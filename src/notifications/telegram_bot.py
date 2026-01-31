@@ -181,6 +181,15 @@ class TelegramBot:
         "/mlstats": "ML model performance & weights",
         "/optimize": "Optimize strategy based on history",
         "/report": "Comprehensive performance report",
+        "/legends": "View 10 legendary fund managers' strategies",
+        
+        # 🔔 Real-Time Push Notifications
+        "/subscribe": "Subscribe to real-time signals - /subscribe on|off",
+        "/realtime": "Real-time market monitoring status",
+        "/pushalerts": "Configure push alert settings",
+        "/pushtest": "Send a test push notification",
+        "/morning": "Get morning market brief (auto daily)",
+        "/evening": "Get evening summary (auto daily)",
     }
     
     # Top 500+ most actively traded US stocks by market cap & volume
@@ -411,6 +420,24 @@ class TelegramBot:
             "best_streak": 0,
         }
         
+        # === REAL-TIME PUSH NOTIFICATIONS ===
+        self.push_notifications_enabled = True  # Master switch
+        self.push_settings = {
+            "signals": True,       # Push AI signals automatically
+            "price_moves": True,   # Push significant price movements
+            "morning_brief": True, # Daily morning market brief (8:30 AM)
+            "evening_summary": True,  # Daily evening summary (4:30 PM)
+            "breakouts": True,     # Push breakout alerts
+            "earnings": True,      # Push earnings alerts
+            "news": True,          # Push breaking news
+            "portfolio": True,     # Push portfolio alerts
+            "min_score": 7.5,      # Minimum AI score to push
+            "price_threshold": 5.0,  # % move to trigger alert
+        }
+        self.last_signal_push = {}  # Track when we last pushed each ticker
+        self.last_prices = {}       # Track prices for movement detection
+        self.realtime_scanning = True  # Real-time scanning enabled
+        
     @property
     def is_configured(self) -> bool:
         return bool(self.bot_token and self.chat_id)
@@ -430,7 +457,12 @@ class TelegramBot:
         asyncio.create_task(self._price_alert_monitor())
         asyncio.create_task(self._market_update_loop())
         
-        await self.send_message("🤖 <b>TradingAI Bot Started</b>\n\nType /help for commands")
+        # Real-time push notification tasks
+        asyncio.create_task(self._realtime_signal_scanner())
+        asyncio.create_task(self._price_movement_monitor())
+        asyncio.create_task(self._scheduled_alerts())
+        
+        await self.send_message("🤖 <b>TradingAI Bot Started</b>\n\n✅ Real-time push notifications ENABLED\n📊 Scanning 500+ stocks for signals\n\nType /help for commands")
         logger.info("Telegram bot started")
     
     async def stop(self):
@@ -709,6 +741,13 @@ Or try uploading a clearer screenshot showing:
             "/optimize": self._cmd_optimize,
             "/report": self._cmd_report,
             "/legends": self._cmd_legends,
+            # Real-Time Push Notifications
+            "/subscribe": self._cmd_subscribe,
+            "/realtime": self._cmd_realtime,
+            "/pushalerts": self._cmd_pushalerts,
+            "/pushtest": self._cmd_pushtest,
+            "/morning": self._cmd_morning,
+            "/evening": self._cmd_evening,
         }
         
         handler = handlers.get(command)
@@ -6473,6 +6512,573 @@ Target 3 (3R): ${target_3r:.2f}
             
         except Exception as e:
             logger.error(f"Market close summary error: {e}")
+    
+    # ===== REAL-TIME PUSH NOTIFICATION SYSTEM =====
+    
+    async def _realtime_signal_scanner(self):
+        """Background task: Scan for high-conviction signals and push alerts."""
+        logger.info("Starting real-time signal scanner...")
+        scan_count = 0
+        
+        while self._running:
+            try:
+                if not self.push_notifications_enabled or not self.push_settings.get("signals", True):
+                    await asyncio.sleep(300)  # 5 min if disabled
+                    continue
+                
+                # Only scan during market hours (9:30 AM - 4:00 PM ET)
+                now = datetime.now()
+                if not (9 <= now.hour < 16 or (now.hour == 9 and now.minute >= 30)):
+                    await asyncio.sleep(300)
+                    continue
+                
+                scan_count += 1
+                min_score = self.push_settings.get("min_score", 7.5)
+                
+                # Scan top stocks for high-conviction signals
+                hot_signals = []
+                scan_batch = self.TOP_STOCKS[:100]  # Scan top 100 each round
+                
+                for ticker in scan_batch:
+                    try:
+                        # Skip if we pushed this ticker recently (within 2 hours)
+                        last_push = self.last_signal_push.get(ticker)
+                        if last_push and (now - last_push).total_seconds() < 7200:
+                            continue
+                        
+                        # Get AI score
+                        result = await self._calculate_legendary_score(ticker)
+                        if not result:
+                            continue
+                        
+                        score = result[0]
+                        if score >= min_score:
+                            quote = await self._fetch_quote(ticker)
+                            price = quote.get('price', 0) if quote else 0
+                            
+                            hot_signals.append({
+                                "ticker": ticker,
+                                "score": score,
+                                "price": price,
+                                "result": result
+                            })
+                    except:
+                        pass
+                    
+                    await asyncio.sleep(0.5)  # Rate limit
+                
+                # Push high-conviction signals
+                if hot_signals:
+                    hot_signals.sort(key=lambda x: x['score'], reverse=True)
+                    
+                    for signal in hot_signals[:3]:  # Max 3 alerts per scan
+                        await self._push_signal_alert(signal)
+                        self.last_signal_push[signal['ticker']] = now
+                
+                logger.info(f"Real-time scan #{scan_count}: Found {len(hot_signals)} hot signals")
+                
+            except Exception as e:
+                logger.error(f"Real-time scanner error: {e}")
+            
+            # Scan every 15 minutes during market hours
+            await asyncio.sleep(900)
+    
+    async def _push_signal_alert(self, signal: Dict):
+        """Push a high-conviction signal alert."""
+        try:
+            ticker = signal['ticker']
+            score = signal['score']
+            price = signal['price']
+            result = signal['result']
+            
+            scores = result[1] if len(result) > 1 else {}
+            reasons = result[2] if len(result) > 2 else {}
+            top_managers = result[3] if len(result) > 3 else []
+            kelly = result[4] if len(result) > 4 else 0.05
+            
+            msg = "🚨 <b>REAL-TIME SIGNAL ALERT</b> 🚨\n\n"
+            msg += f"📊 <b>{ticker}</b>\n"
+            msg += f"💰 Price: ${price:.2f}\n"
+            msg += f"🎯 AI Score: <b>{score:.1f}/10</b>\n\n"
+            
+            # Score bar
+            filled = int(score)
+            bar = "█" * filled + "░" * (10 - filled)
+            msg += f"[{bar}]\n\n"
+            
+            # Top manager endorsements
+            if top_managers:
+                msg += "🏛️ <b>LEGENDARY ENDORSEMENTS:</b>\n"
+                manager_names = {
+                    'buffett': '🏛️ Buffett', 'dalio': '⚖️ Dalio', 'lynch': '📈 Lynch',
+                    'greenblatt': '🔮 Greenblatt', 'tepper': '🦅 Tepper',
+                    'druckenmiller': '🎯 Druckenmiller', 'wood': '🚀 Wood',
+                    'ackman': '🎪 Ackman', 'smith': '💎 Smith', 'griffin': '🔢 Griffin'
+                }
+                for m in top_managers[:3]:
+                    name = manager_names.get(m, m.title())
+                    m_score = scores.get(m, 5)
+                    m_reasons = reasons.get(m, [])
+                    msg += f"  {name}: {m_score:.1f}/10\n"
+                    if m_reasons:
+                        msg += f"    └ {m_reasons[0]}\n"
+                msg += "\n"
+            
+            # Trading levels
+            atr = price * 0.02  # Estimate 2% ATR
+            stop = price - (1.5 * atr)
+            target = price + (3 * atr)
+            
+            msg += "📍 <b>LEVELS:</b>\n"
+            msg += f"├ Entry: ${price:.2f}\n"
+            msg += f"├ Stop: ${stop:.2f} (-{(price-stop)/price*100:.1f}%)\n"
+            msg += f"└ Target: ${target:.2f} (+{(target-price)/price*100:.1f}%)\n\n"
+            
+            # Position sizing
+            risk_per_trade = self.user_settings.get('risk_per_trade', 0.01)
+            account = self.user_settings.get('account_size', 100000)
+            risk_amount = account * risk_per_trade
+            position_size = int(risk_amount / (price - stop)) if price > stop else 0
+            
+            msg += f"💼 Kelly: {kelly*100:.0f}% | Shares: ~{position_size}\n\n"
+            
+            msg += f"⏰ <i>{datetime.now().strftime('%H:%M:%S')}</i>\n"
+            msg += "Use /subscribe off to disable alerts"
+            
+            await self.send_message(msg)
+            logger.info(f"Pushed signal alert for {ticker} (score: {score:.1f})")
+            
+        except Exception as e:
+            logger.error(f"Push signal alert error: {e}")
+    
+    async def _price_movement_monitor(self):
+        """Background task: Monitor for significant price movements."""
+        logger.info("Starting price movement monitor...")
+        
+        while self._running:
+            try:
+                if not self.push_notifications_enabled or not self.push_settings.get("price_moves", True):
+                    await asyncio.sleep(300)
+                    continue
+                
+                now = datetime.now()
+                if not (9 <= now.hour < 16 or (now.hour == 9 and now.minute >= 30)):
+                    await asyncio.sleep(300)
+                    continue
+                
+                threshold = self.push_settings.get("price_threshold", 5.0)
+                big_movers = []
+                
+                # Check watchlist first, then portfolio, then top stocks
+                stocks_to_check = list(set(
+                    self.watchlist + 
+                    list(self.my_portfolio.keys()) + 
+                    self.TOP_STOCKS[:50]
+                ))
+                
+                for ticker in stocks_to_check:
+                    try:
+                        quote = await self._fetch_quote(ticker)
+                        if not quote:
+                            continue
+                        
+                        price = quote.get('price', 0)
+                        change_pct = quote.get('change_pct', 0)
+                        
+                        # Check if significant move
+                        if abs(change_pct) >= threshold:
+                            last_price = self.last_prices.get(ticker, {})
+                            last_alert_pct = last_price.get('last_alert_pct', 0)
+                            
+                            # Only alert if move is new (>2% additional move)
+                            if abs(change_pct - last_alert_pct) >= 2:
+                                big_movers.append({
+                                    "ticker": ticker,
+                                    "price": price,
+                                    "change_pct": change_pct,
+                                    "in_portfolio": ticker in self.my_portfolio,
+                                    "in_watchlist": ticker in self.watchlist
+                                })
+                                self.last_prices[ticker] = {
+                                    'price': price,
+                                    'last_alert_pct': change_pct,
+                                    'timestamp': now
+                                }
+                        else:
+                            self.last_prices[ticker] = {'price': price}
+                            
+                    except:
+                        pass
+                    
+                    await asyncio.sleep(0.3)
+                
+                # Push alerts for big movers
+                for mover in big_movers[:5]:  # Max 5 per cycle
+                    await self._push_price_alert(mover)
+                
+            except Exception as e:
+                logger.error(f"Price movement monitor error: {e}")
+            
+            await asyncio.sleep(300)  # Check every 5 minutes
+    
+    async def _push_price_alert(self, mover: Dict):
+        """Push price movement alert."""
+        try:
+            ticker = mover['ticker']
+            price = mover['price']
+            change_pct = mover['change_pct']
+            
+            direction = "🚀 SURGING" if change_pct > 0 else "📉 PLUNGING"
+            emoji = "🟢" if change_pct > 0 else "🔴"
+            
+            msg = f"⚡ <b>PRICE ALERT</b>\n\n"
+            msg += f"{emoji} <b>{ticker}</b> {direction}!\n\n"
+            msg += f"💰 Price: ${price:.2f}\n"
+            msg += f"📊 Change: {change_pct:+.2f}%\n\n"
+            
+            if mover.get('in_portfolio'):
+                msg += "📦 <i>This stock is in your portfolio</i>\n"
+            elif mover.get('in_watchlist'):
+                msg += "👁️ <i>This stock is on your watchlist</i>\n"
+            
+            msg += f"\n⏰ {datetime.now().strftime('%H:%M:%S')}"
+            
+            await self.send_message(msg)
+            
+        except Exception as e:
+            logger.error(f"Push price alert error: {e}")
+    
+    async def _scheduled_alerts(self):
+        """Background task: Send scheduled daily alerts."""
+        logger.info("Starting scheduled alerts...")
+        last_morning = None
+        last_evening = None
+        
+        while self._running:
+            try:
+                now = datetime.now()
+                today = now.date()
+                
+                # Morning brief at 8:30 AM
+                if self.push_settings.get("morning_brief", True):
+                    if now.hour == 8 and 30 <= now.minute < 31 and last_morning != today:
+                        last_morning = today
+                        await self._cmd_morning(self.chat_id, [])
+                
+                # Evening summary at 4:30 PM
+                if self.push_settings.get("evening_summary", True):
+                    if now.hour == 16 and 30 <= now.minute < 31 and last_evening != today:
+                        last_evening = today
+                        await self._cmd_evening(self.chat_id, [])
+                
+            except Exception as e:
+                logger.error(f"Scheduled alerts error: {e}")
+            
+            await asyncio.sleep(60)  # Check every minute
+    
+    # ===== REAL-TIME PUSH NOTIFICATION COMMANDS =====
+    
+    async def _cmd_subscribe(self, chat_id: int, args: List[str]):
+        """Subscribe to or unsubscribe from real-time push notifications."""
+        if args:
+            action = args[0].lower()
+            if action in ["on", "enable", "yes", "1"]:
+                self.push_notifications_enabled = True
+                msg = "✅ <b>PUSH NOTIFICATIONS ENABLED</b>\n\n"
+                msg += "You will receive:\n"
+                msg += "🎯 High-conviction signal alerts (score ≥7.5)\n"
+                msg += "📊 Significant price movements (±5%)\n"
+                msg += "☀️ Morning market briefs (8:30 AM)\n"
+                msg += "🌙 Evening summaries (4:30 PM)\n\n"
+                msg += "Use /pushalerts to customize settings"
+            elif action in ["off", "disable", "no", "0"]:
+                self.push_notifications_enabled = False
+                msg = "🔕 <b>PUSH NOTIFICATIONS DISABLED</b>\n\n"
+                msg += "You will no longer receive automatic alerts.\n"
+                msg += "Use /subscribe on to re-enable."
+            else:
+                msg = "❓ Usage: /subscribe on|off"
+        else:
+            status = "🟢 ENABLED" if self.push_notifications_enabled else "🔴 DISABLED"
+            msg = f"🔔 <b>PUSH NOTIFICATIONS: {status}</b>\n\n"
+            msg += "Use /subscribe on to enable\n"
+            msg += "Use /subscribe off to disable\n"
+            msg += "Use /pushalerts to configure"
+        
+        await self.send_message_to(chat_id, msg)
+    
+    async def _cmd_realtime(self, chat_id: int, args: List[str]):
+        """Show real-time monitoring status."""
+        msg = "📡 <b>REAL-TIME MONITORING STATUS</b>\n\n"
+        
+        status = "🟢 ACTIVE" if self.push_notifications_enabled else "🔴 INACTIVE"
+        msg += f"Master Status: {status}\n\n"
+        
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "🤖 <b>BACKGROUND TASKS</b>\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        
+        tasks = [
+            ("Signal Scanner", self.push_settings.get("signals", True), "Every 15 min"),
+            ("Price Monitor", self.push_settings.get("price_moves", True), "Every 5 min"),
+            ("Morning Brief", self.push_settings.get("morning_brief", True), "8:30 AM"),
+            ("Evening Summary", self.push_settings.get("evening_summary", True), "4:30 PM"),
+        ]
+        
+        for name, enabled, freq in tasks:
+            status_emoji = "✅" if enabled else "❌"
+            msg += f"{status_emoji} {name}: {freq}\n"
+        
+        msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "📊 <b>ALERT THRESHOLDS</b>\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += f"Min AI Score: {self.push_settings.get('min_score', 7.5)}/10\n"
+        msg += f"Price Move: ±{self.push_settings.get('price_threshold', 5)}%\n"
+        
+        # Recent alerts
+        recent_signals = len([t for t, dt in self.last_signal_push.items() 
+                             if (datetime.now() - dt).total_seconds() < 3600])
+        msg += f"\n📨 Signals pushed (last hr): {recent_signals}\n"
+        
+        msg += "\n<i>Use /pushalerts to configure</i>"
+        
+        await self.send_message_to(chat_id, msg)
+    
+    async def _cmd_pushalerts(self, chat_id: int, args: List[str]):
+        """Configure push alert settings."""
+        if args:
+            setting = args[0].lower()
+            
+            if setting == "minscore" and len(args) > 1:
+                try:
+                    score = float(args[1])
+                    score = max(1, min(10, score))
+                    self.push_settings['min_score'] = score
+                    await self.send_message_to(chat_id, f"✅ Min AI score set to {score}/10")
+                    return
+                except:
+                    pass
+            
+            elif setting == "pricethreshold" and len(args) > 1:
+                try:
+                    threshold = float(args[1])
+                    threshold = max(1, min(20, threshold))
+                    self.push_settings['price_threshold'] = threshold
+                    await self.send_message_to(chat_id, f"✅ Price threshold set to ±{threshold}%")
+                    return
+                except:
+                    pass
+            
+            elif setting in ["signals", "price_moves", "morning_brief", "evening_summary", 
+                            "breakouts", "earnings", "news", "portfolio"]:
+                if len(args) > 1:
+                    value = args[1].lower() in ["on", "true", "1", "yes"]
+                    self.push_settings[setting] = value
+                    status = "enabled" if value else "disabled"
+                    await self.send_message_to(chat_id, f"✅ {setting.replace('_', ' ').title()} alerts {status}")
+                    return
+        
+        # Show current settings
+        msg = "🔔 <b>PUSH ALERT SETTINGS</b>\n\n"
+        
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "📱 <b>ALERT TYPES</b>\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        
+        alerts = [
+            ("signals", "Signal Alerts"),
+            ("price_moves", "Price Movements"),
+            ("morning_brief", "Morning Brief"),
+            ("evening_summary", "Evening Summary"),
+            ("breakouts", "Breakout Alerts"),
+            ("earnings", "Earnings Alerts"),
+            ("news", "News Alerts"),
+            ("portfolio", "Portfolio Alerts"),
+        ]
+        
+        for key, name in alerts:
+            enabled = self.push_settings.get(key, True)
+            emoji = "✅" if enabled else "❌"
+            msg += f"{emoji} {name}\n"
+        
+        msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "⚙️ <b>THRESHOLDS</b>\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += f"Min AI Score: {self.push_settings.get('min_score', 7.5)}/10\n"
+        msg += f"Price Threshold: ±{self.push_settings.get('price_threshold', 5)}%\n"
+        
+        msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "<b>CONFIGURE:</b>\n"
+        msg += "<code>/pushalerts minscore 8</code>\n"
+        msg += "<code>/pushalerts pricethreshold 3</code>\n"
+        msg += "<code>/pushalerts signals on|off</code>\n"
+        msg += "<code>/pushalerts morning_brief off</code>\n"
+        
+        await self.send_message_to(chat_id, msg)
+    
+    async def _cmd_pushtest(self, chat_id: int, args: List[str]):
+        """Send a test push notification."""
+        msg = "🧪 <b>TEST PUSH NOTIFICATION</b>\n\n"
+        msg += "If you see this message, push notifications are working!\n\n"
+        msg += f"🟢 Master Switch: {'ON' if self.push_notifications_enabled else 'OFF'}\n"
+        msg += f"📊 Min Score: {self.push_settings.get('min_score', 7.5)}/10\n"
+        msg += f"📈 Price Threshold: ±{self.push_settings.get('price_threshold', 5)}%\n\n"
+        msg += f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        
+        await self.send_message_to(chat_id, msg)
+    
+    async def _cmd_morning(self, chat_id: int, args: List[str]):
+        """Send morning market brief."""
+        try:
+            msg = f"☀️ <b>MORNING MARKET BRIEF</b>\n"
+            msg += f"<i>{datetime.now().strftime('%A, %B %d, %Y')}</i>\n\n"
+            
+            # Get market status
+            spy = await self._fetch_quote("SPY")
+            qqq = await self._fetch_quote("QQQ")
+            dia = await self._fetch_quote("DIA")
+            
+            msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += "📊 <b>INDEX FUTURES</b>\n"
+            msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+            
+            if spy:
+                emoji = "🟢" if spy.get('change_pct', 0) >= 0 else "🔴"
+                msg += f"{emoji} S&P 500 (SPY): ${spy.get('price', 0):.2f} ({spy.get('change_pct', 0):+.2f}%)\n"
+            if qqq:
+                emoji = "🟢" if qqq.get('change_pct', 0) >= 0 else "🔴"
+                msg += f"{emoji} NASDAQ (QQQ): ${qqq.get('price', 0):.2f} ({qqq.get('change_pct', 0):+.2f}%)\n"
+            if dia:
+                emoji = "🟢" if dia.get('change_pct', 0) >= 0 else "🔴"
+                msg += f"{emoji} DOW (DIA): ${dia.get('price', 0):.2f} ({dia.get('change_pct', 0):+.2f}%)\n"
+            
+            # Top opportunities
+            msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += "🎯 <b>TODAY'S TOP SETUPS</b>\n"
+            msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+            
+            # Quick scan for top picks
+            top_picks = []
+            for ticker in self.TOP_STOCKS[:30]:
+                try:
+                    result = await self._calculate_legendary_score(ticker)
+                    if result and result[0] >= 7:
+                        quote = await self._fetch_quote(ticker)
+                        price = quote.get('price', 0) if quote else 0
+                        top_picks.append({
+                            "ticker": ticker,
+                            "score": result[0],
+                            "price": price
+                        })
+                except:
+                    pass
+            
+            top_picks.sort(key=lambda x: x['score'], reverse=True)
+            
+            for i, pick in enumerate(top_picks[:5], 1):
+                msg += f"{i}. {pick['ticker']}: {pick['score']:.1f}/10 @ ${pick['price']:.2f}\n"
+            
+            if not top_picks:
+                msg += "No high-conviction setups found.\n"
+            
+            msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += "💡 <b>TODAY'S STRATEGY</b>\n"
+            msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+            
+            if spy and spy.get('change_pct', 0) > 0.5:
+                msg += "📈 Bullish bias - look for momentum plays\n"
+            elif spy and spy.get('change_pct', 0) < -0.5:
+                msg += "📉 Bearish bias - focus on defensive names\n"
+            else:
+                msg += "↔️ Neutral - wait for clear direction\n"
+            
+            msg += "\n🔔 Use /top for detailed AI picks\n"
+            msg += f"⏰ Market opens at 9:30 AM ET"
+            
+            await self.send_message_to(chat_id, msg)
+            
+        except Exception as e:
+            logger.error(f"Morning brief error: {e}")
+            await self.send_message_to(chat_id, "❌ Error generating morning brief")
+    
+    async def _cmd_evening(self, chat_id: int, args: List[str]):
+        """Send evening market summary."""
+        try:
+            msg = f"🌙 <b>EVENING MARKET SUMMARY</b>\n"
+            msg += f"<i>{datetime.now().strftime('%A, %B %d, %Y')}</i>\n\n"
+            
+            # Get market status
+            spy = await self._fetch_quote("SPY")
+            qqq = await self._fetch_quote("QQQ")
+            
+            msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += "📊 <b>MARKET CLOSE</b>\n"
+            msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+            
+            if spy:
+                emoji = "🟢" if spy.get('change_pct', 0) >= 0 else "🔴"
+                msg += f"{emoji} S&P 500: {spy.get('change_pct', 0):+.2f}%\n"
+            if qqq:
+                emoji = "🟢" if qqq.get('change_pct', 0) >= 0 else "🔴"
+                msg += f"{emoji} NASDAQ: {qqq.get('change_pct', 0):+.2f}%\n"
+            
+            # Get movers
+            msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += "🏆 <b>TODAY'S MOVERS</b>\n"
+            msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+            
+            movers = []
+            for ticker in self.TOP_STOCKS[:30]:
+                quote = await self._fetch_quote(ticker)
+                if quote:
+                    movers.append({
+                        "ticker": ticker,
+                        "change_pct": quote.get('change_pct', 0)
+                    })
+            
+            movers.sort(key=lambda x: x['change_pct'], reverse=True)
+            
+            msg += "<b>Top Gainers:</b>\n"
+            for m in movers[:3]:
+                msg += f"  🟢 {m['ticker']}: {m['change_pct']:+.2f}%\n"
+            
+            msg += "\n<b>Top Losers:</b>\n"
+            for m in movers[-3:]:
+                msg += f"  🔴 {m['ticker']}: {m['change_pct']:.2f}%\n"
+            
+            # Portfolio update if exists
+            if self.my_portfolio:
+                msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n"
+                msg += "📦 <b>YOUR PORTFOLIO</b>\n"
+                msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+                
+                total_pnl = 0
+                for ticker, pos in self.my_portfolio.items():
+                    quote = await self._fetch_quote(ticker)
+                    if quote:
+                        current = quote.get('price', 0)
+                        cost = pos.get('avg_cost', current)
+                        qty = pos.get('qty', 0)
+                        pnl = (current - cost) * qty
+                        total_pnl += pnl
+                
+                emoji = "🟢" if total_pnl >= 0 else "🔴"
+                msg += f"Today's P&L: {emoji} ${total_pnl:+,.2f}\n"
+            
+            msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += "📋 <b>TOMORROW PREP</b>\n"
+            msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += "• Review today's trades\n"
+            msg += "• Check /earnings calendar\n"
+            msg += "• Update /watchlist\n\n"
+            
+            msg += "💤 <i>See you at 8:30 AM!</i>"
+            
+            await self.send_message_to(chat_id, msg)
+            
+        except Exception as e:
+            logger.error(f"Evening summary error: {e}")
+            await self.send_message_to(chat_id, "❌ Error generating evening summary")
     
     async def send_message(self, text: str, parse_mode: str = "HTML") -> bool:
         """Send message to default chat."""
