@@ -1,0 +1,33 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements/base.txt ./requirements/
+RUN pip install --no-cache-dir -r requirements/base.txt
+RUN pip install --no-cache-dir aiohttp python-telegram-bot
+
+# Copy application code
+COPY src/ ./src/
+COPY run_telegram_bot.py ./
+
+# Create directories for data persistence
+RUN mkdir -p /app/data /app/logs
+
+# Set Python path
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Run the Telegram bot
+CMD ["python", "run_telegram_bot.py"]

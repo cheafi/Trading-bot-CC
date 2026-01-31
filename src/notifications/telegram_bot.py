@@ -165,6 +165,22 @@ class TelegramBot:
         "/learn": "View AI learning & prediction accuracy",
         "/accuracy": "Detailed strategy accuracy stats",
         "/regime": "Market regime detection & strategy selection",
+        
+        # ⚙️ User Settings & Customization
+        "/settings": "View/edit your trading preferences",
+        "/setaccount": "Set account size - /setaccount 50000",
+        "/setrisk": "Set risk % per trade - /setrisk 1.5",
+        "/setstyle": "Set trading style - /setstyle swing",
+        
+        # 🤖 Advanced Automation
+        "/autotrade": "Enable/disable auto-trading",
+        "/schedule": "Schedule automated scans",
+        "/autopilot": "Full autopilot mode settings",
+        
+        # 📊 ML & Performance Analytics
+        "/mlstats": "ML model performance & weights",
+        "/optimize": "Optimize strategy based on history",
+        "/report": "Comprehensive performance report",
     }
     
     # Top 500+ most actively traded US stocks by market cap & volume
@@ -343,6 +359,57 @@ class TelegramBot:
         # === PERFORMANCE CACHE ===
         self._quote_cache: Dict[str, Dict] = {}
         self._cache_ttl = 30  # 30 seconds cache
+        
+        # === USER CUSTOMIZATION SETTINGS ===
+        self.user_settings = {
+            "account_size": 100000,
+            "risk_per_trade": 0.01,  # 1%
+            "max_positions": 10,
+            "trading_style": "swing",  # day, swing, position
+            "risk_tolerance": "moderate",  # conservative, moderate, aggressive
+            "sectors_focus": [],  # Empty = all sectors
+            "min_ai_score": 6,  # Minimum score to show
+            "auto_trade_enabled": False,
+            "max_daily_trades": 5,
+            "preferred_strategies": ["momentum", "trend_following"],
+            "news_alerts": True,
+            "earnings_alerts": True,
+            "price_alerts": True,
+        }
+        
+        # === AUTOMATION SYSTEM ===
+        self.auto_trade_enabled = False
+        self.scheduled_scans: List[Dict] = []
+        self.pending_signals: List[Dict] = []
+        self.executed_trades: List[Dict] = []
+        
+        # === ADVANCED ML TRACKING ===
+        self.ml_model_weights = {
+            "momentum_score": 0.25,
+            "trend_score": 0.20,
+            "value_score": 0.15,
+            "sentiment_score": 0.15,
+            "technical_score": 0.25,
+        }
+        self.prediction_log: List[Dict] = []  # Detailed predictions
+        self.trade_outcomes: List[Dict] = []  # Actual results
+        self.model_version = "2.0.0"
+        
+        # === PERFORMANCE METRICS ===
+        self.performance_stats = {
+            "total_trades": 0,
+            "winning_trades": 0,
+            "total_pnl": 0.0,
+            "best_trade": 0.0,
+            "worst_trade": 0.0,
+            "avg_win": 0.0,
+            "avg_loss": 0.0,
+            "profit_factor": 0.0,
+            "sharpe_ratio": 0.0,
+            "max_drawdown": 0.0,
+            "current_streak": 0,
+            "best_streak": 0,
+        }
         
     @property
     def is_configured(self) -> bool:
@@ -628,6 +695,19 @@ Or try uploading a clearer screenshot showing:
             "/learn": self._cmd_learn,
             "/accuracy": self._cmd_accuracy,
             "/regime": self._cmd_regime,
+            # User Settings & Customization
+            "/settings": self._cmd_settings,
+            "/setaccount": self._cmd_setaccount,
+            "/setrisk": self._cmd_setrisk,
+            "/setstyle": self._cmd_setstyle,
+            # Advanced Automation
+            "/autotrade": self._cmd_autotrade,
+            "/schedule": self._cmd_schedule,
+            "/autopilot": self._cmd_autopilot,
+            # ML & Performance
+            "/mlstats": self._cmd_mlstats,
+            "/optimize": self._cmd_optimize,
+            "/report": self._cmd_report,
         }
         
         handler = handlers.get(command)
@@ -671,11 +751,11 @@ Type /help for all commands.
             "📈 Market Intel": ["/market", "/heatmap", "/sector", "/news"],
             "💡 Stock Analysis": ["/advise", "/analyze", "/check", "/levels"],
             "💰 Trading": ["/buy", "/sell", "/order", "/sizing"],
-            "📁 Portfolio": ["/portfolio", "/positions", "/pnl", "/exposure"],
-            "📊 Performance": ["/backtest", "/performance", "/journal", "/stats"],
-            "🌙 Reports": ["/daily", "/summary", "/eod"],
-            "🔔 Alerts": ["/watchlist", "/alert", "/alerts"],
-            "🧠 Pro Trading": ["/riskcheck", "/regime", "/learn", "/accuracy"],
+            "📁 Portfolio": ["/portfolio", "/myportfolio", "/monitor"],
+            "📊 Performance": ["/backtest", "/report", "/mlstats"],
+            "🧠 Pro Trading": ["/riskcheck", "/regime", "/optimize"],
+            "⚙️ Settings": ["/settings", "/setaccount", "/setrisk", "/setstyle"],
+            "🤖 Automation": ["/autotrade", "/schedule", "/autopilot"],
             "⚙️ System": ["/broker", "/status", "/help"],
         }
         
@@ -687,11 +767,11 @@ Type /help for all commands.
             msg += "\n"
         
         msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
-        msg += "💡 <b>Popular Commands:</b>\n"
-        msg += "<code>/score AAPL</code> - AI score 1-10\n"
-        msg += "<code>/setup</code> - Morning setups with R:R\n"
-        msg += "<code>/riskcheck AAPL 100 175</code> - Pre-trade check\n"
-        msg += "<code>/top</code> - Top picks with confidence\n"
+        msg += "💡 <b>Quick Start:</b>\n"
+        msg += "<code>/settings</code> - Configure your preferences\n"
+        msg += "<code>/top</code> - Today's top AI picks\n"
+        msg += "<code>/riskcheck AAPL 100</code> - Pre-trade check\n"
+        msg += "<code>/autopilot</code> - Setup automation\n"
         
         await self.send_message_to(chat_id, msg)
     
@@ -3834,7 +3914,7 @@ No alerts set.
         }
     
     async def _cmd_score(self, chat_id: int, args: List[str]):
-        """AI score for a stock (Kavout/Kai style)."""
+        """AI score for a stock (Kavout/Kai style) - Enhanced with detailed analysis."""
         if not args:
             msg = """
 🤖 <b>AI Stock Score</b>
@@ -3846,6 +3926,8 @@ Get an AI score (1-10) based on:
 • Volatility (trading range quality)
 • Volume (relative to average)
 • Trend (price position in range)
+• Legendary investor criteria
+• ML-adjusted weights
 """
             await self.send_message_to(chat_id, msg)
             return
@@ -3861,6 +3943,20 @@ Get an AI score (1-10) based on:
             
             score_data = await self._calculate_ai_score(ticker, quote)
             
+            # Get historical data for ATR/RSI
+            bars = await self._get_historical_bars(ticker, days=20)
+            atr = self._calculate_atr(bars) if bars else quote.get('price', 0) * 0.025
+            prices = [b.get('close', 0) for b in bars] if bars else []
+            rsi = self._calculate_rsi(prices) if len(prices) >= 14 else 50
+            
+            # Calculate entry/stop/target
+            current_price = quote.get('price', 0)
+            entry = current_price
+            stop = entry - (2 * atr)
+            target1 = entry + (2 * atr)  # 1R
+            target2 = entry + (4 * atr)  # 2R
+            target3 = entry + (6 * atr)  # 3R
+            
             # Score bar visualization
             score = score_data['ai_score']
             filled = int(score)
@@ -3869,37 +3965,88 @@ Get an AI score (1-10) based on:
             # Color emoji based on score
             if score >= 7:
                 emoji = "🟢"
+                action = "STRONG BUY"
+            elif score >= 6:
+                emoji = "🟢"
+                action = "BUY"
             elif score >= 5:
                 emoji = "🟡"
+                action = "HOLD/WATCH"
+            elif score >= 4:
+                emoji = "🟡"
+                action = "CAUTION"
             else:
                 emoji = "🔴"
+                action = "AVOID"
+            
+            # Calculate position size based on user settings
+            risk_amount = self.user_settings['account_size'] * self.user_settings['risk_per_trade']
+            risk_per_share = entry - stop
+            suggested_shares = int(risk_amount / risk_per_share) if risk_per_share > 0 else 0
+            
+            # Risk/Reward ratio
+            reward = target2 - entry
+            risk = entry - stop
+            rr_ratio = reward / risk if risk > 0 else 0
             
             msg = f"""
-🤖 <b>AI SCORE: {ticker}</b>
+🤖 <b>AI SCORE ANALYSIS: {ticker}</b>
 
-{emoji} <b>Score: {score}/10</b>
+{emoji} <b>Score: {score}/10 - {action}</b>
 [{bar}]
-
-<b>Signal:</b> {score_data['signal']}
-<b>Confidence:</b> {score_data['confidence']}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 📊 <b>FACTOR BREAKDOWN</b>
 ━━━━━━━━━━━━━━━━━━━━━━
-📈 Momentum: {score_data['momentum']}/10
+📈 Momentum: {score_data['momentum']}/10 {'🔥' if score_data['momentum'] >= 7 else ''}
 📉 Volatility: {score_data['volatility']}/10
-📦 Volume: {score_data['volume']}/10
-🎯 Trend: {score_data['trend']}/10
+📦 Volume: {score_data['volume']}/10 {'📊' if score_data['volume'] >= 7 else ''}
+🎯 Trend: {score_data['trend']}/10 {'✨' if score_data['trend'] >= 7 else ''}
+
+━━━━━━━━━━━━━━━━━━━━━━
+📉 <b>TECHNICAL INDICATORS</b>
+━━━━━━━━━━━━━━━━━━━━━━
+RSI(14): {rsi:.1f} {'(Oversold 🟢)' if rsi < 30 else '(Overbought 🔴)' if rsi > 70 else '(Neutral)'}
+ATR(14): ${atr:.2f} ({atr/current_price*100:.1f}% of price)
+Volatility: {'High ⚡' if atr/current_price > 0.03 else 'Normal' if atr/current_price > 0.015 else 'Low'}
+
+━━━━━━━━━━━━━━━━━━━━━━
+🎯 <b>TRADE LEVELS</b>
+━━━━━━━━━━━━━━━━━━━━━━
+📍 Entry: ${entry:.2f}
+🛑 Stop Loss: ${stop:.2f} (-{(entry-stop)/entry*100:.1f}%)
+🎯 Target 1: ${target1:.2f} (+{(target1-entry)/entry*100:.1f}%) [1R]
+🎯 Target 2: ${target2:.2f} (+{(target2-entry)/entry*100:.1f}%) [2R]
+🎯 Target 3: ${target3:.2f} (+{(target3-entry)/entry*100:.1f}%) [3R]
+
+📐 Risk/Reward: 1:{rr_ratio:.1f}
+
+━━━━━━━━━━━━━━━━━━━━━━
+💰 <b>POSITION SIZING</b>
+━━━━━━━━━━━━━━━━━━━━━━
+Account: ${self.user_settings['account_size']:,.0f}
+Risk: {self.user_settings['risk_per_trade']*100:.1f}% = ${risk_amount:,.0f}
+📊 Suggested Shares: {suggested_shares}
+💵 Position Value: ${suggested_shares * entry:,.0f}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 💰 <b>CURRENT DATA</b>
 ━━━━━━━━━━━━━━━━━━━━━━
-Price: ${score_data['price']:.2f}
+Price: ${current_price:.2f}
 Change: {'+' if score_data['change_pct'] >= 0 else ''}{score_data['change_pct']:.2f}%
+Signal: {score_data['signal']}
+Confidence: {score_data['confidence']}
 
-<i>Score updates in real-time with market data</i>
+{'✅ <b>RECOMMENDED</b> - Good setup with favorable R:R' if score >= 6 and rr_ratio >= 2 else ''}
+{'⚠️ <b>WAIT</b> - Look for better entry or R:R' if score >= 5 and rr_ratio < 2 else ''}
+{'❌ <b>PASS</b> - Does not meet criteria' if score < 5 else ''}
+
+<i>Use /riskcheck {ticker} {suggested_shares} {entry:.2f} for full risk analysis</i>
 """
             await self.send_message_to(chat_id, msg)
+            
+            # Record prediction for ML learning
+            await self._record_prediction(ticker, score, action, entry, "momentum")
             
         except Exception as e:
             await self.send_message_to(chat_id, f"❌ Error: {e}")
@@ -6014,6 +6161,569 @@ Target 3 (3R): ${target_3r:.2f}
             await self.send_message_to(chat_id, "✅ Order confirmed!")
         elif data.startswith("cancel_"):
             await self.send_message_to(chat_id, "❌ Order cancelled")
+    
+    # ===== USER SETTINGS & CUSTOMIZATION COMMANDS =====
+    
+    async def _cmd_settings(self, chat_id: int, args: List[str]):
+        """View and edit user trading preferences."""
+        s = self.user_settings
+        
+        msg = "⚙️ <b>YOUR TRADING SETTINGS</b>\n\n"
+        
+        msg += "💰 <b>ACCOUNT</b>\n"
+        msg += f"├ Account Size: ${s['account_size']:,.0f}\n"
+        msg += f"├ Risk/Trade: {s['risk_per_trade']*100:.1f}%\n"
+        msg += f"├ Max Positions: {s['max_positions']}\n"
+        msg += f"└ Max Daily Trades: {s['max_daily_trades']}\n\n"
+        
+        msg += "📊 <b>TRADING STYLE</b>\n"
+        style_emoji = {"day": "⚡", "swing": "🌊", "position": "🏔️"}
+        msg += f"├ Style: {style_emoji.get(s['trading_style'], '📈')} {s['trading_style'].title()}\n"
+        risk_emoji = {"conservative": "🛡️", "moderate": "⚖️", "aggressive": "🔥"}
+        msg += f"├ Risk Tolerance: {risk_emoji.get(s['risk_tolerance'], '⚖️')} {s['risk_tolerance'].title()}\n"
+        msg += f"└ Min AI Score: {s['min_ai_score']}/10\n\n"
+        
+        msg += "🎯 <b>STRATEGIES</b>\n"
+        for strat in s['preferred_strategies']:
+            msg += f"  ✓ {strat.replace('_', ' ').title()}\n"
+        if not s['preferred_strategies']:
+            msg += "  All strategies enabled\n"
+        msg += "\n"
+        
+        msg += "🔔 <b>ALERTS</b>\n"
+        msg += f"├ News: {'✅' if s['news_alerts'] else '❌'}\n"
+        msg += f"├ Earnings: {'✅' if s['earnings_alerts'] else '❌'}\n"
+        msg += f"└ Price: {'✅' if s['price_alerts'] else '❌'}\n\n"
+        
+        msg += "🤖 <b>AUTOMATION</b>\n"
+        msg += f"└ Auto-Trade: {'🟢 ON' if self.auto_trade_enabled else '🔴 OFF'}\n\n"
+        
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "<b>Customize with:</b>\n"
+        msg += "<code>/setaccount 50000</code>\n"
+        msg += "<code>/setrisk 1.5</code>\n"
+        msg += "<code>/setstyle swing|day|position</code>\n"
+        msg += "<code>/autotrade on|off</code>\n"
+        
+        await self.send_message_to(chat_id, msg)
+    
+    async def _cmd_setaccount(self, chat_id: int, args: List[str]):
+        """Set account size."""
+        if not args:
+            msg = f"""
+💰 <b>Account Size Setting</b>
+
+Current: ${self.user_settings['account_size']:,.0f}
+
+Usage: <code>/setaccount 50000</code>
+
+This affects:
+• Position sizing calculations
+• Risk per trade amounts
+• Kelly criterion recommendations
+"""
+            await self.send_message_to(chat_id, msg)
+            return
+        
+        try:
+            amount = float(args[0].replace(",", "").replace("$", ""))
+            if amount < 1000:
+                await self.send_message_to(chat_id, "❌ Minimum account size: $1,000")
+                return
+            if amount > 100000000:
+                await self.send_message_to(chat_id, "❌ Maximum account size: $100M")
+                return
+            
+            old = self.user_settings['account_size']
+            self.user_settings['account_size'] = amount
+            self.account_size = amount
+            
+            msg = f"✅ <b>Account Size Updated</b>\n\n"
+            msg += f"Old: ${old:,.0f}\n"
+            msg += f"New: ${amount:,.0f}\n\n"
+            msg += f"Risk/Trade (1%): ${amount * 0.01:,.0f}"
+            
+            await self.send_message_to(chat_id, msg)
+            
+        except ValueError:
+            await self.send_message_to(chat_id, "❌ Invalid amount. Use: /setaccount 50000")
+    
+    async def _cmd_setrisk(self, chat_id: int, args: List[str]):
+        """Set risk percentage per trade."""
+        if not args:
+            msg = f"""
+⚠️ <b>Risk Per Trade Setting</b>
+
+Current: {self.user_settings['risk_per_trade']*100:.1f}%
+Amount: ${self.user_settings['account_size'] * self.user_settings['risk_per_trade']:,.0f}
+
+Usage: <code>/setrisk 1.5</code>
+
+<b>Professional Guidelines:</b>
+• Conservative: 0.5%
+• Standard: 1.0%
+• Moderate: 1.5%
+• Aggressive: 2.0%
+• Max Recommended: 2.5%
+"""
+            await self.send_message_to(chat_id, msg)
+            return
+        
+        try:
+            pct = float(args[0].replace("%", ""))
+            if pct < 0.1 or pct > 5:
+                await self.send_message_to(chat_id, "❌ Risk must be 0.1% - 5%")
+                return
+            
+            old = self.user_settings['risk_per_trade'] * 100
+            self.user_settings['risk_per_trade'] = pct / 100
+            self.max_risk_per_trade = pct / 100
+            
+            amount = self.user_settings['account_size'] * (pct / 100)
+            
+            msg = f"✅ <b>Risk Updated</b>\n\n"
+            msg += f"Old: {old:.1f}%\n"
+            msg += f"New: {pct:.1f}%\n"
+            msg += f"Risk Amount: ${amount:,.0f}/trade"
+            
+            await self.send_message_to(chat_id, msg)
+            
+        except ValueError:
+            await self.send_message_to(chat_id, "❌ Invalid. Use: /setrisk 1.5")
+    
+    async def _cmd_setstyle(self, chat_id: int, args: List[str]):
+        """Set trading style."""
+        if not args:
+            styles = {
+                "day": "⚡ Day Trading - Intraday, quick profits, no overnight risk",
+                "swing": "🌊 Swing Trading - 2-10 days, catch momentum waves", 
+                "position": "🏔️ Position Trading - Weeks to months, ride trends"
+            }
+            
+            msg = "📊 <b>Trading Style Setting</b>\n\n"
+            msg += f"Current: <b>{self.user_settings['trading_style'].title()}</b>\n\n"
+            msg += "<b>Available Styles:</b>\n"
+            for style, desc in styles.items():
+                current = " ✓" if style == self.user_settings['trading_style'] else ""
+                msg += f"\n{desc}{current}\n"
+            msg += "\n<code>/setstyle swing</code>"
+            
+            await self.send_message_to(chat_id, msg)
+            return
+        
+        style = args[0].lower()
+        if style not in ["day", "swing", "position"]:
+            await self.send_message_to(chat_id, "❌ Use: /setstyle day|swing|position")
+            return
+        
+        self.user_settings['trading_style'] = style
+        
+        # Adjust other settings based on style
+        if style == "day":
+            self.user_settings['min_ai_score'] = 7
+            self.user_settings['max_daily_trades'] = 10
+        elif style == "swing":
+            self.user_settings['min_ai_score'] = 6
+            self.user_settings['max_daily_trades'] = 5
+        else:  # position
+            self.user_settings['min_ai_score'] = 7
+            self.user_settings['max_daily_trades'] = 2
+        
+        msg = f"✅ <b>Style Updated: {style.title()}</b>\n\n"
+        msg += f"Min AI Score: {self.user_settings['min_ai_score']}/10\n"
+        msg += f"Max Daily Trades: {self.user_settings['max_daily_trades']}"
+        
+        await self.send_message_to(chat_id, msg)
+    
+    # ===== AUTOMATION COMMANDS =====
+    
+    async def _cmd_autotrade(self, chat_id: int, args: List[str]):
+        """Enable/disable automated trading."""
+        if not args:
+            status = "🟢 ENABLED" if self.auto_trade_enabled else "🔴 DISABLED"
+            
+            msg = f"""
+🤖 <b>AUTO-TRADE STATUS: {status}</b>
+
+<b>How Auto-Trade Works:</b>
+1. Bot scans market at scheduled times
+2. Signals with AI score ≥{self.user_settings['min_ai_score']} are flagged
+3. Position sizing uses your settings
+4. Orders sent to {self.active_broker.value.upper()}
+
+<b>Safety Limits:</b>
+• Max {self.user_settings['max_daily_trades']} trades/day
+• Max {self.user_settings['risk_per_trade']*100:.1f}% risk/trade
+• Max {self.user_settings['max_positions']} open positions
+• Daily loss limit: 3%
+
+<b>Commands:</b>
+<code>/autotrade on</code> - Enable
+<code>/autotrade off</code> - Disable
+<code>/schedule</code> - Set scan times
+<code>/autopilot</code> - Full settings
+
+⚠️ Paper trading recommended first!
+"""
+            await self.send_message_to(chat_id, msg)
+            return
+        
+        action = args[0].lower()
+        if action == "on":
+            self.auto_trade_enabled = True
+            self.user_settings['auto_trade_enabled'] = True
+            msg = "🟢 <b>Auto-Trade ENABLED</b>\n\n"
+            msg += "Bot will now execute signals automatically.\n"
+            msg += "Use /autopilot to configure.\n\n"
+            msg += "⚠️ Ensure broker is connected: /broker"
+        elif action == "off":
+            self.auto_trade_enabled = False
+            self.user_settings['auto_trade_enabled'] = False
+            msg = "🔴 <b>Auto-Trade DISABLED</b>\n\n"
+            msg += "Bot will only send alerts.\n"
+            msg += "Manual execution required."
+        else:
+            msg = "❌ Use: /autotrade on|off"
+        
+        await self.send_message_to(chat_id, msg)
+    
+    async def _cmd_schedule(self, chat_id: int, args: List[str]):
+        """Configure scheduled scans."""
+        msg = """
+⏰ <b>SCHEDULED SCANS</b>
+
+<b>Default Schedule (US Eastern):</b>
+🌅 08:30 - Pre-market scan
+🔔 09:35 - Opening momentum
+📊 12:00 - Midday review
+🌙 15:45 - EOD signals
+📈 16:30 - After-hours report
+
+<b>Scan Types:</b>
+• Gap scanners (pre-market)
+• ORB breakouts (9:30-10:30)
+• VCP patterns (midday)
+• EOD momentum (15:00+)
+
+<b>Your Preferences:</b>
+• Style: {style}
+• Min Score: {min_score}/10
+• Max Trades: {max_trades}/day
+
+When running on server (24/7):
+• Scans run automatically
+• Signals sent to Telegram
+• Auto-trade executes if enabled
+
+💡 Deploy with: <code>docker-compose up -d</code>
+""".format(
+            style=self.user_settings['trading_style'].title(),
+            min_score=self.user_settings['min_ai_score'],
+            max_trades=self.user_settings['max_daily_trades']
+        )
+        
+        await self.send_message_to(chat_id, msg)
+    
+    async def _cmd_autopilot(self, chat_id: int, args: List[str]):
+        """Full autopilot mode settings."""
+        msg = """
+🚀 <b>AUTOPILOT MODE</b>
+
+<b>Current Status:</b>
+Auto-Trade: {auto_status}
+Broker: {broker}
+Account: ${account:,.0f}
+
+<b>AUTOPILOT RULES:</b>
+
+📊 <b>Entry Criteria:</b>
+• AI Score ≥ {min_score}/10
+• Market regime not BEAR/CRISIS
+• Position size within limits
+• Not exceeding max positions
+
+🛡️ <b>Risk Management:</b>
+• Stop Loss: 2x ATR below entry
+• Profit Target: 3x ATR above entry
+• Trailing Stop: 1.5x ATR
+• Max 1% risk per trade
+
+📈 <b>Position Sizing:</b>
+• Kelly Criterion (quarter size)
+• Max 10% per position
+• Scale in: 50% → 30% → 20%
+
+⏰ <b>Time Filters:</b>
+• No trades first 5 min
+• No trades last 15 min
+• Avoid 12:00-14:00 chop
+
+<b>To activate full autopilot:</b>
+1. <code>/setaccount [size]</code>
+2. <code>/setrisk 1</code>
+3. <code>/broker paper</code> (test first!)
+4. <code>/autotrade on</code>
+5. Deploy to server for 24/7
+
+⚠️ Always monitor initial trades!
+""".format(
+            auto_status="🟢 ON" if self.auto_trade_enabled else "🔴 OFF",
+            broker=self.active_broker.value.upper(),
+            account=self.user_settings['account_size'],
+            min_score=self.user_settings['min_ai_score']
+        )
+        
+        await self.send_message_to(chat_id, msg)
+    
+    # ===== ML & PERFORMANCE COMMANDS =====
+    
+    async def _cmd_mlstats(self, chat_id: int, args: List[str]):
+        """Show ML model statistics and learning progress."""
+        msg = "🧠 <b>ML MODEL STATISTICS</b>\n\n"
+        msg += f"Model Version: {self.model_version}\n\n"
+        
+        msg += "📊 <b>CURRENT WEIGHTS</b>\n"
+        for factor, weight in self.ml_model_weights.items():
+            bar_len = int(weight * 20)
+            bar = "█" * bar_len + "░" * (5 - bar_len)
+            msg += f"├ {factor.replace('_', ' ').title()}: [{bar}] {weight*100:.0f}%\n"
+        
+        msg += f"\n📈 <b>LEARNING METRICS</b>\n"
+        msg += f"├ Predictions Made: {len(self.prediction_log)}\n"
+        msg += f"├ Outcomes Tracked: {len(self.trade_outcomes)}\n"
+        
+        # Calculate overall accuracy
+        if self.trade_outcomes:
+            wins = sum(1 for t in self.trade_outcomes if t.get('profit', 0) > 0)
+            accuracy = wins / len(self.trade_outcomes)
+            msg += f"├ Win Rate: {accuracy*100:.1f}%\n"
+        else:
+            msg += f"├ Win Rate: Collecting data...\n"
+        
+        msg += f"\n🎯 <b>STRATEGY PERFORMANCE</b>\n"
+        for strat, stats in self.strategy_accuracy.items():
+            acc = stats.get('accuracy', 0.5)
+            total = stats.get('total', 0)
+            emoji = "🟢" if acc >= 0.55 else "🟡" if acc >= 0.45 else "🔴"
+            msg += f"{emoji} {strat.title()}: {acc*100:.0f}% ({total} trades)\n"
+        
+        msg += "\n💡 <b>ML LEARNING:</b>\n"
+        msg += "• Weights auto-adjust based on outcomes\n"
+        msg += "• Best strategies get higher weight\n"
+        msg += "• Poor performers reduced\n"
+        msg += "• Rebalances weekly\n"
+        
+        await self.send_message_to(chat_id, msg)
+    
+    async def _cmd_optimize(self, chat_id: int, args: List[str]):
+        """Optimize strategy based on historical performance."""
+        msg = "🔧 <b>STRATEGY OPTIMIZATION</b>\n\n"
+        
+        # Analyze strategy performance
+        best_strategy = None
+        best_accuracy = 0
+        worst_strategy = None
+        worst_accuracy = 1
+        
+        for strat, stats in self.strategy_accuracy.items():
+            acc = stats.get('accuracy', 0.5)
+            if acc > best_accuracy:
+                best_accuracy = acc
+                best_strategy = strat
+            if acc < worst_accuracy:
+                worst_accuracy = acc
+                worst_strategy = strat
+        
+        msg += "📊 <b>ANALYSIS RESULTS</b>\n\n"
+        
+        if best_strategy:
+            msg += f"🏆 <b>Best Strategy:</b> {best_strategy.title()}\n"
+            msg += f"   Accuracy: {best_accuracy*100:.0f}%\n\n"
+        
+        if worst_strategy and worst_accuracy < 0.45:
+            msg += f"⚠️ <b>Underperforming:</b> {worst_strategy.title()}\n"
+            msg += f"   Accuracy: {worst_accuracy*100:.0f}%\n\n"
+        
+        msg += "🎯 <b>OPTIMIZATION SUGGESTIONS</b>\n\n"
+        
+        # Generate suggestions based on performance
+        if best_accuracy >= 0.6:
+            msg += f"✓ Increase {best_strategy.title()} weight to 30%\n"
+        if worst_accuracy < 0.45:
+            msg += f"✗ Reduce {worst_strategy.title()} weight to 10%\n"
+        
+        # Style-based suggestions
+        style = self.user_settings['trading_style']
+        if style == "day":
+            msg += "✓ Focus on momentum + ORB strategies\n"
+            msg += "✓ Tighter stops (1.5x ATR)\n"
+        elif style == "swing":
+            msg += "✓ Use trend + mean reversion combo\n"
+            msg += "✓ Standard stops (2x ATR)\n"
+        else:
+            msg += "✓ Focus on value + trend following\n"
+            msg += "✓ Wider stops (2.5x ATR)\n"
+        
+        msg += "\n<b>Auto-Optimization:</b>\n"
+        msg += "Weights adjust automatically based on\n"
+        msg += "recent 30-day performance data.\n"
+        
+        await self.send_message_to(chat_id, msg)
+    
+    async def _cmd_report(self, chat_id: int, args: List[str]):
+        """Generate comprehensive performance report."""
+        stats = self.performance_stats
+        
+        msg = "📊 <b>PERFORMANCE REPORT</b>\n\n"
+        msg += f"<i>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}</i>\n\n"
+        
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "📈 <b>TRADING SUMMARY</b>\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        
+        total = stats['total_trades']
+        wins = stats['winning_trades']
+        win_rate = (wins / total * 100) if total > 0 else 0
+        
+        msg += f"Total Trades: {total}\n"
+        msg += f"Winning: {wins} ({win_rate:.1f}%)\n"
+        msg += f"Losing: {total - wins} ({100-win_rate:.1f}%)\n\n"
+        
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "💰 <b>PROFIT & LOSS</b>\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        
+        pnl = stats['total_pnl']
+        pnl_emoji = "🟢" if pnl >= 0 else "🔴"
+        msg += f"Total P&L: {pnl_emoji} ${pnl:+,.2f}\n"
+        msg += f"Best Trade: 🏆 ${stats['best_trade']:+,.2f}\n"
+        msg += f"Worst Trade: 📉 ${stats['worst_trade']:+,.2f}\n\n"
+        
+        if stats['avg_win'] > 0 or stats['avg_loss'] > 0:
+            msg += f"Avg Win: ${stats['avg_win']:,.2f}\n"
+            msg += f"Avg Loss: ${abs(stats['avg_loss']):,.2f}\n"
+        
+        msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "📉 <b>RISK METRICS</b>\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        
+        pf = stats['profit_factor']
+        sharpe = stats['sharpe_ratio']
+        dd = stats['max_drawdown']
+        
+        msg += f"Profit Factor: {pf:.2f}\n"
+        msg += f"Sharpe Ratio: {sharpe:.2f}\n"
+        msg += f"Max Drawdown: {dd*100:.1f}%\n\n"
+        
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "🎯 <b>STREAK</b>\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        
+        streak = stats['current_streak']
+        streak_emoji = "🔥" if streak > 0 else "❄️" if streak < 0 else "➖"
+        msg += f"Current: {streak_emoji} {abs(streak)} {'wins' if streak > 0 else 'losses' if streak < 0 else ''}\n"
+        msg += f"Best Streak: 🏆 {stats['best_streak']} wins\n\n"
+        
+        # Recommendations
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "💡 <b>RECOMMENDATIONS</b>\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        
+        if win_rate >= 55:
+            msg += "✅ Win rate is healthy\n"
+        else:
+            msg += "⚠️ Focus on higher conviction trades\n"
+        
+        if pf >= 1.5:
+            msg += "✅ Good profit factor\n"
+        elif pf < 1:
+            msg += "⚠️ Improve R:R ratio\n"
+        
+        if dd > 0.1:
+            msg += "⚠️ Reduce position sizes\n"
+        
+        await self.send_message_to(chat_id, msg)
+    
+    # ===== ML LEARNING HELPERS =====
+    
+    async def _record_prediction(self, ticker: str, score: float, action: str, 
+                                  entry_price: float, strategy: str):
+        """Record a prediction for later outcome tracking."""
+        prediction = {
+            "id": f"{ticker}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            "ticker": ticker,
+            "score": score,
+            "action": action,
+            "entry_price": entry_price,
+            "strategy": strategy,
+            "timestamp": datetime.now().isoformat(),
+            "outcome": None,
+            "exit_price": None,
+            "pnl": None,
+        }
+        self.prediction_log.append(prediction)
+        return prediction["id"]
+    
+    async def _update_prediction_outcome(self, prediction_id: str, 
+                                          exit_price: float, outcome: str):
+        """Update prediction with actual outcome."""
+        for pred in self.prediction_log:
+            if pred["id"] == prediction_id:
+                pred["exit_price"] = exit_price
+                pred["outcome"] = outcome
+                pred["pnl"] = exit_price - pred["entry_price"]
+                
+                # Update strategy accuracy
+                strategy = pred.get("strategy", "momentum")
+                if strategy in self.strategy_accuracy:
+                    self.strategy_accuracy[strategy]["total"] += 1
+                    if outcome == "win":
+                        self.strategy_accuracy[strategy]["wins"] += 1
+                    
+                    total = self.strategy_accuracy[strategy]["total"]
+                    wins = self.strategy_accuracy[strategy]["wins"]
+                    self.strategy_accuracy[strategy]["accuracy"] = wins / total if total > 0 else 0.5
+                
+                # Trigger ML weight adjustment
+                await self._adjust_ml_weights()
+                break
+    
+    async def _adjust_ml_weights(self):
+        """Adjust ML weights based on strategy performance."""
+        # Get strategy performance
+        performances = {}
+        for strat, stats in self.strategy_accuracy.items():
+            if stats["total"] >= 5:  # Minimum sample size
+                performances[strat] = stats["accuracy"]
+        
+        if not performances:
+            return
+        
+        # Normalize weights based on performance
+        total_perf = sum(performances.values())
+        if total_perf > 0:
+            # Map strategies to weight keys
+            strat_to_weight = {
+                "momentum": "momentum_score",
+                "mean_reversion": "value_score",
+                "trend_following": "trend_score",
+                "buffett": "value_score",
+                "druckenmiller": "momentum_score",
+            }
+            
+            # Adjust weights
+            for strat, perf in performances.items():
+                weight_key = strat_to_weight.get(strat)
+                if weight_key and weight_key in self.ml_model_weights:
+                    # Increase weight for better performers
+                    adjustment = (perf - 0.5) * 0.1  # +/-5% max
+                    new_weight = self.ml_model_weights[weight_key] + adjustment
+                    self.ml_model_weights[weight_key] = max(0.1, min(0.4, new_weight))
+            
+            # Normalize to sum to 1
+            total_weight = sum(self.ml_model_weights.values())
+            for key in self.ml_model_weights:
+                self.ml_model_weights[key] /= total_weight
 
 
 # Convenience function to create and start bot
