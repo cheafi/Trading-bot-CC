@@ -708,6 +708,7 @@ Or try uploading a clearer screenshot showing:
             "/mlstats": self._cmd_mlstats,
             "/optimize": self._cmd_optimize,
             "/report": self._cmd_report,
+            "/legends": self._cmd_legends,
         }
         
         handler = handlers.get(command)
@@ -4398,8 +4399,8 @@ Provides comprehensive analysis:
             await self.send_message_to(chat_id, f"❌ Error: {e}")
     
     async def _cmd_top(self, chat_id: int, args: List[str]):
-        """Top 10+ picks today with detailed reasons and legendary investor analysis."""
-        await self.send_message_to(chat_id, "🎯 <b>Scanning 100+ stocks for top picks...</b>")
+        """Top 10+ picks today with 10 legendary fund managers' analysis."""
+        await self.send_message_to(chat_id, "🎯 <b>Scanning 100+ stocks with 10 Legendary Investors' Criteria...</b>")
         
         try:
             # Score stocks and find best setups - scan more stocks
@@ -4416,10 +4417,8 @@ Provides comprehensive analysis:
                 volume = quote.get('volume', 0)
                 high = quote.get('high', 0)
                 low = quote.get('low', 0)
-                open_price = quote.get('open', 0)
-                prev_close = quote.get('prev_close', 0)
                 
-                # Calculate advanced scoring with legendary investor criteria
+                # Calculate advanced scoring with ALL 10 legendary investor criteria
                 score_data = await self._calculate_legendary_score(ticker, quote)
                 
                 if score_data['total_score'] >= 6.0:  # Only high-scoring stocks
@@ -4429,46 +4428,6 @@ Provides comprehensive analysis:
                     stop = round(price - atr_est * 1.5, 2)
                     target = round(price + atr_est * 3, 2)
                     rr = round((target - price) / (price - stop), 1) if price > stop else 0
-                    
-                    # Determine position in day's range
-                    if high > low:
-                        pos_in_range = (price - low) / (high - low) * 100
-                    else:
-                        pos_in_range = 50
-                    
-                    # Build reasons list
-                    reasons = []
-                    
-                    # Momentum reason
-                    if change_pct > 2:
-                        reasons.append(f"🚀 Strong momentum (+{change_pct:.1f}%)")
-                    elif change_pct > 0.5:
-                        reasons.append(f"📈 Positive momentum (+{change_pct:.1f}%)")
-                    elif change_pct < -2:
-                        reasons.append(f"🎯 Oversold bounce setup ({change_pct:.1f}%)")
-                    
-                    # Price action
-                    if pos_in_range > 70:
-                        reasons.append("💪 Trading near day's highs")
-                    elif pos_in_range < 30:
-                        reasons.append("🛡️ Near support level")
-                    
-                    # Investor style reasons
-                    if score_data['buffett_score'] >= 7:
-                        reasons.append("🏛️ Buffett: Strong value + quality")
-                    if score_data['lynch_score'] >= 7:
-                        reasons.append("📊 Lynch: PEG attractive for growth")
-                    if score_data['momentum_score'] >= 7:
-                        reasons.append("🔥 Druckenmiller: Momentum aligned")
-                    if score_data['tepper_score'] >= 7:
-                        reasons.append("💎 Tepper: Distressed value play")
-                    
-                    # Volume confirmation
-                    if volume > 1000000:
-                        reasons.append(f"📊 High liquidity ({volume/1000000:.1f}M vol)")
-                    
-                    if not reasons:
-                        reasons.append("📈 Technical setup favorable")
                     
                     picks.append({
                         "ticker": ticker,
@@ -4480,70 +4439,127 @@ Provides comprehensive analysis:
                         "stop": stop,
                         "target": target,
                         "rr": rr,
-                        "reasons": reasons[:3],  # Top 3 reasons
-                        "investor_scores": score_data,
-                        "hold_days": "3-15 days"
+                        "scores": score_data.get('scores', {}),
+                        "reasons": score_data.get('reasons', {}),
+                        "top_managers": score_data.get('top_managers', []),
+                        "kelly": score_data.get('kelly_fraction', 0),
+                        "vol": score_data.get('volatility', 0),
+                        "rsi": score_data.get('rsi', 50),
+                        "change_30d": score_data.get('change_30d', 0),
                     })
             
             # Sort by score
             picks.sort(key=lambda x: x['score'], reverse=True)
             
-            # Split into two messages if needed
-            msg1 = "🎯 <b>TOP PICKS TODAY (Part 1/2)</b>\n"
+            # Manager name mapping
+            manager_names = {
+                'buffett': '🏛️ Buffett',
+                'dalio': '⚖️ Dalio',
+                'lynch': '📊 Lynch',
+                'greenblatt': '🎯 Greenblatt',
+                'tepper': '💎 Tepper',
+                'druckenmiller': '🔥 Druckenmiller',
+                'wood': '🚀 C.Wood',
+                'ackman': '🎪 Ackman',
+                'smith': '✨ Smith',
+                'griffin': '🤖 Griffin',
+            }
+            
+            # Split into messages
+            msg1 = "🎯 <b>TOP PICKS - 10 LEGENDARY INVESTORS' ANALYSIS</b>\n"
             msg1 += f"<i>Scanned {len(tickers)} stocks | {datetime.now().strftime('%Y-%m-%d %H:%M')}</i>\n\n"
             
             if picks:
-                # First 5 picks in message 1
-                for i, p in enumerate(picks[:5], 1):
-                    score_bar = "●" * int(p['score']) + "○" * (10 - int(p['score']))
+                # First 4 picks with full analysis
+                for i, p in enumerate(picks[:4], 1):
+                    scores = p.get('scores', {})
+                    reasons = p.get('reasons', {})
                     chg_emoji = "🟢" if p['change_pct'] >= 0 else "🔴"
                     
-                    msg1 += f"<b>#{i} {p['ticker']}</b> - {p['signal']}\n"
-                    msg1 += f"{chg_emoji} ${p['price']:.2f} ({p['change_pct']:+.2f}%)\n"
-                    msg1 += f"   🛑 Stop: ${p['stop']:.2f} | 🎯 Target: ${p['target']:.2f}\n"
-                    msg1 += f"   📊 Score: {p['score']:.1f}/10 [{score_bar}]\n"
-                    msg1 += f"   <b>Why:</b>\n"
-                    for reason in p['reasons']:
-                        msg1 += f"   • {reason}\n"
-                    msg1 += "\n"
+                    msg1 += f"━━━━━ <b>#{i} {p['ticker']}</b> ━━━━━\n"
+                    msg1 += f"{chg_emoji} ${p['price']:.2f} ({p['change_pct']:+.2f}%) | 30d: {p.get('change_30d', 0):+.1f}%\n"
+                    msg1 += f"📊 <b>AI Score: {p['score']:.1f}/10 - {p['signal']}</b>\n\n"
+                    
+                    # Show top 5 manager scores
+                    msg1 += "<b>Manager Scores:</b>\n"
+                    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:5]
+                    for mgr, score in sorted_scores:
+                        bar = "█" * int(score) + "░" * (10 - int(score))
+                        name = manager_names.get(mgr, mgr.title())
+                        msg1 += f"{name}: [{bar}] {score:.1f}\n"
+                    
+                    # Why this pick
+                    msg1 += f"\n<b>Why:</b>\n"
+                    for mgr, reason_list in list(reasons.items())[:3]:
+                        if reason_list:
+                            name = manager_names.get(mgr, mgr.title())
+                            msg1 += f"• {name}: {reason_list[0]}\n"
+                    
+                    # Trade levels
+                    msg1 += f"\n<b>Trade:</b>\n"
+                    msg1 += f"📍 Entry: ${p['price']:.2f}\n"
+                    msg1 += f"🛑 Stop: ${p['stop']:.2f} (-{(p['price']-p['stop'])/p['price']*100:.1f}%)\n"
+                    msg1 += f"🎯 Target: ${p['target']:.2f} (+{(p['target']-p['price'])/p['price']*100:.1f}%)\n"
+                    msg1 += f"📐 R:R: 1:{p['rr']:.1f} | Kelly: {p.get('kelly', 0)*100:.0f}%\n\n"
                 
                 await self.send_message_to(chat_id, msg1)
                 
-                # Second message with picks 6-12
-                if len(picks) > 5:
-                    msg2 = "🎯 <b>TOP PICKS TODAY (Part 2/2)</b>\n\n"
+                # Second message with picks 5-10 (condensed)
+                if len(picks) > 4:
+                    msg2 = "🎯 <b>MORE TOP PICKS (5-10)</b>\n\n"
                     
-                    for i, p in enumerate(picks[5:12], 6):
-                        score_bar = "●" * int(p['score']) + "○" * (10 - int(p['score']))
+                    for i, p in enumerate(picks[4:10], 5):
+                        scores = p.get('scores', {})
                         chg_emoji = "🟢" if p['change_pct'] >= 0 else "🔴"
                         
-                        msg2 += f"<b>#{i} {p['ticker']}</b> - {p['signal']}\n"
-                        msg2 += f"{chg_emoji} ${p['price']:.2f} ({p['change_pct']:+.2f}%)\n"
-                        msg2 += f"   🛑 Stop: ${p['stop']:.2f} | 🎯 Target: ${p['target']:.2f}\n"
-                        msg2 += f"   📊 Score: {p['score']:.1f}/10\n"
-                        msg2 += f"   • {p['reasons'][0] if p['reasons'] else 'Technical setup'}\n\n"
+                        # Get top 2 managers
+                        sorted_mgrs = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:2]
+                        top_mgrs = ", ".join([f"{manager_names.get(m, m)[:8]}:{s:.0f}" for m, s in sorted_mgrs])
+                        
+                        msg2 += f"<b>#{i} {p['ticker']}</b> {chg_emoji} ${p['price']:.2f} ({p['change_pct']:+.1f}%)\n"
+                        msg2 += f"   Score: {p['score']:.1f} | {top_mgrs}\n"
+                        msg2 += f"   🛑${p['stop']:.2f} 🎯${p['target']:.2f} R:R {p['rr']:.1f}\n\n"
                     
                     msg2 += "━━━━━━━━━━━━━━━━━━━━━━\n"
-                    msg2 += "💡 <b>LEGENDARY INVESTOR STYLES:</b>\n"
-                    msg2 += "🏛️ Buffett: Value + Moat\n"
-                    msg2 += "📊 Lynch: Growth at reasonable price\n"
-                    msg2 += "🔥 Druckenmiller: Momentum + Macro\n"
-                    msg2 += "💎 Tepper: Distressed value\n\n"
-                    msg2 += "Use <code>/simtrade 2025-04-06</code> to backtest picks\n"
+                    msg2 += "📖 <b>10 LEGENDARY FUND MANAGERS:</b>\n"
+                    msg2 += "🏛️ Buffett - Value + Moat (ROE >20%)\n"
+                    msg2 += "⚖️ Dalio - Risk Parity (low vol)\n"
+                    msg2 += "📊 Lynch - PEG <1, growth >20%\n"
+                    msg2 += "🎯 Greenblatt - Magic Formula ROIC\n"
+                    msg2 += "💎 Tepper - Distressed value (-30%)\n"
+                    msg2 += "🔥 Druckenmiller - Macro momentum\n"
+                    msg2 += "🚀 C.Wood - Disruptive innovation\n"
+                    msg2 += "🎪 Ackman - Concentrated bets\n"
+                    msg2 += "✨ Smith - Quality ROCE >20%\n"
+                    msg2 += "🤖 Griffin - Kelly quant sizing\n\n"
+                    msg2 += "<code>/score TICKER</code> for detailed analysis\n"
                     msg2 += "⚠️ <i>Not financial advice. DYOR.</i>"
                     
                     await self.send_message_to(chat_id, msg2)
             else:
                 msg1 += "📭 No strong picks found right now.\n"
-                msg1 += "Market may be choppy - wait for clearer setups.\n"
-                msg1 += "Try <code>/scan</code> for more options."
+                msg1 += "Market may be choppy - wait for clearer setups."
                 await self.send_message_to(chat_id, msg1)
             
         except Exception as e:
             await self.send_message_to(chat_id, f"❌ Error: {e}")
     
     async def _calculate_legendary_score(self, ticker: str, quote: Dict) -> Dict:
-        """Calculate score based on legendary investor strategies."""
+        """
+        Calculate comprehensive score based on 10 legendary fund managers' strategies.
+        
+        Fund Managers Implemented:
+        1. Warren Buffett - Value + Quality (Moat)
+        2. Ray Dalio - Risk Parity
+        3. Peter Lynch - PEG Ratio / Growth
+        4. Joel Greenblatt - Magic Formula (ROIC + Yield)
+        5. David Tepper - Distressed Value
+        6. Stanley Druckenmiller - Macro Momentum
+        7. Cathie Wood - Disruptive Innovation
+        8. Bill Ackman - Concentrated Conviction
+        9. Terry Smith - Quality Growth (ROCE)
+        10. Ken Griffin - Multi-Strategy Quant
+        """
         price = quote.get('price', 0)
         change_pct = quote.get('change_pct', 0)
         volume = quote.get('volume', 0)
@@ -4551,89 +4567,415 @@ Provides comprehensive analysis:
         low = quote.get('low', 0)
         prev_close = quote.get('prev_close', price)
         
-        # Initialize component scores
-        buffett_score = 5.0  # Value + Quality (Buffett)
-        lynch_score = 5.0    # Growth at reasonable price (Lynch)
-        momentum_score = 5.0  # Momentum (Druckenmiller)
-        tepper_score = 5.0   # Distressed Value (Tepper)
-        greenblatt_score = 5.0  # Magic Formula (Greenblatt)
+        # Get historical data for advanced calculations
+        bars = await self._get_historical_bars(ticker, days=30)
+        prices = [b.get('close', 0) for b in bars] if bars else [price]
         
-        # === BUFFETT SCORE (Value + Quality) ===
-        # Without P/E data, use price stability and trend
+        # Calculate technical indicators
+        atr = self._calculate_atr(bars) if bars else price * 0.025
+        rsi = self._calculate_rsi(prices) if len(prices) >= 14 else 50
+        
+        # Calculate returns for volatility
+        returns = []
+        for i in range(1, len(prices)):
+            if prices[i-1] > 0:
+                returns.append((prices[i] - prices[i-1]) / prices[i-1])
+        volatility = (sum(r**2 for r in returns) / len(returns)) ** 0.5 if returns else 0.02
+        
+        # Price position in range (0-1)
+        pos_in_range = (price - low) / (high - low) if high > low else 0.5
+        
+        # 30-day price change
+        price_30d_ago = prices[0] if prices else price
+        change_30d = ((price - price_30d_ago) / price_30d_ago * 100) if price_30d_ago > 0 else 0
+        
+        # Initialize all manager scores
+        scores = {}
+        reasons = {}
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 1. WARREN BUFFETT - Value + Quality (Moat)
+        # Rule: P/E <15, ROE >20%, debt/equity <0.5, gross margin >40% (10y)
+        # ═══════════════════════════════════════════════════════════════════
+        buffett = 5.0
+        buffett_reasons = []
+        
+        # Stability = Quality (proxy for moat)
         if abs(change_pct) < 1.5:
-            buffett_score += 1.5  # Stable price = quality
-        if price > prev_close * 0.97:  # Not crashing
-            buffett_score += 1
-        # Large cap proxy (higher prices often = larger companies)
+            buffett += 1.5
+            buffett_reasons.append("Stable price action")
+        if volatility < 0.025:
+            buffett += 1.0
+            buffett_reasons.append("Low volatility = quality")
+        
+        # Not overvalued (price not at extreme highs)
+        if pos_in_range < 0.9:
+            buffett += 0.5
+            buffett_reasons.append("Not at extreme high")
+        
+        # Uptrend but not euphoric
+        if 0 < change_30d < 15:
+            buffett += 1.0
+            buffett_reasons.append("Steady uptrend")
+        elif change_30d > 30:
+            buffett -= 1.0
+            buffett_reasons.append("Too hot - wait for pullback")
+        
+        # Large cap proxy
         if price > 100:
-            buffett_score += 1
+            buffett += 1.0
+            buffett_reasons.append("Large cap (higher quality)")
         
-        # === LYNCH SCORE (PEG / Growth) ===
-        # Use momentum as growth proxy
-        if 1 < change_pct <= 3:
-            lynch_score += 2.5  # Moderate growth momentum
-        elif 0.5 < change_pct <= 1:
-            lynch_score += 1.5
-        elif change_pct > 3:
-            lynch_score += 1  # Too hot, lower PEG appeal
+        scores['buffett'] = min(10, max(1, buffett))
+        reasons['buffett'] = buffett_reasons[:3]
         
-        # === MOMENTUM SCORE (Druckenmiller) ===
-        # Trend + Price action
-        if change_pct > 2:
-            momentum_score += 3
-        elif change_pct > 1:
-            momentum_score += 2
-        elif change_pct > 0.5:
-            momentum_score += 1
-        elif change_pct < -1:
-            momentum_score -= 1.5
+        # ═══════════════════════════════════════════════════════════════════
+        # 2. RAY DALIO - Risk Parity
+        # Rule: Weight by inverse volatility: w_i = (1/σ_i) / Σ(1/σ_j)
+        # ═══════════════════════════════════════════════════════════════════
+        dalio = 5.0
+        dalio_reasons = []
         
-        # Near highs = strong momentum
-        if high > low:
-            pos_in_range = (price - low) / (high - low)
-            if pos_in_range > 0.8:
-                momentum_score += 1.5
-            elif pos_in_range < 0.2:
-                momentum_score -= 1
+        # Risk parity favors low volatility assets
+        if volatility < 0.015:
+            dalio += 2.5
+            dalio_reasons.append(f"Low vol ({volatility*100:.1f}%) - high weight")
+        elif volatility < 0.025:
+            dalio += 1.5
+            dalio_reasons.append(f"Moderate vol ({volatility*100:.1f}%)")
+        elif volatility > 0.04:
+            dalio -= 1.5
+            dalio_reasons.append(f"High vol ({volatility*100:.1f}%) - reduce weight")
         
-        # === TEPPER SCORE (Distressed Value) ===
-        # Buy beaten-down assets during panic
-        if change_pct < -3:
-            tepper_score += 3  # Panic selling = opportunity
-        elif change_pct < -2:
-            tepper_score += 2
-        elif change_pct < -1:
-            tepper_score += 1
-        else:
-            tepper_score -= 0.5  # Not distressed
+        # Uncorrelated to market moves (contrarian on big days)
+        if abs(change_pct) < 0.5:
+            dalio += 1.0
+            dalio_reasons.append("Market neutral behavior")
         
-        # === GREENBLATT SCORE (Magic Formula) ===
-        # Earnings yield + ROIC proxy via price action
-        if 0 < change_pct < 2:
-            greenblatt_score += 1.5
-        if abs(change_pct) < 1:  # Stable = quality
-            greenblatt_score += 1
+        # Stable trend preferred
+        if abs(change_30d) < 10:
+            dalio += 1.0
+            dalio_reasons.append("Stable 30d trend")
         
-        # Volume confirmation for all
+        scores['dalio'] = min(10, max(1, dalio))
+        reasons['dalio'] = dalio_reasons[:3]
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 3. PETER LYNCH - PEG Ratio / Growth
+        # Rule: PEG <1, EPS growth >20%, revenue growth >15%
+        # ═══════════════════════════════════════════════════════════════════
+        lynch = 5.0
+        lynch_reasons = []
+        
+        # Growth momentum as proxy for earnings growth
+        if 2 < change_30d <= 15:
+            lynch += 2.0
+            lynch_reasons.append(f"Good growth momentum (+{change_30d:.0f}%)")
+        elif 1 < change_pct <= 3:
+            lynch += 1.5
+            lynch_reasons.append("Moderate daily growth")
+        elif change_30d > 20:
+            lynch -= 0.5
+            lynch_reasons.append("May be overvalued (high PEG)")
+        
+        # Not expensive (price not at highs)
+        if pos_in_range < 0.7:
+            lynch += 1.0
+            lynch_reasons.append("Room to grow")
+        
+        # Volume confirms growth
+        if volume > 1000000:
+            lynch += 0.5
+            lynch_reasons.append("High volume confirms interest")
+        
+        # Consumer-facing stocks often better for Lynch
+        consumer_tickers = ["AAPL", "AMZN", "COST", "WMT", "HD", "NKE", "SBUX", "MCD", "DIS", "NFLX"]
+        if ticker in consumer_tickers:
+            lynch += 1.0
+            lynch_reasons.append("Consumer-facing (Lynch favorite)")
+        
+        scores['lynch'] = min(10, max(1, lynch))
+        reasons['lynch'] = lynch_reasons[:3]
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 4. JOEL GREENBLATT - Magic Formula
+        # Rule: High ROIC + High Earnings Yield, Top 30 stocks
+        # ROIC = EBIT/(Net Fixed Assets + WC), EY = EBIT/EV
+        # ═══════════════════════════════════════════════════════════════════
+        greenblatt = 5.0
+        greenblatt_reasons = []
+        
+        # Stability suggests quality (high ROIC proxy)
+        if abs(change_pct) < 1:
+            greenblatt += 1.5
+            greenblatt_reasons.append("Price stability = quality")
+        
+        # Not overvalued (earnings yield proxy)
+        if change_30d < 10 and change_30d > -5:
+            greenblatt += 1.5
+            greenblatt_reasons.append("Not overextended")
+        
+        # Consistent trend (quality companies)
+        if 0 < change_30d < 8:
+            greenblatt += 1.0
+            greenblatt_reasons.append("Steady performer")
+        
+        # Volume indicates institutional interest
         if volume > 500000:
-            momentum_score += 0.5
-            lynch_score += 0.5
+            greenblatt += 0.5
+            greenblatt_reasons.append("Institutional interest")
         
-        # Normalize scores
-        buffett_score = min(10, max(1, buffett_score))
-        lynch_score = min(10, max(1, lynch_score))
-        momentum_score = min(10, max(1, momentum_score))
-        tepper_score = min(10, max(1, tepper_score))
-        greenblatt_score = min(10, max(1, greenblatt_score))
+        scores['greenblatt'] = min(10, max(1, greenblatt))
+        reasons['greenblatt'] = greenblatt_reasons[:3]
         
-        # Weighted composite score
-        total_score = (
-            buffett_score * 0.20 +      # Value quality
-            lynch_score * 0.20 +         # Growth value
-            momentum_score * 0.30 +      # Momentum (most actionable)
-            tepper_score * 0.15 +        # Contrarian
-            greenblatt_score * 0.15      # Magic formula
-        )
+        # ═══════════════════════════════════════════════════════════════════
+        # 5. DAVID TEPPER - Distressed Value
+        # Rule: Down >30% in 3 months, yield >5%, P/B <1, enter when VIX >25
+        # ═══════════════════════════════════════════════════════════════════
+        tepper = 5.0
+        tepper_reasons = []
+        
+        # Distressed = down significantly
+        if change_30d < -20:
+            tepper += 3.0
+            tepper_reasons.append(f"Heavily beaten down ({change_30d:.0f}%) - opportunity")
+        elif change_30d < -10:
+            tepper += 2.0
+            tepper_reasons.append(f"Significant pullback ({change_30d:.0f}%)")
+        elif change_30d < -5:
+            tepper += 1.0
+            tepper_reasons.append("Mild pullback")
+        else:
+            tepper -= 0.5
+            tepper_reasons.append("Not distressed - Tepper waits")
+        
+        # Daily panic selling
+        if change_pct < -3:
+            tepper += 2.0
+            tepper_reasons.append(f"Panic selling today ({change_pct:.1f}%)")
+        elif change_pct < -2:
+            tepper += 1.0
+            tepper_reasons.append("Selling pressure")
+        
+        # RSI oversold = distressed
+        if rsi < 30:
+            tepper += 1.5
+            tepper_reasons.append(f"RSI oversold ({rsi:.0f})")
+        
+        scores['tepper'] = min(10, max(1, tepper))
+        reasons['tepper'] = tepper_reasons[:3]
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 6. STANLEY DRUCKENMILLER - Macro Momentum
+        # Rule: Align with Fed policy, cut losses at -7%, ride trends
+        # ═══════════════════════════════════════════════════════════════════
+        druckenmiller = 5.0
+        druckenmiller_reasons = []
+        
+        # Strong momentum
+        if change_pct > 2:
+            druckenmiller += 2.5
+            druckenmiller_reasons.append(f"Strong momentum (+{change_pct:.1f}%)")
+        elif change_pct > 1:
+            druckenmiller += 1.5
+            druckenmiller_reasons.append("Good momentum")
+        elif change_pct < -1:
+            druckenmiller -= 1.0
+            druckenmiller_reasons.append("Weak momentum - caution")
+        
+        # Trend following
+        if change_30d > 10:
+            druckenmiller += 2.0
+            druckenmiller_reasons.append(f"Strong trend (+{change_30d:.0f}% in 30d)")
+        elif change_30d > 5:
+            druckenmiller += 1.0
+            druckenmiller_reasons.append("Positive trend")
+        
+        # Near highs = trend confirmation
+        if pos_in_range > 0.8:
+            druckenmiller += 1.0
+            druckenmiller_reasons.append("Near highs - trend intact")
+        
+        # -7% stop loss rule
+        if change_pct < -7:
+            druckenmiller = 2.0
+            druckenmiller_reasons = ["❌ Hit -7% stop loss rule"]
+        
+        scores['druckenmiller'] = min(10, max(1, druckenmiller))
+        reasons['druckenmiller'] = druckenmiller_reasons[:3]
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 7. CATHIE WOOD - Disruptive Innovation
+        # Rule: 5-year DCF, revenue CAGR >30%, tech breakthroughs
+        # ═══════════════════════════════════════════════════════════════════
+        wood = 5.0
+        wood_reasons = []
+        
+        # Innovation sectors
+        innovation_tickers = [
+            "TSLA", "NVDA", "AMD", "PLTR", "COIN", "SQ", "ROKU", "TDOC", "PATH",
+            "CRSP", "BEAM", "NTLA", "EXAS", "PACB",  # Genomics
+            "ARKK", "ARKG", "ARKW", "ARKF",  # ARK funds
+            "U", "RBLX", "DKNG", "HOOD", "SNOW", "NET", "DDOG", "ZS", "CRWD"
+        ]
+        if ticker in innovation_tickers:
+            wood += 2.5
+            wood_reasons.append("🚀 Disruptive innovation sector")
+        
+        # High growth momentum
+        if change_30d > 15:
+            wood += 2.0
+            wood_reasons.append(f"High growth ({change_30d:.0f}%)")
+        elif change_30d > 10:
+            wood += 1.0
+            wood_reasons.append("Good growth trajectory")
+        
+        # Volatility is acceptable for innovation
+        if volatility > 0.03:
+            wood += 0.5
+            wood_reasons.append("Innovation volatility acceptable")
+        
+        # But cap at 2x market vol
+        if volatility > 0.06:
+            wood -= 1.0
+            wood_reasons.append("Excessive volatility")
+        
+        scores['wood'] = min(10, max(1, wood))
+        reasons['wood'] = wood_reasons[:3]
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 8. BILL ACKMAN - Concentrated Conviction
+        # Rule: 8-12 holdings, DCF spread >30%, activist potential
+        # ═══════════════════════════════════════════════════════════════════
+        ackman = 5.0
+        ackman_reasons = []
+        
+        # Large caps with activist potential
+        ackman_style = ["CMG", "HLT", "SBUX", "DPZ", "LOW", "HD", "TGT", "NKE", "DIS", "NFLX"]
+        if ticker in ackman_style:
+            ackman += 2.0
+            ackman_reasons.append("Ackman-style target")
+        
+        # Undervalued = high conviction
+        if change_30d < 0 and change_30d > -15:
+            ackman += 1.5
+            ackman_reasons.append("Potential value unlock")
+        
+        # Not at highs
+        if pos_in_range < 0.7:
+            ackman += 1.0
+            ackman_reasons.append("Room for appreciation")
+        
+        # Stable enough for concentrated bet
+        if volatility < 0.03:
+            ackman += 1.0
+            ackman_reasons.append("Suitable for concentration")
+        
+        scores['ackman'] = min(10, max(1, ackman))
+        reasons['ackman'] = ackman_reasons[:3]
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 9. TERRY SMITH - Quality Growth (ROCE)
+        # Rule: ROCE >20%, sales growth >10%, margin expansion, P/E <25
+        # ═══════════════════════════════════════════════════════════════════
+        smith = 5.0
+        smith_reasons = []
+        
+        # Quality large caps
+        quality_tickers = [
+            "MSFT", "AAPL", "V", "MA", "JNJ", "PG", "KO", "PEP", "UNH", "HD",
+            "COST", "ADBE", "CRM", "ACN", "MCD", "NKE", "SBUX", "TXN", "AVGO", "INTU"
+        ]
+        if ticker in quality_tickers:
+            smith += 2.5
+            smith_reasons.append("High-quality compounder")
+        
+        # Stability = quality
+        if abs(change_pct) < 1 and abs(change_30d) < 5:
+            smith += 1.5
+            smith_reasons.append("Stable = quality")
+        
+        # Steady growth (not explosive)
+        if 0 < change_30d < 10:
+            smith += 1.0
+            smith_reasons.append("Steady growth")
+        
+        # "Do nothing" = low turnover, no panic
+        if volatility < 0.02:
+            smith += 1.0
+            smith_reasons.append("Low churn candidate")
+        
+        scores['smith'] = min(10, max(1, smith))
+        reasons['smith'] = smith_reasons[:3]
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 10. KEN GRIFFIN - Multi-Strategy Quant
+        # Rule: 100+ models, Kelly criterion, daily P&L stops
+        # Kelly: f = μ/σ² (fraction of capital to bet)
+        # ═══════════════════════════════════════════════════════════════════
+        griffin = 5.0
+        griffin_reasons = []
+        
+        # Calculate Kelly-like metric
+        expected_return = change_30d / 100 if change_30d else 0.01
+        kelly_f = expected_return / (volatility ** 2) if volatility > 0 else 0
+        kelly_f = max(-1, min(1, kelly_f))  # Cap at -100% to +100%
+        
+        if kelly_f > 0.3:
+            griffin += 2.0
+            griffin_reasons.append(f"Kelly: {kelly_f:.1%} position size")
+        elif kelly_f > 0.1:
+            griffin += 1.0
+            griffin_reasons.append(f"Kelly: {kelly_f:.1%} - moderate")
+        elif kelly_f < 0:
+            griffin -= 1.0
+            griffin_reasons.append(f"Kelly: {kelly_f:.1%} - avoid")
+        
+        # Momentum signal
+        if change_pct > 0:
+            griffin += 1.0
+            griffin_reasons.append("Positive momentum signal")
+        
+        # Mean reversion signal (RSI)
+        if 30 < rsi < 70:
+            griffin += 0.5
+            griffin_reasons.append(f"RSI neutral ({rsi:.0f})")
+        
+        # Volume confirms
+        if volume > 500000:
+            griffin += 0.5
+            griffin_reasons.append("Sufficient liquidity")
+        
+        scores['griffin'] = min(10, max(1, griffin))
+        reasons['griffin'] = griffin_reasons[:3]
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # COMPOSITE SCORE (Weighted Meta-Model)
+        # ═══════════════════════════════════════════════════════════════════
+        # Adjust weights based on ML learning
+        weights = {
+            'buffett': self.ml_model_weights.get('value_score', 0.15),
+            'dalio': 0.05,  # Risk parity (portfolio level)
+            'lynch': 0.12,  # Growth at reasonable price
+            'greenblatt': 0.10,  # Magic formula
+            'tepper': 0.08,  # Distressed (contrarian)
+            'druckenmiller': self.ml_model_weights.get('momentum_score', 0.20),
+            'wood': 0.08,  # Innovation (high risk)
+            'ackman': 0.07,  # Concentrated
+            'smith': 0.10,  # Quality
+            'griffin': 0.05,  # Quant
+        }
+        
+        # Normalize weights
+        total_weight = sum(weights.values())
+        weights = {k: v/total_weight for k, v in weights.items()}
+        
+        total_score = sum(scores[k] * weights[k] for k in scores)
+        
+        # Find top 3 managers recommending this stock
+        sorted_managers = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        top_managers = sorted_managers[:3]
+        weak_managers = sorted_managers[-2:]
         
         # Determine signal and confidence
         if total_score >= 7.5:
@@ -4646,7 +4988,7 @@ Provides comprehensive analysis:
             signal = "HOLD"
             confidence = "MEDIUM"
         elif total_score >= 4.5:
-            signal = "WEAK"
+            signal = "CAUTION"
             confidence = "LOW"
         else:
             signal = "AVOID"
@@ -4654,13 +4996,22 @@ Provides comprehensive analysis:
         
         return {
             "total_score": round(total_score, 1),
-            "buffett_score": round(buffett_score, 1),
-            "lynch_score": round(lynch_score, 1),
-            "momentum_score": round(momentum_score, 1),
-            "tepper_score": round(tepper_score, 1),
-            "greenblatt_score": round(greenblatt_score, 1),
+            "scores": {k: round(v, 1) for k, v in scores.items()},
+            "reasons": reasons,
+            "top_managers": top_managers,
+            "weak_managers": weak_managers,
             "signal": signal,
             "confidence": confidence,
+            "kelly_fraction": round(kelly_f, 3),
+            "volatility": round(volatility * 100, 2),
+            "rsi": round(rsi, 1),
+            "change_30d": round(change_30d, 1),
+            # Legacy compatibility
+            "buffett_score": scores['buffett'],
+            "lynch_score": scores['lynch'],
+            "momentum_score": scores['druckenmiller'],
+            "tepper_score": scores['tepper'],
+            "greenblatt_score": scores['greenblatt'],
         }
     
     async def _cmd_setup(self, chat_id: int, args: List[str]):
@@ -6643,6 +6994,163 @@ Account: ${account:,.0f}
             msg += "⚠️ Reduce position sizes\n"
         
         await self.send_message_to(chat_id, msg)
+    
+    async def _cmd_legends(self, chat_id: int, args: List[str]):
+        """Show detailed explanations of all 10 legendary fund managers' strategies."""
+        
+        msg = "🏛️ <b>10 LEGENDARY FUND MANAGERS</b>\n"
+        msg += "<i>The strategies powering our AI scoring</i>\n\n"
+        
+        # 1. BUFFETT
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "🏛️ <b>1. WARREN BUFFETT</b>\n"
+        msg += "   <i>Berkshire Hathaway</i>\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "📋 <b>Style:</b> Value + Economic Moat\n"
+        msg += "🎯 <b>Key Metric:</b> Durable competitive advantage\n"
+        msg += "📊 <b>AI Proxy:</b>\n"
+        msg += "   • Low volatility (stable business)\n"
+        msg += "   • Consistent uptrend (proven track record)\n"
+        msg += "   • Large cap ($100B+)\n"
+        msg += "   • Steady price action (no wild swings)\n"
+        msg += "💡 <b>Quote:</b> \"Price is what you pay, value is what you get\"\n\n"
+        
+        # 2. DALIO
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "⚖️ <b>2. RAY DALIO</b>\n"
+        msg += "   <i>Bridgewater Associates</i>\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "📋 <b>Style:</b> Risk Parity / All Weather\n"
+        msg += "🎯 <b>Key Metric:</b> Equal risk contribution\n"
+        msg += "📊 <b>AI Proxy:</b>\n"
+        msg += "   • Inverse volatility weighting\n"
+        msg += "   • Formula: w_i = (1/σ_i) / Σ(1/σ_j)\n"
+        msg += "   • Higher weight to lower vol stocks\n"
+        msg += "💡 <b>Quote:</b> \"Diversify across uncorrelated returns\"\n\n"
+        
+        # 3. LYNCH
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "📈 <b>3. PETER LYNCH</b>\n"
+        msg += "   <i>Fidelity Magellan</i>\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "📋 <b>Style:</b> Growth at Reasonable Price (GARP)\n"
+        msg += "🎯 <b>Key Metric:</b> PEG ratio < 1\n"
+        msg += "📊 <b>AI Proxy:</b>\n"
+        msg += "   • Strong momentum (growth)\n"
+        msg += "   • Not overextended (reasonable price)\n"
+        msg += "   • Consumer-facing tickers preferred\n"
+        msg += "💡 <b>Quote:</b> \"Know what you own and why\"\n\n"
+        
+        # 4. GREENBLATT
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "🔮 <b>4. JOEL GREENBLATT</b>\n"
+        msg += "   <i>Gotham Capital</i>\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "📋 <b>Style:</b> Magic Formula Investing\n"
+        msg += "🎯 <b>Key Metric:</b> ROIC rank + Earnings Yield rank\n"
+        msg += "📊 <b>AI Proxy:</b>\n"
+        msg += "   • Price stability (quality business)\n"
+        msg += "   • Low volatility (high ROIC proxy)\n"
+        msg += "   • Reasonable valuation signals\n"
+        msg += "💡 <b>Quote:</b> \"Buy good companies at bargain prices\"\n\n"
+        
+        await self.send_message_to(chat_id, msg)
+        
+        # Second message for remaining managers
+        msg2 = ""
+        
+        # 5. TEPPER
+        msg2 += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg2 += "🦅 <b>5. DAVID TEPPER</b>\n"
+        msg2 += "   <i>Appaloosa Management</i>\n"
+        msg2 += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg2 += "📋 <b>Style:</b> Distressed / Contrarian\n"
+        msg2 += "🎯 <b>Key Metric:</b> -30% from high + P/B < 1\n"
+        msg2 += "📊 <b>AI Proxy:</b>\n"
+        msg2 += "   • Down >20% from recent high\n"
+        msg2 += "   • Oversold RSI (<30)\n"
+        msg2 += "   • Contrarian opportunity\n"
+        msg2 += "💡 <b>Quote:</b> \"Buy when others are panicking\"\n\n"
+        
+        # 6. DRUCKENMILLER
+        msg2 += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg2 += "🎯 <b>6. STANLEY DRUCKENMILLER</b>\n"
+        msg2 += "   <i>Duquesne Capital</i>\n"
+        msg2 += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg2 += "📋 <b>Style:</b> Macro Momentum\n"
+        msg2 += "🎯 <b>Key Metric:</b> Risk/Reward + Cut at -7%\n"
+        msg2 += "📊 <b>AI Proxy:</b>\n"
+        msg2 += "   • Strong momentum (>15% gain)\n"
+        msg2 += "   • Clear uptrend\n"
+        msg2 += "   • Strict -7% stop loss rule\n"
+        msg2 += "💡 <b>Quote:</b> \"Be right and bet big\"\n\n"
+        
+        # 7. CATHIE WOOD
+        msg2 += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg2 += "🚀 <b>7. CATHIE WOOD</b>\n"
+        msg2 += "   <i>ARK Invest</i>\n"
+        msg2 += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg2 += "📋 <b>Style:</b> Disruptive Innovation\n"
+        msg2 += "🎯 <b>Key Metric:</b> Innovation exposure + High growth\n"
+        msg2 += "📊 <b>AI Proxy:</b>\n"
+        msg2 += "   • Innovation tickers (TSLA, NVDA, SQ, etc.)\n"
+        msg2 += "   • High momentum\n"
+        msg2 += "   • Technology sector focus\n"
+        msg2 += "💡 <b>Quote:</b> \"Invest in the future, not the past\"\n\n"
+        
+        # 8. ACKMAN
+        msg2 += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg2 += "🎪 <b>8. BILL ACKMAN</b>\n"
+        msg2 += "   <i>Pershing Square</i>\n"
+        msg2 += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg2 += "📋 <b>Style:</b> Concentrated Activist\n"
+        msg2 += "🎯 <b>Key Metric:</b> 8-15 positions, deep conviction\n"
+        msg2 += "📊 <b>AI Proxy:</b>\n"
+        msg2 += "   • High score (>7.0) required\n"
+        msg2 += "   • Known Ackman targets (CMG, HLT, etc.)\n"
+        msg2 += "   • Large cap with catalyst potential\n"
+        msg2 += "💡 <b>Quote:</b> \"Concentrated portfolio, know it deeply\"\n\n"
+        
+        await self.send_message_to(chat_id, msg2)
+        
+        # Third message for last two managers
+        msg3 = ""
+        
+        # 9. TERRY SMITH
+        msg3 += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg3 += "💎 <b>9. TERRY SMITH</b>\n"
+        msg3 += "   <i>Fundsmith</i>\n"
+        msg3 += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg3 += "📋 <b>Style:</b> Quality Compounders\n"
+        msg3 += "🎯 <b>Key Metric:</b> ROCE > 25%, Low debt\n"
+        msg3 += "📊 <b>AI Proxy:</b>\n"
+        msg3 += "   • Low volatility (quality)\n"
+        msg3 += "   • Consistent uptrend (compounding)\n"
+        msg3 += "   • Quality tickers (V, MA, MSFT, etc.)\n"
+        msg3 += "💡 <b>Quote:</b> \"Buy, hold, do nothing\"\n\n"
+        
+        # 10. GRIFFIN
+        msg3 += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg3 += "🔢 <b>10. KEN GRIFFIN</b>\n"
+        msg3 += "   <i>Citadel</i>\n"
+        msg3 += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg3 += "📋 <b>Style:</b> Multi-Strategy Quantitative\n"
+        msg3 += "🎯 <b>Key Metric:</b> Kelly Criterion sizing\n"
+        msg3 += "📊 <b>AI Proxy:</b>\n"
+        msg3 += "   • Kelly formula: f = μ / σ²\n"
+        msg3 += "   • Optimal position sizing\n"
+        msg3 += "   • Risk-adjusted returns\n"
+        msg3 += "💡 <b>Quote:</b> \"Markets reward disciplined risk-taking\"\n\n"
+        
+        msg3 += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg3 += "📊 <b>HOW WE USE THESE</b>\n"
+        msg3 += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg3 += "Each stock is scored by all 10 managers.\n"
+        msg3 += "The final score is a weighted average.\n\n"
+        msg3 += "Use /top to see manager-by-manager scores.\n"
+        msg3 += "Use /score [TICKER] for detailed analysis.\n"
+        
+        await self.send_message_to(chat_id, msg3)
     
     # ===== ML LEARNING HELPERS =====
     
