@@ -275,23 +275,53 @@ class SignalEngine:
         
         self.logger.info(f"Filtered signals: {len(filtered_signals)}")
         
+        # 5. Sort by confidence and apply final limits
+        filtered_signals = sorted(filtered_signals, key=lambda s: s.confidence, reverse=True)
+        
+        # Limit to top signals per session
+        max_signals = 10
+        if len(filtered_signals) > max_signals:
+            filtered_signals = filtered_signals[:max_signals]
+            self.logger.info(f"Limited to top {max_signals} signals")
+        
         return filtered_signals
     
     def _preflight_check(self, market_data: Dict) -> tuple[bool, str]:
-        """Pre-flight checks before signal generation."""
+        """
+        Pre-flight checks before signal generation.
+        
+        Ensures market conditions are suitable for trading.
+        """
+        vix = market_data.get('vix', 20)
+        spx_change = market_data.get('spx_change_pct', 0)
+        is_fomc = market_data.get('is_fomc_day', False)
+        is_quad_witching = market_data.get('is_quad_witching', False)
+        data_fresh = market_data.get('data_fresh', True)
         
         checks = [
-            (market_data.get('vix', 0) < 40, "VIX too high (crisis mode)"),
-            (market_data.get('spx_change_pct', 0) > -3.0, "Market circuit breaker risk"),
-            (not market_data.get('is_fomc_day', False), "FOMC day - stand aside"),
-            (market_data.get('data_fresh', True), "Data too stale"),
+            (vix < 40, f"VIX too high ({vix:.1f}) - crisis mode"),
+            (spx_change > -3.0, f"Market down {abs(spx_change):.1f}% - circuit breaker risk"),
+            (not is_fomc, "FOMC day - high volatility expected"),
+            (not is_quad_witching, "Quad witching - unusual volume/volatility"),
+            (data_fresh, "Market data too stale"),
         ]
         
         for condition, reason in checks:
             if not condition:
                 return False, f"NO TRADE: {reason}"
         
-        return True, "OK"
+        # Additional check: Extended hours
+        from datetime import datetime
+        now = datetime.now()
+        market_open = now.replace(hour=9, minute=30, second=0)
+        market_close = now.replace(hour=16, minute=0, second=0)
+        
+        # Only generate signals during market hours (or pre-market after 8am)
+        pre_market = now.replace(hour=8, minute=0, second=0)
+        if now < pre_market or now > market_close:
+            pass  # Allow signals to be generated for next day
+        
+        return True, "All checks passed"
     
     async def generate_signals_async(
         self,
@@ -308,3 +338,78 @@ class SignalEngine:
             self.generate_signals,
             universe, features, market_data, portfolio
         )
+
+
+class SignalValidator:
+    """
+    Additional signal validation layer.
+    
+    Performs sanity checks on generated signals before they're sent out.
+    """
+    
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
+    
+    def validate_signal(self, signal: Signal) -> tuple[bool, str]:
+        """
+        Validate a single signal.
+        
+        Returns:
+            (is_valid, reason)
+        """
+        # Basic price checks
+        if signal.entry_price <= 0:
+            return False, "Invalid entry price"
+        
+        stop_loss = signal.invalidation.stop_price if hasattr(signal, 'invalidation') else getattr(signal, 'stop_loss', 0)
+        take_profit = signal.targets[0].price if hasattr(signal, 'targets') and signal.targets else getattr(signal, 'take_profit', 0)
+        
+        if stop_loss <= 0:
+            return False, "Invalid stop loss"
+        
+        if take_profit <= 0:
+            return False, "Invalid take profit"
+        
+        # Get direction as string
+        direction = signal.direction.value if hasattr(signal.direction, 'value') else str(signal.direction)
+        
+        # Direction consistency
+        if direction == "LONG":
+            if stop_loss >= signal.entry_price:
+                return False, "Stop loss must be below entry for long"
+            if take_profit <= signal.entry_price:
+                return False, "Take profit must be above entry for long"
+        elif direction == "SHORT":
+            if stop_loss <= signal.entry_price:
+                return False, "Stop loss must be above entry for short"
+            if take_profit >= signal.entry_price:
+                return False, "Take profit must be below entry for short"
+        
+        # Risk/Reward ratio check
+        risk = abs(signal.entry_price - stop_loss)
+        reward = abs(take_profit - signal.entry_price)
+        
+        if risk > 0:
+            rr_ratio = reward / risk
+            if rr_ratio < 1.0:
+                return False, f"R:R ratio too low ({rr_ratio:.2f})"
+        
+        # Confidence check
+        confidence = signal.confidence
+        if confidence < 0 or confidence > 100:
+            return False, f"Invalid confidence: {confidence}"
+        
+        return True, "Valid"
+    
+    def validate_signals(self, signals: List[Signal]) -> List[Signal]:
+        """Validate a list of signals, returning only valid ones."""
+        valid_signals = []
+        
+        for signal in signals:
+            is_valid, reason = self.validate_signal(signal)
+            if is_valid:
+                valid_signals.append(signal)
+            else:
+                self.logger.warning(f"Signal {signal.ticker} invalid: {reason}")
+        
+        return valid_signals

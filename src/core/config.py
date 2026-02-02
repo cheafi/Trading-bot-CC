@@ -1,11 +1,20 @@
 """
 TradingAI Bot - Core Configuration
 Loads settings from environment variables with validation.
+
+Features:
+- Type-safe configuration with Pydantic
+- Environment variable loading with defaults
+- Computed properties for derived values
+- Validation for critical settings
 """
 from functools import lru_cache
-from typing import Optional, List
+from typing import Optional, List, Literal
 from pydantic_settings import BaseSettings
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, field_validator, model_validator
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -13,7 +22,9 @@ class Settings(BaseSettings):
     
     # Service identification
     service_name: str = Field(default="tradingai", alias="SERVICE_NAME")
-    environment: str = Field(default="development", alias="ENVIRONMENT")
+    environment: Literal["development", "staging", "production"] = Field(
+        default="development", alias="ENVIRONMENT"
+    )
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     
     # Database - individual components

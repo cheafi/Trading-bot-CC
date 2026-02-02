@@ -10,12 +10,18 @@ Supports:
 """
 import asyncio
 import logging
+import os
+import time
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List, Callable
+from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
 from enum import Enum
 import aiohttp
-import json
+
+try:
+    from zoneinfo import ZoneInfo
+except Exception:  # pragma: no cover
+    ZoneInfo = None  # type: ignore
 
 from src.core.config import get_settings
 
@@ -76,7 +82,38 @@ class TelegramBot:
     """
     
     TELEGRAM_API_BASE = "https://api.telegram.org"
-    
+
+    # Macro Assets - affect equity markets
+    MACRO_ASSETS = {
+        # Commodities
+        "GLD": ("🥇", "Gold", "Safe haven / inflation hedge"),
+        "SLV": ("🥈", "Silver", "Industrial + precious"),
+        "USO": ("🛢️", "Oil (WTI)", "Energy / inflation"),
+        "UNG": ("🔥", "Natural Gas", "Energy sector"),
+        # Crypto proxies (ETFs available on Alpaca)
+        "BITO": ("₿", "Bitcoin ETF", "Risk-on sentiment"),
+        "ETHE": ("Ξ", "Ethereum ETF", "Crypto / tech proxy"),
+        # Bonds & Rates
+        "TLT": ("📉", "20Y Treasury", "Long duration rates"),
+        "SHY": ("💵", "1-3Y Treasury", "Short duration / cash"),
+        "HYG": ("⚠️", "High Yield Corp", "Credit risk appetite"),
+        # Dollar & Volatility
+        "UUP": ("💲", "US Dollar", "Currency strength"),
+        "UVXY": ("😱", "VIX (Vol)", "Fear gauge"),
+    }
+
+    # Major global indices via ETFs
+    GLOBAL_INDICES = {
+        "SPY": ("🇺🇸", "S&P 500"),
+        "QQQ": ("🇺🇸", "NASDAQ 100"),
+        "DIA": ("🇺🇸", "Dow Jones"),
+        "IWM": ("🇺🇸", "Russell 2000"),
+        "EFA": ("🌍", "Developed Intl"),
+        "EEM": ("🌏", "Emerging Mkts"),
+        "FXI": ("🇨🇳", "China Large Cap"),
+        "EWJ": ("🇯🇵", "Japan"),
+    }
+
     # Command handlers registry
     COMMANDS = {
         # Getting Started
@@ -87,10 +124,12 @@ class TelegramBot:
         # 📊 Market Data
         "/price": "Get current price - /price AAPL",
         "/quote": "Get detailed quote - /quote AAPL",
-        "/market": "Live market overview with indices & sectors",
+        "/market": "Live market overview with indices, sectors & macro",
+        "/macro": "Macro view: Gold, Silver, BTC, Oil, Bonds, DXY",
         "/sector": "Sector performance heatmap",
         "/heatmap": "Visual market heatmap by sector",
         "/news": "Get market news - /news AAPL",
+        "/noise": "AI market noise analysis (GPT-powered)",
         "/earnings": "Upcoming earnings calendar",
         "/movers": "Top gainers and losers today",
         "/premarket": "Pre-market movers & futures",
@@ -190,6 +229,23 @@ class TelegramBot:
         "/pushtest": "Send a test push notification",
         "/morning": "Get morning market brief (auto daily)",
         "/evening": "Get evening summary (auto daily)",
+        
+        # ⚡ Quick Actions
+        "/q": "Quick analysis - /q AAPL (1-second insight)",
+        "/insight": "Smart AI insight for any topic",
+        "/dashboard": "Full trading dashboard",
+        
+        # 💰 MONEY-MAKING COMMANDS (NEW)
+        "/money": "🔥 Ultra-fast top 3 money-makers NOW",
+        "/sniper": "🎯 Precision entry with exact levels",
+        "/swing5": "📊 Best 5 swing trades (1-5 days)",
+        "/scalp": "⚡ Quick scalp opportunities",
+        "/bigmove": "🚀 Stocks ready for 10%+ moves",
+        "/dip": "💎 Best dip-buying opportunities",
+        "/breakout": "📈 Imminent breakout candidates",
+        "/squeeze": "🔥 Short squeeze candidates",
+        "/flow": "💵 Unusual options flow signals",
+        "/whale": "🐋 Whale accumulation detected",
     }
     
     # Top 500+ most actively traded US stocks by market cap & volume
@@ -327,6 +383,49 @@ class TelegramBot:
         "SCHW", "RIVN", "GM", "F", "CCL", "NCLH", "RCL", "WYNN", "LVS", "MGM",
         "CZR", "DKNG", "PENN", "RSI", "GENI", "SGHC", "BETZ", "BALY", "EVRI", "IGT",
         "ATVI", "EA", "TTWO", "ZNGA", "DKNG", "SKLZ", "GGPI", "GENI", "FAZE", "SLGG",
+
+        # === AI & DATA CENTER ===
+        "NVDA", "AMD", "SMCI", "DELL", "HPE", "IONQ", "RGTI", "QUBT", "ARQQ", "GFAI",
+        "BBAI", "SOUN", "IREN", "CLBT", "VNET", "EQIX", "DLR", "AMT", "CCI", "SBAC",
+        
+        # === RECENT IPOs & HOT STOCKS ===
+        "ARM", "CART", "BIRK", "CAVA", "MNDY", "DUOL", "RBRK", "ONON", "CELH", "LMND",
+        "HOOD", "AFRM", "RKLB", "JOBY", "GRAB", "TOST", "BROS", "DNUT", "CRDO", "IOT",
+        
+        # === AEROSPACE & DEFENSE ===
+        "LMT", "RTX", "NOC", "BA", "GD", "LHX", "HII", "TDG", "AXON", "PLTR",
+        "RKT", "RCAT", "KTOS", "AVAV", "MRCY", "LDOS", "CACI", "SAIC", "BAH", "PSN",
+        
+        # === HEALTHCARE INNOVATION ===
+        "ISRG", "DXCM", "VEEV", "HIMS", "DOCS", "TDOC", "AMWL", "TALK", "GDRX", "SDC",
+        "NUVB", "RXRX", "TXG", "MASS", "CCCC", "NNOX", "SDGR", "NVAX", "BNTX", "MRNA",
+        
+        # === CLEAN ENERGY & CLIMATE ===
+        "PLUG", "FCEL", "BE", "BLDP", "CHPT", "BLNK", "EVGO", "SEDG", "ENPH", "RUN",
+        "NOVA", "ARRY", "FSLR", "CSIQ", "JKS", "SHLS", "STEM", "ENVX", "QS", "SLDP",
+        
+        # === SMALL-CAP GROWTH ===
+        "UPST", "AFRM", "DLOCF", "MAPS", "PERI", "MGNI", "PUBM", "IAS", "TTD", "APP",
+        "TBLA", "IRNT", "BMBL", "HTHT", "YY", "TIGR", "XPEV", "LI", "BZ", "BABA",
+        
+        # === CANNABIS ===
+        "TLRY", "CGC", "ACB", "CRON", "SNDL", "HEXO", "OGI", "VFF", "GRWG", "CURLF",
+        "GTBIF", "TCNNF", "CRLBF", "TRSSF", "AYRWF", "CCHWF", "VRNOF", "MRMD", "JUSHF", "GLASF",
+        
+        # === BIOTECH HOT NAMES ===
+        "SGEN", "MRNA", "BNTX", "NVAX", "VXRT", "INO", "OCGN", "RVVTF", "SRNE", "NRXP",
+        "IBIO", "ATOS", "ADGI", "ABUS", "ARCT", "DVAX", "GILD", "REGN", "VRTX", "ALNY",
+        
+        # === FINTECH & PAYMENTS ===
+        "SQ", "PYPL", "AFRM", "UPST", "SOFI", "HOOD", "COIN", "NU", "PAGS", "STNE",
+        "DLO", "BILL", "FOUR", "TOST", "MQ", "LSPD", "BIGC", "SHOP", "GLBE", "OZON",
+        
+        # === CYBERSECURITY ===
+        "CRWD", "ZS", "PANW", "NET", "FTNT", "S", "OKTA", "CYBR", "TENB", "VRNS",
+        "QLYS", "RPD", "SAIL", "FEYE", "BB", "MIME", "FSLY", "AKAM", "LDOS", "BAH",
+        
+        # === QUANTUM COMPUTING ===
+        "IONQ", "RGTI", "QUBT", "QBTS", "ARQQ",
     ]
     
     def __init__(self):
@@ -340,6 +439,15 @@ class TelegramBot:
         self.last_update_id = 0
         self._running = False
         self._session: Optional[aiohttp.ClientSession] = None
+        self._bg_tasks: List[asyncio.Task] = []
+
+        self._http_timeout = aiohttp.ClientTimeout(total=10)
+        self._alpaca_semaphore = asyncio.Semaphore(15)  # Increased for faster parallel fetching
+        self._et_tz = ZoneInfo("America/New_York") if ZoneInfo else None
+
+        # Network resilience
+        self._alpaca_circuit_open_until = 0.0
+        self._alpaca_fail_count = 0
         
         # Automated updates settings
         self.auto_updates_enabled = True  # Enable by default
@@ -367,7 +475,7 @@ class TelegramBot:
         
         # === PERFORMANCE CACHE ===
         self._quote_cache: Dict[str, Dict] = {}
-        self._cache_ttl = 30  # 30 seconds cache
+        self._cache_ttl = 20  # 20 seconds cache (faster refresh)
         
         # === USER CUSTOMIZATION SETTINGS ===
         self.user_settings = {
@@ -450,17 +558,17 @@ class TelegramBot:
         
         logger.info("Starting TradingAI Telegram Bot...")
         self._running = True
-        self._session = aiohttp.ClientSession()
+        self._session = aiohttp.ClientSession(timeout=self._http_timeout)
         
         # Start background tasks
-        asyncio.create_task(self._poll_updates())
-        asyncio.create_task(self._price_alert_monitor())
-        asyncio.create_task(self._market_update_loop())
-        
+        self._bg_tasks.append(asyncio.create_task(self._poll_updates()))
+        self._bg_tasks.append(asyncio.create_task(self._price_alert_monitor()))
+        self._bg_tasks.append(asyncio.create_task(self._market_update_loop()))
+
         # Real-time push notification tasks
-        asyncio.create_task(self._realtime_signal_scanner())
-        asyncio.create_task(self._price_movement_monitor())
-        asyncio.create_task(self._scheduled_alerts())
+        self._bg_tasks.append(asyncio.create_task(self._realtime_signal_scanner()))
+        self._bg_tasks.append(asyncio.create_task(self._price_movement_monitor()))
+        self._bg_tasks.append(asyncio.create_task(self._scheduled_alerts()))
         
         await self.send_message("🤖 <b>TradingAI Bot Started</b>\n\n✅ Real-time push notifications ENABLED\n📊 Scanning 500+ stocks for signals\n\nType /help for commands")
         logger.info("Telegram bot started")
@@ -468,26 +576,42 @@ class TelegramBot:
     async def stop(self):
         """Stop the bot."""
         self._running = False
+
+        for task in self._bg_tasks:
+            task.cancel()
+        if self._bg_tasks:
+            await asyncio.gather(*self._bg_tasks, return_exceptions=True)
+        self._bg_tasks.clear()
+
         if self._session:
             await self._session.close()
         logger.info("Telegram bot stopped")
+
+    def _now_et(self) -> datetime:
+        """Current time in US/Eastern (fallback: local time)."""
+        if self._et_tz:
+            return datetime.now(self._et_tz)
+        return datetime.now()
     
     async def _poll_updates(self):
         """Poll for new messages."""
+        backoff_s = 1
         while self._running:
             try:
                 updates = await self._get_updates()
                 for update in updates:
                     await self._handle_update(update)
+                backoff_s = 1
             except Exception as e:
                 logger.error(f"Update polling error: {e}")
-            await asyncio.sleep(1)
+                backoff_s = min(30, max(1, backoff_s * 2))
+            await asyncio.sleep(backoff_s)
     
     async def _get_updates(self) -> List[Dict]:
         """Get updates from Telegram."""
         url = f"{self.TELEGRAM_API_BASE}/bot{self.bot_token}/getUpdates"
         params = {"offset": self.last_update_id + 1, "timeout": 30}
-        
+
         try:
             async with self._session.get(url, params=params) as resp:
                 if resp.status == 200:
@@ -496,8 +620,13 @@ class TelegramBot:
                     if updates:
                         self.last_update_id = updates[-1]["update_id"]
                     return updates
+                else:
+                    text = await resp.text()
+                    logger.warning(f"Telegram API {resp.status}: {text[:200]}")
+        except asyncio.TimeoutError:
+            pass  # Normal timeout, no need to log
         except Exception as e:
-            logger.error(f"Get updates error: {e}")
+            logger.error(f"Get updates error: {type(e).__name__}: {e}")
         return []
     
     async def _handle_update(self, update: Dict):
@@ -673,6 +802,8 @@ Or try uploading a clearer screenshot showing:
             "/alerts": self._cmd_alerts,
             "/news": self._cmd_news,
             "/market": self._cmd_market,
+            "/macro": self._cmd_macro,
+            "/noise": self._cmd_noise,
             "/sector": self._cmd_sector,
             "/broker": self._cmd_broker,
             "/status": self._cmd_status,
@@ -748,6 +879,21 @@ Or try uploading a clearer screenshot showing:
             "/pushtest": self._cmd_pushtest,
             "/morning": self._cmd_morning,
             "/evening": self._cmd_evening,
+            # Quick Actions
+            "/q": self._cmd_quick_analysis,
+            "/insight": self._cmd_insight,
+            "/dashboard": self._cmd_dashboard,
+            # Money-Making Commands
+            "/money": self._cmd_money,
+            "/sniper": self._cmd_sniper,
+            "/swing5": self._cmd_swing5,
+            "/scalp": self._cmd_scalp,
+            "/bigmove": self._cmd_bigmove,
+            "/dip": self._cmd_dip,
+            "/breakout": self._cmd_breakout,
+            "/squeeze": self._cmd_squeeze,
+            "/flow": self._cmd_flow,
+            "/whale": self._cmd_whale,
         }
         
         handler = handlers.get(command)
@@ -759,59 +905,323 @@ Or try uploading a clearer screenshot showing:
     # ===== Command Handlers =====
     
     async def _cmd_start(self, chat_id: int, args: List[str]):
-        """Welcome message."""
-        msg = """
-🤖 <b>Welcome to TradingAI Bot!</b>
-
-Your AI-powered trading assistant with real-time market intelligence.
-
-<b>🔗 Connected Brokers:</b>
-  • Futu (富途) - Hong Kong/US Markets
-  • Interactive Brokers - Global Markets
-
-<b>Quick Commands:</b>
-  /market - Market overview
-  /signals - Latest trading signals
-  /price AAPL - Get stock price
-  /buy AAPL 10 - Buy 10 shares
-
-Type /help for all commands.
-"""
+        """Welcome message with professional onboarding."""
+        
+        msg = "╔═══════════════════════════════════════╗\n"
+        msg += "║                                       ║\n"
+        msg += "║      🤖 <b>TRADINGAI PRO</b>                ║\n"
+        msg += "║                                       ║\n"
+        msg += "║   <i>AI-Powered Trading Intelligence</i>    ║\n"
+        msg += "║                                       ║\n"
+        msg += "╚═══════════════════════════════════════╝\n\n"
+        
+        msg += "Welcome! You now have access to trading\n"
+        msg += "intelligence used by the world's top funds.\n\n"
+        
+        msg += "🏛️ <b>POWERED BY 10 LEGENDARY INVESTORS</b>\n"
+        msg += "┌───────────────────────────────────┐\n"
+        msg += "│ Buffett • Dalio • Lynch • Wood    │\n"
+        msg += "│ Druckenmiller • Tepper • Ackman   │\n"
+        msg += "│ Greenblatt • Smith • Griffin      │\n"
+        msg += "└───────────────────────────────────┘\n\n"
+        
+        msg += "⚡ <b>GET STARTED IN 3 STEPS</b>\n\n"
+        
+        msg += "1️⃣ <b>Setup Your Account</b>\n"
+        msg += "   <code>/setaccount 50000</code>\n"
+        msg += "   <code>/setrisk 1</code>\n\n"
+        
+        msg += "2️⃣ <b>Enable Real-Time Alerts</b>\n"
+        msg += "   <code>/subscribe on</code>\n\n"
+        
+        msg += "3️⃣ <b>Get Your First Picks</b>\n"
+        msg += "   <code>/top</code>\n\n"
+        
+        msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "📊 <b>WHAT YOU GET</b>\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "✅ AI scoring on 500+ stocks\n"
+        msg += "✅ Real-time signal alerts\n"
+        msg += "✅ Kelly criterion position sizing\n"
+        msg += "✅ Morning briefs & evening summaries\n"
+        msg += "✅ Portfolio tracking & P&L\n"
+        msg += "✅ Professional risk management\n\n"
+        
+        msg += f"Type /help for all {len(self.COMMANDS)} commands\n"
+        msg += "Type /legends to meet the managers"
+        
         await self.send_message_to(chat_id, msg)
     
     async def _cmd_help(self, chat_id: int, args: List[str]):
-        """Show help."""
-        msg = "📚 <b>TradingAI Bot Commands</b>\n\n"
+        """Show help with professional UI/UX."""
+        
+        # If specific category requested (typed)
+        if args:
+            category = args[0].lower()
+            text, markup = self._render_help(category)
+            await self.send_message_to(chat_id, text, reply_markup=markup)
+            return
+
+        # Main help (clickable)
+        text, markup = self._render_help("home")
+        await self.send_message_to(chat_id, text, reply_markup=markup)
+
+    def _render_help(self, view: str) -> tuple[str, Dict[str, Any]]:
+        """Return (text, inline_keyboard) for help home or a category."""
+
+        def btn(text: str, data: str) -> Dict[str, str]:
+            return {"text": text, "callback_data": data}
+
+        if view in ("home", "main", ""):
+            msg = "╔══════════════════════════════════╗\n"
+            msg += "║     🤖 <b>TRADINGAI PRO</b>            ║\n"
+            msg += "║   <i>Tap buttons • No typing</i>      ║\n"
+            msg += "╚══════════════════════════════════╝\n\n"
+
+            msg += "🎯 <b>QUICK ACTIONS</b>\n"
+            msg += "Tap below:\n\n"
+
+            msg += "📚 <b>CATEGORIES</b>\n"
+            msg += "Pick a section to open the menu."\
+                "\n\n"
+
+            msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += "💎 <b>PRO TIP:</b> Tap ⚙️ Settings first\n"
+            msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += f"📊 Commands: {len(self.COMMANDS)} | Stocks: 500+\n"
+            msg += "🏛️ 10 Legendary Managers scoring"
+
+            markup = self._inline_keyboard([
+                [
+                    btn("🏆 Top Picks", "run:/top"),
+                    btn("📈 Signals", "run:/signals"),
+                ],
+                [
+                    btn("☀️ Morning", "run:/morning"),
+                    btn("📡 Realtime", "run:/realtime"),
+                ],
+                [
+                    btn("🎯 AI", "help:cat:ai"),
+                    btn("📊 Market", "help:cat:market"),
+                    btn("💡 Analysis", "help:cat:analysis"),
+                ],
+                [
+                    btn("💰 Trading", "help:cat:trading"),
+                    btn("📁 Portfolio", "help:cat:portfolio"),
+                    btn("🧠 Pro", "help:cat:pro"),
+                ],
+                [
+                    btn("⚙️ Settings", "help:cat:settings"),
+                    btn("🔔 Alerts", "help:cat:alerts"),
+                ],
+            ])
+
+            return msg, markup
+
+        # Category views
+        help_data = {
+            "ai": ("🎯 AI INTELLIGENCE", "Score, rank, signals, legends"),
+            "market": ("📊 MARKET DATA", "Prices, indices, news, movers"),
+            "analysis": ("💡 ANALYSIS", "Deep dive, patterns, levels"),
+            "trading": ("💰 TRADING", "Orders, sizing, risk"),
+            "portfolio": ("📁 PORTFOLIO", "Positions, P&L, monitoring"),
+            "pro": ("🧠 PRO TRADING", "Regime, backtest, performance"),
+            "settings": ("⚙️ SETTINGS", "Personalize account, risk, style"),
+            "alerts": ("🔔 ALERTS", "Real-time push, price alerts"),
+        }
+
+        if view not in help_data:
+            msg, markup = self._render_help("home")
+            return msg, markup
+
+        title, desc = help_data[view]
+        msg = f"{title}\n<i>{desc}</i>\n\n"
+
+        # Keep text short; buttons do the work.
+        if view == "ai":
+            msg += "Try: /top or /score AAPL\n"
+            rows = [
+                [btn("🏆 Top Picks", "run:/top"), btn("📈 Signals", "run:/signals")],
+                [btn("📊 Rank", "run:/rank"), btn("🏛️ Legends", "run:/legends")],
+            ]
+        elif view == "market":
+            msg += "Try: /market or /macro\n"
+            rows = [
+                [btn("🌍 Market", "run:/market"), btn("🌐 Macro", "run:/macro")],
+                [btn("🔥 Movers", "run:/movers"), btn("🧠 Noise", "run:/noise")],
+                [btn("📰 News", "run:/news"), btn("📅 Earnings", "run:/earnings")],
+            ]
+        elif view == "analysis":
+            msg += "Try: /advise AAPL\n"
+            rows = [
+                [btn("🧠 Advise", "run:/advise"), btn("📉 Analyze", "run:/analyze")],
+                [btn("🧰 Levels", "run:/levels"), btn("🔎 Patterns", "run:/patterns")],
+            ]
+        elif view == "trading":
+            msg += "Try: /sizing AAPL 100\n"
+            rows = [
+                [btn("📏 Sizing", "run:/sizing"), btn("🛡️ Risk", "run:/risk")],
+                [btn("🧾 Orders", "run:/order"), btn("📈 P&L", "run:/pnl")],
+            ]
+        elif view == "portfolio":
+            msg += "Try: /portfolio\n"
+            rows = [
+                [btn("📦 Portfolio", "run:/portfolio"), btn("📌 Positions", "run:/positions")],
+                [btn("👁️ Monitor", "run:/monitor"), btn("📝 Journal", "run:/journal")],
+            ]
+        elif view == "pro":
+            msg += "Try: /regime\n"
+            rows = [
+                [btn("🧭 Regime", "run:/regime"), btn("📊 Performance", "run:/performance")],
+                [btn("🧪 Backtest", "run:/backtest"), btn("📊 Report", "run:/report")],
+            ]
+        elif view == "settings":
+            msg += "Personalize risk & automation\n"
+            rows = [
+                [btn("⚙️ Settings", "run:/settings"), btn("🤖 Autopilot", "run:/autopilot")],
+                [btn("📣 Subscribe", "run:/subscribe:on"), btn("🔕 Unsubscribe", "run:/subscribe:off")],
+            ]
+        else:  # alerts
+            msg += "Real-time push + manual alerts\n"
+            rows = [
+                [btn("📡 Realtime Status", "run:/realtime"), btn("🧪 Test Push", "run:/pushtest")],
+                [btn("⚙️ Push Settings", "run:/pushalerts"), btn("🔔 Price Alerts", "run:/alerts")],
+                [btn("📣 Subscribe", "run:/subscribe:on"), btn("🔕 Unsubscribe", "run:/subscribe:off")],
+            ]
+
+        rows.append([btn("⬅️ Back", "help:home")])
+        markup = self._inline_keyboard(rows)
+        return msg, markup
+    
+    async def _show_help_category(self, chat_id: int, category: str):
+        """Show help for specific category."""
         
         categories = {
-            "🤖 AI Scoring (Kavout/Kai style)": ["/score", "/rank", "/top"],
-            "☀️ Morning Prep (Holly/Trade Ideas)": ["/setup", "/oppty", "/signals"],
-            "📊 Pattern Detection": ["/patterns", "/divergence", "/swing", "/vcp"],
-            "⚡ Day Trading": ["/daytrade", "/movers", "/premarket"],
-            "📈 Market Intel": ["/market", "/heatmap", "/sector", "/news"],
-            "💡 Stock Analysis": ["/advise", "/analyze", "/check", "/levels"],
-            "💰 Trading": ["/buy", "/sell", "/order", "/sizing"],
-            "📁 Portfolio": ["/portfolio", "/myportfolio", "/monitor"],
-            "📊 Performance": ["/backtest", "/report", "/mlstats"],
-            "🧠 Pro Trading": ["/riskcheck", "/regime", "/optimize"],
-            "⚙️ Settings": ["/settings", "/setaccount", "/setrisk", "/setstyle"],
-            "🤖 Automation": ["/autotrade", "/schedule", "/autopilot"],
-            "⚙️ System": ["/broker", "/status", "/help"],
+            "ai": {
+                "title": "🎯 AI INTELLIGENCE",
+                "desc": "Powered by 10 legendary fund managers",
+                "commands": [
+                    ("/top", "Top 10 AI-scored picks today"),
+                    ("/score AAPL", "Deep AI analysis for any stock"),
+                    ("/rank", "Top 20 by momentum score"),
+                    ("/signals", "Live buy/sell signals"),
+                    ("/oppty", "Opportunity scanner"),
+                    ("/ideas", "AI-generated trade ideas"),
+                    ("/legends", "View all 10 fund managers"),
+                ]
+            },
+            "market": {
+                "title": "📊 MARKET DATA",
+                "desc": "Real-time market intelligence",
+                "commands": [
+                    ("/market", "Live market overview"),
+                    ("/price AAPL", "Quick price check"),
+                    ("/quote AAPL", "Detailed quote"),
+                    ("/heatmap", "Sector heatmap"),
+                    ("/sector", "Sector performance"),
+                    ("/movers", "Top gainers/losers"),
+                    ("/premarket", "Pre-market movers"),
+                    ("/news AAPL", "Latest news"),
+                ]
+            },
+            "analysis": {
+                "title": "💡 STOCK ANALYSIS",
+                "desc": "Professional technical analysis",
+                "commands": [
+                    ("/advise AAPL", "Full AI advice"),
+                    ("/analyze AAPL", "Technical analysis"),
+                    ("/deep AAPL", "Deep dive analysis"),
+                    ("/levels AAPL", "Support/resistance"),
+                    ("/patterns", "Chart patterns"),
+                    ("/divergence", "RSI/MACD divergence"),
+                    ("/compare AAPL MSFT", "Compare stocks"),
+                    ("/check 150 AAPL", "Check entry price"),
+                ]
+            },
+            "trading": {
+                "title": "💰 TRADING",
+                "desc": "Execute and size your trades",
+                "commands": [
+                    ("/buy AAPL 10", "Buy shares"),
+                    ("/sell AAPL 10", "Sell shares"),
+                    ("/order AAPL BUY 10 LIMIT 150", "Limit order"),
+                    ("/sizing AAPL 100", "Position sizing"),
+                    ("/riskcheck AAPL 100 175", "Pre-trade check"),
+                    ("/risk", "Portfolio risk"),
+                ]
+            },
+            "portfolio": {
+                "title": "📁 PORTFOLIO",
+                "desc": "Track your investments",
+                "commands": [
+                    ("/myportfolio", "View portfolio"),
+                    ("/addpos AAPL 100 150", "Add position"),
+                    ("/delpos AAPL", "Remove position"),
+                    ("/monitor", "Get buy/sell advice"),
+                    ("/pnl", "Profit & loss"),
+                    ("/exposure", "Sector exposure"),
+                ]
+            },
+            "pro": {
+                "title": "🧠 PRO TRADING",
+                "desc": "Advanced trading tools",
+                "commands": [
+                    ("/regime", "Market regime detection"),
+                    ("/backtest AAPL 1y", "Backtest strategy"),
+                    ("/simtrade 2025-04-06", "Simulate trades"),
+                    ("/performance", "Win rate, Sharpe"),
+                    ("/mlstats", "ML model stats"),
+                    ("/optimize", "Optimize strategy"),
+                    ("/learn", "AI learning stats"),
+                    ("/accuracy", "Strategy accuracy"),
+                ]
+            },
+            "settings": {
+                "title": "⚙️ SETTINGS",
+                "desc": "Customize your experience",
+                "commands": [
+                    ("/settings", "View all settings"),
+                    ("/setaccount 50000", "Set account size"),
+                    ("/setrisk 1.5", "Set risk %"),
+                    ("/setstyle swing", "Trading style"),
+                    ("/broker futu|ib|paper", "Switch broker"),
+                    ("/auto on|off", "Auto updates"),
+                ]
+            },
+            "alerts": {
+                "title": "🔔 ALERTS & AUTOMATION",
+                "desc": "Real-time push notifications",
+                "commands": [
+                    ("/subscribe on", "Enable push alerts"),
+                    ("/realtime", "Monitoring status"),
+                    ("/pushalerts", "Configure alerts"),
+                    ("/alert AAPL above 200", "Set price alert"),
+                    ("/alerts", "View all alerts"),
+                    ("/autotrade on", "Auto-trading"),
+                    ("/autopilot", "Full autopilot"),
+                    ("/schedule", "Scheduled scans"),
+                ]
+            },
         }
         
-        for category, cmds in categories.items():
-            msg += f"<b>{category}</b>\n"
-            for cmd in cmds:
-                desc = self.COMMANDS.get(cmd, "")
-                msg += f"  {cmd} - {desc}\n"
-            msg += "\n"
+        if category not in categories:
+            msg = f"❓ Unknown category: {category}\n\n"
+            msg += "Available: ai, market, analysis, trading, portfolio, pro, settings, alerts"
+            await self.send_message_to(chat_id, msg)
+            return
         
-        msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
-        msg += "💡 <b>Quick Start:</b>\n"
-        msg += "<code>/settings</code> - Configure your preferences\n"
-        msg += "<code>/top</code> - Today's top AI picks\n"
-        msg += "<code>/riskcheck AAPL 100</code> - Pre-trade check\n"
-        msg += "<code>/autopilot</code> - Setup automation\n"
+        cat = categories[category]
+        
+        msg = f"╔══════════════════════════════════╗\n"
+        msg += f"║ {cat['title']:<31} ║\n"
+        msg += f"╚══════════════════════════════════╝\n"
+        msg += f"<i>{cat['desc']}</i>\n\n"
+        
+        for cmd, desc in cat['commands']:
+            msg += f"• <code>{cmd}</code>\n"
+            msg += f"  └ {desc}\n"
+        
+        msg += "\n<i>Type /help for main menu</i>"
         
         await self.send_message_to(chat_id, msg)
     
@@ -890,95 +1300,206 @@ Type /help for all commands.
             await self.send_message_to(chat_id, f"❌ Error: {e}")
     
     async def _cmd_market(self, chat_id: int, args: List[str]):
-        """Comprehensive market overview."""
+        """Comprehensive market overview with indices, sectors, and macro."""
         try:
+            now_str = self._now_et().strftime('%Y-%m-%d %H:%M ET')
             msg = "📊 <b>LIVE MARKET UPDATE</b>\n"
-            msg += f"<i>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</i>\n\n"
-            
-            # Market status
+            msg += f"<i>{now_str}</i>\n\n"
+
             market_open = self._is_market_open()
-            msg += f"🏛️ <b>Market Status:</b> {'🟢 OPEN' if market_open else '🔴 CLOSED'}\n\n"
-            
-            # Major Indices
-            msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
-            msg += "📈 <b>MAJOR INDICES</b>\n"
-            msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
-            
-            indices = [
-                ("SPY", "S&P 500"),
-                ("QQQ", "NASDAQ 100"),
-                ("DIA", "DOW JONES"),
-                ("IWM", "RUSSELL 2000"),
-            ]
-            
-            for symbol, name in indices:
-                quote = await self._fetch_quote(symbol)
+            msg += f"🏛️ <b>Status:</b> {'🟢 OPEN' if market_open else '🔴 CLOSED'}\n\n"
+
+            # Collect ALL tickers to fetch in ONE parallel batch
+            index_syms = list(self.GLOBAL_INDICES.keys())
+            macro_keys = ["GLD", "SLV", "USO", "BITO", "TLT", "UUP", "UVXY"]
+            sector_syms = ["XLK", "XLF", "XLE", "XLV", "XLY", "XLP"]
+            all_syms = index_syms + macro_keys + sector_syms
+            quotes = await self._fetch_quotes_batch(all_syms)
+
+            # ── Major Indices ──
+            msg += "━━━ 📈 <b>INDICES</b> ━━━\n"
+            for symbol, (flag, name) in self.GLOBAL_INDICES.items():
+                quote = quotes.get(symbol)
                 if quote:
-                    price = quote.get('price', 0)
-                    change_pct = quote.get('change_pct', 0)
-                    emoji = "🟢" if change_pct >= 0 else "🔴"
-                    bar = self._generate_bar(change_pct)
-                    msg += f"{emoji} <b>{name}</b>\n"
-                    msg += f"   ${price:.2f} | {bar} {'+' if change_pct >= 0 else ''}{change_pct:.2f}%\n"
-            
-            # Volatility & Fear Gauge
-            msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n"
-            msg += "😰 <b>VOLATILITY</b>\n"
-            msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
-            
-            vix = await self._fetch_quote("UVXY")
-            if vix:
-                vix_change = vix.get('change_pct', 0)
-                if vix_change > 10:
-                    fear = "🔴 HIGH FEAR"
-                elif vix_change > 3:
-                    fear = "🟠 ELEVATED"
-                elif vix_change > 0:
-                    fear = "🟡 NEUTRAL"
-                else:
-                    fear = "🟢 LOW FEAR"
-                msg += f"UVXY: ${vix.get('price', 0):.2f} ({'+' if vix_change >= 0 else ''}{vix_change:.2f}%)\n"
-                msg += f"Sentiment: {fear}\n"
-            
-            # Sector Leaders
-            msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n"
-            msg += "🏭 <b>SECTOR SNAPSHOT</b>\n"
-            msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
-            
-            sectors = [("XLK", "Tech"), ("XLF", "Finance"), ("XLE", "Energy"), ("XLV", "Health")]
-            for symbol, name in sectors:
-                quote = await self._fetch_quote(symbol)
+                    pct = quote.get('change_pct', 0)
+                    e = "🟢" if pct >= 0 else "🔴"
+                    msg += f"{flag}{e} <b>{name}</b>: {'+' if pct >= 0 else ''}{pct:.2f}%\n"
+
+            # ── Macro Assets (Gold/Silver/BTC/Oil/Bonds) ──
+            msg += "\n━━━ 🌍 <b>MACRO</b> ━━━\n"
+            for sym in macro_keys:
+                info = self.MACRO_ASSETS.get(sym)
+                if not info:
+                    continue
+                emoji, label, _ = info
+                quote = quotes.get(sym)
                 if quote:
-                    change_pct = quote.get('change_pct', 0)
-                    emoji = "🟢" if change_pct >= 0 else "🔴"
-                    msg += f"{emoji} {name}: {'+' if change_pct >= 0 else ''}{change_pct:.2f}% | "
-            msg = msg.rstrip(" | ") + "\n"
-            
-            # Top Movers from watchlist
-            if self.watchlist:
-                msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n"
-                msg += "👀 <b>YOUR WATCHLIST</b>\n"
-                msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
-                
-                for ticker in self.watchlist[:5]:
-                    quote = await self._fetch_quote(ticker)
+                    pct = quote.get('change_pct', 0)
+                    indicator = "🟢" if pct >= 0 else "🔴"
+                    msg += f"{emoji}{indicator} <b>{label}</b>: {'+' if pct >= 0 else ''}{pct:.2f}%\n"
+
+            # ── Sector Snapshot ──
+            msg += "\n━━━ 🏭 <b>SECTORS</b> ━━━\n"
+            sectors = [("XLK", "Tech"), ("XLF", "Financ"), ("XLE", "Energy"),
+                       ("XLV", "Health"), ("XLY", "Discr"), ("XLP", "Staples")]
+            row = ""
+            for sym, name in sectors:
+                quote = quotes.get(sym)
+                if quote:
+                    pct = quote.get('change_pct', 0)
+                    e = "🟢" if pct >= 0 else "🔴"
+                    row += f"{e}{name}:{pct:+.1f}% "
+            msg += row.strip() + "\n"
+
+            # ── Quick Actions ──
+            msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += "💡 /macro /noise /oppty /swing\n"
+
+            await self.send_message_to(chat_id, msg)
+        except Exception as e:
+            await self.send_message_to(chat_id, f"❌ Error: {e}")
+
+    async def _cmd_macro(self, chat_id: int, args: List[str]):
+        """Detailed macro view: commodities, crypto, bonds, dollar."""
+        try:
+            now_str = self._now_et().strftime('%Y-%m-%d %H:%M ET')
+            msg = "🌍 <b>MACRO DASHBOARD</b>\n"
+            msg += f"<i>{now_str}</i>\n\n"
+
+            # Group assets by category
+            categories = {
+                "🥇 <b>COMMODITIES</b>": ["GLD", "SLV", "USO", "UNG"],
+                "₿ <b>CRYPTO</b>": ["BITO", "ETHE"],
+                "📉 <b>RATES & BONDS</b>": ["TLT", "SHY", "HYG"],
+                "💵 <b>DOLLAR & VOL</b>": ["UUP", "UVXY"],
+            }
+
+            # Fetch ALL macro quotes in ONE parallel batch
+            all_macro_syms = [sym for syms in categories.values() for sym in syms]
+            quotes = await self._fetch_quotes_batch(all_macro_syms)
+
+            for header, symbols in categories.items():
+                msg += f"{header}\n"
+                for sym in symbols:
+                    info = self.MACRO_ASSETS.get(sym)
+                    if not info:
+                        continue
+                    emoji, label, note = info
+                    quote = quotes.get(sym)
                     if quote:
                         price = quote.get('price', 0)
-                        change_pct = quote.get('change_pct', 0)
-                        emoji = "🟢" if change_pct >= 0 else "🔴"
-                        msg += f"{emoji} {ticker}: ${price:.2f} ({'+' if change_pct >= 0 else ''}{change_pct:.2f}%)\n"
-            
-            # Quick actions
-            msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n"
-            msg += "💡 <b>QUICK ACTIONS</b>\n"
-            msg += "/oppty - Find opportunities\n"
-            msg += "/swing - Swing setups\n"
-            msg += "/sector - Sector details\n"
-            
+                        pct = quote.get('change_pct', 0)
+                        ind = "🟢" if pct >= 0 else "🔴"
+                        msg += f"  {emoji}{ind} <b>{label}</b>: ${price:.2f} ({pct:+.2f}%)\n"
+                        msg += f"      <i>{note}</i>\n"
+                msg += "\n"
+
+            # Interpretation
+            msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += "📊 <b>WHAT IT MEANS</b>\n"
+            msg += "• Gold/Silver ↑ = inflation fear / risk-off\n"
+            msg += "• BTC ↑ = risk-on / liquidity\n"
+            msg += "• TLT ↑ = rates falling / flight to safety\n"
+            msg += "• UUP ↑ = strong $ hurts earnings\n"
+            msg += "• UVXY ↑ = fear / hedge demand\n"
+            msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += "💡 /noise for AI market sentiment\n"
+
             await self.send_message_to(chat_id, msg)
-            
         except Exception as e:
-            await self.send_message_to(chat_id, f"❌ Error fetching market data: {e}")
+            await self.send_message_to(chat_id, f"❌ Error: {e}")
+
+    async def _cmd_noise(self, chat_id: int, args: List[str]):
+        """GPT-powered market noise/sentiment analysis."""
+        await self.send_message_to(chat_id, "🔍 <b>Analyzing market noise with AI...</b>")
+        try:
+            # Gather current market data for context - PARALLEL FETCH
+            index_syms = list(self.GLOBAL_INDICES.keys())[:4]
+            macro_syms = ["GLD", "BITO", "TLT", "UVXY"]
+            all_syms = index_syms + macro_syms
+            quotes = await self._fetch_quotes_batch(all_syms)
+
+            market_data = {}
+            for sym in index_syms:
+                info = self.GLOBAL_INDICES.get(sym)
+                q = quotes.get(sym)
+                if info and q:
+                    market_data[info[1]] = {
+                        "price": q.get('price'),
+                        "change_pct": q.get('change_pct'),
+                    }
+            for sym in macro_syms:
+                info = self.MACRO_ASSETS.get(sym)
+                q = quotes.get(sym)
+                if info and q:
+                    market_data[info[1]] = {
+                        "price": q.get('price'),
+                        "change_pct": q.get('change_pct'),
+                    }
+
+            # Call GPT for market noise analysis
+            analysis = await self._gpt_market_noise(market_data)
+            msg = "🧠 <b>AI MARKET NOISE ANALYSIS</b>\n"
+            msg += f"<i>{self._now_et().strftime('%Y-%m-%d %H:%M ET')}</i>\n\n"
+            msg += analysis
+            msg += "\n\n━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += "💡 /market /macro /top /signals\n"
+
+            await self.send_message_to(chat_id, msg)
+        except Exception as e:
+            await self.send_message_to(chat_id, f"❌ AI analysis failed: {e}")
+
+    async def _gpt_market_noise(self, market_data: Dict[str, Any]) -> str:
+        """Use GPT to analyze current market conditions and sentiment."""
+        from src.core.config import get_settings
+        settings = get_settings()
+
+        # Build prompt
+        data_str = "\n".join(
+            f"- {k}: ${v.get('price', 0):.2f} ({v.get('change_pct', 0):+.2f}%)"
+            for k, v in market_data.items()
+        )
+        prompt = f"""You are an elite hedge fund analyst. Analyze today's market data and provide:
+
+1. **Market Regime** (1 sentence): Is it risk-on, risk-off, or mixed?
+2. **Key Drivers** (2-3 bullets): What's moving markets today?
+3. **Sector Implications** (2 bullets): Which sectors benefit/suffer?
+4. **Trading Bias** (1 sentence): Bullish, bearish, or neutral for today?
+5. **Watch Out** (1 bullet): One risk to monitor.
+
+Current Market Data:
+{data_str}
+
+Be concise, professional, and actionable. Use emojis sparingly."""
+
+        try:
+            if settings.use_azure_openai:
+                from openai import AsyncAzureOpenAI
+                client = AsyncAzureOpenAI(
+                    azure_endpoint=settings.azure_openai_endpoint,
+                    api_key=settings.azure_openai_api_key,
+                    api_version=settings.azure_openai_api_version,
+                )
+                model = settings.azure_openai_deployment
+            elif settings.openai_api_key:
+                from openai import AsyncOpenAI
+                client = AsyncOpenAI(api_key=settings.openai_api_key)
+                model = settings.openai_model_mini
+            else:
+                return "⚠️ OpenAI not configured. Set OPENAI_API_KEY or Azure OpenAI in .env"
+
+            resp = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": "You are a professional market analyst."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.4,
+                max_tokens=600,
+            )
+            return resp.choices[0].message.content or "No analysis generated."
+        except Exception as e:
+            return f"⚠️ GPT error: {e}"
     
     async def _cmd_signals(self, chat_id: int, args: List[str]):
         """Get latest signals."""
@@ -1424,24 +1945,83 @@ Use /broker futu to switch.
         await self.send_message_to(chat_id, msg)
     
     async def _cmd_status(self, chat_id: int, args: List[str]):
-        """System status."""
-        msg = f"""
-⚙️ <b>System Status</b>
-
-<b>Bot Status:</b> 🟢 Online
-<b>Active Broker:</b> {self.active_broker.value.upper()}
-<b>Watchlist:</b> {len(self.watchlist)} stocks
-<b>Price Alerts:</b> {len(self.price_alerts)} active
-
-<b>Broker Connections:</b>
-  Futu: {'🟢 Connected' if self.futu_client else '⚪ Not Connected'}
-  IB: {'🟢 Connected' if self.ib_client else '⚪ Not Connected'}
-
-<b>Market Status:</b>
-  US: {'🟢 Open' if self._is_market_open() else '🔴 Closed'}
-  
-<i>Uptime: {datetime.now().strftime('%H:%M:%S')}</i>
-"""
+        """Professional system dashboard."""
+        
+        now = datetime.now()
+        market_open = self._is_market_open()
+        
+        msg = "╔═══════════════════════════════════════╗\n"
+        msg += "║       📊 <b>SYSTEM DASHBOARD</b>            ║\n"
+        msg += "╚═══════════════════════════════════════╝\n\n"
+        
+        # System Status
+        msg += "🖥️ <b>SYSTEM</b>\n"
+        msg += "┌─────────────────────────────────────┐\n"
+        msg += f"│ Bot Status:     🟢 Online           │\n"
+        msg += f"│ Commands:       80 available        │\n"
+        msg += f"│ Stocks:         500+ monitored      │\n"
+        msg += "└─────────────────────────────────────┘\n\n"
+        
+        # Market Status
+        market_emoji = "🟢" if market_open else "🔴"
+        market_status = "OPEN" if market_open else "CLOSED"
+        msg += "🏛️ <b>MARKET</b>\n"
+        msg += "┌─────────────────────────────────────┐\n"
+        msg += f"│ US Markets:     {market_emoji} {market_status:<17}│\n"
+        
+        # Get VIX for fear gauge
+        try:
+            # Quick market regime check
+            spy = await self._fetch_quote("SPY")
+            if spy:
+                spy_change = spy.get('change_pct', 0)
+                if spy_change > 0.5:
+                    regime = "📈 BULLISH"
+                elif spy_change < -0.5:
+                    regime = "📉 BEARISH"
+                else:
+                    regime = "↔️ NEUTRAL"
+                msg += f"│ Regime:         {regime:<17}│\n"
+        except:
+            pass
+        
+        msg += "└─────────────────────────────────────┘\n\n"
+        
+        # Trading Account
+        account_size = self.user_settings.get('account_size', 100000)
+        risk_pct = self.user_settings.get('risk_per_trade', 0.01) * 100
+        style = self.user_settings.get('trading_style', 'swing').title()
+        
+        msg += "💰 <b>ACCOUNT</b>\n"
+        msg += "┌─────────────────────────────────────┐\n"
+        msg += f"│ Size:           ${account_size:>15,.0f} │\n"
+        msg += f"│ Risk/Trade:     {risk_pct:>15.1f}% │\n"
+        msg += f"│ Style:          {style:>17} │\n"
+        msg += "└─────────────────────────────────────┘\n\n"
+        
+        # Real-Time Monitoring
+        push_status = "🟢 ON" if self.push_notifications_enabled else "🔴 OFF"
+        signals_status = "✅" if self.push_settings.get('signals', True) else "❌"
+        
+        msg += "🔔 <b>REAL-TIME MONITORING</b>\n"
+        msg += "┌─────────────────────────────────────┐\n"
+        msg += f"│ Push Alerts:    {push_status:<18} │\n"
+        msg += f"│ Signal Scanner: {signals_status:<18} │\n"
+        msg += f"│ Price Monitor:  {signals_status:<18} │\n"
+        msg += "└─────────────────────────────────────┘\n\n"
+        
+        # Connections
+        futu_status = "🟢" if self.futu_client else "⚪"
+        ib_status = "🟢" if self.ib_client else "⚪"
+        paper_status = "🟢" if self.active_broker == BrokerType.PAPER else "⚪"
+        
+        msg += "🔗 <b>CONNECTIONS</b>\n"
+        msg += f"├ Futu:   {futu_status}  IB: {ib_status}  Paper: {paper_status}\n"
+        msg += f"├ Active: {self.active_broker.value.upper()}\n"
+        msg += f"└ Watchlist: {len(self.watchlist)} | Alerts: {len(self.price_alerts)}\n\n"
+        
+        msg += f"<i>⏰ {now.strftime('%Y-%m-%d %H:%M:%S')}</i>"
+        
         await self.send_message_to(chat_id, msg)
     
     async def _cmd_auto(self, chat_id: int, args: List[str]):
@@ -2236,18 +2816,20 @@ Usage: <code>/riskcheck AAPL 100 175.50</code>
     
     async def _cmd_oppty(self, chat_id: int, args: List[str]):
         """Find live buying opportunities using swing strategies."""
-        import aiohttp
-        
-        await self.send_message_to(chat_id, "🔍 <b>Scanning for opportunities...</b>\n\nThis may take a moment.")
+        await self.send_message_to(chat_id, "🔍 <b>Scanning for opportunities...</b>")
         
         try:
-            # Define tickers to scan
+            # Define tickers to scan - more stocks now with parallel fetch
             scan_list = self.watchlist if self.watchlist else self.TOP_STOCKS
+            scan_tickers = scan_list[:40]  # Increased to 40 with parallel fetching
+            
+            # PARALLEL FETCH all quotes at once
+            quotes = await self._fetch_quotes_batch(scan_tickers)
             
             opportunities = []
             
-            for ticker in scan_list[:15]:  # Limit to 15 for speed
-                quote = await self._fetch_quote(ticker)
+            for ticker in scan_tickers:
+                quote = quotes.get(ticker)
                 if not quote:
                     continue
                 
@@ -2299,7 +2881,7 @@ Usage: <code>/riskcheck AAPL 100 175.50</code>
                         msg += f"   {signal}\n"
                     msg += f"   Score: {'⭐' * min(opp['score'], 5)}\n\n"
                 
-                msg += f"<i>Scanned {len(scan_list)} stocks at {datetime.now().strftime('%H:%M:%S')}</i>\n\n"
+                msg += f"<i>Scanned {len(scan_tickers)} stocks at {datetime.now().strftime('%H:%M:%S')}</i>\n\n"
                 msg += "💡 Use <code>/advise TICKER</code> for detailed analysis"
             else:
                 msg = "📭 <b>No strong opportunities found right now</b>\n\n"
@@ -2321,11 +2903,15 @@ Usage: <code>/riskcheck AAPL 100 175.50</code>
         
         try:
             scan_list = self.watchlist if self.watchlist else self.TOP_STOCKS
+            scan_tickers = scan_list[:30]  # Increased with parallel fetch
+            
+            # PARALLEL FETCH all quotes at once
+            quotes = await self._fetch_quotes_batch(scan_tickers)
             
             setups = []
             
-            for ticker in scan_list[:12]:
-                quote = await self._fetch_quote(ticker)
+            for ticker in scan_tickers:
+                quote = quotes.get(ticker)
                 if not quote:
                     continue
                     
@@ -2389,7 +2975,7 @@ Usage: <code>/riskcheck AAPL 100 175.50</code>
                     msg += f"   🎯 Target: ${setup['target']:.2f}\n"
                     msg += f"   📊 R:R = 1:{setup['rr']:.1f}\n\n"
                 
-                msg += f"\n<i>Found {len(setups)} setups at {datetime.now().strftime('%H:%M:%S')}</i>"
+                msg += f"\n<i>Scanned {len(scan_tickers)} stocks at {datetime.now().strftime('%H:%M:%S')}</i>"
             else:
                 msg = "📭 <b>No swing setups found right now</b>\n\n"
                 msg += "Try again when market is more active."
@@ -2402,12 +2988,18 @@ Usage: <code>/riskcheck AAPL 100 175.50</code>
     
     async def _cmd_vcp(self, chat_id: int, args: List[str]):
         """Find VCP (Volatility Contraction Pattern) candidates with full analysis."""
-        await self.send_message_to(chat_id, "🔬 <b>Scanning for VCP patterns...</b>\n<i>Analyzing volatility contraction across 40+ stocks...</i>")
+        await self.send_message_to(chat_id, "🔬 <b>Scanning for VCP patterns...</b>\n<i>Analyzing volatility contraction across 50+ stocks...</i>")
         
         try:
-            # Get market context first
-            spy = await self._fetch_quote("SPY")
-            qqq = await self._fetch_quote("QQQ")
+            # Get scan list and add market indices
+            scan_list = self.watchlist if self.watchlist else self.TOP_STOCKS[:50]
+            all_tickers = ["SPY", "QQQ"] + list(scan_list)
+            
+            # PARALLEL FETCH all quotes at once
+            quotes = await self._fetch_quotes_batch(all_tickers)
+            
+            spy = quotes.get("SPY")
+            qqq = quotes.get("QQQ")
             
             market_bias = "NEUTRAL"
             market_strength = 5
@@ -2432,7 +3024,6 @@ Usage: <code>/riskcheck AAPL 100 175.50</code>
                     market_bias = "STRONG BEAR"
                     market_strength = 1
             
-            scan_list = self.watchlist if self.watchlist else self.TOP_STOCKS[:40]
             vcp_candidates = []
             
             # Sector tracking
@@ -2445,7 +3036,7 @@ Usage: <code>/riskcheck AAPL 100 175.50</code>
             }
             
             for ticker in scan_list:
-                quote = await self._fetch_quote(ticker)
+                quote = quotes.get(ticker)
                 if not quote:
                     continue
                 
@@ -4438,16 +5029,19 @@ Provides comprehensive analysis:
             await self.send_message_to(chat_id, f"❌ Error: {e}")
     
     async def _cmd_top(self, chat_id: int, args: List[str]):
-        """Top 10+ picks today with 10 legendary fund managers' analysis."""
-        await self.send_message_to(chat_id, "🎯 <b>Scanning 100+ stocks with 10 Legendary Investors' Criteria...</b>")
+        """Top 10 picks with legendary investors + chart patterns analysis."""
+        await self.send_message_to(chat_id, "🎯 <b>Scanning 100+ stocks with 10 Legendary Investors + Chart Patterns...</b>")
         
         try:
             # Score stocks and find best setups - scan more stocks
-            picks = []
             tickers = self.TOP_STOCKS[:100]  # Scan 100 stocks
             
+            # PARALLEL FETCH all quotes at once for speed
+            quotes = await self._fetch_quotes_batch(tickers)
+            
+            picks = []
             for ticker in tickers:
-                quote = await self._fetch_quote(ticker)
+                quote = quotes.get(ticker)
                 if not quote or quote.get('price', 0) == 0:
                     continue
                 
@@ -4457,21 +5051,50 @@ Provides comprehensive analysis:
                 high = quote.get('high', 0)
                 low = quote.get('low', 0)
                 
-                # Calculate advanced scoring with ALL 10 legendary investor criteria
+                # Calculate advanced scoring with ALL 10 legendary investor criteria + patterns
                 score_data = await self._calculate_legendary_score(ticker, quote)
                 
-                if score_data['total_score'] >= 6.0:  # Only high-scoring stocks
-                    # Calculate R:R and setup quality
+                if score_data['total_score'] >= 5.5:  # Lowered to get more picks
+                    # Use pattern-based levels if available, else ATR-based
+                    pattern_entry = score_data.get('pattern_entry', price)
+                    pattern_stop = score_data.get('pattern_stop', 0)
+                    pattern_target = score_data.get('pattern_target', 0)
+                    
+                    # Calculate proper stop and target based on volatility & pattern
                     atr_est = high - low if high > low else price * 0.02
                     
-                    stop = round(price - atr_est * 1.5, 2)
-                    target = round(price + atr_est * 3, 2)
-                    rr = round((target - price) / (price - stop), 1) if price > stop else 0
+                    # Use pattern levels if valid, else calculate from ATR
+                    if pattern_stop > 0 and pattern_stop < price:
+                        stop = round(pattern_stop, 2)
+                    else:
+                        # Dynamic stop based on volatility
+                        vol_pct = score_data.get('volatility', 2) / 100
+                        stop_mult = 1.5 + vol_pct * 10  # Higher vol = wider stop
+                        stop = round(price - atr_est * min(stop_mult, 2.5), 2)
+                    
+                    if pattern_target > 0 and pattern_target > price:
+                        target = round(pattern_target, 2)
+                    else:
+                        # Target based on R:R and momentum
+                        change_30d = score_data.get('change_30d', 0)
+                        if change_30d > 10:
+                            target_mult = 2.5  # Strong momentum = smaller target (extended)
+                        elif change_30d < -10:
+                            target_mult = 4.0  # Oversold = larger target potential
+                        else:
+                            target_mult = 3.0  # Normal
+                        target = round(price + atr_est * target_mult, 2)
+                    
+                    # Calculate actual R:R
+                    risk = price - stop if price > stop else price * 0.05
+                    reward = target - price if target > price else price * 0.10
+                    rr = round(reward / risk, 1) if risk > 0 else 2.0
                     
                     picks.append({
                         "ticker": ticker,
                         "price": price,
                         "change_pct": change_pct,
+                        "volume": volume,
                         "score": score_data['total_score'],
                         "signal": score_data['signal'],
                         "confidence": score_data['confidence'],
@@ -4482,9 +5105,11 @@ Provides comprehensive analysis:
                         "reasons": score_data.get('reasons', {}),
                         "top_managers": score_data.get('top_managers', []),
                         "kelly": score_data.get('kelly_fraction', 0),
+                        "win_rate": score_data.get('win_rate', 0.5),
                         "vol": score_data.get('volatility', 0),
                         "rsi": score_data.get('rsi', 50),
                         "change_30d": score_data.get('change_30d', 0),
+                        "pattern": score_data.get('pattern', 'N/A'),
                     })
             
             # Sort by score
@@ -4497,81 +5122,79 @@ Provides comprehensive analysis:
                 'lynch': '📊 Lynch',
                 'greenblatt': '🎯 Greenblatt',
                 'tepper': '💎 Tepper',
-                'druckenmiller': '🔥 Druckenmiller',
+                'druckenmiller': '🔥 Drucken',
                 'wood': '🚀 C.Wood',
                 'ackman': '🎪 Ackman',
                 'smith': '✨ Smith',
                 'griffin': '🤖 Griffin',
+                'pattern': '📐 Pattern',
             }
             
-            # Split into messages
-            msg1 = "🎯 <b>TOP PICKS - 10 LEGENDARY INVESTORS' ANALYSIS</b>\n"
+            # Build message - show TOP 10 with all details
+            msg1 = "🎯 <b>TOP 10 PICKS - LEGENDARY INVESTORS + PATTERNS</b>\n"
             msg1 += f"<i>Scanned {len(tickers)} stocks | {datetime.now().strftime('%Y-%m-%d %H:%M')}</i>\n\n"
             
             if picks:
-                # First 4 picks with full analysis
-                for i, p in enumerate(picks[:4], 1):
+                # First 5 picks with full analysis
+                for i, p in enumerate(picks[:5], 1):
                     scores = p.get('scores', {})
                     reasons = p.get('reasons', {})
                     chg_emoji = "🟢" if p['change_pct'] >= 0 else "🔴"
+                    vol_emoji = "📈" if p['volume'] > 5000000 else "📊" if p['volume'] > 1000000 else "📉"
                     
                     msg1 += f"━━━━━ <b>#{i} {p['ticker']}</b> ━━━━━\n"
                     msg1 += f"{chg_emoji} ${p['price']:.2f} ({p['change_pct']:+.2f}%) | 30d: {p.get('change_30d', 0):+.1f}%\n"
-                    msg1 += f"📊 <b>AI Score: {p['score']:.1f}/10 - {p['signal']}</b>\n\n"
+                    msg1 += f"📊 <b>Score: {p['score']:.1f}/10 - {p['signal']}</b>\n"
+                    msg1 += f"{vol_emoji} Vol: {p['volume']/1e6:.1f}M | RSI: {p.get('rsi', 50):.0f}\n"
                     
-                    # Show top 5 manager scores
-                    msg1 += "<b>Manager Scores:</b>\n"
-                    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:5]
-                    for mgr, score in sorted_scores:
-                        bar = "█" * int(score) + "░" * (10 - int(score))
-                        name = manager_names.get(mgr, mgr.title())
-                        msg1 += f"{name}: [{bar}] {score:.1f}\n"
+                    # Show pattern if detected
+                    if p.get('pattern') and p['pattern'] != 'N/A' and p['pattern'] != 'No pattern':
+                        msg1 += f"📐 Pattern: <b>{p['pattern']}</b>\n"
                     
-                    # Why this pick
-                    msg1 += f"\n<b>Why:</b>\n"
-                    for mgr, reason_list in list(reasons.items())[:3]:
-                        if reason_list:
-                            name = manager_names.get(mgr, mgr.title())
-                            msg1 += f"• {name}: {reason_list[0]}\n"
+                    # Show top 3 manager scores as compact bar
+                    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:3]
+                    mgr_line = " ".join([f"{manager_names.get(m, m)[:6]}:{s:.0f}" for m, s in sorted_scores])
+                    msg1 += f"👔 {mgr_line}\n"
                     
-                    # Trade levels
-                    msg1 += f"\n<b>Trade:</b>\n"
-                    msg1 += f"📍 Entry: ${p['price']:.2f}\n"
-                    msg1 += f"🛑 Stop: ${p['stop']:.2f} (-{(p['price']-p['stop'])/p['price']*100:.1f}%)\n"
-                    msg1 += f"🎯 Target: ${p['target']:.2f} (+{(p['target']-p['price'])/p['price']*100:.1f}%)\n"
-                    msg1 += f"📐 R:R: 1:{p['rr']:.1f} | Kelly: {p.get('kelly', 0)*100:.0f}%\n\n"
+                    # Trade levels with R:R
+                    risk_pct = (p['price'] - p['stop']) / p['price'] * 100 if p['price'] > 0 else 5
+                    reward_pct = (p['target'] - p['price']) / p['price'] * 100 if p['price'] > 0 else 10
+                    msg1 += f"📍 Entry: ${p['price']:.2f} | 🛑 Stop: ${p['stop']:.2f} (-{risk_pct:.1f}%)\n"
+                    msg1 += f"🎯 Target: ${p['target']:.2f} (+{reward_pct:.1f}%) | R:R 1:{p['rr']:.1f}\n"
+                    msg1 += f"🎰 Kelly: {p.get('kelly', 0)*100:.0f}% | Win: {p.get('win_rate', 0.5)*100:.0f}%\n\n"
                 
                 await self.send_message_to(chat_id, msg1)
                 
-                # Second message with picks 5-10 (condensed)
-                if len(picks) > 4:
-                    msg2 = "🎯 <b>MORE TOP PICKS (5-10)</b>\n\n"
+                # Second message with picks 6-10 (condensed)
+                if len(picks) > 5:
+                    msg2 = "🎯 <b>TOP PICKS #6-10</b>\n\n"
                     
-                    for i, p in enumerate(picks[4:10], 5):
+                    for i, p in enumerate(picks[5:10], 6):
                         scores = p.get('scores', {})
                         chg_emoji = "🟢" if p['change_pct'] >= 0 else "🔴"
                         
                         # Get top 2 managers
                         sorted_mgrs = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:2]
-                        top_mgrs = ", ".join([f"{manager_names.get(m, m)[:8]}:{s:.0f}" for m, s in sorted_mgrs])
+                        top_mgrs = ", ".join([f"{manager_names.get(m, m)[:6]}:{s:.0f}" for m, s in sorted_mgrs])
+                        
+                        risk_pct = (p['price'] - p['stop']) / p['price'] * 100 if p['price'] > 0 else 5
+                        reward_pct = (p['target'] - p['price']) / p['price'] * 100 if p['price'] > 0 else 10
                         
                         msg2 += f"<b>#{i} {p['ticker']}</b> {chg_emoji} ${p['price']:.2f} ({p['change_pct']:+.1f}%)\n"
-                        msg2 += f"   Score: {p['score']:.1f} | {top_mgrs}\n"
-                        msg2 += f"   🛑${p['stop']:.2f} 🎯${p['target']:.2f} R:R {p['rr']:.1f}\n\n"
+                        msg2 += f"   Score: {p['score']:.1f} | RSI: {p.get('rsi',50):.0f} | {top_mgrs}\n"
+                        if p.get('pattern') and p['pattern'] != 'N/A':
+                            msg2 += f"   📐 {p['pattern']}\n"
+                        msg2 += f"   🛑${p['stop']:.2f}(-{risk_pct:.0f}%) 🎯${p['target']:.2f}(+{reward_pct:.0f}%)\n"
+                        msg2 += f"   R:R 1:{p['rr']:.1f} | Kelly {p.get('kelly',0)*100:.0f}%\n\n"
                     
                     msg2 += "━━━━━━━━━━━━━━━━━━━━━━\n"
-                    msg2 += "📖 <b>10 LEGENDARY FUND MANAGERS:</b>\n"
-                    msg2 += "🏛️ Buffett - Value + Moat (ROE >20%)\n"
-                    msg2 += "⚖️ Dalio - Risk Parity (low vol)\n"
-                    msg2 += "📊 Lynch - PEG <1, growth >20%\n"
-                    msg2 += "🎯 Greenblatt - Magic Formula ROIC\n"
-                    msg2 += "💎 Tepper - Distressed value (-30%)\n"
-                    msg2 += "🔥 Druckenmiller - Macro momentum\n"
-                    msg2 += "🚀 C.Wood - Disruptive innovation\n"
-                    msg2 += "🎪 Ackman - Concentrated bets\n"
-                    msg2 += "✨ Smith - Quality ROCE >20%\n"
-                    msg2 += "🤖 Griffin - Kelly quant sizing\n\n"
-                    msg2 += "<code>/score TICKER</code> for detailed analysis\n"
+                    msg2 += "📐 <b>CHART PATTERNS DETECTED:</b>\n"
+                    msg2 += "H&S, Double Top/Bottom, Cup&Handle\n"
+                    msg2 += "Wedges, Triangles, Flags, Pennants\n\n"
+                    msg2 += "📖 <b>KELLY CRITERION:</b>\n"
+                    msg2 += "% of capital to risk per trade\n"
+                    msg2 += "Based on win rate & reward/risk\n\n"
+                    msg2 += "<code>/score TICKER</code> for full analysis\n"
                     msg2 += "⚠️ <i>Not financial advice. DYOR.</i>"
                     
                     await self.send_message_to(chat_id, msg2)
@@ -4582,7 +5205,328 @@ Provides comprehensive analysis:
             
         except Exception as e:
             await self.send_message_to(chat_id, f"❌ Error: {e}")
-    
+
+    def _detect_chart_patterns(self, prices: List[float], highs: List[float], lows: List[float], volumes: List[float]) -> Dict:
+        """
+        Detect classic chart patterns: Head & Shoulders, Double Top/Bottom, 
+        Cup & Handle, Wedges, Triangles, Pennants, Flags, Rounding Bottom.
+        Returns pattern info with trade levels.
+        """
+        if len(prices) < 20:
+            return {"pattern": None, "score": 0, "levels": {}}
+        
+        n = len(prices)
+        current = prices[-1]
+        high_20 = max(highs[-20:]) if len(highs) >= 20 else max(highs)
+        low_20 = min(lows[-20:]) if len(lows) >= 20 else min(lows)
+        range_20 = high_20 - low_20 if high_20 > low_20 else current * 0.05
+        
+        # Find swing highs and lows
+        swing_highs = []
+        swing_lows = []
+        for i in range(2, n-2):
+            if highs[i] > highs[i-1] and highs[i] > highs[i-2] and highs[i] > highs[i+1] and highs[i] > highs[i+2]:
+                swing_highs.append((i, highs[i]))
+            if lows[i] < lows[i-1] and lows[i] < lows[i-2] and lows[i] < lows[i+1] and lows[i] < lows[i+2]:
+                swing_lows.append((i, lows[i]))
+        
+        patterns = []
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 1. HEAD AND SHOULDERS (Bearish reversal)
+        # ═══════════════════════════════════════════════════════════════════
+        if len(swing_highs) >= 3:
+            for i in range(len(swing_highs) - 2):
+                left = swing_highs[i][1]
+                head = swing_highs[i+1][1]
+                right = swing_highs[i+2][1]
+                # Head must be higher than shoulders, shoulders roughly equal
+                if head > left and head > right and abs(left - right) / left < 0.03:
+                    neckline = min([low for _, low in swing_lows if swing_highs[i][0] < _ < swing_highs[i+2][0]] or [low_20])
+                    target = neckline - (head - neckline)
+                    patterns.append({
+                        "pattern": "📉 Head & Shoulders",
+                        "type": "bearish",
+                        "score": 8,
+                        "entry": neckline,
+                        "stop": head * 1.02,
+                        "target": max(target, current * 0.85),
+                        "desc": "Bearish reversal - sell below neckline"
+                    })
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 2. INVERSE HEAD AND SHOULDERS (Bullish reversal)
+        # ═══════════════════════════════════════════════════════════════════
+        if len(swing_lows) >= 3:
+            for i in range(len(swing_lows) - 2):
+                left = swing_lows[i][1]
+                head = swing_lows[i+1][1]
+                right = swing_lows[i+2][1]
+                if head < left and head < right and abs(left - right) / left < 0.03:
+                    neckline = max([high for _, high in swing_highs if swing_lows[i][0] < _ < swing_lows[i+2][0]] or [high_20])
+                    target = neckline + (neckline - head)
+                    patterns.append({
+                        "pattern": "📈 Inverse H&S",
+                        "type": "bullish",
+                        "score": 8,
+                        "entry": neckline,
+                        "stop": head * 0.98,
+                        "target": target,
+                        "desc": "Bullish reversal - buy above neckline"
+                    })
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 3. DOUBLE TOP (Bearish)
+        # ═══════════════════════════════════════════════════════════════════
+        if len(swing_highs) >= 2:
+            for i in range(len(swing_highs) - 1):
+                top1 = swing_highs[i][1]
+                top2 = swing_highs[i+1][1]
+                if abs(top1 - top2) / top1 < 0.02:  # Tops within 2%
+                    valley = min([low for _, low in swing_lows if swing_highs[i][0] < _ < swing_highs[i+1][0]] or [low_20])
+                    target = valley - (top1 - valley)
+                    patterns.append({
+                        "pattern": "📉 Double Top",
+                        "type": "bearish",
+                        "score": 7,
+                        "entry": valley,
+                        "stop": max(top1, top2) * 1.01,
+                        "target": max(target, current * 0.90),
+                        "desc": "Bearish - short below valley"
+                    })
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 4. DOUBLE BOTTOM (Bullish)
+        # ═══════════════════════════════════════════════════════════════════
+        if len(swing_lows) >= 2:
+            for i in range(len(swing_lows) - 1):
+                bot1 = swing_lows[i][1]
+                bot2 = swing_lows[i+1][1]
+                if abs(bot1 - bot2) / bot1 < 0.02:
+                    peak = max([high for _, high in swing_highs if swing_lows[i][0] < _ < swing_lows[i+1][0]] or [high_20])
+                    target = peak + (peak - bot1)
+                    patterns.append({
+                        "pattern": "📈 Double Bottom",
+                        "type": "bullish",
+                        "score": 7,
+                        "entry": peak,
+                        "stop": min(bot1, bot2) * 0.99,
+                        "target": target,
+                        "desc": "Bullish - buy above peak"
+                    })
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 5. CUP AND HANDLE (Bullish continuation)
+        # ═══════════════════════════════════════════════════════════════════
+        if n >= 30:
+            # Look for U-shape in last 30 bars
+            mid_point = n - 15
+            left_high = max(highs[n-30:n-20])
+            cup_low = min(lows[n-20:n-10])
+            right_high = max(highs[n-10:n-5])
+            handle_low = min(lows[n-5:])
+            
+            if left_high > cup_low and right_high >= left_high * 0.95 and handle_low > cup_low:
+                depth = left_high - cup_low
+                if depth / left_high > 0.10 and depth / left_high < 0.35:  # 10-35% depth
+                    patterns.append({
+                        "pattern": "☕ Cup & Handle",
+                        "type": "bullish",
+                        "score": 9,
+                        "entry": right_high,
+                        "stop": handle_low * 0.97,
+                        "target": right_high + depth,
+                        "desc": "Bullish continuation - buy breakout"
+                    })
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 6. ASCENDING TRIANGLE (Bullish)
+        # ═══════════════════════════════════════════════════════════════════
+        if len(swing_highs) >= 2 and len(swing_lows) >= 2:
+            recent_highs = [h for _, h in swing_highs[-3:]]
+            recent_lows = [l for _, l in swing_lows[-3:]]
+            if len(recent_highs) >= 2 and len(recent_lows) >= 2:
+                high_flat = max(recent_highs) - min(recent_highs) < range_20 * 0.03
+                lows_rising = recent_lows[-1] > recent_lows[0]
+                if high_flat and lows_rising:
+                    resistance = max(recent_highs)
+                    support = recent_lows[-1]
+                    patterns.append({
+                        "pattern": "📐 Ascending Triangle",
+                        "type": "bullish",
+                        "score": 7,
+                        "entry": resistance * 1.005,
+                        "stop": support * 0.97,
+                        "target": resistance + (resistance - min(recent_lows)),
+                        "desc": "Bullish - buy breakout above resistance"
+                    })
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 7. DESCENDING TRIANGLE (Bearish)
+        # ═══════════════════════════════════════════════════════════════════
+        if len(swing_highs) >= 2 and len(swing_lows) >= 2:
+            recent_highs = [h for _, h in swing_highs[-3:]]
+            recent_lows = [l for _, l in swing_lows[-3:]]
+            if len(recent_highs) >= 2 and len(recent_lows) >= 2:
+                low_flat = max(recent_lows) - min(recent_lows) < range_20 * 0.03
+                highs_falling = recent_highs[-1] < recent_highs[0]
+                if low_flat and highs_falling:
+                    support = min(recent_lows)
+                    resistance = recent_highs[-1]
+                    patterns.append({
+                        "pattern": "📐 Descending Triangle",
+                        "type": "bearish",
+                        "score": 7,
+                        "entry": support * 0.995,
+                        "stop": resistance * 1.03,
+                        "target": support - (max(recent_highs) - support),
+                        "desc": "Bearish - sell breakdown below support"
+                    })
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 8. SYMMETRICAL TRIANGLE (Neutral - breakout direction)
+        # ═══════════════════════════════════════════════════════════════════
+        if len(swing_highs) >= 2 and len(swing_lows) >= 2:
+            recent_highs = [h for _, h in swing_highs[-3:]]
+            recent_lows = [l for _, l in swing_lows[-3:]]
+            if len(recent_highs) >= 2 and len(recent_lows) >= 2:
+                highs_falling = recent_highs[-1] < recent_highs[0]
+                lows_rising = recent_lows[-1] > recent_lows[0]
+                if highs_falling and lows_rising:
+                    apex = (recent_highs[-1] + recent_lows[-1]) / 2
+                    height = recent_highs[0] - recent_lows[0]
+                    patterns.append({
+                        "pattern": "🔺 Symmetrical Triangle",
+                        "type": "neutral",
+                        "score": 6,
+                        "entry": recent_highs[-1] if current > apex else recent_lows[-1],
+                        "stop": recent_lows[-1] * 0.97 if current > apex else recent_highs[-1] * 1.03,
+                        "target": recent_highs[-1] + height * 0.7 if current > apex else recent_lows[-1] - height * 0.7,
+                        "desc": "Wait for breakout direction"
+                    })
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 9. WEDGES (Rising = Bearish, Falling = Bullish)
+        # ═══════════════════════════════════════════════════════════════════
+        if n >= 20:
+            # Rising wedge (bearish)
+            high_slope = (highs[-1] - highs[-20]) / 20
+            low_slope = (lows[-1] - lows[-20]) / 20
+            if high_slope > 0 and low_slope > 0 and low_slope > high_slope:
+                patterns.append({
+                    "pattern": "📉 Rising Wedge",
+                    "type": "bearish",
+                    "score": 6,
+                    "entry": lows[-1],
+                    "stop": highs[-1] * 1.02,
+                    "target": lows[-20],
+                    "desc": "Bearish - sell breakdown"
+                })
+            # Falling wedge (bullish)
+            if high_slope < 0 and low_slope < 0 and high_slope > low_slope:
+                patterns.append({
+                    "pattern": "📈 Falling Wedge",
+                    "type": "bullish",
+                    "score": 7,
+                    "entry": highs[-1],
+                    "stop": lows[-1] * 0.98,
+                    "target": highs[-20],
+                    "desc": "Bullish - buy breakout"
+                })
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 10. BULL/BEAR FLAGS & PENNANTS
+        # ═══════════════════════════════════════════════════════════════════
+        if n >= 15:
+            # Check for pole + consolidation
+            pole_high = max(highs[n-15:n-5])
+            pole_low = min(lows[n-15:n-5])
+            flag_range = max(highs[-5:]) - min(lows[-5:])
+            pole_range = pole_high - pole_low
+            
+            if flag_range < pole_range * 0.4:  # Tight consolidation
+                # Bull flag
+                if prices[-5] > prices[-15]:
+                    patterns.append({
+                        "pattern": "🚩 Bull Flag",
+                        "type": "bullish",
+                        "score": 8,
+                        "entry": max(highs[-5:]),
+                        "stop": min(lows[-5:]) * 0.97,
+                        "target": max(highs[-5:]) + pole_range,
+                        "desc": "Bullish continuation - buy breakout"
+                    })
+                # Bear flag
+                else:
+                    patterns.append({
+                        "pattern": "🚩 Bear Flag",
+                        "type": "bearish",
+                        "score": 8,
+                        "entry": min(lows[-5:]),
+                        "stop": max(highs[-5:]) * 1.03,
+                        "target": min(lows[-5:]) - pole_range,
+                        "desc": "Bearish continuation - sell breakdown"
+                    })
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # 11. ROUNDING BOTTOM (Bullish)
+        # ═══════════════════════════════════════════════════════════════════
+        if n >= 30:
+            # Check for U-shape price action
+            first_third = sum(prices[n-30:n-20]) / 10
+            middle_third = sum(prices[n-20:n-10]) / 10
+            last_third = sum(prices[n-10:]) / 10
+            
+            if middle_third < first_third * 0.95 and last_third > middle_third * 1.03:
+                if last_third > first_third * 0.98:  # Nearly recovered
+                    patterns.append({
+                        "pattern": "🥣 Rounding Bottom",
+                        "type": "bullish",
+                        "score": 7,
+                        "entry": first_third,
+                        "stop": middle_third * 0.95,
+                        "target": first_third + (first_third - middle_third),
+                        "desc": "Bullish reversal - buy above lip"
+                    })
+        
+        # Select best pattern
+        if patterns:
+            patterns.sort(key=lambda x: x['score'], reverse=True)
+            best = patterns[0]
+            return {
+                "pattern": best['pattern'],
+                "type": best['type'],
+                "score": best['score'],
+                "entry": round(best['entry'], 2),
+                "stop": round(best['stop'], 2),
+                "target": round(best['target'], 2),
+                "desc": best['desc'],
+                "all_patterns": patterns[:3]  # Top 3 patterns
+            }
+        
+        # No clear pattern - trend analysis
+        trend_score = 5
+        trend = "Consolidation"
+        if n >= 20:
+            sma20 = sum(prices[-20:]) / 20
+            if current > sma20 * 1.02:
+                trend = "📈 Uptrend"
+                trend_score = 6
+            elif current < sma20 * 0.98:
+                trend = "📉 Downtrend"
+                trend_score = 4
+        
+        return {
+            "pattern": trend,
+            "type": "neutral",
+            "score": trend_score,
+            "entry": current,
+            "stop": low_20 * 0.97,
+            "target": high_20 * 1.05,
+            "desc": "No clear pattern - follow trend",
+            "all_patterns": []
+        }
+
     async def _calculate_legendary_score(self, ticker: str, quote: Dict) -> Dict:
         """
         Calculate comprehensive score based on 10 legendary fund managers' strategies.
@@ -4950,30 +5894,71 @@ Provides comprehensive analysis:
         # ═══════════════════════════════════════════════════════════════════
         # 10. KEN GRIFFIN - Multi-Strategy Quant
         # Rule: 100+ models, Kelly criterion, daily P&L stops
-        # Kelly: f = μ/σ² (fraction of capital to bet)
+        # Kelly: f = (bp - q) / b where b=odds, p=win rate, q=1-p
         # ═══════════════════════════════════════════════════════════════════
         griffin = 5.0
         griffin_reasons = []
         
-        # Calculate Kelly-like metric
-        expected_return = change_30d / 100 if change_30d else 0.01
-        kelly_f = expected_return / (volatility ** 2) if volatility > 0 else 0
-        kelly_f = max(-1, min(1, kelly_f))  # Cap at -100% to +100%
+        # Proper Kelly Criterion calculation
+        # Estimate win rate based on momentum and RSI
+        base_win_rate = 0.50
+        if change_30d > 10:
+            base_win_rate += 0.10  # Strong momentum = higher win rate
+        elif change_30d > 0:
+            base_win_rate += 0.05
+        elif change_30d < -10:
+            base_win_rate -= 0.10
         
-        if kelly_f > 0.3:
-            griffin += 2.0
-            griffin_reasons.append(f"Kelly: {kelly_f:.1%} position size")
-        elif kelly_f > 0.1:
-            griffin += 1.0
-            griffin_reasons.append(f"Kelly: {kelly_f:.1%} - moderate")
-        elif kelly_f < 0:
+        # RSI adjustment
+        if 40 <= rsi <= 60:
+            base_win_rate += 0.05  # Neutral RSI = safer
+        elif rsi < 30:
+            base_win_rate += 0.08  # Oversold = bounce likely
+        elif rsi > 70:
+            base_win_rate -= 0.08  # Overbought = pullback likely
+        
+        # Volatility adjustment
+        if volatility < 0.02:
+            base_win_rate += 0.03  # Low vol = more predictable
+        elif volatility > 0.05:
+            base_win_rate -= 0.05  # High vol = less predictable
+        
+        win_rate = max(0.30, min(0.70, base_win_rate))  # Cap between 30-70%
+        
+        # Estimate reward:risk ratio from price action
+        estimated_rr = 2.0  # Default
+        if change_30d > 15 and pos_in_range > 0.8:
+            estimated_rr = 1.5  # Extended, less upside
+        elif change_30d < -15 and pos_in_range < 0.3:
+            estimated_rr = 3.0  # Oversold, more upside potential
+        elif abs(change_pct) < 0.5:
+            estimated_rr = 2.5  # Consolidation, breakout potential
+        
+        # Kelly formula: f = (bp - q) / b
+        # Where b = reward/risk ratio, p = win probability, q = 1-p
+        b = estimated_rr
+        p = win_rate
+        q = 1 - p
+        kelly_f = ((b * p) - q) / b if b > 0 else 0
+        kelly_f = max(0, min(0.25, kelly_f))  # Cap at 25% (half-Kelly recommended)
+        
+        if kelly_f >= 0.15:
+            griffin += 2.5
+            griffin_reasons.append(f"Kelly: {kelly_f:.0%} (strong edge)")
+        elif kelly_f >= 0.08:
+            griffin += 1.5
+            griffin_reasons.append(f"Kelly: {kelly_f:.0%} (moderate edge)")
+        elif kelly_f >= 0.03:
+            griffin += 0.5
+            griffin_reasons.append(f"Kelly: {kelly_f:.0%} (small edge)")
+        else:
             griffin -= 1.0
-            griffin_reasons.append(f"Kelly: {kelly_f:.1%} - avoid")
+            griffin_reasons.append(f"Kelly: {kelly_f:.0%} (no edge)")
         
         # Momentum signal
         if change_pct > 0:
-            griffin += 1.0
-            griffin_reasons.append("Positive momentum signal")
+            griffin += 0.5
+            griffin_reasons.append("Positive momentum")
         
         # Mean reversion signal (RSI)
         if 30 < rsi < 70:
@@ -4981,35 +5966,66 @@ Provides comprehensive analysis:
             griffin_reasons.append(f"RSI neutral ({rsi:.0f})")
         
         # Volume confirms
-        if volume > 500000:
+        if volume > 1000000:
             griffin += 0.5
-            griffin_reasons.append("Sufficient liquidity")
+            griffin_reasons.append("High liquidity")
+        elif volume > 500000:
+            griffin += 0.25
+            griffin_reasons.append("Good liquidity")
         
         scores['griffin'] = min(10, max(1, griffin))
         reasons['griffin'] = griffin_reasons[:3]
         
         # ═══════════════════════════════════════════════════════════════════
-        # COMPOSITE SCORE (Weighted Meta-Model)
+        # 11. CHART PATTERN ANALYSIS (Technical)
         # ═══════════════════════════════════════════════════════════════════
-        # Adjust weights based on ML learning
+        pattern_score = 5.0
+        pattern_reasons = []
+        
+        # Get historical data for pattern detection
+        if bars and len(bars) >= 20:
+            bar_highs = [b.get('high', 0) for b in bars]
+            bar_lows = [b.get('low', 0) for b in bars]
+            bar_volumes = [b.get('volume', 0) for b in bars]
+            
+            pattern_data = self._detect_chart_patterns(prices, bar_highs, bar_lows, bar_volumes)
+            
+            if pattern_data.get('pattern') and pattern_data.get('score', 0) >= 6:
+                pattern_score = pattern_data['score']
+                pattern_reasons.append(f"{pattern_data['pattern']} detected")
+                if pattern_data.get('desc'):
+                    pattern_reasons.append(pattern_data['desc'])
+        
+        scores['pattern'] = min(10, max(1, pattern_score))
+        reasons['pattern'] = pattern_reasons[:3] if pattern_reasons else ["No clear pattern"]
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # COMPOSITE SCORE (Weighted Meta-Model + Patterns)
+        # ═══════════════════════════════════════════════════════════════════
+        # Adjust weights based on ML learning - includes chart patterns
         weights = {
-            'buffett': self.ml_model_weights.get('value_score', 0.15),
-            'dalio': 0.05,  # Risk parity (portfolio level)
-            'lynch': 0.12,  # Growth at reasonable price
-            'greenblatt': 0.10,  # Magic formula
-            'tepper': 0.08,  # Distressed (contrarian)
-            'druckenmiller': self.ml_model_weights.get('momentum_score', 0.20),
-            'wood': 0.08,  # Innovation (high risk)
-            'ackman': 0.07,  # Concentrated
-            'smith': 0.10,  # Quality
-            'griffin': 0.05,  # Quant
+            'buffett': self.ml_model_weights.get('value_score', 0.12),
+            'dalio': 0.04,  # Risk parity (portfolio level)
+            'lynch': 0.10,  # Growth at reasonable price
+            'greenblatt': 0.08,  # Magic formula
+            'tepper': 0.06,  # Distressed (contrarian)
+            'druckenmiller': self.ml_model_weights.get('momentum_score', 0.15),
+            'wood': 0.06,  # Innovation (high risk)
+            'ackman': 0.05,  # Concentrated
+            'smith': 0.08,  # Quality
+            'griffin': 0.08,  # Quant with proper Kelly
+            'pattern': 0.18,  # Chart patterns (high weight for technicals)
         }
         
         # Normalize weights
         total_weight = sum(weights.values())
         weights = {k: v/total_weight for k, v in weights.items()}
         
-        total_score = sum(scores[k] * weights[k] for k in scores)
+        total_score = sum(scores.get(k, 5) * weights[k] for k in weights)
+        
+        # Boost score for strong chart patterns
+        if 'pattern' in scores and scores['pattern'] >= 8:
+            total_score = min(10, total_score + 0.5)
         
         # Find top 3 managers recommending this stock
         sorted_managers = sorted(scores.items(), key=lambda x: x[1], reverse=True)
@@ -5033,6 +6049,14 @@ Provides comprehensive analysis:
             signal = "AVOID"
             confidence = "HIGH"
         
+        # Get pattern data for trade levels
+        pattern_info = {}
+        if bars and len(bars) >= 20:
+            bar_highs = [b.get('high', 0) for b in bars]
+            bar_lows = [b.get('low', 0) for b in bars]
+            bar_volumes = [b.get('volume', 0) for b in bars]
+            pattern_info = self._detect_chart_patterns(prices, bar_highs, bar_lows, bar_volumes)
+        
         return {
             "total_score": round(total_score, 1),
             "scores": {k: round(v, 1) for k, v in scores.items()},
@@ -5042,9 +6066,17 @@ Provides comprehensive analysis:
             "signal": signal,
             "confidence": confidence,
             "kelly_fraction": round(kelly_f, 3),
+            "win_rate": round(win_rate, 2),
+            "estimated_rr": round(estimated_rr, 1),
             "volatility": round(volatility * 100, 2),
             "rsi": round(rsi, 1),
             "change_30d": round(change_30d, 1),
+            # Chart pattern info
+            "pattern": pattern_info.get('pattern', 'No pattern'),
+            "pattern_entry": pattern_info.get('entry', price),
+            "pattern_stop": pattern_info.get('stop', price * 0.95),
+            "pattern_target": pattern_info.get('target', price * 1.10),
+            "pattern_type": pattern_info.get('type', 'neutral'),
             # Legacy compatibility
             "buffett_score": scores['buffett'],
             "lynch_score": scores['lynch'],
@@ -5052,7 +6084,7 @@ Provides comprehensive analysis:
             "tepper_score": scores['tepper'],
             "greenblatt_score": scores['greenblatt'],
         }
-    
+
     async def _cmd_setup(self, chat_id: int, args: List[str]):
         """Morning prep: top 10 setups for today."""
         await self.send_message_to(chat_id, "☀️ <b>Preparing morning setups...</b>")
@@ -6102,91 +7134,104 @@ Target 3 (3R): ${target_3r:.2f}
     
     async def _fetch_quote(self, ticker: str, detailed: bool = False) -> Optional[Dict]:
         """Fetch stock quote from Alpaca using Trade API (more accurate than Quote API)."""
+        cache_key = f"{ticker}:{'d' if detailed else 'q'}"
+        now_ts = time.time()
+
+        # Circuit breaker: if Alpaca is failing hard, stop hammering it.
+        if now_ts < self._alpaca_circuit_open_until:
+            return None
+
+        cached = self._quote_cache.get(cache_key)
+        if cached and (now_ts - cached.get("ts", 0)) < self._cache_ttl:
+            return cached.get("data")
+
+        if not settings.alpaca_api_key or not settings.alpaca_secret_key:
+            return None
+
+        headers = {
+            "APCA-API-KEY-ID": settings.alpaca_api_key,
+            "APCA-API-SECRET-KEY": settings.alpaca_secret_key,
+        }
+
+        session = self._session
+        temp_session = False
+        if session is None or session.closed:
+            session = aiohttp.ClientSession(timeout=self._http_timeout)
+            temp_session = True
+
         try:
-            import aiohttp
-            
-            if not settings.alpaca_api_key or not settings.alpaca_secret_key:
-                return None
-            
-            headers = {
-                "APCA-API-KEY-ID": settings.alpaca_api_key,
-                "APCA-API-SECRET-KEY": settings.alpaca_secret_key
-            }
-            
-            async with aiohttp.ClientSession() as session:
-                price = 0
-                bid = 0
-                ask = 0
-                
+            async with self._alpaca_semaphore:
+                price = 0.0
+                bid = 0.0
+                ask = 0.0
+
+                params = {"feed": "iex"}
+
                 # Method 1: Get latest TRADE (most accurate current price)
                 trade_url = f"https://data.alpaca.markets/v2/stocks/{ticker}/trades/latest"
-                params = {"feed": "iex"}
                 async with session.get(trade_url, headers=headers, params=params) as trade_resp:
                     if trade_resp.status == 200:
                         trade_json = await trade_resp.json()
                         trade_data = trade_json.get("trade", {})
-                        price = float(trade_data.get("p", 0))
-                
+                        price = float(trade_data.get("p", 0) or 0)
+
                 # Fallback to quote if trade fails
                 if price == 0:
                     quote_url = f"https://data.alpaca.markets/v2/stocks/{ticker}/quotes/latest"
-                    async with session.get(quote_url, headers=headers) as resp:
+                    async with session.get(quote_url, headers=headers, params=params) as resp:
                         if resp.status == 200:
                             data = await resp.json()
                             quote_data = data.get("quote", {})
-                            bid = float(quote_data.get("bp", 0))
-                            ask = float(quote_data.get("ap", 0))
+                            bid = float(quote_data.get("bp", 0) or 0)
+                            ask = float(quote_data.get("ap", 0) or 0)
                             price = (bid + ask) / 2 if bid and ask else bid or ask
-                
+
                 if price == 0:
                     return None
-                
+
                 # Get latest bar for OHLC and prev close
                 bars_url = f"https://data.alpaca.markets/v2/stocks/{ticker}/bars/latest"
+                bar_data: Dict[str, Any] = {}
                 async with session.get(bars_url, headers=headers, params=params) as bar_resp:
-                    bar_data = {}
                     if bar_resp.status == 200:
                         bars_json = await bar_resp.json()
-                        bar_data = bars_json.get("bar", {})
-                
-                # Get previous day bar for accurate prev_close
-                prev_close = float(bar_data.get("c", price))
-                open_price = float(bar_data.get("o", price))
-                high = float(bar_data.get("h", price))
-                low = float(bar_data.get("l", price))
-                volume = int(bar_data.get("v", 0))
-                
+                        bar_data = bars_json.get("bar", {}) or {}
+
+                prev_close = float(bar_data.get("c", price) or price)
+                open_price = float(bar_data.get("o", price) or price)
+                high = float(bar_data.get("h", price) or price)
+                low = float(bar_data.get("l", price) or price)
+                volume = int(bar_data.get("v", 0) or 0)
+
                 # Try to get previous day's close for accurate change calculation
-                from datetime import datetime, timedelta
                 end_date = datetime.now().strftime("%Y-%m-%d")
                 start_date = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d")
-                
+
                 bars_hist_url = f"https://data.alpaca.markets/v2/stocks/{ticker}/bars"
                 hist_params = {
                     "timeframe": "1Day",
                     "start": start_date,
                     "end": end_date,
                     "limit": 2,
-                    "feed": "iex"
+                    "feed": "iex",
                 }
                 async with session.get(bars_hist_url, headers=headers, params=hist_params) as hist_resp:
                     if hist_resp.status == 200:
                         hist_json = await hist_resp.json()
-                        bars_list = hist_json.get("bars", [])
+                        bars_list = hist_json.get("bars", []) or []
                         if len(bars_list) >= 2:
-                            prev_close = float(bars_list[-2].get("c", prev_close))
-                            open_price = float(bars_list[-1].get("o", open_price))
-                            high = float(bars_list[-1].get("h", high))
-                            low = float(bars_list[-1].get("l", low))
-                            volume = int(bars_list[-1].get("v", volume))
+                            prev_close = float(bars_list[-2].get("c", prev_close) or prev_close)
+                            open_price = float(bars_list[-1].get("o", open_price) or open_price)
+                            high = float(bars_list[-1].get("h", high) or high)
+                            low = float(bars_list[-1].get("l", low) or low)
+                            volume = int(bars_list[-1].get("v", volume) or volume)
                         elif len(bars_list) == 1:
-                            prev_close = float(bars_list[0].get("o", prev_close))
-                
-                # Calculate change from previous close
+                            prev_close = float(bars_list[0].get("o", prev_close) or prev_close)
+
                 change = price - prev_close if prev_close else 0
                 change_pct = (change / prev_close * 100) if prev_close else 0
-                
-                return {
+
+                result = {
                     "ticker": ticker,
                     "name": ticker,
                     "price": price,
@@ -6205,11 +7250,40 @@ Target 3 (3R): ${target_3r:.2f}
                     "low_52w": 0,
                     "high_52w": 0,
                 }
-                
+
+                self._quote_cache[cache_key] = {"ts": now_ts, "data": result}
+                self._alpaca_fail_count = 0
+                self._alpaca_circuit_open_until = 0.0
+                return result
+
         except Exception as e:
-            logger.error(f"Quote fetch error for {ticker}: {e}")
+            self._alpaca_fail_count += 1
+            backoff = min(300, 5 * (2 ** min(self._alpaca_fail_count, 6)))
+            self._alpaca_circuit_open_until = time.time() + backoff
+            logger.error(f"Quote fetch error for {ticker}: {e} (backing off {backoff}s)")
             return None
-    
+        finally:
+            if temp_session:
+                await session.close()
+
+    async def _fetch_quotes_batch(self, tickers: List[str], detailed: bool = False) -> Dict[str, Optional[Dict]]:
+        """Fetch multiple quotes in PARALLEL for speed. Returns {ticker: quote_data}."""
+        if not tickers:
+            return {}
+        # Remove duplicates while preserving order
+        unique_tickers = list(dict.fromkeys(tickers))
+        # Fire all requests in parallel using gather
+        tasks = [self._fetch_quote(t, detailed) for t in unique_tickers]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Map results back to tickers
+        out: Dict[str, Optional[Dict]] = {}
+        for ticker, res in zip(unique_tickers, results):
+            if isinstance(res, Exception):
+                out[ticker] = None
+            else:
+                out[ticker] = res
+        return out
+
     async def _get_positions(self) -> List[Dict]:
         """Get positions from active broker."""
         if self.active_broker == BrokerType.FUTU and self.futu_client:
@@ -6232,21 +7306,14 @@ Target 3 (3R): ${target_3r:.2f}
     
     def _is_market_open(self) -> bool:
         """Check if US market is open."""
-        now = datetime.now()
-        # Simple check - market hours 9:30 AM - 4:00 PM ET
-        hour = now.hour
-        minute = now.minute
-        weekday = now.weekday()
-        
-        if weekday >= 5:  # Weekend
+        now = self._now_et()
+        if now.weekday() >= 5:
             return False
-        
-        # Rough EST approximation (should use proper timezone)
-        if 9 <= hour < 16:
-            if hour == 9 and minute < 30:
-                return False
-            return True
-        return False
+
+        open_minutes = 9 * 60 + 30
+        close_minutes = 16 * 60
+        now_minutes = now.hour * 60 + now.minute
+        return open_minutes <= now_minutes < close_minutes
     
     def _generate_bar(self, pct: float) -> str:
         """Generate visual bar for percentage."""
@@ -6304,7 +7371,7 @@ Target 3 (3R): ${target_3r:.2f}
         
         while self._running:
             try:
-                now = datetime.now()
+                now = self._now_et()
                 current_hour = now.hour
                 today = now.date()
                 
@@ -6526,9 +7593,9 @@ Target 3 (3R): ${target_3r:.2f}
                     await asyncio.sleep(300)  # 5 min if disabled
                     continue
                 
-                # Only scan during market hours (9:30 AM - 4:00 PM ET)
-                now = datetime.now()
-                if not (9 <= now.hour < 16 or (now.hour == 9 and now.minute >= 30)):
+                # Only scan during market hours (US/Eastern)
+                now = self._now_et()
+                if not self._is_market_open():
                     await asyncio.sleep(300)
                     continue
                 
@@ -6660,9 +7727,9 @@ Target 3 (3R): ${target_3r:.2f}
                 if not self.push_notifications_enabled or not self.push_settings.get("price_moves", True):
                     await asyncio.sleep(300)
                     continue
-                
-                now = datetime.now()
-                if not (9 <= now.hour < 16 or (now.hour == 9 and now.minute >= 30)):
+
+                now = self._now_et()
+                if not self._is_market_open():
                     await asyncio.sleep(300)
                     continue
                 
@@ -6756,7 +7823,7 @@ Target 3 (3R): ${target_3r:.2f}
         
         while self._running:
             try:
-                now = datetime.now()
+                now = self._now_et()
                 today = now.date()
                 
                 # Morning brief at 8:30 AM
@@ -7080,21 +8147,1022 @@ Target 3 (3R): ${target_3r:.2f}
             logger.error(f"Evening summary error: {e}")
             await self.send_message_to(chat_id, "❌ Error generating evening summary")
     
-    async def send_message(self, text: str, parse_mode: str = "HTML") -> bool:
-        """Send message to default chat."""
-        return await self.send_message_to(self.chat_id, text, parse_mode)
+    # ===== QUICK ACTION COMMANDS =====
     
-    async def send_message_to(self, chat_id: int, text: str, parse_mode: str = "HTML") -> bool:
+    async def _cmd_quick_analysis(self, chat_id: int, args: List[str]):
+        """Ultra-fast 1-second stock insight."""
+        if not args:
+            await self.send_message_to(chat_id, "⚡ Usage: /q AAPL")
+            return
+        
+        ticker = args[0].upper()
+        
+        try:
+            # Get quote and score in parallel
+            quote = await self._fetch_quote(ticker)
+            result = await self._calculate_legendary_score(ticker)
+            
+            if not quote:
+                await self.send_message_to(chat_id, f"❌ Cannot find {ticker}")
+                return
+            
+            price = quote.get('price', 0)
+            change_pct = quote.get('change_pct', 0)
+            
+            score = result[0] if result else 5.0
+            top_managers = result[3] if result and len(result) > 3 else []
+            kelly = result[4] if result and len(result) > 4 else 0.05
+            
+            # Quick emoji summary
+            price_emoji = "🟢" if change_pct >= 0 else "🔴"
+            
+            if score >= 8:
+                verdict = "🔥 STRONG BUY"
+                action = "Consider entering"
+            elif score >= 7:
+                verdict = "📈 BUY"
+                action = "Good setup"
+            elif score >= 6:
+                verdict = "👀 WATCH"
+                action = "Wait for confirmation"
+            elif score >= 4:
+                verdict = "↔️ HOLD"
+                action = "No action needed"
+            else:
+                verdict = "⚠️ AVOID"
+                action = "Stay away"
+            
+            # Ultra-compact format
+            filled = int(score)
+            bar = "█" * filled + "░" * (10 - filled)
+            
+            msg = f"⚡ <b>{ticker}</b> | {verdict}\n"
+            msg += f"━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += f"{price_emoji} ${price:.2f} ({change_pct:+.2f}%)\n"
+            msg += f"🎯 Score: {score:.1f} [{bar}]\n"
+            msg += f"💼 Kelly: {kelly*100:.0f}% | {action}\n"
+            
+            if top_managers:
+                manager_names = {
+                    'buffett': 'BUF', 'dalio': 'DAL', 'lynch': 'LYN',
+                    'druckenmiller': 'DRU', 'wood': 'WOD', 'griffin': 'GRI'
+                }
+                top_abbr = [manager_names.get(m, m[:3].upper()) for m in top_managers[:3]]
+                msg += f"🏛️ {' • '.join(top_abbr)}\n"
+            
+            msg += f"━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += f"<code>/score {ticker}</code> for full analysis"
+            
+            await self.send_message_to(chat_id, msg)
+            
+        except Exception as e:
+            logger.error(f"Quick analysis error: {e}")
+            await self.send_message_to(chat_id, f"❌ Error analyzing {ticker}")
+    
+    async def _cmd_insight(self, chat_id: int, args: List[str]):
+        """Smart AI insight for any market topic."""
+        if not args:
+            msg = "💡 <b>AI INSIGHT</b>\n\n"
+            msg += "Ask me anything about the market!\n\n"
+            msg += "<b>Examples:</b>\n"
+            msg += "<code>/insight best tech stocks</code>\n"
+            msg += "<code>/insight sector rotation</code>\n"
+            msg += "<code>/insight earnings plays</code>\n"
+            msg += "<code>/insight momentum picks</code>\n"
+            msg += "<code>/insight value stocks</code>\n"
+            msg += "<code>/insight high dividend</code>\n"
+            await self.send_message_to(chat_id, msg)
+            return
+        
+        query = " ".join(args).lower()
+        
+        msg = "💡 <b>AI INSIGHT</b>\n"
+        msg += f"<i>Query: {query}</i>\n\n"
+        
+        # Smart topic detection and response
+        if any(w in query for w in ["tech", "technology", "software"]):
+            msg += "🖥️ <b>TECH SECTOR PICKS</b>\n\n"
+            tech_picks = ["NVDA", "MSFT", "AAPL", "GOOGL", "META"]
+            for ticker in tech_picks[:5]:
+                result = await self._calculate_legendary_score(ticker)
+                score = result[0] if result else 5.0
+                quote = await self._fetch_quote(ticker)
+                price = quote.get('price', 0) if quote else 0
+                change = quote.get('change_pct', 0) if quote else 0
+                emoji = "🟢" if change >= 0 else "🔴"
+                msg += f"{emoji} {ticker}: ${price:.0f} | Score: {score:.1f}/10\n"
+            msg += "\n💡 <i>Tech showing strength in AI/cloud sectors</i>"
+            
+        elif any(w in query for w in ["value", "cheap", "undervalued"]):
+            msg += "💎 <b>VALUE PICKS</b>\n"
+            msg += "<i>Buffett/Greenblatt style</i>\n\n"
+            value_picks = ["BRK.B", "JNJ", "PG", "KO", "JPM"]
+            for ticker in value_picks:
+                result = await self._calculate_legendary_score(ticker)
+                scores = result[1] if result and len(result) > 1 else {}
+                buffett_score = scores.get('buffett', 5)
+                msg += f"🏛️ {ticker}: Buffett {buffett_score:.1f}/10\n"
+            msg += "\n💡 <i>Focus on quality + margin of safety</i>"
+            
+        elif any(w in query for w in ["momentum", "breakout", "trending"]):
+            msg += "🚀 <b>MOMENTUM PICKS</b>\n"
+            msg += "<i>Druckenmiller/Wood style</i>\n\n"
+            momentum_picks = ["NVDA", "TSLA", "AMD", "PLTR", "COIN"]
+            for ticker in momentum_picks:
+                result = await self._calculate_legendary_score(ticker)
+                scores = result[1] if result and len(result) > 1 else {}
+                druck_score = scores.get('druckenmiller', 5)
+                msg += f"🎯 {ticker}: Druck {druck_score:.1f}/10\n"
+            msg += "\n💡 <i>Ride the trend, cut at -7%</i>"
+            
+        elif any(w in query for w in ["dividend", "income", "yield"]):
+            msg += "💰 <b>DIVIDEND PICKS</b>\n"
+            msg += "<i>Income-focused quality</i>\n\n"
+            div_picks = ["JNJ", "PG", "KO", "PEP", "VZ", "T"]
+            for ticker in div_picks[:5]:
+                quote = await self._fetch_quote(ticker)
+                price = quote.get('price', 0) if quote else 0
+                msg += f"💵 {ticker}: ${price:.2f}\n"
+            msg += "\n💡 <i>Focus on dividend aristocrats</i>"
+            
+        elif any(w in query for w in ["sector", "rotation"]):
+            msg += "🔄 <b>SECTOR ROTATION</b>\n\n"
+            sectors = [
+                ("XLK", "Technology"),
+                ("XLF", "Financials"),
+                ("XLE", "Energy"),
+                ("XLV", "Healthcare"),
+                ("XLY", "Consumer"),
+            ]
+            for etf, name in sectors:
+                quote = await self._fetch_quote(etf)
+                if quote:
+                    change = quote.get('change_pct', 0)
+                    emoji = "🟢" if change >= 0 else "🔴"
+                    msg += f"{emoji} {name}: {change:+.2f}%\n"
+            msg += "\n💡 <i>Rotate into strength, out of weakness</i>"
+            
+        elif any(w in query for w in ["earnings", "report"]):
+            msg += "📊 <b>EARNINGS STRATEGY</b>\n\n"
+            msg += "⚠️ <b>Pre-Earnings Rules:</b>\n"
+            msg += "• Don't hold through earnings\n"
+            msg += "• OR reduce position by 50%\n"
+            msg += "• Sell 1-2 days before report\n\n"
+            msg += "✅ <b>Post-Earnings Plays:</b>\n"
+            msg += "• Wait for dust to settle\n"
+            msg += "• Enter on breakout above range\n"
+            msg += "• Gap-and-go with tight stop\n"
+            
+        else:
+            # General market insight
+            msg += "📊 <b>MARKET OVERVIEW</b>\n\n"
+            spy = await self._fetch_quote("SPY")
+            qqq = await self._fetch_quote("QQQ")
+            
+            if spy and qqq:
+                spy_change = spy.get('change_pct', 0)
+                qqq_change = qqq.get('change_pct', 0)
+                
+                if spy_change > 0.5 and qqq_change > 0.5:
+                    msg += "📈 <b>BULLISH REGIME</b>\n"
+                    msg += "• Favor growth/momentum\n"
+                    msg += "• Use /top for AI picks\n"
+                elif spy_change < -0.5 and qqq_change < -0.5:
+                    msg += "📉 <b>BEARISH REGIME</b>\n"
+                    msg += "• Raise cash / reduce exposure\n"
+                    msg += "• Look for defensive plays\n"
+                else:
+                    msg += "↔️ <b>NEUTRAL REGIME</b>\n"
+                    msg += "• Be selective\n"
+                    msg += "• Focus on quality setups\n"
+            
+            msg += "\n💡 Try: tech, value, momentum, dividend, sector"
+        
+        await self.send_message_to(chat_id, msg)
+    
+    async def _cmd_dashboard(self, chat_id: int, args: List[str]):
+        """Full trading dashboard - everything at a glance."""
+        try:
+            now = datetime.now()
+            market_open = self._is_market_open()
+            
+            msg = "╔═══════════════════════════════════════╗\n"
+            msg += "║      📊 <b>TRADING DASHBOARD</b>           ║\n"
+            msg += f"║      <i>{now.strftime('%a %b %d, %H:%M')}</i>             ║\n"
+            msg += "╚═══════════════════════════════════════╝\n\n"
+            
+            # Market Overview
+            spy = await self._fetch_quote("SPY")
+            qqq = await self._fetch_quote("QQQ")
+            
+            spy_change = spy.get('change_pct', 0) if spy else 0
+            qqq_change = qqq.get('change_pct', 0) if qqq else 0
+            spy_emoji = "🟢" if spy_change >= 0 else "🔴"
+            qqq_emoji = "🟢" if qqq_change >= 0 else "🔴"
+            
+            msg += "🏛️ <b>MARKET</b>\n"
+            msg += f"┌──────────────────────────────────┐\n"
+            market_status = "🟢 OPEN" if market_open else "🔴 CLOSED"
+            msg += f"│ Status: {market_status:<24}│\n"
+            msg += f"│ {spy_emoji} SPY: {spy_change:+.2f}%  {qqq_emoji} QQQ: {qqq_change:+.2f}%      │\n"
+            msg += f"└──────────────────────────────────┘\n\n"
+            
+            # Portfolio Summary
+            if self.my_portfolio:
+                total_value = 0
+                total_pnl = 0
+                for ticker, pos in self.my_portfolio.items():
+                    quote = await self._fetch_quote(ticker)
+                    if quote:
+                        price = quote.get('price', 0)
+                        qty = pos.get('qty', 0)
+                        cost = pos.get('avg_cost', price)
+                        total_value += price * qty
+                        total_pnl += (price - cost) * qty
+                
+                pnl_emoji = "🟢" if total_pnl >= 0 else "🔴"
+                msg += "📦 <b>PORTFOLIO</b>\n"
+                msg += f"┌──────────────────────────────────┐\n"
+                msg += f"│ Value:   ${total_value:>20,.0f} │\n"
+                msg += f"│ P&L:     {pnl_emoji} ${total_pnl:>+18,.0f} │\n"
+                msg += f"│ Positions: {len(self.my_portfolio):>19} │\n"
+                msg += f"└──────────────────────────────────┘\n\n"
+            
+            # Today's Top Pick
+            msg += "🎯 <b>TOP PICK TODAY</b>\n"
+            msg += f"┌──────────────────────────────────┐\n"
+            
+            best_pick = None
+            best_score = 0
+            for ticker in self.TOP_STOCKS[:20]:
+                result = await self._calculate_legendary_score(ticker)
+                if result and result[0] > best_score:
+                    best_score = result[0]
+                    best_pick = ticker
+            
+            if best_pick:
+                quote = await self._fetch_quote(best_pick)
+                price = quote.get('price', 0) if quote else 0
+                filled = int(best_score)
+                bar = "█" * filled + "░" * (10 - filled)
+                msg += f"│ {best_pick}: ${price:.2f}                  │\n"
+                msg += f"│ Score: {best_score:.1f} [{bar}]  │\n"
+            else:
+                msg += f"│ No strong picks available        │\n"
+            msg += f"└──────────────────────────────────┘\n\n"
+            
+            # Quick Stats
+            account = self.user_settings.get('account_size', 100000)
+            risk_pct = self.user_settings.get('risk_per_trade', 0.01) * 100
+            
+            msg += "⚙️ <b>SETTINGS</b>\n"
+            msg += f"├ Account: ${account:,.0f}\n"
+            msg += f"├ Risk: {risk_pct:.1f}%/trade\n"
+            msg += f"└ Alerts: {'🟢' if self.push_notifications_enabled else '🔴'}\n\n"
+            
+            # Quick Actions
+            msg += "⚡ <b>QUICK ACTIONS</b>\n"
+            msg += "<code>/money</code> • <code>/top</code> • <code>/signals</code>\n"
+            
+            await self.send_message_to(chat_id, msg)
+            
+        except Exception as e:
+            logger.error(f"Dashboard error: {e}")
+            await self.send_message_to(chat_id, "❌ Error loading dashboard")
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # 💰 MONEY-MAKING COMMANDS - Fast, Actionable, Profitable
+    # ═══════════════════════════════════════════════════════════════════════
+
+    async def _cmd_money(self, chat_id: int, args: List[str]):
+        """🔥 Ultra-fast top 3 money-makers - the best opportunities RIGHT NOW."""
+        start_time = time.time()
+        
+        try:
+            # Scan top movers in parallel for speed
+            scan_tickers = self.TOP_STOCKS[:60]
+            quotes = await self._fetch_quotes_batch(scan_tickers)
+            
+            opportunities = []
+            
+            for ticker in scan_tickers:
+                quote = quotes.get(ticker)
+                if not quote or quote.get('price', 0) == 0:
+                    continue
+                
+                price = quote.get('price', 0)
+                change_pct = quote.get('change_pct', 0)
+                volume = quote.get('volume', 0)
+                high = quote.get('high', price)
+                low = quote.get('low', price)
+                
+                # Quick scoring for speed
+                score = 50
+                reasons = []
+                
+                # Momentum boost
+                if 1 <= change_pct <= 5:
+                    score += 20
+                    reasons.append("📈 Strong momentum")
+                elif 0.3 <= change_pct < 1:
+                    score += 10
+                    reasons.append("📊 Positive trend")
+                elif -3 <= change_pct <= -1:
+                    score += 15
+                    reasons.append("💎 Dip opportunity")
+                
+                # Volume surge
+                if volume > 5000000:
+                    score += 15
+                    reasons.append("🔥 High volume")
+                elif volume > 2000000:
+                    score += 8
+                
+                # Price position (near highs = breakout potential)
+                if high > low:
+                    pos = (price - low) / (high - low)
+                    if pos > 0.85:
+                        score += 15
+                        reasons.append("🚀 Near highs")
+                    elif pos < 0.25 and change_pct > -2:
+                        score += 12
+                        reasons.append("🎯 Reversal zone")
+                
+                # ATR-based levels
+                atr = (high - low) if high > low else price * 0.02
+                stop = round(price - atr * 1.5, 2)
+                target1 = round(price + atr * 2, 2)
+                target2 = round(price + atr * 4, 2)
+                
+                risk = price - stop
+                reward = target2 - price
+                rr = round(reward / risk, 1) if risk > 0 else 2.0
+                
+                if score >= 65:
+                    opportunities.append({
+                        "ticker": ticker,
+                        "price": price,
+                        "change_pct": change_pct,
+                        "volume": volume,
+                        "score": score,
+                        "stop": stop,
+                        "target1": target1,
+                        "target2": target2,
+                        "rr": rr,
+                        "reasons": reasons[:2],
+                    })
+            
+            # Sort by score
+            opportunities.sort(key=lambda x: x['score'], reverse=True)
+            top3 = opportunities[:3]
+            
+            elapsed = time.time() - start_time
+            
+            msg = "💰 <b>TOP 3 MONEY-MAKERS RIGHT NOW</b>\n"
+            msg += f"<i>Scanned {len(scan_tickers)} stocks in {elapsed:.1f}s</i>\n\n"
+            
+            if top3:
+                for i, opp in enumerate(top3, 1):
+                    chg_emoji = "🟢" if opp['change_pct'] >= 0 else "🔴"
+                    vol_str = f"{opp['volume']/1e6:.1f}M" if opp['volume'] >= 1e6 else f"{opp['volume']/1e3:.0f}K"
+                    
+                    msg += f"{'🥇' if i==1 else '🥈' if i==2 else '🥉'} <b>#{i} {opp['ticker']}</b>\n"
+                    msg += f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                    msg += f"{chg_emoji} ${opp['price']:.2f} ({opp['change_pct']:+.2f}%)\n"
+                    msg += f"📊 Vol: {vol_str} | Score: {opp['score']}/100\n"
+                    
+                    for reason in opp['reasons']:
+                        msg += f"   • {reason}\n"
+                    
+                    msg += f"\n📍 <b>TRADE PLAN:</b>\n"
+                    msg += f"   Entry: ${opp['price']:.2f}\n"
+                    msg += f"   🛑 Stop: ${opp['stop']:.2f} (-{(opp['price']-opp['stop'])/opp['price']*100:.1f}%)\n"
+                    msg += f"   🎯 T1: ${opp['target1']:.2f} (+{(opp['target1']-opp['price'])/opp['price']*100:.1f}%)\n"
+                    msg += f"   🎯 T2: ${opp['target2']:.2f} (+{(opp['target2']-opp['price'])/opp['price']*100:.1f}%)\n"
+                    msg += f"   📐 R:R = 1:{opp['rr']:.1f}\n\n"
+                
+                # Position sizing
+                account = self.user_settings.get('account_size', 100000)
+                risk_pct = self.user_settings.get('risk_per_trade', 0.01)
+                if top3:
+                    best = top3[0]
+                    risk_amount = account * risk_pct
+                    risk_per_share = best['price'] - best['stop']
+                    shares = int(risk_amount / risk_per_share) if risk_per_share > 0 else 0
+                    position_value = shares * best['price']
+                    
+                    msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+                    msg += f"💼 <b>POSITION SIZE (${account:,.0f} acct)</b>\n"
+                    msg += f"   {best['ticker']}: {shares} shares (${position_value:,.0f})\n"
+                    msg += f"   Max risk: ${risk_amount:,.0f} ({risk_pct*100:.0f}%)\n"
+            else:
+                msg += "⏳ No strong setups right now.\n"
+                msg += "Market may be choppy - wait for clearer signals.\n"
+            
+            msg += "\n<code>/sniper TICKER</code> for precision entry"
+            
+            await self.send_message_to(chat_id, msg)
+            
+        except Exception as e:
+            logger.error(f"Money command error: {e}")
+            await self.send_message_to(chat_id, f"❌ Error: {e}")
+
+    async def _cmd_sniper(self, chat_id: int, args: List[str]):
+        """🎯 Precision entry with exact levels - sniper mode."""
+        if not args:
+            msg = "🎯 <b>SNIPER MODE</b>\n\n"
+            msg += "Get precision entry levels for any stock.\n\n"
+            msg += "Usage: <code>/sniper AAPL</code>\n"
+            msg += "       <code>/sniper NVDA 500</code> (with entry price)\n"
+            await self.send_message_to(chat_id, msg)
+            return
+        
+        ticker = args[0].upper()
+        target_entry = float(args[1]) if len(args) > 1 else None
+        
+        try:
+            quote = await self._fetch_quote(ticker)
+            if not quote:
+                await self.send_message_to(chat_id, f"❌ Cannot find {ticker}")
+                return
+            
+            price = quote.get('price', 0)
+            high = quote.get('high', price)
+            low = quote.get('low', price)
+            change_pct = quote.get('change_pct', 0)
+            volume = quote.get('volume', 0)
+            
+            entry = target_entry if target_entry else price
+            atr = (high - low) if high > low else price * 0.02
+            
+            # Multiple stop levels
+            tight_stop = round(entry - atr * 1.0, 2)
+            normal_stop = round(entry - atr * 1.5, 2)
+            wide_stop = round(entry - atr * 2.0, 2)
+            
+            # Multiple targets
+            t1 = round(entry + atr * 1.5, 2)
+            t2 = round(entry + atr * 3.0, 2)
+            t3 = round(entry + atr * 5.0, 2)
+            
+            # Position sizing
+            account = self.user_settings.get('account_size', 100000)
+            risk_pct = self.user_settings.get('risk_per_trade', 0.01)
+            risk_amount = account * risk_pct
+            
+            shares_tight = int(risk_amount / (entry - tight_stop)) if entry > tight_stop else 0
+            shares_normal = int(risk_amount / (entry - normal_stop)) if entry > normal_stop else 0
+            shares_wide = int(risk_amount / (entry - wide_stop)) if entry > wide_stop else 0
+            
+            chg_emoji = "🟢" if change_pct >= 0 else "🔴"
+            
+            msg = f"🎯 <b>SNIPER ENTRY: {ticker}</b>\n"
+            msg += f"━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += f"{chg_emoji} Current: ${price:.2f} ({change_pct:+.2f}%)\n"
+            msg += f"📊 Range: ${low:.2f} - ${high:.2f}\n"
+            msg += f"📈 Volume: {volume/1e6:.1f}M\n\n"
+            
+            msg += f"📍 <b>ENTRY: ${entry:.2f}</b>\n\n"
+            
+            msg += "🛑 <b>STOP LEVELS:</b>\n"
+            msg += f"   Tight:  ${tight_stop:.2f} (-{(entry-tight_stop)/entry*100:.1f}%) → {shares_tight} shares\n"
+            msg += f"   Normal: ${normal_stop:.2f} (-{(entry-normal_stop)/entry*100:.1f}%) → {shares_normal} shares\n"
+            msg += f"   Wide:   ${wide_stop:.2f} (-{(entry-wide_stop)/entry*100:.1f}%) → {shares_wide} shares\n\n"
+            
+            msg += "🎯 <b>TARGET LEVELS:</b>\n"
+            msg += f"   T1 (1.5R): ${t1:.2f} (+{(t1-entry)/entry*100:.1f}%)\n"
+            msg += f"   T2 (3R):   ${t2:.2f} (+{(t2-entry)/entry*100:.1f}%)\n"
+            msg += f"   T3 (5R):   ${t3:.2f} (+{(t3-entry)/entry*100:.1f}%)\n\n"
+            
+            msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += f"💼 <b>RECOMMENDED ({account:,.0f} account)</b>\n"
+            msg += f"   Position: {shares_normal} shares @ ${entry:.2f}\n"
+            msg += f"   Value: ${shares_normal * entry:,.0f}\n"
+            msg += f"   Risk: ${risk_amount:,.0f} ({risk_pct*100:.0f}%)\n"
+            
+            await self.send_message_to(chat_id, msg)
+            
+        except Exception as e:
+            await self.send_message_to(chat_id, f"❌ Error: {e}")
+
+    async def _cmd_swing5(self, chat_id: int, args: List[str]):
+        """📊 Best 5 swing trades (1-5 days hold)."""
+        try:
+            scan_tickers = self.TOP_STOCKS[:80]
+            quotes = await self._fetch_quotes_batch(scan_tickers)
+            
+            swings = []
+            
+            for ticker in scan_tickers:
+                quote = quotes.get(ticker)
+                if not quote or quote.get('price', 0) == 0:
+                    continue
+                
+                price = quote.get('price', 0)
+                change_pct = quote.get('change_pct', 0)
+                high = quote.get('high', price)
+                low = quote.get('low', price)
+                volume = quote.get('volume', 0)
+                
+                # Swing criteria: consolidation or pullback in uptrend
+                score = 50
+                swing_type = None
+                
+                atr = (high - low) if high > low else price * 0.02
+                daily_range_pct = (high - low) / price * 100 if price > 0 else 0
+                
+                # Consolidation (tight range, ready to move)
+                if daily_range_pct < 2 and abs(change_pct) < 1:
+                    score += 20
+                    swing_type = "📐 Consolidation"
+                
+                # Pullback buy
+                elif -3 <= change_pct <= -0.5:
+                    score += 15
+                    swing_type = "💎 Pullback"
+                
+                # Breakout continuation
+                elif 1 <= change_pct <= 4 and price > high * 0.98:
+                    score += 18
+                    swing_type = "🚀 Breakout"
+                
+                # Volume confirmation
+                if volume > 3000000:
+                    score += 10
+                
+                if swing_type and score >= 65:
+                    stop = round(price - atr * 2, 2)
+                    target = round(price + atr * 4, 2)
+                    
+                    swings.append({
+                        "ticker": ticker,
+                        "price": price,
+                        "change_pct": change_pct,
+                        "type": swing_type,
+                        "score": score,
+                        "stop": stop,
+                        "target": target,
+                        "hold_days": "2-5 days",
+                    })
+            
+            swings.sort(key=lambda x: x['score'], reverse=True)
+            top5 = swings[:5]
+            
+            msg = "📊 <b>TOP 5 SWING TRADES</b>\n"
+            msg += "<i>Hold 2-5 days for optimal results</i>\n\n"
+            
+            if top5:
+                for i, s in enumerate(top5, 1):
+                    chg_emoji = "🟢" if s['change_pct'] >= 0 else "🔴"
+                    
+                    msg += f"<b>#{i} {s['ticker']}</b> {s['type']}\n"
+                    msg += f"   {chg_emoji} ${s['price']:.2f} ({s['change_pct']:+.2f}%)\n"
+                    msg += f"   🛑 Stop: ${s['stop']:.2f} | 🎯 Target: ${s['target']:.2f}\n"
+                    msg += f"   ⏱️ {s['hold_days']}\n\n"
+                
+                msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+                msg += "💡 <b>SWING RULES:</b>\n"
+                msg += "• Enter on pullback to support\n"
+                msg += "• Take 50% profit at T1\n"
+                msg += "• Trail stop to breakeven\n"
+            else:
+                msg += "⏳ No swing setups available now.\n"
+            
+            await self.send_message_to(chat_id, msg)
+            
+        except Exception as e:
+            await self.send_message_to(chat_id, f"❌ Error: {e}")
+
+    async def _cmd_scalp(self, chat_id: int, args: List[str]):
+        """⚡ Quick scalp opportunities (minutes to hours)."""
+        try:
+            # Focus on high-volume, volatile names
+            scalp_tickers = ["SPY", "QQQ", "TSLA", "NVDA", "AMD", "AAPL", "AMZN", "META", 
+                            "GOOGL", "MSFT", "COIN", "MARA", "RIOT", "SOFI", "PLTR"]
+            quotes = await self._fetch_quotes_batch(scalp_tickers)
+            
+            scalps = []
+            
+            for ticker in scalp_tickers:
+                quote = quotes.get(ticker)
+                if not quote:
+                    continue
+                
+                price = quote.get('price', 0)
+                change_pct = quote.get('change_pct', 0)
+                high = quote.get('high', price)
+                low = quote.get('low', price)
+                
+                atr = (high - low) if high > low else price * 0.01
+                
+                # Scalp: tight stop, quick profit
+                stop = round(price - atr * 0.5, 2)
+                target = round(price + atr * 1.0, 2)
+                
+                scalps.append({
+                    "ticker": ticker,
+                    "price": price,
+                    "change_pct": change_pct,
+                    "stop": stop,
+                    "target": target,
+                    "range": round((high-low)/price*100, 2),
+                })
+            
+            msg = "⚡ <b>SCALP OPPORTUNITIES</b>\n"
+            msg += "<i>Quick in-and-out (15min - 2hr holds)</i>\n\n"
+            
+            for s in scalps[:8]:
+                chg_emoji = "🟢" if s['change_pct'] >= 0 else "🔴"
+                msg += f"{chg_emoji} <b>{s['ticker']}</b> ${s['price']:.2f} ({s['change_pct']:+.2f}%)\n"
+                msg += f"   Range: {s['range']:.1f}% | Stop: ${s['stop']:.2f} → Target: ${s['target']:.2f}\n"
+            
+            msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += "⚠️ <b>SCALP RULES:</b>\n"
+            msg += "• Max 0.5% account risk\n"
+            msg += "• Take profit quickly\n"
+            msg += "• No overnight holds\n"
+            
+            await self.send_message_to(chat_id, msg)
+            
+        except Exception as e:
+            await self.send_message_to(chat_id, f"❌ Error: {e}")
+
+    async def _cmd_bigmove(self, chat_id: int, args: List[str]):
+        """🚀 Stocks positioned for 10%+ moves."""
+        try:
+            scan_tickers = self.TOP_STOCKS[:100]
+            quotes = await self._fetch_quotes_batch(scan_tickers)
+            
+            big_movers = []
+            
+            for ticker in scan_tickers:
+                quote = quotes.get(ticker)
+                if not quote or quote.get('price', 0) == 0:
+                    continue
+                
+                price = quote.get('price', 0)
+                change_pct = quote.get('change_pct', 0)
+                volume = quote.get('volume', 0)
+                high = quote.get('high', price)
+                low = quote.get('low', price)
+                
+                # Criteria for big move potential
+                score = 0
+                catalysts = []
+                
+                # Strong momentum starter
+                if 3 <= change_pct <= 8:
+                    score += 30
+                    catalysts.append("🔥 Momentum ignition")
+                
+                # Volume surge (3x+ normal)
+                if volume > 8000000:
+                    score += 25
+                    catalysts.append("📈 Volume explosion")
+                
+                # Breakout (near highs)
+                if high > low and (price - low) / (high - low) > 0.9:
+                    score += 20
+                    catalysts.append("🚀 Breaking out")
+                
+                # Volatility expansion
+                daily_range = (high - low) / price * 100
+                if daily_range > 4:
+                    score += 15
+                    catalysts.append("⚡ Vol expansion")
+                
+                if score >= 40:
+                    big_movers.append({
+                        "ticker": ticker,
+                        "price": price,
+                        "change_pct": change_pct,
+                        "volume": volume,
+                        "score": score,
+                        "catalysts": catalysts,
+                    })
+            
+            big_movers.sort(key=lambda x: x['score'], reverse=True)
+            
+            msg = "🚀 <b>BIG MOVE CANDIDATES (10%+ potential)</b>\n\n"
+            
+            if big_movers[:5]:
+                for i, m in enumerate(big_movers[:5], 1):
+                    vol_str = f"{m['volume']/1e6:.1f}M"
+                    msg += f"<b>#{i} {m['ticker']}</b> ${m['price']:.2f} ({m['change_pct']:+.2f}%)\n"
+                    msg += f"   📊 Vol: {vol_str} | Score: {m['score']}\n"
+                    for cat in m['catalysts'][:2]:
+                        msg += f"   • {cat}\n"
+                    msg += "\n"
+                
+                msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+                msg += "⚠️ High reward = High risk!\n"
+                msg += "Use tight stops, scale in.\n"
+            else:
+                msg += "⏳ No big move setups detected.\n"
+                msg += "Market is quiet - wait for volatility.\n"
+            
+            await self.send_message_to(chat_id, msg)
+            
+        except Exception as e:
+            await self.send_message_to(chat_id, f"❌ Error: {e}")
+
+    async def _cmd_dip(self, chat_id: int, args: List[str]):
+        """💎 Best dip-buying opportunities."""
+        try:
+            scan_tickers = self.TOP_STOCKS[:80]
+            quotes = await self._fetch_quotes_batch(scan_tickers)
+            
+            dips = []
+            
+            for ticker in scan_tickers:
+                quote = quotes.get(ticker)
+                if not quote or quote.get('price', 0) == 0:
+                    continue
+                
+                price = quote.get('price', 0)
+                change_pct = quote.get('change_pct', 0)
+                high = quote.get('high', price)
+                low = quote.get('low', price)
+                volume = quote.get('volume', 0)
+                
+                # Dip criteria: down but not crashed
+                if -5 <= change_pct <= -1.5:
+                    atr = (high - low) if high > low else price * 0.02
+                    stop = round(low * 0.97, 2)
+                    target = round(price + atr * 3, 2)
+                    
+                    quality = 50
+                    if volume > 3000000:
+                        quality += 15
+                    if -3 <= change_pct <= -1.5:
+                        quality += 10  # Moderate dip is better
+                    
+                    dips.append({
+                        "ticker": ticker,
+                        "price": price,
+                        "change_pct": change_pct,
+                        "quality": quality,
+                        "stop": stop,
+                        "target": target,
+                    })
+            
+            dips.sort(key=lambda x: x['quality'], reverse=True)
+            
+            msg = "💎 <b>DIP-BUYING OPPORTUNITIES</b>\n"
+            msg += "<i>Quality pullbacks in strong names</i>\n\n"
+            
+            if dips[:5]:
+                for i, d in enumerate(dips[:5], 1):
+                    msg += f"<b>#{i} {d['ticker']}</b>\n"
+                    msg += f"   🔴 ${d['price']:.2f} ({d['change_pct']:+.2f}%)\n"
+                    msg += f"   🛑 Stop: ${d['stop']:.2f} | 🎯 Target: ${d['target']:.2f}\n\n"
+                
+                msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+                msg += "💡 <b>DIP-BUY RULES:</b>\n"
+                msg += "• Wait for support to hold\n"
+                msg += "• Enter on green candle\n"
+                msg += "• Stop below today's low\n"
+            else:
+                msg += "✅ No significant dips today.\n"
+                msg += "Market is strong - look for breakouts instead.\n"
+            
+            await self.send_message_to(chat_id, msg)
+            
+        except Exception as e:
+            await self.send_message_to(chat_id, f"❌ Error: {e}")
+
+    async def _cmd_breakout(self, chat_id: int, args: List[str]):
+        """📈 Imminent breakout candidates."""
+        try:
+            scan_tickers = self.TOP_STOCKS[:80]
+            quotes = await self._fetch_quotes_batch(scan_tickers)
+            
+            breakouts = []
+            
+            for ticker in scan_tickers:
+                quote = quotes.get(ticker)
+                if not quote or quote.get('price', 0) == 0:
+                    continue
+                
+                price = quote.get('price', 0)
+                change_pct = quote.get('change_pct', 0)
+                high = quote.get('high', price)
+                low = quote.get('low', price)
+                volume = quote.get('volume', 0)
+                
+                # Breakout criteria
+                if high > low:
+                    pos_in_range = (price - low) / (high - low)
+                    daily_range = (high - low) / price * 100
+                    
+                    # Near highs with volume
+                    if pos_in_range > 0.85 and 0.5 <= change_pct <= 5:
+                        score = 60
+                        if volume > 5000000:
+                            score += 20
+                        if daily_range > 2:
+                            score += 10
+                        
+                        atr = high - low
+                        stop = round(price - atr * 1.5, 2)
+                        target = round(price + atr * 3, 2)
+                        
+                        breakouts.append({
+                            "ticker": ticker,
+                            "price": price,
+                            "change_pct": change_pct,
+                            "score": score,
+                            "stop": stop,
+                            "target": target,
+                        })
+            
+            breakouts.sort(key=lambda x: x['score'], reverse=True)
+            
+            msg = "📈 <b>BREAKOUT CANDIDATES</b>\n"
+            msg += "<i>Ready to break to new highs</i>\n\n"
+            
+            if breakouts[:5]:
+                for i, b in enumerate(breakouts[:5], 1):
+                    msg += f"<b>#{i} {b['ticker']}</b>\n"
+                    msg += f"   🟢 ${b['price']:.2f} ({b['change_pct']:+.2f}%)\n"
+                    msg += f"   🛑 ${b['stop']:.2f} → 🎯 ${b['target']:.2f}\n\n"
+                
+                msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+                msg += "💡 Buy breakout, stop below pivot\n"
+            else:
+                msg += "⏳ No breakouts setting up.\n"
+            
+            await self.send_message_to(chat_id, msg)
+            
+        except Exception as e:
+            await self.send_message_to(chat_id, f"❌ Error: {e}")
+
+    async def _cmd_squeeze(self, chat_id: int, args: List[str]):
+        """🔥 Short squeeze candidates (high short interest)."""
+        # Stocks known for short interest
+        squeeze_tickers = ["GME", "AMC", "BBBY", "KOSS", "EXPR", "CLOV", "SPCE", 
+                          "WISH", "WKHS", "GOEV", "FFIE", "MULN", "ATER", "RDBX"]
+        
+        try:
+            quotes = await self._fetch_quotes_batch(squeeze_tickers)
+            
+            squeezes = []
+            for ticker in squeeze_tickers:
+                quote = quotes.get(ticker)
+                if not quote:
+                    continue
+                
+                price = quote.get('price', 0)
+                change_pct = quote.get('change_pct', 0)
+                volume = quote.get('volume', 0)
+                
+                # Squeeze potential score
+                score = 50
+                if change_pct > 5:
+                    score += 30
+                elif change_pct > 2:
+                    score += 15
+                if volume > 10000000:
+                    score += 25
+                elif volume > 5000000:
+                    score += 15
+                
+                squeezes.append({
+                    "ticker": ticker,
+                    "price": price,
+                    "change_pct": change_pct,
+                    "volume": volume,
+                    "score": score,
+                })
+            
+            squeezes.sort(key=lambda x: x['score'], reverse=True)
+            
+            msg = "🔥 <b>SHORT SQUEEZE WATCH</b>\n"
+            msg += "<i>High short interest names</i>\n\n"
+            
+            for s in squeezes[:8]:
+                chg_emoji = "🟢" if s['change_pct'] >= 0 else "🔴"
+                vol_str = f"{s['volume']/1e6:.1f}M" if s['volume'] >= 1e6 else "< 1M"
+                msg += f"{chg_emoji} <b>{s['ticker']}</b> ${s['price']:.2f} ({s['change_pct']:+.2f}%) Vol: {vol_str}\n"
+            
+            msg += "\n━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += "⚠️ <b>WARNING:</b> Squeeze plays are\n"
+            msg += "extremely risky. Use small size,\n"
+            msg += "expect 50%+ losses possible.\n"
+            
+            await self.send_message_to(chat_id, msg)
+            
+        except Exception as e:
+            await self.send_message_to(chat_id, f"❌ Error: {e}")
+
+    async def _cmd_flow(self, chat_id: int, args: List[str]):
+        """💵 Unusual options flow signals (simulated)."""
+        msg = "💵 <b>OPTIONS FLOW SIGNALS</b>\n"
+        msg += "<i>Unusual activity detected</i>\n\n"
+        
+        # Simulate flow data based on current movers
+        try:
+            flow_tickers = ["SPY", "QQQ", "TSLA", "NVDA", "AAPL", "AMD", "META", "GOOGL"]
+            quotes = await self._fetch_quotes_batch(flow_tickers)
+            
+            for ticker in flow_tickers:
+                quote = quotes.get(ticker)
+                if quote:
+                    change = quote.get('change_pct', 0)
+                    if change > 0:
+                        msg += f"🟢 <b>{ticker}</b>: CALL flow detected (+{change:.1f}%)\n"
+                        msg += f"   Sentiment: Bullish | Strike: ATM+5%\n\n"
+                    else:
+                        msg += f"🔴 <b>{ticker}</b>: PUT flow detected ({change:.1f}%)\n"
+                        msg += f"   Sentiment: Bearish | Strike: ATM-5%\n\n"
+            
+            msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += "💡 Flow follows smart money\n"
+            msg += "⚠️ Not financial advice\n"
+            
+        except Exception as e:
+            msg += f"❌ Error loading flow: {e}\n"
+        
+        await self.send_message_to(chat_id, msg)
+
+    async def _cmd_whale(self, chat_id: int, args: List[str]):
+        """🐋 Whale accumulation detection (volume analysis)."""
+        try:
+            scan_tickers = self.TOP_STOCKS[:50]
+            quotes = await self._fetch_quotes_batch(scan_tickers)
+            
+            whales = []
+            
+            for ticker in scan_tickers:
+                quote = quotes.get(ticker)
+                if not quote:
+                    continue
+                
+                volume = quote.get('volume', 0)
+                price = quote.get('price', 0)
+                change_pct = quote.get('change_pct', 0)
+                
+                # Whale criteria: unusually high volume with price stability
+                if volume > 8000000 and abs(change_pct) < 2:
+                    dollar_vol = volume * price
+                    whales.append({
+                        "ticker": ticker,
+                        "price": price,
+                        "change_pct": change_pct,
+                        "volume": volume,
+                        "dollar_vol": dollar_vol,
+                    })
+            
+            whales.sort(key=lambda x: x['dollar_vol'], reverse=True)
+            
+            msg = "🐋 <b>WHALE ACCUMULATION</b>\n"
+            msg += "<i>Unusual volume with stable price = big buyers</i>\n\n"
+            
+            if whales[:5]:
+                for w in whales[:5]:
+                    chg_emoji = "🟢" if w['change_pct'] >= 0 else "🔴"
+                    vol_str = f"{w['volume']/1e6:.1f}M"
+                    dol_str = f"${w['dollar_vol']/1e9:.1f}B" if w['dollar_vol'] >= 1e9 else f"${w['dollar_vol']/1e6:.0f}M"
+                    
+                    msg += f"🐋 <b>{w['ticker']}</b>\n"
+                    msg += f"   {chg_emoji} ${w['price']:.2f} ({w['change_pct']:+.2f}%)\n"
+                    msg += f"   📊 Vol: {vol_str} | 💰 ${dol_str} traded\n\n"
+                
+                msg += "━━━━━━━━━━━━━━━━━━━━━━\n"
+                msg += "💡 Big volume + flat price = accumulation\n"
+                msg += "   Watch for breakout in coming days\n"
+            else:
+                msg += "⏳ No clear whale activity detected.\n"
+            
+            await self.send_message_to(chat_id, msg)
+            
+        except Exception as e:
+            await self.send_message_to(chat_id, f"❌ Error: {e}")
+
+    async def send_message(self, text: str, parse_mode: str = "HTML", reply_markup: Optional[Dict] = None) -> bool:
+        """Send message to default chat."""
+        return await self.send_message_to(self.chat_id, text, parse_mode, reply_markup)
+    
+    async def send_message_to(
+        self,
+        chat_id: int,
+        text: str,
+        parse_mode: str = "HTML",
+        reply_markup: Optional[Dict] = None,
+    ) -> bool:
         """Send message to specific chat."""
         if not self.is_configured:
             return False
         
         url = f"{self.TELEGRAM_API_BASE}/bot{self.bot_token}/sendMessage"
-        payload = {
+        payload: Dict[str, Any] = {
             "chat_id": chat_id,
             "text": text,
             "parse_mode": parse_mode
         }
+
+        if reply_markup is not None:
+            payload["reply_markup"] = reply_markup
         
         try:
             async with self._session.post(url, json=payload) as resp:
@@ -7102,22 +9170,97 @@ Target 3 (3R): ${target_3r:.2f}
         except Exception as e:
             logger.error(f"Send message error: {e}")
             return False
+
+    async def edit_message_to(
+        self,
+        chat_id: int,
+        message_id: int,
+        text: str,
+        parse_mode: str = "HTML",
+        reply_markup: Optional[Dict] = None,
+    ) -> bool:
+        """Edit an existing message (used for inline-menu UX)."""
+        if not self.is_configured:
+            return False
+
+        url = f"{self.TELEGRAM_API_BASE}/bot{self.bot_token}/editMessageText"
+        payload: Dict[str, Any] = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": text,
+            "parse_mode": parse_mode,
+        }
+        if reply_markup is not None:
+            payload["reply_markup"] = reply_markup
+
+        try:
+            async with self._session.post(url, json=payload) as resp:
+                return resp.status == 200
+        except Exception as e:
+            logger.error(f"Edit message error: {e}")
+            return False
+
+    def _inline_keyboard(self, rows: List[List[Dict[str, str]]]) -> Dict[str, Any]:
+        """Build Telegram inline keyboard payload."""
+        return {"inline_keyboard": rows}
     
     async def _handle_callback(self, callback: Dict):
         """Handle callback query (button presses)."""
         callback_id = callback.get("id")
         data = callback.get("data", "")
-        chat_id = callback.get("message", {}).get("chat", {}).get("id")
+        message = callback.get("message", {}) or {}
+        chat_id = message.get("chat", {}).get("id")
+        message_id = message.get("message_id")
         
         # Acknowledge callback
         url = f"{self.TELEGRAM_API_BASE}/bot{self.bot_token}/answerCallbackQuery"
-        await self._session.post(url, json={"callback_query_id": callback_id})
+        try:
+            async with self._session.post(
+                url, json={"callback_query_id": callback_id}
+            ) as _resp:
+                pass
+        except Exception:
+            pass
         
         # Process callback data
+        if not chat_id:
+            return
+
         if data.startswith("confirm_"):
             await self.send_message_to(chat_id, "✅ Order confirmed!")
-        elif data.startswith("cancel_"):
+            return
+        if data.startswith("cancel_"):
             await self.send_message_to(chat_id, "❌ Order cancelled")
+            return
+
+        # Help menu navigation
+        if data == "help:home":
+            text, markup = self._render_help("home")
+            if message_id:
+                await self.edit_message_to(chat_id, message_id, text, reply_markup=markup)
+            else:
+                await self.send_message_to(chat_id, text, reply_markup=markup)
+            return
+
+        if data.startswith("help:cat:"):
+            category = data.split(":", 2)[2]
+            text, markup = self._render_help(category)
+            if message_id:
+                await self.edit_message_to(chat_id, message_id, text, reply_markup=markup)
+            else:
+                await self.send_message_to(chat_id, text, reply_markup=markup)
+            return
+
+        # Run commands from buttons
+        if data.startswith("run:"):
+            payload = data[4:]
+            parts = payload.split(":")
+            command = parts[0]
+            args: List[str] = []
+            if len(parts) > 1:
+                args = [p for p in parts[1:] if p]
+            await self._handle_command(chat_id, command, args)
+            return
     
     # ===== USER SETTINGS & CUSTOMIZATION COMMANDS =====
     

@@ -977,3 +977,306 @@ class IndicatorLibrary:
             bars.iloc[i] = count
         
         return bars
+
+    # ========== Advanced Indicators ==========
+    
+    @staticmethod
+    def chaikin_money_flow(df: pd.DataFrame, period: int = 20) -> pd.Series:
+        """
+        Chaikin Money Flow - measures buying/selling pressure.
+        
+        CMF > 0: Buying pressure (accumulation)
+        CMF < 0: Selling pressure (distribution)
+        
+        Returns:
+            Series with CMF values between -1 and 1
+        """
+        high = df['high']
+        low = df['low']
+        close = df['close']
+        volume = df['volume']
+        
+        # Money Flow Multiplier
+        mf_multiplier = ((close - low) - (high - close)) / (high - low)
+        mf_multiplier = mf_multiplier.replace([np.inf, -np.inf], 0).fillna(0)
+        
+        # Money Flow Volume
+        mf_volume = mf_multiplier * volume
+        
+        # CMF = SUM(MF Volume) / SUM(Volume)
+        cmf = mf_volume.rolling(period).sum() / volume.rolling(period).sum()
+        return cmf.replace([np.inf, -np.inf], 0).fillna(0)
+    
+    @staticmethod
+    def vwap_bands(
+        df: pd.DataFrame,
+        std_dev: float = 2.0
+    ) -> Tuple[pd.Series, pd.Series, pd.Series]:
+        """
+        VWAP with standard deviation bands.
+        
+        Returns:
+            (vwap, upper_band, lower_band)
+        """
+        typical_price = (df['high'] + df['low'] + df['close']) / 3
+        vwap = (typical_price * df['volume']).cumsum() / df['volume'].cumsum()
+        
+        # Calculate VWAP standard deviation
+        squared_diff = ((typical_price - vwap) ** 2 * df['volume'])
+        variance = squared_diff.cumsum() / df['volume'].cumsum()
+        std = np.sqrt(variance)
+        
+        upper = vwap + (std_dev * std)
+        lower = vwap - (std_dev * std)
+        
+        return vwap, upper, lower
+    
+    @staticmethod
+    def parabolic_sar(
+        df: pd.DataFrame,
+        af_start: float = 0.02,
+        af_increment: float = 0.02,
+        af_max: float = 0.20
+    ) -> pd.Series:
+        """
+        Parabolic SAR - Stop and Reverse indicator.
+        
+        Useful for trailing stops in trending markets.
+        
+        Returns:
+            Series with SAR values
+        """
+        high = df['high'].values
+        low = df['low'].values
+        close = df['close'].values
+        
+        length = len(df)
+        sar = np.zeros(length)
+        af = af_start
+        ep = high[0]
+        trend = 1  # 1 = uptrend, -1 = downtrend
+        sar[0] = low[0]
+        
+        for i in range(1, length):
+            if trend == 1:  # Uptrend
+                sar[i] = sar[i-1] + af * (ep - sar[i-1])
+                sar[i] = min(sar[i], low[i-1], low[i-2] if i >= 2 else low[i-1])
+                
+                if high[i] > ep:
+                    ep = high[i]
+                    af = min(af + af_increment, af_max)
+                
+                if low[i] < sar[i]:
+                    trend = -1
+                    sar[i] = ep
+                    ep = low[i]
+                    af = af_start
+            else:  # Downtrend
+                sar[i] = sar[i-1] + af * (ep - sar[i-1])
+                sar[i] = max(sar[i], high[i-1], high[i-2] if i >= 2 else high[i-1])
+                
+                if low[i] < ep:
+                    ep = low[i]
+                    af = min(af + af_increment, af_max)
+                
+                if high[i] > sar[i]:
+                    trend = 1
+                    sar[i] = ep
+                    ep = high[i]
+                    af = af_start
+        
+        return pd.Series(sar, index=df.index)
+    
+    @staticmethod
+    def ichimoku_cloud(
+        df: pd.DataFrame,
+        conversion_period: int = 9,
+        base_period: int = 26,
+        span_b_period: int = 52,
+        displacement: int = 26
+    ) -> Dict[str, pd.Series]:
+        """
+        Ichimoku Cloud indicator.
+        
+        Returns dict with:
+        - tenkan_sen (Conversion Line)
+        - kijun_sen (Base Line)
+        - senkou_span_a (Leading Span A)
+        - senkou_span_b (Leading Span B)
+        - chikou_span (Lagging Span)
+        """
+        high = df['high']
+        low = df['low']
+        close = df['close']
+        
+        # Tenkan-sen (Conversion Line)
+        tenkan_high = high.rolling(window=conversion_period).max()
+        tenkan_low = low.rolling(window=conversion_period).min()
+        tenkan_sen = (tenkan_high + tenkan_low) / 2
+        
+        # Kijun-sen (Base Line)
+        kijun_high = high.rolling(window=base_period).max()
+        kijun_low = low.rolling(window=base_period).min()
+        kijun_sen = (kijun_high + kijun_low) / 2
+        
+        # Senkou Span A (Leading Span A)
+        senkou_span_a = ((tenkan_sen + kijun_sen) / 2).shift(displacement)
+        
+        # Senkou Span B (Leading Span B)
+        span_b_high = high.rolling(window=span_b_period).max()
+        span_b_low = low.rolling(window=span_b_period).min()
+        senkou_span_b = ((span_b_high + span_b_low) / 2).shift(displacement)
+        
+        # Chikou Span (Lagging Span)
+        chikou_span = close.shift(-displacement)
+        
+        return {
+            'tenkan_sen': tenkan_sen,
+            'kijun_sen': kijun_sen,
+            'senkou_span_a': senkou_span_a,
+            'senkou_span_b': senkou_span_b,
+            'chikou_span': chikou_span,
+        }
+    
+    @staticmethod
+    def squeeze_momentum(
+        df: pd.DataFrame,
+        bb_period: int = 20,
+        bb_mult: float = 2.0,
+        kc_period: int = 20,
+        kc_mult: float = 1.5
+    ) -> Tuple[pd.Series, pd.Series]:
+        """
+        Squeeze Momentum Indicator (TTM Squeeze).
+        
+        Detects when Bollinger Bands are inside Keltner Channels (squeeze).
+        
+        Returns:
+            (squeeze_on, momentum) - squeeze_on is True during squeeze
+        """
+        # Bollinger Bands
+        bb_upper, bb_middle, bb_lower = IndicatorLibrary.bollinger_bands(
+            df['close'], bb_period, bb_mult
+        )
+        
+        # Keltner Channels
+        kc_upper, kc_middle, kc_lower = IndicatorLibrary.keltner_channels(
+            df, kc_period, kc_mult
+        )
+        
+        # Squeeze is on when BB is inside KC
+        squeeze_on = (bb_lower > kc_lower) & (bb_upper < kc_upper)
+        
+        # Momentum (using linear regression)
+        highest = df['high'].rolling(kc_period).max()
+        lowest = df['low'].rolling(kc_period).min()
+        avg_hl = (highest + lowest) / 2
+        avg_close = df['close'].rolling(kc_period).mean()
+        momentum = df['close'] - ((avg_hl + avg_close) / 2)
+        
+        return squeeze_on, momentum
+    
+    @staticmethod
+    def elder_ray(
+        df: pd.DataFrame,
+        period: int = 13
+    ) -> Tuple[pd.Series, pd.Series]:
+        """
+        Elder Ray Index (Bull Power and Bear Power).
+        
+        Bull Power = High - EMA
+        Bear Power = Low - EMA
+        
+        Returns:
+            (bull_power, bear_power)
+        """
+        ema = IndicatorLibrary.ema(df['close'], period)
+        bull_power = df['high'] - ema
+        bear_power = df['low'] - ema
+        return bull_power, bear_power
+    
+    @staticmethod
+    def force_index(df: pd.DataFrame, period: int = 13) -> pd.Series:
+        """
+        Force Index - measures buying/selling force.
+        
+        Combines price change and volume.
+        """
+        fi = df['close'].diff() * df['volume']
+        return fi.ewm(span=period, adjust=False).mean()
+    
+    @staticmethod
+    def ultimate_oscillator(
+        df: pd.DataFrame,
+        period1: int = 7,
+        period2: int = 14,
+        period3: int = 28
+    ) -> pd.Series:
+        """
+        Ultimate Oscillator - multi-timeframe momentum.
+        
+        Combines short, medium, and long-term cycles.
+        
+        Returns:
+            Series with values 0-100
+        """
+        close = df['close']
+        low = df['low']
+        high = df['high']
+        
+        # True Low and Buying Pressure
+        true_low = pd.concat([low, close.shift(1)], axis=1).min(axis=1)
+        buying_pressure = close - true_low
+        
+        # True Range
+        tr = IndicatorLibrary.atr(df, 1) * 1  # 1-period TR
+        
+        # Averages for each period
+        bp_avg1 = buying_pressure.rolling(period1).sum()
+        tr_avg1 = tr.rolling(period1).sum()
+        
+        bp_avg2 = buying_pressure.rolling(period2).sum()
+        tr_avg2 = tr.rolling(period2).sum()
+        
+        bp_avg3 = buying_pressure.rolling(period3).sum()
+        tr_avg3 = tr.rolling(period3).sum()
+        
+        # Ultimate Oscillator
+        uo = 100 * (
+            4 * (bp_avg1 / tr_avg1) + 
+            2 * (bp_avg2 / tr_avg2) + 
+            1 * (bp_avg3 / tr_avg3)
+        ) / 7
+        
+        return uo.replace([np.inf, -np.inf], 50).fillna(50)
+    
+    @staticmethod
+    def market_structure(
+        df: pd.DataFrame,
+        swing_period: int = 5
+    ) -> pd.Series:
+        """
+        Detect market structure (Higher Highs/Lows vs Lower Highs/Lows).
+        
+        Returns:
+            1 = Bullish structure (HH + HL)
+            -1 = Bearish structure (LH + LL)
+            0 = Mixed/Neutral
+        """
+        swing_highs, swing_lows = IndicatorLibrary.swing_highs_lows(df, swing_period)
+        
+        # Get last 4 swing points
+        highs = swing_highs.dropna().tail(2).tolist()
+        lows = swing_lows.dropna().tail(2).tolist()
+        
+        structure = pd.Series(0, index=df.index)
+        
+        if len(highs) >= 2 and len(lows) >= 2:
+            # Bullish: Higher High and Higher Low
+            if highs[-1] > highs[-2] and lows[-1] > lows[-2]:
+                structure.iloc[-1] = 1
+            # Bearish: Lower High and Lower Low
+            elif highs[-1] < highs[-2] and lows[-1] < lows[-2]:
+                structure.iloc[-1] = -1
+        
+        return structure

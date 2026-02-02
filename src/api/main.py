@@ -1,15 +1,28 @@
 """
 TradingAI Bot - FastAPI Application
 REST API for accessing signals, reports, and system status.
+
+Features:
+- RESTful API for signals and market data
+- Rate limiting to prevent abuse
+- API key authentication
+- Comprehensive error handling
+- Health checks with component status
 """
 from datetime import datetime, date, timedelta
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import logging
+import time
+from functools import wraps
+from collections import defaultdict
+import asyncio
 
-from fastapi import FastAPI, HTTPException, Depends, Query, Header
+from fastapi import FastAPI, HTTPException, Depends, Query, Header, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from fastapi.exceptions import RequestValidationError
+from pydantic import BaseModel, Field
+from starlette.middleware.base import BaseHTTPMiddleware
 import uvicorn
 
 from src.core.config import get_settings
@@ -18,19 +31,114 @@ from src.core.models import Signal
 settings = get_settings()
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=getattr(logging, settings.log_level, logging.INFO),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
+
+
+# ===== Rate Limiting =====
+
+class RateLimiter:
+    """Simple in-memory rate limiter."""
+    
+    def __init__(self, requests_per_minute: int = 60):
+        self.requests_per_minute = requests_per_minute
+        self.requests: Dict[str, List[float]] = defaultdict(list)
+        self._lock = asyncio.Lock()
+    
+    async def is_allowed(self, client_id: str) -> bool:
+        """Check if request is allowed."""
+        async with self._lock:
+            now = time.time()
+            minute_ago = now - 60
+            
+            # Clean old requests
+            self.requests[client_id] = [
+                t for t in self.requests[client_id] if t > minute_ago
+            ]
+            
+            if len(self.requests[client_id]) >= self.requests_per_minute:
+                return False
+            
+            self.requests[client_id].append(now)
+            return True
+    
+    def get_remaining(self, client_id: str) -> int:
+        """Get remaining requests for client."""
+        now = time.time()
+        minute_ago = now - 60
+        recent = [t for t in self.requests.get(client_id, []) if t > minute_ago]
+        return max(0, self.requests_per_minute - len(recent))
+
+
+rate_limiter = RateLimiter(requests_per_minute=120)
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Rate limiting middleware."""
+    
+    async def dispatch(self, request: Request, call_next):
+        # Get client identifier (API key or IP)
+        client_id = request.headers.get('x-api-key') or request.client.host
+        
+        # Skip rate limiting for health checks
+        if request.url.path in ['/health', '/docs', '/redoc', '/openapi.json']:
+            return await call_next(request)
+        
+        if not await rate_limiter.is_allowed(client_id):
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": "Rate limit exceeded",
+                    "detail": "Too many requests. Please try again later.",
+                    "retry_after": 60
+                }
+            )
+        
+        response = await call_next(request)
+        
+        # Add rate limit headers
+        remaining = rate_limiter.get_remaining(client_id)
+        response.headers['X-RateLimit-Limit'] = str(rate_limiter.requests_per_minute)
+        response.headers['X-RateLimit-Remaining'] = str(remaining)
+        
+        return response
+
 
 # Create FastAPI app
 app = FastAPI(
     title="TradingAI Bot API",
-    description="AI-powered US equities market intelligence system",
-    version="1.0.0",
+    description="""
+# TradingAI Bot API
+
+AI-powered US equities market intelligence system providing:
+- Real-time trading signals
+- Market analysis and reports
+- Portfolio management
+- Performance tracking
+
+## Authentication
+Use the `X-API-Key` header for authenticated endpoints.
+
+## Rate Limits
+- 120 requests per minute per API key
+- Rate limit headers included in responses
+    """,
+    version="2.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    openapi_tags=[
+        {"name": "health", "description": "Health check endpoints"},
+        {"name": "signals", "description": "Trading signal operations"},
+        {"name": "reports", "description": "Market reports and analysis"},
+        {"name": "portfolio", "description": "Portfolio management"},
+    ]
 )
 
-# CORS middleware
+# Add middleware
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -40,14 +148,61 @@ app.add_middleware(
 )
 
 
+# ===== Exception Handlers =====
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle validation errors with clear messages."""
+    errors = []
+    for error in exc.errors():
+        field = ".".join(str(x) for x in error["loc"])
+        errors.append(f"{field}: {error['msg']}")
+    
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "Validation Error",
+            "detail": errors,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handle HTTP exceptions with consistent format."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": exc.detail,
+            "status_code": exc.status_code,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle unexpected errors."""
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal Server Error",
+            "detail": "An unexpected error occurred" if settings.environment == "production" else str(exc),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    )
+
+
 # ===== Authentication =====
 
-async def verify_api_key(x_api_key: str = Header(None)):
+async def verify_api_key(x_api_key: str = Header(None, alias="X-API-Key")):
     """Verify API key from header."""
     if not settings.api_secret_key:
         return True
     
-    if x_api_key != settings.api_secret_key:
+    if not x_api_key or x_api_key != settings.api_secret_key:
         raise HTTPException(
             status_code=401,
             detail="Invalid or missing API key"
@@ -55,22 +210,36 @@ async def verify_api_key(x_api_key: str = Header(None)):
     return True
 
 
+async def optional_api_key(x_api_key: str = Header(None, alias="X-API-Key")):
+    """Optional API key verification."""
+    if settings.api_secret_key and x_api_key != settings.api_secret_key:
+        return None
+    return x_api_key
+
+
 # ===== Response Models =====
 
 class HealthResponse(BaseModel):
-    status: str
-    timestamp: str
-    version: str
-    database: Optional[str] = None
+    """Health check response model."""
+    status: str = Field(..., description="Service status: healthy, degraded, or unhealthy")
+    timestamp: str = Field(..., description="ISO timestamp of health check")
+    version: str = Field(..., description="API version")
+    database: Optional[str] = Field(None, description="Database connection status")
+    redis: Optional[str] = Field(None, description="Redis connection status")
+    uptime_seconds: Optional[float] = Field(None, description="Service uptime in seconds")
 
 
 class SignalListResponse(BaseModel):
-    signals: List[Signal]
-    total: int
-    generated_at: str
+    """Signal list response model."""
+    signals: List[Signal] = Field(..., description="List of trading signals")
+    total: int = Field(..., description="Total number of signals matching criteria")
+    page: int = Field(default=1, description="Current page number")
+    page_size: int = Field(default=50, description="Number of signals per page")
+    generated_at: str = Field(..., description="Response generation timestamp")
 
 
 class MarketReportResponse(BaseModel):
+    """Market report response model."""
     report_date: str
     overview: dict
     sectors: dict
@@ -80,23 +249,46 @@ class MarketReportResponse(BaseModel):
 
 
 class ErrorResponse(BaseModel):
-    error: str
-    detail: Optional[str] = None
+    """Error response model."""
+    error: str = Field(..., description="Error message")
+    detail: Optional[str] = Field(None, description="Detailed error information")
+    status_code: Optional[int] = Field(None, description="HTTP status code")
+    timestamp: str = Field(..., description="Error timestamp")
+
+
+# Track startup time for uptime calculation
+startup_time = datetime.utcnow()
 
 
 # ===== Health Endpoints =====
 
-@app.get("/health", response_model=HealthResponse)
+@app.get(
+    "/health",
+    response_model=HealthResponse,
+    tags=["health"],
+    summary="Basic health check"
+)
 async def health_check():
-    """Basic health check endpoint."""
+    """
+    Basic health check endpoint.
+    
+    Returns service status and version information.
+    No authentication required.
+    """
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
-        "version": "1.0.0"
+        "version": "2.0.0",
+        "uptime_seconds": (datetime.utcnow() - startup_time).total_seconds()
     }
 
 
-@app.get("/health/detailed", response_model=HealthResponse)
+@app.get(
+    "/health/detailed",
+    response_model=HealthResponse,
+    tags=["health"],
+    summary="Detailed health check with component status"
+)
 async def detailed_health_check(
     _: bool = Depends(verify_api_key)
 ):
