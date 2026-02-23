@@ -254,8 +254,8 @@ class Signal(BaseModel):
     id: Optional[UUID] = None
     generated_at: datetime = Field(default_factory=datetime.utcnow)
     
-    # Core signal
-    ticker: str = Field(pattern=r"^[A-Z]{1,5}$")
+    # Core signal — supports US (AAPL), HK (0700.HK), JP (7203.T), Crypto (BTC)
+    ticker: str = Field(pattern=r"^[A-Z0-9]{1,10}(\.[A-Z]{1,3})?$")
     direction: Direction
     horizon: Horizon
     

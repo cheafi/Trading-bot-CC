@@ -108,7 +108,7 @@ class ShortTermTrendFollowingStrategy(IStrategy):
     stoploss = -0.05
     trailing_stop = True
     trailing_stop_positive = 0.03
-    trailing_stop_positive_offset = 0.02
+    trailing_stop_positive_offset = 0.05  # Activate trailing after 5% profit
     
     # Trend parameters
     ma_short = 10
@@ -116,9 +116,9 @@ class ShortTermTrendFollowingStrategy(IStrategy):
     ma_long = 50
     ma_trend = 200
     
-    # Pullback parameters
-    pullback_min_days = 3
-    pullback_max_days = 7
+    # Pullback parameters (widened to catch 2-day pullbacks)
+    pullback_min_days = 2
+    pullback_max_days = 8
     
     # Time-based exit
     min_hold_days = 10
@@ -299,6 +299,8 @@ class ClassicSwingStrategy(IStrategy):
     startup_candle_count = 100
     stoploss = -0.03
     trailing_stop = True
+    trailing_stop_positive = 0.02
+    trailing_stop_positive_offset = 0.04  # Activate trailing after 4% profit
     can_short = True  # Allow short swings
     
     minimal_roi = {
@@ -498,7 +500,7 @@ class MomentumRotationStrategy(IStrategy):
     stoploss = -0.08
     trailing_stop = True
     trailing_stop_positive = 0.05
-    trailing_stop_positive_offset = 0.03
+    trailing_stop_positive_offset = 0.07  # Activate trailing after 7% profit
     
     # Momentum parameters
     momentum_lookback_short = 20   # 4 weeks
@@ -764,13 +766,14 @@ class ShortTermMeanReversionStrategy(IStrategy):
             (dataframe['pullback_depth'] <= self.max_drawdown_pct)
         )
         
-        # 4. Oversold condition
-        oversold = (
-            (dataframe['rsi'] < 30) |
-            (dataframe['rsi_2'] < 10) |
-            (dataframe['stoch_k'] < 20) |
-            (dataframe['below_bb_lower'] == 1)
+        # 4. Oversold condition (require at least 2 for confirmation)
+        oversold_count = (
+            (dataframe['rsi'] < 30).astype(int) +
+            (dataframe['rsi_2'] < 10).astype(int) +
+            (dataframe['stoch_k'] < 20).astype(int) +
+            (dataframe['below_bb_lower'] == 1).astype(int)
         )
+        oversold = oversold_count >= 2  # At least 2 must confirm
         
         # 5. Reversal signal (bullish candle)
         reversal_signal = (
@@ -802,33 +805,34 @@ class ShortTermMeanReversionStrategy(IStrategy):
     ) -> pd.DataFrame:
         """Generate mean reversion exit signals."""
         
-        # Exit 1: Price returns to 10-20 MA (mean reversion complete)
+        # Exit 1: Price returns to 10-20 MA (mean reversion complete) - with profit
         back_to_mean = (
             (dataframe['close'] >= dataframe['sma_10']) &
-            (dataframe['close'].shift(1) < dataframe['sma_10'].shift(1))
+            (dataframe['close'].shift(1) < dataframe['sma_10'].shift(1)) &
+            (dataframe['rsi'] > 45)  # Only exit if RSI recovered
         )
         
-        # Exit 2: Price returns to 20 MA
+        # Exit 2: Price returns to 20 MA with RSI confirmation
         back_to_sma20 = (
             (dataframe['close'] >= dataframe['sma_20']) &
             (dataframe['close'].shift(1) < dataframe['sma_20'].shift(1))
         )
         
-        # Exit 3: RSI no longer oversold
+        # Exit 3: RSI normalized
         rsi_normalized = (
-            (dataframe['rsi'] > 50) &
-            (dataframe['rsi'].shift(1) <= 50)
+            (dataframe['rsi'] > 55) &
+            (dataframe['rsi'].shift(1) <= 55)
         )
         
-        # Exit 4: Momentum reversal complete (back to middle BB)
-        back_to_bb_middle = (
-            (dataframe['close'] >= dataframe['bb_middle']) &
-            (dataframe['close'].shift(1) < dataframe['bb_middle'].shift(1))
+        # Exit 4: Momentum reversal complete (upper half of BB for max R)
+        back_to_bb_upper_half = (
+            (dataframe['close'] >= (dataframe['bb_middle'] + dataframe['bb_upper']) / 2) &
+            (dataframe['close'].shift(1) < ((dataframe['bb_middle'].shift(1) + dataframe['bb_upper'].shift(1)) / 2))
         )
         
         # Combined exit
         dataframe.loc[
-            back_to_mean | back_to_sma20 | rsi_normalized | back_to_bb_middle,
+            back_to_mean | back_to_sma20 | rsi_normalized | back_to_bb_upper_half,
             'exit_long'
         ] = 1
         

@@ -368,7 +368,7 @@ Provide a 2-sentence trading-focused summary of what this means for markets toda
 
         try:
             response = await self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-5.2-mini",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=100,
                 temperature=0.4

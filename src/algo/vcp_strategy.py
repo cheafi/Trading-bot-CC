@@ -56,7 +56,7 @@ class VCPStrategy(IStrategy):
     stoploss = -0.07  # 7% stop loss
     trailing_stop = True
     trailing_stop_positive = 0.05  # Start trailing at 5% profit
-    trailing_stop_positive_offset = 0.03
+    trailing_stop_positive_offset = 0.07  # Activate after 7% profit
     
     # ROI targets (Mark Minervini often takes profits in stages)
     minimal_roi = {
@@ -182,7 +182,7 @@ class VCPStrategy(IStrategy):
         conditions = (
             # Trend Template (if enabled)
             (
-                (dataframe['tt_score'] >= 6) if self.trend_template_enabled
+                (dataframe['tt_score'] >= 7) if self.trend_template_enabled
                 else (dataframe['close'] > dataframe['sma_50'])
             ) &
             
@@ -196,8 +196,8 @@ class VCPStrategy(IStrategy):
             # In a tight consolidation
             (dataframe['tight_consolidation'] == True) &
             
-            # Volume has dried up (lower than average)
-            (dataframe['rel_volume'] < 0.8) &
+            # Volume was dry RECENTLY (prior 5 days avg below average)
+            (dataframe['volume'].rolling(5).mean().shift(1) < dataframe['vol_sma_50'] * 0.8) &
             
             # RS Rating above threshold
             (dataframe['rs_rating'] >= self.rs_min_rating) &
@@ -205,11 +205,11 @@ class VCPStrategy(IStrategy):
             # Within 25% of 52-week high
             (dataframe['dist_from_52w_high'] <= 0.25) &
             
-            # At least 30% above 52-week low
-            (dataframe['dist_from_52w_low'] >= 0.30) &
+            # At least 25% above 52-week low (Minervini original)
+            (dataframe['dist_from_52w_low'] >= 0.25) &
             
-            # Breakout on increasing volume (today's volume > average)
-            (dataframe['volume'] > dataframe['vol_sma_20'])
+            # TODAY is the breakout: volume surges above average
+            (dataframe['volume'] > dataframe['vol_sma_20'] * 1.3)
         )
         
         dataframe.loc[conditions, 'enter_long'] = 1

@@ -43,3 +43,4 @@ azure-identity==1.15.0
 # Broker APIs (optional - install as needed)
 # pip install futu-api  # For Futu (富途)
 # pip install ib_insync  # For Interactive Brokers
+# pip install MetaTrader5  # For MetaTrader 5 (Windows only)

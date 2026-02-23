@@ -248,42 +248,46 @@ class MarketDataIngestor(BaseIngestor):
                 # Use raw SQL for bulk upsert (more efficient)
                 from sqlalchemy import text
                 
-                # Batch insert with ON CONFLICT
-                batch_size = 1000
+                # Batch insert with ON CONFLICT — parameterized to prevent SQL injection
+                batch_size = 500
                 for i in range(0, len(records), batch_size):
                     batch = records[i:i + batch_size]
-                    
-                    values_list = []
+
                     for r in batch:
-                        values_list.append(
-                            f"('{r['ticker']}', '{r['timestamp']}', "
-                            f"{r['open']}, {r['high']}, {r['low']}, {r['close']}, "
-                            f"{r['volume']}, "
-                            f"{'NULL' if r['vwap'] is None else r['vwap']}, "
-                            f"{'NULL' if r['trade_count'] is None else r['trade_count']}, "
-                            f"'{r['interval']}', '{r['source']}')"
-                        )
-                    
-                    sql = f"""
-                        INSERT INTO ohlcv (
-                            ticker, timestamp, open, high, low, close, 
-                            volume, vwap, trade_count, interval, source
-                        )
-                        VALUES {', '.join(values_list)}
-                        ON CONFLICT (ticker, timestamp, interval) 
-                        DO UPDATE SET
-                            open = EXCLUDED.open,
-                            high = EXCLUDED.high,
-                            low = EXCLUDED.low,
-                            close = EXCLUDED.close,
-                            volume = EXCLUDED.volume,
-                            vwap = EXCLUDED.vwap,
-                            trade_count = EXCLUDED.trade_count,
-                            source = EXCLUDED.source,
-                            updated_at = NOW()
-                    """
-                    
-                    await session.execute(text(sql))
+                        sql = text("""
+                            INSERT INTO ohlcv (
+                                ticker, timestamp, open, high, low, close,
+                                volume, vwap, trade_count, interval, source
+                            )
+                            VALUES (
+                                :ticker, :timestamp, :open, :high, :low, :close,
+                                :volume, :vwap, :trade_count, :interval, :source
+                            )
+                            ON CONFLICT (ticker, timestamp, interval)
+                            DO UPDATE SET
+                                open = EXCLUDED.open,
+                                high = EXCLUDED.high,
+                                low = EXCLUDED.low,
+                                close = EXCLUDED.close,
+                                volume = EXCLUDED.volume,
+                                vwap = EXCLUDED.vwap,
+                                trade_count = EXCLUDED.trade_count,
+                                source = EXCLUDED.source,
+                                updated_at = NOW()
+                        """)
+                        await session.execute(sql, {
+                            "ticker": r["ticker"],
+                            "timestamp": r["timestamp"],
+                            "open": r["open"],
+                            "high": r["high"],
+                            "low": r["low"],
+                            "close": r["close"],
+                            "volume": r["volume"],
+                            "vwap": r.get("vwap"),
+                            "trade_count": r.get("trade_count"),
+                            "interval": r["interval"],
+                            "source": r["source"],
+                        })
                     stored_count += len(batch)
                 
                 await session.commit()

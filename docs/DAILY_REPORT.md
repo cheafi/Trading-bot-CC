@@ -469,7 +469,7 @@ class DailyReportGenerator:
         """
         
         response = await self.gpt.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-5.2",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.4,
             max_tokens=500

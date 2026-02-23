@@ -62,8 +62,8 @@ class Settings(BaseSettings):
     
     # OpenAI (standard) - optional fallback
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
-    openai_model: str = Field(default="gpt-4o", alias="OPENAI_MODEL")
-    openai_model_mini: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL_MINI")
+    openai_model: str = Field(default="gpt-5.2", alias="OPENAI_MODEL")
+    openai_model_mini: str = Field(default="gpt-5.2-mini", alias="OPENAI_MODEL_MINI")
     
     # Azure OpenAI (preferred)
     azure_tenant_id: Optional[str] = Field(default=None, alias="AZURE_TENANT_ID")
@@ -71,12 +71,23 @@ class Settings(BaseSettings):
     azure_client_secret: Optional[str] = Field(default=None, alias="AZURE_CLIENT_SECRET")
     azure_openai_endpoint: Optional[str] = Field(default=None, alias="AZURE_OPENAI_ENDPOINT")
     azure_openai_api_key: Optional[str] = Field(default=None, alias="AZURE_OPENAI_API_KEY")
-    azure_openai_deployment: str = Field(default="gpt-4o", alias="AZURE_OPENAI_DEPLOYMENT")
-    azure_openai_api_version: str = Field(default="2024-02-15-preview", alias="AZURE_OPENAI_API_VERSION")
+    azure_openai_deployment: str = Field(default="gpt-5.2", alias="AZURE_OPENAI_DEPLOYMENT")
+    azure_openai_api_version: str = Field(default="2026-01-15-preview", alias="AZURE_OPENAI_API_VERSION")
     
     # Telegram Notifications
     telegram_bot_token: Optional[str] = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
     telegram_chat_id: Optional[str] = Field(default=None, alias="TELEGRAM_CHAT_ID")
+
+    # Discord Notifications (optional)
+    discord_webhook_url: Optional[str] = Field(default=None, alias="DISCORD_WEBHOOK_URL")
+    discord_bot_token: Optional[str] = Field(default=None, alias="DISCORD_BOT_TOKEN")
+    discord_channel_name: str = Field(default="Trading CC", alias="DISCORD_CHANNEL_NAME")
+    
+    # MetaTrader 5 (Forex/CFD/Crypto)
+    mt5_login: Optional[int] = Field(default=None, alias="MT5_LOGIN")
+    mt5_password: Optional[str] = Field(default=None, alias="MT5_PASSWORD")
+    mt5_server: Optional[str] = Field(default=None, alias="MT5_SERVER")
+    mt5_path: Optional[str] = Field(default=None, alias="MT5_PATH")
     
     # Futu Broker (富途)
     futu_host: str = Field(default="127.0.0.1", alias="FUTU_HOST")
@@ -143,11 +154,36 @@ class Settings(BaseSettings):
     def has_telegram(self) -> bool:
         """Check if Telegram is configured."""
         return bool(self.telegram_bot_token and self.telegram_chat_id)
+
+    @property
+    def has_discord(self) -> bool:
+        """Check if Discord webhook is configured."""
+        return bool(self.discord_webhook_url)
+
+    @property
+    def has_whatsapp(self) -> bool:
+        """Check if Twilio WhatsApp is configured."""
+        return bool(
+            self.twilio_account_sid
+            and self.twilio_auth_token
+            and self.twilio_whatsapp_from
+            and self.whatsapp_to
+        )
     
     @property
     def has_s3(self) -> bool:
         """Check if S3 storage is configured."""
         return bool(self.s3_endpoint and self.s3_access_key_id)
+    
+    @property
+    def has_mt5(self) -> bool:
+        """Check if MetaTrader 5 is configured."""
+        return bool(self.mt5_login and self.mt5_password)
+    
+    @property
+    def has_discord_bot(self) -> bool:
+        """Check if Discord bot (interactive) is configured."""
+        return bool(self.discord_bot_token)
     
     @property
     def has_futu(self) -> bool:

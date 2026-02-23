@@ -1,0 +1,20 @@
+# Notification service dependencies
+-r base.txt
+
+# Telegram
+python-telegram-bot==20.7
+
+# Discord
+discord.py==2.3.2
+
+# WhatsApp (via Twilio)
+twilio==8.10.3
+
+# Slack
+slack-sdk==3.26.1
+
+# Email
+sendgrid==6.11.0
+
+# OpenAI for message formatting
+openai==1.6.1

@@ -287,7 +287,7 @@ class StrategyManager:
         self,
         universe_data: Dict[str, pd.DataFrame],
         strategies: Optional[List[str]] = None,
-        min_strategies: int = 1
+        min_strategies: int = 2  # Require 2+ strategy agreement for better signal quality
     ) -> List[Dict[str, Any]]:
         """
         Scan a universe of stocks with multiple strategies.
@@ -360,30 +360,56 @@ class StrategyManager:
 
 # Auto-register built-in strategies
 def _register_builtin_strategies():
-    """Register built-in strategies."""
-    try:
-        from .vcp_strategy import VCPStrategy
-        StrategyRegistry.register(VCPStrategy)
-    except ImportError:
-        pass
+    """Register ALL built-in strategies including swing and earnings."""
+    strategy_imports = [
+        ('vcp_strategy', 'VCPStrategy'),
+        ('momentum_strategy', 'MomentumBreakoutStrategy'),
+        ('mean_reversion_strategy', 'MeanReversionStrategy'),
+        ('trend_following_strategy', 'TrendFollowingStrategy'),
+    ]
     
-    try:
-        from .momentum_strategy import MomentumBreakoutStrategy
-        StrategyRegistry.register(MomentumBreakoutStrategy)
-    except ImportError:
-        pass
+    for module_name, class_name in strategy_imports:
+        try:
+            import importlib
+            mod = importlib.import_module(f'.{module_name}', package='src.algo')
+            cls = getattr(mod, class_name)
+            StrategyRegistry.register(cls)
+        except (ImportError, AttributeError) as e:
+            logger.debug(f"Could not register {class_name}: {e}")
     
+    # Register swing strategies
     try:
-        from .mean_reversion_strategy import MeanReversionStrategy
-        StrategyRegistry.register(MeanReversionStrategy)
-    except ImportError:
-        pass
+        from .swing_strategies import (
+            ShortTermTrendFollowingStrategy,
+            ClassicSwingStrategy,
+            MomentumRotationStrategy,
+            ShortTermMeanReversionStrategy,
+        )
+        for cls in [
+            ShortTermTrendFollowingStrategy,
+            ClassicSwingStrategy,
+            MomentumRotationStrategy,
+            ShortTermMeanReversionStrategy,
+        ]:
+            StrategyRegistry.register(cls)
+    except ImportError as e:
+        logger.debug(f"Could not register swing strategies: {e}")
     
+    # Register earnings strategies
     try:
-        from .trend_following_strategy import TrendFollowingStrategy
-        StrategyRegistry.register(TrendFollowingStrategy)
-    except ImportError:
-        pass
+        from .earnings_strategies import (
+            PreEarningsRunUpStrategy,
+            PostEarningsDriftStrategy,
+            EarningsBreakoutStrategy,
+        )
+        for cls in [
+            PreEarningsRunUpStrategy,
+            PostEarningsDriftStrategy,
+            EarningsBreakoutStrategy,
+        ]:
+            StrategyRegistry.register(cls)
+    except ImportError as e:
+        logger.debug(f"Could not register earnings strategies: {e}")
 
 
 # Auto-register on module import

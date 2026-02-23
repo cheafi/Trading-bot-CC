@@ -45,15 +45,15 @@ class TrendFollowingStrategy(IStrategy):
     stoploss = -0.10  # Wide stop for trend following
     trailing_stop = True
     trailing_stop_positive = 0.05
-    trailing_stop_positive_offset = 0.03
+    trailing_stop_positive_offset = 0.07  # Activate trailing after 7% profit
     
     use_custom_stoploss = True  # Use ATR-based stop
     
     minimal_roi = {
-        "0": 0.40,    # 40% is great
-        "30": 0.25,   # 25% after 30 days
-        "60": 0.15,   # 15% after 60 days
-        "90": 0.08    # 8% after 90 days
+        "0": 0.50,    # 50% is great (let winners run longer)
+        "30": 0.30,   # 30% after 30 days
+        "60": 0.20,   # 20% after 60 days
+        "90": 0.10    # 10% after 90 days
     }
     
     def __init__(self, config: Optional[StrategyConfig] = None):
@@ -100,17 +100,9 @@ class TrendFollowingStrategy(IStrategy):
         dataframe['supertrend'] = supertrend
         dataframe['supertrend_dir'] = direction  # 1 = bullish, -1 = bearish
         
-        # ADX (simplified as directional movement)
-        # Real ADX requires +DI and -DI calculation
-        plus_dm = dataframe['high'].diff().clip(lower=0)
-        minus_dm = (-dataframe['low'].diff()).clip(lower=0)
-        tr = dataframe['atr'] * self.atr_period  # True Range sum approximation
-        
-        plus_di = 100 * (plus_dm.rolling(14).sum() / tr.rolling(14).sum())
-        minus_di = 100 * (minus_dm.rolling(14).sum() / tr.rolling(14).sum())
-        
-        dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
-        dataframe['adx'] = dx.rolling(14).mean()
+        # ADX (proper calculation from indicator library)
+        adx_val, plus_di, minus_di = IndicatorLibrary.adx(dataframe, 14)
+        dataframe['adx'] = adx_val
         dataframe['plus_di'] = plus_di
         dataframe['minus_di'] = minus_di
         
@@ -190,12 +182,14 @@ class TrendFollowingStrategy(IStrategy):
         exit_conditions = (
             (dataframe['close'] < dataframe['exit_low'].shift(1))
         ) | (
-            # Supertrend turns bearish
+            # Supertrend turns bearish AND confirmed by close below SMA20
             (dataframe['supertrend_dir'] == -1) &
-            (dataframe['supertrend_dir'].shift(1) == 1)
+            (dataframe['supertrend_dir'].shift(1) == 1) &
+            (dataframe['close'] < dataframe['sma_20'])
         ) | (
-            # ADX declining significantly (trend weakening)
-            (dataframe['adx'] < dataframe['adx'].shift(5) * 0.7)
+            # ADX declining significantly (trend weakening) - relaxed to 20% over 10 bars
+            (dataframe['adx'] < dataframe['adx'].shift(10) * 0.8) &
+            (dataframe['adx'] < 20)  # Only exit on ADX weakness if ADX is low
         )
         
         dataframe.loc[exit_conditions, 'exit_long'] = 1

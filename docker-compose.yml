@@ -337,6 +337,79 @@ services:
       - tradingai_network
 
   # =============================================================================
+  # DISCORD BOT (Interactive Trading Assistant)
+  # =============================================================================
+
+  discord_bot:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.telegram
+    container_name: tradingai_discord
+    restart: unless-stopped
+    command: ["python", "-m", "src.notifications.discord_bot"]
+    environment:
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+      - DISCORD_CHANNEL_NAME=${DISCORD_CHANNEL_NAME:-Trading CC}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - ALPACA_API_KEY=${ALPACA_API_KEY:-}
+      - ALPACA_SECRET_KEY=${ALPACA_SECRET_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - TZ=America/New_York
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src:ro
+      - ./logs:/app/logs
+    networks:
+      - tradingai_network
+
+  # =============================================================================
+  # AUTO TRADING ENGINE (24/7 Autonomous Execution)
+  # =============================================================================
+
+  auto_trader:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.engine
+    container_name: tradingai_auto_trader
+    restart: unless-stopped
+    command: ["python", "-m", "src.engines.auto_trading_engine"]
+    environment:
+      - SERVICE_NAME=auto_trading_engine
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - ALPACA_API_KEY=${ALPACA_API_KEY:-}
+      - ALPACA_SECRET_KEY=${ALPACA_SECRET_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2025-04-01-preview}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - TZ=America/New_York
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      signal_engine:
+        condition: service_started
+    volumes:
+      - ./src:/app/src:ro
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - ./models:/app/models
+    networks:
+      - tradingai_network
+
+  # =============================================================================
   # MONITORING STACK
   # =============================================================================
 

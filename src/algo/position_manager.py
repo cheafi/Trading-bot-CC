@@ -59,6 +59,14 @@ class Position:
     trailing_stop_price: float = 0.0
     atr_at_entry: float = 0.0
     
+    # Multi-target exits (scale out)
+    target_1r_price: float = 0.0    # First target at 1R
+    target_2r_price: float = 0.0    # Second target at 2R
+    target_3r_price: float = 0.0    # Third target at 3R
+    partial_exit_1r: bool = False   # Has taken profit at 1R?
+    partial_exit_2r: bool = False   # Has taken profit at 2R?
+    original_shares: int = 0        # Track original size for partial exits
+    
     # Time limits
     max_hold_days: int = 40
     min_hold_days: int = 3
@@ -108,24 +116,33 @@ class Position:
         self.unrealized_pnl_pct = (current_price - self.entry_price) / self.entry_price * 100 if self.entry_price > 0 else 0
     
     def update_trailing_stop(self, current_price: float, trail_pct: float = 0.02, activation_pct: float = 0.03):
-        """Update trailing stop if conditions met."""
+        """Update trailing stop with tiered tightening at higher profits."""
         if self.entry_price <= 0:
             return
         
         current_gain = (current_price - self.entry_price) / self.entry_price
         
-        # Only activate trailing stop after certain gain
-        if current_gain >= activation_pct:
-            new_trail_stop = current_price * (1 - trail_pct)
-            if new_trail_stop > self.trailing_stop_price:
-                self.trailing_stop_price = new_trail_stop
+        # Tiered trailing: tighter trail at higher profits to lock in gains
+        if current_gain >= 0.15:       # 15%+ profit: trail at 4%
+            effective_trail = 0.04
+        elif current_gain >= 0.10:     # 10%+ profit: trail at 3%
+            effective_trail = 0.03
+        elif current_gain >= activation_pct:  # Activation threshold: use default
+            effective_trail = trail_pct
+        else:
+            return  # Not yet activated
+        
+        new_trail_stop = current_price * (1 - effective_trail)
+        if new_trail_stop > self.trailing_stop_price:
+            self.trailing_stop_price = new_trail_stop
     
     def check_exit_conditions(self, current_price: float, current_date: datetime) -> Tuple[bool, str]:
         """
-        Check if position should be exited.
+        Check if position should be exited (full or partial).
         
         Returns:
             (should_exit, reason)
+            Partial exits use reason prefix 'partial_'
         """
         self.update_price(current_price)
         
@@ -137,11 +154,28 @@ class Position:
         if self.trailing_stop_price > 0 and current_price <= self.trailing_stop_price:
             return True, "trailing_stop"
         
-        # 3. Take profit hit
+        # 3. Partial exit at 1R (sell 1/3)
+        if self.target_1r_price > 0 and current_price >= self.target_1r_price and not self.partial_exit_1r:
+            self.partial_exit_1r = True
+            # Move stop to breakeven after 1R hit
+            if self.entry_price > self.stop_loss_price:
+                self.stop_loss_price = self.entry_price
+            return True, "partial_1r"
+        
+        # 4. Partial exit at 2R (sell another 1/3)
+        if self.target_2r_price > 0 and current_price >= self.target_2r_price and not self.partial_exit_2r:
+            self.partial_exit_2r = True
+            return True, "partial_2r"
+        
+        # 5. Full take profit at 3R
+        if self.target_3r_price > 0 and current_price >= self.target_3r_price:
+            return True, "take_profit_3r"
+        
+        # 6. Legacy take profit
         if self.take_profit_price > 0 and current_price >= self.take_profit_price:
             return True, "take_profit"
         
-        # 4. Max hold time exceeded
+        # 7. Max hold time exceeded
         if self.entry_date:
             days_held = (current_date - self.entry_date).days
             if days_held >= self.max_hold_days:
@@ -305,8 +339,11 @@ class PositionManager:
                 'reason': 'Position size too small after applying limits'
             }
         
-        # Calculate target price (2R by default)
-        target_price = entry_price + (risk_per_share * 2)
+        # Calculate R-based multi-target prices
+        r_unit = risk_per_share  # 1R = risk per share
+        target_1r = entry_price + (r_unit * 1.0)
+        target_2r = entry_price + (r_unit * 2.0)
+        target_3r = entry_price + (r_unit * 3.0)
         
         return {
             'can_trade': True,
@@ -316,7 +353,10 @@ class PositionManager:
             'risk_pct': (shares * risk_per_share) / self.current_equity * 100,
             'entry_price': entry_price,
             'stop_loss_price': stop_loss_price,
-            'target_price': target_price,
+            'target_1r': target_1r,
+            'target_2r': target_2r,
+            'target_3r': target_3r,
+            'target_price': target_2r,  # Default full target at 2R
             'reward_risk_ratio': 2.0,
             'pct_of_account': position_value / self.current_equity * 100,
         }
@@ -398,6 +438,7 @@ class PositionManager:
             entry_date=datetime.now(),
             entry_reason=entry_reason,
             shares=shares,
+            original_shares=shares,
             position_value=shares * entry_price,
             risk_amount=shares * abs(entry_price - stop_loss_price),
             stop_loss_price=stop_loss_price,
@@ -406,6 +447,13 @@ class PositionManager:
             max_hold_days=max_hold_days,
             sector=sector,
         )
+        
+        # Set multi-target R levels
+        risk_per_share = abs(entry_price - stop_loss_price)
+        if risk_per_share > 0:
+            position.target_1r_price = entry_price + risk_per_share
+            position.target_2r_price = entry_price + (risk_per_share * 2)
+            position.target_3r_price = entry_price + (risk_per_share * 3)
         
         self.positions[ticker] = position
         self.logger.info(
@@ -639,7 +687,8 @@ def calculate_risk_reward(
 def calculate_kelly_fraction(
     win_rate: float,
     avg_win: float,
-    avg_loss: float
+    avg_loss: float,
+    fraction: float = 0.25
 ) -> float:
     """
     Calculate Kelly Criterion for optimal position sizing.
@@ -649,18 +698,19 @@ def calculate_kelly_fraction(
     - W = Win probability
     - R = Win/Loss ratio
     
-    Most traders use fractional Kelly (25-50%) to reduce volatility.
+    Uses quarter-Kelly by default (fraction=0.25) for safety.
+    Half-Kelly (0.5) is more aggressive, full Kelly (1.0) is theoretical max.
     """
-    if avg_loss <= 0:
+    if avg_loss <= 0 or win_rate <= 0:
         return 0.0
     
-    w = win_rate / 100  # Convert to decimal
+    w = min(win_rate / 100, 0.99)  # Convert to decimal, cap at 99%
     r = avg_win / avg_loss
     
     kelly = w - ((1 - w) / r)
     
-    # Return half Kelly for safety
-    return max(0, kelly * 0.5)
+    # Apply fractional Kelly for safety (default quarter-Kelly)
+    return max(0, min(kelly * fraction, 0.25))  # Cap at 25% of equity
 
 
 def suggested_risk_parameters(account_size: float, style: str = "moderate") -> RiskParameters:

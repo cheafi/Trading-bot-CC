@@ -387,7 +387,7 @@ Focus on: What matters most for the stock price? What should traders watch?"""
 
         try:
             response = await self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-5.2-mini",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=150,
                 temperature=0.4

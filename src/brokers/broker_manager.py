@@ -4,6 +4,7 @@ Broker Manager - Unified interface for multiple brokers
 Manages connections to:
 - Futu (富途)
 - Interactive Brokers (IB)
+- MetaTrader 5 (Forex/CFD/Crypto)
 - Paper Trading
 
 Integrates with Telegram bot for real-time trading.
@@ -21,6 +22,7 @@ from src.brokers.base import (
 from src.brokers.futu_broker import FutuBroker
 from src.brokers.ib_broker import IBBroker
 from src.brokers.paper_broker import PaperBroker
+from src.brokers.mt5_broker import MetaTraderBroker
 from src.core.config import get_settings
 
 settings = get_settings()
@@ -31,6 +33,7 @@ class BrokerType(str, Enum):
     """Supported brokers."""
     FUTU = "futu"
     IB = "ib"
+    MT5 = "mt5"
     PAPER = "paper"
 
 
@@ -91,6 +94,16 @@ class BrokerManager:
                     logger.info("Interactive Brokers connected")
             except Exception as e:
                 logger.warning(f"IB broker not available: {e}")
+        
+        # Initialize MetaTrader 5 if configured
+        if settings.has_mt5:
+            try:
+                mt5 = MetaTraderBroker()
+                if await mt5.connect():
+                    self._brokers[BrokerType.MT5] = mt5
+                    logger.info("MetaTrader 5 broker connected")
+            except Exception as e:
+                logger.warning(f"MetaTrader 5 broker not available: {e}")
         
         logger.info(f"Broker manager initialized with {len(self._brokers)} brokers")
     
@@ -155,7 +168,7 @@ class BrokerManager:
         ticker: str,
         side: OrderSide,
         quantity: int,
-        order_type: OrderType = OrderType.MARKET,
+        order_type: OrderType = OrderType.MARKET, 
         limit_price: Optional[float] = None,
         stop_price: Optional[float] = None,
         market: Market = Market.US,

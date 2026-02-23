@@ -100,11 +100,11 @@ class SignalPipeline:
 
 | Function | Input | Output | Model |
 |----------|-------|--------|-------|
-| News Summarization | Raw articles | Structured summary | GPT-4o-mini |
-| Sentiment Classification | Text snippet | Score + rationale | GPT-4o-mini |
-| Signal Validation | Signal + context | Approval/flag + reasoning | GPT-4o |
-| Report Generation | Structured data | Markdown report | GPT-4o |
-| Conflict Resolution | Opposing signals | Recommendation | GPT-4o |
+| News Summarization | Raw articles | Structured summary | GPT-5.2-mini |
+| Sentiment Classification | Text snippet | Score + rationale | GPT-5.2-mini |
+| Signal Validation | Signal + context | Approval/flag + reasoning | GPT-5.2 |
+| Report Generation | Structured data | Markdown report | GPT-5.2 |
+| Conflict Resolution | Opposing signals | Recommendation | GPT-5.2 |
 
 **Prompt Engineering Principles:**
 1. Always ground prompts with retrieved factual data

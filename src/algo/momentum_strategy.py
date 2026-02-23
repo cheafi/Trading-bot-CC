@@ -45,13 +45,13 @@ class MomentumBreakoutStrategy(IStrategy):
     stoploss = -0.06  # 6% stop
     trailing_stop = True
     trailing_stop_positive = 0.03
-    trailing_stop_positive_offset = 0.02
+    trailing_stop_positive_offset = 0.05  # Activate trailing after 5% profit
     
     minimal_roi = {
-        "0": 0.15,    # 15% anytime
-        "10": 0.10,   # 10% after 10 days
-        "20": 0.06,   # 6% after 20 days
-        "40": 0.03    # 3% after 40 days
+        "0": 0.20,    # 20% anytime
+        "10": 0.12,   # 12% after 10 days
+        "20": 0.08,   # 8% after 20 days
+        "40": 0.04    # 4% after 40 days
     }
     
     def __init__(self, config: Optional[StrategyConfig] = None):
@@ -87,7 +87,13 @@ class MomentumBreakoutStrategy(IStrategy):
         dataframe['macd_hist'] = hist
         dataframe['macd_hist_rising'] = dataframe['macd_hist'] > dataframe['macd_hist'].shift(1)
         
-        # ADX for trend strength (simplified calculation)
+        # ADX for trend strength
+        adx_val, plus_di, minus_di = IndicatorLibrary.adx(dataframe, 14)
+        dataframe['adx'] = adx_val
+        dataframe['plus_di'] = plus_di
+        dataframe['minus_di'] = minus_di
+        
+        # ATR for volatility
         dataframe['atr'] = IndicatorLibrary.atr(dataframe, 14)
         
         # Stochastic
@@ -135,13 +141,18 @@ class MomentumBreakoutStrategy(IStrategy):
             (dataframe['rsi'] >= self.rsi_entry_low) &
             (dataframe['rsi'] <= self.rsi_entry_high) &
             
-            # Price above EMAs (uptrend)
+            # Price above EMAs (uptrend) - 2 consecutive closes
             (dataframe['close'] > dataframe['ema_20']) &
+            (dataframe['close'].shift(1) > dataframe['ema_20'].shift(1)) &
             (dataframe['close'] > dataframe['ema_50']) &
             
             # EMA alignment
             (dataframe['ema_9'] > dataframe['ema_20']) &
             (dataframe['ema_20'] > dataframe['ema_50']) &
+            
+            # ADX confirms trend strength (avoid choppy markets)
+            (dataframe['adx'] > 20) &
+            (dataframe['plus_di'] > dataframe['minus_di']) &
             
             # MACD positive and rising
             (dataframe['macd_hist'] > 0) &
@@ -150,8 +161,8 @@ class MomentumBreakoutStrategy(IStrategy):
             # Breaking above recent high
             (dataframe['close'] > dataframe['recent_high'].shift(1)) &
             
-            # Volume confirmation
-            (dataframe['rel_volume'] >= self.min_volume_ratio) &
+            # Volume confirmation (1.5x for stronger signal)
+            (dataframe['rel_volume'] >= 1.5) &
             
             # Positive momentum
             (dataframe['roc_10'] > 0)
@@ -176,12 +187,14 @@ class MomentumBreakoutStrategy(IStrategy):
             # Overbought
             (dataframe['rsi'] > self.rsi_exit)
         ) | (
-            # Lost uptrend
-            (dataframe['close'] < dataframe['ema_20'])
+            # Lost uptrend - require 2 consecutive closes below EMA20
+            (dataframe['close'] < dataframe['ema_20']) &
+            (dataframe['close'].shift(1) < dataframe['ema_20'].shift(1))
         ) | (
-            # MACD crossed below signal
+            # MACD crossed below signal with ADX declining
             (dataframe['macd'] < dataframe['macd_signal']) &
-            (dataframe['macd'].shift(1) >= dataframe['macd_signal'].shift(1))
+            (dataframe['macd'].shift(1) >= dataframe['macd_signal'].shift(1)) &
+            (dataframe['adx'] < dataframe['adx'].shift(3))
         )
         
         dataframe.loc[exit_conditions, 'exit_long'] = 1

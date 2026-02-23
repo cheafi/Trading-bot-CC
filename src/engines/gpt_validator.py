@@ -124,9 +124,9 @@ Respond in JSON format:
     ):
         # Use Azure deployment name if Azure, otherwise default model
         if settings.use_azure_openai:
-            self.model = settings.azure_openai_deployment or "gpt-4o-mini"
+            self.model = settings.azure_openai_deployment or "gpt-5.2-mini"
         else:
-            self.model = model or "gpt-4o-mini"
+            self.model = model or "gpt-5.2-mini"
         
         self.max_retries = max_retries
         self.timeout = timeout
@@ -152,13 +152,22 @@ Respond in JSON format:
         Returns:
             Validation result dict with adjusted confidence
         """
+        # Derive stop/target from the Signal model's actual fields
+        stop_loss = (
+            signal.invalidation.stop_price
+            if signal.invalidation else signal.entry_price * 0.95
+        )
+        take_profit = (
+            signal.targets[0].price
+            if signal.targets else signal.entry_price * 1.10
+        )
         prompt = self.VALIDATION_PROMPT.format(
             ticker=signal.ticker,
-            direction=signal.direction,
-            strategy=signal.strategy,
+            direction=signal.direction.value if hasattr(signal.direction, 'value') else signal.direction,
+            strategy=signal.strategy_id or "unknown",
             entry_price=signal.entry_price,
-            take_profit=signal.take_profit,
-            stop_loss=signal.stop_loss,
+            take_profit=take_profit,
+            stop_loss=stop_loss,
             confidence=signal.confidence,
             news_headlines="\n".join(f"- {h}" for h in news_headlines[:10]),
             social_sentiment=social_sentiment
@@ -171,7 +180,7 @@ Respond in JSON format:
             # Apply validation result
             original_confidence = signal.confidence
             adjustment = result.get('confidence_adjustment', 0)
-            new_confidence = max(0, min(1, original_confidence + adjustment))
+            new_confidence = max(0, min(100, original_confidence + adjustment))
             
             return {
                 'validation_result': result.get('validation_result', 'PASS'),
@@ -351,9 +360,9 @@ Be concise, professional, and factual. Avoid speculation.
     def __init__(self, model: Optional[str] = None):
         # Use Azure deployment name if Azure, otherwise default model
         if settings.use_azure_openai:
-            self.model = settings.azure_openai_deployment or "gpt-4o"
+            self.model = settings.azure_openai_deployment or "gpt-5.2"
         else:
-            self.model = model or "gpt-4o"
+            self.model = model or "gpt-5.2"
         
         # Initialize appropriate OpenAI client (Azure or standard)
         self.client = get_openai_client()

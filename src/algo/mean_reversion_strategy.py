@@ -47,9 +47,9 @@ class MeanReversionStrategy(IStrategy):
     trailing_stop = False  # Take profits at target
     
     minimal_roi = {
-        "0": 0.08,    # 8% anytime (mean reversion targets are smaller)
-        "5": 0.05,    # 5% after 5 days
-        "10": 0.03,   # 3% after 10 days
+        "0": 0.10,    # 10% anytime (target upper BB, not just middle)
+        "5": 0.06,    # 6% after 5 days
+        "10": 0.04,   # 4% after 10 days
         "20": 0.02    # 2% after 20 days
     }
     
@@ -129,6 +129,16 @@ class MeanReversionStrategy(IStrategy):
             (dataframe['close'] - dataframe['bb_lower']) / dataframe['close']
         )
         
+        # SMA 200 as regime filter (only mean-revert in uptrends)
+        dataframe['sma_200'] = IndicatorLibrary.sma(dataframe['close'], 200)
+        dataframe['in_uptrend'] = dataframe['sma_200'].diff(20) > 0
+        
+        # Money Flow Index for institutional buying confirmation
+        dataframe['mfi'] = IndicatorLibrary.mfi(dataframe, 14)
+        
+        # RSI 2-period for short-term oversold (Connors RSI)
+        dataframe['rsi_2'] = IndicatorLibrary.rsi(dataframe['close'], 2)
+        
         return dataframe
     
     def populate_entry_trend(
@@ -141,15 +151,17 @@ class MeanReversionStrategy(IStrategy):
         if 'enter_long' not in dataframe.columns:
             dataframe['enter_long'] = 0
         
-        # Primary oversold condition
-        oversold = (
-            (dataframe['rsi'] < self.rsi_oversold) |
-            (dataframe['stoch_k'] < self.stoch_oversold) |
-            (dataframe['williams_r'] < -80) |
-            (dataframe['cci'] < -100)
+        # Count oversold indicators (require at least 2)
+        oversold_count = (
+            (dataframe['rsi'] < self.rsi_oversold).astype(int) +
+            (dataframe['stoch_k'] < self.stoch_oversold).astype(int) +
+            (dataframe['williams_r'] < -80).astype(int) +
+            (dataframe['cci'] < -100).astype(int) +
+            (dataframe['rsi_2'] < 10).astype(int)
         )
+        oversold = oversold_count >= 2  # At least 2 must confirm
         
-        # Reversal signal
+        # Reversal signal (need at least one)
         reversal = (
             (dataframe['hammer'] == True) |
             (dataframe['engulfing_bullish'] == True) |
@@ -157,13 +169,16 @@ class MeanReversionStrategy(IStrategy):
         )
         
         # At or below lower Bollinger Band
-        at_lower_band = dataframe['close'] <= dataframe['bb_lower'] * 1.01
+        at_lower_band = dataframe['close'] <= dataframe['bb_lower'] * 1.02
         
-        # Volume confirmation
-        volume_ok = dataframe['rel_volume'] > 0.8
+        # Volume confirmation - need ABOVE average for reversal conviction
+        volume_ok = dataframe['rel_volume'] > 1.2
+        
+        # Regime filter: SMA200 must be rising (don't catch falling knives)
+        regime_ok = dataframe['in_uptrend'] | (dataframe['close'] > dataframe['sma_200'])
         
         # Combined entry
-        conditions = oversold & reversal & at_lower_band & volume_ok
+        conditions = oversold & reversal & at_lower_band & volume_ok & regime_ok
         
         dataframe.loc[conditions, 'enter_long'] = 1
         dataframe.loc[conditions, 'enter_tag'] = 'mean_reversion_entry'
@@ -182,15 +197,16 @@ class MeanReversionStrategy(IStrategy):
         
         # Exit at mean or overbought
         exit_conditions = (
-            # RSI reaching overbought zone
-            (dataframe['rsi'] > self.rsi_exit)
+            # RSI reaching overbought zone (extended from 60 to 70 for bigger R)
+            (dataframe['rsi'] > 70)
         ) | (
-            # Price reached middle Bollinger Band
-            (dataframe['close'] > dataframe['bb_middle'])
+            # Price reached upper half of Bollinger Band (better target than middle)
+            (dataframe['close'] > (dataframe['bb_middle'] + dataframe['bb_upper']) / 2)
         ) | (
-            # Stochastic overbought
+            # Stochastic overbought with cross down
             (dataframe['stoch_k'] > 80) &
-            (dataframe['stoch_k'] < dataframe['stoch_d'])
+            (dataframe['stoch_k'] < dataframe['stoch_d']) &
+            (dataframe['stoch_k'].shift(1) >= dataframe['stoch_d'].shift(1))
         )
         
         dataframe.loc[exit_conditions, 'exit_long'] = 1

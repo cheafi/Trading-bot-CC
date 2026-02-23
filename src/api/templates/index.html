@@ -1,0 +1,1949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#00d4aa">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TradingAI">
+    <meta name="description" content="AI-Powered Stock Trading with 182 Commands - US, Crypto, Japan, HK Markets">
+    <meta name="mobile-web-app-capable" content="yes">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/static/manifest.json">
+    
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" href="/static/icons/icon-192x192.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="/static/icons/icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/icon-192x192.png">
+    <link rel="apple-touch-icon" sizes="167x167" href="/static/icons/icon-192x192.png">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/icon-96x96.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/icon-72x72.png">
+    
+    <!-- Splash screens for iOS -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <title>TradingAI Pro v2 - Multi-Market Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        .gradient-bg { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); }
+        .card-glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+        .profit { color: #00d4aa; }
+        .loss { color: #ff6b6b; }
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .ticker-tape { animation: scroll 30s linear infinite; }
+        @keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen text-white" x-data="dashboard()">
+    
+    <!-- Header -->
+    <header class="border-b border-white/10 px-6 py-4">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 bg-gradient-to-br from-green-400 to-blue-500 rounded-xl flex items-center justify-center">
+                    <span class="text-xl">📈</span>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold">TradingAI Pro</h1>
+                    <p class="text-xs text-gray-400">Research & Education Tool</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-4">
+                <!-- Mode Indicator -->
+                <div class="flex items-center space-x-2 bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded-lg text-sm">
+                    <span>📋</span>
+                    <span x-text="'MODE: ' + systemStatus.mode"></span>
+                </div>
+                <!-- Broker Status -->
+                <div class="text-xs text-gray-400">
+                    <span x-text="'Broker: ' + systemStatus.broker"></span>
+                </div>
+                <!-- Auto Trading Status -->
+                <div class="flex items-center space-x-1 text-xs"
+                     :class="systemStatus.autoTrading ? 'text-green-400' : 'text-gray-500'">
+                    <span :class="systemStatus.autoTrading ? 'text-green-400' : 'text-gray-500'" class="pulse">⚡</span>
+                    <span x-text="systemStatus.autoTrading ? '24/7 AUTO' : 'MANUAL'"></span>
+                </div>
+                <!-- Install PWA Button -->
+                <button id="install-btn" style="display: none;" 
+                        class="flex items-center space-x-2 bg-gradient-to-r from-green-400 to-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+                    <span>📲</span>
+                    <span>Install App</span>
+                </button>
+                <div class="text-sm text-gray-400">
+                    <span :class="systemStatus.dataFresh ? 'text-green-400' : 'text-red-400'" class="pulse">●</span>
+                    <span x-text="systemStatus.dataFresh ? 'Live' : 'Stale'"></span>
+                </div>
+                <div class="text-sm" x-text="currentTime"></div>
+            </div>
+        </div>
+    </header>
+
+    <!-- NO TRADE Banner (if triggered) -->
+    <div x-show="systemStatus.noTrade" class="bg-red-500/20 border-b border-red-500/30 px-6 py-3">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <span class="text-2xl">⚠️</span>
+                <div>
+                    <span class="font-semibold text-red-400">NO TRADE:</span>
+                    <span class="text-red-300" x-text="systemStatus.noTradeReason"></span>
+                </div>
+            </div>
+            <div class="text-xs text-gray-400">Signal generation paused</div>
+        </div>
+    </div>
+
+    <!-- Regime Banner -->
+    <div class="bg-white/5 border-b border-white/10 px-6 py-2">
+        <div class="max-w-7xl mx-auto flex items-center justify-between text-sm">
+            <div class="flex items-center space-x-4">
+                <div class="flex items-center space-x-2">
+                    <span>🎯</span>
+                    <span class="text-gray-400">Regime:</span>
+                    <span :class="{
+                        'text-green-400': regime.risk === 'RISK_ON',
+                        'text-red-400': regime.risk === 'RISK_OFF',
+                        'text-yellow-400': regime.risk === 'NEUTRAL'
+                    }" x-text="regime.risk"></span>
+                </div>
+                <div class="text-gray-500">|</div>
+                <div class="flex items-center space-x-2">
+                    <span class="text-gray-400">VIX:</span>
+                    <span :class="regime.vix < 20 ? 'text-green-400' : regime.vix < 30 ? 'text-yellow-400' : 'text-red-400'" x-text="regime.vix.toFixed(1)"></span>
+                </div>
+                <div class="text-gray-500">|</div>
+                <div class="flex items-center space-x-2">
+                    <span class="text-gray-400">Active:</span>
+                    <span class="text-blue-400" x-text="regime.activeStrategies.join(', ')"></span>
+                </div>
+            </div>
+            <div class="text-xs text-gray-400">
+                Last update: <span x-text="systemStatus.lastDataUpdate"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ticker Tape -->
+    <div class="overflow-hidden bg-black/30 py-2">
+        <div class="ticker-tape flex space-x-8 whitespace-nowrap">
+            <template x-for="ticker in tickers" :key="ticker.symbol">
+                <span class="flex items-center space-x-2">
+                    <span class="font-semibold" x-text="ticker.symbol"></span>
+                    <span x-text="'$' + ticker.price.toFixed(2)"></span>
+                    <span :class="ticker.change >= 0 ? 'profit' : 'loss'" x-text="(ticker.change >= 0 ? '+' : '') + ticker.change.toFixed(2) + '%'"></span>
+                </span>
+            </template>
+            <!-- Duplicate for seamless scroll -->
+            <template x-for="ticker in tickers" :key="ticker.symbol + '-dup'">
+                <span class="flex items-center space-x-2">
+                    <span class="font-semibold" x-text="ticker.symbol"></span>
+                    <span x-text="'$' + ticker.price.toFixed(2)"></span>
+                    <span :class="ticker.change >= 0 ? 'profit' : 'loss'" x-text="(ticker.change >= 0 ? '+' : '') + ticker.change.toFixed(2) + '%'"></span>
+                </span>
+            </template>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-6 py-8">
+        
+        <!-- Stats Row -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+            <!-- Total P&L - Split View -->
+            <div class="card-glass rounded-2xl p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-gray-400 text-sm">Total P&L</span>
+                    <span class="text-2xl">💰</span>
+                </div>
+                <div class="text-3xl font-bold" :class="stats.totalPnL >= 0 ? 'profit' : 'loss'" x-text="formatCurrency(stats.totalPnL)"></div>
+                <div class="text-xs text-gray-400 mt-2 space-y-1">
+                    <div class="flex justify-between">
+                        <span>Realized:</span>
+                        <span :class="stats.realizedPnL >= 0 ? 'text-green-400' : 'text-red-400'" x-text="formatCurrency(stats.realizedPnL)"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Unrealized:</span>
+                        <span :class="stats.unrealizedPnL >= 0 ? 'text-green-400' : 'text-red-400'" x-text="formatCurrency(stats.unrealizedPnL)"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Fees:</span>
+                        <span class="text-red-400" x-text="'-' + formatCurrency(Math.abs(stats.fees))"></span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Win Rate - With Sample Size -->
+            <div class="card-glass rounded-2xl p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-gray-400 text-sm">Win Rate</span>
+                    <span class="text-2xl">🎯</span>
+                </div>
+                <div class="text-3xl font-bold" x-text="stats.winRate + '%'"></div>
+                <div class="text-xs text-gray-400 mt-1" x-text="'n=' + stats.totalTrades + ' (' + stats.winRateTimeframe + ')'"></div>
+                <div class="w-full bg-gray-700 rounded-full h-2 mt-2">
+                    <div class="bg-green-400 h-2 rounded-full" :style="'width: ' + stats.winRate + '%'"></div>
+                </div>
+                <div class="text-xs text-gray-500 mt-1" x-show="stats.totalTrades < 30">⚠️ Low sample size</div>
+            </div>
+            
+            <!-- Active Signals -->
+            <div class="card-glass rounded-2xl p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-gray-400 text-sm">Active Signals</span>
+                    <span class="text-2xl">📊</span>
+                </div>
+                <div class="text-3xl font-bold" x-text="stats.activeSignals"></div>
+                <div class="text-sm text-gray-400 mt-2">
+                    <span class="profit" x-text="stats.buySignals + ' Buy'"></span> • 
+                    <span class="loss" x-text="stats.sellSignals + ' Sell'"></span>
+                </div>
+                <div class="text-xs text-gray-500 mt-1">
+                    Last scan: <span x-text="stats.lastScanTime"></span>
+                </div>
+            </div>
+            
+            <!-- Portfolio Value -->
+            <div class="card-glass rounded-2xl p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-gray-400 text-sm">Portfolio Value</span>
+                    <span class="text-2xl">💼</span>
+                </div>
+                <div class="text-3xl font-bold" x-text="formatCurrency(stats.portfolioValue)"></div>
+                <div class="text-xs text-gray-400 mt-2 space-y-1">
+                    <div class="flex justify-between">
+                        <span>Cash:</span>
+                        <span x-text="formatCurrency(stats.cashBalance)"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Positions:</span>
+                        <span x-text="formatCurrency(stats.positionsValue)"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Risk Dashboard Row -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white/5 rounded-xl p-4 text-center">
+                <div class="text-xs text-gray-400 mb-1">Max Drawdown</div>
+                <div class="text-xl font-bold" :class="riskMetrics.maxDrawdown > 10 ? 'text-red-400' : 'text-green-400'" 
+                     x-text="'-' + riskMetrics.maxDrawdown.toFixed(1) + '%'"></div>
+                <div class="text-xs text-gray-500" x-text="'Peak: ' + formatCurrency(riskMetrics.peakValue)"></div>
+            </div>
+            <div class="bg-white/5 rounded-xl p-4 text-center">
+                <div class="text-xs text-gray-400 mb-1">Exposure</div>
+                <div class="text-xl font-bold" :class="riskMetrics.exposure > 80 ? 'text-red-400' : riskMetrics.exposure > 50 ? 'text-yellow-400' : 'text-green-400'"
+                     x-text="riskMetrics.exposure.toFixed(0) + '%'"></div>
+                <div class="text-xs text-gray-500">of portfolio invested</div>
+            </div>
+            <div class="bg-white/5 rounded-xl p-4 text-center">
+                <div class="text-xs text-gray-400 mb-1">Sector Concentration</div>
+                <div class="text-xl font-bold" :class="riskMetrics.topSectorPct > 40 ? 'text-yellow-400' : 'text-green-400'"
+                     x-text="riskMetrics.topSector + ' ' + riskMetrics.topSectorPct + '%'"></div>
+                <div class="text-xs text-gray-500">largest sector</div>
+            </div>
+            <div class="bg-white/5 rounded-xl p-4 text-center">
+                <div class="text-xs text-gray-400 mb-1">Daily VaR (95%)</div>
+                <div class="text-xl font-bold text-blue-400" x-text="formatCurrency(riskMetrics.dailyVaR)"></div>
+                <div class="text-xs text-gray-500">potential daily loss</div>
+            </div>
+        </div>
+
+        <!-- AI Advisor & ML Status Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- AI Advisor Panel -->
+            <div class="card-glass rounded-2xl p-6 border border-purple-500/20">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold">🧠 AI Advisor</h3>
+                    <div class="flex items-center space-x-2">
+                        <span class="w-2 h-2 bg-purple-400 rounded-full pulse"></span>
+                        <span class="text-xs text-purple-400" x-text="aiAdvisor.status"></span>
+                    </div>
+                </div>
+                <!-- Market Brief -->
+                <div class="bg-purple-500/10 rounded-xl p-4 mb-4">
+                    <div class="flex items-center space-x-2 mb-2">
+                        <span class="text-sm font-semibold text-purple-400">📋 Market Brief</span>
+                        <span class="text-xs text-gray-500" x-text="aiAdvisor.briefTime"></span>
+                    </div>
+                    <p class="text-sm text-gray-300 leading-relaxed" x-text="aiAdvisor.marketBrief"></p>
+                </div>
+                <!-- AI Recommendation -->
+                <div class="bg-white/5 rounded-xl p-4 mb-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-semibold">🎯 Today's Recommendation</span>
+                        <span class="px-2 py-0.5 rounded text-xs font-semibold"
+                              :class="{
+                                  'bg-green-500/20 text-green-400': aiAdvisor.recommendation === 'AGGRESSIVE',
+                                  'bg-blue-500/20 text-blue-400': aiAdvisor.recommendation === 'NORMAL',
+                                  'bg-yellow-500/20 text-yellow-400': aiAdvisor.recommendation === 'CAUTIOUS',
+                                  'bg-red-500/20 text-red-400': aiAdvisor.recommendation === 'DEFENSIVE'
+                              }"
+                              x-text="aiAdvisor.recommendation"></span>
+                    </div>
+                    <p class="text-sm text-gray-300" x-text="aiAdvisor.reasoning"></p>
+                </div>
+                <!-- Chain of Thought (collapsible) -->
+                <details class="bg-white/5 rounded-xl">
+                    <summary class="p-3 cursor-pointer text-sm text-gray-400 hover:text-white transition">
+                        🔗 View Chain-of-Thought Reasoning
+                    </summary>
+                    <div class="px-4 pb-4 space-y-2">
+                        <template x-for="(step, idx) in aiAdvisor.chainOfThought" :key="idx">
+                            <div class="flex items-start space-x-2 text-xs">
+                                <span class="text-purple-400 font-mono mt-0.5" x-text="(idx+1) + '.'"></span>
+                                <span class="text-gray-300" x-text="step"></span>
+                            </div>
+                        </template>
+                    </div>
+                </details>
+            </div>
+
+            <!-- ML Model Status & Trade Learning -->
+            <div class="card-glass rounded-2xl p-6 border border-blue-500/20">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold">🤖 ML Model Status</h3>
+                    <span class="text-xs px-2 py-0.5 rounded"
+                          :class="mlStatus.modelReady ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'"
+                          x-text="mlStatus.modelReady ? 'TRAINED' : 'COLLECTING'"></span>
+                </div>
+                <!-- Model Metrics -->
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div class="bg-white/5 rounded-xl p-3 text-center">
+                        <div class="text-xs text-gray-400">Prediction Accuracy</div>
+                        <div class="text-xl font-bold text-green-400" x-text="mlStatus.accuracy + '%'"></div>
+                    </div>
+                    <div class="bg-white/5 rounded-xl p-3 text-center">
+                        <div class="text-xs text-gray-400">Training Samples</div>
+                        <div class="text-xl font-bold text-blue-400" x-text="mlStatus.samples"></div>
+                    </div>
+                    <div class="bg-white/5 rounded-xl p-3 text-center">
+                        <div class="text-xs text-gray-400">Kelly Edge</div>
+                        <div class="text-xl font-bold text-purple-400" x-text="mlStatus.kellyEdge + '%'"></div>
+                    </div>
+                    <div class="bg-white/5 rounded-xl p-3 text-center">
+                        <div class="text-xs text-gray-400">Last Retrain</div>
+                        <div class="text-sm font-bold text-gray-300" x-text="mlStatus.lastRetrain"></div>
+                    </div>
+                </div>
+                <!-- Recent Failure Analysis -->
+                <div class="bg-red-500/5 border border-red-500/20 rounded-xl p-4">
+                    <h4 class="text-sm font-semibold text-red-400 mb-2">📉 Recent Failure Analysis (LLM)</h4>
+                    <template x-for="(analysis, idx) in mlStatus.failureAnalyses" :key="idx">
+                        <div class="mb-2 last:mb-0 text-xs">
+                            <div class="flex items-center space-x-2 mb-1">
+                                <span class="text-red-400 font-semibold" x-text="analysis.ticker"></span>
+                                <span class="text-gray-500" x-text="analysis.loss"></span>
+                            </div>
+                            <p class="text-gray-400" x-text="analysis.insight"></p>
+                        </div>
+                    </template>
+                    <div x-show="mlStatus.failureAnalyses.length === 0" class="text-xs text-gray-500">
+                        No failures to analyze yet
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Strategy Health Widget -->
+        <div class="card-glass rounded-2xl p-6 mb-8">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold">🏥 Strategy Health (Walk-Forward OOS)</h3>
+                <span class="text-xs text-gray-400">Last backtest: <span x-text="strategyHealth.lastBacktest"></span></span>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <template x-for="strategy in strategyHealth.strategies" :key="strategy.name">
+                    <div class="bg-white/5 rounded-xl p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="font-semibold text-sm" x-text="strategy.name"></span>
+                            <span :class="{
+                                'bg-green-500/20 text-green-400': strategy.driftStatus === 'OK',
+                                'bg-yellow-500/20 text-yellow-400': strategy.driftStatus === 'WARN',
+                                'bg-red-500/20 text-red-400': strategy.driftStatus === 'DRIFT'
+                            }" class="px-2 py-0.5 rounded text-xs" x-text="strategy.driftStatus"></span>
+                        </div>
+                        <div class="space-y-1 text-xs">
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">OOS Sharpe:</span>
+                                <span :class="strategy.oosSharpe >= 1.0 ? 'text-green-400' : strategy.oosSharpe >= 0.5 ? 'text-yellow-400' : 'text-red-400'" 
+                                      x-text="strategy.oosSharpe.toFixed(2)"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Win Rate (L20):</span>
+                                <span :class="strategy.winRateL20 >= 60 ? 'text-green-400' : strategy.winRateL20 >= 50 ? 'text-yellow-400' : 'text-red-400'" 
+                                      x-text="strategy.winRateL20 + '%'"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Profit Factor:</span>
+                                <span :class="strategy.profitFactor >= 1.5 ? 'text-green-400' : strategy.profitFactor >= 1.0 ? 'text-yellow-400' : 'text-red-400'" 
+                                      x-text="strategy.profitFactor.toFixed(2)"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400">Expectancy:</span>
+                                <span :class="strategy.expectancy >= 0 ? 'text-green-400' : 'text-red-400'" 
+                                      x-text="(strategy.expectancy >= 0 ? '+' : '') + strategy.expectancy.toFixed(1) + '%'"></span>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Charts & Signals Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- P&L Chart with Benchmark -->
+            <div class="lg:col-span-2 card-glass rounded-2xl p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold">📈 Performance vs SPY</h3>
+                    <div class="flex items-center space-x-4 text-xs">
+                        <span class="flex items-center"><span class="w-3 h-0.5 bg-green-400 mr-1"></span>Portfolio</span>
+                        <span class="flex items-center"><span class="w-3 h-0.5 bg-gray-400 mr-1"></span>SPY</span>
+                    </div>
+                </div>
+                <canvas id="pnlChart" height="200"></canvas>
+            </div>
+            <div class="card-glass rounded-2xl p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold">🎯 Top Signals Now</h3>
+                    <span class="text-xs text-gray-400" x-text="'Updated: ' + stats.lastScanTime"></span>
+                </div>
+                <div class="space-y-3">
+                    <template x-for="signal in topSignals" :key="signal.ticker">
+                        <div @click="selectedSignal = signal; signalDrawerOpen = true" 
+                             class="flex items-center justify-between p-3 bg-white/5 rounded-xl hover:bg-white/10 transition cursor-pointer border border-transparent hover:border-blue-500/30">
+                            <div>
+                                <div class="font-semibold" x-text="signal.ticker"></div>
+                                <div class="text-xs text-gray-400" x-text="signal.strategy"></div>
+                            </div>
+                            <div class="text-right">
+                                <div :class="signal.direction === 'LONG' ? 'profit' : 'loss'" x-text="signal.direction"></div>
+                                <div class="text-xs">
+                                    <span class="text-yellow-400" x-text="signal.score + '/10'"></span>
+                                    <span class="text-gray-400" x-text="'• ' + signal.winRate + '% WR'"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                <a href="/signals/explorer" class="block w-full mt-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 rounded-xl text-blue-400 text-sm transition text-center">
+                    View All Signals →
+                </a>
+            </div>
+        </div>
+
+        <!-- Signal Detail Drawer -->
+        <div x-show="signalDrawerOpen" x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+             class="fixed inset-0 bg-black/50 z-50" @click.self="signalDrawerOpen = false">
+            <div class="absolute right-0 top-0 h-full w-full max-w-md bg-gray-900 border-l border-white/10 p-6 overflow-y-auto"
+                 x-show="signalDrawerOpen" x-transition:enter="transition ease-out duration-300"
+                 x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
+                 x-transition:leave="transition ease-in duration-200"
+                 x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-xl font-bold" x-text="selectedSignal?.ticker"></h3>
+                    <button @click="signalDrawerOpen = false" class="text-gray-400 hover:text-white">✕</button>
+                </div>
+                
+                <template x-if="selectedSignal">
+                    <div class="space-y-6">
+                        <!-- Signal Overview -->
+                        <div class="bg-white/5 rounded-xl p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <span :class="selectedSignal.direction === 'LONG' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'" 
+                                      class="px-3 py-1 rounded-lg text-sm font-semibold" x-text="selectedSignal.direction"></span>
+                                <span class="text-yellow-400 font-semibold" x-text="'Score: ' + selectedSignal.score + '/10'"></span>
+                            </div>
+                            <div class="text-gray-400 text-sm" x-text="selectedSignal.strategy"></div>
+                        </div>
+                        
+                        <!-- What This Means (Professional Interpretation) -->
+                        <div class="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
+                            <h4 class="font-semibold mb-2 text-blue-400">💡 What This Means</h4>
+                            <p class="text-sm text-gray-300 leading-relaxed" x-text="selectedSignal.interpretation"></p>
+                            <div class="mt-3 pt-2 border-t border-blue-500/20 text-xs text-gray-400">
+                                <div class="flex items-center justify-between">
+                                    <span><strong>Trigger:</strong> <span x-text="selectedSignal.trigger"></span></span>
+                                </div>
+                                <div class="flex items-center justify-between mt-1">
+                                    <span><strong>Confirmation:</strong> <span x-text="selectedSignal.confirmation"></span></span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Data Freshness & Validation Badges -->
+                        <div class="flex items-center space-x-3">
+                            <span :class="selectedSignal.dataFresh ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'" 
+                                  class="px-2 py-1 rounded text-xs flex items-center">
+                                <span x-text="selectedSignal.dataFresh ? '✅ Data Fresh' : '⚠️ Stale Data'"></span>
+                            </span>
+                            <span :class="selectedSignal.gptValidated ? 'bg-purple-500/20 text-purple-400' : 'bg-gray-500/20 text-gray-400'" 
+                                  class="px-2 py-1 rounded text-xs flex items-center">
+                                <span x-text="selectedSignal.gptValidated ? '🤖 Sanity Check Passed' : '⚪ Not Validated'"></span>
+                            </span>
+                        </div>
+                        
+                        <!-- Trade Plan -->
+                        <div class="bg-white/5 rounded-xl p-4">
+                            <h4 class="font-semibold mb-3">📋 Trade Plan</h4>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Entry Zone:</span>
+                                    <span x-text="'$' + selectedSignal.entryLow?.toFixed(2) + ' - $' + selectedSignal.entryHigh?.toFixed(2)"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Stop Loss:</span>
+                                    <span class="text-red-400" x-text="'$' + selectedSignal.stopLoss?.toFixed(2) + ' (' + selectedSignal.stopPct?.toFixed(1) + '%)'"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Target 1:</span>
+                                    <span class="text-green-400" x-text="'$' + selectedSignal.target1?.toFixed(2) + ' (' + selectedSignal.target1Pct?.toFixed(1) + '%)'"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Target 2:</span>
+                                    <span class="text-green-400" x-text="'$' + selectedSignal.target2?.toFixed(2) + ' (' + selectedSignal.target2Pct?.toFixed(1) + '%)'"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">R:R Ratio:</span>
+                                    <span class="text-blue-400" x-text="selectedSignal.rrRatio?.toFixed(1) + ':1'"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Horizon:</span>
+                                    <span x-text="selectedSignal.horizon"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Expires:</span>
+                                    <span class="text-yellow-400" x-text="selectedSignal.expires"></span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Position Sizing -->
+                        <div class="bg-white/5 rounded-xl p-4">
+                            <h4 class="font-semibold mb-3">📊 Position Sizing</h4>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Kelly Size:</span>
+                                    <span x-text="selectedSignal.kellyPct?.toFixed(1) + '%'"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Suggested Shares:</span>
+                                    <span x-text="selectedSignal.suggestedShares + ' shares'"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Max Risk:</span>
+                                    <span class="text-red-400" x-text="'$' + selectedSignal.maxRisk?.toFixed(2)"></span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Technical Reasons -->
+                        <div class="bg-white/5 rounded-xl p-4">
+                            <h4 class="font-semibold mb-3">🔍 Why This Signal</h4>
+                            <ul class="text-sm text-gray-300 space-y-1">
+                                <template x-for="reason in selectedSignal.reasons" :key="reason">
+                                    <li class="flex items-start">
+                                        <span class="text-green-400 mr-2">✓</span>
+                                        <span x-text="reason"></span>
+                                    </li>
+                                </template>
+                            </ul>
+                        </div>
+                        
+                        <!-- Warnings -->
+                        <div x-show="selectedSignal.warnings?.length > 0" class="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4">
+                            <h4 class="font-semibold mb-3 text-yellow-400">⚠️ Warnings</h4>
+                            <ul class="text-sm text-yellow-300 space-y-1">
+                                <template x-for="warning in selectedSignal.warnings" :key="warning">
+                                    <li x-text="warning"></li>
+                                </template>
+                            </ul>
+                        </div>
+                        
+                        <!-- Disclaimer -->
+                        <div class="text-xs text-gray-500 border-t border-white/10 pt-4">
+                            ⚠️ This is a research idea, not financial advice. Always do your own due diligence. Past performance does not guarantee future results.
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Position Detail Drawer -->
+        <div x-show="positionDrawerOpen" x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+             class="fixed inset-0 bg-black/50 z-50" @click.self="positionDrawerOpen = false">
+            <div class="absolute right-0 top-0 h-full w-full max-w-md bg-gray-900 border-l border-white/10 p-6 overflow-y-auto"
+                 x-show="positionDrawerOpen" x-transition:enter="transition ease-out duration-300"
+                 x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
+                 x-transition:leave="transition ease-in duration-200"
+                 x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-xl font-bold flex items-center space-x-2">
+                        <span x-text="selectedPosition?.ticker"></span>
+                        <span class="text-sm bg-blue-500/20 text-blue-400 px-2 py-1 rounded" x-text="selectedPosition?.strategy"></span>
+                    </h3>
+                    <button @click="positionDrawerOpen = false" class="text-gray-400 hover:text-white">✕</button>
+                </div>
+                
+                <template x-if="selectedPosition">
+                    <div class="space-y-6">
+                        <!-- Position Overview -->
+                        <div class="bg-white/5 rounded-xl p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-gray-400">Current P&L</span>
+                                <span :class="selectedPosition.pnl >= 0 ? 'text-green-400 text-2xl font-bold' : 'text-red-400 text-2xl font-bold'" 
+                                      x-text="(selectedPosition.pnl >= 0 ? '+' : '') + '$' + selectedPosition.pnl?.toFixed(2) + ' (' + (selectedPosition.pnlPct >= 0 ? '+' : '') + selectedPosition.pnlPct?.toFixed(2) + '%)'"></span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                    <span class="text-gray-400">Shares:</span>
+                                    <span class="ml-2" x-text="selectedPosition.shares"></span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-400">Avg Price:</span>
+                                    <span class="ml-2" x-text="'$' + selectedPosition.avgPrice?.toFixed(2)"></span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-400">Current:</span>
+                                    <span class="ml-2" x-text="'$' + selectedPosition.currentPrice?.toFixed(2)"></span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-400">Opened:</span>
+                                    <span class="ml-2" x-text="selectedPosition.openDate"></span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Stop/Target Progress -->
+                        <div class="bg-white/5 rounded-xl p-4">
+                            <h4 class="font-semibold mb-3">📊 Stop/Target Progress</h4>
+                            <div class="flex justify-between text-sm mb-2">
+                                <span class="text-red-400" x-text="'Stop: $' + selectedPosition.stopLoss?.toFixed(2) + ' (' + selectedPosition.stopPct?.toFixed(1) + '%)'"></span>
+                                <span class="text-green-400" x-text="'Target: $' + selectedPosition.target?.toFixed(2) + ' (' + selectedPosition.targetPct?.toFixed(1) + '%)'"></span>
+                            </div>
+                            <div class="h-3 bg-gray-700 rounded-full overflow-hidden">
+                                <div class="h-full rounded-full" 
+                                     :class="selectedPosition.progressPct >= 50 ? 'bg-green-400' : selectedPosition.progressPct >= 0 ? 'bg-yellow-400' : 'bg-red-400'"
+                                     :style="'width: ' + Math.max(0, Math.min(100, selectedPosition.progressPct)) + '%'"></div>
+                            </div>
+                            <div class="text-center text-sm mt-2 text-gray-400" x-text="selectedPosition.progressPct?.toFixed(0) + '% to target'"></div>
+                        </div>
+                        
+                        <!-- Why I Opened This Position -->
+                        <div class="bg-green-500/10 border border-green-500/20 rounded-xl p-4">
+                            <h4 class="font-semibold mb-3 text-green-400">📝 Why I Opened This Position</h4>
+                            <ul class="text-sm text-gray-300 space-y-2">
+                                <template x-for="reason in selectedPosition.entryReasons" :key="reason">
+                                    <li class="flex items-start">
+                                        <span class="text-green-400 mr-2">✓</span>
+                                        <span x-text="reason"></span>
+                                    </li>
+                                </template>
+                            </ul>
+                        </div>
+                        
+                        <!-- Original Trade Plan -->
+                        <div class="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
+                            <h4 class="font-semibold mb-3 text-blue-400">📋 Original Trade Plan</h4>
+                            <p class="text-sm text-gray-300 leading-relaxed" x-text="selectedPosition.tradePlan"></p>
+                        </div>
+                        
+                        <!-- Trade Interpretation -->
+                        <div class="bg-white/5 rounded-xl p-4">
+                            <h4 class="font-semibold mb-3">💡 Current Thesis</h4>
+                            <p class="text-sm text-gray-300 leading-relaxed" x-text="selectedPosition.interpretation"></p>
+                        </div>
+                        
+                        <!-- Risk/Reward Stats -->
+                        <div class="bg-white/5 rounded-xl p-4">
+                            <h4 class="font-semibold mb-3">📊 Position Stats</h4>
+                            <div class="grid grid-cols-2 gap-4 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Risk/Reward:</span>
+                                    <span class="text-blue-400" x-text="selectedPosition.riskReward"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Kelly Size:</span>
+                                    <span x-text="selectedPosition.kellySize"></span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Disclaimer -->
+                        <div class="text-xs text-gray-500 border-t border-white/10 pt-4">
+                            💡 Review your entry reasons regularly to ensure thesis is still valid. Exit if thesis breaks.
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Trade History Detail Drawer -->
+        <div x-show="historyDrawerOpen" x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+             class="fixed inset-0 bg-black/50 z-50" @click.self="historyDrawerOpen = false">
+            <div class="absolute right-0 top-0 h-full w-full max-w-lg bg-gray-900 border-l border-white/10 p-6 overflow-y-auto"
+                 x-show="historyDrawerOpen" x-transition:enter="transition ease-out duration-300"
+                 x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
+                 x-transition:leave="transition ease-in duration-200"
+                 x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold"
+                             :class="selectedTrade?.result === 'WIN' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'"
+                             x-text="selectedTrade?.result === 'WIN' ? '✓' : '✗'"></div>
+                        <div>
+                            <h3 class="text-xl font-bold" x-text="selectedTrade?.ticker"></h3>
+                            <span class="text-sm text-gray-400" x-text="selectedTrade?.strategy + ' • ' + selectedTrade?.holdDays + ' days'"></span>
+                        </div>
+                    </div>
+                    <button @click="historyDrawerOpen = false" class="text-gray-400 hover:text-white">✕</button>
+                </div>
+                
+                <template x-if="selectedTrade">
+                    <div class="space-y-6">
+                        <!-- Trade Result Banner -->
+                        <div class="rounded-xl p-4 text-center"
+                             :class="selectedTrade.result === 'WIN' ? 'bg-green-500/10 border border-green-500/30' : 'bg-red-500/10 border border-red-500/30'">
+                            <div :class="selectedTrade.result === 'WIN' ? 'text-green-400' : 'text-red-400'" class="text-3xl font-bold"
+                                 x-text="(selectedTrade.pnl >= 0 ? '+' : '') + '$' + selectedTrade.pnl?.toFixed(2)"></div>
+                            <div :class="selectedTrade.result === 'WIN' ? 'text-green-400' : 'text-red-400'" class="text-lg"
+                                 x-text="(selectedTrade.pnlPct >= 0 ? '+' : '') + selectedTrade.pnlPct?.toFixed(2) + '%'"></div>
+                        </div>
+                        
+                        <!-- Trade Timeline -->
+                        <div class="bg-white/5 rounded-xl p-4">
+                            <h4 class="font-semibold mb-3">📅 Trade Timeline</h4>
+                            <div class="flex items-center justify-between text-sm">
+                                <div class="text-center">
+                                    <div class="text-gray-400">Opened</div>
+                                    <div class="font-semibold" x-text="selectedTrade.openDate"></div>
+                                    <div class="text-green-400" x-text="'@ $' + selectedTrade.entryPrice?.toFixed(2)"></div>
+                                </div>
+                                <div class="flex-1 mx-4 h-0.5 bg-gray-600 relative">
+                                    <div class="absolute inset-0 bg-gradient-to-r" 
+                                         :class="selectedTrade.result === 'WIN' ? 'from-green-500/50 to-green-400' : 'from-red-500/50 to-red-400'"></div>
+                                </div>
+                                <div class="text-center">
+                                    <div class="text-gray-400">Closed</div>
+                                    <div class="font-semibold" x-text="selectedTrade.closeDate"></div>
+                                    <div :class="selectedTrade.result === 'WIN' ? 'text-green-400' : 'text-red-400'" 
+                                         x-text="'@ $' + selectedTrade.exitPrice?.toFixed(2)"></div>
+                                </div>
+                            </div>
+                            <div class="text-center text-xs text-gray-400 mt-2" x-text="selectedTrade.shares + ' shares held for ' + selectedTrade.holdDays + ' days'"></div>
+                        </div>
+                        
+                        <!-- Why I Entered -->
+                        <div class="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
+                            <h4 class="font-semibold mb-3 text-blue-400">📝 Why I Entered</h4>
+                            <ul class="text-sm text-gray-300 space-y-2">
+                                <template x-for="reason in selectedTrade.entryReasons" :key="reason">
+                                    <li class="flex items-start">
+                                        <span class="text-blue-400 mr-2">•</span>
+                                        <span x-text="reason"></span>
+                                    </li>
+                                </template>
+                            </ul>
+                        </div>
+                        
+                        <!-- Original Trade Plan -->
+                        <div class="bg-white/5 rounded-xl p-4">
+                            <h4 class="font-semibold mb-3">📋 Original Trade Plan</h4>
+                            <p class="text-sm text-gray-300 leading-relaxed" x-text="selectedTrade.tradePlan"></p>
+                        </div>
+                        
+                        <!-- Why I Exited -->
+                        <div class="rounded-xl p-4"
+                             :class="selectedTrade.result === 'WIN' ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'">
+                            <h4 class="font-semibold mb-3" :class="selectedTrade.result === 'WIN' ? 'text-green-400' : 'text-red-400'"
+                                x-text="selectedTrade.result === 'WIN' ? '✓ Why I Exited (Profit)' : '✗ Why I Exited (Loss)'"></h4>
+                            <p class="text-sm text-gray-300 leading-relaxed" x-text="selectedTrade.exitReason"></p>
+                        </div>
+                        
+                        <!-- Post-Trade Analysis -->
+                        <div class="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4">
+                            <h4 class="font-semibold mb-3 text-yellow-400">🔍 Post-Trade Analysis</h4>
+                            <p class="text-sm text-gray-300 leading-relaxed" x-text="selectedTrade.postAnalysis"></p>
+                        </div>
+                        
+                        <!-- Lessons Learned -->
+                        <div class="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4">
+                            <h4 class="font-semibold mb-3 text-purple-400">💡 Lessons Learned</h4>
+                            <ul class="text-sm text-gray-300 space-y-2">
+                                <template x-for="lesson in selectedTrade.lessons" :key="lesson">
+                                    <li class="flex items-start">
+                                        <span class="text-purple-400 mr-2">→</span>
+                                        <span x-text="lesson"></span>
+                                    </li>
+                                </template>
+                            </ul>
+                        </div>
+                        
+                        <!-- Footer -->
+                        <div class="text-xs text-gray-500 border-t border-white/10 pt-4">
+                            📖 Reviewing past trades helps identify patterns in your trading and improve future decisions.
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Markets & Positions -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Market Overview -->
+            <div class="card-glass rounded-2xl p-6">
+                <h3 class="text-lg font-semibold mb-4">🌍 Market Overview</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <template x-for="market in markets" :key="market.name">
+                        <div class="p-4 bg-white/5 rounded-xl">
+                            <div class="flex items-center space-x-2 mb-2">
+                                <span x-text="market.emoji"></span>
+                                <span class="font-medium" x-text="market.name"></span>
+                            </div>
+                            <div :class="market.change >= 0 ? 'profit' : 'loss'" class="text-xl font-bold" x-text="(market.change >= 0 ? '+' : '') + market.change.toFixed(2) + '%'"></div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            
+            <!-- Open Positions with Stops/Targets -->
+            <div class="card-glass rounded-2xl p-6">
+                <h3 class="text-lg font-semibold mb-4">💼 Open Positions <span class="text-xs text-gray-400 font-normal">(Click for details)</span></h3>
+                <div class="space-y-3">
+                    <template x-for="pos in positions" :key="pos.ticker">
+                        <div class="p-3 bg-white/5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors"
+                             @click="selectedPosition = pos; positionDrawerOpen = true">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-8 h-8 bg-gradient-to-br from-blue-400 to-purple-500 rounded-lg flex items-center justify-center text-xs font-bold" x-text="pos.ticker.substring(0,2)"></div>
+                                    <div>
+                                        <div class="font-semibold flex items-center space-x-2">
+                                            <span x-text="pos.ticker"></span>
+                                            <span class="text-xs bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded" x-text="pos.strategy"></span>
+                                        </div>
+                                        <div class="text-xs text-gray-400" x-text="pos.shares + ' shares @ $' + pos.avgPrice.toFixed(2) + ' • ' + pos.openDate"></div>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <div :class="pos.pnl >= 0 ? 'profit' : 'loss'" x-text="(pos.pnl >= 0 ? '+' : '') + '$' + pos.pnl.toFixed(2)"></div>
+                                    <div :class="pos.pnlPct >= 0 ? 'profit' : 'loss'" class="text-xs" x-text="(pos.pnlPct >= 0 ? '+' : '') + pos.pnlPct.toFixed(2) + '%'"></div>
+                                </div>
+                            </div>
+                            <!-- Stop/Target Progress Bar -->
+                            <div class="mt-2 relative">
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-red-400" x-text="'Stop: $' + pos.stopLoss?.toFixed(2)"></span>
+                                    <span class="text-gray-400" x-text="'Current: $' + pos.currentPrice?.toFixed(2)"></span>
+                                    <span class="text-green-400" x-text="'Target: $' + pos.target?.toFixed(2)"></span>
+                                </div>
+                                <div class="h-2 bg-gray-700 rounded-full overflow-hidden">
+                                    <div class="h-full rounded-full" 
+                                         :class="pos.progressPct >= 50 ? 'bg-green-400' : pos.progressPct >= 0 ? 'bg-yellow-400' : 'bg-red-400'"
+                                         :style="'width: ' + Math.max(0, Math.min(100, pos.progressPct)) + '%'"></div>
+                                </div>
+                                <div class="flex justify-between text-xs mt-1 text-gray-500">
+                                    <span x-text="pos.stopPct?.toFixed(1) + '%'"></span>
+                                    <span x-text="'+' + pos.targetPct?.toFixed(1) + '%'"></span>
+                                </div>
+                            </div>
+                            <!-- Entry Reasons Preview -->
+                            <div class="mt-2 pt-2 border-t border-white/10">
+                                <div class="text-xs text-gray-400">
+                                    <span class="font-semibold">Entry:</span> 
+                                    <span x-text="pos.entryReasons?.slice(0, 2).join(' • ') + (pos.entryReasons?.length > 2 ? '...' : '')"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                    <div x-show="positions.length === 0" class="text-center text-gray-500 py-4">
+                        No open positions
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Crypto & Asia Markets -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Crypto & Digital Assets -->
+            <div class="card-glass rounded-2xl p-6">
+                <h3 class="text-lg font-semibold mb-4">₿ Crypto & Digital Assets</h3>
+                <div class="space-y-3">
+                    <template x-for="crypto in cryptos" :key="crypto.symbol">
+                        <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                            <div class="flex items-center space-x-3">
+                                <span class="text-2xl" x-text="crypto.emoji"></span>
+                                <div>
+                                    <div class="font-semibold" x-text="crypto.name"></div>
+                                    <div class="text-xs text-gray-400" x-text="crypto.symbol"></div>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div x-text="crypto.currency + crypto.price.toLocaleString()"></div>
+                                <div :class="crypto.change >= 0 ? 'profit' : 'loss'" class="text-xs" x-text="(crypto.change >= 0 ? '+' : '') + crypto.change.toFixed(2) + '%'"></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            
+            <!-- Asia Markets with Real Stocks -->
+            <div class="card-glass rounded-2xl p-6">
+                <h3 class="text-lg font-semibold mb-4">🌏 Asia Markets</h3>
+                <div class="space-y-3">
+                    <!-- Index Performance -->
+                    <template x-for="asia in asiaMarkets" :key="asia.name">
+                        <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                            <div class="flex items-center space-x-3">
+                                <span class="text-2xl" x-text="asia.flag"></span>
+                                <div>
+                                    <div class="font-semibold" x-text="asia.name"></div>
+                                    <div class="text-xs text-gray-400" x-text="asia.status"></div>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div :class="asia.change >= 0 ? 'profit' : 'loss'" class="text-xl font-bold" x-text="(asia.change >= 0 ? '+' : '') + asia.change.toFixed(2) + '%'"></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Japan & Hong Kong Stocks -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Japan Stocks -->
+            <div class="card-glass rounded-2xl p-6">
+                <h3 class="text-lg font-semibold mb-4">🇯🇵 Japan Stocks</h3>
+                <div class="space-y-2">
+                    <template x-for="stock in japanStocks" :key="stock.symbol">
+                        <div class="flex items-center justify-between p-2 bg-white/5 rounded-lg">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-8 h-8 bg-gradient-to-br from-red-400 to-pink-500 rounded-lg flex items-center justify-center text-xs font-bold" x-text="stock.symbol.substring(0,2)"></div>
+                                <div>
+                                    <div class="font-semibold text-sm" x-text="stock.symbol"></div>
+                                    <div class="text-xs text-gray-400" x-text="stock.name"></div>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm" x-text="'¥' + stock.price.toLocaleString()"></div>
+                                <div :class="stock.change >= 0 ? 'profit' : 'loss'" class="text-xs" x-text="(stock.change >= 0 ? '+' : '') + stock.change.toFixed(2) + '%'"></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            
+            <!-- Hong Kong Stocks -->
+            <div class="card-glass rounded-2xl p-6">
+                <h3 class="text-lg font-semibold mb-4">🇭🇰 Hong Kong Stocks</h3>
+                <div class="space-y-2">
+                    <template x-for="stock in hkStocks" :key="stock.symbol">
+                        <div class="flex items-center justify-between p-2 bg-white/5 rounded-lg">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-8 h-8 bg-gradient-to-br from-orange-400 to-red-500 rounded-lg flex items-center justify-center text-xs font-bold" x-text="stock.symbol.substring(0,2)"></div>
+                                <div>
+                                    <div class="font-semibold text-sm" x-text="stock.symbol"></div>
+                                    <div class="text-xs text-gray-400" x-text="stock.name"></div>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm" x-text="'HK$' + stock.price.toFixed(2)"></div>
+                                <div :class="stock.change >= 0 ? 'profit' : 'loss'" class="text-xs" x-text="(stock.change >= 0 ? '+' : '') + stock.change.toFixed(2) + '%'"></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Market Commentary (Professional Desk Note Format) -->
+        <div class="card-glass rounded-2xl p-6 mb-8">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold">📝 Market Commentary</h3>
+                <span class="text-xs text-gray-400">Updated: <span x-text="new Date().toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit', hour12: true})"></span> ET</span>
+            </div>
+            
+            <!-- Session Snapshot Bar -->
+            <div class="bg-white/5 rounded-xl p-4 mb-4">
+                <div class="grid grid-cols-2 md:grid-cols-6 gap-4 text-center text-sm">
+                    <div>
+                        <div class="text-gray-400 text-xs">SPY</div>
+                        <div class="text-green-400" x-text="sessionSnapshot.spyChange"></div>
+                    </div>
+                    <div>
+                        <div class="text-gray-400 text-xs">vs VWAP</div>
+                        <div :class="sessionSnapshot.spyVsVwap === 'Above' ? 'text-green-400' : 'text-red-400'" 
+                             x-text="sessionSnapshot.spyVsVwap + ' (' + sessionSnapshot.spyVwapPct + ')'"></div>
+                    </div>
+                    <div>
+                        <div class="text-gray-400 text-xs">Breadth</div>
+                        <div class="text-green-400" x-text="sessionSnapshot.breadth + ' ' + sessionSnapshot.breadthLabel"></div>
+                    </div>
+                    <div>
+                        <div class="text-gray-400 text-xs">RVol(TOD)</div>
+                        <div class="text-blue-400" x-text="sessionSnapshot.rVol"></div>
+                    </div>
+                    <div>
+                        <div class="text-gray-400 text-xs">Session Type</div>
+                        <div class="text-yellow-400" x-text="sessionSnapshot.sessionType"></div>
+                    </div>
+                    <div>
+                        <div class="text-gray-400 text-xs">Regime</div>
+                        <div :class="sessionSnapshot.regime === 'Risk-On' ? 'text-green-400' : sessionSnapshot.regime === 'Risk-Off' ? 'text-red-400' : 'text-yellow-400'" 
+                             x-text="sessionSnapshot.regime"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="space-y-4">
+                <!-- Opening Commentary -->
+                <div class="bg-white/5 rounded-xl p-4" :class="marketCommentary.activePeriod === 'opening' ? 'border border-blue-500/30' : ''">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-sm font-semibold text-blue-400">📍 <span x-text="marketCommentary.periods.opening.title"></span></span>
+                            <span x-show="marketCommentary.activePeriod === 'opening'" class="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">CURRENT</span>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-300 leading-relaxed" x-text="marketCommentary.periods.opening.summary"></p>
+                    <div class="mt-3 pt-3 border-t border-white/10 space-y-2">
+                        <div class="text-xs text-gray-400">
+                            <span class="font-semibold text-yellow-400">📍 Key Level:</span> 
+                            <span x-text="marketCommentary.periods.opening.keyLevel"></span>
+                        </div>
+                        <div class="text-xs text-gray-400">
+                            <span class="font-semibold">Leaders:</span> 
+                            <span class="text-green-400" x-text="marketCommentary.periods.opening.leaders.join(', ')"></span>
+                            <span class="mx-2">|</span>
+                            <span class="font-semibold">Laggards:</span>
+                            <span class="text-red-400" x-text="marketCommentary.periods.opening.laggards.join(', ')"></span>
+                        </div>
+                        <div class="text-xs text-blue-400">
+                            <span class="font-semibold">💡 Edge:</span>
+                            <span x-text="marketCommentary.periods.opening.edge"></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Morning Check (2 Hours) -->
+                <div class="bg-white/5 rounded-xl p-4" :class="marketCommentary.activePeriod === 'morning' ? 'border border-yellow-500/30' : ''">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-sm font-semibold text-yellow-400">🕙 <span x-text="marketCommentary.periods.morning.title"></span></span>
+                            <span x-show="marketCommentary.activePeriod === 'morning'" class="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded">CURRENT</span>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-300 leading-relaxed" x-text="marketCommentary.periods.morning.summary"></p>
+                    <div class="mt-3 pt-3 border-t border-white/10 space-y-2">
+                        <div class="text-xs text-gray-400">
+                            <span class="font-semibold text-yellow-400">📍 Key Level:</span> 
+                            <span x-text="marketCommentary.periods.morning.keyLevel"></span>
+                        </div>
+                        <div class="text-xs text-gray-400">
+                            <span class="font-semibold">Leaders:</span> 
+                            <span class="text-green-400" x-text="marketCommentary.periods.morning.leaders.join(', ')"></span>
+                            <span class="mx-2">|</span>
+                            <span class="font-semibold">Laggards:</span>
+                            <span class="text-red-400" x-text="marketCommentary.periods.morning.laggards.join(', ')"></span>
+                        </div>
+                        <div class="text-xs text-blue-400">
+                            <span class="font-semibold">💡 Edge:</span>
+                            <span x-text="marketCommentary.periods.morning.edge"></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Midday Update -->
+                <div class="bg-white/5 rounded-xl p-4" :class="marketCommentary.activePeriod === 'midday' ? 'border border-orange-500/30' : ''">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-sm font-semibold text-orange-400">☀️ <span x-text="marketCommentary.periods.midday.title"></span></span>
+                            <span x-show="marketCommentary.activePeriod === 'midday'" class="text-xs bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded">CURRENT</span>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-300 leading-relaxed" x-text="marketCommentary.periods.midday.summary"></p>
+                    <div class="mt-3 pt-3 border-t border-white/10 space-y-2">
+                        <div class="text-xs text-gray-400">
+                            <span class="font-semibold text-yellow-400">📍 Key Level:</span> 
+                            <span x-text="marketCommentary.periods.midday.keyLevel"></span>
+                        </div>
+                        <div class="text-xs text-gray-400">
+                            <span class="font-semibold">Leaders:</span> 
+                            <span class="text-green-400" x-text="marketCommentary.periods.midday.leaders.join(', ')"></span>
+                            <span class="mx-2">|</span>
+                            <span class="font-semibold">Laggards:</span>
+                            <span class="text-red-400" x-text="marketCommentary.periods.midday.laggards.join(', ')"></span>
+                        </div>
+                        <div class="text-xs text-blue-400">
+                            <span class="font-semibold">💡 Edge:</span>
+                            <span x-text="marketCommentary.periods.midday.edge"></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Closing Wrap -->
+                <div class="bg-white/5 rounded-xl p-4" :class="marketCommentary.activePeriod === 'closing' ? 'border border-green-500/30' : ''">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-sm font-semibold text-green-400">🧾 <span x-text="marketCommentary.periods.closing.title"></span></span>
+                            <span x-show="marketCommentary.activePeriod === 'closing'" class="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded">FINAL</span>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-300 leading-relaxed" x-text="marketCommentary.periods.closing.summary"></p>
+                    <div class="mt-3 pt-3 border-t border-white/10 space-y-2">
+                        <div class="text-xs text-gray-400">
+                            <span class="font-semibold text-yellow-400">📍 Key Level:</span> 
+                            <span x-text="marketCommentary.periods.closing.keyLevel"></span>
+                        </div>
+                        <div class="text-xs text-gray-400">
+                            <span class="font-semibold">Leaders:</span> 
+                            <span class="text-green-400" x-text="marketCommentary.periods.closing.leaders.join(', ')"></span>
+                            <span class="mx-2">|</span>
+                            <span class="font-semibold">Laggards:</span>
+                            <span class="text-red-400" x-text="marketCommentary.periods.closing.laggards.join(', ')"></span>
+                        </div>
+                        <div class="text-xs text-blue-400">
+                            <span class="font-semibold">💡 Edge:</span>
+                            <span x-text="marketCommentary.periods.closing.edge"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Playbook Bias -->
+            <div class="mt-4 bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
+                <div class="flex items-start space-x-3">
+                    <span class="text-xl">🎯</span>
+                    <div class="flex-1">
+                        <div class="flex items-center space-x-2 mb-1">
+                            <span class="text-sm font-semibold text-blue-400">Today's Playbook Bias:</span>
+                            <span :class="marketCommentary.playbookBias.direction === 'Bullish' ? 'bg-green-500/20 text-green-400' : marketCommentary.playbookBias.direction === 'Bearish' ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'" 
+                                  class="text-xs px-2 py-0.5 rounded font-semibold"
+                                  x-text="marketCommentary.playbookBias.direction + ' (' + marketCommentary.playbookBias.confidence + ' Confidence)'"></span>
+                        </div>
+                        <p class="text-sm text-gray-300" x-text="marketCommentary.playbookBias.reasoning"></p>
+                        <div class="text-xs text-gray-500 mt-2">⚠️ Not financial advice. Framework for educational purposes only.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upcoming Events Widget -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Earnings Calendar -->
+            <div class="card-glass rounded-2xl p-6">
+                <h3 class="text-lg font-semibold mb-4">📅 Upcoming Earnings</h3>
+                <div class="space-y-2">
+                    <template x-for="event in upcomingEarnings" :key="event.ticker + event.date">
+                        <div class="flex items-center justify-between p-2 bg-white/5 rounded-lg">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-8 h-8 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-lg flex items-center justify-center text-xs font-bold" x-text="event.ticker.substring(0,2)"></div>
+                                <div>
+                                    <div class="font-semibold text-sm" x-text="event.ticker"></div>
+                                    <div class="text-xs text-gray-400" x-text="event.name"></div>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm" x-text="event.date"></div>
+                                <div class="text-xs" :class="event.timing === 'BMO' ? 'text-yellow-400' : 'text-blue-400'" x-text="event.timing"></div>
+                            </div>
+                        </div>
+                    </template>
+                    <div x-show="upcomingEarnings.length === 0" class="text-center text-gray-500 py-4">
+                        No earnings this week
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Macro Events -->
+            <div class="card-glass rounded-2xl p-6">
+                <h3 class="text-lg font-semibold mb-4">📊 Economic Calendar</h3>
+                <div class="space-y-2">
+                    <template x-for="event in macroEvents" :key="event.name + event.date">
+                        <div class="flex items-center justify-between p-2 bg-white/5 rounded-lg">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-8 h-8 rounded-lg flex items-center justify-center text-lg"
+                                     :class="event.impact === 'HIGH' ? 'bg-red-500/20' : event.impact === 'MEDIUM' ? 'bg-yellow-500/20' : 'bg-gray-500/20'"
+                                     x-text="event.emoji"></div>
+                                <div>
+                                    <div class="font-semibold text-sm" x-text="event.name"></div>
+                                    <div class="text-xs text-gray-400" x-text="event.time"></div>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm" x-text="event.date"></div>
+                                <span class="text-xs px-2 py-0.5 rounded" 
+                                      :class="event.impact === 'HIGH' ? 'bg-red-500/20 text-red-400' : event.impact === 'MEDIUM' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-500/20 text-gray-400'"
+                                      x-text="event.impact"></span>
+                            </div>
+                        </div>
+                    </template>
+                    <div x-show="macroEvents.length === 0" class="text-center text-gray-500 py-4">
+                        No major events this week
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trade History (Closed Positions with Analysis) -->
+        <div class="card-glass rounded-2xl p-6 mb-8">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold">📊 Trade History <span class="text-xs text-gray-400 font-normal">(Click for full analysis)</span></h3>
+                <div class="flex items-center space-x-2">
+                    <!-- Filter Buttons -->
+                    <button @click="historyFilter = 'all'" 
+                            :class="historyFilter === 'all' ? 'bg-blue-500/20 text-blue-400' : 'bg-white/5 text-gray-400'"
+                            class="px-3 py-1 rounded-lg text-xs transition-colors">All</button>
+                    <button @click="historyFilter = 'wins'" 
+                            :class="historyFilter === 'wins' ? 'bg-green-500/20 text-green-400' : 'bg-white/5 text-gray-400'"
+                            class="px-3 py-1 rounded-lg text-xs transition-colors">Wins</button>
+                    <button @click="historyFilter = 'losses'" 
+                            :class="historyFilter === 'losses' ? 'bg-red-500/20 text-red-400' : 'bg-white/5 text-gray-400'"
+                            class="px-3 py-1 rounded-lg text-xs transition-colors">Losses</button>
+                </div>
+            </div>
+            
+            <!-- History Stats Summary -->
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4 p-3 bg-white/5 rounded-xl text-center text-sm">
+                <div>
+                    <div class="text-gray-400 text-xs">Total Trades</div>
+                    <div class="font-bold" x-text="tradeHistory.length"></div>
+                </div>
+                <div>
+                    <div class="text-gray-400 text-xs">Win Rate</div>
+                    <div class="font-bold text-green-400" x-text="Math.round(tradeHistory.filter(t => t.result === 'WIN').length / tradeHistory.length * 100) + '%'"></div>
+                </div>
+                <div>
+                    <div class="text-gray-400 text-xs">Total P&L</div>
+                    <div class="font-bold" :class="tradeHistory.reduce((sum, t) => sum + t.pnl, 0) >= 0 ? 'text-green-400' : 'text-red-400'"
+                         x-text="'$' + tradeHistory.reduce((sum, t) => sum + t.pnl, 0).toFixed(0)"></div>
+                </div>
+                <div>
+                    <div class="text-gray-400 text-xs">Avg Win</div>
+                    <div class="font-bold text-green-400" 
+                         x-text="'$' + (tradeHistory.filter(t => t.result === 'WIN').reduce((sum, t) => sum + t.pnl, 0) / tradeHistory.filter(t => t.result === 'WIN').length || 0).toFixed(0)"></div>
+                </div>
+                <div>
+                    <div class="text-gray-400 text-xs">Avg Loss</div>
+                    <div class="font-bold text-red-400" 
+                         x-text="'$' + Math.abs(tradeHistory.filter(t => t.result === 'LOSS').reduce((sum, t) => sum + t.pnl, 0) / tradeHistory.filter(t => t.result === 'LOSS').length || 0).toFixed(0)"></div>
+                </div>
+            </div>
+            
+            <!-- Trade History Cards -->
+            <div class="space-y-3">
+                <template x-for="trade in tradeHistory.filter(t => historyFilter === 'all' || (historyFilter === 'wins' && t.result === 'WIN') || (historyFilter === 'losses' && t.result === 'LOSS'))" :key="trade.ticker + trade.closeDate">
+                    <div class="p-4 rounded-xl cursor-pointer hover:bg-white/10 transition-colors"
+                         :class="trade.result === 'WIN' ? 'bg-green-500/5 border border-green-500/20' : 'bg-red-500/5 border border-red-500/20'"
+                         @click="selectedTrade = trade; historyDrawerOpen = true">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold"
+                                     :class="trade.result === 'WIN' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'"
+                                     x-text="trade.result === 'WIN' ? '✓' : '✗'"></div>
+                                <div>
+                                    <div class="font-semibold flex items-center space-x-2">
+                                        <span x-text="trade.ticker"></span>
+                                        <span class="text-xs bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded" x-text="trade.strategy"></span>
+                                        <span class="text-xs text-gray-400" x-text="trade.holdDays + 'd hold'"></span>
+                                    </div>
+                                    <div class="text-xs text-gray-400" x-text="trade.openDate + ' → ' + trade.closeDate"></div>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div :class="trade.pnl >= 0 ? 'profit text-lg' : 'loss text-lg'" x-text="(trade.pnl >= 0 ? '+' : '') + '$' + trade.pnl.toFixed(0)"></div>
+                                <div :class="trade.pnlPct >= 0 ? 'profit' : 'loss'" class="text-xs" x-text="(trade.pnlPct >= 0 ? '+' : '') + trade.pnlPct.toFixed(1) + '%'"></div>
+                            </div>
+                        </div>
+                        <!-- Entry/Exit Summary -->
+                        <div class="grid grid-cols-2 gap-4 text-xs mt-3 pt-3 border-t border-white/10">
+                            <div>
+                                <span class="text-gray-500">Entry:</span> 
+                                <span class="text-gray-300" x-text="'$' + trade.entryPrice.toFixed(2) + ' (' + trade.shares + ' shares)'"></span>
+                            </div>
+                            <div>
+                                <span class="text-gray-500">Exit:</span> 
+                                <span class="text-gray-300" x-text="'$' + trade.exitPrice.toFixed(2)"></span>
+                            </div>
+                        </div>
+                        <!-- Why Preview -->
+                        <div class="mt-2 text-xs">
+                            <span class="text-gray-500">Exit Reason:</span> 
+                            <span class="text-gray-400" x-text="trade.exitReason.substring(0, 80) + (trade.exitReason.length > 80 ? '...' : '')"></span>
+                        </div>
+                    </div>
+                </template>
+                <div x-show="tradeHistory.length === 0" class="text-center text-gray-500 py-8">
+                    No trade history yet
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Executions (Quick Reference) -->
+        <div class="card-glass rounded-2xl p-6">
+            <h3 class="text-lg font-semibold mb-4">📋 Recent Executions</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="text-left text-gray-400 text-sm border-b border-white/10">
+                            <th class="pb-3">Time</th>
+                            <th class="pb-3">Symbol</th>
+                            <th class="pb-3">Side</th>
+                            <th class="pb-3">Qty</th>
+                            <th class="pb-3">Price</th>
+                            <th class="pb-3">P&L</th>
+                            <th class="pb-3">Strategy</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="trade in recentTrades" :key="trade.id">
+                            <tr class="border-b border-white/5 hover:bg-white/5">
+                                <td class="py-3 text-sm text-gray-400" x-text="trade.time"></td>
+                                <td class="py-3 font-semibold" x-text="trade.symbol"></td>
+                                <td class="py-3">
+                                    <span :class="trade.side === 'BUY' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'" class="px-2 py-1 rounded text-xs" x-text="trade.side"></span>
+                                </td>
+                                <td class="py-3" x-text="trade.qty"></td>
+                                <td class="py-3" x-text="'$' + trade.price.toFixed(2)"></td>
+                                <td class="py-3" :class="trade.pnl >= 0 ? 'profit' : 'loss'" x-text="(trade.pnl >= 0 ? '+' : '') + '$' + trade.pnl.toFixed(2)"></td>
+                                <td class="py-3 text-sm text-gray-400" x-text="trade.strategy"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-white/10 px-6 py-4 mt-8">
+        <div class="max-w-7xl mx-auto flex items-center justify-between text-sm text-gray-400">
+            <div>
+                <span>TradingAI Pro v2.0 — Multi-Market AI Trading</span>
+                <span class="mx-2">•</span>
+                <span class="text-yellow-400">Research & Education Tool</span>
+            </div>
+            <div class="flex items-center space-x-4">
+                <a href="/api/docs" class="hover:text-white">API Docs</a>
+                <a href="/signals/explorer" class="hover:text-white">Signal Explorer</a>
+                <a href="/health/live" class="hover:text-white">Health</a>
+            </div>
+        </div>
+        <div class="max-w-7xl mx-auto mt-2 text-xs text-gray-500">
+            ⚠️ Disclaimer: This is a research tool for educational purposes only. Not financial advice. Past performance does not guarantee future results. Always do your own research before making investment decisions.
+        </div>
+    </footer>
+
+    <script>
+        function dashboard() {
+            return {
+                currentTime: '',
+                signalDrawerOpen: false,
+                selectedSignal: null,
+                positionDrawerOpen: false,
+                selectedPosition: null,
+                historyDrawerOpen: false,
+                selectedTrade: null,
+                historyFilter: 'all', // 'all', 'wins', 'losses'
+                
+                // System Status
+                systemStatus: {
+                    mode: 'PAPER',
+                    broker: 'Alpaca (Paper)',
+                    autoTrading: true,
+                    dataFresh: true,
+                    noTrade: false,
+                    noTradeReason: '',
+                    lastDataUpdate: '2 min ago'
+                },
+                
+                // Market Regime
+                regime: {
+                    risk: 'RISK_ON',
+                    vix: 14.5,
+                    activeStrategies: ['Momentum', 'VCP', 'Breakout']
+                },
+                
+                // AI Advisor
+                aiAdvisor: {
+                    status: 'Active',
+                    briefTime: '12:30 PM ET',
+                    marketBrief: 'Markets are in a risk-on regime with tech leading. VIX at 14.5 signals low fear. Breadth is healthy at 62% green. The AI semiconductor narrative continues to drive momentum in NVDA and AMD. Key risk: FOMC minutes on Feb 21 could shift sentiment if hawkish.',
+                    recommendation: 'NORMAL',
+                    reasoning: 'Maintain normal position sizing. Trend is favorable but upcoming FOMC minutes warrant keeping some powder dry. Focus on momentum setups in tech leaders. Avoid overexposure to crypto ahead of regulatory uncertainty.',
+                    chainOfThought: [
+                        'Regime check: VIX 14.5 (low), breadth 62% green → Risk-On confirmed',
+                        'Macro scan: No immediate catalysts today. FOMC minutes in 2 days = moderate uncertainty',
+                        'Sector analysis: Tech +1.2%, Semis +2.5% leadership. Defensive sectors lagging.',
+                        'Portfolio review: 45% invested, 55% cash. Well-positioned for opportunities.',
+                        'Signal quality: 4 high-conviction signals (score ≥8.0). All GPT-validated.',
+                        'Risk assessment: Max drawdown 5.2% (acceptable). No circuit breaker triggers.',
+                        'Decision: NORMAL mode. Execute high-conviction setups, maintain stop discipline.'
+                    ]
+                },
+                
+                // ML Model Status
+                mlStatus: {
+                    modelReady: true,
+                    accuracy: 72.5,
+                    samples: 147,
+                    kellyEdge: 8.3,
+                    lastRetrain: '2h ago',
+                    failureAnalyses: [
+                        { ticker: 'COIN', loss: '-7.23%', insight: 'Regulatory headline risk not captured by technical model. Recommend: reduce position size for crypto-exposed names before known regulatory dates.' },
+                        { ticker: 'AMD', loss: '-6.06%', insight: 'Peer earnings contagion effect. Pattern was valid but external catalyst invalidated setup. Recommend: check sector earnings calendar before VCP entries.' }
+                    ]
+                },
+                
+                // Risk Metrics
+                riskMetrics: {
+                    maxDrawdown: 5.2,
+                    peakValue: 105000,
+                    exposure: 45,
+                    topSector: 'Tech',
+                    topSectorPct: 35,
+                    dailyVaR: 2500
+                },
+                
+                // Strategy Health (Walk-Forward OOS Metrics)
+                strategyHealth: {
+                    lastBacktest: 'Feb 10, 2026',
+                    strategies: [
+                        { name: 'Momentum', oosSharpe: 1.45, winRateL20: 68, profitFactor: 1.85, expectancy: 2.3, driftStatus: 'OK' },
+                        { name: 'Breakout', oosSharpe: 1.22, winRateL20: 62, profitFactor: 1.52, expectancy: 1.8, driftStatus: 'OK' },
+                        { name: 'VCP', oosSharpe: 0.95, winRateL20: 58, profitFactor: 1.35, expectancy: 1.2, driftStatus: 'WARN' },
+                        { name: 'Mean Rev', oosSharpe: 0.68, winRateL20: 52, profitFactor: 1.15, expectancy: 0.5, driftStatus: 'WARN' }
+                    ]
+                },
+                
+                // Session Snapshot (for Market Commentary header)
+                sessionSnapshot: {
+                    spyChange: '+0.45%',
+                    spyVsVwap: 'Above',
+                    spyVwapPct: '+0.12%',
+                    breadth: '58%',
+                    breadthLabel: 'Green',
+                    rVol: '1.2x',
+                    sessionType: 'Trend',
+                    regime: 'Risk-On'
+                },
+                
+                // Market Commentary Periods
+                marketCommentary: {
+                    activePeriod: 'midday',
+                    periods: {
+                        opening: {
+                            title: 'Opening Bell | First Hour',
+                            summary: 'Markets gapped up +0.45% on strong overnight futures driven by positive NVDA guidance and lower-than-expected jobless claims. SPY opened above VWAP and held, signaling institutional demand. Breadth was 58% green at the open with Tech leading (+1.2%) and Utilities lagging (-0.3%).',
+                            keyLevel: 'SPY 502.50 (overnight high) is the bull/bear line. Above = continuation, below = gap fill to 498.',
+                            leaders: ['NVDA +3.2%', 'AMD +2.1%', 'MARA +5.8%'],
+                            laggards: ['XLU -0.3%', 'XLP -0.2%'],
+                            edge: 'Momentum strategies favored. Look for pullbacks to VWAP for long entries in leaders.'
+                        },
+                        morning: {
+                            title: 'Morning Check | 10:30 AM',
+                            summary: 'First hour range established at $500.25 - $503.80 on SPY. Volume tracking 15% above average suggests conviction. The opening gap has held with no fill attempt, a bullish sign. Sector rotation continuing into semis and crypto names. VIX down 8% to 14.2 indicates low fear.',
+                            keyLevel: 'SPY 500.25 (first hour low) is now support. A break below targets 498 gap fill.',
+                            leaders: ['NVDA +4.1%', 'COIN +3.5%', 'MARA +7.2%'],
+                            laggards: ['XLU -0.5%', 'KO -0.8%'],
+                            edge: 'Breakout setups activating. VCP patterns in AMD and TSM worth watching for pivot breaks.'
+                        },
+                        midday: {
+                            title: 'Midday Update | 12:30 PM',
+                            summary: 'Consolidating near highs with healthy rotation. SPY +0.52% and holding above VWAP. Breadth improved to 62% green. Volume pace slowing into lunch as expected. No distribution signals detected. Bond yields stable, no adverse macro headlines.',
+                            keyLevel: 'SPY 503.80 (morning high) is resistance for afternoon continuation.',
+                            leaders: ['NVDA +5.2%', 'MARA +8.5%', 'COIN +4.2%'],
+                            laggards: ['XLU -0.6%', 'XLE -0.3%'],
+                            edge: 'Afternoon breakout setups if SPY clears 503.80. Consider scaling into winners.'
+                        },
+                        closing: {
+                            title: 'Closing Analysis | 4:00 PM',
+                            summary: 'Strong close with SPY finishing +0.68% near session highs. Breadth closed 64% green with clear tech leadership. Volume finished 22% above average confirming institutional participation. MOC imbalance was $500M buy-side, suggesting fund rebalancing into equities.',
+                            keyLevel: 'SPY closed at 504.20. A gap and hold above 505 tomorrow would be very bullish.',
+                            leaders: ['NVDA +5.8%', 'MARA +9.2%', 'COIN +4.8%'],
+                            laggards: ['XLU -0.7%', 'XLE -0.4%'],
+                            edge: 'Continuation expected tomorrow. Add to winning positions on pullbacks to today\'s VWAP at open.'
+                        }
+                    },
+                    playbookBias: {
+                        direction: 'Bullish',
+                        confidence: 'High',
+                        reasoning: 'Risk-On regime, breadth positive, leaders in high-beta sectors, VIX subdued, volume confirms.'
+                    }
+                },
+                
+                // Stats with detailed breakdown
+                stats: {
+                    totalPnL: 24567.89,
+                    realizedPnL: 18234.50,
+                    unrealizedPnL: 6567.89,
+                    fees: 234.50,
+                    todayPnL: 1234.56,
+                    winRate: 68,
+                    totalTrades: 47,
+                    winRateTimeframe: '30 days',
+                    activeSignals: 12,
+                    buySignals: 8,
+                    sellSignals: 4,
+                    portfolioValue: 100000,
+                    cashBalance: 55000,
+                    positionsValue: 45000,
+                    lastScanTime: '2 min ago'
+                },
+                
+                tickers: [
+                    { symbol: 'SPY', price: 512.34, change: 0.45 },
+                    { symbol: 'QQQ', price: 438.21, change: 0.72 },
+                    { symbol: 'NVDA', price: 875.50, change: 2.34 },
+                    { symbol: 'AAPL', price: 182.45, change: -0.23 },
+                    { symbol: 'TSLA', price: 245.67, change: 1.56 },
+                    { symbol: 'BITO', price: 28.45, change: 3.21 },
+                    { symbol: 'MARA', price: 22.34, change: 5.67 },
+                ],
+                
+                // Enhanced signals with trade plan
+                topSignals: [
+                    { 
+                        ticker: 'NVDA', direction: 'LONG', strategy: 'Momentum', score: 9.2, winRate: 75,
+                        entryLow: 870.00, entryHigh: 880.00, stopLoss: 850.00, stopPct: -2.5,
+                        target1: 920.00, target1Pct: 5.2, target2: 960.00, target2Pct: 9.5,
+                        rrRatio: 3.8, kellyPct: 8.5, suggestedShares: 12, maxRisk: 360,
+                        reasons: ['Strong momentum above 20 EMA', 'Volume surge 2x average', 'AI sector tailwind', 'Broke resistance at $865'],
+                        warnings: ['Extended from 50 EMA', 'Earnings in 2 weeks'],
+                        interpretation: 'This is a high-conviction momentum continuation setup. NVDA is exhibiting strong relative strength with price above all major moving averages and accelerating volume. The AI semiconductor thesis remains intact, and the stock is benefiting from sector rotation into tech leadership. The breakout above $865 resistance confirms institutional demand. Entry on a pullback to VWAP or the 10 EMA offers the best risk/reward.',
+                        trigger: 'Price closed above $865 resistance with 2.1x avg volume',
+                        confirmation: 'RVol 2.1x | Trend: Strong Uptrend | Regime: Risk-On',
+                        horizon: 'Swing 5-15d', expires: '6h', dataFresh: true, gptValidated: true
+                    },
+                    { 
+                        ticker: 'MARA', direction: 'LONG', strategy: 'Breakout', score: 8.8, winRate: 68,
+                        entryLow: 22.00, entryHigh: 22.50, stopLoss: 20.50, stopPct: -7.5,
+                        target1: 26.00, target1Pct: 16.0, target2: 30.00, target2Pct: 35.0,
+                        rrRatio: 2.7, kellyPct: 5.2, suggestedShares: 150, maxRisk: 225,
+                        reasons: ['BTC correlation play', 'Breaking consolidation', 'High short interest'],
+                        warnings: ['High volatility stock', 'Crypto correlation risk'],
+                        interpretation: 'MARA is breaking out of a multi-week consolidation pattern as Bitcoin approaches key resistance levels. The 35% short interest creates potential for a squeeze if BTC clears $105K. This is a high-beta leveraged play on crypto momentum. Size conservatively given the elevated volatility profile and use the consolidation low as your invalidation level.',
+                        trigger: 'Breakout above $21.80 consolidation high with expanding volume',
+                        confirmation: 'RVol 1.8x | Trend: Base Breakout | Regime: Risk-On',
+                        horizon: 'Swing 3-10d', expires: '4h', dataFresh: true, gptValidated: true
+                    },
+                    { 
+                        ticker: 'COIN', direction: 'LONG', strategy: 'Smart Money', score: 8.5, winRate: 72,
+                        entryLow: 240.00, entryHigh: 250.00, stopLoss: 225.00, stopPct: -6.5,
+                        target1: 280.00, target1Pct: 14.0, target2: 320.00, target2Pct: 30.0,
+                        rrRatio: 2.5, kellyPct: 6.0, suggestedShares: 25, maxRisk: 625,
+                        reasons: ['Institutional accumulation', 'BTC ETF approval momentum', 'Relative strength'],
+                        warnings: ['Regulatory overhang'],
+                        interpretation: 'Institutional flow data shows sustained accumulation in COIN over the past 5 sessions. The BTC ETF narrative provides a fundamental catalyst, and COIN offers leveraged exposure to crypto market activity. Dark pool prints above VWAP suggest smart money positioning. The regulatory overhang is well-known and largely priced in at current levels.',
+                        trigger: 'Smart Money Index triggered on 3 consecutive sessions of institutional buying',
+                        confirmation: 'RVol 1.4x | Trend: Uptrend | Regime: Risk-On',
+                        horizon: 'Swing 10-20d', expires: '12h', dataFresh: true, gptValidated: false
+                    },
+                    { 
+                        ticker: 'AMD', direction: 'LONG', strategy: 'VCP', score: 8.2, winRate: 65,
+                        entryLow: 164.00, entryHigh: 168.00, stopLoss: 158.00, stopPct: -4.0,
+                        target1: 180.00, target1Pct: 8.5, target2: 195.00, target2Pct: 17.0,
+                        rrRatio: 2.8, kellyPct: 4.5, suggestedShares: 35, maxRisk: 350,
+                        reasons: ['VCP pattern forming', 'AI chip demand', 'Contracting volatility'],
+                        warnings: [],
+                        interpretation: 'AMD is forming a textbook Volatility Contraction Pattern (VCP) with three distinct contractions. Each pullback has been shallower with decreasing volume, indicating supply absorption. The AI chip demand narrative supports fundamentals. Wait for a decisive break above the pivot at $168 with volume confirmation before entering.',
+                        trigger: 'VCP pattern completed with 3rd contraction < 8%',
+                        confirmation: 'RVol 0.8x (contracting) | Trend: Basing | Regime: Neutral',
+                        horizon: 'Swing 10-30d', expires: '24h', dataFresh: true, gptValidated: true
+                    },
+                    { 
+                        ticker: 'META', direction: 'SHORT', strategy: 'Reversal', score: 7.9, winRate: 62,
+                        entryLow: 495.00, entryHigh: 505.00, stopLoss: 520.00, stopPct: -3.5,
+                        target1: 470.00, target1Pct: 6.0, target2: 445.00, target2Pct: 11.5,
+                        rrRatio: 2.2, kellyPct: 3.0, suggestedShares: 8, maxRisk: 200,
+                        reasons: ['Bearish divergence on RSI', 'Volume declining on rally', 'Near major resistance'],
+                        warnings: ['Strong overall trend up', 'Earnings beat streak'],
+                        interpretation: 'META is showing classic distribution characteristics near the $500 psychological resistance. RSI is making lower highs while price makes higher highs—a bearish divergence. Volume is declining on up moves, suggesting exhaustion. This is a counter-trend trade against a strong primary uptrend, so size small and respect the stop. Best used as a hedge or tactical short.',
+                        trigger: 'Bearish RSI divergence at major resistance ($500)',
+                        confirmation: 'RVol 0.6x (declining) | Trend: Extended Uptrend | Regime: Risk-On',
+                        horizon: 'Swing 5-10d', expires: '8h', dataFresh: false, gptValidated: true
+                    },
+                ],
+                
+                markets: [
+                    { name: 'S&P 500', emoji: '🇺🇸', change: 0.45 },
+                    { name: 'NASDAQ', emoji: '💻', change: 0.72 },
+                    { name: 'Bitcoin', emoji: '₿', change: 2.34 },
+                    { name: 'Gold', emoji: '🥇', change: -0.12 },
+                ],
+                
+                // Enhanced positions with stops/targets and trade plan
+                positions: [
+                    { 
+                        ticker: 'NVDA', shares: 50, avgPrice: 850.00, currentPrice: 875.50, pnl: 1275.00, pnlPct: 3.0, 
+                        stopLoss: 825.00, target: 950.00, stopPct: -2.9, targetPct: 11.8, progressPct: 35,
+                        openDate: 'Feb 5, 2026', strategy: 'Momentum',
+                        entryReasons: ['Strong momentum above 20 EMA', 'Volume surge 2.1x average', 'AI sector tailwind', 'Broke $845 resistance'],
+                        tradePlan: 'Entry on breakout above $845 with volume confirmation. Scale out 50% at $920, remaining at $950. Trail stop to breakeven after +5%.',
+                        interpretation: 'High-conviction momentum play in AI leader. Thesis intact as long as above 20 EMA.',
+                        riskReward: '3.8:1', kellySize: '8.5%'
+                    },
+                    { 
+                        ticker: 'AAPL', shares: 100, avgPrice: 180.00, currentPrice: 182.45, pnl: 245.00, pnlPct: 1.36, 
+                        stopLoss: 175.00, target: 195.00, stopPct: -2.8, targetPct: 8.3, progressPct: 16,
+                        openDate: 'Feb 8, 2026', strategy: 'Swing',
+                        entryReasons: ['Bounce off 50 EMA support', 'RSI oversold reversal', 'Services growth narrative'],
+                        tradePlan: 'Mean reversion entry at 50 EMA. Target prior high at $195. Stop below recent swing low.',
+                        interpretation: 'Quality bounce trade in mega-cap. Lower conviction due to choppy sector rotation.',
+                        riskReward: '2.8:1', kellySize: '4.2%'
+                    },
+                    { 
+                        ticker: 'MARA', shares: 200, avgPrice: 20.50, currentPrice: 22.34, pnl: 368.00, pnlPct: 8.98, 
+                        stopLoss: 18.00, target: 28.00, stopPct: -12.2, targetPct: 36.6, progressPct: 25,
+                        openDate: 'Feb 10, 2026', strategy: 'Breakout',
+                        entryReasons: ['BTC correlation play', 'Breaking $20 consolidation', '35% short interest squeeze potential'],
+                        tradePlan: 'Breakout entry above $20.50. Aggressive target at $28 if BTC clears $100K. Wide stop due to volatility.',
+                        interpretation: 'High-beta crypto proxy. Position sized small due to elevated volatility. Ride the BTC wave.',
+                        riskReward: '2.7:1', kellySize: '3.2%'
+                    },
+                ],
+                
+                // Trade History (Closed Positions with Analysis)
+                tradeHistory: [
+                    {
+                        ticker: 'TSLA', shares: 30, strategy: 'Momentum',
+                        openDate: 'Jan 15, 2026', closeDate: 'Jan 28, 2026', holdDays: 13,
+                        entryPrice: 245.00, exitPrice: 285.00, pnl: 1200.00, pnlPct: 16.33, result: 'WIN',
+                        entryReasons: ['Broke above $240 resistance', 'EV sector rotation', 'Volume 1.8x on breakout'],
+                        exitReason: 'Target 1 hit at $285. Took profits as momentum slowed and RSI reached overbought.',
+                        tradePlan: 'Breakout trade above $240. T1: $280, T2: $310. Stop at $225.',
+                        postAnalysis: 'Executed plan well. Entry timing was good on volume confirmation. Could have held partial for T2 but risk management was correct given extended RSI.',
+                        lessons: ['Good discipline taking profits at target', 'Consider scaling out 50/50 next time']
+                    },
+                    {
+                        ticker: 'AMD', shares: 50, strategy: 'VCP',
+                        openDate: 'Jan 20, 2026', closeDate: 'Feb 3, 2026', holdDays: 14,
+                        entryPrice: 165.00, exitPrice: 155.00, pnl: -500.00, pnlPct: -6.06, result: 'LOSS',
+                        entryReasons: ['VCP pattern with 3 contractions', 'AI chip demand thesis', 'Tight pivot at $165'],
+                        exitReason: 'Stop loss triggered at $155 after sector-wide selloff on weak guidance from peer.',
+                        tradePlan: 'VCP breakout at $165 pivot. T1: $180, T2: $195. Stop at $155.',
+                        postAnalysis: 'Pattern was valid but external catalyst (peer guidance) invalidated setup. Stop protected capital. No execution error.',
+                        lessons: ['External catalysts can override technical setups', 'Consider reducing size before peer earnings']
+                    },
+                    {
+                        ticker: 'GOOGL', shares: 25, strategy: 'Earnings Gap',
+                        openDate: 'Jan 30, 2026', closeDate: 'Feb 5, 2026', holdDays: 6,
+                        entryPrice: 175.00, exitPrice: 192.00, pnl: 425.00, pnlPct: 9.71, result: 'WIN',
+                        entryReasons: ['Post-earnings gap up held', 'Cloud revenue beat expectations', 'AI Gemini momentum'],
+                        exitReason: 'Scaled out at $192 as gap fill target achieved. Strong execution.',
+                        tradePlan: 'Gap continuation trade. Enter on first pullback to VWAP post-gap. Target gap fill at $190.',
+                        postAnalysis: 'Perfect setup execution. Entry on VWAP pullback gave excellent R:R. Held through consolidation for full target.',
+                        lessons: ['Post-earnings gap trades work well with VWAP entries', 'Patience on consolidation paid off']
+                    },
+                    {
+                        ticker: 'COIN', shares: 40, strategy: 'Smart Money',
+                        openDate: 'Feb 1, 2026', closeDate: 'Feb 8, 2026', holdDays: 7,
+                        entryPrice: 235.00, exitPrice: 218.00, pnl: -680.00, pnlPct: -7.23, result: 'LOSS',
+                        entryReasons: ['Institutional accumulation signals', 'BTC ETF flow momentum', 'Relative strength vs peers'],
+                        exitReason: 'Stop loss hit at $218 after SEC regulatory headline. Gap down through stop level.',
+                        tradePlan: 'Accumulation breakout trade. T1: $270, T2: $300. Stop at $220.',
+                        postAnalysis: 'Setup was valid but regulatory risk materialized. Gap through stop caused extra slippage. Consider options for headline-sensitive names.',
+                        lessons: ['Regulatory risk in crypto names is real', 'Consider hedging with puts on high-profile names']
+                    },
+                    {
+                        ticker: 'META', shares: 20, strategy: 'Mean Reversion',
+                        openDate: 'Feb 3, 2026', closeDate: 'Feb 10, 2026', holdDays: 7,
+                        entryPrice: 485.00, exitPrice: 510.00, pnl: 500.00, pnlPct: 5.15, result: 'WIN',
+                        entryReasons: ['Oversold bounce at 50 EMA', 'Strong ad revenue fundamentals', 'VR/AI catalyst ahead'],
+                        exitReason: 'Target hit at $510. Textbook mean reversion to 20 EMA.',
+                        tradePlan: 'Mean reversion long at 50 EMA. Target 20 EMA at $510. Stop at $470.',
+                        postAnalysis: 'Clean setup, clean execution. Entry on oversold RSI at support was high probability. Took full target without greed.',
+                        lessons: ['Mean reversion at major EMAs in uptrends is reliable', '50 to 20 EMA moves are tradeable']
+                    },
+                ],
+                
+                cryptos: [
+                    { symbol: 'BTC-USD', name: 'Bitcoin', emoji: '₿', price: 97450, change: 3.21, currency: '$' },
+                    { symbol: 'ETH-USD', name: 'Ethereum', emoji: 'Ξ', price: 3245, change: 2.15, currency: '$' },
+                    { symbol: 'SOL-USD', name: 'Solana', emoji: '◎', price: 178.50, change: 5.67, currency: '$' },
+                    { symbol: 'XRP-USD', name: 'Ripple', emoji: '💧', price: 2.45, change: 4.23, currency: '$' },
+                    { symbol: 'BNB-USD', name: 'BNB', emoji: '🔶', price: 685.30, change: 1.85, currency: '$' },
+                    { symbol: 'ADA-USD', name: 'Cardano', emoji: '🔷', price: 0.92, change: -1.20, currency: '$' },
+                ],
+                
+                asiaMarkets: [
+                    { name: 'Nikkei 225', flag: '🇯🇵', change: 0.85, status: 'Closed' },
+                    { name: 'Hang Seng', flag: '🇭🇰', change: -0.45, status: 'Closed' },
+                    { name: 'Shanghai Composite', flag: '🇨🇳', change: 0.32, status: 'Closed' },
+                    { name: 'KOSPI', flag: '🇰🇷', change: 0.58, status: 'Closed' },
+                    { name: 'Taiwan Weighted', flag: '🇹🇼', change: 1.12, status: 'Closed' },
+                ],
+                
+                // Japan Stocks (Real Tokyo Stock Exchange)
+                japanStocks: [
+                    { symbol: '7203.T', name: 'Toyota Motor', price: 2856, change: 1.24 },
+                    { symbol: '6758.T', name: 'Sony Group', price: 14520, change: 2.15 },
+                    { symbol: '9984.T', name: 'SoftBank Group', price: 8945, change: -0.85 },
+                    { symbol: '6861.T', name: 'Keyence Corp', price: 68450, change: 0.92 },
+                    { symbol: '7974.T', name: 'Nintendo', price: 8125, change: 1.56 },
+                    { symbol: '6902.T', name: 'Denso Corp', price: 2345, change: 0.78 },
+                    { symbol: '8306.T', name: 'Mitsubishi UFJ', price: 1567, change: -0.32 },
+                    { symbol: '6501.T', name: 'Hitachi Ltd', price: 3280, change: 1.45 },
+                ],
+                
+                // Hong Kong Stocks (Real HKEX)
+                hkStocks: [
+                    { symbol: '0700.HK', name: 'Tencent Holdings', price: 385.60, change: 2.35 },
+                    { symbol: '9988.HK', name: 'Alibaba Group', price: 85.45, change: -1.25 },
+                    { symbol: '1299.HK', name: 'AIA Group', price: 62.30, change: 0.85 },
+                    { symbol: '0941.HK', name: 'China Mobile', price: 72.15, change: 0.45 },
+                    { symbol: '3690.HK', name: 'Meituan', price: 142.80, change: 3.12 },
+                    { symbol: '9618.HK', name: 'JD.com', price: 135.20, change: 1.85 },
+                    { symbol: '2318.HK', name: 'Ping An Insurance', price: 42.65, change: -0.65 },
+                    { symbol: '1810.HK', name: 'Xiaomi Corp', price: 18.92, change: 4.25 },
+                ],
+                
+                // Upcoming Events
+                upcomingEarnings: [
+                    { ticker: 'NVDA', name: 'NVIDIA Corp', date: 'Feb 21', timing: 'AMC' },
+                    { ticker: 'AAPL', name: 'Apple Inc', date: 'Feb 24', timing: 'AMC' },
+                    { ticker: 'MSFT', name: 'Microsoft', date: 'Feb 25', timing: 'AMC' },
+                    { ticker: 'GOOGL', name: 'Alphabet', date: 'Feb 27', timing: 'AMC' },
+                ],
+                
+                macroEvents: [
+                    { name: 'FOMC Minutes', emoji: '🏛️', date: 'Feb 21', time: '2:00 PM ET', impact: 'HIGH' },
+                    { name: 'Initial Jobless Claims', emoji: '📊', date: 'Feb 22', time: '8:30 AM ET', impact: 'MEDIUM' },
+                    { name: 'PMI Manufacturing', emoji: '🏭', date: 'Feb 22', time: '9:45 AM ET', impact: 'MEDIUM' },
+                    { name: 'Fed Powell Speech', emoji: '🎤', date: 'Feb 23', time: '12:00 PM ET', impact: 'HIGH' },
+                ],
+                
+                recentTrades: [
+                    { id: 1, time: '14:32', symbol: 'NVDA', side: 'BUY', qty: 10, price: 872.50, pnl: 125.00, strategy: 'Momentum' },
+                    { id: 2, time: '13:45', symbol: 'MARA', side: 'BUY', qty: 50, price: 21.80, pnl: 89.50, strategy: 'Breakout' },
+                    { id: 3, time: '11:20', symbol: 'AAPL', side: 'SELL', qty: 25, price: 183.20, pnl: 67.50, strategy: 'Take Profit' },
+                    { id: 4, time: '10:15', symbol: 'TSLA', side: 'BUY', qty: 15, price: 242.30, pnl: -45.00, strategy: 'Swing' },
+                    { id: 5, time: '09:45', symbol: 'AMD', side: 'BUY', qty: 30, price: 165.80, pnl: 156.00, strategy: 'VCP' },
+                ],
+                
+                init() {
+                    this.updateTime();
+                    setInterval(() => this.updateTime(), 1000);
+                    this.initChart();
+                    this.fetchData();
+                    setInterval(() => this.fetchData(), 30000); // Refresh every 30s
+                },
+                
+                updateTime() {
+                    const now = new Date();
+                    this.currentTime = now.toLocaleTimeString('en-US', { 
+                        hour: '2-digit', 
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: true 
+                    }) + ' ET';
+                },
+                
+                formatCurrency(value) {
+                    return new Intl.NumberFormat('en-US', {
+                        style: 'currency',
+                        currency: 'USD',
+                        minimumFractionDigits: 2
+                    }).format(value);
+                },
+                
+                initChart() {
+                    const ctx = document.getElementById('pnlChart').getContext('2d');
+                    new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                            datasets: [
+                                {
+                                    label: 'Portfolio',
+                                    data: [0, 2.5, 4.2, 6.8, 5.5, 8.9, 12.4, 15.6, 18.2, 21.5, 23.1, 24.5],
+                                    borderColor: '#00d4aa',
+                                    backgroundColor: 'rgba(0, 212, 170, 0.1)',
+                                    fill: true,
+                                    tension: 0.4,
+                                    borderWidth: 2
+                                },
+                                {
+                                    label: 'SPY (Benchmark)',
+                                    data: [0, 1.5, 2.8, 4.2, 3.5, 5.2, 7.8, 9.2, 11.5, 13.2, 15.1, 16.8],
+                                    borderColor: '#888888',
+                                    backgroundColor: 'transparent',
+                                    fill: false,
+                                    tension: 0.4,
+                                    borderWidth: 1,
+                                    borderDash: [5, 5]
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: { 
+                                    display: true,
+                                    labels: { color: '#888', boxWidth: 12 }
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            return context.dataset.label + ': ' + context.parsed.y.toFixed(1) + '%';
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#888' } },
+                                y: { 
+                                    grid: { color: 'rgba(255,255,255,0.05)' }, 
+                                    ticks: { color: '#888', callback: v => v.toFixed(0) + '%' }
+                                }
+                            }
+                        }
+                    });
+                },
+                
+                async fetchData() {
+                    try {
+                        // Fetch system status
+                        const healthResp = await fetch('/health/live');
+                        if (healthResp.ok) {
+                            const healthData = await healthResp.json();
+                            this.systemStatus.dataFresh = healthData.status === 'ok';
+                        }
+                        
+                        // Fetch signals status
+                        const signalsResp = await fetch('/status/signals');
+                        if (signalsResp.ok) {
+                            const signalsData = await signalsResp.json();
+                            this.systemStatus.noTrade = signalsData.no_trade_active || false;
+                            this.systemStatus.noTradeReason = signalsData.no_trade_reason || '';
+                        }
+                        
+                        // In production, fetch real data from:
+                        // - /api/portfolio for positions and P&L
+                        // - /api/signals for top signals
+                        // - /api/market for market data
+                        // - /api/risk for risk metrics
+                        // - /api/ai-advisor for AI recommendations
+                        // - /api/ml-status for ML model metrics
+                        
+                        // Fetch AI advisor data
+                        try {
+                            const aiResp = await fetch('/api/ai-advisor');
+                            if (aiResp.ok) {
+                                const aiData = await aiResp.json();
+                                if (aiData.market_brief) this.aiAdvisor.marketBrief = aiData.market_brief;
+                                if (aiData.recommendation) this.aiAdvisor.recommendation = aiData.recommendation;
+                                if (aiData.reasoning) this.aiAdvisor.reasoning = aiData.reasoning;
+                                if (aiData.chain_of_thought) this.aiAdvisor.chainOfThought = aiData.chain_of_thought;
+                            }
+                        } catch (e) { /* AI advisor endpoint not available yet */ }
+                        
+                        // Fetch ML status
+                        try {
+                            const mlResp = await fetch('/api/ml-status');
+                            if (mlResp.ok) {
+                                const mlData = await mlResp.json();
+                                if (mlData.accuracy) this.mlStatus.accuracy = mlData.accuracy;
+                                if (mlData.samples) this.mlStatus.samples = mlData.samples;
+                                if (mlData.model_ready !== undefined) this.mlStatus.modelReady = mlData.model_ready;
+                            }
+                        } catch (e) { /* ML status endpoint not available yet */ }
+                        
+                    } catch (error) {
+                        console.error('Error fetching data:', error);
+                        this.systemStatus.dataFresh = false;
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- PWA Service Worker Registration -->
+    <script>
+        // Register Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', async () => {
+                try {
+                    const registration = await navigator.serviceWorker.register('/static/sw.js', {
+                        scope: '/'
+                    });
+                    console.log('✅ PWA Service Worker registered:', registration.scope);
+                    
+                    // Check for updates
+                    registration.addEventListener('updatefound', () => {
+                        console.log('🔄 New version available!');
+                    });
+                } catch (error) {
+                    console.log('❌ Service Worker registration failed:', error);
+                }
+            });
+        }
+        
+        // Install prompt handler
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            
+            // Show install button
+            const installBtn = document.getElementById('install-btn');
+            if (installBtn) {
+                installBtn.style.display = 'flex';
+                installBtn.addEventListener('click', async () => {
+                    deferredPrompt.prompt();
+                    const { outcome } = await deferredPrompt.userChoice;
+                    console.log('Install prompt outcome:', outcome);
+                    deferredPrompt = null;
+                    installBtn.style.display = 'none';
+                });
+            }
+        });
+        
+        // Notify when installed
+        window.addEventListener('appinstalled', () => {
+            console.log('✅ TradingAI PWA installed!');
+            deferredPrompt = null;
+        });
+        
+        // Request notification permission
+        async function requestNotifications() {
+            if ('Notification' in window && navigator.serviceWorker) {
+                const permission = await Notification.requestPermission();
+                if (permission === 'granted') {
+                    console.log('✅ Notifications enabled');
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        // Online/Offline status
+        window.addEventListener('online', () => {
+            document.body.classList.remove('offline');
+            console.log('🟢 Back online');
+        });
+        
+        window.addEventListener('offline', () => {
+            document.body.classList.add('offline');
+            console.log('🔴 Offline mode');
+        });
+    </script>
+</body>
+</html>

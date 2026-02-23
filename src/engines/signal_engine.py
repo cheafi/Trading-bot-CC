@@ -100,19 +100,28 @@ class RegimeDetector:
         
         active = []
         
-        # Momentum works in uptrends with normal volatility
+        # Momentum & trend strategies work in uptrends with normal volatility
         if trend in [TrendRegime.UPTREND, TrendRegime.STRONG_UPTREND]:
             if vol != VolatilityRegime.HIGH_VOL:
-                active.append("momentum_v1")
+                active.append("momentum_breakout")
+                active.append("short_term_trend_following")  # Pullback buying in uptrends
+                active.append("trend_following")  # Turtle-style trend following
+                active.append("momentum_rotation")  # Sector rotation
+        
+        # VCP works in low vol (tight base / squeeze setup)
+        if vol in [VolatilityRegime.LOW_VOL, VolatilityRegime.NORMAL]:
+            if trend in [TrendRegime.UPTREND, TrendRegime.STRONG_UPTREND, TrendRegime.NEUTRAL]:
+                active.append("vcp")
         
         # Mean reversion works in normal/low vol environments
         if vol in [VolatilityRegime.NORMAL, VolatilityRegime.LOW_VOL]:
             if trend != TrendRegime.STRONG_DOWNTREND:
-                active.append("mean_reversion_v1")
+                active.append("mean_reversion")
+                active.append("short_term_mean_reversion")
         
-        # Breakouts work in low vol (squeeze setup)
-        if vol in [VolatilityRegime.LOW_VOL, VolatilityRegime.NORMAL]:
-            active.append("breakout_v1")
+        # Classic swing works in neutral/uptrend markets
+        if trend in [TrendRegime.NEUTRAL, TrendRegime.UPTREND, TrendRegime.STRONG_UPTREND]:
+            active.append("classic_swing")
         
         return active
 
@@ -170,7 +179,7 @@ class RiskModel:
             signal.position_size_pct = self._calculate_position_size(signal, portfolio)
         
         # Filter out signals with 0 position size
-        signals = [s for s in signals if (signal.position_size_pct or 0) > 0]
+        signals = [s for s in signals if (s.position_size_pct or 0) > 0]
         
         self.logger.info(f"Risk model: {len(signals)} signals passed filters")
         
@@ -179,7 +188,7 @@ class RiskModel:
     def _calculate_position_size(self, signal: Signal, portfolio: Dict) -> float:
         """Calculate position size based on risk parameters."""
         equity = portfolio.get('equity', 100000)
-        risk_per_trade = 0.01  # 1% risk per trade
+        risk_per_trade = portfolio.get('risk_per_trade', 0.01)  # Configurable, default 1%
         
         # Risk-based sizing
         if signal.invalidation.stop_price and signal.entry_price:
@@ -189,15 +198,24 @@ class RiskModel:
             if stop_pct > 0:
                 base_size = risk_per_trade / stop_pct
             else:
-                base_size = self.max_position_pct
+                base_size = self.max_position_pct * 0.5  # Conservative fallback
         else:
-            base_size = self.max_position_pct
+            base_size = self.max_position_pct * 0.5  # Conservative fallback
         
-        # Confidence adjustment
-        confidence_factor = signal.confidence / 100
+        # Confidence adjustment (scale 0.5-1.0 based on confidence)
+        confidence_factor = 0.5 + (signal.confidence / 200)  # 50 conf → 0.75x, 80 conf → 0.90x
+        
+        # Volatility adjustment: reduce size in high vol
+        vol_factor = 1.0
+        if hasattr(signal, 'metadata') and signal.metadata:
+            atr_pct = signal.metadata.get('atr_pct', 0.02)
+            if atr_pct > 0.04:  # High volatility stock
+                vol_factor = 0.6
+            elif atr_pct > 0.03:
+                vol_factor = 0.8
         
         # Calculate final size
-        position_size = base_size * confidence_factor
+        position_size = base_size * confidence_factor * vol_factor
         
         # Cap at max position size
         return min(position_size, self.max_position_pct)
@@ -291,37 +309,44 @@ class SignalEngine:
         Pre-flight checks before signal generation.
         
         Ensures market conditions are suitable for trading.
+        Returns (can_trade, reason) tuple.
         """
         vix = market_data.get('vix', 20)
         spx_change = market_data.get('spx_change_pct', 0)
         is_fomc = market_data.get('is_fomc_day', False)
         is_quad_witching = market_data.get('is_quad_witching', False)
         data_fresh = market_data.get('data_fresh', True)
+        data_staleness_seconds = market_data.get('data_staleness_seconds', 0)
         
+        # NO TRADE conditions with specific reason codes
         checks = [
-            (vix < 40, f"VIX too high ({vix:.1f}) - crisis mode"),
-            (spx_change > -3.0, f"Market down {abs(spx_change):.1f}% - circuit breaker risk"),
-            (not is_fomc, "FOMC day - high volatility expected"),
-            (not is_quad_witching, "Quad witching - unusual volume/volatility"),
-            (data_fresh, "Market data too stale"),
+            (vix < 40, "NO_TRADE_vix_crisis", f"VIX too high ({vix:.1f}) - crisis mode"),
+            (spx_change > -3.0, "NO_TRADE_circuit_breaker", f"Market down {abs(spx_change):.1f}% - circuit breaker risk"),
+            (not is_fomc, "NO_TRADE_fomc_day", "FOMC day - high volatility expected"),
+            (not is_quad_witching, "NO_TRADE_quad_witching", "Quad witching - unusual volume/volatility"),
+            (data_fresh, "NO_TRADE_stale_data", "Market data too stale"),
+            (data_staleness_seconds < 900, "NO_TRADE_data_15min", f"Data staleness {data_staleness_seconds}s > 15min threshold"),
         ]
         
-        for condition, reason in checks:
+        for condition, code, reason in checks:
             if not condition:
-                return False, f"NO TRADE: {reason}"
-        
-        # Additional check: Extended hours
-        from datetime import datetime
-        now = datetime.now()
-        market_open = now.replace(hour=9, minute=30, second=0)
-        market_close = now.replace(hour=16, minute=0, second=0)
-        
-        # Only generate signals during market hours (or pre-market after 8am)
-        pre_market = now.replace(hour=8, minute=0, second=0)
-        if now < pre_market or now > market_close:
-            pass  # Allow signals to be generated for next day
+                # Track rejection reasons
+                self._track_rejection(code, reason)
+                return False, f"{code}: {reason}"
         
         return True, "All checks passed"
+    
+    def _track_rejection(self, code: str, reason: str):
+        """Track rejection reasons for observability."""
+        if not hasattr(self, '_rejection_counts'):
+            self._rejection_counts = {}
+        
+        self._rejection_counts[code] = self._rejection_counts.get(code, 0) + 1
+        self.logger.info(f"Signal rejected: {code} - {reason}")
+    
+    def get_rejection_stats(self) -> Dict[str, int]:
+        """Get rejection reason statistics."""
+        return getattr(self, '_rejection_counts', {})
     
     async def generate_signals_async(
         self,

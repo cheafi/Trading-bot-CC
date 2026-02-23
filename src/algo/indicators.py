@@ -107,11 +107,14 @@ class IndicatorLibrary:
     
     @staticmethod
     def rsi(series: pd.Series, period: int = 14) -> pd.Series:
-        """Relative Strength Index."""
+        """Relative Strength Index using Wilder's smoothing (EWM)."""
         delta = series.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-        rs = gain / loss.replace(0, np.inf)
+        gain = delta.where(delta > 0, 0)
+        loss = (-delta).where(delta < 0, 0)
+        # Wilder's smoothing = EWM with alpha=1/period (matches TradingView/Bloomberg)
+        avg_gain = gain.ewm(alpha=1.0/period, min_periods=period, adjust=False).mean()
+        avg_loss = loss.ewm(alpha=1.0/period, min_periods=period, adjust=False).mean()
+        rs = avg_gain / avg_loss.replace(0, np.inf)
         return 100 - (100 / (1 + rs))
     
     @staticmethod
@@ -178,12 +181,14 @@ class IndicatorLibrary:
     # ========== Volatility Indicators ==========
     
     @staticmethod
-    def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
-        """Average True Range."""
+    def atr(df: pd.DataFrame, period: int = 14, wilder: bool = True) -> pd.Series:
+        """Average True Range with Wilder's smoothing (default) or SMA."""
         high_low = df['high'] - df['low']
         high_close = (df['high'] - df['close'].shift()).abs()
         low_close = (df['low'] - df['close'].shift()).abs()
         true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+        if wilder:
+            return true_range.ewm(alpha=1.0/period, min_periods=period, adjust=False).mean()
         return true_range.rolling(window=period).mean()
     
     @staticmethod
@@ -254,19 +259,10 @@ class IndicatorLibrary:
     
     @staticmethod
     def obv(df: pd.DataFrame) -> pd.Series:
-        """On-Balance Volume."""
-        obv = pd.Series(0.0, index=df.index)
-        obv.iloc[0] = df['volume'].iloc[0]
-        
-        for i in range(1, len(df)):
-            if df['close'].iloc[i] > df['close'].iloc[i-1]:
-                obv.iloc[i] = obv.iloc[i-1] + df['volume'].iloc[i]
-            elif df['close'].iloc[i] < df['close'].iloc[i-1]:
-                obv.iloc[i] = obv.iloc[i-1] - df['volume'].iloc[i]
-            else:
-                obv.iloc[i] = obv.iloc[i-1]
-        
-        return obv
+        """On-Balance Volume (vectorized)."""
+        direction = np.sign(df['close'].diff())
+        direction.iloc[0] = 0
+        return (direction * df['volume']).cumsum()
     
     @staticmethod
     def vwap(df: pd.DataFrame) -> pd.Series:
@@ -654,21 +650,15 @@ class IndicatorLibrary:
     @staticmethod
     def pullback_days(df: pd.DataFrame) -> pd.Series:
         """
-        Count consecutive down days (pullback length).
+        Count consecutive down days (pullback length) - vectorized.
         
         Returns series with count of consecutive days where close < previous close.
         """
-        down_day = df['close'] < df['close'].shift(1)
-        
-        pullback_count = pd.Series(0, index=df.index)
-        count = 0
-        for i in range(1, len(df)):
-            if down_day.iloc[i]:
-                count += 1
-            else:
-                count = 0
-            pullback_count.iloc[i] = count
-        
+        down_day = (df['close'] < df['close'].shift(1)).astype(int)
+        # Group consecutive runs: when down_day changes from 0 to 1 or 1 to 0
+        groups = (down_day != down_day.shift(1)).cumsum()
+        # Count within each group, but only for down days
+        pullback_count = down_day.groupby(groups).cumsum()
         return pullback_count
     
     @staticmethod

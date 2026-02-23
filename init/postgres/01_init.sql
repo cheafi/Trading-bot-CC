@@ -33,7 +33,9 @@ CREATE TABLE time_series.ohlcv (
     vwap            NUMERIC(12,4),
     trade_count     INTEGER,
     source          VARCHAR(20) DEFAULT 'polygon',
-    created_at      TIMESTAMPTZ DEFAULT NOW()
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    -- Unique constraint to prevent duplicate data
+    CONSTRAINT ohlcv_unique_ts_ticker_source UNIQUE (ts, ticker, source)
 );
 
 -- Convert to hypertable (TimescaleDB)

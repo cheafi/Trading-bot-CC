@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signal Explorer - TradingAI Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        .gradient-bg { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); }
+        .card-glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+        .profit { color: #00d4aa; }
+        .loss { color: #ff6b6b; }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen text-white" x-data="signalExplorer()">
+    
+    <!-- Header -->
+    <header class="border-b border-white/10 px-6 py-4">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <a href="/" class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-gradient-to-br from-green-400 to-blue-500 rounded-xl flex items-center justify-center">
+                        <span class="text-xl">📈</span>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold">Signal Explorer</h1>
+                        <p class="text-xs text-gray-400">TradingAI Pro</p>
+                    </div>
+                </a>
+            </div>
+            <div class="flex items-center space-x-4">
+                <a href="/" class="text-sm text-gray-400 hover:text-white">← Dashboard</a>
+                <span class="text-sm text-gray-400" x-text="lastUpdate"></span>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-6 py-8">
+        
+        <!-- Filters -->
+        <div class="card-glass rounded-xl p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-4">🔍 Filters</h2>
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Date</label>
+                    <input type="date" x-model="filters.date" 
+                           class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Strategy</label>
+                    <select x-model="filters.strategy" 
+                            class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm">
+                        <option value="">All</option>
+                        <option value="momentum">Momentum</option>
+                        <option value="mean_reversion">Mean Reversion</option>
+                        <option value="trend_following">Trend Following</option>
+                        <option value="swing">Swing</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Direction</label>
+                    <select x-model="filters.direction" 
+                            class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm">
+                        <option value="">All</option>
+                        <option value="LONG">Long</option>
+                        <option value="SHORT">Short</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Min Confidence</label>
+                    <input type="range" min="0" max="100" x-model="filters.minConfidence" 
+                           class="w-full">
+                    <span class="text-xs text-gray-400" x-text="filters.minConfidence + '%'"></span>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Status</label>
+                    <select x-model="filters.status" 
+                            class="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm">
+                        <option value="">All</option>
+                        <option value="active">Active</option>
+                        <option value="triggered">Triggered</option>
+                        <option value="expired">Expired</option>
+                        <option value="stopped">Stopped Out</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Signal Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="card-glass rounded-xl p-4 text-center">
+                <div class="text-2xl font-bold profit" x-text="stats.generated"></div>
+                <div class="text-sm text-gray-400">Generated Today</div>
+            </div>
+            <div class="card-glass rounded-xl p-4 text-center">
+                <div class="text-2xl font-bold text-yellow-400" x-text="stats.rejected"></div>
+                <div class="text-sm text-gray-400">Rejected (NO TRADE)</div>
+            </div>
+            <div class="card-glass rounded-xl p-4 text-center">
+                <div class="text-2xl font-bold text-blue-400" x-text="stats.active"></div>
+                <div class="text-sm text-gray-400">Active Signals</div>
+            </div>
+            <div class="card-glass rounded-xl p-4 text-center">
+                <div class="text-2xl font-bold profit" x-text="stats.winRate + '%'"></div>
+                <div class="text-sm text-gray-400">Win Rate (30d)</div>
+            </div>
+        </div>
+
+        <!-- Signals Table -->
+        <div class="card-glass rounded-xl overflow-hidden">
+            <div class="p-4 border-b border-white/10 flex justify-between items-center">
+                <h2 class="text-lg font-semibold">📊 Signals</h2>
+                <button @click="refreshSignals()" class="text-sm bg-blue-500/20 hover:bg-blue-500/30 px-3 py-1 rounded-lg">
+                    ↻ Refresh
+                </button>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-white/5">
+                        <tr class="text-left text-sm text-gray-400">
+                            <th class="px-4 py-3">Time</th>
+                            <th class="px-4 py-3">Ticker</th>
+                            <th class="px-4 py-3">Direction</th>
+                            <th class="px-4 py-3">Strategy</th>
+                            <th class="px-4 py-3">Entry</th>
+                            <th class="px-4 py-3">Stop</th>
+                            <th class="px-4 py-3">Targets</th>
+                            <th class="px-4 py-3">R:R</th>
+                            <th class="px-4 py-3">Confidence</th>
+                            <th class="px-4 py-3">Status</th>
+                            <th class="px-4 py-3">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="signal in filteredSignals" :key="signal.id">
+                            <tr class="border-t border-white/5 hover:bg-white/5 cursor-pointer"
+                                @click="selectedSignal = signal">
+                                <td class="px-4 py-3 text-sm text-gray-400" x-text="signal.time"></td>
+                                <td class="px-4 py-3 font-semibold" x-text="signal.ticker"></td>
+                                <td class="px-4 py-3">
+                                    <span :class="signal.direction === 'LONG' ? 'profit' : 'loss'"
+                                          x-text="signal.direction"></span>
+                                </td>
+                                <td class="px-4 py-3 text-sm" x-text="signal.strategy"></td>
+                                <td class="px-4 py-3" x-text="'$' + signal.entry.toFixed(2)"></td>
+                                <td class="px-4 py-3 loss" x-text="'$' + signal.stop.toFixed(2)"></td>
+                                <td class="px-4 py-3 text-sm profit">
+                                    <span x-text="signal.targets.map(t => '$' + t.toFixed(0)).join(' / ')"></span>
+                                </td>
+                                <td class="px-4 py-3" x-text="signal.rr.toFixed(1) + ':1'"></td>
+                                <td class="px-4 py-3">
+                                    <div class="flex items-center space-x-2">
+                                        <div class="w-16 bg-white/10 rounded-full h-2">
+                                            <div class="bg-green-400 h-2 rounded-full" 
+                                                 :style="'width: ' + signal.confidence + '%'"></div>
+                                        </div>
+                                        <span class="text-sm" x-text="signal.confidence + '%'"></span>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3">
+                                    <span :class="{
+                                        'bg-green-500/20 text-green-400': signal.status === 'active',
+                                        'bg-blue-500/20 text-blue-400': signal.status === 'triggered',
+                                        'bg-gray-500/20 text-gray-400': signal.status === 'expired',
+                                        'bg-red-500/20 text-red-400': signal.status === 'stopped'
+                                    }" class="text-xs px-2 py-1 rounded-full" x-text="signal.status"></span>
+                                </td>
+                                <td class="px-4 py-3">
+                                    <button @click.stop="viewDetail(signal)" 
+                                            class="text-xs bg-blue-500/20 hover:bg-blue-500/30 px-2 py-1 rounded">
+                                        Details
+                                    </button>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Signal Detail Modal -->
+        <div x-show="selectedSignal" x-cloak
+             class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+             @click="selectedSignal = null">
+            <div class="card-glass rounded-xl p-6 max-w-2xl w-full mx-4" @click.stop>
+                <div class="flex justify-between items-start mb-4">
+                    <h3 class="text-xl font-bold">
+                        <span x-text="selectedSignal?.ticker"></span>
+                        <span :class="selectedSignal?.direction === 'LONG' ? 'profit' : 'loss'" 
+                              x-text="selectedSignal?.direction" class="text-sm ml-2"></span>
+                    </h3>
+                    <button @click="selectedSignal = null" class="text-gray-400 hover:text-white">✕</button>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div>
+                        <h4 class="text-sm text-gray-400 mb-2">📍 Entry / Exit</h4>
+                        <div class="space-y-1">
+                            <div>Entry: <span class="font-semibold" x-text="'$' + selectedSignal?.entry?.toFixed(2)"></span></div>
+                            <div>Stop Loss: <span class="font-semibold loss" x-text="'$' + selectedSignal?.stop?.toFixed(2)"></span></div>
+                            <div>Target 1: <span class="font-semibold profit" x-text="'$' + selectedSignal?.targets?.[0]?.toFixed(2)"></span></div>
+                            <div>Target 2: <span class="font-semibold profit" x-text="'$' + selectedSignal?.targets?.[1]?.toFixed(2)"></span></div>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-sm text-gray-400 mb-2">📊 Stats</h4>
+                        <div class="space-y-1">
+                            <div>Strategy: <span class="font-semibold" x-text="selectedSignal?.strategy"></span></div>
+                            <div>Confidence: <span class="font-semibold" x-text="selectedSignal?.confidence + '%'"></span></div>
+                            <div>R:R Ratio: <span class="font-semibold" x-text="selectedSignal?.rr?.toFixed(1) + ':1'"></span></div>
+                            <div>Horizon: <span class="font-semibold" x-text="selectedSignal?.horizon || 'Swing'"></span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <h4 class="text-sm text-gray-400 mb-2">🎯 Why Generated</h4>
+                    <div class="bg-white/5 rounded-lg p-3 text-sm" x-text="selectedSignal?.reason || 'Momentum breakout with volume confirmation above key resistance level.'"></div>
+                </div>
+
+                <div class="mb-4">
+                    <h4 class="text-sm text-gray-400 mb-2">⚠️ Key Risks</h4>
+                    <div class="bg-white/5 rounded-lg p-3 text-sm" x-text="selectedSignal?.risks || 'Earnings in 5 days. High correlation with QQQ (0.85).'"></div>
+                </div>
+
+                <div class="mb-4">
+                    <h4 class="text-sm text-gray-400 mb-2">🤖 GPT Validator Output</h4>
+                    <div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 text-sm" 
+                         x-text="selectedSignal?.gptValidation || 'VALID: Setup meets criteria. No conflicting news. Sector showing relative strength.'"></div>
+                </div>
+
+                <div class="flex items-center justify-between text-xs text-gray-400">
+                    <span>Generated: <span x-text="selectedSignal?.generatedAt"></span></span>
+                    <span>Data as of: <span x-text="selectedSignal?.dataAsOf"></span></span>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        function signalExplorer() {
+            return {
+                lastUpdate: new Date().toLocaleTimeString(),
+                selectedSignal: null,
+                filters: {
+                    date: new Date().toISOString().split('T')[0],
+                    strategy: '',
+                    direction: '',
+                    minConfidence: 60,
+                    status: ''
+                },
+                stats: {
+                    generated: 15,
+                    rejected: 42,
+                    active: 8,
+                    winRate: 68
+                },
+                signals: [
+                    {
+                        id: 1,
+                        time: '14:32',
+                        ticker: 'NVDA',
+                        direction: 'LONG',
+                        strategy: 'Momentum',
+                        entry: 142.50,
+                        stop: 137.00,
+                        targets: [150.25, 158.00, 170.00],
+                        rr: 2.5,
+                        confidence: 85,
+                        status: 'active',
+                        generatedAt: '2026-02-12 14:32:15 ET',
+                        dataAsOf: '2026-02-12 14:32:10 ET',
+                        horizon: 'Swing (1-3 weeks)',
+                        reason: 'Breaking out of VCP pattern with 180% relative volume. RSI at 62 with room to run.',
+                        risks: 'Earnings in 12 days. High beta (1.8). QQQ correlation 0.82.',
+                        gptValidation: 'VALID: Clear breakout setup. No conflicting news. AI/chip sector showing relative strength.'
+                    },
+                    {
+                        id: 2,
+                        time: '13:45',
+                        ticker: 'AAPL',
+                        direction: 'LONG',
+                        strategy: 'Mean Reversion',
+                        entry: 185.20,
+                        stop: 181.50,
+                        targets: [190.00, 195.00],
+                        rr: 1.8,
+                        confidence: 72,
+                        status: 'active',
+                        generatedAt: '2026-02-12 13:45:22 ET',
+                        dataAsOf: '2026-02-12 13:45:18 ET'
+                    },
+                    {
+                        id: 3,
+                        time: '11:20',
+                        ticker: 'TSLA',
+                        direction: 'SHORT',
+                        strategy: 'Trend Following',
+                        entry: 245.00,
+                        stop: 252.00,
+                        targets: [235.00, 225.00],
+                        rr: 2.0,
+                        confidence: 68,
+                        status: 'triggered',
+                        generatedAt: '2026-02-12 11:20:05 ET',
+                        dataAsOf: '2026-02-12 11:20:00 ET'
+                    },
+                    {
+                        id: 4,
+                        time: '10:05',
+                        ticker: 'AMD',
+                        direction: 'LONG',
+                        strategy: 'Swing',
+                        entry: 165.00,
+                        stop: 160.00,
+                        targets: [175.00, 185.00],
+                        rr: 2.5,
+                        confidence: 78,
+                        status: 'stopped',
+                        generatedAt: '2026-02-12 10:05:33 ET',
+                        dataAsOf: '2026-02-12 10:05:28 ET'
+                    }
+                ],
+                
+                get filteredSignals() {
+                    return this.signals.filter(s => {
+                        if (this.filters.strategy && s.strategy.toLowerCase() !== this.filters.strategy) return false;
+                        if (this.filters.direction && s.direction !== this.filters.direction) return false;
+                        if (s.confidence < this.filters.minConfidence) return false;
+                        if (this.filters.status && s.status !== this.filters.status) return false;
+                        return true;
+                    });
+                },
+                
+                refreshSignals() {
+                    this.lastUpdate = new Date().toLocaleTimeString();
+                    // In production, this would fetch from API
+                },
+                
+                viewDetail(signal) {
+                    this.selectedSignal = signal;
+                }
+            }
+        }
+    </script>
+</body>
+</html>
