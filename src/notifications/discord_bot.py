@@ -791,6 +791,37 @@ class DiscordInteractiveBot:
             trader_role = self._roles.get("📈 Trader")
             admin_role = self._roles.get("🤖 Bot Admin")
 
+            # ── Delete old categories that are not in SERVER_LAYOUT ─────
+            keep_cats = {c["category"] for c in SERVER_LAYOUT}
+            keep_chs  = {ch["name"] for c in SERVER_LAYOUT for ch in c["channels"]}
+            for old_cat in guild.categories:
+                if old_cat.name not in keep_cats:
+                    # Delete all channels inside the old category first
+                    for old_ch in old_cat.channels:
+                        try:
+                            await old_ch.delete(reason="Channel consolidation — v5 cleanup")
+                            logger.info(f"  🗑️ Deleted #{old_ch.name} (old)")
+                        except Exception:
+                            pass
+                    try:
+                        await old_cat.delete(reason="Category consolidation — v5 cleanup")
+                        logger.info(f"  🗑️ Deleted category: {old_cat.name}")
+                    except Exception:
+                        pass
+
+            # Also clean stale channels inside kept categories
+            for cat_def in SERVER_LAYOUT:
+                cat = discord.utils.get(guild.categories, name=cat_def["category"])
+                if cat:
+                    valid_names = {ch["name"] for ch in cat_def["channels"]}
+                    for old_ch in cat.text_channels:
+                        if old_ch.name not in valid_names:
+                            try:
+                                await old_ch.delete(reason="Channel consolidation — v5 cleanup")
+                                logger.info(f"  🗑️ Deleted #{old_ch.name} (stale)")
+                            except Exception:
+                                pass
+
             # ── Categories & Channels ─────────────────────────────────
             for cat_def in SERVER_LAYOUT:
                 cat_name = cat_def["category"]
