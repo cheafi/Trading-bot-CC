@@ -16,9 +16,13 @@ from typing import List, Dict, Optional, Any, Tuple
 import logging
 import pandas as pd
 
-from src.core.models import Signal, MarketRegime, VolatilityRegime, TrendRegime, RiskRegime
+from src.core.models import (
+    Signal, MarketRegime, VolatilityRegime, TrendRegime, RiskRegime,
+    MarketPlaybook, TradeBrief, RiskBulletin,
+)
 from src.core.config import get_trading_config
 from src.strategies import get_strategy, get_all_strategies, BaseStrategy
+from src.engines.insight_engine import InsightEngine
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -562,7 +566,7 @@ class RiskModel:
 
 class SignalEngine:
     """
-    Main signal generation pipeline (v4).
+    Main signal generation pipeline (v5).
     
     Orchestrates:
     1. Universe quality filter (hard gates)
@@ -573,7 +577,8 @@ class SignalEngine:
     6. Score unification + calibration
     7. Dedup + conflict resolution
     8. Risk filtering + sizing
-    9. Signal output
+    9. Insight enrichment (playbook + trade briefs + risk bulletin)
+    10. Signal output
     """
     
     def __init__(
@@ -582,15 +587,18 @@ class SignalEngine:
         regime_detector: Optional[RegimeDetector] = None,
         risk_model: Optional[RiskModel] = None,
         universe_filter: Optional[UniverseFilter] = None,
+        insight_engine: Optional[InsightEngine] = None,
     ):
         self.strategies = strategies or get_all_strategies()
         self.regime_detector = regime_detector or RegimeDetector()
         self.risk_model = risk_model or RiskModel()
         self.universe_filter = universe_filter or UniverseFilter()
+        self.insight_engine = insight_engine or InsightEngine()
         self.dedup = SignalDedup()
         self.score_unifier = ScoreUnifier()
         self.logger = logging.getLogger(__name__)
         self._last_market_state: Optional[Dict] = None
+        self._last_insights: Optional[Dict] = None
     
     def generate_signals(
         self,
@@ -711,6 +719,32 @@ class SignalEngine:
             filtered_signals = filtered_signals[:max_signals]
             self.logger.info(f"Limited to top {max_signals} signals")
         
+        # ── 9. Insight enrichment (v5) ─────────────────────────
+        try:
+            features_by_ticker = {}
+            for sig in filtered_signals:
+                features_by_ticker[sig.ticker] = self._get_feature_row(sig.ticker, features)
+            self._last_insights = self.insight_engine.generate_insights(
+                signals=filtered_signals,
+                regime=regime,
+                market_data=market_data,
+                features_by_ticker=features_by_ticker,
+                portfolio=portfolio,
+                calendar_events=calendar_events,
+                yesterday_regime=self._last_market_state.get("yesterday_regime") if self._last_market_state else None,
+            )
+            # Attach edge_model + execution_plan + risk_plan to each signal
+            trade_briefs = self._last_insights.get("trade_briefs", [])
+            for sig, brief in zip(filtered_signals, trade_briefs):
+                sig.feature_snapshot = sig.feature_snapshot or {}
+                sig.feature_snapshot["edge_model"] = brief.edge_model.model_dump() if brief.edge_model else {}
+                sig.feature_snapshot["execution_plan"] = brief.execution_plan.model_dump() if brief.execution_plan else {}
+                sig.feature_snapshot["risk_plan"] = brief.risk_plan.model_dump() if brief.risk_plan else {}
+                sig.feature_snapshot["trade_brief"] = brief.model_dump()
+        except Exception as e:
+            self.logger.error(f"InsightEngine enrichment failed: {e}", exc_info=True)
+            self._last_insights = None
+        
         return filtered_signals
     
     def _get_feature_row(self, ticker: str, features: pd.DataFrame) -> Dict:
@@ -731,6 +765,28 @@ class SignalEngine:
     def get_market_state(self) -> Optional[Dict]:
         """Return the latest market state for display / DB storage."""
         return self._last_market_state
+    
+    def get_insights(self) -> Optional[Dict]:
+        """Return the latest insights (playbook, trade briefs, risk bulletin)."""
+        return self._last_insights
+    
+    def get_playbook(self) -> Optional[MarketPlaybook]:
+        """Convenience: return just the playbook."""
+        if self._last_insights:
+            return self._last_insights.get("playbook")
+        return None
+    
+    def get_trade_briefs(self) -> List[TradeBrief]:
+        """Convenience: return trade briefs."""
+        if self._last_insights:
+            return self._last_insights.get("trade_briefs", [])
+        return []
+    
+    def get_risk_bulletin(self) -> Optional[RiskBulletin]:
+        """Convenience: return risk bulletin."""
+        if self._last_insights:
+            return self._last_insights.get("risk_bulletin")
+        return None
     
     def _preflight_check(self, market_data: Dict) -> tuple[bool, str]:
         """

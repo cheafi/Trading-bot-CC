@@ -556,10 +556,25 @@ DO $$ BEGIN
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
--- Add feature_version to features table
+-- Add feature_version + pattern_features to features table
 DO $$ BEGIN
     ALTER TABLE time_series.features ADD COLUMN IF NOT EXISTS feature_version VARCHAR(20);
     ALTER TABLE time_series.features ADD COLUMN IF NOT EXISTS dollar_volume_20d NUMERIC(18,2);
+    -- v5: Pattern features JSONB — closes the live↔backtest mismatch for breakout strategies
+    --   Keys: high_20d, low_20d, consolidation_days, consolidation_high, consolidation_low,
+    --          bb_squeeze_flag, pivot_level, gap_pct, gap_filled_flag, high_52w, low_52w
+    ALTER TABLE time_series.features ADD COLUMN IF NOT EXISTS pattern_features JSONB;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+-- =============================================================================
+-- v5: Add execution_plan / risk_plan / edge_model to signals
+-- =============================================================================
+DO $$ BEGIN
+    ALTER TABLE time_series.signals ADD COLUMN IF NOT EXISTS execution_plan JSONB;
+    ALTER TABLE time_series.signals ADD COLUMN IF NOT EXISTS risk_plan JSONB;
+    ALTER TABLE time_series.signals ADD COLUMN IF NOT EXISTS edge_model JSONB;
+    ALTER TABLE time_series.signals ADD COLUMN IF NOT EXISTS market_playbook_id UUID;
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
@@ -580,6 +595,102 @@ CREATE TABLE IF NOT EXISTS analytics.score_calibration (
     calibrated_at       TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (strategy_id, regime_label, score_bucket_low, score_bucket_high)
 );
+
+-- =============================================================================
+-- SIGNAL OUTCOMES (per-signal T1/T2/stop labels for calibration)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS analytics.signal_outcomes (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    signal_id           UUID NOT NULL,
+    strategy_id         VARCHAR(50),
+    regime_label        VARCHAR(30),
+    volatility_regime   VARCHAR(20),
+    setup_tags          TEXT[],
+    calibration_bucket  VARCHAR(100),
+
+    hit_t1              BOOLEAN,
+    hit_t2              BOOLEAN,
+    hit_stop            BOOLEAN,
+    hit_time_stop       BOOLEAN,
+
+    time_to_t1_days     INTEGER,
+    time_to_t2_days     INTEGER,
+    holding_days        INTEGER,
+
+    mae_pct             NUMERIC(10,6),
+    mfe_pct             NUMERIC(10,6),
+    pnl_pct             NUMERIC(10,6),
+
+    entry_price         NUMERIC(12,4),
+    exit_price          NUMERIC(12,4),
+    exit_reason         VARCHAR(50),
+
+    created_at          TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_outcomes_bucket ON analytics.signal_outcomes (calibration_bucket);
+CREATE INDEX IF NOT EXISTS idx_outcomes_strategy ON analytics.signal_outcomes (strategy_id, regime_label);
+
+-- =============================================================================
+-- REGIME EDGE STATS (pre-computed P(win) / EV per strategy+regime bucket)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS analytics.regime_edge_stats (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    calibration_bucket  VARCHAR(100) NOT NULL,
+    strategy_id         VARCHAR(50) NOT NULL,
+    regime_label        VARCHAR(30),
+    volatility_regime   VARCHAR(20),
+
+    sample_size         INTEGER,
+    p_t1                NUMERIC(6,4),
+    p_t2                NUMERIC(6,4),
+    p_stop              NUMERIC(6,4),
+    expected_return_pct NUMERIC(10,6),
+    expected_mae_pct    NUMERIC(10,6),
+    expected_holding_days NUMERIC(6,1),
+    avg_rr_realized     NUMERIC(8,4),
+
+    computed_at         TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (calibration_bucket, strategy_id, regime_label, volatility_regime)
+);
+
+-- =============================================================================
+-- MARKET PLAYBOOK (daily regime → strategy mapping + risk stance)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS analytics.market_playbook (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    playbook_date       DATE NOT NULL,
+    session             VARCHAR(20) DEFAULT 'US_RTH',
+
+    regime_label        VARCHAR(30),
+    volatility_regime   VARCHAR(20),
+    trend_regime        VARCHAR(20),
+    risk_regime         VARCHAR(20),
+    risk_on_score       NUMERIC(6,2),
+
+    playbook_text       TEXT,
+    recommended_strategies TEXT[],
+    sizing_stance       VARCHAR(20),
+    key_levels          JSONB,
+    change_summary      JSONB,
+    risk_bulletin       JSONB,
+
+    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (playbook_date, session)
+);
+
+-- =============================================================================
+-- ATTRIBUTION REPORTS (regime / sector / event / factor / trade-mgmt)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS analytics.attribution_reports (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    report_type         VARCHAR(30) NOT NULL,
+    strategy_id         VARCHAR(50),
+    period_start        DATE,
+    period_end          DATE,
+    attribution_data    JSONB NOT NULL,
+    computed_at         TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_attribution_type ON analytics.attribution_reports (report_type, strategy_id);
 
 -- =============================================================================
 -- HELPER FUNCTIONS

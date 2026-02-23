@@ -427,6 +427,146 @@ class DailyReport(BaseModel):
 # BACKTEST MODELS
 # =============================================================================
 
+# =============================================================================
+# V5: INSIGHT ENGINE MODELS  (Market Playbook · Trade Brief · Edge Model)
+# =============================================================================
+
+class ExecutionPlan(BaseModel):
+    """How and when to enter a trade — not just 'market buy'."""
+    order_type: str = "STOP_LIMIT"  # MARKET, LIMIT, STOP, STOP_LIMIT
+    entry_window: str = "first_90_min_or_after_11am"
+    avoid_times: List[str] = Field(default_factory=list)
+    scale_in: List[Dict[str, Any]] = Field(default_factory=list)
+    # e.g. [{"pct": 50, "condition": "breakout + volume"}, {"pct": 50, "condition": "retest holds"}]
+
+
+class RiskPlan(BaseModel):
+    """Per-trade risk budget derived from portfolio-level risk model."""
+    risk_per_trade_pct: float = 1.0
+    position_size_pct: float = 0.0
+    rr_to_t1: float = 0.0
+    rr_to_t2: Optional[float] = None
+    gap_risk_flag: bool = False
+    liquidity_tier: str = "B"  # A (>$50M/day), B ($10-50M), C (<$10M)
+
+
+class EdgeModel(BaseModel):
+    """
+    Calibrated probabilities + EV conditioned on strategy × regime × setup.
+    Replaces vague 'confidence' with historically-backed numbers.
+    """
+    p_stop: float = Field(ge=0, le=1, default=0.5)
+    p_t1: float = Field(ge=0, le=1, default=0.5)
+    p_t2: float = Field(ge=0, le=1, default=0.3)
+    expected_return_pct: float = 0.0
+    expected_mae_pct: float = 0.0
+    expected_holding_days: float = 7.0
+    calibration_bucket: str = ""
+    sample_size: int = 0
+
+    @property
+    def ev_positive(self) -> bool:
+        return self.expected_return_pct > 0
+
+
+class SetupBlock(BaseModel):
+    """Structured setup metadata per signal."""
+    setup_tags: List[str] = Field(default_factory=list)
+    trigger: str = ""
+    time_stop_days: Optional[int] = None
+
+
+class EvidenceBlock(BaseModel):
+    """Data sources that informed this signal."""
+    market_regime: Dict[str, str] = Field(default_factory=dict)
+    features: Dict[str, float] = Field(default_factory=dict)
+    sources_used: Dict[str, List[str]] = Field(default_factory=dict)
+
+
+class KeyLevel(BaseModel):
+    """A technically significant price level."""
+    label: str
+    price: float
+    significance: str = ""  # e.g. "20D breakout", "SPX 200-day SMA"
+
+
+class ChangeItem(BaseModel):
+    """A single 'what changed?' item for daily brief."""
+    category: str  # "regime", "breadth", "volatility", "leadership", "macro"
+    description: str
+    severity: str = "info"  # "info", "warning", "critical"
+
+
+class MarketPlaybook(BaseModel):
+    """
+    Daily decision document: regime → recommended strategies → risk stance.
+    One per trading session.
+    """
+    playbook_date: date
+    session: str = "US_RTH"
+
+    # Regime snapshot
+    regime_label: str = ""
+    volatility_regime: str = ""
+    trend_regime: str = ""
+    risk_regime: str = ""
+    risk_on_score: float = 0.0
+
+    # Playbook
+    playbook_text: str = ""
+    recommended_strategies: List[str] = Field(default_factory=list)
+    sizing_stance: str = "normal"  # "full", "normal", "half", "cash_up"
+
+    # Key levels
+    key_levels: List[KeyLevel] = Field(default_factory=list)
+
+    # What changed since yesterday
+    change_summary: List[ChangeItem] = Field(default_factory=list)
+
+    # Risk bulletin
+    risk_bulletin: List[str] = Field(default_factory=list)
+
+
+class TradeBrief(BaseModel):
+    """
+    Institutional trade brief — one per signal.
+    Answers: why now, how to enter, what kills it, historical edge.
+    """
+    ticker: str
+    direction: Direction
+    horizon: Horizon
+
+    entry_logic: str
+    invalidation_sentence: str
+    catalyst: str
+    key_risks: List[str] = Field(default_factory=list, max_length=5)
+    confidence: int = Field(ge=0, le=100)
+    rationale: str
+
+    setup: SetupBlock = Field(default_factory=SetupBlock)
+    execution_plan: ExecutionPlan = Field(default_factory=ExecutionPlan)
+    risk_plan: RiskPlan = Field(default_factory=RiskPlan)
+    edge_model: EdgeModel = Field(default_factory=EdgeModel)
+    evidence: EvidenceBlock = Field(default_factory=EvidenceBlock)
+
+    what_changes_mind: str = ""  # "If VIX > 30 and breadth < 30%, downgrade"
+
+
+class RiskBulletin(BaseModel):
+    """Portfolio-level + market-structure warning bulletin."""
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    warnings: List[str] = Field(default_factory=list)
+    earnings_cluster_risk: bool = False
+    correlation_spike_risk: bool = False
+    event_windows: List[str] = Field(default_factory=list)
+    max_open_risk_pct: float = 0.0
+    recommendation: str = ""
+
+
+# =============================================================================
+# BACKTEST MODELS
+# =============================================================================
+
 class BacktestTrade(BaseModel):
     """Individual trade in backtest."""
     ticker: str

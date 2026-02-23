@@ -973,3 +973,393 @@ class StrategyComparator:
             
         except ImportError:
             logger.warning("matplotlib not installed. Cannot plot.")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SIGNAL OUTCOME LABELLER (v5)
+# ═══════════════════════════════════════════════════════════════════════
+
+class SignalOutcomeLabeller:
+    """
+    Labels each closed trade with signal_outcome fields:
+      hit_t1, hit_t2, hit_stop, hit_time_stop, time_to_t1_days,
+      time_to_t2_days, mae_pct, mfe_pct, calibration_bucket
+
+    These labels feed analytics.signal_outcomes and are used by
+    EdgeCalculator to build calibrated probabilities.
+    """
+
+    @staticmethod
+    def label_trades(
+        trades: List[Trade],
+        price_data: Dict[str, pd.DataFrame],
+        target_1_pct: float = 0.05,
+        target_2_pct: float = 0.10,
+        stop_pct: float = 0.05,
+    ) -> List[Dict[str, Any]]:
+        """
+        For each trade, walk forward through price data and check
+        if T1, T2, or stop were hit, recording timing and MAE/MFE.
+        """
+        outcomes = []
+        for trade in trades:
+            outcome = SignalOutcomeLabeller._label_single(
+                trade, price_data, target_1_pct, target_2_pct, stop_pct
+            )
+            outcomes.append(outcome)
+        return outcomes
+
+    @staticmethod
+    def _label_single(
+        trade: Trade,
+        price_data: Dict[str, pd.DataFrame],
+        t1_pct: float,
+        t2_pct: float,
+        stop_pct: float,
+    ) -> Dict[str, Any]:
+        df = price_data.get(trade.symbol)
+        if df is None or df.empty:
+            return {
+                "symbol": trade.symbol, "hit_t1": False, "hit_t2": False,
+                "hit_stop": False, "hit_time_stop": False,
+                "time_to_t1_days": None, "time_to_t2_days": None,
+                "mae_pct": 0, "mfe_pct": 0, "calibration_bucket": "unknown",
+            }
+
+        # Slice price data to trade window
+        mask = (df.index >= trade.entry_date) & (df.index <= trade.exit_date)
+        window = df.loc[mask]
+
+        if window.empty:
+            return {
+                "symbol": trade.symbol, "hit_t1": False, "hit_t2": False,
+                "hit_stop": False, "hit_time_stop": False,
+                "time_to_t1_days": None, "time_to_t2_days": None,
+                "mae_pct": 0, "mfe_pct": 0, "calibration_bucket": "unknown",
+            }
+
+        entry = trade.entry_price
+        is_long = trade.side == PositionSide.LONG
+
+        t1_price = entry * (1 + t1_pct) if is_long else entry * (1 - t1_pct)
+        t2_price = entry * (1 + t2_pct) if is_long else entry * (1 - t2_pct)
+        stop_price = entry * (1 - stop_pct) if is_long else entry * (1 + stop_pct)
+
+        hit_t1 = False
+        hit_t2 = False
+        hit_stop = False
+        time_to_t1 = None
+        time_to_t2 = None
+        max_adverse = 0.0
+        max_favorable = 0.0
+
+        for i, (dt, row) in enumerate(window.iterrows()):
+            high = row.get("high", row.get("close", entry))
+            low = row.get("low", row.get("close", entry))
+
+            if is_long:
+                excursion_up = (high - entry) / entry
+                excursion_down = (entry - low) / entry
+            else:
+                excursion_up = (entry - low) / entry
+                excursion_down = (high - entry) / entry
+
+            max_favorable = max(max_favorable, excursion_up)
+            max_adverse = max(max_adverse, excursion_down)
+
+            days_in = (dt - trade.entry_date).days
+
+            if not hit_t1:
+                if (is_long and high >= t1_price) or (not is_long and low <= t1_price):
+                    hit_t1 = True
+                    time_to_t1 = days_in
+            if not hit_t2:
+                if (is_long and high >= t2_price) or (not is_long and low <= t2_price):
+                    hit_t2 = True
+                    time_to_t2 = days_in
+            if not hit_stop:
+                if (is_long and low <= stop_price) or (not is_long and high >= stop_price):
+                    hit_stop = True
+
+        hit_time_stop = trade.exit_signal in ("time_stop_flat", "max_hold")
+
+        return {
+            "symbol": trade.symbol,
+            "entry_date": trade.entry_date.isoformat() if trade.entry_date else None,
+            "exit_date": trade.exit_date.isoformat() if trade.exit_date else None,
+            "hit_t1": hit_t1,
+            "hit_t2": hit_t2,
+            "hit_stop": hit_stop,
+            "hit_time_stop": hit_time_stop,
+            "time_to_t1_days": time_to_t1,
+            "time_to_t2_days": time_to_t2,
+            "mae_pct": round(-max_adverse * 100, 2),
+            "mfe_pct": round(max_favorable * 100, 2),
+            "pnl_pct": round(trade.pnl_pct * 100, 2),
+            "hold_days": trade.hold_days,
+            "exit_reason": trade.exit_signal,
+            "calibration_bucket": "unknown",  # filled by AttributionEngine
+        }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# ATTRIBUTION ENGINE (v5)
+# ═══════════════════════════════════════════════════════════════════════
+
+class AttributionEngine:
+    """
+    Post-trade attribution — answers 'where did alpha come from / leak to?'
+
+    6 attribution reports:
+      1. Regime     — P&L bucketed by market regime at entry
+      2. Sector     — P&L by sector / industry
+      3. Factor     — P&L by factor exposure (value, momentum, quality, size)
+      4. Event      — P&L around earnings/FOMC/CPI
+      5. Liquidity  — P&L by dollar volume tier
+      6. Trade Mgmt — exit quality: MAE, MFE, time-in-trade, stop-hit rate
+    """
+
+    @staticmethod
+    def regime_attribution(
+        trades: List[Trade],
+        outcomes: List[Dict],
+        trade_metadata: Optional[Dict[str, Dict]] = None,
+    ) -> Dict[str, Any]:
+        """Attribute P&L to market regime at time of entry."""
+        buckets: Dict[str, List[float]] = {}
+        for trade, outcome in zip(trades, outcomes):
+            meta = (trade_metadata or {}).get(trade.symbol, {})
+            regime = meta.get("regime_label", "UNKNOWN")
+            buckets.setdefault(regime, []).append(trade.pnl_pct)
+
+        report = {}
+        for regime, pnls in buckets.items():
+            arr = np.array(pnls)
+            report[regime] = {
+                "count": len(arr),
+                "win_rate": float(np.mean(arr > 0)),
+                "avg_pnl_pct": float(np.mean(arr)),
+                "total_pnl_pct": float(np.sum(arr)),
+                "sharpe": float(np.mean(arr) / np.std(arr)) if np.std(arr) > 0 else 0,
+            }
+        return {"type": "regime", "buckets": report}
+
+    @staticmethod
+    def sector_attribution(
+        trades: List[Trade],
+        sector_map: Dict[str, str],
+    ) -> Dict[str, Any]:
+        """Attribute P&L to sectors."""
+        buckets: Dict[str, List[float]] = {}
+        for trade in trades:
+            sector = sector_map.get(trade.symbol, "Unknown")
+            buckets.setdefault(sector, []).append(trade.pnl_pct)
+
+        report = {}
+        for sector, pnls in buckets.items():
+            arr = np.array(pnls)
+            report[sector] = {
+                "count": len(arr),
+                "win_rate": float(np.mean(arr > 0)),
+                "avg_pnl_pct": float(np.mean(arr)),
+                "total_pnl_pct": float(np.sum(arr)),
+            }
+        return {"type": "sector", "buckets": report}
+
+    @staticmethod
+    def factor_attribution(
+        trades: List[Trade],
+        factor_exposures: Dict[str, Dict[str, float]],
+    ) -> Dict[str, Any]:
+        """
+        Attribute P&L to factor exposures.
+        factor_exposures: {symbol: {momentum: 0.8, value: -0.2, ...}}
+        """
+        factors = set()
+        for sym, exp in factor_exposures.items():
+            factors.update(exp.keys())
+
+        report = {}
+        for factor in factors:
+            high_exp = []
+            low_exp = []
+            for trade in trades:
+                exp = factor_exposures.get(trade.symbol, {}).get(factor, 0)
+                if exp > 0:
+                    high_exp.append(trade.pnl_pct)
+                else:
+                    low_exp.append(trade.pnl_pct)
+            report[factor] = {
+                "high_exposure_count": len(high_exp),
+                "high_exposure_avg_pnl": float(np.mean(high_exp)) if high_exp else 0,
+                "low_exposure_count": len(low_exp),
+                "low_exposure_avg_pnl": float(np.mean(low_exp)) if low_exp else 0,
+                "spread": (
+                    (float(np.mean(high_exp)) - float(np.mean(low_exp)))
+                    if high_exp and low_exp else 0
+                ),
+            }
+        return {"type": "factor", "factors": report}
+
+    @staticmethod
+    def event_attribution(
+        trades: List[Trade],
+        calendar_events: List[Dict],
+    ) -> Dict[str, Any]:
+        """P&L around scheduled events (earnings, FOMC, CPI)."""
+        from datetime import date as date_type
+
+        event_trades: Dict[str, List[float]] = {}
+        non_event_pnls: List[float] = []
+
+        for trade in trades:
+            trade_start = trade.entry_date.date() if hasattr(trade.entry_date, "date") else trade.entry_date
+            trade_end = trade.exit_date.date() if hasattr(trade.exit_date, "date") else trade.exit_date
+            matched = False
+            for ev in calendar_events:
+                ev_date = ev.get("event_date")
+                if isinstance(ev_date, str):
+                    ev_date = date_type.fromisoformat(ev_date)
+                if ev_date and trade_start <= ev_date <= trade_end:
+                    ev_type = ev.get("event_type", "unknown")
+                    event_trades.setdefault(ev_type, []).append(trade.pnl_pct)
+                    matched = True
+                    break
+            if not matched:
+                non_event_pnls.append(trade.pnl_pct)
+
+        report = {}
+        for ev_type, pnls in event_trades.items():
+            arr = np.array(pnls)
+            report[ev_type] = {
+                "count": len(arr),
+                "avg_pnl_pct": float(np.mean(arr)),
+                "win_rate": float(np.mean(arr > 0)),
+            }
+        non_arr = np.array(non_event_pnls) if non_event_pnls else np.array([0])
+        report["no_event"] = {
+            "count": len(non_event_pnls),
+            "avg_pnl_pct": float(np.mean(non_arr)),
+            "win_rate": float(np.mean(non_arr > 0)) if len(non_event_pnls) else 0,
+        }
+        return {"type": "event", "buckets": report}
+
+    @staticmethod
+    def liquidity_attribution(
+        trades: List[Trade],
+        dollar_vol_map: Dict[str, float],
+    ) -> Dict[str, Any]:
+        """P&L by dollar-volume tier (A ≥ $50M, B ≥ $10M, C < $10M)."""
+        tiers = {"A": [], "B": [], "C": []}
+        for trade in trades:
+            dv = dollar_vol_map.get(trade.symbol, 0)
+            if dv >= 50_000_000:
+                tiers["A"].append(trade.pnl_pct)
+            elif dv >= 10_000_000:
+                tiers["B"].append(trade.pnl_pct)
+            else:
+                tiers["C"].append(trade.pnl_pct)
+
+        report = {}
+        for tier, pnls in tiers.items():
+            if pnls:
+                arr = np.array(pnls)
+                report[tier] = {
+                    "count": len(arr),
+                    "avg_pnl_pct": float(np.mean(arr)),
+                    "win_rate": float(np.mean(arr > 0)),
+                    "avg_slippage_impact": 0,  # can be filled from slippage audit
+                }
+            else:
+                report[tier] = {"count": 0, "avg_pnl_pct": 0, "win_rate": 0}
+        return {"type": "liquidity", "tiers": report}
+
+    @staticmethod
+    def trade_management_attribution(
+        trades: List[Trade],
+        outcomes: List[Dict],
+    ) -> Dict[str, Any]:
+        """
+        Evaluate trade management quality:
+        - How much MFE was captured?
+        - Did stops hit too often?
+        - Average MAE vs actual loss
+        """
+        if not outcomes:
+            return {"type": "trade_management", "metrics": {}}
+
+        mfe_list = [o["mfe_pct"] for o in outcomes if o.get("mfe_pct")]
+        mae_list = [o["mae_pct"] for o in outcomes if o.get("mae_pct")]
+        pnl_list = [o["pnl_pct"] for o in outcomes if o.get("pnl_pct") is not None]
+
+        stop_hits = sum(1 for o in outcomes if o.get("hit_stop"))
+        t1_hits = sum(1 for o in outcomes if o.get("hit_t1"))
+        t2_hits = sum(1 for o in outcomes if o.get("hit_t2"))
+        time_stops = sum(1 for o in outcomes if o.get("hit_time_stop"))
+        total = len(outcomes)
+
+        # Edge capture ratio = actual P&L / MFE (how much of the max move did we capture?)
+        capture_ratios = []
+        for o in outcomes:
+            mfe = o.get("mfe_pct", 0)
+            pnl = o.get("pnl_pct", 0)
+            if mfe > 0:
+                capture_ratios.append(pnl / mfe)
+
+        # Exit quality by reason
+        exit_quality: Dict[str, List[float]] = {}
+        for trade, outcome in zip(trades, outcomes):
+            reason = trade.exit_signal or "unknown"
+            exit_quality.setdefault(reason, []).append(trade.pnl_pct)
+
+        exit_report = {}
+        for reason, pnls in exit_quality.items():
+            arr = np.array(pnls)
+            exit_report[reason] = {
+                "count": len(arr),
+                "avg_pnl_pct": float(np.mean(arr)),
+                "win_rate": float(np.mean(arr > 0)),
+            }
+
+        return {
+            "type": "trade_management",
+            "metrics": {
+                "total_trades": total,
+                "t1_hit_rate": t1_hits / total if total else 0,
+                "t2_hit_rate": t2_hits / total if total else 0,
+                "stop_hit_rate": stop_hits / total if total else 0,
+                "time_stop_rate": time_stops / total if total else 0,
+                "avg_mfe_pct": float(np.mean(mfe_list)) if mfe_list else 0,
+                "avg_mae_pct": float(np.mean(mae_list)) if mae_list else 0,
+                "avg_capture_ratio": float(np.mean(capture_ratios)) if capture_ratios else 0,
+                "exit_quality": exit_report,
+            },
+        }
+
+    @staticmethod
+    def full_attribution(
+        trades: List[Trade],
+        outcomes: List[Dict],
+        price_data: Dict[str, pd.DataFrame],
+        trade_metadata: Optional[Dict[str, Dict]] = None,
+        sector_map: Optional[Dict[str, str]] = None,
+        factor_exposures: Optional[Dict[str, Dict[str, float]]] = None,
+        calendar_events: Optional[List[Dict]] = None,
+        dollar_vol_map: Optional[Dict[str, float]] = None,
+    ) -> Dict[str, Any]:
+        """Run all 6 attribution reports and return combined result."""
+        return {
+            "regime": AttributionEngine.regime_attribution(
+                trades, outcomes, trade_metadata),
+            "sector": AttributionEngine.sector_attribution(
+                trades, sector_map or {}),
+            "factor": AttributionEngine.factor_attribution(
+                trades, factor_exposures or {}),
+            "event": AttributionEngine.event_attribution(
+                trades, calendar_events or []),
+            "liquidity": AttributionEngine.liquidity_attribution(
+                trades, dollar_vol_map or {}),
+            "trade_management": AttributionEngine.trade_management_attribution(
+                trades, outcomes),
+            "generated_at": datetime.utcnow().isoformat(),
+        }

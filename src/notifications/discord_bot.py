@@ -1,8 +1,13 @@
 """
-TradingAI Pro v3.0 — Professional Discord Trading Server Bot
-=============================================================
+TradingAI Pro v5.0 — Institutional-Grade Discord Trading Server Bot
+=====================================================================
 
-Enterprise-grade Discord bot built with top-tier server admin practices:
+v5 Upgrades:
+  • InsightEngine integration: playbook, trade briefs, risk bulletin
+  • Progressive disclosure UX: 7 primary actions
+  • Signal cards with EdgeModel (P(T1), EV, R:R) and execution plan
+  • Morning memo: What Changed → 3 Levels → Playbook → Top 5 Briefs → Risk Bulletin
+  • /market_now command: instant regime + playbook + risk snapshot
 
 Architecture:
   • Multi-category channel layout with proper permission overrides
@@ -17,8 +22,8 @@ Architecture:
   • Dynamic bot presence showing market status
   • Verification gate for new members
 
-Commands (45+):
-  Market Data   — /price /quote /market /sector /macro /movers /news /premarket
+Commands (50+):
+  Market Data   — /price /quote /market /market_now /sector /macro /movers /news /premarket
   AI Signals    — /signals /scan /breakout /dip /momentum /swing /whale /squeeze
   AI Analysis   — /ai /analyze /advise /score /compare /levels /why
   Trading       — /buy /sell /portfolio /positions /pnl /risk /stats
@@ -289,12 +294,47 @@ class DiscordInteractiveBot:
         strat = getattr(signal, "strategy_id", None)
         if strat:
             embed.add_field("Strategy", f"`{strat}`")
+
+        # ── v5: Edge Model + Execution Plan ──
+        fs = getattr(signal, "feature_snapshot", None) or {}
+        edge = fs.get("edge_model", {})
+        exec_plan = fs.get("execution_plan", {})
+        risk_plan = fs.get("risk_plan", {})
+
+        if edge:
+            p_t1 = edge.get("p_t1", 0)
+            p_stop = edge.get("p_stop", 0)
+            ev = edge.get("expected_return_pct", 0)
+            sample = edge.get("sample_size", 0)
+            cal_label = f"(n={sample})" if sample >= 30 else "(base-rate)"
+            embed.add_field(
+                "📊 Edge Model",
+                f"P(T1): **{p_t1*100:.0f}%** | P(stop): {p_stop*100:.0f}%\n"
+                f"EV: **{ev:+.1f}%** | Hold: {edge.get('expected_holding_days', '?')}d\n"
+                f"MAE: {edge.get('expected_mae_pct', 0):.1f}% {cal_label}",
+                inline=False)
+
+        if exec_plan:
+            exec_str = f"Order: `{exec_plan.get('order_type', '?')}`"
+            if exec_plan.get("avoid_times"):
+                exec_str += f"\n⚠️ Avoid: {', '.join(exec_plan['avoid_times'])}"
+            embed.add_field("📐 Execution", exec_str)
+
+        if risk_plan:
+            liq = risk_plan.get("liquidity_tier", "?")
+            liq_icon = {"A": "✅", "B": "🟡", "C": "🔴"}.get(liq, "?")
+            rr_t1 = risk_plan.get("rr_to_t1", 0)
+            embed.add_field("🛡️ Risk",
+                            f"R:R to T1: **{rr_t1:.1f}** | "
+                            f"Liq: {liq_icon}{liq} | "
+                            f"{'⚠️ GAP' if risk_plan.get('gap_risk_flag') else '✅ No gap'}")
+
         risks = getattr(signal, "key_risks", [])
         if risks:
             embed.add_field("⚠️ Risks",
                             "\n".join(f"• {r}" for r in risks[:3]), inline=False)
         embed.set_footer(
-            f"TradingAI Pro • {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+            f"TradingAI Pro v5 • {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
         return embed.to_dict()
 
     # ── Push helpers ──────────────────────────────────────────────────
@@ -1369,7 +1409,7 @@ class DiscordInteractiveBot:
         _morning_posted = set()
         @tasks.loop(minutes=10)
         async def morning_brief():
-            """Enhanced morning brief with 'What Changed?' and consolidated dashboard."""
+            """v5 Morning Decision Memo — regime, playbook, top trades, risk bulletin."""
             now = datetime.now(timezone.utc)
             today = now.strftime("%Y-%m-%d")
             if today in _morning_posted:
@@ -1382,92 +1422,180 @@ class DiscordInteractiveBot:
                     return
             _morning_posted.add(today)
             try:
-                # ── EMBED 1: Market Dashboard ──
+                # ── Fetch all market data ──
+                spy_data = await _fetch_stock("SPY")
+                qqq_data = await _fetch_stock("QQQ")
+                iwm_data = await _fetch_stock("IWM")
+                vix_data = await _fetch_stock("^VIX")
+                tlt_data = await _fetch_stock("TLT")
+                btc_data = await _fetch_stock("BTC-USD")
+                gold_data = await _fetch_stock("GLD")
+
+                vix = vix_data.get("price", 0)
+                spy_pct = spy_data.get("change_pct", 0)
+                qqq_pct = qqq_data.get("change_pct", 0)
+
+                # ── Regime derivation ──
+                risk = "risk_off" if (vix > 25 or spy_pct < -1.5) else (
+                    "risk_on" if (vix < 18 and spy_pct > 0.3) else "neutral")
+                trend = "up" if spy_pct > 0.5 else "down" if spy_pct < -0.5 else "flat"
+                vol = "high" if vix > 22 else "low" if vix < 15 else "normal"
+
+                regime_icons = {
+                    "risk_on": "🟢 RISK ON", "neutral": "🟡 NEUTRAL", "risk_off": "🔴 RISK OFF"
+                }
+                regime_label = regime_icons.get(risk, "🟡 NEUTRAL")
+
+                # ── Playbook ──
+                playbook_map = {
+                    ("risk_on", "up", "low"): ("Trending bull — full offence",
+                        ["Momentum", "Breakout", "Trend-Follow"]),
+                    ("risk_on", "up", "normal"): ("Mild bull — normal book",
+                        ["Momentum", "Swing", "VCP"]),
+                    ("risk_on", "flat", "low"): ("Low-vol grind — fade extremes",
+                        ["Mean-Reversion", "Swing"]),
+                    ("neutral", "up", "normal"): ("Selective bull — pick spots",
+                        ["Momentum", "VCP", "Swing"]),
+                    ("neutral", "flat", "normal"): ("Chop — reduce size",
+                        ["Mean-Reversion", "Swing"]),
+                    ("neutral", "down", "normal"): ("Pullback — wait for support",
+                        ["Mean-Reversion"]),
+                    ("risk_off", "down", "high"): ("Sell-off — capital preservation",
+                        ["Cash", "Hedges"]),
+                    ("risk_off", "flat", "high"): ("Elevated vol — small positions only",
+                        ["Mean-Reversion"]),
+                }
+                key = (risk, trend, vol)
+                stance_text, strategies = playbook_map.get(
+                    key, ("Mixed signals — be selective", ["Swing", "Mean-Reversion"]))
+
+                # ═══ EMBED 1: Morning Decision Memo ═══
                 e = discord.Embed(
-                    title=f"☀️ Morning Brief — {now.strftime('%A, %B %d')}",
+                    title=f"☀️ Morning Decision Memo — {now.strftime('%A, %B %d')}",
                     description=(
-                        "Pre-market snapshot • Futures • Macro • Asia close\n"
+                        f"**{regime_label}** • VIX {vix:.1f} • "
+                        f"SPY {spy_pct:+.2f}% • QQQ {qqq_pct:+.2f}%\n"
                         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                     ),
                     color=COLOR_GOLD, timestamp=now)
 
-                # Futures row
+                # ── What Changed ──
+                changes = []
+                for sym, pct_val in [("SPY", spy_pct), ("QQQ", qqq_pct)]:
+                    if abs(pct_val) > 1.5:
+                        changes.append(f"{'📈' if pct_val > 0 else '📉'} **{sym}** {pct_val:+.2f}%")
+                if vix > 22:
+                    changes.append(f"⚠️ VIX elevated at **{vix:.1f}**")
+                btc_pct = btc_data.get("change_pct", 0)
+                if abs(btc_pct) > 3:
+                    changes.append(f"₿ BTC {'surging' if btc_pct > 0 else 'dumping'} {btc_pct:+.1f}%")
+                if not changes:
+                    changes.append("No major overnight moves — quiet open expected")
+                e.add_field(name="🔄 What Changed",
+                            value="\n".join(changes[:5]), inline=False)
+
+                # ── Key Levels ──
+                levels = []
+                for sym, name, data in [
+                    ("SPY", "S&P 500", spy_data),
+                    ("QQQ", "Nasdaq", qqq_data),
+                    ("IWM", "Russell", iwm_data),
+                ]:
+                    price = data.get("price", 0)
+                    hi = data.get("high", price)
+                    lo = data.get("low", price)
+                    levels.append(f"**{name}**: ${price:.2f} (R: ${hi:.2f} | S: ${lo:.2f})")
+                e.add_field(name="📐 3 Key Levels",
+                            value="\n".join(levels), inline=False)
+
+                # ── Today's Playbook ──
+                strat_str = " · ".join(f"`{s}`" for s in strategies)
+                e.add_field(
+                    name="📋 Today's Playbook",
+                    value=f"**{stance_text}**\nStrategies: {strat_str}",
+                    inline=False)
+
+                # ── Macro snapshot ──
+                e.add_field(
+                    name="🌍 Macro",
+                    value=(
+                        f"📉 VIX: **{vix:.1f}** "
+                        f"{'🔴' if vix > 25 else '🟡' if vix > 18 else '🟢'} | "
+                        f"💵 TLT: {tlt_data.get('change_pct',0):+.2f}% | "
+                        f"🥇 Gold: {gold_data.get('change_pct',0):+.2f}% | "
+                        f"₿ BTC: {btc_pct:+.2f}%"
+                    ), inline=False)
+
+                # Futures
                 futures_text = []
                 for sym, name in [("ES=F", "S&P"), ("NQ=F", "Nasdaq"), ("YM=F", "Dow")]:
                     data = await _fetch_stock(sym)
                     pct = data.get("change_pct", 0)
                     icon = "🟢" if pct > 0 else "🔴" if pct < 0 else "⚪"
-                    futures_text.append(f"{icon} **{name}**: ${data.get('price', 0):,.0f} ({pct:+.2f}%)")
-                e.add_field(name="📈 Futures", value="\n".join(futures_text), inline=False)
-
-                # Key levels
-                key_levels = []
-                for sym in ["SPY", "QQQ", "NVDA", "TSLA", "AAPL"]:
-                    data = await _fetch_stock(sym)
-                    pct = data.get("change_pct", 0)
-                    icon = "🟢" if pct > 0.5 else "🔴" if pct < -0.5 else "⚪"
-                    key_levels.append(f"{icon} {sym}: ${data.get('price', 0):.2f} ({pct:+.2f}%)")
-                e.add_field(name="📊 Key Levels", value="\n".join(key_levels), inline=False)
-
-                # Macro (BTC, Gold, VIX)
-                btc = await _fetch_stock("BTC-USD")
-                gold = await _fetch_stock("GLD")
-                vix_data = await _fetch_stock("^VIX")
-                vix = vix_data.get("price", 0)
-                vix_icon = "🔴 Risk Off" if vix > 25 else "🟡 Caution" if vix > 18 else "🟢 Risk On"
-                macro_text = (
-                    f"₿ **BTC**: ${btc.get('price', 0):,.0f} ({btc.get('change_pct', 0):+.2f}%)\n"
-                    f"🥇 **Gold**: ${gold.get('price', 0):.2f} ({gold.get('change_pct', 0):+.2f}%)\n"
-                    f"📉 **VIX**: {vix:.1f} — {vix_icon}"
-                )
-                e.add_field(name="🌍 Macro", value=macro_text, inline=False)
+                    futures_text.append(f"{icon} **{name}**: {pct:+.2f}%")
+                e.add_field(name="📈 Futures", value=" | ".join(futures_text), inline=False)
 
                 # Asia close
                 asia_lines = []
                 for sym, name in _WATCH_ASIA:
                     data = await _fetch_stock(sym)
                     pct = data.get("change_pct", 0)
-                    icon = "🟢" if pct > 0 else "🔴" if pct < 0 else "⚪"
-                    asia_lines.append(f"{icon} {name}: {data.get('price', 0):,.2f} ({pct:+.2f}%)")
-                e.add_field(name="🌏 Asia Close", value="\n".join(asia_lines), inline=False)
+                    icon = "🟢" if pct > 0 else "🔴"
+                    asia_lines.append(f"{icon} {name}: {pct:+.2f}%")
+                e.add_field(name="🌏 Asia Close", value=" | ".join(asia_lines), inline=False)
 
-                # ── "What Changed Since Yesterday?" ──
-                changes = []
-                for sym in ["SPY", "QQQ", "NVDA", "TSLA"]:
-                    data = await _fetch_stock(sym)
-                    pct = data.get("change_pct", 0)
-                    if abs(pct) > 1.5:
-                        changes.append(f"{'📈' if pct > 0 else '📉'} **{sym}** moved {pct:+.2f}%")
-                if vix > 22:
-                    changes.append(f"⚠️ **VIX** at {vix:.1f} — elevated fear")
-                if btc.get("change_pct", 0) > 3:
-                    changes.append(f"₿ **BTC** surging {btc.get('change_pct', 0):+.1f}%")
-                elif btc.get("change_pct", 0) < -3:
-                    changes.append(f"₿ **BTC** dumping {btc.get('change_pct', 0):+.1f}%")
+                # ── Risk Bulletin ──
+                risks = []
+                if vix > 25:
+                    risks.append(f"🔴 VIX {vix:.1f} — reduce position sizes to 50%")
+                if vix > 18 and spy_pct < -1:
+                    risks.append("⚠️ Selling into vol — stop discipline critical")
+                if abs(qqq_pct - spy_pct) > 1.5:
+                    risks.append(f"⚠️ QQQ/SPY divergence {qqq_pct-spy_pct:+.1f}% — rotation risk")
+                if not risks:
+                    risks.append("✅ No critical risk flags")
+                e.add_field(name="🛡️ Risk Bulletin",
+                            value="\n".join(risks), inline=False)
 
-                if changes:
-                    e.add_field(name="🔄 What Changed?",
-                                value="\n".join(changes[:5]),
-                                inline=False)
+                # ── Sizing ──
+                if risk == "risk_off":
+                    sizing = "⚠️ **25-50%** of normal • Wider stops"
+                elif risk == "neutral":
+                    sizing = "🟡 **75%** of normal • Standard stops"
                 else:
-                    e.add_field(name="🔄 What Changed?",
-                                value="No major overnight moves. Quiet open expected.",
-                                inline=False)
+                    sizing = "🟢 **100%** full size • Tight stops"
+                e.add_field(name="📏 Sizing Guidance", value=sizing, inline=False)
 
-                # Market regime estimate
-                spy_data = await _fetch_stock("SPY")
-                spy_pct = spy_data.get("change_pct", 0)
-                if vix > 25 and spy_pct < -0.5:
-                    regime = "🔴 **RISK OFF** — Defensive, reduce size"
-                elif vix < 15 and spy_pct > 0.3:
-                    regime = "🟢 **RISK ON** — Trending, full size OK"
-                else:
-                    regime = "🟡 **NEUTRAL** — Be selective, normal sizing"
-                e.add_field(name="🎯 Today's Regime", value=regime, inline=False)
-
-                e.set_footer(text="☀️ Auto Morning Brief • Good luck today! • /ai <ticker> for analysis")
+                e.set_footer(text="☀️ v5 Decision Memo • /market_now for real-time • Good luck!")
                 await _send_ch("daily-brief", embed=e)
-                await _audit("☀️ Morning brief auto-posted (v4)")
+
+                # ═══ EMBED 2: Top Trades Preview ═══
+                try:
+                    signals = await asyncio.to_thread(_sync_signal_scan, _WATCH_US[:15])
+                    if signals:
+                        signals.sort(key=lambda x: x["score"], reverse=True)
+                        e2 = discord.Embed(
+                            title="🎯 Top 5 Trade Ideas",
+                            description="Pre-market scan • sorted by conviction",
+                            color=COLOR_INFO, timestamp=now)
+                        for i, sig in enumerate(signals[:5], 1):
+                            arrow = "🟢" if sig["direction"] == "LONG" else "🔴"
+                            rr = sig.get("rr_ratio", 0)
+                            e2.add_field(
+                                name=f"{arrow} #{i} {sig['ticker']} — ${sig['price']:.2f}",
+                                value=(
+                                    f"Score: **{sig['score']}** | "
+                                    f"R:R: **{rr:.1f}:1** | "
+                                    f"Stop: ${sig.get('stop',0):.2f} | "
+                                    f"Target: ${sig.get('target',0):.2f}\n"
+                                    f"{sig['reasons'][0] if sig.get('reasons') else ''}"
+                                ), inline=False)
+                        e2.set_footer(text="/scan for full list • Buttons in #live-signals")
+                        await _send_ch("daily-brief", embed=e2)
+                except Exception as exc:
+                    logger.warning(f"morning_brief trade preview: {exc}")
+
+                await _audit("☀️ v5 Morning Decision Memo posted")
             except Exception as exc:
                 logger.error(f"morning_brief error: {exc}")
 
@@ -1909,6 +2037,141 @@ class DiscordInteractiveBot:
                 e.add_field(name=name,
                             value=f"${data.get('price',0):,.2f} ({data.get('change_pct',0):+.2f}%)")
             await interaction.followup.send(embed=e)
+
+        # ── /market_now — v5 institutional regime + playbook snapshot ──
+        @bot.tree.command(name="market_now",
+                          description="Instant regime · playbook · risk snapshot (v5)")
+        @app_commands.checks.cooldown(1, 15, key=lambda i: i.user.id)
+        async def cmd_market_now(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                # ── Fetch regime inputs ──
+                spy_data = await _fetch_stock("SPY")
+                qqq_data = await _fetch_stock("QQQ")
+                vix_data = await _fetch_stock("^VIX")
+                tlt_data = await _fetch_stock("TLT")
+                btc_data = await _fetch_stock("BTC-USD")
+                gold_data = await _fetch_stock("GLD")
+
+                vix = vix_data.get("price", 0)
+                spy_pct = spy_data.get("change_pct", 0)
+                qqq_pct = qqq_data.get("change_pct", 0)
+
+                # ── Derive regime ──
+                risk = "risk_off" if (vix > 25 or spy_pct < -1.5) else (
+                    "risk_on" if (vix < 18 and spy_pct > 0.3) else "neutral")
+                trend = "up" if spy_pct > 0.5 else "down" if spy_pct < -0.5 else "flat"
+                vol = "high" if vix > 22 else "low" if vix < 15 else "normal"
+
+                regime_icons = {
+                    "risk_on": "🟢 RISK ON", "neutral": "🟡 NEUTRAL", "risk_off": "🔴 RISK OFF"
+                }
+                regime_label = regime_icons.get(risk, "🟡 NEUTRAL")
+
+                # ── Playbook logic (mirrors InsightEngine) ──
+                playbook_map = {
+                    ("risk_on", "up", "low"): ("Trending bull — full offence",
+                        ["Momentum", "Breakout", "Trend-Follow"]),
+                    ("risk_on", "up", "normal"): ("Mild bull — normal book",
+                        ["Momentum", "Swing", "VCP"]),
+                    ("risk_on", "flat", "low"): ("Low-vol grind — fade extremes",
+                        ["Mean-Reversion", "Swing"]),
+                    ("neutral", "up", "normal"): ("Selective bull — pick spots",
+                        ["Momentum", "VCP", "Swing"]),
+                    ("neutral", "flat", "normal"): ("Chop — reduce size",
+                        ["Mean-Reversion", "Swing"]),
+                    ("neutral", "down", "normal"): ("Pullback — wait for support",
+                        ["Mean-Reversion"]),
+                    ("risk_off", "down", "high"): ("Sell-off — capital preservation",
+                        ["Cash", "Hedges"]),
+                    ("risk_off", "flat", "high"): ("Elevated vol — small positions only",
+                        ["Mean-Reversion"]),
+                }
+                key = (risk, trend, vol)
+                stance_text, strategies = playbook_map.get(
+                    key, ("Mixed signals — be selective", ["Swing", "Mean-Reversion"]))
+
+                # ── Build embed ──
+                now_ts = datetime.now(timezone.utc)
+                e = discord.Embed(
+                    title=f"🎛️ Market Now — {now_ts.strftime('%H:%M UTC')}",
+                    description=(
+                        f"**{regime_label}** • VIX {vix:.1f} • "
+                        f"SPY {spy_pct:+.2f}% • QQQ {qqq_pct:+.2f}%"
+                    ),
+                    color=COLOR_BUY if risk == "risk_on" else (
+                        COLOR_SELL if risk == "risk_off" else COLOR_INFO),
+                    timestamp=now_ts)
+
+                # Section 1: Regime
+                e.add_field(
+                    name="📊 Regime",
+                    value=(
+                        f"Risk: **{risk.replace('_',' ').title()}** | "
+                        f"Trend: **{trend.title()}** | Vol: **{vol.title()}**"
+                    ), inline=False)
+
+                # Section 2: Playbook
+                strat_str = " · ".join(f"`{s}`" for s in strategies)
+                e.add_field(
+                    name="📋 Today's Playbook",
+                    value=f"**{stance_text}**\nStrategies: {strat_str}",
+                    inline=False)
+
+                # Section 3: Key Levels
+                levels = []
+                for sym, name, data in [
+                    ("SPY", "S&P 500", spy_data), ("QQQ", "Nasdaq", qqq_data)
+                ]:
+                    price = data.get("price", 0)
+                    hi = data.get("high", price)
+                    lo = data.get("low", price)
+                    levels.append(f"**{name}**: ${price:.2f} (R: ${hi:.2f} | S: ${lo:.2f})")
+                e.add_field(name="📐 Key Levels",
+                            value="\n".join(levels), inline=False)
+
+                # Section 4: Macro snapshot
+                e.add_field(
+                    name="🌍 Macro",
+                    value=(
+                        f"📉 VIX: **{vix:.1f}** "
+                        f"{'🔴' if vix > 25 else '🟡' if vix > 18 else '🟢'}\n"
+                        f"💵 TLT: ${tlt_data.get('price',0):.2f} "
+                        f"({tlt_data.get('change_pct',0):+.2f}%)\n"
+                        f"🥇 Gold: ${gold_data.get('price',0):.2f} "
+                        f"({gold_data.get('change_pct',0):+.2f}%)\n"
+                        f"₿ BTC: ${btc_data.get('price',0):,.0f} "
+                        f"({btc_data.get('change_pct',0):+.2f}%)"
+                    ), inline=False)
+
+                # Section 5: Risk Bulletin
+                risks = []
+                if vix > 25:
+                    risks.append(f"🔴 VIX at {vix:.1f} — reduce position sizes")
+                if vix > 18 and spy_pct < -1:
+                    risks.append("⚠️ Selling into elevated vol — stop discipline critical")
+                if abs(qqq_pct - spy_pct) > 1.5:
+                    risks.append(f"⚠️ QQQ/SPY divergence {qqq_pct-spy_pct:+.1f}% — rotation risk")
+                if not risks:
+                    risks.append("✅ No critical risk flags")
+                e.add_field(name="🛡️ Risk Bulletin",
+                            value="\n".join(risks), inline=False)
+
+                # Section 6: Sizing guidance
+                if risk == "risk_off":
+                    sizing = "⚠️ **25-50%** of normal size • Wider stops"
+                elif risk == "neutral":
+                    sizing = "🟡 **75%** of normal size • Standard stops"
+                else:
+                    sizing = "🟢 **100%** full size OK • Tight stops"
+                e.add_field(name="📏 Position Sizing", value=sizing, inline=False)
+
+                e.set_footer(text="TradingAI Pro v5 • /scan /morning /ai <ticker> for trades")
+                await interaction.followup.send(embed=e)
+                await _audit(f"🎛️ {interaction.user} → /market_now ({regime_label})")
+            except Exception as exc:
+                logger.error(f"market_now error: {exc}")
+                await interaction.followup.send(f"❌ {exc}")
 
         @bot.tree.command(name="movers", description="Top gainers and losers today")
         @app_commands.checks.cooldown(1, 15, key=lambda i: i.user.id)
