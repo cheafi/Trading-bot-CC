@@ -77,61 +77,26 @@ ROLE_DEFS = [
 # Each category has channels; "readonly" means members can't send messages.
 SERVER_LAYOUT = [
     {
-        "category": "📌 INFORMATION",
+        "category": "📌 START HERE",
         "channels": [
-            {"name": "rules",          "topic": "Server rules — read before participating",                  "readonly": True},
-            {"name": "announcements",  "topic": "Official announcements from TradingAI",                     "readonly": True},
-            {"name": "verify",         "topic": "React below to verify and unlock all channels",             "readonly": True},
+            {"name": "rules",          "topic": "Server rules & FAQ — read before participating",           "readonly": True},
+            {"name": "verify",         "topic": "Click below to verify and unlock all channels",             "readonly": True},
             {"name": "roles",          "topic": "Pick your role to customise your experience",               "readonly": True},
-            {"name": "faq",            "topic": "Frequently asked questions — check here first",             "readonly": True},
         ],
     },
     {
-        "category": "🤖 AI SIGNALS",
+        "category": "🤖 TRADING FLOOR",
         "channels": [
-            {"name": "live-signals",   "topic": "🔴 LIVE — AI trading signals pushed in real time",         "readonly": True},
-            {"name": "signal-chat",    "topic": "Discuss signals, share your take, ask questions",           "readonly": False},
-            {"name": "whale-alerts",   "topic": "🐋 Large institutional flow detected",                     "readonly": True},
-        ],
-    },
-    {
-        "category": "📊 MARKET DATA",
-        "channels": [
-            {"name": "daily-brief",    "topic": "☀️ Morning brief & 🌙 End-of-day summary",                "readonly": True},
-            {"name": "market-chat",    "topic": "General market discussion — US, HK, JP, Crypto",           "readonly": False},
-            {"name": "earnings",       "topic": "Earnings calendar, results, and reactions",                 "readonly": False},
-            {"name": "macro-news",     "topic": "Fed, CPI, GDP, geopolitics — macro events",                "readonly": False},
-        ],
-    },
-    {
-        "category": "💰 TRADING",
-        "channels": [
-            {"name": "bot-commands",   "topic": "Use slash commands here — /help for the full list",        "readonly": False},
-            {"name": "trade-journal",  "topic": "Post your trades — accountability builds discipline",      "readonly": False},
-            {"name": "portfolio",      "topic": "Portfolio snapshots, P&L updates from the bot",            "readonly": True},
-            {"name": "backtesting",    "topic": "Strategy backtest results and analysis",                   "readonly": True},
-        ],
-    },
-    {
-        "category": "🧠 AI ADVISOR",
-        "channels": [
-            {"name": "ai-analysis",    "topic": "Deep AI breakdowns — technicals, fundamentals, catalysts", "readonly": True},
-            {"name": "ask-ai",         "topic": "Ask the AI anything about markets — use /ai <ticker>",     "readonly": False},
-        ],
-    },
-    {
-        "category": "📚 EDUCATION",
-        "channels": [
-            {"name": "tutorials",      "topic": "Step-by-step guides on strategies and bot usage",          "readonly": True},
-            {"name": "book-club",      "topic": "Discuss trading books, share resources",                   "readonly": False},
-            {"name": "newbie-help",    "topic": "No question is too basic — ask away",                      "readonly": False},
+            {"name": "signals",        "topic": "🔴 LIVE signals + 🐋 whale alerts — AI-pushed",            "readonly": True},
+            {"name": "daily-brief",    "topic": "☀️ Morning memo · 🌙 EOD · 📢 Announcements",             "readonly": True},
+            {"name": "bot-commands",   "topic": "All slash commands here — /help for the full list",        "readonly": False},
+            {"name": "trading-chat",   "topic": "Discuss signals, market, trades, earnings — all chat here", "readonly": False},
         ],
     },
     {
         "category": "⚙️ ADMIN",
         "channels": [
-            {"name": "audit-log",      "topic": "Bot actions, command usage, and moderation log",           "readonly": True},
-            {"name": "bot-status",     "topic": "Uptime, errors, connection status",                        "readonly": True},
+            {"name": "admin-log",      "topic": "Audit trail, bot status, and moderation log",              "readonly": True},
         ],
     },
 ]
@@ -481,8 +446,8 @@ class DiscordInteractiveBot:
             return f"${v/1e6:.0f}M"
 
         async def _audit(msg: str):
-            """Write to #audit-log."""
-            ch = self._channels.get("audit-log")
+            """Write to #admin-log."""
+            ch = self._channels.get("admin-log")
             if ch:
                 e = discord.Embed(description=msg, color=COLOR_DARK,
                                   timestamp=datetime.now(timezone.utc))
@@ -880,7 +845,6 @@ class DiscordInteractiveBot:
             await _post_rules(guild)
             await _post_verify()
             await _post_roles()
-            await _post_faq()
             await _post_welcome()
 
         # ── Static channel content ────────────────────────────────────
@@ -893,6 +857,7 @@ class DiscordInteractiveBot:
             async for msg in ch.history(limit=5):
                 if msg.author == guild.me and msg.embeds:
                     return  # Already posted
+            # ── Rules embed ──
             e = discord.Embed(
                 title="📜 Server Rules",
                 description=(
@@ -902,16 +867,28 @@ class DiscordInteractiveBot:
             rules = [
                 ("1️⃣  No spam / self-promotion", "Keep discussions on topic. No unsolicited links."),
                 ("2️⃣  Respect all members", "Harassment, hate speech, or personal attacks = instant ban."),
-                ("3️⃣  No financial advice claims", "This bot provides AI analysis — not regulated advice. Trade at your own risk."),
-                ("4️⃣  Keep signals in #signal-chat", "Don't post unsolicited calls in other channels."),
-                ("5️⃣  Use bot commands in #bot-commands", "Keeps other channels clean for discussion."),
-                ("6️⃣  No sharing bot output outside", "Our AI signals are for members only."),
-                ("7️⃣  Have fun & make money", "We're here to learn, grow, and profit together. 🚀"),
+                ("3️⃣  No financial advice claims", "AI analysis — not regulated advice. Trade at your own risk."),
+                ("4️⃣  Use bot commands in #bot-commands", "Keeps #trading-chat clean for discussion."),
+                ("5️⃣  No sharing bot output outside", "Our AI signals are for members only."),
+                ("6️⃣  Have fun & make money", "We're here to learn, grow, and profit together. 🚀"),
             ]
             for name, val in rules:
                 e.add_field(name=name, value=val, inline=False)
             e.set_footer(text="By participating you agree to these rules. Head to #verify →")
             await ch.send(embed=e)
+
+            # ── FAQ embed (same channel) ──
+            faq = discord.Embed(title="❓ FAQ", color=COLOR_INFO)
+            faqs = [
+                ("How do I start?", "Go to **#bot-commands** and type `/help` to see every command."),
+                ("Is this real money?", "**Paper Trading** by default. No real money at risk until you connect a broker."),
+                ("What markets?", "US stocks, Hong Kong, Japan, and Crypto."),
+                ("How accurate are signals?", "AI scans 500+ tickers using momentum, mean-reversion, VCP, and GPT validation. Past performance ≠ future results."),
+                ("How do I report a bug?", "DM the bot admin or post in **#trading-chat**."),
+            ]
+            for q, a in faqs:
+                faq.add_field(name=q, value=a, inline=False)
+            await ch.send(embed=faq)
 
         async def _post_verify():
             ch = self._channels.get("verify")
@@ -943,52 +920,32 @@ class DiscordInteractiveBot:
                 color=COLOR_PURPLE)
             await ch.send(embed=e, view=RolePickView())
 
-        async def _post_faq():
-            ch = self._channels.get("faq")
-            if not ch:
-                return
-            async for msg in ch.history(limit=5):
-                if msg.author == bot.user and msg.embeds:
-                    return
-            e = discord.Embed(title="❓ Frequently Asked Questions", color=COLOR_INFO)
-            faqs = [
-                ("How do I start?", "Head to **#bot-commands** and type `/help` to see every command."),
-                ("Is this real money?", "By default **Paper Trading** mode. No real money at risk until you connect a broker."),
-                ("What markets are covered?", "US stocks, Hong Kong, Japan, and Crypto."),
-                ("How accurate are signals?", "AI scans 500+ tickers using momentum, mean-reversion, VCP, and GPT validation. Past performance ≠ future results."),
-                ("Can I get premium signals?", "Members with the ⭐ Pro Trader role get priority signals and lower latency."),
-                ("How do I report a bug?", "DM the bot admin or post in **#ask-ai**."),
-            ]
-            for q, a in faqs:
-                e.add_field(name=q, value=a, inline=False)
-            await ch.send(embed=e)
-
         async def _post_welcome():
-            ch = self._channels.get("announcements")
+            ch = self._channels.get("daily-brief")
             if not ch:
                 return
             async for msg in ch.history(limit=5):
                 if msg.author == bot.user and msg.embeds:
-                    return
+                    if any("TradingAI Pro v5" in (em.title or "") for em in msg.embeds):
+                        return
             e = discord.Embed(
-                title="🤖 TradingAI Pro v3.0 — AI Trading Command Center",
+                title="🤖 TradingAI Pro v5 — AI Trading Command Center",
                 description=(
-                    "Welcome to the most advanced AI trading Discord server.\n\n"
+                    "Welcome to the AI-powered trading server.\n\n"
                     "**What I do:**\n"
                     "• Scan **US · HK · JP · Crypto** markets 24/7\n"
-                    "• Generate AI signals with GPT validation\n"
-                    "• Real-time price data, technicals, and scoring\n"
-                    "• Paper trading with position management\n"
-                    "• Daily morning briefs and end-of-day reports\n\n"
+                    "• AI signals with edge model (P(T1), EV, R:R)\n"
+                    "• Regime detection → daily playbook → trade plans\n"
+                    "• Morning decision memo & end-of-day scorecards\n"
+                    "• Paper trading with position management\n\n"
                     "**Getting Started:**\n"
                     "1. Read **#rules** and click ✅ in **#verify**\n"
                     "2. Pick your interests in **#roles**\n"
                     "3. Go to **#bot-commands** → type `/help`\n"
-                    "4. Try `/price AAPL` or `/ai NVDA`\n\u200b"),
+                    "4. Try `/market_now` or `/ai NVDA`\n\u200b"),
                 color=COLOR_PURPLE)
-            e.add_field(name="🎯 Quick Commands",
-                        value=("`/price` `/market` `/signals` `/ai`\n"
-                               "`/portfolio` `/buy` `/sell` `/backtest`"),
+            e.add_field(name="🎛️ Start Here",
+                        value="`/market_now` `/signals` `/ai`\n`/price` `/market` `/portfolio`",
                         inline=True)
             e.add_field(name="🌏 Markets",
                         value="`/asia` `/japan` `/hk` `/crypto`\n`/macro` `/sector` `/movers`",
@@ -996,7 +953,14 @@ class DiscordInteractiveBot:
             e.add_field(name="📊 Analysis",
                         value="`/analyze` `/advise` `/score`\n`/compare` `/levels` `/why`",
                         inline=True)
-            e.set_footer(text="TradingAI Pro v3.0 • 24/7 AI Trading • Type /help to begin")
+            e.add_field(name="📍 Channel Guide",
+                        value=(
+                            "**#signals** — live AI trades + whale flow\n"
+                            "**#daily-brief** — morning memo + EOD report\n"
+                            "**#bot-commands** — use all slash commands\n"
+                            "**#trading-chat** — discuss anything market-related"),
+                        inline=False)
+            e.set_footer(text="TradingAI Pro v5 • 24/7 AI Trading • Type /help to begin")
             await ch.send(embed=e)
 
         # ══════════════════════════════════════════════════════════════
@@ -1142,7 +1106,7 @@ class DiscordInteractiveBot:
                                                 for r in losers),
                                 inline=False)
                 e.set_footer(text="Auto-scan 30 stocks every 30 min")
-                await _send_ch("live-signals", embed=e)
+                await _send_ch("signals", embed=e)
                 await _audit(f"📡 Auto-movers: {len(big)} stocks ≥ 2%")
             except Exception as exc:
                 logger.error(f"auto_movers error: {exc}")
@@ -1327,7 +1291,7 @@ class DiscordInteractiveBot:
                     ),
                     color=COLOR_INFO, timestamp=now)
                 header.set_footer(text="Score 0-100 | R:R = Reward÷Risk | ATR = volatility")
-                await _send_ch("live-signals", embed=header)
+                await _send_ch("signals", embed=header)
                 await asyncio.sleep(0.5)
 
                 for sig in signals[:top_count]:
@@ -1394,13 +1358,13 @@ class DiscordInteractiveBot:
                     e.set_footer(
                         text="Buttons below ↓ • Deep Analysis • Position Size • Set Alert")
 
-                    await _send_ch("live-signals", embed=e,
+                    await _send_ch("signals", embed=e,
                                    view=SignalActionView(sig["ticker"], sig))
                     await asyncio.sleep(1)  # rate limit
 
                 await _audit(
                     f"🎯 Auto-scan: {len(signals)} signals found, "
-                    f"top {top_count} posted to #live-signals"
+                    f"top {top_count} posted to #signals"
                 )
             except Exception as exc:
                 logger.error(f"auto_signal_scan error: {exc}")
@@ -1762,7 +1726,7 @@ class DiscordInteractiveBot:
                                f"Vol: **{_vol(w['vol'])}** ({w['ratio']:.1f}x avg)"),
                         inline=True)
                 e.set_footer(text="Auto whale scan every 45 min")
-                await _send_ch("whale-alerts", embed=e)
+                await _send_ch("signals", embed=e)
                 await _audit(f"🐋 Whale scan: {len(whales)} unusual vol stocks")
             except Exception as exc:
                 logger.error(f"auto_whale_scan error: {exc}")
@@ -1793,7 +1757,7 @@ class DiscordInteractiveBot:
                 e.add_field(name="📅 Coming Up", inline=False,
                             value="Check economic calendar for next week's key events")
                 e.set_footer(text="Weekly auto-recap • Good trading week ahead! 🚀")
-                await _send_ch("announcements", embed=e)
+                await _send_ch("daily-brief", embed=e)
                 await _audit("📅 Weekly recap auto-posted")
             except Exception as exc:
                 logger.error(f"weekly_recap error: {exc}")
@@ -1821,7 +1785,7 @@ class DiscordInteractiveBot:
                     f"{'✅' if eod_report.is_running() else '❌'} EOD Report"
                 )
                 e.add_field(name="🔄 Running Tasks", value=tasks_status, inline=False)
-                await _send_ch("bot-status", embed=e)
+                await _send_ch("admin-log", embed=e)
             except Exception:
                 pass
 
@@ -2731,7 +2695,7 @@ class DiscordInteractiveBot:
                 await interaction.followup.send("✅ Server setup complete.", ephemeral=True)
                 await _audit(f"⚙️ {interaction.user} ran /setup")
 
-        @bot.tree.command(name="announce", description="[Admin] Post announcement to #announcements")
+        @bot.tree.command(name="announce", description="[Admin] Post announcement to #daily-brief")
         @app_commands.describe(message="Announcement text")
         @app_commands.checks.has_permissions(administrator=True)
         async def cmd_announce(interaction: discord.Interaction, message: str):
@@ -2739,7 +2703,7 @@ class DiscordInteractiveBot:
                               color=COLOR_GOLD,
                               timestamp=datetime.now(timezone.utc))
             e.set_footer(text=f"Posted by {interaction.user.display_name}")
-            await _send_ch("announcements", embed=e)
+            await _send_ch("daily-brief", embed=e)
             await interaction.response.send_message("✅ Announcement posted.", ephemeral=True)
             await _audit(f"📢 {interaction.user} posted announcement")
 
