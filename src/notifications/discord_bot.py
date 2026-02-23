@@ -680,6 +680,7 @@ class DiscordInteractiveBot:
                                custom_id="verify_btn")
             async def btn_verify(self, interaction: discord.Interaction,
                                  button: discord.ui.Button):
+                await interaction.response.defer(ephemeral=True)
                 guild = interaction.guild
                 if not guild:
                     return
@@ -691,13 +692,13 @@ class DiscordInteractiveBot:
                         await member.add_roles(trader_role)
                     if unverified and unverified in member.roles:
                         await member.remove_roles(unverified)
-                    await interaction.response.send_message(
+                    await interaction.followup.send(
                         "✅ You're verified! All channels are now unlocked. "
                         "Head to **#bot-commands** and type `/help`.",
                         ephemeral=True)
                     await _audit(f"✅ {member} verified")
                 else:
-                    await interaction.response.send_message(
+                    await interaction.followup.send(
                         "Could not verify. Please try again.", ephemeral=True)
 
         class RolePickView(discord.ui.View):
@@ -742,6 +743,7 @@ class DiscordInteractiveBot:
                 await self._toggle(interaction, "🎯 Swing Trader")
 
             async def _toggle(self, interaction: discord.Interaction, role_name: str):
+                await interaction.response.defer(ephemeral=True)
                 guild = interaction.guild
                 if not guild:
                     return
@@ -752,11 +754,11 @@ class DiscordInteractiveBot:
                 if isinstance(member, discord.Member):
                     if role in member.roles:
                         await member.remove_roles(role)
-                        await interaction.response.send_message(
+                        await interaction.followup.send(
                             f"Removed **{role_name}**", ephemeral=True)
                     else:
                         await member.add_roles(role)
-                        await interaction.response.send_message(
+                        await interaction.followup.send(
                             f"Added **{role_name}** ✅", ephemeral=True)
 
         # ══════════════════════════════════════════════════════════════
@@ -1009,7 +1011,7 @@ class DiscordInteractiveBot:
         _WATCH_ASIA = [("^N225","🇯🇵 Nikkei"),("^HSI","🇭🇰 Hang Seng"),
                        ("000001.SS","🇨🇳 Shanghai")]
         _INDICES = [("SPY","S&P 500"),("QQQ","Nasdaq 100"),("DIA","Dow"),
-                    ("IWM","Russell 2K"),("VIX","VIX")]
+                    ("IWM","Russell 2K"),("^VIX","VIX")]
         _SECTORS = [("XLK","Tech"),("XLF","Fin"),("XLV","Health"),("XLE","Energy"),
                     ("XLI","Indust"),("XLY","Disc"),("XLP","Stpl"),("XLU","Util"),
                     ("XLRE","RE"),("XLC","Comm"),("XLB","Mat")]
@@ -1054,7 +1056,7 @@ class DiscordInteractiveBot:
                     e.add_field(name=name,
                                 value=f"${data.get('price',0):.2f} {_bar(pct, 6)}")
                 # Add VIX as fear gauge
-                vix = await _fetch_stock("VIX")
+                vix = await _fetch_stock("^VIX")
                 vp = vix.get("price", 0)
                 vlabel = "😌 Low" if vp < 15 else "😐 Normal" if vp < 20 else "😰 Elevated" if vp < 30 else "🔥 PANIC"
                 e.add_field(name=f"VIX {vlabel}", value=f"**{vp:.2f}**", inline=False)
