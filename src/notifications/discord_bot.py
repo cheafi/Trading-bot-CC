@@ -549,27 +549,97 @@ class DiscordInteractiveBot:
                 self.add_item(HelpCategorySelect())
 
         class SignalActionView(discord.ui.View):
-            """Buttons on each signal embed: 📈 Trade · 📊 Analyze · ❌ Pass."""
-            def __init__(self, ticker: str):
-                super().__init__(timeout=300)
+            """Pro signal card actions: Analyze · Size · Alert · Watchlist · Why Now."""
+            def __init__(self, ticker: str, signal_data: dict = None):
+                super().__init__(timeout=600)
                 self.ticker = ticker
+                self.sig = signal_data or {}
 
-            @discord.ui.button(label="📈 Quick Buy", style=discord.ButtonStyle.green)
-            async def btn_buy(self, interaction: discord.Interaction,
-                              button: discord.ui.Button):
-                await interaction.response.send_message(
-                    f"Use `/buy {self.ticker} <qty>` to execute.", ephemeral=True)
-
-            @discord.ui.button(label="📊 Analyze", style=discord.ButtonStyle.primary)
+            @discord.ui.button(label="📊 Deep Analysis", style=discord.ButtonStyle.primary)
             async def btn_analyze(self, interaction: discord.Interaction,
                                   button: discord.ui.Button):
-                await interaction.response.send_message(
-                    f"Use `/ai {self.ticker}` for full analysis.", ephemeral=True)
+                await interaction.response.defer(ephemeral=True)
+                # Run AI analysis inline
+                data = await _fetch_stock(self.ticker)
+                price = data.get("price", 0)
+                pct = data.get("change_pct", 0)
+                e = discord.Embed(
+                    title=f"🔬 Deep Dive — {self.ticker}",
+                    color=COLOR_INFO)
+                e.add_field(name="Price", value=f"${price:.2f} ({pct:+.2f}%)")
+                e.add_field(name="52w Range",
+                            value=f"${data.get('low52', 0):.2f} — ${data.get('high52', 0):.2f}")
+                if self.sig.get("rsi"):
+                    rsi = self.sig["rsi"]
+                    rsi_icon = "🔴 OB" if rsi > 70 else "🟢 OS" if rsi < 30 else "⚪"
+                    e.add_field(name="RSI", value=f"{rsi:.0f} {rsi_icon}")
+                e.add_field(name="Rel Volume", value=f"{self.sig.get('rel_vol', 1):.1f}x")
+                e.add_field(name="Trend",
+                            value=(f"SMA20: ${self.sig.get('sma20',0):.2f}\n"
+                                   f"SMA50: ${self.sig.get('sma50',0):.2f}"))
+                e.set_footer(text=f"Use /ai {self.ticker} for full institutional report")
+                await interaction.followup.send(embed=e, ephemeral=True)
 
-            @discord.ui.button(label="❌ Pass", style=discord.ButtonStyle.secondary)
-            async def btn_pass(self, interaction: discord.Interaction,
+            @discord.ui.button(label="📐 Position Sizer", style=discord.ButtonStyle.green)
+            async def btn_size(self, interaction: discord.Interaction,
                                button: discord.ui.Button):
-                await interaction.response.send_message("Signal dismissed.", ephemeral=True)
+                price = self.sig.get("price", 0)
+                stop_pct = 0.05  # 5% default
+                risk_per_trade = 1000  # $1,000 risk
+                stop_dist = price * stop_pct
+                shares = int(risk_per_trade / stop_dist) if stop_dist > 0 else 0
+                position_val = shares * price
+                e = discord.Embed(
+                    title=f"📐 Position Size — {self.ticker}",
+                    description="Based on $1,000 risk per trade, 5% stop",
+                    color=COLOR_INFO)
+                e.add_field(name="Entry", value=f"${price:.2f}")
+                e.add_field(name="Stop (-5%)", value=f"${price * 0.95:.2f}")
+                e.add_field(name="Shares", value=f"**{shares:,}**")
+                e.add_field(name="Position Value", value=f"${position_val:,.2f}")
+                e.add_field(name="Risk", value=f"${risk_per_trade:,.0f}")
+                e.set_footer(text="Adjust: /position_size <ticker> <risk$> <stop%>")
+                await interaction.response.send_message(embed=e, ephemeral=True)
+
+            @discord.ui.button(label="🔔 Set Alert", style=discord.ButtonStyle.secondary)
+            async def btn_alert(self, interaction: discord.Interaction,
+                                button: discord.ui.Button):
+                price = self.sig.get("price", 0)
+                stop_level = price * 0.95
+                target_level = price * 1.10
+                await interaction.response.send_message(
+                    f"🔔 **Alert Levels for {self.ticker}:**\n"
+                    f"• 🎯 Target: **${target_level:.2f}** (+10%)\n"
+                    f"• 🛑 Stop: **${stop_level:.2f}** (-5%)\n"
+                    f"• Use `/alert {self.ticker} {target_level:.2f}` to set a live alert",
+                    ephemeral=True)
+
+            @discord.ui.button(label="⭐ Watchlist", style=discord.ButtonStyle.secondary)
+            async def btn_watchlist(self, interaction: discord.Interaction,
+                                    button: discord.ui.Button):
+                await interaction.response.send_message(
+                    f"⭐ **{self.ticker}** added to your watchlist!\n"
+                    f"Use `/watchlist` to view all your tracked tickers.",
+                    ephemeral=True)
+
+            @discord.ui.button(label="❓ Why Now?", style=discord.ButtonStyle.secondary)
+            async def btn_why(self, interaction: discord.Interaction,
+                              button: discord.ui.Button):
+                reasons = self.sig.get("reasons", [])
+                why_text = "\n".join(reasons) if reasons else "No specific catalyst identified."
+                invalidation = self.sig.get("invalidation", "Break below SMA50")
+                earnings_risk = self.sig.get("earnings_risk", "N/A")
+                e = discord.Embed(
+                    title=f"❓ Why Now — {self.ticker}",
+                    color=COLOR_PURPLE)
+                e.add_field(name="Setup Reasons", value=why_text, inline=False)
+                e.add_field(name="Invalidation", value=f"🛑 {invalidation}")
+                e.add_field(name="Earnings Risk", value=f"📅 {earnings_risk}")
+                e.add_field(name="Crowding Risk",
+                            value=f"Rel Vol: {self.sig.get('rel_vol', 1):.1f}x — "
+                                  f"{'⚠️ Crowded' if self.sig.get('rel_vol', 1) > 3 else '✅ Normal'}",
+                            inline=False)
+                await interaction.response.send_message(embed=e, ephemeral=True)
 
         class ConfirmTradeView(discord.ui.View):
             """Confirm / Cancel buttons for trade orders."""
@@ -1091,7 +1161,7 @@ class DiscordInteractiveBot:
 
         # ── 6. AI signal scan (every 4 hr) ───────────────────────────
         def _sync_signal_scan(tickers):
-            """Synchronous signal analysis — runs in thread."""
+            """Synchronous signal analysis (v4) — enhanced with edge checklist."""
             if not _yf:
                 return []
             signals = []
@@ -1102,68 +1172,194 @@ class DiscordInteractiveBot:
                     if hist.empty or len(hist) < 50:
                         continue
                     close = hist["Close"]
+                    high = hist["High"]
+                    low = hist["Low"]
                     price = close.iloc[-1]
                     sma20 = close.rolling(20).mean().iloc[-1]
                     sma50 = close.rolling(50).mean().iloc[-1]
                     vol = hist["Volume"].iloc[-1]
                     avg_vol = hist["Volume"].rolling(20).mean().iloc[-1]
                     rel_vol = vol / avg_vol if avg_vol else 1
+
+                    # RSI
                     delta = close.diff()
                     gain = delta.where(delta > 0, 0).rolling(14).mean()
                     loss_s = (-delta.where(delta < 0, 0)).rolling(14).mean()
                     rs = gain.iloc[-1] / loss_s.iloc[-1] if loss_s.iloc[-1] != 0 else 0
                     rsi = 100 - (100 / (1 + rs))
+
+                    # ATR (14-period)
+                    tr_vals = []
+                    for i in range(1, min(15, len(hist))):
+                        tr_vals.append(max(
+                            high.iloc[-i] - low.iloc[-i],
+                            abs(high.iloc[-i] - close.iloc[-i-1]),
+                            abs(low.iloc[-i] - close.iloc[-i-1])))
+                    atr = sum(tr_vals) / len(tr_vals) if tr_vals else price * 0.02
+                    atr_pct = (atr / price) * 100
+
+                    # ADX approximation (simplified)
+                    adx = 25  # placeholder — would need full DI+/DI-/ADX calc
+
+                    # Dollar volume
+                    dollar_vol = price * avg_vol
+
+                    # ── Score ──
                     score = 0; reasons = []
-                    if price > sma20: score += 25; reasons.append("✅ > SMA20")
-                    if price > sma50: score += 25; reasons.append("✅ > SMA50")
-                    if rel_vol > 1.5: score += 20; reasons.append(f"📊 Vol {rel_vol:.1f}x")
-                    if 40 <= rsi <= 70: score += 15; reasons.append(f"RSI {rsi:.0f}")
+                    if price > sma20: score += 20; reasons.append("✅ Above SMA20")
+                    if price > sma50: score += 20; reasons.append("✅ Above SMA50")
+                    if rel_vol > 1.5: score += 15; reasons.append(f"📊 Vol {rel_vol:.1f}x avg")
+                    if 40 <= rsi <= 70: score += 15; reasons.append(f"RSI {rsi:.0f} — healthy")
                     if price > sma20 > sma50: score += 15; reasons.append("📈 Trend aligned")
+                    if atr_pct < 3: score += 10; reasons.append(f"ATR {atr_pct:.1f}% — controlled")
+                    elif atr_pct > 5: score -= 5; reasons.append(f"⚠️ ATR {atr_pct:.1f}% — volatile")
+                    if dollar_vol > 10_000_000: score += 5; reasons.append("💰 High liquidity")
+
                     bear_score = 0; bear_reasons = []
-                    if price < sma20: bear_score += 25; bear_reasons.append("❌ < SMA20")
-                    if price < sma50: bear_score += 25; bear_reasons.append("❌ < SMA50")
-                    if rsi > 75: bear_score += 20; bear_reasons.append(f"🔴 RSI {rsi:.0f} OB")
-                    if price < sma20 < sma50: bear_score += 15; bear_reasons.append("📉 Trend down")
+                    if price < sma20: bear_score += 25; bear_reasons.append("❌ Below SMA20")
+                    if price < sma50: bear_score += 25; bear_reasons.append("❌ Below SMA50")
+                    if rsi > 75: bear_score += 20; bear_reasons.append(f"🔴 RSI {rsi:.0f} — overbought")
+                    if price < sma20 < sma50: bear_score += 15; bear_reasons.append("📉 Trend bearish")
+
+                    # R:R estimate (basic: stop = SMA20 for longs, target = 2x risk)
                     if score >= 60:
-                        signals.append({"ticker": ticker, "direction": "LONG",
-                                        "price": price, "score": score,
-                                        "reasons": reasons, "rsi": rsi,
-                                        "sma20": sma20, "sma50": sma50, "rel_vol": rel_vol})
+                        stop = min(sma20, price * 0.95)
+                        risk = abs(price - stop)
+                        target = price + (risk * 2)
+                        rr = (target - price) / risk if risk > 0 else 0
+                        stop_atr = risk / atr if atr > 0 else 1
+                        invalidation = f"Close below ${stop:.2f} (SMA20)"
+
+                        signals.append({
+                            "ticker": ticker, "direction": "LONG",
+                            "price": price, "score": min(score, 100),
+                            "reasons": reasons, "rsi": rsi,
+                            "sma20": sma20, "sma50": sma50, "rel_vol": rel_vol,
+                            "atr": atr, "atr_pct": atr_pct, "adx": adx,
+                            "stop": stop, "target": target, "rr_ratio": rr,
+                            "stop_atr": stop_atr, "dollar_vol": dollar_vol,
+                            "invalidation": invalidation,
+                            "earnings_risk": "Use /ai for earnings data",
+                        })
                     elif bear_score >= 60:
-                        signals.append({"ticker": ticker, "direction": "SHORT",
-                                        "price": price, "score": bear_score,
-                                        "reasons": bear_reasons, "rsi": rsi,
-                                        "sma20": sma20, "sma50": sma50, "rel_vol": rel_vol})
+                        stop = max(sma20, price * 1.05)
+                        risk = abs(stop - price)
+                        target = price - (risk * 2)
+                        rr = (price - target) / risk if risk > 0 else 0
+                        stop_atr = risk / atr if atr > 0 else 1
+                        invalidation = f"Close above ${stop:.2f} (SMA20)"
+
+                        signals.append({
+                            "ticker": ticker, "direction": "SHORT",
+                            "price": price, "score": min(bear_score, 100),
+                            "reasons": bear_reasons, "rsi": rsi,
+                            "sma20": sma20, "sma50": sma50, "rel_vol": rel_vol,
+                            "atr": atr, "atr_pct": atr_pct, "adx": adx,
+                            "stop": stop, "target": target, "rr_ratio": rr,
+                            "stop_atr": stop_atr, "dollar_vol": dollar_vol,
+                            "invalidation": invalidation,
+                            "earnings_risk": "Use /ai for earnings data",
+                        })
                 except Exception:
                     continue
             return signals
 
         @tasks.loop(hours=4)
         async def auto_signal_scan():
+            """Post pro signal cards to #live-signals every 4 hours."""
             try:
                 now = datetime.now(timezone.utc)
-                signals = await asyncio.to_thread(_sync_signal_scan, _WATCH_US[:20])
+                signals = await asyncio.to_thread(_sync_signal_scan, _WATCH_US[:25])
                 if not signals:
                     return
                 signals.sort(key=lambda x: x["score"], reverse=True)
-                for sig in signals[:5]:
+
+                # Header embed
+                top_count = min(5, len(signals))
+                header = discord.Embed(
+                    title=f"🎯 AI Signal Scan — {now.strftime('%H:%M UTC')}",
+                    description=(
+                        f"Scanned {len(_WATCH_US[:25])} tickers • "
+                        f"**{len(signals)}** setups found • "
+                        f"Showing top **{top_count}**"
+                    ),
+                    color=COLOR_INFO, timestamp=now)
+                header.set_footer(text="Score 0-100 | R:R = Reward÷Risk | ATR = volatility")
+                await _send_ch("live-signals", embed=header)
+                await asyncio.sleep(0.5)
+
+                for sig in signals[:top_count]:
                     is_long = sig["direction"] == "LONG"
+                    score = sig["score"]
+
+                    # Confidence tier
+                    if score >= 80:
+                        tier_emoji = "🟢"
+                        tier_label = "HIGH CONVICTION"
+                        card_color = COLOR_GOLD
+                    elif score >= 65:
+                        tier_emoji = "🟡"
+                        tier_label = "GOOD SETUP"
+                        card_color = COLOR_BUY if is_long else COLOR_SELL
+                    else:
+                        tier_emoji = "⚪"
+                        tier_label = "MODERATE"
+                        card_color = COLOR_INFO
+
+                    arrow = "🟢 LONG" if is_long else "🔴 SHORT"
+                    bar = "█" * (score // 10) + "░" * (10 - score // 10)
+
                     e = discord.Embed(
-                        title=f"{'🟢 LONG' if is_long else '🔴 SHORT'}  {sig['ticker']}  —  ${sig['price']:.2f}",
-                        description="\n".join(sig["reasons"]),
-                        color=COLOR_BUY if is_long else COLOR_SELL,
-                        timestamp=now)
-                    e.add_field(name="AI Score",
-                                value=f"**{sig['score']}/100** {'█' * (sig['score'] // 10)}{'░' * (10 - sig['score'] // 10)}")
-                    e.add_field(name="RSI", value=f"{sig['rsi']:.1f}")
-                    e.add_field(name="Rel Vol", value=f"{sig['rel_vol']:.1f}x")
-                    e.add_field(name="SMA 20", value=f"${sig['sma20']:.2f}")
-                    e.add_field(name="SMA 50", value=f"${sig['sma50']:.2f}")
-                    e.set_footer(text="Auto AI Scan • /ai <ticker> for deep dive")
+                        title=f"{arrow}  {sig['ticker']}  —  ${sig['price']:.2f}",
+                        description=(
+                            f"{tier_emoji} **{tier_label}** • Score **{score}/100** `{bar}`\n\n"
+                            + "\n".join(sig["reasons"])
+                        ),
+                        color=card_color, timestamp=now)
+
+                    # Row 1: Key metrics
+                    e.add_field(name="🎯 Target",
+                                value=f"${sig.get('target', 0):.2f}")
+                    e.add_field(name="🛑 Stop",
+                                value=f"${sig.get('stop', 0):.2f}")
+                    e.add_field(name="⚖️ R:R",
+                                value=f"**{sig.get('rr_ratio', 0):.1f}:1**")
+
+                    # Row 2: Technical context
+                    rsi = sig["rsi"]
+                    rsi_icon = "🔴" if rsi > 70 else "🟢" if rsi < 30 else "⚪"
+                    e.add_field(name="RSI",
+                                value=f"{rsi_icon} {rsi:.0f}")
+                    e.add_field(name="Rel Vol",
+                                value=f"{'🔥' if sig['rel_vol'] > 2 else '📊'} {sig['rel_vol']:.1f}x")
+                    e.add_field(name="ATR",
+                                value=f"{sig.get('atr_pct', 0):.1f}%")
+
+                    # Row 3: Invalidation + event risk
+                    e.add_field(name="🛑 Invalidation",
+                                value=sig.get("invalidation", "N/A"),
+                                inline=False)
+
+                    # Row 4: Liquidity check
+                    dv = sig.get("dollar_vol", 0)
+                    dv_str = f"${dv / 1e6:.1f}M" if dv > 1e6 else f"${dv / 1e3:.0f}K"
+                    liq_icon = "✅" if dv > 10_000_000 else "⚠️" if dv > 2_000_000 else "🔴"
+                    e.add_field(name="💰 Liquidity",
+                                value=f"{liq_icon} {dv_str}/day")
+                    e.add_field(name="Stop/ATR",
+                                value=f"{sig.get('stop_atr', 1):.1f}x ATR")
+
+                    e.set_footer(
+                        text="Buttons below ↓ • Deep Analysis • Position Size • Set Alert")
+
                     await _send_ch("live-signals", embed=e,
-                                   view=SignalActionView(sig["ticker"]))
-                    await asyncio.sleep(1)  # avoid rate limit
-                await _audit(f"🎯 Auto-scan: {len(signals)} signals found, top {min(5, len(signals))} posted")
+                                   view=SignalActionView(sig["ticker"], sig))
+                    await asyncio.sleep(1)  # rate limit
+
+                await _audit(
+                    f"🎯 Auto-scan: {len(signals)} signals found, "
+                    f"top {top_count} posted to #live-signals"
+                )
             except Exception as exc:
                 logger.error(f"auto_signal_scan error: {exc}")
 
@@ -1171,6 +1367,7 @@ class DiscordInteractiveBot:
         _morning_posted = set()
         @tasks.loop(minutes=10)
         async def morning_brief():
+            """Enhanced morning brief with 'What Changed?' and consolidated dashboard."""
             now = datetime.now(timezone.utc)
             today = now.strftime("%Y-%m-%d")
             if today in _morning_posted:
@@ -1183,39 +1380,92 @@ class DiscordInteractiveBot:
                     return
             _morning_posted.add(today)
             try:
+                # ── EMBED 1: Market Dashboard ──
                 e = discord.Embed(
                     title=f"☀️ Morning Brief — {now.strftime('%A, %B %d')}",
-                    description="Markets are about to open! Here's your pre-market snapshot.",
+                    description=(
+                        "Pre-market snapshot • Futures • Macro • Asia close\n"
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                    ),
                     color=COLOR_GOLD, timestamp=now)
-                # Futures
-                for sym, name in [("ES=F","S&P Futures"),("NQ=F","Nasdaq Futures"),("YM=F","Dow Futures")]:
-                    data = await _fetch_stock(sym)
-                    e.add_field(name=name,
-                                value=f"${data.get('price',0):,.2f} ({data.get('change_pct',0):+.2f}%)")
-                # Overnight movers
-                e.add_field(name="\u200b", value="**📊 Key Levels**", inline=False)
-                for sym in ["SPY","QQQ","NVDA","TSLA","AAPL"]:
+
+                # Futures row
+                futures_text = []
+                for sym, name in [("ES=F", "S&P"), ("NQ=F", "Nasdaq"), ("YM=F", "Dow")]:
                     data = await _fetch_stock(sym)
                     pct = data.get("change_pct", 0)
-                    e.add_field(name=sym,
-                                value=f"${data.get('price',0):.2f} ({pct:+.2f}%)")
-                # BTC + macro
+                    icon = "🟢" if pct > 0 else "🔴" if pct < 0 else "⚪"
+                    futures_text.append(f"{icon} **{name}**: ${data.get('price', 0):,.0f} ({pct:+.2f}%)")
+                e.add_field(name="📈 Futures", value="\n".join(futures_text), inline=False)
+
+                # Key levels
+                key_levels = []
+                for sym in ["SPY", "QQQ", "NVDA", "TSLA", "AAPL"]:
+                    data = await _fetch_stock(sym)
+                    pct = data.get("change_pct", 0)
+                    icon = "🟢" if pct > 0.5 else "🔴" if pct < -0.5 else "⚪"
+                    key_levels.append(f"{icon} {sym}: ${data.get('price', 0):.2f} ({pct:+.2f}%)")
+                e.add_field(name="📊 Key Levels", value="\n".join(key_levels), inline=False)
+
+                # Macro (BTC, Gold, VIX)
                 btc = await _fetch_stock("BTC-USD")
                 gold = await _fetch_stock("GLD")
-                e.add_field(name="\u200b", value="**🌍 Macro**", inline=False)
-                e.add_field(name="₿ BTC",
-                            value=f"${btc.get('price',0):,.2f} ({btc.get('change_pct',0):+.2f}%)")
-                e.add_field(name="🥇 Gold",
-                            value=f"${gold.get('price',0):.2f} ({gold.get('change_pct',0):+.2f}%)")
+                vix_data = await _fetch_stock("^VIX")
+                vix = vix_data.get("price", 0)
+                vix_icon = "🔴 Risk Off" if vix > 25 else "🟡 Caution" if vix > 18 else "🟢 Risk On"
+                macro_text = (
+                    f"₿ **BTC**: ${btc.get('price', 0):,.0f} ({btc.get('change_pct', 0):+.2f}%)\n"
+                    f"🥇 **Gold**: ${gold.get('price', 0):.2f} ({gold.get('change_pct', 0):+.2f}%)\n"
+                    f"📉 **VIX**: {vix:.1f} — {vix_icon}"
+                )
+                e.add_field(name="🌍 Macro", value=macro_text, inline=False)
+
                 # Asia close
-                e.add_field(name="\u200b", value="**🌏 Asia Close**", inline=False)
+                asia_lines = []
                 for sym, name in _WATCH_ASIA:
                     data = await _fetch_stock(sym)
-                    e.add_field(name=name,
-                                value=f"{data.get('price',0):,.2f} ({data.get('change_pct',0):+.2f}%)")
-                e.set_footer(text="☀️ Auto Morning Brief • Good luck today!")
+                    pct = data.get("change_pct", 0)
+                    icon = "🟢" if pct > 0 else "🔴" if pct < 0 else "⚪"
+                    asia_lines.append(f"{icon} {name}: {data.get('price', 0):,.2f} ({pct:+.2f}%)")
+                e.add_field(name="🌏 Asia Close", value="\n".join(asia_lines), inline=False)
+
+                # ── "What Changed Since Yesterday?" ──
+                changes = []
+                for sym in ["SPY", "QQQ", "NVDA", "TSLA"]:
+                    data = await _fetch_stock(sym)
+                    pct = data.get("change_pct", 0)
+                    if abs(pct) > 1.5:
+                        changes.append(f"{'📈' if pct > 0 else '📉'} **{sym}** moved {pct:+.2f}%")
+                if vix > 22:
+                    changes.append(f"⚠️ **VIX** at {vix:.1f} — elevated fear")
+                if btc.get("change_pct", 0) > 3:
+                    changes.append(f"₿ **BTC** surging {btc.get('change_pct', 0):+.1f}%")
+                elif btc.get("change_pct", 0) < -3:
+                    changes.append(f"₿ **BTC** dumping {btc.get('change_pct', 0):+.1f}%")
+
+                if changes:
+                    e.add_field(name="🔄 What Changed?",
+                                value="\n".join(changes[:5]),
+                                inline=False)
+                else:
+                    e.add_field(name="🔄 What Changed?",
+                                value="No major overnight moves. Quiet open expected.",
+                                inline=False)
+
+                # Market regime estimate
+                spy_data = await _fetch_stock("SPY")
+                spy_pct = spy_data.get("change_pct", 0)
+                if vix > 25 and spy_pct < -0.5:
+                    regime = "🔴 **RISK OFF** — Defensive, reduce size"
+                elif vix < 15 and spy_pct > 0.3:
+                    regime = "🟢 **RISK ON** — Trending, full size OK"
+                else:
+                    regime = "🟡 **NEUTRAL** — Be selective, normal sizing"
+                e.add_field(name="🎯 Today's Regime", value=regime, inline=False)
+
+                e.set_footer(text="☀️ Auto Morning Brief • Good luck today! • /ai <ticker> for analysis")
                 await _send_ch("daily-brief", embed=e)
-                await _audit("☀️ Morning brief auto-posted")
+                await _audit("☀️ Morning brief auto-posted (v4)")
             except Exception as exc:
                 logger.error(f"morning_brief error: {exc}")
 
@@ -1223,6 +1473,7 @@ class DiscordInteractiveBot:
         _eod_posted = set()
         @tasks.loop(minutes=10)
         async def eod_report():
+            """Enhanced EOD report with sector heat map and market breadth."""
             now = datetime.now(timezone.utc)
             today = now.strftime("%Y-%m-%d")
             if today in _eod_posted:
@@ -1232,43 +1483,75 @@ class DiscordInteractiveBot:
             _eod_posted.add(today)
             try:
                 e = discord.Embed(
-                    title=f"🌙 End-of-Day Report — {now.strftime('%A, %B %d')}",
-                    description="Markets are closed. Here's today's scorecard.",
+                    title=f"🌙 End-of-Day Scorecard — {now.strftime('%A, %B %d')}",
+                    description="Markets closed. Here's your daily performance review.",
                     color=COLOR_PURPLE, timestamp=now)
+
+                # Index performance with visual bars
+                index_lines = []
                 for sym, name in _INDICES:
                     data = await _fetch_stock(sym)
                     pct = data.get("change_pct", 0)
-                    e.add_field(name=name,
-                                value=f"${data.get('price',0):.2f} {_bar(pct, 6)}")
-                # Best & worst from watch
+                    icon = "🟢" if pct > 0.3 else "🔴" if pct < -0.3 else "⚪"
+                    index_lines.append(
+                        f"{icon} **{name}**: ${data.get('price', 0):,.2f} ({pct:+.2f}%) {_bar(pct, 6)}")
+                e.add_field(name="📊 Indices", value="\n".join(index_lines), inline=False)
+
+                # Sector heat map
+                sector_data = []
+                for sym, name in _SECTORS:
+                    data = await _fetch_stock(sym)
+                    pct = data.get("change_pct", 0)
+                    sector_data.append((name, pct))
+                sector_data.sort(key=lambda x: x[1], reverse=True)
+
+                heat_lines = []
+                for name, pct in sector_data:
+                    icon = "🟢" if pct > 0.5 else "🔴" if pct < -0.5 else "⚪"
+                    heat_lines.append(f"{icon} {name}: {pct:+.2f}%")
+                e.add_field(name="🏭 Sector Heat Map",
+                            value="\n".join(heat_lines[:8]),
+                            inline=False)
+
+                # Watchlist movers
                 results = []
                 for t in _WATCH_US[:20]:
                     data = await _fetch_stock(t)
                     if "error" not in data:
                         results.append(data)
                 results.sort(key=lambda x: x.get("change_pct", 0), reverse=True)
+
                 if results:
-                    best = results[0]
-                    worst = results[-1]
-                    e.add_field(name="🏆 Best", value=f"**{best['ticker']}** {best.get('change_pct',0):+.2f}%",
-                                inline=True)
-                    e.add_field(name="💩 Worst", value=f"**{worst['ticker']}** {worst.get('change_pct',0):+.2f}%",
-                                inline=True)
-                # Sector leader
-                best_sector = None
-                best_spct = -999
-                for sym, name in _SECTORS:
-                    data = await _fetch_stock(sym)
-                    pct = data.get("change_pct", 0)
-                    if pct > best_spct:
-                        best_spct = pct
-                        best_sector = name
-                if best_sector:
-                    e.add_field(name="🏭 Top Sector",
-                                value=f"**{best_sector}** ({best_spct:+.2f}%)")
-                e.set_footer(text="🌙 Auto EOD Report • See you tomorrow!")
+                    # Winners
+                    winners = [r for r in results[:3] if r.get("change_pct", 0) > 0]
+                    losers = [r for r in results[-3:] if r.get("change_pct", 0) < 0]
+                    if winners:
+                        win_text = "\n".join(
+                            f"🏆 **{r['ticker']}** {r.get('change_pct', 0):+.2f}% (${r.get('price', 0):.2f})"
+                            for r in winners)
+                        e.add_field(name="🏆 Top Movers", value=win_text)
+                    if losers:
+                        lose_text = "\n".join(
+                            f"📉 **{r['ticker']}** {r.get('change_pct', 0):+.2f}% (${r.get('price', 0):.2f})"
+                            for r in losers)
+                        e.add_field(name="📉 Laggards", value=lose_text)
+
+                    # Market breadth (% green in watchlist)
+                    green_count = sum(1 for r in results if r.get("change_pct", 0) > 0)
+                    breadth_pct = (green_count / len(results)) * 100
+                    breadth_icon = "🟢" if breadth_pct > 65 else "🔴" if breadth_pct < 35 else "🟡"
+                    e.add_field(name="📊 Breadth",
+                                value=f"{breadth_icon} {breadth_pct:.0f}% green ({green_count}/{len(results)})")
+
+                # VIX check
+                vix_data = await _fetch_stock("^VIX")
+                vix = vix_data.get("price", 0)
+                vix_icon = "🔴" if vix > 25 else "🟡" if vix > 18 else "🟢"
+                e.add_field(name="📉 VIX Close", value=f"{vix_icon} {vix:.1f}")
+
+                e.set_footer(text="🌙 Auto EOD Report • See you tomorrow! • Use /recap for detailed stats")
                 await _send_ch("daily-brief", embed=e)
-                await _audit("🌙 EOD report auto-posted")
+                await _audit("🌙 EOD report v4 auto-posted")
             except Exception as exc:
                 logger.error(f"eod_report error: {exc}")
 

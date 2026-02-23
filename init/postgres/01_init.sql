@@ -454,6 +454,134 @@ CREATE TABLE system.audit_log (
 CREATE INDEX idx_audit_log_action ON system.audit_log (action, created_at DESC);
 
 -- =============================================================================
+-- CORPORATE ACTIONS (survivorship-bias protection)
+-- =============================================================================
+
+CREATE TABLE documents.corporate_actions (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ticker              VARCHAR(10) NOT NULL,
+    action_date         DATE NOT NULL,
+    action_type         VARCHAR(30) NOT NULL,  -- SPLIT, DIVIDEND, SYMBOL_CHANGE, MERGER, SPINOFF, DELIST
+    factor              NUMERIC(12,6),          -- split ratio or dividend amount
+    old_ticker          VARCHAR(10),            -- for symbol changes
+    new_ticker          VARCHAR(10),
+    notes               TEXT,
+    created_at          TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_corp_actions_ticker ON documents.corporate_actions (ticker, action_date DESC);
+CREATE INDEX idx_corp_actions_date   ON documents.corporate_actions (action_date DESC);
+
+-- =============================================================================
+-- MARKET STATE (NO-TRADE hard gate + regime history)
+-- =============================================================================
+
+CREATE TABLE system.market_state (
+    ts                  TIMESTAMPTZ PRIMARY KEY DEFAULT NOW(),
+    regime_label        VARCHAR(30),
+    volatility_regime   VARCHAR(20),
+    trend_regime        VARCHAR(20),
+    risk_regime         VARCHAR(20),
+    risk_on_score       NUMERIC(6,2),
+    no_trade_flag       BOOLEAN DEFAULT FALSE,
+    no_trade_reason     TEXT,
+    active_strategies   TEXT[],
+    vix                 NUMERIC(8,2),
+    spx_change_pct      NUMERIC(8,4),
+    breadth_pct50       NUMERIC(6,2),
+    metadata            JSONB,
+    created_at          TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_market_state_ts ON system.market_state (ts DESC);
+
+-- =============================================================================
+-- LLM GOVERNANCE (every GPT call is tracked)
+-- =============================================================================
+
+CREATE TABLE system.llm_calls (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    call_type           VARCHAR(50) NOT NULL,  -- signal_validation, sentiment, summary, report
+    model               VARCHAR(50),
+    prompt_hash         VARCHAR(64),            -- SHA-256 of system+user prompt
+    prompt_version      VARCHAR(20),
+    input_tokens        INTEGER,
+    output_tokens       INTEGER,
+    latency_ms          INTEGER,
+    cost_usd            NUMERIC(8,6),
+    
+    ticker              VARCHAR(10),
+    signal_id           UUID,
+    
+    request_json        JSONB,                  -- full prompt (minus API key)
+    response_json       JSONB,                  -- full response
+    parsed_result       JSONB,                  -- extracted structured output
+    
+    success             BOOLEAN DEFAULT TRUE,
+    error_message       TEXT,
+    
+    created_at          TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_llm_calls_type ON system.llm_calls (call_type, created_at DESC);
+CREATE INDEX idx_llm_calls_ticker ON system.llm_calls (ticker, created_at DESC);
+
+-- =============================================================================
+-- SIGNAL DEDUP + CONFLICT RESOLUTION
+-- =============================================================================
+
+-- Add columns to existing signals table (safe for existing data)
+DO $$ BEGIN
+    ALTER TABLE time_series.signals ADD COLUMN IF NOT EXISTS dedupe_key VARCHAR(128);
+    ALTER TABLE time_series.signals ADD COLUMN IF NOT EXISTS conflict_group_id UUID;
+    ALTER TABLE time_series.signals ADD COLUMN IF NOT EXISTS conflict_resolution JSONB;
+    ALTER TABLE time_series.signals ADD COLUMN IF NOT EXISTS feature_version VARCHAR(20);
+    ALTER TABLE time_series.signals ADD COLUMN IF NOT EXISTS data_snapshot_id UUID;
+    ALTER TABLE time_series.signals ADD COLUMN IF NOT EXISTS setup_tags TEXT[];
+    ALTER TABLE time_series.signals ADD COLUMN IF NOT EXISTS regime_at_signal JSONB;
+    ALTER TABLE time_series.signals ADD COLUMN IF NOT EXISTS earnings_risk_days INTEGER;
+    ALTER TABLE time_series.signals ADD COLUMN IF NOT EXISTS dollar_volume_20d NUMERIC(18,2);
+    ALTER TABLE time_series.signals ADD COLUMN IF NOT EXISTS edge_checklist JSONB;
+    ALTER TABLE time_series.signals ADD COLUMN IF NOT EXISTS why_now TEXT;
+    ALTER TABLE time_series.signals ADD COLUMN IF NOT EXISTS invalidation_sentence TEXT;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_signals_dedupe ON time_series.signals (dedupe_key);
+
+-- Add model_version to news_articles for reproducibility
+DO $$ BEGIN
+    ALTER TABLE documents.news_articles ADD COLUMN IF NOT EXISTS model_version VARCHAR(30);
+    ALTER TABLE documents.news_articles ADD COLUMN IF NOT EXISTS embedding JSONB;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+-- Add feature_version to features table
+DO $$ BEGIN
+    ALTER TABLE time_series.features ADD COLUMN IF NOT EXISTS feature_version VARCHAR(20);
+    ALTER TABLE time_series.features ADD COLUMN IF NOT EXISTS dollar_volume_20d NUMERIC(18,2);
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+-- =============================================================================
+-- SCORE CALIBRATION TABLE (maps score → historical win-rate per strategy+regime)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS analytics.score_calibration (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    strategy_id         VARCHAR(50) NOT NULL,
+    regime_label        VARCHAR(30),
+    score_bucket_low    INTEGER,
+    score_bucket_high   INTEGER,
+    sample_size         INTEGER,
+    historical_win_rate NUMERIC(6,4),
+    avg_rr_ratio        NUMERIC(8,4),
+    avg_pnl_pct         NUMERIC(10,6),
+    calibrated_at       TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (strategy_id, regime_label, score_bucket_low, score_bucket_high)
+);
+
+-- =============================================================================
 -- HELPER FUNCTIONS
 -- =============================================================================
 

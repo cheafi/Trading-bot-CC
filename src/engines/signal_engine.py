@@ -1,16 +1,355 @@
 """
 TradingAI Bot - Signal Engine
 Main orchestrator for signal generation pipeline.
+
+Upgrades (v4):
+  • Universe quality filter — removes illiquid / penny / corporate-action noise
+  • Unified score (0-100) with calibration hooks
+  • Edge Checklist per signal (setup_tags + regime_required)
+  • NO TRADE as a hard gate stored in system.market_state
+  • Signal dedup + conflict resolution
 """
 import asyncio
-from datetime import datetime, date
-from typing import List, Dict, Optional, Any
+import hashlib
+from datetime import datetime, date, timedelta
+from typing import List, Dict, Optional, Any, Tuple
 import logging
 import pandas as pd
 
 from src.core.models import Signal, MarketRegime, VolatilityRegime, TrendRegime, RiskRegime
 from src.core.config import get_trading_config
 from src.strategies import get_strategy, get_all_strategies, BaseStrategy
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# UNIVERSE QUALITY FILTER
+# ═══════════════════════════════════════════════════════════════════════
+
+class UniverseFilter:
+    """
+    Hard quality gates — reject tickers that destroy edge in live trading.
+    These run BEFORE any strategy, saving compute and preventing bad signals.
+    """
+
+    # Configurable thresholds (override via config dict)
+    DEFAULT_GATES = {
+        "min_price":           5.0,        # No penny stocks
+        "min_dollar_vol_20d":  5_000_000,  # $5M daily dollar volume minimum
+        "min_avg_volume_20d":  200_000,    # 200K shares/day minimum
+        "max_spread_pct":      1.0,        # Proxy: (high-low)/close < 1%
+        "min_market_cap":      500_000_000, # $500M minimum market cap
+        "min_history_days":    60,          # Need 60 days of clean data
+        "earnings_blackout_days": 2,        # Skip 2 days before earnings
+    }
+
+    def __init__(self, overrides: Optional[Dict] = None):
+        self.gates = {**self.DEFAULT_GATES, **(overrides or {})}
+        self.logger = logging.getLogger(__name__)
+        self._rejection_log: List[Dict] = []
+
+    def filter(
+        self,
+        universe: List[str],
+        features: pd.DataFrame,
+        calendar_events: Optional[List[Dict]] = None,
+        corporate_actions: Optional[List[Dict]] = None,
+    ) -> Tuple[List[str], Dict[str, str]]:
+        """
+        Filter universe to tradeable names only.
+
+        Returns:
+            (clean_universe, rejection_map) where rejection_map = {ticker: reason}
+        """
+        rejections: Dict[str, str] = {}
+        clean: List[str] = []
+
+        # Build earnings-blackout set
+        blackout_tickers = set()
+        if calendar_events:
+            cutoff = date.today() + timedelta(days=self.gates["earnings_blackout_days"])
+            for ev in calendar_events:
+                if ev.get("event_type") == "earnings" and ev.get("ticker"):
+                    ev_date = ev.get("event_date")
+                    if isinstance(ev_date, str):
+                        ev_date = date.fromisoformat(ev_date)
+                    if ev_date and ev_date <= cutoff:
+                        blackout_tickers.add(ev["ticker"])
+
+        # Build corporate-action-flagged set
+        action_tickers = set()
+        if corporate_actions:
+            recent = date.today() - timedelta(days=5)
+            for ca in corporate_actions:
+                ca_date = ca.get("action_date")
+                if isinstance(ca_date, str):
+                    ca_date = date.fromisoformat(ca_date)
+                if ca_date and ca_date >= recent:
+                    action_tickers.add(ca["ticker"])
+
+        for ticker in universe:
+            # Per-ticker feature row (latest)
+            tf = features[features.index.get_level_values("ticker") == ticker] if "ticker" in features.index.names else features[features.get("ticker") == ticker] if "ticker" in features.columns else pd.DataFrame()
+
+            # Fallback: try simple column lookup
+            row = {}
+            if not tf.empty:
+                row = tf.iloc[-1].to_dict() if hasattr(tf.iloc[-1], "to_dict") else {}
+
+            price = row.get("close", row.get("sma_20", 0)) or 0
+            avg_vol = row.get("volume_sma_20", 0) or 0
+            mkt_cap = row.get("market_cap", float("inf")) or float("inf")
+            history_len = len(tf)
+
+            dollar_vol = price * avg_vol
+
+            # --- Gate checks ---
+            if price < self.gates["min_price"]:
+                rejections[ticker] = f"price ${price:.2f} < ${self.gates['min_price']}"
+                continue
+            if dollar_vol < self.gates["min_dollar_vol_20d"]:
+                rejections[ticker] = f"dollar_vol ${dollar_vol:,.0f} < ${self.gates['min_dollar_vol_20d']:,.0f}"
+                continue
+            if avg_vol < self.gates["min_avg_volume_20d"]:
+                rejections[ticker] = f"avg_vol {avg_vol:,.0f} < {self.gates['min_avg_volume_20d']:,.0f}"
+                continue
+            if mkt_cap < self.gates["min_market_cap"]:
+                rejections[ticker] = f"mkt_cap ${mkt_cap:,.0f} < ${self.gates['min_market_cap']:,.0f}"
+                continue
+            if history_len < self.gates["min_history_days"]:
+                rejections[ticker] = f"history {history_len}d < {self.gates['min_history_days']}d"
+                continue
+            if ticker in blackout_tickers:
+                rejections[ticker] = "earnings_blackout"
+                continue
+            if ticker in action_tickers:
+                rejections[ticker] = "recent_corporate_action"
+                continue
+
+            clean.append(ticker)
+
+        self.logger.info(
+            f"Universe filter: {len(universe)} → {len(clean)} "
+            f"({len(rejections)} rejected)"
+        )
+        self._rejection_log = [{"ticker": t, "reason": r} for t, r in rejections.items()]
+        return clean, rejections
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SCORE UNIFICATION
+# ═══════════════════════════════════════════════════════════════════════
+
+class ScoreUnifier:
+    """
+    One canonical signal_score_0_100.
+    Everything else derives from it — no "vibes" scoring.
+    """
+
+    # Calibration table: strategy+regime → score→win_rate (loaded from DB)
+    _calibration: Dict[str, Dict[int, float]] = {}
+
+    @staticmethod
+    def unify(raw_confidence: int) -> Dict[str, Any]:
+        """Map raw confidence (0-100) to all derived scores."""
+        score = max(0, min(100, raw_confidence))
+        return {
+            "signal_score_0_100": score,
+            "ai_score_0_10": round(score / 10, 1),
+            "confidence_bucket": (
+                "HIGH" if score >= 80 else
+                "GOOD" if score >= 65 else
+                "MODERATE" if score >= 50 else
+                "LOW"
+            ),
+            "display_bar": "█" * (score // 10) + "░" * (10 - score // 10),
+        }
+
+    @classmethod
+    def calibrated_win_rate(
+        cls,
+        strategy_id: str,
+        regime_label: str,
+        score: int,
+    ) -> Optional[float]:
+        """
+        Look up historically-calibrated win rate for this score bracket.
+        Returns None if no calibration data exists yet.
+        """
+        key = f"{strategy_id}:{regime_label}"
+        bucket = (score // 10) * 10  # 0,10,20,...90
+        return cls._calibration.get(key, {}).get(bucket)
+
+    @classmethod
+    def load_calibration(cls, rows: List[Dict]):
+        """Load calibration rows from analytics.score_calibration table."""
+        for r in rows:
+            key = f"{r['strategy_id']}:{r.get('regime_label', 'ALL')}"
+            if key not in cls._calibration:
+                cls._calibration[key] = {}
+            cls._calibration[key][r["score_bucket_low"]] = r["historical_win_rate"]
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# EDGE CHECKLIST
+# ═══════════════════════════════════════════════════════════════════════
+
+class EdgeChecklist:
+    """
+    Standardized, mechanical setup validation per signal.
+    Stored with the signal so GPT validates the *checklist*, not vibes.
+    """
+
+    @staticmethod
+    def build(
+        signal: Signal,
+        features_row: Dict[str, Any],
+        regime: MarketRegime,
+        calendar_events: Optional[List[Dict]] = None,
+    ) -> Dict[str, Any]:
+        """Build edge checklist for a signal."""
+        # Setup tags from features
+        tags: List[str] = []
+        rsi = features_row.get("rsi_14", 50)
+        adx = features_row.get("adx_14", 0)
+        rel_vol = features_row.get("relative_volume", 1.0)
+        dist_sma20 = features_row.get("dist_from_sma20", 0)
+        dist_sma50 = features_row.get("dist_from_sma50", 0)
+        dist_sma200 = features_row.get("dist_from_sma200", 0)
+
+        if dist_sma20 > 0:
+            tags.append("above_sma20")
+        if dist_sma50 > 0:
+            tags.append("above_sma50")
+        if dist_sma200 > 0:
+            tags.append("above_sma200")
+        if adx > 25:
+            tags.append("trend_strong")
+        if rel_vol >= 2.0:
+            tags.append("rel_volume_2x")
+        elif rel_vol >= 1.5:
+            tags.append("vol_expansion")
+        if 30 <= rsi <= 45:
+            tags.append("rsi_oversold_bounce")
+        if 55 <= rsi <= 70:
+            tags.append("rsi_momentum_zone")
+        if rsi > 75:
+            tags.append("rsi_overbought")
+        if rsi < 25:
+            tags.append("rsi_extreme_oversold")
+
+        # Trend alignment
+        if dist_sma20 > 0 and dist_sma50 > 0 and dist_sma200 > 0:
+            tags.append("all_ma_aligned_up")
+        elif dist_sma20 < 0 and dist_sma50 < 0 and dist_sma200 < 0:
+            tags.append("all_ma_aligned_down")
+
+        # Regime required
+        regime_required: List[str] = []
+        if regime.risk != RiskRegime.RISK_OFF:
+            regime_required.append(regime.risk.value)
+        if regime.trend.value in ["UPTREND", "STRONG_UPTREND"]:
+            regime_required.append(regime.trend.value)
+        regime_required.append(regime.volatility.value)
+
+        # Earnings risk proximity
+        earnings_days: Optional[int] = None
+        if calendar_events:
+            today = date.today()
+            for ev in calendar_events:
+                if ev.get("event_type") == "earnings" and ev.get("ticker") == signal.ticker:
+                    ev_date = ev.get("event_date")
+                    if isinstance(ev_date, str):
+                        ev_date = date.fromisoformat(ev_date)
+                    if ev_date and ev_date >= today:
+                        earnings_days = (ev_date - today).days
+                        break
+
+        # R:R validation
+        stop_dist = abs(signal.entry_price - signal.invalidation.stop_price) if signal.invalidation else 0
+        target_dist = abs(signal.targets[0].price - signal.entry_price) if signal.targets else 0
+        rr_ratio = target_dist / stop_dist if stop_dist > 0 else 0
+
+        # ATR check: is stop too tight?
+        atr = features_row.get("atr_14", 0)
+        stop_vs_atr = stop_dist / atr if atr > 0 else float("inf")
+
+        return {
+            "setup_tags": tags,
+            "regime_required": regime_required,
+            "regime_at_signal": {
+                "volatility": regime.volatility.value,
+                "trend": regime.trend.value,
+                "risk": regime.risk.value,
+            },
+            "earnings_risk_days": earnings_days,
+            "rr_ratio": round(rr_ratio, 2),
+            "stop_vs_atr": round(stop_vs_atr, 2),
+            "stop_too_tight": stop_vs_atr < 0.5,
+            "rsi": round(rsi, 1),
+            "adx": round(adx, 1),
+            "relative_volume": round(rel_vol, 2),
+            "dollar_volume_20d": features_row.get("dollar_volume_20d", 0),
+        }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SIGNAL DEDUP + CONFLICT RESOLUTION
+# ═══════════════════════════════════════════════════════════════════════
+
+class SignalDedup:
+    """Prevent duplicate and conflicting signals."""
+
+    @staticmethod
+    def dedupe_key(signal: Signal) -> str:
+        """Generate deterministic dedup key."""
+        raw = f"{signal.ticker}:{signal.direction.value}:{signal.horizon.value}:{signal.strategy_id or 'unknown'}"
+        return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+    @staticmethod
+    def resolve_conflicts(signals: List[Signal]) -> Tuple[List[Signal], List[Dict]]:
+        """
+        When multiple strategies hit the same ticker with different directions,
+        keep the higher-confidence one and log the resolution.
+        """
+        from collections import defaultdict
+        by_ticker: Dict[str, List[Signal]] = defaultdict(list)
+        for s in signals:
+            by_ticker[s.ticker].append(s)
+
+        kept: List[Signal] = []
+        resolutions: List[Dict] = []
+
+        for ticker, group in by_ticker.items():
+            if len(group) == 1:
+                kept.append(group[0])
+                continue
+
+            # Check for direction conflicts
+            directions = set(s.direction.value for s in group)
+            if len(directions) > 1:
+                # Conflict: different directions on same ticker
+                winner = max(group, key=lambda s: s.confidence)
+                losers = [s for s in group if s is not winner]
+                kept.append(winner)
+                resolutions.append({
+                    "ticker": ticker,
+                    "kept": f"{winner.strategy_id}:{winner.direction.value} (conf={winner.confidence})",
+                    "dropped": [f"{s.strategy_id}:{s.direction.value} (conf={s.confidence})" for s in losers],
+                    "reason": "direction_conflict",
+                })
+            else:
+                # Same direction: keep highest confidence
+                winner = max(group, key=lambda s: s.confidence)
+                kept.append(winner)
+                if len(group) > 1:
+                    resolutions.append({
+                        "ticker": ticker,
+                        "kept": f"{winner.strategy_id} (conf={winner.confidence})",
+                        "dropped": [f"{s.strategy_id} (conf={s.confidence})" for s in group if s is not winner],
+                        "reason": "duplicate_same_direction",
+                    })
+
+        return kept, resolutions
 
 
 class RegimeDetector:
@@ -223,32 +562,44 @@ class RiskModel:
 
 class SignalEngine:
     """
-    Main signal generation pipeline.
+    Main signal generation pipeline (v4).
     
     Orchestrates:
-    1. Regime detection
-    2. Strategy execution
-    3. Risk filtering
-    4. Signal output
+    1. Universe quality filter (hard gates)
+    2. Market-state NO TRADE check
+    3. Regime detection
+    4. Strategy execution
+    5. Edge checklist per signal
+    6. Score unification + calibration
+    7. Dedup + conflict resolution
+    8. Risk filtering + sizing
+    9. Signal output
     """
     
     def __init__(
         self, 
         strategies: Optional[List[BaseStrategy]] = None,
         regime_detector: Optional[RegimeDetector] = None,
-        risk_model: Optional[RiskModel] = None
+        risk_model: Optional[RiskModel] = None,
+        universe_filter: Optional[UniverseFilter] = None,
     ):
         self.strategies = strategies or get_all_strategies()
         self.regime_detector = regime_detector or RegimeDetector()
         self.risk_model = risk_model or RiskModel()
+        self.universe_filter = universe_filter or UniverseFilter()
+        self.dedup = SignalDedup()
+        self.score_unifier = ScoreUnifier()
         self.logger = logging.getLogger(__name__)
+        self._last_market_state: Optional[Dict] = None
     
     def generate_signals(
         self,
         universe: List[str],
         features: pd.DataFrame,
         market_data: Dict[str, Any],
-        portfolio: Optional[Dict] = None
+        portfolio: Optional[Dict] = None,
+        calendar_events: Optional[List[Dict]] = None,
+        corporate_actions: Optional[List[Dict]] = None,
     ) -> List[Signal]:
         """
         Main signal generation pipeline.
@@ -258,51 +609,128 @@ class SignalEngine:
             features: Pre-computed features DataFrame
             market_data: Market-level data (VIX, breadth, etc.)
             portfolio: Current portfolio state
+            calendar_events: Upcoming earnings/macro events
+            corporate_actions: Recent splits/dividends/mergers
         
         Returns:
-            List of validated and sized signals
+            List of validated, sized, deduplicated signals
         """
-        # 1. Pre-flight checks
-        can_trade, reason = self._preflight_check(market_data)
-        if not can_trade:
-            self.logger.warning(f"Signal generation skipped: {reason}")
+        # ── 0. Universe quality filter ──────────────────────────
+        clean_universe, rejections = self.universe_filter.filter(
+            universe, features, calendar_events, corporate_actions
+        )
+        if not clean_universe:
+            self.logger.warning("No tickers passed universe filter")
             return []
         
-        # 2. Detect regime
+        # ── 1. Pre-flight NO TRADE check ───────────────────────
+        can_trade, reason = self._preflight_check(market_data)
+        self._last_market_state = {
+            "ts": datetime.utcnow().isoformat(),
+            "can_trade": can_trade,
+            "no_trade_reason": reason if not can_trade else None,
+            "vix": market_data.get("vix", 0),
+            "spx_change_pct": market_data.get("spx_change_pct", 0),
+        }
+        if not can_trade:
+            self.logger.warning(f"🚫 NO TRADE: {reason}")
+            return []
+        
+        # ── 2. Detect regime ───────────────────────────────────
         regime = self.regime_detector.detect(market_data)
         
         if not regime.should_trade:
             self.logger.warning("Regime indicates no trading")
+            self._last_market_state["no_trade_reason"] = "regime_no_trade"
             return []
         
-        # 3. Run active strategies
+        # ── 3. Run active strategies ───────────────────────────
         raw_signals = []
         for strategy in self.strategies:
             if strategy.STRATEGY_ID in regime.active_strategies:
                 try:
-                    signals = strategy.generate_signals(universe, features, market_data)
+                    signals = strategy.generate_signals(clean_universe, features, market_data)
                     self.logger.info(f"Strategy {strategy.STRATEGY_ID}: {len(signals)} signals")
                     raw_signals.extend(signals)
                 except Exception as e:
                     self.logger.error(f"Error in strategy {strategy.STRATEGY_ID}: {e}")
         
         self.logger.info(f"Total raw signals: {len(raw_signals)}")
+        if not raw_signals:
+            return []
         
-        # 4. Apply risk model
-        filtered_signals = self.risk_model.filter_and_size(raw_signals, portfolio)
+        # ── 4. Edge checklist per signal ───────────────────────
+        for sig in raw_signals:
+            try:
+                feat_row = self._get_feature_row(sig.ticker, features)
+                checklist = EdgeChecklist.build(sig, feat_row, regime, calendar_events)
+                sig.feature_snapshot = sig.feature_snapshot or {}
+                sig.feature_snapshot["edge_checklist"] = checklist
+                sig.feature_snapshot["setup_tags"] = checklist["setup_tags"]
+                sig.feature_snapshot["regime_at_signal"] = checklist["regime_at_signal"]
+                sig.feature_snapshot["earnings_risk_days"] = checklist["earnings_risk_days"]
+                sig.feature_snapshot["dollar_volume_20d"] = checklist["dollar_volume_20d"]
+            except Exception as e:
+                self.logger.warning(f"Edge checklist error for {sig.ticker}: {e}")
+        
+        # ── 5. Score unification ───────────────────────────────
+        for sig in raw_signals:
+            scores = self.score_unifier.unify(sig.confidence)
+            sig.feature_snapshot = sig.feature_snapshot or {}
+            sig.feature_snapshot["unified_scores"] = scores
+            # Check calibrated win rate if available
+            cal_wr = self.score_unifier.calibrated_win_rate(
+                sig.strategy_id or "unknown",
+                regime.trend.value,
+                sig.confidence,
+            )
+            if cal_wr is not None:
+                sig.feature_snapshot["calibrated_win_rate"] = round(cal_wr, 4)
+        
+        # ── 6. Dedup + conflict resolution ─────────────────────
+        deduped_signals, resolutions = self.dedup.resolve_conflicts(raw_signals)
+        if resolutions:
+            self.logger.info(f"Conflict resolutions: {len(resolutions)}")
+            for r in resolutions:
+                self.logger.info(f"  {r['ticker']}: kept {r['kept']}, dropped {r['dropped']}")
+        
+        # Add dedup keys
+        for sig in deduped_signals:
+            sig.feature_snapshot = sig.feature_snapshot or {}
+            sig.feature_snapshot["dedupe_key"] = self.dedup.dedupe_key(sig)
+        
+        # ── 7. Risk model filter + sizing ──────────────────────
+        filtered_signals = self.risk_model.filter_and_size(deduped_signals, portfolio)
         
         self.logger.info(f"Filtered signals: {len(filtered_signals)}")
         
-        # 5. Sort by confidence and apply final limits
+        # ── 8. Sort + limit ────────────────────────────────────
         filtered_signals = sorted(filtered_signals, key=lambda s: s.confidence, reverse=True)
-        
-        # Limit to top signals per session
         max_signals = 10
         if len(filtered_signals) > max_signals:
             filtered_signals = filtered_signals[:max_signals]
             self.logger.info(f"Limited to top {max_signals} signals")
         
         return filtered_signals
+    
+    def _get_feature_row(self, ticker: str, features: pd.DataFrame) -> Dict:
+        """Extract latest feature row for a ticker."""
+        try:
+            if "ticker" in features.index.names:
+                tf = features.xs(ticker, level="ticker")
+            elif "ticker" in features.columns:
+                tf = features[features["ticker"] == ticker]
+            else:
+                return {}
+            if tf.empty:
+                return {}
+            return tf.iloc[-1].to_dict() if hasattr(tf.iloc[-1], "to_dict") else {}
+        except Exception:
+            return {}
+    
+    def get_market_state(self) -> Optional[Dict]:
+        """Return the latest market state for display / DB storage."""
+        return self._last_market_state
     
     def _preflight_check(self, market_data: Dict) -> tuple[bool, str]:
         """

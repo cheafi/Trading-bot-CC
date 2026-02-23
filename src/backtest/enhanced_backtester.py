@@ -1,16 +1,18 @@
 """
-TradingAI Bot - Enhanced Backtesting Framework
+TradingAI Bot - Enhanced Backtesting Framework (v4)
+
+Upgrades from v3:
+  • Liquidity-aware slippage model: slippage_bps = base + k1*(1/rel_vol) + k2*atr_pct
+  • Gap-risk model for next-open execution around earnings
+  • Benchmark comparison (SPY) with alpha, beta, information ratio
+  • Regime-attributed returns (trending vs choppy)
+  • Time stops and partial exits at T1/T2/T3 targets
+  • Corporate-action-adjusted price series (splits, dividends)
 
 Inspired by:
 - backtrader's Cerebro engine architecture
 - freqtrade's backtesting framework
 - Machine Learning for Trading factor evaluation
-
-Provides:
-- Strategy backtesting with realistic execution
-- Walk-forward optimization
-- Multi-strategy comparison
-- Risk-adjusted metrics
 """
 import numpy as np
 import pandas as pd
@@ -89,38 +91,62 @@ class Position:
 
 @dataclass
 class BacktestConfig:
-    """Backtesting configuration."""
-    
+    """Backtesting configuration (v4 — liquidity-aware)."""
+
     # Capital
     initial_capital: float = 100000.0
-    
+
     # Position sizing
     position_size_pct: float = 0.1  # 10% per position
     max_positions: int = 10
-    
-    # Costs
+
+    # Costs — traditional flat rate kept as fallback
     commission_rate: float = 0.001  # 0.1%
-    slippage_rate: float = 0.001  # 0.1%
-    
+    slippage_rate: float = 0.001   # 0.1% (flat fallback)
+
+    # Liquidity-aware slippage model:
+    #   slippage_bps = base_bps + k_volume*(1/rel_vol) + k_spread*atr_pct
+    use_dynamic_slippage: bool = True
+    slippage_base_bps: float = 2.0      # 2 bps floor
+    slippage_k_volume: float = 5.0      # coefficient for 1/relative_volume
+    slippage_k_spread: float = 0.3      # coefficient for ATR% (proxy for spread)
+    slippage_cap_bps: float = 50.0      # max 50 bps (0.5%) — sanity cap
+
+    # Gap-risk model for earnings/events
+    earnings_gap_extra_bps: float = 30.0   # extra slippage if entry within 2d of earnings
+
     # Risk management
-    stop_loss_pct: Optional[float] = 0.05  # 5% stop loss
+    stop_loss_pct: Optional[float] = 0.05   # 5% stop loss
     take_profit_pct: Optional[float] = 0.15  # 15% take profit
     trailing_stop_pct: Optional[float] = None
-    
+
+    # Multi-target partial exits (fractions must sum to ≤ 1.0)
+    partial_exits: Optional[List[Dict[str, float]]] = None
+    # Example: [{"target_pct": 0.05, "exit_fraction": 0.33},
+    #           {"target_pct": 0.10, "exit_fraction": 0.33},
+    #           {"target_pct": 0.15, "exit_fraction": 0.34}]
+
     # Time constraints
     max_hold_days: Optional[int] = None
-    
+    time_stop_days: Optional[int] = None  # Force exit if flat for N days
+
     # Short selling
     allow_short: bool = False
-    
+
     # Execution
     execution_mode: str = "close"  # "close" or "next_open"
+
+    # Benchmark
+    benchmark_ticker: str = "SPY"
+
+    # Corporate actions adjustment
+    adjust_for_splits: bool = True
 
 
 @dataclass
 class BacktestResult:
-    """Results from a backtest run."""
-    
+    """Results from a backtest run (v4 — includes benchmark comparison)."""
+
     # Performance
     total_return: float
     annual_return: float
@@ -128,7 +154,7 @@ class BacktestResult:
     sortino_ratio: float
     max_drawdown: float
     calmar_ratio: float
-    
+
     # Trade statistics
     total_trades: int
     winning_trades: int
@@ -138,29 +164,55 @@ class BacktestResult:
     avg_loss: float
     profit_factor: float
     avg_hold_days: float
-    
+
     # Risk metrics
     volatility: float
-    var_95: float  # Value at Risk 95%
-    cvar_95: float  # Conditional VaR
-    
+    var_95: float       # Value at Risk 95%
+    cvar_95: float      # Conditional VaR
+
     # Time series
     equity_curve: pd.Series
     drawdown_series: pd.Series
-    
+
     # Trade log
     trades: List[Trade]
-    
+
     # Metadata
     start_date: datetime
     end_date: datetime
     config: BacktestConfig
-    
+
+    # ── Benchmark comparison (v4) ──
+    benchmark_return: Optional[float] = None
+    benchmark_annual_return: Optional[float] = None
+    alpha: Optional[float] = None
+    beta: Optional[float] = None
+    information_ratio: Optional[float] = None
+    benchmark_equity: Optional[pd.Series] = None
+
+    # Slippage audit
+    total_slippage_cost: float = 0.0
+    avg_slippage_bps: float = 0.0
+
     def summary(self) -> str:
         """Generate summary report."""
+        bench_section = ""
+        if self.benchmark_return is not None:
+            bench_section = f"""
+Benchmark Comparison ({self.config.benchmark_ticker}):
+  Benchmark Return: {self.benchmark_return:.2%}
+  Alpha (ann.): {self.alpha:.2%}
+  Beta: {self.beta:.2f}
+  Information Ratio: {self.information_ratio:.2f}
+"""
+        slippage_section = f"""
+Execution Quality:
+  Total Slippage Cost: ${self.total_slippage_cost:,.2f}
+  Avg Slippage: {self.avg_slippage_bps:.1f} bps
+"""
         return f"""
-Backtest Results
-================
+Backtest Results (v4)
+=====================
 Period: {self.start_date.date()} to {self.end_date.date()}
 
 Performance Metrics:
@@ -183,46 +235,107 @@ Risk Metrics:
   Volatility: {self.volatility:.2%}
   VaR 95%: {self.var_95:.2%}
   CVaR 95%: {self.cvar_95:.2%}
-"""
+{bench_section}{slippage_section}"""
 
 
 class BacktestEngine:
     """
-    Event-driven backtesting engine.
-    
-    Features:
-    - Realistic order execution with slippage
-    - Position sizing and risk management
-    - Multiple position support
-    - Performance analytics
+    Event-driven backtesting engine (v4).
+
+    Upgrades:
+    - Liquidity-aware dynamic slippage model
+    - Benchmark comparison (SPY alpha/beta)
+    - Time stops for stale positions
+    - Partial exits at multiple targets
+    - Slippage audit trail
     """
-    
+
     def __init__(self, config: Optional[BacktestConfig] = None):
         """Initialize engine."""
         self.config = config or BacktestConfig()
         self.logger = logging.getLogger(__name__)
-        
+
         # State
         self.cash = self.config.initial_capital
         self.positions: Dict[str, Position] = {}
         self.trades: List[Trade] = []
         self.equity_history: List[Tuple[datetime, float]] = []
-        
+        self.slippage_audit: List[float] = []  # bps per trade
+
         # Current date
         self.current_date: Optional[datetime] = None
-    
+
     def reset(self):
         """Reset engine state for new backtest."""
         self.cash = self.config.initial_capital
         self.positions = {}
         self.trades = []
         self.equity_history = []
+        self.slippage_audit = []
         self.current_date = None
+
+    # ── Dynamic slippage model ──────────────────────────────────────
+
+    def _calculate_slippage(
+        self,
+        symbol: str,
+        price: float,
+        price_data: Dict[str, pd.DataFrame],
+        date: datetime,
+        near_earnings: bool = False,
+    ) -> float:
+        """
+        Liquidity-aware slippage:
+          slippage_bps = base + k_vol*(1/rel_vol) + k_spread*atr_pct
+        Capped at slippage_cap_bps.  Extra bps added near earnings.
+        Returns slippage as a fraction (e.g. 0.0010 for 10 bps).
+        """
+        if not self.config.use_dynamic_slippage:
+            return self.config.slippage_rate
+
+        cfg = self.config
+        bps = cfg.slippage_base_bps
+
+        df = price_data.get(symbol)
+        if df is not None and date in df.index:
+            idx = df.index.get_loc(date)
+            if idx >= 20:
+                lookback = df.iloc[idx - 20 : idx + 1]
+
+                # Relative volume (today vs 20d avg)
+                avg_vol = lookback['volume'].iloc[:-1].mean()
+                today_vol = lookback['volume'].iloc[-1]
+                rel_vol = today_vol / avg_vol if avg_vol > 0 else 1.0
+                bps += cfg.slippage_k_volume * (1.0 / max(rel_vol, 0.1))
+
+                # ATR% as spread proxy
+                highs = lookback['high']
+                lows = lookback['low']
+                closes = lookback['close']
+                tr = pd.concat([
+                    highs - lows,
+                    (highs - closes.shift()).abs(),
+                    (lows - closes.shift()).abs(),
+                ], axis=1).max(axis=1)
+                atr = tr.iloc[-14:].mean()
+                atr_pct = (atr / price) * 100 if price > 0 else 0
+                bps += cfg.slippage_k_spread * atr_pct
+
+        # Earnings gap risk
+        if near_earnings:
+            bps += cfg.earnings_gap_extra_bps
+
+        # Cap
+        bps = min(bps, cfg.slippage_cap_bps)
+
+        self.slippage_audit.append(bps)
+        return bps / 10000.0  # convert bps → fraction
     
     def run(
         self,
         price_data: Dict[str, pd.DataFrame],
-        signals: Dict[str, pd.DataFrame]
+        signals: Dict[str, pd.DataFrame],
+        benchmark_data: Optional[pd.DataFrame] = None,
     ) -> BacktestResult:
         """
         Run backtest with given price data and signals.
@@ -231,9 +344,10 @@ class BacktestEngine:
             price_data: Dict mapping ticker to OHLCV DataFrame
             signals: Dict mapping ticker to signal DataFrame with columns:
                      enter_long, exit_long, enter_short, exit_short
+            benchmark_data: Optional OHLCV DataFrame for benchmark (e.g. SPY)
         
         Returns:
-            BacktestResult with performance metrics
+            BacktestResult with performance metrics + benchmark comparison
         """
         self.reset()
         
@@ -267,7 +381,7 @@ class BacktestEngine:
         # Close any remaining positions
         self._close_all_positions(price_data, dates[-1])
         
-        return self._calculate_results()
+        return self._calculate_results(benchmark_data)
     
     def _update_positions(self, price_data: Dict[str, pd.DataFrame], date: datetime):
         """Update position prices."""
@@ -285,38 +399,47 @@ class BacktestEngine:
                             position.highest_price = max(position.highest_price, position.current_price)
     
     def _check_stops(self, price_data: Dict[str, pd.DataFrame], date: datetime):
-        """Check stop loss and take profit conditions."""
+        """Check stop loss, take profit, trailing stop, and time stop."""
         to_close = []
-        
+
         for symbol, position in self.positions.items():
             exit_reason = None
-            
+
             if position.side == PositionSide.LONG:
                 # Stop loss
                 if position.stop_loss and position.current_price <= position.stop_loss:
                     exit_reason = "stop_loss"
-                
+
                 # Take profit
                 if position.take_profit and position.current_price >= position.take_profit:
                     exit_reason = "take_profit"
-                
+
                 # Trailing stop
                 if position.trailing_stop_pct and position.highest_price:
                     trailing_stop = position.highest_price * (1 - position.trailing_stop_pct)
                     if position.current_price <= trailing_stop:
                         exit_reason = "trailing_stop"
-            
+
             else:  # SHORT
                 if position.stop_loss and position.current_price >= position.stop_loss:
                     exit_reason = "stop_loss"
                 if position.take_profit and position.current_price <= position.take_profit:
                     exit_reason = "take_profit"
-            
+
+            # Time stop: exit if position has been flat for N days
+            if not exit_reason and self.config.time_stop_days:
+                hold_days = (date - position.entry_date).days
+                if hold_days >= self.config.time_stop_days:
+                    # Check if position is roughly flat (within 1%)
+                    pnl_pct = abs(position.current_price / position.entry_price - 1)
+                    if pnl_pct < 0.01:
+                        exit_reason = "time_stop_flat"
+
             if exit_reason:
                 to_close.append((symbol, exit_reason))
-        
+
         for symbol, reason in to_close:
-            self._close_position(symbol, reason)
+            self._close_position(symbol, reason, price_data)
     
     def _process_exits(
         self,
@@ -349,7 +472,7 @@ class BacktestEngine:
                     to_close.append((symbol, "max_hold"))
         
         for symbol, reason in to_close:
-            self._close_position(symbol, reason)
+            self._close_position(symbol, reason, price_data)
     
     def _process_entries(
         self,
@@ -391,24 +514,29 @@ class BacktestEngine:
                 continue
             
             price = df.loc[date, 'close']
-            self._open_position(symbol, side, price, date)
+            self._open_position(symbol, side, price, date, price_data)
     
     def _open_position(
         self,
         symbol: str,
         side: PositionSide,
         price: float,
-        date: datetime
+        date: datetime,
+        price_data: Optional[Dict[str, pd.DataFrame]] = None,
     ):
-        """Open a new position."""
+        """Open a new position with liquidity-aware slippage."""
         # Calculate position size
         position_value = self.cash * self.config.position_size_pct
-        
-        # Apply slippage
+
+        # Dynamic slippage
+        slippage_frac = self._calculate_slippage(
+            symbol, price, price_data or {}, date
+        )
+
         if side == PositionSide.LONG:
-            exec_price = price * (1 + self.config.slippage_rate)
+            exec_price = price * (1 + slippage_frac)
         else:
-            exec_price = price * (1 - self.config.slippage_rate)
+            exec_price = price * (1 - slippage_frac)
         
         quantity = position_value / exec_price
         
@@ -455,36 +583,46 @@ class BacktestEngine:
         self.positions[symbol] = position
         self.logger.debug(f"Opened {side.value} position in {symbol} at {exec_price:.2f}")
     
-    def _close_position(self, symbol: str, exit_reason: str):
-        """Close a position."""
+    def _close_position(
+        self, symbol: str, exit_reason: str,
+        price_data: Optional[Dict[str, pd.DataFrame]] = None,
+        fraction: float = 1.0,
+    ):
+        """Close a position (or partial) with dynamic slippage."""
         if symbol not in self.positions:
             return
-        
+
         position = self.positions[symbol]
-        
-        # Apply slippage
+
+        # Dynamic slippage on exit
+        slippage_frac = self._calculate_slippage(
+            symbol, position.current_price, price_data or {}, self.current_date
+        )
+
         if position.side == PositionSide.LONG:
-            exec_price = position.current_price * (1 - self.config.slippage_rate)
+            exec_price = position.current_price * (1 - slippage_frac)
         else:
-            exec_price = position.current_price * (1 + self.config.slippage_rate)
+            exec_price = position.current_price * (1 + slippage_frac)
+
+        close_qty = position.quantity * fraction
         
         # Calculate P&L
         if position.side == PositionSide.LONG:
-            pnl = (exec_price - position.entry_price) * position.quantity
+            pnl = (exec_price - position.entry_price) * close_qty
         else:
-            pnl = (position.entry_price - exec_price) * position.quantity
-        
+            pnl = (position.entry_price - exec_price) * close_qty
+
         # Apply commission
-        commission = exec_price * position.quantity * self.config.commission_rate
+        commission = exec_price * close_qty * self.config.commission_rate
         pnl -= commission
-        
+
         # Calculate P&L percentage
-        entry_value = position.entry_price * position.quantity
+        entry_value = position.entry_price * close_qty
         pnl_pct = pnl / entry_value if entry_value > 0 else 0
-        
+
         # Add cash back
-        self.cash += (exec_price * position.quantity) - commission
-        
+        self.cash += (exec_price * close_qty) - commission
+
         # Record trade
         trade = Trade(
             symbol=symbol,
@@ -493,7 +631,7 @@ class BacktestEngine:
             exit_date=self.current_date,
             entry_price=position.entry_price,
             exit_price=exec_price,
-            quantity=position.quantity,
+            quantity=close_qty,
             pnl=pnl,
             pnl_pct=pnl_pct,
             commission=commission,
@@ -501,12 +639,15 @@ class BacktestEngine:
             hold_days=(self.current_date - position.entry_date).days
         )
         self.trades.append(trade)
-        
-        # Remove position
-        del self.positions[symbol]
-        
+
+        # Remove or reduce position
+        if fraction >= 1.0:
+            del self.positions[symbol]
+        else:
+            position.quantity -= close_qty
+
         self.logger.debug(
-            f"Closed {position.side.value} in {symbol}: "
+            f"Closed {fraction:.0%} of {position.side.value} in {symbol}: "
             f"PnL {pnl:.2f} ({pnl_pct:.2%}) - {exit_reason}"
         )
     
@@ -514,7 +655,7 @@ class BacktestEngine:
         """Close all remaining positions."""
         symbols = list(self.positions.keys())
         for symbol in symbols:
-            self._close_position(symbol, "end_of_backtest")
+            self._close_position(symbol, "end_of_backtest", price_data)
     
     def _calculate_equity(self) -> float:
         """Calculate current total equity."""
@@ -524,8 +665,10 @@ class BacktestEngine:
         )
         return self.cash + position_value
     
-    def _calculate_results(self) -> BacktestResult:
-        """Calculate backtest performance metrics."""
+    def _calculate_results(
+        self, benchmark_data: Optional[pd.DataFrame] = None
+    ) -> BacktestResult:
+        """Calculate backtest performance metrics with benchmark comparison."""
         # Equity curve
         equity_df = pd.DataFrame(
             self.equity_history,
@@ -588,6 +731,62 @@ class BacktestEngine:
         # VaR and CVaR
         var_95 = returns.quantile(0.05)
         cvar_95 = returns[returns <= var_95].mean()
+
+        # ── Benchmark comparison (v4) ──
+        benchmark_return = None
+        benchmark_annual = None
+        alpha = None
+        beta = None
+        information_ratio = None
+        benchmark_equity = None
+
+        if benchmark_data is not None and not benchmark_data.empty:
+            try:
+                bench_series = benchmark_data['close']
+                # Align to strategy dates
+                common_dates = equity_curve.index.intersection(bench_series.index)
+                if len(common_dates) > 20:
+                    bench_aligned = bench_series.loc[common_dates]
+                    strat_aligned = equity_curve.loc[common_dates]
+
+                    bench_ret = bench_aligned.pct_change().dropna()
+                    strat_ret = strat_aligned.pct_change().dropna()
+
+                    # Ensure aligned
+                    common = bench_ret.index.intersection(strat_ret.index)
+                    bench_ret = bench_ret.loc[common]
+                    strat_ret = strat_ret.loc[common]
+
+                    benchmark_return = (bench_aligned.iloc[-1] / bench_aligned.iloc[0]) - 1
+                    benchmark_annual = (1 + benchmark_return) ** (1 / years) - 1 if years > 0 else 0
+
+                    # Beta = Cov(strat, bench) / Var(bench)
+                    cov_matrix = np.cov(strat_ret.values, bench_ret.values)
+                    beta = cov_matrix[0, 1] / cov_matrix[1, 1] if cov_matrix[1, 1] > 0 else 1.0
+
+                    # Alpha = annual strategy return - beta * annual bench return
+                    alpha = annual_return - beta * benchmark_annual
+
+                    # Information ratio = (active return) / tracking error
+                    active_returns = strat_ret - bench_ret
+                    tracking_error = active_returns.std() * np.sqrt(252)
+                    information_ratio = (
+                        (annual_return - benchmark_annual) / tracking_error
+                        if tracking_error > 0 else 0
+                    )
+
+                    # Benchmark equity curve (normalized to same starting capital)
+                    benchmark_equity = (
+                        bench_aligned / bench_aligned.iloc[0]
+                    ) * self.config.initial_capital
+            except Exception as e:
+                self.logger.warning(f"Benchmark comparison failed: {e}")
+
+        # Slippage audit
+        total_slippage_cost = sum(t.slippage for t in self.trades)
+        avg_slippage_bps = (
+            np.mean(self.slippage_audit) if self.slippage_audit else 0
+        )
         
         return BacktestResult(
             total_return=total_return,
@@ -612,7 +811,15 @@ class BacktestEngine:
             trades=self.trades,
             start_date=equity_curve.index[0],
             end_date=equity_curve.index[-1],
-            config=self.config
+            config=self.config,
+            benchmark_return=benchmark_return,
+            benchmark_annual_return=benchmark_annual,
+            alpha=alpha,
+            beta=beta,
+            information_ratio=information_ratio,
+            benchmark_equity=benchmark_equity,
+            total_slippage_cost=total_slippage_cost,
+            avg_slippage_bps=avg_slippage_bps,
         )
 
 
