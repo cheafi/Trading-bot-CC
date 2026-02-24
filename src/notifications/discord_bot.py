@@ -87,10 +87,12 @@ SERVER_LAYOUT = [
     {
         "category": "🤖 TRADING FLOOR",
         "channels": [
-            {"name": "signals",        "topic": "🔴 LIVE signals + 🐋 whale alerts — AI-pushed",            "readonly": True},
-            {"name": "daily-brief",    "topic": "☀️ Morning memo · 🌙 EOD · 📢 Announcements",             "readonly": True},
-            {"name": "bot-commands",   "topic": "All slash commands here — /help for the full list",        "readonly": False},
-            {"name": "trading-chat",   "topic": "Discuss signals, market, trades, earnings — all chat here", "readonly": False},
+            {"name": "swing-trades",     "topic": "🔄 Swing setups — pullback entries in trending stocks (2-8 wk hold)",   "readonly": True},
+            {"name": "breakout-setups",  "topic": "🚀 Breakout setups — consolidation breaks with volume (1-4 wk hold)",   "readonly": True},
+            {"name": "momentum-alerts",  "topic": "⚡ Momentum + whale flow — big movers, unusual volume, short-term",     "readonly": True},
+            {"name": "daily-brief",      "topic": "☀️ Morning memo · 🌙 EOD · 📢 Announcements",                          "readonly": True},
+            {"name": "bot-commands",     "topic": "All slash commands here — /help for the full list",                      "readonly": False},
+            {"name": "trading-chat",     "topic": "Discuss signals, market, trades, earnings — all chat here",              "readonly": False},
         ],
     },
     {
@@ -986,7 +988,9 @@ class DiscordInteractiveBot:
                         inline=True)
             e.add_field(name="📍 Channel Guide",
                         value=(
-                            "**#signals** — live AI trades + whale flow\n"
+                            "**#swing-trades** — pullback entries in trending stocks (2-8wk hold)\n"
+                            "**#breakout-setups** — consolidation breaks with volume (1-4wk hold)\n"
+                            "**#momentum-alerts** — big movers, whale flow, momentum (days-2wk)\n"
                             "**#daily-brief** — morning memo + EOD report\n"
                             "**#bot-commands** — use all slash commands\n"
                             "**#trading-chat** — discuss anything market-related"),
@@ -1137,7 +1141,7 @@ class DiscordInteractiveBot:
                                                 for r in losers),
                                 inline=False)
                 e.set_footer(text="Auto-scan 30 stocks every 30 min")
-                await _send_ch("signals", embed=e)
+                await _send_ch("momentum-alerts", embed=e)
                 await _audit(f"📡 Auto-movers: {len(big)} stocks ≥ 2%")
             except Exception as exc:
                 logger.error(f"auto_movers error: {exc}")
@@ -1196,9 +1200,277 @@ class DiscordInteractiveBot:
             except Exception as exc:
                 logger.error(f"auto_crypto error: {exc}")
 
-        # ── 6. AI signal scan (every 4 hr) ───────────────────────────
-        def _sync_signal_scan(tickers):
-            """Synchronous signal analysis (v4) — enhanced with edge checklist."""
+        # ── 6. Dedicated scanners — swing / breakout / momentum ──────
+
+        def _compute_technicals(hist):
+            """Shared technical computation for all scanners."""
+            close = hist["Close"]
+            high = hist["High"]
+            low = hist["Low"]
+            price = close.iloc[-1]
+            sma10 = close.rolling(10).mean().iloc[-1]
+            sma20 = close.rolling(20).mean().iloc[-1]
+            sma50 = close.rolling(50).mean().iloc[-1]
+            ema20 = close.ewm(span=20).mean().iloc[-1]
+            vol = hist["Volume"].iloc[-1]
+            avg_vol = hist["Volume"].rolling(20).mean().iloc[-1]
+            rel_vol = vol / avg_vol if avg_vol else 1
+            dollar_vol = price * avg_vol
+
+            # RSI
+            delta = close.diff()
+            gain = delta.where(delta > 0, 0).rolling(14).mean()
+            loss_s = (-delta.where(delta < 0, 0)).rolling(14).mean()
+            rs = gain.iloc[-1] / loss_s.iloc[-1] if loss_s.iloc[-1] != 0 else 0
+            rsi = 100 - (100 / (1 + rs))
+
+            # ATR
+            tr_vals = []
+            for i in range(1, min(15, len(hist))):
+                tr_vals.append(max(
+                    high.iloc[-i] - low.iloc[-i],
+                    abs(high.iloc[-i] - close.iloc[-i - 1]),
+                    abs(low.iloc[-i] - close.iloc[-i - 1])))
+            atr = sum(tr_vals) / len(tr_vals) if tr_vals else price * 0.02
+            atr_pct = (atr / price) * 100
+
+            # Bollinger Bands (20, 2)
+            bb_mid = sma20
+            bb_std = close.rolling(20).std().iloc[-1]
+            bb_upper = bb_mid + 2 * bb_std
+            bb_lower = bb_mid - 2 * bb_std
+            bb_width = (bb_upper - bb_lower) / bb_mid * 100 if bb_mid else 5
+
+            # Consolidation: range of last 10 candles vs ATR
+            hi_10 = high.iloc[-10:].max()
+            lo_10 = low.iloc[-10:].min()
+            range_10 = (hi_10 - lo_10) / price * 100 if price else 5
+
+            # Pullback days: consecutive days below SMA10
+            pullback_days = 0
+            for i in range(1, min(15, len(close))):
+                if close.iloc[-i] < sma10:
+                    pullback_days += 1
+                else:
+                    break
+
+            return {
+                "price": price, "sma10": sma10, "sma20": sma20,
+                "sma50": sma50, "ema20": ema20, "rsi": rsi,
+                "atr": atr, "atr_pct": atr_pct, "vol": vol,
+                "avg_vol": avg_vol, "rel_vol": rel_vol,
+                "dollar_vol": dollar_vol,
+                "bb_upper": bb_upper, "bb_lower": bb_lower,
+                "bb_width": bb_width, "bb_mid": bb_mid,
+                "hi_10": hi_10, "lo_10": lo_10, "range_10": range_10,
+                "pullback_days": pullback_days,
+                "high": high, "low": low, "close": close,
+            }
+
+        # ── 6a. Swing scanner ────────────────────────────────────────
+        def _sync_swing_scan(tickers):
+            """
+            Swing trade scanner — finds pullback entries in trending stocks.
+            Criteria: uptrend (SMA50>SMA200-ish, price>SMA50),
+            2-7 day pullback that holds key MA, RSI not overbought,
+            healthy volume.  Hold target: 2-8 weeks.
+            """
+            if not _yf:
+                return []
+            signals = []
+            for ticker in tickers:
+                try:
+                    t = _yf.Ticker(ticker)
+                    hist = t.history(period="6mo")
+                    if hist.empty or len(hist) < 60:
+                        continue
+                    d = _compute_technicals(hist)
+                    price, sma20, sma50 = d["price"], d["sma20"], d["sma50"]
+                    rsi, rel_vol = d["rsi"], d["rel_vol"]
+                    atr, atr_pct = d["atr"], d["atr_pct"]
+                    pb = d["pullback_days"]
+
+                    # ── Swing-long criteria ──
+                    score = 0
+                    reasons = []
+
+                    # 1. Uptrend: price above SMA50, SMA20 > SMA50
+                    if price > sma50 and sma20 > sma50:
+                        score += 25
+                        reasons.append("📈 Strong uptrend (SMA20 > SMA50)")
+                    elif price > sma50:
+                        score += 15
+                        reasons.append("📈 Above SMA50")
+                    else:
+                        continue  # no downtrend swings
+
+                    # 2. Pullback present (2-7 days)
+                    if 2 <= pb <= 7:
+                        score += 25
+                        reasons.append(f"🔄 {pb}-day pullback — entry zone")
+                    elif pb == 1:
+                        score += 10
+                        reasons.append("🔄 1-day dip")
+                    else:
+                        continue  # no pullback = no swing entry
+
+                    # 3. Holding key level (price above SMA50 or EMA20)
+                    if price > d["ema20"]:
+                        score += 15
+                        reasons.append("✅ Holding above EMA20")
+                    elif price > sma50:
+                        score += 10
+                        reasons.append("✅ Holding above SMA50")
+
+                    # 4. RSI not overbought
+                    if 35 <= rsi <= 55:
+                        score += 15
+                        reasons.append(f"RSI {rsi:.0f} — reset into buy zone")
+                    elif rsi < 35:
+                        score += 10
+                        reasons.append(f"RSI {rsi:.0f} — oversold bounce")
+                    elif rsi > 70:
+                        continue  # overbought, skip
+
+                    # 5. Volume & liquidity
+                    if d["dollar_vol"] > 10_000_000:
+                        score += 5
+                        reasons.append("💰 Liquid")
+                    if rel_vol > 0.5:
+                        score += 5
+
+                    if score < 55:
+                        continue
+
+                    stop = max(sma50, price - 2 * atr)
+                    risk = abs(price - stop)
+                    target = price + risk * 2.5
+                    rr = (target - price) / risk if risk > 0 else 0
+
+                    signals.append({
+                        "ticker": ticker, "direction": "LONG",
+                        "setup_type": "SWING", "price": price,
+                        "score": min(score, 100), "reasons": reasons,
+                        "rsi": rsi, "sma20": sma20, "sma50": sma50,
+                        "rel_vol": rel_vol, "atr": atr, "atr_pct": atr_pct,
+                        "stop": stop, "target": target, "rr_ratio": rr,
+                        "stop_atr": risk / atr if atr > 0 else 1,
+                        "dollar_vol": d["dollar_vol"],
+                        "hold_target": "2-8 weeks",
+                        "invalidation": f"Close below ${stop:.2f} (SMA50 / 2×ATR)",
+                    })
+                except Exception:
+                    continue
+            return signals
+
+        # ── 6b. Breakout scanner ─────────────────────────────────────
+        def _sync_breakout_scan(tickers):
+            """
+            Breakout scanner — finds consolidation breaks with volume.
+            Criteria: tight range (low BB width or narrow 10-day range),
+            price breaking above the consolidation high on above-avg volume.
+            Hold target: 1-4 weeks.
+            """
+            if not _yf:
+                return []
+            signals = []
+            for ticker in tickers:
+                try:
+                    t = _yf.Ticker(ticker)
+                    hist = t.history(period="6mo")
+                    if hist.empty or len(hist) < 60:
+                        continue
+                    d = _compute_technicals(hist)
+                    price, sma20, sma50 = d["price"], d["sma20"], d["sma50"]
+                    rsi, rel_vol = d["rsi"], d["rel_vol"]
+                    atr, atr_pct = d["atr"], d["atr_pct"]
+                    hi_10, range_10 = d["hi_10"], d["range_10"]
+                    bb_width = d["bb_width"]
+                    close = d["close"]
+
+                    score = 0
+                    reasons = []
+
+                    # 1. Tight consolidation (BB squeeze or narrow range)
+                    if bb_width < 6:
+                        score += 20
+                        reasons.append(f"🔒 BB squeeze — width {bb_width:.1f}%")
+                    elif range_10 < atr_pct * 2.5:
+                        score += 15
+                        reasons.append(f"🔒 Tight 10d range {range_10:.1f}%")
+                    else:
+                        continue  # not consolidating
+
+                    # 2. Breaking above the consolidation high
+                    yesterday = close.iloc[-2] if len(close) > 1 else price
+                    if price > hi_10 and yesterday <= hi_10:
+                        score += 30
+                        reasons.append(f"🚀 BREAKING OUT above ${hi_10:.2f}")
+                    elif price > hi_10 * 0.99:
+                        score += 15
+                        reasons.append(f"📍 Testing resistance ${hi_10:.2f}")
+                    else:
+                        continue  # not at breakout level
+
+                    # 3. Volume confirmation
+                    if rel_vol >= 2.0:
+                        score += 20
+                        reasons.append(f"🔥 Volume surge {rel_vol:.1f}x avg")
+                    elif rel_vol >= 1.3:
+                        score += 10
+                        reasons.append(f"📊 Vol {rel_vol:.1f}x avg")
+                    else:
+                        score -= 10
+                        reasons.append("⚠️ Low volume — needs confirmation")
+
+                    # 4. Trend context
+                    if price > sma50:
+                        score += 10
+                        reasons.append("📈 Above SMA50")
+                    if sma20 > sma50:
+                        score += 5
+
+                    # 5. RSI range
+                    if 50 <= rsi <= 70:
+                        score += 5
+                        reasons.append(f"RSI {rsi:.0f} — momentum")
+
+                    # 6. Liquidity
+                    if d["dollar_vol"] > 10_000_000:
+                        score += 5
+                        reasons.append("💰 Liquid")
+
+                    if score < 55:
+                        continue
+
+                    stop = d["lo_10"]  # bottom of consolidation
+                    risk = abs(price - stop)
+                    target = price + risk * 2
+                    rr = (target - price) / risk if risk > 0 else 0
+
+                    signals.append({
+                        "ticker": ticker, "direction": "LONG",
+                        "setup_type": "BREAKOUT", "price": price,
+                        "score": min(score, 100), "reasons": reasons,
+                        "rsi": rsi, "sma20": sma20, "sma50": sma50,
+                        "rel_vol": rel_vol, "atr": atr, "atr_pct": atr_pct,
+                        "stop": stop, "target": target, "rr_ratio": rr,
+                        "stop_atr": risk / atr if atr > 0 else 1,
+                        "dollar_vol": d["dollar_vol"],
+                        "hold_target": "1-4 weeks",
+                        "invalidation": f"Close below ${stop:.2f} (consolidation low)",
+                    })
+                except Exception:
+                    continue
+            return signals
+
+        # ── 6c. Momentum scanner ─────────────────────────────────────
+        def _sync_momentum_scan(tickers):
+            """
+            Momentum scanner — finds strong movers for short-term plays.
+            Criteria: big move today (>2%), above-avg volume, strong trend.
+            Hold target: days to 2 weeks.
+            """
             if not _yf:
                 return []
             signals = []
@@ -1206,199 +1478,270 @@ class DiscordInteractiveBot:
                 try:
                     t = _yf.Ticker(ticker)
                     hist = t.history(period="3mo")
-                    if hist.empty or len(hist) < 50:
+                    if hist.empty or len(hist) < 30:
                         continue
-                    close = hist["Close"]
-                    high = hist["High"]
-                    low = hist["Low"]
-                    price = close.iloc[-1]
-                    sma20 = close.rolling(20).mean().iloc[-1]
-                    sma50 = close.rolling(50).mean().iloc[-1]
-                    vol = hist["Volume"].iloc[-1]
-                    avg_vol = hist["Volume"].rolling(20).mean().iloc[-1]
-                    rel_vol = vol / avg_vol if avg_vol else 1
+                    d = _compute_technicals(hist)
+                    price, sma20, sma50 = d["price"], d["sma20"], d["sma50"]
+                    rsi, rel_vol = d["rsi"], d["rel_vol"]
+                    atr, atr_pct = d["atr"], d["atr_pct"]
+                    close = d["close"]
 
-                    # RSI
-                    delta = close.diff()
-                    gain = delta.where(delta > 0, 0).rolling(14).mean()
-                    loss_s = (-delta.where(delta < 0, 0)).rolling(14).mean()
-                    rs = gain.iloc[-1] / loss_s.iloc[-1] if loss_s.iloc[-1] != 0 else 0
-                    rsi = 100 - (100 / (1 + rs))
+                    prev_close = close.iloc[-2] if len(close) > 1 else price
+                    day_pct = ((price - prev_close) / prev_close * 100) if prev_close else 0
 
-                    # ATR (14-period)
-                    tr_vals = []
-                    for i in range(1, min(15, len(hist))):
-                        tr_vals.append(max(
-                            high.iloc[-i] - low.iloc[-i],
-                            abs(high.iloc[-i] - close.iloc[-i-1]),
-                            abs(low.iloc[-i] - close.iloc[-i-1])))
-                    atr = sum(tr_vals) / len(tr_vals) if tr_vals else price * 0.02
-                    atr_pct = (atr / price) * 100
+                    score = 0
+                    reasons = []
+                    direction = "LONG"
 
-                    # ADX approximation (simplified)
-                    adx = 25  # placeholder — would need full DI+/DI-/ADX calc
+                    # 1. Big daily move
+                    if day_pct >= 5:
+                        score += 30
+                        reasons.append(f"🚀 {day_pct:+.1f}% today — explosive move")
+                    elif day_pct >= 3:
+                        score += 25
+                        reasons.append(f"📈 {day_pct:+.1f}% today — strong move")
+                    elif day_pct >= 2:
+                        score += 15
+                        reasons.append(f"📈 {day_pct:+.1f}% today")
+                    elif day_pct <= -5:
+                        score += 25
+                        direction = "SHORT"
+                        reasons.append(f"📉 {day_pct:+.1f}% today — dump")
+                    elif day_pct <= -3:
+                        score += 20
+                        direction = "SHORT"
+                        reasons.append(f"📉 {day_pct:+.1f}% today — weakness")
+                    else:
+                        continue  # no big move
 
-                    # Dollar volume
-                    dollar_vol = price * avg_vol
+                    # 2. Volume confirmation
+                    if rel_vol >= 3.0:
+                        score += 25
+                        reasons.append(f"🐋 Volume {rel_vol:.1f}x avg — institutional")
+                    elif rel_vol >= 2.0:
+                        score += 20
+                        reasons.append(f"🔥 Volume {rel_vol:.1f}x avg")
+                    elif rel_vol >= 1.5:
+                        score += 10
+                        reasons.append(f"📊 Volume {rel_vol:.1f}x avg")
 
-                    # ── Score ──
-                    score = 0; reasons = []
-                    if price > sma20: score += 20; reasons.append("✅ Above SMA20")
-                    if price > sma50: score += 20; reasons.append("✅ Above SMA50")
-                    if rel_vol > 1.5: score += 15; reasons.append(f"📊 Vol {rel_vol:.1f}x avg")
-                    if 40 <= rsi <= 70: score += 15; reasons.append(f"RSI {rsi:.0f} — healthy")
-                    if price > sma20 > sma50: score += 15; reasons.append("📈 Trend aligned")
-                    if atr_pct < 3: score += 10; reasons.append(f"ATR {atr_pct:.1f}% — controlled")
-                    elif atr_pct > 5: score -= 5; reasons.append(f"⚠️ ATR {atr_pct:.1f}% — volatile")
-                    if dollar_vol > 10_000_000: score += 5; reasons.append("💰 High liquidity")
+                    # 3. Trend alignment
+                    if direction == "LONG" and price > sma20 > sma50:
+                        score += 15
+                        reasons.append("📈 Trend aligned up")
+                    elif direction == "SHORT" and price < sma20 < sma50:
+                        score += 15
+                        reasons.append("📉 Trend aligned down")
 
-                    bear_score = 0; bear_reasons = []
-                    if price < sma20: bear_score += 25; bear_reasons.append("❌ Below SMA20")
-                    if price < sma50: bear_score += 25; bear_reasons.append("❌ Below SMA50")
-                    if rsi > 75: bear_score += 20; bear_reasons.append(f"🔴 RSI {rsi:.0f} — overbought")
-                    if price < sma20 < sma50: bear_score += 15; bear_reasons.append("📉 Trend bearish")
+                    # 4. RSI supports direction
+                    if direction == "LONG" and rsi > 50:
+                        score += 5
+                    elif direction == "SHORT" and rsi < 50:
+                        score += 5
 
-                    # R:R estimate (basic: stop = SMA20 for longs, target = 2x risk)
-                    if score >= 60:
-                        stop = min(sma20, price * 0.95)
-                        risk = abs(price - stop)
-                        target = price + (risk * 2)
-                        rr = (target - price) / risk if risk > 0 else 0
-                        stop_atr = risk / atr if atr > 0 else 1
-                        invalidation = f"Close below ${stop:.2f} (SMA20)"
+                    # 5. Liquidity
+                    if d["dollar_vol"] > 10_000_000:
+                        score += 5
+                        reasons.append("💰 Liquid")
 
-                        signals.append({
-                            "ticker": ticker, "direction": "LONG",
-                            "price": price, "score": min(score, 100),
-                            "reasons": reasons, "rsi": rsi,
-                            "sma20": sma20, "sma50": sma50, "rel_vol": rel_vol,
-                            "atr": atr, "atr_pct": atr_pct, "adx": adx,
-                            "stop": stop, "target": target, "rr_ratio": rr,
-                            "stop_atr": stop_atr, "dollar_vol": dollar_vol,
-                            "invalidation": invalidation,
-                            "earnings_risk": "Use /ai for earnings data",
-                        })
-                    elif bear_score >= 60:
-                        stop = max(sma20, price * 1.05)
-                        risk = abs(stop - price)
-                        target = price - (risk * 2)
-                        rr = (price - target) / risk if risk > 0 else 0
-                        stop_atr = risk / atr if atr > 0 else 1
-                        invalidation = f"Close above ${stop:.2f} (SMA20)"
+                    if score < 50:
+                        continue
 
-                        signals.append({
-                            "ticker": ticker, "direction": "SHORT",
-                            "price": price, "score": min(bear_score, 100),
-                            "reasons": bear_reasons, "rsi": rsi,
-                            "sma20": sma20, "sma50": sma50, "rel_vol": rel_vol,
-                            "atr": atr, "atr_pct": atr_pct, "adx": adx,
-                            "stop": stop, "target": target, "rr_ratio": rr,
-                            "stop_atr": stop_atr, "dollar_vol": dollar_vol,
-                            "invalidation": invalidation,
-                            "earnings_risk": "Use /ai for earnings data",
-                        })
+                    if direction == "LONG":
+                        stop = price - 1.5 * atr
+                        target = price + 2 * atr
+                    else:
+                        stop = price + 1.5 * atr
+                        target = price - 2 * atr
+                    risk = abs(price - stop)
+                    rr = abs(price - target) / risk if risk > 0 else 0
+
+                    signals.append({
+                        "ticker": ticker, "direction": direction,
+                        "setup_type": "MOMENTUM", "price": price,
+                        "score": min(score, 100), "reasons": reasons,
+                        "rsi": rsi, "sma20": sma20, "sma50": sma50,
+                        "rel_vol": rel_vol, "atr": atr, "atr_pct": atr_pct,
+                        "stop": stop, "target": target, "rr_ratio": rr,
+                        "stop_atr": risk / atr if atr > 0 else 1,
+                        "dollar_vol": d["dollar_vol"],
+                        "day_pct": day_pct,
+                        "hold_target": "days to 2 weeks",
+                        "invalidation": f"{'Close below' if direction == 'LONG' else 'Close above'} ${stop:.2f} (1.5×ATR)",
+                    })
                 except Exception:
                     continue
             return signals
 
-        @tasks.loop(hours=4)
-        async def auto_signal_scan():
-            """Post pro signal cards to #live-signals every 4 hours."""
+        # ── Legacy wrapper (used by morning brief) ───────────────────
+        def _sync_signal_scan(tickers):
+            """Combined scan — merges all three scanner types."""
+            swing = _sync_swing_scan(tickers)
+            breakout = _sync_breakout_scan(tickers)
+            momentum = _sync_momentum_scan(tickers)
+            combined = swing + breakout + momentum
+            combined.sort(key=lambda x: x.get("score", 0), reverse=True)
+            return combined
+
+        # ── Signal card builder (shared) ─────────────────────────────
+        def _build_signal_card(sig, now, setup_label=""):
+            """Build a Discord embed for any signal type."""
+            is_long = sig["direction"] == "LONG"
+            score = sig["score"]
+            if score >= 80:
+                tier_emoji, tier_label, card_color = "🟢", "HIGH CONVICTION", COLOR_GOLD
+            elif score >= 65:
+                tier_emoji, tier_label = "🟡", "GOOD SETUP"
+                card_color = COLOR_BUY if is_long else COLOR_SELL
+            else:
+                tier_emoji, tier_label, card_color = "⚪", "MODERATE", COLOR_INFO
+
+            arrow = "🟢 LONG" if is_long else "🔴 SHORT"
+            bar = "█" * (score // 10) + "░" * (10 - score // 10)
+            label = f"  [{setup_label}]" if setup_label else ""
+
+            e = discord.Embed(
+                title=f"{arrow}  {sig['ticker']}  —  ${sig['price']:.2f}{label}",
+                description=(
+                    f"{tier_emoji} **{tier_label}** • Score **{score}/100** `{bar}`\n\n"
+                    + "\n".join(sig["reasons"])
+                ),
+                color=card_color, timestamp=now)
+
+            e.add_field(name="🎯 Target", value=f"${sig.get('target', 0):.2f}")
+            e.add_field(name="🛑 Stop", value=f"${sig.get('stop', 0):.2f}")
+            e.add_field(name="⚖️ R:R", value=f"**{sig.get('rr_ratio', 0):.1f}:1**")
+
+            rsi = sig["rsi"]
+            rsi_icon = "🔴" if rsi > 70 else "🟢" if rsi < 30 else "⚪"
+            e.add_field(name="RSI", value=f"{rsi_icon} {rsi:.0f}")
+            e.add_field(name="Rel Vol",
+                        value=f"{'🔥' if sig['rel_vol'] > 2 else '📊'} {sig['rel_vol']:.1f}x")
+            e.add_field(name="⏳ Hold", value=sig.get("hold_target", ""))
+
+            e.add_field(name="🛑 Invalidation",
+                        value=sig.get("invalidation", "N/A"), inline=False)
+
+            dv = sig.get("dollar_vol", 0)
+            dv_str = f"${dv / 1e6:.1f}M" if dv > 1e6 else f"${dv / 1e3:.0f}K"
+            liq_icon = "✅" if dv > 10_000_000 else "⚠️" if dv > 2_000_000 else "🔴"
+            e.add_field(name="💰 Liquidity", value=f"{liq_icon} {dv_str}/day")
+            e.add_field(name="Stop/ATR",
+                        value=f"{sig.get('stop_atr', 1):.1f}x ATR")
+            e.set_footer(text="Buttons below ↓ • Deep Analysis • Position Size • Set Alert")
+            return e
+
+        # ── 6A. Swing trade auto-post (every 6 hr) ──────────────────
+        @tasks.loop(hours=6)
+        async def auto_swing_scan():
+            """Scan for swing pullback entries → #swing-trades."""
+            now = datetime.now(timezone.utc)
+            if not (now.weekday() < 5):
+                return
             try:
-                now = datetime.now(timezone.utc)
-                signals = await asyncio.to_thread(_sync_signal_scan, _WATCH_US[:25])
+                signals = await asyncio.to_thread(_sync_swing_scan, _WATCH_US)
                 if not signals:
                     return
                 signals.sort(key=lambda x: x["score"], reverse=True)
-
-                # Header embed
                 top_count = min(5, len(signals))
                 header = discord.Embed(
-                    title=f"🎯 AI Signal Scan — {now.strftime('%H:%M UTC')}",
+                    title=f"🔄 Swing Trade Scan — {now.strftime('%H:%M UTC')}",
                     description=(
-                        f"Scanned {len(_WATCH_US[:25])} tickers • "
-                        f"**{len(signals)}** setups found • "
-                        f"Showing top **{top_count}**"
-                    ),
-                    color=COLOR_INFO, timestamp=now)
-                header.set_footer(text="Score 0-100 | R:R = Reward÷Risk | ATR = volatility")
-                await _send_ch("signals", embed=header)
+                        f"Scanned {len(_WATCH_US)} tickers • "
+                        f"**{len(signals)}** swing setups • "
+                        f"Hold: 2-8 weeks"
+                    ), color=COLOR_BUY, timestamp=now)
+                header.set_footer(text="Pullback entries in trending stocks • Score 0-100")
+                await _send_ch("swing-trades", embed=header)
                 await asyncio.sleep(0.5)
 
                 for sig in signals[:top_count]:
-                    is_long = sig["direction"] == "LONG"
-                    score = sig["score"]
-
-                    # Confidence tier
-                    if score >= 80:
-                        tier_emoji = "🟢"
-                        tier_label = "HIGH CONVICTION"
-                        card_color = COLOR_GOLD
-                    elif score >= 65:
-                        tier_emoji = "🟡"
-                        tier_label = "GOOD SETUP"
-                        card_color = COLOR_BUY if is_long else COLOR_SELL
-                    else:
-                        tier_emoji = "⚪"
-                        tier_label = "MODERATE"
-                        card_color = COLOR_INFO
-
-                    arrow = "🟢 LONG" if is_long else "🔴 SHORT"
-                    bar = "█" * (score // 10) + "░" * (10 - score // 10)
-
-                    e = discord.Embed(
-                        title=f"{arrow}  {sig['ticker']}  —  ${sig['price']:.2f}",
-                        description=(
-                            f"{tier_emoji} **{tier_label}** • Score **{score}/100** `{bar}`\n\n"
-                            + "\n".join(sig["reasons"])
-                        ),
-                        color=card_color, timestamp=now)
-
-                    # Row 1: Key metrics
-                    e.add_field(name="🎯 Target",
-                                value=f"${sig.get('target', 0):.2f}")
-                    e.add_field(name="🛑 Stop",
-                                value=f"${sig.get('stop', 0):.2f}")
-                    e.add_field(name="⚖️ R:R",
-                                value=f"**{sig.get('rr_ratio', 0):.1f}:1**")
-
-                    # Row 2: Technical context
-                    rsi = sig["rsi"]
-                    rsi_icon = "🔴" if rsi > 70 else "🟢" if rsi < 30 else "⚪"
-                    e.add_field(name="RSI",
-                                value=f"{rsi_icon} {rsi:.0f}")
-                    e.add_field(name="Rel Vol",
-                                value=f"{'🔥' if sig['rel_vol'] > 2 else '📊'} {sig['rel_vol']:.1f}x")
-                    e.add_field(name="ATR",
-                                value=f"{sig.get('atr_pct', 0):.1f}%")
-
-                    # Row 3: Invalidation + event risk
-                    e.add_field(name="🛑 Invalidation",
-                                value=sig.get("invalidation", "N/A"),
-                                inline=False)
-
-                    # Row 4: Liquidity check
-                    dv = sig.get("dollar_vol", 0)
-                    dv_str = f"${dv / 1e6:.1f}M" if dv > 1e6 else f"${dv / 1e3:.0f}K"
-                    liq_icon = "✅" if dv > 10_000_000 else "⚠️" if dv > 2_000_000 else "🔴"
-                    e.add_field(name="💰 Liquidity",
-                                value=f"{liq_icon} {dv_str}/day")
-                    e.add_field(name="Stop/ATR",
-                                value=f"{sig.get('stop_atr', 1):.1f}x ATR")
-
-                    e.set_footer(
-                        text="Buttons below ↓ • Deep Analysis • Position Size • Set Alert")
-
-                    await _send_ch("signals", embed=e,
+                    e = _build_signal_card(sig, now, "SWING")
+                    await _send_ch("swing-trades", embed=e,
                                    view=SignalActionView(sig["ticker"], sig))
-                    await asyncio.sleep(1)  # rate limit
+                    await asyncio.sleep(1)
 
                 await _audit(
-                    f"🎯 Auto-scan: {len(signals)} signals found, "
-                    f"top {top_count} posted to #signals"
-                )
+                    f"🔄 Swing scan: {len(signals)} setups, "
+                    f"top {top_count} → #swing-trades")
             except Exception as exc:
-                logger.error(f"auto_signal_scan error: {exc}")
+                logger.error(f"auto_swing_scan error: {exc}")
+
+        # ── 6B. Breakout auto-post (every 4 hr) ─────────────────────
+        @tasks.loop(hours=4)
+        async def auto_breakout_scan():
+            """Scan for consolidation breakouts → #breakout-setups."""
+            now = datetime.now(timezone.utc)
+            if not (13 <= now.hour < 21 and now.weekday() < 5):
+                return  # US hours only for breakouts
+            try:
+                signals = await asyncio.to_thread(_sync_breakout_scan, _WATCH_US)
+                if not signals:
+                    return
+                signals.sort(key=lambda x: x["score"], reverse=True)
+                top_count = min(5, len(signals))
+                header = discord.Embed(
+                    title=f"🚀 Breakout Scan — {now.strftime('%H:%M UTC')}",
+                    description=(
+                        f"Scanned {len(_WATCH_US)} tickers • "
+                        f"**{len(signals)}** breakout setups • "
+                        f"Hold: 1-4 weeks"
+                    ), color=COLOR_GOLD, timestamp=now)
+                header.set_footer(text="Consolidation breaks with volume • Score 0-100")
+                await _send_ch("breakout-setups", embed=header)
+                await asyncio.sleep(0.5)
+
+                for sig in signals[:top_count]:
+                    e = _build_signal_card(sig, now, "BREAKOUT")
+                    await _send_ch("breakout-setups", embed=e,
+                                   view=SignalActionView(sig["ticker"], sig))
+                    await asyncio.sleep(1)
+
+                await _audit(
+                    f"🚀 Breakout scan: {len(signals)} setups, "
+                    f"top {top_count} → #breakout-setups")
+            except Exception as exc:
+                logger.error(f"auto_breakout_scan error: {exc}")
+
+        # ── 6C. Momentum auto-post (every 2 hr) ─────────────────────
+        @tasks.loop(hours=2)
+        async def auto_momentum_scan():
+            """Scan for big movers + volume → #momentum-alerts."""
+            now = datetime.now(timezone.utc)
+            if not (13 <= now.hour < 21 and now.weekday() < 5):
+                return
+            try:
+                signals = await asyncio.to_thread(_sync_momentum_scan, _WATCH_US)
+                if not signals:
+                    return
+                signals.sort(key=lambda x: x["score"], reverse=True)
+                top_count = min(5, len(signals))
+                header = discord.Embed(
+                    title=f"⚡ Momentum Alert — {now.strftime('%H:%M UTC')}",
+                    description=(
+                        f"Scanned {len(_WATCH_US)} tickers • "
+                        f"**{len(signals)}** momentum signals • "
+                        f"Hold: days to 2 weeks"
+                    ), color=COLOR_SELL, timestamp=now)
+                header.set_footer(text="Big movers + volume surges • Score 0-100")
+                await _send_ch("momentum-alerts", embed=header)
+                await asyncio.sleep(0.5)
+
+                for sig in signals[:top_count]:
+                    e = _build_signal_card(sig, now, "MOMENTUM")
+                    pct = sig.get("day_pct", 0)
+                    if pct:
+                        e.add_field(name="📊 Today",
+                                    value=f"**{pct:+.1f}%**", inline=True)
+                    await _send_ch("momentum-alerts", embed=e,
+                                   view=SignalActionView(sig["ticker"], sig))
+                    await asyncio.sleep(1)
+
+                await _audit(
+                    f"⚡ Momentum scan: {len(signals)} signals, "
+                    f"top {top_count} → #momentum-alerts")
+            except Exception as exc:
+                logger.error(f"auto_momentum_scan error: {exc}")
 
         # ── 7. Morning brief (runs every 10 min, fires once at ~13:30 UTC / 9:30 ET)
         _morning_posted = set()
@@ -1576,8 +1919,9 @@ class DiscordInteractiveBot:
                         for i, sig in enumerate(signals[:5], 1):
                             arrow = "🟢" if sig["direction"] == "LONG" else "🔴"
                             rr = sig.get("rr_ratio", 0)
+                            stype = sig.get("setup_type", "SIGNAL")
                             e2.add_field(
-                                name=f"{arrow} #{i} {sig['ticker']} — ${sig['price']:.2f}",
+                                name=f"{arrow} #{i} {sig['ticker']} — ${sig['price']:.2f}  [{stype}]",
                                 value=(
                                     f"Score: **{sig['score']}** | "
                                     f"R:R: **{rr:.1f}:1** | "
@@ -1585,7 +1929,7 @@ class DiscordInteractiveBot:
                                     f"Target: ${sig.get('target',0):.2f}\n"
                                     f"{sig['reasons'][0] if sig.get('reasons') else ''}"
                                 ), inline=False)
-                        e2.set_footer(text="/scan for full list • Buttons in #live-signals")
+                        e2.set_footer(text="/scan for full list • Setups in #swing-trades #breakout-setups #momentum-alerts")
                         await _send_ch("daily-brief", embed=e2)
                 except Exception as exc:
                     logger.warning(f"morning_brief trade preview: {exc}")
@@ -1757,7 +2101,7 @@ class DiscordInteractiveBot:
                                f"Vol: **{_vol(w['vol'])}** ({w['ratio']:.1f}x avg)"),
                         inline=True)
                 e.set_footer(text="Auto whale scan every 45 min")
-                await _send_ch("signals", embed=e)
+                await _send_ch("momentum-alerts", embed=e)
                 await _audit(f"🐋 Whale scan: {len(whales)} unusual vol stocks")
             except Exception as exc:
                 logger.error(f"auto_whale_scan error: {exc}")
@@ -1809,7 +2153,9 @@ class DiscordInteractiveBot:
                     f"{'✅' if update_presence.is_running() else '❌'} Presence\n"
                     f"{'✅' if market_pulse.is_running() else '❌'} Market Pulse\n"
                     f"{'✅' if auto_movers.is_running() else '❌'} Auto Movers\n"
-                    f"{'✅' if auto_signal_scan.is_running() else '❌'} AI Signals\n"
+                    f"{'✅' if auto_swing_scan.is_running() else '❌'} Swing Scan\n"
+                    f"{'✅' if auto_breakout_scan.is_running() else '❌'} Breakout Scan\n"
+                    f"{'✅' if auto_momentum_scan.is_running() else '❌'} Momentum Scan\n"
                     f"{'✅' if auto_crypto.is_running() else '❌'} Crypto\n"
                     f"{'✅' if auto_whale_scan.is_running() else '❌'} Whale Scan\n"
                     f"{'✅' if morning_brief.is_running() else '❌'} Morning Brief\n"
@@ -1831,8 +2177,12 @@ class DiscordInteractiveBot:
         async def _w4(): await bot.wait_until_ready()
         @auto_crypto.before_loop
         async def _w5(): await bot.wait_until_ready()
-        @auto_signal_scan.before_loop
-        async def _w6(): await bot.wait_until_ready()
+        @auto_swing_scan.before_loop
+        async def _w6a(): await bot.wait_until_ready()
+        @auto_breakout_scan.before_loop
+        async def _w6b(): await bot.wait_until_ready()
+        @auto_momentum_scan.before_loop
+        async def _w6c(): await bot.wait_until_ready()
         @morning_brief.before_loop
         async def _w7(): await bot.wait_until_ready()
         @eod_report.before_loop
@@ -1868,7 +2218,8 @@ class DiscordInteractiveBot:
                 logger.error(f"Slash command sync error: {exc}")
             # Start ALL background tasks
             all_tasks = [update_presence, market_pulse, auto_movers,
-                         auto_sector_macro, auto_crypto, auto_signal_scan,
+                         auto_sector_macro, auto_crypto,
+                         auto_swing_scan, auto_breakout_scan, auto_momentum_scan,
                          morning_brief, eod_report, asia_preview,
                          auto_whale_scan, weekly_recap, health_check]
             for t in all_tasks:
