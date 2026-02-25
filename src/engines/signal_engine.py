@@ -1,8 +1,12 @@
 """
-TradingAI Bot - Signal Engine
+TradingAI Bot - Signal Engine (v6 — Pro Desk)
 Main orchestrator for signal generation pipeline.
 
-Upgrades (v4):
+Upgrades (v6):
+  • Data quality gates run BEFORE features/signals
+  • Delta tracker + regime scoreboard integration
+  • Signal v6 fields: setup_grade, edge_type, time_stop_days, event_risk,
+    scenario_plan, portfolio_fit, evidence, expected_value, approval_status, why_now
   • Universe quality filter — removes illiquid / penny / corporate-action noise
   • Unified score (0-100) with calibration hooks
   • Edge Checklist per signal (setup_tags + regime_required)
@@ -566,19 +570,22 @@ class RiskModel:
 
 class SignalEngine:
     """
-    Main signal generation pipeline (v5).
+    Main signal generation pipeline (v6 — Pro Desk).
     
     Orchestrates:
-    1. Universe quality filter (hard gates)
-    2. Market-state NO TRADE check
-    3. Regime detection
-    4. Strategy execution
-    5. Edge checklist per signal
-    6. Score unification + calibration
-    7. Dedup + conflict resolution
-    8. Risk filtering + sizing
-    9. Insight enrichment (playbook + trade briefs + risk bulletin)
-    10. Signal output
+    0.  Data quality gates (reject stale/bad data)
+    1.  Universe quality filter (hard gates)
+    2.  Market-state NO TRADE check
+    3.  Regime detection + scoreboard build
+    4.  Delta tracking (what changed overnight)
+    5.  Strategy execution
+    6.  Edge checklist per signal
+    7.  Score unification + calibration
+    8.  Dedup + conflict resolution
+    9.  Risk filtering + sizing
+    10. Insight enrichment (playbook + trade briefs + risk bulletin)
+    11. Signal v6 field population
+    12. Signal output
     """
     
     def __init__(
@@ -599,6 +606,31 @@ class SignalEngine:
         self.logger = logging.getLogger(__name__)
         self._last_market_state: Optional[Dict] = None
         self._last_insights: Optional[Dict] = None
+        self._last_scoreboard = None
+        self._last_delta_snapshot = None
+        self._last_bullish_changes = None
+        self._last_bearish_changes = None
+        self._last_data_quality = None
+
+        # Lazy-import v6 components (avoid circular)
+        self._data_quality_gate = None
+        self._delta_tracker = None
+        self._scoreboard_builder = None
+    
+    def _get_data_quality_gate(self):
+        if self._data_quality_gate is None:
+            from src.engines.data_quality import DataQualityGate
+            self._data_quality_gate = DataQualityGate()
+        return self._data_quality_gate
+
+    def _get_delta_tracker(self):
+        if self._delta_tracker is None:
+            from src.engines.delta_scoreboard import (
+                DeltaTracker, ScoreboardBuilder,
+            )
+            self._delta_tracker = DeltaTracker()
+            self._scoreboard_builder = ScoreboardBuilder()
+        return self._delta_tracker, self._scoreboard_builder
     
     def generate_signals(
         self,
@@ -608,9 +640,11 @@ class SignalEngine:
         portfolio: Optional[Dict] = None,
         calendar_events: Optional[List[Dict]] = None,
         corporate_actions: Optional[List[Dict]] = None,
+        yesterday_market_data: Optional[Dict[str, Any]] = None,
+        week_ago_market_data: Optional[Dict[str, Any]] = None,
     ) -> List[Signal]:
         """
-        Main signal generation pipeline.
+        Main signal generation pipeline (v6).
         
         Args:
             universe: List of tickers to consider
@@ -619,10 +653,35 @@ class SignalEngine:
             portfolio: Current portfolio state
             calendar_events: Upcoming earnings/macro events
             corporate_actions: Recent splits/dividends/mergers
+            yesterday_market_data: Yesterday's market data for delta tracking
+            week_ago_market_data: Week-ago market data for delta tracking
         
         Returns:
-            List of validated, sized, deduplicated signals
+            List of validated, sized, deduplicated signals with v6 fields
         """
+        # ── -1. Data quality gates (v6) ─────────────────────────
+        try:
+            dq_gate = self._get_data_quality_gate()
+            dq_passed, dq_reports = dq_gate.run_all_checks(market_data)
+            self._last_data_quality = dq_reports
+            if not dq_passed:
+                critical = [r for r in dq_reports
+                            if r.severity == "critical"
+                            and not r.passed]
+                reasons = "; ".join(
+                    f"{r.feed_name}:{r.check_type}"
+                    for r in critical
+                )
+                self.logger.warning(
+                    f"🚫 Data quality gate FAILED: {reasons}"
+                )
+                return []
+        except Exception as e:
+            self.logger.warning(
+                f"Data quality check error (continuing): {e}"
+            )
+            self._last_data_quality = None
+
         # ── 0. Universe quality filter ──────────────────────────
         clean_universe, rejections = self.universe_filter.filter(
             universe, features, calendar_events, corporate_actions
@@ -649,19 +708,55 @@ class SignalEngine:
         
         if not regime.should_trade:
             self.logger.warning("Regime indicates no trading")
-            self._last_market_state["no_trade_reason"] = "regime_no_trade"
+            self._last_market_state["no_trade_reason"] = (
+                "regime_no_trade"
+            )
             return []
+
+        # ── 2b. Build delta snapshot + scoreboard (v6) ─────────
+        try:
+            dt, sb_builder = self._get_delta_tracker()
+            self._last_delta_snapshot = dt.compute(
+                today=market_data,
+                yesterday=yesterday_market_data or {},
+                week_ago=week_ago_market_data or {},
+            )
+            bull, bear = dt.classify_changes(
+                self._last_delta_snapshot
+            )
+            self._last_bullish_changes = bull
+            self._last_bearish_changes = bear
+            self._last_scoreboard = sb_builder.build(
+                regime, market_data
+            )
+            self.logger.info(
+                f"Scoreboard: {self._last_scoreboard.regime_label} "
+                f"| budget={self._last_scoreboard.risk_budget_pct}%"
+            )
+        except Exception as e:
+            self.logger.warning(
+                f"Delta/scoreboard build error (continuing): {e}"
+            )
+            self._last_delta_snapshot = None
+            self._last_scoreboard = None
         
         # ── 3. Run active strategies ───────────────────────────
         raw_signals = []
         for strategy in self.strategies:
             if strategy.STRATEGY_ID in regime.active_strategies:
                 try:
-                    signals = strategy.generate_signals(clean_universe, features, market_data)
-                    self.logger.info(f"Strategy {strategy.STRATEGY_ID}: {len(signals)} signals")
+                    signals = strategy.generate_signals(
+                        clean_universe, features, market_data
+                    )
+                    self.logger.info(
+                        f"Strategy {strategy.STRATEGY_ID}: "
+                        f"{len(signals)} signals"
+                    )
                     raw_signals.extend(signals)
                 except Exception as e:
-                    self.logger.error(f"Error in strategy {strategy.STRATEGY_ID}: {e}")
+                    self.logger.error(
+                        f"Error in strategy {strategy.STRATEGY_ID}: {e}"
+                    )
         
         self.logger.info(f"Total raw signals: {len(raw_signals)}")
         if not raw_signals:
@@ -671,49 +766,78 @@ class SignalEngine:
         for sig in raw_signals:
             try:
                 feat_row = self._get_feature_row(sig.ticker, features)
-                checklist = EdgeChecklist.build(sig, feat_row, regime, calendar_events)
+                checklist = EdgeChecklist.build(
+                    sig, feat_row, regime, calendar_events
+                )
                 sig.feature_snapshot = sig.feature_snapshot or {}
                 sig.feature_snapshot["edge_checklist"] = checklist
-                sig.feature_snapshot["setup_tags"] = checklist["setup_tags"]
-                sig.feature_snapshot["regime_at_signal"] = checklist["regime_at_signal"]
-                sig.feature_snapshot["earnings_risk_days"] = checklist["earnings_risk_days"]
-                sig.feature_snapshot["dollar_volume_20d"] = checklist["dollar_volume_20d"]
+                sig.feature_snapshot["setup_tags"] = (
+                    checklist["setup_tags"]
+                )
+                sig.feature_snapshot["regime_at_signal"] = (
+                    checklist["regime_at_signal"]
+                )
+                sig.feature_snapshot["earnings_risk_days"] = (
+                    checklist["earnings_risk_days"]
+                )
+                sig.feature_snapshot["dollar_volume_20d"] = (
+                    checklist["dollar_volume_20d"]
+                )
             except Exception as e:
-                self.logger.warning(f"Edge checklist error for {sig.ticker}: {e}")
+                self.logger.warning(
+                    f"Edge checklist error for {sig.ticker}: {e}"
+                )
         
         # ── 5. Score unification ───────────────────────────────
         for sig in raw_signals:
             scores = self.score_unifier.unify(sig.confidence)
             sig.feature_snapshot = sig.feature_snapshot or {}
             sig.feature_snapshot["unified_scores"] = scores
-            # Check calibrated win rate if available
             cal_wr = self.score_unifier.calibrated_win_rate(
                 sig.strategy_id or "unknown",
                 regime.trend.value,
                 sig.confidence,
             )
             if cal_wr is not None:
-                sig.feature_snapshot["calibrated_win_rate"] = round(cal_wr, 4)
+                sig.feature_snapshot["calibrated_win_rate"] = (
+                    round(cal_wr, 4)
+                )
         
         # ── 6. Dedup + conflict resolution ─────────────────────
-        deduped_signals, resolutions = self.dedup.resolve_conflicts(raw_signals)
+        deduped_signals, resolutions = (
+            self.dedup.resolve_conflicts(raw_signals)
+        )
         if resolutions:
-            self.logger.info(f"Conflict resolutions: {len(resolutions)}")
+            self.logger.info(
+                f"Conflict resolutions: {len(resolutions)}"
+            )
             for r in resolutions:
-                self.logger.info(f"  {r['ticker']}: kept {r['kept']}, dropped {r['dropped']}")
+                self.logger.info(
+                    f"  {r['ticker']}: kept {r['kept']}, "
+                    f"dropped {r['dropped']}"
+                )
         
-        # Add dedup keys
         for sig in deduped_signals:
             sig.feature_snapshot = sig.feature_snapshot or {}
-            sig.feature_snapshot["dedupe_key"] = self.dedup.dedupe_key(sig)
+            sig.feature_snapshot["dedupe_key"] = (
+                self.dedup.dedupe_key(sig)
+            )
         
         # ── 7. Risk model filter + sizing ──────────────────────
-        filtered_signals = self.risk_model.filter_and_size(deduped_signals, portfolio)
+        filtered_signals = self.risk_model.filter_and_size(
+            deduped_signals, portfolio
+        )
         
-        self.logger.info(f"Filtered signals: {len(filtered_signals)}")
+        self.logger.info(
+            f"Filtered signals: {len(filtered_signals)}"
+        )
         
         # ── 8. Sort + limit ────────────────────────────────────
-        filtered_signals = sorted(filtered_signals, key=lambda s: s.confidence, reverse=True)
+        filtered_signals = sorted(
+            filtered_signals,
+            key=lambda s: s.confidence,
+            reverse=True,
+        )
         max_signals = 10
         if len(filtered_signals) > max_signals:
             filtered_signals = filtered_signals[:max_signals]
@@ -723,7 +847,9 @@ class SignalEngine:
         try:
             features_by_ticker = {}
             for sig in filtered_signals:
-                features_by_ticker[sig.ticker] = self._get_feature_row(sig.ticker, features)
+                features_by_ticker[sig.ticker] = (
+                    self._get_feature_row(sig.ticker, features)
+                )
             self._last_insights = self.insight_engine.generate_insights(
                 signals=filtered_signals,
                 regime=regime,
@@ -731,21 +857,194 @@ class SignalEngine:
                 features_by_ticker=features_by_ticker,
                 portfolio=portfolio,
                 calendar_events=calendar_events,
-                yesterday_regime=self._last_market_state.get("yesterday_regime") if self._last_market_state else None,
+                yesterday_regime=(
+                    self._last_market_state.get("yesterday_regime")
+                    if self._last_market_state else None
+                ),
             )
-            # Attach edge_model + execution_plan + risk_plan to each signal
-            trade_briefs = self._last_insights.get("trade_briefs", [])
+            trade_briefs = self._last_insights.get(
+                "trade_briefs", []
+            )
             for sig, brief in zip(filtered_signals, trade_briefs):
                 sig.feature_snapshot = sig.feature_snapshot or {}
-                sig.feature_snapshot["edge_model"] = brief.edge_model.model_dump() if brief.edge_model else {}
-                sig.feature_snapshot["execution_plan"] = brief.execution_plan.model_dump() if brief.execution_plan else {}
-                sig.feature_snapshot["risk_plan"] = brief.risk_plan.model_dump() if brief.risk_plan else {}
-                sig.feature_snapshot["trade_brief"] = brief.model_dump()
+                sig.feature_snapshot["edge_model"] = (
+                    brief.edge_model.model_dump()
+                    if brief.edge_model else {}
+                )
+                sig.feature_snapshot["execution_plan"] = (
+                    brief.execution_plan.model_dump()
+                    if brief.execution_plan else {}
+                )
+                sig.feature_snapshot["risk_plan"] = (
+                    brief.risk_plan.model_dump()
+                    if brief.risk_plan else {}
+                )
+                sig.feature_snapshot["trade_brief"] = (
+                    brief.model_dump()
+                )
         except Exception as e:
-            self.logger.error(f"InsightEngine enrichment failed: {e}", exc_info=True)
+            self.logger.error(
+                f"InsightEngine enrichment failed: {e}",
+                exc_info=True,
+            )
             self._last_insights = None
+            trade_briefs = []
+
+        # ── 10. Populate Signal v6 fields (pro desk) ──────────
+        self._populate_v6_fields(
+            filtered_signals, trade_briefs, regime,
+            features, calendar_events, portfolio,
+        )
         
         return filtered_signals
+    
+    def _populate_v6_fields(
+        self,
+        signals: List[Signal],
+        trade_briefs: List[Any],
+        regime: MarketRegime,
+        features: pd.DataFrame,
+        calendar_events: Optional[List[Dict]],
+        portfolio: Optional[Dict],
+    ) -> None:
+        """
+        Populate Signal v6 fields from edge model, checklist,
+        regime scoreboard, and delta snapshot.
+        """
+        brief_map = {}
+        for i, tb in enumerate(trade_briefs):
+            if i < len(signals):
+                brief_map[signals[i].ticker] = tb
+
+        for sig in signals:
+            try:
+                checklist = (
+                    (sig.feature_snapshot or {})
+                    .get("edge_checklist", {})
+                )
+                tb = brief_map.get(sig.ticker)
+                edge = tb.edge_model if tb else None
+                rp = tb.risk_plan if tb else None
+
+                # setup_grade: A/B/C/D based on tag count + regime
+                tag_count = len(checklist.get("setup_tags", []))
+                regime_ok = checklist.get(
+                    "regime_at_signal", {}
+                ).get("risk", "") != "RISK_OFF"
+                if tag_count >= 5 and regime_ok:
+                    sig.setup_grade = "A"
+                elif tag_count >= 3 and regime_ok:
+                    sig.setup_grade = "B"
+                elif tag_count >= 2:
+                    sig.setup_grade = "C"
+                else:
+                    sig.setup_grade = "D"
+
+                # edge_type
+                strat = sig.strategy_id or ""
+                if "momentum" in strat or "trend" in strat:
+                    sig.edge_type = "trend"
+                elif "mean_reversion" in strat:
+                    sig.edge_type = "reversion"
+                elif "vcp" in strat:
+                    sig.edge_type = "pattern"
+                elif "swing" in strat:
+                    sig.edge_type = "swing"
+                else:
+                    sig.edge_type = "mixed"
+
+                # time_stop_days from edge model
+                if edge:
+                    sig.time_stop_days = (
+                        edge.expected_holding_days
+                    )
+                else:
+                    sig.time_stop_days = 5
+
+                # event_risk
+                earn_days = checklist.get("earnings_risk_days")
+                if earn_days is not None and earn_days <= 5:
+                    sig.event_risk = (
+                        f"Earnings in {earn_days}d"
+                    )
+                else:
+                    sig.event_risk = None
+
+                # scenario_plan from scoreboard
+                if self._last_scoreboard and self._last_scoreboard.scenarios:
+                    sc = self._last_scoreboard.scenarios
+                    sig.scenario_plan = {
+                        "base": sc.base_case,
+                        "base_probability": sc.base_probability,
+                        "bull_trigger": sc.bull_trigger,
+                        "bear_trigger": sc.bear_trigger,
+                    }
+
+                # portfolio_fit
+                if portfolio:
+                    existing = set(
+                        portfolio.get("positions", {}).keys()
+                    )
+                    sector = (sig.metadata or {}).get("sector", "")
+                    same_sector = sum(
+                        1 for p in existing
+                        if portfolio.get("positions", {})
+                        .get(p, {}).get("sector") == sector
+                    ) if sector else 0
+                    if same_sector >= 3:
+                        sig.portfolio_fit = "over_concentrated"
+                    elif same_sector >= 2:
+                        sig.portfolio_fit = "sector_heavy"
+                    else:
+                        sig.portfolio_fit = "fits"
+                else:
+                    sig.portfolio_fit = "no_portfolio_data"
+
+                # evidence list
+                evidence = []
+                for tag in checklist.get("setup_tags", [])[:5]:
+                    evidence.append(f"Setup: {tag}")
+                if edge:
+                    evidence.append(
+                        f"P(T1)={edge.p_t1*100:.0f}%, "
+                        f"EV={edge.expected_return_pct:+.1f}%"
+                    )
+                if checklist.get("rr_ratio"):
+                    evidence.append(
+                        f"R:R={checklist['rr_ratio']:.1f}"
+                    )
+                sig.evidence = evidence
+
+                # expected_value
+                if edge:
+                    sig.expected_value = (
+                        edge.expected_return_pct
+                    )
+
+                # why_now — compose from regime + catalyst
+                parts = []
+                if self._last_scoreboard:
+                    parts.append(
+                        f"Regime: {self._last_scoreboard.regime_label}"
+                    )
+                if tb and tb.catalyst:
+                    parts.append(f"Catalyst: {tb.catalyst}")
+                if checklist.get("relative_volume", 1) >= 1.5:
+                    parts.append(
+                        f"Volume {checklist['relative_volume']:.1f}x"
+                    )
+                sig.why_now = " | ".join(parts) if parts else None
+
+                # approval_status will be set by GPT validator later
+                # default to conditional until validated
+                if not sig.approval_status:
+                    sig.approval_status = "conditional"
+
+            except Exception as e:
+                self.logger.warning(
+                    f"v6 field population error for "
+                    f"{sig.ticker}: {e}"
+                )
     
     def _get_feature_row(self, ticker: str, features: pd.DataFrame) -> Dict:
         """Extract latest feature row for a ticker."""
@@ -787,6 +1086,27 @@ class SignalEngine:
         if self._last_insights:
             return self._last_insights.get("risk_bulletin")
         return None
+
+    # ── v6 getters ──────────────────────────────────────────────
+
+    def get_scoreboard(self):
+        """Return the last computed RegimeScoreboard."""
+        return self._last_scoreboard
+
+    def get_delta_snapshot(self):
+        """Return the last computed DeltaSnapshot."""
+        return self._last_delta_snapshot
+
+    def get_delta_changes(self):
+        """Return (bullish_changes, bearish_changes) ChangeItem lists."""
+        return (
+            self._last_bullish_changes or [],
+            self._last_bearish_changes or [],
+        )
+
+    def get_data_quality(self):
+        """Return the last data quality report list."""
+        return self._last_data_quality
     
     def _preflight_check(self, market_data: Dict) -> tuple[bool, str]:
         """

@@ -290,6 +290,19 @@ class Signal(BaseModel):
     gpt_validated: bool = False
     gpt_rationale: Optional[str] = None
     
+    # --- v6: Pro Desk fields ---
+    setup_grade: Optional[str] = None          # A / B / C / D
+    edge_type: Optional[str] = None            # trend / reversion / pattern / swing / mixed
+    time_stop_days: Optional[int] = None       # max holding period before forced exit
+    event_risk: Optional[str] = None           # e.g. "AAPL earnings in 2d"
+    scenario_plan: Optional[Dict[str, Any]] = None  # base / bull / bear cases
+    portfolio_fit: Optional[str] = None        # "good" / "overlap" / "concentrated"
+    evidence: List[str] = Field(default_factory=list)  # supporting data points
+    expected_value: Optional[float] = None     # EV from edge model
+    approval_status: str = "conditional"       # approved / conditional / rejected
+    approval_flags: Dict[str, bool] = Field(default_factory=dict)  # per-check flags
+    why_now: Optional[str] = None              # catalyst + timing rationale
+    
     def to_table_row(self) -> str:
         """Format as structured table row."""
         targets_str = " / ".join([f"${t.price:.2f} ({t.pct_position}%)" for t in self.targets])
@@ -630,3 +643,124 @@ class BacktestResult(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+# =============================================================================
+# V6: PRO DESK MODELS  (Scenario · Flows · Delta · Scoreboard · Diagnostics · DQ)
+# =============================================================================
+
+class ScenarioPlan(BaseModel):
+    """Base / bull / bear scenario map attached to a regime scoreboard."""
+    base_case: Dict[str, Any] = Field(default_factory=dict)
+    bull_case: Dict[str, Any] = Field(default_factory=dict)
+    bear_case: Dict[str, Any] = Field(default_factory=dict)
+    triggers: List[str] = Field(default_factory=list)
+
+
+class FlowsPositioning(BaseModel):
+    """Options flow and market positioning snapshot."""
+    put_call_ratio: Optional[float] = None
+    put_call_trend: Optional[str] = None           # "rising" / "falling" / "flat"
+    iv_rank_spy: Optional[float] = None             # 0-100
+    iv_vs_rv: Optional[str] = None                  # "premium" / "discount" / "fair"
+    gamma_zone: Optional[str] = None                # "positive" / "negative" / "neutral"
+    etf_flow_signals: List[str] = Field(default_factory=list)
+    crowding_flags: List[str] = Field(default_factory=list)
+
+
+class DeltaSnapshot(BaseModel):
+    """What changed since yesterday / last week — the 'delta deck'."""
+    snapshot_date: date
+    session: str = "US_RTH"
+
+    # Index moves
+    spx_1d_pct: Optional[float] = None
+    spx_5d_pct: Optional[float] = None
+    ndx_1d_pct: Optional[float] = None
+    ndx_5d_pct: Optional[float] = None
+    iwm_1d_pct: Optional[float] = None
+    iwm_5d_pct: Optional[float] = None
+
+    # Volatility
+    vix_close: Optional[float] = None
+    vix_1d_change: Optional[float] = None
+    vix_5d_change: Optional[float] = None
+
+    # Rates
+    yield_10y: Optional[float] = None
+    yield_10y_1d_bp: Optional[float] = None
+    yield_10y_5d_bp: Optional[float] = None
+
+    # Breadth
+    pct_above_50dma: Optional[float] = None
+    pct_above_50dma_1d_change: Optional[float] = None
+    new_highs: Optional[int] = None
+    new_lows: Optional[int] = None
+
+    # Sector leadership
+    top_3_sectors: List[str] = Field(default_factory=list)
+    bottom_3_sectors: List[str] = Field(default_factory=list)
+
+    # Sentiment
+    news_sentiment_change: Optional[float] = None
+    social_sentiment_change: Optional[float] = None
+
+    # Options
+    put_call_ratio: Optional[float] = None
+    iv_rank_spy: Optional[float] = None
+
+
+class RegimeScoreboard(BaseModel):
+    """Regime summary → strategy playbook → risk budget."""
+    regime_label: str = "NEUTRAL"
+    risk_on_score: float = 0.0
+    trend_state: str = "NEUTRAL"
+    vol_state: str = "NORMAL"
+
+    # Risk budget
+    max_gross_pct: float = 100.0
+    net_long_target_low: float = 0.0
+    net_long_target_high: float = 100.0
+    max_single_name_pct: float = 5.0
+    max_sector_pct: float = 25.0
+
+    # Strategy playbook
+    strategies_on: List[str] = Field(default_factory=list)
+    strategies_conditional: List[Dict[str, str]] = Field(default_factory=list)
+    strategies_off: List[str] = Field(default_factory=list)
+
+    # Context
+    no_trade_triggers: List[str] = Field(default_factory=list)
+    top_drivers: List[str] = Field(default_factory=list)
+    scenarios: Optional[ScenarioPlan] = None
+
+
+class BacktestDiagnostic(BaseModel):
+    """Sliced backtest metrics for edge model calibration."""
+    slice_type: str          # "regime", "volatility", "sector", "setup_grade"
+    slice_label: str         # e.g. "RISK_ON", "HIGH_VOL", "Technology", "A"
+    total_trades: int = 0
+    wins: int = 0
+    losses: int = 0
+    win_rate: float = 0.0
+    avg_pnl_pct: float = 0.0
+    avg_rr_realized: float = 0.0
+    sharpe: float = 0.0
+    avg_mae_pct: float = 0.0
+    avg_mfe_pct: float = 0.0
+    avg_holding_days: float = 0.0
+    stop_exits: int = 0
+    time_stop_exits: int = 0
+    target_exits: int = 0
+    trail_stop_exits: int = 0
+
+
+class DataQualityReport(BaseModel):
+    """Result of a single data-quality check."""
+    check_time: datetime = Field(default_factory=datetime.utcnow)
+    feed_name: str                             # "ohlcv", "features", "news", etc.
+    check_type: str                            # "freshness", "missing_bars", "outlier", etc.
+    passed: bool = True
+    severity: str = "info"                     # "info" / "warning" / "critical"
+    details: Optional[Dict[str, Any]] = None   # free-form context
+    affected_tickers: List[str] = Field(default_factory=list)
