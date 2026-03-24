@@ -1,294 +1,181 @@
-# D) Daily Report Format — v6 Pro Desk Edition
+# 📋 Daily Reports & Auto Briefs — TradingAI Bot v6
 
-## Overview
-
-v6 replaces the flat "market summary" with an **institutional decision-memo** format.
-Every report section now maps to a concrete trading action or risk limit.
-
-| Report           | When                | Delivery             | Builder Function           |
-|------------------|---------------------|----------------------|---------------------------|
-| Morning Memo     | ~09:30 ET pre-open  | Discord #daily-brief | `build_morning_memo()`    |
-| Market Now       | On-demand /market_now | Discord ephemeral  | `build_regime_snapshot()` |
-| EOD Scorecard    | ~16:10 ET post-close | Discord #daily-brief | `build_eod_scorecard()`   |
-| Signal Card      | Per new signal      | Discord #signals     | `build_signal_card()`     |
-
-All builders live in `src/notifications/report_generator.py` and return
-format-agnostic dicts that Discord, Telegram, and the web API can render.
+How the reporting system delivers structured market intelligence across global trading sessions.
 
 ---
 
-## v6 Report Template Structure
+## Report Schedule (24-Hour View)
 
 ```
-┌───────────────────────────────────────────────────────────────────────────────────┐
-│                     ☀️ MORNING DECISION MEMO — v6 Pro Desk                        │
-│                     [Date] — Pre-Market Edition                                   │
-├───────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                   │
-│  1. REGIME SCOREBOARD                                                             │
-│     - Regime label (RISK_ON / NEUTRAL / RISK_OFF)                                 │
-│     - Risk-On Score (0-100)                                                       │
-│     - Trend state · Vol state                                                     │
-│     - Risk budgets (max gross, net long, single name, sector)                     │
-│                                                                                   │
-│  2. STRATEGY PLAYBOOK                                                             │
-│     - Strategies ON (active today)                                                │
-│     - Strategies CONDITIONAL (with trigger conditions)                            │
-│     - Strategies OFF (not suitable for regime)                                    │
-│                                                                                   │
-│  3. DELTA DECK — What Changed                                                     │
-│     - SPX / NDX / IWM 1-day %                                                    │
-│     - VIX close + change                                                          │
-│     - Bullish change items vs Bearish change items                                │
-│                                                                                   │
-│  4. SCENARIO PLAN                                                                 │
-│     - Base case (probability + description)                                       │
-│     - Bull case (probability + description)                                       │
-│     - Bear case (probability + description)                                       │
-│     - Trigger events                                                              │
-│                                                                                   │
-│  5. TOP 5 TRADE IDEAS                                                             │
-│     - v6 signal cards with setup_grade, approval_status                           │
-│     - edge_type, why_now, evidence stack                                          │
-│     - scenario_plan per trade                                                     │
-│     - time_stop_days, event_risk, portfolio_fit                                   │
-│                                                                                   │
-│  6. NO-TRADE TRIGGERS / RISK FLAGS                                                │
-│     - VIX thresholds                                                              │
-│     - Divergence warnings                                                         │
-│     - Event risk calendar                                                         │
-│                                                                                   │
-│  7. MACRO SNAPSHOT                                                                │
-│     - VIX, TLT, Gold, BTC                                                        │
-│     - Futures, Asia recap                                                         │
-│                                                                                   │
-│  DISCLAIMER                                                                       │
-│                                                                                   │
-└───────────────────────────────────────────────────────────────────────────────────┘
+UTC    HKT    Report
+────── ────── ─────────────────────────────────────────────────────
+00:00  08:00  📰 Auto News · ₿ Crypto Pulse · 🌍 Global Update
+01:00  09:00  ☀️ ASIA MORNING BRIEF · 🌏 Asia Preview
+       ↓      📡 Market Pulse (15min) · 📰 News (30min)
+07:00  15:00  ☀️ EUROPE MORNING BRIEF
+08:00  16:00  📡 Pulse · 🔥 Movers · 🏭 Sectors · 🐋 Whales begin
+       ↓      ⚡ Momentum scans · 🚀 Breakout scans
+13:00  21:00  🤖 AI Signal Scan · 🎯 Opportunity Scanner
+13:30  21:30  ☀️ US PRE-MARKET BRIEF · 📊 Morning Brief (v6 Decision Memo)
+       ↓      All scans running at full frequency
+16:00  00:00  📰 News · ₿ Crypto · 🌍 Global Update
+20:10  04:10  🌙 EOD SCORECARD
+21:00  05:00  Sunday: 📅 WEEKLY RECAP
+22:00  06:00  Session tasks wind down
+
+ALWAYS ON: 🚨 Price Alerts (3min) · ⚠️ VIX Fear (5min) · 📰 News (30min) · 💚 Health (30min)
 ```
 
 ---
 
-## v6 Signal Card Schema
+## Report Types in Detail
 
-Each signal card includes these v6 fields beyond the legacy signal:
+### ☀️ Smart Morning Update
 
-| Field               | Type           | Description                                        |
-|---------------------|----------------|----------------------------------------------------|
-| `setup_grade`       | A / B / C / F  | Overall setup quality grade                        |
-| `edge_type`         | string         | E.g. `trend_continuation`, `mean_reversion`, `event` |
-| `approval_status`   | APPROVED / NEEDS_REVIEW / REJECTED | GPT gatekeeper verdict |
-| `approval_flags`    | list[str]      | Reasons for review/rejection                       |
-| `why_now`           | string         | 1-2 sentence narrative: why this trade today       |
-| `evidence`          | list[str]      | 3-8 evidence bullets (price, volume, sector, etc.) |
-| `scenario_plan`     | ScenarioPlan   | Base/bull/bear with probabilities                  |
-| `time_stop_days`    | int            | Auto-exit if thesis not working after N days       |
-| `event_risk`        | string         | Upcoming event that could invalidate thesis        |
-| `portfolio_fit`     | string         | `adds_diversification`, `correlated`, `concentrated` |
-| `expected_value`    | float          | Simplified EV = P(win) × reward - P(loss) × risk  |
+**Fires 3× daily** for global timezone coverage:
 
-### Signal Card Example (JSON)
+| Session | UTC | Local Time | Extra Markets |
+|---------|-----|------------|---------------|
+| 🌏 Asia | 01:00 | 09:00 HKT | Nikkei, Hang Seng, Shanghai |
+| 🌍 Europe | 07:00 | 08:00 CET | DAX, FTSE |
+| 🇺🇸 US | 13:30 | 09:30 ET | S&P Futures, Nasdaq Futures |
 
-```json
-{
-  "ticker": "NVDA",
-  "direction": "BUY",
-  "confidence": 0.78,
-  "strategy": "momentum",
-  "entry_price": 878.50,
-  "stop_loss": 842.00,
-  "take_profit": 920.00,
-  "setup_grade": "A",
-  "edge_type": "trend_continuation",
-  "approval_status": "APPROVED",
-  "approval_flags": [],
-  "why_now": "Breaking 3-week consolidation on 2.1x vol; GTC catalyst in 3 weeks",
-  "evidence": [
-    "Price > SMA20 > SMA50 — bullish alignment",
-    "RSI 62, rising — momentum confirmed",
-    "Volume 2.1x 20d avg — institutional participation",
-    "Sector (XLK) +1.24% — tech leadership",
-    "OBV accumulation — smart money bid"
-  ],
-  "scenario_plan": {
-    "base_case": {"probability": "55%", "description": "Grind to $920 (+4.7%)"},
-    "bull_case": {"probability": "30%", "description": "Squeeze to $965 (+9.8%)"},
-    "bear_case": {"probability": "15%", "description": "Fail at $880, retrace to $842"},
-    "triggers": ["GTC conference", "Earnings preview", "Export restrictions"]
-  },
-  "time_stop_days": 15,
-  "event_risk": "GTC conference in 3 weeks",
-  "portfolio_fit": "adds_diversification",
-  "expected_value": 2.45
-}
+**Each brief contains:**
+
+```
+☀️ Asia Morning Brief — Monday, March 24
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🟢 RISK ON • Risk: 72/100 █████████░ • AI: 🟢 NORMAL
+
+🇺🇸 US Indices
+🟢 SPY $582.40 (+0.85%) | 🟢 QQQ $498.20 (+1.12%)
+
+📊 Session Markets
+🟢 Nikkei: +0.45% | 🔴 Hang Seng: -0.20%
+
+🌍 Macro
+VIX: 14.8 🟢 | Gold: +0.15% | Bonds: -0.08% | BTC: $67,420 (+2.1%)
+
+📋 Today's Playbook
+`Momentum` · `Breakout`
+
+🛡️ Risk
+✅ All clear — normal sizing
 ```
 
 ---
 
-## RegimeScoreboard Schema
+### 📊 Morning Brief (v6 Decision Memo)
 
-The scoreboard drives all position sizing and strategy selection:
+**Fires once** at ~13:30 UTC (09:30 ET) on weekdays.
 
-```json
-{
-  "regime_label": "RISK_ON",
-  "risk_on_score": 72,
-  "trend_state": "UPTREND",
-  "vol_state": "NORMAL",
-  "max_gross_pct": 150,
-  "net_long_target_low": 60,
-  "net_long_target_high": 100,
-  "max_single_name_pct": 5,
-  "max_sector_pct": 30,
-  "strategies_on": ["Momentum", "Swing", "VCP"],
-  "strategies_conditional": [],
-  "strategies_off": [],
-  "no_trade_triggers": [],
-  "top_drivers": ["SPX +0.82%", "VIX 15.4"],
-  "scenarios": {
-    "base_case": {"probability": "55%", "description": "Range-bound near highs"},
-    "bull_case": {"probability": "30%", "description": "Break to new ATH on earnings"},
-    "bear_case": {"probability": "15%", "description": "Geopolitical shock, VIX spike"},
-    "triggers": ["Macro data", "Fed commentary", "Earnings"]
-  }
-}
-```
-
-### Regime → Risk Budget Mapping
-
-| Regime    | Max Gross | Net Long Range | Max Single | Max Sector |
-|-----------|-----------|----------------|------------|------------|
-| RISK_ON   | 150%      | 60-100%        | 5%         | 30%        |
-| NEUTRAL   | 100%      | 30-70%         | 4%         | 25%        |
-| RISK_OFF  | 60%       | 0-30%          | 2%         | 15%        |
-
-### Regime → Strategy Playbook Matrix
-
-| Regime   | Trend    | Vol     | ON                          | CONDITIONAL          | OFF                     |
-|----------|----------|---------|-----------------------------|--------------------|-------------------------|
-| RISK_ON  | UPTREND  | LOW_VOL | Momentum, Breakout, Trend   |                    | Mean-Reversion          |
-| RISK_ON  | UPTREND  | NORMAL  | Momentum, Swing, VCP        |                    |                         |
-| RISK_ON  | NEUTRAL  | LOW_VOL | Mean-Reversion, Swing       |                    | Momentum                |
-| NEUTRAL  | UPTREND  | NORMAL  | Momentum, VCP               | Swing (pullback>3d)| |
-| NEUTRAL  | NEUTRAL  | NORMAL  | Mean-Reversion              | Swing (A grade)    | Momentum                |
-| NEUTRAL  | DOWNTREND| NORMAL  | Mean-Reversion              |                    | Momentum, Breakout      |
-| RISK_OFF | DOWNTREND| HIGH_VOL|                             |                    | All aggressive           |
-| RISK_OFF | NEUTRAL  | HIGH_VOL| Mean-Reversion              |                    | Momentum, Breakout      |
+Full institutional-style morning memo with:
+- **Regime Scoreboard** — label, risk-on score, trend, volatility
+- **Risk Budgets** — max gross, net long, single name, sector limits
+- **Strategy Playbook** — ON / CONDITIONAL / OFF strategies
+- **Delta Deck** — what changed overnight (SPX, NDX, IWM, VIX)
+- **Scenario Plan** — base / bull / bear with probabilities
+- **Top 5 Trade Ideas** — v6 signal cards with full context
+- **Risk Flags** — VIX warnings, divergence alerts, event risk
 
 ---
 
-## DeltaSnapshot Schema
+### 🌙 EOD Scorecard
 
-Captures "what changed" vs yesterday:
+**Fires once** at ~20:10 UTC (16:10 ET) on weekdays.
 
-```json
-{
-  "snapshot_date": "2026-01-30",
-  "spx_1d_pct": 0.49,
-  "ndx_1d_pct": 0.75,
-  "iwm_1d_pct": -0.54,
-  "vix_close": 16.42,
-  "vix_1d_change": -0.8,
-  "put_call_ratio": 0.82,
-  "advance_decline_ratio": 1.49,
-  "pct_above_sma20": 68.2,
-  "pct_above_sma50": 71.4,
-  "hi_lo_ratio": 5.57,
-  "sector_leader": "XLK",
-  "sector_laggard": "XLE",
-  "new_highs": 156,
-  "new_lows": 28
-}
-```
+Closing summary with:
+- Regime at close (RISK_ON / NEUTRAL / RISK_OFF)
+- Index performance + bars
+- Sector heatmap (11 sectors sorted)
+- Top movers + laggards from watchlist
+- Market breadth (% green)
+- VIX close analysis
+- Overnight outlook
 
 ---
 
-## DataQualityReport Schema
+### 🌏 Asia Preview
 
-Pipeline health check:
+**Fires once** at ~01:00 UTC (09:00 HKT).
 
-```json
-{
-  "report_date": "2026-01-30",
-  "total_tickers_expected": 50,
-  "tickers_with_data": 48,
-  "coverage_pct": 96.0,
-  "stale_tickers": ["ABNB", "DDOG"],
-  "gap_tickers": [],
-  "schema_issues": [],
-  "freshness_median_minutes": 5.0,
-  "freshness_p95_minutes": 12.0,
-  "overall_grade": "A"
-}
-```
+Bridges US close into Asia open with:
+- Nikkei, Hang Seng, Shanghai performance
+- US closing levels as context
+- Overnight event preview
 
 ---
 
-## API Endpoints (v6)
+### 📅 Weekly Recap
 
-| Endpoint                         | Method | Description                              |
-|----------------------------------|--------|------------------------------------------|
-| `/api/v6/scoreboard`             | GET    | Live regime scoreboard + risk budgets    |
-| `/api/v6/delta`                  | GET    | Today's delta snapshot                   |
-| `/api/v6/regime-snapshot`        | GET    | Formatted regime report (embeds + MD)    |
-| `/api/v6/data-quality`           | GET    | Data pipeline health report              |
-| `/api/v6/signal-card/{ticker}`   | GET    | v6 signal card with evidence + scenarios |
+**Fires Sunday** ~21:00 UTC.
+
+Full week summary: all major indices + crypto + preview of next week's calendar.
 
 ---
 
-## Discord Commands (v6)
+## High-Frequency Auto-Reports
 
-| Command        | Description                                              |
-|----------------|----------------------------------------------------------|
-| `/market_now`  | Instant regime scoreboard + delta + playbook (v6)        |
-| `/morning`     | Triggers morning decision memo with scenario map         |
-| `/scan`        | Scan for trade setups with v6 scoring                    |
-| `/ai <ticker>` | Full institutional analysis with GPT validation          |
+These run continuously without user action:
 
----
-
-## Report Generation Code (v6)
-
-```python
-from src.notifications.report_generator import (
-    build_signal_card,
-    build_regime_snapshot,
-    build_morning_memo,
-    build_eod_scorecard,
-    embeds_to_markdown,
-)
-from src.core.models import RegimeScoreboard, DeltaSnapshot, ScenarioPlan, Signal
-
-# Build regime scoreboard from live data
-scoreboard = RegimeScoreboard(
-    regime_label="RISK_ON", risk_on_score=72,
-    trend_state="UPTREND", vol_state="NORMAL",
-    max_gross_pct=150, net_long_target_low=60, net_long_target_high=100,
-    max_single_name_pct=5, max_sector_pct=30,
-    strategies_on=["Momentum", "Swing", "VCP"],
-    strategies_conditional=[], strategies_off=[],
-    no_trade_triggers=[], top_drivers=["SPX +0.82%"],
-    scenarios=ScenarioPlan(
-        base_case={"probability": "55%", "description": "Range-bound"},
-        bull_case={"probability": "30%", "description": "Break to ATH"},
-        bear_case={"probability": "15%", "description": "Vol spike"},
-        triggers=["Macro", "Earnings"],
-    ),
-)
-
-# Generate morning memo (returns list of embed dicts)
-memo_embeds = build_morning_memo(
-    scoreboard=scoreboard, delta=delta,
-    bullish_changes=bullish, bearish_changes=bearish,
-    top_signals=top_5_signals, market_prices=prices,
-)
-
-# Convert to Markdown for export
-markdown = embeds_to_markdown(memo_embeds)
-```
+| Report | Frequency | Channel | Content |
+|--------|-----------|---------|---------|
+| **⏱️ Market Pulse** | 15 min | `#daily-brief` | SPY/QQQ/DIA + VIX fear gauge |
+| **🔥 Big Movers** | 30 min | `#signals` | Stocks moving ≥ 2% with volume |
+| **🏭 Sector Heatmap** | 60 min | `#daily-brief` | All 11 S&P sectors |
+| **🌍 Macro Snapshot** | 60 min | `#daily-brief` | Gold, Oil, Bonds, Dollar, BTC |
+| **₿ Crypto Pulse** | 2 hr | `#daily-brief` | Top 6 crypto + sentiment |
+| **🌍 Global Update** | 4 hr | `#daily-brief` | Cross-session overview |
+| **📰 News Feed** | 30 min | `#daily-brief` | Top headlines from Yahoo Finance |
 
 ---
 
-*Report specification v6.0 — TradingAI Pro Desk*
-*Data sources: yfinance, Polygon.io, NewsAPI, OpenAI/Azure*
-*Builder: `src/notifications/report_generator.py`*
+## Alert-Driven Reports (fire only when triggered)
+
+| Alert | Trigger | Channel |
+|-------|---------|---------|
+| **🚨 Price Spike/Crash** | Stock ≥ 3%, Index ≥ 1.2%, Crypto ≥ 5% | `#momentum-alerts` |
+| **⚠️ VIX Fear Alert** | VIX +10% or above 25/30 thresholds | `#daily-brief` + `#momentum-alerts` |
+| **🐋 Whale Alert** | Volume ≥ 3× 20-day average | `#signals` |
+| **🎯 Opportunity Flash** | Signal score ≥ 75 | `#momentum-alerts` |
+| **🔔 User Price Alert** | User target crossed | DM + `#signals` |
+
+---
+
+## Channel Destination Map
+
+| Channel | What Goes There |
+|---------|----------------|
+| `#daily-brief` | Morning briefs, EOD, macro, sectors, news, VIX, global |
+| `#signals` | Whale alerts, user alerts, movers |
+| `#momentum-alerts` | Price spikes, momentum scans, opportunities |
+| `#swing-trades` | Swing scan results |
+| `#breakout-setups` | Breakout scan results |
+| `#ai-signals` | Combined AI-ranked signals |
+| `#admin-log` | Health checks, audit trail |
+
+---
+
+## Report Design Principles
+
+1. **Actionable** — every report answers "what should I do?"
+2. **Regime-aware** — strategy recommendations adapt to market conditions
+3. **Layered** — quick headline + detailed fields for those who want depth
+4. **Timely** — fires at the right time for the right timezone
+5. **Non-spammy** — cooldowns, deduplication, and thresholds prevent noise
+
+---
+
+## Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `src/discord_bot.py` | All 21 background tasks that generate reports |
+| `src/notifications/report_generator.py` | Format-agnostic report builders |
+| `src/engines/delta_scoreboard.py` | Regime change tracking |
+| `src/engines/data_quality.py` | Feed health monitoring |
+| `src/core/models.py` | `RegimeScoreboard`, `DeltaSnapshot`, `ScenarioPlan` |
+
+---
+
+_Last updated: March 2026 · v6 Pro Desk Edition_
