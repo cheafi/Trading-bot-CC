@@ -1,362 +1,231 @@
-# 🛠️ Setup Guide — TradingAI Bot v6
+# Setup Guide
 
-Complete installation, configuration, and deployment walkthrough.
-
----
-
-## Table of Contents
-
-1. [Prerequisites](#1-prerequisites)
-2. [Clone & Install](#2-clone--install)
-3. [Environment Variables](#3-environment-variables)
-4. [Database Setup (Optional)](#4-database-setup-optional)
-5. [Start the Discord Bot](#5-start-the-discord-bot)
-6. [Start the Web Dashboard (Optional)](#6-start-the-web-dashboard-optional)
-7. [Connect a Broker](#7-connect-a-broker)
-8. [Enable AI / GPT Features](#8-enable-ai--gpt-features)
-9. [Discord Server Auto-Setup](#9-discord-server-auto-setup)
-10. [Verify the Install](#10-verify-the-install)
-11. [Production Deployment](#11-production-deployment)
-12. [Troubleshooting](#12-troubleshooting)
+> Full installation and deployment guide for TradingAI Bot v6 Pro Desk.
 
 ---
 
-## 1. Prerequisites
+## Prerequisites
 
-| Tool | Version | Required? | Purpose |
-|------|---------|:---------:|---------|
-| **Python** | 3.11+ | ✅ | Core runtime (tested 3.13.5) |
-| **Discord Bot Token** | — | ✅ | Primary interface |
-| **TA-Lib** | latest | 📌 Recommended | Technical indicators |
-| PostgreSQL | 15+ | Optional | Historical persistence |
-| Redis | 7+ | Optional | Cache / queue |
-| Docker | 24+ | Optional | Container deployment |
-
-### macOS
-
-```bash
-brew install python@3.13 ta-lib
-# Optional:
-brew install postgresql redis
-```
-
-### Ubuntu / Debian
-
-```bash
-sudo apt update && sudo apt install -y \
-  python3 python3-venv python3-pip libta-lib-dev \
-  postgresql redis-server  # optional
-```
-
-### Get a Discord Bot Token
-
-1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
-2. Create Application → Bot → **Copy Token**
-3. Under **OAuth2 → URL Generator**: select `bot` + `applications.commands`
-4. Select permissions: Send Messages, Embed Links, Manage Channels, Manage Roles
-5. Copy the invite URL → open it → add bot to your server
+| Requirement | Version | Notes |
+|------------|---------|-------|
+| Python | 3.11 + | Tested on 3.13.5 |
+| Discord Bot Token | — | Required |
+| OpenAI API Key | — | Optional — enables GPT narratives |
+| PostgreSQL | 14 + | Optional — enables persistence |
+| Git | any | For cloning |
 
 ---
 
-## 2. Clone & Install
+## Installation
+
+### 1. Clone & Create Environment
 
 ```bash
-git clone https://github.com/cheafi/Trading-bot-CC.git
+git clone https://github.com/cheafi/Trading-bot-CC
 cd TradingAI_Bot-main
-
 python -m venv venv
-source venv/bin/activate     # macOS / Linux
-# venv\Scripts\activate      # Windows
-
-# Install all dependencies at once
-pip install -r requirements/base.txt \
-            -r requirements/engine.txt \
-            -r requirements/notifications.txt \
-            -r requirements/api.txt \
-            -r requirements/backtest.txt \
-            -r requirements/ingestor.txt
+source venv/bin/activate          # macOS / Linux
+# venv\Scripts\activate           # Windows
 ```
 
-### Key packages installed
-
-| Package | Purpose |
-|---------|---------|
-| `discord.py` | Discord bot framework |
-| `yfinance` | Free market data (no API key needed) |
-| `pandas` / `numpy` | Data manipulation |
-| `ta-lib` | Technical indicators |
-| `openai` | GPT analysis (optional) |
-| `alpaca-py` | Broker integration (optional) |
-| `fastapi` / `uvicorn` | Web dashboard (optional) |
-| `pydantic` | Data models |
-
----
-
-## 3. Environment Variables
-
-Create `.env` in the project root:
+### 2. Install Dependencies
 
 ```bash
-cp .env.example .env    # if example exists, or create manually
+# Minimum (bot only)
+pip install -r requirements/base.txt
+
+# Full (notifications + AI)
+pip install -r requirements/notifications.txt
+pip install -r requirements/engine.txt
 ```
 
-### 🔴 Required
+### 3. Environment Variables
 
-```env
+Create a `.env` file in the project root:
+
+```dotenv
+# ── REQUIRED ─────────────────────────────────────────────────
 DISCORD_BOT_TOKEN=your_discord_bot_token_here
-```
 
-### 🟡 Optional — AI Features
+# ── OPTIONAL: GPT NARRATIVES ──────────────────────────────────
+OPENAI_API_KEY=sk-...
 
-```env
-# OpenAI
-OPENAI_API_KEY=sk-your-key-here
+# ── OPTIONAL: DATABASE ────────────────────────────────────────
+DATABASE_URL=postgresql://user:pass@localhost:5432/tradingbot
 
-# Or Azure OpenAI
-AZURE_OPENAI_KEY=your-azure-key
-AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
-AZURE_OPENAI_DEPLOYMENT=gpt-4
-```
-
-### 🟡 Optional — Broker
-
-```env
-# Alpaca (recommended — free paper trading)
-ALPACA_API_KEY=your_key
-ALPACA_SECRET_KEY=your_secret
+# ── OPTIONAL: BROKER CONNECTIONS ─────────────────────────────
+ALPACA_API_KEY=
+ALPACA_SECRET_KEY=
 ALPACA_BASE_URL=https://paper-api.alpaca.markets
-
-# Interactive Brokers
 IB_HOST=127.0.0.1
 IB_PORT=7497
 IB_CLIENT_ID=1
-
-# Futu (HK / CN markets)
 FUTU_HOST=127.0.0.1
 FUTU_PORT=11111
+
+# ── OPTIONAL: TELEGRAM ────────────────────────────────────────
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
 ```
 
-### 🟡 Optional — Database
+### 4. Create Discord Bot
 
-```env
-POSTGRES_USER=tradingai
-POSTGRES_PASSWORD=your_secure_password
-POSTGRES_DB=tradingai
-DATABASE_URL=postgresql://tradingai:your_secure_password@localhost:5432/tradingai
-REDIS_URL=redis://localhost:6379/0
-```
+1. Go to [discord.com/developers/applications](https://discord.com/developers/applications)
+2. **New Application** → name it **TradingAI Bot**
+3. **Bot** tab → **Add Bot** → copy Token → paste into `.env`
+4. Under **Privileged Gateway Intents** enable:
+   - ✅ Message Content Intent
+   - ✅ Server Members Intent
+   - ✅ Presence Intent
+5. **OAuth2** → **URL Generator**:
+   - Scopes: `bot` + `applications.commands`
+   - Bot permissions: `Send Messages`, `Use Slash Commands`, `Embed Links`, `Attach Files`, `Read Message History`, `Manage Messages`
+6. Copy the generated URL → open in browser → invite to your server
 
 ---
 
-## 4. Database Setup (Optional)
+## Running the Bot
 
-The Discord bot runs fully without PostgreSQL — it uses yfinance for live data and in-memory state. Database is for historical persistence and expansion.
-
-```bash
-createdb tradingai
-psql tradingai < init/postgres/01_init.sql
-psql tradingai < init/postgres/02_pro_desk_upgrade.sql
-```
-
-Or with Docker:
-```bash
-docker-compose up -d postgres redis
-```
-
----
-
-## 5. Start the Discord Bot
+### Option A — Local Development
 
 ```bash
 source venv/bin/activate
 python run_discord_bot.py
 ```
 
-### Expected output
-
+Expected startup output:
 ```
-✅ TradingAI Bot connected as TradingAI Bot#XXXX
-   Servers: Your Server Name
-   Synced 52 slash commands
-   🔄 Started 18 auto-pilot tasks
-   🚨 Real-time alerts: prices(3min) + news(30min) + VIX(5min)
-   ☀️ Smart morning: Asia(01UTC) + Europe(07UTC) + US(13:30UTC)
-   🎯 Opportunity scanner: every 30min, score≥75 only
+✅ Signal Engine loaded
+✅ Strategy Optimizer ready
+✅ Logged in as TradingAI Bot#8419
+📋 Synced 54 commands to Trading CC
+🚀 v6 Pro Desk online
 ```
 
-### Run in background (production)
+### Option B — Background Process (macOS/Linux)
 
 ```bash
-nohup ./venv/bin/python run_discord_bot.py > /tmp/discord_bot.log 2>&1 &
-
-# Monitor
-tail -f /tmp/discord_bot.log
-
-# Stop
-pkill -f run_discord_bot.py
+nohup python run_discord_bot.py > logs/bot.log 2>&1 &
+echo $! > bot.pid
 ```
 
----
-
-## 6. Start the Web Dashboard (Optional)
-
+Stop it:
 ```bash
-python run_dashboard.py
-```
-
-| URL | What |
-|-----|------|
-| `http://localhost:8000` | Dashboard UI |
-| `http://localhost:8000/docs` | Interactive API docs (Swagger) |
-| `http://localhost:8000/redoc` | Alternative API docs |
-
----
-
-## 7. Connect a Broker
-
-### Alpaca (Recommended)
-
-1. Sign up at [alpaca.markets](https://alpaca.markets) (free)
-2. Generate Paper Trading API keys
-3. Add `ALPACA_API_KEY`, `ALPACA_SECRET_KEY`, `ALPACA_BASE_URL` to `.env`
-4. Verify: `/portfolio` in Discord → shows live positions + P&L
-
-### Paper Broker (Built-in)
-
-If no broker is configured, `/buy` and `/sell` use the built-in paper broker.
-
-### Interactive Brokers
-
-1. Install TWS or IB Gateway
-2. Enable API in TWS settings
-3. Set `IB_HOST`, `IB_PORT`, `IB_CLIENT_ID` in `.env`
-
----
-
-## 8. Enable AI / GPT Features
-
-GPT enhances analysis but is **optional** — the bot works fully without it.
-
-**With GPT:** `/ai`, `/advise`, `/why` give GPT-powered narrative analysis, signal validation, and reasoning.
-
-**Without GPT:** All technical analysis, scanning, scoring, alerts, and dashboards work normally.
-
----
-
-## 9. Discord Server Auto-Setup
-
-When the bot joins a server, it auto-creates:
-
-**📊 TRADING category:**
-`#daily-brief` · `#signals` · `#swing-trades` · `#breakout-setups`
-
-**📈 MARKETS category:**
-`#momentum-alerts` · `#ai-signals` · `#bot-commands` · `#trading-chat`
-
-**🔧 ADMIN category:**
-`#admin-log`
-
-**Roles:** 🟢 Trader · 🔴 Admin · 🟡 VIP
-
-Re-run anytime with `/setup`.
-
----
-
-## 10. Verify the Install
-
-| Test Command | Expected Result |
-|--------------|-----------------|
-| `/status` | ✅ All systems green |
-| `/price AAPL` | Live price + chart info |
-| `/market` | SPY / QQQ / DIA / VIX |
-| `/dashboard` | 3-embed mega dashboard |
-| `/watchlist add TSLA` | Ticker added confirmation |
-| `/alert AAPL above 200` | Alert registered |
-| `/my_alerts` | Shows your active alerts |
-
-Check `#admin-log` for the health check embed (posts every 30 min).
-
----
-
-## 11. Production Deployment
-
-### Option A — Background Process (simplest)
-
-```bash
-nohup ./venv/bin/python run_discord_bot.py > /tmp/discord_bot.log 2>&1 &
-
-# Auto-restart on crash (crontab)
-crontab -e
-*/5 * * * * pgrep -f run_discord_bot.py || cd /path/to/project && nohup ./venv/bin/python run_discord_bot.py >> /tmp/discord_bot.log 2>&1 &
-```
-
-### Option B — systemd (Linux server)
-
-```ini
-# /etc/systemd/system/tradingai.service
-[Unit]
-Description=TradingAI Discord Bot
-After=network.target
-
-[Service]
-Type=simple
-User=ubuntu
-WorkingDirectory=/home/ubuntu/TradingAI_Bot-main
-ExecStart=/home/ubuntu/TradingAI_Bot-main/venv/bin/python run_discord_bot.py
-Restart=always
-RestartSec=10
-Environment=PYTHONUNBUFFERED=1
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl enable tradingai && sudo systemctl start tradingai
-sudo journalctl -u tradingai -f
+kill $(cat bot.pid)
 ```
 
 ### Option C — Docker
 
 ```bash
-docker-compose up -d
+docker compose -f docker-compose.yml up -d telegram   # adapt for discord
+```
+
+Or build standalone:
+```bash
+docker build -f docker/Dockerfile.telegram -t tradingbot .
+docker run -d --env-file .env tradingbot
 ```
 
 ---
 
-## 12. Troubleshooting
+## Channel Setup (Recommended)
 
-| Problem | Solution |
-|---------|----------|
-| Bot won't start | `python -c "import ast; ast.parse(open('src/discord_bot.py').read()); print('OK')"` |
-| Token error | Verify `DISCORD_BOT_TOKEN` is set in `.env` |
-| 0 commands synced | Re-invite bot with `applications.commands` scope, wait 1 min |
-| No auto-posts | Check channel names exist; run `/setup` |
-| No market data | `python -c "import yfinance as yf; print(yf.Ticker('AAPL').fast_info)"` |
-| Import errors | `pip install -r requirements/base.txt -r requirements/engine.txt -r requirements/notifications.txt` |
+Create these text channels in your Discord server for best experience:
 
-### ⚠️ Important: Keep Both Bot Files in Sync
+| Channel | Purpose |
+|---------|---------|
+| `#general` | Main bot output, market updates |
+| `#signals` | Trading signals from scanners |
+| `#ai-signals` | ML strategy learning reports |
+| `#alerts` | Price alerts + spike notifications |
+| `#analysis` | Detailed ticker analysis |
+| `#news` | Auto news feed (30 min) + ticker news |
+| `#daily-reports` | Morning brief, EOD scorecard, weekly recap |
+| `#crypto` | Crypto-specific signals and updates |
+
+---
+
+## Slash Command Sync
+
+Commands sync automatically on first start. If they don't appear:
+
+```
+/sync          # Not available — sync is automatic at startup
+```
+
+Or restart the bot. Discord can take up to 1 hour to propagate new commands globally, but guild-synced commands appear instantly.
+
+---
+
+## First Run Checklist
+
+- [ ] `.env` file created with `DISCORD_BOT_TOKEN`
+- [ ] Bot invited to server with correct permissions
+- [ ] `python run_discord_bot.py` runs without errors
+- [ ] All 54 commands visible in Discord after typing `/`
+- [ ] Type `/status` → all 23 tasks showing as Active
+- [ ] Type `/market_now` → live prices appear
+
+---
+
+## Optional: Database
+
+Without a database the bot operates fully in memory (signals cached in Python dicts). To enable persistence:
 
 ```bash
-cp src/discord_bot.py src/notifications/discord_bot.py
+# Start Postgres
+docker run -d --name tradingdb \
+  -e POSTGRES_DB=tradingbot \
+  -e POSTGRES_USER=trader \
+  -e POSTGRES_PASSWORD=secret \
+  -p 5432:5432 postgres:16
+
+# Set DATABASE_URL in .env
+DATABASE_URL=postgresql://trader:secret@localhost:5432/tradingbot
+
+# Run schema migrations (if applicable)
+psql $DATABASE_URL < init/postgres/01_init.sql
 ```
 
-The canonical source is `src/discord_bot.py`. The launcher imports from `src/notifications/discord_bot.py`. Always sync after editing.
+See [docs/SCHEMA.md](SCHEMA.md) for the full model catalog.
 
 ---
 
-## Quick Reference Card
+## Updating the Bot
 
-| Action | Command |
-|--------|---------|
-| Start bot | `python run_discord_bot.py` |
-| Background bot | `nohup ./venv/bin/python run_discord_bot.py > /tmp/discord_bot.log 2>&1 &` |
-| Stop bot | `pkill -f run_discord_bot.py` |
-| View logs | `tail -f /tmp/discord_bot.log` |
-| Start dashboard | `python run_dashboard.py` |
-| Sync bot files | `cp src/discord_bot.py src/notifications/discord_bot.py` |
-| Syntax check | `python -c "import ast; ast.parse(open('src/discord_bot.py').read()); print('OK')"` |
+```bash
+git pull origin main
+pip install -r requirements/base.txt   # picks up new deps
+# restart the process
+```
 
 ---
 
-_Last updated: March 2026 · v6 Pro Desk Edition_
+## Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| `discord.errors.LoginFailure` | Check `DISCORD_BOT_TOKEN` in `.env` |
+| Commands not showing in Discord | Wait up to 1 hour, or kick/re-invite bot |
+| `ModuleNotFoundError` | `pip install -r requirements/base.txt` |
+| `No data for TICKER` | yfinance throttled — wait 60s and retry |
+| Price alerts not firing | Check `/status` — `realtime_price_alerts` must be Active |
+| GPT responses missing | Set `OPENAI_API_KEY` in `.env` |
+| Strategy Optimizer slow | Normal on first `/backtest` — caches results for 6h |
+
+---
+
+## Environment Files Reference
+
+| File | Contents |
+|------|---------|
+| `requirements/base.txt` | discord.py, yfinance, scikit-learn, pandas, numpy |
+| `requirements/notifications.txt` | openai, aiohttp extras |
+| `requirements/engine.txt` | TA-lib, additional ML libs |
+| `requirements/backtest.txt` | Backtesting utilities |
+| `.env` | All secrets (never commit) |
+| `run_discord_bot.py` | Entry-point launcher |
+
+---
+
+Back to [README.md](../README.md)

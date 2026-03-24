@@ -1,240 +1,308 @@
-# 🗄️ Data Model & Schema — TradingAI Bot v6
+# Schema Reference
 
-Data structures, runtime state, Pydantic models, and optional PostgreSQL persistence.
-
----
-
-## Runtime State (In-Memory)
-
-The Discord bot maintains these live data structures:
-
-| Store | Type | Purpose | Persistent? |
-|-------|------|---------|:-----------:|
-| `_user_watchlists` | `Dict[int, List[str]]` | Per-user watchlist (up to 20) | ❌ |
-| `_user_alerts` | `Dict[int, List[dict]]` | Per-user price alerts | ❌ |
-| `_last_prices` | `Dict[str, float]` | Last known price per ticker | ❌ |
-| `_spike_cooldown` | `Dict[str, float]` | Alert cooldown timestamps | ❌ |
-| `_opp_cooldown` | `Dict[str, float]` | Opportunity alert cooldowns | ❌ |
-| `_news_seen` | `set` | Dedupe URLs for news feed | ❌ |
-| `_morning_posted` | `set` | Once-per-day morning brief | ❌ |
-| `_eod_posted` | `set` | Once-per-day EOD report | ❌ |
-| `_smart_morning_posted` | `Dict[str, set]` | Per-session morning flags | ❌ |
-| `_vix_last_alert` | `float` | VIX alert cooldown | ❌ |
-
-> ⚠️ All in-memory state resets on bot restart. See [Persistence Recommendations](#persistence-recommendations) below.
+> Pydantic models, runtime state, and data structures used in TradingAI Bot v6.
 
 ---
 
-## Pydantic Models (`src/core/models.py`)
+## Core Models (`src/core/models.py` — 766 lines)
 
-767 lines defining the shared type system across all layers.
+### SignalCard
 
-### Enums
+The primary output of every scanner and strategy.
 
-| Enum | Values | Used For |
-|------|--------|----------|
-| `Direction` | LONG, SHORT, CLOSE, NEUTRAL | Signal direction |
-| `Horizon` | INTRADAY, SWING_1_5D, SWING_5_15D, POSITION_15_60D | Hold window |
-| `StopType` | HARD, CLOSE_BELOW, TRAILING_ATR | Stop loss behavior |
-| `SignalStatus` | pending, active, closed, expired, cancelled | Signal lifecycle |
-| `VolatilityRegime` | CRISIS, HIGH_VOL, NORMAL, LOW_VOL | VIX-based regime |
-| `TrendRegime` | STRONG_UPTREND → STRONG_DOWNTREND | Trend state |
-| `RiskRegime` | RISK_ON, NEUTRAL, RISK_OFF | Overall risk stance |
-| `SentimentLabel` | very_bearish → very_bullish | News/social sentiment |
+```python
+class SignalCard(BaseModel):
+    ticker: str                     # e.g. "NVDA"
+    direction: str                  # "LONG" | "SHORT" | "WATCH"
+    strategy: str                   # "SWING" | "BREAKOUT" | "MOMENTUM" | "MEAN_REVERSION"
+    price: float                    # entry price
+    target: float                   # price target
+    stop: float                     # stop-loss price
+    score: int                      # 0–100 signal quality score
+    rr_ratio: float                 # risk/reward ratio
+    rsi: float                      # RSI at signal time
+    rel_volume: float               # relative volume (1.0 = average)
+    hold_period: str                # e.g. "1–4 weeks"
+    conditions: list[str]           # bullet-point reasons for the signal
+    buy_thesis: str                 # WHY BUY narrative (new v6)
+    stop_reason: str                # WHY THIS STOP logic (new v6)
+    ml_regime: str                  # detected regime from optimizer
+    ml_score: int                   # backtest score (0–100)
+    ml_multiplier: float            # self-correction multiplier (0.6–1.4)
+    news_headline: str | None       # most recent news headline
+    timestamp: datetime             # signal generation time
+```
 
-### Market Models
+### TradeSetup
 
-| Model | Key Fields | Purpose |
-|-------|-----------|---------|
-| `OHLCV` | ts, ticker, open, high, low, close, volume, vwap | Price bars |
-| `Quote` | ticker, price, change, change_pct, volume, bid, ask | Real-time quotes |
-| `MarketSnapshot` | spx, ndx, djia, iwm, vix, futures, put_call | Market overview |
+Extended version of SignalCard used by `/setup` and `/advise`.
 
-### Feature Models
+```python
+class TradeSetup(BaseModel):
+    signal: SignalCard
+    support_levels: list[float]
+    resistance_levels: list[float]
+    pivot: float
+    atr: float
+    stop_atr_multiple: float        # stop distance / ATR
+    liquidity_ok: bool              # avg daily volume > $10M
+    avg_daily_volume_usd: float
+    macd_hist: float
+    bb_width: float                 # Bollinger Band width %
+    adx: float
+    analyst_target: float | None
+    analyst_rating: str | None      # e.g. "Buy" | "Hold" | "Sell"
+```
 
-| Model | Key Fields | Purpose |
-|-------|-----------|---------|
-| `TechnicalFeatures` | returns, volatility, SMAs, RSI, MACD, BBands, ADX, volume | Per-ticker TA |
-| `MarketBreadth` | AD ratio, new highs/lows, % above SMAs, McClellan | Market health |
-| `MarketRegime` | volatility, trend, risk, active_strategies | Regime classification |
+### BrokerPosition
 
-### Signal Models
+Paper or live position.
 
-| Model | Key Fields | Purpose |
-|-------|-----------|---------|
-| `Signal` | ticker, direction, horizon, confidence, entry, stop, targets | Core signal |
-| `Target` | price, pct_position | Take-profit level |
-| `Invalidation` | stop_price, stop_type, condition | Stop loss config |
+```python
+class BrokerPosition(BaseModel):
+    ticker: str
+    shares: float
+    entry_price: float
+    current_price: float
+    pnl_dollars: float
+    pnl_pct: float
+    stop_price: float
+    target_price: float
+    strategy: str
+    opened_at: datetime
+```
 
-### v6 Pro Desk Models
+### WatchlistItem
 
-| Model | Key Fields | Purpose |
-|-------|-----------|---------|
-| `RegimeScoreboard` | regime_label, risk_on_score, trend, vol, budgets, playbook | Morning memo backbone |
-| `ScenarioPlan` | base_case, bull_case, bear_case, triggers | Scenario planning |
-| `DeltaSnapshot` | spx/ndx/iwm 1d%, vix_close, vix_change | What changed |
-| `DataQualityReport` | status, stale_feeds, gaps | Pipeline health |
-| `BacktestDiagnostic` | sharpe, win_rate, max_dd, profit_factor | Backtest results |
-| `ChangeItem` | description, direction, magnitude | Delta deck item |
+User personal watchlist entry.
+
+```python
+class WatchlistItem(BaseModel):
+    user_id: int                    # Discord user ID
+    ticker: str
+    added_at: datetime
+    note: str | None
+```
+
+### PriceAlert
+
+User-set or auto-generated price alert.
+
+```python
+class PriceAlert(BaseModel):
+    alert_id: str                   # UUID
+    user_id: int                    # Discord user ID
+    ticker: str
+    condition: str                  # "above" | "below"
+    price: float
+    created_at: datetime
+    fired: bool                     # True once triggered
+```
 
 ---
 
-## Signal Schema (JSON)
+## Backtest Models (`src/engines/strategy_optimizer.py`)
 
-```json
+### StrategyResult
+
+Output of a single strategy backtest.
+
+```python
+class StrategyResult(BaseModel):
+    strategy_type: str              # "SWING" | "BREAKOUT" | etc.
+    ticker: str
+    period: str                     # "6mo" | "1y" | "2y"
+    regime: str                     # detected regime
+    regime_confidence: float        # 0.0–1.0
+
+    # Core stats
+    total_trades: int
+    win_rate: float                 # 0.0–1.0
+    avg_return: float               # percentage
+    max_drawdown: float             # percentage (negative)
+    profit_factor: float            # gross wins / gross losses
+
+    # Walk-forward
+    train_win_rate: float
+    oos_win_rate: float
+    oos_degradation: float          # train_win_rate - oos_win_rate
+
+    # Parameters
+    best_params: dict               # {"rsi_period": 14, "sma_period": 50, ...}
+    param_stability: float          # 0–100
+
+    # Cross-check
+    cross_check_score: float        # 0–100
+
+    # Monte Carlo
+    mc_mean_return: float
+    mc_5th_pct: float
+    mc_95th_pct: float
+
+    # Self-correction
+    correction_multiplier: float    # 0.6–1.4
+    raw_score: float                # pre-correction
+    final_score: float              # post-correction (0–100)
+
+    computed_at: datetime
+```
+
+### BacktestReport
+
+Full `/backtest` output — 4 strategies ranked.
+
+```python
+class BacktestReport(BaseModel):
+    ticker: str
+    period: str
+    regime: str
+    regime_confidence: float
+    strategies: list[StrategyResult]   # sorted by final_score desc
+    best_strategy: str
+    recommendation: str
+    computed_at: datetime
+```
+
+---
+
+## Runtime State
+
+The following are live in-memory dictionaries (not persisted unless `DATABASE_URL` is set):
+
+```python
+# Active user price alerts
+_alerts: dict[str, PriceAlert]          # keyed by alert_id
+
+# Recent signals (last 100 per strategy)
+_signal_cache: dict[str, list[SignalCard]]   # keyed by strategy type
+
+# Paper trading positions
+_paper_positions: dict[str, BrokerPosition] # keyed by ticker
+
+# User watchlists
+_user_watchlists: dict[int, list[WatchlistItem]]  # keyed by Discord user_id
+
+# Strategy optimizer cache (expires after 6h)
+_optimizer_cache: dict[str, BacktestReport]  # keyed by "ticker:period"
+
+# Strategy accuracy tracking (for self-correction)
+_strategy_accuracy: dict[str, dict]  # keyed by strategy_type
+```
+
+---
+
+## Indicator Output Schema
+
+`indicators.py` functions return typed dicts. Example:
+
+```python
+# indicators.calculate_all(ticker, period="1y") returns:
 {
-  "ticker": "NVDA",
-  "direction": "LONG",
-  "horizon": "SWING_5_15D",
-  "confidence": 82,
-  "entry_logic": "Breakout above $142 with volume confirmation",
-  "invalidation": {
-    "stop_price": 135.00,
-    "stop_type": "HARD",
-    "condition": "Close below 50-SMA"
-  },
-  "targets": [
-    {"price": 150.0, "pct_position": 50},
-    {"price": 160.0, "pct_position": 30},
-    {"price": 175.0, "pct_position": 20}
-  ],
-  "catalyst": "AI chip demand cycle + data center capex",
-  "key_risks": ["Earnings in 3 weeks", "Sector rotation risk"],
-  "rationale": "Strong momentum with volume support in risk-on regime"
+    "price": float,
+    "sma20": float,
+    "sma50": float,
+    "sma200": float,
+    "ema9": float,
+    "ema21": float,
+    "vwap": float,
+    "rsi14": float,
+    "macd": float,
+    "macd_signal": float,
+    "macd_hist": float,
+    "bb_upper": float,
+    "bb_mid": float,
+    "bb_lower": float,
+    "bb_width": float,       # (upper - lower) / mid * 100
+    "atr14": float,
+    "adx14": float,
+    "volume": float,
+    "avg_volume_20d": float,
+    "rel_volume": float,     # volume / avg_volume_20d
+    "obv_trend": str,        # "rising" | "falling" | "flat"
+    "regime": str,           # 9-state classification
+    "trend_direction": str,  # "uptrend" | "downtrend" | "sideways"
 }
 ```
 
 ---
 
-## Regime Scoreboard Schema
+## Database Schema (Optional)
 
-```json
-{
-  "regime_label": "RISK_ON",
-  "risk_on_score": 72.5,
-  "trend_state": "UPTREND",
-  "vol_state": "NORMAL",
-  "max_gross_pct": 150,
-  "net_long_target_low": 60,
-  "net_long_target_high": 100,
-  "max_single_name_pct": 5,
-  "max_sector_pct": 30,
-  "strategies_on": ["Momentum", "Breakout", "Trend-Follow"],
-  "strategies_conditional": [],
-  "strategies_off": ["Mean-Reversion"],
-  "no_trade_triggers": [],
-  "scenarios": {
-    "base_case": {"probability": "55%", "description": "Consolidation near highs"},
-    "bull_case": {"probability": "30%", "description": "Breakout above resistance"},
-    "bear_case": {"probability": "15%", "description": "VIX spike on macro data"}
-  }
-}
-```
+Only used when `DATABASE_URL` is set. Schema defined in `init/postgres/01_init.sql`.
 
----
-
-## Optional PostgreSQL Schema
-
-Bootstrap scripts: `init/postgres/01_init.sql` and `02_pro_desk_upgrade.sql`
-
-### Recommended Tables
-
-#### Signal History
-
+### signals table
 ```sql
 CREATE TABLE signals (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    ticker          VARCHAR(20) NOT NULL,
-    direction       VARCHAR(10) NOT NULL,
-    horizon         VARCHAR(20) NOT NULL,
-    confidence      NUMERIC(6,2),
-    entry_price     NUMERIC(18,6),
-    stop_price      NUMERIC(18,6),
-    target_price    NUMERIC(18,6),
-    entry_logic     TEXT,
-    rationale       TEXT,
-    generated_at    TIMESTAMPTZ NOT NULL,
-    status          VARCHAR(20) DEFAULT 'pending',
-    closed_at       TIMESTAMPTZ,
-    pnl_pct         NUMERIC(8,4),
-    raw_payload     JSONB,
-    created_at      TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX idx_signals_ticker ON signals (ticker, generated_at DESC);
-CREATE INDEX idx_signals_status ON signals (status);
-```
-
-#### Regime Snapshots
-
-```sql
-CREATE TABLE regime_snapshots (
-    ts              TIMESTAMPTZ PRIMARY KEY,
-    regime_label    VARCHAR(20) NOT NULL,
-    risk_on_score   NUMERIC(6,2),
-    trend_state     VARCHAR(20),
-    vol_state       VARCHAR(20),
-    vix_close       NUMERIC(8,2),
-    spy_pct         NUMERIC(8,4),
-    payload         JSONB,
-    created_at      TIMESTAMPTZ DEFAULT NOW()
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ticker      VARCHAR(10) NOT NULL,
+    strategy    VARCHAR(30) NOT NULL,
+    direction   VARCHAR(10) NOT NULL,
+    price       DECIMAL(12,4),
+    target      DECIMAL(12,4),
+    stop        DECIMAL(12,4),
+    score       INT,
+    regime      VARCHAR(40),
+    ml_score    INT,
+    buy_thesis  TEXT,
+    stop_reason TEXT,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 
-#### User Watchlists (Persistent)
-
+### positions table
 ```sql
-CREATE TABLE user_watchlists (
+CREATE TABLE positions (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id     BIGINT NOT NULL,
-    ticker      VARCHAR(20) NOT NULL,
-    added_at    TIMESTAMPTZ DEFAULT NOW(),
-    PRIMARY KEY (user_id, ticker)
+    ticker      VARCHAR(10) NOT NULL,
+    shares      DECIMAL(12,4),
+    entry_price DECIMAL(12,4),
+    stop_price  DECIMAL(12,4),
+    target      DECIMAL(12,4),
+    strategy    VARCHAR(30),
+    opened_at   TIMESTAMPTZ DEFAULT NOW(),
+    closed_at   TIMESTAMPTZ,
+    exit_price  DECIMAL(12,4)
 );
 ```
 
-#### User Alerts (Persistent)
-
+### alerts table
 ```sql
-CREATE TABLE user_alerts (
-    id              BIGSERIAL PRIMARY KEY,
-    user_id         BIGINT NOT NULL,
-    ticker          VARCHAR(20) NOT NULL,
-    condition       VARCHAR(10) NOT NULL,
-    target_price    NUMERIC(18,6) NOT NULL,
-    triggered       BOOLEAN DEFAULT FALSE,
-    triggered_at    TIMESTAMPTZ,
-    created_at      TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX idx_alerts_user ON user_alerts (user_id, triggered);
-```
-
-#### Data Quality Reports
-
-```sql
-CREATE TABLE data_quality_reports (
-    ts              TIMESTAMPTZ PRIMARY KEY,
-    status          VARCHAR(20) NOT NULL,
-    stale_feeds     INTEGER DEFAULT 0,
-    gaps_detected   INTEGER DEFAULT 0,
-    payload         JSONB
+CREATE TABLE alerts (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     BIGINT NOT NULL,
+    ticker      VARCHAR(10) NOT NULL,
+    condition   VARCHAR(10) NOT NULL,
+    price       DECIMAL(12,4),
+    fired       BOOLEAN DEFAULT FALSE,
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    fired_at    TIMESTAMPTZ
 );
 ```
 
 ---
 
-## Persistence Recommendations
+## Config Reference (`src/core/config.py`)
 
-Priority order for making state durable:
+```python
+class Settings(BaseSettings):
+    discord_bot_token: str          # Required
+    openai_api_key: str = ""        # Optional
+    database_url: str = ""          # Optional
+    alpaca_api_key: str = ""
+    alpaca_secret_key: str = ""
+    alpaca_base_url: str = "https://paper-api.alpaca.markets"
+    ib_host: str = "127.0.0.1"
+    ib_port: int = 7497
+    futu_host: str = "127.0.0.1"
+    futu_port: int = 11111
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    timezone: str = "Asia/Hong_Kong"
 
-| Priority | What | Why |
-|:--------:|------|-----|
-| 1 | User alerts | Users expect alerts to survive restarts |
-| 2 | User watchlists | Personal config should persist |
-| 3 | Signal history | Enables performance measurement |
-| 4 | Regime snapshots | Historical regime context for backtesting |
-| 5 | Report archives | Audit trail |
+settings = Settings()
+```
 
 ---
 
-_Last updated: March 2026 · v6 Pro Desk Edition_
+Back to [README.md](../README.md)

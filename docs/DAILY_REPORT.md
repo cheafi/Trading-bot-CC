@@ -1,181 +1,244 @@
-# 📋 Daily Reports & Auto Briefs — TradingAI Bot v6
+# Daily Report Timeline
 
-How the reporting system delivers structured market intelligence across global trading sessions.
+> Full 24-hour automation schedule — all 23 background tasks mapped by time (UTC and HKT).
 
 ---
 
-## Report Schedule (24-Hour View)
+## Timeline Overview
 
 ```
-UTC    HKT    Report
-────── ────── ─────────────────────────────────────────────────────
-00:00  08:00  📰 Auto News · ₿ Crypto Pulse · 🌍 Global Update
-01:00  09:00  ☀️ ASIA MORNING BRIEF · 🌏 Asia Preview
-       ↓      📡 Market Pulse (15min) · 📰 News (30min)
-07:00  15:00  ☀️ EUROPE MORNING BRIEF
-08:00  16:00  📡 Pulse · 🔥 Movers · 🏭 Sectors · 🐋 Whales begin
-       ↓      ⚡ Momentum scans · 🚀 Breakout scans
-13:00  21:00  🤖 AI Signal Scan · 🎯 Opportunity Scanner
-13:30  21:30  ☀️ US PRE-MARKET BRIEF · 📊 Morning Brief (v6 Decision Memo)
-       ↓      All scans running at full frequency
-16:00  00:00  📰 News · ₿ Crypto · 🌍 Global Update
-20:10  04:10  🌙 EOD SCORECARD
-21:00  05:00  Sunday: 📅 WEEKLY RECAP
-22:00  06:00  Session tasks wind down
+UTC    HKT    Task                                    Channel
+────── ────── ──────────────────────────────────────  ───────────────
+00:00  08:00  🌍 global_market_update (hourly)        #general
+00:30  08:30  ₿ auto_crypto (30 min)                  #crypto
+              📰 auto_news_feed (30 min)               #news
 
-ALWAYS ON: 🚨 Price Alerts (3min) · ⚠️ VIX Fear (5min) · 📰 News (30min) · 💚 Health (30min)
+01:00  09:00  ☀️ morning_brief (daily)                #daily-reports
+01:00  09:00  🌏 asia_preview (daily)                 #daily-reports
+
+       ↕ CONTINUOUS ALL DAY ↕
+
+Every  Every  🚨 realtime_price_alerts (3 min)        #alerts
+3 min  3 min      → price spikes · user alerts
+                  → news auto-attached to spikes
+
+Every  Every  ⚠️  vix_fear_monitor (5 min)            #alerts
+5 min  5 min      → VIX spike warnings
+
+Every  Every  📡 market_pulse (15 min)                #general
+15min  15min      → SPY/QQQ/BTC pulse
+
+Every  Every  📰 auto_ticker_news (15 min)            #news
+15min  15min      → rotating 50-stock news coverage
+
+Every  Every  📰 auto_news_feed (30 min)              #news
+30min  30min      → 25-source aggregated news
+
+Every  Every  💚 health_check (30 min)                internal
+30min  30min      → internal diagnostics
+
+       ──────────────────────────────────────────────────────
+
+08:00  16:00  🔥 auto_movers starts (30 min · 8–22UTC) #general
+08:00  16:00  🏭 auto_sector_macro starts (60m · 8–22) #general
+08:00  16:00  🐋 auto_whale_scan starts (45m · 8–22)  #signals
+
+       ──────────────────────────────────────────────────────
+
+13:00  21:00  🤖 auto_signal_scan (3h · 13–21 UTC)   #signals
+13:00  21:00  🎯 opportunity_scanner (30m · 13–21)    #signals
+
+13:30  21:30  ☀️ smart_morning_update (daily)         #daily-reports
+              = v6 US Pre-Market Decision Memo
+
+       ──────────────────────────────────────────────────────
+
+WEEKDAYS ONLY — scanning tasks:
+
+Every  Every  ⚡ auto_momentum_scan (2 h)             #signals
+2h     2h
+
+Every  Every  🚀 auto_breakout_scan (4 h)             #signals
+4h     4h
+
+Every  Every  🔄 auto_swing_scan (6 h)                #signals
+6h     6h
+
+Every  Every  🤖 auto_strategy_learn (6 h)            #ai-signals
+6h     6h         → AI self-learning backtest update
+
+       ──────────────────────────────────────────────────────
+
+20:10  04:10  🌙 eod_report (daily)                   #daily-reports
+
+Sunday Sunday  📅 weekly_recap (weekly · Sun 21 UTC)  #daily-reports
+21:00  05:00
+
+Every  Every  🌀 update_presence (1 min)              Bot status
+1min   1min
 ```
 
 ---
 
-## Report Types in Detail
+## Morning Sequence (HKT 08:00–10:00)
 
-### ☀️ Smart Morning Update
+### 08:00 HKT — Global Update
+`global_market_update` posts:
+- World indices: SPY, QQQ, Nikkei, Hang Seng, Shanghai, DAX, FTSE
+- USD/CNH, USD/JPY, Gold, Oil, BTC
+- Overnight futures context
 
-**Fires 3× daily** for global timezone coverage:
+### 08:30 HKT — First Crypto + News Pulse
+- `auto_crypto`: BTC/ETH/SOL/DOGE/ADA/AVAX with 24h change
+- `auto_news_feed`: Top headlines from 25 sources
 
-| Session | UTC | Local Time | Extra Markets |
-|---------|-----|------------|---------------|
-| 🌏 Asia | 01:00 | 09:00 HKT | Nikkei, Hang Seng, Shanghai |
-| 🌍 Europe | 07:00 | 08:00 CET | DAX, FTSE |
-| 🇺🇸 US | 13:30 | 09:30 ET | S&P Futures, Nasdaq Futures |
-
-**Each brief contains:**
+### 09:00 HKT — Asia Morning Brief
+`morning_brief` posts to `#daily-reports`:
 
 ```
-☀️ Asia Morning Brief — Monday, March 24
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🟢 RISK ON • Risk: 72/100 █████████░ • AI: 🟢 NORMAL
+☀️ ASIA MORNING BRIEF — Mon 2 Jun 2025  09:00 HKT
 
-🇺🇸 US Indices
-🟢 SPY $582.40 (+0.85%) | 🟢 QQQ $498.20 (+1.12%)
+  OVERNIGHT: SPY +0.4% · QQQ +0.6% · BTC $97,200
 
-📊 Session Markets
-🟢 Nikkei: +0.45% | 🔴 Hang Seng: -0.20%
+  ASIA SESSION
+  Nikkei 225:   38,420  +0.8%  🟢
+  Hang Seng:    19,840  −0.3%  🔴
+  Shanghai:     3,380   +0.1%  ⚪
 
-🌍 Macro
-VIX: 14.8 🟢 | Gold: +0.15% | Bonds: -0.08% | BTC: $67,420 (+2.1%)
+  TOP 3 SIGNALS FROM OVERNIGHT SCANS
+  1. 🟢 NVDA BREAKOUT  Score 87  Target $162
+  2. 🟢 MSFT SWING     Score 74  Target $448
+  3. ⚪ TSLA WATCH     Score 52  Wait for entry
 
-📋 Today's Playbook
-`Momentum` · `Breakout`
-
-🛡️ Risk
-✅ All clear — normal sizing
+  TOP NEWS
+  • NVDA: New enterprise GPU orders confirmed (Reuters)
+  • FED: No rate surprise expected (Bloomberg)
 ```
 
 ---
 
-### 📊 Morning Brief (v6 Decision Memo)
+## US Session (HKT 21:30–06:00)
 
-**Fires once** at ~13:30 UTC (09:30 ET) on weekdays.
+### 21:30 HKT — Pre-Market Decision Memo
+`smart_morning_update` posts to `#daily-reports`:
 
-Full institutional-style morning memo with:
-- **Regime Scoreboard** — label, risk-on score, trend, volatility
-- **Risk Budgets** — max gross, net long, single name, sector limits
-- **Strategy Playbook** — ON / CONDITIONAL / OFF strategies
-- **Delta Deck** — what changed overnight (SPX, NDX, IWM, VIX)
-- **Scenario Plan** — base / bull / bear with probabilities
-- **Top 5 Trade Ideas** — v6 signal cards with full context
-- **Risk Flags** — VIX warnings, divergence alerts, event risk
+```
+☀️ v6 PRE-MARKET MEMO — 21:30 HKT
 
----
+  FUTURES: ES +0.3% · NQ +0.5% · RTY +0.1%
+  PRE-MARKET MOVERS (4am–9:30am ET):
+    🟢 NVDA  +1.8%  on volume  (earnings beat)
+    🔴 AMZN  −0.4%  light volume
+    🟢 AAPL  +0.6%
 
-### 🌙 EOD Scorecard
+  TODAY'S FOCUS STOCKS: NVDA · MSFT · AMD
+  KEY LEVELS TO WATCH:
+    SPY: Support 545 / Resistance 552
+    QQQ: Support 470 / Resistance 478
 
-**Fires once** at ~20:10 UTC (16:10 ET) on weekdays.
+  TOP OPPORTUNITY: NVDA BREAKOUT setup confirmed pre-market
+  RISK: VIX 18.4 — normal · Risk-ON posture
+```
 
-Closing summary with:
-- Regime at close (RISK_ON / NEUTRAL / RISK_OFF)
-- Index performance + bars
-- Sector heatmap (11 sectors sorted)
-- Top movers + laggards from watchlist
-- Market breadth (% green)
-- VIX close analysis
-- Overnight outlook
+### 21:30–02:00 HKT — US Session Scanning
+All scanners running during US market hours:
+- `auto_signal_scan` (every 3h)
+- `opportunity_scanner` (every 30min)
+- `auto_momentum_scan` (every 2h)
+- `auto_breakout_scan` (every 4h)
+- `auto_whale_scan` (every 45min)
+- `realtime_price_alerts` (every 3min)
+- `auto_ticker_news` (every 15min)
 
----
+### 04:10 HKT — EOD Scorecard
+`eod_report` posts to `#daily-reports`:
 
-### 🌏 Asia Preview
+```
+🌙 EOD SCORECARD — Mon 2 Jun 2025
 
-**Fires once** at ~01:00 UTC (09:00 HKT).
+  US MARKET CLOSE
+  SPY:  +0.8%  QQQ: +1.1%  DIA: +0.4%  IWM: +1.3%
+  VIX:  17.2 (−0.8)  — Fear declining
 
-Bridges US close into Asia open with:
-- Nikkei, Hang Seng, Shanghai performance
-- US closing levels as context
-- Overnight event preview
+  TOP SIGNALS FIRED TODAY
+  ✅ NVDA BREAKOUT — fired at 142.50, hit 144.80 (+1.6%)
+  ✅ MSFT SWING    — fired at 422.10, in profit +0.8%
+  ⏳ AMD MOMENTUM  — fired at 162.00, pending
 
----
+  PORTFOLIO SNAPSHOT
+  Positions: 3  · Day P&L: +$480 (+1.2%)
+  Best: NVDA +$210  · Worst: n/a
 
-### 📅 Weekly Recap
-
-**Fires Sunday** ~21:00 UTC.
-
-Full week summary: all major indices + crypto + preview of next week's calendar.
-
----
-
-## High-Frequency Auto-Reports
-
-These run continuously without user action:
-
-| Report | Frequency | Channel | Content |
-|--------|-----------|---------|---------|
-| **⏱️ Market Pulse** | 15 min | `#daily-brief` | SPY/QQQ/DIA + VIX fear gauge |
-| **🔥 Big Movers** | 30 min | `#signals` | Stocks moving ≥ 2% with volume |
-| **🏭 Sector Heatmap** | 60 min | `#daily-brief` | All 11 S&P sectors |
-| **🌍 Macro Snapshot** | 60 min | `#daily-brief` | Gold, Oil, Bonds, Dollar, BTC |
-| **₿ Crypto Pulse** | 2 hr | `#daily-brief` | Top 6 crypto + sentiment |
-| **🌍 Global Update** | 4 hr | `#daily-brief` | Cross-session overview |
-| **📰 News Feed** | 30 min | `#daily-brief` | Top headlines from Yahoo Finance |
+  UPCOMING CATALYSTS
+  Tue: CPI Data (high impact)
+  Wed: FOMC Minutes
+  Thu: AMD Earnings
+```
 
 ---
 
-## Alert-Driven Reports (fire only when triggered)
+## Weekly Recap (Sunday 05:00 HKT)
 
-| Alert | Trigger | Channel |
-|-------|---------|---------|
-| **🚨 Price Spike/Crash** | Stock ≥ 3%, Index ≥ 1.2%, Crypto ≥ 5% | `#momentum-alerts` |
-| **⚠️ VIX Fear Alert** | VIX +10% or above 25/30 thresholds | `#daily-brief` + `#momentum-alerts` |
-| **🐋 Whale Alert** | Volume ≥ 3× 20-day average | `#signals` |
-| **🎯 Opportunity Flash** | Signal score ≥ 75 | `#momentum-alerts` |
-| **🔔 User Price Alert** | User target crossed | DM + `#signals` |
+`weekly_recap` posts to `#daily-reports`:
 
----
+```
+📅 WEEKLY RECAP — Week of 26 May – 1 Jun 2025
 
-## Channel Destination Map
+  MARKET PERFORMANCE
+  SPY:   +1.8%  QQQ: +2.4%  DIA: +0.9%
 
-| Channel | What Goes There |
-|---------|----------------|
-| `#daily-brief` | Morning briefs, EOD, macro, sectors, news, VIX, global |
-| `#signals` | Whale alerts, user alerts, movers |
-| `#momentum-alerts` | Price spikes, momentum scans, opportunities |
-| `#swing-trades` | Swing scan results |
-| `#breakout-setups` | Breakout scan results |
-| `#ai-signals` | Combined AI-ranked signals |
-| `#admin-log` | Health checks, audit trail |
+  SIGNALS SUMMARY (this week)
+  Total signals:  12
+  Wins:           8   (67%)
+  Losses:         2   (17%)
+  Open:           2   (pending)
+  Best win:  +8.4% (NVDA BREAKOUT)
+  Worst:     −3.2% (TSLA)
 
----
+  STRATEGY BREAKDOWN
+  BREAKOUT:     4 signals  75% win rate
+  MOMENTUM:     3 signals  67% win rate
+  SWING:        3 signals  67% win rate
+  MEAN_REV:     2 signals  50% win rate
 
-## Report Design Principles
-
-1. **Actionable** — every report answers "what should I do?"
-2. **Regime-aware** — strategy recommendations adapt to market conditions
-3. **Layered** — quick headline + detailed fields for those who want depth
-4. **Timely** — fires at the right time for the right timezone
-5. **Non-spammy** — cooldowns, deduplication, and thresholds prevent noise
+  NEXT WEEK KEY EVENTS
+  Mon: PCE inflation
+  Wed: FOMC
+  Fri: Jobs report (NFP)
+```
 
 ---
 
-## Implementation Files
+## 23 Background Tasks — Quick Reference
 
-| File | Purpose |
-|------|---------|
-| `src/discord_bot.py` | All 21 background tasks that generate reports |
-| `src/notifications/report_generator.py` | Format-agnostic report builders |
-| `src/engines/delta_scoreboard.py` | Regime change tracking |
-| `src/engines/data_quality.py` | Feed health monitoring |
-| `src/core/models.py` | `RegimeScoreboard`, `DeltaSnapshot`, `ScenarioPlan` |
+| # | Task | Interval | Active Hours |
+|---|------|----------|-------------|
+| 1 | `update_presence` | 1 min | always |
+| 2 | `market_pulse` | 15 min | always |
+| 3 | `auto_movers` | 30 min | 8–22 UTC |
+| 4 | `auto_sector_macro` | 60 min | 8–22 UTC |
+| 5 | `auto_crypto` | 30 min | always |
+| 6 | `global_market_update` | 60 min | always |
+| 7 | `auto_swing_scan` | 6 h | weekdays |
+| 8 | `auto_breakout_scan` | 4 h | weekdays |
+| 9 | `auto_momentum_scan` | 2 h | weekdays |
+| 10 | `auto_signal_scan` | 3 h | 13–21 UTC |
+| 11 | `morning_brief` | daily | 01:00 UTC |
+| 12 | `eod_report` | daily | 20:10 UTC |
+| 13 | `asia_preview` | daily | 01:00 UTC |
+| 14 | `auto_whale_scan` | 45 min | 8–22 UTC |
+| 15 | `weekly_recap` | weekly | Sun 21 UTC |
+| 16 | `realtime_price_alerts` | 3 min | always |
+| 17 | `auto_news_feed` | 30 min | always |
+| 18 | `auto_ticker_news` | 15 min | always |
+| 19 | `auto_strategy_learn` | 6 h | weekdays |
+| 20 | `smart_morning_update` | daily | 13:30 UTC |
+| 21 | `opportunity_scanner` | 30 min | 13–21 UTC |
+| 22 | `vix_fear_monitor` | 5 min | always |
+| 23 | `health_check` | 30 min | always |
+
+Use `/status` to see live state of all 23 tasks.
 
 ---
 
-_Last updated: March 2026 · v6 Pro Desk Edition_
+Back to [README.md](../README.md)
