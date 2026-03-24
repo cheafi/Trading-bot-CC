@@ -440,6 +440,10 @@ class DiscordInteractiveBot:
             _yf = None
             logger.warning("yfinance not installed — market data unavailable")
 
+        # Centralised cached market-data service (async-safe, TTL cache)
+        from src.services.market_data import get_market_data_service
+        _mds = get_market_data_service()
+
         intents = discord.Intents.default()
         intents.message_content = True
 
@@ -1512,22 +1516,40 @@ class DiscordInteractiveBot:
                 "high": high, "low": low, "close": close,
             }
 
+        # ── Async pre-fetch via centralized cache ────────────────────
+        async def _prefetch(tickers, period="6mo", interval="1d"):
+            """Batch-fetch histories via MarketDataService; returns {ticker: DataFrame}."""
+            results = await asyncio.gather(
+                *[_mds.get_history(t, period=period, interval=interval) for t in tickers],
+                return_exceptions=True,
+            )
+            return {
+                t: df for t, df in zip(tickers, results)
+                if df is not None and not isinstance(df, Exception)
+                and not getattr(df, "empty", True)
+            }
+
+        async def _async_signal_scan(tickers):
+            """Async wrapper — pre-fetches histories then runs combined scan."""
+            hist_map = await _prefetch(tickers, "6mo")
+            return await asyncio.to_thread(_sync_signal_scan, tickers, hist_map)
+
         # ── 6a. Swing scanner ────────────────────────────────────────
-        def _sync_swing_scan(tickers):
+        def _sync_swing_scan(tickers, hist_map=None):
             """
             Swing trade scanner — finds pullback entries in trending stocks.
             Criteria: uptrend (SMA50>SMA200-ish, price>SMA50),
             2-7 day pullback that holds key MA, RSI not overbought,
             healthy volume.  Hold target: 2-8 weeks.
             """
-            if not _yf:
-                return []
             signals = []
             for ticker in tickers:
                 try:
-                    t = _yf.Ticker(ticker)
-                    hist = t.history(period="6mo")
-                    if hist.empty or len(hist) < 60:
+                    hist = (hist_map or {}).get(ticker)
+                    if hist is None:
+                        if not _yf: continue
+                        hist = _yf.Ticker(ticker).history(period="6mo")
+                    if hist is None or hist.empty or len(hist) < 60:
                         continue
                     d = _compute_technicals(hist)
                     price, sma20, sma50 = d["price"], d["sma20"], d["sma50"]
@@ -1620,21 +1642,21 @@ class DiscordInteractiveBot:
             return signals
 
         # ── 6b. Breakout scanner ─────────────────────────────────────
-        def _sync_breakout_scan(tickers):
+        def _sync_breakout_scan(tickers, hist_map=None):
             """
             Breakout scanner — finds consolidation breaks with volume.
             Criteria: tight range (low BB width or narrow 10-day range),
             price breaking above the consolidation high on above-avg volume.
             Hold target: 1-4 weeks.
             """
-            if not _yf:
-                return []
             signals = []
             for ticker in tickers:
                 try:
-                    t = _yf.Ticker(ticker)
-                    hist = t.history(period="6mo")
-                    if hist.empty or len(hist) < 60:
+                    hist = (hist_map or {}).get(ticker)
+                    if hist is None:
+                        if not _yf: continue
+                        hist = _yf.Ticker(ticker).history(period="6mo")
+                    if hist is None or hist.empty or len(hist) < 60:
                         continue
                     d = _compute_technicals(hist)
                     price, sma20, sma50 = d["price"], d["sma20"], d["sma50"]
@@ -1732,20 +1754,20 @@ class DiscordInteractiveBot:
             return signals
 
         # ── 6c. Momentum scanner ─────────────────────────────────────
-        def _sync_momentum_scan(tickers):
+        def _sync_momentum_scan(tickers, hist_map=None):
             """
             Momentum scanner — finds strong movers for short-term plays.
             Criteria: big move today (>2%), above-avg volume, strong trend.
             Hold target: days to 2 weeks.
             """
-            if not _yf:
-                return []
             signals = []
             for ticker in tickers:
                 try:
-                    t = _yf.Ticker(ticker)
-                    hist = t.history(period="3mo")
-                    if hist.empty or len(hist) < 30:
+                    hist = (hist_map or {}).get(ticker)
+                    if hist is None:
+                        if not _yf: continue
+                        hist = _yf.Ticker(ticker).history(period="3mo")
+                    if hist is None or hist.empty or len(hist) < 30:
                         continue
                     d = _compute_technicals(hist)
                     price, sma20, sma50 = d["price"], d["sma20"], d["sma50"]
@@ -1852,11 +1874,11 @@ class DiscordInteractiveBot:
             return signals
 
         # ── Legacy wrapper (used by morning brief) ───────────────────
-        def _sync_signal_scan(tickers):
+        def _sync_signal_scan(tickers, hist_map=None):
             """Combined scan — merges all three scanner types."""
-            swing = _sync_swing_scan(tickers)
-            breakout = _sync_breakout_scan(tickers)
-            momentum = _sync_momentum_scan(tickers)
+            swing = _sync_swing_scan(tickers, hist_map)
+            breakout = _sync_breakout_scan(tickers, hist_map)
+            momentum = _sync_momentum_scan(tickers, hist_map)
             combined = swing + breakout + momentum
             combined.sort(key=lambda x: x.get("score", 0), reverse=True)
             return combined
@@ -1960,11 +1982,15 @@ class DiscordInteractiveBot:
             if not (now.weekday() < 5):
                 return
             try:
-                signals = await asyncio.to_thread(_sync_swing_scan, _WATCH_US)
+                hist_map = await _prefetch(_WATCH_US, "6mo")
+                signals = await asyncio.to_thread(_sync_swing_scan, _WATCH_US, hist_map)
                 if not signals:
                     return
-                signals = await asyncio.to_thread(_attach_ml_rank, signals, {})
+                ml_hist = await _prefetch([s["ticker"] for s in signals], "3mo")
+                signals = await asyncio.to_thread(_attach_ml_rank, signals, ml_hist)
                 signals.sort(key=lambda x: x["score"], reverse=True)
+                header = discord.Embed(
+                    title="🔄 Swing Pullback Setups",
                     description=(
                         f"Scanned {len(_WATCH_US)} tickers • "
                         f"**{len(signals)}** swing setups • "
@@ -1994,10 +2020,12 @@ class DiscordInteractiveBot:
             if not (13 <= now.hour < 21 and now.weekday() < 5):
                 return  # US hours only for breakouts
             try:
-                signals = await asyncio.to_thread(_sync_breakout_scan, _WATCH_US)
+                hist_map = await _prefetch(_WATCH_US, "6mo")
+                signals = await asyncio.to_thread(_sync_breakout_scan, _WATCH_US, hist_map)
                 if not signals:
                     return
-                signals = await asyncio.to_thread(_attach_ml_rank, signals, {})
+                ml_hist = await _prefetch([s["ticker"] for s in signals], "3mo")
+                signals = await asyncio.to_thread(_attach_ml_rank, signals, ml_hist)
                 signals.sort(key=lambda x: x["score"], reverse=True)
                 top_count = min(5, len(signals))
                 header = discord.Embed(
@@ -2031,7 +2059,8 @@ class DiscordInteractiveBot:
             if not (13 <= now.hour < 21 and now.weekday() < 5):
                 return
             try:
-                signals = await asyncio.to_thread(_sync_momentum_scan, _WATCH_US)
+                hist_map = await _prefetch(_WATCH_US, "3mo")
+                signals = await asyncio.to_thread(_sync_momentum_scan, _WATCH_US, hist_map)
                 if not signals:
                     return
                 signals.sort(key=lambda x: x["score"], reverse=True)
@@ -2071,6 +2100,7 @@ class DiscordInteractiveBot:
             if not (13 <= now.hour < 21 and now.weekday() < 5):
                 return
             try:
+                hist_map = await _prefetch(_WATCH_US, "6mo")
                 all_sigs = []
                 for scan_fn, label in [
                     (_sync_swing_scan, "SWING"),
@@ -2078,7 +2108,7 @@ class DiscordInteractiveBot:
                     (_sync_momentum_scan, "MOMENTUM"),
                 ]:
                     try:
-                        sigs = await asyncio.to_thread(scan_fn, _WATCH_US)
+                        sigs = await asyncio.to_thread(scan_fn, _WATCH_US, hist_map)
                         for s in (sigs or []):
                             s["_strategy"] = label
                         all_sigs.extend(sigs or [])
@@ -2089,7 +2119,8 @@ class DiscordInteractiveBot:
                     return
 
                 # Attach ML regime rank to all signals
-                all_sigs = await asyncio.to_thread(_attach_ml_rank, all_sigs, {})
+                ml_hist = await _prefetch([s["ticker"] for s in all_sigs], "3mo")
+                all_sigs = await asyncio.to_thread(_attach_ml_rank, all_sigs, ml_hist)
 
                 # Rank by composite score and pick top 5
                 all_sigs.sort(key=lambda x: x.get("score", 0), reverse=True)
@@ -2258,7 +2289,7 @@ class DiscordInteractiveBot:
                     # Scan for top signals
                     top_signal_objs = None
                     try:
-                        scan_results = await asyncio.to_thread(_sync_signal_scan, _WATCH_US[:15])
+                        scan_results = await _async_signal_scan(_WATCH_US[:15])
                         if scan_results:
                             scan_results.sort(key=lambda x: x["score"], reverse=True)
                             # Convert scan dicts to minimal Signal-like objects for display
@@ -2594,14 +2625,15 @@ class DiscordInteractiveBot:
             if not (8 <= now.hour < 22 and now.weekday() < 5):
                 return
             try:
+                wh_hist = await _prefetch(_WATCH_US, "1mo")
                 def _sync_whale_scan():
-                    if not _yf:
-                        return []
                     whales = []
                     for ticker in _WATCH_US:
                         try:
-                            t = _yf.Ticker(ticker)
-                            hist = t.history(period="1mo")
+                            hist = wh_hist.get(ticker)
+                            if hist is None:
+                                if not _yf: continue
+                                hist = _yf.Ticker(ticker).history(period="1mo")
                             if hist.empty or len(hist) < 10:
                                 continue
                             vol = hist["Volume"].iloc[-1]
@@ -2989,15 +3021,17 @@ class DiscordInteractiveBot:
                 return
             try:
                 scan_tickers = _WATCH_US[:5] + ["SPY", "QQQ", "BTC-USD"]
+                learn_hist = await _prefetch(scan_tickers, "1y")
 
                 def _sync_learn():
-                    if not _yf:
-                        return []
                     results = []
                     for sym in scan_tickers:
                         try:
-                            hist = _yf.Ticker(sym).history(period="1y")
-                            if hist.empty or len(hist) < 60:
+                            hist = learn_hist.get(sym)
+                            if hist is None:
+                                if not _yf: continue
+                                hist = _yf.Ticker(sym).history(period="1y")
+                            if hist is None or hist.empty or len(hist) < 60:
                                 continue
                             analysis = opt.full_analysis(sym, hist, "1y")
                             ranked = analysis["ranked"]
@@ -3219,7 +3253,7 @@ class DiscordInteractiveBot:
                 if now.weekday() >= 5:
                     return
 
-                scan_results = await asyncio.to_thread(_sync_signal_scan, _WATCH_US)
+                scan_results = await _async_signal_scan(_WATCH_US)
                 if not scan_results:
                     return
 
@@ -3920,7 +3954,7 @@ class DiscordInteractiveBot:
 
                 # ── EMBED 3: Top AI Signals (scan top stocks) ──
                 try:
-                    scan_results = await asyncio.to_thread(_sync_signal_scan, _WATCH_US[:20])
+                    scan_results = await _async_signal_scan(_WATCH_US[:20])
                     if scan_results:
                         scan_results.sort(key=lambda x: x["score"], reverse=True)
                         top5 = scan_results[:5]
@@ -4048,11 +4082,8 @@ class DiscordInteractiveBot:
         async def cmd_analyze(interaction: discord.Interaction, ticker: str):
             await interaction.response.defer()
             try:
-                def _sync_analyze():
-                    t = _yf.Ticker(ticker.upper())
-                    return t.history(period="3mo")
-                hist = await asyncio.to_thread(_sync_analyze)
-                if hist.empty:
+                hist = await _mds.get_history(ticker.upper(), period="3mo")
+                if hist is None or hist.empty:
                     await interaction.followup.send(f"❌ No data for {ticker.upper()}"); return
                 close = hist["Close"]; price = close.iloc[-1]
                 sma20 = close.rolling(20).mean().iloc[-1]
@@ -4087,11 +4118,8 @@ class DiscordInteractiveBot:
         async def cmd_advise(interaction: discord.Interaction, ticker: str):
             await interaction.response.defer()
             try:
-                def _sync_advise():
-                    t = _yf.Ticker(ticker.upper())
-                    return t.history(period="3mo")
-                hist = await asyncio.to_thread(_sync_advise)
-                if hist.empty:
+                hist = await _mds.get_history(ticker.upper(), period="3mo")
+                if hist is None or hist.empty:
                     await interaction.followup.send(f"❌ No data"); return
                 close = hist["Close"]; price = close.iloc[-1]
                 sma20 = close.rolling(20).mean().iloc[-1]
@@ -4166,11 +4194,8 @@ class DiscordInteractiveBot:
         async def cmd_levels(interaction: discord.Interaction, ticker: str):
             await interaction.response.defer()
             try:
-                def _sync_levels():
-                    t = _yf.Ticker(ticker.upper())
-                    return t.history(period="6mo")
-                hist = await asyncio.to_thread(_sync_levels)
-                if hist.empty:
+                hist = await _mds.get_history(ticker.upper(), period="6mo")
+                if hist is None or hist.empty:
                     await interaction.followup.send(f"❌ No data"); return
                 close, high, low = hist["Close"], hist["High"], hist["Low"]
                 price = close.iloc[-1]
@@ -4195,19 +4220,21 @@ class DiscordInteractiveBot:
             ticker = ticker.upper().strip()
             now = datetime.now(timezone.utc)
 
-            def _sync_why_analysis(sym):
-                if not _yf:
-                    return {}
+            def _sync_why_analysis(sym, pre_hist=None):
                 try:
-                    t = _yf.Ticker(sym)
-                    hist = t.history(period="3mo")
-                    if hist.empty or len(hist) < 20:
+                    hist = pre_hist
+                    if hist is None:
+                        if not _yf: return {}
+                        hist = _yf.Ticker(sym).history(period="3mo")
+                    if hist is None or hist.empty or len(hist) < 20:
                         return {}
                     techs = _compute_technicals(hist)
                     news, analyst = [], {}
                     try:
-                        raw_news = t.news if hasattr(t, "news") else []
-                        ts_now = now.timestamp()
+                        if _yf:
+                            t = _yf.Ticker(sym)
+                            raw_news = t.news if hasattr(t, "news") else []
+                            ts_now = now.timestamp()
                         for item in (raw_news or [])[:8]:
                             url = item.get("link", item.get("url", ""))
                             title = item.get("title", "")
@@ -4231,7 +4258,8 @@ class DiscordInteractiveBot:
                 except Exception:
                     return {}
 
-            data = await asyncio.to_thread(_sync_why_analysis, ticker)
+            why_hist = await _mds.get_history(ticker, period="3mo")
+            data = await asyncio.to_thread(_sync_why_analysis, ticker, why_hist)
             d = await _fetch_stock(ticker)
             if not data:
                 await interaction.followup.send(
@@ -4827,16 +4855,14 @@ class DiscordInteractiveBot:
             ticker = ticker.upper().strip()
             now = datetime.now(timezone.utc)
 
-            def _sync_run(sym, per):
-                if not _yf:
-                    return None
-                hist = _yf.Ticker(sym).history(period=per)
-                if hist.empty or len(hist) < 30:
+            async def _async_run(sym, per):
+                hist = await _mds.get_history(sym, period=per)
+                if hist is None or hist.empty or len(hist) < 30:
                     return None
                 opt = _get_optimizer()
                 if opt is None:
                     return None
-                return opt.full_analysis(sym, hist, per)
+                return await asyncio.to_thread(opt.full_analysis, sym, hist, per)
 
             await interaction.followup.send(
                 embed=discord.Embed(
@@ -4844,7 +4870,7 @@ class DiscordInteractiveBot:
                     description="Testing SWING · BREAKOUT · MEAN_REVERSION · MOMENTUM\nWalk-forward validation + parameter sweep + cross-check...",
                     color=COLOR_INFO, timestamp=now))
 
-            result = await asyncio.to_thread(_sync_run, ticker, period)
+            result = await _async_run(ticker, period)
             if result is None:
                 await interaction.followup.send(
                     f"❌ No data for `{ticker}` ({period}). Try a different symbol or period.")
@@ -4955,21 +4981,21 @@ class DiscordInteractiveBot:
             ticker = ticker.upper().strip()
             now = datetime.now(timezone.utc)
 
-            def _sync_best(sym):
-                if not _yf:
-                    return None
-                hist = _yf.Ticker(sym).history(period="6mo")
-                if hist.empty or len(hist) < 30:
+            async def _async_best(sym):
+                hist = await _mds.get_history(sym, period="6mo")
+                if hist is None or hist.empty or len(hist) < 30:
                     return None
                 opt = _get_optimizer()
                 if opt is None:
                     return None
                 from src.engines.strategy_optimizer import _regime_from_data
-                ranked = opt.quick_regime_rank(hist)
-                regime = _regime_from_data(hist)
-                return {"ranked": ranked, "regime": regime}
+                def _compute():
+                    ranked = opt.quick_regime_rank(hist)
+                    regime = _regime_from_data(hist)
+                    return {"ranked": ranked, "regime": regime}
+                return await asyncio.to_thread(_compute)
 
-            result = await asyncio.to_thread(_sync_best, ticker)
+            result = await _async_best(ticker)
             if not result:
                 await interaction.followup.send(f"❌ No data for `{ticker}`.")
                 return
@@ -5381,7 +5407,7 @@ class DiscordInteractiveBot:
 
                 # ── EMBED 3: Top Signals ──
                 try:
-                    scan_results = await asyncio.to_thread(_sync_signal_scan, _WATCH_US[:20])
+                    scan_results = await _async_signal_scan(_WATCH_US[:20])
                     if scan_results:
                         scan_results.sort(key=lambda x: x["score"], reverse=True)
                         e3 = discord.Embed(
@@ -5509,8 +5535,13 @@ class DiscordInteractiveBot:
         # ══════════════════════════════════════════════════════════════
 
         @bot.tree.command(name="setup", description="[Admin] Re-run full server setup")
+        @app_commands.guild_only()
         @app_commands.checks.has_permissions(administrator=True)
         async def cmd_setup(interaction: discord.Interaction):
+            if not interaction.guild:
+                await interaction.response.send_message(
+                    "❌ This command can only be used in a server.", ephemeral=True)
+                return
             await interaction.response.defer(ephemeral=True)
             if interaction.guild:
                 await full_server_setup(interaction.guild)
@@ -5519,8 +5550,17 @@ class DiscordInteractiveBot:
 
         @bot.tree.command(name="announce", description="[Admin] Post announcement to #daily-brief")
         @app_commands.describe(message="Announcement text")
+        @app_commands.guild_only()
         @app_commands.checks.has_permissions(administrator=True)
         async def cmd_announce(interaction: discord.Interaction, message: str):
+            if not interaction.guild:
+                await interaction.response.send_message(
+                    "❌ This command can only be used in a server.", ephemeral=True)
+                return
+            if not interaction.user.guild_permissions.administrator:
+                await interaction.response.send_message(
+                    "🔒 Insufficient permissions — administrator required.", ephemeral=True)
+                return
             e = discord.Embed(title="📢 Announcement", description=message,
                               color=COLOR_GOLD,
                               timestamp=datetime.now(timezone.utc))
@@ -5531,8 +5571,17 @@ class DiscordInteractiveBot:
 
         @bot.tree.command(name="purge", description="[Admin] Delete last N messages in this channel")
         @app_commands.describe(count="Number of messages to delete (max 100)")
+        @app_commands.guild_only()
         @app_commands.checks.has_permissions(manage_messages=True)
         async def cmd_purge(interaction: discord.Interaction, count: int):
+            if not interaction.guild:
+                await interaction.response.send_message(
+                    "❌ This command can only be used in a server.", ephemeral=True)
+                return
+            if not interaction.user.guild_permissions.manage_messages:
+                await interaction.response.send_message(
+                    "🔒 Insufficient permissions — manage_messages required.", ephemeral=True)
+                return
             count = min(max(1, count), 100)
             await interaction.response.defer(ephemeral=True)
             if interaction.channel and hasattr(interaction.channel, "purge"):
@@ -5543,8 +5592,17 @@ class DiscordInteractiveBot:
 
         @bot.tree.command(name="slowmode", description="[Admin] Set slowmode for this channel")
         @app_commands.describe(seconds="Slowmode seconds (0 = off, max 21600)")
+        @app_commands.guild_only()
         @app_commands.checks.has_permissions(manage_channels=True)
         async def cmd_slowmode(interaction: discord.Interaction, seconds: int):
+            if not interaction.guild:
+                await interaction.response.send_message(
+                    "❌ This command can only be used in a server.", ephemeral=True)
+                return
+            if not interaction.user.guild_permissions.manage_channels:
+                await interaction.response.send_message(
+                    "🔒 Insufficient permissions — manage_channels required.", ephemeral=True)
+                return
             seconds = min(max(0, seconds), 21600)
             if interaction.channel and hasattr(interaction.channel, "edit"):
                 await interaction.channel.edit(slowmode_delay=seconds)
@@ -5554,8 +5612,17 @@ class DiscordInteractiveBot:
                 await _audit(f"⏱️ {interaction.user} set slowmode {label} in #{interaction.channel}")
 
         @bot.tree.command(name="pin", description="[Admin] Pin the last message")
+        @app_commands.guild_only()
         @app_commands.checks.has_permissions(manage_messages=True)
         async def cmd_pin(interaction: discord.Interaction):
+            if not interaction.guild:
+                await interaction.response.send_message(
+                    "❌ This command can only be used in a server.", ephemeral=True)
+                return
+            if not interaction.user.guild_permissions.manage_messages:
+                await interaction.response.send_message(
+                    "🔒 Insufficient permissions — manage_messages required.", ephemeral=True)
+                return
             if interaction.channel and hasattr(interaction.channel, "history"):
                 async for msg in interaction.channel.history(limit=2):
                     if msg.author != bot.user or not msg.embeds:

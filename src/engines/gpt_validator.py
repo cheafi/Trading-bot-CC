@@ -15,6 +15,7 @@ Upgrades v6:
 import hashlib
 import json
 import logging
+import random
 import re
 import time
 from typing import List, Optional, Dict, Any
@@ -22,6 +23,7 @@ from datetime import datetime
 import asyncio
 
 from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from src.core.config import get_settings
 from src.core.models import Signal
@@ -35,6 +37,7 @@ settings = get_settings()
 
 class ValidationResponse(BaseModel):
     """Strict schema for signal validation output (v6 — pro desk)."""
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     validation_result: str = Field(pattern=r"^(PASS|WARN|FAIL)$")
     approval_status: str = Field(pattern=r"^(approved|conditional|rejected)$", default="conditional")
     confidence_adjustment: float = Field(ge=-30, le=10)
@@ -42,12 +45,13 @@ class ValidationResponse(BaseModel):
     red_flags: List[str] = Field(default_factory=list, max_length=5)
     supporting_factors: List[str] = Field(default_factory=list, max_length=5)
     checklist_violations: List[str] = Field(default_factory=list)
-    approval_flags: Dict[str, bool] = Field(default_factory=dict)  # math_ok, event_ok, crowding_ok, liquidity_ok
+    approval_flags: Dict[str, bool] = Field(default_factory=dict)
     sources_used: List[str] = Field(default_factory=list)
 
 
 class SentimentResponse(BaseModel):
     """Strict schema for sentiment output."""
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     sentiment: str = Field(pattern=r"^(BULLISH|BEARISH|NEUTRAL|MIXED)$")
     confidence: float = Field(ge=0.0, le=1.0)
     key_topics: List[str] = Field(default_factory=list, max_length=5)
@@ -509,7 +513,14 @@ Respond ONLY in JSON:
                 validated = SentimentResponse(**raw_result)
                 result = validated.model_dump()
             except ValidationError:
-                result = raw_result  # best-effort
+                    # GPT returned unexpected fields or violated schema.
+                    # Never pass raw model output through — use safe defaults.
+                    result = {
+                        "sentiment": "NEUTRAL",
+                        "confidence": 0.3,
+                        "key_topics": [],
+                        "summary": "Schema validation failed — defaulting to NEUTRAL.",
+                    }
 
             return {
                 'sentiment': result.get('sentiment', 'NEUTRAL'),
@@ -560,14 +571,19 @@ Respond ONLY in JSON:
         processed_results = []
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                self.logger.error(f"Validation failed: {result}")
-                processed_results.append({
-                    'validation_result': 'PASS',
-                    'original_confidence': signals[i].confidence,
-                    'adjusted_confidence': signals[i].confidence,
-                    'reason': 'Validation error',
-                    'error': str(result)
-                })
+                    self.logger.error(f"Validation failed for {signals[i].ticker}: {result}")
+                    # Default to WARN + confidence penalty — never silently PASS an
+                    # unvalidated signal (the original code incorrectly used PASS here).
+                    processed_results.append({
+                        "validation_result": "WARN",
+                        "approval_status": "conditional",
+                        "original_confidence": signals[i].confidence,
+                        "adjusted_confidence": max(0, signals[i].confidence - 10),
+                        "reason": "Validation unavailable — confidence reduced as precaution.",
+                        "red_flags": ["validation_error"],
+                        "supporting_factors": [],
+                        "checklist_violations": ["validation_unavailable"],
+                    })
             else:
                 processed_results.append(result)
         
@@ -601,7 +617,8 @@ Respond ONLY in JSON:
                 # Handle rate limits with exponential backoff
                 if "rate" in str(e).lower() or "429" in str(e):
                     last_error = "Rate limit exceeded"
-                    await asyncio.sleep(2 ** attempt)
+                    delay = (2 ** attempt) * (0.8 + random.random() * 0.4)
+                    await asyncio.sleep(delay)
                 else:
                     last_error = str(e)
                     self.logger.warning(f"GPT error on attempt {attempt + 1}: {e}")

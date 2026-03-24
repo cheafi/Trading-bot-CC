@@ -121,11 +121,15 @@ def _regime_from_data(hist: pd.DataFrame) -> Dict[str, Any]:
 
 # ─── per-strategy backsimulation ────────────────────────────────────────────
 
-def _backtest_swing(hist: pd.DataFrame, params: Dict) -> Dict[str, Any]:
+def _backtest_swing(hist: pd.DataFrame, params: Dict, skip_n: int = 0) -> Dict[str, Any]:
     """
     Walk-forward swing backtest on price history.
     Entries: price crosses back above EMA20 after pullback.
     Exits: stop = params["stop_atr"]*ATR below entry; target = params["rr"]*risk.
+
+    skip_n: bar index below which entered trades are NOT counted in results.
+    Used by walk-forward to provide indicator warm-up context without leaking
+    training-period trades into the OOS metric.
     """
     close = hist["Close"].dropna() if "Close" in hist.columns else hist["close"].dropna()
     high = hist["High"].dropna() if "High" in hist.columns else hist["high"].dropna()
@@ -158,6 +162,7 @@ def _backtest_swing(hist: pd.DataFrame, params: Dict) -> Dict[str, Any]:
     hold_days = []
     in_trade = False
     pb_count = 0
+    entry_bar = 0
 
     for i in range(55, len(close)):
         price = close.iloc[i]
@@ -169,23 +174,26 @@ def _backtest_swing(hist: pd.DataFrame, params: Dict) -> Dict[str, Any]:
         if in_trade:
             if price <= stop_price:
                 pnl = (stop_price - entry) / entry
-                returns.append(pnl)
-                equity.append(equity[-1] * (1 + pnl))
-                hold_days.append(hold)
+                if entry_bar >= skip_n:  # only count trades entered in the test window
+                    returns.append(pnl)
+                    equity.append(equity[-1] * (1 + pnl))
+                    hold_days.append(hold)
                 in_trade = False
             elif price >= target_price:
                 pnl = (target_price - entry) / entry
-                returns.append(pnl)
-                equity.append(equity[-1] * (1 + pnl))
-                hold_days.append(hold)
+                if entry_bar >= skip_n:
+                    returns.append(pnl)
+                    equity.append(equity[-1] * (1 + pnl))
+                    hold_days.append(hold)
                 in_trade = False
             else:
                 hold += 1
                 if hold >= 15:  # time stop
                     pnl = (price - entry) / entry
-                    returns.append(pnl)
-                    equity.append(equity[-1] * (1 + pnl))
-                    hold_days.append(hold)
+                    if entry_bar >= skip_n:
+                        returns.append(pnl)
+                        equity.append(equity[-1] * (1 + pnl))
+                        hold_days.append(hold)
                     in_trade = False
         else:
             # Count pullback days (below EMA20)
@@ -202,6 +210,7 @@ def _backtest_swing(hist: pd.DataFrame, params: Dict) -> Dict[str, Any]:
                 risk = entry - stop_price
                 target_price = entry + rr * risk
                 in_trade = True
+                entry_bar = i
                 hold = 0
 
     if not returns:
@@ -221,9 +230,10 @@ def _backtest_swing(hist: pd.DataFrame, params: Dict) -> Dict[str, Any]:
     }
 
 
-def _backtest_breakout(hist: pd.DataFrame, params: Dict) -> Dict[str, Any]:
+def _backtest_breakout(hist: pd.DataFrame, params: Dict, skip_n: int = 0) -> Dict[str, Any]:
     """
     Breakout backtest: buy when price breaks 20-day high with above-avg vol.
+    skip_n: see _backtest_swing docstring.
     """
     close = hist["Close"].dropna() if "Close" in hist.columns else hist["close"].dropna()
     high = hist["High"].dropna() if "High" in hist.columns else hist["high"].dropna()
@@ -245,6 +255,7 @@ def _backtest_breakout(hist: pd.DataFrame, params: Dict) -> Dict[str, Any]:
     equity = [1.0]
     hold_days = []
     in_trade = False
+    entry_bar = 0
 
     for i in range(lookback + 5, len(close)):
         price = close.iloc[i]
@@ -258,23 +269,26 @@ def _backtest_breakout(hist: pd.DataFrame, params: Dict) -> Dict[str, Any]:
         if in_trade:
             if price <= stop_price:
                 pnl = (stop_price - entry) / entry
-                returns.append(pnl)
-                equity.append(equity[-1] * (1 + pnl))
-                hold_days.append(hold)
+                if entry_bar >= skip_n:
+                    returns.append(pnl)
+                    equity.append(equity[-1] * (1 + pnl))
+                    hold_days.append(hold)
                 in_trade = False
             elif price >= target_price:
                 pnl = (target_price - entry) / entry
-                returns.append(pnl)
-                equity.append(equity[-1] * (1 + pnl))
-                hold_days.append(hold)
+                if entry_bar >= skip_n:
+                    returns.append(pnl)
+                    equity.append(equity[-1] * (1 + pnl))
+                    hold_days.append(hold)
                 in_trade = False
             else:
                 hold += 1
                 if hold >= 20:
                     pnl = (price - entry) / entry
-                    returns.append(pnl)
-                    equity.append(equity[-1] * (1 + pnl))
-                    hold_days.append(hold)
+                    if entry_bar >= skip_n:
+                        returns.append(pnl)
+                        equity.append(equity[-1] * (1 + pnl))
+                        hold_days.append(hold)
                     in_trade = False
         else:
             if (prev < resistance and price > resistance
@@ -284,6 +298,7 @@ def _backtest_breakout(hist: pd.DataFrame, params: Dict) -> Dict[str, Any]:
                 risk = entry - stop_price
                 target_price = entry + rr * risk
                 in_trade = True
+                entry_bar = i
                 hold = 0
 
     if not returns:
@@ -303,9 +318,10 @@ def _backtest_breakout(hist: pd.DataFrame, params: Dict) -> Dict[str, Any]:
     }
 
 
-def _backtest_mean_reversion(hist: pd.DataFrame, params: Dict) -> Dict[str, Any]:
+def _backtest_mean_reversion(hist: pd.DataFrame, params: Dict, skip_n: int = 0) -> Dict[str, Any]:
     """
     Mean reversion backtest: buy RSI < threshold, sell at RSI > exit or +N%.
+    skip_n: see _backtest_swing docstring.
     """
     close = hist["Close"].dropna() if "Close" in hist.columns else hist["close"].dropna()
     if len(close) < 30:
@@ -328,6 +344,7 @@ def _backtest_mean_reversion(hist: pd.DataFrame, params: Dict) -> Dict[str, Any]
     equity = [1.0]
     hold_days = []
     in_trade = False
+    entry_bar = 0
 
     for i in range(20, len(close)):
         price = close.iloc[i]
@@ -336,23 +353,26 @@ def _backtest_mean_reversion(hist: pd.DataFrame, params: Dict) -> Dict[str, Any]
         if in_trade:
             if price <= stop_price:
                 pnl = (stop_price - entry) / entry
-                returns.append(pnl)
-                equity.append(equity[-1] * (1 + pnl))
-                hold_days.append(hold)
+                if entry_bar >= skip_n:
+                    returns.append(pnl)
+                    equity.append(equity[-1] * (1 + pnl))
+                    hold_days.append(hold)
                 in_trade = False
             elif price >= target_price or rsi_val > rsi_exit:
                 pnl = (price - entry) / entry
-                returns.append(pnl)
-                equity.append(equity[-1] * (1 + pnl))
-                hold_days.append(hold)
+                if entry_bar >= skip_n:
+                    returns.append(pnl)
+                    equity.append(equity[-1] * (1 + pnl))
+                    hold_days.append(hold)
                 in_trade = False
             else:
                 hold += 1
                 if hold >= 10:
                     pnl = (price - entry) / entry
-                    returns.append(pnl)
-                    equity.append(equity[-1] * (1 + pnl))
-                    hold_days.append(hold)
+                    if entry_bar >= skip_n:
+                        returns.append(pnl)
+                        equity.append(equity[-1] * (1 + pnl))
+                        hold_days.append(hold)
                     in_trade = False
         else:
             if rsi_val < rsi_entry:
@@ -360,6 +380,7 @@ def _backtest_mean_reversion(hist: pd.DataFrame, params: Dict) -> Dict[str, Any]
                 stop_price = entry * (1 - stop_pct)
                 target_price = entry * (1 + target_pct)
                 in_trade = True
+                entry_bar = i
                 hold = 0
 
     if not returns:
@@ -379,9 +400,10 @@ def _backtest_mean_reversion(hist: pd.DataFrame, params: Dict) -> Dict[str, Any]
     }
 
 
-def _backtest_momentum(hist: pd.DataFrame, params: Dict) -> Dict[str, Any]:
+def _backtest_momentum(hist: pd.DataFrame, params: Dict, skip_n: int = 0) -> Dict[str, Any]:
     """
     Momentum backtest: enter on big surge day, trail stop, hold momentum.
+    skip_n: see _backtest_swing docstring.
     """
     close = hist["Close"].dropna() if "Close" in hist.columns else hist["close"].dropna()
     vol = hist["Volume"].dropna() if "Volume" in hist.columns else hist["volume"].dropna()
@@ -399,6 +421,7 @@ def _backtest_momentum(hist: pd.DataFrame, params: Dict) -> Dict[str, Any]:
     equity = [1.0]
     hold_days = []
     in_trade = False
+    entry_bar = 0
 
     for i in range(21, len(close)):
         price = close.iloc[i]
@@ -415,23 +438,26 @@ def _backtest_momentum(hist: pd.DataFrame, params: Dict) -> Dict[str, Any]:
             stop_price = max(stop_price, trail)
             if price <= stop_price:
                 pnl = (stop_price - entry) / entry
-                returns.append(pnl)
-                equity.append(equity[-1] * (1 + pnl))
-                hold_days.append(hold)
+                if entry_bar >= skip_n:
+                    returns.append(pnl)
+                    equity.append(equity[-1] * (1 + pnl))
+                    hold_days.append(hold)
                 in_trade = False
             elif price >= target_price:
                 pnl = (target_price - entry) / entry
-                returns.append(pnl)
-                equity.append(equity[-1] * (1 + pnl))
-                hold_days.append(hold)
+                if entry_bar >= skip_n:
+                    returns.append(pnl)
+                    equity.append(equity[-1] * (1 + pnl))
+                    hold_days.append(hold)
                 in_trade = False
             else:
                 hold += 1
                 if hold >= 10:
                     pnl = (price - entry) / entry
-                    returns.append(pnl)
-                    equity.append(equity[-1] * (1 + pnl))
-                    hold_days.append(hold)
+                    if entry_bar >= skip_n:
+                        returns.append(pnl)
+                        equity.append(equity[-1] * (1 + pnl))
+                        hold_days.append(hold)
                     in_trade = False
         else:
             if day_ret >= min_move and cur_vol > vol_mult * avg_v:
@@ -440,6 +466,7 @@ def _backtest_momentum(hist: pd.DataFrame, params: Dict) -> Dict[str, Any]:
                 risk = entry - stop_price
                 target_price = entry + rr * risk
                 in_trade = True
+                entry_bar = i
                 hold = 0
 
     if not returns:
@@ -646,25 +673,52 @@ class StrategyOptimizer:
         scored.sort(key=lambda x: x["score"], reverse=True)
         return scored
 
+    # ── self-correction constants ─────────────────────────────────────────────
+    # Require enough observations before making any adjustment, then use a
+    # slow EMA + shrinkage-toward-neutral to prevent oscillation.
+    _MIN_SAMPLES   = 20      # no adjustment until we have this many outcomes
+    _EMA_ALPHA     = 0.15    # low alpha ≈ half-life ~4 observations
+    _SHRINK_RATE   = 0.12    # pull 12% toward 1.0 on every update (L2-like)
+    _FACTOR_MIN    = 0.75    # tighter bounds than original (was 0.6)
+    _FACTOR_MAX    = 1.25    # tighter bounds than original (was 1.4)
+
     def record_signal_outcome(self, strategy: str, was_correct: bool):
         """
-        Feed live outcomes back in to self-correct scoring weights.
-        Called whenever a signal hits target (correct) or stop (incorrect).
+        Feed live outcomes back to self-correct scoring weights.
+
+        Uses a damped EMA with shrinkage toward 1.0 (neutral).
+        No adjustment is made until _MIN_SAMPLES outcomes are recorded,
+        preventing the multiplier from reacting to early statistical noise.
         """
         if was_correct:
             self._accuracy[strategy]["hits"] += 1
         else:
             self._accuracy[strategy]["misses"] += 1
 
-        # Recalculate adjustment factor
-        acc = self._accuracy[strategy]
+        acc   = self._accuracy[strategy]
         total = acc["hits"] + acc["misses"]
-        if total >= 10:
-            live_wr = acc["hits"] / total
-            # Neutral = 0.5 wr → factor 1.0; above → bonus; below → penalty
-            factor = 0.6 + live_wr * 0.8  # range ≈ 0.6 to 1.4
-            self._score_adjustments[strategy] = round(factor, 3)
-            logger.info(f"Self-corrected {strategy}: live_wr={live_wr:.2f} → factor={factor:.3f}")
+
+        if total < self._MIN_SAMPLES:
+            return  # not enough data yet
+
+        live_wr = acc["hits"] / total
+
+        # Raw target factor: 50% WR → 1.0; range [_FACTOR_MIN, _FACTOR_MAX]
+        raw = self._FACTOR_MIN + live_wr * (self._FACTOR_MAX - self._FACTOR_MIN)
+
+        # EMA-smooth: blend toward raw target slowly
+        prev     = self._score_adjustments.get(strategy, 1.0)
+        smoothed = self._EMA_ALPHA * raw + (1.0 - self._EMA_ALPHA) * prev
+
+        # Shrinkage toward 1.0 — regularises the estimate when evidence is weak
+        shrunk = smoothed + self._SHRINK_RATE * (1.0 - smoothed)
+
+        final = round(max(self._FACTOR_MIN, min(self._FACTOR_MAX, shrunk)), 3)
+        self._score_adjustments[strategy] = final
+        logger.info(
+            "Self-corrected %s: n=%d, live_wr=%.2f, prev=%.3f → %.3f",
+            strategy, total, live_wr, prev, final,
+        )
 
     def get_accuracy_summary(self) -> Dict[str, Dict]:
         """Return live accuracy per strategy for the /strategy_report command."""
@@ -687,25 +741,39 @@ class StrategyOptimizer:
         n_folds: int = 4
     ) -> Dict[str, Any]:
         """
-        Split hist into n_folds, train (find best params) on first half,
-        test on second half of each fold. Returns OOS (out-of-sample) metrics.
+        Expanding-window walk-forward validation.
+
+        For each fold we:
+          1. Fit best params on the TRAIN portion only (no test data seen).
+          2. Evaluate OOS on the TEST portion.
+          3. Prepend CONTEXT_BARS from the training tail so rolling indicators
+             (SMA50, ATR14, etc.) are fully initialised before test_start.
+             Trades entered during the warm-up window are NOT counted — only
+             trades entered at bar >= test_start are included in OOS metrics.
         """
         cfg = STRATEGY_REGISTRY.get(strategy_name)
         if not cfg or len(hist) < 120:
             return {}
 
+        CONTEXT_BARS = 70  # covers SMA50 (50) + ATR14 (14) + safety margin
         fold_size = len(hist) // n_folds
         oos_results = []
 
         for fold in range(n_folds - 1):
-            train_end = (fold + 2) * fold_size
-            test_start = train_end
-            test_end = min(train_end + fold_size, len(hist))
+            train_end   = (fold + 2) * fold_size
+            test_start  = train_end
+            test_end    = min(train_end + fold_size, len(hist))
 
+            # Training data: clean slice, no test period visible
             train_data = hist.iloc[:train_end].copy()
-            test_data = hist.iloc[test_start:test_end].copy()
 
-            if len(test_data) < 20:
+            # Test data: prepend context bars so indicators are warm
+            context_start = max(0, test_start - CONTEXT_BARS)
+            test_data     = hist.iloc[context_start:test_end].copy()
+            skip_n        = test_start - context_start  # warm-up bars to skip
+
+            # Skip fold if there are fewer than 10 genuine test bars
+            if (test_end - test_start) < 10:
                 continue
 
             # Quick best params on train (use only a small grid subset)
@@ -728,9 +796,9 @@ class StrategyOptimizer:
                     except Exception:
                         pass
 
-            # Test on OOS
+            # Test on OOS — only count trades entered in the test window
             try:
-                oos_r = cfg["fn"](test_data, best_p)
+                oos_r = cfg["fn"](test_data, best_p, skip_n=skip_n)
                 oos_results.append({
                     "fold": fold,
                     "trades": oos_r["trades"],
@@ -832,8 +900,8 @@ class StrategyOptimizer:
         elif len(bad) >= 3:
             verdict = "AVOID"
             explanation = (
-                f"All strategies score poorly on this ticker/period. "
-                f"Market structure unfavourable — sit out or wait."
+                "All strategies score poorly on this ticker/period. "
+                "Market structure unfavourable — sit out or wait."
             )
         else:
             verdict = "MODERATE"
@@ -909,20 +977,38 @@ class StrategyOptimizer:
         return notes
 
     def _monte_carlo(self, returns: List[float], n: int = 500) -> Dict[str, Any]:
-        """Fast Monte Carlo on trade returns."""
+        """
+        Block-bootstrap Monte Carlo.
+
+        Preserves serial dependence (win/loss streaks, volatility clustering)
+        that naïve full-permutation destroys.  Block size ≈ sqrt(n_trades)
+        (standard Politis-Romano heuristic).
+        """
         if len(returns) < 10:
             return {}
-        pnls = np.array(returns)
-        finals = []
+        pnls    = np.array(returns)
+        n_orig  = len(pnls)
+        # Block size: floor(sqrt(n_trades)), clamped to [2, 10]
+        block_size      = max(2, min(10, int(math.sqrt(n_orig))))
+        n_blocks_needed = math.ceil(n_orig / block_size)
+
+        finals: List[float] = []
         for _ in range(n):
-            shuffled = np.random.permutation(pnls)
-            finals.append(float(np.prod(1 + shuffled)))
+            sampled: List[float] = []
+            for _b in range(n_blocks_needed):
+                start = random.randint(0, n_orig - block_size)
+                sampled.extend(pnls[start : start + block_size])
+            seq = np.array(sampled[:n_orig])   # trim to original length
+            finals.append(float(np.prod(1.0 + seq)))
+
         finals_arr = np.array(finals)
         return {
-            "n": n,
-            "median_final": round(float(np.median(finals_arr)), 3),
-            "p5_final": round(float(np.percentile(finals_arr, 5)), 3),
-            "p95_final": round(float(np.percentile(finals_arr, 95)), 3),
+            "n":              n,
+            "method":         "block_bootstrap",
+            "block_size":     block_size,
+            "median_final":   round(float(np.median(finals_arr)), 3),
+            "p5_final":       round(float(np.percentile(finals_arr, 5)), 3),
+            "p95_final":      round(float(np.percentile(finals_arr, 95)), 3),
             "pct_profitable": round(float((finals_arr > 1.0).mean() * 100), 1),
         }
 
