@@ -58,6 +58,15 @@ try:
 except ImportError:
     _HAS_REPORT_GEN = False
 
+# v6: strategy optimizer (self-learning, regime-aware backtester)
+try:
+    from src.engines.strategy_optimizer import get_optimizer as _get_optimizer
+    _HAS_OPTIMIZER = True
+except ImportError:
+    _HAS_OPTIMIZER = False
+    def _get_optimizer():
+        return None
+
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
@@ -1150,10 +1159,22 @@ class DiscordInteractiveBot:
         # ──────────────────────────────────────────────────────────────
 
         # Watchlist used by auto-scanners
-        _WATCH_US = ["AAPL","MSFT","GOOGL","AMZN","NVDA","META","TSLA","AMD",
-                     "NFLX","CRM","COIN","PLTR","SOFI","NIO","RIVN","MARA",
-                     "XYZ","SHOP","ROKU","SNAP","UBER","ABNB","NET","CRWD",
-                     "DKNG","SMCI","ARM","AVGO","MU","INTC"]
+        _WATCH_US = [
+            # Mega-cap tech (market movers)
+            "AAPL","MSFT","GOOGL","AMZN","NVDA","META","TSLA",
+            # Semiconductors
+            "AMD","INTC","AVGO","MU","ARM","SMCI","QCOM",
+            # Software / SaaS / Cybersecurity
+            "CRM","ADBE","NOW","SNOW","PLTR","NET","CRWD","PANW",
+            # Finance / Fintech
+            "JPM","BAC","GS","V","MA","COIN","SOFI","HOOD",
+            # Consumer / Media / E-commerce
+            "NFLX","DIS","UBER","ABNB","SHOP","ROKU","SNAP","BABA",
+            # Healthcare / Biotech
+            "LLY","JNJ","MRNA","ABBV",
+            # High-volatility / Speculative
+            "RIVN","NIO","MARA","GME","DKNG","PYPL","LULU",
+        ]
         _WATCH_CRYPTO = ["BTC-USD","ETH-USD","SOL-USD","DOGE-USD","ADA-USD","XRP-USD",
                          "AVAX-USD","DOT-USD","MATIC-USD","LINK-USD"]
         _WATCH_ASIA = [("^N225","🇯🇵 Nikkei"),("^HSI","🇭🇰 Hang Seng"),
@@ -1582,6 +1603,17 @@ class DiscordInteractiveBot:
                         "dollar_vol": d["dollar_vol"],
                         "hold_target": "2-8 weeks",
                         "invalidation": f"Close below ${stop:.2f} (SMA50 / 2×ATR)",
+                        "buy_thesis": (
+                            f"{ticker} is in a confirmed uptrend with a healthy {pb}-day pullback to support. "
+                            f"RSI {rsi:.0f} has reset into the buy zone — ideal re-entry. "
+                            f"Buy the dip in the direction of the existing trend for highest probability."
+                        ),
+                        "stop_reason": (
+                            f"Stop ${stop:.2f} = max(SMA50, price − 2×ATR). "
+                            f"A close BELOW this = the uptrend is structurally broken → exit immediately. "
+                            f"SMA50 is the primary support for swing trades. "
+                            f"2×ATR keeps stop outside normal daily noise. Risk: {abs(price - stop)/price*100:.1f}%."
+                        ),
                     })
                 except Exception:
                     continue
@@ -1683,6 +1715,17 @@ class DiscordInteractiveBot:
                         "dollar_vol": d["dollar_vol"],
                         "hold_target": "1-4 weeks",
                         "invalidation": f"Close below ${stop:.2f} (consolidation low)",
+                        "buy_thesis": (
+                            f"{ticker} is breaking out of a {d['bb_width']:.1f}% BB squeeze consolidation. "
+                            f"Volume {rel_vol:.1f}x avg confirms REAL institutional demand, not noise. "
+                            f"Breakout above ${d['hi_10']:.2f} = buyers in control — momentum builds from here."
+                        ),
+                        "stop_reason": (
+                            f"Stop ${stop:.2f} = consolidation low. "
+                            f"A failed breakout = price returns INTO the base → thesis dead, exit fast. "
+                            f"Never hold a failed breakout — that is how big losses happen. "
+                            f"Risk: {abs(price - stop)/price*100:.1f}% — tight vs the measured-move target."
+                        ),
                     })
                 except Exception:
                     continue
@@ -1792,6 +1835,17 @@ class DiscordInteractiveBot:
                         "day_pct": day_pct,
                         "hold_target": "days to 2 weeks",
                         "invalidation": f"{'Close below' if direction == 'LONG' else 'Close above'} ${stop:.2f} (1.5×ATR)",
+                        "buy_thesis": (
+                            f"{ticker} moved {day_pct:+.1f}% today on {rel_vol:.1f}x volume — real money behind this move. "
+                            f"{'Trend aligned up — ride the momentum.' if direction == 'LONG' else 'Sharp drop on heavy volume — momentum short.'} "
+                            f"High-conviction directional move with institutional participation."
+                        ),
+                        "stop_reason": (
+                            f"Stop ${stop:.2f} = 1.5×ATR from entry. "
+                            f"{'Momentum stops when the surge fades — close below = exit.' if direction == 'LONG' else 'Cover if close above — dump exhausted.'} "
+                            f"1.5×ATR is calibrated to daily volatility (ATR=${atr:.2f}). "
+                            f"Risk: {abs(price - stop)/price*100:.1f}% — sized for a short hold."
+                        ),
                     })
                 except Exception:
                     continue
@@ -1806,6 +1860,33 @@ class DiscordInteractiveBot:
             combined = swing + breakout + momentum
             combined.sort(key=lambda x: x.get("score", 0), reverse=True)
             return combined
+
+        def _attach_ml_rank(signals: list, hist_cache: dict) -> list:
+            """Attach ML regime rank and win probability to each signal."""
+            opt = _get_optimizer()
+            if opt is None or not _yf:
+                return signals
+            for sig in signals:
+                ticker = sig.get("ticker", "")
+                try:
+                    if ticker not in hist_cache:
+                        hist_cache[ticker] = _yf.Ticker(ticker).history(period="3mo")
+                    hist = hist_cache[ticker]
+                    if not hist.empty and len(hist) >= 30:
+                        ranked = opt.quick_regime_rank(hist)
+                        # find rank position for this signal's strategy
+                        strategy = sig.get("setup_type", "SWING")
+                        rank_item = next(
+                            (r for r in ranked if r["strategy"] == strategy), None)
+                        if rank_item:
+                            sig["ml_score"] = rank_item["score"]
+                            sig["ml_regime_fit"] = rank_item["regime_fit"]
+                            sig["ml_rank"] = ranked.index(rank_item) + 1
+                        # top strategy for current regime
+                        sig["ml_best_strategy"] = ranked[0]["strategy"] if ranked else "N/A"
+                except Exception:
+                    pass
+            return signals
 
         # ── Signal card builder (shared) ─────────────────────────────
         def _build_signal_card(sig, now, setup_label=""):
@@ -1845,6 +1926,22 @@ class DiscordInteractiveBot:
 
             e.add_field(name="🛑 Invalidation",
                         value=sig.get("invalidation", "N/A"), inline=False)
+            if sig.get("buy_thesis"):
+                e.add_field(name="🟢 WHY BUY", value=sig["buy_thesis"][:512], inline=False)
+            if sig.get("stop_reason"):
+                e.add_field(name="🛑 WHY THIS STOP", value=sig["stop_reason"][:512], inline=False)
+            if sig.get("ml_score") is not None:
+                ml_score = sig["ml_score"]
+                ml_fit = sig.get("ml_regime_fit", False)
+                ml_rank = sig.get("ml_rank", "?")
+                ml_best = sig.get("ml_best_strategy", "")
+                e.add_field(
+                    name="🧠 ML Regime Check",
+                    value=(
+                        f"Backtest score: **{ml_score:.0f}/100** (rank #{ml_rank})\n"
+                        f"Regime fit: {'✅ Yes' if ml_fit else '⚠️ Off-regime'}\n"
+                        f"Best strategy now: **{ml_best}**"
+                    ), inline=True)
 
             dv = sig.get("dollar_vol", 0)
             dv_str = f"${dv / 1e6:.1f}M" if dv > 1e6 else f"${dv / 1e3:.0f}K"
@@ -1866,10 +1963,8 @@ class DiscordInteractiveBot:
                 signals = await asyncio.to_thread(_sync_swing_scan, _WATCH_US)
                 if not signals:
                     return
+                signals = await asyncio.to_thread(_attach_ml_rank, signals, {})
                 signals.sort(key=lambda x: x["score"], reverse=True)
-                top_count = min(5, len(signals))
-                header = discord.Embed(
-                    title=f"🔄 Swing Trade Scan — {now.strftime('%H:%M UTC')}",
                     description=(
                         f"Scanned {len(_WATCH_US)} tickers • "
                         f"**{len(signals)}** swing setups • "
@@ -1902,6 +1997,7 @@ class DiscordInteractiveBot:
                 signals = await asyncio.to_thread(_sync_breakout_scan, _WATCH_US)
                 if not signals:
                     return
+                signals = await asyncio.to_thread(_attach_ml_rank, signals, {})
                 signals.sort(key=lambda x: x["score"], reverse=True)
                 top_count = min(5, len(signals))
                 header = discord.Embed(
@@ -1991,6 +2087,9 @@ class DiscordInteractiveBot:
 
                 if not all_sigs:
                     return
+
+                # Attach ML regime rank to all signals
+                all_sigs = await asyncio.to_thread(_attach_ml_rank, all_sigs, {})
 
                 # Rank by composite score and pick top 5
                 all_sigs.sort(key=lambda x: x.get("score", 0), reverse=True)
@@ -2577,6 +2676,32 @@ class DiscordInteractiveBot:
         # ══════════════════════════════════════════════════════════════
 
         # ── 12. Real-time price spike / crash alert (every 3 min, 24/7) ──
+        async def _fetch_ticker_news_for_alert(sym: str, max_items: int = 3) -> list:
+            """Fetch recent news headlines for a ticker — attached to spike alert embeds."""
+            def _sync():
+                if not _yf:
+                    return []
+                try:
+                    t = _yf.Ticker(sym)
+                    raw = t.news if hasattr(t, "news") else []
+                    out = []
+                    for item in (raw or [])[:max_items + 3]:
+                        url = item.get("link", item.get("url", ""))
+                        title = item.get("title", "")
+                        if url and title and len(out) < max_items:
+                            out.append({
+                                "title": title[:90],
+                                "url": url,
+                                "publisher": item.get("publisher", ""),
+                            })
+                    return out
+                except Exception:
+                    return []
+            try:
+                return await asyncio.wait_for(asyncio.to_thread(_sync), timeout=5.0)
+            except Exception:
+                return []
+
         _last_prices: Dict[str, float] = {}
         _spike_cooldown: Dict[str, float] = {}   # ticker → timestamp of last alert
 
@@ -2641,6 +2766,15 @@ class DiscordInteractiveBot:
                                         value=f"`/ai {sym}` · `/analyze {sym}` · `/why {sym}`",
                                         inline=False)
                             e.set_footer(text="🔔 Real-time alert • Auto-detected")
+                            try:
+                                _anews = await _fetch_ticker_news_for_alert(sym)
+                                if _anews:
+                                    _nl = "\n".join(
+                                        f"• [{n['title']}]({n['url']})" for n in _anews[:3])
+                                    e.add_field(name="📰 Why Is It Moving?",
+                                                value=_nl[:900], inline=False)
+                            except Exception:
+                                pass
                             await _send_ch(channel, embed=e)
 
                             # Also alert in daily-brief for big index moves
@@ -2707,7 +2841,11 @@ class DiscordInteractiveBot:
                         return []
                     all_news = []
                     # Get market-wide news from major tickers
-                    for sym in ["SPY", "QQQ", "^VIX", "BTC-USD", "AAPL", "NVDA", "TSLA"]:
+                    _news_scan_universe = (
+                        ["SPY", "QQQ", "^VIX", "BTC-USD", "ETH-USD"]
+                        + _WATCH_US[:20]
+                    )
+                    for sym in _news_scan_universe:
                         try:
                             t = _yf.Ticker(sym)
                             news = t.news if hasattr(t, "news") else []
@@ -2762,6 +2900,175 @@ class DiscordInteractiveBot:
                 await _send_ch("daily-brief", embed=e)
             except Exception as exc:
                 logger.error(f"auto_news_feed error: {exc}")
+
+        # ── 13B. Per-stock breaking news monitor (every 15 min, extended hours) ──
+        _ticker_news_seen: Dict[str, set] = {}   # per-ticker seen URLs
+
+        @tasks.loop(minutes=15)
+        async def auto_ticker_news():
+            """Scans all 50 tracked stocks for breaking news in rotating chunks.
+            Each stock checked every ~45 min. Posts to #daily-brief."""
+            now = datetime.now(timezone.utc)
+            if not (8 <= now.hour < 22):
+                return
+            try:
+                import time as _tt
+                chunk_sz = max(1, len(_WATCH_US) // 3)
+                idx = int(_tt.time() / 900) % 3
+                chunk = _WATCH_US[idx * chunk_sz:(idx + 1) * chunk_sz]
+
+                def _sync_chunk_news(syms):
+                    if not _yf:
+                        return []
+                    results = []
+                    for sym in syms:
+                        try:
+                            t = _yf.Ticker(sym)
+                            raw = t.news if hasattr(t, "news") else []
+                            for item in (raw or [])[:3]:
+                                url = item.get("link", item.get("url", ""))
+                                title = item.get("title", "")
+                                if not url or not title:
+                                    continue
+                                if url in _ticker_news_seen.get(sym, set()):
+                                    continue
+                                results.append({
+                                    "ticker": sym,
+                                    "title": title[:150],
+                                    "publisher": item.get("publisher", ""),
+                                    "url": url,
+                                    "time": item.get("providerPublishTime", 0),
+                                })
+                        except Exception:
+                            continue
+                    return results
+
+                fresh = await asyncio.to_thread(_sync_chunk_news, chunk)
+                if not fresh:
+                    return
+                fresh.sort(key=lambda x: x.get("time", 0), reverse=True)
+                new_items = []
+                for item in fresh[:6]:
+                    sym = item["ticker"]
+                    if sym not in _ticker_news_seen:
+                        _ticker_news_seen[sym] = set()
+                    _ticker_news_seen[sym].add(item["url"])
+                    if len(_ticker_news_seen[sym]) > 200:
+                        _ticker_news_seen[sym] = set(list(_ticker_news_seen[sym])[-100:])
+                    new_items.append(item)
+                if not new_items:
+                    return
+                e = discord.Embed(
+                    title=f"📰 Breaking Stock News — {now.strftime('%H:%M UTC')}",
+                    description=(
+                        f"Fresh headlines · Stocks chunk {idx + 1}/3 "
+                        f"({len(chunk)} tickers · {len(new_items)} new stories)"
+                    ),
+                    color=COLOR_INFO, timestamp=now)
+                for item in new_items:
+                    e.add_field(
+                        name=f"[{item['ticker']}] {item['publisher'] or 'News'}",
+                        value=f"[{item['title']}]({item['url']})",
+                        inline=False)
+                e.set_footer(
+                    text="📰 All 50 tracked stocks covered every 45min · /why TICKER for full analysis")
+                await _send_ch("daily-brief", embed=e)
+            except Exception as exc:
+                logger.error(f"auto_ticker_news error: {exc}")
+
+        # ── 13C. Auto Strategy Learn (every 6h weekdays) ──────────────
+        @tasks.loop(hours=6)
+        async def auto_strategy_learn():
+            """Runs full AI backtest on top watchlist stocks, identifies best
+            strategy per regime, posts ranked summary to #ai-signals."""
+            now = datetime.now(timezone.utc)
+            if not (8 <= now.hour < 22 and now.weekday() < 5):
+                return
+            opt = _get_optimizer()
+            if opt is None:
+                return
+            try:
+                scan_tickers = _WATCH_US[:5] + ["SPY", "QQQ", "BTC-USD"]
+
+                def _sync_learn():
+                    if not _yf:
+                        return []
+                    results = []
+                    for sym in scan_tickers:
+                        try:
+                            hist = _yf.Ticker(sym).history(period="1y")
+                            if hist.empty or len(hist) < 60:
+                                continue
+                            analysis = opt.full_analysis(sym, hist, "1y")
+                            ranked = analysis["ranked"]
+                            best = ranked[0] if ranked else {}
+                            regime = analysis["regime"]
+                            rr = analysis["regime_recommendation"]
+                            results.append({
+                                "ticker": sym,
+                                "best_strategy": best.get("strategy", "N/A"),
+                                "best_score": best.get("score", 0),
+                                "regime": regime["label"],
+                                "regime_fit": rr.get("regime_fit", False),
+                                "cross_check": analysis["cross_check"]["verdict"],
+                                "win_rate": best.get("win_rate", 0),
+                                "sharpe": best.get("sharpe", 0),
+                                "sweep_improvement": analysis.get("sweep_improvement", 0),
+                                "correction_notes": analysis.get("correction_notes", []),
+                            })
+                        except Exception:
+                            continue
+                    return results
+
+                results = await asyncio.to_thread(_sync_learn)
+                if not results:
+                    return
+
+                results.sort(key=lambda x: x["best_score"], reverse=True)
+
+                e = discord.Embed(
+                    title=f"🤖 AI Strategy Learning Report — {now.strftime('%a %d %b %H:%M UTC')}",
+                    description=(
+                        f"Backtested **{len(results)}** tickers · 4 strategies each · "
+                        f"Walk-forward validated · Self-correction applied"
+                    ),
+                    color=COLOR_PURPLE, timestamp=now)
+
+                for r in results:
+                    cc_icon = {"STRONG_AGREEMENT": "✅", "MIXED_SIGNAL": "⚠️",
+                               "AVOID": "🔴", "MODERATE": "🟡"}.get(r["cross_check"], "❓")
+                    fit_tag = "✅ Regime fit" if r["regime_fit"] else "⚠️ Off-regime"
+                    sweep_note = (f"⚙️ Param sweep +{r['sweep_improvement']:.1f}pts\n"
+                                  if r["sweep_improvement"] > 1 else "")
+                    e.add_field(
+                        name=f"{'🥇' if r == results[0] else '📊'} {r['ticker']} → {r['best_strategy']}",
+                        value=(
+                            f"Score **{r['best_score']:.0f}** · WR **{r['win_rate']*100:.0f}%** · "
+                            f"Sharpe **{r['sharpe']:.2f}**\n"
+                            f"Regime: **{r['regime']}** {fit_tag}\n"
+                            f"{cc_icon} Cross-check: {r['cross_check']}\n"
+                            + sweep_note
+                        ))
+
+                all_notes = []
+                for r in results:
+                    all_notes.extend(r.get("correction_notes", []))
+                unique_notes = list(dict.fromkeys(all_notes))[:3]
+                valid_notes = [n for n in unique_notes if "No self-corrections yet" not in n]
+                if valid_notes:
+                    e.add_field(name="🧠 Self-Correction Log",
+                                value="\n".join(valid_notes)[:400], inline=False)
+
+                e.add_field(name="📋 Actions",
+                            value=("`/backtest TICKER` full analysis · "
+                                   "`/best_strategy TICKER` quick regime pick · "
+                                   "`/strategy_report` live accuracy"),
+                            inline=False)
+                e.set_footer(text="🤖 Runs every 6h · self-improves with each live outcome")
+                await _send_ch("ai-signals", embed=e)
+                await _audit(f"🤖 auto_strategy_learn: {len(results)} tickers analysed")
+            except Exception as exc:
+                logger.error(f"auto_strategy_learn error: {exc}")
 
         # ── 14. Smart morning update (multi-timezone coverage) ────────
         # Posts at 3 different times so users in ANY timezone get a fresh
@@ -3043,6 +3350,8 @@ class DiscordInteractiveBot:
                     f"{'✅' if market_pulse.is_running() else '❌'} Market Pulse\n"
                     f"{'✅' if realtime_price_alerts.is_running() else '❌'} 🚨 Price Alerts (3min)\n"
                     f"{'✅' if auto_news_feed.is_running() else '❌'} 📰 News Feed (30min)\n"
+                    f"{'✅' if auto_ticker_news.is_running() else '❌'} 📰 Ticker News (15min)\n"
+                    f"{'✅' if auto_strategy_learn.is_running() else '❌'} 🤖 Strategy Learn (6h)\n"
                     f"{'✅' if smart_morning_update.is_running() else '❌'} ☀️ Smart Morning (3x/day)\n"
                     f"{'✅' if opportunity_scanner.is_running() else '❌'} 🎯 Oppty Scanner (30min)\n"
                     f"{'✅' if vix_fear_monitor.is_running() else '❌'} ⚠️ VIX Fear Monitor (5min)\n"
@@ -3096,6 +3405,10 @@ class DiscordInteractiveBot:
         async def _w16(): await bot.wait_until_ready()
         @vix_fear_monitor.before_loop
         async def _w17(): await bot.wait_until_ready()
+        @auto_ticker_news.before_loop
+        async def _w18(): await bot.wait_until_ready()
+        @auto_strategy_learn.before_loop
+        async def _w19(): await bot.wait_until_ready()
 
         # ══════════════════════════════════════════════════════════════
         # BOT EVENTS
@@ -3126,8 +3439,11 @@ class DiscordInteractiveBot:
                 health_check,
                 # NEW: Real-time automation
                 realtime_price_alerts, auto_news_feed,
+                auto_ticker_news,
                 smart_morning_update, opportunity_scanner,
                 vix_fear_monitor,
+                # AI learning
+                auto_strategy_learn,
             ]
             for t in all_tasks:
                 if not t.is_running():
@@ -3871,19 +4187,229 @@ class DiscordInteractiveBot:
             except Exception as exc:
                 await interaction.followup.send(f"❌ {exc}")
 
-        @bot.tree.command(name="why", description="Why is a stock moving?")
-        @app_commands.describe(ticker="Stock symbol")
+        @bot.tree.command(name="why", description="Full conviction analysis — should you buy/sell, where to stop, why")
+        @app_commands.describe(ticker="Stock symbol e.g. NVDA, TSLA, BTC-USD")
         @app_commands.checks.cooldown(1, 5, key=lambda i: i.user.id)
         async def cmd_why(interaction: discord.Interaction, ticker: str):
             await interaction.response.defer()
+            ticker = ticker.upper().strip()
+            now = datetime.now(timezone.utc)
+
+            def _sync_why_analysis(sym):
+                if not _yf:
+                    return {}
+                try:
+                    t = _yf.Ticker(sym)
+                    hist = t.history(period="3mo")
+                    if hist.empty or len(hist) < 20:
+                        return {}
+                    techs = _compute_technicals(hist)
+                    news, analyst = [], {}
+                    try:
+                        raw_news = t.news if hasattr(t, "news") else []
+                        ts_now = now.timestamp()
+                        for item in (raw_news or [])[:8]:
+                            url = item.get("link", item.get("url", ""))
+                            title = item.get("title", "")
+                            if url and title:
+                                age_h = (ts_now - item.get("providerPublishTime", ts_now)) / 3600
+                                news.append({"title": title[:100], "url": url,
+                                             "publisher": item.get("publisher", ""),
+                                             "age_h": age_h})
+                    except Exception:
+                        pass
+                    try:
+                        info = t.info or {}
+                        analyst = {
+                            "recommendation": info.get("recommendationKey", ""),
+                            "analyst_count": info.get("numberOfAnalystOpinions", 0),
+                            "target_mean": info.get("targetMeanPrice", 0),
+                        }
+                    except Exception:
+                        pass
+                    return {**techs, "news": news, "analyst": analyst}
+                except Exception:
+                    return {}
+
+            data = await asyncio.to_thread(_sync_why_analysis, ticker)
             d = await _fetch_stock(ticker)
+            if not data:
+                await interaction.followup.send(
+                    f"❌ Could not fetch data for `{ticker}`. Check the symbol (e.g. NVDA, BTC-USD).")
+                return
+
+            price = d.get("price", data.get("price", 0))
             pct = d.get("change_pct", 0)
-            direction = "up" if pct > 0 else "down"
-            e = discord.Embed(title=f"❓ Why is {ticker.upper()} {direction} {abs(pct):.1f}%?",
-                              color=COLOR_BUY if pct > 0 else COLOR_SELL)
-            e.add_field(name="Quick Check", inline=False,
-                        value=f"`/news {ticker}` · `/analyze {ticker}` · `/ai {ticker}`")
+            rsi = data.get("rsi", 50)
+            atr = data.get("atr", price * 0.02)
+            sma20 = data.get("sma20", 0)
+            sma50 = data.get("sma50", 0)
+            rel_vol = data.get("rel_vol", 1.0)
+            bb_lower = data.get("bb_lower", 0)
+            bb_upper = data.get("bb_upper", 0)
+            bb_width = data.get("bb_width", 5)
+            pb = data.get("pullback_days", 0)
+
+            # ── Build conviction score ─────────────────────────────────
+            buy_pts, sell_pts, conviction = [], [], 0
+
+            # Trend
+            if price > sma20 > sma50:
+                conviction += 25
+                buy_pts.append(f"✅ Price > SMA20 > SMA50 — uptrend in force")
+            elif price > sma50:
+                conviction += 10
+                buy_pts.append(f"🟡 Above SMA50 — holding trend support")
+            elif price < sma20 < sma50:
+                conviction -= 25
+                sell_pts.append(f"🔴 Below SMA20 & SMA50 — downtrend confirmed, avoid longs")
+            else:
+                sell_pts.append(f"🟠 Mixed trend — no clear direction, wait for clarity")
+
+            # Pullback (swing quality)
+            if 2 <= pb <= 7:
+                conviction += 15
+                buy_pts.append(f"✅ {pb}-day healthy pullback in uptrend — classic swing entry")
+            elif pb == 1:
+                conviction += 5
+                buy_pts.append(f"🟡 1-day dip — monitor for follow-through")
+
+            # RSI
+            if rsi < 30:
+                conviction += 25
+                buy_pts.append(f"✅ RSI {rsi:.0f} — severely oversold, bounce very likely")
+            elif rsi < 45:
+                conviction += 10
+                buy_pts.append(f"✅ RSI {rsi:.0f} — oversold reset, buy zone")
+            elif rsi > 75:
+                conviction -= 25
+                sell_pts.append(f"🔴 RSI {rsi:.0f} — extremely overbought, avoid new longs")
+            elif rsi > 65:
+                conviction -= 10
+                sell_pts.append(f"🟠 RSI {rsi:.0f} — elevated, not ideal entry")
+            else:
+                buy_pts.append(f"🟡 RSI {rsi:.0f} — neutral zone, no RSI edge")
+
+            # Volume
+            if rel_vol >= 2.5:
+                conviction += 25
+                buy_pts.append(f"✅ Volume {rel_vol:.1f}× avg — strong institutional activity")
+            elif rel_vol >= 1.5:
+                conviction += 10
+                buy_pts.append(f"🟡 Volume {rel_vol:.1f}× avg — above-normal interest")
+            elif rel_vol < 0.7:
+                conviction -= 10
+                sell_pts.append(f"🔴 Volume {rel_vol:.1f}× avg — no conviction behind the move")
+
+            # Today's move
+            if abs(pct) >= 3:
+                if pct > 0:
+                    conviction += 15
+                    buy_pts.append(f"✅ {pct:+.1f}% today — momentum catalyst present")
+                else:
+                    conviction -= 15
+                    sell_pts.append(f"🔴 {pct:+.1f}% today — selling pressure, be cautious")
+            elif pct > 1:
+                conviction += 5
+                buy_pts.append(f"🟡 {pct:+.1f}% today — mild positive momentum")
+
+            # Bollinger Band position
+            if bb_lower and price < bb_lower:
+                conviction += 20
+                buy_pts.append(f"✅ Below lower BB (${bb_lower:.2f}) — mean reversion setup")
+            elif bb_upper and price > bb_upper:
+                conviction -= 15
+                sell_pts.append(f"🔴 Above upper BB (${bb_upper:.2f}) — extended, overbought")
+            elif bb_width and bb_width < 4:
+                conviction += 5
+                buy_pts.append(f"✅ BB squeeze ({bb_width:.1f}%) — potential breakout building")
+
+            conviction = max(-100, min(100, conviction))
+
+            # ── Stop loss reasoning ────────────────────────────────────
+            if conviction >= 0:
+                suggested_stop = round(price - 1.5 * atr, 2)
+                stop_risk_pct = abs(price - suggested_stop) / price * 100
+                stop_text = (
+                    f"**Enter:** ~${price:.2f}  |  **Stop:** ${suggested_stop:.2f}  |  **Risk:** {stop_risk_pct:.1f}%\n"
+                    f"• Stop = **1.5× ATR** (${atr:.2f}) below price = outside normal daily noise\n"
+                    f"• **If close below ${suggested_stop:.2f}**: the buy thesis is broken → exit immediately\n"
+                    f"• SMA50 at ${sma50:.2f} — a close below SMA50 also invalidates a long\n"
+                    f"• Stop loss exists to protect capital, not to hope the trade bounces"
+                )
+            else:
+                suggested_stop = round(price + 1.5 * atr, 2)
+                stop_risk_pct = abs(price - suggested_stop) / price * 100
+                stop_text = (
+                    f"**Counter-trend / falling setup** — higher risk, smaller size\n"
+                    f"• If buying dip: stop above **${suggested_stop:.2f}** (+{stop_risk_pct:.1f}%)\n"
+                    f"• Trend is DOWN — only trade with very tight stop and small position\n"
+                    f"• **Better strategy**: wait for trend reversal confirmation before entering"
+                )
+
+            # ── Verdict ───────────────────────────────────────────────
+            if conviction >= 50:
+                verdict, v_color = "🟢 STRONG BUY — High conviction setup", COLOR_BUY
+            elif conviction >= 20:
+                verdict, v_color = "🟢 BUY / WATCH — Conditions favour long", COLOR_BUY
+            elif conviction >= -10:
+                verdict, v_color = "🟡 NEUTRAL — Wait for a clearer signal", COLOR_INFO
+            elif conviction >= -40:
+                verdict, v_color = "🟠 CAUTION — Avoid new long entries", COLOR_SELL
+            else:
+                verdict, v_color = "🔴 AVOID / SELL — Conditions unfavourable", COLOR_SELL
+
+            e = discord.Embed(
+                title=f"🧠 Conviction Analysis — {ticker}",
+                description=(
+                    f"**${price:.2f}** ({pct:+.2f}% today)  |  Conviction: **{conviction:+d}/100**\n\n"
+                    f"**{verdict}**"
+                ),
+                color=v_color, timestamp=now)
+
+            if buy_pts:
+                e.add_field(name="🟢 REASONS TO BUY",
+                            value="\n".join(buy_pts[:5]), inline=False)
+            if sell_pts:
+                e.add_field(name="🔴 REASONS TO WAIT / AVOID",
+                            value="\n".join(sell_pts[:4]), inline=False)
+
+            e.add_field(name="🛑 STOP LOSS — WHERE & WHY",
+                        value=stop_text[:512], inline=False)
+
+            e.add_field(name="📊 Technicals",
+                        value=(
+                            f"RSI **{rsi:.0f}** · Vol **{rel_vol:.1f}×** · ATR **${atr:.2f}**\n"
+                            f"SMA20 **${sma20:.2f}** · SMA50 **${sma50:.2f}**"
+                        ), inline=True)
+
+            # Analyst consensus
+            analyst = data.get("analyst", {})
+            if analyst.get("recommendation") or analyst.get("analyst_count"):
+                rec = (analyst.get("recommendation") or "N/A").upper()
+                cnt = analyst.get("analyst_count", 0)
+                tgt = analyst.get("target_mean", 0)
+                upside = (tgt - price) / price * 100 if tgt and price else 0
+                ana_text = f"**{rec}** ({cnt} analysts)"
+                if tgt:
+                    ana_text += f"\nTarget: **${tgt:.2f}** ({upside:+.1f}% upside)"
+                e.add_field(name="👔 Analyst View", value=ana_text, inline=True)
+
+            # News & social
+            news = data.get("news", [])
+            news_24h = [n for n in news if n.get("age_h", 99) < 24]
+            s_icon = "🔥" if len(news_24h) >= 3 else "📰" if news_24h else "📭"
+            if news:
+                news_text = f"{s_icon} **{len(news_24h)}** stories in last 24h\n"
+                news_text += "\n".join(
+                    f"• [{n['title'][:65]}...]({n['url']})" for n in news[:4] if n.get("url"))
+            else:
+                news_text = "📭 No recent news found — quiet on this ticker"
+            e.add_field(name="📰 NEWS & CATALYST", value=news_text[:900], inline=False)
+
+            e.set_footer(text=f"🧠 /why conviction engine · {ticker} · Also try /analyze /ai /news")
             await interaction.followup.send(embed=e)
+            await _audit(f"🧠 {interaction.user} → /why {ticker} (conviction {conviction:+d})")
 
         # ══════════════════════════════════════════════════════════════
         # SLASH COMMANDS — Signals & Scanners
@@ -4290,19 +4816,266 @@ class DiscordInteractiveBot:
         # SLASH COMMANDS — Tools
         # ══════════════════════════════════════════════════════════════
 
-        @bot.tree.command(name="backtest", description="Backtest a strategy")
-        @app_commands.describe(ticker="Symbol", period="1mo, 3mo, 6mo, 1y, 2y")
-        @app_commands.checks.cooldown(1, 15, key=lambda i: i.user.id)
+        @bot.tree.command(name="backtest",
+                          description="Backtest all 4 strategies on a ticker — ranked by Sharpe, win-rate & regime fit")
+        @app_commands.describe(ticker="Symbol e.g. NVDA, TSLA, BTC-USD",
+                               period="1mo 3mo 6mo 1y 2y (default 1y)")
+        @app_commands.checks.cooldown(1, 20, key=lambda i: i.user.id)
         async def cmd_backtest(interaction: discord.Interaction,
                                 ticker: str, period: str = "1y"):
             await interaction.response.defer()
-            e = discord.Embed(title=f"📈 Backtest — {ticker.upper()} ({period})",
-                              description="⏳ Running...", color=COLOR_INFO)
-            e.add_field(name="Strategy", value="Momentum + MR")
-            e.add_field(name="Period", value=period)
-            e.add_field(name="Output", value="#backtesting")
+            ticker = ticker.upper().strip()
+            now = datetime.now(timezone.utc)
+
+            def _sync_run(sym, per):
+                if not _yf:
+                    return None
+                hist = _yf.Ticker(sym).history(period=per)
+                if hist.empty or len(hist) < 30:
+                    return None
+                opt = _get_optimizer()
+                if opt is None:
+                    return None
+                return opt.full_analysis(sym, hist, per)
+
+            await interaction.followup.send(
+                embed=discord.Embed(
+                    title=f"🔬 Running AI Backtest — {ticker} ({period})",
+                    description="Testing SWING · BREAKOUT · MEAN_REVERSION · MOMENTUM\nWalk-forward validation + parameter sweep + cross-check...",
+                    color=COLOR_INFO, timestamp=now))
+
+            result = await asyncio.to_thread(_sync_run, ticker, period)
+            if result is None:
+                await interaction.followup.send(
+                    f"❌ No data for `{ticker}` ({period}). Try a different symbol or period.")
+                return
+
+            regime = result["regime"]
+            ranked = result["ranked"]
+            best = result["best_strategy"]
+            best_r = result["strategy_results"].get(best, {})
+            cc = result["cross_check"]
+            rr = result["regime_recommendation"]
+            mc = result.get("monte_carlo", {})
+            wf = result.get("walk_forward", {})
+
+            # ── Header embed ──
+            e = discord.Embed(
+                title=f"📊 Backtest Results — {ticker} ({period})",
+                description=(
+                    f"**Regime: {regime['label']}** · Vol {regime.get('vol_ann',0):.0f}% ann · "
+                    f"Trend {regime.get('trend_pct',0):+.1f}% vs SMA50\n"
+                    f"**4 strategies tested · best = {best}**"
+                ),
+                color=COLOR_GOLD, timestamp=now)
+
+            # Strategy comparison table
+            table_lines = []
+            for r in ranked:
+                name = r["strategy"]
+                score = r.get("score", 0)
+                trades = r.get("trades", 0)
+                wr = r.get("win_rate", 0) * 100
+                sharpe = r.get("sharpe", 0)
+                dd = r.get("max_dd", 0) * 100
+                bar = "█" * int(score // 12) + "░" * (8 - int(score // 12))
+                medal = "🥇" if name == best else ("🥈" if r == ranked[1] else "  ")
+                table_lines.append(
+                    f"{medal} **{name}** `{bar}` {score:.0f}\n"
+                    f"  Trades {trades} · WR {wr:.0f}% · Sharpe {sharpe:.2f} · DD {dd:.1f}%")
+            e.add_field(name="🏆 Strategy Ranking",
+                        value="\n".join(table_lines)[:900], inline=False)
+
+            # Regime recommendation
+            e.add_field(
+                name=f"🌡️ Regime: {rr['regime']}",
+                value=(
+                    f"{rr['explanation']}\n"
+                    f"→ **Best strategy for this regime: {rr['best_strategy']}** "
+                    f"(score {rr['best_score']:.0f}) "
+                    f"{'✅ Regime-fit' if rr['regime_fit'] else '⚠️ Not ideal regime'}"
+                ),
+                inline=False)
+
+            # Cross-check
+            verdict_emoji = {"STRONG_AGREEMENT": "✅", "MIXED_SIGNAL": "⚠️",
+                             "AVOID": "🔴", "MODERATE": "🟡"}.get(cc["verdict"], "❓")
+            e.add_field(
+                name=f"{verdict_emoji} Cross-Check: {cc['verdict']}",
+                value=cc["explanation"][:300], inline=False)
+
+            # Walk-forward OOS for best strategy
+            if wf.get(best):
+                wf_r = wf[best]
+                stable = "✅ Stable" if wf_r.get("stable") else "⚠️ Unstable"
+                e.add_field(
+                    name=f"🔄 Walk-Forward OOS — {best}",
+                    value=(
+                        f"{stable} · {wf_r['folds']} folds\n"
+                        f"OOS Sharpe **{wf_r['avg_oos_sharpe']:.2f}** · "
+                        f"OOS Win-rate **{wf_r['avg_oos_win_rate']*100:.0f}%** · "
+                        f"Score **{wf_r['avg_oos_score']:.0f}**"
+                    ), inline=False)
+
+            # Param sweep improvement
+            sweep_delta = result.get("sweep_improvement", 0)
+            if abs(sweep_delta) > 0.5:
+                bp = result.get("best_params", {})
+                params_str = "  ·  ".join(f"{k}={v}" for k, v in bp.items())
+                e.add_field(
+                    name=f"⚙️ Optimal Params — {best} (+{sweep_delta:.1f} pts)",
+                    value=params_str[:200], inline=False)
+
+            # Monte Carlo
+            if mc:
+                e.add_field(
+                    name="🎲 Monte Carlo (500 runs)",
+                    value=(
+                        f"Median final equity **{mc['median_final']*100:.0f}%** · "
+                        f"5th pct **{mc['p5_final']*100:.0f}%** · "
+                        f"Profitable in **{mc['pct_profitable']:.0f}%** of simulations"
+                    ), inline=False)
+
+            # Self-correction notes
+            corrections = result.get("correction_notes", [])
+            if corrections:
+                e.add_field(name="🧠 Self-Correction Status",
+                            value="\n".join(corrections[:4])[:400], inline=False)
+
+            e.set_footer(text=f"✅ Real backtest · {ticker} · /best_strategy for regime pick · /strategy_report for live accuracy")
             await interaction.followup.send(embed=e)
-            await _audit(f"📈 {interaction.user} → /backtest {ticker} {period}")
+            await _audit(f"📊 {interaction.user} → /backtest {ticker} {period} → best={best} score={best_r.get('score',0):.0f}")
+
+        @bot.tree.command(name="best_strategy",
+                          description="Which strategy wins on this ticker RIGHT NOW in current market regime?")
+        @app_commands.describe(ticker="Symbol e.g. SPY, NVDA, BTC-USD")
+        @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
+        async def cmd_best_strategy(interaction: discord.Interaction, ticker: str):
+            await interaction.response.defer()
+            ticker = ticker.upper().strip()
+            now = datetime.now(timezone.utc)
+
+            def _sync_best(sym):
+                if not _yf:
+                    return None
+                hist = _yf.Ticker(sym).history(period="6mo")
+                if hist.empty or len(hist) < 30:
+                    return None
+                opt = _get_optimizer()
+                if opt is None:
+                    return None
+                from src.engines.strategy_optimizer import _regime_from_data
+                ranked = opt.quick_regime_rank(hist)
+                regime = _regime_from_data(hist)
+                return {"ranked": ranked, "regime": regime}
+
+            result = await asyncio.to_thread(_sync_best, ticker)
+            if not result:
+                await interaction.followup.send(f"❌ No data for `{ticker}`.")
+                return
+
+            regime = result["regime"]
+            ranked = result["ranked"]
+            best = ranked[0] if ranked else {}
+
+            regime_icons = {
+                "RISK_ON_TRENDING": "🟢", "LOW_VOL_UPTREND": "🟢",
+                "NEUTRAL": "🟡", "LOW_VOL_RANGING": "🟡",
+                "RISK_OFF": "🔴", "HIGH_VOL": "🔴", "DOWNTREND": "🔴",
+                "RISK_ON_HIGH_VOL": "🟠",
+            }
+            icon = regime_icons.get(regime["label"], "⚪")
+
+            e = discord.Embed(
+                title=f"🏆 Best Strategy for {ticker} Right Now",
+                description=(
+                    f"{icon} **Regime: {regime['label']}**\n"
+                    f"Vol {regime.get('vol_ann',0):.0f}% ann · "
+                    f"Trend {regime.get('trend_pct',0):+.1f}% vs SMA50 · "
+                    f"20d mom {regime.get('mom20d',0):+.1f}%"
+                ),
+                color=COLOR_GOLD, timestamp=now)
+
+            medals = ["🥇", "🥈", "🥉", "4️⃣"]
+            lines = []
+            for i, r in enumerate(ranked):
+                medal = medals[i] if i < len(medals) else "  "
+                fit_tag = "✅ Regime fit" if r["regime_fit"] else "⚠️ Off-regime"
+                lines.append(f"{medal} **{r['strategy']}** — Score {r['score']:.0f}  {fit_tag}")
+            e.add_field(name="Strategy Rankings (6mo data)",
+                        value="\n".join(lines), inline=False)
+
+            if best:
+                e.add_field(
+                    name=f"✅ Use this: {best['strategy']}",
+                    value=(
+                        f"Best fit for **{regime['label']}** regime.\n"
+                        f"`/backtest {ticker} 1y` → full details + optimal parameters."
+                    ), inline=False)
+
+            e.set_footer(text="/backtest for walk-forward + param sweep · /strategy_report for live accuracy")
+            await interaction.followup.send(embed=e)
+            await _audit(f"🏆 {interaction.user} → /best_strategy {ticker} → {best.get('strategy','?')}")
+
+        @bot.tree.command(name="strategy_report",
+                          description="AI self-learning report — live accuracy, corrections, regime performance")
+        @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
+        async def cmd_strategy_report(interaction: discord.Interaction):
+            await interaction.response.defer()
+            now = datetime.now(timezone.utc)
+            opt = _get_optimizer()
+            if opt is None:
+                await interaction.followup.send("❌ Strategy optimizer not available.")
+                return
+
+            acc = opt.get_accuracy_summary()
+            e = discord.Embed(
+                title="🧠 AI Self-Learning Strategy Report",
+                description=(
+                    "Live accuracy tracked from every signal outcome.\n"
+                    "Scoring weights auto-adjust based on what's actually working."
+                ),
+                color=COLOR_PURPLE, timestamp=now)
+
+            if not acc:
+                e.add_field(
+                    name="📊 Status",
+                    value=(
+                        "No live outcomes recorded yet.\n"
+                        "The optimizer learns as signals hit target or stop.\n"
+                        "Run `/backtest TICKER` to see historical backtest performance."
+                    ), inline=False)
+            else:
+                for strat, data in acc.items():
+                    total = data["total"]
+                    if total == 0:
+                        continue
+                    wr = data.get("live_win_rate", 0) or 0
+                    factor = data.get("score_factor", 1.0)
+                    status = "✅" if wr >= 55 else ("⚠️" if wr >= 40 else "🔴")
+                    up_dn = "🔺" if factor > 1.05 else ("🔻" if factor < 0.95 else "➡️")
+                    e.add_field(
+                        name=f"{status} {strat}",
+                        value=(
+                            f"Tracked: **{total}** signals\n"
+                            f"Live win-rate: **{wr:.0f}%**\n"
+                            f"{up_dn} Score factor: **×{factor:.2f}** (auto-adjusted)"
+                        ))
+
+            e.add_field(
+                name="ℹ️ How Self-Correction Works",
+                value=(
+                    "1️⃣ Every signal tagged with its strategy\n"
+                    "2️⃣ Target hit → WIN recorded\n"
+                    "3️⃣ Stop hit → LOSS recorded\n"
+                    "4️⃣ Live win-rate updates score multiplier (×0.6–1.4)\n"
+                    "5️⃣ Weak strategies get lower scores, strong ones boosted\n"
+                    "6️⃣ Rebalances every 20 new outcomes"
+                ), inline=False)
+
+            e.set_footer(text="/backtest TICKER · /best_strategy TICKER · auto_strategy_learn runs every 6h")
+            await interaction.followup.send(embed=e)
+            await _audit(f"🧠 {interaction.user} → /strategy_report")
 
         @bot.tree.command(name="watchlist",
                           description="Manage your watchlist — view, add, remove tickers with live prices")

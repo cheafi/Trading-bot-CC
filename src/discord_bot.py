@@ -58,6 +58,15 @@ try:
 except ImportError:
     _HAS_REPORT_GEN = False
 
+# v6: strategy optimizer (self-learning, regime-aware backtester)
+try:
+    from src.engines.strategy_optimizer import get_optimizer as _get_optimizer
+    _HAS_OPTIMIZER = True
+except ImportError:
+    _HAS_OPTIMIZER = False
+    def _get_optimizer():
+        return None
+
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
@@ -1852,6 +1861,33 @@ class DiscordInteractiveBot:
             combined.sort(key=lambda x: x.get("score", 0), reverse=True)
             return combined
 
+        def _attach_ml_rank(signals: list, hist_cache: dict) -> list:
+            """Attach ML regime rank and win probability to each signal."""
+            opt = _get_optimizer()
+            if opt is None or not _yf:
+                return signals
+            for sig in signals:
+                ticker = sig.get("ticker", "")
+                try:
+                    if ticker not in hist_cache:
+                        hist_cache[ticker] = _yf.Ticker(ticker).history(period="3mo")
+                    hist = hist_cache[ticker]
+                    if not hist.empty and len(hist) >= 30:
+                        ranked = opt.quick_regime_rank(hist)
+                        # find rank position for this signal's strategy
+                        strategy = sig.get("setup_type", "SWING")
+                        rank_item = next(
+                            (r for r in ranked if r["strategy"] == strategy), None)
+                        if rank_item:
+                            sig["ml_score"] = rank_item["score"]
+                            sig["ml_regime_fit"] = rank_item["regime_fit"]
+                            sig["ml_rank"] = ranked.index(rank_item) + 1
+                        # top strategy for current regime
+                        sig["ml_best_strategy"] = ranked[0]["strategy"] if ranked else "N/A"
+                except Exception:
+                    pass
+            return signals
+
         # ── Signal card builder (shared) ─────────────────────────────
         def _build_signal_card(sig, now, setup_label=""):
             """Build a Discord embed for any signal type."""
@@ -1894,6 +1930,18 @@ class DiscordInteractiveBot:
                 e.add_field(name="🟢 WHY BUY", value=sig["buy_thesis"][:512], inline=False)
             if sig.get("stop_reason"):
                 e.add_field(name="🛑 WHY THIS STOP", value=sig["stop_reason"][:512], inline=False)
+            if sig.get("ml_score") is not None:
+                ml_score = sig["ml_score"]
+                ml_fit = sig.get("ml_regime_fit", False)
+                ml_rank = sig.get("ml_rank", "?")
+                ml_best = sig.get("ml_best_strategy", "")
+                e.add_field(
+                    name="🧠 ML Regime Check",
+                    value=(
+                        f"Backtest score: **{ml_score:.0f}/100** (rank #{ml_rank})\n"
+                        f"Regime fit: {'✅ Yes' if ml_fit else '⚠️ Off-regime'}\n"
+                        f"Best strategy now: **{ml_best}**"
+                    ), inline=True)
 
             dv = sig.get("dollar_vol", 0)
             dv_str = f"${dv / 1e6:.1f}M" if dv > 1e6 else f"${dv / 1e3:.0f}K"
@@ -1915,10 +1963,8 @@ class DiscordInteractiveBot:
                 signals = await asyncio.to_thread(_sync_swing_scan, _WATCH_US)
                 if not signals:
                     return
+                signals = await asyncio.to_thread(_attach_ml_rank, signals, {})
                 signals.sort(key=lambda x: x["score"], reverse=True)
-                top_count = min(5, len(signals))
-                header = discord.Embed(
-                    title=f"🔄 Swing Trade Scan — {now.strftime('%H:%M UTC')}",
                     description=(
                         f"Scanned {len(_WATCH_US)} tickers • "
                         f"**{len(signals)}** swing setups • "
@@ -1951,6 +1997,7 @@ class DiscordInteractiveBot:
                 signals = await asyncio.to_thread(_sync_breakout_scan, _WATCH_US)
                 if not signals:
                     return
+                signals = await asyncio.to_thread(_attach_ml_rank, signals, {})
                 signals.sort(key=lambda x: x["score"], reverse=True)
                 top_count = min(5, len(signals))
                 header = discord.Embed(
@@ -2040,6 +2087,9 @@ class DiscordInteractiveBot:
 
                 if not all_sigs:
                     return
+
+                # Attach ML regime rank to all signals
+                all_sigs = await asyncio.to_thread(_attach_ml_rank, all_sigs, {})
 
                 # Rank by composite score and pick top 5
                 all_sigs.sort(key=lambda x: x.get("score", 0), reverse=True)
@@ -2926,6 +2976,100 @@ class DiscordInteractiveBot:
             except Exception as exc:
                 logger.error(f"auto_ticker_news error: {exc}")
 
+        # ── 13C. Auto Strategy Learn (every 6h weekdays) ──────────────
+        @tasks.loop(hours=6)
+        async def auto_strategy_learn():
+            """Runs full AI backtest on top watchlist stocks, identifies best
+            strategy per regime, posts ranked summary to #ai-signals."""
+            now = datetime.now(timezone.utc)
+            if not (8 <= now.hour < 22 and now.weekday() < 5):
+                return
+            opt = _get_optimizer()
+            if opt is None:
+                return
+            try:
+                scan_tickers = _WATCH_US[:5] + ["SPY", "QQQ", "BTC-USD"]
+
+                def _sync_learn():
+                    if not _yf:
+                        return []
+                    results = []
+                    for sym in scan_tickers:
+                        try:
+                            hist = _yf.Ticker(sym).history(period="1y")
+                            if hist.empty or len(hist) < 60:
+                                continue
+                            analysis = opt.full_analysis(sym, hist, "1y")
+                            ranked = analysis["ranked"]
+                            best = ranked[0] if ranked else {}
+                            regime = analysis["regime"]
+                            rr = analysis["regime_recommendation"]
+                            results.append({
+                                "ticker": sym,
+                                "best_strategy": best.get("strategy", "N/A"),
+                                "best_score": best.get("score", 0),
+                                "regime": regime["label"],
+                                "regime_fit": rr.get("regime_fit", False),
+                                "cross_check": analysis["cross_check"]["verdict"],
+                                "win_rate": best.get("win_rate", 0),
+                                "sharpe": best.get("sharpe", 0),
+                                "sweep_improvement": analysis.get("sweep_improvement", 0),
+                                "correction_notes": analysis.get("correction_notes", []),
+                            })
+                        except Exception:
+                            continue
+                    return results
+
+                results = await asyncio.to_thread(_sync_learn)
+                if not results:
+                    return
+
+                results.sort(key=lambda x: x["best_score"], reverse=True)
+
+                e = discord.Embed(
+                    title=f"🤖 AI Strategy Learning Report — {now.strftime('%a %d %b %H:%M UTC')}",
+                    description=(
+                        f"Backtested **{len(results)}** tickers · 4 strategies each · "
+                        f"Walk-forward validated · Self-correction applied"
+                    ),
+                    color=COLOR_PURPLE, timestamp=now)
+
+                for r in results:
+                    cc_icon = {"STRONG_AGREEMENT": "✅", "MIXED_SIGNAL": "⚠️",
+                               "AVOID": "🔴", "MODERATE": "🟡"}.get(r["cross_check"], "❓")
+                    fit_tag = "✅ Regime fit" if r["regime_fit"] else "⚠️ Off-regime"
+                    sweep_note = (f"⚙️ Param sweep +{r['sweep_improvement']:.1f}pts\n"
+                                  if r["sweep_improvement"] > 1 else "")
+                    e.add_field(
+                        name=f"{'🥇' if r == results[0] else '📊'} {r['ticker']} → {r['best_strategy']}",
+                        value=(
+                            f"Score **{r['best_score']:.0f}** · WR **{r['win_rate']*100:.0f}%** · "
+                            f"Sharpe **{r['sharpe']:.2f}**\n"
+                            f"Regime: **{r['regime']}** {fit_tag}\n"
+                            f"{cc_icon} Cross-check: {r['cross_check']}\n"
+                            + sweep_note
+                        ))
+
+                all_notes = []
+                for r in results:
+                    all_notes.extend(r.get("correction_notes", []))
+                unique_notes = list(dict.fromkeys(all_notes))[:3]
+                valid_notes = [n for n in unique_notes if "No self-corrections yet" not in n]
+                if valid_notes:
+                    e.add_field(name="🧠 Self-Correction Log",
+                                value="\n".join(valid_notes)[:400], inline=False)
+
+                e.add_field(name="📋 Actions",
+                            value=("`/backtest TICKER` full analysis · "
+                                   "`/best_strategy TICKER` quick regime pick · "
+                                   "`/strategy_report` live accuracy"),
+                            inline=False)
+                e.set_footer(text="🤖 Runs every 6h · self-improves with each live outcome")
+                await _send_ch("ai-signals", embed=e)
+                await _audit(f"🤖 auto_strategy_learn: {len(results)} tickers analysed")
+            except Exception as exc:
+                logger.error(f"auto_strategy_learn error: {exc}")
+
         # ── 14. Smart morning update (multi-timezone coverage) ────────
         # Posts at 3 different times so users in ANY timezone get a fresh
         # morning brief: Asia morning (01:00 UTC), Europe morning (07:00),
@@ -3207,6 +3351,7 @@ class DiscordInteractiveBot:
                     f"{'✅' if realtime_price_alerts.is_running() else '❌'} 🚨 Price Alerts (3min)\n"
                     f"{'✅' if auto_news_feed.is_running() else '❌'} 📰 News Feed (30min)\n"
                     f"{'✅' if auto_ticker_news.is_running() else '❌'} 📰 Ticker News (15min)\n"
+                    f"{'✅' if auto_strategy_learn.is_running() else '❌'} 🤖 Strategy Learn (6h)\n"
                     f"{'✅' if smart_morning_update.is_running() else '❌'} ☀️ Smart Morning (3x/day)\n"
                     f"{'✅' if opportunity_scanner.is_running() else '❌'} 🎯 Oppty Scanner (30min)\n"
                     f"{'✅' if vix_fear_monitor.is_running() else '❌'} ⚠️ VIX Fear Monitor (5min)\n"
@@ -3260,6 +3405,10 @@ class DiscordInteractiveBot:
         async def _w16(): await bot.wait_until_ready()
         @vix_fear_monitor.before_loop
         async def _w17(): await bot.wait_until_ready()
+        @auto_ticker_news.before_loop
+        async def _w18(): await bot.wait_until_ready()
+        @auto_strategy_learn.before_loop
+        async def _w19(): await bot.wait_until_ready()
 
         # ══════════════════════════════════════════════════════════════
         # BOT EVENTS
@@ -3293,6 +3442,8 @@ class DiscordInteractiveBot:
                 auto_ticker_news,
                 smart_morning_update, opportunity_scanner,
                 vix_fear_monitor,
+                # AI learning
+                auto_strategy_learn,
             ]
             for t in all_tasks:
                 if not t.is_running():
@@ -4665,19 +4816,266 @@ class DiscordInteractiveBot:
         # SLASH COMMANDS — Tools
         # ══════════════════════════════════════════════════════════════
 
-        @bot.tree.command(name="backtest", description="Backtest a strategy")
-        @app_commands.describe(ticker="Symbol", period="1mo, 3mo, 6mo, 1y, 2y")
-        @app_commands.checks.cooldown(1, 15, key=lambda i: i.user.id)
+        @bot.tree.command(name="backtest",
+                          description="Backtest all 4 strategies on a ticker — ranked by Sharpe, win-rate & regime fit")
+        @app_commands.describe(ticker="Symbol e.g. NVDA, TSLA, BTC-USD",
+                               period="1mo 3mo 6mo 1y 2y (default 1y)")
+        @app_commands.checks.cooldown(1, 20, key=lambda i: i.user.id)
         async def cmd_backtest(interaction: discord.Interaction,
                                 ticker: str, period: str = "1y"):
             await interaction.response.defer()
-            e = discord.Embed(title=f"📈 Backtest — {ticker.upper()} ({period})",
-                              description="⏳ Running...", color=COLOR_INFO)
-            e.add_field(name="Strategy", value="Momentum + MR")
-            e.add_field(name="Period", value=period)
-            e.add_field(name="Output", value="#backtesting")
+            ticker = ticker.upper().strip()
+            now = datetime.now(timezone.utc)
+
+            def _sync_run(sym, per):
+                if not _yf:
+                    return None
+                hist = _yf.Ticker(sym).history(period=per)
+                if hist.empty or len(hist) < 30:
+                    return None
+                opt = _get_optimizer()
+                if opt is None:
+                    return None
+                return opt.full_analysis(sym, hist, per)
+
+            await interaction.followup.send(
+                embed=discord.Embed(
+                    title=f"🔬 Running AI Backtest — {ticker} ({period})",
+                    description="Testing SWING · BREAKOUT · MEAN_REVERSION · MOMENTUM\nWalk-forward validation + parameter sweep + cross-check...",
+                    color=COLOR_INFO, timestamp=now))
+
+            result = await asyncio.to_thread(_sync_run, ticker, period)
+            if result is None:
+                await interaction.followup.send(
+                    f"❌ No data for `{ticker}` ({period}). Try a different symbol or period.")
+                return
+
+            regime = result["regime"]
+            ranked = result["ranked"]
+            best = result["best_strategy"]
+            best_r = result["strategy_results"].get(best, {})
+            cc = result["cross_check"]
+            rr = result["regime_recommendation"]
+            mc = result.get("monte_carlo", {})
+            wf = result.get("walk_forward", {})
+
+            # ── Header embed ──
+            e = discord.Embed(
+                title=f"📊 Backtest Results — {ticker} ({period})",
+                description=(
+                    f"**Regime: {regime['label']}** · Vol {regime.get('vol_ann',0):.0f}% ann · "
+                    f"Trend {regime.get('trend_pct',0):+.1f}% vs SMA50\n"
+                    f"**4 strategies tested · best = {best}**"
+                ),
+                color=COLOR_GOLD, timestamp=now)
+
+            # Strategy comparison table
+            table_lines = []
+            for r in ranked:
+                name = r["strategy"]
+                score = r.get("score", 0)
+                trades = r.get("trades", 0)
+                wr = r.get("win_rate", 0) * 100
+                sharpe = r.get("sharpe", 0)
+                dd = r.get("max_dd", 0) * 100
+                bar = "█" * int(score // 12) + "░" * (8 - int(score // 12))
+                medal = "🥇" if name == best else ("🥈" if r == ranked[1] else "  ")
+                table_lines.append(
+                    f"{medal} **{name}** `{bar}` {score:.0f}\n"
+                    f"  Trades {trades} · WR {wr:.0f}% · Sharpe {sharpe:.2f} · DD {dd:.1f}%")
+            e.add_field(name="🏆 Strategy Ranking",
+                        value="\n".join(table_lines)[:900], inline=False)
+
+            # Regime recommendation
+            e.add_field(
+                name=f"🌡️ Regime: {rr['regime']}",
+                value=(
+                    f"{rr['explanation']}\n"
+                    f"→ **Best strategy for this regime: {rr['best_strategy']}** "
+                    f"(score {rr['best_score']:.0f}) "
+                    f"{'✅ Regime-fit' if rr['regime_fit'] else '⚠️ Not ideal regime'}"
+                ),
+                inline=False)
+
+            # Cross-check
+            verdict_emoji = {"STRONG_AGREEMENT": "✅", "MIXED_SIGNAL": "⚠️",
+                             "AVOID": "🔴", "MODERATE": "🟡"}.get(cc["verdict"], "❓")
+            e.add_field(
+                name=f"{verdict_emoji} Cross-Check: {cc['verdict']}",
+                value=cc["explanation"][:300], inline=False)
+
+            # Walk-forward OOS for best strategy
+            if wf.get(best):
+                wf_r = wf[best]
+                stable = "✅ Stable" if wf_r.get("stable") else "⚠️ Unstable"
+                e.add_field(
+                    name=f"🔄 Walk-Forward OOS — {best}",
+                    value=(
+                        f"{stable} · {wf_r['folds']} folds\n"
+                        f"OOS Sharpe **{wf_r['avg_oos_sharpe']:.2f}** · "
+                        f"OOS Win-rate **{wf_r['avg_oos_win_rate']*100:.0f}%** · "
+                        f"Score **{wf_r['avg_oos_score']:.0f}**"
+                    ), inline=False)
+
+            # Param sweep improvement
+            sweep_delta = result.get("sweep_improvement", 0)
+            if abs(sweep_delta) > 0.5:
+                bp = result.get("best_params", {})
+                params_str = "  ·  ".join(f"{k}={v}" for k, v in bp.items())
+                e.add_field(
+                    name=f"⚙️ Optimal Params — {best} (+{sweep_delta:.1f} pts)",
+                    value=params_str[:200], inline=False)
+
+            # Monte Carlo
+            if mc:
+                e.add_field(
+                    name="🎲 Monte Carlo (500 runs)",
+                    value=(
+                        f"Median final equity **{mc['median_final']*100:.0f}%** · "
+                        f"5th pct **{mc['p5_final']*100:.0f}%** · "
+                        f"Profitable in **{mc['pct_profitable']:.0f}%** of simulations"
+                    ), inline=False)
+
+            # Self-correction notes
+            corrections = result.get("correction_notes", [])
+            if corrections:
+                e.add_field(name="🧠 Self-Correction Status",
+                            value="\n".join(corrections[:4])[:400], inline=False)
+
+            e.set_footer(text=f"✅ Real backtest · {ticker} · /best_strategy for regime pick · /strategy_report for live accuracy")
             await interaction.followup.send(embed=e)
-            await _audit(f"📈 {interaction.user} → /backtest {ticker} {period}")
+            await _audit(f"📊 {interaction.user} → /backtest {ticker} {period} → best={best} score={best_r.get('score',0):.0f}")
+
+        @bot.tree.command(name="best_strategy",
+                          description="Which strategy wins on this ticker RIGHT NOW in current market regime?")
+        @app_commands.describe(ticker="Symbol e.g. SPY, NVDA, BTC-USD")
+        @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
+        async def cmd_best_strategy(interaction: discord.Interaction, ticker: str):
+            await interaction.response.defer()
+            ticker = ticker.upper().strip()
+            now = datetime.now(timezone.utc)
+
+            def _sync_best(sym):
+                if not _yf:
+                    return None
+                hist = _yf.Ticker(sym).history(period="6mo")
+                if hist.empty or len(hist) < 30:
+                    return None
+                opt = _get_optimizer()
+                if opt is None:
+                    return None
+                from src.engines.strategy_optimizer import _regime_from_data
+                ranked = opt.quick_regime_rank(hist)
+                regime = _regime_from_data(hist)
+                return {"ranked": ranked, "regime": regime}
+
+            result = await asyncio.to_thread(_sync_best, ticker)
+            if not result:
+                await interaction.followup.send(f"❌ No data for `{ticker}`.")
+                return
+
+            regime = result["regime"]
+            ranked = result["ranked"]
+            best = ranked[0] if ranked else {}
+
+            regime_icons = {
+                "RISK_ON_TRENDING": "🟢", "LOW_VOL_UPTREND": "🟢",
+                "NEUTRAL": "🟡", "LOW_VOL_RANGING": "🟡",
+                "RISK_OFF": "🔴", "HIGH_VOL": "🔴", "DOWNTREND": "🔴",
+                "RISK_ON_HIGH_VOL": "🟠",
+            }
+            icon = regime_icons.get(regime["label"], "⚪")
+
+            e = discord.Embed(
+                title=f"🏆 Best Strategy for {ticker} Right Now",
+                description=(
+                    f"{icon} **Regime: {regime['label']}**\n"
+                    f"Vol {regime.get('vol_ann',0):.0f}% ann · "
+                    f"Trend {regime.get('trend_pct',0):+.1f}% vs SMA50 · "
+                    f"20d mom {regime.get('mom20d',0):+.1f}%"
+                ),
+                color=COLOR_GOLD, timestamp=now)
+
+            medals = ["🥇", "🥈", "🥉", "4️⃣"]
+            lines = []
+            for i, r in enumerate(ranked):
+                medal = medals[i] if i < len(medals) else "  "
+                fit_tag = "✅ Regime fit" if r["regime_fit"] else "⚠️ Off-regime"
+                lines.append(f"{medal} **{r['strategy']}** — Score {r['score']:.0f}  {fit_tag}")
+            e.add_field(name="Strategy Rankings (6mo data)",
+                        value="\n".join(lines), inline=False)
+
+            if best:
+                e.add_field(
+                    name=f"✅ Use this: {best['strategy']}",
+                    value=(
+                        f"Best fit for **{regime['label']}** regime.\n"
+                        f"`/backtest {ticker} 1y` → full details + optimal parameters."
+                    ), inline=False)
+
+            e.set_footer(text="/backtest for walk-forward + param sweep · /strategy_report for live accuracy")
+            await interaction.followup.send(embed=e)
+            await _audit(f"🏆 {interaction.user} → /best_strategy {ticker} → {best.get('strategy','?')}")
+
+        @bot.tree.command(name="strategy_report",
+                          description="AI self-learning report — live accuracy, corrections, regime performance")
+        @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
+        async def cmd_strategy_report(interaction: discord.Interaction):
+            await interaction.response.defer()
+            now = datetime.now(timezone.utc)
+            opt = _get_optimizer()
+            if opt is None:
+                await interaction.followup.send("❌ Strategy optimizer not available.")
+                return
+
+            acc = opt.get_accuracy_summary()
+            e = discord.Embed(
+                title="🧠 AI Self-Learning Strategy Report",
+                description=(
+                    "Live accuracy tracked from every signal outcome.\n"
+                    "Scoring weights auto-adjust based on what's actually working."
+                ),
+                color=COLOR_PURPLE, timestamp=now)
+
+            if not acc:
+                e.add_field(
+                    name="📊 Status",
+                    value=(
+                        "No live outcomes recorded yet.\n"
+                        "The optimizer learns as signals hit target or stop.\n"
+                        "Run `/backtest TICKER` to see historical backtest performance."
+                    ), inline=False)
+            else:
+                for strat, data in acc.items():
+                    total = data["total"]
+                    if total == 0:
+                        continue
+                    wr = data.get("live_win_rate", 0) or 0
+                    factor = data.get("score_factor", 1.0)
+                    status = "✅" if wr >= 55 else ("⚠️" if wr >= 40 else "🔴")
+                    up_dn = "🔺" if factor > 1.05 else ("🔻" if factor < 0.95 else "➡️")
+                    e.add_field(
+                        name=f"{status} {strat}",
+                        value=(
+                            f"Tracked: **{total}** signals\n"
+                            f"Live win-rate: **{wr:.0f}%**\n"
+                            f"{up_dn} Score factor: **×{factor:.2f}** (auto-adjusted)"
+                        ))
+
+            e.add_field(
+                name="ℹ️ How Self-Correction Works",
+                value=(
+                    "1️⃣ Every signal tagged with its strategy\n"
+                    "2️⃣ Target hit → WIN recorded\n"
+                    "3️⃣ Stop hit → LOSS recorded\n"
+                    "4️⃣ Live win-rate updates score multiplier (×0.6–1.4)\n"
+                    "5️⃣ Weak strategies get lower scores, strong ones boosted\n"
+                    "6️⃣ Rebalances every 20 new outcomes"
+                ), inline=False)
+
+            e.set_footer(text="/backtest TICKER · /best_strategy TICKER · auto_strategy_learn runs every 6h")
+            await interaction.followup.send(embed=e)
+            await _audit(f"🧠 {interaction.user} → /strategy_report")
 
         @bot.tree.command(name="watchlist",
                           description="Manage your watchlist — view, add, remove tickers with live prices")
