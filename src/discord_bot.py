@@ -1150,10 +1150,22 @@ class DiscordInteractiveBot:
         # ──────────────────────────────────────────────────────────────
 
         # Watchlist used by auto-scanners
-        _WATCH_US = ["AAPL","MSFT","GOOGL","AMZN","NVDA","META","TSLA","AMD",
-                     "NFLX","CRM","COIN","PLTR","SOFI","NIO","RIVN","MARA",
-                     "XYZ","SHOP","ROKU","SNAP","UBER","ABNB","NET","CRWD",
-                     "DKNG","SMCI","ARM","AVGO","MU","INTC"]
+        _WATCH_US = [
+            # Mega-cap tech (market movers)
+            "AAPL","MSFT","GOOGL","AMZN","NVDA","META","TSLA",
+            # Semiconductors
+            "AMD","INTC","AVGO","MU","ARM","SMCI","QCOM",
+            # Software / SaaS / Cybersecurity
+            "CRM","ADBE","NOW","SNOW","PLTR","NET","CRWD","PANW",
+            # Finance / Fintech
+            "JPM","BAC","GS","V","MA","COIN","SOFI","HOOD",
+            # Consumer / Media / E-commerce
+            "NFLX","DIS","UBER","ABNB","SHOP","ROKU","SNAP","BABA",
+            # Healthcare / Biotech
+            "LLY","JNJ","MRNA","ABBV",
+            # High-volatility / Speculative
+            "RIVN","NIO","MARA","GME","DKNG","PYPL","LULU",
+        ]
         _WATCH_CRYPTO = ["BTC-USD","ETH-USD","SOL-USD","DOGE-USD","ADA-USD","XRP-USD",
                          "AVAX-USD","DOT-USD","MATIC-USD","LINK-USD"]
         _WATCH_ASIA = [("^N225","🇯🇵 Nikkei"),("^HSI","🇭🇰 Hang Seng"),
@@ -1582,6 +1594,17 @@ class DiscordInteractiveBot:
                         "dollar_vol": d["dollar_vol"],
                         "hold_target": "2-8 weeks",
                         "invalidation": f"Close below ${stop:.2f} (SMA50 / 2×ATR)",
+                        "buy_thesis": (
+                            f"{ticker} is in a confirmed uptrend with a healthy {pb}-day pullback to support. "
+                            f"RSI {rsi:.0f} has reset into the buy zone — ideal re-entry. "
+                            f"Buy the dip in the direction of the existing trend for highest probability."
+                        ),
+                        "stop_reason": (
+                            f"Stop ${stop:.2f} = max(SMA50, price − 2×ATR). "
+                            f"A close BELOW this = the uptrend is structurally broken → exit immediately. "
+                            f"SMA50 is the primary support for swing trades. "
+                            f"2×ATR keeps stop outside normal daily noise. Risk: {abs(price - stop)/price*100:.1f}%."
+                        ),
                     })
                 except Exception:
                     continue
@@ -1683,6 +1706,17 @@ class DiscordInteractiveBot:
                         "dollar_vol": d["dollar_vol"],
                         "hold_target": "1-4 weeks",
                         "invalidation": f"Close below ${stop:.2f} (consolidation low)",
+                        "buy_thesis": (
+                            f"{ticker} is breaking out of a {d['bb_width']:.1f}% BB squeeze consolidation. "
+                            f"Volume {rel_vol:.1f}x avg confirms REAL institutional demand, not noise. "
+                            f"Breakout above ${d['hi_10']:.2f} = buyers in control — momentum builds from here."
+                        ),
+                        "stop_reason": (
+                            f"Stop ${stop:.2f} = consolidation low. "
+                            f"A failed breakout = price returns INTO the base → thesis dead, exit fast. "
+                            f"Never hold a failed breakout — that is how big losses happen. "
+                            f"Risk: {abs(price - stop)/price*100:.1f}% — tight vs the measured-move target."
+                        ),
                     })
                 except Exception:
                     continue
@@ -1792,6 +1826,17 @@ class DiscordInteractiveBot:
                         "day_pct": day_pct,
                         "hold_target": "days to 2 weeks",
                         "invalidation": f"{'Close below' if direction == 'LONG' else 'Close above'} ${stop:.2f} (1.5×ATR)",
+                        "buy_thesis": (
+                            f"{ticker} moved {day_pct:+.1f}% today on {rel_vol:.1f}x volume — real money behind this move. "
+                            f"{'Trend aligned up — ride the momentum.' if direction == 'LONG' else 'Sharp drop on heavy volume — momentum short.'} "
+                            f"High-conviction directional move with institutional participation."
+                        ),
+                        "stop_reason": (
+                            f"Stop ${stop:.2f} = 1.5×ATR from entry. "
+                            f"{'Momentum stops when the surge fades — close below = exit.' if direction == 'LONG' else 'Cover if close above — dump exhausted.'} "
+                            f"1.5×ATR is calibrated to daily volatility (ATR=${atr:.2f}). "
+                            f"Risk: {abs(price - stop)/price*100:.1f}% — sized for a short hold."
+                        ),
                     })
                 except Exception:
                     continue
@@ -1845,6 +1890,10 @@ class DiscordInteractiveBot:
 
             e.add_field(name="🛑 Invalidation",
                         value=sig.get("invalidation", "N/A"), inline=False)
+            if sig.get("buy_thesis"):
+                e.add_field(name="🟢 WHY BUY", value=sig["buy_thesis"][:512], inline=False)
+            if sig.get("stop_reason"):
+                e.add_field(name="🛑 WHY THIS STOP", value=sig["stop_reason"][:512], inline=False)
 
             dv = sig.get("dollar_vol", 0)
             dv_str = f"${dv / 1e6:.1f}M" if dv > 1e6 else f"${dv / 1e3:.0f}K"
@@ -2577,6 +2626,32 @@ class DiscordInteractiveBot:
         # ══════════════════════════════════════════════════════════════
 
         # ── 12. Real-time price spike / crash alert (every 3 min, 24/7) ──
+        async def _fetch_ticker_news_for_alert(sym: str, max_items: int = 3) -> list:
+            """Fetch recent news headlines for a ticker — attached to spike alert embeds."""
+            def _sync():
+                if not _yf:
+                    return []
+                try:
+                    t = _yf.Ticker(sym)
+                    raw = t.news if hasattr(t, "news") else []
+                    out = []
+                    for item in (raw or [])[:max_items + 3]:
+                        url = item.get("link", item.get("url", ""))
+                        title = item.get("title", "")
+                        if url and title and len(out) < max_items:
+                            out.append({
+                                "title": title[:90],
+                                "url": url,
+                                "publisher": item.get("publisher", ""),
+                            })
+                    return out
+                except Exception:
+                    return []
+            try:
+                return await asyncio.wait_for(asyncio.to_thread(_sync), timeout=5.0)
+            except Exception:
+                return []
+
         _last_prices: Dict[str, float] = {}
         _spike_cooldown: Dict[str, float] = {}   # ticker → timestamp of last alert
 
@@ -2641,6 +2716,15 @@ class DiscordInteractiveBot:
                                         value=f"`/ai {sym}` · `/analyze {sym}` · `/why {sym}`",
                                         inline=False)
                             e.set_footer(text="🔔 Real-time alert • Auto-detected")
+                            try:
+                                _anews = await _fetch_ticker_news_for_alert(sym)
+                                if _anews:
+                                    _nl = "\n".join(
+                                        f"• [{n['title']}]({n['url']})" for n in _anews[:3])
+                                    e.add_field(name="📰 Why Is It Moving?",
+                                                value=_nl[:900], inline=False)
+                            except Exception:
+                                pass
                             await _send_ch(channel, embed=e)
 
                             # Also alert in daily-brief for big index moves
@@ -2707,7 +2791,11 @@ class DiscordInteractiveBot:
                         return []
                     all_news = []
                     # Get market-wide news from major tickers
-                    for sym in ["SPY", "QQQ", "^VIX", "BTC-USD", "AAPL", "NVDA", "TSLA"]:
+                    _news_scan_universe = (
+                        ["SPY", "QQQ", "^VIX", "BTC-USD", "ETH-USD"]
+                        + _WATCH_US[:20]
+                    )
+                    for sym in _news_scan_universe:
                         try:
                             t = _yf.Ticker(sym)
                             news = t.news if hasattr(t, "news") else []
@@ -2762,6 +2850,81 @@ class DiscordInteractiveBot:
                 await _send_ch("daily-brief", embed=e)
             except Exception as exc:
                 logger.error(f"auto_news_feed error: {exc}")
+
+        # ── 13B. Per-stock breaking news monitor (every 15 min, extended hours) ──
+        _ticker_news_seen: Dict[str, set] = {}   # per-ticker seen URLs
+
+        @tasks.loop(minutes=15)
+        async def auto_ticker_news():
+            """Scans all 50 tracked stocks for breaking news in rotating chunks.
+            Each stock checked every ~45 min. Posts to #daily-brief."""
+            now = datetime.now(timezone.utc)
+            if not (8 <= now.hour < 22):
+                return
+            try:
+                import time as _tt
+                chunk_sz = max(1, len(_WATCH_US) // 3)
+                idx = int(_tt.time() / 900) % 3
+                chunk = _WATCH_US[idx * chunk_sz:(idx + 1) * chunk_sz]
+
+                def _sync_chunk_news(syms):
+                    if not _yf:
+                        return []
+                    results = []
+                    for sym in syms:
+                        try:
+                            t = _yf.Ticker(sym)
+                            raw = t.news if hasattr(t, "news") else []
+                            for item in (raw or [])[:3]:
+                                url = item.get("link", item.get("url", ""))
+                                title = item.get("title", "")
+                                if not url or not title:
+                                    continue
+                                if url in _ticker_news_seen.get(sym, set()):
+                                    continue
+                                results.append({
+                                    "ticker": sym,
+                                    "title": title[:150],
+                                    "publisher": item.get("publisher", ""),
+                                    "url": url,
+                                    "time": item.get("providerPublishTime", 0),
+                                })
+                        except Exception:
+                            continue
+                    return results
+
+                fresh = await asyncio.to_thread(_sync_chunk_news, chunk)
+                if not fresh:
+                    return
+                fresh.sort(key=lambda x: x.get("time", 0), reverse=True)
+                new_items = []
+                for item in fresh[:6]:
+                    sym = item["ticker"]
+                    if sym not in _ticker_news_seen:
+                        _ticker_news_seen[sym] = set()
+                    _ticker_news_seen[sym].add(item["url"])
+                    if len(_ticker_news_seen[sym]) > 200:
+                        _ticker_news_seen[sym] = set(list(_ticker_news_seen[sym])[-100:])
+                    new_items.append(item)
+                if not new_items:
+                    return
+                e = discord.Embed(
+                    title=f"📰 Breaking Stock News — {now.strftime('%H:%M UTC')}",
+                    description=(
+                        f"Fresh headlines · Stocks chunk {idx + 1}/3 "
+                        f"({len(chunk)} tickers · {len(new_items)} new stories)"
+                    ),
+                    color=COLOR_INFO, timestamp=now)
+                for item in new_items:
+                    e.add_field(
+                        name=f"[{item['ticker']}] {item['publisher'] or 'News'}",
+                        value=f"[{item['title']}]({item['url']})",
+                        inline=False)
+                e.set_footer(
+                    text="📰 All 50 tracked stocks covered every 45min · /why TICKER for full analysis")
+                await _send_ch("daily-brief", embed=e)
+            except Exception as exc:
+                logger.error(f"auto_ticker_news error: {exc}")
 
         # ── 14. Smart morning update (multi-timezone coverage) ────────
         # Posts at 3 different times so users in ANY timezone get a fresh
@@ -3043,6 +3206,7 @@ class DiscordInteractiveBot:
                     f"{'✅' if market_pulse.is_running() else '❌'} Market Pulse\n"
                     f"{'✅' if realtime_price_alerts.is_running() else '❌'} 🚨 Price Alerts (3min)\n"
                     f"{'✅' if auto_news_feed.is_running() else '❌'} 📰 News Feed (30min)\n"
+                    f"{'✅' if auto_ticker_news.is_running() else '❌'} 📰 Ticker News (15min)\n"
                     f"{'✅' if smart_morning_update.is_running() else '❌'} ☀️ Smart Morning (3x/day)\n"
                     f"{'✅' if opportunity_scanner.is_running() else '❌'} 🎯 Oppty Scanner (30min)\n"
                     f"{'✅' if vix_fear_monitor.is_running() else '❌'} ⚠️ VIX Fear Monitor (5min)\n"
@@ -3126,6 +3290,7 @@ class DiscordInteractiveBot:
                 health_check,
                 # NEW: Real-time automation
                 realtime_price_alerts, auto_news_feed,
+                auto_ticker_news,
                 smart_morning_update, opportunity_scanner,
                 vix_fear_monitor,
             ]
@@ -3871,19 +4036,229 @@ class DiscordInteractiveBot:
             except Exception as exc:
                 await interaction.followup.send(f"❌ {exc}")
 
-        @bot.tree.command(name="why", description="Why is a stock moving?")
-        @app_commands.describe(ticker="Stock symbol")
+        @bot.tree.command(name="why", description="Full conviction analysis — should you buy/sell, where to stop, why")
+        @app_commands.describe(ticker="Stock symbol e.g. NVDA, TSLA, BTC-USD")
         @app_commands.checks.cooldown(1, 5, key=lambda i: i.user.id)
         async def cmd_why(interaction: discord.Interaction, ticker: str):
             await interaction.response.defer()
+            ticker = ticker.upper().strip()
+            now = datetime.now(timezone.utc)
+
+            def _sync_why_analysis(sym):
+                if not _yf:
+                    return {}
+                try:
+                    t = _yf.Ticker(sym)
+                    hist = t.history(period="3mo")
+                    if hist.empty or len(hist) < 20:
+                        return {}
+                    techs = _compute_technicals(hist)
+                    news, analyst = [], {}
+                    try:
+                        raw_news = t.news if hasattr(t, "news") else []
+                        ts_now = now.timestamp()
+                        for item in (raw_news or [])[:8]:
+                            url = item.get("link", item.get("url", ""))
+                            title = item.get("title", "")
+                            if url and title:
+                                age_h = (ts_now - item.get("providerPublishTime", ts_now)) / 3600
+                                news.append({"title": title[:100], "url": url,
+                                             "publisher": item.get("publisher", ""),
+                                             "age_h": age_h})
+                    except Exception:
+                        pass
+                    try:
+                        info = t.info or {}
+                        analyst = {
+                            "recommendation": info.get("recommendationKey", ""),
+                            "analyst_count": info.get("numberOfAnalystOpinions", 0),
+                            "target_mean": info.get("targetMeanPrice", 0),
+                        }
+                    except Exception:
+                        pass
+                    return {**techs, "news": news, "analyst": analyst}
+                except Exception:
+                    return {}
+
+            data = await asyncio.to_thread(_sync_why_analysis, ticker)
             d = await _fetch_stock(ticker)
+            if not data:
+                await interaction.followup.send(
+                    f"❌ Could not fetch data for `{ticker}`. Check the symbol (e.g. NVDA, BTC-USD).")
+                return
+
+            price = d.get("price", data.get("price", 0))
             pct = d.get("change_pct", 0)
-            direction = "up" if pct > 0 else "down"
-            e = discord.Embed(title=f"❓ Why is {ticker.upper()} {direction} {abs(pct):.1f}%?",
-                              color=COLOR_BUY if pct > 0 else COLOR_SELL)
-            e.add_field(name="Quick Check", inline=False,
-                        value=f"`/news {ticker}` · `/analyze {ticker}` · `/ai {ticker}`")
+            rsi = data.get("rsi", 50)
+            atr = data.get("atr", price * 0.02)
+            sma20 = data.get("sma20", 0)
+            sma50 = data.get("sma50", 0)
+            rel_vol = data.get("rel_vol", 1.0)
+            bb_lower = data.get("bb_lower", 0)
+            bb_upper = data.get("bb_upper", 0)
+            bb_width = data.get("bb_width", 5)
+            pb = data.get("pullback_days", 0)
+
+            # ── Build conviction score ─────────────────────────────────
+            buy_pts, sell_pts, conviction = [], [], 0
+
+            # Trend
+            if price > sma20 > sma50:
+                conviction += 25
+                buy_pts.append(f"✅ Price > SMA20 > SMA50 — uptrend in force")
+            elif price > sma50:
+                conviction += 10
+                buy_pts.append(f"🟡 Above SMA50 — holding trend support")
+            elif price < sma20 < sma50:
+                conviction -= 25
+                sell_pts.append(f"🔴 Below SMA20 & SMA50 — downtrend confirmed, avoid longs")
+            else:
+                sell_pts.append(f"🟠 Mixed trend — no clear direction, wait for clarity")
+
+            # Pullback (swing quality)
+            if 2 <= pb <= 7:
+                conviction += 15
+                buy_pts.append(f"✅ {pb}-day healthy pullback in uptrend — classic swing entry")
+            elif pb == 1:
+                conviction += 5
+                buy_pts.append(f"🟡 1-day dip — monitor for follow-through")
+
+            # RSI
+            if rsi < 30:
+                conviction += 25
+                buy_pts.append(f"✅ RSI {rsi:.0f} — severely oversold, bounce very likely")
+            elif rsi < 45:
+                conviction += 10
+                buy_pts.append(f"✅ RSI {rsi:.0f} — oversold reset, buy zone")
+            elif rsi > 75:
+                conviction -= 25
+                sell_pts.append(f"🔴 RSI {rsi:.0f} — extremely overbought, avoid new longs")
+            elif rsi > 65:
+                conviction -= 10
+                sell_pts.append(f"🟠 RSI {rsi:.0f} — elevated, not ideal entry")
+            else:
+                buy_pts.append(f"🟡 RSI {rsi:.0f} — neutral zone, no RSI edge")
+
+            # Volume
+            if rel_vol >= 2.5:
+                conviction += 25
+                buy_pts.append(f"✅ Volume {rel_vol:.1f}× avg — strong institutional activity")
+            elif rel_vol >= 1.5:
+                conviction += 10
+                buy_pts.append(f"🟡 Volume {rel_vol:.1f}× avg — above-normal interest")
+            elif rel_vol < 0.7:
+                conviction -= 10
+                sell_pts.append(f"🔴 Volume {rel_vol:.1f}× avg — no conviction behind the move")
+
+            # Today's move
+            if abs(pct) >= 3:
+                if pct > 0:
+                    conviction += 15
+                    buy_pts.append(f"✅ {pct:+.1f}% today — momentum catalyst present")
+                else:
+                    conviction -= 15
+                    sell_pts.append(f"🔴 {pct:+.1f}% today — selling pressure, be cautious")
+            elif pct > 1:
+                conviction += 5
+                buy_pts.append(f"🟡 {pct:+.1f}% today — mild positive momentum")
+
+            # Bollinger Band position
+            if bb_lower and price < bb_lower:
+                conviction += 20
+                buy_pts.append(f"✅ Below lower BB (${bb_lower:.2f}) — mean reversion setup")
+            elif bb_upper and price > bb_upper:
+                conviction -= 15
+                sell_pts.append(f"🔴 Above upper BB (${bb_upper:.2f}) — extended, overbought")
+            elif bb_width and bb_width < 4:
+                conviction += 5
+                buy_pts.append(f"✅ BB squeeze ({bb_width:.1f}%) — potential breakout building")
+
+            conviction = max(-100, min(100, conviction))
+
+            # ── Stop loss reasoning ────────────────────────────────────
+            if conviction >= 0:
+                suggested_stop = round(price - 1.5 * atr, 2)
+                stop_risk_pct = abs(price - suggested_stop) / price * 100
+                stop_text = (
+                    f"**Enter:** ~${price:.2f}  |  **Stop:** ${suggested_stop:.2f}  |  **Risk:** {stop_risk_pct:.1f}%\n"
+                    f"• Stop = **1.5× ATR** (${atr:.2f}) below price = outside normal daily noise\n"
+                    f"• **If close below ${suggested_stop:.2f}**: the buy thesis is broken → exit immediately\n"
+                    f"• SMA50 at ${sma50:.2f} — a close below SMA50 also invalidates a long\n"
+                    f"• Stop loss exists to protect capital, not to hope the trade bounces"
+                )
+            else:
+                suggested_stop = round(price + 1.5 * atr, 2)
+                stop_risk_pct = abs(price - suggested_stop) / price * 100
+                stop_text = (
+                    f"**Counter-trend / falling setup** — higher risk, smaller size\n"
+                    f"• If buying dip: stop above **${suggested_stop:.2f}** (+{stop_risk_pct:.1f}%)\n"
+                    f"• Trend is DOWN — only trade with very tight stop and small position\n"
+                    f"• **Better strategy**: wait for trend reversal confirmation before entering"
+                )
+
+            # ── Verdict ───────────────────────────────────────────────
+            if conviction >= 50:
+                verdict, v_color = "🟢 STRONG BUY — High conviction setup", COLOR_BUY
+            elif conviction >= 20:
+                verdict, v_color = "🟢 BUY / WATCH — Conditions favour long", COLOR_BUY
+            elif conviction >= -10:
+                verdict, v_color = "🟡 NEUTRAL — Wait for a clearer signal", COLOR_INFO
+            elif conviction >= -40:
+                verdict, v_color = "🟠 CAUTION — Avoid new long entries", COLOR_SELL
+            else:
+                verdict, v_color = "🔴 AVOID / SELL — Conditions unfavourable", COLOR_SELL
+
+            e = discord.Embed(
+                title=f"🧠 Conviction Analysis — {ticker}",
+                description=(
+                    f"**${price:.2f}** ({pct:+.2f}% today)  |  Conviction: **{conviction:+d}/100**\n\n"
+                    f"**{verdict}**"
+                ),
+                color=v_color, timestamp=now)
+
+            if buy_pts:
+                e.add_field(name="🟢 REASONS TO BUY",
+                            value="\n".join(buy_pts[:5]), inline=False)
+            if sell_pts:
+                e.add_field(name="🔴 REASONS TO WAIT / AVOID",
+                            value="\n".join(sell_pts[:4]), inline=False)
+
+            e.add_field(name="🛑 STOP LOSS — WHERE & WHY",
+                        value=stop_text[:512], inline=False)
+
+            e.add_field(name="📊 Technicals",
+                        value=(
+                            f"RSI **{rsi:.0f}** · Vol **{rel_vol:.1f}×** · ATR **${atr:.2f}**\n"
+                            f"SMA20 **${sma20:.2f}** · SMA50 **${sma50:.2f}**"
+                        ), inline=True)
+
+            # Analyst consensus
+            analyst = data.get("analyst", {})
+            if analyst.get("recommendation") or analyst.get("analyst_count"):
+                rec = (analyst.get("recommendation") or "N/A").upper()
+                cnt = analyst.get("analyst_count", 0)
+                tgt = analyst.get("target_mean", 0)
+                upside = (tgt - price) / price * 100 if tgt and price else 0
+                ana_text = f"**{rec}** ({cnt} analysts)"
+                if tgt:
+                    ana_text += f"\nTarget: **${tgt:.2f}** ({upside:+.1f}% upside)"
+                e.add_field(name="👔 Analyst View", value=ana_text, inline=True)
+
+            # News & social
+            news = data.get("news", [])
+            news_24h = [n for n in news if n.get("age_h", 99) < 24]
+            s_icon = "🔥" if len(news_24h) >= 3 else "📰" if news_24h else "📭"
+            if news:
+                news_text = f"{s_icon} **{len(news_24h)}** stories in last 24h\n"
+                news_text += "\n".join(
+                    f"• [{n['title'][:65]}...]({n['url']})" for n in news[:4] if n.get("url"))
+            else:
+                news_text = "📭 No recent news found — quiet on this ticker"
+            e.add_field(name="📰 NEWS & CATALYST", value=news_text[:900], inline=False)
+
+            e.set_footer(text=f"🧠 /why conviction engine · {ticker} · Also try /analyze /ai /news")
             await interaction.followup.send(embed=e)
+            await _audit(f"🧠 {interaction.user} → /why {ticker} (conviction {conviction:+d})")
 
         # ══════════════════════════════════════════════════════════════
         # SLASH COMMANDS — Signals & Scanners
