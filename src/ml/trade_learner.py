@@ -121,8 +121,7 @@ class TradeOutcomePredictor:
 
     FEATURE_COLS = [
         "confidence", "vix_at_entry", "rsi_at_entry", "adx_at_entry",
-        "relative_volume", "distance_from_sma50", "hold_hours",
-        "max_adverse_excursion",
+        "relative_volume", "distance_from_sma50",
     ]
 
     def __init__(self):
@@ -183,7 +182,8 @@ class TradeOutcomePredictor:
         try:
             from sklearn.ensemble import GradientBoostingClassifier
             from sklearn.preprocessing import StandardScaler
-            from sklearn.model_selection import cross_val_score
+            from sklearn.model_selection import TimeSeriesSplit
+            from sklearn.metrics import brier_score_loss, log_loss, roc_auc_score
 
             self.scaler = StandardScaler()
             X_scaled = self.scaler.fit_transform(X)
@@ -197,25 +197,36 @@ class TradeOutcomePredictor:
                 random_state=42,
             )
 
-            # Cross-validation
-            scores = cross_val_score(self.model, X_scaled, y, cv=5, scoring="accuracy")
+            # Time-aware cross-validation (no future leakage)
+            tscv = TimeSeriesSplit(n_splits=5)
+            fold_scores, fold_brier, fold_auc = [], [], []
+            for train_idx, val_idx in tscv.split(X_scaled):
+                Xtr, Xval = X_scaled[train_idx], X_scaled[val_idx]
+                ytr, yval = y[train_idx], y[val_idx]
+                self.model.fit(Xtr, ytr)
+                proba = self.model.predict_proba(Xval)[:, 1]
+                fold_scores.append(float((self.model.predict(Xval) == yval).mean()))
+                fold_brier.append(float(brier_score_loss(yval, proba)))
+                if len(set(yval)) > 1:
+                    fold_auc.append(float(roc_auc_score(yval, proba)))
 
-            # Fit on all data
+            # Fit final model on all data
             self.model.fit(X_scaled, y)
             self._save_model()
 
             # Feature importance
             importances = dict(zip(available_features, self.model.feature_importances_))
-
             metrics = {
                 "status": "trained",
                 "samples": len(self._history),
-                "cv_accuracy": float(np.mean(scores)),
-                "cv_std": float(np.std(scores)),
+                "cv_accuracy": float(np.mean(fold_scores)),
+                "cv_std": float(np.std(fold_scores)),
+                "cv_brier": float(np.mean(fold_brier)),
+                "cv_auc": float(np.mean(fold_auc)) if fold_auc else None,
                 "feature_importances": importances,
                 "win_rate_actual": float(y.mean()),
             }
-            logger.info(f"Model trained: accuracy={metrics['cv_accuracy']:.3f}")
+            logger.info(f"Model trained: accuracy={metrics['cv_accuracy']:.3f} brier={metrics['cv_brier']:.3f}")
             return metrics
 
         except ImportError:

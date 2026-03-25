@@ -361,41 +361,58 @@ class FeaturePipeline:
             Dict with cross-sectional features added
         """
         result = {}
-        
-        # Get latest values for ranking
-        latest_returns = {}
-        latest_volumes = {}
-        latest_volatilities = {}
-        
+
+        # -----------------------------------------------------------
+        # Per-date cross-sectional ranks (fixes leakage bug).
+        # Old code computed ranks from the LATEST snapshot and wrote
+        # a single constant value across ALL historical rows.
+        # Now: build a panel, compute ranks per date, merge back.
+        # -----------------------------------------------------------
+        panels = []
         for ticker, df in all_data.items():
-            if len(df) > 20:
-                latest_returns[ticker] = df['close'].iloc[-1] / df['close'].iloc[-21] - 1
-                latest_volumes[ticker] = df['volume'].iloc[-1]
-                latest_volatilities[ticker] = df['close'].pct_change().iloc[-20:].std()
-        
-        # Create rank Series
-        return_ranks = pd.Series(latest_returns).rank(pct=True)
-        volume_ranks = pd.Series(latest_volumes).rank(pct=True)
-        volatility_ranks = pd.Series(latest_volatilities).rank(pct=True)
-        
+            if len(df) < 21:
+                continue
+            tmp = df[['close', 'volume']].copy()
+            tmp['ticker'] = ticker
+            tmp['ret_20d'] = tmp['close'].pct_change(20)
+            tmp['vol_20d'] = tmp['close'].pct_change().rolling(20).std()
+            panels.append(tmp)
+
+        if panels:
+            panel = pd.concat(panels)
+            # Rank within each date across tickers
+            for col, rank_col in [
+                ('ret_20d', 'return_rank'),
+                ('volume', 'volume_rank'),
+                ('vol_20d', 'volatility_rank'),
+            ]:
+                panel[rank_col] = panel.groupby(
+                    panel.index
+                )[col].rank(pct=True)
+        else:
+            panel = pd.DataFrame()
+
         for ticker, df in all_data.items():
             df_copy = df.copy()
-            
-            # Relative strength vs market
+
+            # Relative strength vs market (per-date, not constant)
             if market_data is not None and len(df_copy) == len(market_data):
                 df_copy['relative_strength'] = (
-                    df_copy['close'].pct_change(20) - 
-                    market_data['close'].pct_change(20)
+                    df_copy['close'].pct_change(20)
+                    - market_data['close'].pct_change(20)
                 )
-            
-            # Cross-sectional ranks
-            if ticker in return_ranks:
-                df_copy['return_rank'] = return_ranks[ticker]
-            if ticker in volume_ranks:
-                df_copy['volume_rank'] = volume_ranks[ticker]
-            if ticker in volatility_ranks:
-                df_copy['volatility_rank'] = volatility_ranks[ticker]
-            
+
+            # Merge per-date ranks
+            if not panel.empty and ticker in panel['ticker'].values:
+                tk_ranks = panel[panel['ticker'] == ticker][
+                    ['return_rank', 'volume_rank', 'volatility_rank']
+                ]
+                for col in ['return_rank', 'volume_rank', 'volatility_rank']:
+                    if col in tk_ranks.columns:
+                        df_copy[col] = tk_ranks[col].reindex(
+                            df_copy.index
+                        )
+
             result[ticker] = df_copy
         
         return result

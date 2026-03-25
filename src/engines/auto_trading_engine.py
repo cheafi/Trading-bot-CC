@@ -387,11 +387,31 @@ class AutoTradingEngine:
             features_df = pd.concat(all_features, ignore_index=True)
 
             # 4. Generate signals
+            # Gather real market state so RegimeDetector has VIX/breadth
+            try:
+                import yfinance as _yf_ate
+                _vix_d = _yf_ate.Ticker("^VIX").history(period="5d")
+                _spy_d = _yf_ate.Ticker("SPY").history(period="5d")
+                _mkt = {
+                    "vix": float(_vix_d["Close"].iloc[-1]) if len(_vix_d) else 20,
+                    "vix_term_structure": 1.0,
+                    "pct_above_sma50": 55,
+                    "hy_spread": 350,
+                    "spx_change_pct": float(
+                        _spy_d["Close"].pct_change().iloc[-1] * 100
+                    ) if len(_spy_d) > 1 else 0,
+                }
+            except Exception:
+                _mkt = {
+                    "vix": 20, "vix_term_structure": 1.0,
+                    "pct_above_sma50": 55, "hy_spread": 350,
+                }
+
             engine = SignalEngine()
             signals = engine.generate_signals(
                 universe=valid_tickers,
                 features=features_df,
-                market_data={},
+                market_data=_mkt,
                 portfolio={},
             )
             self._signals_today.extend(signals)

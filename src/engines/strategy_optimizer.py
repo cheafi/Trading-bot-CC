@@ -586,55 +586,124 @@ class StrategyOptimizer:
         period_label: str = "1y",
     ) -> Dict[str, Any]:
         """
-        Run ALL strategies on hist data, rank them, identify best for current regime.
-        Returns a rich analysis dict ready for Discord rendering.
+        OOS-driven strategy selection with frozen holdout.
+
+        Split:
+          - dev pool (oldest 70%): walk-forward + param search
+          - validation (next 15%): confirm selected strategy
+          - holdout (newest 15%): final one-time report
         """
-        regime_info = _regime_from_data(hist)
+        n = len(hist)
+        dev_end = int(n * 0.70)
+        val_end = int(n * 0.85)
+
+        dev_data = hist.iloc[:dev_end].copy()
+        val_data = hist.iloc[dev_end:val_end].copy()
+        holdout_data = hist.iloc[val_end:].copy()
+
+        regime_info = _regime_from_data(dev_data)
         regime = regime_info["label"]
 
         results: Dict[str, Dict] = {}
 
-        # 1. Run each strategy with default params
+        # 1. Run each strategy on DEV data (not full history)
         for name, cfg in STRATEGY_REGISTRY.items():
             try:
-                r = cfg["fn"](hist.copy(), cfg["default_params"])
+                r = cfg["fn"](dev_data.copy(), cfg["default_params"])
                 adj = self._score_adjustments.get(name, 1.0)
-                r["score"] = round(_score_result(r, regime, name) * adj, 1)
+                r["score"] = round(
+                    _score_result(r, regime, name) * adj, 1
+                )
                 r["strategy"] = name
                 r["params"] = cfg["default_params"]
                 results[name] = r
             except Exception as exc:
                 logger.warning(f"Strategy {name} failed: {exc}")
-                results[name] = {"trades": 0, "score": 0, "strategy": name,
-                                 "returns": [], "win_rate": 0, "sharpe": 0,
-                                 "pf": 0, "max_dd": 0, "avg_hold": 0}
+                results[name] = {
+                    "trades": 0, "score": 0, "strategy": name,
+                    "returns": [], "win_rate": 0, "sharpe": 0,
+                    "pf": 0, "max_dd": 0, "avg_hold": 0,
+                }
 
-        # 2. Walk-forward validation on best strategies
-        ranked = sorted(results.values(), key=lambda x: x["score"], reverse=True)
-        top2 = ranked[:2]
+        # 2. Walk-forward on DEV data for top strategies
+        ranked = sorted(
+            results.values(), key=lambda x: x["score"], reverse=True
+        )
+        top3 = ranked[:3]
         wf_results = {}
-        for r in top2:
+        for r in top3:
             try:
-                wf = self._walk_forward(hist.copy(), r["strategy"])
+                wf = self._walk_forward(
+                    dev_data.copy(), r["strategy"]
+                )
                 wf_results[r["strategy"]] = wf
             except Exception:
                 pass
 
-        # 3. Parameter sweep (find best params for top strategy)
+        # 3. Rank by OOS score (walk-forward avg), not in-sample
+        for strat_name, wf in wf_results.items():
+            oos_score = wf.get("avg_oos_score", 0)
+            if oos_score > 0 and strat_name in results:
+                results[strat_name]["oos_score"] = oos_score
+
+        # Re-rank by OOS score where available, else in-sample
+        ranked = sorted(
+            results.values(),
+            key=lambda x: x.get("oos_score", x["score"]),
+            reverse=True,
+        )
+
+        # 4. Param sweep on DEV data only (not full history)
         best_strat = ranked[0]["strategy"] if ranked else "SWING"
-        best_params, sweep_score = self._param_sweep(hist.copy(), best_strat)
+        best_params, sweep_score = self._param_sweep(
+            dev_data.copy(), best_strat
+        )
 
-        # 4. Cross-check: do strategies agree on direction?
+        # 5. Validation check on middle segment
+        val_result = {}
+        try:
+            cfg = STRATEGY_REGISTRY.get(best_strat, {})
+            if cfg and len(val_data) > 30:
+                vr = cfg["fn"](val_data.copy(), best_params)
+                val_result = {
+                    "trades": vr["trades"],
+                    "sharpe": vr["sharpe"],
+                    "win_rate": vr["win_rate"],
+                    "score": _score_result(
+                        vr, regime, best_strat
+                    ),
+                    "stable": vr["sharpe"] > 0
+                    and vr["win_rate"] > 0.35,
+                }
+        except Exception:
+            pass
+
+        # 6. Frozen holdout - report only, never optimize on it
+        holdout_result = {}
+        try:
+            cfg = STRATEGY_REGISTRY.get(best_strat, {})
+            if cfg and len(holdout_data) > 20:
+                hr = cfg["fn"](holdout_data.copy(), best_params)
+                holdout_result = {
+                    "trades": hr["trades"],
+                    "sharpe": hr["sharpe"],
+                    "win_rate": hr["win_rate"],
+                    "score": _score_result(
+                        hr, regime, best_strat
+                    ),
+                }
+        except Exception:
+            pass
+
+        # 7. Cross-check, correction, regime recommendation, MC
         conflict = self._cross_check(results)
-
-        # 5. Self-correction summary
         correction_notes = self._correction_notes()
-
-        # 6. Best strategy for current regime
-        regime_recommendation = self._regime_recommendation(regime, results)
-
-        # 7. Monte Carlo on best strategy's returns
-        mc = self._monte_carlo(results.get(best_strat, {}).get("returns", []))
+        regime_recommendation = self._regime_recommendation(
+            regime, results
+        )
+        mc = self._monte_carlo(
+            results.get(best_strat, {}).get("returns", [])
+        )
 
         return {
             "ticker": ticker,
@@ -644,8 +713,15 @@ class StrategyOptimizer:
             "ranked": ranked,
             "best_strategy": best_strat,
             "best_params": best_params,
-            "sweep_improvement": round(sweep_score - results.get(best_strat, {}).get("score", 0), 1),
+            "sweep_improvement": round(
+                sweep_score
+                - results.get(best_strat, {}).get("score", 0),
+                1,
+            ),
             "walk_forward": wf_results,
+            "validation": val_result,
+            "holdout": holdout_result,
+            "selection_method": "OOS_walk_forward",
             "cross_check": conflict,
             "regime_recommendation": regime_recommendation,
             "correction_notes": correction_notes,

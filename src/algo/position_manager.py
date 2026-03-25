@@ -408,8 +408,19 @@ class PositionManager:
         # Check daily loss limit
         daily_loss = self._get_daily_pnl()
         if daily_loss <= -self.params.max_daily_loss_pct:
-            return False, f"Daily loss limit ({self.params.max_daily_loss_pct}%) reached"
-        
+            return False, (
+                f"Daily loss limit "
+                f"({self.params.max_daily_loss_pct}%) reached"
+            )
+
+        # Check weekly loss limit
+        weekly_loss = self._get_weekly_pnl()
+        if weekly_loss <= -self.params.max_weekly_loss_pct:
+            return False, (
+                f"Weekly loss limit "
+                f"({self.params.max_weekly_loss_pct}%) reached"
+            )
+
         return True, ""
     
     def open_position(
@@ -481,18 +492,35 @@ class PositionManager:
         
         position = self.positions[ticker]
         position.close_position(exit_price, datetime.now(), reason)
-        
+
         # Update equity
         self.current_equity += position.realized_pnl
         if self.current_equity > self.peak_equity:
             self.peak_equity = self.current_equity
-        
+
+        # --- FIX: update daily and weekly PnL ledgers ---
+        today = datetime.now().strftime('%Y-%m-%d')
+        self.daily_pnl[today] = (
+            self.daily_pnl.get(today, 0.0)
+            + position.realized_pnl_pct
+        )
+        try:
+            week_key = datetime.now().strftime('%Y-W%W')
+        except Exception:
+            week_key = today[:7]
+        if not hasattr(self, 'weekly_pnl'):
+            self.weekly_pnl = {}
+        self.weekly_pnl[week_key] = (
+            self.weekly_pnl.get(week_key, 0.0)
+            + position.realized_pnl_pct
+        )
+
         # Track consecutive losses
         if position.realized_pnl < 0:
             self.consecutive_losses += 1
         else:
             self.consecutive_losses = 0
-        
+
         # Move to closed positions
         self.closed_positions.append(position)
         del self.positions[ticker]
@@ -533,11 +561,21 @@ class PositionManager:
                 should_exit, reason = position.check_exit_conditions(current_price, current_date)
                 
                 if should_exit:
-                    positions_to_close.append({
-                        'ticker': ticker,
-                        'price': current_price,
-                        'reason': reason
-                    })
+                    if reason.startswith("partial_"):
+                        # Partial exit: sell 1/3 of position
+                        partial_shares = max(
+                            1, position.shares // 3
+                        )
+                        self.reduce_position(
+                            ticker, partial_shares,
+                            current_price, reason,
+                        )
+                    else:
+                        positions_to_close.append({
+                            'ticker': ticker,
+                            'price': current_price,
+                            'reason': reason,
+                        })
         
         return positions_to_close
     
@@ -562,9 +600,79 @@ class PositionManager:
         return (self.peak_equity - self.current_equity) / self.peak_equity * 100
     
     def _get_daily_pnl(self) -> float:
-        """Get today's P/L as percentage of equity."""
+        """Get today P/L as percentage of equity."""
         today = datetime.now().strftime('%Y-%m-%d')
         return self.daily_pnl.get(today, 0.0)
+
+    def _get_weekly_pnl(self) -> float:
+        """Get this week P/L as percentage of equity."""
+        if not hasattr(self, 'weekly_pnl'):
+            self.weekly_pnl = {}
+        try:
+            week_key = datetime.now().strftime('%Y-W%W')
+        except Exception:
+            week_key = datetime.now().strftime('%Y-%m-%d')[:7]
+        return self.weekly_pnl.get(week_key, 0.0)
+
+    def reduce_position(
+        self,
+        ticker: str,
+        shares_to_sell: int,
+        exit_price: float,
+        reason: str = "partial",
+    ):
+        """
+        Partial exit: reduce position by shares_to_sell.
+
+        If shares_to_sell >= current shares, does a full close.
+        Returns the realized PnL from the partial exit.
+        """
+        if ticker not in self.positions:
+            self.logger.warning(f"No position for {ticker}")
+            return None
+
+        pos = self.positions[ticker]
+        if shares_to_sell >= pos.shares:
+            return self.close_position(ticker, exit_price, reason)
+
+        # Partial exit
+        pnl_per_share = exit_price - pos.entry_price
+        partial_pnl = pnl_per_share * shares_to_sell
+        partial_pnl_pct = (
+            pnl_per_share / pos.entry_price * 100
+        )
+
+        # Update position
+        pos.shares -= shares_to_sell
+        pos.position_value = pos.shares * exit_price
+
+        # Update equity
+        self.current_equity += partial_pnl
+        if self.current_equity > self.peak_equity:
+            self.peak_equity = self.current_equity
+
+        # Update daily/weekly PnL
+        today = datetime.now().strftime('%Y-%m-%d')
+        self.daily_pnl[today] = (
+            self.daily_pnl.get(today, 0.0) + partial_pnl_pct
+        )
+        if not hasattr(self, 'weekly_pnl'):
+            self.weekly_pnl = {}
+        try:
+            wk = datetime.now().strftime('%Y-W%W')
+        except Exception:
+            wk = today[:7]
+        self.weekly_pnl[wk] = (
+            self.weekly_pnl.get(wk, 0.0) + partial_pnl_pct
+        )
+
+        self.logger.info(
+            f"Partial exit: {ticker} sold {shares_to_sell} shares "
+            f"@ ${exit_price:.2f}, PnL: ${partial_pnl:.2f} "
+            f"({partial_pnl_pct:.2f}%), reason: {reason}, "
+            f"{pos.shares} shares remaining"
+        )
+        return partial_pnl
     
     def get_exposure_report(self) -> Dict[str, Any]:
         """Get comprehensive exposure report."""

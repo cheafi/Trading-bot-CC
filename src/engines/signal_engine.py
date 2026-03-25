@@ -447,28 +447,41 @@ class RegimeDetector:
         
         active = []
         
-        # Momentum & trend strategies work in uptrends with normal volatility
+        # Momentum and trend strategies - uptrends with normal vol
         if trend in [TrendRegime.UPTREND, TrendRegime.STRONG_UPTREND]:
             if vol != VolatilityRegime.HIGH_VOL:
-                active.append("momentum_breakout")
-                active.append("short_term_trend_following")  # Pullback buying in uptrends
-                active.append("trend_following")  # Turtle-style trend following
-                active.append("momentum_rotation")  # Sector rotation
+                active.extend([
+                    "momentum_breakout",
+                    "momentum_v1",
+                    "short_term_trend_following",
+                    "trend_following",
+                    "momentum_rotation",
+                ])
         
-        # VCP works in low vol (tight base / squeeze setup)
+        # VCP works in low vol (tight base / squeeze)
         if vol in [VolatilityRegime.LOW_VOL, VolatilityRegime.NORMAL]:
             if trend in [TrendRegime.UPTREND, TrendRegime.STRONG_UPTREND, TrendRegime.NEUTRAL]:
                 active.append("vcp")
         
-        # Mean reversion works in normal/low vol environments
+        # Mean reversion - normal/low vol
         if vol in [VolatilityRegime.NORMAL, VolatilityRegime.LOW_VOL]:
             if trend != TrendRegime.STRONG_DOWNTREND:
-                active.append("mean_reversion")
-                active.append("short_term_mean_reversion")
+                active.extend([
+                    "mean_reversion",
+                    "mean_reversion_v1",
+                    "short_term_mean_reversion",
+                ])
         
-        # Classic swing works in neutral/uptrend markets
+        # Breakout and swing - neutral/uptrend
         if trend in [TrendRegime.NEUTRAL, TrendRegime.UPTREND, TrendRegime.STRONG_UPTREND]:
-            active.append("classic_swing")
+            active.extend(["breakout_v1", "classic_swing"])
+        
+        # Earnings strategies - always (self-filter on calendar)
+        active.extend([
+            "pre_earnings_momentum",
+            "post_earnings_drift",
+            "earnings_breakout",
+        ])
         
         return active
 
