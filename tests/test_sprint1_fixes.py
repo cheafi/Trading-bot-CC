@@ -91,7 +91,7 @@ class TestStrategyRouting(unittest.TestCase):
             TrendRegime.DOWNTREND,
             RiskRegime.RISK_OFF,
         )
-        self.assertEqual(active, [])
+        self.assertEqual(active, {})
 
 
 class TestOOSSelection(unittest.TestCase):

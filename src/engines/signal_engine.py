@@ -415,7 +415,8 @@ class RegimeDetector:
             risk_regime = RiskRegime.NEUTRAL
         
         # Determine active strategies
-        active_strategies = self._get_active_strategies(vol_regime, trend_regime, risk_regime)
+        strategy_weights = self._get_active_strategies(vol_regime, trend_regime, risk_regime)
+        active_strategies = list(strategy_weights.keys())
         
         self.logger.info(
             f"Regime detected: vol={vol_regime.value}, trend={trend_regime.value}, "
@@ -435,55 +436,68 @@ class RegimeDetector:
         vol: VolatilityRegime, 
         trend: TrendRegime, 
         risk: RiskRegime
-    ) -> List[str]:
-        """Map regime to active strategies."""
+    ) -> Dict[str, float]:
+        """
+        Map regime to active strategies with confidence weights.
+        
+        Returns:
+            Dict mapping strategy_id -> weight (0.0-1.0).
+            Higher weight = more regime-appropriate = higher position sizing.
+        """
         
         # NO TRADE conditions
         if vol == VolatilityRegime.CRISIS:
-            return []
+            return {}
         
         if trend == TrendRegime.STRONG_DOWNTREND and risk == RiskRegime.RISK_OFF:
-            return []
+            return {}
         
-        active = []
+        weights: Dict[str, float] = {}
         
-        # Momentum and trend strategies - uptrends with normal vol
-        if trend in [TrendRegime.UPTREND, TrendRegime.STRONG_UPTREND]:
-            if vol != VolatilityRegime.HIGH_VOL:
-                active.extend([
-                    "momentum_breakout",
-                    "momentum_v1",
-                    "short_term_trend_following",
-                    "trend_following",
-                    "momentum_rotation",
-                ])
+        # ── Base weights by trend alignment ───────────────────────
+        is_uptrend = trend in [TrendRegime.UPTREND, TrendRegime.STRONG_UPTREND]
+        is_neutral = trend == TrendRegime.NEUTRAL
+        is_downtrend = trend in [TrendRegime.DOWNTREND, TrendRegime.STRONG_DOWNTREND]
+        is_low_vol = vol in [VolatilityRegime.LOW_VOL, VolatilityRegime.NORMAL]
+        
+        # Momentum / trend strategies - best in uptrends with normal vol
+        if is_uptrend and vol != VolatilityRegime.HIGH_VOL:
+            boost = 1.0 if trend == TrendRegime.STRONG_UPTREND else 0.8
+            weights["momentum_breakout"] = boost
+            weights["momentum_v1"] = boost
+            weights["short_term_trend_following"] = boost * 0.9
+            weights["trend_following"] = boost
+            weights["momentum_rotation"] = boost * 0.85
         
         # VCP works in low vol (tight base / squeeze)
-        if vol in [VolatilityRegime.LOW_VOL, VolatilityRegime.NORMAL]:
-            if trend in [TrendRegime.UPTREND, TrendRegime.STRONG_UPTREND, TrendRegime.NEUTRAL]:
-                active.append("vcp")
+        if is_low_vol and not is_downtrend:
+            weights["vcp"] = 0.9 if vol == VolatilityRegime.LOW_VOL else 0.7
         
-        # Mean reversion - normal/low vol
-        if vol in [VolatilityRegime.NORMAL, VolatilityRegime.LOW_VOL]:
-            if trend != TrendRegime.STRONG_DOWNTREND:
-                active.extend([
-                    "mean_reversion",
-                    "mean_reversion_v1",
-                    "short_term_mean_reversion",
-                ])
+        # Mean reversion - normal/low vol, avoid strong downtrend
+        if is_low_vol and not is_downtrend:
+            mr_w = 0.85 if is_neutral else 0.65
+            weights["mean_reversion"] = mr_w
+            weights["mean_reversion_v1"] = mr_w
+            weights["short_term_mean_reversion"] = mr_w * 0.9
         
         # Breakout and swing - neutral/uptrend
-        if trend in [TrendRegime.NEUTRAL, TrendRegime.UPTREND, TrendRegime.STRONG_UPTREND]:
-            active.extend(["breakout_v1", "classic_swing"])
+        if not is_downtrend:
+            sw_w = 0.9 if is_uptrend else 0.7
+            weights["breakout_v1"] = sw_w
+            weights["classic_swing"] = sw_w
         
-        # Earnings strategies - always (self-filter on calendar)
-        active.extend([
-            "pre_earnings_momentum",
-            "post_earnings_drift",
-            "earnings_breakout",
-        ])
+        # Earnings strategies - always active (self-filter on calendar)
+        weights["pre_earnings_momentum"] = 0.6
+        weights["post_earnings_drift"] = 0.6
+        weights["earnings_breakout"] = 0.6
         
-        return active
+        # ── Global risk dampener ──────────────────────────────────
+        if vol == VolatilityRegime.HIGH_VOL:
+            weights = {k: v * 0.6 for k, v in weights.items()}
+        if risk == RiskRegime.RISK_OFF:
+            weights = {k: v * 0.5 for k, v in weights.items()}
+        
+        return weights
 
 
 class RiskModel:

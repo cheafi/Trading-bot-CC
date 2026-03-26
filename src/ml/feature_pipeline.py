@@ -417,6 +417,85 @@ class FeaturePipeline:
         
         return result
 
+    def generate_regime_features(
+        self, df: pd.DataFrame, market_df: Optional[pd.DataFrame] = None
+    ) -> pd.DataFrame:
+        """
+        Add regime-awareness features for ML models.
+        
+        New features:
+        - realized_vol_10d/20d: rolling annualised volatility
+        - vol_regime_z: z-score of current vol vs 60-day mean
+        - trend_strength: ADX-style directional strength
+        - sector_momentum_20d: sector ETF relative return (if market_df given)
+        """
+        out = df.copy()
+        
+        # Realised volatility (annualised)
+        rets = out['close'].pct_change()
+        out['realized_vol_10d'] = rets.rolling(10).std() * (252 ** 0.5)
+        out['realized_vol_20d'] = rets.rolling(20).std() * (252 ** 0.5)
+        
+        # Volatility regime z-score
+        vol_20 = out['realized_vol_20d']
+        vol_mean = vol_20.rolling(60).mean()
+        vol_std = vol_20.rolling(60).std()
+        out['vol_regime_z'] = ((vol_20 - vol_mean) / vol_std.replace(0, np.nan)).fillna(0)
+        
+        # Trend strength (simplified ADX: absolute directional movement)
+        high = out.get('high', out['close'])
+        low = out.get('low', out['close'])
+        plus_dm = (high - high.shift(1)).clip(lower=0)
+        minus_dm = (low.shift(1) - low).clip(lower=0)
+        tr = pd.concat([
+            high - low,
+            (high - out['close'].shift(1)).abs(),
+            (low - out['close'].shift(1)).abs(),
+        ], axis=1).max(axis=1)
+        atr14 = tr.rolling(14).mean()
+        plus_di = 100 * (plus_dm.rolling(14).mean() / atr14.replace(0, np.nan))
+        minus_di = 100 * (minus_dm.rolling(14).mean() / atr14.replace(0, np.nan))
+        dx = (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan) * 100
+        out['trend_strength'] = dx.rolling(14).mean().fillna(0)
+        
+        # Relative performance vs market
+        if market_df is not None and 'close' in market_df.columns:
+            mkt_ret = market_df['close'].pct_change(20)
+            stk_ret = out['close'].pct_change(20)
+            # Align by index
+            aligned = stk_ret.reindex(mkt_ret.index)
+            out['sector_momentum_20d'] = (aligned - mkt_ret).reindex(out.index).fillna(0)
+        
+        return out
+
+    @staticmethod
+    def generate_earnings_proximity(
+        df: pd.DataFrame,
+        earnings_dates: Optional[list] = None,
+    ) -> pd.DataFrame:
+        """
+        Add days-to-next-earnings feature.
+        If no earnings_dates provided, returns column of NaN.
+        """
+        out = df.copy()
+        if not earnings_dates:
+            out['days_to_earnings'] = np.nan
+            return out
+        
+        import bisect
+        ts_list = sorted([pd.Timestamp(d) for d in earnings_dates])
+        
+        def _days_to_next(dt):
+            idx = bisect.bisect_left(ts_list, pd.Timestamp(dt))
+            if idx < len(ts_list):
+                return (ts_list[idx] - pd.Timestamp(dt)).days
+            return np.nan
+        
+        out['days_to_earnings'] = pd.Series(
+            [_days_to_next(d) for d in df.index], index=df.index
+        )
+        return out
+
 
 class FeatureSelector:
     """

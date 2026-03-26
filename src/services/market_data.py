@@ -195,6 +195,43 @@ class MarketDataService:
         for k in keys_to_drop:
             del self._cache[k]
 
+    async def get_news(self, ticker: str, max_items: int = 5) -> list:
+        """
+        Fetch recent news for a ticker via yfinance.
+        Returns list of dicts with title, url, publisher, time keys.
+        Cached for 5 minutes via the standard cache.
+        """
+        cache_key = f"{ticker}:news"
+        entry = self._cache.get(cache_key)
+        if entry and entry.is_fresh(300) and entry.df is not None:
+            return entry.df  # reuse df field to store list
+
+        def _sync():
+            try:
+                import yfinance as yf
+                t = yf.Ticker(ticker.upper())
+                raw = t.news if hasattr(t, "news") else []
+                out = []
+                for item in (raw or []):
+                    url = item.get("link", item.get("url", ""))
+                    title = item.get("title", "")
+                    if url and title and len(out) < max_items:
+                        out.append({
+                            "title": title[:200],
+                            "url": url,
+                            "publisher": item.get("publisher", ""),
+                            "time": item.get("providerPublishTime", 0),
+                        })
+                return out
+            except Exception as exc:
+                logger.warning(f"[MarketData] get_news({ticker}) error: {exc}")
+                return []
+
+        result = await asyncio.to_thread(_sync)
+        # Store in cache (abuse df field for list)
+        self._cache[cache_key] = _CacheEntry(cache_key, result)
+        return result
+
     def cache_stats(self) -> Dict[str, Any]:
         """
         Health snapshot for /status command.
