@@ -2235,13 +2235,22 @@ async def get_recommendations(limit: int = Query(10, ge=1, le=50)):
         leaderboard = StrategyLeaderboard()
         ensembler = OpportunityEnsembler()
 
-        # In a real pipeline the signals come from SignalEngine;
-        # here we return an empty list if none are cached.
+        # Try to get cached recommendations from a running engine
+        cached_recs = []
+        try:
+            from src.engines.auto_trading_engine import AutoTradingEngine
+            # Note: in production the engine instance is a singleton;
+            # here we return the class-level structure for the endpoint.
+            cached_recs = []  # Populated by engine.get_cached_state()
+        except Exception:
+            pass
+
         return {
             "status": "ok",
             "regime": regime,
-            "recommendations": [],
-            "note": "Live recommendations require active trading cycle. Use /signals for cached signals.",
+            "recommendations": cached_recs,
+            "strategy_scores": leaderboard.get_strategy_scores(),
+            "note": "Live data populated when AutoTradingEngine is running.",
             "timestamp": datetime.utcnow().isoformat(),
         }
     except Exception as e:

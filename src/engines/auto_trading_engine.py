@@ -26,6 +26,12 @@ from src.algo.position_manager import PositionManager, RiskParameters
 from src.ml.trade_learner import TradeLearningLoop, TradeOutcomeRecord
 from src.core.errors import BrokerError, DataError, RiskLimitError
 
+try:
+    from src.engines.insight_engine import EdgeCalculator
+    _HAS_EDGE_CALC = True
+except ImportError:
+    _HAS_EDGE_CALC = False
+
 logger = logging.getLogger(__name__)
 settings = get_settings()
 trading_config = get_trading_config()
@@ -256,6 +262,13 @@ class AutoTradingEngine:
             risk_params = RiskParameters()
         self.position_mgr = PositionManager(params=risk_params)
         self.learning_loop = TradeLearningLoop()
+        self.edge_calculator = EdgeCalculator() if _HAS_EDGE_CALC else None
+
+        # Sprint 7: signal/recommendation cache for API + EOD tracking
+        self._cached_regime: Dict[str, Any] = {}
+        self._cached_recommendations: List[Dict[str, Any]] = []
+        self._cached_leaderboard: Dict[str, Any] = {}
+        self._last_eod_date: Optional[date] = None
 
     async def run(self):
         """Main loop — runs until stopped."""
@@ -345,13 +358,35 @@ class AutoTradingEngine:
             strategy_scores=self.leaderboard.get_strategy_scores(),
         )
 
-        # Execute only approved opportunities
+        # Cache ranked results for API
+        self._cached_recommendations = ranked
+        self._cached_regime = self._regime_state
+        self._cached_leaderboard = self.leaderboard.get_strategy_scores()
+
+        # Execute only approved opportunities (with ML quality gate)
         for opp in ranked:
             if not opp.get("trade_decision", False):
                 continue
             signal = opp["original_signal"].get("_signal_obj")
             if signal is None:
                 continue
+
+            # Sprint 7: ML quality gate — skip D-grade signals
+            ml_quality = self.learning_loop.predict_signal_quality({
+                "confidence": getattr(signal, "confidence", 50),
+                "vix_at_entry": self._regime_state.get("vix", 20),
+                "rsi_at_entry": getattr(signal, "rsi", 50),
+                "adx_at_entry": getattr(signal, "adx", 25),
+                "relative_volume": getattr(signal, "relative_volume", 1.0),
+                "distance_from_sma50": getattr(signal, "distance_from_sma50", 0),
+            })
+            if ml_quality.get("model_available") and ml_quality.get("signal_grade") == "D":
+                logger.info(
+                    "ML quality gate rejected %s (win_prob=%.2f, grade=D)",
+                    signal.ticker, ml_quality.get("win_probability", 0),
+                )
+                continue
+
             if self.dry_run:
                 logger.info(
                     f"[DRY RUN] Would execute: {signal.ticker} "
@@ -388,6 +423,9 @@ class AutoTradingEngine:
         # Periodic reporting
         if self._cycle_count % 300 == 0:  # Every ~5 hours
             await self._send_status_update()
+
+        # End-of-day cycle (once per day after market close)
+        await self._maybe_run_eod()
 
     def _get_active_markets(self, now: datetime) -> List[str]:
         """Determine which markets are currently open."""
@@ -694,6 +732,105 @@ class AutoTradingEngine:
         except Exception as e:
             logger.warning("Learning loop record error: %s", e)
 
+
+    async def _maybe_run_eod(self):
+        """Trigger EOD cycle once per day after US market close (20:30 UTC)."""
+        now = datetime.now(timezone.utc)
+        today = now.date()
+        if self._last_eod_date == today:
+            return
+        # Run EOD after 20:30 UTC (US market close + 30 min buffer)
+        if now.hour >= 20 and now.minute >= 30:
+            us_active = self._get_active_markets(now)
+            if "us" not in us_active:
+                self._last_eod_date = today
+                await self._run_eod_cycle()
+
+    async def _run_eod_cycle(self):
+        """
+        End-of-day processing:
+        1. Run LLM failure analysis on losing trades
+        2. Retrain ML model if enough new data
+        3. Refresh strategy leaderboard
+        4. Send EOD report
+        """
+        logger.info("🌙 Running end-of-day cycle...")
+
+        # 1. Failure analysis
+        try:
+            analysis = await self.learning_loop.run_failure_analysis()
+            if analysis:
+                logger.info(
+                    "EOD failure analysis: %d recommendations",
+                    len(analysis.get("recommendations", [])),
+                )
+        except Exception as e:
+            logger.warning("EOD failure analysis error: %s", e)
+
+        # 2. Force model retrain
+        try:
+            metrics = self.learning_loop.predictor.train()
+            logger.info("EOD model retrain: %s", metrics.get("status", "unknown"))
+        except Exception as e:
+            logger.warning("EOD model retrain error: %s", e)
+
+        # 3. Refresh leaderboard with today's trades
+        try:
+            for trade in self._trades_today:
+                strategy = trade.get("strategy_name", "unknown")
+                pnl = trade.get("pnl_pct", 0)
+                self.leaderboard.record_outcome(
+                    strategy, pnl > 0, pnl,
+                )
+        except Exception as e:
+            logger.warning("EOD leaderboard refresh error: %s", e)
+
+        # 4. Performance summary
+        try:
+            summary = self.learning_loop.get_performance_summary()
+            logger.info(
+                "EOD summary: %d trades, %.1f%% win rate, %.2f%% avg PnL",
+                summary.get("total_trades", 0),
+                summary.get("win_rate", 0),
+                summary.get("avg_pnl", 0),
+            )
+        except Exception as e:
+            logger.warning("EOD summary error: %s", e)
+
+        # 5. Send EOD report
+        try:
+            await self._send_eod_report()
+        except Exception as e:
+            logger.warning("EOD report send error: %s", e)
+
+        # Reset daily counters
+        self._signals_today.clear()
+        self._trades_today.clear()
+        self.circuit_breaker.reset_daily()
+        logger.info("🌙 End-of-day cycle complete")
+
+    async def _send_eod_report(self):
+        """Send end-of-day performance report."""
+        try:
+            from src.notifications.multi_channel import MultiChannelNotifier
+            notifier = MultiChannelNotifier()
+            summary = self.learning_loop.get_performance_summary()
+            regime = self._cached_regime.get("regime", "unknown")
+            report = (
+                f"🌙 TradingAI End-of-Day Report\n"
+                f"Date: {date.today().isoformat()}\n"
+                f"Regime: {regime}\n"
+                f"Signals generated: {len(self._signals_today)}\n"
+                f"Trades executed: {len(self._trades_today)}\n"
+                f"Total trades (lifetime): {summary.get('total_trades', 0)}\n"
+                f"Win rate: {summary.get('win_rate', 0):.1f}%\n"
+                f"Avg PnL: {summary.get('avg_pnl', 0):.2f}%\n"
+                f"Model trained: {summary.get('model_trained', False)}"
+            )
+            await notifier.send_message(report)
+        except Exception as e:
+            logger.error("EOD report error: %s", e)
+
     async def _get_equity(self) -> float:
         try:
             from src.brokers.broker_manager import BrokerManager
@@ -729,6 +866,18 @@ class AutoTradingEngine:
             await notifier.send_message(status)
         except Exception as e:
             logger.error(f"Status update error: {e}")
+
+
+    def get_cached_state(self) -> Dict[str, Any]:
+        """Return cached regime, recommendations, leaderboard for API."""
+        return {
+            "regime": self._cached_regime,
+            "recommendations": self._cached_recommendations,
+            "leaderboard": self._cached_leaderboard,
+            "cycle_count": self._cycle_count,
+            "signals_today": len(self._signals_today),
+            "trades_today": len(self._trades_today),
+        }
 
     def _calculate_position_size(self, signal) -> int:
         """

@@ -231,3 +231,21 @@ class StrategyLeaderboard:
         else:
             entry["cooldown_since"] = None
             return StrategyStatus.ACTIVE
+
+    def record_outcome(self, strategy_name: str, is_win: bool, pnl_pct: float):
+        """Record a trade outcome for a strategy, updating its score."""
+        if strategy_name not in self._strategies:
+            self._strategies[strategy_name] = {
+                "trades": 0,
+                "wins": 0,
+                "total_pnl": 0.0,
+                "score": 0.5,
+                "last_updated": None,
+            }
+        s = self._strategies[strategy_name]
+        s["trades"] += 1
+        if is_win:
+            s["wins"] += 1
+        s["total_pnl"] += pnl_pct
+        s["score"] = s["wins"] / s["trades"] if s["trades"] > 0 else 0.5
+        s["last_updated"] = __import__("datetime").datetime.now().isoformat()

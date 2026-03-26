@@ -11,6 +11,12 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, Dict, Any, List
 
+try:
+    from src.core.errors import BrokerError
+except ImportError:
+    class BrokerError(Exception):
+        pass
+
 logger = logging.getLogger(__name__)
 
 
@@ -337,9 +343,9 @@ class BaseBroker(ABC):
                 elif pos.quantity < 0:
                     return await self.buy(ticker, abs(pos.quantity), market=market)
         
-        return OrderResult(
-            success=False,
-            message=f"No position found for {ticker}"
+        raise BrokerError(
+            message=f"No position found for {ticker}",
+            broker=self.name,
         )
     
     async def close_all_positions(self) -> List[OrderResult]:
