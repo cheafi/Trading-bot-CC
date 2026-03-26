@@ -9,9 +9,9 @@ yfinance==0.2.35
 # News APIs
 newsapi-python==0.2.7
 
-# Social media
-tweepy==4.14.0
-praw==7.7.1
+# Social media (install when social ingestor is wired)
+# tweepy==4.14.0
+# praw==7.7.1
 
 # OpenAI for sentiment
 openai==1.6.1

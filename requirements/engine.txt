@@ -16,7 +16,7 @@ openai==1.6.1
 tiktoken==0.5.2
 
 # Feature engineering
-feature-engine==1.6.2
+# feature-engine removed — not imported; using src/engines/feature_engine.py
 
 # ML trade learning
 joblib==1.3.2

@@ -9,16 +9,18 @@
 
 | Feature | Detail |
 |---------|--------|
-| **Interface** | Discord only — all intelligence via rich embeds + buttons |
-| **Commands** | 54 slash commands across 8 categories |
+| **Interface** | Discord + Telegram + REST API |
+| **Commands** | 57 slash commands across 8 categories |
 | **Auto-tasks** | 23 background tasks running 24/7 |
 | **Universe** | 50 US stocks + 10 crypto + 3 Asia indices + 11 sectors |
 | **Strategies** | SWING · BREAKOUT · MOMENTUM · MEAN_REVERSION |
-| **AI Engine** | Regime detection · walk-forward backtest · param sweep · self-correction |
+| **Decision Layer** | RegimeRouter · OpportunityEnsembler · StrategyLeaderboard · EdgeCalculator |
 | **Signal Cards** | WHY BUY · WHY THIS STOP · ML regime check on every signal |
-| **News** | All 50 stocks tracked every 15 min · headlines auto-attached to alerts |
+| **Autonomous Engine** | AutoTradingEngine with heartbeat, circuit breaker, R-based sizing |
+| **Brokers** | Paper · Alpaca · Futu · Interactive Brokers · MT5 (pluggable) |
 | **Data** | yfinance (no paid API) + optional OpenAI for narrative |
-| **Language** | Python 3.13 · discord.py · scikit-learn · pandas · numpy |
+| **Deploy** | Docker Compose (12 services) or standalone |
+| **Language** | Python 3.11 · discord.py · scikit-learn · pandas · numpy |
 
 ---
 
@@ -223,25 +225,93 @@ Plus: 10 crypto · 3 Asia indices · SPY/QQQ/DIA/IWM/^VIX · 11 S&P sectors
 ## Key Source Files
 
 | File | Lines | Purpose |
-|------|------:|---------|
-| `src/discord_bot.py` | 5,596 | All 54 commands + 23 tasks |
-| `src/engines/strategy_optimizer.py` | 936 | AI backtest engine (new) |
-| `src/engines/signal_engine.py` | 1,244 | Core signal generation |
-| `src/engines/gpt_validator.py` | 1,058 | GPT narrative + validation |
-| `src/algo/indicators.py` | 1,272 | Technical indicator library |
-| `src/core/models.py` | 766 | Pydantic type system |
+|------|------:|:--------|
+| `src/discord_bot.py` | 5,800 | 57 slash commands + 23 background tasks |
+| `src/engines/auto_trading_engine.py` | 1,290 | Autonomous trading loop with full decision pipeline |
+| `src/engines/signal_engine.py` | 1,244 | Swing/breakout/momentum/mean-reversion signal gen |
+| `src/engines/gpt_validator.py` | 1,058 | GPT narrative generation + validation |
+| `src/engines/strategy_optimizer.py` | 936 | Walk-forward backtest + param sweep + self-correction |
+| `src/engines/main.py` | 155 | Production entrypoint (Docker CMD) |
+| `src/algo/indicators.py` | 1,272 | Technical indicator library (SMA/EMA/RSI/MACD/ADX) |
+| `src/algo/position_manager.py` | 861 | R-based sizing, trailing stops, partial exits |
+| `src/core/models.py` | 766 | Pydantic v2 type system |
+| `src/core/errors.py` | — | TradingError hierarchy (6 typed exceptions) |
+| `src/core/trade_repo.py` | 190 | TradeOutcomeRepository (DB persistence) |
+| `src/core/logging_config.py` | 137 | Structured JSON logging + correlation IDs |
+| `src/brokers/broker_manager.py` | — | Singleton multi-broker manager |
+| `src/ml/trade_learner.py` | — | ML quality gate + trade learning loop |
+
+---
+
+## Docker Compose Deployment
+
+```bash
+# Clone and configure
+git clone https://github.com/cheafi/Trading-bot-CC
+cd TradingAI_Bot-main
+cp .env.example .env   # add tokens: DISCORD_BOT_TOKEN, ALPACA_API_KEY, etc.
+
+# Start all services
+docker compose up -d
+
+# Start with dev tools (Jupyter + Grafana)
+docker compose --profile dev up -d
+```
+
+**Services** (12):
+
+| Service | Image | Purpose |
+|---------|-------|---------|
+| `postgres` | postgres:15 | Primary database |
+| `redis` | redis:7 | Cache + pub/sub |
+| `market_data_ingestor` | Dockerfile.ingestor | OHLCV ingest (yfinance + Polygon) |
+| `news_ingestor` | Dockerfile.ingestor | News + sentiment pipeline |
+| `social_ingestor` | Dockerfile.ingestor | Social media feeds |
+| `signal_engine` | Dockerfile.engine | Signal generation + GPT validation |
+| `auto_trader` | Dockerfile.engine | AutoTradingEngine (autonomous loop) |
+| `scheduler` | Dockerfile.scheduler | Cron-based task orchestration |
+| `telegram_bot` | Dockerfile.telegram | Telegram interface |
+| `discord_bot` | Dockerfile.discord | Discord interface (57 commands) |
+| `api` | Dockerfile.api | FastAPI REST endpoints |
+| `jupyter` | Dockerfile.jupyter | Research notebooks (dev profile) |
+
+---
+
+## Multi-Broker Support
+
+The `BrokerManager` singleton routes orders to any configured broker:
+
+| Broker | Module | Status |
+|--------|--------|---------|
+| Paper | `src/brokers/paper_broker.py` | ✅ Default — no API key needed |
+| Alpaca | `src/brokers/alpaca_broker.py` | ✅ US equities + crypto |
+| Futu (富途) | `src/brokers/futu_broker.py` | ✅ HK/US equities |
+| Interactive Brokers | `src/brokers/ib_broker.py` | ✅ Global multi-asset |
+| MetaTrader 5 | `src/brokers/mt5_broker.py` | ✅ Forex + CFDs (Windows) |
 
 ---
 
 ## Quick Start
+
+### Standalone (Discord bot only)
 
 ```bash
 git clone https://github.com/cheafi/Trading-bot-CC
 cd TradingAI_Bot-main
 python -m venv venv && source venv/bin/activate
 pip install -r requirements/base.txt
+pip install discord.py
 cp .env.example .env        # add DISCORD_BOT_TOKEN
 python run_discord_bot.py
+```
+
+### Docker Compose (full stack)
+
+```bash
+git clone https://github.com/cheafi/Trading-bot-CC
+cd TradingAI_Bot-main
+cp .env.example .env        # add all tokens
+docker compose up -d
 ```
 
 Full setup: [docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md) · Full command reference: [docs/BOT_GUIDE.md](docs/BOT_GUIDE.md)

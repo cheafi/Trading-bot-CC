@@ -10,11 +10,11 @@ discord.py==2.3.2
 # WhatsApp (via Twilio)
 twilio==8.10.3
 
-# Slack
-slack-sdk==3.26.1
+# Slack (install when Slack integration is wired)
+# slack-sdk==3.26.1
 
-# Email
-sendgrid==6.11.0
+# Email (install when email notifications are wired)
+# sendgrid==6.11.0
 
 # OpenAI for message formatting
 openai==1.6.1
