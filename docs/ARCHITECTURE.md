@@ -219,33 +219,96 @@ TradingAI_Bot-main/
 │   ├── notifications/
 │   │   └── discord_bot.py      ← symlinked copy (auto-synced)
 │   ├── engines/
-│   │   ├── strategy_optimizer.py   (936 lines) ← NEW
-│   │   ├── signal_engine.py        (1,244)
+│   │   ├── main.py                 ← Production entrypoint (Sprint 12)
+│   │   ├── __main__.py             ← `python -m src.engines` support
+│   │   ├── auto_trading_engine.py  (1,272 lines)
+│   │   ├── strategy_optimizer.py   (936 lines)
+│   │   ├── signal_engine.py        (1,272)
 │   │   ├── gpt_validator.py        (1,058)
 │   │   ├── feature_engine.py
 │   │   ├── ai_advisor.py
-│   │   └── insight_engine.py
+│   │   ├── insight_engine.py
+│   │   ├── regime_router.py        ← Sprint 3
+│   │   ├── context_assembler.py    ← Sprint 3
+│   │   ├── opportunity_ensembler.py ← Sprint 3
+│   │   └── strategy_leaderboard.py ← Sprint 3
 │   ├── algo/
 │   │   ├── indicators.py           (1,272)
 │   │   ├── base_strategy.py
 │   │   ├── momentum_strategy.py
+│   │   ├── position_manager.py     ← Sprint 5 (861 lines)
 │   │   ├── swing_strategies.py
 │   │   └── ...
 │   ├── core/
 │   │   ├── models.py               (766)
 │   │   ├── config.py
-│   │   └── database.py
+│   │   ├── database.py
+│   │   ├── errors.py               ← Sprint 6 (typed exceptions)
+│   │   ├── trade_repo.py           ← Sprint 11 (DB persistence)
+│   │   └── logging_config.py       ← Sprint 12 (structured JSON logging)
 │   ├── brokers/
+│   │   ├── broker_manager.py       ← Sprint 8 (singleton)
 │   │   ├── paper_broker.py
 │   │   ├── alpaca_broker.py
 │   │   └── ...
 │   └── ml/
 │       ├── feature_pipeline.py
-│       ├── trade_learner.py
+│       ├── trade_learner.py        ← Sprint 6-8 (persistence + ML gate)
 │       └── rl_agents.py
+├── config/
+│   └── default.yaml                ← Sprint 13
+├── init/postgres/
+│   ├── 01_init.sql
+│   ├── 02_pro_desk_upgrade.sql
+│   └── 03_decision_layer.sql       ← Sprint 11
 ├── docs/
 ├── requirements/
 └── docker/
+```
+
+---
+
+## Sprint History (Decision-Layer Upgrades)
+
+| Sprint | Focus | Key Deliverables |
+|--------|-------|------------------|
+| 1-2 | P0 Bug Fixes | Core stability, 7 critical fixes |
+| 3 | Decision Engines | RegimeRouter, ContextAssembler, OpportunityEnsembler, StrategyLeaderboard, EdgeCalculator |
+| 4 | Engine Wiring | All 5 engines integrated into AutoTradingEngine._run_cycle |
+| 5 | Config + Risk | PositionManager (R-based sizing, trailing stops, partial exits) |
+| 6 | Errors + Learning | TradingError hierarchy (6 types), TradeLearningLoop wiring, 3 API endpoints |
+| 7 | ML Gate + EOD | ML quality gate (D-grade rejection), EOD cycle, signal caching |
+| 8 | Singleton + Edge | BrokerManager singleton, EdgeCalculator enrichment, JSON persistence |
+| 9 | Brokers + Discord | BrokerError in all 4 brokers, /regime /leaderboard /recommendations commands |
+| 10 | Typed Errors | 13 typed catches, health_check(), graceful_shutdown(), /api/health |
+| 11 | DB Persistence | 4 new DB tables (trade_outcomes, leaderboard, regime, health), TradeOutcomeRepository, _timed_phase wiring |
+| 12 | Boot + Logging | engines/main.py entrypoint, _boot() pre-flight, JSONFormatter, correlation IDs |
+| 13 | Infrastructure | Docker CMD fix, __main__.py, config/default.yaml, ARCHITECTURE.md update |
+
+### AutoTradingEngine Pipeline (current)
+
+```
+_boot()                          ← pre-flight validation
+  └── run()                      ← main loop
+       └── _run_cycle()          ← per-cycle
+            ├── set_correlation_id()       ← tracing
+            ├── _get_active_markets()      ← session check
+            ├── circuit_breaker.update()   ← risk gate
+            ├── _timed_phase("context")    ← context assembly
+            ├── regime_router.classify()   ← regime gate
+            ├── trade_repo.save_regime()   ← DB persist
+            ├── _timed_phase("signals")    ← signal generation
+            ├── _timed_phase("validation") ← GPT validation
+            ├── ensembler.rank()           ← ensemble scoring
+            │   └── edge_calculator.compute()  ← calibrated EV
+            ├── learning_loop.predict()    ← ML quality gate
+            ├── _execute_signal()          ← broker execution
+            │   └── position_mgr.open()    ← R-based sizing
+            ├── _timed_phase("monitoring") ← position monitoring
+            │   └── position_mgr.update_all()  ← trailing stops
+            │       └── _record_learning_outcome()  ← ML feedback
+            │           └── trade_repo.save_outcome()  ← DB persist
+            └── _maybe_run_eod()           ← EOD cycle
 ```
 
 ---

@@ -378,7 +378,7 @@ services:
       dockerfile: docker/Dockerfile.engine
     container_name: tradingai_auto_trader
     restart: unless-stopped
-    command: ["python", "-m", "src.engines.auto_trading_engine"]
+    command: ["python", "-m", "src.engines.main"]
     environment:
       - SERVICE_NAME=auto_trading_engine
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
@@ -393,6 +393,9 @@ services:
       - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-}
       - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2025-04-01-preview}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FORMAT=json
+      - DRY_RUN=${DRY_RUN:-false}
+      - CYCLE_INTERVAL=${CYCLE_INTERVAL:-60}
       - TZ=America/New_York
     depends_on:
       postgres:
@@ -401,6 +404,12 @@ services:
         condition: service_healthy
       signal_engine:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     volumes:
       - ./src:/app/src:ro
       - ./config:/app/config:ro

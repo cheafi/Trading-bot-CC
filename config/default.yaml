@@ -1,0 +1,62 @@
+# ═══════════════════════════════════════════════════════════════
+# TradingAI Bot — Default Configuration
+# Override via environment variables or .env file
+# ═══════════════════════════════════════════════════════════════
+
+engine:
+  cycle_interval_seconds: 60      # Main loop interval
+  dry_run: false                  # true = paper-trade only
+  log_level: INFO                 # DEBUG / INFO / WARNING / ERROR
+  log_format: auto                # json / text / auto (json in Docker)
+
+risk:
+  risk_per_trade: 0.01            # 1% of equity per trade
+  max_position_pct: 0.05          # 5% max single position
+  max_sector_pct: 0.20            # 20% max single sector
+  max_portfolio_var: 0.15         # 15% portfolio VaR limit
+  max_drawdown_pct: 10.0          # 10% drawdown circuit breaker
+  max_daily_loss_pct: 3.0         # 3% daily loss circuit breaker
+  max_consecutive_losses: 5       # pause after 5 consecutive losses
+  max_open_positions: 15          # max concurrent positions
+  stop_loss_pct: 0.05             # 5% default stop loss
+  max_hold_days: 15               # max holding period (swing)
+
+strategies:
+  enabled:
+    - momentum_breakout
+    - trend_following
+    - vcp
+    - mean_reversion
+    - classic_swing
+    - earnings_drift
+  ml_quality_gate: true           # reject D-grade signals
+  retrain_interval: 20            # retrain ML after N new trades
+
+markets:
+  regions:
+    - us
+    - hk
+    - crypto
+  universe_max_tickers: 50        # cap to avoid rate limits
+  min_price: 5.0                  # filter penny stocks
+  min_dollar_volume_20d: 5000000  # $5M daily minimum
+
+notifications:
+  discord: true
+  telegram: true
+  eod_report: true
+  signal_alerts: true
+  risk_alerts: true
+
+database:
+  pool_size: 10
+  max_overflow: 20
+  pool_recycle: 3600
+  query_timeout: 60
+
+api:
+  host: "0.0.0.0"
+  port: 8000
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8080"
