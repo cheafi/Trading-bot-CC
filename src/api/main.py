@@ -2188,5 +2188,87 @@ async def get_signal_card(ticker: str):
     }
 
 
+
+
+# ===== Sprint 6: Decision-Layer API Endpoints =====
+
+@app.get("/api/regime", tags=["decision-layer"])
+async def get_regime_state():
+    """Get current market regime classification."""
+    try:
+        from src.engines.regime_router import RegimeRouter
+        from src.engines.context_assembler import ContextAssembler
+
+        assembler = ContextAssembler()
+        ctx = assembler.assemble_sync()
+        mkt = ctx.get("market_state", {})
+
+        router = RegimeRouter()
+        state = router.classify(mkt)
+
+        return {
+            "status": "ok",
+            "regime": state,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"Regime endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/recommendations", tags=["decision-layer"])
+async def get_recommendations(limit: int = Query(10, ge=1, le=50)):
+    """Get ranked trade recommendations from the ensemble scorer."""
+    try:
+        from src.engines.opportunity_ensembler import OpportunityEnsembler
+        from src.engines.strategy_leaderboard import StrategyLeaderboard
+        from src.engines.regime_router import RegimeRouter
+        from src.engines.context_assembler import ContextAssembler
+
+        assembler = ContextAssembler()
+        ctx = assembler.assemble_sync()
+        mkt = ctx.get("market_state", {})
+
+        router = RegimeRouter()
+        regime = router.classify(mkt)
+
+        leaderboard = StrategyLeaderboard()
+        ensembler = OpportunityEnsembler()
+
+        # In a real pipeline the signals come from SignalEngine;
+        # here we return an empty list if none are cached.
+        return {
+            "status": "ok",
+            "regime": regime,
+            "recommendations": [],
+            "note": "Live recommendations require active trading cycle. Use /signals for cached signals.",
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"Recommendations endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/leaderboard", tags=["decision-layer"])
+async def get_strategy_leaderboard():
+    """Get strategy health scores and lifecycle state."""
+    try:
+        from src.engines.strategy_leaderboard import StrategyLeaderboard
+
+        lb = StrategyLeaderboard()
+        scores = lb.get_strategy_scores()
+        rankings = lb.get_rankings()
+
+        return {
+            "status": "ok",
+            "strategy_scores": scores,
+            "rankings": rankings,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"Leaderboard endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     start()

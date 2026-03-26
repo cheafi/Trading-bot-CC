@@ -23,6 +23,8 @@ from src.engines.opportunity_ensembler import OpportunityEnsembler
 from src.engines.context_assembler import ContextAssembler
 from src.engines.strategy_leaderboard import StrategyLeaderboard
 from src.algo.position_manager import PositionManager, RiskParameters
+from src.ml.trade_learner import TradeLearningLoop, TradeOutcomeRecord
+from src.core.errors import BrokerError, DataError, RiskLimitError
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -253,6 +255,7 @@ class AutoTradingEngine:
         except Exception:
             risk_params = RiskParameters()
         self.position_mgr = PositionManager(params=risk_params)
+        self.learning_loop = TradeLearningLoop()
 
     async def run(self):
         """Main loop — runs until stopped."""
@@ -362,16 +365,19 @@ class AutoTradingEngine:
                     self._trades_today.append(result)
                     # Record in PositionManager for trailing stops
                     try:
+                        _stop = (
+                            signal.invalidation.stop_price
+                            if getattr(signal, "invalidation", None)
+                            and getattr(signal.invalidation, "stop_price", 0)
+                            else result.get("entry_price", signal.entry_price) * (1 - trading_config.stop_loss_pct)
+                        )
                         self.position_mgr.open_position(
                             ticker=signal.ticker,
-                            entry_price=result.get(
-                                "entry_price", signal.entry_price
-                            ),
+                            strategy_id=opp.get("strategy_name", "unknown"),
+                            entry_price=result.get("entry_price", signal.entry_price),
                             shares=self._calculate_position_size(signal),
-                            direction=signal.direction.value
-                            if hasattr(signal.direction, "value")
-                            else str(signal.direction),
-                            strategy_name=opp.get("strategy_name", "unknown"),
+                            stop_loss_price=_stop,
+                            max_hold_days=trading_config.max_hold_days,
                         )
                     except Exception as e:
                         logger.warning(f"PositionManager track error: {e}")
@@ -509,6 +515,9 @@ class AutoTradingEngine:
             )
             self._signals_today.extend(signals)
             return signals
+        except DataError as e:
+            logger.error(f"Data error in signal generation: {e}")
+            return []
         except Exception as e:
             logger.error(f"Signal generation error: {e}")
             return []
@@ -572,50 +581,118 @@ class AutoTradingEngine:
             else:
                 logger.warning(f"Order failed for {signal.ticker}: {result.message}")
                 return None
+        except BrokerError as e:
+            logger.error(f"Broker error for {signal.ticker}: {e}")
+            return None
         except Exception as e:
             logger.error(f"Execution error for {signal.ticker}: {e}")
             return None
 
     async def _monitor_positions(self):
-        """Check all open positions for stop-loss and time-stop exits."""
+        """
+        Monitor open positions using PositionManager for:
+        - Trailing stop updates + exits
+        - R-target partial exits (1R, 2R, 3R)
+        - Time-based exits (max hold days)
+        - Hard stop-loss
+        Closed positions are fed to TradeLearningLoop.
+        """
         try:
             from src.brokers.broker_manager import BrokerManager
             manager = BrokerManager()
             await manager.initialize()
-            positions = await manager.get_positions()
+            broker_positions = await manager.get_positions()
 
-            for pos in positions:
+            # Build price dict from broker positions
+            prices: Dict[str, float] = {}
+            broker_qty: Dict[str, int] = {}
+            broker_side: Dict[str, str] = {}
+            for pos in broker_positions:
                 ticker = getattr(pos, "symbol", getattr(pos, "ticker", "???"))
-                entry_price = getattr(pos, "avg_entry_price", 0)
-                current_price = getattr(pos, "current_price", entry_price)
-                qty = getattr(pos, "qty", 0)
-                side = getattr(pos, "side", "long")
+                current_price = getattr(pos, "current_price", 0)
+                if current_price and current_price > 0:
+                    prices[ticker] = current_price
+                    broker_qty[ticker] = abs(int(getattr(pos, "qty", 0)))
+                    broker_side[ticker] = getattr(pos, "side", "long")
 
-                if not entry_price or entry_price <= 0:
+            if not prices:
+                return
+
+            now = datetime.now(timezone.utc)
+
+            # Use PositionManager to check all exit conditions
+            positions_to_close = self.position_mgr.update_all_positions(prices, now)
+
+            for close_info in positions_to_close:
+                ticker = close_info["ticker"]
+                exit_price = close_info["price"]
+                reason = close_info["reason"]
+                qty = broker_qty.get(ticker, 0)
+                side = broker_side.get(ticker, "long")
+
+                if qty <= 0:
                     continue
 
-                pnl_pct = (current_price - entry_price) / entry_price
-                if side == "short":
-                    pnl_pct = -pnl_pct
-
-                # Hard stop-loss at -3%
-                if pnl_pct <= -0.03:
-                    logger.warning(
-                        "Stop-loss hit for %s: %.1f%% loss", ticker, pnl_pct * 100
+                logger.warning(
+                    "Exit signal for %s: %s @ $%.2f", ticker, reason, exit_price
+                )
+                try:
+                    close_side = "sell" if side == "long" else "buy"
+                    await manager.submit_order(
+                        symbol=ticker, qty=qty,
+                        side=close_side, type="market",
+                        time_in_force="day",
                     )
-                    try:
-                        close_side = "sell" if side == "long" else "buy"
-                        await manager.submit_order(
-                            symbol=ticker, qty=abs(int(qty)),
-                            side=close_side, type="market",
-                            time_in_force="day",
-                        )
-                        logger.info("Closed %s via stop-loss", ticker)
-                    except Exception as e:
-                        logger.error("Stop-loss order failed for %s: %s", ticker, e)
+                    logger.info("Closed %s via %s", ticker, reason)
+
+                    # Close in PositionManager and feed to learning loop
+                    closed_pos = self.position_mgr.close_position(
+                        ticker, exit_price, reason
+                    )
+                    if closed_pos:
+                        self._record_learning_outcome(closed_pos, reason)
+
+                except Exception as e:
+                    logger.error("Close order failed for %s: %s", ticker, e)
 
         except Exception as e:
             logger.error("Position monitoring error: %s", e)
+
+    def _record_learning_outcome(self, closed_pos, reason: str):
+        """Feed a closed position into the TradeLearningLoop."""
+        try:
+            record = TradeOutcomeRecord(
+                trade_id=closed_pos.position_id,
+                ticker=closed_pos.ticker,
+                direction="LONG",
+                strategy=closed_pos.strategy_id,
+                entry_price=closed_pos.entry_price,
+                exit_price=closed_pos.exit_price,
+                entry_time=(
+                    closed_pos.entry_date.isoformat()
+                    if closed_pos.entry_date else ""
+                ),
+                exit_time=(
+                    closed_pos.exit_date.isoformat()
+                    if closed_pos.exit_date else ""
+                ),
+                pnl_pct=closed_pos.realized_pnl_pct,
+                confidence=50,
+                horizon="swing",
+                exit_reason=reason,
+                hold_hours=(
+                    (closed_pos.exit_date - closed_pos.entry_date).total_seconds() / 3600
+                    if closed_pos.entry_date and closed_pos.exit_date
+                    else 0
+                ),
+            )
+            self.learning_loop.record_outcome(record)
+            logger.info(
+                "Recorded learning outcome: %s %s %.2f%%",
+                closed_pos.ticker, reason, closed_pos.realized_pnl_pct,
+            )
+        except Exception as e:
+            logger.warning("Learning loop record error: %s", e)
 
     async def _get_equity(self) -> float:
         try:
