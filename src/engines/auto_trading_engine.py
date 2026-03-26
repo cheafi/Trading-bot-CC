@@ -24,7 +24,10 @@ from src.engines.context_assembler import ContextAssembler
 from src.engines.strategy_leaderboard import StrategyLeaderboard
 from src.algo.position_manager import PositionManager, RiskParameters
 from src.ml.trade_learner import TradeLearningLoop, TradeOutcomeRecord
-from src.core.errors import BrokerError, DataError, RiskLimitError
+from src.core.errors import (
+    BrokerError, ConfigError, DataError,
+    RiskLimitError, SignalError, ValidationError,
+)
 
 try:
     from src.engines.insight_engine import EdgeCalculator
@@ -258,7 +261,7 @@ class AutoTradingEngine:
                 max_drawdown_pct=tc.max_drawdown_pct,
                 risk_per_trade=tc.risk_per_trade,
             )
-        except Exception:
+        except (ConfigError, Exception):
             risk_params = RiskParameters()
         self.position_mgr = PositionManager(params=risk_params)
         self.learning_loop = TradeLearningLoop()
@@ -316,8 +319,11 @@ class AutoTradingEngine:
         # Assemble decision context
         try:
             self._context = self.context_assembler.assemble_sync()
+        except DataError as e:
+            logger.warning("Context assembly DataError: %s", e)
+            self._context = {}
         except Exception as e:
-            logger.warning(f"Context assembly failed: {e}")
+            logger.warning("Context assembly failed: %s", e)
             self._context = {}
 
         # Regime classification and trade gate
@@ -434,8 +440,10 @@ class AutoTradingEngine:
                             stop_loss_price=_stop,
                             max_hold_days=trading_config.max_hold_days,
                         )
+                    except RiskLimitError as e:
+                        logger.warning("PositionManager risk limit for %s: %s", signal.ticker, e)
                     except Exception as e:
-                        logger.warning(f"PositionManager track error: {e}")
+                        logger.warning("PositionManager track error for %s: %s", signal.ticker, e)
 
         # Monitor existing positions
         await self._monitor_positions()
@@ -511,8 +519,11 @@ class AutoTradingEngine:
                 if data.empty:
                     logger.warning("No market data returned")
                     return []
+            except DataError as e:
+                logger.error("Market data fetch DataError: %s", e)
+                return []
             except Exception as e:
-                logger.error(f"Market data fetch error: {e}")
+                logger.error("Market data fetch error: %s", e)
                 return []
 
             # 3. Compute features
@@ -574,10 +585,13 @@ class AutoTradingEngine:
             self._signals_today.extend(signals)
             return signals
         except DataError as e:
-            logger.error(f"Data error in signal generation: {e}")
+            logger.error("Data error in signal generation: %s", e)
+            return []
+        except SignalError as e:
+            logger.error("Signal generation error: %s", e)
             return []
         except Exception as e:
-            logger.error(f"Signal generation error: {e}")
+            logger.error("Unexpected signal generation error: %s", e)
             return []
 
     async def _validate_signals(self, signals: List[Signal]) -> List[Signal]:
@@ -599,9 +613,12 @@ class AutoTradingEngine:
                 if vr in ("PASS", "STRONG_PASS"):
                     approved.append(sig)
             return approved
-        except Exception as e:
-            logger.error(f"Validation error: {e}")
+        except ValidationError as e:
+            logger.error("Signal validation failed: %s", e)
             return signals  # Proceed without validation
+        except Exception as e:
+            logger.error("Unexpected validation error: %s", e)
+            return signals
 
     async def _execute_signal(self, signal: Signal) -> Optional[Dict[str, Any]]:
         """Execute a signal through the broker manager."""
@@ -706,9 +723,13 @@ class AutoTradingEngine:
                     if closed_pos:
                         self._record_learning_outcome(closed_pos, reason)
 
+                except BrokerError as e:
+                    logger.error("Close order broker error for %s: %s", ticker, e)
                 except Exception as e:
                     logger.error("Close order failed for %s: %s", ticker, e)
 
+        except BrokerError as e:
+            logger.error("Position monitoring broker error: %s", e)
         except Exception as e:
             logger.error("Position monitoring error: %s", e)
 
@@ -862,6 +883,8 @@ class AutoTradingEngine:
             manager = await self._get_broker()
             account = await manager.get_account()
             return getattr(account, "portfolio_value", 100000.0)
+        except BrokerError:
+            return 100000.0
         except Exception:
             return 100000.0
 
@@ -870,6 +893,8 @@ class AutoTradingEngine:
             manager = await self._get_broker()
             positions = await manager.get_positions()
             return len(positions)
+        except BrokerError:
+            return 0
         except Exception:
             return 0
 
@@ -900,6 +925,129 @@ class AutoTradingEngine:
             "signals_today": len(self._signals_today),
             "trades_today": len(self._trades_today),
         }
+
+
+    # ── Sprint 10: Observability ─────────────────────────────
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def _timed_phase(self, phase_name: str):
+        """Context manager that logs phase latency and errors."""
+        t0 = time.monotonic()
+        try:
+            yield
+        except Exception as exc:
+            elapsed = (time.monotonic() - t0) * 1000
+            logger.error(
+                "Phase %s FAILED after %.1fms: %s",
+                phase_name, elapsed, exc,
+            )
+            raise
+        else:
+            elapsed = (time.monotonic() - t0) * 1000
+            if elapsed > 5000:
+                logger.warning(
+                    "Phase %s SLOW: %.1fms", phase_name, elapsed,
+                )
+            else:
+                logger.debug(
+                    "Phase %s OK: %.1fms", phase_name, elapsed,
+                )
+
+    async def health_check(self) -> Dict[str, Any]:
+        """
+        Return structured health status for monitoring/API.
+
+        Keys:
+          status:      'healthy' | 'degraded' | 'unhealthy'
+          components:  dict of component → bool
+          metrics:     cycle_count, uptime, circuit_breaker state
+        """
+        components: Dict[str, bool] = {
+            "regime_router": self.regime_router is not None,
+            "ensembler": self.ensembler is not None,
+            "context_assembler": self.context_assembler is not None,
+            "leaderboard": self.leaderboard is not None,
+            "position_mgr": self.position_mgr is not None,
+            "learning_loop": self.learning_loop is not None,
+            "edge_calculator": self.edge_calculator is not None,
+            "circuit_breaker": self.circuit_breaker is not None,
+            "position_monitor": self.position_monitor is not None,
+        }
+
+        # Broker connectivity
+        try:
+            mgr = await self._get_broker()
+            components["broker"] = mgr is not None
+        except Exception:
+            components["broker"] = False
+
+        healthy_count = sum(components.values())
+        total = len(components)
+        if healthy_count == total:
+            status = "healthy"
+        elif healthy_count >= total - 2:
+            status = "degraded"
+        else:
+            status = "unhealthy"
+
+        return {
+            "status": status,
+            "components": components,
+            "metrics": {
+                "cycle_count": self._cycle_count,
+                "running": self._running,
+                "signals_today": len(self._signals_today),
+                "trades_today": len(self._trades_today),
+                "circuit_breaker_triggered": self.circuit_breaker.triggered,
+                "circuit_breaker_reason": self.circuit_breaker.trigger_reason,
+                "dry_run": self.dry_run,
+            },
+        }
+
+    async def graceful_shutdown(self):
+        """
+        Stop the engine gracefully:
+        1. Stop accepting new signals
+        2. Flush open positions (close at market)
+        3. Run EOD cycle one final time
+        4. Set _running = False
+        """
+        logger.info("🛑 Graceful shutdown initiated...")
+        self._running = False
+
+        # Flush open positions
+        try:
+            manager = await self._get_broker()
+            positions = await manager.get_positions()
+            for pos in positions:
+                ticker = getattr(pos, "symbol", getattr(pos, "ticker", "???"))
+                qty = abs(int(getattr(pos, "qty", 0)))
+                side = getattr(pos, "side", "long")
+                if qty <= 0:
+                    continue
+                close_side = "sell" if side == "long" else "buy"
+                try:
+                    await manager.submit_order(
+                        symbol=ticker, qty=qty,
+                        side=close_side, type="market",
+                        time_in_force="day",
+                    )
+                    logger.info("Shutdown: closed %s (%d shares)", ticker, qty)
+                except BrokerError as e:
+                    logger.error("Shutdown close failed %s: %s", ticker, e)
+        except BrokerError as e:
+            logger.error("Shutdown broker error: %s", e)
+        except Exception as e:
+            logger.error("Shutdown position flush error: %s", e)
+
+        # Final EOD
+        try:
+            await self._run_eod_cycle()
+        except Exception as e:
+            logger.warning("Shutdown EOD error: %s", e)
+
+        logger.info("🛑 Graceful shutdown complete")
 
     def _calculate_position_size(self, signal) -> int:
         """

@@ -2279,5 +2279,27 @@ async def get_strategy_leaderboard():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+@app.get("/api/health", tags=["monitoring"])
+async def api_health():
+    """Engine health-check endpoint for monitoring."""
+    try:
+        from src.engines.auto_trading_engine import AutoTradingEngine
+        engine = AutoTradingEngine(dry_run=True)
+        return await engine.health_check()
+    except Exception as e:
+        return {"status": "unhealthy", "error": str(e)}
+
+
 if __name__ == "__main__":
     start()
+
+
+async def api_health():
+    """Engine health-check endpoint for monitoring."""
+    try:
+        engine = _get_engine()
+        return await engine.health_check()
+    except Exception as e:
+        return {"status": "unhealthy", "error": str(e)}
+
