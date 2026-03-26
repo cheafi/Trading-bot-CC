@@ -36,5 +36,12 @@ htmlcov/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Runtime data & models
+data/
+models/
+reports/
+notebooks/
+
 # Sprint patch files (development only)
 _sprint*_patch.py

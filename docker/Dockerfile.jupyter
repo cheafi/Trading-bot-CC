@@ -1,0 +1,28 @@
+FROM python:3.11-slim
+
+WORKDIR /home/jovyan
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements/base.txt ./requirements/
+RUN pip install --no-cache-dir -r requirements/base.txt
+RUN pip install --no-cache-dir jupyterlab notebook pandas matplotlib seaborn
+
+# Copy source for import access
+COPY src/ ./src/
+
+# Create notebook directory
+RUN mkdir -p /home/jovyan/notebooks /home/jovyan/data
+
+# Set Python path
+ENV PYTHONPATH=/home/jovyan
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8888
+
+CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root"]

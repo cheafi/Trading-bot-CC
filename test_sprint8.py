@@ -124,7 +124,9 @@ class TestEdgeCalculatorInvocation(unittest.TestCase):
         idx = self.src.find("edge_calculator.compute(")
         block = self.src[idx:idx + 800]
         self.assertIn("except", block)
-        self.assertIn("pass", block)
+        # Accepts either bare pass or typed catch with logging
+        has_fallback = "pass" in block or "logger.debug" in block
+        self.assertTrue(has_fallback, "Edge fallback must use pass or logger.debug")
 
 
 class TestPositionSizingUpgrade(unittest.TestCase):

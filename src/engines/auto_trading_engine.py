@@ -339,8 +339,8 @@ class AutoTradingEngine:
             else:
                 logger.warning("  ⚠️  database unreachable (non-fatal)")
                 checks_passed += 1  # non-fatal
-        except Exception:
-            logger.warning("  ⚠️  database check skipped (non-fatal)")
+        except (ImportError, OSError, ConnectionError) as e:
+            logger.warning("  ⚠️  database check skipped (non-fatal): %s", e)
             checks_passed += 1  # non-fatal
 
         # 4. Config sanity
@@ -381,11 +381,23 @@ class AutoTradingEngine:
         while self._running:
             try:
                 await self._run_cycle()
+                self._touch_heartbeat()
             except Exception as e:
                 logger.error(f"Cycle error: {e}", exc_info=True)
                 await asyncio.sleep(5)
 
             await asyncio.sleep(self.cycle_interval)
+
+    def _touch_heartbeat(self):
+        """Write heartbeat file for Docker healthcheck."""
+        try:
+            import pathlib
+            hb = pathlib.Path("/tmp/engine_heartbeat")
+            hb.write_text(
+                datetime.now(timezone.utc).isoformat()
+            )
+        except OSError:
+            pass
 
     async def stop(self):
         self._running = False
@@ -447,8 +459,8 @@ class AutoTradingEngine:
                     default=str,
                 ),
             })
-        except Exception:
-            pass  # DB persistence is best-effort
+        except (OSError, ConnectionError, RuntimeError) as e:
+            logger.debug("Regime DB persist skipped: %s", e)
 
         if not self._regime_state.get("should_trade", True):
             if self._cycle_count % 30 == 0:
@@ -494,8 +506,8 @@ class AutoTradingEngine:
                     sd["edge_p_t1"] = edge.p_t1
                     sd["edge_p_stop"] = edge.p_stop
                     sd["edge_ev"] = edge.expected_return_pct
-                except Exception:
-                    pass  # graceful fallback
+                except (ValueError, KeyError, TypeError) as e:
+                    logger.debug("Edge calc fallback for signal: %s", e)
 
             signal_dicts.append(sd)
 
@@ -668,7 +680,8 @@ class AutoTradingEngine:
                         feats["ticker"] = ticker
                         all_features.append(feats.iloc[[-1]])
                         valid_tickers.append(ticker)
-                except Exception:
+                except (ValueError, KeyError, TypeError) as e:
+                    logger.debug("Feature calc skipped for %s: %s", ticker, e)
                     continue
 
             if not all_features:
@@ -692,7 +705,8 @@ class AutoTradingEngine:
                         _spy_d["Close"].pct_change().iloc[-1] * 100
                     ) if len(_spy_d) > 1 else 0,
                 }
-            except Exception:
+            except (ConnectionError, OSError, ValueError, KeyError) as e:
+                logger.debug("Market data fallback: %s", e)
                 _mkt = {
                     "vix": 20, "vix_term_structure": 1.0,
                     "pct_above_sma50": 55, "hy_spread": 350,
@@ -929,8 +943,8 @@ class AutoTradingEngine:
                         "feature_snapshot": None,
                     })
                 )
-            except Exception:
-                pass  # DB persistence is best-effort
+            except (OSError, ConnectionError, RuntimeError) as e:
+                logger.debug("Trade outcome DB persist skipped: %s", e)
 
         except Exception as e:
             logger.warning("Learning loop record error: %s", e)
@@ -1070,7 +1084,8 @@ class AutoTradingEngine:
             return getattr(account, "portfolio_value", 100000.0)
         except BrokerError:
             return 100000.0
-        except Exception:
+        except (ConnectionError, OSError, RuntimeError) as e:
+            logger.debug("Equity fetch fallback: %s", e)
             return 100000.0
 
     async def _count_positions(self) -> int:
@@ -1080,7 +1095,8 @@ class AutoTradingEngine:
             return len(positions)
         except BrokerError:
             return 0
-        except Exception:
+        except (ConnectionError, OSError, RuntimeError) as e:
+            logger.debug("Position count fallback: %s", e)
             return 0
 
     async def _send_status_update(self):
@@ -1164,7 +1180,8 @@ class AutoTradingEngine:
         try:
             mgr = await self._get_broker()
             components["broker"] = mgr is not None
-        except Exception:
+        except (BrokerError, ConnectionError, OSError) as e:
+            logger.debug("Health check broker probe failed: %s", e)
             components["broker"] = False
 
         healthy_count = sum(components.values())
