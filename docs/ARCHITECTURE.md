@@ -289,6 +289,7 @@ TradingAI_Bot-main/
 | 16 | Sync + Polish | notifications/discord_bot.py synced (54→57 commands), stale refs fixed |
 | 17 | Unit Tests | 37 decision-layer tests (Ensembler, Leaderboard, EdgeCalc, Errors, Context) |
 | 18 | Infra Hardening | ingestors/main.py entrypoint, redis lazy import, 14× utcnow→timezone.utc |
+| 19 | Pydantic V2 | 6× class Config→model_config=ConfigDict, eliminates PydanticDeprecatedSince20 |
 
 ### AutoTradingEngine Pipeline (current)
 

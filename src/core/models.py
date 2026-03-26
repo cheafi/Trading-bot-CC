@@ -6,7 +6,7 @@ from datetime import datetime, date, timezone
 from typing import Optional, List, Dict, Any
 from enum import Enum
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 def _utcnow() -> datetime:
@@ -90,9 +90,7 @@ class OHLCV(BaseModel):
     volume: int
     vwap: Optional[float] = None
     trade_count: Optional[int] = None
-    
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Quote(BaseModel):
@@ -319,9 +317,7 @@ class Signal(BaseModel):
             f"{targets_str} | {self.catalyst[:30]}... | {risks_str[:50]}... | "
             f"{self.confidence} | {self.rationale[:50]}... |"
         )
-    
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ValidatedSignal(BaseModel):
@@ -359,9 +355,7 @@ class NewsArticle(BaseModel):
     
     article_type: Optional[str] = None
     urgency: Optional[str] = None
-    
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SocialPost(BaseModel):
@@ -389,9 +383,7 @@ class SocialPost(BaseModel):
     is_influencer: bool = False
     is_verified: bool = False
     spam_score: Optional[float] = None
-    
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CalendarEvent(BaseModel):
@@ -415,9 +407,7 @@ class CalendarEvent(BaseModel):
     
     importance: str = "medium"
     status: str = "scheduled"
-    
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # =============================================================================
@@ -645,9 +635,7 @@ class BacktestResult(BaseModel):
     trades: List[BacktestTrade]
     equity_curve: List[Dict[str, Any]]
     monthly_returns: Dict[str, float]
-    
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # =============================================================================
