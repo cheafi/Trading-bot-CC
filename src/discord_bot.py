@@ -5736,10 +5736,32 @@ class DiscordInteractiveBot:
                     value=f"**{regime_name}** {'🟢' if should_trade else '🔴'}",
                     inline=False,
                 )
-                e.description = (
-                    "Live recommendations populate when AutoTradingEngine "
-                    "is running. Use `/regime` for current market state."
-                )
+                # Try to fetch cached recommendations from running engine
+                try:
+                    from src.engines.auto_trading_engine import AutoTradingEngine
+                    engine = AutoTradingEngine(dry_run=True)
+                    cached = engine.get_cached_state()
+                    recs = cached.get("recommendations", [])
+                    if recs:
+                        for i, rec in enumerate(recs[:5], 1):
+                            ticker = rec.get("original_signal", {}).get("ticker", "?")
+                            score = rec.get("composite_score", 0)
+                            decision = "✅ BUY" if rec.get("trade_decision") else "⏸️ HOLD"
+                            e.add_field(
+                                name=f"{i}. {ticker}",
+                                value=f"Score: **{score:.3f}** | {decision}",
+                                inline=True,
+                            )
+                    else:
+                        e.description = (
+                            "No recommendations cached yet. "
+                            "Recommendations populate after the engine runs a cycle."
+                        )
+                except Exception:
+                    e.description = (
+                        "Live recommendations populate when AutoTradingEngine "
+                        "is running. Use `/regime` for current market state."
+                    )
                 e.set_footer(text="Sprint 9 Decision Layer • /regime /leaderboard")
                 await interaction.followup.send(embed=e)
             except Exception as ex:

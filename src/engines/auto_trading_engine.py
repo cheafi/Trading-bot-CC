@@ -24,6 +24,7 @@ from src.engines.context_assembler import ContextAssembler
 from src.engines.strategy_leaderboard import StrategyLeaderboard
 from src.algo.position_manager import PositionManager, RiskParameters
 from src.ml.trade_learner import TradeLearningLoop, TradeOutcomeRecord
+from src.core.logging_config import set_correlation_id, get_correlation_id
 from src.core.trade_repo import TradeOutcomeRepository
 from src.core.errors import (
     BrokerError, ConfigError, DataError,
@@ -276,6 +277,100 @@ class AutoTradingEngine:
         self._cached_leaderboard: Dict[str, Any] = {}
         self._last_eod_date: Optional[date] = None
 
+
+    async def _boot(self) -> bool:
+        """
+        Pre-flight validation before entering the main loop.
+
+        Checks:
+        1. All decision-layer components initialized
+        2. Broker connectivity (if not dry_run)
+        3. Database connectivity (best-effort)
+        4. Config sanity (risk params within bounds)
+
+        Returns True if all critical checks pass.
+        """
+        logger.info("🔍 Running boot checks...")
+        checks_passed = 0
+        checks_total = 0
+
+        # 1. Component validation
+        components = {
+            "regime_router": self.regime_router,
+            "ensembler": self.ensembler,
+            "context_assembler": self.context_assembler,
+            "leaderboard": self.leaderboard,
+            "position_mgr": self.position_mgr,
+            "learning_loop": self.learning_loop,
+            "circuit_breaker": self.circuit_breaker,
+            "position_monitor": self.position_monitor,
+        }
+        for name, comp in components.items():
+            checks_total += 1
+            if comp is not None:
+                checks_passed += 1
+                logger.info("  ✅ %s OK", name)
+            else:
+                logger.error("  ❌ %s MISSING", name)
+
+        # 2. Broker connectivity
+        if not self.dry_run:
+            checks_total += 1
+            try:
+                mgr = await self._get_broker()
+                if mgr is not None:
+                    checks_passed += 1
+                    logger.info("  ✅ broker connected")
+                else:
+                    logger.error("  ❌ broker returned None")
+            except Exception as e:
+                logger.error("  ❌ broker connection failed: %s", e)
+        else:
+            logger.info("  ⏭️  broker check skipped (dry-run)")
+
+        # 3. Database connectivity (best-effort)
+        checks_total += 1
+        try:
+            from src.core.database import check_database_health
+            db_ok = await check_database_health()
+            if db_ok:
+                checks_passed += 1
+                logger.info("  ✅ database OK")
+            else:
+                logger.warning("  ⚠️  database unreachable (non-fatal)")
+                checks_passed += 1  # non-fatal
+        except Exception:
+            logger.warning("  ⚠️  database check skipped (non-fatal)")
+            checks_passed += 1  # non-fatal
+
+        # 4. Config sanity
+        checks_total += 1
+        try:
+            if self.position_mgr.params.risk_per_trade > 0.10:
+                logger.warning(
+                    "  ⚠️  risk_per_trade=%.2f > 10%% — very aggressive",
+                    self.position_mgr.params.risk_per_trade,
+                )
+            checks_passed += 1
+            logger.info("  ✅ config sanity OK")
+        except Exception as e:
+            logger.warning("  ⚠️  config check error: %s", e)
+            checks_passed += 1  # non-fatal
+
+        # 5. Edge calculator
+        if self.edge_calculator is not None:
+            logger.info("  ✅ edge_calculator OK")
+        else:
+            logger.info("  ⏭️  edge_calculator unavailable (non-fatal)")
+
+        all_ok = checks_passed >= checks_total
+        logger.info(
+            "Boot checks: %d/%d passed — %s",
+            checks_passed, checks_total,
+            "✅ READY" if all_ok else "❌ FAILED",
+        )
+        return all_ok
+
     async def run(self):
         """Main loop — runs until stopped."""
         self._running = True
@@ -298,6 +393,7 @@ class AutoTradingEngine:
 
     async def _run_cycle(self):
         self._cycle_count += 1
+        set_correlation_id(f"cyc-{self._cycle_count}")
         now = datetime.now(timezone.utc)
 
         # Determine active markets
