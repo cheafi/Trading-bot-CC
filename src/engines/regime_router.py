@@ -12,7 +12,7 @@ for the OpportunityEnsembler and ExpressionEngine.
 import logging
 import math
 from typing import Dict, Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 import numpy as np
 
@@ -136,7 +136,7 @@ class RegimeRouter:
             "breadth_pct": breadth,
             "credit_spread_z": hy_spread,
             "realized_vol_20d": realized_vol,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     @staticmethod

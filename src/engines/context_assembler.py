@@ -11,7 +11,7 @@ throughout the auto_trading_engine.
 import logging
 import asyncio
 from typing import Dict, Any, Optional, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ class ContextAssembler:
         results.setdefault("news_by_ticker", {})
         results.setdefault("sentiment", {})
         results.setdefault("calendar_events", [])
-        results["timestamp"] = datetime.utcnow().isoformat()
+        results["timestamp"] = datetime.now(timezone.utc).isoformat()
 
         return results
 
@@ -219,11 +219,11 @@ class ContextAssembler:
         """Return cached value if fresh, else None."""
         if key in self._cache:
             val, ts = self._cache[key]
-            age = (datetime.utcnow() - ts).total_seconds()
+            age = (datetime.now(timezone.utc) - ts).total_seconds()
             if age < self._cache_ttl:
                 return val
         return None
 
     def _set_cache(self, key: str, value: Any) -> None:
         """Store value in cache with timestamp."""
-        self._cache[key] = (value, datetime.utcnow())
+        self._cache[key] = (value, datetime.now(timezone.utc))

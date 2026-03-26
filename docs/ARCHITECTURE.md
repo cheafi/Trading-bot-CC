@@ -287,6 +287,8 @@ TradingAI_Bot-main/
 | 14 | Typed Exceptions | 9 bare except→typed, heartbeat healthcheck, Dockerfile.discord/jupyter, .gitignore |
 | 15 | README + Deps | README modernised (Docker/brokers/API), 7 ghost deps removed from requirements |
 | 16 | Sync + Polish | notifications/discord_bot.py synced (54→57 commands), stale refs fixed |
+| 17 | Unit Tests | 37 decision-layer tests (Ensembler, Leaderboard, EdgeCalc, Errors, Context) |
+| 18 | Infra Hardening | ingestors/main.py entrypoint, redis lazy import, 14× utcnow→timezone.utc |
 
 ### AutoTradingEngine Pipeline (current)
 

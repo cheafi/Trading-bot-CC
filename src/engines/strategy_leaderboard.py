@@ -10,7 +10,7 @@ strategy multipliers based on recent track record.
 """
 import logging
 from typing import Dict, List, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ class StrategyLeaderboard:
         entry = self._strategies.get(strategy_name, {
             "name": strategy_name,
             "status": StrategyStatus.ACTIVE,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "cooldown_since": None,
             "trade_count": 0,
         })
@@ -85,7 +85,7 @@ class StrategyLeaderboard:
         # Update metrics
         entry["metrics"] = metrics
         entry["trade_count"] = metrics.get("trade_count", 0)
-        entry["last_updated"] = datetime.utcnow().isoformat()
+        entry["last_updated"] = datetime.now(timezone.utc).isoformat()
 
         # Calculate blended score
         score = self._calculate_score(metrics)
@@ -101,7 +101,7 @@ class StrategyLeaderboard:
             "strategy": strategy_name,
             "score": entry["blended_score"],
             "status": entry["status"],
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
         return entry
@@ -211,7 +211,7 @@ class StrategyLeaderboard:
                 try:
                     cd_dt = datetime.fromisoformat(cd_since)
                     days_in_cd = (
-                        datetime.utcnow() - cd_dt
+                        datetime.now(timezone.utc) - cd_dt
                     ).days
                     if days_in_cd > self.RETIRE_AFTER_DAYS:
                         return StrategyStatus.RETIRED
@@ -222,7 +222,7 @@ class StrategyLeaderboard:
         if score < self.COOLDOWN_SCORE:
             if current != StrategyStatus.COOLDOWN:
                 entry["cooldown_since"] = (
-                    datetime.utcnow().isoformat()
+                    datetime.now(timezone.utc).isoformat()
                 )
             return StrategyStatus.COOLDOWN
         elif score < self.REDUCED_SCORE:

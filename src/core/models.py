@@ -2,11 +2,16 @@
 TradingAI Bot - Data Models
 Pydantic models for all data structures.
 """
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional, List, Dict, Any
 from enum import Enum
 from uuid import UUID
 from pydantic import BaseModel, Field
+
+
+def _utcnow() -> datetime:
+    """Timezone-aware UTC now (replaces deprecated datetime.utcnow)."""
+    return datetime.now(timezone.utc)
 
 
 # =============================================================================
@@ -252,7 +257,7 @@ class Invalidation(BaseModel):
 class Signal(BaseModel):
     """Trading signal output."""
     id: Optional[UUID] = None
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=_utcnow)
     
     # Core signal — supports US (AAPL), HK (0700.HK), JP (7203.T), Crypto (BTC)
     ticker: str = Field(pattern=r"^[A-Z0-9]{1,10}(\.[A-Z]{1,3})?$")
@@ -567,7 +572,7 @@ class TradeBrief(BaseModel):
 
 class RiskBulletin(BaseModel):
     """Portfolio-level + market-structure warning bulletin."""
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=_utcnow)
     warnings: List[str] = Field(default_factory=list)
     earnings_cluster_risk: bool = False
     correlation_spike_risk: bool = False
@@ -757,7 +762,7 @@ class BacktestDiagnostic(BaseModel):
 
 class DataQualityReport(BaseModel):
     """Result of a single data-quality check."""
-    check_time: datetime = Field(default_factory=datetime.utcnow)
+    check_time: datetime = Field(default_factory=_utcnow)
     feed_name: str                             # "ohlcv", "features", "news", etc.
     check_type: str                            # "freshness", "missing_bars", "outlier", etc.
     passed: bool = True
@@ -851,7 +856,7 @@ class TradeRecommendation(BaseModel):
     """
     # Identity
     ticker: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=_utcnow)
     recommendation_id: str = ""
 
     # What to do
@@ -911,7 +916,7 @@ class RegimeState(BaseModel):
     breadth_pct: float = 0.5
     credit_spread_z: float = 0.0
     realized_vol_20d: float = 0.0
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=_utcnow)
 
 
 class StrategyScore(BaseModel):
@@ -933,4 +938,4 @@ class StrategyScore(BaseModel):
     composite_score: float = 0.0
     status: str = "active"           # active / reduced / cooldown / retired
     cooldown_until: Optional[datetime] = None
-    last_updated: datetime = Field(default_factory=datetime.utcnow)
+    last_updated: datetime = Field(default_factory=_utcnow)
