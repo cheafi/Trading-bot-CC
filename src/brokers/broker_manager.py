@@ -25,6 +25,12 @@ from src.brokers.paper_broker import PaperBroker
 from src.brokers.mt5_broker import MetaTraderBroker
 from src.core.config import get_settings
 
+try:
+    from src.core.errors import BrokerError
+except ImportError:
+    class BrokerError(Exception):
+        pass
+
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
@@ -193,9 +199,9 @@ class BrokerManager:
         target_broker = self._brokers.get(broker) if broker else self.active_broker
         
         if not target_broker:
-            return OrderResult(
-                success=False,
-                message="No broker available"
+            raise BrokerError(
+                message="No broker available for order",
+                broker=str(broker or self._active_broker),
             )
         
         order = OrderRequest(

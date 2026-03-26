@@ -403,6 +403,7 @@ class TradeLearningLoop:
         self._last_train_count = 0
         self._retrain_interval = 20  # retrain every 20 new trades
         self._last_analysis: Optional[Dict[str, Any]] = None
+        self._load_persisted_outcomes()
 
     def record_outcome(self, record: TradeOutcomeRecord):
         """Record a trade outcome and trigger retraining if needed."""
@@ -415,6 +416,7 @@ class TradeLearningLoop:
             metrics = self.predictor.train()
             self._last_train_count = len(self._outcomes)
             logger.info(f"Auto-retrained model: {metrics}")
+            self._persist_outcomes()
 
     def predict_signal_quality(self, signal_features: Dict[str, Any]) -> Dict[str, Any]:
         """Predict quality of a potential signal before execution."""
@@ -448,6 +450,49 @@ class TradeLearningLoop:
         if analysis:
             self._last_analysis = analysis
         return analysis
+
+
+    def _persist_outcomes(self):
+        """Save trade outcomes to JSON for persistence across restarts."""
+        import json
+        path = MODEL_DIR / "trade_outcomes.json"
+        try:
+            data = [o.to_dict() for o in self._outcomes]
+            with open(path, "w") as f:
+                json.dump(data, f, default=str)
+            logger.info("Persisted %d trade outcomes to %s", len(data), path)
+        except Exception as e:
+            logger.warning("Outcome persistence error: %s", e)
+
+    def _load_persisted_outcomes(self):
+        """Load previously saved trade outcomes."""
+        import json
+        path = MODEL_DIR / "trade_outcomes.json"
+        if not path.exists():
+            return
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+            for d in data:
+                record = TradeOutcomeRecord(
+                    trade_id=d.get("trade_id", ""),
+                    ticker=d.get("ticker", ""),
+                    direction=d.get("direction", "LONG"),
+                    strategy=d.get("strategy", "unknown"),
+                    entry_price=d.get("entry_price", 0),
+                    exit_price=d.get("exit_price", 0),
+                    entry_time=d.get("entry_time", ""),
+                    exit_time=d.get("exit_time", ""),
+                    pnl_pct=d.get("pnl_pct", 0),
+                    confidence=d.get("confidence", 50),
+                    horizon=d.get("horizon", "swing"),
+                    exit_reason=d.get("exit_reason", ""),
+                )
+                self._outcomes.append(record)
+                self.predictor.add_outcome(record)
+            logger.info("Loaded %d persisted trade outcomes", len(data))
+        except Exception as e:
+            logger.warning("Outcome load error: %s", e)
 
     def get_performance_summary(self) -> Dict[str, Any]:
         """Get summary of learning loop performance."""

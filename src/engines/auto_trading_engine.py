@@ -262,6 +262,7 @@ class AutoTradingEngine:
             risk_params = RiskParameters()
         self.position_mgr = PositionManager(params=risk_params)
         self.learning_loop = TradeLearningLoop()
+        self._broker_mgr = None  # singleton, init in run()
         self.edge_calculator = EdgeCalculator() if _HAS_EDGE_CALC else None
 
         # Sprint 7: signal/recommendation cache for API + EOD tracking
@@ -338,10 +339,10 @@ class AutoTradingEngine:
         # Validate signals
         validated = await self._validate_signals(signals)
 
-        # Rank through ensemble scorer
+        # Rank through ensemble scorer (with calibrated edge if available)
         signal_dicts = []
         for sig in validated:
-            signal_dicts.append({
+            sd = {
                 "ticker": sig.ticker,
                 "direction": sig.direction.value if hasattr(sig.direction, 'value') else sig.direction,
                 "score": sig.confidence / 100 if hasattr(sig, 'confidence') else 0.5,
@@ -349,7 +350,26 @@ class AutoTradingEngine:
                 "risk_reward_ratio": getattr(sig, 'risk_reward_ratio', 1.5),
                 "expected_return": getattr(sig, 'expected_return', 0.02),
                 "_signal_obj": sig,  # keep reference
-            })
+            }
+
+            # Sprint 8: enrich with EdgeCalculator calibrated probabilities
+            if self.edge_calculator is not None:
+                try:
+                    edge = self.edge_calculator.compute(
+                        signal=sig,
+                        regime=self._regime_state,
+                        features={
+                            "relative_volume": getattr(sig, "relative_volume", 1.0),
+                            "rsi_14": getattr(sig, "rsi", 50),
+                        },
+                    )
+                    sd["edge_p_t1"] = edge.p_t1
+                    sd["edge_p_stop"] = edge.p_stop
+                    sd["edge_ev"] = edge.expected_return_pct
+                except Exception:
+                    pass  # graceful fallback
+
+            signal_dicts.append(sd)
 
         ranked = self.ensembler.rank_opportunities(
             signal_dicts,
@@ -586,11 +606,9 @@ class AutoTradingEngine:
     async def _execute_signal(self, signal: Signal) -> Optional[Dict[str, Any]]:
         """Execute a signal through the broker manager."""
         try:
-            from src.brokers.broker_manager import BrokerManager
             from src.brokers.base import OrderSide, OrderType
 
-            manager = BrokerManager()
-            await manager.initialize()
+            manager = await self._get_broker()
 
             side = OrderSide.BUY if signal.direction == Direction.LONG else OrderSide.SELL
             result = await manager.place_order(
@@ -636,9 +654,7 @@ class AutoTradingEngine:
         Closed positions are fed to TradeLearningLoop.
         """
         try:
-            from src.brokers.broker_manager import BrokerManager
-            manager = BrokerManager()
-            await manager.initialize()
+            manager = await self._get_broker()
             broker_positions = await manager.get_positions()
 
             # Build price dict from broker positions
@@ -831,11 +847,19 @@ class AutoTradingEngine:
         except Exception as e:
             logger.error("EOD report error: %s", e)
 
+
+    async def _get_broker(self):
+        """Get or create the singleton BrokerManager instance."""
+        if self._broker_mgr is None:
+            from src.brokers.broker_manager import BrokerManager
+            self._broker_mgr = BrokerManager()
+            await self._broker_mgr.initialize()
+            logger.info("BrokerManager singleton initialized")
+        return self._broker_mgr
+
     async def _get_equity(self) -> float:
         try:
-            from src.brokers.broker_manager import BrokerManager
-            manager = BrokerManager()
-            await manager.initialize()
+            manager = await self._get_broker()
             account = await manager.get_account()
             return getattr(account, "portfolio_value", 100000.0)
         except Exception:
@@ -843,9 +867,7 @@ class AutoTradingEngine:
 
     async def _count_positions(self) -> int:
         try:
-            from src.brokers.broker_manager import BrokerManager
-            manager = BrokerManager()
-            await manager.initialize()
+            manager = await self._get_broker()
             positions = await manager.get_positions()
             return len(positions)
         except Exception:
@@ -881,31 +903,37 @@ class AutoTradingEngine:
 
     def _calculate_position_size(self, signal) -> int:
         """
-        Risk-based position sizing.
-        Risks 1% of equity per trade, using stop distance.
+        Risk-based position sizing using PositionManager.
+        Falls back to simple 1% risk calculation if PositionManager fails.
         """
-        try:
-            import asyncio
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                equity = 100000.0
-            else:
-                equity = loop.run_until_complete(self._get_equity())
-        except Exception:
-            equity = 100000.0
-
-        risk_per_trade = equity * 0.01
-
-        price = getattr(signal, "price", 0) or getattr(signal, "close", 0)
+        price = getattr(signal, "entry_price", 0) or getattr(signal, "price", 0) or getattr(signal, "close", 0)
         if not price or price <= 0:
             return 1
 
-        stop_pct = 0.03
-        stop_distance = price * stop_pct
+        # Compute stop from signal or config default
+        stop_price = price * (1 - trading_config.stop_loss_pct)
+        if getattr(signal, "invalidation", None) and getattr(signal.invalidation, "stop_price", 0):
+            stop_price = signal.invalidation.stop_price
 
+        # Try PositionManager for full risk-based sizing
+        try:
+            result = self.position_mgr.calculate_position_size(
+                ticker=getattr(signal, "ticker", "UNKNOWN"),
+                entry_price=price,
+                stop_loss_price=stop_price,
+                sector=getattr(signal, "sector", ""),
+            )
+            if result.get("can_trade") and result.get("shares", 0) > 0:
+                return result["shares"]
+        except Exception as e:
+            logger.debug("PositionManager sizing fallback: %s", e)
+
+        # Fallback: simple 1% risk
+        equity = 100000.0
+        risk_per_trade = equity * 0.01
+        stop_distance = abs(price - stop_price)
         if stop_distance <= 0:
             return 1
-
         shares = int(risk_per_trade / stop_distance)
         max_shares = int((equity * 0.05) / price)
         return max(1, min(shares, max_shares))
