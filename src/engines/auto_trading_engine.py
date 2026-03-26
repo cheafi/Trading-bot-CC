@@ -24,6 +24,7 @@ from src.engines.context_assembler import ContextAssembler
 from src.engines.strategy_leaderboard import StrategyLeaderboard
 from src.algo.position_manager import PositionManager, RiskParameters
 from src.ml.trade_learner import TradeLearningLoop, TradeOutcomeRecord
+from src.core.trade_repo import TradeOutcomeRepository
 from src.core.errors import (
     BrokerError, ConfigError, DataError,
     RiskLimitError, SignalError, ValidationError,
@@ -269,6 +270,7 @@ class AutoTradingEngine:
         self.edge_calculator = EdgeCalculator() if _HAS_EDGE_CALC else None
 
         # Sprint 7: signal/recommendation cache for API + EOD tracking
+        self.trade_repo = TradeOutcomeRepository()
         self._cached_regime: Dict[str, Any] = {}
         self._cached_recommendations: List[Dict[str, Any]] = []
         self._cached_leaderboard: Dict[str, Any] = {}
@@ -318,7 +320,8 @@ class AutoTradingEngine:
 
         # Assemble decision context
         try:
-            self._context = self.context_assembler.assemble_sync()
+            async with self._timed_phase("context_assembly"):
+                self._context = self.context_assembler.assemble_sync()
         except DataError as e:
             logger.warning("Context assembly DataError: %s", e)
             self._context = {}
@@ -330,6 +333,27 @@ class AutoTradingEngine:
         mkt_state = self._context.get("market_state", {})
         self._regime_state = self.regime_router.classify(mkt_state)
 
+        # Persist regime snapshot to DB
+        try:
+            import json as _json
+            await self.trade_repo.save_regime_snapshot({
+                "snapshot_time": now.isoformat(),
+                "risk_regime": self._regime_state.get("risk_regime", ""),
+                "trend_regime": self._regime_state.get("trend_regime", ""),
+                "volatility_regime": self._regime_state.get("volatility_regime", ""),
+                "composite_regime": self._regime_state.get("regime", ""),
+                "should_trade": self._regime_state.get("should_trade", True),
+                "entropy": self._regime_state.get("entropy", 0),
+                "vix_level": self._regime_state.get("vix", 0),
+                "pct_above_sma50": self._regime_state.get("pct_above_sma50", 0),
+                "context_snapshot": _json.dumps(
+                    {k: str(v) for k, v in list(self._regime_state.items())[:20]},
+                    default=str,
+                ),
+            })
+        except Exception:
+            pass  # DB persistence is best-effort
+
         if not self._regime_state.get("should_trade", True):
             if self._cycle_count % 30 == 0:
                 logger.info(
@@ -340,10 +364,12 @@ class AutoTradingEngine:
             return
 
         # Generate signals for active markets
-        signals = await self._generate_signals(active_markets)
+        async with self._timed_phase("signal_generation"):
+            signals = await self._generate_signals(active_markets)
 
         # Validate signals
-        validated = await self._validate_signals(signals)
+        async with self._timed_phase("signal_validation"):
+            validated = await self._validate_signals(signals)
 
         # Rank through ensemble scorer (with calibrated edge if available)
         signal_dicts = []
@@ -446,7 +472,8 @@ class AutoTradingEngine:
                         logger.warning("PositionManager track error for %s: %s", signal.ticker, e)
 
         # Monitor existing positions
-        await self._monitor_positions()
+        async with self._timed_phase("position_monitoring"):
+            await self._monitor_positions()
 
         # Periodic reporting
         if self._cycle_count % 300 == 0:  # Every ~5 hours
@@ -766,6 +793,49 @@ class AutoTradingEngine:
                 "Recorded learning outcome: %s %s %.2f%%",
                 closed_pos.ticker, reason, closed_pos.realized_pnl_pct,
             )
+
+            # Persist to database (best-effort)
+            try:
+                import asyncio as _aio
+                _aio.get_event_loop().create_task(
+                    self.trade_repo.save_outcome({
+                        "trade_id": closed_pos.position_id,
+                        "ticker": closed_pos.ticker,
+                        "direction": "LONG",
+                        "strategy": closed_pos.strategy_id,
+                        "entry_price": closed_pos.entry_price,
+                        "exit_price": closed_pos.exit_price,
+                        "entry_time": (
+                            closed_pos.entry_date.isoformat()
+                            if closed_pos.entry_date else None
+                        ),
+                        "exit_time": (
+                            closed_pos.exit_date.isoformat()
+                            if closed_pos.exit_date else None
+                        ),
+                        "pnl_pct": closed_pos.realized_pnl_pct,
+                        "confidence": 50,
+                        "horizon": "swing",
+                        "exit_reason": reason,
+                        "regime_at_entry": self._cached_regime.get("regime"),
+                        "vix_at_entry": self._cached_regime.get("vix"),
+                        "rsi_at_entry": None,
+                        "adx_at_entry": None,
+                        "relative_volume": None,
+                        "setup_grade": None,
+                        "composite_score": None,
+                        "hold_hours": (
+                            (closed_pos.exit_date - closed_pos.entry_date
+                             ).total_seconds() / 3600
+                            if closed_pos.entry_date and closed_pos.exit_date
+                            else 0
+                        ),
+                        "feature_snapshot": None,
+                    })
+                )
+            except Exception:
+                pass  # DB persistence is best-effort
+
         except Exception as e:
             logger.warning("Learning loop record error: %s", e)
 
@@ -868,6 +938,25 @@ class AutoTradingEngine:
         except Exception as e:
             logger.error("EOD report error: %s", e)
 
+
+
+    async def _with_retry(self, coro_func, *args, retries=3, delay=1.0, **kwargs):
+        """Retry an async callable with exponential backoff."""
+        last_exc = None
+        for attempt in range(retries):
+            try:
+                return await coro_func(*args, **kwargs)
+            except BrokerError as e:
+                last_exc = e
+                wait = delay * (2 ** attempt)
+                logger.warning(
+                    "Retry %d/%d after BrokerError: %s (wait %.1fs)",
+                    attempt + 1, retries, e, wait,
+                )
+                await asyncio.sleep(wait)
+            except Exception as e:
+                raise  # Non-retryable
+        raise last_exc
 
     async def _get_broker(self):
         """Get or create the singleton BrokerManager instance."""

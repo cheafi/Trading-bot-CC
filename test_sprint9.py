@@ -44,9 +44,23 @@ for stub in [
     if stub not in sys.modules:
         sys.modules[stub] = MagicMock()
 
+# Stub database before loading core (avoids asyncpg/tenacity)
+import types as _types
+_db_stub = _types.ModuleType("src.core.database")
+_db_stub.get_session = MagicMock()
+_db_stub.get_read_session = MagicMock()
+_db_stub.check_database_health = MagicMock()
+_db_stub.Base = MagicMock()
+sys.modules["src.core.database"] = _db_stub
+
 _load("src.core.config", "src/core/config.py")
 _load("src.core.models", "src/core/models.py")
 _load("src.core.errors", "src/core/errors.py")
+
+# Stub trade_repo so engine import succeeds
+_repo_stub = _types.ModuleType("src.core.trade_repo")
+_repo_stub.TradeOutcomeRepository = MagicMock
+sys.modules["src.core.trade_repo"] = _repo_stub
 
 
 class TestBrokerErrorInConcreteBrokers(unittest.TestCase):
