@@ -1547,7 +1547,8 @@ class DiscordInteractiveBot:
                 try:
                     hist = (hist_map or {}).get(ticker)
                     if hist is None:
-                        continue  # skip — _prefetch already tried
+                        if not _yf: continue
+                        hist = _yf.Ticker(ticker).history(period="6mo")
                     if hist is None or hist.empty or len(hist) < 60:
                         continue
                     d = _compute_technicals(hist)
@@ -1653,7 +1654,8 @@ class DiscordInteractiveBot:
                 try:
                     hist = (hist_map or {}).get(ticker)
                     if hist is None:
-                        continue  # skip — _prefetch already tried
+                        if not _yf: continue
+                        hist = _yf.Ticker(ticker).history(period="6mo")
                     if hist is None or hist.empty or len(hist) < 60:
                         continue
                     d = _compute_technicals(hist)
@@ -1763,7 +1765,8 @@ class DiscordInteractiveBot:
                 try:
                     hist = (hist_map or {}).get(ticker)
                     if hist is None:
-                        continue
+                        if not _yf: continue
+                        hist = _yf.Ticker(ticker).history(period="3mo")
                     if hist is None or hist.empty or len(hist) < 30:
                         continue
                     d = _compute_technicals(hist)
@@ -1889,7 +1892,7 @@ class DiscordInteractiveBot:
                 ticker = sig.get("ticker", "")
                 try:
                     if ticker not in hist_cache:
-                        continue
+                        hist_cache[ticker] = _yf.Ticker(ticker).history(period="3mo")
                     hist = hist_cache[ticker]
                     if not hist.empty and len(hist) >= 30:
                         ranked = opt.quick_regime_rank(hist)
@@ -1996,7 +1999,6 @@ class DiscordInteractiveBot:
                 header.set_footer(text="Pullback entries in trending stocks • Score 0-100")
                 await _send_ch("swing-trades", embed=header)
                 await asyncio.sleep(0.5)
-                top_count = min(5, len(signals))
 
                 for sig in signals[:top_count]:
                     e = _build_signal_card(sig, now, "SWING")
@@ -2630,7 +2632,8 @@ class DiscordInteractiveBot:
                         try:
                             hist = wh_hist.get(ticker)
                             if hist is None:
-                                continue
+                                if not _yf: continue
+                                hist = _yf.Ticker(ticker).history(period="1mo")
                             if hist.empty or len(hist) < 10:
                                 continue
                             vol = hist["Volume"].iloc[-1]
@@ -2707,11 +2710,24 @@ class DiscordInteractiveBot:
         # ── 12. Real-time price spike / crash alert (every 3 min, 24/7) ──
         async def _fetch_ticker_news_for_alert(sym: str, max_items: int = 3) -> list:
             """Fetch recent news headlines for a ticker — attached to spike alert embeds."""
-            try:
-                items = await _mds.get_news(sym, max_items=max_items)
-                return [{"title": n["title"][:90], "url": n["url"],
-                         "publisher": n.get("publisher", "")} for n in items]
-            except Exception:
+            def _sync():
+                if not _yf:
+                    return []
+                try:
+                    t = _yf.Ticker(sym)
+                    raw = t.news if hasattr(t, "news") else []
+                    out = []
+                    for item in (raw or [])[:max_items + 3]:
+                        url = item.get("link", item.get("url", ""))
+                        title = item.get("title", "")
+                        if url and title and len(out) < max_items:
+                            out.append({
+                                "title": title[:90],
+                                "url": url,
+                                "publisher": item.get("publisher", ""),
+                            })
+                    return out
+                except Exception:
                     return []
             try:
                 return await asyncio.wait_for(asyncio.to_thread(_sync), timeout=5.0)
@@ -2852,30 +2868,33 @@ class DiscordInteractiveBot:
             try:
                 now = datetime.now(timezone.utc)
 
-                async def _async_fetch_news():
+                def _sync_fetch_news():
+                    if not _yf:
+                        return []
                     all_news = []
+                    # Get market-wide news from major tickers
                     _news_scan_universe = (
                         ["SPY", "QQQ", "^VIX", "BTC-USD", "ETH-USD"]
                         + _WATCH_US[:20]
                     )
-                    results = await asyncio.gather(
-                        *[_mds.get_news(sym, max_items=3)
-                          for sym in _news_scan_universe],
-                        return_exceptions=True,
-                    )
-                    for sym, items in zip(_news_scan_universe, results):
-                        if isinstance(items, Exception) or not items:
+                    for sym in _news_scan_universe:
+                        try:
+                            t = _yf.Ticker(sym)
+                            news = t.news if hasattr(t, "news") else []
+                            if news:
+                                for item in news[:3]:
+                                    url = item.get("link", item.get("url", ""))
+                                    if url and url not in _news_seen:
+                                        all_news.append({
+                                            "title": item.get("title", "")[:200],
+                                            "publisher": item.get("publisher", "Unknown"),
+                                            "url": url,
+                                            "symbol": sym,
+                                            "time": item.get("providerPublishTime", 0),
+                                        })
+                        except Exception:
                             continue
-                        for item in items:
-                            url = item.get("url", "")
-                            if url and url not in _news_seen:
-                                all_news.append({
-                                    "title": item.get("title", "")[:200],
-                                    "publisher": item.get("publisher", "Unknown"),
-                                    "url": url,
-                                    "symbol": sym,
-                                    "time": item.get("time", 0),
-                                })
+                    # Sort by recency, deduplicate by title prefix
                     all_news.sort(key=lambda x: x.get("time", 0), reverse=True)
                     seen_titles = set()
                     unique = []
@@ -2886,7 +2905,7 @@ class DiscordInteractiveBot:
                             unique.append(n)
                     return unique[:8]
 
-                news = await _async_fetch_news()
+                news = await asyncio.to_thread(_sync_fetch_news)
                 if not news:
                     return
 
@@ -2930,32 +2949,33 @@ class DiscordInteractiveBot:
                 idx = int(_tt.time() / 900) % 3
                 chunk = _WATCH_US[idx * chunk_sz:(idx + 1) * chunk_sz]
 
-                async def _async_chunk_news(syms):
+                def _sync_chunk_news(syms):
+                    if not _yf:
+                        return []
                     results = []
-                    news_batch = await asyncio.gather(
-                        *[_mds.get_news(sym, max_items=3) for sym in syms],
-                        return_exceptions=True,
-                    )
-                    for sym, items in zip(syms, news_batch):
-                        if isinstance(items, Exception) or not items:
+                    for sym in syms:
+                        try:
+                            t = _yf.Ticker(sym)
+                            raw = t.news if hasattr(t, "news") else []
+                            for item in (raw or [])[:3]:
+                                url = item.get("link", item.get("url", ""))
+                                title = item.get("title", "")
+                                if not url or not title:
+                                    continue
+                                if url in _ticker_news_seen.get(sym, set()):
+                                    continue
+                                results.append({
+                                    "ticker": sym,
+                                    "title": title[:150],
+                                    "publisher": item.get("publisher", ""),
+                                    "url": url,
+                                    "time": item.get("providerPublishTime", 0),
+                                })
+                        except Exception:
                             continue
-                        for item in items:
-                            url = item.get("url", "")
-                            title = item.get("title", "")
-                            if not url or not title:
-                                continue
-                            if url in _ticker_news_seen.get(sym, set()):
-                                continue
-                            results.append({
-                                "ticker": sym,
-                                "title": title[:150],
-                                "publisher": item.get("publisher", ""),
-                                "url": url,
-                                "time": item.get("time", 0),
-                            })
                     return results
 
-                fresh = await _async_chunk_news(chunk)
+                fresh = await asyncio.to_thread(_sync_chunk_news, chunk)
                 if not fresh:
                     return
                 fresh.sort(key=lambda x: x.get("time", 0), reverse=True)
@@ -3009,7 +3029,8 @@ class DiscordInteractiveBot:
                         try:
                             hist = learn_hist.get(sym)
                             if hist is None:
-                                continue
+                                if not _yf: continue
+                                hist = _yf.Ticker(sym).history(period="1y")
                             if hist is None or hist.empty or len(hist) < 60:
                                 continue
                             analysis = opt.full_analysis(sym, hist, "1y")
@@ -3990,7 +4011,10 @@ class DiscordInteractiveBot:
         async def cmd_news(interaction: discord.Interaction, ticker: str):
             await interaction.response.defer()
             try:
-                news = await _mds.get_news(ticker.upper(), max_items=5)
+                def _sync_news():
+                    t = _yf.Ticker(ticker.upper())
+                    return t.news[:5] if t.news else []
+                news = await asyncio.to_thread(_sync_news)
                 if not news:
                     await interaction.followup.send(f"No news for {ticker.upper()}")
                     return
@@ -5606,6 +5630,143 @@ class DiscordInteractiveBot:
                         await interaction.response.send_message("📌 Pinned.", ephemeral=True)
                         return
             await interaction.response.send_message("Nothing to pin.", ephemeral=True)
+
+
+        # ── Sprint 9: Decision-Layer Commands ─────────────────────────
+
+        @bot.tree.command(
+            name="regime",
+            description="Current market regime classification and trade gate status")
+        @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
+        async def regime_cmd(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                from src.engines.regime_router import RegimeRouter
+                from src.engines.context_assembler import ContextAssembler
+                assembler = ContextAssembler()
+                ctx = assembler.assemble_sync()
+                router = RegimeRouter()
+                state = router.classify(ctx.get("market_state", {}))
+
+                regime = state.get("regime", "unknown")
+                entropy = state.get("entropy", 0)
+                should_trade = state.get("should_trade", True)
+                probs = state.get("probabilities", {})
+
+                e = discord.Embed(
+                    title="🎯 Market Regime Classification",
+                    color=COLOR_SUCCESS if should_trade else COLOR_DANGER,
+                )
+                e.add_field(name="Regime", value=f"**{regime}**", inline=True)
+                e.add_field(name="Entropy", value=f"{entropy:.3f}", inline=True)
+                e.add_field(
+                    name="Trade Gate",
+                    value="🟢 OPEN" if should_trade else "🔴 CLOSED",
+                    inline=True,
+                )
+                if probs:
+                    prob_text = "\n".join(
+                        f"`{k}`: {v:.1%}" for k, v in sorted(
+                            probs.items(), key=lambda x: -x[1]
+                        )[:5]
+                    )
+                    e.add_field(name="Probabilities", value=prob_text, inline=False)
+                e.set_footer(text="Sprint 9 Decision Layer")
+                await interaction.followup.send(embed=e)
+            except Exception as ex:
+                await interaction.followup.send(f"❌ Regime error: {ex}")
+            await _audit(f"🎯 {interaction.user} → /regime")
+
+        @bot.tree.command(
+            name="leaderboard",
+            description="Strategy health scores and lifecycle rankings")
+        @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
+        async def leaderboard_cmd(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                from src.engines.strategy_leaderboard import StrategyLeaderboard
+                lb = StrategyLeaderboard()
+                scores = lb.get_strategy_scores()
+                rankings = lb.get_rankings()
+
+                e = discord.Embed(
+                    title="🏆 Strategy Leaderboard",
+                    color=COLOR_GOLD,
+                )
+                if scores:
+                    for name, score in sorted(
+                        scores.items(), key=lambda x: -x[1]
+                    )[:10]:
+                        medal = "🥇" if score >= 0.7 else "🥈" if score >= 0.5 else "🥉"
+                        e.add_field(
+                            name=f"{medal} {name}",
+                            value=f"Score: **{score:.2f}**",
+                            inline=True,
+                        )
+                else:
+                    e.description = "No strategy data yet. Scores populate after trades."
+                e.set_footer(text="Sprint 9 Decision Layer")
+                await interaction.followup.send(embed=e)
+            except Exception as ex:
+                await interaction.followup.send(f"❌ Leaderboard error: {ex}")
+            await _audit(f"🏆 {interaction.user} → /leaderboard")
+
+        @bot.tree.command(
+            name="recommendations",
+            description="AI-ranked trade recommendations from the ensemble scorer")
+        @app_commands.checks.cooldown(1, 15, key=lambda i: i.user.id)
+        async def recommendations_cmd(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                from src.engines.regime_router import RegimeRouter
+                from src.engines.context_assembler import ContextAssembler
+                assembler = ContextAssembler()
+                ctx = assembler.assemble_sync()
+                router = RegimeRouter()
+                regime = router.classify(ctx.get("market_state", {}))
+
+                e = discord.Embed(
+                    title="📋 Trade Recommendations",
+                    color=COLOR_INFO,
+                )
+                regime_name = regime.get("regime", "unknown")
+                should_trade = regime.get("should_trade", True)
+                e.add_field(
+                    name="Current Regime",
+                    value=f"**{regime_name}** {'🟢' if should_trade else '🔴'}",
+                    inline=False,
+                )
+                # Try to fetch cached recommendations from running engine
+                try:
+                    from src.engines.auto_trading_engine import AutoTradingEngine
+                    engine = AutoTradingEngine(dry_run=True)
+                    cached = engine.get_cached_state()
+                    recs = cached.get("recommendations", [])
+                    if recs:
+                        for i, rec in enumerate(recs[:5], 1):
+                            ticker = rec.get("original_signal", {}).get("ticker", "?")
+                            score = rec.get("composite_score", 0)
+                            decision = "✅ BUY" if rec.get("trade_decision") else "⏸️ HOLD"
+                            e.add_field(
+                                name=f"{i}. {ticker}",
+                                value=f"Score: **{score:.3f}** | {decision}",
+                                inline=True,
+                            )
+                    else:
+                        e.description = (
+                            "No recommendations cached yet. "
+                            "Recommendations populate after the engine runs a cycle."
+                        )
+                except Exception:
+                    e.description = (
+                        "Live recommendations populate when AutoTradingEngine "
+                        "is running. Use `/regime` for current market state."
+                    )
+                e.set_footer(text="Sprint 9 Decision Layer • /regime /leaderboard")
+                await interaction.followup.send(embed=e)
+            except Exception as ex:
+                await interaction.followup.send(f"❌ Recommendations error: {ex}")
+            await _audit(f"📋 {interaction.user} → /recommendations")
 
         # ══════════════════════════════════════════════════════════════
         # START

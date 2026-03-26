@@ -9,14 +9,14 @@
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           DISCORD INTERFACE                                  │
-│              54 slash commands  ·  rich embeds  ·  interactive buttons       │
+│              57 slash commands  ·  rich embeds  ·  interactive buttons       │
 └──────────────────────────────────┬──────────────────────────────────────────┘
                                    │
 ┌──────────────────────────────────▼──────────────────────────────────────────┐
 │                    src/discord_bot.py  (5,596 lines)                         │
 │                                                                               │
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │  Command Layer (54 slash commands)                                    │   │
+│  │  Command Layer (57 slash commands)                                    │   │
 │  │  advise · ai · alert · analyze · announce · asia · backtest          │   │
 │  │  best_strategy · breakout · btc · buy · clear_alerts · compare       │   │
 │  │  crypto · daily · daily_update · dashboard · dip · help · hk         │   │
@@ -77,7 +77,7 @@
 ### Layer 1 — Discord Interface
 `src/discord_bot.py` is the single entry point for all user-facing functionality.
 
-- All 54 slash commands defined as `@bot.tree.command` decorators
+- All 57 slash commands defined as `@bot.tree.command` decorators
 - All 23 background tasks defined as `@tasks.loop` decorators
 - Commands call engines directly; no REST intermediary
 - Responses are Discord embeds (`discord.Embed`) with inline fields and buttons
@@ -284,6 +284,9 @@ TradingAI_Bot-main/
 | 11 | DB Persistence | 4 new DB tables (trade_outcomes, leaderboard, regime, health), TradeOutcomeRepository, _timed_phase wiring |
 | 12 | Boot + Logging | engines/main.py entrypoint, _boot() pre-flight, JSONFormatter, correlation IDs |
 | 13 | Infrastructure | Docker CMD fix, __main__.py, config/default.yaml, ARCHITECTURE.md update |
+| 14 | Typed Exceptions | 9 bare except→typed, heartbeat healthcheck, Dockerfile.discord/jupyter, .gitignore |
+| 15 | README + Deps | README modernised (Docker/brokers/API), 7 ghost deps removed from requirements |
+| 16 | Sync + Polish | notifications/discord_bot.py synced (54→57 commands), stale refs fixed |
 
 ### AutoTradingEngine Pipeline (current)
 

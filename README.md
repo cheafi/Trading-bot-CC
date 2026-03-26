@@ -1,7 +1,7 @@
 # TradingAI Bot — v6 Pro Desk
 
-> 24/7 automated trading intelligence platform delivered entirely through Discord.
-> **54 slash commands · 23 background tasks · 50-stock universe · self-learning AI engine.**
+> 24/7 automated trading intelligence platform — Discord · Telegram · REST API.
+> **57 slash commands · 23 background tasks · 50-stock universe · self-learning AI engine.**
 
 ---
 
@@ -28,12 +28,12 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                   DISCORD INTERFACE (54 commands)                    │
+│                   DISCORD INTERFACE (57 commands)                    │
 │  /why  /backtest  /best_strategy  /analyze  /market  /news  ...     │
 └──────────────────────────┬──────────────────────────────────────────┘
                            │
 ┌──────────────────────────▼──────────────────────────────────────────┐
-│                  src/discord_bot.py (5,596 lines)                    │
+│                  src/discord_bot.py (5,800 lines)                    │
 │  ┌─────────────┐  ┌────────────────┐  ┌────────────────────────┐   │
 │  │  23 Auto    │  │  Signal Card   │  │  Price Alert Engine    │   │
 │  │  Tasks      │  │  Builder       │  │  3-min · 50 tickers    │   │
@@ -84,7 +84,7 @@ ALWAYS ON: 🚨 Alerts(3m) · ⚠️ VIX(5m) · 📰 News(30m) · 📰 Tickers(1
 
 ---
 
-## All 54 Slash Commands
+## All 57 Slash Commands
 
 ### 📊 Market Intelligence (15)
 
@@ -106,7 +106,7 @@ ALWAYS ON: 🚨 Alerts(3m) · ⚠️ VIX(5m) · 📰 News(30m) · 📰 Tickers(1
 | `/risk` | Risk regime + VIX + allocation guidance |
 | `/whale` | Unusual volume scan across 50 stocks |
 
-### 🤖 AI Analysis (9)
+### 🤖 AI Analysis & Decision Layer (12)
 
 | Command | What It Does |
 |---------|-------------|
@@ -119,6 +119,9 @@ ALWAYS ON: 🚨 Alerts(3m) · ⚠️ VIX(5m) · 📰 News(30m) · 📰 Tickers(1
 | `/why TICKER` | Full conviction engine: score −100→+100, WHY BUY, WHY THIS STOP, analyst consensus, news |
 | `/price TICKER` | Real-time quote with extended-hours |
 | `/quote TICKER` | Compact price quote |
+| `/regime` | Current market regime — risk, trend, volatility, entropy |
+| `/leaderboard` | Strategy leaderboard — ranked by win rate + Sharpe |
+| `/recommendations` | Top engine-ranked trade setups right now |
 
 ### 🎯 Signals & Scanners (9)
 
