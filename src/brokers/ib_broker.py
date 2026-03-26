@@ -27,6 +27,13 @@ from src.core.config import get_settings
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
+try:
+    from src.core.errors import BrokerError
+except ImportError:
+    class BrokerError(Exception):
+        pass
+
+
 
 class IBBroker(BaseBroker):
     """
@@ -70,7 +77,7 @@ class IBBroker(BaseBroker):
         """Connect to IB TWS or Gateway."""
         if not self._ib_insync_available:
             logger.error("ib_insync not available. Install with: pip install ib_insync")
-            return False
+            raise BrokerError(message="Connection failed", broker=self.name)
         
         try:
             self._ib = self._ib_insync.IB()

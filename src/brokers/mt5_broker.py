@@ -30,6 +30,13 @@ from src.brokers.base import (
 from src.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+try:
+    from src.core.errors import BrokerError
+except ImportError:
+    class BrokerError(Exception):
+        pass
+
 settings = get_settings()
 
 
@@ -72,7 +79,7 @@ class MetaTraderBroker(BaseBroker):
                 "MetaTrader5 package not installed. "
                 "Run: pip install MetaTrader5  (Windows only, or use Wine)"
             )
-            return False
+            raise BrokerError(message="Connection failed", broker=self.name)
 
         # Populate order type map
         self._ORDER_TYPE_MAP = {

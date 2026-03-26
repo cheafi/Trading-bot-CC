@@ -5631,6 +5631,121 @@ class DiscordInteractiveBot:
                         return
             await interaction.response.send_message("Nothing to pin.", ephemeral=True)
 
+
+        # ── Sprint 9: Decision-Layer Commands ─────────────────────────
+
+        @bot.tree.command(
+            name="regime",
+            description="Current market regime classification and trade gate status")
+        @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
+        async def regime_cmd(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                from src.engines.regime_router import RegimeRouter
+                from src.engines.context_assembler import ContextAssembler
+                assembler = ContextAssembler()
+                ctx = assembler.assemble_sync()
+                router = RegimeRouter()
+                state = router.classify(ctx.get("market_state", {}))
+
+                regime = state.get("regime", "unknown")
+                entropy = state.get("entropy", 0)
+                should_trade = state.get("should_trade", True)
+                probs = state.get("probabilities", {})
+
+                e = discord.Embed(
+                    title="🎯 Market Regime Classification",
+                    color=COLOR_SUCCESS if should_trade else COLOR_DANGER,
+                )
+                e.add_field(name="Regime", value=f"**{regime}**", inline=True)
+                e.add_field(name="Entropy", value=f"{entropy:.3f}", inline=True)
+                e.add_field(
+                    name="Trade Gate",
+                    value="🟢 OPEN" if should_trade else "🔴 CLOSED",
+                    inline=True,
+                )
+                if probs:
+                    prob_text = "\n".join(
+                        f"`{k}`: {v:.1%}" for k, v in sorted(
+                            probs.items(), key=lambda x: -x[1]
+                        )[:5]
+                    )
+                    e.add_field(name="Probabilities", value=prob_text, inline=False)
+                e.set_footer(text="Sprint 9 Decision Layer")
+                await interaction.followup.send(embed=e)
+            except Exception as ex:
+                await interaction.followup.send(f"❌ Regime error: {ex}")
+            await _audit(f"🎯 {interaction.user} → /regime")
+
+        @bot.tree.command(
+            name="leaderboard",
+            description="Strategy health scores and lifecycle rankings")
+        @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
+        async def leaderboard_cmd(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                from src.engines.strategy_leaderboard import StrategyLeaderboard
+                lb = StrategyLeaderboard()
+                scores = lb.get_strategy_scores()
+                rankings = lb.get_rankings()
+
+                e = discord.Embed(
+                    title="🏆 Strategy Leaderboard",
+                    color=COLOR_GOLD,
+                )
+                if scores:
+                    for name, score in sorted(
+                        scores.items(), key=lambda x: -x[1]
+                    )[:10]:
+                        medal = "🥇" if score >= 0.7 else "🥈" if score >= 0.5 else "🥉"
+                        e.add_field(
+                            name=f"{medal} {name}",
+                            value=f"Score: **{score:.2f}**",
+                            inline=True,
+                        )
+                else:
+                    e.description = "No strategy data yet. Scores populate after trades."
+                e.set_footer(text="Sprint 9 Decision Layer")
+                await interaction.followup.send(embed=e)
+            except Exception as ex:
+                await interaction.followup.send(f"❌ Leaderboard error: {ex}")
+            await _audit(f"🏆 {interaction.user} → /leaderboard")
+
+        @bot.tree.command(
+            name="recommendations",
+            description="AI-ranked trade recommendations from the ensemble scorer")
+        @app_commands.checks.cooldown(1, 15, key=lambda i: i.user.id)
+        async def recommendations_cmd(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                from src.engines.regime_router import RegimeRouter
+                from src.engines.context_assembler import ContextAssembler
+                assembler = ContextAssembler()
+                ctx = assembler.assemble_sync()
+                router = RegimeRouter()
+                regime = router.classify(ctx.get("market_state", {}))
+
+                e = discord.Embed(
+                    title="📋 Trade Recommendations",
+                    color=COLOR_INFO,
+                )
+                regime_name = regime.get("regime", "unknown")
+                should_trade = regime.get("should_trade", True)
+                e.add_field(
+                    name="Current Regime",
+                    value=f"**{regime_name}** {'🟢' if should_trade else '🔴'}",
+                    inline=False,
+                )
+                e.description = (
+                    "Live recommendations populate when AutoTradingEngine "
+                    "is running. Use `/regime` for current market state."
+                )
+                e.set_footer(text="Sprint 9 Decision Layer • /regime /leaderboard")
+                await interaction.followup.send(embed=e)
+            except Exception as ex:
+                await interaction.followup.send(f"❌ Recommendations error: {ex}")
+            await _audit(f"📋 {interaction.user} → /recommendations")
+
         # ══════════════════════════════════════════════════════════════
         # START
         # ══════════════════════════════════════════════════════════════

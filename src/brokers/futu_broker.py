@@ -26,6 +26,13 @@ from src.core.config import get_settings
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
+try:
+    from src.core.errors import BrokerError
+except ImportError:
+    class BrokerError(Exception):
+        pass
+
+
 
 class FutuBroker(BaseBroker):
     """
@@ -86,7 +93,7 @@ class FutuBroker(BaseBroker):
         """Connect to Futu OpenD Gateway."""
         if not self._futu_available:
             logger.error("Futu API not available. Install with: pip install futu-api")
-            return False
+            raise BrokerError(message="Connection failed", broker=self.name)
         
         try:
             # Connect in thread pool (Futu API is synchronous)

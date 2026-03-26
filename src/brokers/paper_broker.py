@@ -17,6 +17,13 @@ from src.brokers.base import (
 
 logger = logging.getLogger(__name__)
 
+try:
+    from src.core.errors import BrokerError
+except ImportError:
+    class BrokerError(Exception):
+        pass
+
+
 
 class PaperBroker(BaseBroker):
     """
