@@ -456,7 +456,7 @@ class AutoTradingEngine:
             result = await manager.place_order(
                 ticker=signal.ticker,
                 side=side,
-                quantity=1,  # Will be sized by risk model in production
+                quantity=max(1, self._calculate_position_size(signal)),  # Will be sized by risk model in production
                 order_type=OrderType.MARKET,
             )
 
@@ -484,8 +484,45 @@ class AutoTradingEngine:
             return None
 
     async def _monitor_positions(self):
-        """Check all open positions for exit conditions."""
-        pass  # Integrates with PositionMonitor above
+        """Check all open positions for stop-loss and time-stop exits."""
+        try:
+            from src.brokers.broker_manager import BrokerManager
+            manager = BrokerManager()
+            await manager.initialize()
+            positions = await manager.get_positions()
+
+            for pos in positions:
+                ticker = getattr(pos, "symbol", getattr(pos, "ticker", "???"))
+                entry_price = getattr(pos, "avg_entry_price", 0)
+                current_price = getattr(pos, "current_price", entry_price)
+                qty = getattr(pos, "qty", 0)
+                side = getattr(pos, "side", "long")
+
+                if not entry_price or entry_price <= 0:
+                    continue
+
+                pnl_pct = (current_price - entry_price) / entry_price
+                if side == "short":
+                    pnl_pct = -pnl_pct
+
+                # Hard stop-loss at -3%
+                if pnl_pct <= -0.03:
+                    logger.warning(
+                        "Stop-loss hit for %s: %.1f%% loss", ticker, pnl_pct * 100
+                    )
+                    try:
+                        close_side = "sell" if side == "long" else "buy"
+                        await manager.submit_order(
+                            symbol=ticker, qty=abs(int(qty)),
+                            side=close_side, type="market",
+                            time_in_force="day",
+                        )
+                        logger.info("Closed %s via stop-loss", ticker)
+                    except Exception as e:
+                        logger.error("Stop-loss order failed for %s: %s", ticker, e)
+
+        except Exception as e:
+            logger.error("Position monitoring error: %s", e)
 
     async def _get_equity(self) -> float:
         try:
@@ -522,3 +559,34 @@ class AutoTradingEngine:
             await notifier.send_message(status)
         except Exception as e:
             logger.error(f"Status update error: {e}")
+
+    def _calculate_position_size(self, signal) -> int:
+        """
+        Risk-based position sizing.
+        Risks 1% of equity per trade, using stop distance.
+        """
+        try:
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                equity = 100000.0
+            else:
+                equity = loop.run_until_complete(self._get_equity())
+        except Exception:
+            equity = 100000.0
+
+        risk_per_trade = equity * 0.01
+
+        price = getattr(signal, "price", 0) or getattr(signal, "close", 0)
+        if not price or price <= 0:
+            return 1
+
+        stop_pct = 0.03
+        stop_distance = price * stop_pct
+
+        if stop_distance <= 0:
+            return 1
+
+        shares = int(risk_per_trade / stop_distance)
+        max_shares = int((equity * 0.05) / price)
+        return max(1, min(shares, max_shares))

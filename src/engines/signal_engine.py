@@ -1001,10 +1001,10 @@ class SignalEngine:
                 if self._last_scoreboard and self._last_scoreboard.scenarios:
                     sc = self._last_scoreboard.scenarios
                     sig.scenario_plan = {
-                        "base": sc.base_case,
+                        "base_case": sc.base_case,
                         "base_probability": sc.base_probability,
-                        "bull_trigger": sc.bull_trigger,
-                        "bear_trigger": sc.bear_trigger,
+                        "bull_case": sc.bull_trigger,
+                        "bear_case": sc.bear_trigger,
                     }
 
                 # portfolio_fit

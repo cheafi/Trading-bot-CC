@@ -764,3 +764,173 @@ class DataQualityReport(BaseModel):
     severity: str = "info"                     # "info" / "warning" / "critical"
     details: Optional[Dict[str, Any]] = None   # free-form context
     affected_tickers: List[str] = Field(default_factory=list)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# TRADE RECOMMENDATION LAYER (Sprint 3)
+# ═══════════════════════════════════════════════════════════════════
+
+class InstrumentType(str, Enum):
+    """What vehicle to use for the trade."""
+    STOCK = "stock"
+    CALL = "call"
+    PUT = "put"
+    VERTICAL_SPREAD = "vertical_spread"
+    DEBIT_SPREAD = "debit_spread"
+    CREDIT_SPREAD = "credit_spread"
+    NO_TRADE = "no_trade"
+
+
+class SetupGrade(str, Enum):
+    """Quality grade for a setup."""
+    A = "A"
+    B = "B"
+    C = "C"
+    REJECT = "Reject"
+
+
+class MistakeType(str, Enum):
+    """Categories for post-trade learning."""
+    CHASED_ENTRY = "chased_entry"
+    IGNORED_REGIME = "ignored_regime"
+    OVERSIZED = "oversized"
+    HELD_THROUGH_EVENT = "held_through_event"
+    WRONG_EXPRESSION = "wrong_expression"
+    PREMATURE_EXIT = "premature_exit"
+    NO_EDGE = "no_edge"
+    CORRECT_PROCESS = "correct_process"
+
+
+class LearningTag(str, Enum):
+    """Tags for outcome attribution."""
+    REGIME_CORRECT = "regime_correct"
+    REGIME_WRONG = "regime_wrong"
+    EXPRESSION_OPTIMAL = "expression_optimal"
+    EXPRESSION_SUBOPTIMAL = "expression_suboptimal"
+    SIZING_CORRECT = "sizing_correct"
+    SIZING_WRONG = "sizing_wrong"
+    TIMING_GOOD = "timing_good"
+    TIMING_BAD = "timing_bad"
+
+
+class OptionLeg(BaseModel):
+    """Single leg of an options trade."""
+    action: str = "buy"          # "buy" or "sell"
+    right: str = "call"          # "call" or "put"
+    strike: float = 0.0
+    expiry: str = ""             # ISO date string
+    quantity: int = 1
+    premium: Optional[float] = None
+    iv: Optional[float] = None
+    delta: Optional[float] = None
+
+
+class ExpressionPlan(BaseModel):
+    """How to express the trade thesis (stock, option, spread)."""
+    instrument_type: str = "stock"       # InstrumentType value
+    legs: List[OptionLeg] = Field(default_factory=list)
+    expiry_logic: str = ""               # e.g. "30-45 DTE for swing"
+    strike_logic: str = ""               # e.g. "ATM call, 70-delta"
+    iv_rank: Optional[float] = None      # 0-100
+    iv_percentile: Optional[float] = None
+    theta_note: Optional[str] = None
+    liquidity_note: Optional[str] = None
+    max_risk_dollars: Optional[float] = None
+    spread_width: Optional[float] = None
+    open_interest_min: Optional[int] = None
+    why_this_expression: str = ""
+
+
+class TradeRecommendation(BaseModel):
+    """
+    The final decision artifact.
+
+    Signal is the raw research candidate.
+    TradeRecommendation is the portfolio-aware, options-aware,
+    regime-aware execution instruction.
+    """
+    # Identity
+    ticker: str
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    recommendation_id: str = ""
+
+    # What to do
+    instrument_type: str = "stock"       # InstrumentType value
+    direction: str = "bullish"           # bullish / bearish / neutral / no_trade
+    recommended_strategy: str = ""
+    expression: ExpressionPlan = Field(default_factory=ExpressionPlan)
+
+    # Regime context
+    regime_assessment: Dict[str, float] = Field(default_factory=dict)
+    regime_confidence: float = 0.0
+
+    # Trade parameters
+    entry_zone: Optional[List[float]] = None
+    invalidation: str = ""
+    profit_targets: List[str] = Field(default_factory=list)
+    expected_holding_period: str = ""
+
+    # Quality metrics
+    confidence: int = 50
+    setup_grade: str = "C"               # SetupGrade value
+    risk_reward_estimate: Optional[float] = None
+    ensemble_score: float = 0.0
+    strategy_agreement: float = 0.0      # 0-1, how many strategies agree
+
+    # Explanations
+    why_this_trade_exists: str = ""
+    why_now: str = ""
+    key_risks: List[str] = Field(default_factory=list)
+    invalid_when: str = ""
+    better_alternative: Optional[str] = None
+
+    # Execution
+    execution_notes: List[str] = Field(default_factory=list)
+    position_sizing_guidance: str = ""
+    max_position_pct: float = 0.02       # of portfolio
+
+    # Learning
+    post_trade_learning_tag: str = ""
+    source_signal_id: Optional[str] = None
+    source_strategies: List[str] = Field(default_factory=list)
+
+    # Metadata
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class RegimeState(BaseModel):
+    """Probabilistic regime assessment."""
+    risk_on_uptrend: float = 0.0
+    neutral_range: float = 0.0
+    risk_off_downtrend: float = 0.0
+    entropy: float = 1.0
+    should_trade: bool = True
+    confidence: float = 0.0
+    vix: float = 0.0
+    vix_term_slope: float = 0.0
+    breadth_pct: float = 0.5
+    credit_spread_z: float = 0.0
+    realized_vol_20d: float = 0.0
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+class StrategyScore(BaseModel):
+    """Leaderboard entry for a strategy."""
+    strategy_id: str
+    regime_bucket: str = ""
+    horizon: str = ""
+    asset_class: str = "equity"
+    oos_sharpe: float = 0.0
+    oos_sortino: float = 0.0
+    walk_forward_stability: float = 0.0
+    live_expectancy: float = 0.0
+    live_trades: int = 0
+    live_drawdown: float = 0.0
+    recent_degradation: float = 0.0
+    liquidity_score: float = 1.0
+    options_suitability: float = 0.0
+    correlation_penalty: float = 0.0
+    composite_score: float = 0.0
+    status: str = "active"           # active / reduced / cooldown / retired
+    cooldown_until: Optional[datetime] = None
+    last_updated: datetime = Field(default_factory=datetime.utcnow)
