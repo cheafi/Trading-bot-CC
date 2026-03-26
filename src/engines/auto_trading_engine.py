@@ -18,6 +18,10 @@ from typing import Any, Dict, List, Optional, Set
 
 from src.core.config import get_settings, get_trading_config
 from src.core.models import Direction, Signal, SignalStatus
+from src.engines.regime_router import RegimeRouter
+from src.engines.opportunity_ensembler import OpportunityEnsembler
+from src.engines.context_assembler import ContextAssembler
+from src.engines.strategy_leaderboard import StrategyLeaderboard
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -226,6 +230,14 @@ class AutoTradingEngine:
         self._signals_today: List[Signal] = []
         self._trades_today: List[Dict[str, Any]] = []
 
+        # Sprint 4: decision-layer components
+        self.regime_router = RegimeRouter()
+        self.ensembler = OpportunityEnsembler()
+        self.context_assembler = ContextAssembler()
+        self.leaderboard = StrategyLeaderboard()
+        self._regime_state: Dict[str, Any] = {}
+        self._context: Dict[str, Any] = {}
+
     async def run(self):
         """Main loop — runs until stopped."""
         self._running = True
@@ -268,19 +280,69 @@ class AutoTradingEngine:
                 )
             return
 
+        # Assemble decision context
+        try:
+            self._context = self.context_assembler.assemble_sync()
+        except Exception as e:
+            logger.warning(f"Context assembly failed: {e}")
+            self._context = {}
+
+        # Regime classification and trade gate
+        mkt_state = self._context.get("market_state", {})
+        self._regime_state = self.regime_router.classify(mkt_state)
+
+        if not self._regime_state.get("should_trade", True):
+            if self._cycle_count % 30 == 0:
+                logger.info(
+                    "Regime gate: no-trade "
+                    f"(entropy={self._regime_state.get('entropy', 0):.2f})"
+                )
+            await self._monitor_positions()
+            return
+
         # Generate signals for active markets
         signals = await self._generate_signals(active_markets)
 
         # Validate signals
         validated = await self._validate_signals(signals)
 
-        # Execute
-        for signal in validated:
+        # Rank through ensemble scorer
+        signal_dicts = []
+        for sig in validated:
+            signal_dicts.append({
+                "ticker": sig.ticker,
+                "direction": sig.direction.value if hasattr(sig.direction, 'value') else sig.direction,
+                "score": sig.confidence / 100 if hasattr(sig, 'confidence') else 0.5,
+                "strategy_name": sig.strategy_name if hasattr(sig, 'strategy_name') else "unknown",
+                "risk_reward_ratio": getattr(sig, 'risk_reward_ratio', 1.5),
+                "expected_return": getattr(sig, 'expected_return', 0.02),
+                "_signal_obj": sig,  # keep reference
+            })
+
+        ranked = self.ensembler.rank_opportunities(
+            signal_dicts,
+            self._regime_state,
+            portfolio_state=self._context.get("portfolio_state"),
+            strategy_scores=self.leaderboard.get_strategy_scores(),
+        )
+
+        # Execute only approved opportunities
+        for opp in ranked:
+            if not opp.get("trade_decision", False):
+                continue
+            signal = opp["original_signal"].get("_signal_obj")
+            if signal is None:
+                continue
             if self.dry_run:
-                logger.info(f"[DRY RUN] Would execute: {signal.ticker} {signal.direction.value}")
+                logger.info(
+                    f"[DRY RUN] Would execute: {signal.ticker} "
+                    f"{signal.direction.value} "
+                    f"(score={opp['composite_score']:.3f})"
+                )
             else:
                 result = await self._execute_signal(signal)
                 if result:
+                    result["composite_score"] = opp["composite_score"]
                     self._trades_today.append(result)
 
         # Monitor existing positions
@@ -412,7 +474,7 @@ class AutoTradingEngine:
                 universe=valid_tickers,
                 features=features_df,
                 market_data=_mkt,
-                portfolio={},
+                portfolio=self._context.get("portfolio_state", {}),
             )
             self._signals_today.extend(signals)
             return signals
@@ -430,8 +492,8 @@ class AutoTradingEngine:
             # validate_batch returns list of dicts with 'validation_result' key
             results = await validator.validate_batch(
                 signals=signals,
-                news_by_ticker={},
-                sentiment_by_ticker={},
+                news_by_ticker=self._context.get("news_by_ticker", {}),
+                sentiment_by_ticker=self._context.get("sentiment", {}),
             )
             approved = []
             for sig, res in zip(signals, results):
