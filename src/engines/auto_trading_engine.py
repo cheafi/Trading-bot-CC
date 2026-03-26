@@ -22,6 +22,7 @@ from src.engines.regime_router import RegimeRouter
 from src.engines.opportunity_ensembler import OpportunityEnsembler
 from src.engines.context_assembler import ContextAssembler
 from src.engines.strategy_leaderboard import StrategyLeaderboard
+from src.algo.position_manager import PositionManager, RiskParameters
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -238,6 +239,21 @@ class AutoTradingEngine:
         self._regime_state: Dict[str, Any] = {}
         self._context: Dict[str, Any] = {}
 
+        # Position management with trailing stops + R-targets
+        try:
+            from src.core.config import get_trading_config
+            tc = get_trading_config()
+            risk_params = RiskParameters(
+                max_position_pct=tc.max_position_pct,
+                max_sector_pct=tc.max_sector_pct,
+                max_portfolio_var=tc.max_portfolio_var,
+                max_drawdown_pct=tc.max_drawdown_pct,
+                risk_per_trade=tc.risk_per_trade,
+            )
+        except Exception:
+            risk_params = RiskParameters()
+        self.position_mgr = PositionManager(params=risk_params)
+
     async def run(self):
         """Main loop — runs until stopped."""
         self._running = True
@@ -344,6 +360,21 @@ class AutoTradingEngine:
                 if result:
                     result["composite_score"] = opp["composite_score"]
                     self._trades_today.append(result)
+                    # Record in PositionManager for trailing stops
+                    try:
+                        self.position_mgr.open_position(
+                            ticker=signal.ticker,
+                            entry_price=result.get(
+                                "entry_price", signal.entry_price
+                            ),
+                            shares=self._calculate_position_size(signal),
+                            direction=signal.direction.value
+                            if hasattr(signal.direction, "value")
+                            else str(signal.direction),
+                            strategy_name=opp.get("strategy_name", "unknown"),
+                        )
+                    except Exception as e:
+                        logger.warning(f"PositionManager track error: {e}")
 
         # Monitor existing positions
         await self._monitor_positions()

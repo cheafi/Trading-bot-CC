@@ -39,15 +39,23 @@ class RegimeRouter:
     BREADTH_BULL = 0.65
     BREADTH_BEAR = 0.35
 
-    def __init__(self, no_trade_entropy: float = 1.35,
-                 min_confidence: float = 0.40):
+    def __init__(self, no_trade_entropy: float = None,
+                 min_confidence: float = None):
         """
         Args:
             no_trade_entropy: if entropy exceeds this, should_trade = False
             min_confidence: if max regime prob < this, reduce sizing
         """
-        self.no_trade_entropy = no_trade_entropy
-        self.min_confidence = min_confidence
+        # Read from config with fallback defaults
+        try:
+            from src.core.config import get_trading_config
+            tc = get_trading_config()
+            self.no_trade_entropy = no_trade_entropy or tc.regime_no_trade_entropy
+            self.min_confidence = min_confidence or tc.regime_min_confidence
+            self.VIX_CRISIS = tc.regime_vix_crisis
+        except Exception:
+            self.no_trade_entropy = no_trade_entropy or 1.35
+            self.min_confidence = min_confidence or 0.40
 
     def classify(self, market_data: Dict[str, Any]) -> Dict[str, Any]:
         """

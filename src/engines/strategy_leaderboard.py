@@ -49,6 +49,15 @@ class StrategyLeaderboard:
     def __init__(self):
         self._strategies: Dict[str, Dict[str, Any]] = {}
         self._history: List[Dict[str, Any]] = []
+        # Read from config with fallback
+        try:
+            from src.core.config import get_trading_config
+            tc = get_trading_config()
+            self.COOLDOWN_SCORE = tc.strategy_cooldown_score
+            self.REDUCED_SCORE = tc.strategy_reduced_score
+            self.RETIRE_AFTER_DAYS = tc.strategy_retire_days
+        except Exception:
+            pass  # use class-level defaults
 
     def update(
         self,

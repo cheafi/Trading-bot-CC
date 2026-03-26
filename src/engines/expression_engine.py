@@ -43,16 +43,31 @@ class ExpressionEngine:
 
     def __init__(
         self,
-        options_enabled: bool = False,
-        max_option_allocation: float = 0.20,
+        options_enabled: bool = None,
+        max_option_allocation: float = None,
     ):
         """
         Args:
             options_enabled: master switch for options
             max_option_allocation: max portfolio % in options
         """
-        self.options_enabled = options_enabled
-        self.max_option_allocation = max_option_allocation
+        # Read from config with fallback
+        try:
+            from src.core.config import get_trading_config
+            tc = get_trading_config()
+            self.options_enabled = (
+                options_enabled if options_enabled is not None
+                else tc.options_enabled
+            )
+            self.max_option_allocation = (
+                max_option_allocation or tc.max_option_allocation
+            )
+            self.MIN_OPTION_OI = tc.min_option_oi
+        except Exception:
+            self.options_enabled = options_enabled or False
+            self.max_option_allocation = (
+                max_option_allocation or 0.20
+            )
 
     def select_expression(
         self,

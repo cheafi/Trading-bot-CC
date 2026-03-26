@@ -221,6 +221,29 @@ class TradingConfig(BaseSettings):
     # Signal filters
     min_confidence: int = Field(default=50, alias="MIN_CONFIDENCE")
     max_vix_for_trading: float = Field(default=40.0, alias="MAX_VIX_FOR_TRADING")
+
+    # Regime router thresholds
+    regime_vix_crisis: float = Field(default=35.0, alias="REGIME_VIX_CRISIS")
+    regime_no_trade_entropy: float = Field(default=1.35, alias="REGIME_NO_TRADE_ENTROPY")
+    regime_min_confidence: float = Field(default=0.40, alias="REGIME_MIN_CONFIDENCE")
+
+    # Ensembler thresholds
+    ensemble_min_score: float = Field(default=0.35, alias="ENSEMBLE_MIN_SCORE")
+
+    # Expression engine
+    options_enabled: bool = Field(default=False, alias="OPTIONS_ENABLED")
+    max_option_allocation: float = Field(default=0.20, alias="MAX_OPTION_ALLOCATION")
+    min_option_oi: int = Field(default=500, alias="MIN_OPTION_OI")
+
+    # Strategy leaderboard
+    strategy_cooldown_score: float = Field(default=0.20, alias="STRATEGY_COOLDOWN_SCORE")
+    strategy_reduced_score: float = Field(default=0.35, alias="STRATEGY_REDUCED_SCORE")
+    strategy_retire_days: int = Field(default=90, alias="STRATEGY_RETIRE_DAYS")
+
+    # Position management
+    stop_loss_pct: float = Field(default=0.03, alias="STOP_LOSS_PCT")
+    trailing_stop_pct: float = Field(default=0.02, alias="TRAILING_STOP_PCT")
+    max_hold_days: int = Field(default=30, alias="MAX_HOLD_DAYS")
     
     # Scheduling (Eastern Time)
     premarket_report_time: str = Field(default="06:30", alias="PREMARKET_REPORT_TIME")

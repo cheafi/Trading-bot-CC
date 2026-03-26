@@ -45,10 +45,16 @@ class OpportunityEnsembler:
     def __init__(
         self,
         weights: Optional[Dict[str, float]] = None,
-        min_score: float = 0.35,
+        min_score: float = None,
     ):
         self.weights = weights or self.DEFAULT_WEIGHTS.copy()
-        self.min_score = min_score
+        # Read from config with fallback
+        try:
+            from src.core.config import get_trading_config
+            tc = get_trading_config()
+            self.min_score = min_score or tc.ensemble_min_score
+        except Exception:
+            self.min_score = min_score or 0.35
 
     def rank_opportunities(
         self,
