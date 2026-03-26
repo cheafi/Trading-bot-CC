@@ -196,14 +196,19 @@ class TestLeaderboardRecordOutcome(unittest.TestCase):
         self.assertIn("def record_outcome(self", self.src)
 
     def test_16_record_outcome_updates_score(self):
-        """record_outcome tracks wins, trades, pnl, score."""
+        """record_outcome tracks wins, trades, pnl, and calls update()."""
         idx = self.src.find("def record_outcome")
-        block = self.src[idx:idx + 600]
-        for field in ["trades", "wins", "total_pnl", "score"]:
+        block = self.src[idx:idx + 3000]
+        for field in ["trades", "wins", "total_pnl"]:
             self.assertIn(
                 f'"{field}"', block,
                 f"record_outcome missing field: {field}",
             )
+        # Sprint 20: calls self.update() instead of setting entry["score"]
+        self.assertIn(
+            "self.update(", block,
+            "record_outcome should call self.update()",
+        )
 
 
 class TestAPIRecommendationsUpdated(unittest.TestCase):

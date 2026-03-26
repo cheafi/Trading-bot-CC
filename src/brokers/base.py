@@ -94,7 +94,18 @@ class Position:
     unrealized_pnl_pct: float = 0.0
     realized_pnl: float = 0.0
     market: Market = Market.US
-    
+    direction: str = "long"  # "long" or "short"
+
+    @property
+    def side(self) -> str:
+        """Alias for direction (backward-compat)."""
+        return self.direction
+
+    @property
+    def qty(self) -> int:
+        """Alias for quantity (backward-compat)."""
+        return self.quantity
+
     def update_price(self, price: float):
         """Update current price and recalculate P&L."""
         self.current_price = price

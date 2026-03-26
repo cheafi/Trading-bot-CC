@@ -233,19 +233,50 @@ class StrategyLeaderboard:
             return StrategyStatus.ACTIVE
 
     def record_outcome(self, strategy_name: str, is_win: bool, pnl_pct: float):
-        """Record a trade outcome for a strategy, updating its score."""
-        if strategy_name not in self._strategies:
-            self._strategies[strategy_name] = {
-                "trades": 0,
-                "wins": 0,
-                "total_pnl": 0.0,
-                "score": 0.5,
-                "last_updated": None,
-            }
-        s = self._strategies[strategy_name]
-        s["trades"] += 1
+        """Record a trade outcome and recompute blended score.
+
+        This updates the same entry shape that update() uses, so
+        get_strategy_scores() and get_sizing_multiplier() see
+        consistent data.
+        """
+        # Ensure outcome tracking fields exist
+        entry = self._strategies.get(strategy_name, {})
+        entry.setdefault("trades", 0)
+        entry.setdefault("wins", 0)
+        entry.setdefault("total_pnl", 0.0)
+        entry.setdefault("pnl_history", [])
+
+        entry["trades"] += 1
         if is_win:
-            s["wins"] += 1
-        s["total_pnl"] += pnl_pct
-        s["score"] = s["wins"] / s["trades"] if s["trades"] > 0 else 0.5
-        s["last_updated"] = __import__("datetime").datetime.now().isoformat()
+            entry["wins"] += 1
+        entry["total_pnl"] += pnl_pct
+        entry["pnl_history"].append(pnl_pct)
+
+        # Derive rolling metrics from outcome history
+        trades = entry["trades"]
+        wins = entry["wins"]
+        pnl_hist = entry["pnl_history"]
+        win_rate = wins / trades if trades > 0 else 0.5
+        avg_win = (
+            sum(p for p in pnl_hist if p > 0) / max(wins, 1)
+        )
+        avg_loss = abs(
+            sum(p for p in pnl_hist if p <= 0) / max(trades - wins, 1)
+        )
+        profit_factor = avg_win / avg_loss if avg_loss > 0 else 1.0
+        expectancy = win_rate * avg_win - (1 - win_rate) * avg_loss
+
+        metrics = {
+            "trade_count": trades,
+            "win_rate": win_rate,
+            "profit_factor": min(profit_factor, 5.0),
+            "expectancy": expectancy,
+            "oos_sharpe": entry.get("metrics", {}).get("oos_sharpe", 0),
+            "calmar_ratio": entry.get("metrics", {}).get("calmar_ratio", 0),
+            "max_drawdown": entry.get("metrics", {}).get("max_drawdown", 0),
+            "consistency": entry.get("metrics", {}).get("consistency", 0.5),
+        }
+
+        # Reuse update() so blended_score + status stay consistent
+        self._strategies[strategy_name] = entry
+        self.update(strategy_name, metrics)

@@ -295,7 +295,8 @@ class TestStrategyLeaderboard(unittest.TestCase):
         self.assertEqual(entry["trades"], 2)
         self.assertEqual(entry["wins"], 1)
         self.assertAlmostEqual(entry["total_pnl"], 1.5)
-        self.assertAlmostEqual(entry["score"], 0.5)
+        # Sprint 20: record_outcome now calls update() → blended_score
+        self.assertIn("blended_score", entry)
 
     def test_20_lifecycle_cooldown(self):
         """Very low score with enough trades → COOLDOWN."""

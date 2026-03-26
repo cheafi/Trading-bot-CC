@@ -224,6 +224,7 @@ class MarketRegime(BaseModel):
     trend: TrendRegime
     risk: RiskRegime
     active_strategies: List[str]
+    strategy_weights: Dict[str, float] = Field(default_factory=dict)
     
     @property
     def should_trade(self) -> bool:

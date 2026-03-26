@@ -247,7 +247,11 @@ class AutoTradingEngine:
         # Sprint 4: decision-layer components
         self.regime_router = RegimeRouter()
         self.ensembler = OpportunityEnsembler()
-        self.context_assembler = ContextAssembler()
+        self.context_assembler = ContextAssembler(
+            market_data_service=getattr(self, 'market_data', None),
+            broker_manager=getattr(self, 'broker_manager', None),
+            news_service=getattr(self, 'news_service', None),
+        )
         self.leaderboard = StrategyLeaderboard()
         self._regime_state: Dict[str, Any] = {}
         self._context: Dict[str, Any] = {}
@@ -482,11 +486,17 @@ class AutoTradingEngine:
         # Rank through ensemble scorer (with calibrated edge if available)
         signal_dicts = []
         for sig in validated:
+            # Prefer strategy_id (canonical), fallback strategy_name
+            _strat_id = (
+                getattr(sig, 'strategy_id', None)
+                or getattr(sig, 'strategy_name', None)
+                or "unknown"
+            )
             sd = {
                 "ticker": sig.ticker,
                 "direction": sig.direction.value if hasattr(sig.direction, 'value') else sig.direction,
                 "score": sig.confidence / 100 if hasattr(sig, 'confidence') else 0.5,
-                "strategy_name": sig.strategy_name if hasattr(sig, 'strategy_name') else "unknown",
+                "strategy_name": _strat_id,
                 "risk_reward_ratio": getattr(sig, 'risk_reward_ratio', 1.5),
                 "expected_return": getattr(sig, 'expected_return', 0.02),
                 "_signal_obj": sig,  # keep reference
@@ -782,11 +792,29 @@ class AutoTradingEngine:
                     signal.entry_price,
                     stop_price,
                 )
+                _strat = (
+                    getattr(signal, 'strategy_id', None)
+                    or getattr(signal, 'strategy_name', None)
+                    or "unknown"
+                )
+                _entry_price = getattr(
+                    result, "avg_fill_price", signal.entry_price
+                )
                 return {
                     "signal": signal.ticker,
                     "direction": signal.direction.value,
-                    "entry_price": getattr(result, "avg_fill_price", signal.entry_price),
+                    "strategy_name": _strat,
+                    "entry_price": _entry_price,
                     "time": datetime.now(timezone.utc).isoformat(),
+                    "confidence": getattr(signal, "confidence", 50),
+                    "entry_snapshot": {
+                        "confidence": getattr(signal, "confidence", 50),
+                        "vix_at_entry": self._regime_state.get("vix", 20),
+                        "rsi_at_entry": getattr(signal, "rsi", 50),
+                        "adx_at_entry": getattr(signal, "adx", 25),
+                        "relative_volume": getattr(signal, "relative_volume", 1.0),
+                        "distance_from_sma50": getattr(signal, "distance_from_sma50", 0),
+                    },
                 }
             else:
                 logger.warning(f"Order failed for {signal.ticker}: {result.message}")
@@ -808,10 +836,13 @@ class AutoTradingEngine:
         Closed positions are fed to TradeLearningLoop.
         """
         try:
+            from src.brokers.base import OrderSide, OrderType
+
             manager = await self._get_broker()
             broker_positions = await manager.get_positions()
 
             # Build price dict from broker positions
+            # Use quantity (canonical) with fallback to qty
             prices: Dict[str, float] = {}
             broker_qty: Dict[str, int] = {}
             broker_side: Dict[str, str] = {}
@@ -820,8 +851,13 @@ class AutoTradingEngine:
                 current_price = getattr(pos, "current_price", 0)
                 if current_price and current_price > 0:
                     prices[ticker] = current_price
-                    broker_qty[ticker] = abs(int(getattr(pos, "qty", 0)))
-                    broker_side[ticker] = getattr(pos, "side", "long")
+                    broker_qty[ticker] = abs(int(
+                        getattr(pos, "quantity",
+                                getattr(pos, "qty", 0))
+                    ))
+                    _dir = getattr(pos, "direction",
+                                   getattr(pos, "side", "long"))
+                    broker_side[ticker] = _dir
 
             if not prices:
                 return
@@ -829,7 +865,9 @@ class AutoTradingEngine:
             now = datetime.now(timezone.utc)
 
             # Use PositionManager to check all exit conditions
-            positions_to_close = self.position_mgr.update_all_positions(prices, now)
+            positions_to_close = self.position_mgr.update_all_positions(
+                prices, now
+            )
 
             for close_info in positions_to_close:
                 ticker = close_info["ticker"]
@@ -842,28 +880,48 @@ class AutoTradingEngine:
                     continue
 
                 logger.warning(
-                    "Exit signal for %s: %s @ $%.2f", ticker, reason, exit_price
+                    "Exit signal for %s: %s @ $%.2f",
+                    ticker, reason, exit_price,
                 )
                 try:
-                    close_side = "sell" if side == "long" else "buy"
-                    await manager.submit_order(
-                        symbol=ticker, qty=qty,
-                        side=close_side, type="market",
-                        time_in_force="day",
+                    close_side = (
+                        OrderSide.SELL if side == "long"
+                        else OrderSide.BUY
+                    )
+                    await manager.place_order(
+                        ticker=ticker,
+                        side=close_side,
+                        quantity=qty,
+                        order_type=OrderType.MARKET,
                     )
                     logger.info("Closed %s via %s", ticker, reason)
 
-                    # Close in PositionManager and feed to learning loop
+                    # Update circuit breaker with trade PnL
                     closed_pos = self.position_mgr.close_position(
                         ticker, exit_price, reason
                     )
                     if closed_pos:
-                        self._record_learning_outcome(closed_pos, reason)
+                        pnl = getattr(
+                            closed_pos, "realized_pnl_pct", 0
+                        )
+                        self.circuit_breaker.update(
+                            equity=await self._get_equity(),
+                            trade_pnl=pnl,
+                        )
+                        self._record_learning_outcome(
+                            closed_pos, reason
+                        )
 
                 except BrokerError as e:
-                    logger.error("Close order broker error for %s: %s", ticker, e)
+                    logger.error(
+                        "Close order broker error for %s: %s",
+                        ticker, e,
+                    )
                 except Exception as e:
-                    logger.error("Close order failed for %s: %s", ticker, e)
+                    logger.error(
+                        "Close order failed for %s: %s",
+                        ticker, e,
+                    )
 
         except BrokerError as e:
             logger.error("Position monitoring broker error: %s", e)
@@ -873,10 +931,33 @@ class AutoTradingEngine:
     def _record_learning_outcome(self, closed_pos, reason: str):
         """Feed a closed position into the TradeLearningLoop."""
         try:
+            # Resolve direction from position or default
+            _dir = getattr(closed_pos, "direction", None)
+            if not _dir:
+                _dir = (
+                    "LONG"
+                    if getattr(closed_pos, "quantity", 1) >= 0
+                    else "SHORT"
+                )
+
+            # Look up entry snapshot from _trades_today
+            _snapshot = {}
+            _conf = 50
+            for t in self._trades_today:
+                if t.get("signal") == closed_pos.ticker:
+                    _snapshot = t.get("entry_snapshot", {})
+                    _conf = t.get("confidence", 50)
+                    break
+
+            _hold = 0.0
+            if closed_pos.entry_date and closed_pos.exit_date:
+                _dt = closed_pos.exit_date - closed_pos.entry_date
+                _hold = _dt.total_seconds() / 3600
+
             record = TradeOutcomeRecord(
                 trade_id=closed_pos.position_id,
                 ticker=closed_pos.ticker,
-                direction="LONG",
+                direction=_dir,
                 strategy=closed_pos.strategy_id,
                 entry_price=closed_pos.entry_price,
                 exit_price=closed_pos.exit_price,
@@ -889,14 +970,11 @@ class AutoTradingEngine:
                     if closed_pos.exit_date else ""
                 ),
                 pnl_pct=closed_pos.realized_pnl_pct,
-                confidence=50,
+                confidence=_conf,
                 horizon="swing",
                 exit_reason=reason,
-                hold_hours=(
-                    (closed_pos.exit_date - closed_pos.entry_date).total_seconds() / 3600
-                    if closed_pos.entry_date and closed_pos.exit_date
-                    else 0
-                ),
+                hold_hours=_hold,
+                **_snapshot,
             )
             self.learning_loop.record_outcome(record)
             logger.info(
@@ -1220,24 +1298,43 @@ class AutoTradingEngine:
 
         # Flush open positions
         try:
+            from src.brokers.base import OrderSide, OrderType
+
             manager = await self._get_broker()
             positions = await manager.get_positions()
             for pos in positions:
-                ticker = getattr(pos, "symbol", getattr(pos, "ticker", "???"))
-                qty = abs(int(getattr(pos, "qty", 0)))
-                side = getattr(pos, "side", "long")
+                ticker = getattr(
+                    pos, "symbol", getattr(pos, "ticker", "???")
+                )
+                qty = abs(int(
+                    getattr(pos, "quantity",
+                            getattr(pos, "qty", 0))
+                ))
+                _dir = getattr(
+                    pos, "direction",
+                    getattr(pos, "side", "long"),
+                )
                 if qty <= 0:
                     continue
-                close_side = "sell" if side == "long" else "buy"
+                close_side = (
+                    OrderSide.SELL if _dir == "long"
+                    else OrderSide.BUY
+                )
                 try:
-                    await manager.submit_order(
-                        symbol=ticker, qty=qty,
-                        side=close_side, type="market",
-                        time_in_force="day",
+                    await manager.place_order(
+                        ticker=ticker,
+                        side=close_side,
+                        quantity=qty,
+                        order_type=OrderType.MARKET,
                     )
-                    logger.info("Shutdown: closed %s (%d shares)", ticker, qty)
+                    logger.info(
+                        "Shutdown: closed %s (%d shares)",
+                        ticker, qty,
+                    )
                 except BrokerError as e:
-                    logger.error("Shutdown close failed %s: %s", ticker, e)
+                    logger.error(
+                        "Shutdown close failed %s: %s", ticker, e
+                    )
         except BrokerError as e:
             logger.error("Shutdown broker error: %s", e)
         except Exception as e:

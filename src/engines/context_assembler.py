@@ -145,11 +145,17 @@ class ContextAssembler:
         return state
 
     async def _get_portfolio_state(self) -> Dict[str, Any]:
-        """Fetch current portfolio from broker."""
-        state = {
+        """Fetch current portfolio from broker.
+
+        Returns canonical portfolio schema with both list and dict
+        forms so downstream consumers (RiskModel, ensembler) work.
+        """
+        state: Dict[str, Any] = {
             "positions": [],
+            "positions_by_ticker": {},
             "tickers": [],
             "sectors": {},
+            "equity": 0.0,
             "total_value": 0.0,
             "cash": 0.0,
             "options_allocation_pct": 0.0,
@@ -166,20 +172,38 @@ class ContextAssembler:
                 )
                 if positions:
                     state["positions"] = positions
-                    state["tickers"] = [
-                        p.get("ticker", p.get("symbol", ""))
-                        for p in positions
-                    ]
+                    by_ticker: Dict[str, Any] = {}
+                    tickers_list: List[str] = []
+                    for p in positions:
+                        tk = getattr(
+                            p, "ticker",
+                            getattr(p, "symbol", ""),
+                        )
+                        if not tk:
+                            tk = p.get("ticker", p.get("symbol", ""))
+                        tickers_list.append(tk)
+                        by_ticker[tk] = p
+                    state["positions_by_ticker"] = by_ticker
+                    state["tickers"] = tickers_list
 
             if hasattr(self.broker, "get_account"):
                 account = await self._maybe_await(
                     self.broker.get_account()
                 )
                 if account:
-                    state["total_value"] = account.get(
-                        "portfolio_value", 0
+                    val = getattr(
+                        account, "portfolio_value",
+                        account.get("portfolio_value", 0)
+                        if isinstance(account, dict) else 0,
                     )
-                    state["cash"] = account.get("cash", 0)
+                    cash = getattr(
+                        account, "cash",
+                        account.get("cash", 0)
+                        if isinstance(account, dict) else 0,
+                    )
+                    state["total_value"] = val
+                    state["equity"] = val
+                    state["cash"] = cash
 
         except Exception as e:
             logger.warning("Portfolio state fetch error: %s", e)

@@ -290,6 +290,7 @@ TradingAI_Bot-main/
 | 17 | Unit Tests | 37 decision-layer tests (Ensembler, Leaderboard, EdgeCalc, Errors, Context) |
 | 18 | Infra Hardening | ingestors/main.py entrypoint, redis lazy import, 14× utcnow→timezone.utc |
 | 19 | Pydantic V2 | 6× class Config→model_config=ConfigDict, eliminates PydanticDeprecatedSince20 |
+| 20 | Deep Integration | P0: submit_order→place_order, Position direction+aliases, portfolio schema (positions_by_ticker), strategy_weights preserved, leaderboard record_outcome→update(), circuit breaker trade_pnl, learning loop real features, ML scaler leakage fix |
 
 ### AutoTradingEngine Pipeline (current)
 

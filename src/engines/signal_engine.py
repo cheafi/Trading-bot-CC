@@ -428,7 +428,8 @@ class RegimeDetector:
             volatility=vol_regime,
             trend=trend_regime,
             risk=risk_regime,
-            active_strategies=active_strategies
+            active_strategies=active_strategies,
+            strategy_weights=strategy_weights,
         )
     
     def _get_active_strategies(
@@ -544,8 +545,21 @@ class RiskModel:
         
         signals = unique_signals
         
-        # Filter out existing positions
-        existing_positions = set(portfolio.get('positions', {}).keys())
+        # Filter out existing positions — use positions_by_ticker (dict)
+        # with fallback to positions (may be list or dict)
+        pos_raw = portfolio.get('positions_by_ticker',
+                                portfolio.get('positions', {}))
+        if isinstance(pos_raw, dict):
+            existing_positions = set(pos_raw.keys())
+        elif isinstance(pos_raw, list):
+            existing_positions = {
+                getattr(p, 'ticker', getattr(p, 'symbol', ''))
+                if not isinstance(p, dict)
+                else p.get('ticker', p.get('symbol', ''))
+                for p in pos_raw
+            }
+        else:
+            existing_positions = set()
         signals = [s for s in signals if s.ticker not in existing_positions]
         
         # Calculate position sizes

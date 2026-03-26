@@ -185,9 +185,6 @@ class TradeOutcomePredictor:
             from sklearn.model_selection import TimeSeriesSplit
             from sklearn.metrics import brier_score_loss, log_loss, roc_auc_score
 
-            self.scaler = StandardScaler()
-            X_scaled = self.scaler.fit_transform(X)
-
             self.model = GradientBoostingClassifier(
                 n_estimators=200,
                 max_depth=4,
@@ -197,11 +194,14 @@ class TradeOutcomePredictor:
                 random_state=42,
             )
 
-            # Time-aware cross-validation (no future leakage)
+            # Time-aware cross-validation — scale inside each fold
+            # to avoid validation-statistics leakage
             tscv = TimeSeriesSplit(n_splits=5)
             fold_scores, fold_brier, fold_auc = [], [], []
-            for train_idx, val_idx in tscv.split(X_scaled):
-                Xtr, Xval = X_scaled[train_idx], X_scaled[val_idx]
+            for train_idx, val_idx in tscv.split(X):
+                fold_scaler = StandardScaler()
+                Xtr = fold_scaler.fit_transform(X[train_idx])
+                Xval = fold_scaler.transform(X[val_idx])
                 ytr, yval = y[train_idx], y[val_idx]
                 self.model.fit(Xtr, ytr)
                 proba = self.model.predict_proba(Xval)[:, 1]
@@ -210,7 +210,9 @@ class TradeOutcomePredictor:
                 if len(set(yval)) > 1:
                     fold_auc.append(float(roc_auc_score(yval, proba)))
 
-            # Fit final model on all data
+            # Fit final model on all data (scaler fitted only on training)
+            self.scaler = StandardScaler()
+            X_scaled = self.scaler.fit_transform(X)
             self.model.fit(X_scaled, y)
             self._save_model()
 
