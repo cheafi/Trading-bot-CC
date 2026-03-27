@@ -90,7 +90,7 @@ class TestEODCycle(unittest.TestCase):
     def test_05_run_eod_cycle_exists(self):
         """_run_eod_cycle exists with failure analysis + retrain."""
         self.assertIn("async def _run_eod_cycle(self)", self.src)
-        idx = self.src.find("_run_eod_cycle")
+        idx = self.src.find("async def _run_eod_cycle")
         block = self.src[idx:idx + 2000]
         self.assertIn("run_failure_analysis", block)
         self.assertIn("predictor.train", block)
@@ -195,12 +195,12 @@ class TestLeaderboardRecordOutcome(unittest.TestCase):
 
     def test_15_record_outcome_exists(self):
         """record_outcome method exists in StrategyLeaderboard."""
-        self.assertIn("def record_outcome(self", self.src)
+        self.assertIn("def record_outcome(", self.src)
 
     def test_16_record_outcome_updates_score(self):
         """record_outcome tracks wins, trades, pnl, and calls update()."""
         idx = self.src.find("def record_outcome")
-        block = self.src[idx:idx + 3000]
+        block = self.src[idx:idx + 5000]
         for field in ["trades", "wins", "total_pnl"]:
             self.assertIn(
                 f'"{field}"', block,

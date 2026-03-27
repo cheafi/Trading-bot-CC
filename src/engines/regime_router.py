@@ -5,18 +5,72 @@ Replaces hard-threshold regime detection with a soft probabilistic
 assessment that outputs regime probabilities, entropy, and a
 should_trade flag.
 
-The deterministic RegimeDetector in signal_engine.py is kept as
-fallback; this module sits above it and provides richer context
-for the OpportunityEnsembler and ExpressionEngine.
+Sprint 34: canonical RegimeState dataclass — one object used by
+AutoTradingEngine, SignalEngine, OpportunityEnsembler,
+ExpressionEngine, API, bots, and dashboard.
 """
 import logging
 import math
+from dataclasses import dataclass, field, asdict
 from typing import Dict, Optional, Any
 from datetime import datetime, timezone
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+
+# ─── Canonical RegimeState ────────────────────────────────────
+@dataclass
+class RegimeState:
+    """Single source of truth for market regime across all layers.
+
+    Every component (strategy routing, sizing, explanation,
+    dashboard, API, bots) consumes this same object.
+    """
+    # Derived labels
+    regime: str = "NEUTRAL"             # RISK_ON / NEUTRAL / RISK_OFF
+    risk_regime: str = "neutral"        # risk_on / neutral / risk_off
+    trend_regime: str = "sideways"      # uptrend / downtrend / sideways
+    volatility_regime: str = "normal_vol"  # low_vol / normal_vol / elevated_vol / high_vol / crisis_vol
+    no_trade_reason: str = ""
+
+    # Probabilities
+    risk_on_uptrend: float = 0.333
+    neutral_range: float = 0.334
+    risk_off_downtrend: float = 0.333
+    entropy: float = 1.0
+    should_trade: bool = True
+    confidence: float = 0.334
+
+    # Sizing scalar (Sprint 34: graduated, not binary)
+    size_scalar: float = 1.0
+
+    # Raw inputs
+    vix: float = 18.0
+    vix_term_slope: float = 0.0
+    breadth_pct: float = 0.50
+    credit_spread_z: float = 0.0
+    realized_vol_20d: float = 0.15
+    timestamp: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dict for backward compatibility."""
+        return asdict(self)
+
+    def get(self, key: str, default=None):
+        """Dict-like access for backward compatibility."""
+        return getattr(self, key, default)
+
+    def __getitem__(self, key: str):
+        """Support state['key'] access for backward compat."""
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(key)
+
+    def __contains__(self, key: str) -> bool:
+        """Support 'key' in state."""
+        return hasattr(self, key)
 
 
 class RegimeRouter:
@@ -200,28 +254,44 @@ class RegimeRouter:
                     f"{self.min_confidence:.0%})"
                 )
 
-        return {
-            # Derived labels (downstream contract)
-            "regime": regime,
-            "risk_regime": risk_regime,
-            "trend_regime": trend_regime,
-            "volatility_regime": volatility_regime,
-            "no_trade_reason": no_trade_reason,
+        # ── Graduated size scalar (Sprint 34) ──────────────────
+        # crisis → 0 (no trade), high entropy → 0.5, weak
+        # confidence → 0.6, normal → 1.0
+        if vix >= self.VIX_CRISIS:
+            size_scalar = 0.0
+        elif entropy > self.no_trade_entropy:
+            size_scalar = 0.5  # half size in uncertain regime
+        elif max_prob < self.min_confidence:
+            size_scalar = 0.6  # A-grade setups only
+        elif entropy > 0.8:
+            size_scalar = 0.75
+        else:
+            size_scalar = 1.0
+
+        return RegimeState(
+            # Derived labels
+            regime=regime,
+            risk_regime=risk_regime,
+            trend_regime=trend_regime,
+            volatility_regime=volatility_regime,
+            no_trade_reason=no_trade_reason,
             # Probabilities
-            "risk_on_uptrend": round(risk_on_prob, 3),
-            "neutral_range": round(neutral_prob, 3),
-            "risk_off_downtrend": round(risk_off_prob, 3),
-            "entropy": round(entropy, 3),
-            "should_trade": should_trade,
-            "confidence": round(max_prob, 3),
-            # Raw inputs (for transparency)
-            "vix": vix,
-            "vix_term_slope": vix_term_slope,
-            "breadth_pct": breadth,
-            "credit_spread_z": hy_spread,
-            "realized_vol_20d": realized_vol,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
+            risk_on_uptrend=round(risk_on_prob, 3),
+            neutral_range=round(neutral_prob, 3),
+            risk_off_downtrend=round(risk_off_prob, 3),
+            entropy=round(entropy, 3),
+            should_trade=should_trade,
+            confidence=round(max_prob, 3),
+            # Sizing
+            size_scalar=size_scalar,
+            # Raw inputs
+            vix=vix,
+            vix_term_slope=vix_term_slope,
+            breadth_pct=breadth,
+            credit_spread_z=hy_spread,
+            realized_vol_20d=realized_vol,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+        )
 
     @staticmethod
     def _sigmoid(x: float, k: float = 1.0) -> float:
@@ -236,16 +306,22 @@ class RegimeRouter:
         return e_x / e_x.sum()
 
     def get_strategy_multipliers(
-        self, regime_state: Dict[str, Any]
+        self, regime_state,
     ) -> Dict[str, float]:
         """
         Convert regime state into strategy-family multipliers.
 
+        Accepts both RegimeState object and plain dict.
         Returns dict mapping strategy family → sizing multiplier (0-1).
         """
-        risk_on = regime_state.get("risk_on_uptrend", 0.33)
-        neutral = regime_state.get("neutral_range", 0.33)
-        risk_off = regime_state.get("risk_off_downtrend", 0.33)
+        if isinstance(regime_state, RegimeState):
+            risk_on = regime_state.risk_on_uptrend
+            neutral = regime_state.neutral_range
+            risk_off = regime_state.risk_off_downtrend
+        else:
+            risk_on = regime_state.get("risk_on_uptrend", 0.33)
+            neutral = regime_state.get("neutral_range", 0.33)
+            risk_off = regime_state.get("risk_off_downtrend", 0.33)
 
         return {
             "momentum": min(1.0, risk_on * 1.5),

@@ -474,22 +474,131 @@ class SignalCooldown:
 class RegimeDetector:
     """
     Detects current market regime to determine which strategies to run.
+
+    Sprint 34: delegates to RegimeRouter for probabilistic
+    classification, then maps the canonical RegimeState back
+    to the MarketRegime dataclass that strategies consume.
+    This eliminates split-brain between AutoTradingEngine
+    (RegimeRouter) and SignalEngine (old RegimeDetector).
     """
-    
+
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-    
+        try:
+            from src.engines.regime_router import (
+                RegimeRouter, RegimeState,
+            )
+            self._router = RegimeRouter()
+        except Exception:
+            self._router = None
+
     def detect(self, market_data: Dict[str, Any]) -> MarketRegime:
         """
         Classify current market regime.
-        
-        Args:
-            market_data: Dict with keys like 'vix', 'vix_term_structure', 
-                        'pct_above_sma50', 'hy_spread', etc.
-        
-        Returns:
-            MarketRegime with volatility, trend, risk classification and active strategies
+
+        Uses RegimeRouter as the canonical source, then maps
+        to MarketRegime for backward compatibility.
         """
+        # ── Try canonical RegimeRouter first ────────────────
+        if self._router is not None:
+            try:
+                rs = self._router.classify({
+                    "vix": market_data.get("vix", 20),
+                    "spy_return_20d": market_data.get(
+                        "spx_change_pct", 0
+                    ) / 100,
+                    "breadth_pct": market_data.get(
+                        "pct_above_sma50", 50
+                    ) / 100,
+                    "hy_spread": market_data.get(
+                        "hy_spread", 350
+                    ) / 1000,
+                    "realized_vol_20d": market_data.get(
+                        "realized_vol_20d", 0.15
+                    ),
+                    "vix_term_slope": market_data.get(
+                        "vix_term_structure", 1.0
+                    ) - 1.0,
+                })
+                return self._regime_state_to_market(
+                    rs, market_data,
+                )
+            except Exception as e:
+                self.logger.warning(
+                    "RegimeRouter fallback: %s", e
+                )
+
+        # ── Legacy fallback ─────────────────────────────────
+        return self._legacy_detect(market_data)
+
+    def _regime_state_to_market(
+        self, rs, market_data,
+    ) -> MarketRegime:
+        """Map canonical RegimeState → legacy MarketRegime."""
+        # Volatility
+        vol_map = {
+            "low_vol": VolatilityRegime.LOW_VOL,
+            "normal_vol": VolatilityRegime.NORMAL,
+            "elevated_vol": VolatilityRegime.HIGH_VOL,
+            "high_vol": VolatilityRegime.HIGH_VOL,
+            "crisis_vol": VolatilityRegime.CRISIS,
+        }
+        vol_regime = vol_map.get(
+            rs.volatility_regime, VolatilityRegime.NORMAL,
+        )
+
+        # Trend
+        trend_map = {
+            "uptrend": TrendRegime.UPTREND,
+            "downtrend": TrendRegime.DOWNTREND,
+            "sideways": TrendRegime.NEUTRAL,
+        }
+        trend_regime = trend_map.get(
+            rs.trend_regime, TrendRegime.NEUTRAL,
+        )
+
+        # Risk
+        risk_map = {
+            "risk_on": RiskRegime.RISK_ON,
+            "risk_off": RiskRegime.RISK_OFF,
+            "neutral": RiskRegime.NEUTRAL,
+        }
+        risk_regime = risk_map.get(
+            rs.risk_regime, RiskRegime.NEUTRAL,
+        )
+
+        # Get strategy weights from the canonical source
+        strategy_weights = self._get_active_strategies(
+            vol_regime, trend_regime, risk_regime,
+        )
+
+        # If RegimeRouter says no trade, return empty
+        if not rs.should_trade:
+            strategy_weights = {}
+
+        self.logger.info(
+            "Regime (unified): vol=%s, trend=%s, "
+            "risk=%s, strategies=%s",
+            vol_regime.value, trend_regime.value,
+            risk_regime.value, list(strategy_weights),
+        )
+
+        mr = MarketRegime(
+            timestamp=datetime.utcnow(),
+            volatility=vol_regime,
+            trend=trend_regime,
+            risk=risk_regime,
+            active_strategies=list(strategy_weights),
+            strategy_weights=strategy_weights,
+        )
+        # Attach canonical state for downstream
+        mr._regime_state = rs
+        return mr
+
+    def _legacy_detect(
+        self, market_data: Dict[str, Any],
+    ) -> MarketRegime:
+        """Original hard-threshold detection as fallback."""
         vix = market_data.get('vix', 20)
         vix_term = market_data.get('vix_term_structure', 1.0)
         pct_above_50 = market_data.get('pct_above_sma50', 50)

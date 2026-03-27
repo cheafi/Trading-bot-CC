@@ -1218,6 +1218,25 @@ class AutoTradingEngine:
                 closed_pos.ticker, reason, closed_pos.realized_pnl_pct,
             )
 
+            # Sprint 34: update leaderboard from *closed* trade
+            # (was in _run_eod_cycle using entry records)
+            try:
+                _pnl = closed_pos.realized_pnl_pct
+                self.leaderboard.record_outcome(
+                    closed_pos.strategy_id,
+                    _pnl > 0,
+                    _pnl,
+                    regime=_regime_at_entry,
+                    direction=_dir,
+                    market=getattr(
+                        closed_pos, "market", "us"
+                    ),
+                )
+            except Exception as e:
+                logger.warning(
+                    "Leaderboard update error: %s", e,
+                )
+
             # Persist to database (best-effort)
             # Sprint 24: propagate real direction, confidence,
             # composite_score from the trade record / snapshot
@@ -1364,16 +1383,10 @@ class AutoTradingEngine:
         except Exception as e:
             logger.warning("EOD model retrain error: %s", e)
 
-        # 3. Refresh leaderboard with today's trades
-        try:
-            for trade in self._trades_today:
-                strategy = trade.get("strategy_name", "unknown")
-                pnl = trade.get("pnl_pct", 0)
-                self.leaderboard.record_outcome(
-                    strategy, pnl > 0, pnl,
-                )
-        except Exception as e:
-            logger.warning("EOD leaderboard refresh error: %s", e)
+        # 3. Leaderboard now updated on each closed trade
+        # in _record_learning_outcome() — Sprint 34
+        # (was: loop over _trades_today entries, which have
+        #  no realized PnL — only entry snapshots)
 
         # 4. Performance summary
         try:

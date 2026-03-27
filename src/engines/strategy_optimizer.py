@@ -540,7 +540,11 @@ STRATEGY_REGISTRY: Dict[str, Dict] = {
 def _score_result(r: Dict, regime: str, strategy_name: str) -> float:
     """
     Single composite quality score (0–100) for a backtest result.
-    Weights: Sharpe 35%, win-rate 20%, profit-factor 20%, drawdown -15%, trade count 10%
+
+    Sprint 34: reweighted to prioritise net expectancy and
+    cost-adjusted Sharpe over win rate.  Win rate is now a
+    secondary quality check (5%), while expectancy (25%) and
+    Sharpe (30%) dominate.
     """
     if r["trades"] < 2:
         return 0.0
@@ -551,8 +555,14 @@ def _score_result(r: Dict, regime: str, strategy_name: str) -> float:
     dd_penalty = max(0.0, 1.0 - r["max_dd"] / 0.3)  # 30% dd = 0 penalty score
     trade_score = min(r["trades"] / 30.0, 1.0)
 
-    raw = (sharpe_score * 35 + wr_score * 20 + pf * 20 +
-           dd_penalty * 15 + trade_score * 10)
+    # Net expectancy in R-terms
+    avg_win = r.get("avg_win", 0.02)
+    avg_loss = abs(r.get("avg_loss", 0.01)) or 0.01
+    net_exp = r["win_rate"] * avg_win - (1 - r["win_rate"]) * avg_loss
+    exp_score = max(0.0, min(net_exp / 0.03, 1.0))  # 3% net = perfect
+
+    raw = (sharpe_score * 30 + exp_score * 25 + pf * 20 +
+           dd_penalty * 15 + wr_score * 5 + trade_score * 5)
 
     # Regime bonus: +10 if strategy naturally fits this regime
     if regime in STRATEGY_REGISTRY.get(strategy_name, {}).get("regime_fit", []):

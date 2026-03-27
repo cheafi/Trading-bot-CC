@@ -361,7 +361,7 @@ class TestLeaderboardRecordOutcome(unittest.TestCase):
         """record_outcome source must call self.update()."""
         src = _read("src/engines/strategy_leaderboard.py")
         idx = src.index("def record_outcome")
-        method_src = src[idx:idx + 3000]
+        method_src = src[idx:idx + 5000]
         self.assertIn("self.update(", method_src)
 
     def test_24_sizing_multiplier_after_record(self):

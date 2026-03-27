@@ -25,14 +25,16 @@ class OpportunityEnsembler:
     """
 
     # Default component weights — sum to 1.0
+    # Sprint 34: net_expectancy is primary; win rate is secondary
     DEFAULT_WEIGHTS = {
-        "calibrated_pwin": 0.25,
-        "expected_r": 0.20,
+        "net_expectancy": 0.30,
+        "calibrated_pwin": 0.15,
+        "expected_r": 0.10,
         "regime_fit": 0.15,
         "strategy_health": 0.10,
-        "timing_quality": 0.10,
+        "timing_quality": 0.05,
         "risk_reward": 0.10,
-        "conviction_bonus": 0.10,
+        "conviction_bonus": 0.05,
     }
 
     # Penalties
@@ -130,10 +132,22 @@ class OpportunityEnsembler:
         pwin = rec.edge_p_t1 if rec.edge_p_t1 > 0 else rec.score
         pwin = min(pwin, 1.0)
 
-        # Component: expected return (normalised)
-        # Prefer non-zero edge EV
+        # Component: expected return — SIGNED, aligned to direction
+        # Sprint 34: negative EV now correctly penalises, not rewards
         exp_r = rec.edge_ev if rec.edge_ev != 0 else rec.expected_return
-        exp_r_norm = min(abs(exp_r) / 0.10, 1.0)  # 10% = max
+        # Align sign: for LONG, positive EV is good; for SHORT, flip
+        direction = getattr(rec, "direction", "LONG")
+        if isinstance(direction, str) and direction.upper() == "SHORT":
+            exp_r = -exp_r  # SHORT profits when price falls
+        exp_r_norm = max(min(exp_r / 0.10, 1.0), -0.5)  # cap [-0.5, 1.0]
+
+        # Component: NET EXPECTANCY (Sprint 34)
+        # net_exp = p(win) * avg_win_R - p(loss) * avg_loss_R
+        avg_win_r = rec.risk_reward_ratio if rec.risk_reward_ratio > 0 else 2.0
+        avg_loss_r = 1.0  # normalised to 1R
+        net_exp = pwin * avg_win_r - (1 - pwin) * avg_loss_r
+        # Normalise: 1.0R net expectancy = perfect score
+        net_exp_norm = max(min(net_exp / 1.0, 1.0), -0.5)
 
         # Component: regime fit
         regime_fit = self._calc_regime_fit(rec, regime)
@@ -159,15 +173,16 @@ class OpportunityEnsembler:
         # Component: conviction (multi-strategy agreement)
         conviction = rec.strategy_agreement
 
-        # Composite
+        # Composite — net_expectancy is primary signal
         composite = (
-            w["calibrated_pwin"] * pwin
-            + w["expected_r"] * exp_r_norm
-            + w["regime_fit"] * regime_fit
-            + w["strategy_health"] * health
-            + w["timing_quality"] * timing
-            + w["risk_reward"] * rr_norm
-            + w["conviction_bonus"] * conviction
+            w.get("net_expectancy", 0.30) * net_exp_norm
+            + w.get("calibrated_pwin", 0.15) * pwin
+            + w.get("expected_r", 0.10) * exp_r_norm
+            + w.get("regime_fit", 0.15) * regime_fit
+            + w.get("strategy_health", 0.10) * health
+            + w.get("timing_quality", 0.05) * timing
+            + w.get("risk_reward", 0.10) * rr_norm
+            + w.get("conviction_bonus", 0.05) * conviction
         )
 
         # Penalties
@@ -205,6 +220,8 @@ class OpportunityEnsembler:
         rec.regime_weight = rw
         rec.strategy_health = health
         rec.components = {
+            "net_expectancy": round(net_exp_norm, 3),
+            "net_expectancy_raw": round(net_exp, 3),
             "pwin": round(pwin, 3),
             "exp_r": round(exp_r_norm, 3),
             "regime_fit": round(regime_fit, 3),

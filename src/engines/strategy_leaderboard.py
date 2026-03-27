@@ -30,11 +30,12 @@ class StrategyLeaderboard:
     """
 
     # Blended score component weights
+    # Sprint 34: expectancy is primary, win_rate demoted
     SCORE_WEIGHTS = {
         "oos_sharpe": 0.25,
-        "expectancy": 0.20,
+        "expectancy": 0.25,
         "calmar_ratio": 0.15,
-        "win_rate": 0.10,
+        "win_rate": 0.05,
         "profit_factor": 0.10,
         "max_drawdown_penalty": 0.10,
         "consistency": 0.10,
@@ -283,12 +284,22 @@ class StrategyLeaderboard:
             entry["cooldown_since"] = None
             return StrategyStatus.ACTIVE
 
-    def record_outcome(self, strategy_name: str, is_win: bool, pnl_pct: float):
-        """Record a trade outcome and recompute blended score.
+    def record_outcome(
+        self,
+        strategy_name: str,
+        is_win: bool,
+        pnl_pct: float,
+        regime: str = "",
+        direction: str = "",
+        market: str = "",
+    ):
+        """Record a closed-trade outcome and recompute blended score.
 
-        This updates the same entry shape that update() uses, so
-        get_strategy_scores() and get_sizing_multiplier() see
-        consistent data.
+        Sprint 34: called from _record_learning_outcome() at
+        position-close time, not from EOD entry records.
+        Tracks by regime/direction/market for granular analytics.
+        Applies Bayesian shrinkage so a handful of trades do not
+        overrule a long track record.
         """
         # Ensure outcome tracking fields exist
         entry = self._strategies.get(strategy_name, {})
@@ -296,6 +307,9 @@ class StrategyLeaderboard:
         entry.setdefault("wins", 0)
         entry.setdefault("total_pnl", 0.0)
         entry.setdefault("pnl_history", [])
+        entry.setdefault("regime_breakdown", {})
+        entry.setdefault("direction_breakdown", {})
+        entry.setdefault("market_breakdown", {})
 
         entry["trades"] += 1
         if is_win:
@@ -303,11 +317,34 @@ class StrategyLeaderboard:
         entry["total_pnl"] += pnl_pct
         entry["pnl_history"].append(pnl_pct)
 
+        # Track breakdowns
+        for bk_key, bk_val in [
+            ("regime_breakdown", regime),
+            ("direction_breakdown", direction),
+            ("market_breakdown", market),
+        ]:
+            if bk_val:
+                sub = entry[bk_key].setdefault(bk_val, {
+                    "trades": 0, "wins": 0, "total_pnl": 0.0,
+                })
+                sub["trades"] += 1
+                if is_win:
+                    sub["wins"] += 1
+                sub["total_pnl"] += pnl_pct
+
         # Derive rolling metrics from outcome history
         trades = entry["trades"]
         wins = entry["wins"]
         pnl_hist = entry["pnl_history"]
-        win_rate = wins / trades if trades > 0 else 0.5
+
+        # Bayesian shrinkage: blend observed win rate with prior
+        # prior = 0.50 (uninformative), weight = min(trades, 200)
+        prior_wr = 0.50
+        shrinkage_n = 200  # full weight at 200 trades
+        raw_wr = wins / trades if trades > 0 else 0.5
+        shrink_w = min(trades, shrinkage_n) / shrinkage_n
+        win_rate = shrink_w * raw_wr + (1 - shrink_w) * prior_wr
+
         avg_win = (
             sum(p for p in pnl_hist if p > 0) / max(wins, 1)
         )
