@@ -108,6 +108,64 @@ US_SECTOR_ETFS = [
     "XLRE", "XLU", "XLB", "SPY", "QQQ", "IWM", "DIA",
 ]
 
+# Sprint 32-b: remaining S&P 500 constituents (not in mega/mid/growth)
+US_SP500_REST = [
+    # ── Technology / IT Services ─────────────────────────────
+    "ORCL", "IBM", "FTNT", "ANSS", "CDNS", "SNPS", "KEYS",
+    "TER", "ZBRA", "JNPR", "HPE", "HPQ", "NTAP", "WDC",
+    "STX", "AKAM", "FFIV", "LDOS", "IT", "TRMB", "VRSN",
+    "GEN", "CTSH", "ENPH", "FSLR", "TYL", "BR", "CDW",
+    "FICO", "CPAY", "GDDY", "EPAM", "PTC", "MANH", "NTNX",
+    "JKHY", "MSCI",
+    # ── Financials ───────────────────────────────────────────
+    "BLK", "CB", "PGR", "AFL", "MET", "PRU", "TRV", "AIG",
+    "ALL", "CINF", "AJG", "MMC", "AON", "TROW", "BEN",
+    "IVZ", "NDAQ", "ICE", "CME", "MCO", "SPGI", "ACGL",
+    "RJF", "STT", "NTRS", "CFG", "HBAN", "KEY", "RF",
+    "FITB", "ZION", "CMA", "MTB", "PNC", "USB", "TFC",
+    "DFS", "SYF", "COF", "GL", "L", "ERIE", "RE",
+    # ── Healthcare ───────────────────────────────────────────
+    "CI", "ELV", "HCA", "HUM", "CNC", "MOH", "A", "IQV",
+    "WAT", "BIO", "DGX", "LH", "HOLX", "MTD", "BAX", "BDX",
+    "COO", "RMD", "PODD", "INCY", "ALNY", "GEHC", "VTRS",
+    "PKI", "RVTY", "TFX", "OGN",
+    # ── Consumer Discretionary ───────────────────────────────
+    "F", "GM", "APTV", "BWA", "RL", "PVH", "TPR", "GRMN",
+    "POOL", "TSCO", "BBY", "KMX", "AZO", "ORLY", "EBAY",
+    "ETSY", "LVS", "CZR", "RCL", "CCL", "NCLH", "LEN",
+    "DHI", "PHM", "NVR", "DECK", "BURL", "ULTA", "GPC",
+    "EXPE", "CPRT", "PENN",
+    # ── Consumer Staples ─────────────────────────────────────
+    "MDLZ", "KHC", "SJM", "MKC", "CAG", "CPB", "HRL",
+    "TSN", "SYY", "KR", "ADM", "STZ", "TAP", "MNST",
+    "KDP", "CHD", "EL", "WBA", "CVS", "MO",
+    # ── Industrials ──────────────────────────────────────────
+    "WM", "RSG", "VRSK", "PAYX", "ADP", "CTAS", "FAST",
+    "GWW", "SNA", "SWK", "TT", "CARR", "OTIS", "AME",
+    "HUBB", "ROP", "IEX", "XYL", "DOV", "AOS", "GNRC",
+    "PWR", "PCAR", "WAB", "NSC", "CSX", "CHRW", "JBHT",
+    "UAL", "DAL", "LUV", "FDX", "UPS", "IR", "TDG",
+    "HWM", "AXON", "EXPD", "STE", "ALLE", "HII",
+    # ── Energy ───────────────────────────────────────────────
+    "WMB", "KMI", "OKE", "TRGP", "FANG", "CTRA", "MRO",
+    "APA", "EQT", "BKR", "HES",
+    # ── Materials ────────────────────────────────────────────
+    "LIN", "APD", "SHW", "ECL", "DD", "DOW", "LYB", "EMN",
+    "PPG", "ALB", "FMC", "CF", "MOS", "NUE", "STLD", "FCX",
+    "NEM", "IP", "PKG", "AVY", "BLL", "VMC", "MLM", "CE",
+    "CLF", "WRK", "SEE",
+    # ── Utilities ────────────────────────────────────────────
+    "EXC", "XEL", "ES", "WEC", "ED", "DTE", "CMS", "CNP",
+    "ATO", "NI", "EVRG", "PPL", "FE", "AWK", "PNW", "AES",
+    "LNT",
+    # ── REITs / Real Estate ──────────────────────────────────
+    "DLR", "PSA", "WELL", "AVB", "EQR", "ESS", "MAA", "UDR",
+    "INVH", "KIM", "REG", "VTR", "IRM", "SBA", "ARE",
+    # ── Communication Services ───────────────────────────────
+    "T", "VZ", "TMUS", "CHTR", "EA", "TTWO", "MTCH", "PINS",
+    "SNAP", "LYV", "FOXA", "OMC", "IPG",
+]
+
 HK_MAJOR = [
     "0700.HK",  # Tencent
     "9988.HK",  # Alibaba
@@ -194,7 +252,8 @@ class MultiMarketUniverse:
         assets: List[UniverseAsset] = []
 
         if MarketRegion.US in markets:
-            for t in US_MEGA_CAPS + US_MID_CAPS + US_GROWTH:
+            for t in (US_MEGA_CAPS + US_MID_CAPS + US_SP500_REST
+                      + US_GROWTH):
                 assets.append(UniverseAsset(
                     ticker=t, name=t, market=MarketRegion.US, sector="Equity",
                 ))

@@ -210,8 +210,8 @@ class TestPerMarketCaps(unittest.TestCase):
         self.assertLessEqual(hk_count, 5)
 
     def test_13_multi_market_no_flood(self):
-        """No single market takes > 80% of total."""
-        b = UniverseBuilder(total_cap=170)
+        """No single market takes > 95% of total."""
+        b = UniverseBuilder(total_cap=550)
         spec = b.build(
             markets=["us", "hk", "jp", "crypto"],
         )
@@ -220,7 +220,7 @@ class TestPerMarketCaps(unittest.TestCase):
             us_count = spec.stats.get("us", 0)
             us_pct = us_count / total
             self.assertLess(
-                us_pct, 0.80,
+                us_pct, 0.95,
                 f"US is {us_pct:.0%} of universe",
             )
 
@@ -294,7 +294,7 @@ class TestRegimePrioritisation(unittest.TestCase):
 
     def test_18_risk_on_deprioritises_crypto_off(self):
         """RISK_OFF regime pushes crypto towards end."""
-        b = UniverseBuilder(total_cap=170)
+        b = UniverseBuilder(total_cap=550)
         spec = b.build(
             markets=["us", "crypto"],
             regime_state={"regime": "RISK_OFF"},
@@ -507,9 +507,9 @@ class TestEdgeCases(unittest.TestCase):
         self.assertGreater(spec.stats.get("hk", 0), 0)
 
     def test_40_default_total_cap(self):
-        """Default total_cap is 170 (Sprint 32 expansion)."""
+        """Default total_cap is 550 (S&P 500 expansion)."""
         b = UniverseBuilder()
-        self.assertEqual(b.total_cap, 170)
+        self.assertEqual(b.total_cap, 550)
 
 
 if __name__ == "__main__":

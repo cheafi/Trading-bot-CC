@@ -28,6 +28,7 @@ from src.scanners.multi_market_scanner import (
     UniverseAsset,
     US_MEGA_CAPS,
     US_MID_CAPS,
+    US_SP500_REST,
     US_GROWTH,
     US_SECTOR_ETFS,
     HK_MAJOR,
@@ -43,7 +44,7 @@ _CRYPTO_SUFFIX = "-USD"
 
 # ── Per-market defaults ──────────────────────────────────────────
 _DEFAULT_MARKET_CAP = {
-    "us": 120,
+    "us": 500,
     "hk": 20,
     "jp": 15,
     "crypto": 15,
@@ -66,6 +67,8 @@ REGIME_SECTOR_WEIGHTS: Dict[str, Dict[str, float]] = {
         "Crypto": 1.2,
         "Financials": 1.1,
         "Consumer": 1.1,
+        "Communication": 1.1,
+        "Materials": 1.0,
         "Industrials": 1.0,
         "Energy": 1.0,
         "ETF": 0.8,
@@ -83,7 +86,9 @@ REGIME_SECTOR_WEIGHTS: Dict[str, Dict[str, float]] = {
         "ETF": 1.1,
         "REITs": 1.0,
         "Financials": 0.9,
+        "Materials": 0.9,
         "Consumer": 0.8,
+        "Communication": 0.8,
         "Industrials": 0.8,
         "Energy": 0.7,
         "Technology": 0.7,
@@ -153,6 +158,79 @@ for _sector, _tickers in _MID_SECTOR_MAP.items():
     for _t in _tickers:
         _US_SECTOR_HINTS[_t] = _sector
 
+# Sprint 32-b: sector hints for S&P 500 remainder
+_SP500_SECTOR_MAP = {
+    "Technology": [
+        "ORCL", "IBM", "FTNT", "ANSS", "CDNS", "SNPS", "KEYS",
+        "TER", "ZBRA", "JNPR", "HPE", "HPQ", "NTAP", "WDC",
+        "STX", "AKAM", "FFIV", "LDOS", "IT", "TRMB", "VRSN",
+        "GEN", "CTSH", "ENPH", "FSLR", "TYL", "BR", "CDW",
+        "FICO", "CPAY", "GDDY", "EPAM", "PTC", "MANH", "NTNX",
+        "JKHY", "MSCI",
+    ],
+    "Financials": [
+        "BLK", "CB", "PGR", "AFL", "MET", "PRU", "TRV", "AIG",
+        "ALL", "CINF", "AJG", "MMC", "AON", "TROW", "BEN",
+        "IVZ", "NDAQ", "ICE", "CME", "MCO", "SPGI", "ACGL",
+        "RJF", "STT", "NTRS", "CFG", "HBAN", "KEY", "RF",
+        "FITB", "ZION", "CMA", "MTB", "PNC", "USB", "TFC",
+        "DFS", "SYF", "COF", "GL", "L", "ERIE", "RE",
+    ],
+    "Healthcare": [
+        "CI", "ELV", "HCA", "HUM", "CNC", "MOH", "A", "IQV",
+        "WAT", "BIO", "DGX", "LH", "HOLX", "MTD", "BAX", "BDX",
+        "COO", "RMD", "PODD", "INCY", "ALNY", "GEHC", "VTRS",
+        "PKI", "RVTY", "TFX", "OGN",
+    ],
+    "Consumer": [
+        "F", "GM", "APTV", "BWA", "RL", "PVH", "TPR", "GRMN",
+        "POOL", "TSCO", "BBY", "KMX", "AZO", "ORLY", "EBAY",
+        "ETSY", "LVS", "CZR", "RCL", "CCL", "NCLH", "LEN",
+        "DHI", "PHM", "NVR", "DECK", "BURL", "ULTA", "GPC",
+        "EXPE", "CPRT", "PENN",
+    ],
+    "Staples": [
+        "MDLZ", "KHC", "SJM", "MKC", "CAG", "CPB", "HRL",
+        "TSN", "SYY", "KR", "ADM", "STZ", "TAP", "MNST",
+        "KDP", "CHD", "EL", "WBA", "CVS", "MO",
+    ],
+    "Industrials": [
+        "WM", "RSG", "VRSK", "PAYX", "ADP", "CTAS", "FAST",
+        "GWW", "SNA", "SWK", "TT", "CARR", "OTIS", "AME",
+        "HUBB", "ROP", "IEX", "XYL", "DOV", "AOS", "GNRC",
+        "PWR", "PCAR", "WAB", "NSC", "CSX", "CHRW", "JBHT",
+        "UAL", "DAL", "LUV", "FDX", "UPS", "IR", "TDG",
+        "HWM", "AXON", "EXPD", "STE", "ALLE", "HII",
+    ],
+    "Energy": [
+        "WMB", "KMI", "OKE", "TRGP", "FANG", "CTRA", "MRO",
+        "APA", "EQT", "BKR", "HES",
+    ],
+    "Materials": [
+        "LIN", "APD", "SHW", "ECL", "DD", "DOW", "LYB", "EMN",
+        "PPG", "ALB", "FMC", "CF", "MOS", "NUE", "STLD", "FCX",
+        "NEM", "IP", "PKG", "AVY", "BLL", "VMC", "MLM", "CE",
+        "CLF", "WRK", "SEE",
+    ],
+    "Utilities": [
+        "EXC", "XEL", "ES", "WEC", "ED", "DTE", "CMS", "CNP",
+        "ATO", "NI", "EVRG", "PPL", "FE", "AWK", "PNW", "AES",
+        "LNT",
+    ],
+    "REITs": [
+        "DLR", "PSA", "WELL", "AVB", "EQR", "ESS", "MAA",
+        "UDR", "INVH", "KIM", "REG", "VTR", "IRM", "SBA",
+        "ARE",
+    ],
+    "Communication": [
+        "T", "VZ", "TMUS", "CHTR", "EA", "TTWO", "MTCH",
+        "PINS", "SNAP", "LYV", "FOXA", "OMC", "IPG",
+    ],
+}
+for _sector, _tickers in _SP500_SECTOR_MAP.items():
+    for _t in _tickers:
+        _US_SECTOR_HINTS[_t] = _sector
+
 
 @dataclass
 class UniverseSpec:
@@ -184,7 +262,7 @@ class UniverseBuilder:
     def __init__(
         self,
         market_caps: Optional[Dict[str, int]] = None,
-        total_cap: int = 170,
+        total_cap: int = 550,
     ):
         self.market_caps = market_caps or dict(_DEFAULT_MARKET_CAP)
         self.total_cap = total_cap
@@ -263,7 +341,8 @@ class UniverseBuilder:
         if "us" in markets:
             for t in (
                 US_MEGA_CAPS + US_MID_CAPS
-                + US_SECTOR_ETFS + US_GROWTH
+                + US_SP500_REST + US_SECTOR_ETFS
+                + US_GROWTH
             ):
                 sector = _US_SECTOR_HINTS.get(t, "Equity")
                 assets.append(UniverseAsset(
