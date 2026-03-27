@@ -50,9 +50,26 @@ class RegimeRouter:
         try:
             from src.core.config import get_trading_config
             tc = get_trading_config()
-            self.no_trade_entropy = no_trade_entropy or tc.regime_no_trade_entropy
-            self.min_confidence = min_confidence or tc.regime_min_confidence
-            self.VIX_CRISIS = tc.regime_vix_crisis
+            _nte = tc.regime_no_trade_entropy
+            _mc = tc.regime_min_confidence
+            _vc = tc.regime_vix_crisis
+            self.no_trade_entropy = (
+                no_trade_entropy
+                or (float(_nte) if isinstance(
+                    _nte, (int, float)
+                ) else 1.35)
+            )
+            self.min_confidence = (
+                min_confidence
+                or (float(_mc) if isinstance(
+                    _mc, (int, float)
+                ) else 0.40)
+            )
+            self.VIX_CRISIS = (
+                float(_vc) if isinstance(
+                    _vc, (int, float)
+                ) else 35.0
+            )
         except Exception:
             self.no_trade_entropy = no_trade_entropy or 1.35
             self.min_confidence = min_confidence or 0.40
@@ -124,13 +141,80 @@ class RegimeRouter:
         elif max_prob < self.min_confidence:
             should_trade = False  # No clear regime
 
+        # ── Derived labels ─────────────────────────────────────
+        # Downstream contract: regime, risk_regime, trend_regime,
+        # volatility_regime, no_trade_reason.
+        _probs = {
+            "RISK_ON": risk_on_prob,
+            "NEUTRAL": neutral_prob,
+            "RISK_OFF": risk_off_prob,
+        }
+        regime = max(_probs, key=_probs.get)
+
+        # risk_regime: simplified risk-appetite label
+        if risk_on_prob >= 0.50:
+            risk_regime = "risk_on"
+        elif risk_off_prob >= 0.50:
+            risk_regime = "risk_off"
+        else:
+            risk_regime = "neutral"
+
+        # trend_regime: SPY return + breadth
+        if spy_ret > 0.02 and breadth > self.BREADTH_BULL:
+            trend_regime = "uptrend"
+        elif spy_ret < -0.02 and breadth < self.BREADTH_BEAR:
+            trend_regime = "downtrend"
+        else:
+            trend_regime = "sideways"
+
+        # volatility_regime: VIX-driven
+        if vix < self.VIX_LOW:
+            volatility_regime = "low_vol"
+        elif vix < self.VIX_MID:
+            volatility_regime = "normal_vol"
+        elif vix < self.VIX_HIGH:
+            volatility_regime = "elevated_vol"
+        elif vix < self.VIX_CRISIS:
+            volatility_regime = "high_vol"
+        else:
+            volatility_regime = "crisis_vol"
+
+        # no_trade_reason: human-readable explanation
+        no_trade_reason = ""
+        if not should_trade:
+            if vix >= self.VIX_CRISIS:
+                no_trade_reason = (
+                    f"VIX at {vix:.1f} exceeds crisis "
+                    f"threshold ({self.VIX_CRISIS})"
+                )
+            elif entropy > self.no_trade_entropy:
+                no_trade_reason = (
+                    f"Regime uncertainty too high "
+                    f"(entropy {entropy:.2f} > "
+                    f"{self.no_trade_entropy})"
+                )
+            elif max_prob < self.min_confidence:
+                no_trade_reason = (
+                    f"No regime has sufficient confidence "
+                    f"(best {max_prob:.1%} < "
+                    f"{self.min_confidence:.0%})"
+                )
+
         return {
+            # Derived labels (downstream contract)
+            "regime": regime,
+            "risk_regime": risk_regime,
+            "trend_regime": trend_regime,
+            "volatility_regime": volatility_regime,
+            "no_trade_reason": no_trade_reason,
+            # Probabilities
             "risk_on_uptrend": round(risk_on_prob, 3),
             "neutral_range": round(neutral_prob, 3),
             "risk_off_downtrend": round(risk_off_prob, 3),
             "entropy": round(entropy, 3),
             "should_trade": should_trade,
             "confidence": round(max_prob, 3),
+            # Raw inputs (for transparency)
             "vix": vix,
             "vix_term_slope": vix_term_slope,
             "breadth_pct": breadth,

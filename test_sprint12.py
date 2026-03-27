@@ -164,7 +164,7 @@ class TestDiscordRecsWiring(unittest.TestCase):
         # Find recommendations_cmd and look for get_cached_state
         recs_idx = discord_src.find("recommendations_cmd")
         self.assertGreater(recs_idx, 0)
-        recs_block = discord_src[recs_idx:recs_idx + 2000]
+        recs_block = discord_src[recs_idx:recs_idx + 5000]
         self.assertIn(
             "get_cached_state", recs_block,
             "/recommendations not wired to engine cache",

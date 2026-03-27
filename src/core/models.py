@@ -934,6 +934,19 @@ class TradeRecommendation(BaseModel):
     key_risks: List[str] = Field(default_factory=list)
     execution_notes: List[str] = Field(default_factory=list)
 
+    # ── Rich explanation fields (Sprint 33 — end-to-end) ──────
+    why_now: str = ""
+    approval_status: str = ""
+    approval_flags: Dict[str, bool] = Field(
+        default_factory=dict,
+    )
+    scenario_plan: Optional[Dict[str, Any]] = None
+    evidence: List[str] = Field(default_factory=list)
+    event_risk: str = ""
+    portfolio_fit: str = ""
+    why_not_trade: str = ""
+    better_alternative: str = ""
+
     # ── Metadata (catch-all for extensions) ───────────────────
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
@@ -968,8 +981,15 @@ class TradeRecommendation(BaseModel):
 
     def to_api_dict(self) -> Dict[str, Any]:
         """JSON-safe dict for API / Discord serialisation."""
-        d = self.model_dump(exclude={"expression"})
+        d = self.model_dump()
         d["instrument_type"] = self.instrument_type
+        # Flatten expression for easier consumption
+        if self.expression:
+            expr = self.expression.model_dump()
+            d["expression"] = expr
+            d["why_this_expression"] = (
+                self.expression.why_this_expression
+            )
         for ts_key in ("timestamp", "execution_time"):
             if d.get(ts_key) and hasattr(d[ts_key], "isoformat"):
                 d[ts_key] = d[ts_key].isoformat()
@@ -993,6 +1013,28 @@ class TradeRecommendation(BaseModel):
             "ml_grade": self.ml_grade,
             "regime_label": self.regime_label,
         }
+
+    # ── Factory helpers (guard against MagicMock in tests) ────
+
+    @staticmethod
+    def _safe_str(obj, attr: str) -> str:
+        v = getattr(obj, attr, "")
+        return v if isinstance(v, str) else ""
+
+    @staticmethod
+    def _safe_dict(obj, attr: str) -> dict:
+        v = getattr(obj, attr, {})
+        return dict(v) if isinstance(v, dict) else {}
+
+    @staticmethod
+    def _safe_optdict(obj, attr: str):
+        v = getattr(obj, attr, None)
+        return dict(v) if isinstance(v, dict) else None
+
+    @staticmethod
+    def _safe_list(obj, attr: str) -> list:
+        v = getattr(obj, attr, [])
+        return list(v) if isinstance(v, (list, tuple)) else []
 
     # ── Factory methods ───────────────────────────────────────
 
@@ -1049,6 +1091,15 @@ class TradeRecommendation(BaseModel):
             distance_from_sma50=getattr(signal, "distance_from_sma50", 0),
             vix_at_entry=regime_state.get("vix", 20),
             regime_label=regime_state.get("regime", ""),
+            # Rich explanation fields (Sprint 33)
+            # Use _safe_* helpers to guard against MagicMock values
+            why_now=cls._safe_str(signal, "why_now"),
+            approval_status=cls._safe_str(signal, "approval_status"),
+            approval_flags=cls._safe_dict(signal, "approval_flags"),
+            scenario_plan=cls._safe_optdict(signal, "scenario_plan"),
+            evidence=cls._safe_list(signal, "evidence"),
+            event_risk=cls._safe_str(signal, "event_risk"),
+            portfolio_fit=cls._safe_str(signal, "portfolio_fit"),
         )
 
         # Edge calculator data

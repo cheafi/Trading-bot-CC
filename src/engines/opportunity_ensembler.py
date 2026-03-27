@@ -303,21 +303,85 @@ class OpportunityEnsembler:
         ranked: List[Dict[str, Any]],
         regime: Dict[str, Any],
     ) -> List[Dict[str, Any]]:
-        """
-        Post-ranking suppression rules:
-        - If regime says no trade, suppress all
-        - If top signal is weak, suppress all
-        - If strategies strongly disagree, suppress
+        """Post-ranking suppression with detailed user reasons.
+
+        Sets ``trade_decision = False``, ``suppression_reason``
+        (machine key), and ``why_not_trade`` (user-facing text).
         """
         if not regime.get("should_trade", True):
+            no_trade = regime.get(
+                "no_trade_reason", "regime_no_trade",
+            )
             for r in ranked:
                 r["trade_decision"] = False
                 r["suppression_reason"] = "regime_no_trade"
+                r["why_not_trade"] = (
+                    no_trade
+                    or "Market regime indicates no new "
+                    "entries right now"
+                )
             return ranked
 
-        if ranked and ranked[0]["composite_score"] < self.min_score:
-            for r in ranked:
-                r["trade_decision"] = False
+        for r in ranked:
+            reasons: List[str] = []
+            cs = r.get("composite_score", 0)
+
+            if cs < self.min_score:
+                reasons.append(
+                    f"Composite score {cs:.3f} below "
+                    f"minimum {self.min_score}",
+                )
                 r["suppression_reason"] = "weak_top_signal"
+
+            # Low confidence
+            pwin = r.get("components", {}).get("pwin", 0)
+            if pwin < 0.35:
+                reasons.append(
+                    f"Win probability too low ({pwin:.0%})",
+                )
+
+            # Poor risk/reward
+            rr = r.get("components", {}).get(
+                "risk_reward", 0,
+            )
+            if rr < 0.15:
+                reasons.append("Risk/reward ratio insufficient")
+
+            # Event risk
+            dte = 999
+            if hasattr(r, "days_to_earnings"):
+                dte = r.get("days_to_earnings", 999)
+            elif isinstance(r, dict):
+                dte = r.get("days_to_earnings", 999)
+            if dte <= 2:
+                reasons.append(
+                    f"Earnings in {dte}d \u2014 event risk "
+                    f"too close",
+                )
+
+            # Regime uncertainty
+            ent = regime.get("entropy", 0)
+            if ent > 0.9:
+                reasons.append(
+                    f"Regime uncertainty elevated "
+                    f"(entropy {ent:.2f})",
+                )
+
+            # Correlation penalty
+            corr_pen = r.get("penalties", {}).get(
+                "correlation", 0,
+            )
+            if corr_pen > 0.10:
+                reasons.append(
+                    "Too correlated with current portfolio",
+                )
+
+            if reasons:
+                r["trade_decision"] = False
+                if not r.get("suppression_reason"):
+                    r["suppression_reason"] = (
+                        "multi_factor_reject"
+                    )
+                r["why_not_trade"] = "; ".join(reasons)
 
         return ranked

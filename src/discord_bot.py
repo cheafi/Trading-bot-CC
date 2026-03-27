@@ -5729,14 +5729,32 @@ class DiscordInteractiveBot:
                     title="📋 Trade Recommendations",
                     color=COLOR_INFO,
                 )
+                # Regime header with rich labels
                 regime_name = regime.get("regime", "unknown")
+                risk_r = regime.get("risk_regime", "unknown")
+                trend_r = regime.get("trend_regime", "unknown")
+                vol_r = regime.get("volatility_regime", "unknown")
                 should_trade = regime.get("should_trade", True)
+                conf = regime.get("confidence", 0)
                 e.add_field(
-                    name="Current Regime",
-                    value=f"**{regime_name}** {'🟢' if should_trade else '🔴'}",
+                    name="Market Regime",
+                    value=(
+                        f"**{regime_name}** {'🟢' if should_trade else '🔴'}\n"
+                        f"Risk: `{risk_r}` • Trend: `{trend_r}` • "
+                        f"Vol: `{vol_r}` • Conf: `{conf:.0%}`"
+                    ),
                     inline=False,
                 )
-                # Try to fetch cached recommendations from running engine
+                if not should_trade:
+                    reason = regime.get("no_trade_reason", "")
+                    if reason:
+                        e.add_field(
+                            name="⚠️ No-Trade Reason",
+                            value=reason,
+                            inline=False,
+                        )
+
+                # Fetch cached recommendations from the running engine
                 try:
                     from src.engines.auto_trading_engine import AutoTradingEngine
                     engine = AutoTradingEngine(dry_run=True)
@@ -5744,25 +5762,43 @@ class DiscordInteractiveBot:
                     recs = cached.get("recommendations", [])
                     if recs:
                         for i, rec in enumerate(recs[:5], 1):
-                            ticker = rec.get("original_signal", {}).get("ticker", "?")
+                            ticker = rec.get("ticker", "?")
+                            direction = rec.get("direction", "?")
+                            grade = rec.get("setup_grade", "?")
                             score = rec.get("composite_score", 0)
-                            decision = "✅ BUY" if rec.get("trade_decision") else "⏸️ HOLD"
+                            decision = rec.get("trade_decision", False)
+                            icon = "✅" if decision else "⏸️"
+                            conf_pct = rec.get("signal_confidence", 0)
+                            inst = rec.get("instrument_type", "stock")
+                            why = rec.get("why_now", "")
+                            supp = rec.get("why_not_trade", "")
+                            # Build card
+                            lines = [
+                                f"{icon} **{direction}** {inst} • Grade **{grade}**",
+                                f"Score: **{score:.3f}** • Conf: **{conf_pct}%**",
+                            ]
+                            if why:
+                                lines.append(f"📌 {why[:80]}")
+                            if supp and not decision:
+                                lines.append(f"🚫 {supp[:80]}")
                             e.add_field(
                                 name=f"{i}. {ticker}",
-                                value=f"Score: **{score:.3f}** | {decision}",
-                                inline=True,
+                                value="\n".join(lines),
+                                inline=False,
                             )
                     else:
                         e.description = (
                             "No recommendations cached yet. "
-                            "Recommendations populate after the engine runs a cycle."
+                            "Recommendations populate after "
+                            "the engine runs a cycle."
                         )
                 except Exception:
                     e.description = (
-                        "Live recommendations populate when AutoTradingEngine "
-                        "is running. Use `/regime` for current market state."
+                        "Live recommendations populate when "
+                        "AutoTradingEngine is running. "
+                        "Use `/regime` for current market state."
                     )
-                e.set_footer(text="Sprint 9 Decision Layer • /regime /leaderboard")
+                e.set_footer(text="Sprint 33 • /regime /leaderboard /calibration")
                 await interaction.followup.send(embed=e)
             except Exception as ex:
                 await interaction.followup.send(f"❌ Recommendations error: {ex}")
