@@ -1058,7 +1058,16 @@ class TradeRecommendation(BaseModel):
             fields["edge_ev"] = getattr(edge, "expected_return_pct", 0)
 
         fields.update(overrides)
-        return cls(**fields)
+        rec = cls(**fields)
+
+        # Sprint 30: carry signal's feature_snapshot enrichment
+        # (edge checklist, trade brief, unified scores, etc.)
+        # into TradeRecommendation metadata so nothing is lost.
+        fs = getattr(signal, "feature_snapshot", None)
+        if fs and isinstance(fs, dict):
+            rec.metadata["feature_snapshot"] = fs
+
+        return rec
 
     @classmethod
     def from_dict(

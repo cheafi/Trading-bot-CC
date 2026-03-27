@@ -244,6 +244,9 @@ class AutoTradingEngine:
         self._equity_fetched_at: Optional[datetime] = None
         self._equity_stale_minutes: int = 15
 
+        # Sprint 30: no-trade readiness snapshot
+        self._no_trade_readiness: Dict[str, Any] = {}
+
 
     async def _boot(self) -> bool:
         """
@@ -442,12 +445,7 @@ class AutoTradingEngine:
             logger.debug("Regime DB persist skipped: %s", e)
 
         if not self._regime_state.get("should_trade", True):
-            if self._cycle_count % 30 == 0:
-                logger.info(
-                    "Regime gate: no-trade "
-                    f"(entropy={self._regime_state.get('entropy', 0):.2f})"
-                )
-            await self._monitor_positions()
+            await self._no_trade_cycle()
             return
 
         # Generate signals for active markets
@@ -459,27 +457,10 @@ class AutoTradingEngine:
             validated = await self._validate_signals(signals)
 
         # Rank through ensemble scorer (with calibrated edge if available)
-        recommendations = []
-        for sig in validated:
-            # Build typed edge object if available
-            _edge = None
-            if self.edge_calculator is not None:
-                try:
-                    _edge = self.edge_calculator.compute(
-                        signal=sig,
-                        regime=self._regime_state,
-                        features={
-                            "relative_volume": getattr(sig, "relative_volume", 1.0),
-                            "rsi_14": getattr(sig, "rsi", 50),
-                        },
-                    )
-                except (ValueError, KeyError, TypeError) as e:
-                    logger.debug("Edge calc fallback for signal: %s", e)
-
-            rec = TradeRecommendation.from_signal(
-                sig, edge=_edge, regime_state=self._regime_state,
-            )
-            recommendations.append(rec)
+        # Sprint 30: use generate_recommendations() bridge
+        recommendations = self._signals_to_recommendations(
+            validated,
+        )
 
         ranked = self.ensembler.rank_opportunities(
             recommendations,
@@ -612,6 +593,122 @@ class AutoTradingEngine:
                 active.update(session["markets"])
 
         return list(active)
+
+    # ------------------------------------------------------------------
+    # Sprint 30: No-trade cycle — do useful work even when regime
+    # says don't trade (universe refresh, position monitoring,
+    # readiness snapshot, regime telemetry)
+    # ------------------------------------------------------------------
+
+    async def _no_trade_cycle(self):
+        """Run productive tasks when the regime gate blocks trading.
+
+        Instead of wasting the cycle, we:
+        1. Monitor existing positions (trailing stops still run)
+        2. Refresh universe to keep caches warm
+        3. Compute readiness snapshot (what we would trade)
+        4. Log regime telemetry for analytics
+        """
+        if self._cycle_count % 30 == 0:
+            logger.info(
+                "Regime gate: no-trade "
+                "(entropy=%.2f, regime=%s)",
+                self._regime_state.get("entropy", 0),
+                self._regime_state.get("regime", "unknown"),
+            )
+
+        # 1. Always monitor positions (stops/exits still active)
+        await self._monitor_positions()
+
+        # 2. Refresh universe (keep ticker list warm)
+        try:
+            active_markets = self._get_active_markets(
+                datetime.now(timezone.utc),
+            )
+            if active_markets:
+                spec = self.universe_builder.build(
+                    markets=active_markets,
+                    regime_state=self._regime_state,
+                )
+                self._no_trade_readiness = {
+                    "timestamp": datetime.now(
+                        timezone.utc,
+                    ).isoformat(),
+                    "regime": self._regime_state.get(
+                        "regime", "",
+                    ),
+                    "entropy": self._regime_state.get(
+                        "entropy", 0,
+                    ),
+                    "should_trade": False,
+                    "universe_size": len(spec.tickers),
+                    "markets": active_markets,
+                    "reason": self._regime_state.get(
+                        "no_trade_reason",
+                        "high_entropy",
+                    ),
+                    "risk_regime": self._regime_state.get(
+                        "risk_regime", "",
+                    ),
+                    "probabilities": {
+                        k: round(v, 3)
+                        for k, v in self._regime_state.items()
+                        if k.startswith("prob_")
+                        or k in (
+                            "risk_on_uptrend",
+                            "neutral_range",
+                            "risk_off_downtrend",
+                        )
+                    },
+                }
+        except Exception as e:
+            logger.debug("No-trade universe refresh: %s", e)
+            self._no_trade_readiness = {
+                "timestamp": datetime.now(
+                    timezone.utc,
+                ).isoformat(),
+                "should_trade": False,
+                "reason": str(e),
+            }
+
+    # ------------------------------------------------------------------
+    # Sprint 30: Signal → TradeRecommendation bridge
+    # ------------------------------------------------------------------
+
+    def _signals_to_recommendations(
+        self, signals: List[Signal],
+    ) -> List[TradeRecommendation]:
+        """Convert validated signals to TradeRecommendations.
+
+        Carries edge calculator data + feature_snapshot enrichment
+        through so nothing from the SignalEngine v6 pipeline is
+        lost in translation.
+        """
+        recommendations = []
+        for sig in signals:
+            _edge = None
+            if self.edge_calculator is not None:
+                try:
+                    _edge = self.edge_calculator.compute(
+                        signal=sig,
+                        regime=self._regime_state,
+                        features={
+                            "relative_volume": getattr(
+                                sig, "relative_volume", 1.0,
+                            ),
+                            "rsi_14": getattr(sig, "rsi", 50),
+                        },
+                    )
+                except (ValueError, KeyError, TypeError) as e:
+                    logger.debug("Edge calc fallback: %s", e)
+
+            rec = TradeRecommendation.from_signal(
+                sig,
+                edge=_edge,
+                regime_state=self._regime_state,
+            )
+            recommendations.append(rec)
+        return recommendations
 
     async def _generate_signals(self, markets: List[str]) -> List[Signal]:
         """Generate signals using the signal engine for active markets.
@@ -1370,6 +1467,8 @@ class AutoTradingEngine:
                 ),
             },
             "dry_run": self.dry_run,
+            # Sprint 30: no-trade readiness snapshot
+            "no_trade_readiness": self._no_trade_readiness,
         }
 
 
