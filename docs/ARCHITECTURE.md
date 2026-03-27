@@ -292,6 +292,8 @@ TradingAI_Bot-main/
 | 19 | Pydantic V2 | 6× class Config→model_config=ConfigDict, eliminates PydanticDeprecatedSince20 |
 | 20 | Deep Integration | P0: submit_order→place_order, Position direction+aliases, portfolio schema (positions_by_ticker), strategy_weights preserved, leaderboard record_outcome→update(), circuit breaker trade_pnl, learning loop real features, ML scaler leakage fix |
 | 21 | Ensemble Sizing | Regime-weighted strategy_health in ensembler, EdgeCalculator p_t1/EV used for pwin+exp_r, half-Kelly position sizing in engine+RiskModel, leaderboard sizing_multiplier, regime_router wired to ensembler |
+| 22 | TradeRecommendation | Canonical TradeRecommendation dataclass replaces ad-hoc dicts across signal→ensemble→execution pipeline, dict-like protocol for backward compat, from_signal/from_dict/to_api_dict factories |
+| 23 | Staged Universe | UniverseBuilder 3-stage pipeline (source→filter→prioritise), crypto suffix fix (BTC→BTC-USD), per-market caps (us50/hk12/jp8/crypto10), regime-aware sector weighting, watchlist injection |
 
 ### AutoTradingEngine Pipeline (current)
 
@@ -306,6 +308,7 @@ _boot()                          ← pre-flight validation
             ├── regime_router.classify()   ← regime gate
             ├── trade_repo.save_regime()   ← DB persist
             ├── _timed_phase("signals")    ← signal generation
+            │   └── universe_builder.build()  ← staged universe (Sprint 23)
             ├── _timed_phase("validation") ← GPT validation
             ├── ensembler.rank()           ← ensemble scoring
             │   └── edge_calculator.compute()  ← calibrated EV

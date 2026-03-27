@@ -20,6 +20,7 @@ from src.core.config import get_settings, get_trading_config
 from src.core.models import Direction, Signal, SignalStatus, TradeRecommendation
 from src.engines.regime_router import RegimeRouter
 from src.engines.opportunity_ensembler import OpportunityEnsembler
+from src.scanners.universe_builder import UniverseBuilder
 from src.engines.context_assembler import ContextAssembler
 from src.engines.strategy_leaderboard import StrategyLeaderboard
 from src.algo.position_manager import PositionManager, RiskParameters
@@ -253,6 +254,7 @@ class AutoTradingEngine:
             news_service=getattr(self, 'news_service', None),
         )
         self.leaderboard = StrategyLeaderboard()
+        self.universe_builder = UniverseBuilder()
         self._regime_state: Dict[str, Any] = {}
         self._context: Dict[str, Any] = {}
 
@@ -605,29 +607,26 @@ class AutoTradingEngine:
         return list(active)
 
     async def _generate_signals(self, markets: List[str]) -> List[Signal]:
-        """Generate signals using the signal engine for active markets."""
+        """Generate signals using the signal engine for active markets.
+
+        Pipeline (Sprint 23 — staged universe):
+        1. UniverseBuilder.build() → regime-aware, per-market capped,
+           crypto-suffix-fixed ticker list
+        2. yfinance batch download
+        3. FeatureEngine per ticker
+        4. SignalEngine.generate_signals()
+        """
         try:
             import pandas as pd
             from src.engines.signal_engine import SignalEngine
             from src.engines.feature_engine import FeatureEngine
-            from src.scanners.multi_market_scanner import (
-                MarketRegion,
-                MultiMarketUniverse,
-            )
 
-            # 1. Build universe for active markets
-            region_map = {
-                "us": MarketRegion.US,
-                "hk": MarketRegion.HK,
-                "jp": MarketRegion.JP,
-                "crypto": MarketRegion.CRYPTO,
-            }
-            active_regions = [
-                region_map[m] for m in markets if m in region_map
-            ]
-            universe_builder = MultiMarketUniverse()
-            assets = universe_builder.build_universe(markets=active_regions)
-            tickers = [a.ticker for a in assets]
+            # 1. Build universe via staged pipeline
+            spec = self.universe_builder.build(
+                markets=markets,
+                regime_state=self._regime_state,
+            )
+            tickers = spec.tickers
 
             if not tickers:
                 logger.warning("No tickers for active markets")
@@ -637,9 +636,8 @@ class AutoTradingEngine:
             try:
                 import yfinance as yf
 
-                # Batch download last 200 days of data
                 data = yf.download(
-                    tickers[:50],  # limit to avoid rate limits
+                    tickers,
                     period="200d",
                     progress=False,
                     group_by="ticker",
@@ -649,10 +647,14 @@ class AutoTradingEngine:
                     logger.warning("No market data returned")
                     return []
             except DataError as e:
-                logger.error("Market data fetch DataError: %s", e)
+                logger.error(
+                    "Market data fetch DataError: %s", e,
+                )
                 return []
             except Exception as e:
-                logger.error("Market data fetch error: %s", e)
+                logger.error(
+                    "Market data fetch error: %s", e,
+                )
                 return []
 
             # 3. Compute features
@@ -660,29 +662,42 @@ class AutoTradingEngine:
             all_features = []
             valid_tickers = []
 
-            for ticker in tickers[:50]:
+            for ticker in tickers:
                 try:
-                    if len(tickers[:50]) > 1:
+                    if len(tickers) > 1:
                         df = data[ticker].dropna()
                     else:
                         df = data.dropna()
                     if df.empty or len(df) < 50:
                         continue
-                    df.columns = [c.lower() for c in df.columns]
-                    feats = feature_engine.calculate_features(df)
+                    df.columns = [
+                        c.lower() for c in df.columns
+                    ]
+                    feats = feature_engine.calculate_features(
+                        df,
+                    )
                     if not feats.empty:
                         feats["ticker"] = ticker
-                        all_features.append(feats.iloc[[-1]])
+                        all_features.append(
+                            feats.iloc[[-1]],
+                        )
                         valid_tickers.append(ticker)
-                except (ValueError, KeyError, TypeError) as e:
-                    logger.debug("Feature calc skipped for %s: %s", ticker, e)
+                except (
+                    ValueError, KeyError, TypeError,
+                ) as e:
+                    logger.debug(
+                        "Feature calc skipped for %s: %s",
+                        ticker, e,
+                    )
                     continue
 
             if not all_features:
                 logger.warning("No features computed")
                 return []
 
-            features_df = pd.concat(all_features, ignore_index=True)
+            features_df = pd.concat(
+                all_features, ignore_index=True,
+            )
 
             # 4. Generate signals
             # Gather real market state so RegimeDetector has VIX/breadth
