@@ -976,7 +976,12 @@ class TradeRecommendation(BaseModel):
         return d
 
     def to_entry_snapshot(self) -> Dict[str, Any]:
-        """Extract ML entry snapshot for learning loop / DB."""
+        """Extract ML entry snapshot for learning loop / DB.
+
+        Sprint 29: now includes composite_score, ml_grade,
+        regime_label so the learning loop has full decision
+        context for each trade.
+        """
         return {
             "confidence": self.signal_confidence,
             "vix_at_entry": self.vix_at_entry,
@@ -984,6 +989,9 @@ class TradeRecommendation(BaseModel):
             "adx_at_entry": self.adx_at_entry,
             "relative_volume": self.relative_volume,
             "distance_from_sma50": self.distance_from_sma50,
+            "composite_score": self.composite_score,
+            "ml_grade": self.ml_grade,
+            "regime_label": self.regime_label,
         }
 
     # ── Factory methods ───────────────────────────────────────

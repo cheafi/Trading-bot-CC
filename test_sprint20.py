@@ -454,9 +454,9 @@ class TestLearningOutcome(unittest.TestCase):
         """confidence must come from snapshot, not hardcoded 50."""
         src = _read("src/engines/auto_trading_engine.py")
         idx = src.index("def _record_learning_outcome")
-        method_src = src[idx:idx + 2000]
+        method_src = src[idx:idx + 3000]
         rec_idx = method_src.index("TradeOutcomeRecord(")
-        rec_block = method_src[rec_idx:rec_idx + 1000]
+        rec_block = method_src[rec_idx:rec_idx + 1500]
         self.assertIn(
             "confidence=_conf",
             rec_block,

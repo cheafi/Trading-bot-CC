@@ -308,8 +308,10 @@ class TestLearningDataFidelity(unittest.TestCase):
         self.assertIn(
             '_snapshot.get("relative_volume")', block,
         )
+        # Sprint 29: composite_score now uses enriched
+        # _composite variable instead of _snapshot.get
         self.assertIn(
-            '_snapshot.get("composite_score")', block,
+            '"composite_score": _composite', block,
         )
 
     def test_18_db_persist_uses_hold_hours(self):

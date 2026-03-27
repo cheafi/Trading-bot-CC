@@ -987,18 +987,37 @@ class AutoTradingEngine:
                 )
 
             # Look up entry snapshot from _trades_today
+            # Sprint 29: also extract ml_grade, composite_score,
+            # regime_at_entry stored by Sprint 28 enrichment
             _snapshot = {}
             _conf = 50
+            _ml_grade = ""
+            _composite = 0.0
+            _regime_at_entry = ""
             for t in self._trades_today:
                 if t.get("ticker") == closed_pos.ticker:
                     _snapshot = t.get("entry_snapshot", {})
                     _conf = t.get("confidence", 50)
+                    _ml_grade = t.get("ml_grade", "")
+                    _composite = t.get("composite_score", 0.0)
+                    _regime_at_entry = t.get(
+                        "regime_at_entry", "",
+                    )
                     break
 
             _hold = 0.0
             if closed_pos.entry_date and closed_pos.exit_date:
                 _dt = closed_pos.exit_date - closed_pos.entry_date
                 _hold = _dt.total_seconds() / 3600
+
+            # Sprint 29: merge enriched fields into snapshot
+            # so TradeOutcomeRecord has full decision context
+            _snapshot["composite_score"] = (
+                _composite or _snapshot.get("composite_score", 0)
+            )
+            _snapshot["ml_grade"] = (
+                _ml_grade or _snapshot.get("ml_grade", "")
+            )
 
             record = TradeOutcomeRecord(
                 trade_id=closed_pos.position_id,
@@ -1018,6 +1037,7 @@ class AutoTradingEngine:
                 pnl_pct=closed_pos.realized_pnl_pct,
                 confidence=_conf,
                 horizon="swing",
+                market_regime=_regime_at_entry,
                 exit_reason=reason,
                 hold_hours=_hold,
                 **_snapshot,
@@ -1053,13 +1073,22 @@ class AutoTradingEngine:
                         "confidence": _conf,
                         "horizon": "swing",
                         "exit_reason": reason,
-                        "regime_at_entry": self._cached_regime.get("regime"),
-                        "vix_at_entry": self._cached_regime.get("vix"),
+                        "regime_at_entry": (
+                            _regime_at_entry
+                            or self._cached_regime.get("regime")
+                        ),
+                        "vix_at_entry": (
+                            _snapshot.get("vix_at_entry")
+                            or self._cached_regime.get("vix")
+                        ),
                         "rsi_at_entry": _snapshot.get("rsi_at_entry"),
                         "adx_at_entry": _snapshot.get("adx_at_entry"),
                         "relative_volume": _snapshot.get("relative_volume"),
-                        "setup_grade": _snapshot.get("setup_grade"),
-                        "composite_score": _snapshot.get("composite_score"),
+                        "setup_grade": (
+                            _snapshot.get("setup_grade")
+                            or _ml_grade
+                        ),
+                        "composite_score": _composite,
                         "hold_hours": _hold,
                         "feature_snapshot": _snapshot or None,
                     })

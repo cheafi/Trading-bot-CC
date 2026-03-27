@@ -453,6 +453,68 @@ class TradeLearningLoop:
             self._last_analysis = analysis
         return analysis
 
+    # ── Sprint 29: calibration tracking ───────────────────
+
+    def get_calibration_stats(
+        self, n_bins: int = 5,
+    ) -> Dict[str, Any]:
+        """Compare predicted win probabilities to actual outcomes.
+
+        Bins all predictions into ``n_bins`` buckets and computes
+        the mean predicted probability vs actual win rate for each
+        bucket.  Returns empty dict if no predictions yet.
+        """
+        if not self._outcomes or self.predictor.model is None:
+            return {"calibrated": False, "reason": "no_model"}
+
+        preds: List[Tuple[float, bool]] = []
+        for o in self._outcomes:
+            d = o.to_dict()
+            features = {
+                c: d.get(c, 0)
+                for c in self.predictor.FEATURE_COLS
+            }
+            prob = self.predictor.predict_win_probability(features)
+            if prob is not None:
+                preds.append((prob, d["is_winner"]))
+
+        if len(preds) < 10:
+            return {
+                "calibrated": False,
+                "reason": "insufficient_predictions",
+                "count": len(preds),
+            }
+
+        # Sort by predicted prob and bin
+        preds.sort(key=lambda x: x[0])
+        bin_size = max(1, len(preds) // n_bins)
+        bins: List[Dict[str, Any]] = []
+        for i in range(0, len(preds), bin_size):
+            chunk = preds[i:i + bin_size]
+            if not chunk:
+                continue
+            mean_pred = sum(p for p, _ in chunk) / len(chunk)
+            actual_wr = sum(
+                1 for _, w in chunk if w
+            ) / len(chunk)
+            bins.append({
+                "predicted": round(mean_pred, 3),
+                "actual": round(actual_wr, 3),
+                "count": len(chunk),
+            })
+
+        # Brier-style calibration error
+        cal_error = sum(
+            abs(b["predicted"] - b["actual"]) * b["count"]
+            for b in bins
+        ) / len(preds)
+
+        return {
+            "calibrated": True,
+            "bins": bins,
+            "calibration_error": round(cal_error, 4),
+            "total_predictions": len(preds),
+        }
 
     def _persist_outcomes(self):
         """Save trade outcomes to JSON for persistence across restarts."""
@@ -476,6 +538,8 @@ class TradeLearningLoop:
             with open(path, "r") as f:
                 data = json.load(f)
             for d in data:
+                # Sprint 29: preserve full context fields on
+                # reload so model retraining has full feature set
                 record = TradeOutcomeRecord(
                     trade_id=d.get("trade_id", ""),
                     ticker=d.get("ticker", ""),
@@ -488,7 +552,16 @@ class TradeLearningLoop:
                     pnl_pct=d.get("pnl_pct", 0),
                     confidence=d.get("confidence", 50),
                     horizon=d.get("horizon", "swing"),
+                    market_regime=d.get("market_regime", ""),
+                    vix_at_entry=d.get("vix_at_entry", 0.0),
+                    rsi_at_entry=d.get("rsi_at_entry", 0.0),
+                    adx_at_entry=d.get("adx_at_entry", 0.0),
+                    relative_volume=d.get("relative_volume", 0.0),
+                    distance_from_sma50=d.get(
+                        "distance_from_sma50", 0.0,
+                    ),
                     exit_reason=d.get("exit_reason", ""),
+                    hold_hours=d.get("hold_hours", 0.0),
                 )
                 self._outcomes.append(record)
                 self.predictor.add_outcome(record)
