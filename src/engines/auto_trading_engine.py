@@ -870,6 +870,9 @@ class AutoTradingEngine:
                 rec.execution_time = datetime.now(timezone.utc)
                 rec.fill_price = _entry_price
 
+                # Sprint 25: send trade-execution notification
+                await self._notify_trade_executed(rec, _entry_price)
+
                 return {
                     "ticker": rec.ticker,
                     "direction": rec.direction,
@@ -1004,6 +1007,10 @@ class AutoTradingEngine:
                         )
                         # Sprint 24: persist after close
                         self.position_mgr.save_state()
+                        # Sprint 25: send exit notification
+                        await self._notify_position_closed(
+                            closed_pos, reason,
+                        )
 
                 except BrokerError as e:
                     logger.error(
@@ -1117,6 +1124,59 @@ class AutoTradingEngine:
         except Exception as e:
             logger.warning("Learning loop record error: %s", e)
 
+
+    # ------------------------------------------------------------------
+    # Sprint 25: trade-execution notifications
+    # ------------------------------------------------------------------
+
+    async def _notify_trade_executed(
+        self, rec: "TradeRecommendation", fill_price: float,
+    ):
+        """Best-effort push notification on trade entry."""
+        try:
+            from src.notifications.multi_channel import (
+                MultiChannelNotifier,
+            )
+            notifier = MultiChannelNotifier()
+            await notifier.send_trade_alert({
+                "ticker": rec.ticker,
+                "direction": rec.direction,
+                "quantity": rec.position_size_shares or 0,
+                "fill_price": fill_price,
+                "strategy": rec.strategy_id,
+                "confidence": rec.signal_confidence,
+                "stop_price": rec.stop_price,
+                "composite_score": rec.composite_score,
+                "time": (
+                    rec.execution_time.isoformat()
+                    if rec.execution_time else "now"
+                ),
+            })
+        except Exception as e:
+            logger.debug("Trade notification skipped: %s", e)
+
+    async def _notify_position_closed(
+        self, closed_pos, reason: str,
+    ):
+        """Best-effort push notification on position exit."""
+        try:
+            from src.notifications.multi_channel import (
+                MultiChannelNotifier,
+            )
+            notifier = MultiChannelNotifier()
+            _hold = 0.0
+            if closed_pos.entry_date and closed_pos.exit_date:
+                _dt = closed_pos.exit_date - closed_pos.entry_date
+                _hold = _dt.total_seconds() / 3600
+            await notifier.send_exit_alert({
+                "ticker": closed_pos.ticker,
+                "exit_price": closed_pos.exit_price,
+                "pnl_pct": closed_pos.realized_pnl_pct,
+                "reason": reason,
+                "hold_hours": _hold,
+            })
+        except Exception as e:
+            logger.debug("Exit notification skipped: %s", e)
 
     async def _maybe_run_eod(self):
         """Trigger EOD cycle once per day after US market close (20:30 UTC)."""

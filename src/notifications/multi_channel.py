@@ -86,3 +86,55 @@ class MultiChannelNotifier:
     async def send_alert(self, title: str, message: str, level: str = "INFO") -> Dict[str, bool]:
         text = self.telegram._format_alert_message(title=title, message=message, level=level)
         return await self.send_message(text)
+
+    # ------------------------------------------------------------------
+    # Sprint 25: structured trade-execution alerts
+    # ------------------------------------------------------------------
+
+    async def send_trade_alert(self, trade_info: Dict[str, Any]) -> Dict[str, bool]:
+        """Send a structured trade execution notification.
+
+        Args:
+            trade_info: dict with keys like ticker, direction, quantity,
+                        fill_price, strategy, confidence, stop_price, etc.
+        """
+        direction = trade_info.get("direction", "LONG")
+        ticker = trade_info.get("ticker", "???")
+        qty = trade_info.get("quantity", 0)
+        fill = trade_info.get("fill_price", 0)
+        strategy = trade_info.get("strategy", "unknown")
+        confidence = trade_info.get("confidence", 0)
+        stop = trade_info.get("stop_price", 0)
+        score = trade_info.get("composite_score", 0)
+
+        emoji = "\U0001f7e2" if direction == "LONG" else "\U0001f534"  # green / red circle
+        text = (
+            f"{emoji} Trade Executed: {direction} {ticker}\n"
+            f"Qty: {qty} @ ${fill:.2f}\n"
+            f"Strategy: {strategy} (conf={confidence:.0f}%)\n"
+            f"Stop: ${stop:.2f} | Score: {score:.3f}\n"
+            f"Time: {trade_info.get('time', 'now')}"
+        )
+        return await self.send_message(text)
+
+    async def send_exit_alert(self, exit_info: Dict[str, Any]) -> Dict[str, bool]:
+        """Send a structured position-exit notification.
+
+        Args:
+            exit_info: dict with keys like ticker, exit_price, pnl_pct,
+                       reason, hold_hours, direction.
+        """
+        ticker = exit_info.get("ticker", "???")
+        exit_price = exit_info.get("exit_price", 0)
+        pnl_pct = exit_info.get("pnl_pct", 0)
+        reason = exit_info.get("reason", "unknown")
+        hold_h = exit_info.get("hold_hours", 0)
+
+        emoji = "\u2705" if pnl_pct >= 0 else "\u274c"  # check / cross
+        text = (
+            f"{emoji} Position Closed: {ticker}\n"
+            f"Exit: ${exit_price:.2f} | PnL: {pnl_pct:+.2f}%\n"
+            f"Reason: {reason}\n"
+            f"Held: {hold_h:.1f}h"
+        )
+        return await self.send_message(text)

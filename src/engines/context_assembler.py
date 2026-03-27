@@ -5,13 +5,14 @@ Assembles the full decision context that the live engine needs:
 market state, portfolio state, news, sentiment, calendar events,
 and corporate actions — all in one async call.
 
-This replaces the scattered empty-dict / None placeholders
-throughout the auto_trading_engine.
+Sprint 25: _get_market_state now fetches **real** VIX, SPY return,
+and market breadth via yfinance instead of returning hardcoded
+defaults.  Falls back gracefully to defaults on any fetch failure.
 """
 import logging
 import asyncio
 from typing import Dict, Any, Optional, List
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ class ContextAssembler:
         self.market_data = market_data_service
         self.broker = broker_manager
         self.news_service = news_service
-        self._cache = {}
+        self._cache: Dict[str, Any] = {}
         self._cache_ttl = 300  # 5 min
 
     async def assemble(
@@ -59,7 +60,7 @@ class ContextAssembler:
         if tickers:
             tasks["news_by_ticker"] = self._get_news(tickers)
 
-        results = {}
+        results: Dict[str, Any] = {}
         for key, coro in tasks.items():
             try:
                 results[key] = await coro
@@ -89,60 +90,164 @@ class ContextAssembler:
                 import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor() as pool:
                     future = pool.submit(
-                        asyncio.run, self.assemble(tickers)
+                        asyncio.run, self.assemble(tickers),
                     )
                     return future.result(timeout=30)
             return loop.run_until_complete(
-                self.assemble(tickers)
+                self.assemble(tickers),
             )
         except RuntimeError:
             return asyncio.run(self.assemble(tickers))
 
+    # ------------------------------------------------------------------
+    # Sprint 25: real market-state data via yfinance
+    # ------------------------------------------------------------------
+
     async def _get_market_state(self) -> Dict[str, Any]:
-        """Fetch VIX, SPY, breadth, etc."""
+        """Fetch VIX, SPY 20-day return, breadth, etc.
+
+        Priority order:
+          1. Injected ``market_data_service`` (if it has the methods)
+          2. yfinance direct fetch (Sprint 25)
+          3. Hardcoded safe defaults (last resort)
+        """
         cache_key = "market_state"
         cached = self._check_cache(cache_key)
         if cached is not None:
             return cached
 
-        state = {
+        # Safe defaults — used only when *everything* fails
+        state: Dict[str, Any] = {
             "vix": 18.0,
             "spy_return_20d": 0.0,
             "breadth_pct": 0.50,
             "hy_spread": 0.0,
             "realized_vol_20d": 0.15,
             "vix_term_slope": 0.0,
+            "data_source": "defaults",
         }
 
+        # --- Try injected market_data_service first ---
         if self.market_data:
             try:
                 md = self.market_data
                 if hasattr(md, "get_vix"):
-                    vix_val = await self._maybe_await(
-                        md.get_vix()
-                    )
+                    vix_val = await self._maybe_await(md.get_vix())
                     if vix_val:
                         state["vix"] = float(vix_val)
+                        state["data_source"] = "market_data_service"
 
                 if hasattr(md, "get_spy_return"):
-                    spy_ret = await self._maybe_await(
-                        md.get_spy_return(20)
-                    )
+                    spy_ret = await self._maybe_await(md.get_spy_return(20))
                     if spy_ret is not None:
                         state["spy_return_20d"] = float(spy_ret)
 
                 if hasattr(md, "get_market_breadth"):
-                    breadth = await self._maybe_await(
-                        md.get_market_breadth()
-                    )
+                    breadth = await self._maybe_await(md.get_market_breadth())
                     if breadth is not None:
                         state["breadth_pct"] = float(breadth)
 
             except Exception as e:
-                logger.warning("Market state fetch error: %s", e)
+                logger.warning("Market data service error: %s", e)
+
+        # --- Fallback: yfinance (Sprint 25) ---
+        if state["data_source"] == "defaults":
+            yf_state = await self._fetch_market_state_yfinance()
+            if yf_state:
+                state.update(yf_state)
+                state["data_source"] = "yfinance"
 
         self._set_cache(cache_key, state)
         return state
+
+    async def _fetch_market_state_yfinance(self) -> Optional[Dict[str, Any]]:
+        """Fetch VIX, SPY return, and breadth proxy via yfinance.
+
+        Runs the blocking yfinance calls in a thread-pool so we
+        don't block the async event loop.
+        """
+        try:
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                None, self._yfinance_market_state_sync,
+            )
+        except Exception as e:
+            logger.warning("yfinance market-state fetch failed: %s", e)
+            return None
+
+    @staticmethod
+    def _yfinance_market_state_sync() -> Optional[Dict[str, Any]]:
+        """Synchronous helper — called inside an executor.
+
+        Fetches:
+          - ^VIX last close → ``vix``
+          - SPY 25-day history → 20-day return + realized vol
+          - Breadth proxy via sector ETF performance (% of 9
+            Select Sector SPDRs above their 50-day SMA)
+        """
+        try:
+            import yfinance as yf
+        except ImportError:
+            logger.debug("yfinance not installed — skipping live market state")
+            return None
+
+        result: Dict[str, Any] = {}
+
+        # ── VIX ──────────────────────────────────────────────
+        try:
+            vix = yf.Ticker("^VIX")
+            vix_hist = vix.history(period="5d")
+            if len(vix_hist) > 0:
+                result["vix"] = round(float(vix_hist["Close"].iloc[-1]), 2)
+        except Exception as e:
+            logger.debug("VIX fetch error: %s", e)
+
+        # ── SPY return + realized vol ────────────────────────
+        try:
+            spy = yf.Ticker("SPY")
+            spy_hist = spy.history(period="30d")
+            if len(spy_hist) >= 20:
+                closes = spy_hist["Close"]
+                # 20-day return (%)
+                ret_20d = (closes.iloc[-1] / closes.iloc[-20] - 1) * 100
+                result["spy_return_20d"] = round(float(ret_20d), 2)
+
+                # 20-day realized volatility (annualised)
+                daily_returns = closes.pct_change().dropna().tail(20)
+                if len(daily_returns) >= 10:
+                    import math
+                    rvol = float(daily_returns.std() * math.sqrt(252))
+                    result["realized_vol_20d"] = round(rvol, 4)
+        except Exception as e:
+            logger.debug("SPY fetch error: %s", e)
+
+        # ── Market breadth proxy ─────────────────────────────
+        # % of 9 Select Sector SPDRs whose last close > 50-day SMA
+        try:
+            sectors = ["XLK", "XLF", "XLV", "XLY", "XLP", "XLE", "XLI", "XLU", "XLB"]
+            above = 0
+            checked = 0
+            data = yf.download(sectors, period="60d", progress=False, group_by="ticker", threads=True)
+            for etf in sectors:
+                try:
+                    if len(sectors) > 1:
+                        df = data[etf]
+                    else:
+                        df = data
+                    closes = df["Close"].dropna()
+                    if len(closes) >= 50:
+                        sma50 = closes.rolling(50).mean().iloc[-1]
+                        if closes.iloc[-1] > sma50:
+                            above += 1
+                        checked += 1
+                except (KeyError, IndexError):
+                    continue
+            if checked > 0:
+                result["breadth_pct"] = round(above / checked, 2)
+        except Exception as e:
+            logger.debug("Breadth fetch error: %s", e)
+
+        return result if result else None
 
     async def _get_portfolio_state(self) -> Dict[str, Any]:
         """Fetch current portfolio from broker.
@@ -168,7 +273,7 @@ class ContextAssembler:
         try:
             if hasattr(self.broker, "get_positions"):
                 positions = await self._maybe_await(
-                    self.broker.get_positions()
+                    self.broker.get_positions(),
                 )
                 if positions:
                     state["positions"] = positions
@@ -188,7 +293,7 @@ class ContextAssembler:
 
             if hasattr(self.broker, "get_account"):
                 account = await self._maybe_await(
-                    self.broker.get_account()
+                    self.broker.get_account(),
                 )
                 if account:
                     val = getattr(
@@ -224,7 +329,7 @@ class ContextAssembler:
             try:
                 for ticker in tickers[:20]:  # limit
                     articles = await self._maybe_await(
-                        self.market_data.get_news(ticker)
+                        self.market_data.get_news(ticker),
                     )
                     if articles:
                         news_by_ticker[ticker] = articles
