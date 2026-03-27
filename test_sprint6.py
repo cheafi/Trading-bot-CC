@@ -99,7 +99,7 @@ class TestOpenPositionCallFix(unittest.TestCase):
         """open_position call passes strategy_id and stop_loss_price."""
         src = (ROOT / "src/engines/auto_trading_engine.py").read_text()
         idx = src.find("self.position_mgr.open_position(")
-        call_block = src[idx:idx + 500]
+        call_block = src[idx:idx + 2000]
         self.assertIn("strategy_id=", call_block)
         self.assertIn("stop_loss_price=", call_block)
 

@@ -49,12 +49,19 @@ class OpportunityEnsembler:
     ):
         self.weights = weights or self.DEFAULT_WEIGHTS.copy()
         # Read from config with fallback
-        try:
-            from src.core.config import get_trading_config
-            tc = get_trading_config()
-            self.min_score = min_score or tc.ensemble_min_score
-        except Exception:
-            self.min_score = min_score or 0.35
+        if min_score is not None:
+            self.min_score = min_score
+        else:
+            try:
+                from src.core.config import get_trading_config
+                tc = get_trading_config()
+                val = tc.ensemble_min_score
+                self.min_score = (
+                    float(val)
+                    if isinstance(val, (int, float)) else 0.35
+                )
+            except Exception:
+                self.min_score = 0.35
 
     def rank_opportunities(
         self,
@@ -62,6 +69,7 @@ class OpportunityEnsembler:
         regime_state: Dict[str, Any],
         portfolio_state: Optional[Dict[str, Any]] = None,
         strategy_scores: Optional[Dict[str, float]] = None,
+        regime_weights: Optional[Dict[str, float]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Rank a list of raw signals into scored opportunities.
@@ -70,6 +78,10 @@ class OpportunityEnsembler:
             ticker, direction, score, strategy_name,
             risk_reward_ratio, expected_return
 
+        Args:
+            regime_weights: strategy_family → 0–1 regime
+                multiplier from RegimeRouter.get_strategy_multipliers()
+
         Returns list sorted by composite_score descending,
         each entry augmented with composite_score, components,
         and trade_decision (True/False).
@@ -77,7 +89,8 @@ class OpportunityEnsembler:
         scored = []
         for sig in signals:
             entry = self._score_opportunity(
-                sig, regime_state, portfolio_state, strategy_scores
+                sig, regime_state, portfolio_state,
+                strategy_scores, regime_weights,
             )
             scored.append(entry)
 
@@ -95,26 +108,36 @@ class OpportunityEnsembler:
         regime: Dict[str, Any],
         portfolio: Optional[Dict[str, Any]],
         strategy_health: Optional[Dict[str, float]],
+        regime_weights: Optional[Dict[str, float]] = None,
     ) -> Dict[str, Any]:
         """Score a single opportunity."""
         w = self.weights
 
         # Component: calibrated win probability
-        raw_score = signal.get("score", 0.5)
-        pwin = min(raw_score, 1.0)
+        # Prefer EdgeCalculator p_t1 if available
+        pwin = signal.get("edge_p_t1", signal.get("score", 0.5))
+        pwin = min(pwin, 1.0)
 
         # Component: expected return (normalised)
-        exp_r = signal.get("expected_return", 0.0)
+        # Prefer edge EV over raw expected_return
+        exp_r = signal.get(
+            "edge_ev", signal.get("expected_return", 0.0)
+        )
         exp_r_norm = min(abs(exp_r) / 0.10, 1.0)  # 10% = max
 
         # Component: regime fit
         regime_fit = self._calc_regime_fit(signal, regime)
 
-        # Component: strategy health (OOS performance)
+        # Component: strategy health (leaderboard * regime weight)
         strat = signal.get("strategy_name", "unknown")
-        health = 0.5
+        lb_score = 0.5
         if strategy_health and strat in strategy_health:
-            health = min(strategy_health[strat], 1.0)
+            lb_score = min(strategy_health[strat], 1.0)
+        # Blend with regime weight for this strategy family
+        rw = self._resolve_regime_weight(
+            strat, regime_weights
+        )
+        health = lb_score * rw
 
         # Component: timing quality (simplified)
         timing = signal.get("timing_score", 0.5)
@@ -238,6 +261,31 @@ class OpportunityEnsembler:
                 penalty += 0.10
 
         return min(penalty, 0.25)  # cap
+
+    @staticmethod
+    def _resolve_regime_weight(
+        strategy_name: str,
+        regime_weights: Optional[Dict[str, float]],
+    ) -> float:
+        """Look up regime sizing multiplier for a strategy.
+
+        Matches strategy_name against regime_weights keys using
+        substring matching (e.g. 'momentum_breakout' matches
+        the 'momentum' key).
+
+        Returns 1.0 when no regime_weights provided (neutral).
+        """
+        if not regime_weights:
+            return 1.0
+        name = strategy_name.lower()
+        # Exact match first
+        if name in regime_weights:
+            return max(regime_weights[name], 0.1)
+        # Substring match
+        for key, val in regime_weights.items():
+            if key in name or name in key:
+                return max(val, 0.1)
+        return 0.5  # unknown strategy → conservative
 
     def _apply_suppression(
         self,

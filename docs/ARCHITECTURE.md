@@ -291,6 +291,7 @@ TradingAI_Bot-main/
 | 18 | Infra Hardening | ingestors/main.py entrypoint, redis lazy import, 14× utcnow→timezone.utc |
 | 19 | Pydantic V2 | 6× class Config→model_config=ConfigDict, eliminates PydanticDeprecatedSince20 |
 | 20 | Deep Integration | P0: submit_order→place_order, Position direction+aliases, portfolio schema (positions_by_ticker), strategy_weights preserved, leaderboard record_outcome→update(), circuit breaker trade_pnl, learning loop real features, ML scaler leakage fix |
+| 21 | Ensemble Sizing | Regime-weighted strategy_health in ensembler, EdgeCalculator p_t1/EV used for pwin+exp_r, half-Kelly position sizing in engine+RiskModel, leaderboard sizing_multiplier, regime_router wired to ensembler |
 
 ### AutoTradingEngine Pipeline (current)
 

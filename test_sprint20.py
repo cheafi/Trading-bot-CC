@@ -322,7 +322,7 @@ class TestExecuteSignalReturn(unittest.TestCase):
         """_execute_signal must return entry_snapshot with market features."""
         src = _read("src/engines/auto_trading_engine.py")
         idx = src.index("async def _execute_signal")
-        method_src = src[idx:idx + 2000]
+        method_src = src[idx:idx + 4000]
         self.assertIn('"entry_snapshot"', method_src)
         self.assertIn("vix_at_entry", method_src)
         self.assertIn("rsi_at_entry", method_src)
@@ -332,7 +332,7 @@ class TestExecuteSignalReturn(unittest.TestCase):
         """_execute_signal must return confidence."""
         src = _read("src/engines/auto_trading_engine.py")
         idx = src.index("async def _execute_signal")
-        method_src = src[idx:idx + 2000]
+        method_src = src[idx:idx + 4000]
         self.assertIn('"confidence"', method_src)
 
 

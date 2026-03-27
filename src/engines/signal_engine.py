@@ -573,38 +573,70 @@ class RiskModel:
         
         return signals
     
-    def _calculate_position_size(self, signal: Signal, portfolio: Dict) -> float:
-        """Calculate position size based on risk parameters."""
+    def _calculate_position_size(
+        self, signal: Signal, portfolio: Dict,
+    ) -> float:
+        """Calculate position size based on risk parameters.
+
+        Uses half-Kelly fraction when EdgeCalculator data
+        (p_t1, risk_reward_ratio) is available on the signal,
+        otherwise falls back to confidence-scaled risk sizing.
+        """
         equity = portfolio.get('equity', 100000)
-        risk_per_trade = portfolio.get('risk_per_trade', 0.01)  # Configurable, default 1%
-        
+        risk_per_trade = portfolio.get(
+            'risk_per_trade', 0.01,
+        )  # Configurable, default 1%
+
         # Risk-based sizing
         if signal.invalidation.stop_price and signal.entry_price:
-            stop_distance = abs(signal.entry_price - signal.invalidation.stop_price)
-            stop_pct = stop_distance / signal.entry_price if signal.entry_price > 0 else 0.05
-            
+            stop_distance = abs(
+                signal.entry_price
+                - signal.invalidation.stop_price
+            )
+            stop_pct = (
+                stop_distance / signal.entry_price
+                if signal.entry_price > 0 else 0.05
+            )
+
             if stop_pct > 0:
                 base_size = risk_per_trade / stop_pct
             else:
-                base_size = self.max_position_pct * 0.5  # Conservative fallback
+                base_size = self.max_position_pct * 0.5
         else:
-            base_size = self.max_position_pct * 0.5  # Conservative fallback
-        
-        # Confidence adjustment (scale 0.5-1.0 based on confidence)
-        confidence_factor = 0.5 + (signal.confidence / 200)  # 50 conf → 0.75x, 80 conf → 0.90x
-        
+            base_size = self.max_position_pct * 0.5
+
+        # ── Half-Kelly overlay ──────────────────────────────
+        # If EdgeCalculator data is on the signal, use Kelly
+        # fraction to scale position (conservative half-Kelly).
+        edge_pwin = getattr(signal, 'edge_p_t1', 0)
+        edge_rr = getattr(
+            signal, 'risk_reward_ratio',
+            getattr(signal, 'edge_rr', 0),
+        )
+        if edge_pwin > 0 and edge_rr > 0:
+            kelly_f = (
+                edge_pwin - (1.0 - edge_pwin) / edge_rr
+            )
+            kelly_f = max(kelly_f, 0.0)
+            kelly_mult = min(kelly_f * 0.5, 1.0)
+            kelly_mult = max(kelly_mult, 0.25) if kelly_mult > 0 else 0.25
+            base_size *= kelly_mult
+        else:
+            # Confidence adjustment (legacy fallback)
+            confidence_factor = 0.5 + (signal.confidence / 200)
+            base_size *= confidence_factor
+
         # Volatility adjustment: reduce size in high vol
         vol_factor = 1.0
         if hasattr(signal, 'metadata') and signal.metadata:
             atr_pct = signal.metadata.get('atr_pct', 0.02)
-            if atr_pct > 0.04:  # High volatility stock
+            if atr_pct > 0.04:
                 vol_factor = 0.6
             elif atr_pct > 0.03:
                 vol_factor = 0.8
-        
-        # Calculate final size
-        position_size = base_size * confidence_factor * vol_factor
-        
+
+        position_size = base_size * vol_factor
+
         # Cap at max position size
         return min(position_size, self.max_position_pct)
 

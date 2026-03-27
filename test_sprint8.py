@@ -139,7 +139,7 @@ class TestPositionSizingUpgrade(unittest.TestCase):
     def test_10_uses_position_manager(self):
         """_calculate_position_size calls position_mgr."""
         idx = self.src.find("def _calculate_position_size(")
-        block = self.src[idx:idx + 1000]
+        block = self.src[idx:idx + 2000]
         self.assertIn(
             "self.position_mgr.calculate_position_size(",
             block,
@@ -148,7 +148,7 @@ class TestPositionSizingUpgrade(unittest.TestCase):
     def test_11_has_fallback(self):
         """Still has fallback simple calculation."""
         idx = self.src.find("def _calculate_position_size(")
-        block = self.src[idx:idx + 1500]
+        block = self.src[idx:idx + 3000]
         self.assertTrue(
             "allback" in block.lower(),
             "Should have a fallback path for position sizing",

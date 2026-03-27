@@ -526,6 +526,9 @@ class AutoTradingEngine:
             self._regime_state,
             portfolio_state=self._context.get("portfolio_state"),
             strategy_scores=self.leaderboard.get_strategy_scores(),
+            regime_weights=self.regime_router.get_strategy_multipliers(
+                self._regime_state
+            ),
         )
 
         # Cache ranked results for API
@@ -564,7 +567,9 @@ class AutoTradingEngine:
                     f"(score={opp['composite_score']:.3f})"
                 )
             else:
-                result = await self._execute_signal(signal)
+                result = await self._execute_signal(
+                    signal, opp=opp,
+                )
                 if result:
                     result["composite_score"] = opp["composite_score"]
                     self._trades_today.append(result)
@@ -578,9 +583,26 @@ class AutoTradingEngine:
                         )
                         self.position_mgr.open_position(
                             ticker=signal.ticker,
-                            strategy_id=opp.get("strategy_name", "unknown"),
-                            entry_price=result.get("entry_price", signal.entry_price),
-                            shares=self._calculate_position_size(signal),
+                            strategy_id=opp.get(
+                                "strategy_name", "unknown",
+                            ),
+                            entry_price=result.get(
+                                "entry_price", signal.entry_price,
+                            ),
+                            shares=self._calculate_position_size(
+                                signal,
+                                edge_pwin=opp.get(
+                                    "original_signal", {},
+                                ).get("edge_p_t1", 0),
+                                edge_rr=opp.get(
+                                    "original_signal", {},
+                                ).get(
+                                    "risk_reward_ratio", 0,
+                                ),
+                                strategy_name=opp.get(
+                                    "strategy_name", "unknown",
+                                ),
+                            ),
                             stop_loss_price=_stop,
                             max_hold_days=trading_config.max_hold_days,
                         )
@@ -767,18 +789,43 @@ class AutoTradingEngine:
             logger.error("Unexpected validation error: %s", e)
             return signals
 
-    async def _execute_signal(self, signal: Signal) -> Optional[Dict[str, Any]]:
+    async def _execute_signal(
+        self, signal: Signal,
+        opp: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
         """Execute a signal through the broker manager."""
         try:
             from src.brokers.base import OrderSide, OrderType
 
             manager = await self._get_broker()
+            opp = opp or {}
+            orig = opp.get("original_signal", {})
 
-            side = OrderSide.BUY if signal.direction == Direction.LONG else OrderSide.SELL
+            # Edge-adjusted sizing
+            _pwin = orig.get("edge_p_t1", 0)
+            _rr = signal.risk_reward_ratio if hasattr(
+                signal, "risk_reward_ratio"
+            ) else orig.get("risk_reward_ratio", 0)
+            _strat = opp.get(
+                "strategy_name",
+                getattr(signal, "strategy_id", "unknown"),
+            )
+
+            side = (
+                OrderSide.BUY
+                if signal.direction == Direction.LONG
+                else OrderSide.SELL
+            )
+            qty = max(1, self._calculate_position_size(
+                signal,
+                edge_pwin=_pwin,
+                edge_rr=_rr,
+                strategy_name=_strat,
+            ))
             result = await manager.place_order(
                 ticker=signal.ticker,
                 side=side,
-                quantity=max(1, self._calculate_position_size(signal)),  # Will be sized by risk model in production
+                quantity=qty,
                 order_type=OrderType.MARKET,
             )
 
@@ -1348,21 +1395,38 @@ class AutoTradingEngine:
 
         logger.info("🛑 Graceful shutdown complete")
 
-    def _calculate_position_size(self, signal) -> int:
+    def _calculate_position_size(
+        self, signal, edge_pwin: float = 0.0,
+        edge_rr: float = 0.0,
+        strategy_name: str = "",
+    ) -> int:
         """
-        Risk-based position sizing using PositionManager.
-        Falls back to simple 1% risk calculation if PositionManager fails.
+        Risk-based position sizing.
+
+        Layers (applied in order):
+        1. PositionManager risk-based sizing (1R = risk_per_trade%)
+        2. Half-Kelly multiplier when EdgeCalculator data available
+        3. Leaderboard sizing_multiplier for strategy lifecycle
+        Falls back to simple 1% risk if PositionManager fails.
         """
-        price = getattr(signal, "entry_price", 0) or getattr(signal, "price", 0) or getattr(signal, "close", 0)
+        price = (
+            getattr(signal, "entry_price", 0)
+            or getattr(signal, "price", 0)
+            or getattr(signal, "close", 0)
+        )
         if not price or price <= 0:
             return 1
 
         # Compute stop from signal or config default
         stop_price = price * (1 - trading_config.stop_loss_pct)
-        if getattr(signal, "invalidation", None) and getattr(signal.invalidation, "stop_price", 0):
+        if (
+            getattr(signal, "invalidation", None)
+            and getattr(signal.invalidation, "stop_price", 0)
+        ):
             stop_price = signal.invalidation.stop_price
 
         # Try PositionManager for full risk-based sizing
+        base_shares = 0
         try:
             result = self.position_mgr.calculate_position_size(
                 ticker=getattr(signal, "ticker", "UNKNOWN"),
@@ -1371,16 +1435,39 @@ class AutoTradingEngine:
                 sector=getattr(signal, "sector", ""),
             )
             if result.get("can_trade") and result.get("shares", 0) > 0:
-                return result["shares"]
+                base_shares = result["shares"]
         except Exception as e:
             logger.debug("PositionManager sizing fallback: %s", e)
 
         # Fallback: simple 1% risk
-        equity = 100000.0
-        risk_per_trade = equity * 0.01
-        stop_distance = abs(price - stop_price)
-        if stop_distance <= 0:
-            return 1
-        shares = int(risk_per_trade / stop_distance)
-        max_shares = int((equity * 0.05) / price)
-        return max(1, min(shares, max_shares))
+        if base_shares <= 0:
+            equity = 100000.0
+            risk_per_trade = equity * 0.01
+            stop_distance = abs(price - stop_price)
+            if stop_distance <= 0:
+                return 1
+            base_shares = int(risk_per_trade / stop_distance)
+            max_shares = int((equity * 0.05) / price)
+            base_shares = max(1, min(base_shares, max_shares))
+
+        # ── Half-Kelly multiplier ──────────────────────────
+        kelly_mult = 1.0
+        if edge_pwin > 0 and edge_rr > 0:
+            # Kelly fraction = p - (1-p)/b  where b = reward/risk
+            kelly_f = edge_pwin - (1.0 - edge_pwin) / edge_rr
+            kelly_f = max(kelly_f, 0.0)
+            # Half-Kelly is conservative best practice
+            kelly_mult = min(kelly_f * 0.5, 1.0)
+            # Never reduce below 25% of base if Kelly is positive
+            if kelly_mult > 0:
+                kelly_mult = max(kelly_mult, 0.25)
+            else:
+                kelly_mult = 0.25  # edge-negative → minimum
+
+        # ── Leaderboard sizing multiplier ──────────────────
+        lb_mult = self.leaderboard.get_sizing_multiplier(
+            strategy_name or "unknown"
+        )
+
+        final = int(base_shares * kelly_mult * lb_mult)
+        return max(1, final)
