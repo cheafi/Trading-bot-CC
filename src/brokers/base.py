@@ -33,6 +33,8 @@ class OrderSide(str, Enum):
     """Order side."""
     BUY = "buy"
     SELL = "sell"
+    SELL_SHORT = "sell_short"
+    BUY_TO_COVER = "buy_to_cover"
 
 
 class OrderStatus(str, Enum):
@@ -109,9 +111,15 @@ class Position:
     def update_price(self, price: float):
         """Update current price and recalculate P&L."""
         self.current_price = price
-        self.market_value = price * self.quantity
-        cost_basis = self.avg_price * self.quantity
-        self.unrealized_pnl = self.market_value - cost_basis
+        abs_qty = abs(self.quantity)
+        if self.direction == "short":
+            self.market_value = price * abs_qty
+            cost_basis = self.avg_price * abs_qty
+            self.unrealized_pnl = cost_basis - self.market_value
+        else:
+            self.market_value = price * self.quantity
+            cost_basis = self.avg_price * self.quantity
+            self.unrealized_pnl = self.market_value - cost_basis
         if cost_basis > 0:
             self.unrealized_pnl_pct = (self.unrealized_pnl / cost_basis) * 100
 
@@ -334,7 +342,45 @@ class BaseBroker(ABC):
             market=market
         )
         return await self.place_order(order)
-    
+
+    async def sell_short(
+        self,
+        ticker: str,
+        quantity: int,
+        order_type: OrderType = OrderType.MARKET,
+        limit_price: Optional[float] = None,
+        market: Market = Market.US
+    ) -> OrderResult:
+        """Open a short position."""
+        order = OrderRequest(
+            ticker=ticker,
+            side=OrderSide.SELL_SHORT,
+            quantity=quantity,
+            order_type=order_type,
+            limit_price=limit_price,
+            market=market
+        )
+        return await self.place_order(order)
+
+    async def buy_to_cover(
+        self,
+        ticker: str,
+        quantity: int,
+        order_type: OrderType = OrderType.MARKET,
+        limit_price: Optional[float] = None,
+        market: Market = Market.US
+    ) -> OrderResult:
+        """Close a short position."""
+        order = OrderRequest(
+            ticker=ticker,
+            side=OrderSide.BUY_TO_COVER,
+            quantity=quantity,
+            order_type=order_type,
+            limit_price=limit_price,
+            market=market
+        )
+        return await self.place_order(order)
+
     async def close_position(self, ticker: str, market: Market = Market.US) -> OrderResult:
         """
         Close entire position for a ticker.

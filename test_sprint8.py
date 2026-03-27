@@ -158,7 +158,7 @@ class TestPositionSizingUpgrade(unittest.TestCase):
     def test_12_uses_config_stop_loss(self):
         """Uses trading_config.stop_loss_pct for stop calculation."""
         idx = self.src.find("def _calculate_position_size(")
-        block = self.src[idx:idx + 1000]
+        block = self.src[idx:idx + 1500]
         self.assertIn("trading_config.stop_loss_pct", block)
 
 

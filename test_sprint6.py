@@ -86,14 +86,15 @@ class TestOpenPositionCallFix(unittest.TestCase):
     """Tests 4-5: Fixed open_position call kwargs."""
 
     def test_04_no_direction_kwarg(self):
-        """open_position call no longer passes 'direction' kwarg."""
+        """open_position call passes direction kwarg (Sprint 27)."""
         src = (ROOT / "src/engines/auto_trading_engine.py").read_text()
         # Find the open_position call block
         idx = src.find("self.position_mgr.open_position(")
         self.assertGreater(idx, 0, "open_position call must exist")
         call_block = src[idx:idx + 500]
-        self.assertNotIn("direction=", call_block,
-                         "Should not pass 'direction' to PositionManager.open_position")
+        # Sprint 27: direction IS now passed for short selling
+        self.assertIn("direction=", call_block,
+                      "Should pass 'direction' to open_position (Sprint 27)")
 
     def test_05_uses_strategy_id_and_stop_loss(self):
         """open_position call passes strategy_id and stop_loss_price."""

@@ -536,20 +536,32 @@ class AutoTradingEngine:
                     self._trades_today.append(result)
                     # Record in PositionManager for trailing stops
                     try:
-                        _stop = (
-                            rec.stop_price
-                            if rec.stop_price > 0
-                            else result.get("entry_price", rec.entry_price) * (1 - trading_config.stop_loss_pct)
+                        _is_short = (
+                            rec.direction == Direction.SHORT.value
                         )
+                        _entry = result.get(
+                            "entry_price", rec.entry_price,
+                        )
+                        if rec.stop_price and rec.stop_price > 0:
+                            _stop = rec.stop_price
+                        elif _is_short:
+                            _stop = _entry * (
+                                1 + trading_config.stop_loss_pct
+                            )
+                        else:
+                            _stop = _entry * (
+                                1 - trading_config.stop_loss_pct
+                            )
                         self.position_mgr.open_position(
                             ticker=rec.ticker,
                             strategy_id=rec.strategy_id,
-                            entry_price=result.get(
-                                "entry_price", rec.entry_price,
-                            ),
+                            entry_price=_entry,
                             shares=rec.position_size_shares or 1,
                             stop_loss_price=_stop,
                             max_hold_days=trading_config.max_hold_days,
+                            direction=(
+                                "short" if _is_short else "long"
+                            ),
                         )
                     except RiskLimitError as e:
                         logger.warning(
@@ -767,7 +779,7 @@ class AutoTradingEngine:
             side = (
                 OrderSide.BUY
                 if rec.direction == Direction.LONG.value
-                else OrderSide.SELL
+                else OrderSide.SELL_SHORT
             )
             qty = max(1, self._calculate_position_size(
                 rec,
@@ -903,7 +915,7 @@ class AutoTradingEngine:
                 try:
                     close_side = (
                         OrderSide.SELL if side == "long"
-                        else OrderSide.BUY
+                        else OrderSide.BUY_TO_COVER
                     )
                     await manager.place_order(
                         ticker=ticker,
@@ -1432,7 +1444,7 @@ class AutoTradingEngine:
                     continue
                 close_side = (
                     OrderSide.SELL if _dir == "long"
-                    else OrderSide.BUY
+                    else OrderSide.BUY_TO_COVER
                 )
                 try:
                     await manager.place_order(
@@ -1485,7 +1497,16 @@ class AutoTradingEngine:
             return 1
 
         # Compute stop from signal or config default
-        stop_price = price * (1 - trading_config.stop_loss_pct)
+        # Sprint 27: direction-aware default stop
+        _dir = getattr(signal, "direction", "LONG")
+        if hasattr(_dir, "value"):
+            _dir = _dir.value
+        _is_short = (_dir == "SHORT")
+
+        if _is_short:
+            stop_price = price * (1 + trading_config.stop_loss_pct)
+        else:
+            stop_price = price * (1 - trading_config.stop_loss_pct)
         # TradeRecommendation has stop_price directly;
         # legacy Signal has invalidation.stop_price
         _direct_stop = getattr(signal, "stop_price", 0)

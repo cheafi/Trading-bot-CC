@@ -89,6 +89,7 @@ class Position:
     # Metadata
     sector: str = ""
     notes: str = ""
+    direction: str = "long"  # Sprint 27: "long" or "short"
     
     def __post_init__(self):
         if not self.position_id:
@@ -114,29 +115,58 @@ class Position:
     def update_price(self, current_price: float):
         """Update position with current price."""
         self.current_price = current_price
-        self.unrealized_pnl = (current_price - self.entry_price) * self.shares
-        self.unrealized_pnl_pct = (current_price - self.entry_price) / self.entry_price * 100 if self.entry_price > 0 else 0
+        if self.direction == "short":
+            self.unrealized_pnl = (self.entry_price - current_price) * self.shares
+            self.unrealized_pnl_pct = (
+                (self.entry_price - current_price) / self.entry_price * 100
+                if self.entry_price > 0 else 0
+            )
+        else:
+            self.unrealized_pnl = (current_price - self.entry_price) * self.shares
+            self.unrealized_pnl_pct = (
+                (current_price - self.entry_price) / self.entry_price * 100
+                if self.entry_price > 0 else 0
+            )
     
     def update_trailing_stop(self, current_price: float, trail_pct: float = 0.02, activation_pct: float = 0.03):
         """Update trailing stop with tiered tightening at higher profits."""
         if self.entry_price <= 0:
             return
-        
-        current_gain = (current_price - self.entry_price) / self.entry_price
-        
-        # Tiered trailing: tighter trail at higher profits to lock in gains
-        if current_gain >= 0.15:       # 15%+ profit: trail at 4%
-            effective_trail = 0.04
-        elif current_gain >= 0.10:     # 10%+ profit: trail at 3%
-            effective_trail = 0.03
-        elif current_gain >= activation_pct:  # Activation threshold: use default
-            effective_trail = trail_pct
+
+        if self.direction == "short":
+            # Short: profit when price drops; trail ABOVE current price
+            current_gain = (self.entry_price - current_price) / self.entry_price
+
+            if current_gain >= 0.15:
+                effective_trail = 0.04
+            elif current_gain >= 0.10:
+                effective_trail = 0.03
+            elif current_gain >= activation_pct:
+                effective_trail = trail_pct
+            else:
+                return
+
+            new_trail_stop = current_price * (1 + effective_trail)
+            # For shorts, trailing stop should move DOWN (tighter)
+            if (self.trailing_stop_price <= 0
+                    or new_trail_stop < self.trailing_stop_price):
+                self.trailing_stop_price = new_trail_stop
         else:
-            return  # Not yet activated
-        
-        new_trail_stop = current_price * (1 - effective_trail)
-        if new_trail_stop > self.trailing_stop_price:
-            self.trailing_stop_price = new_trail_stop
+            current_gain = (current_price - self.entry_price) / self.entry_price
+
+            # Tiered trailing: tighter trail at higher profits
+            if current_gain >= 0.15:
+                effective_trail = 0.04
+            elif current_gain >= 0.10:
+                effective_trail = 0.03
+            elif current_gain >= activation_pct:
+                effective_trail = trail_pct
+            else:
+                return
+
+            new_trail_stop = current_price * (1 - effective_trail)
+            if new_trail_stop > self.trailing_stop_price:
+                self.trailing_stop_price = new_trail_stop
     
     def check_exit_conditions(self, current_price: float, current_date: datetime) -> Tuple[bool, str]:
         """
@@ -147,37 +177,45 @@ class Position:
             Partial exits use reason prefix 'partial_'
         """
         self.update_price(current_price)
-        
-        # 1. Stop loss hit
-        if current_price <= self.stop_loss_price:
-            return True, "stop_loss"
-        
-        # 2. Trailing stop hit
-        if self.trailing_stop_price > 0 and current_price <= self.trailing_stop_price:
-            return True, "trailing_stop"
-        
-        # 3. Partial exit at 1R (sell 1/3)
-        if self.target_1r_price > 0 and current_price >= self.target_1r_price and not self.partial_exit_1r:
-            self.partial_exit_1r = True
-            # Move stop to breakeven after 1R hit
-            if self.entry_price > self.stop_loss_price:
-                self.stop_loss_price = self.entry_price
-            return True, "partial_1r"
-        
-        # 4. Partial exit at 2R (sell another 1/3)
-        if self.target_2r_price > 0 and current_price >= self.target_2r_price and not self.partial_exit_2r:
-            self.partial_exit_2r = True
-            return True, "partial_2r"
-        
-        # 5. Full take profit at 3R
-        if self.target_3r_price > 0 and current_price >= self.target_3r_price:
-            return True, "take_profit_3r"
-        
-        # 6. Legacy take profit
-        if self.take_profit_price > 0 and current_price >= self.take_profit_price:
-            return True, "take_profit"
-        
-        # 7. Max hold time exceeded
+
+        if self.direction == "short":
+            # Short: stop is ABOVE entry, targets BELOW
+            if self.stop_loss_price > 0 and current_price >= self.stop_loss_price:
+                return True, "stop_loss"
+            if self.trailing_stop_price > 0 and current_price >= self.trailing_stop_price:
+                return True, "trailing_stop"
+            if self.target_1r_price > 0 and current_price <= self.target_1r_price and not self.partial_exit_1r:
+                self.partial_exit_1r = True
+                if self.entry_price < self.stop_loss_price:
+                    self.stop_loss_price = self.entry_price
+                return True, "partial_1r"
+            if self.target_2r_price > 0 and current_price <= self.target_2r_price and not self.partial_exit_2r:
+                self.partial_exit_2r = True
+                return True, "partial_2r"
+            if self.target_3r_price > 0 and current_price <= self.target_3r_price:
+                return True, "take_profit_3r"
+            if self.take_profit_price > 0 and current_price <= self.take_profit_price:
+                return True, "take_profit"
+        else:
+            # Long: stop is BELOW entry, targets ABOVE
+            if current_price <= self.stop_loss_price:
+                return True, "stop_loss"
+            if self.trailing_stop_price > 0 and current_price <= self.trailing_stop_price:
+                return True, "trailing_stop"
+            if self.target_1r_price > 0 and current_price >= self.target_1r_price and not self.partial_exit_1r:
+                self.partial_exit_1r = True
+                if self.entry_price > self.stop_loss_price:
+                    self.stop_loss_price = self.entry_price
+                return True, "partial_1r"
+            if self.target_2r_price > 0 and current_price >= self.target_2r_price and not self.partial_exit_2r:
+                self.partial_exit_2r = True
+                return True, "partial_2r"
+            if self.target_3r_price > 0 and current_price >= self.target_3r_price:
+                return True, "take_profit_3r"
+            if self.take_profit_price > 0 and current_price >= self.take_profit_price:
+                return True, "take_profit"
+
+        # Max hold time (direction-agnostic)
         if self.entry_date:
             days_held = (current_date - self.entry_date).days
             if days_held >= self.max_hold_days:
@@ -190,8 +228,18 @@ class Position:
         self.exit_price = exit_price
         self.exit_date = exit_date
         self.exit_reason = reason
-        self.realized_pnl = (exit_price - self.entry_price) * self.shares
-        self.realized_pnl_pct = (exit_price - self.entry_price) / self.entry_price * 100 if self.entry_price > 0 else 0
+        if self.direction == "short":
+            self.realized_pnl = (self.entry_price - exit_price) * self.shares
+            self.realized_pnl_pct = (
+                (self.entry_price - exit_price) / self.entry_price * 100
+                if self.entry_price > 0 else 0
+            )
+        else:
+            self.realized_pnl = (exit_price - self.entry_price) * self.shares
+            self.realized_pnl_pct = (
+                (exit_price - self.entry_price) / self.entry_price * 100
+                if self.entry_price > 0 else 0
+            )
         
         # Set status based on reason
         if reason == "stop_loss" or reason == "trailing_stop":
@@ -436,7 +484,8 @@ class PositionManager:
         atr: float = 0.0,
         max_hold_days: int = 40,
         sector: str = "",
-        entry_reason: str = ""
+        entry_reason: str = "",
+        direction: str = "long",
     ) -> Position:
         """
         Open a new position.
@@ -459,14 +508,20 @@ class PositionManager:
             atr_at_entry=atr,
             max_hold_days=max_hold_days,
             sector=sector,
+            direction=direction,
         )
         
-        # Set multi-target R levels
+        # Set multi-target R levels (direction-aware)
         risk_per_share = abs(entry_price - stop_loss_price)
         if risk_per_share > 0:
-            position.target_1r_price = entry_price + risk_per_share
-            position.target_2r_price = entry_price + (risk_per_share * 2)
-            position.target_3r_price = entry_price + (risk_per_share * 3)
+            if direction == "short":
+                position.target_1r_price = entry_price - risk_per_share
+                position.target_2r_price = entry_price - (risk_per_share * 2)
+                position.target_3r_price = entry_price - (risk_per_share * 3)
+            else:
+                position.target_1r_price = entry_price + risk_per_share
+                position.target_2r_price = entry_price + (risk_per_share * 2)
+                position.target_3r_price = entry_price + (risk_per_share * 3)
         
         self.positions[ticker] = position
         self.logger.info(

@@ -293,14 +293,22 @@ class PaperBroker(BaseBroker):
         spread_pct = (ask - bid) / mid if mid > 0 else 0.0
 
         if order_type == OrderType.MARKET:
-            raw = ask if side == OrderSide.BUY else bid
+            # BUY / BUY_TO_COVER fill at ask; SELL / SELL_SHORT at bid
+            if side in (OrderSide.BUY, OrderSide.BUY_TO_COVER):
+                raw = ask
+            else:
+                raw = bid
         elif order_type == OrderType.LIMIT and limit_price:
             raw = limit_price
         else:
             raw = mid
 
-        # Apply slippage on top
-        fill = self.slippage_model.apply(raw, side.value, spread_pct)
+        # Apply slippage on top — map to simple "buy"/"sell" for model
+        slip_side = (
+            "buy" if side in (OrderSide.BUY, OrderSide.BUY_TO_COVER)
+            else "sell"
+        )
+        fill = self.slippage_model.apply(raw, slip_side, spread_pct)
 
         # Track cumulative slippage cost (vs mid)
         self._total_slippage_cost += abs(fill - mid)
@@ -442,7 +450,7 @@ class PaperBroker(BaseBroker):
                     market=order.market,
                 )
 
-        else:  # SELL
+        elif order.side == OrderSide.SELL:
             if order.ticker not in self._positions:
                 return OrderResult(
                     success=False,
@@ -467,6 +475,99 @@ class PaperBroker(BaseBroker):
             self._cash += (total_cost - commission)
 
             pos.quantity -= order.quantity
+            pos.realized_pnl += pnl
+
+            if pos.quantity == 0:
+                del self._positions[order.ticker]
+
+            self._trades.append({
+                'ticker': order.ticker,
+                'side': order.side.value,
+                'quantity': order.quantity,
+                'price': fill_price,
+                'pnl': pnl,
+                'commission': commission,
+                'timestamp': datetime.now(),
+            })
+
+        elif order.side == OrderSide.SELL_SHORT:
+            # Sprint 27: open short — set aside margin (= notional)
+            required = total_cost + commission
+            if required > self._cash:
+                return OrderResult(
+                    success=False,
+                    order_id=order_id,
+                    status=OrderStatus.REJECTED,
+                    message=(
+                        f"Insufficient margin. "
+                        f"Need ${required:.2f}, have ${self._cash:.2f}"
+                    ),
+                )
+
+            self._cash -= commission  # margin held implicitly
+            # Credit sale proceeds
+            self._cash += total_cost
+
+            if order.ticker in self._positions:
+                pos = self._positions[order.ticker]
+                if pos.direction == "long":
+                    return OrderResult(
+                        success=False,
+                        order_id=order_id,
+                        status=OrderStatus.REJECTED,
+                        message=(
+                            f"Already long {order.ticker}; "
+                            f"close long before shorting"
+                        ),
+                    )
+                # Add to existing short
+                old_val = pos.avg_price * abs(pos.quantity)
+                new_val = fill_price * order.quantity
+                total_qty = abs(pos.quantity) + order.quantity
+                pos.avg_price = (old_val + new_val) / total_qty
+                pos.quantity = -total_qty
+            else:
+                self._positions[order.ticker] = Position(
+                    ticker=order.ticker,
+                    quantity=-order.quantity,
+                    avg_price=fill_price,
+                    current_price=fill_price,
+                    market_value=total_cost,
+                    market=order.market,
+                    direction="short",
+                )
+
+        elif order.side == OrderSide.BUY_TO_COVER:
+            # Sprint 27: close short
+            if order.ticker not in self._positions:
+                return OrderResult(
+                    success=False,
+                    order_id=order_id,
+                    status=OrderStatus.REJECTED,
+                    message=f"No short position in {order.ticker}",
+                )
+
+            pos = self._positions[order.ticker]
+            short_qty = abs(pos.quantity)
+
+            if order.quantity > short_qty:
+                return OrderResult(
+                    success=False,
+                    order_id=order_id,
+                    status=OrderStatus.REJECTED,
+                    message=(
+                        f"Cover qty {order.quantity} > "
+                        f"short {short_qty}"
+                    ),
+                )
+
+            # Short P&L: (entry - exit) * shares
+            pnl = (pos.avg_price - fill_price) * order.quantity - commission
+
+            # Pay to buy back shares
+            self._cash -= (total_cost + commission)
+
+            pos.quantity += order.quantity  # negative + positive
             pos.realized_pnl += pnl
 
             if pos.quantity == 0:

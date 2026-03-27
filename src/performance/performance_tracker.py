@@ -550,16 +550,162 @@ class PerformanceTracker:
         return "\n".join(lines)
     
     async def _save_signal(self, outcome: SignalOutcome):
-        """Save signal to database."""
-        # Implementation depends on database structure
-        pass
-    
+        """Save signal to database via trade repository."""
+        try:
+            if hasattr(self.db, "save_outcome"):
+                await self.db.save_outcome({
+                    "trade_id": outcome.signal_id,
+                    "ticker": outcome.ticker,
+                    "direction": outcome.direction.value,
+                    "strategy": outcome.strategy,
+                    "entry_price": outcome.entry_price,
+                    "exit_price": outcome.exit_price or 0,
+                    "entry_time": outcome.entry_time.isoformat(),
+                    "exit_time": (
+                        outcome.exit_time.isoformat()
+                        if outcome.exit_time else None
+                    ),
+                    "pnl_pct": outcome.pnl_pct,
+                    "confidence": outcome.initial_confidence,
+                    "horizon": "swing",
+                    "exit_reason": outcome.status.value,
+                    "hold_hours": outcome.hold_time_hours,
+                })
+            elif hasattr(self.db, "execute"):
+                await self.db.execute(
+                    "INSERT INTO analytics.signal_outcomes "
+                    "(signal_id, ticker, direction, strategy, "
+                    "entry_price, entry_time, status, confidence) "
+                    "VALUES (:sid, :tk, :dir, :strat, :ep, :et, "
+                    ":st, :conf) ON CONFLICT DO NOTHING",
+                    {
+                        "sid": outcome.signal_id,
+                        "tk": outcome.ticker,
+                        "dir": outcome.direction.value,
+                        "strat": outcome.strategy,
+                        "ep": outcome.entry_price,
+                        "et": outcome.entry_time.isoformat(),
+                        "st": outcome.status.value,
+                        "conf": outcome.initial_confidence,
+                    },
+                )
+        except Exception as e:
+            logger.debug("Signal DB save skipped: %s", e)
+
     async def _update_signal(self, outcome: SignalOutcome):
-        """Update signal in database."""
-        # Implementation depends on database structure
-        pass
-    
+        """Update closed signal in database."""
+        try:
+            if hasattr(self.db, "save_outcome"):
+                await self.db.save_outcome({
+                    "trade_id": outcome.signal_id,
+                    "ticker": outcome.ticker,
+                    "direction": outcome.direction.value,
+                    "strategy": outcome.strategy,
+                    "entry_price": outcome.entry_price,
+                    "exit_price": outcome.exit_price or 0,
+                    "entry_time": outcome.entry_time.isoformat(),
+                    "exit_time": (
+                        outcome.exit_time.isoformat()
+                        if outcome.exit_time else None
+                    ),
+                    "pnl_pct": outcome.pnl_pct,
+                    "confidence": outcome.initial_confidence,
+                    "horizon": "swing",
+                    "exit_reason": outcome.status.value,
+                    "hold_hours": outcome.hold_time_hours,
+                })
+            elif hasattr(self.db, "execute"):
+                await self.db.execute(
+                    "UPDATE analytics.signal_outcomes SET "
+                    "exit_price=:ep, exit_time=:et, "
+                    "status=:st, pnl_pct=:pnl, "
+                    "hold_hours=:hh "
+                    "WHERE signal_id=:sid",
+                    {
+                        "sid": outcome.signal_id,
+                        "ep": outcome.exit_price,
+                        "et": (
+                            outcome.exit_time.isoformat()
+                            if outcome.exit_time else None
+                        ),
+                        "st": outcome.status.value,
+                        "pnl": outcome.pnl_pct,
+                        "hh": outcome.hold_time_hours,
+                    },
+                )
+        except Exception as e:
+            logger.debug("Signal DB update skipped: %s", e)
+
     async def load_from_db(self):
         """Load historical signals from database."""
-        # Implementation depends on database structure
-        pass
+        try:
+            rows = []
+            if hasattr(self.db, "get_recent_outcomes"):
+                rows = await self.db.get_recent_outcomes(limit=500)
+            elif hasattr(self.db, "fetch"):
+                rows = await self.db.fetch(
+                    "SELECT * FROM analytics.signal_outcomes "
+                    "ORDER BY entry_time DESC LIMIT 500"
+                )
+
+            for row in rows:
+                direction = row.get("direction", "long")
+                try:
+                    td = TradeDirection(direction.lower())
+                except ValueError:
+                    td = TradeDirection.LONG
+
+                entry_time_raw = row.get("entry_time")
+                if isinstance(entry_time_raw, str):
+                    entry_time = datetime.fromisoformat(
+                        entry_time_raw,
+                    )
+                elif isinstance(entry_time_raw, datetime):
+                    entry_time = entry_time_raw
+                else:
+                    entry_time = datetime.now()
+
+                exit_time = None
+                exit_raw = row.get("exit_time")
+                if isinstance(exit_raw, str):
+                    exit_time = datetime.fromisoformat(exit_raw)
+                elif isinstance(exit_raw, datetime):
+                    exit_time = exit_raw
+
+                outcome = SignalOutcome(
+                    signal_id=str(
+                        row.get("trade_id", row.get("signal_id", ""))
+                    ),
+                    ticker=row.get("ticker", ""),
+                    strategy=row.get("strategy", ""),
+                    direction=td,
+                    entry_time=entry_time,
+                    entry_price=float(row.get("entry_price", 0)),
+                    target_price=0.0,
+                    stop_loss=0.0,
+                    exit_time=exit_time,
+                    exit_price=float(row.get("exit_price", 0)) or None,
+                    status=SignalStatus.ACTIVE if exit_time is None else SignalStatus.TARGET_HIT,
+                    initial_confidence=float(
+                        row.get("confidence", 0)
+                    ),
+                    pnl_pct=float(row.get("pnl_pct", 0)),
+                    hold_time_hours=float(
+                        row.get("hold_hours", 0)
+                    ),
+                )
+
+                if exit_time is None:
+                    self.active_signals[outcome.signal_id] = outcome
+                else:
+                    self.completed_signals.append(outcome)
+
+            logger.info(
+                "Loaded %d signals from DB "
+                "(%d active, %d completed)",
+                len(rows),
+                len(self.active_signals),
+                len(self.completed_signals),
+            )
+        except Exception as e:
+            logger.debug("Signal DB load skipped: %s", e)
