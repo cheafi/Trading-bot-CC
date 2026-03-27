@@ -310,7 +310,7 @@ _boot()                          ← pre-flight validation
             ├── ensembler.rank()           ← ensemble scoring
             │   └── edge_calculator.compute()  ← calibrated EV
             ├── learning_loop.predict()    ← ML quality gate
-            ├── _execute_signal()          ← broker execution
+            ├── _execute_recommendation()  ← broker execution (Sprint 22: typed)
             │   └── position_mgr.open()    ← R-based sizing
             ├── _timed_phase("monitoring") ← position monitoring
             │   └── position_mgr.update_all()  ← trailing stops

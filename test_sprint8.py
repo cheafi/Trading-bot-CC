@@ -61,8 +61,8 @@ class TestSingletonBrokerManager(unittest.TestCase):
         self.assertIn("self._broker_mgr = None", self.src)
 
     def test_03_no_broker_manager_in_execute_signal(self):
-        """_execute_signal uses _get_broker() not BrokerManager()."""
-        idx = self.src.find("async def _execute_signal(")
+        """Execution path uses _get_broker() not BrokerManager()."""
+        idx = self.src.find("async def _execute_recommendation(")
         next_method = self.src.find("\n    async def ", idx + 10)
         if next_method == -1:
             next_method = self.src.find("\n    def ", idx + 10)
@@ -112,11 +112,12 @@ class TestEdgeCalculatorInvocation(unittest.TestCase):
         self.assertIn("self.edge_calculator.compute(", self.src)
 
     def test_08_edge_data_in_signal_dict(self):
-        """Signal dict enriched with edge_p_t1, edge_p_stop, edge_ev."""
+        """Edge fields exist on TradeRecommendation (formerly signal dict)."""
+        model_src = (ROOT / "src/core/models.py").read_text()
         for field in ["edge_p_t1", "edge_p_stop", "edge_ev"]:
             self.assertIn(
-                f'sd["{field}"]', self.src,
-                f"Signal dict missing edge field: {field}",
+                field, self.src + model_src,
+                f"Missing edge field: {field}",
             )
 
     def test_09_edge_graceful_fallback(self):

@@ -193,9 +193,9 @@ class TestStructuredErrorUsage(unittest.TestCase):
         self.assertIn("DataError", src)
 
     def test_16_execute_signal_catches_broker_error(self):
-        """_execute_signal has explicit BrokerError catch."""
+        """Execution path has explicit BrokerError catch."""
         src = (ROOT / "src/engines/auto_trading_engine.py").read_text()
-        exec_start = src.find("async def _execute_signal(")
+        exec_start = src.find("async def _execute_recommendation(")
         exec_end = src.find("\n    async def ", exec_start + 1)
         if exec_end == -1:
             exec_end = src.find("\n    def ", exec_start + 1)

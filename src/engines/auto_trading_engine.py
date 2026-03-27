@@ -17,7 +17,7 @@ from datetime import datetime, date, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set
 
 from src.core.config import get_settings, get_trading_config
-from src.core.models import Direction, Signal, SignalStatus
+from src.core.models import Direction, Signal, SignalStatus, TradeRecommendation
 from src.engines.regime_router import RegimeRouter
 from src.engines.opportunity_ensembler import OpportunityEnsembler
 from src.engines.context_assembler import ContextAssembler
@@ -484,28 +484,13 @@ class AutoTradingEngine:
             validated = await self._validate_signals(signals)
 
         # Rank through ensemble scorer (with calibrated edge if available)
-        signal_dicts = []
+        recommendations = []
         for sig in validated:
-            # Prefer strategy_id (canonical), fallback strategy_name
-            _strat_id = (
-                getattr(sig, 'strategy_id', None)
-                or getattr(sig, 'strategy_name', None)
-                or "unknown"
-            )
-            sd = {
-                "ticker": sig.ticker,
-                "direction": sig.direction.value if hasattr(sig.direction, 'value') else sig.direction,
-                "score": sig.confidence / 100 if hasattr(sig, 'confidence') else 0.5,
-                "strategy_name": _strat_id,
-                "risk_reward_ratio": getattr(sig, 'risk_reward_ratio', 1.5),
-                "expected_return": getattr(sig, 'expected_return', 0.02),
-                "_signal_obj": sig,  # keep reference
-            }
-
-            # Sprint 8: enrich with EdgeCalculator calibrated probabilities
+            # Build typed edge object if available
+            _edge = None
             if self.edge_calculator is not None:
                 try:
-                    edge = self.edge_calculator.compute(
+                    _edge = self.edge_calculator.compute(
                         signal=sig,
                         regime=self._regime_state,
                         features={
@@ -513,16 +498,16 @@ class AutoTradingEngine:
                             "rsi_14": getattr(sig, "rsi", 50),
                         },
                     )
-                    sd["edge_p_t1"] = edge.p_t1
-                    sd["edge_p_stop"] = edge.p_stop
-                    sd["edge_ev"] = edge.expected_return_pct
                 except (ValueError, KeyError, TypeError) as e:
                     logger.debug("Edge calc fallback for signal: %s", e)
 
-            signal_dicts.append(sd)
+            rec = TradeRecommendation.from_signal(
+                sig, edge=_edge, regime_state=self._regime_state,
+            )
+            recommendations.append(rec)
 
         ranked = self.ensembler.rank_opportunities(
-            signal_dicts,
+            recommendations,
             self._regime_state,
             portfolio_state=self._context.get("portfolio_state"),
             strategy_scores=self.leaderboard.get_strategy_scores(),
@@ -531,85 +516,62 @@ class AutoTradingEngine:
             ),
         )
 
-        # Cache ranked results for API
-        self._cached_recommendations = ranked
+        # Cache ranked results for API (JSON-safe)
+        self._cached_recommendations = [
+            rec.to_api_dict() for rec in ranked
+        ]
         self._cached_regime = self._regime_state
         self._cached_leaderboard = self.leaderboard.get_strategy_scores()
 
         # Execute only approved opportunities (with ML quality gate)
-        for opp in ranked:
-            if not opp.get("trade_decision", False):
-                continue
-            signal = opp["original_signal"].get("_signal_obj")
-            if signal is None:
+        for rec in ranked:
+            if not rec.trade_decision:
                 continue
 
             # Sprint 7: ML quality gate — skip D-grade signals
-            ml_quality = self.learning_loop.predict_signal_quality({
-                "confidence": getattr(signal, "confidence", 50),
-                "vix_at_entry": self._regime_state.get("vix", 20),
-                "rsi_at_entry": getattr(signal, "rsi", 50),
-                "adx_at_entry": getattr(signal, "adx", 25),
-                "relative_volume": getattr(signal, "relative_volume", 1.0),
-                "distance_from_sma50": getattr(signal, "distance_from_sma50", 0),
-            })
+            ml_quality = self.learning_loop.predict_signal_quality(
+                rec.to_entry_snapshot(),
+            )
             if ml_quality.get("model_available") and ml_quality.get("signal_grade") == "D":
+                rec.ml_grade = "D"
+                rec.ml_win_probability = ml_quality.get("win_probability", 0)
                 logger.info(
                     "ML quality gate rejected %s (win_prob=%.2f, grade=D)",
-                    signal.ticker, ml_quality.get("win_probability", 0),
+                    rec.ticker, rec.ml_win_probability,
                 )
                 continue
 
             if self.dry_run:
                 logger.info(
-                    f"[DRY RUN] Would execute: {signal.ticker} "
-                    f"{signal.direction.value} "
-                    f"(score={opp['composite_score']:.3f})"
+                    "[DRY RUN] Would execute: %s %s (score=%.3f)",
+                    rec.ticker, rec.direction, rec.composite_score,
                 )
             else:
-                result = await self._execute_signal(
-                    signal, opp=opp,
-                )
+                result = await self._execute_recommendation(rec)
                 if result:
-                    result["composite_score"] = opp["composite_score"]
+                    result["composite_score"] = rec.composite_score
                     self._trades_today.append(result)
                     # Record in PositionManager for trailing stops
                     try:
                         _stop = (
-                            signal.invalidation.stop_price
-                            if getattr(signal, "invalidation", None)
-                            and getattr(signal.invalidation, "stop_price", 0)
-                            else result.get("entry_price", signal.entry_price) * (1 - trading_config.stop_loss_pct)
+                            rec.stop_price
+                            if rec.stop_price > 0
+                            else result.get("entry_price", rec.entry_price) * (1 - trading_config.stop_loss_pct)
                         )
                         self.position_mgr.open_position(
-                            ticker=signal.ticker,
-                            strategy_id=opp.get(
-                                "strategy_name", "unknown",
-                            ),
+                            ticker=rec.ticker,
+                            strategy_id=rec.strategy_id,
                             entry_price=result.get(
-                                "entry_price", signal.entry_price,
+                                "entry_price", rec.entry_price,
                             ),
-                            shares=self._calculate_position_size(
-                                signal,
-                                edge_pwin=opp.get(
-                                    "original_signal", {},
-                                ).get("edge_p_t1", 0),
-                                edge_rr=opp.get(
-                                    "original_signal", {},
-                                ).get(
-                                    "risk_reward_ratio", 0,
-                                ),
-                                strategy_name=opp.get(
-                                    "strategy_name", "unknown",
-                                ),
-                            ),
+                            shares=rec.position_size_shares or 1,
                             stop_loss_price=_stop,
                             max_hold_days=trading_config.max_hold_days,
                         )
                     except RiskLimitError as e:
-                        logger.warning("PositionManager risk limit for %s: %s", signal.ticker, e)
+                        logger.warning("PositionManager risk limit for %s: %s", rec.ticker, e)
                     except Exception as e:
-                        logger.warning("PositionManager track error for %s: %s", signal.ticker, e)
+                        logger.warning("PositionManager track error for %s: %s", rec.ticker, e)
 
         # Monitor existing positions
         async with self._timed_phase("position_monitoring"):
@@ -789,89 +751,101 @@ class AutoTradingEngine:
             logger.error("Unexpected validation error: %s", e)
             return signals
 
-    async def _execute_signal(
-        self, signal: Signal,
-        opp: Optional[Dict[str, Any]] = None,
+    async def _execute_recommendation(
+        self, rec: "TradeRecommendation",
     ) -> Optional[Dict[str, Any]]:
-        """Execute a signal through the broker manager."""
+        """Execute a TradeRecommendation through the broker manager.
+
+        All data (edge, strategy, sizing params) is read from the
+        canonical TradeRecommendation object — no ad-hoc dicts.
+        """
         try:
             from src.brokers.base import OrderSide, OrderType
 
             manager = await self._get_broker()
-            opp = opp or {}
-            orig = opp.get("original_signal", {})
-
-            # Edge-adjusted sizing
-            _pwin = orig.get("edge_p_t1", 0)
-            _rr = signal.risk_reward_ratio if hasattr(
-                signal, "risk_reward_ratio"
-            ) else orig.get("risk_reward_ratio", 0)
-            _strat = opp.get(
-                "strategy_name",
-                getattr(signal, "strategy_id", "unknown"),
-            )
 
             side = (
                 OrderSide.BUY
-                if signal.direction == Direction.LONG
+                if rec.direction == Direction.LONG.value
                 else OrderSide.SELL
             )
             qty = max(1, self._calculate_position_size(
-                signal,
-                edge_pwin=_pwin,
-                edge_rr=_rr,
-                strategy_name=_strat,
+                rec,
+                edge_pwin=rec.edge_p_t1,
+                edge_rr=rec.risk_reward_ratio,
+                strategy_name=rec.strategy_id,
             ))
+            rec.position_size_shares = qty
+
             result = await manager.place_order(
-                ticker=signal.ticker,
+                ticker=rec.ticker,
                 side=side,
                 quantity=qty,
                 order_type=OrderType.MARKET,
             )
 
             if result.success:
-                stop_price = (
-                    signal.invalidation.stop_price
-                    if signal.invalidation else signal.entry_price * 0.95
+                _stop = (
+                    rec.stop_price if rec.stop_price > 0
+                    else rec.entry_price * 0.95
                 )
                 self.position_monitor.track_entry(
-                    signal.ticker,
-                    signal.entry_price,
-                    stop_price,
-                )
-                _strat = (
-                    getattr(signal, 'strategy_id', None)
-                    or getattr(signal, 'strategy_name', None)
-                    or "unknown"
+                    rec.ticker, rec.entry_price, _stop,
                 )
                 _entry_price = getattr(
-                    result, "avg_fill_price", signal.entry_price
+                    result, "avg_fill_price", rec.entry_price,
                 )
+
+                rec.executed = True
+                rec.execution_time = datetime.now(timezone.utc)
+                rec.fill_price = _entry_price
+
                 return {
-                    "signal": signal.ticker,
-                    "direction": signal.direction.value,
-                    "strategy_name": _strat,
+                    "ticker": rec.ticker,
+                    "direction": rec.direction,
+                    "strategy_name": rec.strategy_id,
                     "entry_price": _entry_price,
-                    "time": datetime.now(timezone.utc).isoformat(),
-                    "confidence": getattr(signal, "confidence", 50),
-                    "entry_snapshot": {
-                        "confidence": getattr(signal, "confidence", 50),
-                        "vix_at_entry": self._regime_state.get("vix", 20),
-                        "rsi_at_entry": getattr(signal, "rsi", 50),
-                        "adx_at_entry": getattr(signal, "adx", 25),
-                        "relative_volume": getattr(signal, "relative_volume", 1.0),
-                        "distance_from_sma50": getattr(signal, "distance_from_sma50", 0),
-                    },
+                    "time": rec.execution_time.isoformat(),
+                    "confidence": rec.signal_confidence,
+                    "entry_snapshot": rec.to_entry_snapshot(),
                 }
             else:
-                logger.warning(f"Order failed for {signal.ticker}: {result.message}")
+                logger.warning(
+                    "Order failed for %s: %s",
+                    rec.ticker,
+                    getattr(result, "message", "unknown"),
+                )
                 return None
         except BrokerError as e:
-            logger.error(f"Broker error for {signal.ticker}: {e}")
+            logger.error("Broker error for %s: %s", rec.ticker, e)
             return None
         except Exception as e:
-            logger.error(f"Execution error for {signal.ticker}: {e}")
+            logger.error(
+                "Execution error for %s: %s", rec.ticker, e,
+            )
             return None
+
+    async def _execute_signal(
+        self, signal: Signal,
+        opp: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Legacy wrapper: convert Signal+opp to TradeRecommendation.
+
+        Kept for backward compatibility with callers that still
+        pass raw Signal objects.  New code should use
+        ``_execute_recommendation()`` directly.
+        """
+        rec = TradeRecommendation.from_signal(
+            signal, regime_state=self._regime_state,
+        )
+        if opp:
+            rec.composite_score = opp.get(
+                "composite_score", 0,
+            )
+            rec.trade_decision = opp.get(
+                "trade_decision", False,
+            )
+        return await self._execute_recommendation(rec)
 
     async def _monitor_positions(self):
         """
@@ -1419,7 +1393,12 @@ class AutoTradingEngine:
 
         # Compute stop from signal or config default
         stop_price = price * (1 - trading_config.stop_loss_pct)
-        if (
+        # TradeRecommendation has stop_price directly;
+        # legacy Signal has invalidation.stop_price
+        _direct_stop = getattr(signal, "stop_price", 0)
+        if _direct_stop and _direct_stop > 0:
+            stop_price = _direct_stop
+        elif (
             getattr(signal, "invalidation", None)
             and getattr(signal.invalidation, "stop_price", 0)
         ):

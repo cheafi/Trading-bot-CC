@@ -274,7 +274,7 @@ class TestPipelineIntegration(unittest.TestCase):
             "_validate_signals",
             "rank_opportunities",
             "predict_signal_quality",
-            "_execute_signal",
+            "_execute_recommendation",
             "_monitor_positions",
             "_maybe_run_eod",
         ]

@@ -35,13 +35,13 @@ class TestTradeRecommendationModels(unittest.TestCase):
 
     def test_trade_recommendation_creation(self):
         TR = _models.TradeRecommendation
-        rec = TR(ticker="AAPL", direction="bullish",
+        rec = TR(ticker="AAPL", direction="LONG",
                  instrument_type="stock",
-                 ensemble_score=0.75,
-                 recommended_strategy="momentum",
-                 regime_confidence=0.8)
+                 composite_score=0.75,
+                 strategy_id="momentum",
+                 regime_weight=0.8)
         self.assertEqual(rec.ticker, "AAPL")
-        self.assertEqual(rec.ensemble_score, 0.75)
+        self.assertEqual(rec.composite_score, 0.75)
         self.assertEqual(rec.instrument_type, "stock")
 
     def test_expression_plan_creation(self):

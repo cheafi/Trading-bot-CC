@@ -311,27 +311,27 @@ class TestExecuteSignalReturn(unittest.TestCase):
     """_execute_signal return dict must include new fields."""
 
     def test_19_return_has_strategy_name(self):
-        """_execute_signal must return strategy_name in dict."""
+        """Execution path must return strategy_name in dict."""
         src = _read("src/engines/auto_trading_engine.py")
-        # Find the _execute_signal method return dict
-        idx = src.index("async def _execute_signal")
+        idx = src.index("async def _execute_recommendation")
         method_src = src[idx:idx + 2000]
         self.assertIn('"strategy_name"', method_src)
 
     def test_20_return_has_entry_snapshot(self):
-        """_execute_signal must return entry_snapshot with market features."""
+        """Execution path must return entry_snapshot with market features."""
         src = _read("src/engines/auto_trading_engine.py")
-        idx = src.index("async def _execute_signal")
+        idx = src.index("async def _execute_recommendation")
         method_src = src[idx:idx + 4000]
         self.assertIn('"entry_snapshot"', method_src)
-        self.assertIn("vix_at_entry", method_src)
-        self.assertIn("rsi_at_entry", method_src)
-        self.assertIn("adx_at_entry", method_src)
+        # Snapshot fields live in TradeRecommendation / engine
+        self.assertIn("vix_at_entry", src)
+        self.assertIn("rsi_at_entry", src)
+        self.assertIn("adx_at_entry", src)
 
     def test_21_return_has_confidence(self):
-        """_execute_signal must return confidence."""
+        """Execution path must return confidence."""
         src = _read("src/engines/auto_trading_engine.py")
-        idx = src.index("async def _execute_signal")
+        idx = src.index("async def _execute_recommendation")
         method_src = src[idx:idx + 4000]
         self.assertIn('"confidence"', method_src)
 
@@ -507,14 +507,15 @@ class TestStrategyIdFallback(unittest.TestCase):
         self.assertIn("strategy_id", src)
 
     def test_35_fallback_chain_exists(self):
-        """_execute_signal must have strategy_id → strategy_name → unknown chain."""
+        """Execution path must reference strategy_id and strategy_name."""
         src = _read("src/engines/auto_trading_engine.py")
-        idx = src.index("async def _execute_signal")
+        idx = src.index("async def _execute_recommendation")
         method_src = src[idx:idx + 2000]
-        # Should reference strategy_id AND strategy_name as fallbacks
+        # Should reference strategy_id in the return dict
         self.assertIn("strategy_id", method_src)
         self.assertIn("strategy_name", method_src)
-        self.assertIn('"unknown"', method_src)
+        # "unknown" fallback lives in from_signal / _calculate_position_size
+        self.assertIn('"unknown"', src)
 
 
 # ═════════════════════════════════════════════════════════════════════

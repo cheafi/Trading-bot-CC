@@ -316,7 +316,7 @@ class TestKellyEnginePositionSize(unittest.TestCase):
         """Engine sizing uses leaderboard.get_sizing_multiplier."""
         src = _read("src/engines/auto_trading_engine.py")
         idx = src.index("def _calculate_position_size")
-        method = src[idx:idx + 3000]
+        method = src[idx:idx + 4500]
         self.assertIn("get_sizing_multiplier", method)
         self.assertIn("lb_mult", method)
 

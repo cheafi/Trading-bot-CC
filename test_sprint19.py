@@ -60,12 +60,12 @@ class TestPydanticMigration(unittest.TestCase):
         self.assertNotIn("class Config:", content)
 
     def test_02_has_model_config_6_times(self):
-        """models.py should have 6 model_config = ConfigDict lines."""
+        """models.py should have 7 model_config = ConfigDict lines."""
         path = os.path.join(ROOT, "src", "core", "models.py")
         with open(path) as f:
             content = f.read()
         count = content.count("model_config = ConfigDict(from_attributes=True)")
-        self.assertEqual(count, 6, f"Expected 6, found {count}")
+        self.assertEqual(count, 7, f"Expected 7, found {count}")
 
     def test_03_configdict_imported(self):
         """ConfigDict is imported from pydantic."""

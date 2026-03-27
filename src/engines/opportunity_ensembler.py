@@ -10,8 +10,10 @@ from potentially overlapping signals, applying regime fit,
 correlation penalty, and event-proximity adjustments.
 """
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
+
+from src.core.models import TradeRecommendation
 
 logger = logging.getLogger(__name__)
 
@@ -65,37 +67,47 @@ class OpportunityEnsembler:
 
     def rank_opportunities(
         self,
-        signals: List[Dict[str, Any]],
+        signals: List[Union[Dict[str, Any], "TradeRecommendation"]],
         regime_state: Dict[str, Any],
         portfolio_state: Optional[Dict[str, Any]] = None,
         strategy_scores: Optional[Dict[str, float]] = None,
         regime_weights: Optional[Dict[str, float]] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> List["TradeRecommendation"]:
         """
-        Rank a list of raw signals into scored opportunities.
+        Rank a list of signals into scored TradeRecommendation objects.
 
-        Each signal should have at minimum:
-            ticker, direction, score, strategy_name,
-            risk_reward_ratio, expected_return
+        Accepts both legacy signal dicts and TradeRecommendation objects.
+        Dict inputs are auto-converted via TradeRecommendation.from_dict().
 
         Args:
+            signals: list of TradeRecommendation or legacy signal dicts
             regime_weights: strategy_family → 0–1 regime
                 multiplier from RegimeRouter.get_strategy_multipliers()
 
-        Returns list sorted by composite_score descending,
-        each entry augmented with composite_score, components,
-        and trade_decision (True/False).
+        Returns list of TradeRecommendation sorted by composite_score
+        descending, each augmented with composite_score, components,
+        and trade_decision.
         """
-        scored = []
+        # Normalise inputs to TradeRecommendation
+        recs: List[TradeRecommendation] = []
         for sig in signals:
+            if isinstance(sig, TradeRecommendation):
+                recs.append(sig)
+            else:
+                recs.append(TradeRecommendation.from_dict(sig))
+
+        scored: List[TradeRecommendation] = []
+        for rec in recs:
             entry = self._score_opportunity(
-                sig, regime_state, portfolio_state,
+                rec, regime_state, portfolio_state,
                 strategy_scores, regime_weights,
             )
             scored.append(entry)
 
         # Sort descending by composite score
-        scored.sort(key=lambda x: x["composite_score"], reverse=True)
+        scored.sort(
+            key=lambda x: x.composite_score, reverse=True,
+        )
 
         # Apply no-trade suppression
         scored = self._apply_suppression(scored, regime_state)
@@ -104,32 +116,30 @@ class OpportunityEnsembler:
 
     def _score_opportunity(
         self,
-        signal: Dict[str, Any],
+        rec: "TradeRecommendation",
         regime: Dict[str, Any],
         portfolio: Optional[Dict[str, Any]],
         strategy_health: Optional[Dict[str, float]],
         regime_weights: Optional[Dict[str, float]] = None,
-    ) -> Dict[str, Any]:
-        """Score a single opportunity."""
+    ) -> "TradeRecommendation":
+        """Score a single TradeRecommendation in-place."""
         w = self.weights
 
         # Component: calibrated win probability
-        # Prefer EdgeCalculator p_t1 if available
-        pwin = signal.get("edge_p_t1", signal.get("score", 0.5))
+        # Prefer non-zero edge_p_t1, fall back to normalised score
+        pwin = rec.edge_p_t1 if rec.edge_p_t1 > 0 else rec.score
         pwin = min(pwin, 1.0)
 
         # Component: expected return (normalised)
-        # Prefer edge EV over raw expected_return
-        exp_r = signal.get(
-            "edge_ev", signal.get("expected_return", 0.0)
-        )
+        # Prefer non-zero edge EV
+        exp_r = rec.edge_ev if rec.edge_ev != 0 else rec.expected_return
         exp_r_norm = min(abs(exp_r) / 0.10, 1.0)  # 10% = max
 
         # Component: regime fit
-        regime_fit = self._calc_regime_fit(signal, regime)
+        regime_fit = self._calc_regime_fit(rec, regime)
 
         # Component: strategy health (leaderboard * regime weight)
-        strat = signal.get("strategy_name", "unknown")
+        strat = rec.strategy_id
         lb_score = 0.5
         if strategy_health and strat in strategy_health:
             lb_score = min(strategy_health[strat], 1.0)
@@ -140,14 +150,14 @@ class OpportunityEnsembler:
         health = lb_score * rw
 
         # Component: timing quality (simplified)
-        timing = signal.get("timing_score", 0.5)
+        timing = rec.timing_score
 
         # Component: risk/reward ratio
-        rr = signal.get("risk_reward_ratio", 1.0)
+        rr = rec.risk_reward_ratio
         rr_norm = min(rr / 4.0, 1.0)  # 4:1 = perfect
 
         # Component: conviction (multi-strategy agreement)
-        conviction = signal.get("strategy_agreement", 0.5)
+        conviction = rec.strategy_agreement
 
         # Composite
         composite = (
@@ -161,19 +171,19 @@ class OpportunityEnsembler:
         )
 
         # Penalties
-        penalties = {}
+        penalties: Dict[str, float] = {}
 
         # Correlation penalty: if portfolio already has correlated
         if portfolio:
             corr_penalty = self._correlation_penalty(
-                signal, portfolio
+                rec, portfolio
             )
             composite -= corr_penalty
             if corr_penalty > 0:
                 penalties["correlation"] = round(corr_penalty, 3)
 
         # Event proximity (earnings within 3 days)
-        if signal.get("days_to_earnings", 999) <= 3:
+        if rec.days_to_earnings <= 3:
             composite -= self.EVENT_PROXIMITY_PENALTY
             penalties["event_proximity"] = (
                 self.EVENT_PROXIMITY_PENALTY
@@ -188,32 +198,33 @@ class OpportunityEnsembler:
 
         composite = max(composite, 0.0)
 
-        return {
-            "ticker": signal.get("ticker", "???"),
-            "direction": signal.get("direction", "LONG"),
-            "strategy_name": strat,
-            "composite_score": round(composite, 4),
-            "trade_decision": composite >= self.min_score,
-            "components": {
-                "pwin": round(pwin, 3),
-                "exp_r": round(exp_r_norm, 3),
-                "regime_fit": round(regime_fit, 3),
-                "strategy_health": round(health, 3),
-                "timing": round(timing, 3),
-                "risk_reward": round(rr_norm, 3),
-                "conviction": round(conviction, 3),
-            },
-            "penalties": penalties,
-            "original_signal": signal,
+        # Mutate the recommendation with ensemble results
+        rec.composite_score = round(composite, 4)
+        rec.trade_decision = composite >= self.min_score
+        rec.regime_fit = regime_fit
+        rec.regime_weight = rw
+        rec.strategy_health = health
+        rec.components = {
+            "pwin": round(pwin, 3),
+            "exp_r": round(exp_r_norm, 3),
+            "regime_fit": round(regime_fit, 3),
+            "strategy_health": round(health, 3),
+            "timing": round(timing, 3),
+            "risk_reward": round(rr_norm, 3),
+            "conviction": round(conviction, 3),
         }
+        rec.penalties = penalties
+        return rec
 
     def _calc_regime_fit(
         self,
-        signal: Dict[str, Any],
+        signal,
         regime: Dict[str, Any],
     ) -> float:
         """How well does this signal's strategy fit the regime?"""
-        strat = signal.get("strategy_name", "").lower()
+        strat = signal.get(
+            "strategy_name", signal.get("strategy_id", "")
+        ).lower()
         direction = signal.get("direction", "LONG")
 
         risk_on = regime.get("risk_on_uptrend", 0.33)
@@ -238,7 +249,7 @@ class OpportunityEnsembler:
 
     def _correlation_penalty(
         self,
-        signal: Dict[str, Any],
+        signal,
         portfolio: Dict[str, Any],
     ) -> float:
         """Penalise if ticker/sector already represented."""

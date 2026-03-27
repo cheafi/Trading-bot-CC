@@ -132,8 +132,10 @@ class TestSignalCaching(unittest.TestCase):
 
     def test_09_recommendations_cached_before_exec(self):
         """Ranked results are cached before execution loop."""
-        idx = self.src.find("_cached_recommendations = ranked")
+        idx = self.src.find("_cached_recommendations = [")
         self.assertGreater(idx, 0)
+        block = self.src[idx:idx + 200]
+        self.assertIn("ranked", block)
 
     def test_10_get_cached_state_method(self):
         """get_cached_state() method returns dict with expected keys."""

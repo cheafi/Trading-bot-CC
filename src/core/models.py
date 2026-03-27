@@ -837,59 +837,255 @@ class ExpressionPlan(BaseModel):
 
 class TradeRecommendation(BaseModel):
     """
-    The final decision artifact.
+    Canonical decision artifact: signal → ensemble → execution.
 
-    Signal is the raw research candidate.
-    TradeRecommendation is the portfolio-aware, options-aware,
-    regime-aware execution instruction.
+    Replaces ad-hoc dicts that previously flowed through the pipeline:
+    - signal_dicts built in AutoTradingEngine._run_cycle
+    - opportunity dicts returned by OpportunityEnsembler.rank_opportunities
+    - opp parameter consumed by _execute_signal
+    - _cached_recommendations entries served to the API
+
+    Lifecycle:
+      1. Created from a Signal via ``from_signal()``
+      2. Scored by OpportunityEnsembler (sets composite_score, etc.)
+      3. Consumed by AutoTradingEngine._execute_signal
+      4. Serialised for API via ``to_api_dict()``
+
+    Supports dict-like access (``rec["composite_score"]``,
+    ``rec.get("key", default)``) for backward compatibility with
+    code that previously used plain dicts.
     """
-    # Identity
-    ticker: str
-    timestamp: datetime = Field(default_factory=_utcnow)
-    recommendation_id: str = ""
 
-    # What to do
-    instrument_type: str = "stock"       # InstrumentType value
-    direction: str = "bullish"           # bullish / bearish / neutral / no_trade
-    recommended_strategy: str = ""
+    # ── Identity ──────────────────────────────────────────────
+    ticker: str
+    direction: str = "LONG"               # Direction enum .value
+    strategy_id: str = "unknown"
+    recommendation_id: str = ""
+    timestamp: datetime = Field(default_factory=_utcnow)
+
+    # ── Signal origin ─────────────────────────────────────────
+    signal_confidence: int = 50            # 0-100 raw from Signal
+    score: float = 0.5                     # 0-1 normalised (confidence / 100)
+    entry_price: float = 0.0
+    stop_price: float = 0.0
+    risk_reward_ratio: float = 1.5
+    expected_return: float = 0.02
+    horizon: str = "SWING_1_5D"
+    entry_logic: str = ""
+    catalyst: str = ""
+
+    # ── Edge Calculator ───────────────────────────────────────
+    edge_p_t1: float = 0.0                # calibrated win probability
+    edge_p_stop: float = 0.0              # calibrated stop probability
+    edge_ev: float = 0.0                  # expected value %
+
+    # ── Ensemble scoring (set by OpportunityEnsembler) ────────
+    composite_score: float = 0.0
+    trade_decision: bool = False
+    suppression_reason: str = ""
+    components: Dict[str, float] = Field(default_factory=dict)
+    penalties: Dict[str, float] = Field(default_factory=dict)
+
+    # ── Regime context ────────────────────────────────────────
+    regime_label: str = ""
+    regime_fit: float = 0.0
+    regime_weight: float = 1.0
+
+    # ── Strategy health ───────────────────────────────────────
+    strategy_health: float = 0.5
+    sizing_multiplier: float = 1.0
+
+    # ── Entry snapshot (for ML learning loop) ─────────────────
+    vix_at_entry: float = 20.0
+    rsi_at_entry: float = 50.0
+    adx_at_entry: float = 25.0
+    relative_volume: float = 1.0
+    distance_from_sma50: float = 0.0
+
+    # ── Quality ───────────────────────────────────────────────
+    setup_grade: str = "C"
+    ml_grade: str = ""
+    ml_win_probability: float = 0.0
+
+    # ── Ensemble component inputs ─────────────────────────────
+    timing_score: float = 0.5
+    strategy_agreement: float = 0.5
+    days_to_earnings: int = 999
+    sector: str = ""
+
+    # ── Expression (Sprint 3 — options-aware) ─────────────────
+    instrument_type: str = "stock"
     expression: ExpressionPlan = Field(default_factory=ExpressionPlan)
 
-    # Regime context
-    regime_assessment: Dict[str, float] = Field(default_factory=dict)
-    regime_confidence: float = 0.0
+    # ── Sizing (set during execution) ─────────────────────────
+    position_size_shares: int = 0
+    kelly_fraction: float = 0.0
 
-    # Trade parameters
-    entry_zone: Optional[List[float]] = None
-    invalidation: str = ""
-    profit_targets: List[str] = Field(default_factory=list)
-    expected_holding_period: str = ""
+    # ── Execution state ───────────────────────────────────────
+    executed: bool = False
+    execution_time: Optional[datetime] = None
+    fill_price: float = 0.0
 
-    # Quality metrics
-    confidence: int = 50
-    setup_grade: str = "C"               # SetupGrade value
-    risk_reward_estimate: Optional[float] = None
-    ensemble_score: float = 0.0
-    strategy_agreement: float = 0.0      # 0-1, how many strategies agree
-
-    # Explanations
-    why_this_trade_exists: str = ""
-    why_now: str = ""
-    key_risks: List[str] = Field(default_factory=list)
-    invalid_when: str = ""
-    better_alternative: Optional[str] = None
-
-    # Execution
-    execution_notes: List[str] = Field(default_factory=list)
-    position_sizing_guidance: str = ""
-    max_position_pct: float = 0.02       # of portfolio
-
-    # Learning
-    post_trade_learning_tag: str = ""
+    # ── Source tracking ───────────────────────────────────────
     source_signal_id: Optional[str] = None
     source_strategies: List[str] = Field(default_factory=list)
 
-    # Metadata
+    # ── Explanations ──────────────────────────────────────────
+    key_risks: List[str] = Field(default_factory=list)
+    execution_notes: List[str] = Field(default_factory=list)
+
+    # ── Metadata (catch-all for extensions) ───────────────────
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    model_config = ConfigDict(from_attributes=True)
+
+    # ── Dict-like protocol (backward compat) ──────────────────
+
+    def __getitem__(self, key: str):
+        try:
+            return getattr(self, key)
+        except AttributeError:
+            if key in self.metadata:
+                return self.metadata[key]
+            raise KeyError(key)
+
+    def __setitem__(self, key: str, value):
+        if key in self.model_fields:
+            setattr(self, key, value)
+        else:
+            self.metadata[key] = value
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.model_fields or key in self.metadata
+
+    def get(self, key: str, default=None):
+        """Dict-compatible .get() for backward compat."""
+        if key in self.model_fields:
+            return getattr(self, key)
+        return self.metadata.get(key, default)
+
+    # ── Serialisation helpers ─────────────────────────────────
+
+    def to_api_dict(self) -> Dict[str, Any]:
+        """JSON-safe dict for API / Discord serialisation."""
+        d = self.model_dump(exclude={"expression"})
+        d["instrument_type"] = self.instrument_type
+        for ts_key in ("timestamp", "execution_time"):
+            if d.get(ts_key) and hasattr(d[ts_key], "isoformat"):
+                d[ts_key] = d[ts_key].isoformat()
+        return d
+
+    def to_entry_snapshot(self) -> Dict[str, Any]:
+        """Extract ML entry snapshot for learning loop / DB."""
+        return {
+            "confidence": self.signal_confidence,
+            "vix_at_entry": self.vix_at_entry,
+            "rsi_at_entry": self.rsi_at_entry,
+            "adx_at_entry": self.adx_at_entry,
+            "relative_volume": self.relative_volume,
+            "distance_from_sma50": self.distance_from_sma50,
+        }
+
+    # ── Factory methods ───────────────────────────────────────
+
+    @classmethod
+    def from_signal(
+        cls,
+        signal,
+        edge=None,
+        regime_state: Optional[Dict[str, Any]] = None,
+        **overrides,
+    ) -> "TradeRecommendation":
+        """Build from a Signal object + optional EdgeModel + regime."""
+        regime_state = regime_state or {}
+        direction_val = (
+            signal.direction.value
+            if hasattr(signal.direction, "value")
+            else str(signal.direction)
+        )
+        _strat = (
+            getattr(signal, "strategy_id", None)
+            or getattr(signal, "strategy_name", None)
+            or "unknown"
+        )
+        _conf = getattr(signal, "confidence", 50) or 50
+        _stop = 0.0
+        inv = getattr(signal, "invalidation", None)
+        if inv and getattr(inv, "stop_price", 0):
+            _stop = inv.stop_price
+
+        fields: Dict[str, Any] = dict(
+            ticker=signal.ticker,
+            direction=direction_val,
+            strategy_id=_strat,
+            signal_confidence=_conf,
+            score=_conf / 100.0,
+            entry_price=getattr(signal, "entry_price", 0) or 0,
+            stop_price=_stop,
+            risk_reward_ratio=getattr(signal, "risk_reward_ratio", 1.5) or 1.5,
+            expected_return=getattr(signal, "expected_return", 0.02) or 0.02,
+            horizon=(
+                signal.horizon.value
+                if hasattr(signal, "horizon") and hasattr(signal.horizon, "value")
+                else str(getattr(signal, "horizon", "SWING_1_5D"))
+            ),
+            entry_logic=getattr(signal, "entry_logic", ""),
+            catalyst=getattr(signal, "catalyst", ""),
+            setup_grade=getattr(signal, "setup_grade", "C") or "C",
+            source_signal_id=str(getattr(signal, "id", "")) or None,
+            key_risks=list(getattr(signal, "key_risks", [])),
+            # Entry snapshot for ML
+            rsi_at_entry=getattr(signal, "rsi", 50),
+            adx_at_entry=getattr(signal, "adx", 25),
+            relative_volume=getattr(signal, "relative_volume", 1.0),
+            distance_from_sma50=getattr(signal, "distance_from_sma50", 0),
+            vix_at_entry=regime_state.get("vix", 20),
+            regime_label=regime_state.get("regime", ""),
+        )
+
+        # Edge calculator data
+        if edge is not None:
+            fields["edge_p_t1"] = getattr(edge, "p_t1", 0)
+            fields["edge_p_stop"] = getattr(edge, "p_stop", 0)
+            fields["edge_ev"] = getattr(edge, "expected_return_pct", 0)
+
+        fields.update(overrides)
+        return cls(**fields)
+
+    @classmethod
+    def from_dict(
+        cls, d: Dict[str, Any],
+    ) -> "TradeRecommendation":
+        """Build from a legacy signal dict (backward compat).
+
+        Maps old field names (``strategy_name``, ``score``, etc.)
+        to the canonical TradeRecommendation field names.
+        """
+        _score = d.get("score", 0.5)
+        _conf = d.get("confidence", int(_score * 100))
+        _rr = d.get("risk_reward_ratio", d.get("risk_reward", 1.5))
+
+        rec = cls(
+            ticker=d.get("ticker", "???"),
+            direction=d.get("direction", "LONG"),
+            strategy_id=d.get("strategy_name", d.get("strategy_id", "unknown")),
+            signal_confidence=_conf,
+            score=_score,
+            entry_price=d.get("entry_price", 0),
+            risk_reward_ratio=_rr if _rr else 1.5,
+            expected_return=d.get("expected_return", 0.02),
+            edge_p_t1=d.get("edge_p_t1", 0),
+            edge_p_stop=d.get("edge_p_stop", 0),
+            edge_ev=d.get("edge_ev", 0),
+            timing_score=d.get("timing_score", 0.5),
+            strategy_agreement=d.get("strategy_agreement", 0.5),
+            days_to_earnings=d.get("days_to_earnings", 999),
+            sector=d.get("sector", ""),
+        )
+
+        # Stash original dict in metadata (preserves _signal_obj etc.)
+        rec.metadata["_original_dict"] = d
+        return rec
 
 
 class RegimeState(BaseModel):
