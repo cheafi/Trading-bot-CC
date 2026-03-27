@@ -240,6 +240,12 @@ class TradingConfig(BaseSettings):
     strategy_reduced_score: float = Field(default=0.35, alias="STRATEGY_REDUCED_SCORE")
     strategy_retire_days: int = Field(default=90, alias="STRATEGY_RETIRE_DAYS")
 
+    # Circuit breaker
+    max_daily_loss_pct: float = Field(default=3.0, alias="MAX_DAILY_LOSS_PCT")
+    max_consecutive_losses: int = Field(default=5, alias="MAX_CONSECUTIVE_LOSSES")
+    circuit_breaker_cooldown_min: int = Field(default=60, alias="CIRCUIT_BREAKER_COOLDOWN_MIN")
+    max_open_positions: int = Field(default=15, alias="MAX_OPEN_POSITIONS")
+
     # Position management
     stop_loss_pct: float = Field(default=0.03, alias="STOP_LOSS_PCT")
     trailing_stop_pct: float = Field(default=0.02, alias="TRAILING_STOP_PCT")

@@ -294,6 +294,7 @@ TradingAI_Bot-main/
 | 21 | Ensemble Sizing | Regime-weighted strategy_health in ensembler, EdgeCalculator p_t1/EV used for pwin+exp_r, half-Kelly position sizing in engine+RiskModel, leaderboard sizing_multiplier, regime_router wired to ensembler |
 | 22 | TradeRecommendation | Canonical TradeRecommendation dataclass replaces ad-hoc dicts across signal→ensemble→execution pipeline, dict-like protocol for backward compat, from_signal/from_dict/to_api_dict factories |
 | 23 | Staged Universe | UniverseBuilder 3-stage pipeline (source→filter→prioritise), crypto suffix fix (BTC→BTC-USD), per-market caps (us50/hk12/jp8/crypto10), regime-aware sector weighting, watchlist injection |
+| 24 | Hardened Risk | Equity cache (no $100k phantom), staleness guard blocks trades, circuit breaker reads TradingConfig, learning loop real direction/confidence/snapshot, PositionManager save/load state, RiskParameters field name fix |
 
 ### AutoTradingEngine Pipeline (current)
 

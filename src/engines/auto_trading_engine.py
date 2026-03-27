@@ -61,19 +61,31 @@ class RiskCircuitBreaker:
     Portfolio-level risk controls that halt trading automatically.
 
     Triggers:
-    - Daily loss exceeds MAX_DAILY_LOSS_PCT
-    - Portfolio drawdown exceeds MAX_DRAWDOWN_PCT
-    - Consecutive losses exceed MAX_CONSECUTIVE_LOSSES
+    - Daily loss exceeds max_daily_loss_pct
+    - Portfolio drawdown exceeds max_drawdown_pct
+    - Consecutive losses exceed max_consecutive_losses
     - High volatility regime detected (VIX > threshold)
+
+    All thresholds are read from TradingConfig so users can tune
+    via .env without touching code.
     """
 
-    MAX_DAILY_LOSS_PCT = 3.0       # Stop trading if daily loss > 3%
-    MAX_DRAWDOWN_PCT = 10.0        # Stop if drawdown from peak > 10%
-    MAX_CONSECUTIVE_LOSSES = 5     # Pause after 5 consecutive losses
-    COOLDOWN_MINUTES = 60          # Pause duration after trigger
-    MAX_OPEN_POSITIONS = 15        # Max concurrent positions
+    def __init__(
+        self,
+        max_daily_loss_pct: float = 3.0,
+        max_drawdown_pct: float = 10.0,
+        max_consecutive_losses: int = 5,
+        cooldown_minutes: int = 60,
+        max_open_positions: int = 15,
+    ):
+        # Configurable thresholds
+        self.max_daily_loss_pct = max_daily_loss_pct
+        self.max_drawdown_pct = max_drawdown_pct
+        self.max_consecutive_losses = max_consecutive_losses
+        self.cooldown_minutes = cooldown_minutes
+        self.max_open_positions = max_open_positions
 
-    def __init__(self):
+        # Runtime state
         self.daily_pnl: float = 0.0
         self.peak_equity: float = 0.0
         self.consecutive_losses: int = 0
@@ -104,7 +116,7 @@ class RiskCircuitBreaker:
         # Check cooldown
         if self.triggered and self.trigger_time:
             elapsed = (datetime.now(timezone.utc) - self.trigger_time).total_seconds()
-            if elapsed < self.COOLDOWN_MINUTES * 60:
+            if elapsed < self.cooldown_minutes * 60:
                 return False
             else:
                 self.triggered = False
@@ -120,24 +132,24 @@ class RiskCircuitBreaker:
                 self.consecutive_losses = 0
 
         # Check daily loss
-        if self.daily_pnl < -self.MAX_DAILY_LOSS_PCT:
+        if self.daily_pnl < -self.max_daily_loss_pct:
             self._trigger(f"Daily loss {self.daily_pnl:.1f}% exceeds limit")
             return False
 
         # Check drawdown
         if self.peak_equity > 0:
             drawdown = (self.peak_equity - equity) / self.peak_equity * 100
-            if drawdown > self.MAX_DRAWDOWN_PCT:
+            if drawdown > self.max_drawdown_pct:
                 self._trigger(f"Drawdown {drawdown:.1f}% exceeds limit")
                 return False
 
         # Check consecutive losses
-        if self.consecutive_losses >= self.MAX_CONSECUTIVE_LOSSES:
+        if self.consecutive_losses >= self.max_consecutive_losses:
             self._trigger(f"{self.consecutive_losses} consecutive losses")
             return False
 
         # Check max positions
-        if open_positions >= self.MAX_OPEN_POSITIONS:
+        if open_positions >= self.max_open_positions:
             return False
 
         return True
@@ -238,7 +250,18 @@ class AutoTradingEngine:
     ):
         self.cycle_interval = cycle_interval_seconds
         self.dry_run = dry_run
-        self.circuit_breaker = RiskCircuitBreaker()
+        # Sprint 24: circuit breaker reads from TradingConfig
+        try:
+            _tc = get_trading_config()
+            self.circuit_breaker = RiskCircuitBreaker(
+                max_daily_loss_pct=_tc.max_daily_loss_pct,
+                max_drawdown_pct=_tc.max_drawdown_pct * 100,  # config is fraction
+                max_consecutive_losses=_tc.max_consecutive_losses,
+                cooldown_minutes=_tc.circuit_breaker_cooldown_min,
+                max_open_positions=_tc.max_open_positions,
+            )
+        except (ConfigError, KeyError, ValueError):
+            self.circuit_breaker = RiskCircuitBreaker()
         self.position_monitor = PositionMonitor()
         self._running = False
         self._cycle_count = 0
@@ -260,16 +283,14 @@ class AutoTradingEngine:
 
         # Position management with trailing stops + R-targets
         try:
-            from src.core.config import get_trading_config
             tc = get_trading_config()
             risk_params = RiskParameters(
-                max_position_pct=tc.max_position_pct,
-                max_sector_pct=tc.max_sector_pct,
-                max_portfolio_var=tc.max_portfolio_var,
-                max_drawdown_pct=tc.max_drawdown_pct,
-                risk_per_trade=tc.risk_per_trade,
+                max_position_size_pct=tc.max_position_pct * 100,
+                max_sector_exposure_pct=tc.max_sector_pct * 100,
+                max_total_drawdown_pct=tc.max_drawdown_pct * 100,
+                risk_per_trade_pct=tc.risk_per_trade * 100,
             )
-        except (ConfigError, Exception):
+        except (ConfigError, KeyError, ValueError, TypeError):
             risk_params = RiskParameters()
         self.position_mgr = PositionManager(params=risk_params)
         self.learning_loop = TradeLearningLoop()
@@ -282,6 +303,11 @@ class AutoTradingEngine:
         self._cached_recommendations: List[Dict[str, Any]] = []
         self._cached_leaderboard: Dict[str, Any] = {}
         self._last_eod_date: Optional[date] = None
+
+        # Sprint 24: equity cache to eliminate $100k fallback
+        self._last_known_equity: float = 0.0
+        self._equity_fetched_at: Optional[datetime] = None
+        self._equity_stale_minutes: int = 15
 
 
     async def _boot(self) -> bool:
@@ -375,6 +401,19 @@ class AutoTradingEngine:
             checks_passed, checks_total,
             "✅ READY" if all_ok else "❌ FAILED",
         )
+
+        # Sprint 24: reload position state from last run
+        try:
+            self.position_mgr.load_state()
+            logger.info(
+                "  ✅ position state loaded (%d open)",
+                len(self.position_mgr.positions),
+            )
+        except Exception as e:
+            logger.warning(
+                "  ⚠️  position state load skipped: %s", e,
+            )
+
         return all_ok
 
     async def run(self):
@@ -526,6 +565,14 @@ class AutoTradingEngine:
         self._cached_leaderboard = self.leaderboard.get_strategy_scores()
 
         # Execute only approved opportunities (with ML quality gate)
+        # Sprint 24: refuse new trades when equity is stale
+        if self._is_equity_stale():
+            logger.warning(
+                "Equity data stale/missing — skipping "
+                "new trade execution this cycle",
+            )
+            return
+
         for rec in ranked:
             if not rec.trade_decision:
                 continue
@@ -571,9 +618,17 @@ class AutoTradingEngine:
                             max_hold_days=trading_config.max_hold_days,
                         )
                     except RiskLimitError as e:
-                        logger.warning("PositionManager risk limit for %s: %s", rec.ticker, e)
+                        logger.warning(
+                            "PositionManager risk limit "
+                            "for %s: %s", rec.ticker, e,
+                        )
                     except Exception as e:
-                        logger.warning("PositionManager track error for %s: %s", rec.ticker, e)
+                        logger.warning(
+                            "PositionManager track error "
+                            "for %s: %s", rec.ticker, e,
+                        )
+                    # Sprint 24: persist state after open
+                    self.position_mgr.save_state()
 
         # Monitor existing positions
         async with self._timed_phase("position_monitoring"):
@@ -947,6 +1002,8 @@ class AutoTradingEngine:
                         self._record_learning_outcome(
                             closed_pos, reason
                         )
+                        # Sprint 24: persist after close
+                        self.position_mgr.save_state()
 
                 except BrokerError as e:
                     logger.error(
@@ -1019,13 +1076,15 @@ class AutoTradingEngine:
             )
 
             # Persist to database (best-effort)
+            # Sprint 24: propagate real direction, confidence,
+            # composite_score from the trade record / snapshot
             try:
                 import asyncio as _aio
                 _aio.get_event_loop().create_task(
                     self.trade_repo.save_outcome({
                         "trade_id": closed_pos.position_id,
                         "ticker": closed_pos.ticker,
-                        "direction": "LONG",
+                        "direction": _dir,
                         "strategy": closed_pos.strategy_id,
                         "entry_price": closed_pos.entry_price,
                         "exit_price": closed_pos.exit_price,
@@ -1038,23 +1097,18 @@ class AutoTradingEngine:
                             if closed_pos.exit_date else None
                         ),
                         "pnl_pct": closed_pos.realized_pnl_pct,
-                        "confidence": 50,
+                        "confidence": _conf,
                         "horizon": "swing",
                         "exit_reason": reason,
                         "regime_at_entry": self._cached_regime.get("regime"),
                         "vix_at_entry": self._cached_regime.get("vix"),
-                        "rsi_at_entry": None,
-                        "adx_at_entry": None,
-                        "relative_volume": None,
-                        "setup_grade": None,
-                        "composite_score": None,
-                        "hold_hours": (
-                            (closed_pos.exit_date - closed_pos.entry_date
-                             ).total_seconds() / 3600
-                            if closed_pos.entry_date and closed_pos.exit_date
-                            else 0
-                        ),
-                        "feature_snapshot": None,
+                        "rsi_at_entry": _snapshot.get("rsi_at_entry"),
+                        "adx_at_entry": _snapshot.get("adx_at_entry"),
+                        "relative_volume": _snapshot.get("relative_volume"),
+                        "setup_grade": _snapshot.get("setup_grade"),
+                        "composite_score": _snapshot.get("composite_score"),
+                        "hold_hours": _hold,
+                        "feature_snapshot": _snapshot or None,
                     })
                 )
             except (OSError, ConnectionError, RuntimeError) as e:
@@ -1192,15 +1246,30 @@ class AutoTradingEngine:
         return self._broker_mgr
 
     async def _get_equity(self) -> float:
+        """Fetch equity from broker; cache last-known value.
+
+        Sprint 24: eliminates $100k phantom fallback.  Returns
+        cached equity on transient errors.  Returns 0.0 only if
+        we have *never* successfully fetched.
+        """
         try:
             manager = await self._get_broker()
             account = await manager.get_account()
-            return getattr(account, "portfolio_value", 100000.0)
-        except BrokerError:
-            return 100000.0
-        except (ConnectionError, OSError, RuntimeError) as e:
-            logger.debug("Equity fetch fallback: %s", e)
-            return 100000.0
+            equity = getattr(account, "portfolio_value", 0.0)
+            if equity > 0:
+                self._last_known_equity = equity
+                self._equity_fetched_at = datetime.now(timezone.utc)
+            return equity if equity > 0 else self._last_known_equity
+        except (BrokerError, ConnectionError, OSError, RuntimeError) as e:
+            logger.debug("Equity fetch fallback to cache: %s", e)
+            return self._last_known_equity
+
+    def _is_equity_stale(self) -> bool:
+        """True if we have never fetched equity or it's older than threshold."""
+        if self._equity_fetched_at is None:
+            return True
+        age = (datetime.now(timezone.utc) - self._equity_fetched_at).total_seconds()
+        return age > self._equity_stale_minutes * 60
 
     async def _count_positions(self) -> int:
         try:
@@ -1433,9 +1502,9 @@ class AutoTradingEngine:
         except Exception as e:
             logger.debug("PositionManager sizing fallback: %s", e)
 
-        # Fallback: simple 1% risk
+        # Fallback: simple 1% risk using cached equity
         if base_shares <= 0:
-            equity = 100000.0
+            equity = self._last_known_equity if self._last_known_equity > 0 else 10000.0
             risk_per_trade = equity * 0.01
             stop_distance = abs(price - stop_price)
             if stop_distance <= 0:

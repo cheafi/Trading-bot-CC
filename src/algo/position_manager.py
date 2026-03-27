@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
 from enum import Enum
+import json
+import logging
 import pandas as pd
 import numpy as np
 import logging
@@ -776,10 +778,157 @@ class PositionManager:
             for p in self.positions.values()
         ]
 
+    # ========== State Persistence (Sprint 24) ==========
 
-# ==============================================================================
+    def save_state(self, path: str = "/tmp/positions_state.json"):
+        """Serialize open positions + equity to JSON.
+
+        Called after every position open/close so state survives
+        engine restarts.
+        """
+        _logger = logging.getLogger(__name__)
+        try:
+            state = {
+                "current_equity": self.current_equity,
+                "peak_equity": self.peak_equity,
+                "consecutive_losses": self.consecutive_losses,
+                "positions": {},
+            }
+            for ticker, p in self.positions.items():
+                state["positions"][ticker] = {
+                    "ticker": p.ticker,
+                    "strategy_id": p.strategy_id,
+                    "position_id": p.position_id,
+                    "entry_price": p.entry_price,
+                    "entry_date": (
+                        p.entry_date.isoformat()
+                        if p.entry_date else None
+                    ),
+                    "entry_reason": p.entry_reason,
+                    "shares": p.shares,
+                    "original_shares": p.original_shares,
+                    "position_value": p.position_value,
+                    "risk_amount": p.risk_amount,
+                    "stop_loss_price": p.stop_loss_price,
+                    "take_profit_price": p.take_profit_price,
+                    "trailing_stop_price": p.trailing_stop_price,
+                    "atr_at_entry": p.atr_at_entry,
+                    "target_1r_price": p.target_1r_price,
+                    "target_2r_price": p.target_2r_price,
+                    "target_3r_price": p.target_3r_price,
+                    "partial_exit_1r": p.partial_exit_1r,
+                    "partial_exit_2r": p.partial_exit_2r,
+                    "max_hold_days": p.max_hold_days,
+                    "sector": p.sector,
+                    "current_price": p.current_price,
+                    "status": p.status.value,
+                }
+            with open(path, "w") as f:
+                json.dump(state, f, indent=2)
+            _logger.debug(
+                "Saved %d positions to %s",
+                len(self.positions), path,
+            )
+        except (OSError, TypeError, ValueError) as e:
+            _logger.warning("Position state save failed: %s", e)
+
+    def load_state(self, path: str = "/tmp/positions_state.json"):
+        """Reload positions from JSON, reconciling with broker.
+
+        Called at engine boot to recover stop/target state
+        after a restart.
+        """
+        _logger = logging.getLogger(__name__)
+        try:
+            with open(path) as f:
+                state = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            _logger.info("No saved position state at %s", path)
+            return
+        except OSError as e:
+            _logger.warning("Position state load failed: %s", e)
+            return
+
+        self.current_equity = state.get(
+            "current_equity", self.current_equity,
+        )
+        self.peak_equity = state.get(
+            "peak_equity", self.peak_equity,
+        )
+        self.consecutive_losses = state.get(
+            "consecutive_losses", 0,
+        )
+
+        loaded = 0
+        for ticker, d in state.get("positions", {}).items():
+            if ticker in self.positions:
+                continue  # already tracked
+            entry_date = None
+            if d.get("entry_date"):
+                try:
+                    entry_date = datetime.fromisoformat(
+                        d["entry_date"],
+                    )
+                except (ValueError, TypeError):
+                    pass
+            pos = Position(
+                ticker=d.get("ticker", ticker),
+                strategy_id=d.get("strategy_id", ""),
+                position_id=d.get("position_id", ""),
+                entry_price=d.get("entry_price", 0.0),
+                entry_date=entry_date,
+                entry_reason=d.get("entry_reason", ""),
+                shares=d.get("shares", 0),
+                original_shares=d.get(
+                    "original_shares",
+                    d.get("shares", 0),
+                ),
+                position_value=d.get("position_value", 0.0),
+                risk_amount=d.get("risk_amount", 0.0),
+                stop_loss_price=d.get(
+                    "stop_loss_price", 0.0,
+                ),
+                take_profit_price=d.get(
+                    "take_profit_price", 0.0,
+                ),
+                trailing_stop_price=d.get(
+                    "trailing_stop_price", 0.0,
+                ),
+                atr_at_entry=d.get("atr_at_entry", 0.0),
+                target_1r_price=d.get(
+                    "target_1r_price", 0.0,
+                ),
+                target_2r_price=d.get(
+                    "target_2r_price", 0.0,
+                ),
+                target_3r_price=d.get(
+                    "target_3r_price", 0.0,
+                ),
+                partial_exit_1r=d.get(
+                    "partial_exit_1r", False,
+                ),
+                partial_exit_2r=d.get(
+                    "partial_exit_2r", False,
+                ),
+                max_hold_days=d.get("max_hold_days", 40),
+                sector=d.get("sector", ""),
+                current_price=d.get("current_price", 0.0),
+                status=PositionStatus(
+                    d.get("status", "open"),
+                ),
+            )
+            self.positions[ticker] = pos
+            loaded += 1
+
+        if loaded:
+            _logger.info(
+                "Loaded %d positions from %s", loaded, path,
+            )
+
+
+# ==========================================================
 # Helper Functions
-# ==============================================================================
+# ==========================================================
 
 def calculate_risk_reward(
     entry_price: float,

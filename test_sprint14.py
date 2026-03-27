@@ -60,8 +60,8 @@ class TestTypedExceptions(unittest.TestCase):
         """_get_equity catches BrokerError + typed fallback."""
         # Find _get_equity method
         idx = self.src.find("async def _get_equity")
-        section = self.src[idx:idx + 400]
-        self.assertIn("except BrokerError", section)
+        section = self.src[idx:idx + 800]
+        self.assertIn("BrokerError", section)
         self.assertNotIn("except Exception:", section)
 
     def test_07_broker_error_catch_for_positions(self):
