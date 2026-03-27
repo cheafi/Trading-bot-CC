@@ -15,7 +15,7 @@ Upgrades (v6):
 """
 import asyncio
 import hashlib
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import List, Dict, Optional, Any, Tuple
 import logging
 import pandas as pd
@@ -358,6 +358,117 @@ class SignalDedup:
                     })
 
         return kept, resolutions
+
+
+class SignalCooldown:
+    """Sprint 31: Cross-cycle signal dedup + anti-flip guard.
+
+    Tracks when each (ticker, direction) was last signaled so we
+    don't whipsaw the same name every 60 seconds.
+
+    Rules:
+    1. Same ticker + same direction within ``cooldown_hours``
+       → blocked ("cooldown").
+    2. Same ticker + opposite direction within ``anti_flip_hours``
+       → blocked ("anti_flip").
+    """
+
+    def __init__(
+        self,
+        cooldown_hours: int = 4,
+        anti_flip_hours: int = 6,
+    ):
+        self.cooldown_hours = cooldown_hours
+        self.anti_flip_hours = anti_flip_hours
+        # {ticker: {direction: datetime_utc}}
+        self._history: Dict[str, Dict[str, datetime]] = {}
+
+    def is_allowed(
+        self, ticker: str, direction: str,
+    ) -> Tuple[bool, str]:
+        """Check if a signal is allowed given cooldown rules.
+
+        Returns (allowed, reason).  reason is empty when allowed.
+        """
+        now = datetime.now(timezone.utc)
+        prev = self._history.get(ticker)
+        if not prev:
+            return True, ""
+
+        # Rule 1: same direction cooldown
+        same_ts = prev.get(direction)
+        if same_ts:
+            elapsed = (now - same_ts).total_seconds() / 3600
+            if elapsed < self.cooldown_hours:
+                return False, (
+                    f"cooldown: {ticker} {direction} "
+                    f"signaled {elapsed:.1f}h ago "
+                    f"(need {self.cooldown_hours}h)"
+                )
+
+        # Rule 2: opposite direction anti-flip
+        opposite = (
+            "SHORT" if direction == "LONG" else "LONG"
+        )
+        flip_ts = prev.get(opposite)
+        if flip_ts:
+            elapsed = (now - flip_ts).total_seconds() / 3600
+            if elapsed < self.anti_flip_hours:
+                return False, (
+                    f"anti_flip: {ticker} was {opposite} "
+                    f"{elapsed:.1f}h ago "
+                    f"(need {self.anti_flip_hours}h)"
+                )
+
+        return True, ""
+
+    def record(self, ticker: str, direction: str):
+        """Record that a signal was emitted."""
+        now = datetime.now(timezone.utc)
+        if ticker not in self._history:
+            self._history[ticker] = {}
+        self._history[ticker][direction] = now
+
+    def filter_signals(
+        self, signals: List[Signal],
+    ) -> Tuple[List[Signal], List[Dict]]:
+        """Filter a batch of signals, returning kept + log."""
+        kept: List[Signal] = []
+        blocked: List[Dict] = []
+        for sig in signals:
+            _dir = sig.direction.value
+            allowed, reason = self.is_allowed(
+                sig.ticker, _dir,
+            )
+            if allowed:
+                kept.append(sig)
+            else:
+                blocked.append({
+                    "ticker": sig.ticker,
+                    "direction": _dir,
+                    "reason": reason,
+                })
+        return kept, blocked
+
+    def record_batch(self, signals: List[Signal]):
+        """Record all signals in a batch."""
+        for sig in signals:
+            self.record(sig.ticker, sig.direction.value)
+
+    def clear_expired(self):
+        """Purge entries older than max(cooldown, anti_flip)."""
+        now = datetime.now(timezone.utc)
+        max_h = max(
+            self.cooldown_hours, self.anti_flip_hours,
+        )
+        cutoff = now - timedelta(hours=max_h)
+        for ticker in list(self._history):
+            dirs = self._history[ticker]
+            for d in list(dirs):
+                if dirs[d] < cutoff:
+                    del dirs[d]
+            if not dirs:
+                del self._history[ticker]
 
 
 class RegimeDetector:

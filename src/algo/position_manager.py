@@ -411,6 +411,70 @@ class PositionManager:
             'pct_of_account': position_value / self.current_equity * 100,
         }
     
+    # ========== Sprint 31: Correlation Guard ==========
+
+    def get_correlated_count(
+        self,
+        candidate_ticker: str,
+        price_data: Optional[Dict[str, "pd.Series"]] = None,
+        threshold: float = 0.70,
+    ) -> int:
+        """Count how many open positions are highly correlated
+        with ``candidate_ticker``.
+
+        Args:
+            candidate_ticker: The ticker we want to add.
+            price_data: {ticker: pd.Series of close prices}.
+                If None or missing data, returns 0 (permissive).
+            threshold: Pearson-r above which two tickers are
+                considered correlated.
+
+        Returns:
+            Number of open positions with correlation >= threshold.
+        """
+        if not price_data or not self.positions:
+            return 0
+        candidate_prices = price_data.get(candidate_ticker)
+        if candidate_prices is None or len(candidate_prices) < 20:
+            return 0
+        count = 0
+        for held_ticker in self.positions:
+            held_prices = price_data.get(held_ticker)
+            if held_prices is None or len(held_prices) < 20:
+                continue
+            try:
+                corr = candidate_prices.tail(20).corr(
+                    held_prices.tail(20),
+                )
+                if corr >= threshold:
+                    count += 1
+            except (ValueError, TypeError):
+                continue
+        return count
+
+    def check_correlation_guard(
+        self,
+        candidate_ticker: str,
+        price_data: Optional[Dict[str, "pd.Series"]] = None,
+        max_correlated: int = 3,
+        threshold: float = 0.70,
+    ) -> Tuple[bool, str]:
+        """Return (allowed, reason).
+
+        Blocks the trade if the candidate is highly correlated
+        with ``max_correlated`` or more existing positions.
+        """
+        n = self.get_correlated_count(
+            candidate_ticker, price_data, threshold,
+        )
+        if n >= max_correlated:
+            return False, (
+                f"Correlation guard: {candidate_ticker} "
+                f"correlated (r>={threshold}) with "
+                f"{n} held positions (max {max_correlated})"
+            )
+        return True, ""
+
     def calculate_atr_based_size(
         self,
         ticker: str,

@@ -247,6 +247,38 @@ class AutoTradingEngine:
         # Sprint 30: no-trade readiness snapshot
         self._no_trade_readiness: Dict[str, Any] = {}
 
+        # Sprint 31: signal cooldown + correlation guard
+        try:
+            _tc2 = get_trading_config()
+            _cdh = _tc2.signal_cooldown_hours
+            _afh = _tc2.anti_flip_hours
+            _mcr = _tc2.max_correlated_held
+            # Guard against mock / invalid types
+            self._signal_cooldown_hours = (
+                int(_cdh) if isinstance(_cdh, (int, float))
+                else 4
+            )
+            self._anti_flip_hours = (
+                int(_afh) if isinstance(_afh, (int, float))
+                else 6
+            )
+            self._max_correlated = (
+                int(_mcr) if isinstance(_mcr, (int, float))
+                else 3
+            )
+        except (ConfigError, KeyError, ValueError, TypeError):
+            self._signal_cooldown_hours = 4
+            self._anti_flip_hours = 6
+            self._max_correlated = 3
+        from src.engines.signal_engine import SignalCooldown
+        self._signal_cooldown = SignalCooldown(
+            cooldown_hours=self._signal_cooldown_hours,
+            anti_flip_hours=self._anti_flip_hours,
+        )
+        self._last_price_data: Dict[
+            str, Any
+        ] = {}  # ticker→close Series cache
+
 
     async def _boot(self) -> bool:
         """
@@ -492,6 +524,23 @@ class AutoTradingEngine:
             if not rec.trade_decision:
                 continue
 
+            # Sprint 31: correlation guard — skip if
+            # candidate is too correlated with held positions
+            corr_ok, corr_reason = (
+                self.position_mgr.check_correlation_guard(
+                    rec.ticker,
+                    price_data=self._last_price_data,
+                    max_correlated=self._max_correlated,
+                    threshold=0.70,
+                )
+            )
+            if not corr_ok:
+                logger.info(
+                    "Correlation guard skipped %s: %s",
+                    rec.ticker, corr_reason,
+                )
+                continue
+
             # Sprint 28: ML grade → size modulation (not just D-reject)
             # A=1.0, B=0.75, C=0.5, D=reject
             ml_quality = self.learning_loop.predict_signal_quality(
@@ -680,12 +729,23 @@ class AutoTradingEngine:
     ) -> List[TradeRecommendation]:
         """Convert validated signals to TradeRecommendations.
 
-        Carries edge calculator data + feature_snapshot enrichment
-        through so nothing from the SignalEngine v6 pipeline is
-        lost in translation.
+        Sprint 31: applies signal cooldown + anti-flip filter
+        before conversion so we never whipsaw the same ticker.
         """
+        # Sprint 31: cross-cycle dedup
+        self._signal_cooldown.clear_expired()
+        kept, blocked = self._signal_cooldown.filter_signals(
+            signals,
+        )
+        for b in blocked:
+            logger.info(
+                "Signal blocked: %s %s — %s",
+                b["ticker"], b["direction"], b["reason"],
+            )
+        self._signal_cooldown.record_batch(kept)
+
         recommendations = []
-        for sig in signals:
+        for sig in kept:
             _edge = None
             if self.edge_calculator is not None:
                 try:
@@ -798,6 +858,19 @@ class AutoTradingEngine:
             if not all_features:
                 logger.warning("No features computed")
                 return []
+
+            # Sprint 31: cache close prices for correlation guard
+            self._last_price_data = {}
+            for ticker in valid_tickers:
+                try:
+                    if len(tickers) > 1:
+                        close = data[ticker]["Close"].dropna()
+                    else:
+                        close = data["Close"].dropna()
+                    if len(close) >= 20:
+                        self._last_price_data[ticker] = close
+                except (KeyError, TypeError):
+                    pass
 
             features_df = pd.concat(
                 all_features, ignore_index=True,
@@ -1469,6 +1542,10 @@ class AutoTradingEngine:
             "dry_run": self.dry_run,
             # Sprint 30: no-trade readiness snapshot
             "no_trade_readiness": self._no_trade_readiness,
+            # Sprint 31: signal cooldown state
+            "signal_cooldown_tickers": len(
+                self._signal_cooldown._history,
+            ),
         }
 
 

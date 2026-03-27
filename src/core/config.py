@@ -250,6 +250,17 @@ class TradingConfig(BaseSettings):
     stop_loss_pct: float = Field(default=0.03, alias="STOP_LOSS_PCT")
     trailing_stop_pct: float = Field(default=0.02, alias="TRAILING_STOP_PCT")
     max_hold_days: int = Field(default=30, alias="MAX_HOLD_DAYS")
+
+    # Sprint 31: signal dedup / anti-flip
+    signal_cooldown_hours: int = Field(
+        default=4, alias="SIGNAL_COOLDOWN_HOURS",
+    )
+    anti_flip_hours: int = Field(
+        default=6, alias="ANTI_FLIP_HOURS",
+    )
+    max_correlated_held: int = Field(
+        default=3, alias="MAX_CORRELATED_HELD",
+    )
     
     # Scheduling (Eastern Time)
     premarket_report_time: str = Field(default="06:30", alias="PREMARKET_REPORT_TIME")
