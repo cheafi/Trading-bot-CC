@@ -307,18 +307,18 @@ class TestKellyEnginePositionSize(unittest.TestCase):
         """auto_trading_engine has Kelly fraction code."""
         src = _read("src/engines/auto_trading_engine.py")
         idx = src.index("def _calculate_position_size")
-        method = src[idx:idx + 3000]
+        method = src[idx:idx + 5000]
         self.assertIn("kelly_f", method)
         self.assertIn("edge_pwin", method)
         self.assertIn("edge_rr", method)
 
     def test_12_source_has_leaderboard_multiplier(self):
-        """Engine sizing uses leaderboard.get_sizing_multiplier."""
+        """Engine sizing uses leaderboard.get_health_multiplier."""
         src = _read("src/engines/auto_trading_engine.py")
         idx = src.index("def _calculate_position_size")
-        method = src[idx:idx + 4500]
-        self.assertIn("get_sizing_multiplier", method)
-        self.assertIn("lb_mult", method)
+        method = src[idx:idx + 5000]
+        self.assertIn("get_health_multiplier", method)
+        self.assertIn("health_mult", method)
 
     def test_13_kelly_positive_edge(self):
         """Positive Kelly edge should yield > 0.25 multiplier."""

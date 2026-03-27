@@ -511,18 +511,24 @@ class AutoTradingEngine:
             if not rec.trade_decision:
                 continue
 
-            # Sprint 7: ML quality gate — skip D-grade signals
+            # Sprint 28: ML grade → size modulation (not just D-reject)
+            # A=1.0, B=0.75, C=0.5, D=reject
             ml_quality = self.learning_loop.predict_signal_quality(
                 rec.to_entry_snapshot(),
             )
-            if ml_quality.get("model_available") and ml_quality.get("signal_grade") == "D":
-                rec.ml_grade = "D"
-                rec.ml_win_probability = ml_quality.get("win_probability", 0)
-                logger.info(
-                    "ML quality gate rejected %s (win_prob=%.2f, grade=D)",
-                    rec.ticker, rec.ml_win_probability,
-                )
-                continue
+            _ml_grade = ml_quality.get("signal_grade", "B")
+            _ml_prob = ml_quality.get("win_probability", 0)
+            if ml_quality.get("model_available"):
+                rec.ml_grade = _ml_grade
+                rec.ml_win_probability = _ml_prob
+                if _ml_grade == "D":
+                    logger.info(
+                        "ML gate rejected %s (grade=D, p=%.2f)",
+                        rec.ticker, _ml_prob,
+                    )
+                    continue
+            # Store grade for sizing layer
+            rec.ml_grade = _ml_grade
 
             if self.dry_run:
                 logger.info(
@@ -815,6 +821,11 @@ class AutoTradingEngine:
                     "entry_price": _entry_price,
                     "time": rec.execution_time.isoformat(),
                     "confidence": rec.signal_confidence,
+                    "composite_score": rec.composite_score,
+                    "ml_grade": getattr(rec, "ml_grade", ""),
+                    "regime_at_entry": self._cached_regime.get(
+                        "regime", "",
+                    ),
                     "entry_snapshot": rec.to_entry_snapshot(),
                 }
             else:
@@ -979,7 +990,7 @@ class AutoTradingEngine:
             _snapshot = {}
             _conf = 50
             for t in self._trades_today:
-                if t.get("signal") == closed_pos.ticker:
+                if t.get("ticker") == closed_pos.ticker:
                     _snapshot = t.get("entry_snapshot", {})
                     _conf = t.get("confidence", 50)
                     break
@@ -1480,13 +1491,15 @@ class AutoTradingEngine:
         strategy_name: str = "",
     ) -> int:
         """
-        Risk-based position sizing.
+        Risk-based position sizing with unified multiplier chain.
 
-        Layers (applied in order):
-        1. PositionManager risk-based sizing (1R = risk_per_trade%)
-        2. Half-Kelly multiplier when EdgeCalculator data available
-        3. Leaderboard sizing_multiplier for strategy lifecycle
-        Falls back to simple 1% risk if PositionManager fails.
+        Sprint 28: final_size = base_risk
+            × confidence_mult   (ML grade: A=1.0 B=0.75 C=0.5)
+            × regime_mult       (risk-off=0.5, neutral=0.75, risk-on=1.0)
+            × strategy_health   (leaderboard health score 0-1)
+            × volatility_mult   (high VIX = reduce)
+            × portfolio_heat    (many open positions = reduce)
+            × kelly_mult        (half-Kelly when edge data available)
         """
         price = (
             getattr(signal, "entry_price", 0)
@@ -1518,7 +1531,7 @@ class AutoTradingEngine:
         ):
             stop_price = signal.invalidation.stop_price
 
-        # Try PositionManager for full risk-based sizing
+        # ── Base shares from PositionManager ───────────────
         base_shares = 0
         try:
             result = self.position_mgr.calculate_position_size(
@@ -1534,7 +1547,11 @@ class AutoTradingEngine:
 
         # Fallback: simple 1% risk using cached equity
         if base_shares <= 0:
-            equity = self._last_known_equity if self._last_known_equity > 0 else 10000.0
+            equity = (
+                self._last_known_equity
+                if self._last_known_equity > 0
+                else 10000.0
+            )
             risk_per_trade = equity * 0.01
             stop_distance = abs(price - stop_price)
             if stop_distance <= 0:
@@ -1543,24 +1560,62 @@ class AutoTradingEngine:
             max_shares = int((equity * 0.05) / price)
             base_shares = max(1, min(base_shares, max_shares))
 
-        # ── Half-Kelly multiplier ──────────────────────────
+        # ── 1. Confidence / ML grade multiplier ───────────
+        _grade = getattr(signal, "ml_grade", "B")
+        confidence_mult = {
+            "A": 1.0, "B": 0.75, "C": 0.5,
+        }.get(_grade, 0.75)
+
+        # ── 2. Regime multiplier ──────────────────────────
+        _regime = self._regime_state.get("risk_regime", "neutral")
+        regime_mult = {
+            "risk_on": 1.0, "neutral": 0.75, "risk_off": 0.5,
+        }.get(_regime, 0.75)
+
+        # ── 3. Strategy health multiplier ─────────────────
+        health_mult = self.leaderboard.get_health_multiplier(
+            strategy_name or "unknown",
+        )
+
+        # ── 4. Volatility multiplier (VIX-based) ─────────
+        _vix = self._context.get("market_state", {}).get("vix", 20)
+        if _vix > 30:
+            vol_mult = 0.5
+        elif _vix > 25:
+            vol_mult = 0.75
+        else:
+            vol_mult = 1.0
+
+        # ── 5. Portfolio heat multiplier ──────────────────
+        _open = len(self.position_mgr.positions)
+        _max = self.position_mgr.params.max_open_positions
+        heat_ratio = _open / _max if _max > 0 else 0
+        if heat_ratio > 0.8:
+            heat_mult = 0.5
+        elif heat_ratio > 0.6:
+            heat_mult = 0.75
+        else:
+            heat_mult = 1.0
+
+        # ── 6. Half-Kelly multiplier ──────────────────────
         kelly_mult = 1.0
         if edge_pwin > 0 and edge_rr > 0:
-            # Kelly fraction = p - (1-p)/b  where b = reward/risk
             kelly_f = edge_pwin - (1.0 - edge_pwin) / edge_rr
             kelly_f = max(kelly_f, 0.0)
-            # Half-Kelly is conservative best practice
             kelly_mult = min(kelly_f * 0.5, 1.0)
-            # Never reduce below 25% of base if Kelly is positive
             if kelly_mult > 0:
                 kelly_mult = max(kelly_mult, 0.25)
             else:
-                kelly_mult = 0.25  # edge-negative → minimum
+                kelly_mult = 0.25
 
-        # ── Leaderboard sizing multiplier ──────────────────
-        lb_mult = self.leaderboard.get_sizing_multiplier(
-            strategy_name or "unknown"
+        # ── Combine all multipliers ───────────────────────
+        combined = (
+            confidence_mult
+            * regime_mult
+            * health_mult
+            * vol_mult
+            * heat_mult
+            * kelly_mult
         )
-
-        final = int(base_shares * kelly_mult * lb_mult)
+        final = int(base_shares * combined)
         return max(1, final)

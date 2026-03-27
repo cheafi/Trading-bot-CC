@@ -72,7 +72,7 @@ class TestMLQualityGate(unittest.TestCase):
 
     def test_03_ml_gate_logs_rejection(self):
         """ML gate logs the rejection with ticker and win probability."""
-        idx = self.src.find("ML quality gate rejected")
+        idx = self.src.find("ML gate rejected")
         self.assertGreater(idx, 0, "Should log ML gate rejections")
 
 

@@ -154,6 +154,57 @@ class StrategyLeaderboard:
         else:
             return 0.0
 
+    def get_health_multiplier(
+        self, strategy_name: str,
+    ) -> float:
+        """Sprint 28: composite health multiplier for live sizing.
+
+        Factors:
+          - lifecycle status   (active=1.0, reduced=0.5, else=0.0)
+          - rolling win rate   (0.6+ → 1.0, 0.4-0.6 → linear, <0.4 → 0.5)
+          - blended score      (scaled 0.5-1.0)
+          - recent drawdown    (deep DD → reduce)
+
+        Returns 0.0-1.0 multiplier that feeds into position sizing.
+        """
+        entry = self._strategies.get(strategy_name)
+        if not entry:
+            return 0.5  # unknown strategy → conservative
+
+        # 1. Lifecycle gate
+        status = entry.get("status", StrategyStatus.ACTIVE)
+        if status == StrategyStatus.COOLDOWN:
+            return 0.0
+        if status == StrategyStatus.RETIRED:
+            return 0.0
+        status_mult = 1.0 if status == StrategyStatus.ACTIVE else 0.5
+
+        # 2. Rolling win rate factor
+        metrics = entry.get("metrics", {})
+        wr = metrics.get("win_rate", 0.5)
+        if wr >= 0.60:
+            wr_mult = 1.0
+        elif wr >= 0.40:
+            wr_mult = 0.5 + (wr - 0.40) / 0.20 * 0.5  # linear 0.5→1.0
+        else:
+            wr_mult = 0.5
+
+        # 3. Blended score factor (0.5-1.0 range)
+        score = entry.get("blended_score", 0.5)
+        score_mult = 0.5 + min(score, 1.0) * 0.5
+
+        # 4. Drawdown penalty
+        mdd = abs(metrics.get("max_drawdown", 0))
+        if mdd > 0.15:
+            dd_mult = 0.5
+        elif mdd > 0.10:
+            dd_mult = 0.75
+        else:
+            dd_mult = 1.0
+
+        health = status_mult * wr_mult * score_mult * dd_mult
+        return round(max(0.0, min(health, 1.0)), 3)
+
     def _calculate_score(
         self, metrics: Dict[str, float],
     ) -> float:
