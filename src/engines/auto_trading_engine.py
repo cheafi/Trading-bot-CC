@@ -161,70 +161,6 @@ class RiskCircuitBreaker:
         logger.warning(f"🚨 Circuit breaker triggered: {reason}")
 
 
-class PositionMonitor:
-    """
-    Monitors open positions for:
-    - Trailing stop updates
-    - Take profit targets
-    - Time-based exits (max hold time)
-    - Gap protection
-    """
-
-    def __init__(self):
-        self._trailing_stops: Dict[str, float] = {}  # ticker -> trailing stop price
-        self._entry_times: Dict[str, datetime] = {}
-        self._max_hold_hours: float = 24 * 15  # 15 days default
-
-    def track_entry(self, ticker: str, entry_price: float, stop_price: float):
-        self._trailing_stops[ticker] = stop_price
-        self._entry_times[ticker] = datetime.now(timezone.utc)
-
-    def update_trailing_stop(
-        self,
-        ticker: str,
-        current_price: float,
-        atr: float,
-        direction: str = "LONG",
-        trail_factor: float = 2.0,
-    ) -> Optional[float]:
-        """Update trailing stop and return new stop price if changed."""
-        if ticker not in self._trailing_stops:
-            return None
-
-        current_stop = self._trailing_stops[ticker]
-        new_stop = current_stop
-
-        if direction == "LONG":
-            candidate = current_price - (atr * trail_factor)
-            if candidate > current_stop:
-                new_stop = candidate
-        else:
-            candidate = current_price + (atr * trail_factor)
-            if candidate < current_stop:
-                new_stop = candidate
-
-        if new_stop != current_stop:
-            self._trailing_stops[ticker] = new_stop
-            logger.info(
-                f"Trailing stop updated for {ticker}: "
-                f"{current_stop:.2f} → {new_stop:.2f}"
-            )
-
-        return new_stop
-
-    def should_exit_time(self, ticker: str) -> bool:
-        """Check if position exceeded max hold time."""
-        entry = self._entry_times.get(ticker)
-        if entry is None:
-            return False
-        held_hours = (datetime.now(timezone.utc) - entry).total_seconds() / 3600
-        return held_hours > self._max_hold_hours
-
-    def remove(self, ticker: str):
-        self._trailing_stops.pop(ticker, None)
-        self._entry_times.pop(ticker, None)
-
-
 class AutoTradingEngine:
     """
     The main autonomous trading loop.
@@ -262,7 +198,6 @@ class AutoTradingEngine:
             )
         except (ConfigError, KeyError, ValueError):
             self.circuit_breaker = RiskCircuitBreaker()
-        self.position_monitor = PositionMonitor()
         self._running = False
         self._cycle_count = 0
         self._signals_today: List[Signal] = []
@@ -335,7 +270,6 @@ class AutoTradingEngine:
             "position_mgr": self.position_mgr,
             "learning_loop": self.learning_loop,
             "circuit_breaker": self.circuit_breaker,
-            "position_monitor": self.position_monitor,
         }
         for name, comp in components.items():
             checks_total += 1
@@ -378,10 +312,10 @@ class AutoTradingEngine:
         # 4. Config sanity
         checks_total += 1
         try:
-            if self.position_mgr.params.risk_per_trade > 0.10:
+            if self.position_mgr.params.risk_per_trade_pct > 10.0:
                 logger.warning(
-                    "  ⚠️  risk_per_trade=%.2f > 10%% — very aggressive",
-                    self.position_mgr.params.risk_per_trade,
+                    "  ⚠️  risk_per_trade_pct=%.1f%% > 10%% — very aggressive",
+                    self.position_mgr.params.risk_per_trade_pct,
                 )
             checks_passed += 1
             logger.info("  ✅ config sanity OK")
@@ -755,26 +689,22 @@ class AutoTradingEngine:
             )
 
             # 4. Generate signals
-            # Gather real market state so RegimeDetector has VIX/breadth
-            try:
-                import yfinance as _yf_ate
-                _vix_d = _yf_ate.Ticker("^VIX").history(period="5d")
-                _spy_d = _yf_ate.Ticker("SPY").history(period="5d")
-                _mkt = {
-                    "vix": float(_vix_d["Close"].iloc[-1]) if len(_vix_d) else 20,
-                    "vix_term_structure": 1.0,
-                    "pct_above_sma50": 55,
-                    "hy_spread": 350,
-                    "spx_change_pct": float(
-                        _spy_d["Close"].pct_change().iloc[-1] * 100
-                    ) if len(_spy_d) > 1 else 0,
-                }
-            except (ConnectionError, OSError, ValueError, KeyError) as e:
-                logger.debug("Market data fallback: %s", e)
-                _mkt = {
-                    "vix": 20, "vix_term_structure": 1.0,
-                    "pct_above_sma50": 55, "hy_spread": 350,
-                }
+            # Sprint 26: reuse context assembler market_state
+            # instead of a redundant yfinance fetch
+            _ctx_mkt = self._context.get("market_state", {})
+            _mkt = {
+                "vix": _ctx_mkt.get("vix", 20),
+                "vix_term_structure": _ctx_mkt.get(
+                    "vix_term_slope", 1.0,
+                ),
+                "pct_above_sma50": int(
+                    _ctx_mkt.get("breadth_pct", 0.55) * 100
+                ),
+                "hy_spread": _ctx_mkt.get("hy_spread", 350),
+                "spx_change_pct": _ctx_mkt.get(
+                    "spy_return_20d", 0,
+                ),
+            }
 
             engine = SignalEngine()
             signals = engine.generate_signals(
@@ -855,13 +785,6 @@ class AutoTradingEngine:
             )
 
             if result.success:
-                _stop = (
-                    rec.stop_price if rec.stop_price > 0
-                    else rec.entry_price * 0.95
-                )
-                self.position_monitor.track_entry(
-                    rec.ticker, rec.entry_price, _stop,
-                )
                 _entry_price = getattr(
                     result, "avg_fill_price", rec.entry_price,
                 )
@@ -1360,7 +1283,19 @@ class AutoTradingEngine:
 
 
     def get_cached_state(self) -> Dict[str, Any]:
-        """Return cached regime, recommendations, leaderboard for API."""
+        """Return cached engine state for API / dashboard.
+
+        Sprint 26: expanded with market_state, equity, positions,
+        circuit-breaker status, and PnL so the dashboard can
+        display real data instead of hardcoded placeholders.
+        """
+        # Position / PnL snapshot from PositionManager
+        _pm = self.position_mgr
+        _open = len(_pm.positions)
+        _total_trades = _pm.total_trades if hasattr(_pm, "total_trades") else 0
+        _wins = _pm.winning_trades if hasattr(_pm, "winning_trades") else 0
+        _win_rate = (_wins / _total_trades * 100) if _total_trades else 0
+
         return {
             "regime": self._cached_regime,
             "recommendations": self._cached_recommendations,
@@ -1368,6 +1303,21 @@ class AutoTradingEngine:
             "cycle_count": self._cycle_count,
             "signals_today": len(self._signals_today),
             "trades_today": len(self._trades_today),
+            # Sprint 26: dashboard data
+            "market_state": self._context.get("market_state", {}),
+            "equity": self._last_known_equity,
+            "open_positions": _open,
+            "total_trades": _total_trades,
+            "win_rate": _win_rate,
+            "circuit_breaker": {
+                "triggered": self.circuit_breaker.triggered,
+                "reason": self.circuit_breaker.trigger_reason,
+                "daily_pnl": self.circuit_breaker.daily_pnl,
+                "consecutive_losses": (
+                    self.circuit_breaker.consecutive_losses
+                ),
+            },
+            "dry_run": self.dry_run,
         }
 
 
@@ -1416,7 +1366,6 @@ class AutoTradingEngine:
             "learning_loop": self.learning_loop is not None,
             "edge_calculator": self.edge_calculator is not None,
             "circuit_breaker": self.circuit_breaker is not None,
-            "position_monitor": self.position_monitor is not None,
         }
 
         # Broker connectivity

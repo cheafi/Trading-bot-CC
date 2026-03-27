@@ -141,7 +141,7 @@ class TestSignalCaching(unittest.TestCase):
         """get_cached_state() method returns dict with expected keys."""
         self.assertIn("def get_cached_state(self)", self.src)
         idx = self.src.find("get_cached_state")
-        block = self.src[idx:idx + 500]
+        block = self.src[idx:idx + 1200]
         for key in ["regime", "recommendations", "leaderboard",
                      "cycle_count", "signals_today", "trades_today"]:
             self.assertIn(

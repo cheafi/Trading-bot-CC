@@ -218,32 +218,80 @@ async def signal_explorer(request: Request):
 
 @app.get("/api/dashboard", tags=["dashboard"])
 async def get_dashboard_data():
-    """Get real-time dashboard data for the web UI."""
+    """Get real-time dashboard data for the web UI.
+
+    Sprint 26: reads live data from AutoTradingEngine's cached
+    state instead of returning hardcoded placeholders.
+    """
     from datetime import datetime
-    
-    # This would connect to your actual data sources
+
+    # Try to load engine state
+    state: Dict[str, Any] = {}
+    try:
+        from src.engines.auto_trading_engine import AutoTradingEngine
+        # If the engine singleton is available, use its cached state
+        engine = getattr(app, "_engine_instance", None)
+        if engine and hasattr(engine, "get_cached_state"):
+            state = engine.get_cached_state()
+    except Exception:
+        pass
+
+    # Extract real values with safe defaults
+    mkt = state.get("market_state", {})
+    cb = state.get("circuit_breaker", {})
+    recs = state.get("recommendations", [])
+    equity = state.get("equity", 0)
+
+    # Build top signals from live recommendations
+    top_signals = []
+    buy_count = 0
+    sell_count = 0
+    for r in recs[:10]:
+        direction = r.get("direction", "LONG")
+        if direction == "LONG":
+            buy_count += 1
+        else:
+            sell_count += 1
+        top_signals.append({
+            "ticker": r.get("ticker", "???"),
+            "direction": direction,
+            "score": round(r.get("composite_score", 0) * 10, 1),
+            "strategy": r.get("strategy_id", "unknown"),
+            "confidence": r.get("signal_confidence", 0),
+        })
+
     return {
         "timestamp": datetime.utcnow().isoformat(),
         "stats": {
-            "totalPnL": 24567.89,
-            "todayPnL": 1234.56,
-            "winRate": 68,
-            "activeSignals": 12,
-            "buySignals": 8,
-            "sellSignals": 4,
-            "portfolioValue": 100000
+            "totalPnL": cb.get("daily_pnl", 0),
+            "todayPnL": cb.get("daily_pnl", 0),
+            "winRate": round(state.get("win_rate", 0), 1),
+            "activeSignals": len(recs),
+            "buySignals": buy_count,
+            "sellSignals": sell_count,
+            "portfolioValue": equity,
+            "openPositions": state.get("open_positions", 0),
+            "totalTrades": state.get("total_trades", 0),
+            "cycleCount": state.get("cycle_count", 0),
+            "dryRun": state.get("dry_run", True),
         },
+        "regime": state.get("regime", {}),
         "markets": {
-            "SPY": {"price": 512.34, "change": 0.45},
-            "QQQ": {"price": 438.21, "change": 0.72},
-            "BITO": {"price": 28.45, "change": 3.21},
-            "GLD": {"price": 185.50, "change": -0.12}
+            "VIX": {"value": mkt.get("vix", 0)},
+            "SPY_20d": {"value": mkt.get("spy_return_20d", 0)},
+            "Breadth": {"value": mkt.get("breadth_pct", 0)},
+            "RealVol": {"value": mkt.get("realized_vol_20d", 0)},
+            "dataSource": mkt.get("data_source", "unknown"),
         },
-        "topSignals": [
-            {"ticker": "NVDA", "direction": "LONG", "score": 9.2, "winRate": 75},
-            {"ticker": "MARA", "direction": "LONG", "score": 8.8, "winRate": 68},
-            {"ticker": "COIN", "direction": "LONG", "score": 8.5, "winRate": 72}
-        ]
+        "circuitBreaker": {
+            "triggered": cb.get("triggered", False),
+            "reason": cb.get("reason", ""),
+            "consecutiveLosses": cb.get("consecutive_losses", 0),
+        },
+        "topSignals": top_signals,
+        "signalsToday": state.get("signals_today", 0),
+        "tradesToday": state.get("trades_today", 0),
+        "leaderboard": state.get("leaderboard", {}),
     }
 
 

@@ -50,11 +50,10 @@ class TestTypedExceptions(unittest.TestCase):
         self.assertIn("except (ValueError, KeyError, TypeError)", self.src)
 
     def test_05_has_connection_error_for_market(self):
-        """Market data fallback catches ConnectionError."""
-        self.assertIn(
-            "except (ConnectionError, OSError, ValueError, KeyError)",
-            self.src,
-        )
+        """Market data fallback catches DataError (typed)."""
+        # Sprint 26: inline yfinance VIX fetch removed; signal
+        # pipeline catches DataError for market-data failures.
+        self.assertIn("except DataError as e:", self.src)
 
     def test_06_broker_error_catch_for_equity(self):
         """_get_equity catches BrokerError + typed fallback."""
@@ -80,7 +79,8 @@ class TestTypedExceptions(unittest.TestCase):
     def test_09_debug_logging_on_typed_catches(self):
         """Typed catches use logger.debug for non-critical fallbacks."""
         self.assertIn('logger.debug("Edge calc fallback', self.src)
-        self.assertIn('logger.debug("Market data fallback', self.src)
+        # Sprint 26: inline yfinance VIX block removed (dedup),
+        # so "Market data fallback" debug log no longer exists.
         self.assertIn('logger.debug("Equity fetch fallback', self.src)
 
 

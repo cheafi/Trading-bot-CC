@@ -162,7 +162,6 @@ class TestAsyncSmokeTest(unittest.TestCase):
         self.assertTrue(hasattr(engine, "position_mgr"))
         self.assertTrue(hasattr(engine, "learning_loop"))
         self.assertTrue(hasattr(engine, "circuit_breaker"))
-        self.assertTrue(hasattr(engine, "position_monitor"))
 
     def test_10_get_cached_state_returns_dict(self):
         """get_cached_state returns dict with expected keys."""
