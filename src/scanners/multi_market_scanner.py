@@ -61,11 +61,46 @@ US_MEGA_CAPS = [
     "TXN", "NEE", "PM", "UNP", "RTX", "HON", "LOW", "COP", "AMAT",
 ]
 
+# Sprint 32: expanded mid-cap + value + sector leaders
+US_MID_CAPS = [
+    # Semiconductors
+    "MRVL", "ON", "NXPI", "KLAC", "LRCX", "MPWR", "SWKS", "QCOM",
+    # Software / Cloud
+    "NOW", "INTU", "ADBE", "CRM", "WDAY", "TEAM", "HUBS", "VEEV",
+    "BILL", "PAYC", "PCTY", "GTLB", "MDB", "ESTC", "CFLT", "DKNG",
+    # Fintech / Financials
+    "GS", "MS", "JPM", "BAC", "WFC", "C", "SCHW", "BX", "KKR",
+    "AXP", "PYPL", "FIS", "FISV", "GPN",
+    # Healthcare / Biotech
+    "ISRG", "REGN", "VRTX", "GILD", "AMGN", "BIIB", "MRNA", "BMY",
+    "ZTS", "EW", "DXCM", "ALGN", "IDXX", "SYK", "MDT", "BSX",
+    # Industrials / Defense
+    "CAT", "DE", "GE", "LMT", "NOC", "GD", "BA", "MMM",
+    "EMR", "ETN", "ITW", "PH", "ROK", "FTV",
+    # Energy
+    "XOM", "CVX", "SLB", "EOG", "PXD", "DVN", "OXY", "MPC",
+    "PSX", "VLO", "HAL",
+    # Consumer / Retail
+    "NKE", "SBUX", "TGT", "WMT", "LULU", "DG", "DLTR", "ROST",
+    "TJX", "CMG", "YUM", "DPZ", "WYNN", "MGM", "MAR", "HLT",
+    # Media / Communication
+    "DIS", "NFLX", "CMCSA", "PARA", "WBD", "SPOT", "ROKU",
+    # REITs / Real Estate
+    "AMT", "CCI", "PLD", "EQIX", "O", "SPG",
+    # Utilities / Staples (defensive)
+    "SO", "DUK", "AEP", "D", "SRE", "CL", "GIS", "K", "HSY",
+]
+
 US_GROWTH = [
     "NVDA", "AMD", "SMCI", "ARM", "PLTR", "CRWD", "PANW", "SNOW",
     "DDOG", "NET", "ZS", "MNDY", "TTD", "SHOP", "MELI", "SE",
     "NU", "COIN", "SQ", "SOFI", "HOOD", "AFRM",
     "UBER", "LYFT", "DASH", "ABNB", "RBLX", "U",
+    # Sprint 32: additional growth
+    "IONQ", "RGTI", "QUBT", "APP", "RDDT", "DUOL",
+    "TOST", "CAVA", "BROS", "GRAB", "RIVN", "LCID",
+    "JOBY", "LUNR", "RKLB", "ASTS", "SOUN", "AI",
+    "PATH", "S", "OKTA", "DOCN", "DT", "GLBE",
 ]
 
 US_SECTOR_ETFS = [
@@ -159,7 +194,7 @@ class MultiMarketUniverse:
         assets: List[UniverseAsset] = []
 
         if MarketRegion.US in markets:
-            for t in US_MEGA_CAPS + US_GROWTH:
+            for t in US_MEGA_CAPS + US_MID_CAPS + US_GROWTH:
                 assets.append(UniverseAsset(
                     ticker=t, name=t, market=MarketRegion.US, sector="Equity",
                 ))

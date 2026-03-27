@@ -27,6 +27,7 @@ from src.scanners.multi_market_scanner import (
     MarketRegion,
     UniverseAsset,
     US_MEGA_CAPS,
+    US_MID_CAPS,
     US_GROWTH,
     US_SECTOR_ETFS,
     HK_MAJOR,
@@ -42,10 +43,10 @@ _CRYPTO_SUFFIX = "-USD"
 
 # ── Per-market defaults ──────────────────────────────────────────
 _DEFAULT_MARKET_CAP = {
-    "us": 50,
-    "hk": 12,
-    "jp": 8,
-    "crypto": 10,
+    "us": 120,
+    "hk": 20,
+    "jp": 15,
+    "crypto": 15,
 }
 
 # ── Regime → sector preference mapping ───────────────────────────
@@ -63,7 +64,13 @@ REGIME_SECTOR_WEIGHTS: Dict[str, Dict[str, float]] = {
         "Technology": 1.4,
         "Growth": 1.3,
         "Crypto": 1.2,
+        "Financials": 1.1,
+        "Consumer": 1.1,
+        "Industrials": 1.0,
+        "Energy": 1.0,
         "ETF": 0.8,
+        "Healthcare": 0.9,
+        "REITs": 0.8,
         "Utilities": 0.6,
         "Staples": 0.6,
         "Defensive": 0.6,
@@ -74,6 +81,11 @@ REGIME_SECTOR_WEIGHTS: Dict[str, Dict[str, float]] = {
         "Staples": 1.3,
         "Defensive": 1.3,
         "ETF": 1.1,
+        "REITs": 1.0,
+        "Financials": 0.9,
+        "Consumer": 0.8,
+        "Industrials": 0.8,
+        "Energy": 0.7,
         "Technology": 0.7,
         "Growth": 0.6,
         "Crypto": 0.4,
@@ -95,7 +107,51 @@ for _t in ("XLU", "XLP", "XLV"):
 # Tech ETFs / leaders
 for _t in ("XLK", "QQQ"):
     _US_SECTOR_HINTS[_t] = "Technology"
-# The rest default to the asset's sector field from the universe
+
+# Sprint 32: sector hints for mid-caps
+_MID_SECTOR_MAP = {
+    "Technology": [
+        "MRVL", "ON", "NXPI", "KLAC", "LRCX", "MPWR",
+        "SWKS", "QCOM", "NOW", "INTU", "ADBE", "CRM",
+        "WDAY", "TEAM", "HUBS", "VEEV", "BILL", "PAYC",
+        "PCTY", "GTLB", "MDB", "ESTC", "CFLT", "DKNG",
+    ],
+    "Financials": [
+        "GS", "MS", "JPM", "BAC", "WFC", "C", "SCHW",
+        "BX", "KKR", "AXP", "PYPL", "FIS", "FISV", "GPN",
+    ],
+    "Healthcare": [
+        "ISRG", "REGN", "VRTX", "GILD", "AMGN", "BIIB",
+        "MRNA", "BMY", "ZTS", "EW", "DXCM", "ALGN",
+        "IDXX", "SYK", "MDT", "BSX",
+    ],
+    "Industrials": [
+        "CAT", "DE", "GE", "LMT", "NOC", "GD", "BA",
+        "MMM", "EMR", "ETN", "ITW", "PH", "ROK", "FTV",
+    ],
+    "Energy": [
+        "XOM", "CVX", "SLB", "EOG", "PXD", "DVN", "OXY",
+        "MPC", "PSX", "VLO", "HAL",
+    ],
+    "Consumer": [
+        "NKE", "SBUX", "TGT", "WMT", "LULU", "DG",
+        "DLTR", "ROST", "TJX", "CMG", "YUM", "DPZ",
+        "WYNN", "MGM", "MAR", "HLT", "DIS", "NFLX",
+        "CMCSA", "PARA", "WBD", "SPOT", "ROKU",
+    ],
+    "REITs": [
+        "AMT", "CCI", "PLD", "EQIX", "O", "SPG",
+    ],
+    "Utilities": [
+        "SO", "DUK", "AEP", "D", "SRE",
+    ],
+    "Staples": [
+        "CL", "GIS", "K", "HSY",
+    ],
+}
+for _sector, _tickers in _MID_SECTOR_MAP.items():
+    for _t in _tickers:
+        _US_SECTOR_HINTS[_t] = _sector
 
 
 @dataclass
@@ -128,7 +184,7 @@ class UniverseBuilder:
     def __init__(
         self,
         market_caps: Optional[Dict[str, int]] = None,
-        total_cap: int = 80,
+        total_cap: int = 170,
     ):
         self.market_caps = market_caps or dict(_DEFAULT_MARKET_CAP)
         self.total_cap = total_cap
@@ -170,7 +226,7 @@ class UniverseBuilder:
         raw = self._source(markets)
 
         # ── Stage 2: Filter ───────────────────────────────────
-        filtered = self._filter(raw, markets)
+        filtered = self._filter(raw)
 
         # ── Stage 3: Prioritise ───────────────────────────────
         prioritised = self._prioritise(filtered, regime_state)
@@ -205,7 +261,10 @@ class UniverseBuilder:
         assets: List[UniverseAsset] = []
 
         if "us" in markets:
-            for t in US_MEGA_CAPS + US_SECTOR_ETFS + US_GROWTH:
+            for t in (
+                US_MEGA_CAPS + US_MID_CAPS
+                + US_SECTOR_ETFS + US_GROWTH
+            ):
                 sector = _US_SECTOR_HINTS.get(t, "Equity")
                 assets.append(UniverseAsset(
                     ticker=t, name=t,
@@ -240,9 +299,13 @@ class UniverseBuilder:
     def _filter(
         self,
         assets: List[UniverseAsset],
-        markets: List[str],
     ) -> List[UniverseAsset]:
-        """Deduplicate, fix crypto tickers, apply per-market caps."""
+        """Deduplicate and fix crypto tickers.
+
+        Per-market caps are applied *after* regime-aware sorting
+        in ``_prioritise()`` so that favoured sectors survive the
+        cut regardless of their position in the source lists.
+        """
         # Deduplicate by ticker
         seen: Set[str] = set()
         unique: List[UniverseAsset] = []
@@ -258,19 +321,7 @@ class UniverseBuilder:
 
             unique.append(a)
 
-        # Apply per-market caps
-        per_market: Dict[str, List[UniverseAsset]] = {}
-        for a in unique:
-            mkey = a.market.value  # "us", "hk", etc.
-            per_market.setdefault(mkey, []).append(a)
-
-        capped: List[UniverseAsset] = []
-        for mkey in markets:
-            market_assets = per_market.get(mkey, [])
-            cap = self.market_caps.get(mkey, 20)
-            capped.extend(market_assets[:cap])
-
-        return capped
+        return unique
 
     # ── Stage 3: Prioritise ───────────────────────────────────
 
@@ -279,11 +330,14 @@ class UniverseBuilder:
         assets: List[UniverseAsset],
         regime_state: Dict[str, Any],
     ) -> List[UniverseAsset]:
-        """Sort assets by regime-aware sector affinity.
+        """Sort assets by regime-aware sector affinity, then cap.
 
         In RISK_ON regimes, Technology/Growth/Crypto get boosted
         to the front.  In RISK_OFF, Defensive/Healthcare/Utilities
         get boosted.  NEUTRAL leaves the order unchanged.
+
+        Per-market caps are applied *after* sorting so that regime-
+        favoured tickers survive regardless of source-list order.
         """
         regime_label = regime_state.get("regime", "NEUTRAL")
         sector_weights = REGIME_SECTOR_WEIGHTS.get(
@@ -291,24 +345,35 @@ class UniverseBuilder:
             REGIME_SECTOR_WEIGHTS.get("NEUTRAL", {}),
         )
 
-        if not sector_weights:
-            return assets  # no re-ordering
+        if sector_weights:
+            def _sort_key(a: UniverseAsset) -> float:
+                """Higher weight → lower sort key (appears first)."""
+                sector = a.sector or "Equity"
+                # Try exact match, then substring
+                w = sector_weights.get(sector, None)
+                if w is None:
+                    for key, val in sector_weights.items():
+                        if key.lower() in sector.lower():
+                            w = val
+                            break
+                if w is None:
+                    w = 1.0
+                return -w  # negative so higher weight sorts first
 
-        def _sort_key(a: UniverseAsset) -> float:
-            """Higher weight → lower sort key (appears first)."""
-            sector = a.sector or "Equity"
-            # Try exact match, then substring
-            w = sector_weights.get(sector, None)
-            if w is None:
-                for key, val in sector_weights.items():
-                    if key.lower() in sector.lower():
-                        w = val
-                        break
-            if w is None:
-                w = 1.0
-            return -w  # negative so higher weight sorts first
+            assets = sorted(assets, key=_sort_key)
 
-        return sorted(assets, key=_sort_key)
+        # Apply per-market caps on the sorted list
+        per_market: Dict[str, int] = {}
+        capped: List[UniverseAsset] = []
+        for a in assets:
+            mkey = a.market.value  # "us", "hk", etc.
+            count = per_market.get(mkey, 0)
+            cap = self.market_caps.get(mkey, 20)
+            if count < cap:
+                capped.append(a)
+                per_market[mkey] = count + 1
+
+        return capped
 
     # ── Watchlist injection ───────────────────────────────────
 

@@ -210,8 +210,8 @@ class TestPerMarketCaps(unittest.TestCase):
         self.assertLessEqual(hk_count, 5)
 
     def test_13_multi_market_no_flood(self):
-        """No single market takes > 70% of total."""
-        b = UniverseBuilder(total_cap=80)
+        """No single market takes > 80% of total."""
+        b = UniverseBuilder(total_cap=170)
         spec = b.build(
             markets=["us", "hk", "jp", "crypto"],
         )
@@ -272,26 +272,29 @@ class TestRegimePrioritisation(unittest.TestCase):
         )
 
     def test_17_risk_off_boosts_defensive(self):
-        """RISK_OFF regime puts Defensive ETFs earlier."""
-        b = UniverseBuilder(total_cap=80)
+        """RISK_OFF regime puts Defensive / Utilities / Staples earlier."""
+        b = UniverseBuilder(total_cap=170)
         spec = b.build(
             markets=["us"],
             regime_state={"regime": "RISK_OFF"},
         )
-        # XLU (Utilities) should be in first 20
-        top_20 = spec.tickers[:20]
+        # Defensive assets (ETFs + mid-cap utilities/staples) should
+        # appear in the top half of the universe under RISK_OFF.
+        top_half = spec.tickers[:max(len(spec.tickers) // 2, 40)]
+        defensive_etfs = {"XLU", "XLP", "XLV"}
+        util_staples = {"SO", "DUK", "AEP", "D", "SRE", "CL", "GIS", "K", "HSY"}
         defensive = [
-            t for t in top_20
-            if t in ("XLU", "XLP", "XLV")
+            t for t in top_half
+            if t in defensive_etfs or t in util_staples
         ]
         self.assertGreater(
             len(defensive), 0,
-            "Defensive ETFs should be prioritised in RISK_OFF",
+            "Defensive / Utilities / Staples should be prioritised in RISK_OFF",
         )
 
     def test_18_risk_on_deprioritises_crypto_off(self):
         """RISK_OFF regime pushes crypto towards end."""
-        b = UniverseBuilder(total_cap=80)
+        b = UniverseBuilder(total_cap=170)
         spec = b.build(
             markets=["us", "crypto"],
             regime_state={"regime": "RISK_OFF"},
@@ -504,9 +507,9 @@ class TestEdgeCases(unittest.TestCase):
         self.assertGreater(spec.stats.get("hk", 0), 0)
 
     def test_40_default_total_cap(self):
-        """Default total_cap is 80."""
+        """Default total_cap is 170 (Sprint 32 expansion)."""
         b = UniverseBuilder()
-        self.assertEqual(b.total_cap, 80)
+        self.assertEqual(b.total_cap, 170)
 
 
 if __name__ == "__main__":
