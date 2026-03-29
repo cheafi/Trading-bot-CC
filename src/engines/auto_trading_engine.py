@@ -25,6 +25,10 @@ from src.engines.context_assembler import ContextAssembler
 from src.engines.strategy_leaderboard import StrategyLeaderboard
 from src.engines.portfolio_risk_budget import PortfolioRiskBudget
 from src.engines.professional_kpi import ProfessionalKPI, CoverageFunnel
+from src.core.trust_metadata import (
+    TrustMetadata, TrustBadge, PnLBreakdown,
+    TradeAttribution, NoTradeCard,
+)
 from src.algo.position_manager import PositionManager, RiskParameters
 from src.ml.trade_learner import TradeLearningLoop, TradeOutcomeRecord
 from src.core.logging_config import set_correlation_id, get_correlation_id
@@ -752,6 +756,17 @@ class AutoTradingEngine:
                 "reason": str(e),
             }
 
+        # Sprint 36: build + cache no-trade card
+        try:
+            self._no_trade_card = NoTradeCard.from_regime(
+                self._regime_state,
+                tickers=self._no_trade_readiness.get(
+                    "tickers", [],
+                ),
+            )
+        except (KeyError, TypeError, ValueError):
+            pass
+
     # ------------------------------------------------------------------
     # Sprint 30: Signal → TradeRecommendation bridge
     # ------------------------------------------------------------------
@@ -1013,6 +1028,26 @@ class AutoTradingEngine:
                 rec.execution_time = datetime.now(timezone.utc)
                 rec.fill_price = _entry_price
 
+                # Sprint 36: attach trust metadata to entry
+                _badge = (
+                    TrustBadge.PAPER
+                    if self.dry_run
+                    else TrustBadge.LIVE
+                )
+                rec.trust = TrustMetadata.for_entry(
+                    badge=_badge,
+                    confidence=rec.signal_confidence,
+                    source_count=len(
+                        rec.source_strategies
+                    ) or 1,
+                    regime_label=self._cached_regime.get(
+                        "regime", "",
+                    ),
+                    risk_regime=self._cached_regime.get(
+                        "risk_regime", "",
+                    ),
+                ).to_dict()
+
                 # Sprint 25: send trade-execution notification
                 await self._notify_trade_executed(rec, _entry_price)
 
@@ -1029,6 +1064,7 @@ class AutoTradingEngine:
                         "regime", "",
                     ),
                     "entry_snapshot": rec.to_entry_snapshot(),
+                    "trust": rec.trust,
                 }
             else:
                 logger.warning(
@@ -1345,7 +1381,11 @@ class AutoTradingEngine:
     async def _notify_trade_executed(
         self, rec: "TradeRecommendation", fill_price: float,
     ):
-        """Best-effort push notification on trade entry."""
+        """Best-effort push notification on trade entry.
+
+        Sprint 36: includes trust metadata (badge, regime,
+        freshness, model version) in the notification dict.
+        """
         try:
             from src.notifications.multi_channel import (
                 MultiChannelNotifier,
@@ -1364,6 +1404,7 @@ class AutoTradingEngine:
                     rec.execution_time.isoformat()
                     if rec.execution_time else "now"
                 ),
+                "trust": rec.trust,
             })
         except Exception as e:
             logger.debug("Trade notification skipped: %s", e)
@@ -1371,7 +1412,12 @@ class AutoTradingEngine:
     async def _notify_position_closed(
         self, closed_pos, reason: str,
     ):
-        """Best-effort push notification on position exit."""
+        """Best-effort push notification on position exit.
+
+        Sprint 36: includes trust metadata with PnL breakdown
+        (gross/net/fees/slippage) and trade attribution
+        (what worked / what failed).
+        """
         try:
             from src.notifications.multi_channel import (
                 MultiChannelNotifier,
@@ -1381,12 +1427,76 @@ class AutoTradingEngine:
             if closed_pos.entry_date and closed_pos.exit_date:
                 _dt = closed_pos.exit_date - closed_pos.entry_date
                 _hold = _dt.total_seconds() / 3600
+
+            # Sprint 36: build PnL breakdown
+            _gross = closed_pos.realized_pnl_pct
+            _fees = getattr(
+                closed_pos, "fees_pct", 0.05,
+            )
+            _slip = getattr(
+                closed_pos, "slippage_pct", 0.02,
+            )
+            pnl_bd = PnLBreakdown.from_trade(
+                gross_pnl_pct=_gross,
+                fees_pct=_fees,
+                slippage_pct=_slip,
+                hold_hours=_hold,
+                exit_reason=reason,
+            )
+
+            # Sprint 36: build trade attribution
+            _dir = getattr(closed_pos, "direction", "LONG")
+            if hasattr(_dir, "value"):
+                _dir = _dir.value
+            _regime_entry = ""
+            for t in self._trades_today:
+                if t.get("ticker") == closed_pos.ticker:
+                    _regime_entry = t.get(
+                        "regime_at_entry", "",
+                    )
+                    break
+            attribution = TradeAttribution.from_closed_trade(
+                pnl_pct=_gross,
+                exit_reason=reason,
+                regime_at_entry=_regime_entry,
+                regime_at_exit=self._cached_regime.get(
+                    "regime", "",
+                ),
+                hold_hours=_hold,
+                entry_price=closed_pos.entry_price,
+                exit_price=closed_pos.exit_price,
+                stop_price=getattr(
+                    closed_pos, "stop_price", 0,
+                ),
+                target_price=getattr(
+                    closed_pos, "target_price", 0,
+                ),
+                direction=_dir,
+            )
+
+            _badge = (
+                TrustBadge.PAPER
+                if self.dry_run
+                else TrustBadge.LIVE
+            )
+            trust = TrustMetadata.for_exit(
+                badge=_badge,
+                pnl=pnl_bd,
+                attribution=attribution,
+                regime_label=self._cached_regime.get(
+                    "regime", "",
+                ),
+            )
+
             await notifier.send_exit_alert({
                 "ticker": closed_pos.ticker,
                 "exit_price": closed_pos.exit_price,
                 "pnl_pct": closed_pos.realized_pnl_pct,
                 "reason": reason,
                 "hold_hours": _hold,
+                "trust": trust.to_dict(),
+                "pnl_breakdown": pnl_bd.to_dict(),
+                "attribution": attribution.to_dict(),
             })
         except Exception as e:
             logger.debug("Exit notification skipped: %s", e)

@@ -950,6 +950,9 @@ class TradeRecommendation(BaseModel):
     # ── Metadata (catch-all for extensions) ───────────────────
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
+    # ── Trust metadata (Sprint 36) ────────────────────────────
+    trust: Dict[str, Any] = Field(default_factory=dict)
+
     model_config = ConfigDict(from_attributes=True)
 
     # ── Dict-like protocol (backward compat) ──────────────────
@@ -993,6 +996,9 @@ class TradeRecommendation(BaseModel):
         for ts_key in ("timestamp", "execution_time"):
             if d.get(ts_key) and hasattr(d[ts_key], "isoformat"):
                 d[ts_key] = d[ts_key].isoformat()
+        # Sprint 36: include trust metadata if populated
+        if self.trust:
+            d["trust"] = self.trust
         return d
 
     def to_entry_snapshot(self) -> Dict[str, Any]:

@@ -314,7 +314,7 @@ class TestExecuteSignalReturn(unittest.TestCase):
         """Execution path must return strategy_name in dict."""
         src = _read("src/engines/auto_trading_engine.py")
         idx = src.index("async def _execute_recommendation")
-        method_src = src[idx:idx + 2000]
+        method_src = src[idx:idx + 4000]
         self.assertIn('"strategy_name"', method_src)
 
     def test_20_return_has_entry_snapshot(self):

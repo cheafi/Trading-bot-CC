@@ -94,9 +94,12 @@ class MultiChannelNotifier:
     async def send_trade_alert(self, trade_info: Dict[str, Any]) -> Dict[str, bool]:
         """Send a structured trade execution notification.
 
+        Sprint 36: includes trust badge, regime, model version.
+
         Args:
             trade_info: dict with keys like ticker, direction, quantity,
-                        fill_price, strategy, confidence, stop_price, etc.
+                        fill_price, strategy, confidence, stop_price,
+                        trust (TrustMetadata dict), etc.
         """
         direction = trade_info.get("direction", "LONG")
         ticker = trade_info.get("ticker", "???")
@@ -107,22 +110,54 @@ class MultiChannelNotifier:
         stop = trade_info.get("stop_price", 0)
         score = trade_info.get("composite_score", 0)
 
-        emoji = "\U0001f7e2" if direction == "LONG" else "\U0001f534"  # green / red circle
-        text = (
-            f"{emoji} Trade Executed: {direction} {ticker}\n"
-            f"Qty: {qty} @ ${fill:.2f}\n"
-            f"Strategy: {strategy} (conf={confidence:.0f}%)\n"
-            f"Stop: ${stop:.2f} | Score: {score:.3f}\n"
-            f"Time: {trade_info.get('time', 'now')}"
+        emoji = (
+            "\U0001f7e2" if direction == "LONG"
+            else "\U0001f534"
         )
+
+        # Sprint 36: trust metadata line
+        trust = trade_info.get("trust", {})
+        badge = trust.get("badge", "PAPER")
+        badge_icon = {
+            "LIVE": "\U0001f7e2",
+            "PAPER": "\U0001f4cb",
+            "BACKTEST": "\U0001f52c",
+            "RESEARCH": "\U0001f50d",
+        }.get(badge, "\u2753")
+        model_ver = trust.get("model_version", "")
+        regime = trust.get("regime_label", "")
+        freshness = trust.get("freshness", "")
+
+        lines = [
+            f"{emoji} Trade Executed: {direction} {ticker}",
+            f"Qty: {qty} @ ${fill:.2f}",
+            f"Strategy: {strategy} (conf={confidence:.0f}%)",
+            f"Stop: ${stop:.2f} | Score: {score:.3f}",
+            f"Time: {trade_info.get('time', 'now')}",
+        ]
+        # Trust footer
+        trust_parts = [f"{badge_icon} {badge}"]
+        if regime:
+            trust_parts.append(f"Regime: {regime}")
+        if freshness:
+            trust_parts.append(freshness)
+        if model_ver:
+            trust_parts.append(model_ver)
+        lines.append(" \u2502 ".join(trust_parts))
+
+        text = "\n".join(lines)
         return await self.send_message(text)
 
     async def send_exit_alert(self, exit_info: Dict[str, Any]) -> Dict[str, bool]:
         """Send a structured position-exit notification.
 
+        Sprint 36: includes gross/net P&L breakdown, what worked
+        / what failed attribution, and trust badge.
+
         Args:
-            exit_info: dict with keys like ticker, exit_price, pnl_pct,
-                       reason, hold_hours, direction.
+            exit_info: dict with keys like ticker, exit_price,
+                       pnl_pct, reason, hold_hours,
+                       trust, pnl_breakdown, attribution.
         """
         ticker = exit_info.get("ticker", "???")
         exit_price = exit_info.get("exit_price", 0)
@@ -130,11 +165,82 @@ class MultiChannelNotifier:
         reason = exit_info.get("reason", "unknown")
         hold_h = exit_info.get("hold_hours", 0)
 
-        emoji = "\u2705" if pnl_pct >= 0 else "\u274c"  # check / cross
-        text = (
-            f"{emoji} Position Closed: {ticker}\n"
-            f"Exit: ${exit_price:.2f} | PnL: {pnl_pct:+.2f}%\n"
-            f"Reason: {reason}\n"
-            f"Held: {hold_h:.1f}h"
-        )
+        emoji = "\u2705" if pnl_pct >= 0 else "\u274c"
+
+        lines = [
+            f"{emoji} Position Closed: {ticker}",
+            f"Exit: ${exit_price:.2f} | PnL: {pnl_pct:+.2f}%",
+            f"Reason: {reason}",
+            f"Held: {hold_h:.1f}h",
+        ]
+
+        # Sprint 36: gross/net breakdown
+        pnl_bd = exit_info.get("pnl_breakdown", {})
+        if pnl_bd:
+            gross = pnl_bd.get("gross_pnl_pct", pnl_pct)
+            net = pnl_bd.get("net_pnl_pct", pnl_pct)
+            fees = pnl_bd.get("fees_pct", 0)
+            slip = pnl_bd.get("slippage_pct", 0)
+            lines.append(
+                f"Gross {gross:+.2f}% \u2192 "
+                f"Net {net:+.2f}% "
+                f"(fees {fees:.2f}%, slip {slip:.2f}%)"
+            )
+
+        # Sprint 36: attribution
+        attr = exit_info.get("attribution", {})
+        worked = attr.get("what_worked", [])
+        failed = attr.get("what_failed", [])
+        if worked:
+            lines.append(
+                "\u2705 " + " | ".join(worked[:3])
+            )
+        if failed:
+            lines.append(
+                "\u274c " + " | ".join(failed[:3])
+            )
+
+        # Sprint 36: trust badge
+        trust = exit_info.get("trust", {})
+        badge = trust.get("badge", "PAPER")
+        model_ver = trust.get("model_version", "")
+        badge_icon = {
+            "LIVE": "\U0001f7e2",
+            "PAPER": "\U0001f4cb",
+        }.get(badge, "\u2753")
+        trust_line = f"{badge_icon} {badge}"
+        if model_ver:
+            trust_line += f" \u2502 {model_ver}"
+        lines.append(trust_line)
+
+        text = "\n".join(lines)
+        return await self.send_message(text)
+
+    async def send_no_trade_alert(
+        self, no_trade_info: Dict[str, Any],
+    ) -> Dict[str, bool]:
+        """Send a no-trade card when system passes (Sprint 36).
+
+        Args:
+            no_trade_info: dict from NoTradeCard.to_dict()
+        """
+        reason = no_trade_info.get("reason", "")
+        regime = no_trade_info.get("regime_label", "")
+        resume = no_trade_info.get("resume_conditions", [])
+        tickers = no_trade_info.get("tickers_considered", [])
+
+        lines = [
+            "\U0001f6ab No Trade",
+            f"Regime: {regime}",
+            f"Reason: {reason}",
+        ]
+        if tickers:
+            lines.append(
+                f"Considered: {', '.join(tickers[:5])}"
+            )
+        if resume:
+            lines.append("Resume when:")
+            for c in resume[:3]:
+                lines.append(f"  \u2022 {c}")
+        text = "\n".join(lines)
         return await self.send_message(text)

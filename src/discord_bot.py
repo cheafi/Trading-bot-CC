@@ -5772,9 +5772,13 @@ class DiscordInteractiveBot:
                             inst = rec.get("instrument_type", "stock")
                             why = rec.get("why_now", "")
                             supp = rec.get("why_not_trade", "")
+                            # Sprint 36: trust metadata
+                            trust = rec.get("trust", {})
+                            badge = trust.get("badge", "PAPER")
+                            badge_icon = {"LIVE": "🟢", "PAPER": "📋", "BACKTEST": "🔬"}.get(badge, "❓")
                             # Build card
                             lines = [
-                                f"{icon} **{direction}** {inst} • Grade **{grade}**",
+                                f"{icon} **{direction}** {inst} • Grade **{grade}** {badge_icon}",
                                 f"Score: **{score:.3f}** • Conf: **{conf_pct}%**",
                             ]
                             if why:
@@ -5798,7 +5802,7 @@ class DiscordInteractiveBot:
                         "AutoTradingEngine is running. "
                         "Use `/regime` for current market state."
                     )
-                e.set_footer(text="Sprint 33 • /regime /leaderboard /calibration")
+                e.set_footer(text="Sprint 36 • v6.36 • /regime /leaderboard /calibration")
                 await interaction.followup.send(embed=e)
             except Exception as ex:
                 await interaction.followup.send(f"❌ Recommendations error: {ex}")
