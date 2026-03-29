@@ -7,7 +7,7 @@ Manages connections to:
 - MetaTrader 5 (Forex/CFD/Crypto)
 - Paper Trading
 
-Integrates with Telegram bot for real-time trading.
+Integrates with Discord bot for real-time trading.
 """
 import asyncio
 import logging

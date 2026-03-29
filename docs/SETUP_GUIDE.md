@@ -63,9 +63,6 @@ IB_CLIENT_ID=1
 FUTU_HOST=127.0.0.1
 FUTU_PORT=11111
 
-# ── OPTIONAL: TELEGRAM ────────────────────────────────────────
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_CHAT_ID=
 ```
 
 ### 4. Create Discord Bot
@@ -117,12 +114,12 @@ kill $(cat bot.pid)
 ### Option C — Docker
 
 ```bash
-docker compose -f docker-compose.yml up -d telegram   # adapt for discord
+docker compose up -d discord_bot
 ```
 
 Or build standalone:
 ```bash
-docker build -f docker/Dockerfile.telegram -t tradingbot .
+docker build -f docker/Dockerfile.discord -t tradingbot .
 docker run -d --env-file .env tradingbot
 ```
 

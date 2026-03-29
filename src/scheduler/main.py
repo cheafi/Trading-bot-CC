@@ -15,7 +15,7 @@ from src.core.config import get_settings
 from src.ingestors import MarketDataIngestor, NewsIngestor, SocialIngestor
 from src.engines import FeatureEngine, SignalEngine
 from src.engines.gpt_validator import GPTSignalValidator, GPTSummarizer
-from src.notifications.telegram import TelegramNotifier
+from src.notifications.multi_channel import MultiChannelNotifier
 
 settings = get_settings()
 
@@ -50,7 +50,7 @@ class TradingScheduler:
         self.signal_engine = SignalEngine()
         self.gpt_validator = GPTSignalValidator()
         self.gpt_summarizer = GPTSummarizer()
-        self.telegram = TelegramNotifier()
+        self.notifier = MultiChannelNotifier()
         
         # Job tracking
         self._job_history: list = []
@@ -227,16 +227,16 @@ class TradingScheduler:
                 'news_summary': 'Market overview pending implementation'
             }
             
-            # Send report via Telegram
-            if self.telegram.is_configured:
-                await self.telegram.send_daily_report(report)
-                logger.info("Daily report sent via Telegram")
+            # Send report via notification channels
+            if self.notifier.is_configured:
+                await self.notifier.send_daily_report(report)
+                logger.info("Daily report sent via notification channels")
             
         except Exception as e:
             logger.error(f"Daily report job failed: {e}")
             # Alert on critical failures
-            if self.telegram.is_configured:
-                await self.telegram.send_alert(
+            if self.notifier.is_configured:
+                await self.notifier.send_alert(
                     "Daily Report Failed",
                     f"Error generating daily report: {str(e)}",
                     level="ERROR"
@@ -250,15 +250,15 @@ class TradingScheduler:
             # TODO: Implement with actual data pipeline
             signals = []
             
-            # Send signals via Telegram if any
-            if signals and self.telegram.is_configured:
-                await self.telegram.send_signals_batch(signals)
-                logger.info(f"Sent {len(signals)} signals via Telegram")
+            # Send signals if any
+            if signals and self.notifier.is_configured:
+                await self.notifier.send_signals_batch(signals)
+                logger.info(f"Sent {len(signals)} signals via notification channels")
             
         except Exception as e:
             logger.error(f"Pre-market signals job failed: {e}")
-            if self.telegram.is_configured:
-                await self.telegram.send_alert(
+            if self.notifier.is_configured:
+                await self.notifier.send_alert(
                     "Signal Generation Failed",
                     f"Error generating pre-market signals: {str(e)}",
                     level="ERROR"

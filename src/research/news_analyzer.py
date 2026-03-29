@@ -537,8 +537,8 @@ Keep it concise and actionable."""
         
         return "\n".join(lines)
     
-    def format_brief_telegram(self, brief: NewsBrief) -> str:
-        """Format brief for Telegram."""
+    def format_brief_text(self, brief: NewsBrief) -> str:
+        """Format brief as plain text for notifications."""
         lines = []
         
         mood_emoji = {"risk_on": "🟢", "risk_off": "🔴", "mixed": "🟡"}.get(brief.market_mood, "⚪")

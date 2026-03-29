@@ -7,7 +7,7 @@ a monthly performance report card.
 Consumed by:
   - Discord ``/scorecard`` command
   - API ``/api/v1/scorecard``
-  - Telegram monthly notification
+  - Discord monthly notification
 """
 from __future__ import annotations
 
@@ -100,7 +100,7 @@ class MonthlyScorecard:
         }
 
     def format_text(self) -> str:
-        """Render as plain text for Discord / Telegram."""
+        """Render as plain text for Discord / notifications."""
         lines = [
             f"\U0001f4c5 Monthly Scorecard \u2014 {self.month}",
             "\u2550" * 34,

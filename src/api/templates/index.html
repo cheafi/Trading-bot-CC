@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="TradingAI">
-    <meta name="description" content="AI-Powered Stock Trading with 182 Commands - US, Crypto, Japan, HK Markets">
+    <meta name="description" content="AI-Powered Stock Trading — 64 Slash Commands · 3,000+ Stock Universe · 8 Markets · Self-Learning AI Engine">
     <meta name="mobile-web-app-capable" content="yes">
     
     <!-- PWA Manifest -->
@@ -26,7 +26,7 @@
     <!-- Splash screens for iOS -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     
-    <title>TradingAI Pro v2 - Multi-Market Dashboard</title>
+    <title>TradingAI Pro v3 — 3,000+ Universe Multi-Market Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -395,6 +395,32 @@
                         </div>
                     </div>
                 </template>
+            </div>
+        </div>
+
+        <!-- Universe Coverage Stats -->
+        <div class="card-glass rounded-2xl p-6 mb-8 border border-cyan-500/20">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold">🌐 Universe Coverage — 3,003 Tickers Across 8 Markets</h3>
+                <span class="text-xs bg-cyan-500/20 text-cyan-400 px-2 py-1 rounded">Sprint 39</span>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+                <template x-for="market in universeStats" :key="market.market">
+                    <div class="bg-white/5 rounded-xl p-3 text-center hover:bg-white/10 transition">
+                        <div class="text-2xl mb-1" x-text="market.flag"></div>
+                        <div class="text-xs text-gray-400" x-text="market.market"></div>
+                        <div class="text-lg font-bold text-cyan-400" x-text="market.count.toLocaleString()"></div>
+                        <div class="text-xs text-gray-500" x-text="market.detail"></div>
+                    </div>
+                </template>
+            </div>
+            <div class="mt-4 flex items-center justify-between text-xs text-gray-400">
+                <div class="flex items-center space-x-4">
+                    <span>📊 US: S&P 500 + S&P 400 + NASDAQ-100 + Russell 2000 + Extended</span>
+                </div>
+                <div>
+                    <span class="text-cyan-400 font-semibold">3,003</span> total unique tickers scanned
+                </div>
             </div>
         </div>
 
@@ -965,6 +991,66 @@
                             </div>
                             <div class="text-right">
                                 <div class="text-sm" x-text="'HK$' + stock.price.toFixed(2)"></div>
+                                <div :class="stock.change >= 0 ? 'profit' : 'loss'" class="text-xs" x-text="(stock.change >= 0 ? '+' : '') + stock.change.toFixed(2) + '%'"></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Korea, Australia & India Stocks -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- Korea Stocks -->
+            <div class="card-glass rounded-2xl p-6">
+                <h3 class="text-lg font-semibold mb-4">🇰🇷 Korea Stocks</h3>
+                <div class="space-y-2">
+                    <template x-for="stock in koreaStocks" :key="stock.symbol">
+                        <div class="flex items-center justify-between p-2 bg-white/5 rounded-lg">
+                            <div>
+                                <div class="font-semibold text-sm" x-text="stock.name"></div>
+                                <div class="text-xs text-gray-400" x-text="stock.symbol"></div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm" x-text="'₩' + stock.price.toLocaleString()"></div>
+                                <div :class="stock.change >= 0 ? 'profit' : 'loss'" class="text-xs" x-text="(stock.change >= 0 ? '+' : '') + stock.change.toFixed(2) + '%'"></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            
+            <!-- Australia Stocks -->
+            <div class="card-glass rounded-2xl p-6">
+                <h3 class="text-lg font-semibold mb-4">🇦🇺 Australia Stocks</h3>
+                <div class="space-y-2">
+                    <template x-for="stock in ausStocks" :key="stock.symbol">
+                        <div class="flex items-center justify-between p-2 bg-white/5 rounded-lg">
+                            <div>
+                                <div class="font-semibold text-sm" x-text="stock.name"></div>
+                                <div class="text-xs text-gray-400" x-text="stock.symbol"></div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm" x-text="'A$' + stock.price.toFixed(2)"></div>
+                                <div :class="stock.change >= 0 ? 'profit' : 'loss'" class="text-xs" x-text="(stock.change >= 0 ? '+' : '') + stock.change.toFixed(2) + '%'"></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            
+            <!-- India Stocks -->
+            <div class="card-glass rounded-2xl p-6">
+                <h3 class="text-lg font-semibold mb-4">🇮🇳 India Stocks</h3>
+                <div class="space-y-2">
+                    <template x-for="stock in indiaStocks" :key="stock.symbol">
+                        <div class="flex items-center justify-between p-2 bg-white/5 rounded-lg">
+                            <div>
+                                <div class="font-semibold text-sm" x-text="stock.name"></div>
+                                <div class="text-xs text-gray-400" x-text="stock.symbol"></div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm" x-text="'₹' + stock.price.toLocaleString()"></div>
                                 <div :class="stock.change >= 0 ? 'profit' : 'loss'" class="text-xs" x-text="(stock.change >= 0 ? '+' : '') + stock.change.toFixed(2) + '%'"></div>
                             </div>
                         </div>
@@ -1689,6 +1775,20 @@
                     { name: 'Shanghai Composite', flag: '🇨🇳', change: 0.32, status: 'Closed' },
                     { name: 'KOSPI', flag: '🇰🇷', change: 0.58, status: 'Closed' },
                     { name: 'Taiwan Weighted', flag: '🇹🇼', change: 1.12, status: 'Closed' },
+                    { name: 'S&P/ASX 200', flag: '🇦🇺', change: 0.42, status: 'Closed' },
+                    { name: 'Nifty 50', flag: '🇮🇳', change: 0.68, status: 'Closed' },
+                ],
+                
+                // Universe Coverage Stats
+                universeStats: [
+                    { market: 'US', flag: '🇺🇸', count: 2751, detail: 'S&P/NDX/Russell' },
+                    { market: 'Hong Kong', flag: '🇭🇰', count: 78, detail: 'HSI + H-shares' },
+                    { market: 'Japan', flag: '🇯🇵', count: 60, detail: 'Nikkei/TOPIX' },
+                    { market: 'Korea', flag: '🇰🇷', count: 15, detail: 'KOSPI leaders' },
+                    { market: 'Taiwan', flag: '🇹🇼', count: 11, detail: 'TSMC + peers' },
+                    { market: 'Australia', flag: '🇦🇺', count: 15, detail: 'ASX 200' },
+                    { market: 'India', flag: '🇮🇳', count: 10, detail: 'Nifty 50' },
+                    { market: 'Crypto', flag: '₿', count: 63, detail: 'BTC/ETH + alts' },
                 ],
                 
                 // Japan Stocks (Real Tokyo Stock Exchange)
@@ -1713,6 +1813,30 @@
                     { symbol: '9618.HK', name: 'JD.com', price: 135.20, change: 1.85 },
                     { symbol: '2318.HK', name: 'Ping An Insurance', price: 42.65, change: -0.65 },
                     { symbol: '1810.HK', name: 'Xiaomi Corp', price: 18.92, change: 4.25 },
+                ],
+                
+                // Korea Stocks
+                koreaStocks: [
+                    { symbol: '005930.KS', name: 'Samsung Electronics', price: 72500, change: 1.45 },
+                    { symbol: '000660.KS', name: 'SK Hynix', price: 185000, change: 2.85 },
+                    { symbol: '035420.KS', name: 'NAVER Corp', price: 215000, change: -0.65 },
+                    { symbol: '035720.KS', name: 'Kakao Corp', price: 52300, change: 0.92 },
+                ],
+                
+                // Australia Stocks
+                ausStocks: [
+                    { symbol: 'BHP.AX', name: 'BHP Group', price: 45.82, change: 0.68 },
+                    { symbol: 'CBA.AX', name: 'Commonwealth Bank', price: 125.40, change: 0.35 },
+                    { symbol: 'CSL.AX', name: 'CSL Limited', price: 295.60, change: 1.12 },
+                    { symbol: 'WBC.AX', name: 'Westpac Banking', price: 28.45, change: -0.42 },
+                ],
+                
+                // India Stocks
+                indiaStocks: [
+                    { symbol: 'RELIANCE.NS', name: 'Reliance Industries', price: 2850, change: 0.95 },
+                    { symbol: 'TCS.NS', name: 'Tata Consultancy', price: 4125, change: 1.32 },
+                    { symbol: 'INFY.NS', name: 'Infosys', price: 1580, change: 0.78 },
+                    { symbol: 'HDFCBANK.NS', name: 'HDFC Bank', price: 1685, change: -0.25 },
                 ],
                 
                 // Upcoming Events

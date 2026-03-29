@@ -26,14 +26,11 @@ from typing import Any, Dict, List, Optional, Set
 from src.scanners.multi_market_scanner import (
     MarketRegion,
     UniverseAsset,
-    US_MEGA_CAPS,
-    US_MID_CAPS,
-    US_SP500_REST,
-    US_GROWTH,
-    US_SECTOR_ETFS,
-    HK_MAJOR,
-    JP_MAJOR,
-    CRYPTO_MAJOR,
+)
+from src.scanners.us_universe import US_UNIVERSE, US_SECTOR_MAP
+from src.scanners.intl_universe import (
+    HK_TICKERS, JP_TICKERS, KR_TICKERS, TW_TICKERS,
+    AU_TICKERS, IN_TICKERS, CRYPTO_TICKERS,
 )
 
 logger = logging.getLogger(__name__)
@@ -44,10 +41,14 @@ _CRYPTO_SUFFIX = "-USD"
 
 # ── Per-market defaults ──────────────────────────────────────────
 _DEFAULT_MARKET_CAP = {
-    "us": 500,
-    "hk": 20,
-    "jp": 15,
-    "crypto": 15,
+    "us": 2800,
+    "hk": 80,
+    "jp": 60,
+    "kr": 15,
+    "tw": 11,
+    "au": 15,
+    "in": 10,
+    "crypto": 50,
 }
 
 # ── Regime → sector preference mapping ───────────────────────────
@@ -98,20 +99,8 @@ REGIME_SECTOR_WEIGHTS: Dict[str, Dict[str, float]] = {
     "NEUTRAL": {},  # all equal
 }
 
-# US ticker → sector rough mapping (for prioritisation only)
-_US_SECTOR_HINTS: Dict[str, str] = {}
-# Growth stocks get "Growth" sector
-for _t in US_GROWTH:
-    _US_SECTOR_HINTS[_t] = "Growth"
-# Sector ETFs get "ETF"
-for _t in US_SECTOR_ETFS:
-    _US_SECTOR_HINTS[_t] = "ETF"
-# Defensive ETFs
-for _t in ("XLU", "XLP", "XLV"):
-    _US_SECTOR_HINTS[_t] = "Defensive"
-# Tech ETFs / leaders
-for _t in ("XLK", "QQQ"):
-    _US_SECTOR_HINTS[_t] = "Technology"
+# US ticker → sector rough mapping (from us_universe.py)
+_US_SECTOR_HINTS: Dict[str, str] = dict(US_SECTOR_MAP)
 
 # Sprint 32: sector hints for mid-caps
 _MID_SECTOR_MAP = {
@@ -262,7 +251,7 @@ class UniverseBuilder:
     def __init__(
         self,
         market_caps: Optional[Dict[str, int]] = None,
-        total_cap: int = 550,
+        total_cap: int = 3100,
     ):
         self.market_caps = market_caps or dict(_DEFAULT_MARKET_CAP)
         self.total_cap = total_cap
@@ -296,7 +285,10 @@ class UniverseBuilder:
             ``.tickers`` is the flat list ready for yfinance.
         """
         if markets is None:
-            markets = ["us", "hk", "jp", "crypto"]
+            markets = [
+                "us", "hk", "jp", "kr", "tw",
+                "au", "in", "crypto",
+            ]
         regime_state = regime_state or {}
         watchlist = watchlist or []
 
@@ -335,15 +327,11 @@ class UniverseBuilder:
     def _source(
         self, markets: List[str],
     ) -> List[UniverseAsset]:
-        """Gather raw assets from hardcoded lists."""
+        """Gather raw assets from universe files."""
         assets: List[UniverseAsset] = []
 
         if "us" in markets:
-            for t in (
-                US_MEGA_CAPS + US_MID_CAPS
-                + US_SP500_REST + US_SECTOR_ETFS
-                + US_GROWTH
-            ):
+            for t in US_UNIVERSE:
                 sector = _US_SECTOR_HINTS.get(t, "Equity")
                 assets.append(UniverseAsset(
                     ticker=t, name=t,
@@ -351,21 +339,49 @@ class UniverseBuilder:
                 ))
 
         if "hk" in markets:
-            for t in HK_MAJOR:
+            for t in HK_TICKERS:
                 assets.append(UniverseAsset(
                     ticker=t, name=t,
                     market=MarketRegion.HK, sector="HK Equity",
                 ))
 
         if "jp" in markets:
-            for t in JP_MAJOR:
+            for t in JP_TICKERS:
                 assets.append(UniverseAsset(
                     ticker=t, name=t,
                     market=MarketRegion.JP, sector="JP Equity",
                 ))
 
+        if "kr" in markets:
+            for t in KR_TICKERS:
+                assets.append(UniverseAsset(
+                    ticker=t, name=t,
+                    market=MarketRegion.US, sector="KR Equity",
+                ))
+
+        if "tw" in markets:
+            for t in TW_TICKERS:
+                assets.append(UniverseAsset(
+                    ticker=t, name=t,
+                    market=MarketRegion.US, sector="TW Equity",
+                ))
+
+        if "au" in markets:
+            for t in AU_TICKERS:
+                assets.append(UniverseAsset(
+                    ticker=t, name=t,
+                    market=MarketRegion.US, sector="AU Equity",
+                ))
+
+        if "in" in markets:
+            for t in IN_TICKERS:
+                assets.append(UniverseAsset(
+                    ticker=t, name=t,
+                    market=MarketRegion.US, sector="IN Equity",
+                ))
+
         if "crypto" in markets:
-            for t in CRYPTO_MAJOR:
+            for t in CRYPTO_TICKERS:
                 assets.append(UniverseAsset(
                     ticker=t, name=t,
                     market=MarketRegion.CRYPTO, sector="Crypto",

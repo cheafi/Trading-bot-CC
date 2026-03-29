@@ -74,10 +74,6 @@ class Settings(BaseSettings):
     azure_openai_deployment: str = Field(default="gpt-5.2", alias="AZURE_OPENAI_DEPLOYMENT")
     azure_openai_api_version: str = Field(default="2026-01-15-preview", alias="AZURE_OPENAI_API_VERSION")
     
-    # Telegram Notifications
-    telegram_bot_token: Optional[str] = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
-    telegram_chat_id: Optional[str] = Field(default=None, alias="TELEGRAM_CHAT_ID")
-
     # Discord Notifications (optional)
     discord_webhook_url: Optional[str] = Field(default=None, alias="DISCORD_WEBHOOK_URL")
     discord_bot_token: Optional[str] = Field(default=None, alias="DISCORD_BOT_TOKEN")
@@ -150,11 +146,6 @@ class Settings(BaseSettings):
         """Check if Azure OpenAI should be used."""
         return bool(self.azure_openai_endpoint and self.azure_client_id)
     
-    @property
-    def has_telegram(self) -> bool:
-        """Check if Telegram is configured."""
-        return bool(self.telegram_bot_token and self.telegram_chat_id)
-
     @property
     def has_discord(self) -> bool:
         """Check if Discord webhook is configured."""

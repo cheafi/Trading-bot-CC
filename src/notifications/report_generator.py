@@ -10,7 +10,7 @@ Report types:
   • Signal Card            (per signal, on demand)
   • Regime Snapshot        (on demand, /market_now)
 
-All builders return plain dicts so renderers (Discord, API, Telegram)
+All builders return plain dicts so renderers (Discord, API)
 can consume them without importing heavyweight UI libraries.
 """
 from __future__ import annotations
@@ -792,7 +792,7 @@ def build_eod_scorecard(
 
 
 # ─────────────────────────────────────────────────────────────────────
-# 5. Markdown export (for docs / telegram / email)
+# 5. Markdown export (for docs / notifications / email)
 # ─────────────────────────────────────────────────────────────────────
 
 def embeds_to_markdown(embeds: List[Dict[str, Any]]) -> str:

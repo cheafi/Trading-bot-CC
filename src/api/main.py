@@ -1840,52 +1840,6 @@ async def get_quote(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ===== Telegram Bot Endpoints =====
-
-@app.post("/telegram/start")
-async def start_telegram_bot_endpoint(
-    _: bool = Depends(verify_api_key)
-):
-    """Start the interactive Telegram bot."""
-    from src.notifications import start_telegram_bot
-    
-    try:
-        bot = await start_telegram_bot()
-        
-        return {
-            "success": True,
-            "message": "Telegram bot started",
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Telegram bot start error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/telegram/send")
-async def send_telegram_message(
-    message: str,
-    _: bool = Depends(verify_api_key)
-):
-    """Send a message via Telegram."""
-    from src.notifications import TelegramNotifier
-    
-    try:
-        notifier = TelegramNotifier()
-        success = await notifier.send_message(message)
-        
-        return {
-            "success": success,
-            "message": "Message sent" if success else "Failed to send message",
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Telegram send error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 # ===== Main Entry Point =====
 
 def start():

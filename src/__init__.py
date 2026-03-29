@@ -12,7 +12,7 @@ Modules:
     brokers  - Unified broker interface (Futu, IB, MT5, Paper)
     ml       - Alpha factors, RL agents, trade outcome learning
     scanners - Pattern, sector, momentum, volume scanners
-    notifications - Telegram, Discord, WhatsApp, Slack
+    notifications - Discord, WhatsApp, multi-channel dispatch
     performance  - P&L analytics, backtest analysis
     research     - News/earnings/macro intelligence
     backtest     - Backtesting frameworks

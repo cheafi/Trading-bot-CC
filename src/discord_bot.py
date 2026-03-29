@@ -3494,6 +3494,36 @@ class DiscordInteractiveBot:
             await full_server_setup(guild)
             await _audit(f"📥 Joined new server: {guild.name}")
 
+        @bot.event
+        async def on_disconnect():
+            logger.warning("⚠️ Discord disconnected — will auto-reconnect")
+
+        @bot.event
+        async def on_resumed():
+            logger.info("✅ Discord connection resumed")
+            await _audit("🔄 Connection resumed after disconnect")
+            # Restart any tasks that may have died during disconnect
+            all_bg = [
+                update_presence, market_pulse, auto_movers,
+                auto_sector_macro, auto_crypto, global_market_update,
+                auto_signal_scan, morning_brief, eod_report,
+                asia_preview, auto_whale_scan, weekly_recap,
+                health_check, realtime_price_alerts, auto_news_feed,
+                auto_ticker_news, smart_morning_update, opportunity_scanner,
+                vix_fear_monitor, auto_strategy_learn,
+            ]
+            restarted = 0
+            for t in all_bg:
+                if not t.is_running():
+                    t.start()
+                    restarted += 1
+            if restarted:
+                logger.info(f"🔄 Restarted {restarted} background tasks after reconnect")
+
+        @bot.event
+        async def on_error(event_method: str, *args, **kwargs):
+            logger.error(f"❌ Unhandled error in {event_method}", exc_info=True)
+
         # ══════════════════════════════════════════════════════════════
         # SLASH COMMANDS — Getting Started
         # ══════════════════════════════════════════════════════════════
@@ -6295,7 +6325,7 @@ class DiscordInteractiveBot:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Standalone launcher
+# Standalone launcher — 24/7 supervisor with auto-restart
 # ═══════════════════════════════════════════════════════════════════════
 
 async def main():
@@ -6304,9 +6334,34 @@ async def main():
         print("❌ DISCORD_BOT_TOKEN not set in .env\n"
               "Get your token: https://discord.com/developers/applications")
         return
-    print("🤖 Starting TradingAI Discord Bot...")
+    print("🤖 Starting TradingAI Discord Bot (24/7 mode)...")
+    print("   Auto-restart on crash enabled")
     print("   Ctrl+C to stop\n")
-    await bot.run_interactive_bot()
+
+    MAX_RETRIES = 999          # effectively infinite
+    INITIAL_DELAY = 5          # seconds
+    MAX_DELAY = 300            # 5 min ceiling
+    retry = 0
+    delay = INITIAL_DELAY
+
+    while retry < MAX_RETRIES:
+        try:
+            await bot.run_interactive_bot()
+            break  # clean exit
+        except KeyboardInterrupt:
+            print("\n👋 Bot stopped by user")
+            break
+        except Exception as e:
+            retry += 1
+            logger.error(f"💥 Bot crashed (attempt {retry}): {e}")
+            print(f"💥 Bot crashed (attempt {retry}/{MAX_RETRIES}): {e}")
+            print(f"   Restarting in {delay}s...")
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, MAX_DELAY)  # exponential backoff
+            # Re-create bot instance for clean state
+            bot = DiscordInteractiveBot()
+    else:
+        print(f"❌ Max retries ({MAX_RETRIES}) exhausted. Exiting.")
 
 
 if __name__ == "__main__":

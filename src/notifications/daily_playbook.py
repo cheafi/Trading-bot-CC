@@ -7,7 +7,7 @@ regime we're in, and what the plan is for today.
 
 Consumed by:
   - Discord ``/playbook`` command
-  - Telegram daily notification
+  - Discord daily notification
   - Dashboard morning card
 
 Format:
@@ -112,7 +112,7 @@ class PlaybookCard:
         }
 
     def format_text(self) -> str:
-        """Render as plain text for Discord / Telegram."""
+        """Render as plain text for Discord / notifications."""
         lines = [
             f"\U0001f4cb Daily Playbook \u2014 {self.date}",
             "\u2550" * 32,

@@ -4,7 +4,6 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List
 
-from src.notifications.telegram import TelegramNotifier
 from src.notifications.discord import DiscordNotifier
 from src.notifications.whatsapp import WhatsAppNotifier
 
@@ -14,14 +13,12 @@ class MultiChannelNotifier:
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-        self.telegram = TelegramNotifier()
         self.discord = DiscordNotifier()
         self.whatsapp = WhatsAppNotifier()
 
     @property
     def channels_status(self) -> Dict[str, bool]:
         return {
-            "telegram": self.telegram.is_configured,
             "discord": self.discord.is_configured,
             "whatsapp": self.whatsapp.is_configured,
         }
@@ -33,13 +30,10 @@ class MultiChannelNotifier:
 
     async def send_message(self, message: str) -> Dict[str, bool]:
         results = {
-            "telegram": False,
             "discord": False,
             "whatsapp": False,
         }
 
-        if self.telegram.is_configured:
-            results["telegram"] = await self.telegram.send_message(message)
         if self.discord.is_configured:
             results["discord"] = await self.discord.send_message(message)
         if self.whatsapp.is_configured:
@@ -49,13 +43,10 @@ class MultiChannelNotifier:
 
     async def send_signal(self, signal: Any) -> Dict[str, bool]:
         results = {
-            "telegram": False,
             "discord": False,
             "whatsapp": False,
         }
 
-        if self.telegram.is_configured:
-            results["telegram"] = await self.telegram.send_signal(signal)
         if self.discord.is_configured:
             results["discord"] = await self.discord.send_signal(signal)
         if self.whatsapp.is_configured:
@@ -65,13 +56,10 @@ class MultiChannelNotifier:
 
     async def send_signals_batch(self, signals: List[Any]) -> Dict[str, int]:
         sent = {
-            "telegram": 0,
             "discord": 0,
             "whatsapp": 0,
         }
 
-        if self.telegram.is_configured:
-            sent["telegram"] = await self.telegram.send_signals_batch(signals)
         if self.discord.is_configured:
             sent["discord"] = await self.discord.send_signals_batch(signals)
         if self.whatsapp.is_configured:
@@ -80,12 +68,26 @@ class MultiChannelNotifier:
         return sent
 
     async def send_daily_report(self, report: Dict[str, Any]) -> Dict[str, bool]:
-        message = self.telegram._format_daily_report_message(report)
+        message = self._format_daily_report_message(report)
         return await self.send_message(message)
 
     async def send_alert(self, title: str, message: str, level: str = "INFO") -> Dict[str, bool]:
-        text = self.telegram._format_alert_message(title=title, message=message, level=level)
+        text = self._format_alert_message(title=title, message=message, level=level)
         return await self.send_message(text)
+
+    @staticmethod
+    def _format_daily_report_message(report: Dict[str, Any]) -> str:
+        """Format a daily report dict into plain text."""
+        lines = ["📊 Daily Report"]
+        for key, val in report.items():
+            lines.append(f"  {key}: {val}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _format_alert_message(*, title: str, message: str, level: str = "INFO") -> str:
+        """Format an alert into plain text."""
+        emoji = {"INFO": "ℹ️", "WARNING": "⚠️", "ERROR": "🚨"}.get(level, "ℹ️")
+        return f"{emoji} {title}\n{message}"
 
     # ------------------------------------------------------------------
     # Sprint 25: structured trade-execution alerts

@@ -51,11 +51,10 @@ def validate_config() -> bool:
 
     # Important: notification channels
     discord_token = os.environ.get("DISCORD_BOT_TOKEN", "")
-    telegram_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-    if not discord_token and not telegram_token:
+    if not discord_token:
         warnings.append(
             "No notification channel configured "
-            "(DISCORD_BOT_TOKEN / TELEGRAM_BOT_TOKEN)"
+            "(DISCORD_BOT_TOKEN)"
         )
 
     # Optional: AI features

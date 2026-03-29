@@ -17,31 +17,9 @@ async def test_config():
     print(f"   Database: {s.postgres_host}:{s.postgres_port}/{s.postgres_db}")
     print(f"   Redis: {s.redis_host}:{s.redis_port}")
     print(f"   Azure OpenAI: {s.use_azure_openai}")
-    print(f"   Telegram: {s.has_telegram}")
     print(f"   S3 Storage: {s.has_s3}")
     print(f"   Alpaca: {bool(s.alpaca_api_key)}")
     return True
-
-
-async def test_telegram():
-    """Test Telegram connection."""
-    print("\n=== Testing Telegram ===")
-    from src.notifications.telegram import TelegramNotifier
-    
-    t = TelegramNotifier()
-    if not t.is_configured:
-        print("⚠️  Telegram not configured, skipping")
-        return False
-    
-    ok = await t.test_connection()
-    if ok:
-        print("✅ Telegram connection successful")
-        # Send test message
-        sent = await t.send_message("🤖 <b>TradingAI Bot</b> connection test successful!")
-        print(f"   Test message: {'sent' if sent else 'failed'}")
-    else:
-        print("❌ Telegram connection failed")
-    return ok
 
 
 async def test_azure_openai():
@@ -123,7 +101,6 @@ async def main():
     results = {}
     
     results["config"] = await test_config()
-    results["telegram"] = await test_telegram()
     results["azure_openai"] = await test_azure_openai()
     results["alpaca"] = await test_alpaca()
     

@@ -16,7 +16,7 @@ a trading system, not retail vanity metrics:
   • no-trade rate
   • coverage funnel: watched → eligible → ranked → rejected → executed
 
-Consumed by API, Discord /performance, Telegram, and dashboard.
+Consumed by API, Discord /performance, and dashboard.
 """
 import logging
 import math

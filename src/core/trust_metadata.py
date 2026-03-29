@@ -1,7 +1,7 @@
 """
 Trust Metadata — professional trust signals for every card (Sprint 36).
 
-Every output surface (Discord, Telegram, API, dashboard) should carry
+Every output surface (Discord, API, dashboard) should carry
 clear trust indicators so users never mistake paper for live, stale
 for fresh, or cherry-picked for systematic.
 
@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 # Enums
 # ─────────────────────────────────────────────────────────────────────
 
-MODEL_VERSION = "v6.38"  # bump each sprint
+MODEL_VERSION = "v6.39"  # bump each sprint
 
 
 class TrustBadge(Enum):
@@ -328,7 +328,7 @@ class NoTradeCard:
         }
 
     def format_card(self) -> str:
-        """Text-format for Telegram / Discord."""
+        """Text-format for Discord / notifications."""
         lines = [
             "🚫 No Trade",
             f"Regime: {self.regime_label}",

@@ -1,7 +1,7 @@
 # TradingAI Bot — v6 Pro Desk
 
-> 24/7 automated trading intelligence platform — Discord · Telegram · REST API.
-> **64 slash commands · 23 background tasks · 50-stock universe · self-learning AI engine.**
+> 24/7 automated trading intelligence platform — Discord · REST API.
+> **64 slash commands · 23 background tasks · 3,000+ stock universe · self-learning AI engine.**
 
 ---
 
@@ -9,17 +9,17 @@
 
 | Feature | Detail |
 |---------|--------|
-| **Interface** | Discord + Telegram + REST API |
+| **Interface** | Discord + REST API |
 | **Commands** | 64 slash commands across 8 categories |
 | **Auto-tasks** | 23 background tasks running 24/7 |
-| **Universe** | 50 US stocks + 10 crypto + 3 Asia indices + 11 sectors |
+| **Universe** | 3,000+ stocks · US (S&P 500/400, NASDAQ-100, Russell 2000) + HK + JP + KR + TW + AU + IN + 63 Crypto |
 | **Strategies** | SWING · BREAKOUT · MOMENTUM · MEAN_REVERSION |
 | **Decision Layer** | RegimeRouter · OpportunityEnsembler · StrategyLeaderboard · EdgeCalculator |
 | **Signal Cards** | WHY BUY · WHY THIS STOP · ML regime check on every signal |
 | **Autonomous Engine** | AutoTradingEngine with heartbeat, circuit breaker, R-based sizing |
 | **Brokers** | Paper · Alpaca · Futu · Interactive Brokers · MT5 (pluggable) |
 | **Data** | yfinance (no paid API) + optional OpenAI for narrative |
-| **Deploy** | Docker Compose (12 services) or standalone |
+| **Deploy** | Docker Compose (11 services) or standalone |
 | **Language** | Python 3.11 · discord.py · scikit-learn · pandas · numpy |
 
 ---
@@ -216,19 +216,25 @@ ALWAYS ON: 🚨 Alerts(3m) · ⚠️ VIX(5m) · 📰 News(30m) · 📰 Tickers(1
 
 ---
 
-## Tracked Universe (50 US stocks)
+## Tracked Universe (3,000+ tickers)
 
 ```
-Mega-cap : AAPL MSFT GOOGL AMZN NVDA META TSLA
-Semi     : AMD INTC AVGO MU ARM SMCI QCOM
-Software : CRM ADBE NOW SNOW PLTR NET CRWD PANW
-Finance  : JPM BAC GS V MA COIN SOFI HOOD
-Consumer : NFLX DIS UBER ABNB SHOP ROKU SNAP BABA
-Health   : LLY JNJ MRNA ABBV
-Spec/Vol : RIVN NIO MARA GME DKNG PYPL LULU
-```
+US (2,751 unique):
+  S&P 500    : 427 stocks across 11 sectors
+  NASDAQ-100 : 43 additional names
+  S&P 400    : 286 mid-cap stocks
+  Russell    : 477 small-cap + 400 fill names
+  Extended   : 500+ liquid ADRs, crypto miners, day-trading favorites
 
-Plus: 10 crypto · 3 Asia indices · SPY/QQQ/DIA/IWM/^VIX · 11 S&P sectors
+International (252):
+  Hong Kong  : 78 (HSI + H-shares + tech)
+  Japan      : 60 (TOPIX / Nikkei 225)
+  Korea      : 15 (Samsung, SK Hynix, NAVER)
+  Taiwan     : 11 (TSMC, Hon Hai, MediaTek)
+  Australia  : 15 (BHP, CBA, CSL)
+  India      : 10 (Reliance, TCS, INFY)
+  Crypto     : 63 (BTC, ETH, SOL + DeFi + L1/L2 + AI tokens)
+```
 
 ---
 
@@ -268,7 +274,7 @@ docker compose up -d
 docker compose --profile dev up -d
 ```
 
-**Services** (12):
+**Services** (11):
 
 | Service | Image | Purpose |
 |---------|-------|---------|
@@ -280,7 +286,6 @@ docker compose --profile dev up -d
 | `signal_engine` | Dockerfile.engine | Signal generation + GPT validation |
 | `auto_trader` | Dockerfile.engine | AutoTradingEngine (autonomous loop) |
 | `scheduler` | Dockerfile.scheduler | Cron-based task orchestration |
-| `telegram_bot` | Dockerfile.telegram | Telegram interface |
 | `discord_bot` | Dockerfile.discord | Discord interface (64 commands) |
 | `api` | Dockerfile.api | FastAPI REST endpoints |
 | `jupyter` | Dockerfile.jupyter | Research notebooks (dev profile) |

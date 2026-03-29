@@ -296,8 +296,6 @@ class Settings(BaseSettings):
     ib_port: int = 7497
     futu_host: str = "127.0.0.1"
     futu_port: int = 11111
-    telegram_bot_token: str = ""
-    telegram_chat_id: str = ""
     timezone: str = "Asia/Hong_Kong"
 
 settings = Settings()
