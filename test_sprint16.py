@@ -45,10 +45,10 @@ class TestDiscordBotSync(unittest.TestCase):
             "src/discord_bot.py and src/notifications/discord_bot.py differ")
 
     def test_02_canonical_has_57_commands(self):
-        """src/discord_bot.py has 60 @bot.tree.command (Sprint 37: +3)."""
+        """src/discord_bot.py has 64 @bot.tree.command (Sprint 38: +4)."""
         count = self.canonical.count("@bot.tree.command")
-        self.assertEqual(count, 60,
-            f"Expected 60 commands, got {count}")
+        self.assertEqual(count, 64,
+            f"Expected 64 commands, got {count}")
 
     def test_03_notif_has_regime(self):
         self.assertIn('name="regime"', self.notif)
@@ -68,20 +68,20 @@ class TestReadmeUpdated(unittest.TestCase):
         cls.readme = _read("README.md")
 
     def test_06_tagline_57(self):
-        self.assertIn("60 slash commands", self.readme)
+        self.assertIn("64 slash commands", self.readme)
         self.assertNotIn("54 slash commands", self.readme)
 
     def test_07_tagline_telegram(self):
         self.assertIn("Telegram", self.readme)
 
     def test_08_diagram_57_commands(self):
-        self.assertIn("DISCORD INTERFACE (60 commands)", self.readme)
+        self.assertIn("DISCORD INTERFACE (64 commands)", self.readme)
 
     def test_09_diagram_5800_lines(self):
         self.assertIn("6,100 lines", self.readme)
 
     def test_10_section_heading_57(self):
-        self.assertIn("All 60 Slash Commands", self.readme)
+        self.assertIn("All 64 Slash Commands", self.readme)
 
     def test_11_regime_in_readme(self):
         self.assertIn("/regime", self.readme)
@@ -101,7 +101,7 @@ class TestArchitectureUpdated(unittest.TestCase):
         cls.arch = _read("docs/ARCHITECTURE.md")
 
     def test_14_arch_says_57(self):
-        self.assertIn("60 slash commands", self.arch)
+        self.assertIn("64 slash commands", self.arch)
         self.assertNotIn("54 slash commands", self.arch)
 
     def test_15_sprint_14_in_table(self):

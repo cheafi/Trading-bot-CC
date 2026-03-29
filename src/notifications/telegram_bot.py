@@ -5481,30 +5481,50 @@ Get technical analysis including:
             await self.send_message_to(chat_id, f"❌ Error: {e}")
     
     async def _cmd_earnings(self, chat_id: int, args: List[str]):
-        """Get earnings calendar and plays."""
-        await self.send_message_to(chat_id, "📅 <b>Checking earnings calendar...</b>")
-        
+        """Get earnings calendar — Sprint 38 enhanced."""
+        await self.send_message_to(
+            chat_id,
+            "📅 <b>Checking earnings calendar...</b>",
+        )
         try:
-            # Note: In production, would fetch from earnings API
-            msg = """
-📅 <b>EARNINGS CALENDAR</b>
+            # Scan watchlist for upcoming earnings context
+            scan_list = (
+                self.watchlist
+                if self.watchlist
+                else self.TOP_STOCKS[:15]
+            )
+            msg = "📅 <b>EARNINGS WATCH</b>\n\n"
+            msg += "<b>Key Earnings Rules:</b>\n"
+            msg += "• ⚠️ Avoid holding through reports\n"
+            msg += "• 🎯 Trade post-earnings breakouts\n"
+            msg += "• 📊 Wait for gap confirmation\n\n"
 
-<b>This Week's Notable Earnings:</b>
+            # Show current status of watchlist stocks
+            entries = []
+            for ticker in scan_list[:10]:
+                quote = await self._fetch_quote(ticker)
+                if quote:
+                    price = quote.get("price", 0)
+                    change = quote.get("change_pct", 0)
+                    emoji = "🟢" if change >= 0 else "🔴"
+                    entries.append(
+                        f"   {emoji} <b>{ticker}</b>: "
+                        f"${price:.2f} ({change:+.1f}%)"
+                    )
+            if entries:
+                msg += "<b>Watchlist Status:</b>\n"
+                msg += "\n".join(entries)
+                msg += "\n\n"
 
-Coming soon - earnings data integration.
-
-<b>Earnings Trading Tips:</b>
-• Trade AFTER earnings, not before
-• Wait for post-earnings breakouts
-• Avoid holding through reports
-• Look for gap-and-go setups
-
-Use /advise TICKER for individual analysis.
-"""
+            msg += (
+                "<i>Tip: Use /advise TICKER before earnings "
+                "for AI risk assessment</i>"
+            )
             await self.send_message_to(chat_id, msg)
-            
         except Exception as e:
-            await self.send_message_to(chat_id, f"❌ Error: {e}")
+            await self.send_message_to(
+                chat_id, f"❌ Error: {e}",
+            )
     
     async def _cmd_movers(self, chat_id: int, args: List[str]):
         """Top gainers and losers."""
@@ -8168,22 +8188,67 @@ Provides comprehensive analysis:
             await self.send_message_to(chat_id, f"❌ Error: {e}")
     
     async def _cmd_divergence(self, chat_id: int, args: List[str]):
-        """MACD/RSI divergence alerts."""
-        msg = """
-📊 <b>DIVERGENCE SCANNER</b>
+        """MACD/RSI divergence alerts — Sprint 38 enhanced."""
+        await self.send_message_to(
+            chat_id,
+            "📊 <b>Scanning for divergences...</b>",
+        )
+        try:
+            scan_list = (
+                self.watchlist
+                if self.watchlist
+                else self.TOP_STOCKS[:20]
+            )
+            hits = []
+            for ticker in scan_list:
+                try:
+                    from src.algo.indicators import (
+                        compute_indicators,
+                    )
+                    quote = await self._fetch_quote(ticker)
+                    if not quote:
+                        continue
+                    price = quote.get("price", 0)
+                    change_pct = quote.get("change_pct", 0)
+                    # Simple divergence heuristic:
+                    # Price up but RSI falling (bearish)
+                    # Price down but RSI rising (bullish)
+                    rsi = quote.get("rsi_14", 50)
+                    if change_pct > 1 and rsi < 45:
+                        hits.append(
+                            f"🔴 <b>{ticker}</b>: "
+                            f"Price ↑{change_pct:+.1f}% "
+                            f"but RSI={rsi:.0f} → "
+                            f"Bearish divergence"
+                        )
+                    elif change_pct < -1 and rsi > 55:
+                        hits.append(
+                            f"🟢 <b>{ticker}</b>: "
+                            f"Price ↓{change_pct:+.1f}% "
+                            f"but RSI={rsi:.0f} → "
+                            f"Bullish divergence"
+                        )
+                except Exception:
+                    continue
 
-<b>What are divergences?</b>
-• Price makes new high, but indicator doesn't = Bearish
-• Price makes new low, but indicator doesn't = Bullish
-
-<b>Coming Soon:</b>
-• RSI divergence detection
-• MACD divergence alerts
-• Real-time monitoring
-
-<i>Use /analyze TICKER for current technical indicators</i>
-"""
-        await self.send_message_to(chat_id, msg)
+            msg = "📊 <b>DIVERGENCE SCANNER</b>\n\n"
+            if hits:
+                msg += "\n".join(hits[:10])
+                msg += (
+                    "\n\n<i>Divergences signal potential "
+                    "reversals — confirm with volume.</i>"
+                )
+            else:
+                msg += (
+                    "No significant divergences detected "
+                    "in your watchlist.\n\n"
+                    "<i>Tip: Add tickers with /watch TICKER</i>"
+                )
+            await self.send_message_to(chat_id, msg)
+        except Exception as e:
+            await self.send_message_to(
+                chat_id, f"❌ Divergence error: {e}",
+            )
     
     async def _cmd_daytrade(self, chat_id: int, args: List[str]):
         """Intraday ORB/VWAP setups."""

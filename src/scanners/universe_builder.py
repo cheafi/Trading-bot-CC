@@ -476,6 +476,108 @@ class UniverseBuilder:
                 ))
         return prepended + assets
 
+    # ── Sprint 38: Dynamic Sleeve Allocation ──────────────────
+
+    SLEEVE_ALLOCATIONS = {
+        "RISK_ON": {
+            "momentum": 0.50,
+            "growth": 0.25,
+            "value": 0.10,
+            "defensive": 0.10,
+            "bearish": 0.05,
+        },
+        "NEUTRAL": {
+            "momentum": 0.30,
+            "growth": 0.20,
+            "value": 0.25,
+            "defensive": 0.20,
+            "bearish": 0.05,
+        },
+        "RISK_OFF": {
+            "momentum": 0.10,
+            "growth": 0.10,
+            "value": 0.15,
+            "defensive": 0.40,
+            "bearish": 0.25,
+        },
+    }
+
+    SLEEVE_SECTORS = {
+        "momentum": {
+            "Technology", "Consumer Discretionary",
+            "Crypto",
+        },
+        "growth": {
+            "Communication Services", "Biotechnology",
+            "Semiconductors",
+        },
+        "value": {
+            "Financials", "Industrials", "Energy",
+            "Materials",
+        },
+        "defensive": {
+            "Healthcare", "Utilities",
+            "Consumer Staples", "Real Estate",
+        },
+        "bearish": set(),  # populated dynamically
+    }
+
+    def get_sleeve_allocation(
+        self,
+        regime_label: str = "NEUTRAL",
+    ) -> Dict[str, float]:
+        """Return current sleeve weights for given regime."""
+        return dict(
+            self.SLEEVE_ALLOCATIONS.get(
+                regime_label,
+                self.SLEEVE_ALLOCATIONS["NEUTRAL"],
+            )
+        )
+
+    def allocate_by_sleeve(
+        self,
+        assets: List[UniverseAsset],
+        regime_label: str = "NEUTRAL",
+    ) -> Dict[str, List[str]]:
+        """Partition assets into sleeves with regime-aware counts.
+
+        Returns a dict mapping sleeve name to list of tickers.
+        """
+        allocation = self.get_sleeve_allocation(regime_label)
+        total = len(assets)
+
+        # Classify each asset into a sleeve
+        sleeve_assets: Dict[str, List[UniverseAsset]] = {
+            s: [] for s in allocation
+        }
+        for a in assets:
+            placed = False
+            sector = a.sector or "Equity"
+            for sleeve, sectors in self.SLEEVE_SECTORS.items():
+                if sleeve == "bearish":
+                    continue
+                for s in sectors:
+                    if s.lower() in sector.lower():
+                        sleeve_assets[sleeve].append(a)
+                        placed = True
+                        break
+                if placed:
+                    break
+            if not placed:
+                # Default to value sleeve
+                sleeve_assets["value"].append(a)
+
+        # Apply allocation ratios
+        result: Dict[str, List[str]] = {}
+        for sleeve, pct in allocation.items():
+            cap = max(1, int(total * pct))
+            pool = sleeve_assets.get(sleeve, [])
+            result[sleeve] = [
+                a.ticker for a in pool[:cap]
+            ]
+
+        return result
+
     # ── Stats ─────────────────────────────────────────────────
 
     @staticmethod

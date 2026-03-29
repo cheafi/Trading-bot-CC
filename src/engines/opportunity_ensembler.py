@@ -67,6 +67,30 @@ class OpportunityEnsembler:
             except Exception:
                 self.min_score = 0.35
 
+    # ── Sprint 38: accept learned weights from MetaEnsemble ──
+
+    def set_weights(
+        self, learned: Dict[str, float],
+    ) -> None:
+        """Replace component weights with learned values.
+
+        Only keys that exist in DEFAULT_WEIGHTS are accepted;
+        unknown keys are silently dropped.  The resulting weights
+        are re-normalised to sum to 1.0.
+        """
+        merged = self.DEFAULT_WEIGHTS.copy()
+        for k, v in learned.items():
+            if k in merged:
+                merged[k] = max(float(v), 0.02)
+        total = sum(merged.values()) or 1.0
+        self.weights = {
+            k: v / total for k, v in merged.items()
+        }
+        logger.info(
+            "Ensembler weights updated from MetaEnsemble: %s",
+            {k: round(v, 3) for k, v in self.weights.items()},
+        )
+
     def rank_opportunities(
         self,
         signals: List[Union[Dict[str, Any], "TradeRecommendation"]],

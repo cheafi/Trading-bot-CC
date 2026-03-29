@@ -270,6 +270,111 @@ class TradeOutcomePredictor:
         # Cap at max position
         return min(half_kelly, trading_config.max_position_pct)
 
+    # ── Sprint 38: Regression heads ───────────────────────────
+
+    def train_regression(self) -> Dict[str, Any]:
+        """Train regression models for R-multiple, MAE, hold-days.
+
+        Complements the classification model by predicting the
+        *magnitude* of expected outcomes, not just win/loss.
+        """
+        if len(self._history) < self._min_samples:
+            return {"status": "insufficient_data"}
+
+        df = pd.DataFrame(self._history)
+        available = [
+            c for c in self.FEATURE_COLS if c in df.columns
+        ]
+        X = df[available].fillna(0).values
+
+        results: Dict[str, Any] = {"status": "trained"}
+        try:
+            from sklearn.ensemble import (
+                GradientBoostingRegressor,
+            )
+            from sklearn.preprocessing import StandardScaler
+
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X)
+
+            # R-multiple predictor
+            if "r_multiple" in df.columns:
+                y_r = df["r_multiple"].fillna(0).values
+                model_r = GradientBoostingRegressor(
+                    n_estimators=150, max_depth=3,
+                    learning_rate=0.05, random_state=42,
+                )
+                model_r.fit(X_scaled, y_r)
+                self._reg_r_model = model_r
+                self._reg_scaler = scaler
+                results["r_multiple_trained"] = True
+
+            # MAE predictor (maximum adverse excursion)
+            if "mae_pct" in df.columns:
+                y_mae = df["mae_pct"].fillna(0).values
+                model_mae = GradientBoostingRegressor(
+                    n_estimators=150, max_depth=3,
+                    learning_rate=0.05, random_state=42,
+                )
+                model_mae.fit(X_scaled, y_mae)
+                self._reg_mae_model = model_mae
+                results["mae_trained"] = True
+
+            # Hold-time predictor
+            if "hold_hours" in df.columns:
+                y_hold = df["hold_hours"].fillna(0).values
+                model_hold = GradientBoostingRegressor(
+                    n_estimators=100, max_depth=3,
+                    learning_rate=0.05, random_state=42,
+                )
+                model_hold.fit(X_scaled, y_hold)
+                self._reg_hold_model = model_hold
+                results["hold_days_trained"] = True
+
+        except ImportError:
+            results["status"] = "error"
+            results["message"] = "scikit-learn not installed"
+        return results
+
+    def predict_r_multiple(
+        self, features: Dict[str, Any],
+    ) -> Optional[float]:
+        """Predict expected R-multiple for a trade setup."""
+        model = getattr(self, "_reg_r_model", None)
+        scaler = getattr(self, "_reg_scaler", None)
+        if model is None or scaler is None:
+            return None
+        X = np.array(
+            [[features.get(c, 0) for c in self.FEATURE_COLS]]
+        )
+        return float(model.predict(scaler.transform(X))[0])
+
+    def predict_mae(
+        self, features: Dict[str, Any],
+    ) -> Optional[float]:
+        """Predict expected MAE (max adverse excursion %)."""
+        model = getattr(self, "_reg_mae_model", None)
+        scaler = getattr(self, "_reg_scaler", None)
+        if model is None or scaler is None:
+            return None
+        X = np.array(
+            [[features.get(c, 0) for c in self.FEATURE_COLS]]
+        )
+        return float(model.predict(scaler.transform(X))[0])
+
+    def predict_hold_days(
+        self, features: Dict[str, Any],
+    ) -> Optional[float]:
+        """Predict expected holding period in hours."""
+        model = getattr(self, "_reg_hold_model", None)
+        scaler = getattr(self, "_reg_scaler", None)
+        if model is None or scaler is None:
+            return None
+        X = np.array(
+            [[features.get(c, 0) for c in self.FEATURE_COLS]]
+        )
+        return float(model.predict(scaler.transform(X))[0])
+
 
 # ---------------------------------------------------------------------------
 # LLM Failure Analyst

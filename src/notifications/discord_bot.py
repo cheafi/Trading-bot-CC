@@ -5802,7 +5802,7 @@ class DiscordInteractiveBot:
                         "AutoTradingEngine is running. "
                         "Use `/regime` for current market state."
                     )
-                e.set_footer(text="Sprint 37 • v6.37 • /regime /leaderboard /kpi /notrade /calibration")
+                e.set_footer(text="Sprint 38 • v6.38 • 64 commands")
                 await interaction.followup.send(embed=e)
             except Exception as ex:
                 await interaction.followup.send(f"❌ Recommendations error: {ex}")
@@ -5904,7 +5904,7 @@ class DiscordInteractiveBot:
                         "No trade data yet. KPIs populate after "
                         "the engine records closed trades."
                     )
-                e.set_footer(text="Sprint 37 • v6.37 • Professional KPI")
+                e.set_footer(text="Sprint 38 • v6.38 • KPI")
                 await interaction.followup.send(embed=e)
             except Exception as ex:
                 await interaction.followup.send(f"❌ KPI error: {ex}")
@@ -5992,7 +5992,7 @@ class DiscordInteractiveBot:
                         "gate blocks new entries."
                     )
                     e.color = COLOR_SUCCESS
-                e.set_footer(text="Sprint 37 • v6.37 • /regime /kpi")
+                e.set_footer(text="Sprint 38 • v6.38")
                 await interaction.followup.send(embed=e)
             except Exception as ex:
                 await interaction.followup.send(f"❌ No-trade error: {ex}")
@@ -6065,11 +6065,221 @@ class DiscordInteractiveBot:
                 except Exception:
                     pass
 
-                e.set_footer(text="Sprint 37 • v6.37 • /kpi /notrade /recommendations")
+                e.set_footer(text="Sprint 38 • v6.38")
                 await interaction.followup.send(embed=e)
             except Exception as ex:
                 await interaction.followup.send(f"❌ Calibration error: {ex}")
             await _audit(f"🎯 {interaction.user} → /calibration")
+
+        # ── Sprint 38: Daily Playbook ────────────────────────────────
+
+        @bot.tree.command(
+            name="playbook",
+            description="📋 Today's trading playbook with top setups",
+        )
+        async def cmd_playbook(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                from src.notifications.daily_playbook import (
+                    DailyPlaybookBuilder,
+                )
+
+                state = engine.get_cached_state() if engine else {}
+                regime = state.get("regime_state", {})
+                recs = state.get("recommendations", [])
+                budget = state.get("risk_budget", {})
+                md = state.get("market_data", {})
+
+                builder = DailyPlaybookBuilder()
+                card = builder.build(
+                    regime_state=regime,
+                    recommendations=recs,
+                    budget_info=budget,
+                    market_data=md,
+                )
+                text = card.format_text()
+                e = discord.Embed(
+                    title="📋 Daily Playbook",
+                    description=f"```\n{text[:3900]}\n```",
+                    color=COLOR_INFO,
+                )
+                e.add_field(
+                    name="📊 Setups",
+                    value=f"**{len(card.setups)}** opportunities",
+                    inline=True,
+                )
+                e.add_field(
+                    name="🌍 Regime",
+                    value=card.regime_label or "NEUTRAL",
+                    inline=True,
+                )
+                e.set_footer(text="Sprint 38 • v6.38 • /playbook /scorecard /mode")
+                await interaction.followup.send(embed=e)
+            except Exception as ex:
+                await interaction.followup.send(f"❌ Playbook error: {ex}")
+            await _audit(f"📋 {interaction.user} → /playbook")
+
+        # ── Sprint 38: Monthly Scorecard ─────────────────────────────
+
+        @bot.tree.command(
+            name="scorecard",
+            description="📊 Monthly performance scorecard",
+        )
+        async def cmd_scorecard(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                from src.notifications.monthly_scorecard import (
+                    MonthlyScorecardBuilder,
+                )
+
+                state = engine.get_cached_state() if engine else {}
+                perf = state.get("performance", {})
+                trades = perf.get("completed_trades", [])
+                cycles = perf.get("cycle_count", 0)
+                no_trade = perf.get("no_trade_cycles", 0)
+
+                builder = MonthlyScorecardBuilder()
+                sc = builder.build(
+                    trades=trades,
+                    cycles=cycles,
+                    no_trade_cycles=no_trade,
+                )
+                text = sc.format_text()
+                e = discord.Embed(
+                    title="📊 Monthly Scorecard",
+                    description=f"```\n{text[:3900]}\n```",
+                    color=COLOR_GOLD,
+                )
+                e.add_field(
+                    name="📈 Net Return",
+                    value=f"**{sc.net_return_pct:+.2f}%**",
+                    inline=True,
+                )
+                e.add_field(
+                    name="🎯 Win Rate",
+                    value=f"**{sc.win_rate:.1%}**",
+                    inline=True,
+                )
+                e.add_field(
+                    name="📊 Trades",
+                    value=f"**{sc.total_trades}**",
+                    inline=True,
+                )
+                e.set_footer(text="Sprint 38 • v6.38 • /playbook /scorecard")
+                await interaction.followup.send(embed=e)
+            except Exception as ex:
+                await interaction.followup.send(f"❌ Scorecard error: {ex}")
+            await _audit(f"📊 {interaction.user} → /scorecard")
+
+        # ── Sprint 38: User Output Mode ──────────────────────────────
+
+        @bot.tree.command(
+            name="mode",
+            description="🎛️ Switch output mode: Quick / Pro / Explainer",
+        )
+        @app_commands.describe(
+            style="Output mode: quick, pro, or explainer",
+        )
+        @app_commands.choices(style=[
+            app_commands.Choice(name="⚡ Quick", value="quick"),
+            app_commands.Choice(name="🔬 Pro", value="pro"),
+            app_commands.Choice(name="📖 Explainer", value="explainer"),
+        ])
+        async def cmd_mode(
+            interaction: discord.Interaction,
+            style: Optional[str] = None,
+        ):
+            await interaction.response.defer(ephemeral=True)
+            try:
+                from src.core.user_preferences import (
+                    OutputMode,
+                    get_preference_manager,
+                )
+
+                mgr = get_preference_manager()
+                uid = str(interaction.user.id)
+
+                if style is None:
+                    # Cycle to next mode
+                    new_mode = mgr.cycle_mode(uid)
+                else:
+                    mode_map = {
+                        "quick": OutputMode.QUICK,
+                        "pro": OutputMode.PRO,
+                        "explainer": OutputMode.EXPLAINER,
+                    }
+                    new_mode = mode_map.get(
+                        style, OutputMode.PRO,
+                    )
+                    mgr.set_mode(uid, new_mode)
+
+                icons = {
+                    OutputMode.QUICK: "⚡",
+                    OutputMode.PRO: "🔬",
+                    OutputMode.EXPLAINER: "📖",
+                }
+                icon = icons.get(new_mode, "🔬")
+                e = discord.Embed(
+                    title=f"{icon} Output Mode: {new_mode.value.title()}",
+                    description=(
+                        f"Your output mode is now **{new_mode.value}**.\n\n"
+                        "• ⚡ **Quick** — scores + action only\n"
+                        "• 🔬 **Pro** — full components + risk\n"
+                        "• 📖 **Explainer** — plain-English why"
+                    ),
+                    color=COLOR_CYAN,
+                )
+                e.set_footer(text="Sprint 38 • v6.38 • /mode quick|pro|explainer")
+                await interaction.followup.send(embed=e, ephemeral=True)
+            except Exception as ex:
+                await interaction.followup.send(
+                    f"❌ Mode error: {ex}", ephemeral=True,
+                )
+            await _audit(f"🎛️ {interaction.user} → /mode {style}")
+
+        # ── Sprint 38: Trading Methodology ───────────────────────────
+
+        @bot.tree.command(
+            name="methodology",
+            description="📘 Show the trading methodology overview",
+        )
+        async def cmd_methodology(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                methodology_text = (
+                    "**TradingAI Bot — Methodology**\n\n"
+                    "**1. Universe** — 502 tickers across US, HK, JP, Crypto "
+                    "with regime-driven sleeve allocation.\n\n"
+                    "**2. Regime** — Multi-factor regime classifier "
+                    "(VIX, breadth, trend, yield curve) → "
+                    "RISK_ON / NEUTRAL / RISK_OFF.\n\n"
+                    "**3. Strategies** — 8 strategy families: "
+                    "Momentum, Trend-Following, Mean-Reversion, "
+                    "Swing, VCP, Earnings, Breakout, Bearish Sleeve.\n\n"
+                    "**4. Scoring** — Calibrated probability × "
+                    "expected R-multiple → net expectancy.\n\n"
+                    "**5. Ensemble** — Weighted vote across strategy "
+                    "signals with correlation penalty and "
+                    "no-trade suppression.\n\n"
+                    "**6. Risk** — Kelly-fraction sizing capped at "
+                    "2% per position, 20% sector, 25% portfolio heat.\n\n"
+                    "**7. Execution** — Bracket orders via Alpaca "
+                    "with stop-loss and take-profit.\n\n"
+                    "**8. Tracking** — Every signal tracked to exit "
+                    "with R-multiple, MAE, hold time.\n\n"
+                    "**9. Learning** — ML models retrain on outcomes "
+                    "to improve calibration and sizing."
+                )
+                e = discord.Embed(
+                    title="📘 Trading Methodology",
+                    description=methodology_text,
+                    color=COLOR_PURPLE,
+                )
+                e.set_footer(text="Sprint 38 • v6.38 • /methodology • docs/METHODOLOGY.md")
+                await interaction.followup.send(embed=e)
+            except Exception as ex:
+                await interaction.followup.send(f"❌ Error: {ex}")
+            await _audit(f"📘 {interaction.user} → /methodology")
 
         # ══════════════════════════════════════════════════════════════
         # START

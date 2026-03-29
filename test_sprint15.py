@@ -109,7 +109,7 @@ class TestReadmeModernised(unittest.TestCase):
         self.assertIn("Alpaca", self.readme)
 
     def test_10_at_a_glance_57_commands(self):
-        self.assertIn("60 slash commands", self.readme)
+        self.assertIn("64 slash commands", self.readme)
 
     def test_11_at_a_glance_python_311(self):
         self.assertIn("Python 3.11", self.readme)

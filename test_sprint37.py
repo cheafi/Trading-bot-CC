@@ -230,7 +230,8 @@ class TestToApiDictExplanation(unittest.TestCase):
 class TestModelVersion(unittest.TestCase):
 
     def test_15_version_is_v6_37(self):
-        self.assertEqual(MODEL_VERSION, "v6.37")
+        # Sprint 38 bumps to v6.38, so accept >= v6.37
+        self.assertIn(MODEL_VERSION, ("v6.37", "v6.38"))
 
 
 # ══════════════════════════════════════════════════════════════
@@ -399,7 +400,10 @@ class TestFooterUpdate(unittest.TestCase):
             cls.src = f.read()
 
     def test_41_footer_mentions_v6_37(self):
-        self.assertIn("v6.37", self.src)
+        # Sprint 38 bumps to v6.38
+        self.assertTrue(
+            "v6.37" in self.src or "v6.38" in self.src,
+        )
 
     def test_42_footer_mentions_kpi(self):
         self.assertIn("/kpi", self.src)

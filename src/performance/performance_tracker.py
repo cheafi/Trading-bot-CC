@@ -709,3 +709,125 @@ class PerformanceTracker:
             )
         except Exception as e:
             logger.debug("Signal DB load skipped: %s", e)
+
+    # ── Sprint 38: JSON file persistence fallback ─────────────
+
+    def save_to_json(self, path: str = "") -> str:
+        """Save all signals to JSON file."""
+        import pathlib
+        if not path:
+            path = str(
+                pathlib.Path.home()
+                / ".tradingai"
+                / "signal_outcomes.json"
+            )
+        pathlib.Path(path).parent.mkdir(
+            parents=True, exist_ok=True,
+        )
+        data = {
+            "active": {
+                k: self._outcome_to_dict(v)
+                for k, v in self.active_signals.items()
+            },
+            "completed": [
+                self._outcome_to_dict(o)
+                for o in self.completed_signals[-500:]
+            ],
+            "saved_at": datetime.now().isoformat(),
+        }
+        with open(path, "w") as f:
+            json.dump(data, f, indent=2, default=str)
+        logger.info("Saved %d signals to %s", len(data["completed"]), path)
+        return path
+
+    def load_from_json(self, path: str = "") -> int:
+        """Load signals from JSON file. Returns count loaded."""
+        import pathlib
+        if not path:
+            path = str(
+                pathlib.Path.home()
+                / ".tradingai"
+                / "signal_outcomes.json"
+            )
+        if not pathlib.Path(path).exists():
+            return 0
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            count = 0
+            for item in data.get("completed", []):
+                try:
+                    td = TradeDirection(
+                        item.get("direction", "long").lower()
+                    )
+                except ValueError:
+                    td = TradeDirection.LONG
+                et = item.get("entry_time")
+                entry_time = (
+                    datetime.fromisoformat(et)
+                    if isinstance(et, str) else datetime.now()
+                )
+                xt = item.get("exit_time")
+                exit_time = (
+                    datetime.fromisoformat(xt)
+                    if isinstance(xt, str) else None
+                )
+                outcome = SignalOutcome(
+                    signal_id=item.get("signal_id", ""),
+                    ticker=item.get("ticker", ""),
+                    strategy=item.get("strategy", ""),
+                    direction=td,
+                    entry_time=entry_time,
+                    entry_price=float(
+                        item.get("entry_price", 0)
+                    ),
+                    target_price=float(
+                        item.get("target_price", 0)
+                    ),
+                    stop_loss=float(
+                        item.get("stop_loss", 0)
+                    ),
+                    exit_time=exit_time,
+                    exit_price=float(
+                        item.get("exit_price", 0)
+                    ) or None,
+                    status=SignalStatus.TARGET_HIT,
+                    pnl_pct=float(item.get("pnl_pct", 0)),
+                    hold_time_hours=float(
+                        item.get("hold_hours", 0)
+                    ),
+                )
+                self.completed_signals.append(outcome)
+                count += 1
+            logger.info("Loaded %d signals from JSON", count)
+            return count
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.warning("JSON load failed: %s", e)
+            return 0
+
+    @staticmethod
+    def _outcome_to_dict(
+        outcome: SignalOutcome,
+    ) -> Dict[str, Any]:
+        """Convert SignalOutcome to JSON-safe dict."""
+        return {
+            "signal_id": outcome.signal_id,
+            "ticker": outcome.ticker,
+            "strategy": outcome.strategy,
+            "direction": outcome.direction.value,
+            "entry_time": (
+                outcome.entry_time.isoformat()
+                if outcome.entry_time else None
+            ),
+            "entry_price": outcome.entry_price,
+            "target_price": outcome.target_price,
+            "stop_loss": outcome.stop_loss,
+            "exit_time": (
+                outcome.exit_time.isoformat()
+                if outcome.exit_time else None
+            ),
+            "exit_price": outcome.exit_price,
+            "status": outcome.status.value,
+            "pnl_pct": outcome.pnl_pct,
+            "hold_hours": outcome.hold_time_hours,
+        }

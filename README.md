@@ -1,7 +1,7 @@
 # TradingAI Bot — v6 Pro Desk
 
 > 24/7 automated trading intelligence platform — Discord · Telegram · REST API.
-> **60 slash commands · 23 background tasks · 50-stock universe · self-learning AI engine.**
+> **64 slash commands · 23 background tasks · 50-stock universe · self-learning AI engine.**
 
 ---
 
@@ -10,7 +10,7 @@
 | Feature | Detail |
 |---------|--------|
 | **Interface** | Discord + Telegram + REST API |
-| **Commands** | 60 slash commands across 8 categories |
+| **Commands** | 64 slash commands across 8 categories |
 | **Auto-tasks** | 23 background tasks running 24/7 |
 | **Universe** | 50 US stocks + 10 crypto + 3 Asia indices + 11 sectors |
 | **Strategies** | SWING · BREAKOUT · MOMENTUM · MEAN_REVERSION |
@@ -28,7 +28,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                   DISCORD INTERFACE (60 commands)                    │
+│                   DISCORD INTERFACE (64 commands)                    │
 │  /why  /backtest  /best_strategy  /analyze  /market  /news  ...     │
 └──────────────────────────┬──────────────────────────────────────────┘
                            │
@@ -84,7 +84,7 @@ ALWAYS ON: 🚨 Alerts(3m) · ⚠️ VIX(5m) · 📰 News(30m) · 📰 Tickers(1
 
 ---
 
-## All 60 Slash Commands
+## All 64 Slash Commands
 
 ### 📊 Market Intelligence (15)
 
@@ -106,7 +106,7 @@ ALWAYS ON: 🚨 Alerts(3m) · ⚠️ VIX(5m) · 📰 News(30m) · 📰 Tickers(1
 | `/risk` | Risk regime + VIX + allocation guidance |
 | `/whale` | Unusual volume scan across 50 stocks |
 
-### 🤖 AI Analysis & Decision Layer (12)
+### 🤖 AI Analysis & Decision Layer (16)
 
 | Command | What It Does |
 |---------|-------------|
@@ -125,6 +125,10 @@ ALWAYS ON: 🚨 Alerts(3m) · ⚠️ VIX(5m) · 📰 News(30m) · 📰 Tickers(1
 | `/kpi` | Professional KPI dashboard — expectancy, drawdown, funnel |
 | `/notrade` | No-trade status — why the system is sitting out |
 | `/calibration` | Edge calibration — base rates and strategy priors |
+| `/playbook` | Daily trading playbook with top setups |
+| `/scorecard` | Monthly performance scorecard |
+| `/mode` | Switch output mode: Quick / Pro / Explainer |
+| `/methodology` | Trading methodology overview |
 
 ### 🎯 Signals & Scanners (9)
 
@@ -232,7 +236,7 @@ Plus: 10 crypto · 3 Asia indices · SPY/QQQ/DIA/IWM/^VIX · 11 S&P sectors
 
 | File | Lines | Purpose |
 |------|------:|:--------|
-| `src/discord_bot.py` | 6,100 | 60 slash commands + 23 background tasks |
+| `src/discord_bot.py` | 6,300 | 64 slash commands + 23 background tasks |
 | `src/engines/auto_trading_engine.py` | 1,290 | Autonomous trading loop with full decision pipeline |
 | `src/engines/signal_engine.py` | 1,244 | Swing/breakout/momentum/mean-reversion signal gen |
 | `src/engines/gpt_validator.py` | 1,058 | GPT narrative generation + validation |
@@ -277,7 +281,7 @@ docker compose --profile dev up -d
 | `auto_trader` | Dockerfile.engine | AutoTradingEngine (autonomous loop) |
 | `scheduler` | Dockerfile.scheduler | Cron-based task orchestration |
 | `telegram_bot` | Dockerfile.telegram | Telegram interface |
-| `discord_bot` | Dockerfile.discord | Discord interface (60 commands) |
+| `discord_bot` | Dockerfile.discord | Discord interface (64 commands) |
 | `api` | Dockerfile.api | FastAPI REST endpoints |
 | `jupyter` | Dockerfile.jupyter | Research notebooks (dev profile) |
 

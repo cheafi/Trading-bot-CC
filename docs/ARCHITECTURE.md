@@ -9,14 +9,14 @@
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           DISCORD INTERFACE                                  │
-│              60 slash commands  ·  rich embeds  ·  interactive buttons       │
+│              64 slash commands  ·  rich embeds  ·  interactive buttons       │
 └──────────────────────────────────┬──────────────────────────────────────────┘
                                    │
 ┌──────────────────────────────────▼──────────────────────────────────────────┐
 │                    src/discord_bot.py  (5,596 lines)                         │
 │                                                                               │
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │  Command Layer (60 slash commands)                                    │   │
+│  │  Command Layer (64 slash commands)                                    │   │
 │  │  advise · ai · alert · analyze · announce · asia · backtest          │   │
 │  │  best_strategy · breakout · btc · buy · clear_alerts · compare       │   │
 │  │  crypto · daily · daily_update · dashboard · dip · help · hk         │   │
@@ -77,7 +77,7 @@
 ### Layer 1 — Discord Interface
 `src/discord_bot.py` is the single entry point for all user-facing functionality.
 
-- All 60 slash commands defined as `@bot.tree.command` decorators
+- All 64 slash commands defined as `@bot.tree.command` decorators
 - All 23 background tasks defined as `@tasks.loop` decorators
 - Commands call engines directly; no REST intermediary
 - Responses are Discord embeds (`discord.Embed`) with inline fields and buttons
