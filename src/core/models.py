@@ -983,7 +983,11 @@ class TradeRecommendation(BaseModel):
     # ── Serialisation helpers ─────────────────────────────────
 
     def to_api_dict(self) -> Dict[str, Any]:
-        """JSON-safe dict for API / Discord serialisation."""
+        """JSON-safe dict for API / Discord serialisation.
+
+        Sprint 37: surfaces all 9 explanation fields as a grouped
+        ``explanation`` section for cleaner API / card consumption.
+        """
         d = self.model_dump()
         d["instrument_type"] = self.instrument_type
         # Flatten expression for easier consumption
@@ -999,6 +1003,31 @@ class TradeRecommendation(BaseModel):
         # Sprint 36: include trust metadata if populated
         if self.trust:
             d["trust"] = self.trust
+
+        # Sprint 37: grouped explanation section ───────────────
+        explanation: Dict[str, Any] = {}
+        if self.why_now:
+            explanation["why_now"] = self.why_now
+        if self.approval_status:
+            explanation["approval_status"] = self.approval_status
+        if self.approval_flags:
+            explanation["approval_flags"] = self.approval_flags
+        if self.scenario_plan:
+            explanation["scenario_plan"] = self.scenario_plan
+        if self.evidence:
+            explanation["evidence"] = self.evidence
+        if self.event_risk:
+            explanation["event_risk"] = self.event_risk
+        if self.portfolio_fit:
+            explanation["portfolio_fit"] = self.portfolio_fit
+        if self.why_not_trade:
+            explanation["why_not_trade"] = self.why_not_trade
+        if self.better_alternative:
+            explanation["better_alternative"] = self.better_alternative
+        if self.key_risks:
+            explanation["key_risks"] = self.key_risks
+        if explanation:
+            d["explanation"] = explanation
         return d
 
     def to_entry_snapshot(self) -> Dict[str, Any]:

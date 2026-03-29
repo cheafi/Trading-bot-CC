@@ -255,6 +255,9 @@ class AutoTradingEngine:
         # Sprint 30: no-trade readiness snapshot
         self._no_trade_readiness: Dict[str, Any] = {}
 
+        # Sprint 36: cached no-trade card
+        self._no_trade_card = None
+
         # Sprint 31: signal cooldown + correlation guard
         try:
             _tc2 = get_trading_config()
@@ -1720,6 +1723,13 @@ class AutoTradingEngine:
             ),
             # Sprint 35: professional KPIs
             "pro_kpis": self._build_pro_kpis(),
+            # Sprint 36: no-trade card
+            "no_trade_card": (
+                self._no_trade_card.to_dict()
+                if self._no_trade_card else None
+            ),
+            # Sprint 37: professional KPI snapshot
+            "kpi_snapshot": self._build_kpi_snapshot(),
         }
 
     def _build_pro_kpis(self) -> Dict[str, Any]:
@@ -1799,6 +1809,15 @@ class AutoTradingEngine:
             kpis = {"error": str(e)}
 
         return kpis
+
+    def _build_kpi_snapshot(self) -> Dict[str, Any]:
+        """Sprint 37: full KPI snapshot from ProfessionalKPI."""
+        try:
+            snap = self.kpi.compute()
+            return snap.to_dict()
+        except (AttributeError, TypeError, ValueError) as e:
+            logger.debug("KPI snapshot error: %s", e)
+            return {}
 
     # ── Sprint 10: Observability ─────────────────────────────
     from contextlib import asynccontextmanager

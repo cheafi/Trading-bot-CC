@@ -5802,11 +5802,274 @@ class DiscordInteractiveBot:
                         "AutoTradingEngine is running. "
                         "Use `/regime` for current market state."
                     )
-                e.set_footer(text="Sprint 36 • v6.36 • /regime /leaderboard /calibration")
+                e.set_footer(text="Sprint 37 • v6.37 • /regime /leaderboard /kpi /notrade /calibration")
                 await interaction.followup.send(embed=e)
             except Exception as ex:
                 await interaction.followup.send(f"❌ Recommendations error: {ex}")
             await _audit(f"📋 {interaction.user} → /recommendations")
+
+        # ── Sprint 37: Professional KPI Dashboard ─────────────────
+
+        @bot.tree.command(
+            name="kpi",
+            description="Professional KPI dashboard — expectancy, drawdown, funnel")
+        @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
+        async def kpi_cmd(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                from src.engines.auto_trading_engine import AutoTradingEngine
+                engine = AutoTradingEngine(dry_run=True)
+                cached = engine.get_cached_state()
+                snap = cached.get("kpi_snapshot", {})
+
+                e = discord.Embed(
+                    title="📊 Professional KPI Dashboard",
+                    color=COLOR_INFO,
+                )
+
+                if snap and snap.get("total_trades", 0) > 0:
+                    # Economic value
+                    e.add_field(
+                        name="💰 Economic Value",
+                        value=(
+                            f"Net Expectancy: **{snap.get('net_expectancy_r', 0):+.3f}R**\n"
+                            f"Avg R Multiple: **{snap.get('avg_r_multiple', 0):+.3f}R**\n"
+                            f"Profit Factor: **{snap.get('profit_factor', 0):.2f}**\n"
+                            f"Win Rate: **{snap.get('win_rate', 0):.1%}**"
+                        ),
+                        inline=True,
+                    )
+                    # Risk
+                    e.add_field(
+                        name="🛡️ Risk Metrics",
+                        value=(
+                            f"Max Drawdown: **{snap.get('max_drawdown', 0):.2%}**\n"
+                            f"CVaR-95: **{snap.get('cvar_95', 0):.2%}**\n"
+                            f"Volatility: **{snap.get('volatility', 0):.2%}**\n"
+                            f"Cal. Error: **{snap.get('calibration_error', 0):.3f}**"
+                        ),
+                        inline=True,
+                    )
+                    # Activity
+                    e.add_field(
+                        name="⚡ Activity",
+                        value=(
+                            f"Turnover: **{snap.get('turnover', 0):.1f}** trades/day\n"
+                            f"No-trade rate: **{snap.get('no_trade_rate', 0):.1%}**\n"
+                            f"Avg hold: **{snap.get('avg_hold_hours', 0):.0f}h**\n"
+                            f"Total trades: **{snap.get('total_trades', 0)}**"
+                        ),
+                        inline=True,
+                    )
+                    # Benchmark (if available)
+                    alpha = snap.get("alpha")
+                    beta = snap.get("beta")
+                    ir = snap.get("information_ratio")
+                    if alpha is not None:
+                        e.add_field(
+                            name="📈 Benchmark",
+                            value=(
+                                f"Alpha (ann.): **{alpha:+.2%}**\n"
+                                f"Beta: **{beta:.2f}**\n"
+                                f"Info Ratio: **{ir:.3f}**"
+                            ),
+                            inline=True,
+                        )
+                    # Coverage funnel
+                    funnel = snap.get("funnel", {})
+                    if funnel:
+                        watched = funnel.get("watched", 0)
+                        eligible = funnel.get("eligible", 0)
+                        ranked = funnel.get("ranked", 0)
+                        approved = funnel.get("approved", 0)
+                        rejected = funnel.get("rejected", 0)
+                        executed = funnel.get("executed", 0)
+                        pass_rate = (
+                            executed / watched
+                            if watched > 0 else 0
+                        )
+                        e.add_field(
+                            name="🔍 Coverage Funnel",
+                            value=(
+                                f"Watched: **{watched}** → Eligible: **{eligible}** → "
+                                f"Ranked: **{ranked}**\n"
+                                f"Approved: **{approved}** | Rejected: **{rejected}** | "
+                                f"Executed: **{executed}**\n"
+                                f"Pass rate: **{pass_rate:.1%}**"
+                            ),
+                            inline=False,
+                        )
+                else:
+                    e.description = (
+                        "No trade data yet. KPIs populate after "
+                        "the engine records closed trades."
+                    )
+                e.set_footer(text="Sprint 37 • v6.37 • Professional KPI")
+                await interaction.followup.send(embed=e)
+            except Exception as ex:
+                await interaction.followup.send(f"❌ KPI error: {ex}")
+            await _audit(f"📊 {interaction.user} → /kpi")
+
+        # ── Sprint 37: No-Trade Card ─────────────────────────────
+
+        @bot.tree.command(
+            name="notrade",
+            description="Current no-trade status — why the system is sitting out")
+        @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
+        async def notrade_cmd(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                from src.engines.auto_trading_engine import AutoTradingEngine
+                engine = AutoTradingEngine(dry_run=True)
+                cached = engine.get_cached_state()
+                card = cached.get("no_trade_card")
+                readiness = cached.get("no_trade_readiness", {})
+
+                e = discord.Embed(
+                    title="🚫 No-Trade Status",
+                    color=COLOR_WARN,
+                )
+
+                if card:
+                    regime = card.get("regime_label", "unknown")
+                    reason = card.get("reason", "No reason available")
+                    resume = card.get("resume_conditions", [])
+                    tickers = card.get("tickers_considered", [])
+
+                    e.add_field(
+                        name="Regime",
+                        value=f"**{regime}**",
+                        inline=True,
+                    )
+                    e.add_field(
+                        name="Reason",
+                        value=reason[:200],
+                        inline=True,
+                    )
+                    if tickers:
+                        e.add_field(
+                            name="Tickers Considered",
+                            value=", ".join(tickers[:10]),
+                            inline=False,
+                        )
+                    if resume:
+                        resume_text = "\n".join(
+                            f"• {c}" for c in resume[:5]
+                        )
+                        e.add_field(
+                            name="✅ Resume When",
+                            value=resume_text,
+                            inline=False,
+                        )
+                elif readiness and not readiness.get("should_trade", True):
+                    # Fallback to readiness snapshot
+                    e.add_field(
+                        name="Regime",
+                        value=f"**{readiness.get('regime', 'unknown')}**",
+                        inline=True,
+                    )
+                    e.add_field(
+                        name="Reason",
+                        value=readiness.get("reason", "high_entropy"),
+                        inline=True,
+                    )
+                    e.add_field(
+                        name="Entropy",
+                        value=f"{readiness.get('entropy', 0):.3f}",
+                        inline=True,
+                    )
+                    uni_size = readiness.get("universe_size", 0)
+                    if uni_size:
+                        e.add_field(
+                            name="Universe (warm)",
+                            value=f"{uni_size} tickers",
+                            inline=True,
+                        )
+                else:
+                    e.description = (
+                        "🟢 System is currently trading. "
+                        "No-trade card appears when the regime "
+                        "gate blocks new entries."
+                    )
+                    e.color = COLOR_SUCCESS
+                e.set_footer(text="Sprint 37 • v6.37 • /regime /kpi")
+                await interaction.followup.send(embed=e)
+            except Exception as ex:
+                await interaction.followup.send(f"❌ No-trade error: {ex}")
+            await _audit(f"🚫 {interaction.user} → /notrade")
+
+        # ── Sprint 37: Calibration Dashboard ─────────────────────
+
+        @bot.tree.command(
+            name="calibration",
+            description="Edge calibration — base rates and strategy priors")
+        @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
+        async def calibration_cmd(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                from src.engines.insight_engine import EdgeCalculator
+                calc = EdgeCalculator()
+
+                e = discord.Embed(
+                    title="🎯 Edge Calibration Dashboard",
+                    color=COLOR_INFO,
+                )
+                e.description = (
+                    "Base-rate priors per strategy. "
+                    "Adjusted by regime at runtime."
+                )
+
+                for strategy, rates in sorted(
+                    calc.BASE_RATES.items()
+                ):
+                    name_pretty = strategy.replace("_", " ").title()
+                    ev = rates.get("ev", 0)
+                    ev_emoji = "🟢" if ev >= 0.8 else "🟡" if ev >= 0.5 else "🔴"
+                    e.add_field(
+                        name=f"{ev_emoji} {name_pretty}",
+                        value=(
+                            f"P(T1): **{rates['p_t1']:.0%}** • "
+                            f"P(stop): **{rates['p_stop']:.0%}**\n"
+                            f"EV: **{ev:+.1f}%** • "
+                            f"MAE: **{rates['mae']:+.1f}%** • "
+                            f"Days: **{rates['days']}**"
+                        ),
+                        inline=False,
+                    )
+
+                # Default fallback
+                d = calc.DEFAULT_RATE
+                e.add_field(
+                    name="⬜ Default (unknown strategy)",
+                    value=(
+                        f"P(T1): **{d['p_t1']:.0%}** • "
+                        f"P(stop): **{d['p_stop']:.0%}**\n"
+                        f"EV: **{d['ev']:+.1f}%** • "
+                        f"MAE: **{d['mae']:+.1f}%** • "
+                        f"Days: **{d['days']}**"
+                    ),
+                    inline=False,
+                )
+
+                # Live calibration count
+                try:
+                    from src.engines.auto_trading_engine import AutoTradingEngine
+                    eng = AutoTradingEngine(dry_run=True)
+                    if eng.edge_calculator:
+                        n = len(eng.edge_calculator._calibration_cache)
+                        e.add_field(
+                            name="📦 Live Calibration",
+                            value=f"**{n}** buckets loaded from DB",
+                            inline=False,
+                        )
+                except Exception:
+                    pass
+
+                e.set_footer(text="Sprint 37 • v6.37 • /kpi /notrade /recommendations")
+                await interaction.followup.send(embed=e)
+            except Exception as ex:
+                await interaction.followup.send(f"❌ Calibration error: {ex}")
+            await _audit(f"🎯 {interaction.user} → /calibration")
 
         # ══════════════════════════════════════════════════════════════
         # START
