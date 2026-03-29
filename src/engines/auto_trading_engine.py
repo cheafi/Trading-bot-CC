@@ -23,6 +23,8 @@ from src.engines.opportunity_ensembler import OpportunityEnsembler
 from src.scanners.universe_builder import UniverseBuilder
 from src.engines.context_assembler import ContextAssembler
 from src.engines.strategy_leaderboard import StrategyLeaderboard
+from src.engines.portfolio_risk_budget import PortfolioRiskBudget
+from src.engines.professional_kpi import ProfessionalKPI, CoverageFunnel
 from src.algo.position_manager import PositionManager, RiskParameters
 from src.ml.trade_learner import TradeLearningLoop, TradeOutcomeRecord
 from src.core.logging_config import set_correlation_id, get_correlation_id
@@ -213,6 +215,8 @@ class AutoTradingEngine:
         )
         self.leaderboard = StrategyLeaderboard()
         self.universe_builder = UniverseBuilder()
+        self.risk_budget = PortfolioRiskBudget()
+        self.kpi = ProfessionalKPI()
         self._regime_state: Dict[str, Any] = {}
         self._context: Dict[str, Any] = {}
 
@@ -421,6 +425,8 @@ class AutoTradingEngine:
         self._cycle_count += 1
         set_correlation_id(f"cyc-{self._cycle_count}")
         now = datetime.now(timezone.utc)
+        signals: List[Signal] = []
+        ranked: List[TradeRecommendation] = []
 
         # Determine active markets
         active_markets = self._get_active_markets(now)
@@ -611,6 +617,32 @@ class AutoTradingEngine:
                         )
                     # Sprint 24: persist state after open
                     self.position_mgr.save_state()
+
+        # Sprint 35: record engine cycle into KPI tracker
+        _traded = len(self._trades_today) > 0
+        try:
+            _funnel = CoverageFunnel(
+                watched=len(
+                    self.universe_builder.build(
+                        markets=active_markets,
+                        regime_state=self._regime_state,
+                    ).tickers
+                ) if active_markets else 0,
+                eligible=len(signals),
+                ranked=len(ranked),
+                approved=sum(
+                    1 for r in ranked if r.trade_decision
+                ),
+                rejected=sum(
+                    1 for r in ranked if not r.trade_decision
+                ),
+                executed=len(self._trades_today),
+            )
+            self.kpi.record_cycle(
+                traded=_traded, funnel=_funnel,
+            )
+        except Exception as e:
+            logger.debug("KPI record_cycle error: %s", e)
 
         # Monitor existing positions
         async with self._timed_phase("position_monitoring"):
@@ -1237,6 +1269,23 @@ class AutoTradingEngine:
                     "Leaderboard update error: %s", e,
                 )
 
+            # Sprint 35: record into professional KPI tracker
+            try:
+                _r_mult = (
+                    closed_pos.realized_pnl_pct
+                    / (trading_config.risk_per_trade * 100)
+                    if trading_config.risk_per_trade > 0
+                    else 0.0
+                )
+                self.kpi.record_trade(
+                    pnl_pct=closed_pos.realized_pnl_pct,
+                    r_multiple=_r_mult,
+                    hold_hours=_hold,
+                    predicted_wr=_composite,
+                )
+            except Exception as e:
+                logger.debug("KPI record_trade error: %s", e)
+
             # Persist to database (best-effort)
             # Sprint 24: propagate real direction, confidence,
             # composite_score from the trade record / snapshot
@@ -1559,8 +1608,87 @@ class AutoTradingEngine:
             "signal_cooldown_tickers": len(
                 self._signal_cooldown._history,
             ),
+            # Sprint 35: professional KPIs
+            "pro_kpis": self._build_pro_kpis(),
         }
 
+    def _build_pro_kpis(self) -> Dict[str, Any]:
+        """Sprint 35: professional KPIs for dashboard/API.
+
+        Surfaces: net expectancy, avg R, profit factor, max DD,
+        no-trade rate, coverage funnel, and exposure summary.
+        """
+        kpis: Dict[str, Any] = {}
+        try:
+            # From leaderboard strategies
+            all_strats = self.leaderboard._strategies
+            total_trades = 0
+            total_wins = 0
+            total_pnl = 0.0
+            all_pnl: List[float] = []
+            for entry in all_strats.values():
+                total_trades += entry.get("trades", 0)
+                total_wins += entry.get("wins", 0)
+                total_pnl += entry.get("total_pnl", 0.0)
+                all_pnl.extend(entry.get("pnl_history", []))
+
+            win_rate = (
+                total_wins / total_trades
+                if total_trades > 0 else 0
+            )
+            avg_pnl = (
+                total_pnl / total_trades
+                if total_trades > 0 else 0
+            )
+            wins_pnl = [p for p in all_pnl if p > 0]
+            losses_pnl = [p for p in all_pnl if p <= 0]
+            avg_win = (
+                sum(wins_pnl) / len(wins_pnl)
+                if wins_pnl else 0
+            )
+            avg_loss = (
+                abs(sum(losses_pnl) / len(losses_pnl))
+                if losses_pnl else 0
+            )
+            profit_factor = (
+                sum(wins_pnl) / abs(sum(losses_pnl))
+                if losses_pnl and sum(losses_pnl) != 0
+                else 0.0
+            )
+            net_expectancy = (
+                win_rate * avg_win
+                - (1 - win_rate) * avg_loss
+            )
+            max_dd = min(all_pnl) if all_pnl else 0.0
+
+            # Coverage funnel
+            signals_generated = len(self._signals_today)
+            trades_executed = len(self._trades_today)
+            no_trade_count = getattr(
+                self, "_no_trade_count", 0,
+            )
+            total_cycles = max(self._cycle_count, 1)
+            no_trade_rate = no_trade_count / total_cycles
+
+            kpis = {
+                "net_expectancy": round(net_expectancy, 4),
+                "avg_r": round(avg_pnl, 4),
+                "profit_factor": round(profit_factor, 2),
+                "max_drawdown_trade": round(max_dd, 4),
+                "win_rate": round(win_rate, 4),
+                "total_closed_trades": total_trades,
+                "no_trade_rate": round(no_trade_rate, 4),
+                "coverage_funnel": {
+                    "signals_generated": signals_generated,
+                    "trades_executed": trades_executed,
+                    "no_trade_cycles": no_trade_count,
+                },
+            }
+        except Exception as e:
+            logger.debug("Pro KPI build error: %s", e)
+            kpis = {"error": str(e)}
+
+        return kpis
 
     # ── Sprint 10: Observability ─────────────────────────────
     from contextlib import asynccontextmanager
@@ -1790,6 +1918,13 @@ class AutoTradingEngine:
             "risk_on": 1.0, "neutral": 0.75, "risk_off": 0.5,
         }.get(_regime, 0.75)
 
+        # Sprint 35: graduated regime size_scalar
+        _size_scalar = self._regime_state.get(
+            "size_scalar", 1.0,
+        )
+        if isinstance(_size_scalar, (int, float)):
+            regime_mult *= _size_scalar
+
         # ── 3. Strategy health multiplier ─────────────────
         health_mult = self.leaderboard.get_health_multiplier(
             strategy_name or "unknown",
@@ -1826,6 +1961,44 @@ class AutoTradingEngine:
             else:
                 kelly_mult = 0.25
 
+        # ── 7. Portfolio risk-budget multiplier (Sprint 35) ──
+        budget_mult = 1.0
+        try:
+            _ticker = getattr(signal, "ticker", "UNKNOWN")
+            _sector = getattr(signal, "sector", "")
+            _equity = (
+                self._last_known_equity
+                if self._last_known_equity > 0
+                else 10000.0
+            )
+            _pos_weight = (price * base_shares) / _equity if _equity > 0 else 0
+            _exposure = self.risk_budget.build_exposure(
+                list(self.position_mgr.positions.values()),
+            )
+            _risk_regime = self._regime_state.get("risk_regime", "neutral")
+            _beta = getattr(signal, "beta", 1.0)
+            if not isinstance(_beta, (int, float)):
+                _beta = 1.0
+            _dte = getattr(signal, "days_to_earnings", None)
+            budget = self.risk_budget.check_budget(
+                ticker=_ticker,
+                sector=_sector,
+                position_weight=_pos_weight,
+                exposure=_exposure,
+                regime_risk=_risk_regime,
+                beta=_beta,
+                days_to_earnings=_dte,
+            )
+            budget_mult = budget.get("size_scalar", 1.0)
+            if not budget.get("allowed", True):
+                logger.info(
+                    "Risk budget blocked %s: %s",
+                    _ticker, budget.get("violations", []),
+                )
+                return 1  # minimum 1 share
+        except Exception as e:
+            logger.debug("Risk budget check fallback: %s", e)
+
         # ── Combine all multipliers ───────────────────────
         combined = (
             confidence_mult
@@ -1834,6 +2007,7 @@ class AutoTradingEngine:
             * vol_mult
             * heat_mult
             * kelly_mult
+            * budget_mult
         )
         final = int(base_shares * combined)
         return max(1, final)
