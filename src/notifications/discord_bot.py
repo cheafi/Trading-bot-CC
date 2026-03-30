@@ -43,8 +43,25 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Sequence
 
 import aiohttp
+import socket
 
 from src.core.config import get_settings
+
+
+def _get_lan_ip() -> str:
+    """Auto-detect this machine's LAN IP so phone/Discord links work."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "localhost"
+
+
+def _get_dashboard_url() -> str:
+    return f"http://{_get_lan_ip()}:8000"
 
 # v6: report generator for signal cards, memos, scoreboard
 try:
@@ -633,13 +650,215 @@ class DiscordInteractiveBot:
 
         # ── Sprint 40: Interactive Menu with Buttons ──
 
+        # ── Sprint 41: Smart Menu Category Select ──
+        class MenuCategorySelect(discord.ui.Select):
+            """Categorized command browser — replaces scattered buttons."""
+            def __init__(self):
+                options = [
+                    discord.SelectOption(label="📊 Markets & Prices", value="markets",
+                        description="Live indices, quotes, sectors, macro", emoji="📊"),
+                    discord.SelectOption(label="🎯 AI Signals & Scanners", value="signals",
+                        description="Trade ideas, breakouts, momentum", emoji="🎯"),
+                    discord.SelectOption(label="🧠 Deep Analysis", value="analysis",
+                        description="AI score, technicals, compare", emoji="🧠"),
+                    discord.SelectOption(label="💰 Portfolio & Trading", value="trading",
+                        description="Buy, sell, positions, P&L", emoji="💰"),
+                    discord.SelectOption(label="🔬 Backtest & Strategy", value="backtest",
+                        description="Test strategies with custom dates", emoji="🔬"),
+                    discord.SelectOption(label="🌏 Asia, Crypto & Global", value="global",
+                        description="Japan, HK, crypto, BTC", emoji="🌏"),
+                    discord.SelectOption(label="⚙️ Tools & Alerts", value="tools",
+                        description="Alerts, watchlist, risk calc", emoji="⚙️"),
+                    discord.SelectOption(label="📋 Reports & Briefings", value="reports",
+                        description="Morning memo, EOD, dashboard", emoji="📋"),
+                ]
+                super().__init__(placeholder="📂 Pick a category to see commands...",
+                                 options=options, min_values=1, max_values=1)
+
+            async def callback(self, interaction: discord.Interaction):
+                cats = {
+                    "markets": ("📊 Markets & Prices", COLOR_INFO, [
+                        ("/price AAPL", "⚡ Real-time price"),
+                        ("/quote AAPL", "📋 Detailed quote + fundamentals"),
+                        ("/market", "🇺🇸 US indices overview"),
+                        ("/sector", "🏭 Sector heatmap"),
+                        ("/macro", "🌍 Gold, Oil, Bonds, DXY"),
+                        ("/movers", "📈 Top gainers & losers"),
+                        ("/premarket", "🌅 Pre-market futures"),
+                        ("/news AAPL", "📰 Latest headlines"),
+                    ]),
+                    "signals": ("🎯 AI Signals & Scanners", COLOR_BUY, [
+                        ("/signals", "🎯 Latest AI trade signals"),
+                        ("/scan vcp", "🔍 Scan for setups"),
+                        ("/breakout", "🚀 Breakout candidates"),
+                        ("/momentum", "⚡ Momentum picks"),
+                        ("/swing", "📈 Swing setups (2-10 days)"),
+                        ("/dip", "🛒 Dip buying opportunities"),
+                        ("/whale", "🐋 Whale accumulation"),
+                        ("/squeeze", "💥 Short squeeze candidates"),
+                    ]),
+                    "analysis": ("🧠 Deep Analysis", COLOR_PURPLE, [
+                        ("/ai AAPL", "🤖 Full AI breakdown"),
+                        ("/score AAPL", "📊 AI score 1-10"),
+                        ("/analyze AAPL", "📉 SMA, RSI, volume"),
+                        ("/advise AAPL", "💡 Buy / Hold / Sell"),
+                        ("/why TSLA", "❓ Why is it moving?"),
+                        ("/levels AAPL", "📏 Support & resistance"),
+                        ("/compare AAPL MSFT", "⚖️ Side-by-side"),
+                    ]),
+                    "trading": ("💰 Portfolio & Trading", COLOR_GOLD, [
+                        ("/portfolio", "💼 Full portfolio view"),
+                        ("/positions", "📊 Open positions"),
+                        ("/pnl", "📈 Today's P&L breakdown"),
+                        ("/buy AAPL 10", "🟢 Buy shares (paper)"),
+                        ("/sell AAPL 10", "🔴 Sell shares (paper)"),
+                        ("/risk AAPL 150 142", "🎯 Position size calculator"),
+                        ("/stats", "📊 Trading statistics"),
+                    ]),
+                    "backtest": ("🔬 Backtest & Strategy", COLOR_CYAN, [
+                        ("/backtest AAPL", "▶️ Backtest all strategies"),
+                        ("/backtest AAPL swing", "📈 Test swing strategy"),
+                        ("/backtest AAPL momentum", "⚡ Test momentum"),
+                        ("/backtest AAPL breakout", "🚀 Test breakout"),
+                        ("/backtest ... start_date:2024-01-01", "📅 Custom date range"),
+                        ("/best_strategy AAPL", "🏆 Best strategy now"),
+                        ("/strategy_report", "📊 AI learning status"),
+                    ]),
+                    "global": ("🌏 Asia, Crypto & Global", COLOR_INFO, [
+                        ("/asia", "🌏 Asia dashboard (JP + HK + CN)"),
+                        ("/japan", "🇯🇵 Japan top picks"),
+                        ("/hk", "🇭🇰 Hong Kong top picks"),
+                        ("/crypto", "₿ Crypto market overview"),
+                        ("/btc", "₿ Bitcoin deep analysis"),
+                    ]),
+                    "tools": ("⚙️ Tools & Alerts", COLOR_WARN, [
+                        ("/alert AAPL 200", "🔔 Set price alert"),
+                        ("/my_alerts", "📋 View your alerts"),
+                        ("/clear_alerts", "🗑️ Clear all alerts"),
+                        ("/watchlist", "⭐ View watchlist"),
+                        ("/watchlist add AAPL", "➕ Add to watchlist"),
+                        ("/status", "🔌 System connectivity"),
+                    ]),
+                    "reports": ("📋 Reports & Briefings", COLOR_DARK, [
+                        ("/dashboard", "🖥️ Full trading dashboard"),
+                        ("/daily", "📋 Daily summary"),
+                        ("/report morning", "☀️ Morning briefing"),
+                        ("/report eod", "🌙 End of day scorecard"),
+                        ("/market_now", "📊 Market right now"),
+                        ("/daily_update", "📰 Full intelligence brief"),
+                    ]),
+                }
+                choice = self.values[0]
+                title, color, cmds = cats.get(choice, ("Unknown", COLOR_INFO, []))
+                e = discord.Embed(title=title, color=color)
+                for cmd, desc in cmds:
+                    e.add_field(name=f"`{cmd}`", value=desc, inline=True)
+                e.set_footer(text="Tap a command above to copy, then paste it in chat!")
+                await interaction.response.edit_message(embed=e, view=MenuView())
+
         class MenuView(discord.ui.View):
-            """Main menu with button-driven navigation — makes Discord easier to use."""
+            """Sprint 41: Smart menu — category browser + AI intelligence + web link."""
             def __init__(self):
                 super().__init__(timeout=300)
+                self.add_item(MenuCategorySelect())
 
-            @discord.ui.button(label="📊 Market Overview", style=discord.ButtonStyle.primary, row=0)
-            async def btn_market(self, interaction: discord.Interaction, button: discord.ui.Button):
+            @discord.ui.button(label="🧠 What Should I Do?", style=discord.ButtonStyle.green, row=1)
+            async def btn_ai_advice(self, interaction: discord.Interaction, button: discord.ui.Button):
+                """AI reads market right now and tells you what to do."""
+                await interaction.response.defer(ephemeral=True)
+                try:
+                    spy = await _fetch_stock("SPY")
+                    qqq = await _fetch_stock("QQQ")
+                    vix_d = await _fetch_stock("^VIX")
+                    btc = await _fetch_stock("BTC-USD")
+                    iwm = await _fetch_stock("IWM")
+                    vix = vix_d.get("price", 0)
+                    spy_pct = spy.get("change_pct", 0)
+                    qqq_pct = qqq.get("change_pct", 0)
+                    btc_pct = btc.get("change_pct", 0)
+
+                    # Determine regime
+                    risk = "RISK_OFF" if (vix > 25 or spy_pct < -1.5) else (
+                        "RISK_ON" if (vix < 18 and spy_pct > 0.3) else "NEUTRAL")
+                    score = max(0, min(100, 50 + spy_pct * 10 - (vix - 18) * 3))
+                    regime_icon = {"RISK_ON": "🟢", "NEUTRAL": "🟡", "RISK_OFF": "🔴"}
+
+                    # Build intelligence
+                    e = discord.Embed(
+                        title=f"{regime_icon.get(risk, '🟡')} AI Intelligence Brief",
+                        color=COLOR_BUY if risk == "RISK_ON" else COLOR_SELL if risk == "RISK_OFF" else COLOR_GOLD)
+
+                    # What's happening
+                    summary = []
+                    summary.append(f"SPY {spy_pct:+.2f}% · QQQ {qqq_pct:+.2f}% · VIX {vix:.1f}")
+                    if abs(qqq_pct - spy_pct) > 1: summary.append("⚠️ Tech diverging from broad market")
+                    if vix > 25: summary.append("⚠️ High fear — markets stressed")
+                    if vix < 14: summary.append("😴 Very low vol — watch for breakout")
+                    if btc_pct > 3: summary.append(f"₿ BTC surging {btc_pct:+.1f}% — risk appetite strong")
+                    if btc_pct < -3: summary.append(f"₿ BTC dumping {btc_pct:+.1f}% — risk-off vibes")
+                    e.add_field(name="📡 What's Happening", value="\n".join(summary), inline=False)
+
+                    # What to do
+                    actions = []
+                    if risk == "RISK_ON" and vix < 16:
+                        actions.append("✅ **GO AGGRESSIVE** — breakouts & momentum")
+                        actions.append("`/signals` → find high-score setups")
+                        actions.append("`/breakout` → volume breakout scans")
+                        actions.append("`/momentum` → ride the trend")
+                    elif risk == "RISK_ON":
+                        actions.append("✅ **NORMAL LONG** — swing & trend-follow")
+                        actions.append("`/swing` → 2-10 day setups")
+                        actions.append("`/signals` → AI trade ideas")
+                    elif risk == "NEUTRAL" and vix < 20:
+                        actions.append("🟡 **SELECTIVE** — mean reversion & swings")
+                        actions.append("`/dip` → buy oversold bounces")
+                        actions.append("`/swing` → swing trade setups")
+                        actions.append("`/analyze SPY` → check trend direction")
+                    elif risk == "NEUTRAL":
+                        actions.append("🟡 **CAUTIOUS** — small positions only")
+                        actions.append("`/dip` → carefully buy dips")
+                        actions.append("`/risk` → use position sizer")
+                    else:
+                        actions.append("🔴 **DEFENSIVE** — reduce exposure")
+                        actions.append("`/portfolio` → review open positions")
+                        actions.append("`/positions` → check stops")
+                        actions.append("Consider raising cash, tightening stops")
+                    e.add_field(name="🎯 What To Do Now", value="\n".join(actions), inline=False)
+
+                    # Suggested tickers
+                    suggested = []
+                    if risk in ("RISK_ON", "NEUTRAL"):
+                        try:
+                            scan = await _async_signal_scan(_WATCH_US[:10])
+                            if scan:
+                                scan.sort(key=lambda x: x["score"], reverse=True)
+                                for s in scan[:3]:
+                                    suggested.append(f"**{s['ticker']}** — score {s['score']}, "
+                                                     f"R:R {s.get('rr_ratio',0):.1f}:1")
+                        except Exception:
+                            pass
+                    if suggested:
+                        e.add_field(name="🔥 Top Picks Right Now",
+                                    value="\n".join(f"→ {s}" for s in suggested), inline=False)
+                    else:
+                        e.add_field(name="🔥 Picks",
+                                    value="No strong setups right now. Use `/signals` to check.", inline=False)
+
+                    # Risk meter
+                    bar = "█" * (int(score) // 10) + "░" * (10 - int(score) // 10)
+                    e.add_field(name="📊 Risk Score",
+                                value=f"`{bar}` **{score:.0f}/100**", inline=True)
+                    e.add_field(name="📉 VIX",
+                                value=f"{'🔴' if vix > 25 else '🟡' if vix > 18 else '🟢'} {vix:.1f}", inline=True)
+
+                    e.set_footer(text="TradingAI Pro v6.41 · AI reads market live · refreshes each tap")
+                    await interaction.followup.send(embed=e, ephemeral=True)
+                except Exception as exc:
+                    await interaction.followup.send(f"❌ {exc}", ephemeral=True)
+
+            @discord.ui.button(label="🖥️ Full Dashboard", style=discord.ButtonStyle.primary, row=1)
+            async def btn_dashboard(self, interaction: discord.Interaction, button: discord.ui.Button):
+                """Run the full /dashboard command inline."""
                 await interaction.response.defer(ephemeral=True)
                 try:
                     spy = await _fetch_stock("SPY")
@@ -647,151 +866,33 @@ class DiscordInteractiveBot:
                     vix_d = await _fetch_stock("^VIX")
                     btc = await _fetch_stock("BTC-USD")
                     vix = vix_d.get("price", 0)
-                    risk = "🟢 RISK ON" if (vix < 18 and spy.get("change_pct", 0) > 0.3) else (
-                        "🔴 RISK OFF" if (vix > 25 or spy.get("change_pct", 0) < -1.5) else "🟡 NEUTRAL")
-                    e = discord.Embed(title="📊 Quick Market View", color=COLOR_GOLD)
-                    e.add_field(name="Regime", value=risk, inline=True)
-                    e.add_field(name="VIX", value=f"{vix:.1f}", inline=True)
-                    e.add_field(name="SPY", value=f"${spy.get('price',0):.2f} ({spy.get('change_pct',0):+.2f}%)", inline=True)
+                    spy_pct = spy.get("change_pct", 0)
+                    risk = "🟢 RISK ON" if (vix < 18 and spy_pct > 0.3) else (
+                        "🔴 RISK OFF" if (vix > 25 or spy_pct < -1.5) else "🟡 NEUTRAL")
+                    score = max(0, min(100, 50 + spy_pct * 10 - (vix - 18) * 3))
+                    bar = "█" * (int(score) // 10) + "░" * (10 - int(score) // 10)
+
+                    e = discord.Embed(title="🖥️ Quick Dashboard", color=COLOR_GOLD)
+                    e.description = f"**{risk}** · Score: **{score:.0f}/100** `{bar}`"
+                    e.add_field(name="SPY", value=f"${spy.get('price',0):.2f} ({spy_pct:+.2f}%)", inline=True)
                     e.add_field(name="QQQ", value=f"${qqq.get('price',0):.2f} ({qqq.get('change_pct',0):+.2f}%)", inline=True)
-                    e.add_field(name="BTC", value=f"${btc.get('price',0):,.0f} ({btc.get('change_pct',0):+.2f}%)", inline=True)
-                    e.set_footer(text="Use /market for full view · /sector for heatmap · /macro for commodities")
+                    e.add_field(name="VIX", value=f"{vix:.1f}", inline=True)
+                    e.add_field(name="BTC", value=f"${btc.get('price',0):,.0f}", inline=True)
+                    e.set_footer(text="/dashboard for full 3-page view · /market for indices")
                     await interaction.followup.send(embed=e, ephemeral=True)
                 except Exception as exc:
                     await interaction.followup.send(f"❌ {exc}", ephemeral=True)
 
-            @discord.ui.button(label="🎯 Top Signals", style=discord.ButtonStyle.green, row=0)
-            async def btn_signals(self, interaction: discord.Interaction, button: discord.ui.Button):
-                await interaction.response.defer(ephemeral=True)
-                try:
-                    scan_results = await _async_signal_scan(_WATCH_US[:15])
-                    if scan_results:
-                        scan_results.sort(key=lambda x: x["score"], reverse=True)
-                        e = discord.Embed(title="🎯 Top 5 AI Trade Ideas", color=COLOR_BUY)
-                        for i, sig in enumerate(scan_results[:5], 1):
-                            arrow = "🟢" if sig["direction"] == "LONG" else "🔴"
-                            e.add_field(
-                                name=f"{arrow} #{i} {sig['ticker']} ${sig['price']:.2f}",
-                                value=f"Score: **{sig['score']}** | R:R: **{sig.get('rr_ratio',0):.1f}:1**",
-                                inline=False)
-                        e.set_footer(text="/signals for all · /ai TICKER for deep dive")
-                    else:
-                        e = discord.Embed(title="🎯 Signals", description="No signals right now. Market may be closed.", color=COLOR_INFO)
-                    await interaction.followup.send(embed=e, ephemeral=True)
-                except Exception as exc:
-                    await interaction.followup.send(f"❌ {exc}", ephemeral=True)
-
-            @discord.ui.button(label="💼 Portfolio", style=discord.ButtonStyle.secondary, row=0)
-            async def btn_portfolio(self, interaction: discord.Interaction, button: discord.ui.Button):
-                await interaction.response.defer(ephemeral=True)
-                pv, cash, dp, npos = 100_000.0, 100_000.0, 0.0, 0
-                try:
-                    import alpaca_trade_api as tradeapi
-                    api = tradeapi.REST(settings.alpaca_api_key, settings.alpaca_secret_key,
-                                        base_url=getattr(settings, 'alpaca_base_url', 'https://paper-api.alpaca.markets'))
-                    acct = api.get_account()
-                    pv = float(acct.portfolio_value)
-                    cash = float(acct.cash)
-                    dp = float(acct.equity) - float(acct.last_equity)
-                    npos = len(api.list_positions())
-                except Exception:
-                    pass
-                exp = ((pv - cash) / pv * 100) if pv else 0
-                e = discord.Embed(title="💼 Portfolio Snapshot", color=COLOR_INFO)
-                e.add_field(name="Value", value=f"${pv:,.0f}")
-                e.add_field(name="Today", value=f"${dp:+,.0f}")
-                e.add_field(name="Cash", value=f"${cash:,.0f}")
-                e.add_field(name="Positions", value=str(npos))
-                e.add_field(name="Exposure", value=f"{exp:.0f}%")
-                e.set_footer(text="/portfolio for full view · /positions · /pnl")
-                await interaction.followup.send(embed=e, ephemeral=True)
-
-            @discord.ui.button(label="🔬 Backtest", style=discord.ButtonStyle.primary, row=1)
-            async def btn_backtest(self, interaction: discord.Interaction, button: discord.ui.Button):
-                e = discord.Embed(title="🔬 Backtest — How to Use", color=COLOR_INFO,
-                    description=(
-                        "Run strategy backtests with custom date ranges:\n\n"
-                        "**Quick backtest (all strategies, 1 year):**\n"
-                        "`/backtest AAPL`\n\n"
-                        "**Specific strategy:**\n"
-                        "`/backtest NVDA momentum`\n\n"
-                        "**Custom date range:**\n"
-                        "`/backtest TSLA swing start_date:2024-01-01 end_date:2024-12-31`\n\n"
-                        "**Strategies:** Swing · Breakout · Momentum · Mean Reversion\n\n"
-                        "🌐 **Web dashboard** also has an interactive backtest form!"
-                    ))
-                await interaction.response.send_message(embed=e, ephemeral=True)
-
-            @discord.ui.button(label="🔍 Look Up Stock", style=discord.ButtonStyle.green, row=1)
-            async def btn_lookup(self, interaction: discord.Interaction, button: discord.ui.Button):
-                e = discord.Embed(title="🔍 Stock Lookup — Quick Commands", color=COLOR_INFO,
-                    description=(
-                        "`/price AAPL` — real-time price\n"
-                        "`/quote AAPL` — detailed quote + fundamentals\n"
-                        "`/analyze AAPL` — SMA, RSI, volume technicals\n"
-                        "`/ai AAPL` — full AI analysis report\n"
-                        "`/why AAPL` — conviction analysis with stops\n"
-                        "`/score AAPL` — AI score 1-10\n"
-                        "`/compare AAPL MSFT` — head-to-head\n"
-                        "`/levels AAPL` — support/resistance"
-                    ))
-                await interaction.response.send_message(embed=e, ephemeral=True)
-
-            @discord.ui.button(label="⚙️ Tools & Alerts", style=discord.ButtonStyle.secondary, row=1)
-            async def btn_tools(self, interaction: discord.Interaction, button: discord.ui.Button):
-                e = discord.Embed(title="⚙️ Tools & Alerts", color=COLOR_INFO,
-                    description=(
-                        "`/alert AAPL 200` — set price alert\n"
-                        "`/my_alerts` — view your alerts\n"
-                        "`/watchlist add AAPL` — add to watchlist\n"
-                        "`/watchlist` — view watchlist with prices\n"
-                        "`/risk AAPL 150 142` — position size calc\n"
-                        "`/buy AAPL 10` — paper trade buy\n"
-                        "`/sell AAPL 10` — paper trade sell\n"
-                        "`/news AAPL` — latest news"
-                    ))
-                await interaction.response.send_message(embed=e, ephemeral=True)
-
-            @discord.ui.button(label="🌏 Asia & Crypto", style=discord.ButtonStyle.secondary, row=2)
-            async def btn_intl(self, interaction: discord.Interaction, button: discord.ui.Button):
-                e = discord.Embed(title="🌏 International Markets", color=COLOR_INFO,
-                    description=(
-                        "`/asia` — JP + HK + CN dashboard\n"
-                        "`/japan` — top Japan picks\n"
-                        "`/hk` — top Hong Kong picks\n"
-                        "`/crypto` — crypto market overview\n"
-                        "`/btc` — Bitcoin deep analysis\n\n"
-                        "**Coverage:** 3,000+ tickers across\n"
-                        "US · HK · JP · KR · TW · AU · IN · Crypto"
-                    ))
-                await interaction.response.send_message(embed=e, ephemeral=True)
-
-            @discord.ui.button(label="📋 Reports", style=discord.ButtonStyle.secondary, row=2)
-            async def btn_reports(self, interaction: discord.Interaction, button: discord.ui.Button):
-                e = discord.Embed(title="📋 Reports & Briefings", color=COLOR_INFO,
-                    description=(
-                        "`/report morning` — morning briefing\n"
-                        "`/report eod` — end of day scorecard\n"
-                        "`/daily` — full market intelligence\n"
-                        "`/dashboard` — comprehensive dashboard\n"
-                        "`/movers` — today's top gainers/losers\n"
-                        "`/premarket` — pre-market futures\n"
-                        "`/strategy_report` — AI learning status"
-                    ))
-                await interaction.response.send_message(embed=e, ephemeral=True)
-
-            @discord.ui.button(label="🌐 Web Dashboard", style=discord.ButtonStyle.primary, row=2)
+            @discord.ui.button(label="🌐 Open Web", style=discord.ButtonStyle.secondary, row=1)
             async def btn_web(self, interaction: discord.Interaction, button: discord.ui.Button):
+                url = _get_dashboard_url()
                 e = discord.Embed(title="🌐 Web Dashboard", color=COLOR_INFO,
                     description=(
-                        "Open the live dashboard in your browser:\n\n"
-                        "🔗 **http://localhost:8000**\n\n"
-                        "Features:\n"
-                        "• Live market overview with regime\n"
-                        "• Interactive strategy backtester\n"
-                        "• Stock quote lookup with technicals\n"
-                        "• Strategy guide & descriptions\n"
-                        "• Auto-refreshes every 60 seconds"
+                        f"Open on your phone or computer:\n\n"
+                        f"🔗 **{url}**\n\n"
+                        "📱 Works on phone (same WiFi)\n"
+                        "💻 Works on any device on your network\n\n"
+                        "Features: Live market · Backtester · Quote lookup · Strategy guide"
                     ))
                 await interaction.response.send_message(embed=e, ephemeral=True)
 
@@ -3703,25 +3804,24 @@ class DiscordInteractiveBot:
             await interaction.response.send_message(embed=e, view=HelpView(), ephemeral=True)
 
         @bot.tree.command(name="menu",
-                          description="🚀 Quick menu — buttons for everything (easiest way to use the bot)")
+                          description="🚀 Smart menu — AI tells you what to do, browse all commands by category")
         async def cmd_menu(interaction: discord.Interaction):
-            """Sprint 40: Interactive button menu for easier navigation."""
+            """Sprint 41: Smart categorized menu with AI intelligence."""
+            url = _get_dashboard_url()
             e = discord.Embed(
-                title="🚀 TradingAI Pro — Quick Menu",
+                title="🚀 TradingAI Pro — Command Center",
                 description=(
-                    "**Tap any button below** to get started!\n\n"
-                    "📊 **Market** — live indices, VIX, regime\n"
-                    "🎯 **Signals** — top AI trade ideas now\n"
-                    "💼 **Portfolio** — your positions & P&L\n"
-                    "🔬 **Backtest** — test strategies with custom dates\n"
-                    "🔍 **Lookup** — price, analysis, AI score\n"
-                    "⚙️ **Tools** — alerts, watchlist, orders\n"
-                    "🌏 **Asia/Crypto** — international markets\n"
-                    "📋 **Reports** — morning/EOD briefings\n"
-                    "🌐 **Web** — open full web dashboard"
+                    "**How to use this menu:**\n\n"
+                    "📂 **Dropdown** — browse commands by category\n"
+                    "🧠 **What Should I Do?** — AI reads the market and tells you\n"
+                    "🖥️ **Full Dashboard** — quick market snapshot\n"
+                    f"🌐 **Open Web** — dashboard at `{url}`\n"
+                    "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "📊 Markets · 🎯 Signals · 🧠 Analysis · 💰 Trading\n"
+                    "🔬 Backtest · 🌏 Global · ⚙️ Tools · 📋 Reports"
                 ),
                 color=COLOR_GOLD)
-            e.set_footer(text="TradingAI Pro v6 · 65 commands · 3,000+ tickers · 8 markets")
+            e.set_footer(text="TradingAI Pro v6.41 · 65 commands · 3,003 tickers · 8 markets")
             await interaction.response.send_message(embed=e, view=MenuView(), ephemeral=True)
 
         @bot.tree.command(name="status", description="System connectivity check")
@@ -5276,7 +5376,7 @@ class DiscordInteractiveBot:
                             value=f"**{vs_bh:.2f}%** vs passive — consider indexing", inline=True)
 
             e.set_footer(text=(
-                "🌐 Full interactive backtest at http://localhost:8000\n"
+                f"🌐 Full interactive backtest at {_get_dashboard_url()}\n"
                 "Try: /backtest AAPL swing 2024-01-01 2024-12-31"))
             await interaction.followup.send(embed=e)
             await _audit(f"📊 {interaction.user} → /backtest {ticker} {strategy} {date_label} → best={best}")
