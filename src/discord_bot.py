@@ -631,6 +631,170 @@ class DiscordInteractiveBot:
                 super().__init__(timeout=120)
                 self.add_item(HelpCategorySelect())
 
+        # ── Sprint 40: Interactive Menu with Buttons ──
+
+        class MenuView(discord.ui.View):
+            """Main menu with button-driven navigation — makes Discord easier to use."""
+            def __init__(self):
+                super().__init__(timeout=300)
+
+            @discord.ui.button(label="📊 Market Overview", style=discord.ButtonStyle.primary, row=0)
+            async def btn_market(self, interaction: discord.Interaction, button: discord.ui.Button):
+                await interaction.response.defer(ephemeral=True)
+                try:
+                    spy = await _fetch_stock("SPY")
+                    qqq = await _fetch_stock("QQQ")
+                    vix_d = await _fetch_stock("^VIX")
+                    btc = await _fetch_stock("BTC-USD")
+                    vix = vix_d.get("price", 0)
+                    risk = "🟢 RISK ON" if (vix < 18 and spy.get("change_pct", 0) > 0.3) else (
+                        "🔴 RISK OFF" if (vix > 25 or spy.get("change_pct", 0) < -1.5) else "🟡 NEUTRAL")
+                    e = discord.Embed(title="📊 Quick Market View", color=COLOR_GOLD)
+                    e.add_field(name="Regime", value=risk, inline=True)
+                    e.add_field(name="VIX", value=f"{vix:.1f}", inline=True)
+                    e.add_field(name="SPY", value=f"${spy.get('price',0):.2f} ({spy.get('change_pct',0):+.2f}%)", inline=True)
+                    e.add_field(name="QQQ", value=f"${qqq.get('price',0):.2f} ({qqq.get('change_pct',0):+.2f}%)", inline=True)
+                    e.add_field(name="BTC", value=f"${btc.get('price',0):,.0f} ({btc.get('change_pct',0):+.2f}%)", inline=True)
+                    e.set_footer(text="Use /market for full view · /sector for heatmap · /macro for commodities")
+                    await interaction.followup.send(embed=e, ephemeral=True)
+                except Exception as exc:
+                    await interaction.followup.send(f"❌ {exc}", ephemeral=True)
+
+            @discord.ui.button(label="🎯 Top Signals", style=discord.ButtonStyle.green, row=0)
+            async def btn_signals(self, interaction: discord.Interaction, button: discord.ui.Button):
+                await interaction.response.defer(ephemeral=True)
+                try:
+                    scan_results = await _async_signal_scan(_WATCH_US[:15])
+                    if scan_results:
+                        scan_results.sort(key=lambda x: x["score"], reverse=True)
+                        e = discord.Embed(title="🎯 Top 5 AI Trade Ideas", color=COLOR_BUY)
+                        for i, sig in enumerate(scan_results[:5], 1):
+                            arrow = "🟢" if sig["direction"] == "LONG" else "🔴"
+                            e.add_field(
+                                name=f"{arrow} #{i} {sig['ticker']} ${sig['price']:.2f}",
+                                value=f"Score: **{sig['score']}** | R:R: **{sig.get('rr_ratio',0):.1f}:1**",
+                                inline=False)
+                        e.set_footer(text="/signals for all · /ai TICKER for deep dive")
+                    else:
+                        e = discord.Embed(title="🎯 Signals", description="No signals right now. Market may be closed.", color=COLOR_INFO)
+                    await interaction.followup.send(embed=e, ephemeral=True)
+                except Exception as exc:
+                    await interaction.followup.send(f"❌ {exc}", ephemeral=True)
+
+            @discord.ui.button(label="💼 Portfolio", style=discord.ButtonStyle.secondary, row=0)
+            async def btn_portfolio(self, interaction: discord.Interaction, button: discord.ui.Button):
+                await interaction.response.defer(ephemeral=True)
+                pv, cash, dp, npos = 100_000.0, 100_000.0, 0.0, 0
+                try:
+                    import alpaca_trade_api as tradeapi
+                    api = tradeapi.REST(settings.alpaca_api_key, settings.alpaca_secret_key,
+                                        base_url=getattr(settings, 'alpaca_base_url', 'https://paper-api.alpaca.markets'))
+                    acct = api.get_account()
+                    pv = float(acct.portfolio_value)
+                    cash = float(acct.cash)
+                    dp = float(acct.equity) - float(acct.last_equity)
+                    npos = len(api.list_positions())
+                except Exception:
+                    pass
+                exp = ((pv - cash) / pv * 100) if pv else 0
+                e = discord.Embed(title="💼 Portfolio Snapshot", color=COLOR_INFO)
+                e.add_field(name="Value", value=f"${pv:,.0f}")
+                e.add_field(name="Today", value=f"${dp:+,.0f}")
+                e.add_field(name="Cash", value=f"${cash:,.0f}")
+                e.add_field(name="Positions", value=str(npos))
+                e.add_field(name="Exposure", value=f"{exp:.0f}%")
+                e.set_footer(text="/portfolio for full view · /positions · /pnl")
+                await interaction.followup.send(embed=e, ephemeral=True)
+
+            @discord.ui.button(label="🔬 Backtest", style=discord.ButtonStyle.primary, row=1)
+            async def btn_backtest(self, interaction: discord.Interaction, button: discord.ui.Button):
+                e = discord.Embed(title="🔬 Backtest — How to Use", color=COLOR_INFO,
+                    description=(
+                        "Run strategy backtests with custom date ranges:\n\n"
+                        "**Quick backtest (all strategies, 1 year):**\n"
+                        "`/backtest AAPL`\n\n"
+                        "**Specific strategy:**\n"
+                        "`/backtest NVDA momentum`\n\n"
+                        "**Custom date range:**\n"
+                        "`/backtest TSLA swing start_date:2024-01-01 end_date:2024-12-31`\n\n"
+                        "**Strategies:** Swing · Breakout · Momentum · Mean Reversion\n\n"
+                        "🌐 **Web dashboard** also has an interactive backtest form!"
+                    ))
+                await interaction.response.send_message(embed=e, ephemeral=True)
+
+            @discord.ui.button(label="🔍 Look Up Stock", style=discord.ButtonStyle.green, row=1)
+            async def btn_lookup(self, interaction: discord.Interaction, button: discord.ui.Button):
+                e = discord.Embed(title="🔍 Stock Lookup — Quick Commands", color=COLOR_INFO,
+                    description=(
+                        "`/price AAPL` — real-time price\n"
+                        "`/quote AAPL` — detailed quote + fundamentals\n"
+                        "`/analyze AAPL` — SMA, RSI, volume technicals\n"
+                        "`/ai AAPL` — full AI analysis report\n"
+                        "`/why AAPL` — conviction analysis with stops\n"
+                        "`/score AAPL` — AI score 1-10\n"
+                        "`/compare AAPL MSFT` — head-to-head\n"
+                        "`/levels AAPL` — support/resistance"
+                    ))
+                await interaction.response.send_message(embed=e, ephemeral=True)
+
+            @discord.ui.button(label="⚙️ Tools & Alerts", style=discord.ButtonStyle.secondary, row=1)
+            async def btn_tools(self, interaction: discord.Interaction, button: discord.ui.Button):
+                e = discord.Embed(title="⚙️ Tools & Alerts", color=COLOR_INFO,
+                    description=(
+                        "`/alert AAPL 200` — set price alert\n"
+                        "`/my_alerts` — view your alerts\n"
+                        "`/watchlist add AAPL` — add to watchlist\n"
+                        "`/watchlist` — view watchlist with prices\n"
+                        "`/risk AAPL 150 142` — position size calc\n"
+                        "`/buy AAPL 10` — paper trade buy\n"
+                        "`/sell AAPL 10` — paper trade sell\n"
+                        "`/news AAPL` — latest news"
+                    ))
+                await interaction.response.send_message(embed=e, ephemeral=True)
+
+            @discord.ui.button(label="🌏 Asia & Crypto", style=discord.ButtonStyle.secondary, row=2)
+            async def btn_intl(self, interaction: discord.Interaction, button: discord.ui.Button):
+                e = discord.Embed(title="🌏 International Markets", color=COLOR_INFO,
+                    description=(
+                        "`/asia` — JP + HK + CN dashboard\n"
+                        "`/japan` — top Japan picks\n"
+                        "`/hk` — top Hong Kong picks\n"
+                        "`/crypto` — crypto market overview\n"
+                        "`/btc` — Bitcoin deep analysis\n\n"
+                        "**Coverage:** 3,000+ tickers across\n"
+                        "US · HK · JP · KR · TW · AU · IN · Crypto"
+                    ))
+                await interaction.response.send_message(embed=e, ephemeral=True)
+
+            @discord.ui.button(label="📋 Reports", style=discord.ButtonStyle.secondary, row=2)
+            async def btn_reports(self, interaction: discord.Interaction, button: discord.ui.Button):
+                e = discord.Embed(title="📋 Reports & Briefings", color=COLOR_INFO,
+                    description=(
+                        "`/report morning` — morning briefing\n"
+                        "`/report eod` — end of day scorecard\n"
+                        "`/daily` — full market intelligence\n"
+                        "`/dashboard` — comprehensive dashboard\n"
+                        "`/movers` — today's top gainers/losers\n"
+                        "`/premarket` — pre-market futures\n"
+                        "`/strategy_report` — AI learning status"
+                    ))
+                await interaction.response.send_message(embed=e, ephemeral=True)
+
+            @discord.ui.button(label="🌐 Web Dashboard", style=discord.ButtonStyle.primary, row=2)
+            async def btn_web(self, interaction: discord.Interaction, button: discord.ui.Button):
+                e = discord.Embed(title="🌐 Web Dashboard", color=COLOR_INFO,
+                    description=(
+                        "Open the live dashboard in your browser:\n\n"
+                        "🔗 **http://localhost:8000**\n\n"
+                        "Features:\n"
+                        "• Live market overview with regime\n"
+                        "• Interactive strategy backtester\n"
+                        "• Stock quote lookup with technicals\n"
+                        "• Strategy guide & descriptions\n"
+                        "• Auto-refreshes every 60 seconds"
+                    ))
+                await interaction.response.send_message(embed=e, ephemeral=True)
+
         class SignalActionView(discord.ui.View):
             """Pro signal card actions: Analyze · Size · Alert · Watchlist · Why Now."""
             def __init__(self, ticker: str, signal_data: dict = None):
@@ -3535,8 +3699,30 @@ class DiscordInteractiveBot:
                 title="📖 TradingAI Pro — Command Center",
                 description="Pick a category below to see all commands.\n\u200b",
                 color=COLOR_PURPLE)
-            e.set_footer(text="45+ commands across 6 categories")
+            e.set_footer(text="65+ commands across 6 categories")
             await interaction.response.send_message(embed=e, view=HelpView(), ephemeral=True)
+
+        @bot.tree.command(name="menu",
+                          description="🚀 Quick menu — buttons for everything (easiest way to use the bot)")
+        async def cmd_menu(interaction: discord.Interaction):
+            """Sprint 40: Interactive button menu for easier navigation."""
+            e = discord.Embed(
+                title="🚀 TradingAI Pro — Quick Menu",
+                description=(
+                    "**Tap any button below** to get started!\n\n"
+                    "📊 **Market** — live indices, VIX, regime\n"
+                    "🎯 **Signals** — top AI trade ideas now\n"
+                    "💼 **Portfolio** — your positions & P&L\n"
+                    "🔬 **Backtest** — test strategies with custom dates\n"
+                    "🔍 **Lookup** — price, analysis, AI score\n"
+                    "⚙️ **Tools** — alerts, watchlist, orders\n"
+                    "🌏 **Asia/Crypto** — international markets\n"
+                    "📋 **Reports** — morning/EOD briefings\n"
+                    "🌐 **Web** — open full web dashboard"
+                ),
+                color=COLOR_GOLD)
+            e.set_footer(text="TradingAI Pro v6 · 65 commands · 3,000+ tickers · 8 markets")
+            await interaction.response.send_message(embed=e, view=MenuView(), ephemeral=True)
 
         @bot.tree.command(name="status", description="System connectivity check")
         @app_commands.checks.cooldown(1, 15, key=lambda i: i.user.id)
@@ -4875,132 +5061,225 @@ class DiscordInteractiveBot:
         # ══════════════════════════════════════════════════════════════
 
         @bot.tree.command(name="backtest",
-                          description="Backtest all 4 strategies on a ticker — ranked by Sharpe, win-rate & regime fit")
-        @app_commands.describe(ticker="Symbol e.g. NVDA, TSLA, BTC-USD",
-                               period="1mo 3mo 6mo 1y 2y (default 1y)")
+                          description="Backtest strategies on a ticker — pick strategy, set date range")
+        @app_commands.describe(
+            ticker="Symbol e.g. NVDA, TSLA, BTC-USD",
+            strategy="Strategy to test (default: all)",
+            period="Period if no dates: 1mo 3mo 6mo 1y 2y (default 1y)",
+            start_date="Start date YYYY-MM-DD (optional, overrides period)",
+            end_date="End date YYYY-MM-DD (optional)")
+        @app_commands.choices(strategy=[
+            app_commands.Choice(name="🔄 All Strategies (compare)", value="all"),
+            app_commands.Choice(name="📈 Swing Trading", value="swing"),
+            app_commands.Choice(name="🚀 Breakout / VCP", value="breakout"),
+            app_commands.Choice(name="⚡ Momentum", value="momentum"),
+            app_commands.Choice(name="🔁 Mean Reversion", value="mean_reversion"),
+        ])
         @app_commands.checks.cooldown(1, 20, key=lambda i: i.user.id)
         async def cmd_backtest(interaction: discord.Interaction,
-                                ticker: str, period: str = "1y"):
+                                ticker: str, strategy: str = "all",
+                                period: str = "1y",
+                                start_date: str = "", end_date: str = ""):
             await interaction.response.defer()
             ticker = ticker.upper().strip()
             now = datetime.now(timezone.utc)
 
-            async def _async_run(sym, per):
-                hist = await _mds.get_history(sym, period=per)
-                if hist is None or hist.empty or len(hist) < 30:
-                    return None
-                opt = _get_optimizer()
-                if opt is None:
-                    return None
-                return await asyncio.to_thread(opt.full_analysis, sym, hist, per)
+            # Determine date range label
+            if start_date and end_date:
+                date_label = f"{start_date} → {end_date}"
+            else:
+                date_label = period
+                start_date = ""
+                end_date = ""
+
+            strat_names = {
+                "all": "All 4 Strategies", "swing": "Swing Trading",
+                "breakout": "Breakout/VCP", "momentum": "Momentum",
+                "mean_reversion": "Mean Reversion",
+            }
 
             await interaction.followup.send(
                 embed=discord.Embed(
-                    title=f"🔬 Running AI Backtest — {ticker} ({period})",
-                    description="Testing SWING · BREAKOUT · MEAN_REVERSION · MOMENTUM\nWalk-forward validation + parameter sweep + cross-check...",
+                    title=f"🔬 Running Backtest — {ticker}",
+                    description=(
+                        f"**Strategy:** {strat_names.get(strategy, strategy)}\n"
+                        f"**Period:** {date_label}\n"
+                        "Computing entry/exit signals, P&L, Sharpe ratio..."
+                    ),
                     color=COLOR_INFO, timestamp=now))
 
-            result = await _async_run(ticker, period)
-            if result is None:
-                await interaction.followup.send(
-                    f"❌ No data for `{ticker}` ({period}). Try a different symbol or period.")
+            # Use the live API backtest engine
+            try:
+                import aiohttp
+                params = {"ticker": ticker, "strategy": strategy, "period": period}
+                if start_date:
+                    params["start_date"] = start_date
+                if end_date:
+                    params["end_date"] = end_date
+
+                # Direct computation (same as API)
+                async def _run_bt():
+                    import yfinance as yf
+                    import numpy as np
+                    t = yf.Ticker(ticker)
+                    if start_date and end_date:
+                        hist = t.history(start=start_date, end=end_date)
+                    else:
+                        hist = t.history(period=period)
+                    if hist is None or hist.empty or len(hist) < 30:
+                        return None
+                    close = hist["Close"].values
+                    vol = hist["Volume"].values
+                    dates_arr = hist.index
+                    n = len(close)
+                    sma20 = np.convolve(close, np.ones(20)/20, mode="full")[:n]
+                    sma50 = np.convolve(close, np.ones(50)/50, mode="full")[:n]
+                    deltas = np.diff(close, prepend=close[0])
+                    gains = np.where(deltas > 0, deltas, 0)
+                    losses = np.where(deltas < 0, -deltas, 0)
+                    ag = np.convolve(gains, np.ones(14)/14, mode="full")[:n]
+                    al = np.convolve(losses, np.ones(14)/14, mode="full")[:n]
+                    rs = np.where(al > 0, ag / al, 100)
+                    rsi = 100 - (100 / (1 + rs))
+                    vol_ma = np.convolve(vol.astype(float), np.ones(20)/20, mode="full")[:n]
+                    vr = np.where(vol_ma > 0, vol / vol_ma, 1.0)
+
+                    def _bt(sid):
+                        entries, exits = [], []
+                        pos = None
+                        sp, tp = 0.05, 0.10
+                        if sid == "mean_reversion":
+                            sp, tp = 0.04, 0.06
+                        for i in range(50, n):
+                            if pos is None:
+                                go = False
+                                if sid == "swing":
+                                    go = rsi[i] < 35 and close[i] > sma50[i] and close[i-1] < sma20[i-1] and close[i] > sma20[i]
+                                elif sid == "breakout":
+                                    hi20 = np.max(close[max(0,i-20):i])
+                                    go = close[i] > hi20 and vr[i] > 1.5 and close[i] > sma20[i]
+                                elif sid == "momentum":
+                                    go = close[i] > sma20[i] > sma50[i] and 50 < rsi[i] < 75 and vr[i] > 1.0
+                                elif sid == "mean_reversion":
+                                    go = rsi[i] < 30 and close[i] < sma20[i] * 0.97 and vr[i] > 1.2
+                                if go:
+                                    pos = {"i": i, "p": close[i]}
+                                    entries.append((i, close[i]))
+                            else:
+                                pnl = (close[i] - pos["p"]) / pos["p"]
+                                hd = i - pos["i"]
+                                if pnl >= tp:
+                                    exits.append((i, close[i], "target"))
+                                    pos = None
+                                elif pnl <= -sp:
+                                    exits.append((i, close[i], "stop"))
+                                    pos = None
+                                elif hd >= 15:
+                                    exits.append((i, close[i], "time"))
+                                    pos = None
+                        if pos:
+                            exits.append((n-1, close[-1], "end"))
+                        trades = []
+                        for j in range(min(len(entries), len(exits))):
+                            ep, xp = entries[j][1], exits[j][1]
+                            trades.append({"pnl": (xp-ep)/ep, "hd": exits[j][0]-entries[j][0],
+                                           "ed": str(dates_arr[entries[j][0]].date()),
+                                           "xd": str(dates_arr[exits[j][0]].date()),
+                                           "ep": round(ep, 2), "xp": round(xp, 2),
+                                           "reason": exits[j][2]})
+                        rets = [t["pnl"] for t in trades]
+                        tt = len(trades)
+                        w = sum(1 for r in rets if r > 0)
+                        wr = w / tt * 100 if tt else 0
+                        aw = np.mean([r for r in rets if r > 0]) * 100 if w else 0
+                        al2 = np.mean([r for r in rets if r <= 0]) * 100 if (tt - w) else 0
+                        tr = sum(rets) * 100
+                        sh = (np.mean(rets) / np.std(rets) * np.sqrt(252 / max(1, np.mean([t["hd"] for t in trades])))) if rets and np.std(rets) > 0 else 0
+                        cum = np.cumprod(1 + np.array(rets)) if rets else np.array([1])
+                        pk = np.maximum.accumulate(cum)
+                        dd = float(np.min((cum - pk) / pk)) * 100 if len(pk) else 0
+                        gp = sum(r for r in rets if r > 0)
+                        gl = abs(sum(r for r in rets if r <= 0))
+                        pf = gp / gl if gl > 0 else 99
+                        sc = sh * 20 + wr * 0.5 + tr * 0.3
+                        return {"strategy": sid, "trades": tt, "winners": w,
+                                "win_rate": round(wr, 1), "total_return": round(tr, 2),
+                                "avg_win": round(aw, 2), "avg_loss": round(al2, 2),
+                                "sharpe": round(sh, 2), "max_dd": round(dd, 2),
+                                "profit_factor": round(pf, 2), "score": round(sc, 1),
+                                "trade_list": trades[-10:]}
+
+                    strats = ["swing", "breakout", "momentum", "mean_reversion"] if strategy == "all" else [strategy]
+                    results = {s: _bt(s) for s in strats}
+                    ranked = sorted(results.values(), key=lambda x: x["score"], reverse=True)
+                    bh = ((close[-1] - close[0]) / close[0]) * 100
+                    return {"ranked": ranked, "best": ranked[0]["strategy"],
+                            "benchmark": round(bh, 2), "bars": n,
+                            "date_range": f"{dates_arr[0].date()} → {dates_arr[-1].date()}"}
+
+                result = await asyncio.to_thread(_run_bt)
+            except Exception as exc:
+                await interaction.followup.send(f"❌ Backtest error: {exc}")
                 return
 
-            regime = result["regime"]
-            ranked = result["ranked"]
-            best = result["best_strategy"]
-            best_r = result["strategy_results"].get(best, {})
-            cc = result["cross_check"]
-            rr = result["regime_recommendation"]
-            mc = result.get("monte_carlo", {})
-            wf = result.get("walk_forward", {})
+            if result is None:
+                await interaction.followup.send(
+                    f"❌ No data for `{ticker}` ({date_label}). Try a different symbol or period.")
+                return
 
-            # ── Header embed ──
+            ranked = result["ranked"]
+            best = result["best"]
+            bh = result["benchmark"]
+
+            # ── Results embed ──
             e = discord.Embed(
-                title=f"📊 Backtest Results — {ticker} ({period})",
+                title=f"📊 Backtest Results — {ticker}",
                 description=(
-                    f"**Regime: {regime['label']}** · Vol {regime.get('vol_ann',0):.0f}% ann · "
-                    f"Trend {regime.get('trend_pct',0):+.1f}% vs SMA50\n"
-                    f"**4 strategies tested · best = {best}**"
+                    f"**{strat_names.get(strategy, strategy)}** · {result['date_range']}\n"
+                    f"{result['bars']} bars · Buy & Hold: **{bh:+.2f}%**"
                 ),
                 color=COLOR_GOLD, timestamp=now)
 
-            # Strategy comparison table
-            table_lines = []
             for r in ranked:
                 name = r["strategy"]
-                score = r.get("score", 0)
-                trades = r.get("trades", 0)
-                wr = r.get("win_rate", 0) * 100
-                sharpe = r.get("sharpe", 0)
-                dd = r.get("max_dd", 0) * 100
-                bar = "█" * int(score // 12) + "░" * (8 - int(score // 12))
-                medal = "🥇" if name == best else ("🥈" if r == ranked[1] else "  ")
-                table_lines.append(
-                    f"{medal} **{name}** `{bar}` {score:.0f}\n"
-                    f"  Trades {trades} · WR {wr:.0f}% · Sharpe {sharpe:.2f} · DD {dd:.1f}%")
-            e.add_field(name="🏆 Strategy Ranking",
-                        value="\n".join(table_lines)[:900], inline=False)
-
-            # Regime recommendation
-            e.add_field(
-                name=f"🌡️ Regime: {rr['regime']}",
-                value=(
-                    f"{rr['explanation']}\n"
-                    f"→ **Best strategy for this regime: {rr['best_strategy']}** "
-                    f"(score {rr['best_score']:.0f}) "
-                    f"{'✅ Regime-fit' if rr['regime_fit'] else '⚠️ Not ideal regime'}"
-                ),
-                inline=False)
-
-            # Cross-check
-            verdict_emoji = {"STRONG_AGREEMENT": "✅", "MIXED_SIGNAL": "⚠️",
-                             "AVOID": "🔴", "MODERATE": "🟡"}.get(cc["verdict"], "❓")
-            e.add_field(
-                name=f"{verdict_emoji} Cross-Check: {cc['verdict']}",
-                value=cc["explanation"][:300], inline=False)
-
-            # Walk-forward OOS for best strategy
-            if wf.get(best):
-                wf_r = wf[best]
-                stable = "✅ Stable" if wf_r.get("stable") else "⚠️ Unstable"
+                medal = "🥇" if name == best else ("🥈" if len(ranked) > 1 and r == ranked[1] else "")
+                bar = "█" * max(1, int(r["score"] / 12)) + "░" * max(0, 8 - int(r["score"] / 12))
                 e.add_field(
-                    name=f"🔄 Walk-Forward OOS — {best}",
+                    name=f"{medal} {name.replace('_', ' ').title()} — Score {r['score']:.0f}",
                     value=(
-                        f"{stable} · {wf_r['folds']} folds\n"
-                        f"OOS Sharpe **{wf_r['avg_oos_sharpe']:.2f}** · "
-                        f"OOS Win-rate **{wf_r['avg_oos_win_rate']*100:.0f}%** · "
-                        f"Score **{wf_r['avg_oos_score']:.0f}**"
+                        f"`{bar}`\n"
+                        f"Trades: **{r['trades']}** · WR: **{r['win_rate']:.0f}%** · "
+                        f"Sharpe: **{r['sharpe']:.2f}**\n"
+                        f"Return: **{r['total_return']:+.2f}%** · "
+                        f"Max DD: **{r['max_dd']:.1f}%** · "
+                        f"PF: **{r['profit_factor']:.1f}**"
                     ), inline=False)
 
-            # Param sweep improvement
-            sweep_delta = result.get("sweep_improvement", 0)
-            if abs(sweep_delta) > 0.5:
-                bp = result.get("best_params", {})
-                params_str = "  ·  ".join(f"{k}={v}" for k, v in bp.items())
-                e.add_field(
-                    name=f"⚙️ Optimal Params — {best} (+{sweep_delta:.1f} pts)",
-                    value=params_str[:200], inline=False)
+            # Recent trades for best strategy
+            best_r = next((r for r in ranked if r["strategy"] == best), ranked[0])
+            if best_r.get("trade_list"):
+                trade_lines = []
+                for t in best_r["trade_list"][-5:]:
+                    icon = "🟢" if t["pnl"] > 0 else "🔴"
+                    trade_lines.append(
+                        f"{icon} {t['ed']}→{t['xd']} ${t['ep']}→${t['xp']} "
+                        f"**{t['pnl']*100:+.1f}%** ({t['reason']})")
+                e.add_field(name=f"📋 Recent Trades — {best}",
+                            value="\n".join(trade_lines)[:900], inline=False)
 
-            # Monte Carlo
-            if mc:
-                e.add_field(
-                    name="🎲 Monte Carlo (500 runs)",
-                    value=(
-                        f"Median final equity **{mc['median_final']*100:.0f}%** · "
-                        f"5th pct **{mc['p5_final']*100:.0f}%** · "
-                        f"Profitable in **{mc['pct_profitable']:.0f}%** of simulations"
-                    ), inline=False)
+            vs_bh = best_r["total_return"] - bh
+            if vs_bh > 0:
+                e.add_field(name="📈 vs Buy & Hold",
+                            value=f"**+{vs_bh:.2f}%** alpha over passive", inline=True)
+            else:
+                e.add_field(name="📉 vs Buy & Hold",
+                            value=f"**{vs_bh:.2f}%** vs passive — consider indexing", inline=True)
 
-            # Self-correction notes
-            corrections = result.get("correction_notes", [])
-            if corrections:
-                e.add_field(name="🧠 Self-Correction Status",
-                            value="\n".join(corrections[:4])[:400], inline=False)
-
-            e.set_footer(text=f"✅ Real backtest · {ticker} · /best_strategy for regime pick · /strategy_report for live accuracy")
+            e.set_footer(text=(
+                "🌐 Full interactive backtest at http://localhost:8000\n"
+                "Try: /backtest AAPL swing 2024-01-01 2024-12-31"))
             await interaction.followup.send(embed=e)
-            await _audit(f"📊 {interaction.user} → /backtest {ticker} {period} → best={best} score={best_r.get('score',0):.0f}")
+            await _audit(f"📊 {interaction.user} → /backtest {ticker} {strategy} {date_label} → best={best}")
 
         @bot.tree.command(name="best_strategy",
                           description="Which strategy wins on this ticker RIGHT NOW in current market regime?")

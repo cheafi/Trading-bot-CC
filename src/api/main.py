@@ -207,13 +207,13 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def dashboard(request: Request):
     """Serve the main dashboard."""
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 
 @app.get("/signals/explorer", response_class=HTMLResponse, include_in_schema=False)
 async def signal_explorer(request: Request):
     """Serve the Signal Explorer page."""
-    return templates.TemplateResponse("signal_explorer.html", {"request": request})
+    return templates.TemplateResponse(request, "signal_explorer.html")
 
 
 @app.get("/api/dashboard", tags=["dashboard"])
@@ -2293,15 +2293,379 @@ async def api_health():
         return {"status": "unhealthy", "error": str(e)}
 
 
+# ═══════════════════════════════════════════════════════════════════
+# SPRINT 40 — LIVE API ENDPOINTS (public, no auth — power web + Discord)
+# ═══════════════════════════════════════════════════════════════════
+
+_LIVE_INDICES = [
+    ("SPY", "S&P 500"), ("QQQ", "Nasdaq 100"), ("IWM", "Russell 2000"),
+    ("DIA", "Dow Jones"),
+]
+_LIVE_MACRO = [
+    ("^VIX", "VIX"), ("GLD", "Gold"), ("TLT", "Bonds 20Y"),
+    ("BTC-USD", "Bitcoin"), ("ETH-USD", "Ethereum"),
+    ("USO", "Oil"),
+]
+_LIVE_SECTORS = [
+    ("XLK", "Technology"), ("XLF", "Financials"), ("XLV", "Healthcare"),
+    ("XLE", "Energy"), ("XLI", "Industrials"), ("XLY", "Consumer Disc"),
+    ("XLP", "Consumer Staples"), ("XLU", "Utilities"), ("XLRE", "Real Estate"),
+    ("XLC", "Communication"), ("XLB", "Materials"),
+]
+_LIVE_ASIA = [
+    ("^N225", "Nikkei 225"), ("^HSI", "Hang Seng"), ("000001.SS", "Shanghai"),
+    ("^KS11", "KOSPI"), ("^TWII", "TAIEX"), ("^AXJO", "ASX 200"),
+    ("^BSESN", "BSE Sensex"),
+]
+
+
+def _yf_quote(symbol: str) -> dict:
+    """Fetch a single quote via yfinance (sync helper)."""
+    import yfinance as yf
+    try:
+        t = yf.Ticker(symbol)
+        info = t.fast_info if hasattr(t, "fast_info") else {}
+        price = getattr(info, "last_price", 0) or 0
+        prev = getattr(info, "previous_close", price) or price
+        pct = ((price - prev) / prev * 100) if prev else 0
+        high = getattr(info, "day_high", price) or price
+        low = getattr(info, "day_low", price) or price
+        vol = getattr(info, "last_volume", 0) or 0
+        mcap = getattr(info, "market_cap", 0) or 0
+        h52 = getattr(info, "year_high", 0) or 0
+        l52 = getattr(info, "year_low", 0) or 0
+        return {
+            "symbol": symbol, "price": round(price, 2),
+            "change_pct": round(pct, 2), "prev_close": round(prev, 2),
+            "high": round(high, 2), "low": round(low, 2),
+            "volume": vol, "market_cap": mcap,
+            "high_52w": round(h52, 2), "low_52w": round(l52, 2),
+        }
+    except Exception:
+        return {"symbol": symbol, "price": 0, "change_pct": 0, "error": True}
+
+
+@app.get("/api/live/market", tags=["live"])
+async def live_market():
+    """
+    Sprint 40: Live market overview — indices, macro, sectors, Asia.
+    Public endpoint (no auth). Powers the web dashboard.
+    """
+    import asyncio
+    loop = asyncio.get_event_loop()
+
+    # Fetch all tickers in parallel threads
+    all_symbols = (
+        [(s, n, "index") for s, n in _LIVE_INDICES]
+        + [(s, n, "macro") for s, n in _LIVE_MACRO]
+        + [(s, n, "sector") for s, n in _LIVE_SECTORS]
+        + [(s, n, "asia") for s, n in _LIVE_ASIA]
+    )
+
+    results = {}
+    for sym, name, group in all_symbols:
+        try:
+            q = await asyncio.to_thread(_yf_quote, sym)
+            q["name"] = name
+            q["group"] = group
+            results[sym] = q
+        except Exception:
+            results[sym] = {"symbol": sym, "name": name, "group": group,
+                            "price": 0, "change_pct": 0}
+
+    # Derive regime
+    spy = results.get("SPY", {})
+    vix = results.get("^VIX", {})
+    spy_pct = spy.get("change_pct", 0)
+    vix_price = vix.get("price", 0)
+
+    risk = "RISK_OFF" if (vix_price > 25 or spy_pct < -1.5) else (
+        "RISK_ON" if (vix_price < 18 and spy_pct > 0.3) else "NEUTRAL")
+    trend = "UPTREND" if spy_pct > 0.5 else ("DOWNTREND" if spy_pct < -0.5 else "SIDEWAYS")
+    vol_state = "HIGH" if vix_price > 22 else ("LOW" if vix_price < 15 else "NORMAL")
+    risk_score = max(0, min(100, int(50 + spy_pct * 10 - (vix_price - 18) * 3)))
+
+    playbook_map = {
+        ("RISK_ON", "UPTREND"): ["Momentum", "Breakout", "Trend-Follow"],
+        ("RISK_ON", "SIDEWAYS"): ["Swing", "VCP"],
+        ("NEUTRAL", "UPTREND"): ["Momentum", "VCP"],
+        ("NEUTRAL", "SIDEWAYS"): ["Mean-Reversion", "Swing"],
+        ("NEUTRAL", "DOWNTREND"): ["Mean-Reversion"],
+        ("RISK_OFF", "DOWNTREND"): ["Cash", "Hedges"],
+    }
+    strategies = playbook_map.get((risk, trend), ["Swing", "Mean-Reversion"])
+
+    indices = [results[s] for s, _ in _LIVE_INDICES if s in results]
+    macro = [results[s] for s, _ in _LIVE_MACRO if s in results]
+    sectors = sorted(
+        [results[s] for s, _ in _LIVE_SECTORS if s in results],
+        key=lambda x: x.get("change_pct", 0), reverse=True)
+    asia = [results[s] for s, _ in _LIVE_ASIA if s in results]
+
+    return {
+        "regime": {"label": risk, "trend": trend, "vol": vol_state,
+                   "score": risk_score, "strategies": strategies},
+        "indices": indices,
+        "macro": macro,
+        "sectors": sectors,
+        "asia": asia,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
+@app.get("/api/live/quote/{ticker}", tags=["live"])
+async def live_quote(ticker: str):
+    """Sprint 40: Live quote for any ticker. Public, no auth."""
+    import asyncio
+    q = await asyncio.to_thread(_yf_quote, ticker.upper())
+    if q.get("error"):
+        raise HTTPException(404, f"No data for {ticker}")
+
+    # Add technical indicators
+    import yfinance as yf
+    try:
+        t = yf.Ticker(ticker.upper())
+        hist = t.history(period="3mo")
+        if hist is not None and len(hist) >= 20:
+            close = hist["Close"]
+            sma20 = float(close.rolling(20).mean().iloc[-1])
+            sma50 = float(close.rolling(50).mean().iloc[-1]) if len(close) >= 50 else 0
+            # RSI
+            delta = close.diff()
+            gain = delta.clip(lower=0).rolling(14).mean()
+            loss = (-delta.clip(upper=0)).rolling(14).mean()
+            rs = gain / loss
+            rsi_series = 100 - (100 / (1 + rs))
+            rsi = float(rsi_series.iloc[-1]) if not rsi_series.empty else 50
+            # Volume ratio
+            vol_avg = float(hist["Volume"].rolling(20).mean().iloc[-1])
+            vol_now = float(hist["Volume"].iloc[-1])
+            vol_ratio = vol_now / vol_avg if vol_avg > 0 else 1.0
+            q["sma20"] = round(sma20, 2)
+            q["sma50"] = round(sma50, 2)
+            q["rsi"] = round(rsi, 1)
+            q["volume_ratio"] = round(vol_ratio, 2)
+            q["above_sma20"] = q["price"] > sma20
+            q["above_sma50"] = q["price"] > sma50 if sma50 else None
+    except Exception:
+        pass
+
+    return {"quote": q, "timestamp": datetime.utcnow().isoformat()}
+
+
+@app.get("/api/live/strategies", tags=["live"])
+async def live_strategies():
+    """Sprint 40: List available backtest strategies."""
+    return {
+        "strategies": [
+            {"id": "swing", "name": "Swing Trading",
+             "description": "2-10 day holds, RSI reversals + SMA crossovers",
+             "best_regime": "NEUTRAL / LOW_VOL"},
+            {"id": "breakout", "name": "Breakout / VCP",
+             "description": "Volume-confirmed breakouts from consolidation",
+             "best_regime": "RISK_ON / UPTREND"},
+            {"id": "momentum", "name": "Momentum",
+             "description": "Trend-following with 20/50 SMA alignment",
+             "best_regime": "RISK_ON / UPTREND"},
+            {"id": "mean_reversion", "name": "Mean Reversion",
+             "description": "Buy oversold dips, sell overbought rallies",
+             "best_regime": "NEUTRAL / SIDEWAYS"},
+            {"id": "all", "name": "All Strategies",
+             "description": "Run all 4 strategies and rank by Sharpe ratio",
+             "best_regime": "Any"},
+        ],
+    }
+
+
+@app.post("/api/live/backtest", tags=["live"])
+async def live_backtest(
+    ticker: str = Query(..., description="Stock symbol"),
+    strategy: str = Query("all", description="swing / breakout / momentum / mean_reversion / all"),
+    start_date: Optional[str] = Query(None, description="Start date YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="End date YYYY-MM-DD"),
+    period: str = Query("1y", description="Fallback period if no dates: 1mo 3mo 6mo 1y 2y"),
+):
+    """
+    Sprint 40: Run backtest with specific strategy + date range.
+    Public endpoint, powers both web form and Discord command.
+    """
+    import asyncio
+    import yfinance as yf
+    import numpy as np
+
+    ticker = ticker.upper().strip()
+
+    # Fetch historical data
+    try:
+        t = yf.Ticker(ticker)
+        if start_date and end_date:
+            hist = t.history(start=start_date, end=end_date)
+        else:
+            hist = t.history(period=period)
+    except Exception as e:
+        raise HTTPException(400, f"Failed to fetch data for {ticker}: {e}")
+
+    if hist is None or hist.empty or len(hist) < 30:
+        raise HTTPException(400, f"Insufficient data for {ticker} (need 30+ bars)")
+
+    close = hist["Close"].values
+    volume = hist["Volume"].values
+    dates_idx = hist.index
+
+    # Simple vectorized backtest engine
+    def _run_strategy(strat_id: str) -> dict:
+        """Run a single strategy backtest."""
+        import numpy as np
+        n = len(close)
+        # Compute indicators
+        sma20 = np.convolve(close, np.ones(20)/20, mode="full")[:n]
+        sma50 = np.convolve(close, np.ones(50)/50, mode="full")[:n]
+        # RSI
+        deltas = np.diff(close, prepend=close[0])
+        gains = np.where(deltas > 0, deltas, 0)
+        losses = np.where(deltas < 0, -deltas, 0)
+        avg_gain = np.convolve(gains, np.ones(14)/14, mode="full")[:n]
+        avg_loss = np.convolve(losses, np.ones(14)/14, mode="full")[:n]
+        rs = np.where(avg_loss > 0, avg_gain / avg_loss, 100)
+        rsi = 100 - (100 / (1 + rs))
+        # Volume ratio
+        vol_ma = np.convolve(volume.astype(float), np.ones(20)/20, mode="full")[:n]
+        vol_ratio = np.where(vol_ma > 0, volume / vol_ma, 1.0)
+
+        # Generate signals based on strategy
+        entries = []  # (index, price)
+        exits = []    # (index, price, reason)
+        position = None
+        stop_pct = 0.05
+        target_pct = 0.10
+
+        for i in range(50, n):
+            if position is None:
+                # Entry logic by strategy
+                enter = False
+                if strat_id == "swing":
+                    enter = (rsi[i] < 35 and close[i] > sma50[i]
+                             and close[i-1] < sma20[i-1] and close[i] > sma20[i])
+                elif strat_id == "breakout":
+                    hi20 = np.max(close[max(0,i-20):i])
+                    enter = (close[i] > hi20 and vol_ratio[i] > 1.5
+                             and close[i] > sma20[i])
+                elif strat_id == "momentum":
+                    enter = (close[i] > sma20[i] > sma50[i]
+                             and rsi[i] > 50 and rsi[i] < 75
+                             and vol_ratio[i] > 1.0)
+                elif strat_id == "mean_reversion":
+                    enter = (rsi[i] < 30 and close[i] < sma20[i] * 0.97
+                             and vol_ratio[i] > 1.2)
+                    target_pct = 0.06
+                    stop_pct = 0.04
+
+                if enter:
+                    position = {"idx": i, "price": close[i]}
+                    entries.append((i, close[i]))
+            else:
+                # Exit logic
+                entry_p = position["price"]
+                pnl_pct = (close[i] - entry_p) / entry_p
+                hold_days = i - position["idx"]
+
+                if pnl_pct >= target_pct:
+                    exits.append((i, close[i], "target"))
+                    position = None
+                elif pnl_pct <= -stop_pct:
+                    exits.append((i, close[i], "stop"))
+                    position = None
+                elif hold_days >= 15:
+                    exits.append((i, close[i], "time"))
+                    position = None
+
+        # Close any remaining position
+        if position is not None:
+            exits.append((n-1, close[-1], "end"))
+
+        # Calculate metrics
+        trades = []
+        for j in range(min(len(entries), len(exits))):
+            ep = entries[j][1]
+            xp = exits[j][1]
+            pnl = (xp - ep) / ep
+            trades.append({
+                "entry_date": str(dates_idx[entries[j][0]].date()),
+                "exit_date": str(dates_idx[exits[j][0]].date()),
+                "entry_price": round(ep, 2),
+                "exit_price": round(xp, 2),
+                "pnl_pct": round(pnl * 100, 2),
+                "reason": exits[j][2],
+                "hold_days": exits[j][0] - entries[j][0],
+            })
+
+        returns = [t["pnl_pct"] / 100 for t in trades]
+        total_trades = len(trades)
+        winners = sum(1 for r in returns if r > 0)
+        losers = total_trades - winners
+        win_rate = (winners / total_trades * 100) if total_trades else 0
+        avg_win = np.mean([r for r in returns if r > 0]) * 100 if winners else 0
+        avg_loss = np.mean([r for r in returns if r <= 0]) * 100 if losers else 0
+        total_return = sum(returns) * 100
+        # Sharpe approximation
+        if returns and np.std(returns) > 0:
+            sharpe = np.mean(returns) / np.std(returns) * np.sqrt(252 / max(1, np.mean([t["hold_days"] for t in trades])))
+        else:
+            sharpe = 0
+        # Max drawdown
+        cum = np.cumprod(1 + np.array(returns)) if returns else np.array([1])
+        peak = np.maximum.accumulate(cum)
+        dd = (cum - peak) / peak
+        max_dd = float(np.min(dd)) * 100 if len(dd) else 0
+
+        # Profit factor
+        gross_profit = sum(r for r in returns if r > 0)
+        gross_loss = abs(sum(r for r in returns if r <= 0))
+        profit_factor = gross_profit / gross_loss if gross_loss > 0 else 99
+
+        return {
+            "strategy": strat_id,
+            "total_trades": total_trades,
+            "winners": winners, "losers": losers,
+            "win_rate": round(win_rate, 1),
+            "total_return": round(total_return, 2),
+            "avg_win": round(avg_win, 2),
+            "avg_loss": round(avg_loss, 2),
+            "sharpe": round(sharpe, 2),
+            "max_drawdown": round(max_dd, 2),
+            "profit_factor": round(profit_factor, 2),
+            "trades": trades[-20:],  # Last 20 trades
+            "score": round(sharpe * 20 + win_rate * 0.5 + total_return * 0.3, 1),
+        }
+
+    # Run requested strategies
+    strats_to_run = ["swing", "breakout", "momentum", "mean_reversion"] if strategy == "all" else [strategy]
+    results = {}
+    for sid in strats_to_run:
+        try:
+            results[sid] = await asyncio.to_thread(_run_strategy, sid)
+        except Exception as e:
+            results[sid] = {"strategy": sid, "error": str(e), "total_trades": 0, "score": 0}
+
+    # Rank by score
+    ranked = sorted(results.values(), key=lambda x: x.get("score", 0), reverse=True)
+    best = ranked[0]["strategy"] if ranked else "none"
+
+    # Buy-and-hold benchmark
+    bh_return = ((close[-1] - close[0]) / close[0]) * 100
+
+    return {
+        "ticker": ticker,
+        "period": f"{start_date} to {end_date}" if start_date else period,
+        "bars": len(close),
+        "date_range": f"{dates_idx[0].date()} → {dates_idx[-1].date()}",
+        "benchmark_return": round(bh_return, 2),
+        "best_strategy": best,
+        "strategies": ranked,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
 if __name__ == "__main__":
     start()
-
-
-async def api_health():
-    """Engine health-check endpoint for monitoring."""
-    try:
-        engine = _get_engine()
-        return await engine.health_check()
-    except Exception as e:
-        return {"status": "unhealthy", "error": str(e)}
 
