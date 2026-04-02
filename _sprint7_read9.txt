@@ -1,0 +1,7 @@
+10: - Learning loop: records outcomes for ML retraining
+26: from src.ml.trade_learner import TradeLearningLoop, TradeOutcomeRecord
+219:     3. End of day → generate report, retrain if needed
+258:         self.learning_loop = TradeLearningLoop()
+362:                 result = await self._execute_signal(signal)
+548:     async def _execute_signal(self, signal: Signal) -> Optional[Dict[str, Any]]:
+689:             self.learning_loop.record_outcome(record)

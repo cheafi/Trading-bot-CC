@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0d1117">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Regime Screener - TradingAI Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root{--bg:#0d1117;--s1:#161b22;--s2:#1c2333;--bd:#21262d;--bd2:#30363d;--t1:#e6edf3;--t2:#8b949e;--t3:#484f58;--green:#00d4aa;--red:#ff5c5c;--amber:#fbbf24;--blue:#58a6ff}
+        *{font-family:'Inter',sans-serif;box-sizing:border-box;margin:0}
+        body{background:var(--bg);color:var(--t1);overflow-x:hidden}
+        .mono{font-family:'JetBrains Mono',monospace}
+
+        /* Regime Banner */
+        .regime-banner{padding:8px 20px;font-size:13px;font-weight:700;letter-spacing:.3px}
+        .rb-on{background:#00d4aa15;border-bottom:2px solid var(--green);color:var(--green)}
+        .rb-off{background:#ff5c5c15;border-bottom:2px solid var(--red);color:var(--red)}
+        .rb-neutral{background:#fbbf2415;border-bottom:2px solid var(--amber);color:var(--amber)}
+
+        /* Sub-tabs */
+        .stab{display:flex;border-bottom:1px solid var(--bd);background:var(--s1)}
+        .stab button{padding:8px 16px;font-size:12px;font-weight:500;color:var(--t3);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent}
+        .stab button:hover{color:var(--t2)}
+        .stab button.on{color:var(--green);border-bottom-color:var(--green);font-weight:600}
+
+        /* Summary strip */
+        .sum-strip{display:flex;border-bottom:1px solid var(--bd);background:var(--s2);font-size:12px}
+        .sum-cell{flex:1;padding:10px 16px;border-right:1px solid var(--bd)}
+        .sum-cell:last-child{border-right:none}
+        .sum-lbl{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.4px}
+        .sum-val{font-weight:700;margin-top:2px}
+
+        /* Data table */
+        .dt{width:100%;border-collapse:collapse;font-size:12px}
+        .dt th{text-align:left;padding:6px 10px;color:var(--t3);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--bd);background:var(--s2)}
+        .dt td{padding:6px 10px;border-bottom:1px solid var(--bd)}
+        .dt tr:hover{background:var(--s2);cursor:pointer}
+        .dt tr.sel{background:#00d4aa08;border-left:3px solid var(--green)}
+        .dt .r{text-align:right}
+
+        /* KPI grid */
+        .kpi-g{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--bd);border-radius:6px;overflow:hidden}
+        .kpi-c{background:var(--s1);padding:14px;text-align:center}
+        .kpi-v{font-size:22px;font-weight:800;line-height:1.1}
+        .kpi-l{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
+        .kpi-s{font-size:10px;margin-top:2px}
+
+        /* Indicator rows */
+        .ir{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bd);font-size:12px}
+        .ir:last-child{border-bottom:none}
+
+        .pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600}
+        .pg{background:#00d4aa18;color:var(--green)}.pr{background:#ff5c5c18;color:var(--red)}.py{background:#fbbf2418;color:var(--amber)}
+
+        .fade{animation:f .2s ease}@keyframes f{from{opacity:0}to{opacity:1}}
+        .spin{display:inline-block;width:20px;height:20px;border:2px solid var(--bd);border-top-color:var(--green);border-radius:50%;animation:sp .5s linear infinite}
+        @keyframes sp{to{transform:rotate(360deg)}}
+
+        .nav-b{position:fixed;bottom:0;left:0;right:0;background:var(--bg);border-top:1px solid var(--bd);z-index:100;padding:5px 0 env(safe-area-inset-bottom,5px)}
+        .nav-b a{display:flex;flex-direction:column;align-items:center;font-size:9px;color:var(--t3);text-decoration:none;padding:3px 0;transition:color .15s}
+        .nav-b a.on{color:var(--green)}
+        .nav-b a .ic{font-size:17px;margin-bottom:1px}
+
+        .safe-b{padding-bottom:env(safe-area-inset-bottom,68px)}
+        @media(max-width:1024px){.split{flex-direction:column!important}.split>div{max-height:none!important}}
+    </style>
+</head>
+<body x-data="RS()" x-init="init()" class="safe-b">
+
+<!-- Title -->
+<header style="background:var(--s1);border-bottom:1px solid var(--bd)" class="flex items-center justify-between px-4 py-2.5">
+    <div class="flex items-center gap-2.5">
+        <a href="/" class="text-base">📈</a>
+        <div>
+            <div class="text-[13px] font-bold text-white">US Market Regime Dual-Engine Screener</div>
+            <div class="text-[10px] mono" style="color:var(--t3)" x-text="'Generated (UTC): '+genAt"></div>
+        </div>
+    </div>
+    <div class="flex items-center gap-2">
+        <span class="text-[10px] mono" style="color:var(--t3)" x-text="clock"></span>
+        <span :class="live?'text-green-400':'text-red-400'" class="text-xs" x-text="live?'●':'○'"></span>
+    </div>
+</header>
+
+<!-- Regime Banner -->
+<div class="regime-banner" :class="R.risk==='RISK_ON'?'rb-on':R.risk==='RISK_OFF'?'rb-off':'rb-neutral'">
+    <span x-text="'Regime: '+(R.risk||'—').replace('_',' ')+' · Active Engine: '+(R.risk||'—').replace('_',' ')"></span>
+</div>
+
+<!-- Sub-tabs -->
+<div class="stab">
+    <button @click="tab='scr'" :class="tab==='scr'&&'on'">Screener Result</button>
+    <button @click="tab='bg'" :class="tab==='bg'&&'on'">Background</button>
+    <button @click="tab='hist'" :class="tab==='hist'&&'on'">Historical Backtest</button>
+</div>
+
+<!-- Summary strip -->
+<div class="sum-strip">
+    <div class="sum-cell"><div class="sum-lbl">Engine</div><div class="sum-val" :class="R.risk==='RISK_ON'?'text-green-400':R.risk==='RISK_OFF'?'text-red-400':'text-amber-400'" x-text="(R.risk||'—').replace('RISK_','').toLowerCase()"></div></div>
+    <div class="sum-cell"><div class="sum-lbl">Regime</div><div class="sum-val" :class="R.risk==='RISK_ON'?'text-green-400':R.risk==='RISK_OFF'?'text-red-400':'text-amber-400'" x-text="(R.risk||'—').replace('RISK_','').toLowerCase()"></div></div>
+    <div class="sum-cell"><div class="sum-lbl">Universe</div><div class="sum-val text-white" x-text="uniSz"></div></div>
+    <div class="sum-cell"><div class="sum-lbl">Candidates</div><div class="sum-val text-green-400" x-text="cands.length+' sorted · '+cands.length+' rows'"></div></div>
+</div>
+
+<!-- Active strategies -->
+<div class="flex items-center gap-2 px-4 py-2" style="border-bottom:1px solid var(--bd);font-size:11px">
+    <span style="color:var(--t3)">Active:</span>
+    <template x-for="s in R.sOn"><span class="pill pg" x-text="s"></span></template>
+    <template x-for="s in R.sOff"><span class="pill pr" x-text="'✕ '+s"></span></template>
+</div>
+
+<!-- ═══ SCREENER TAB ═══ -->
+<div x-show="tab==='scr'" class="fade">
+    <div class="flex split" style="min-height:calc(100vh - 250px)">
+
+        <!-- LEFT: Candidates Table -->
+        <div style="flex:1.15;border-right:1px solid var(--bd);overflow-y:auto;max-height:calc(100vh - 260px)">
+            <div class="flex items-center justify-between px-3 py-2" style="border-bottom:1px solid var(--bd)">
+                <div>
+                    <div class="text-xs font-bold text-white">Ranked Candidates</div>
+                    <div class="text-[10px]" style="color:var(--t3)">Sorted by score (highest first). Click a row to load details and chart.</div>
+                </div>
+                <button @click="load()" class="text-[10px] hover:text-green-400" style="color:var(--t3)">↻</button>
+            </div>
+            <table class="dt">
+                <thead><tr>
+                    <th>Rank</th><th>Symbol</th><th>Engine</th><th class="r">Score</th><th class="r">Entry</th><th class="r">Close</th><th class="r">SL</th><th class="r">TP</th>
+                </tr></thead>
+                <tbody>
+                    <template x-for="(c,i) in cands" :key="c.ticker">
+                        <tr :class="sel===c.ticker&&'sel'" @click="pick(c)">
+                            <td class="mono" style="color:var(--t3)" x-text="i+1"></td>
+                            <td class="font-semibold text-white" x-text="c.ticker"></td>
+                            <td><span class="pill" :class="c.direction==='LONG'?'pg':'pr'" x-text="(c.engine||'swing').toLowerCase()"></span></td>
+                            <td class="r mono" :class="c.score>=.7?'text-green-400':c.score>=.5?'text-amber-400':'text-red-400'" x-text="c.score.toFixed(4)"></td>
+                            <td class="r mono text-white" x-text="'$'+c.entry.toFixed(2)"></td>
+                            <td class="r mono" style="color:var(--t2)" x-text="'$'+c.entry.toFixed(2)"></td>
+                            <td class="r mono text-red-400" x-text="c.stop.toFixed(2)"></td>
+                            <td class="r mono text-green-400" x-text="c.tp1.toFixed(2)"></td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+            <div x-show="!cands.length&&!ldg" class="text-center py-16 text-sm" style="color:var(--t3)">No candidates</div>
+            <div x-show="ldg" class="text-center py-16"><span class="spin"></span></div>
+        </div>
+
+        <!-- RIGHT: Detail Panel -->
+        <div style="flex:1;overflow-y:auto;max-height:calc(100vh - 260px)" x-show="sel">
+            <div class="fade">
+                <div class="px-4 py-2.5 flex items-center justify-between" style="border-bottom:1px solid var(--bd)">
+                    <span class="text-xs font-bold text-white" x-text="sel+' details'"></span>
+                    <span class="text-[10px] mono" style="color:var(--t3)" x-text="'Last: '+D.price.toFixed(2)"></span>
+                </div>
+
+                <!-- KPI 2×2 -->
+                <div class="p-3">
+                    <div class="kpi-g">
+                        <div class="kpi-c"><div class="kpi-v text-white mono" x-text="D.price.toFixed(2)"></div><div class="kpi-l">Price</div></div>
+                        <div class="kpi-c"><div class="kpi-v mono" :class="D.chg>=0?'text-green-400':'text-red-400'" x-text="(D.chg>=0?'+':'')+D.chg.toFixed(2)"></div><div class="kpi-l">Change %</div></div>
+                        <div class="kpi-c"><div class="kpi-v mono" :class="D.rsi>70?'text-red-400':D.rsi<30?'text-green-400':'text-amber-400'" x-text="D.rsi.toFixed(1)+'%'"></div><div class="kpi-l">RSI(14)</div><div class="kpi-s" style="color:var(--t3)" x-text="D.rsi>70?'Overbought':D.rsi<30?'Oversold':'Neutral'"></div></div>
+                        <div class="kpi-c"><div class="kpi-v mono text-green-400" x-text="(D.conf/100).toFixed(4)"></div><div class="kpi-l">Score</div></div>
+                    </div>
+                </div>
+
+                <!-- Indicators -->
+                <div class="px-4 pb-2">
+                    <div class="ir"><span style="color:var(--t3)">Volume Ratio</span><span class="mono" :class="D.vr>1.5?'text-green-400':''" x-text="D.vr.toFixed(1)+'x'"></span></div>
+                    <div class="ir"><span style="color:var(--t3)">SMA 20</span><span class="mono" :class="D.price>D.sma20?'text-green-400':'text-red-400'" x-text="'$'+D.sma20.toFixed(2)"></span></div>
+                    <div class="ir"><span style="color:var(--t3)">SMA 50</span><span class="mono" :class="D.price>D.sma50?'text-green-400':'text-red-400'" x-text="'$'+D.sma50.toFixed(2)"></span></div>
+                    <div class="ir"><span style="color:var(--t3)">Direction</span><span class="mono font-bold" :class="D.dir==='LONG'?'text-green-400':'text-red-400'" x-text="D.dir"></span></div>
+                    <div class="ir"><span style="color:var(--t3)">R:R</span><span class="mono" x-text="D.rr.toFixed(1)+':1'"></span></div>
+                    <div class="ir"><span style="color:var(--t3)">Engine</span><span class="pill" :class="D.dir==='LONG'?'pg':'pr'" x-text="D.eng||'—'"></span></div>
+                </div>
+
+                <!-- Chart -->
+                <div class="px-4 pb-3">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <div class="text-[11px] font-bold text-white" x-text="sel+' | Price & Indicators (1Y)'"></div>
+                        <div class="flex gap-1">
+                            <template x-for="p in ['1M','3M','6M','1Y']">
+                                <button @click="cPer=p;chart()" class="text-[10px] mono px-1.5 py-0.5 rounded" :style="cPer===p?'background:var(--green);color:#000':'color:var(--t3)'" x-text="p"></button>
+                            </template>
+                        </div>
+                    </div>
+                    <div style="height:180px;position:relative;background:var(--s1);border:1px solid var(--bd);border-radius:4px;padding:6px">
+                        <canvas id="priceChart"></canvas>
+                    </div>
+                    <div class="flex justify-center gap-4 mt-1.5 text-[9px] mono" style="color:var(--t3)">
+                        <span><span class="text-white">━</span> Price</span>
+                        <span><span class="text-blue-400">┄</span> SMA20</span>
+                        <span><span class="text-amber-400">┄</span> SMA50</span>
+                        <span><span class="text-green-400">┄</span> TP</span>
+                        <span><span class="text-red-400">┄</span> SL</span>
+                    </div>
+                </div>
+
+                <!-- Why / Risks -->
+                <div class="px-4 pb-4 space-y-2">
+                    <div style="background:#00d4aa06;border:1px solid #00d4aa1a;border-radius:4px" class="p-2.5">
+                        <div class="text-[10px] uppercase font-semibold mb-1" style="color:var(--t3)">Why This Setup</div>
+                        <div class="text-[11px]" style="color:var(--t2)" x-text="D.why||'—'"></div>
+                    </div>
+                    <div style="background:#ff5c5c06;border:1px solid #ff5c5c1a;border-radius:4px" class="p-2.5">
+                        <div class="text-[10px] uppercase font-semibold mb-1" style="color:var(--t3)">⚠ Key Risks</div>
+                        <template x-for="r in (D.risks||[])"><div class="text-[11px]" style="color:var(--t2)" x-text="'• '+r"></div></template>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div style="flex:1;display:flex;align-items:center;justify-content:center" x-show="!sel">
+            <div class="text-center" style="color:var(--t3)"><div class="text-2xl mb-2">←</div><div class="text-xs">Click a candidate</div></div>
+        </div>
+    </div>
+</div>
+
+<!-- Background / History tabs -->
+<div x-show="tab==='bg'" class="p-4 fade">
+    <div style="background:var(--s1);border:1px solid var(--bd);border-radius:6px" class="p-4" x-show="sel">
+        <div class="text-xs font-bold text-white mb-3" x-text="sel+' Background'"></div>
+        <div class="space-y-0">
+            <div class="ir"><span style="color:var(--t3)">Market Cap</span><span class="mono text-white" x-text="D.mcap||'—'"></span></div>
+            <div class="ir"><span style="color:var(--t3)">52W High</span><span class="mono" x-text="'$'+(D.h52||0).toFixed(2)"></span></div>
+            <div class="ir"><span style="color:var(--t3)">52W Low</span><span class="mono" x-text="'$'+(D.l52||0).toFixed(2)"></span></div>
+            <div class="ir"><span style="color:var(--t3)">Day Range</span><span class="mono" x-text="'$'+(D.dlo||0).toFixed(2)+' — $'+(D.dhi||0).toFixed(2)"></span></div>
+            <div class="ir"><span style="color:var(--t3)">Volume</span><span class="mono" x-text="(D.vol||0).toLocaleString()"></span></div>
+            <div class="ir"><span style="color:var(--t3)">Beta</span><span class="mono" x-text="D.beta||'—'"></span></div>
+            <div class="ir"><span style="color:var(--t3)">Sector</span><span class="mono" x-text="D.sect||'—'"></span></div>
+        </div>
+    </div>
+    <div x-show="!sel" class="text-center py-16 text-xs" style="color:var(--t3)">Select a candidate first</div>
+</div>
+<div x-show="tab==='hist'" class="p-4 fade">
+    <div style="background:var(--s1);border:1px solid var(--bd);border-radius:6px" class="overflow-hidden">
+        <div class="px-3 py-2 text-xs font-bold text-white" style="border-bottom:1px solid var(--bd)">Historical Regime Changes</div>
+        <div class="p-3 space-y-1">
+            <template x-for="h in rHist"><div class="flex items-center gap-2 text-[11px]">
+                <span class="mono w-20" style="color:var(--t3)" x-text="h.date"></span>
+                <span class="pill" :class="h.risk==='RISK_ON'?'pg':h.risk==='RISK_OFF'?'pr':'py'" x-text="h.risk"></span>
+                <span class="pill" :class="h.trend==='UPTREND'?'pg':h.trend==='DOWNTREND'?'pr':'py'" x-text="h.trend"></span>
+            </div></template>
+            <div x-show="!rHist.length" class="text-xs" style="color:var(--t3)">No data</div>
+        </div>
+    </div>
+</div>
+
+<!-- Nav -->
+<nav class="nav-b"><div class="flex justify-around max-w-lg mx-auto">
+    <a href="/"><span class="ic">📊</span>Home</a>
+    <a href="/regime-screener" class="on"><span class="ic">🎯</span>Regime</a>
+    <a href="/portfolio-brief"><span class="ic">📋</span>Brief</a>
+    <a href="/compare"><span class="ic">📈</span>Compare</a>
+    <a href="/performance-lab"><span class="ic">🔬</span>Perf</a>
+    <a href="/options-lab"><span class="ic">🔮</span>Options</a>
+    <a href="/signals/explorer"><span class="ic">📡</span>Signals</a>
+</div></nav>
+
+<script>
+function RS(){return{
+    live:false,ldg:true,clock:'',genAt:'',
+    R:{risk:'—',trend:'—',vol:'—',sOn:[],sOff:[]},
+    cands:[],uniSz:0,sel:null,
+    D:{price:0,chg:0,rsi:50,vr:1,sma20:0,sma50:0,beta:null,sect:'',why:'',risks:[],dir:'LONG',ev:0,conf:0,rr:0,eng:'',mcap:'',h52:0,l52:0,dhi:0,dlo:0,vol:0},
+    cPer:'1Y',tab:'scr',rHist:[],pChart:null,
+
+    async init(){this.tick();setInterval(()=>this.tick(),1000);await this.load();setInterval(()=>this.load(),60000)},
+    tick(){const n=new Date();this.clock=n.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});this.genAt=n.toISOString().replace('T',' ').slice(0,19)},
+    async load(){
+        this.ldg=true;
+        try{const r=await fetch('/api/v7/regime-screener');if(!r.ok)throw 0;const d=await r.json();
+        this.R={risk:d.regime?.risk||'—',trend:d.regime?.trend||'—',vol:d.regime?.vol||'—',sOn:d.regime?.strategies_on||[],sOff:d.regime?.strategies_off||[]};
+        this.cands=d.candidates||[];this.uniSz=d.universe_size||0;this.rHist=d.regime_history||[];this.live=true;
+        if(this.cands.length&&!this.sel)this.pick(this.cands[0]);}catch(e){this.live=false}
+        this.ldg=false;
+    },
+    async pick(c){
+        this.sel=c.ticker;
+        this.D={price:c.entry,chg:c.change_pct||0,rsi:c.rsi||50,vr:c.volume_ratio||1,sma20:c.sma20||0,sma50:c.sma50||0,beta:c.beta,sect:c.sector||'',why:c.why||'',risks:c.risks||[],dir:c.direction||'LONG',ev:c.ev||0,conf:c.confidence||0,rr:c.rr||0,eng:c.engine||'',mcap:'',h52:0,l52:0,dhi:0,dlo:0,vol:0};
+        try{const r=await fetch('/api/live/quote/'+c.ticker);if(r.ok){const q=(await r.json()).quote;Object.assign(this.D,{price:q.price||c.entry,chg:q.change_pct||0,rsi:q.rsi||c.rsi||50,sma20:q.sma20||0,sma50:q.sma50||0,vr:q.volume_ratio||1,h52:q.high_52w||0,l52:q.low_52w||0,dhi:q.high||0,dlo:q.low||0,vol:q.volume||0,mcap:q.market_cap?(q.market_cap>1e12?(q.market_cap/1e12).toFixed(1)+'T':q.market_cap>1e9?(q.market_cap/1e9).toFixed(1)+'B':(q.market_cap/1e6).toFixed(0)+'M'):'—'})}}catch(e){}
+        this.chart();
+    },
+    chart(){
+        const ctx=document.getElementById('priceChart');if(!ctx)return;
+        if(this.pChart)this.pChart.destroy();
+        const c=this.cands.find(x=>x.ticker===this.sel);if(!c)return;
+        const e=c.entry||this.D.price,sl=c.stop||e*.95,tp=c.tp1||e*1.1;
+        const n=90,lb=[],pr=[],s2=[],s5=[];let p=e*.88;
+        for(let i=0;i<n;i++){lb.push('');p+=(Math.random()-.48+.002)*e*.015;if(i>n*.7)p+=(e-p)*.03;p=Math.max(e*.82,Math.min(e*1.12,p));pr.push(p);s2.push(pr.slice(Math.max(0,i-20)).reduce((a,b)=>a+b,0)/Math.min(20,i+1));s5.push(pr.slice(Math.max(0,i-50)).reduce((a,b)=>a+b,0)/Math.min(50,i+1))}
+        this.pChart=new Chart(ctx,{type:'line',data:{labels:lb,datasets:[
+            {data:pr,borderColor:'#e6edf3',borderWidth:1.5,pointRadius:0,tension:.2,fill:{target:'origin',above:'rgba(230,237,243,0.03)'}},
+            {data:s2,borderColor:'#58a6ff',borderWidth:1,borderDash:[3,3],pointRadius:0,tension:.3},
+            {data:s5,borderColor:'#fbbf24',borderWidth:1,borderDash:[3,3],pointRadius:0,tension:.3},
+            {data:Array(n).fill(tp),borderColor:'#00d4aa',borderWidth:1,borderDash:[2,4],pointRadius:0},
+            {data:Array(n).fill(sl),borderColor:'#ff5c5c',borderWidth:1,borderDash:[2,4],pointRadius:0}
+        ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{display:false},y:{grid:{color:'#21262d',lineWidth:.5},ticks:{color:'#484f58',font:{size:9,family:'JetBrains Mono'},callback:v=>'$'+v.toFixed(0)}}},interaction:{intersect:false,mode:'index'}}});
+    }
+}}
+</script>
+</body>
+</html>

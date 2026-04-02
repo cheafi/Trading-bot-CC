@@ -1,0 +1,50 @@
+681:                 horizon="swing",
+682:                 exit_reason=reason,
+683:                 hold_hours=(
+684:                     (closed_pos.exit_date - closed_pos.entry_date).total_seconds() / 3600
+685:                     if closed_pos.entry_date and closed_pos.exit_date
+686:                     else 0
+687:                 ),
+688:             )
+689:             self.learning_loop.record_outcome(record)
+690:             logger.info(
+691:                 "Recorded learning outcome: %s %s %.2f%%",
+692:                 closed_pos.ticker, reason, closed_pos.realized_pnl_pct,
+693:             )
+694:         except Exception as e:
+695:             logger.warning("Learning loop record error: %s", e)
+696: 
+697:     async def _get_equity(self) -> float:
+698:         try:
+699:             from src.brokers.broker_manager import BrokerManager
+700:             manager = BrokerManager()
+701:             await manager.initialize()
+702:             account = await manager.get_account()
+703:             return getattr(account, "portfolio_value", 100000.0)
+704:         except Exception:
+705:             return 100000.0
+706: 
+707:     async def _count_positions(self) -> int:
+708:         try:
+709:             from src.brokers.broker_manager import BrokerManager
+710:             manager = BrokerManager()
+711:             await manager.initialize()
+712:             positions = await manager.get_positions()
+713:             return len(positions)
+714:         except Exception:
+715:             return 0
+716: 
+717:     async def _send_status_update(self):
+718:         """Send periodic status update to all channels."""
+719:         try:
+720:             from src.notifications.multi_channel import MultiChannelNotifier
+721:             notifier = MultiChannelNotifier()
+722:             status = (
+723:                 f"📊 TradingAI Status Update\n"
+724:                 f"Cycle: {self._cycle_count}\n"
+725:                 f"Signals today: {len(self._signals_today)}\n"
+726:                 f"Trades today: {len(self._trades_today)}\n"
+727:                 f"Circuit breaker: {'🔴 Active' if self.circuit_breaker.triggered else '🟢 OK'}"
+728:             )
+729:             await notifier.send_message(status)
+730:         except Exception as e:

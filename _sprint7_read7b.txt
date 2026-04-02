@@ -1,0 +1,19 @@
+36: class UniverseFilter:
+150: class ScoreUnifier:
+204: class EdgeChecklist:
+307: class SignalDedup:
+317:     def resolve_conflicts(signals: List[Signal]) -> Tuple[List[Signal], List[Dict]]:
+323:         by_ticker: Dict[str, List[Signal]] = defaultdict(list)
+327:         kept: List[Signal] = []
+363: class RegimeDetector:
+503: class RiskModel:
+519:         signals: List[Signal],
+521:     ) -> List[Signal]:
+598: class SignalEngine:
+662:     def generate_signals(
+672:     ) -> List[Signal]:
+930:         signals: List[Signal],
+1182:     async def generate_signals_async(
+1188:     ) -> List[Signal]:
+1199: class SignalValidator:
+1260:     def validate_signals(self, signals: List[Signal]) -> List[Signal]:

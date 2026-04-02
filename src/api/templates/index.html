@@ -1,450 +1,1175 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#00d4aa">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"
+    />
+    <meta name="theme-color" content="#0d1117" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
     <title>TradingAI Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script
+      defer
+      src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"
+    ></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <style>
-        *{font-family:'Inter',sans-serif;-webkit-tap-highlight-color:transparent}
-        body{background:#0b0e14;color:#e2e8f0;overflow-x:hidden}
-        .card{background:#141820;border:1px solid #1e2433;border-radius:14px;transition:all .2s}
-        .card:active{transform:scale(0.98)}
-        .g{color:#00d4aa}.r{color:#ff5c5c}.y{color:#fbbf24}.w{color:#e2e8f0}
-        .pill{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
-        .pill-g{background:#00d4aa20;color:#00d4aa}.pill-r{background:#ff5c5c20;color:#ff5c5c}.pill-y{background:#fbbf2420;color:#fbbf24}
-        .btn{padding:10px 18px;border-radius:10px;font-weight:600;font-size:14px;cursor:pointer;border:none;transition:all .15s}
-        .btn:active{transform:scale(0.96)}
-        .btn-p{background:linear-gradient(135deg,#00d4aa,#0ea5e9);color:#fff}
-        .btn-s{background:#1e2433;color:#94a3b8;border:1px solid #2d3654}
-        .btn-s:hover{border-color:#00d4aa;color:#00d4aa}
-        input,select{background:#141820;border:1px solid #1e2433;color:#e2e8f0;border-radius:10px;padding:10px 14px;font-size:14px;outline:none;width:100%}
-        input:focus,select:focus{border-color:#00d4aa}
-        .bar{background:#1e2433;border-radius:6px;height:6px;overflow:hidden}
-        .bar-f{background:linear-gradient(90deg,#00d4aa,#0ea5e9);height:100%;border-radius:6px;transition:width .6s}
-        .tab{padding:10px 0;font-size:13px;font-weight:500;color:#64748b;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
-        .tab-a{color:#00d4aa;border-color:#00d4aa;font-weight:700}
-        .spin{display:inline-block;width:16px;height:16px;border:2px solid #1e2433;border-top-color:#00d4aa;border-radius:50%;animation:sp .5s linear infinite}
-        @keyframes sp{to{transform:rotate(360deg)}}
-        .fade-in{animation:fi .3s ease}@keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-        .no-scroll::-webkit-scrollbar{display:none}
-        .safe-b{padding-bottom:env(safe-area-inset-bottom,20px)}
+      :root {
+        --bg: #0d1117;
+        --s1: #161b22;
+        --s2: #1c2333;
+        --bd: #21262d;
+        --bd2: #30363d;
+        --t1: #e6edf3;
+        --t2: #8b949e;
+        --t3: #484f58;
+        --green: #00d4aa;
+        --red: #ff5c5c;
+        --amber: #fbbf24;
+        --blue: #58a6ff;
+      }
+      * {
+        font-family: "Inter", sans-serif;
+        box-sizing: border-box;
+        margin: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--t1);
+        overflow-x: hidden;
+      }
+      .mono {
+        font-family: "JetBrains Mono", monospace;
+      }
+      .card {
+        background: var(--s1);
+        border: 1px solid var(--bd);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .card-p {
+        padding: 14px;
+      }
+      .pill {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 6px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+      }
+      .pg {
+        background: rgba(0, 212, 170, 0.12);
+        color: var(--green);
+      }
+      .pr {
+        background: rgba(255, 92, 92, 0.12);
+        color: var(--red);
+      }
+      .pa {
+        background: rgba(251, 191, 36, 0.12);
+        color: var(--amber);
+      }
+      .pb {
+        background: rgba(88, 166, 255, 0.12);
+        color: var(--blue);
+      }
+      .pw {
+        background: rgba(230, 237, 243, 0.08);
+        color: var(--t2);
+      }
+      .tab-bar {
+        display: flex;
+        gap: 2px;
+        padding: 6px 12px;
+        background: var(--s1);
+        border-bottom: 1px solid var(--bd);
+        overflow-x: auto;
+      }
+      .tab-btn {
+        padding: 6px 14px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--t2);
+        background: none;
+        border: none;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: 0.15s;
+      }
+      .tab-btn.on {
+        background: var(--s2);
+        color: var(--t1);
+        box-shadow: 0 0 0 1px var(--bd2);
+      }
+      .nav-b {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: var(--s1);
+        border-top: 1px solid var(--bd);
+        padding: 6px 0 max(env(safe-area-inset-bottom), 6px);
+        z-index: 50;
+      }
+      .nav-b a {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        font-size: 9px;
+        color: var(--t3);
+        text-decoration: none;
+        gap: 2px;
+        padding: 2px 0;
+      }
+      .nav-b a.on {
+        color: var(--green);
+      }
+      .nav-b .ic {
+        font-size: 16px;
+      }
+      .scroll-row {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        padding-bottom: 4px;
+        scrollbar-width: none;
+      }
+      .scroll-row::-webkit-scrollbar {
+        display: none;
+      }
+      input,
+      select {
+        background: var(--s2);
+        border: 1px solid var(--bd);
+        border-radius: 6px;
+        padding: 8px 10px;
+        color: var(--t1);
+        font-size: 12px;
+        width: 100%;
+      }
+      input:focus,
+      select:focus {
+        outline: none;
+        border-color: var(--blue);
+      }
+      .btn-p {
+        background: var(--green);
+        color: #000;
+        font-weight: 700;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 16px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .btn-p:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .btn-s {
+        background: var(--s2);
+        color: var(--t2);
+        font-weight: 600;
+        border: 1px solid var(--bd);
+        border-radius: 6px;
+        padding: 6px 12px;
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .spin {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border: 2px solid var(--t3);
+        border-top-color: var(--green);
+        border-radius: 50%;
+        animation: sp 0.6s linear infinite;
+      }
+      @keyframes sp {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .fade {
+        animation: fi 0.3s ease;
+      }
+      @keyframes fi {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      .kpi-strip {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        padding: 10px 12px;
+      }
+      .kpi-box {
+        background: var(--s1);
+        border: 1px solid var(--bd);
+        border-radius: 8px;
+        padding: 10px;
+        text-align: center;
+      }
+      .kpi-val {
+        font-size: 18px;
+        font-weight: 800;
+        line-height: 1.2;
+      }
+      .kpi-lbl {
+        font-size: 9px;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: var(--t3);
+        letter-spacing: 0.5px;
+        margin-top: 2px;
+      }
+      .section-hdr {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: var(--t3);
+        letter-spacing: 0.5px;
+        padding: 0 12px;
+        margin-top: 12px;
+        margin-bottom: 6px;
+      }
+      .qa-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+        padding: 0 12px;
+      }
+      .qa-card {
+        display: block;
+        background: var(--s1);
+        border: 1px solid var(--bd);
+        border-radius: 8px;
+        padding: 12px;
+        text-decoration: none;
+        transition: 0.15s;
+      }
+      .qa-card:hover {
+        border-color: var(--bd2);
+        background: var(--s2);
+      }
+      .qa-card .qa-icon {
+        font-size: 20px;
+        margin-bottom: 4px;
+      }
+      .qa-card .qa-title {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--t1);
+      }
+      .qa-card .qa-sub {
+        font-size: 9px;
+        color: var(--t3);
+        margin-top: 2px;
+      }
     </style>
-</head>
-<body x-data="app()" x-init="init()" class="safe-b">
-
-<!-- ═══ HEADER ═══ -->
-<header class="sticky top-0 z-50 px-4 py-3 flex items-center justify-between" style="background:#0b0e14ee;backdrop-filter:blur(12px)">
-    <div class="flex items-center gap-2.5">
-        <div class="w-8 h-8 bg-gradient-to-br from-green-400 to-cyan-500 rounded-lg flex items-center justify-center text-base">📈</div>
-        <div>
-            <div class="text-sm font-bold text-white leading-tight">TradingAI Pro</div>
-            <div class="text-[10px] text-gray-500">v6.41 · Live</div>
-        </div>
-    </div>
-    <div class="flex items-center gap-3 text-xs">
-        <span :class="live?'g':'r'" class="text-lg" x-text="live?'●':'○'"></span>
-        <span class="text-gray-500" x-text="clock"></span>
-    </div>
-</header>
-
-<!-- ═══ TAB BAR ═══ -->
-<nav class="px-4 flex gap-5 overflow-x-auto no-scroll border-b border-gray-800/50">
-    <template x-for="t in tabs">
-        <button @click="tab=t.id" class="tab flex-shrink-0" :class="tab===t.id&&'tab-a'" x-text="t.icon+' '+t.label"></button>
-    </template>
-</nav>
-
-<!-- ══════════════════════════════════════════════════════════════ -->
-<!-- TAB: HOME -->
-<!-- ══════════════════════════════════════════════════════════════ -->
-<main x-show="tab==='home'" class="px-4 py-4 space-y-4 fade-in">
-
-    <!-- AI Intelligence Card -->
-    <div class="card p-4">
-        <div class="flex items-center justify-between mb-2">
-            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">🧠 AI Intelligence</div>
-            <span class="pill" :class="regime.label==='RISK_ON'?'pill-g':regime.label==='RISK_OFF'?'pill-r':'pill-y'"
-                  x-text="regime.label||'LOADING'"></span>
-        </div>
-        <div class="flex items-center gap-3 mb-3">
-            <div>
-                <div class="text-2xl font-extrabold" :class="(regime.score||50)>60?'g':(regime.score||50)<40?'r':'y'"
-                     x-text="(regime.score||0)+'/100'"></div>
-                <div class="text-[11px] text-gray-500" x-text="'Trend: '+(regime.trend||'—')+' · Vol: '+(regime.vol||'—')"></div>
+  </head>
+  <body x-data="app()" x-init="init()" style="padding-bottom: 60px">
+    <!-- HEADER -->
+    <header
+      style="
+        background: var(--s1);
+        border-bottom: 1px solid var(--bd);
+        padding: 10px 14px;
+      "
+    >
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div
+            style="
+              width: 28px;
+              height: 28px;
+              border-radius: 6px;
+              background: linear-gradient(135deg, var(--green), var(--blue));
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 14px;
+            "
+          >
+            📊
+          </div>
+          <div>
+            <div class="text-sm font-bold text-white">TradingAI Pro</div>
+            <div class="text-[9px] mono" style="color: var(--t3)">
+              v6.41 · Sprint 41
             </div>
-            <div class="flex-1">
-                <div class="bar"><div class="bar-f" :style="'width:'+Math.min(100,regime.score||0)+'%'"></div></div>
-            </div>
+          </div>
         </div>
-        <div x-show="regime.strategies" class="flex flex-wrap gap-1.5">
-            <template x-for="s in (regime.strategies||[])">
-                <span class="pill pill-g" x-text="s"></span>
-            </template>
+        <div class="flex items-center gap-3">
+          <div
+            class="text-[10px] mono"
+            style="color: var(--t2)"
+            x-text="clock"
+          ></div>
+          <div class="flex items-center gap-1">
+            <div
+              style="width: 6px; height: 6px; border-radius: 50%"
+              :style="live?'background:var(--green)':'background:var(--red)'"
+            ></div>
+            <span
+              class="text-[9px]"
+              :style="live?'color:var(--green)':'color:var(--red)'"
+              x-text="live?'LIVE':'OFFLINE'"
+            ></span>
+          </div>
         </div>
+      </div>
+    </header>
+
+    <!-- TAB BAR -->
+    <div class="tab-bar">
+      <template x-for="t in tabs">
+        <button
+          class="tab-btn"
+          :class="tab===t.id?'on':''"
+          @click="tab=t.id"
+          x-text="t.icon+' '+t.label"
+        ></button>
+      </template>
     </div>
 
-    <!-- Key Indices — 2 column grid -->
-    <div class="grid grid-cols-2 gap-3">
-        <template x-for="item in indices">
-            <div class="card p-3">
-                <div class="text-[11px] text-gray-500 mb-0.5" x-text="item.name"></div>
-                <div class="text-base font-bold text-white" x-text="'$'+(item.price||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})"></div>
-                <span class="text-sm font-bold" :class="(item.change_pct||0)>=0?'g':'r'"
-                      x-text="((item.change_pct||0)>=0?'+':'')+(item.change_pct||0).toFixed(2)+'%'"></span>
+    <!-- ═══ HOME TAB ═══ -->
+    <main x-show="tab==='home'" class="fade">
+      <!-- KPI Strip -->
+      <div class="kpi-strip">
+        <div class="kpi-box">
+          <div
+            class="kpi-val mono"
+            :class="(regime.score||0)>=60?'text-green-400':(regime.score||0)>=40?'text-amber-300':'text-red-400'"
+            x-text="regime.score||'—'"
+          ></div>
+          <div class="kpi-lbl">AI Score</div>
+        </div>
+        <div class="kpi-box">
+          <div
+            class="kpi-val text-sm"
+            :class="regime.label==='RISK_ON'?'text-green-400':regime.label==='RISK_OFF'?'text-red-400':'text-amber-300'"
+            x-text="(regime.label||'—').replace('_',' ')"
+          ></div>
+          <div class="kpi-lbl">Regime</div>
+        </div>
+        <div class="kpi-box">
+          <div
+            class="kpi-val text-sm"
+            :class="regime.trend==='UPTREND'?'text-green-400':regime.trend==='DOWNTREND'?'text-red-400':'text-amber-300'"
+            x-text="regime.trend||'—'"
+          ></div>
+          <div class="kpi-lbl">Trend</div>
+        </div>
+        <div class="kpi-box">
+          <div
+            class="kpi-val text-sm"
+            :class="regime.vol==='LOW'?'text-green-400':regime.vol==='HIGH'?'text-red-400':'text-amber-300'"
+            x-text="regime.vol||'—'"
+          ></div>
+          <div class="kpi-lbl">Volatility</div>
+        </div>
+      </div>
+
+      <!-- Strategies -->
+      <template x-if="regime.strategies && regime.strategies.length">
+        <div
+          style="padding: 0 12px 4px; display: flex; gap: 4px; flex-wrap: wrap"
+        >
+          <span
+            class="text-[9px] font-bold uppercase"
+            style="color: var(--t3); margin-right: 4px"
+            >Playbook:</span
+          >
+          <template x-for="s in regime.strategies">
+            <span class="pill pb" x-text="s"></span>
+          </template>
+        </div>
+      </template>
+
+      <!-- US Indices -->
+      <div class="section-hdr">📈 US Indices</div>
+      <div
+        style="
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 6px;
+          padding: 0 12px;
+        "
+      >
+        <template x-for="i in indices">
+          <div class="card card-p" style="padding: 10px">
+            <div class="flex items-center justify-between">
+              <div
+                class="text-[10px] font-bold"
+                style="color: var(--t2)"
+                x-text="i.name"
+              ></div>
+              <span
+                class="pill mono"
+                :class="(i.change_pct||0)>=0?'pg':'pr'"
+                x-text="((i.change_pct||0)>=0?'+':'')+(i.change_pct||0).toFixed(2)+'%'"
+              ></span>
             </div>
+            <div
+              class="text-base font-bold mono text-white mt-1"
+              x-text="'$'+(i.price||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})"
+            ></div>
+          </div>
         </template>
-    </div>
+      </div>
 
-    <!-- Macro Row -->
-    <div>
-        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">🌍 Macro & Crypto</div>
-        <div class="flex gap-3 overflow-x-auto no-scroll pb-1">
-            <template x-for="item in macro">
-                <div class="card p-3 min-w-[120px] flex-shrink-0">
-                    <div class="text-[11px] text-gray-500" x-text="item.name"></div>
-                    <div class="text-sm font-bold text-white" x-text="(item.price||0)>=1000?'$'+(item.price||0).toLocaleString(undefined,{maximumFractionDigits:0}):'$'+(item.price||0).toFixed(2)"></div>
-                    <div class="text-xs font-bold" :class="(item.change_pct||0)>=0?'g':'r'" x-text="((item.change_pct||0)>=0?'+':'')+(item.change_pct||0).toFixed(2)+'%'"></div>
-                </div>
-            </template>
-        </div>
-    </div>
+      <!-- Macro -->
+      <div class="section-hdr" style="margin-top: 14px">
+        🌐 Macro Indicators
+      </div>
+      <div class="scroll-row" style="padding: 0 12px">
+        <template x-for="m in macro">
+          <div
+            class="card"
+            style="min-width: 120px; padding: 10px; flex-shrink: 0"
+          >
+            <div
+              class="text-[9px] font-bold"
+              style="color: var(--t3)"
+              x-text="m.name"
+            ></div>
+            <div
+              class="text-sm font-bold mono text-white"
+              x-text="m.symbol==='^VIX'?(m.price||0).toFixed(2):'$'+(m.price||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})"
+            ></div>
+            <div
+              class="text-[10px] mono"
+              :class="(m.change_pct||0)>=0?'text-green-400':'text-red-400'"
+              x-text="((m.change_pct||0)>=0?'+':'')+(m.change_pct||0).toFixed(2)+'%'"
+            ></div>
+          </div>
+        </template>
+      </div>
 
-    <!-- Sectors -->
-    <div>
-        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">🏭 Sectors</div>
-        <div class="grid grid-cols-3 gap-2">
-            <template x-for="item in sectors">
-                <div class="card p-2.5 text-center">
-                    <div class="text-[10px] text-gray-500 truncate" x-text="item.name"></div>
-                    <div class="text-sm font-bold" :class="(item.change_pct||0)>=0?'g':'r'"
-                         x-text="((item.change_pct||0)>=0?'+':'')+(item.change_pct||0).toFixed(2)+'%'"></div>
-                </div>
-            </template>
-        </div>
-    </div>
+      <!-- Sectors -->
+      <div class="section-hdr" style="margin-top: 14px">
+        📊 Sector Performance
+      </div>
+      <div
+        style="
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 4px;
+          padding: 0 12px;
+        "
+      >
+        <template x-for="s in sectors">
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              padding: 6px 10px;
+              background: var(--s1);
+              border: 1px solid var(--bd);
+              border-radius: 6px;
+            "
+          >
+            <span
+              class="text-[10px]"
+              style="color: var(--t2)"
+              x-text="s.name"
+            ></span>
+            <span
+              class="text-[10px] mono font-bold"
+              :class="(s.change_pct||0)>=0?'text-green-400':'text-red-400'"
+              x-text="((s.change_pct||0)>=0?'+':'')+(s.change_pct||0).toFixed(2)+'%'"
+            ></span>
+          </div>
+        </template>
+      </div>
 
-    <!-- Asia -->
-    <div>
-        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">🌏 Asia</div>
-        <div class="flex gap-3 overflow-x-auto no-scroll pb-1">
-            <template x-for="item in asia">
-                <div class="card p-2.5 min-w-[100px] flex-shrink-0 text-center">
-                    <div class="text-[10px] text-gray-500" x-text="item.name"></div>
-                    <div class="text-xs font-bold" :class="(item.change_pct||0)>=0?'g':'r'" x-text="((item.change_pct||0)>=0?'+':'')+(item.change_pct||0).toFixed(2)+'%'"></div>
-                </div>
-            </template>
-        </div>
-    </div>
+      <!-- Asia-Pacific -->
+      <div class="section-hdr" style="margin-top: 14px">
+        🌏 Asia-Pacific Markets
+      </div>
+      <div class="scroll-row" style="padding: 0 12px">
+        <template x-for="a in asia">
+          <div
+            class="card"
+            style="min-width: 110px; padding: 10px; flex-shrink: 0"
+          >
+            <div
+              class="text-[9px] font-bold"
+              style="color: var(--t3)"
+              x-text="a.name"
+            ></div>
+            <div
+              class="text-xs font-bold mono text-white"
+              x-text="(a.price||0).toLocaleString(undefined,{maximumFractionDigits:0})"
+            ></div>
+            <div
+              class="text-[10px] mono"
+              :class="(a.change_pct||0)>=0?'text-green-400':'text-red-400'"
+              x-text="((a.change_pct||0)>=0?'+':'')+(a.change_pct||0).toFixed(2)+'%'"
+            ></div>
+          </div>
+        </template>
+      </div>
 
-    <!-- Universe stats -->
-    <div class="card p-4">
-        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">📡 Universe</div>
-        <div class="grid grid-cols-4 gap-2 text-center text-xs">
-            <div><div class="text-base font-bold g">2,751</div><div class="text-gray-500">US</div></div>
-            <div><div class="text-base font-bold w">78</div><div class="text-gray-500">HK</div></div>
-            <div><div class="text-base font-bold w">60</div><div class="text-gray-500">JP</div></div>
-            <div><div class="text-base font-bold y">63</div><div class="text-gray-500">Crypto</div></div>
-        </div>
-        <div class="text-center mt-2 text-[10px] text-gray-600">3,003 tickers · 65 commands · 8 markets</div>
-    </div>
-</main>
-
-<!-- ══════════════════════════════════════════════════════════════ -->
-<!-- TAB: BACKTEST -->
-<!-- ══════════════════════════════════════════════════════════════ -->
-<main x-show="tab==='backtest'" class="px-4 py-4 space-y-4 fade-in">
-    <div class="card p-4">
-        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">🔬 Strategy Backtester</div>
-        <div class="space-y-3">
-            <div class="grid grid-cols-2 gap-3">
-                <div>
-                    <label class="text-[11px] text-gray-500 block mb-1">Ticker</label>
-                    <input type="text" x-model="bt.ticker" placeholder="AAPL" class="uppercase">
-                </div>
-                <div>
-                    <label class="text-[11px] text-gray-500 block mb-1">Strategy</label>
-                    <select x-model="bt.strategy">
-                        <option value="all">All (compare)</option>
-                        <option value="swing">Swing</option>
-                        <option value="breakout">Breakout</option>
-                        <option value="momentum">Momentum</option>
-                        <option value="mean_reversion">Mean Reversion</option>
-                    </select>
-                </div>
+      <!-- Quick Access -->
+      <div class="section-hdr" style="margin-top: 16px">⚡ Quick Access</div>
+      <div class="qa-grid" style="margin-bottom: 16px">
+        <a href="/regime-screener" class="qa-card">
+          <div class="qa-icon">🎯</div>
+          <div class="qa-title">Regime Screener</div>
+          <div class="qa-sub">AI scoring + filtering</div>
+        </a>
+        <a href="/portfolio-brief" class="qa-card">
+          <div class="qa-icon">📋</div>
+          <div class="qa-title">Portfolio Brief</div>
+          <div class="qa-sub">Daily intelligence report</div>
+        </a>
+        <a href="/compare" class="qa-card">
+          <div class="qa-icon">📈</div>
+          <div class="qa-title">Compare</div>
+          <div class="qa-sub">Multi-ticker overlay</div>
+        </a>
+        <a href="/performance-lab" class="qa-card">
+          <div class="qa-icon">🔬</div>
+          <div class="qa-title">Performance Lab</div>
+          <div class="qa-sub">FinLab-style metrics</div>
+        </a>
+        <a href="/options-lab" class="qa-card">
+          <div class="qa-icon">🔮</div>
+          <div class="qa-title">Options Lab</div>
+          <div class="qa-sub">Options analysis report</div>
+        </a>
+        <a href="/signals/explorer" class="qa-card">
+          <div class="qa-icon">📡</div>
+          <div class="qa-title">Signal Explorer</div>
+          <div class="qa-sub">Browse trading signals</div>
+        </a>
+        <a
+          href="/macro-intel"
+          class="qa-card"
+          style="border-color: var(--amber); grid-column: span 2"
+        >
+          <div class="flex items-center gap-3">
+            <div class="qa-icon" style="font-size: 24px">🌍</div>
+            <div>
+              <div class="qa-title" style="font-size: 12px">
+                Macro Intelligence
+              </div>
+              <div class="qa-sub">
+                Rates · Political Risk · War/Geopolitical · Insider Holdings ·
+                Correlations
+              </div>
             </div>
-            <div class="grid grid-cols-2 gap-3">
-                <div>
-                    <label class="text-[11px] text-gray-500 block mb-1">Start Date</label>
-                    <input type="date" x-model="bt.startDate">
-                </div>
-                <div>
-                    <label class="text-[11px] text-gray-500 block mb-1">End Date</label>
-                    <input type="date" x-model="bt.endDate">
-                </div>
-            </div>
-            <button @click="runBacktest()" class="btn btn-p w-full" :disabled="bt.loading">
-                <span x-show="!bt.loading">▶ Run Backtest</span>
-                <span x-show="bt.loading" class="flex items-center justify-center gap-2"><span class="spin"></span> Running...</span>
+          </div>
+        </a>
+      </div>
+    </main>
+
+    <!-- ═══ BACKTEST TAB ═══ -->
+    <main x-show="tab==='backtest'" class="p-4 space-y-3 fade">
+      <div class="card card-p">
+        <div
+          class="text-[10px] font-bold uppercase mb-3"
+          style="color: var(--t3)"
+        >
+          🔬 Backtest Engine
+        </div>
+        <div class="space-y-2">
+          <input
+            type="text"
+            x-model="bt.ticker"
+            placeholder="Ticker (e.g. AAPL)"
+            style="text-transform: uppercase"
+          />
+          <select x-model="bt.strategy">
+            <option value="all">All Strategies</option>
+            <option value="swing">Swing Trading</option>
+            <option value="breakout">Breakout / VCP</option>
+            <option value="momentum">Momentum</option>
+            <option value="mean_reversion">Mean Reversion</option>
+          </select>
+          <div class="flex gap-2">
+            <select x-model="bt.period" class="flex-1">
+              <option value="1mo">1 Month</option>
+              <option value="3mo">3 Months</option>
+              <option value="6mo">6 Months</option>
+              <option value="1y" selected>1 Year</option>
+              <option value="2y">2 Years</option>
+            </select>
+            <button
+              @click="runBT()"
+              class="btn-p flex-shrink-0 px-6"
+              :disabled="bt.loading"
+            >
+              <span x-show="!bt.loading">Run</span
+              ><span x-show="bt.loading"><span class="spin"></span></span>
             </button>
-            <!-- Quick periods -->
-            <div class="flex gap-2 flex-wrap">
-                <template x-for="p in ['1mo','3mo','6mo','1y','2y']">
-                    <button @click="bt.startDate='';bt.endDate='';bt.period=p;runBacktest()"
-                            class="btn btn-s text-xs py-1.5 px-3" x-text="p"></button>
-                </template>
+          </div>
+        </div>
+      </div>
+      <template x-if="bt.result">
+        <div class="space-y-2 fade">
+          <div class="card card-p">
+            <div class="flex items-center justify-between mb-2">
+              <div
+                class="text-sm font-bold text-white mono"
+                x-text="bt.result.ticker||bt.ticker"
+              ></div>
+              <span
+                class="pill pg"
+                x-text="bt.result.best_strategy?.replace('_',' ')"
+              ></span>
             </div>
-        </div>
-    </div>
-
-    <!-- Results -->
-    <template x-if="bt.result">
-        <div class="space-y-3 fade-in">
-            <div class="card p-4">
-                <div class="flex items-center justify-between mb-2">
-                    <div class="text-sm font-bold text-white" x-text="'📊 '+bt.result.ticker+' — '+bt.result.period"></div>
-                    <span class="pill pill-g" x-text="bt.result.best_strategy?.replace('_',' ')"></span>
-                </div>
-                <div class="grid grid-cols-3 gap-3 text-center text-xs">
-                    <div><div class="text-gray-500">Buy&Hold</div><div class="text-sm font-bold" :class="(bt.result.benchmark_return||0)>=0?'g':'r'" x-text="((bt.result.benchmark_return||0)>=0?'+':'')+(bt.result.benchmark_return||0)+'%'"></div></div>
-                    <div><div class="text-gray-500">Best Return</div><div class="text-sm font-bold g" x-text="bt.result.strategies?.[0]?.total_return+'%'||'—'"></div></div>
-                    <div><div class="text-gray-500">Bars</div><div class="text-sm font-bold w" x-text="bt.result.bars||0"></div></div>
-                </div>
+            <div
+              style="
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 8px;
+                text-align: center;
+                font-size: 11px;
+              "
+            >
+              <div>
+                <div style="color: var(--t3)">Buy&Hold</div>
+                <div
+                  class="font-bold mono"
+                  :class="(bt.result.benchmark_return||0)>=0?'text-green-400':'text-red-400'"
+                  x-text="((bt.result.benchmark_return||0)>=0?'+':'')+(bt.result.benchmark_return||0)+'%'"
+                ></div>
+              </div>
+              <div>
+                <div style="color: var(--t3)">Best</div>
+                <div
+                  class="font-bold mono text-green-400"
+                  x-text="bt.result.strategies?.[0]?.total_return+'%'||'—'"
+                ></div>
+              </div>
+              <div>
+                <div style="color: var(--t3)">Bars</div>
+                <div
+                  class="font-bold mono text-white"
+                  x-text="bt.result.bars||0"
+                ></div>
+              </div>
             </div>
-            <template x-for="(s, i) in (bt.result.strategies||[])">
-                <div class="card p-3 fade-in" :class="i===0&&'border-green-500/40'">
-                    <div class="flex items-center justify-between mb-2">
-                        <div class="flex items-center gap-2">
-                            <span class="text-base" x-text="i===0?'🥇':i===1?'🥈':i===2?'🥉':'#'+(i+1)"></span>
-                            <span class="text-sm font-bold text-white" x-text="(s.strategy||'').replace('_',' ').replace(/\b\w/g,l=>l.toUpperCase())"></span>
-                        </div>
-                        <span class="text-xs text-gray-400" x-text="'Score '+s.score"></span>
-                    </div>
-                    <div class="grid grid-cols-3 gap-2 text-xs text-center">
-                        <div><div class="text-gray-500">Trades</div><div class="font-bold w" x-text="s.total_trades||0"></div></div>
-                        <div><div class="text-gray-500">Win</div><div class="font-bold" :class="(s.win_rate||0)>50?'g':'r'" x-text="(s.win_rate||0)+'%'"></div></div>
-                        <div><div class="text-gray-500">Return</div><div class="font-bold" :class="(s.total_return||0)>=0?'g':'r'" x-text="((s.total_return||0)>=0?'+':'')+(s.total_return||0)+'%'"></div></div>
-                        <div><div class="text-gray-500">Sharpe</div><div class="font-bold w" x-text="s.sharpe||0"></div></div>
-                        <div><div class="text-gray-500">Max DD</div><div class="font-bold r" x-text="(s.max_drawdown||0)+'%'"></div></div>
-                        <div><div class="text-gray-500">P.Factor</div><div class="font-bold w" x-text="s.profit_factor||0"></div></div>
-                    </div>
+          </div>
+          <template x-for="(s,i) in (bt.result.strategies||[])">
+            <div
+              class="card card-p fade"
+              :style="i===0?'border-color:var(--green)':''"
+            >
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                  <span
+                    class="text-base"
+                    x-text="i===0?'🥇':i===1?'🥈':i===2?'🥉':'#'+(i+1)"
+                  ></span>
+                  <span
+                    class="text-sm font-bold text-white"
+                    x-text="(s.strategy||'').replace('_',' ').replace(/\b\w/g,l=>l.toUpperCase())"
+                  ></span>
                 </div>
-            </template>
+                <span
+                  class="text-[10px] mono"
+                  style="color: var(--t3)"
+                  x-text="'Score '+s.score"
+                ></span>
+              </div>
+              <div
+                style="
+                  display: grid;
+                  grid-template-columns: repeat(3, 1fr);
+                  gap: 6px;
+                  text-align: center;
+                  font-size: 11px;
+                "
+              >
+                <div>
+                  <div style="color: var(--t3)">Trades</div>
+                  <div
+                    class="font-bold mono text-white"
+                    x-text="s.total_trades||0"
+                  ></div>
+                </div>
+                <div>
+                  <div style="color: var(--t3)">Win</div>
+                  <div
+                    class="font-bold mono"
+                    :class="(s.win_rate||0)>50?'text-green-400':'text-red-400'"
+                    x-text="(s.win_rate||0)+'%'"
+                  ></div>
+                </div>
+                <div>
+                  <div style="color: var(--t3)">Return</div>
+                  <div
+                    class="font-bold mono"
+                    :class="(s.total_return||0)>=0?'text-green-400':'text-red-400'"
+                    x-text="((s.total_return||0)>=0?'+':'')+(s.total_return||0)+'%'"
+                  ></div>
+                </div>
+                <div>
+                  <div style="color: var(--t3)">Sharpe</div>
+                  <div
+                    class="font-bold mono text-white"
+                    x-text="s.sharpe||0"
+                  ></div>
+                </div>
+                <div>
+                  <div style="color: var(--t3)">Max DD</div>
+                  <div
+                    class="font-bold mono text-red-400"
+                    x-text="(s.max_drawdown||0)+'%'"
+                  ></div>
+                </div>
+                <div>
+                  <div style="color: var(--t3)">P.Factor</div>
+                  <div
+                    class="font-bold mono text-white"
+                    x-text="s.profit_factor||0"
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </template>
         </div>
-    </template>
+      </template>
+    </main>
 
-    <!-- Strategy Guide -->
-    <div class="card p-4">
-        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">📘 Strategy Guide</div>
-        <div class="space-y-2.5">
-            <div class="p-3 bg-white/5 rounded-lg"><div class="font-semibold text-sm text-white mb-0.5">📈 Swing</div><div class="text-xs text-gray-400">2-10 day holds. RSI < 35 crossing above 20-SMA. Best: neutral/low-vol.</div></div>
-            <div class="p-3 bg-white/5 rounded-lg"><div class="font-semibold text-sm text-white mb-0.5">🚀 Breakout</div><div class="text-xs text-gray-400">Volume breakouts above 20d highs. 1.5x volume. Best: risk-on uptrend.</div></div>
-            <div class="p-3 bg-white/5 rounded-lg"><div class="font-semibold text-sm text-white mb-0.5">⚡ Momentum</div><div class="text-xs text-gray-400">Trend-following, 20/50 SMA alignment + RSI 50-75. Best: risk-on.</div></div>
-            <div class="p-3 bg-white/5 rounded-lg"><div class="font-semibold text-sm text-white mb-0.5">🔁 Mean Reversion</div><div class="text-xs text-gray-400">Oversold RSI < 30, 3%+ below 20-SMA. Tight stops. Best: sideways.</div></div>
+    <!-- ═══ QUOTE TAB ═══ -->
+    <main x-show="tab==='quote'" class="p-4 space-y-3 fade">
+      <div class="card card-p">
+        <div
+          class="text-[10px] font-bold uppercase mb-3"
+          style="color: var(--t3)"
+        >
+          🔍 Stock Lookup
         </div>
-    </div>
-</main>
-
-<!-- ══════════════════════════════════════════════════════════════ -->
-<!-- TAB: QUOTE -->
-<!-- ══════════════════════════════════════════════════════════════ -->
-<main x-show="tab==='quote'" class="px-4 py-4 space-y-4 fade-in">
-    <div class="card p-4">
-        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">🔍 Stock Lookup</div>
         <div class="flex gap-2">
-            <input type="text" x-model="qt.ticker" @keydown.enter="fetchQuote()" placeholder="AAPL, NVDA, BTC-USD..." class="uppercase">
-            <button @click="fetchQuote()" class="btn btn-p flex-shrink-0 px-4" :disabled="qt.loading">
-                <span x-show="!qt.loading">Go</span><span x-show="qt.loading"><span class="spin"></span></span>
-            </button>
+          <input
+            type="text"
+            x-model="qt.ticker"
+            @keydown.enter="getQ()"
+            placeholder="AAPL, NVDA..."
+            style="text-transform: uppercase"
+          />
+          <button
+            @click="getQ()"
+            class="btn-p flex-shrink-0 px-4"
+            :disabled="qt.loading"
+          >
+            <span x-show="!qt.loading">Go</span
+            ><span x-show="qt.loading"><span class="spin"></span></span>
+          </button>
         </div>
-    </div>
-
-    <template x-if="qt.data">
-        <div class="space-y-3 fade-in">
-            <div class="card p-4">
-                <div class="flex items-center justify-between mb-2">
-                    <div class="text-xl font-extrabold text-white" x-text="qt.data.symbol"></div>
-                    <button @click="bt.ticker=qt.data.symbol;tab='backtest'" class="btn btn-s text-xs py-1 px-3">🔬 Backtest</button>
-                </div>
-                <div class="text-3xl font-extrabold mb-0.5" :class="(qt.data.change_pct||0)>=0?'g':'r'"
-                     x-text="'$'+(qt.data.price||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})"></div>
-                <div class="text-lg font-bold" :class="(qt.data.change_pct||0)>=0?'g':'r'"
-                     x-text="((qt.data.change_pct||0)>=0?'+':'')+(qt.data.change_pct||0).toFixed(2)+'%'"></div>
+      </div>
+      <template x-if="qt.data">
+        <div class="space-y-2 fade">
+          <div class="card card-p">
+            <div class="flex items-center justify-between mb-2">
+              <div
+                class="text-lg font-bold text-white mono"
+                x-text="qt.data.symbol"
+              ></div>
+              <button
+                @click="bt.ticker=qt.data.symbol;tab='backtest'"
+                class="btn-s text-[10px]"
+              >
+                🔬 Backtest
+              </button>
             </div>
-
-            <div class="card p-4">
-                <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">📊 Key Data</div>
-                <div class="grid grid-cols-2 gap-3 text-sm">
-                    <div><span class="text-gray-500">Day Range</span><br><span class="text-white" x-text="'$'+(qt.data.low||0)+' — $'+(qt.data.high||0)"></span></div>
-                    <div><span class="text-gray-500">52W Range</span><br><span class="text-white" x-text="'$'+(qt.data.low_52w||0)+' — $'+(qt.data.high_52w||0)"></span></div>
-                    <div><span class="text-gray-500">Volume</span><br><span class="text-white" x-text="(qt.data.volume||0).toLocaleString()"></span></div>
-                    <div><span class="text-gray-500">Prev Close</span><br><span class="text-white" x-text="'$'+(qt.data.prev_close||0)"></span></div>
-                </div>
+            <div
+              class="text-2xl font-black mono"
+              :class="(qt.data.change_pct||0)>=0?'text-green-400':'text-red-400'"
+              x-text="'$'+(qt.data.price||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})"
+            ></div>
+            <div
+              class="text-lg font-bold mono"
+              :class="(qt.data.change_pct||0)>=0?'text-green-400':'text-red-400'"
+              x-text="((qt.data.change_pct||0)>=0?'+':'')+(qt.data.change_pct||0).toFixed(2)+'%'"
+            ></div>
+          </div>
+          <div class="card card-p">
+            <div
+              class="text-[10px] font-bold uppercase mb-2"
+              style="color: var(--t3)"
+            >
+              📊 Key Data
             </div>
-
-            <div class="card p-4" x-show="qt.data.rsi">
-                <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">📈 Technicals</div>
-                <div class="grid grid-cols-3 gap-3 text-center text-sm">
-                    <div>
-                        <div class="text-gray-500 text-xs">RSI(14)</div>
-                        <div class="font-bold" :class="(qt.data.rsi||50)>70?'r':(qt.data.rsi||50)<30?'g':'w'"
-                             x-text="qt.data.rsi||'—'"></div>
-                        <div class="text-[10px]" :class="(qt.data.rsi||50)>70?'r':(qt.data.rsi||50)<30?'g':'text-gray-600'"
-                             x-text="(qt.data.rsi||50)>70?'Overbought':(qt.data.rsi||50)<30?'Oversold':'Neutral'"></div>
-                    </div>
-                    <div>
-                        <div class="text-gray-500 text-xs">SMA 20</div>
-                        <div class="font-bold w" x-text="'$'+(qt.data.sma20||'—')"></div>
-                        <div class="text-[10px]" :class="qt.data.above_sma20?'g':'r'" x-text="qt.data.above_sma20?'Above ✓':'Below ✗'"></div>
-                    </div>
-                    <div>
-                        <div class="text-gray-500 text-xs">SMA 50</div>
-                        <div class="font-bold w" x-text="'$'+(qt.data.sma50||'—')"></div>
-                        <div class="text-[10px]" :class="qt.data.above_sma50?'g':'r'" x-text="qt.data.above_sma50===true?'Above ✓':qt.data.above_sma50===false?'Below ✗':''"></div>
-                    </div>
-                    <div>
-                        <div class="text-gray-500 text-xs">Vol Ratio</div>
-                        <div class="font-bold" :class="(qt.data.volume_ratio||1)>1.5?'g':'w'" x-text="(qt.data.volume_ratio||1).toFixed(1)+'x'"></div>
-                    </div>
-                    <div>
-                        <div class="text-gray-500 text-xs">Mkt Cap</div>
-                        <div class="font-bold w" x-text="(qt.data.market_cap||0)>1e12?'$'+((qt.data.market_cap||0)/1e12).toFixed(1)+'T':(qt.data.market_cap||0)>1e9?'$'+((qt.data.market_cap||0)/1e9).toFixed(1)+'B':'$'+((qt.data.market_cap||0)/1e6).toFixed(0)+'M'"></div>
-                    </div>
-                </div>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <span style="color: var(--t3)">Day Range</span><br /><span
+                  class="mono text-white"
+                  x-text="'$'+(qt.data.low||0)+' — $'+(qt.data.high||0)"
+                ></span>
+              </div>
+              <div>
+                <span style="color: var(--t3)">52W Range</span><br /><span
+                  class="mono text-white"
+                  x-text="'$'+(qt.data.low_52w||0)+' — $'+(qt.data.high_52w||0)"
+                ></span>
+              </div>
+              <div>
+                <span style="color: var(--t3)">Volume</span><br /><span
+                  class="mono text-white"
+                  x-text="(qt.data.volume||0).toLocaleString()"
+                ></span>
+              </div>
+              <div>
+                <span style="color: var(--t3)">Prev Close</span><br /><span
+                  class="mono text-white"
+                  x-text="'$'+(qt.data.prev_close||0)"
+                ></span>
+              </div>
             </div>
+          </div>
+          <div class="card card-p" x-show="qt.data.rsi">
+            <div
+              class="text-[10px] font-bold uppercase mb-2"
+              style="color: var(--t3)"
+            >
+              📈 Technicals
+            </div>
+            <div
+              style="
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 8px;
+                text-align: center;
+                font-size: 12px;
+              "
+            >
+              <div>
+                <div class="text-[10px]" style="color: var(--t3)">RSI(14)</div>
+                <div
+                  class="font-bold mono"
+                  :class="(qt.data.rsi||50)>70?'text-red-400':(qt.data.rsi||50)<30?'text-green-400':'text-white'"
+                  x-text="qt.data.rsi||'—'"
+                ></div>
+              </div>
+              <div>
+                <div class="text-[10px]" style="color: var(--t3)">SMA 20</div>
+                <div
+                  class="font-bold mono text-white"
+                  x-text="'$'+(qt.data.sma20||'—')"
+                ></div>
+                <div
+                  class="text-[9px]"
+                  :class="qt.data.above_sma20?'text-green-400':'text-red-400'"
+                  x-text="qt.data.above_sma20?'Above ✓':'Below ✗'"
+                ></div>
+              </div>
+              <div>
+                <div class="text-[10px]" style="color: var(--t3)">SMA 50</div>
+                <div
+                  class="font-bold mono text-white"
+                  x-text="'$'+(qt.data.sma50||'—')"
+                ></div>
+                <div
+                  class="text-[9px]"
+                  :class="qt.data.above_sma50?'text-green-400':'text-red-400'"
+                  x-text="qt.data.above_sma50===true?'Above ✓':qt.data.above_sma50===false?'Below ✗':''"
+                ></div>
+              </div>
+              <div>
+                <div class="text-[10px]" style="color: var(--t3)">
+                  Vol Ratio
+                </div>
+                <div
+                  class="font-bold mono"
+                  :class="(qt.data.volume_ratio||1)>1.5?'text-green-400':'text-white'"
+                  x-text="(qt.data.volume_ratio||1).toFixed(1)+'x'"
+                ></div>
+              </div>
+              <div>
+                <div class="text-[10px]" style="color: var(--t3)">Mkt Cap</div>
+                <div
+                  class="font-bold mono text-white"
+                  x-text="(qt.data.market_cap||0)>1e12?'$'+((qt.data.market_cap||0)/1e12).toFixed(1)+'T':(qt.data.market_cap||0)>1e9?'$'+((qt.data.market_cap||0)/1e9).toFixed(1)+'B':'$'+((qt.data.market_cap||0)/1e6).toFixed(0)+'M'"
+                ></div>
+              </div>
+            </div>
+          </div>
         </div>
-    </template>
-    <div x-show="qt.error" class="card p-4 border-red-500/40">
+      </template>
+      <div
+        x-show="qt.error"
+        class="card card-p"
+        style="border-color: var(--red)"
+      >
         <div class="text-red-400 text-sm" x-text="qt.error"></div>
-    </div>
-</main>
+      </div>
+    </main>
 
-<!-- ══════════════════════════════════════════════════════════════ -->
-<!-- TAB: COMMANDS -->
-<!-- ══════════════════════════════════════════════════════════════ -->
-<main x-show="tab==='cmds'" class="px-4 py-4 space-y-4 fade-in">
-    <div class="card p-4">
-        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">💬 Discord Commands</div>
-        <div class="text-xs text-gray-500 mb-3">All features are also available via Discord. Type <code class="bg-white/10 px-1 rounded">/menu</code> for the easiest start.</div>
-    </div>
-
-    <!-- Command categories -->
-    <template x-for="cat in cmdCats">
-        <div class="card p-4 fade-in">
-            <div class="text-sm font-bold text-white mb-2" x-text="cat.icon+' '+cat.name"></div>
-            <div class="grid grid-cols-1 gap-1.5">
-                <template x-for="c in cat.cmds">
-                    <div class="flex items-center justify-between py-1.5 border-b border-gray-800/50 last:border-0">
-                        <code class="text-xs text-cyan-400" x-text="c[0]"></code>
-                        <span class="text-[11px] text-gray-400 text-right" x-text="c[1]"></span>
-                    </div>
-                </template>
-            </div>
+    <!-- ═══ COMMANDS TAB ═══ -->
+    <main x-show="tab==='cmds'" class="p-4 space-y-3 fade">
+      <div class="card card-p">
+        <div
+          class="text-[10px] font-bold uppercase mb-1"
+          style="color: var(--t3)"
+        >
+          💬 Discord Commands
         </div>
-    </template>
-</main>
+        <div class="text-[11px]" style="color: var(--t2)">
+          All features via Discord. Type
+          <code
+            style="
+              background: var(--s2);
+              padding: 1px 4px;
+              border-radius: 2px;
+              font-size: 10px;
+            "
+            >/menu</code
+          >
+          to start.
+        </div>
+      </div>
+      <template x-for="cat in cmdCats">
+        <div class="card card-p fade">
+          <div
+            class="text-xs font-bold text-white mb-2"
+            x-text="cat.icon+' '+cat.name"
+          ></div>
+          <template x-for="c in cat.cmds">
+            <div
+              class="flex items-center justify-between py-1.5"
+              style="border-bottom: 1px solid var(--bd)"
+            >
+              <code
+                class="text-[11px] mono"
+                style="color: var(--blue)"
+                x-text="c[0]"
+              ></code>
+              <span
+                class="text-[10px] text-right"
+                style="color: var(--t2)"
+                x-text="c[1]"
+              ></span>
+            </div>
+          </template>
+        </div>
+      </template>
+    </main>
 
-<!-- ═══ FOOTER ═══ -->
-<footer class="px-4 py-3 mt-4 border-t border-gray-800/30 text-center text-[10px] text-gray-600">
-    TradingAI Pro v6.41 · Sprint 41 · Research & Education Tool · Auto-refresh 60s
-</footer>
+    <footer
+      class="px-4 py-2 text-center text-[9px]"
+      style="color: var(--t3); border-top: 1px solid var(--bd)"
+    >
+      TradingAI Pro v6.41 · Sprint 41 · Research & Education
+    </footer>
 
-<script>
-function app() {
-    return {
-        tab: 'home',
-        tabs: [
-            {id:'home', icon:'📊', label:'Home'},
-            {id:'backtest', icon:'🔬', label:'Backtest'},
-            {id:'quote', icon:'🔍', label:'Quote'},
-            {id:'cmds', icon:'💬', label:'Commands'},
-        ],
-        live: false,
-        clock: '',
-        regime: {},
-        indices: [],
-        macro: [],
-        sectors: [],
-        asia: [],
-        bt: {ticker:'AAPL', strategy:'all', startDate:'', endDate:'', period:'1y', loading:false, result:null},
-        qt: {ticker:'', loading:false, data:null, error:''},
-        cmdCats: [
-            {icon:'📊', name:'Markets & Prices', cmds:[
-                ['/price AAPL','Real-time price'],['/quote AAPL','Detailed quote'],['/market','US indices'],
-                ['/sector','Sector heatmap'],['/macro','Gold, Oil, Bonds'],['/movers','Gainers & losers'],
-                ['/premarket','Pre-market futures'],['/news AAPL','Headlines']]},
-            {icon:'🎯', name:'AI Signals', cmds:[
-                ['/signals','Latest AI signals'],['/scan vcp','Scan for setups'],['/breakout','Breakout picks'],
-                ['/momentum','Momentum picks'],['/swing','Swing setups'],['/dip','Dip buying'],
-                ['/whale','Whale activity'],['/squeeze','Short squeeze']]},
-            {icon:'🧠', name:'Deep Analysis', cmds:[
-                ['/ai AAPL','Full AI breakdown'],['/score AAPL','AI score 1-10'],['/analyze AAPL','SMA, RSI, volume'],
-                ['/advise AAPL','Buy/Hold/Sell'],['/why TSLA','Why moving?'],['/levels AAPL','Support/resistance'],
-                ['/compare AAPL MSFT','Side-by-side']]},
-            {icon:'💰', name:'Portfolio & Trading', cmds:[
-                ['/portfolio','Full portfolio'],['/positions','Open positions'],['/pnl','Today P&L'],
-                ['/buy AAPL 10','Buy (paper)'],['/sell AAPL 10','Sell (paper)'],['/risk AAPL 150 142','Position sizer']]},
-            {icon:'🔬', name:'Backtest & Strategy', cmds:[
-                ['/backtest AAPL','All strategies'],['/backtest AAPL swing','Test swing'],
-                ['/backtest ... start_date:2024-01-01','Custom dates'],['/best_strategy AAPL','Best strategy now'],
-                ['/strategy_report','AI learning status']]},
-            {icon:'🌏', name:'Global Markets', cmds:[
-                ['/asia','Asia dashboard'],['/japan','Japan picks'],['/hk','Hong Kong picks'],
-                ['/crypto','Crypto overview'],['/btc','Bitcoin analysis']]},
-            {icon:'⚙️', name:'Tools & Alerts', cmds:[
-                ['/alert AAPL 200','Set price alert'],['/my_alerts','View alerts'],['/watchlist','Your watchlist'],
-                ['/watchlist add AAPL','Add to list'],['/status','System check']]},
-            {icon:'📋', name:'Reports', cmds:[
-                ['/menu','Smart command center'],['/dashboard','Full dashboard'],['/daily','Daily summary'],
-                ['/report morning','Morning brief'],['/report eod','EOD scorecard']]},
-        ],
-        init() {
-            this.updateClock(); setInterval(()=>this.updateClock(),1000);
-            this.fetchMarket(); setInterval(()=>this.fetchMarket(),60000);
-        },
-        updateClock() {
-            this.clock=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-        },
-        async fetchMarket() {
+    <nav class="nav-b">
+      <div class="flex justify-around max-w-lg mx-auto">
+        <a href="/" class="on"><span class="ic">📊</span>Home</a>
+        <a href="/regime-screener"><span class="ic">🎯</span>Regime</a>
+        <a href="/portfolio-brief"><span class="ic">📋</span>Brief</a>
+        <a href="/compare"><span class="ic">📈</span>Compare</a>
+        <a href="/performance-lab"><span class="ic">🔬</span>Perf</a>
+        <a href="/options-lab"><span class="ic">🔮</span>Options</a>
+        <a href="/signals/explorer"><span class="ic">📡</span>Signals</a>
+      </div>
+    </nav>
+
+    <script>
+      function app() {
+        return {
+          tab: "home",
+          tabs: [
+            { id: "home", icon: "📊", label: "Home" },
+            { id: "backtest", icon: "🔬", label: "Backtest" },
+            { id: "quote", icon: "🔍", label: "Quote" },
+            { id: "cmds", icon: "💬", label: "Commands" },
+          ],
+          live: false,
+          clock: "",
+          regime: {},
+          indices: [],
+          macro: [],
+          sectors: [],
+          asia: [],
+          bt: {
+            ticker: "AAPL",
+            strategy: "all",
+            startDate: "",
+            endDate: "",
+            period: "1y",
+            loading: false,
+            result: null,
+          },
+          qt: { ticker: "", loading: false, data: null, error: "" },
+          cmdCats: [
+            {
+              icon: "📊",
+              name: "Markets",
+              cmds: [
+                ["/price AAPL", "Real-time price"],
+                ["/quote AAPL", "Detailed quote"],
+                ["/market", "US indices"],
+                ["/sector", "Sector heatmap"],
+                ["/macro", "Gold, Oil, Bonds"],
+                ["/movers", "Gainers & losers"],
+              ],
+            },
+            {
+              icon: "🎯",
+              name: "AI Signals",
+              cmds: [
+                ["/signals", "Latest signals"],
+                ["/scan vcp", "Scan setups"],
+                ["/breakout", "Breakout picks"],
+                ["/momentum", "Momentum picks"],
+                ["/swing", "Swing setups"],
+              ],
+            },
+            {
+              icon: "🧠",
+              name: "Analysis",
+              cmds: [
+                ["/ai AAPL", "Full AI breakdown"],
+                ["/score AAPL", "AI score 1-10"],
+                ["/analyze AAPL", "SMA, RSI, volume"],
+                ["/advise AAPL", "Buy/Hold/Sell"],
+                ["/why TSLA", "Why moving?"],
+              ],
+            },
+            {
+              icon: "💰",
+              name: "Portfolio",
+              cmds: [
+                ["/portfolio", "Full portfolio"],
+                ["/positions", "Open positions"],
+                ["/pnl", "Today P&L"],
+                ["/buy AAPL 10", "Buy (paper)"],
+                ["/sell AAPL 10", "Sell (paper)"],
+              ],
+            },
+            {
+              icon: "🔬",
+              name: "Backtest",
+              cmds: [
+                ["/backtest AAPL", "All strategies"],
+                ["/backtest AAPL swing", "Test swing"],
+                ["/best_strategy AAPL", "Best strategy now"],
+              ],
+            },
+            {
+              icon: "🌏",
+              name: "Global",
+              cmds: [
+                ["/asia", "Asia dashboard"],
+                ["/japan", "Japan picks"],
+                ["/hk", "Hong Kong picks"],
+                ["/crypto", "Crypto overview"],
+              ],
+            },
+            {
+              icon: "⚙️",
+              name: "Tools",
+              cmds: [
+                ["/alert AAPL 200", "Set alert"],
+                ["/my_alerts", "View alerts"],
+                ["/watchlist", "Your watchlist"],
+                ["/status", "System check"],
+              ],
+            },
+          ],
+          init() {
+            this.tick();
+            setInterval(() => this.tick(), 1000);
+            this.fetchMkt();
+            setInterval(() => this.fetchMkt(), 60000);
+          },
+          tick() {
+            this.clock = new Date().toLocaleTimeString("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            });
+          },
+          async fetchMkt() {
             try {
-                const r=await fetch('/api/live/market');
-                if(!r.ok) throw new Error('API error');
-                const d=await r.json();
-                this.regime=d.regime||{}; this.indices=d.indices||[];
-                this.macro=d.macro||[]; this.sectors=d.sectors||[];
-                this.asia=d.asia||[]; this.live=true;
-            } catch(e) { console.error('Market:',e); this.live=false; }
-        },
-        async runBacktest() {
-            if(!this.bt.ticker) return;
-            this.bt.loading=true; this.bt.result=null;
+              const r = await fetch("/api/live/market");
+              if (!r.ok) throw 0;
+              const d = await r.json();
+              this.regime = d.regime || {};
+              this.indices = d.indices || [];
+              this.macro = d.macro || [];
+              this.sectors = d.sectors || [];
+              this.asia = d.asia || [];
+              this.live = true;
+            } catch (e) {
+              this.live = false;
+            }
+          },
+          async runBT() {
+            if (!this.bt.ticker) return;
+            this.bt.loading = true;
+            this.bt.result = null;
             try {
-                let url='/api/live/backtest?ticker='+encodeURIComponent(this.bt.ticker)+'&strategy='+this.bt.strategy;
-                if(this.bt.startDate&&this.bt.endDate) url+='&start_date='+this.bt.startDate+'&end_date='+this.bt.endDate;
-                else url+='&period='+this.bt.period;
-                const r=await fetch(url,{method:'POST'});
-                if(!r.ok){const e=await r.json();throw new Error(e.detail||'Failed');}
-                this.bt.result=await r.json();
-            } catch(e) { alert('Error: '+e.message); }
-            finally { this.bt.loading=false; }
-        },
-        async fetchQuote() {
-            if(!this.qt.ticker) return;
-            this.qt.loading=true; this.qt.data=null; this.qt.error='';
+              let u =
+                "/api/live/backtest?ticker=" +
+                encodeURIComponent(this.bt.ticker) +
+                "&strategy=" +
+                this.bt.strategy;
+              if (this.bt.startDate && this.bt.endDate)
+                u +=
+                  "&start_date=" +
+                  this.bt.startDate +
+                  "&end_date=" +
+                  this.bt.endDate;
+              else u += "&period=" + this.bt.period;
+              const r = await fetch(u, { method: "POST" });
+              if (!r.ok) {
+                const e = await r.json();
+                throw new Error(e.detail || "Failed");
+              }
+              this.bt.result = await r.json();
+            } catch (e) {
+              alert("Error: " + e.message);
+            } finally {
+              this.bt.loading = false;
+            }
+          },
+          async getQ() {
+            if (!this.qt.ticker) return;
+            this.qt.loading = true;
+            this.qt.data = null;
+            this.qt.error = "";
             try {
-                const r=await fetch('/api/live/quote/'+encodeURIComponent(this.qt.ticker));
-                if(!r.ok){const e=await r.json();throw new Error(e.detail||'Not found');}
-                this.qt.data=(await r.json()).quote;
-            } catch(e) { this.qt.error=e.message; }
-            finally { this.qt.loading=false; }
-        },
-    }
-}
-</script>
-</body>
+              const r = await fetch(
+                "/api/live/quote/" + encodeURIComponent(this.qt.ticker),
+              );
+              if (!r.ok) {
+                const e = await r.json();
+                throw new Error(e.detail || "Not found");
+              }
+              this.qt.data = (await r.json()).quote;
+            } catch (e) {
+              this.qt.error = e.message;
+            } finally {
+              this.qt.loading = false;
+            }
+          },
+        };
+      }
+    </script>
+  </body>
 </html>

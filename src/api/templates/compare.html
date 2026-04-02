@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0d1117">
+    <title>Compare Overlay - TradingAI Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root{--bg:#0d1117;--s1:#161b22;--s2:#1c2333;--bd:#21262d;--t1:#e6edf3;--t2:#8b949e;--t3:#484f58;--green:#00d4aa;--red:#ff5c5c;--amber:#fbbf24;--blue:#58a6ff}
+        *{font-family:'Inter',sans-serif;box-sizing:border-box;margin:0}
+        body{background:var(--bg);color:var(--t1);overflow-x:hidden}
+        .mono{font-family:'JetBrains Mono',monospace}
+
+        .dt{width:100%;border-collapse:collapse;font-size:12px}
+        .dt th{text-align:left;padding:7px 10px;color:var(--t3);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--bd);background:var(--s2)}
+        .dt td{padding:6px 10px;border-bottom:1px solid var(--bd)}
+        .dt .r{text-align:right}
+
+        .mode-bar{display:flex;gap:0;border-bottom:1px solid var(--bd);background:var(--s1)}
+        .mode-btn{padding:8px 16px;font-size:12px;font-weight:500;color:var(--t3);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent}
+        .mode-btn:hover{color:var(--t2)}
+        .mode-btn.on{color:var(--green);border-bottom-color:var(--green);font-weight:600}
+
+        .per-btn{padding:4px 10px;border-radius:4px;font-size:11px;font-weight:500;border:1px solid var(--bd);background:none;color:var(--t3);cursor:pointer}
+        .per-btn.on{background:var(--green);color:#000;border-color:var(--green);font-weight:700}
+
+        .ticker-chip{display:flex;align-items:center;gap:4px;background:var(--s2);border:1px solid var(--bd);border-radius:4px;padding:4px 10px}
+        .ticker-chip .dot{width:8px;height:8px;border-radius:50%}
+        .ticker-chip button{color:var(--t3);font-size:10px;margin-left:4px;cursor:pointer;background:none;border:none}
+        .ticker-chip button:hover{color:var(--red)}
+
+        input{background:var(--s1);border:1px solid var(--bd);color:var(--t1);border-radius:4px;padding:6px 10px;font-size:12px;outline:none}
+        input:focus{border-color:var(--green)}
+        .btn-add{padding:5px 10px;border-radius:4px;font-size:11px;font-weight:600;border:1px solid var(--bd);background:none;color:var(--t3);cursor:pointer}
+        .btn-add:hover{border-color:var(--green);color:var(--green)}
+        .btn-go{padding:6px 14px;border-radius:4px;font-weight:700;font-size:12px;cursor:pointer;border:none;background:var(--green);color:#000}
+
+        /* Correlation matrix cells */
+        .corr-cell{padding:6px 10px;text-align:center;font-size:11px;font-weight:600;border-radius:3px}
+
+        .spin{display:inline-block;width:24px;height:24px;border:2px solid var(--bd);border-top-color:var(--green);border-radius:50%;animation:sp .5s linear infinite}
+        @keyframes sp{to{transform:rotate(360deg)}}
+        .fade{animation:f .2s ease}@keyframes f{from{opacity:0}to{opacity:1}}
+
+        .nav-b{position:fixed;bottom:0;left:0;right:0;background:var(--bg);border-top:1px solid var(--bd);z-index:100;padding:5px 0 env(safe-area-inset-bottom,5px)}
+        .nav-b a or{display:flex;flex-direction:column;align-items:center;font-size:9px;color:var(--t3);text-decoration:none;padding:3px 0}
+        .nav-b a{display:flex;flex-direction:column;align-items:center;font-size:9px;color:var(--t3);text-decoration:none;padding:3px 0}
+        .nav-b a.on{color:var(--green)}.nav-b a .ic{font-size:17px;margin-bottom:1px}
+        .safe-b{padding-bottom:env(safe-area-inset-bottom,68px)}
+    </style>
+</head>
+<body x-data="CO()" x-init="init()" class="safe-b">
+
+<header style="background:var(--s1);border-bottom:1px solid var(--bd)" class="flex items-center justify-between px-4 py-2.5">
+    <div class="flex items-center gap-2.5">
+        <a href="/" class="text-base">📈</a>
+        <div>
+            <div class="text-[13px] font-bold text-white">Compare Overlay</div>
+            <div class="text-[10px]" style="color:var(--t3)">Normalized · Relative Strength · Correlation</div>
+        </div>
+    </div>
+</header>
+
+<!-- Ticker input + period -->
+<div class="px-4 py-3" style="border-bottom:1px solid var(--bd);background:var(--s1)">
+    <div class="flex flex-wrap items-center gap-2 mb-2">
+        <template x-for="(t,i) in tickers" :key="i">
+            <div class="ticker-chip">
+                <div class="dot" :style="'background:'+colors[i]"></div>
+                <span class="text-xs font-semibold mono" :style="'color:'+colors[i]" x-text="t"></span>
+                <button @click="tickers.splice(i,1);if(hasData)compare()" x D-text="✕">✕</button>
+            </div>
+        </template>
+        <div class="flex items-center gap-1">
+            <input type="text" x-model="newT" @keyup.enter="addT()" placeholder="Add..." class="w-20 mono" maxlength="5" style="text-transform:uppercase">
+            <button @click="addT()" class="btn-add">+ Add</button>
+        </div>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap">
+        <div class="flex gap-1">
+            <template x-for="p in ['1M','3M','6M','1Y','2Y']">
+                <button @click="period=p;compare()" class="per-btn" :class="period===p&&'on'" x-text="p"></button>
+            </template>
+        </div>
+        <button @click="compare()" class="btn-go ml-auto">Compare</button>
+    </div>
+</div>
+
+<!-- Mode tabs -->
+<div class="mode-bar">
+    <button @click="mode='norm';renderChart()" class="mode-btn" :class="mode==='norm'&&'on'">📈 Normalized Return</button>
+    <button @click="mode='rel';renderChart()" class="mode-btn" :class="mode==='rel'&&'on'">📊 Relative Strength</button>
+    <button @click="mode='corr';renderChart()" class="mode-btn" :class="mode==='corr'&&'on'">🔗 Correlation</button>
+</div>
+
+<!-- Chart -->
+<div class="p-4">
+    <div x-show="ldg" class="flex justify-center py-16"><span class="spin"></span></div>
+    <div x-show="!ldg && hasData" style="height:280px;position:relative;background:var(--s1);border:1px solid var(--bd);border-radius:6px;padding:10px">
+        <canvas id="cmpChart"></canvas>
+    </div>
+    <div x-show="!ldg && !hasData" class="text-center py-16" style="color:var(--t3)">
+        <div class="text-2xl mb-2">📈</div><div class="text-xs">Add 2+ tickers and click Compare</div>
+    </div>
+</div>
+
+<!-- Stats Table -->
+<div x-show="hasData" class="px-4 pb-3">
+    <div style="background:var(--s1);border:1px solid var(--bd);border-radius:6px;overflow:hidden">
+        <div class="px-3 py-2 text-[10px] font-bold uppercase" style="color:var(--t3);border-bottom:1px solid var(--bd)">Comparison Stats</div>
+        <table class="dt">
+            <thead><tr>
+                <th>Metric</th>
+                <template x-for="(t,i) in tickers"><th class="r" :style="'color:'+colors[i]" x-text="t"></th></template>
+            </tr></thead>
+            <tbody>
+                <tr><td style="color:var(--t2)">Return</td><template x-for="(t,i) in tickers"><td class="r mono" :class="(stats[t]?.total_return||0)>=0?'text-green-400':'text-red-400'" x-text="((stats[t]?.total_return||0)>=0?'+':'')+(stats[t]?.total_return||0).toFixed(1)+'%'"></td></template></tr>
+                <tr><td style="color:var(--t2)">Sharpe</td><template x-for="t in tickers"><td class="r mono text-white" x-text="(stats[t]?.sharpe||0).toFixed(2)"></td></template></tr>
+                <tr><td style="color:var(--t2)">Max DD</td><template x-for="t in tickers"><td class="r mono text-red-400" x-text="(stats[t]?.max_dd||0).toFixed(1)+'%'"></td></template></tr>
+                <tr><td style="color:var(--t2)">Volatility</td><template x-for="t in tickers"><td class="r mono" style="color:var(--t2)" x-text="(stats[t]?.volatility||0).toFixed(1)+'%'"></td></template></tr>
+                <tr><td style="color:var(--t2)">Beta vs SPY</td><template x-for="t in tickers"><td class="r mono" style="color:var(--t2)" x-text="(stats[t]?.beta||0).toFixed(2)"></td></template></tr>
+                <tr><td style="color:var(--t2)">Corr vs SPY</td><template x-for="t in tickers"><td class="r mono" style="color:var(--t2)" x-text="(stats[t]?.corr_spy||0).toFixed(2)"></td></template></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Correlation Matrix -->
+<div x-show="hasData && Object.keys(corrMx).length" class="px-4 pb-4">
+    <div style="background:var(--s1);border:1px solid var(--bd);border-radius:6px;overflow:hidden">
+        <div class="px-3 py-2 text-[10px] font-bold uppercase" style="color:var(--t3);border-bottom:1px solid var(--bd)">🔗 Correlation Matrix</div>
+        <div class="p-3 overflow-x-auto">
+            <table class="dt">
+                <thead><tr><th></th><template x-for="t in tickers"><th class="r" style="color:var(--t2)" x-text="t"></th></template></tr></thead>
+                <tbody>
+                    <template x-for="t1 in tickers">
+                        <tr>
+                            <td class="font-semibold" style="color:var(--t2)" x-text="t1"></td>
+                            <template x-for="t2 in tickers">
+                                <td class="r"><div class="corr-cell mono" :style="'background:'+corrBg(gc(t1,t2))" x-text="gc(t1,t2).toFixed(2)"></div></td>
+                            </template>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<nav class="nav-b"><div class="flex justify-around max-w-lg mx-auto">
+    <a href="/"><span class="ic">📊</span>Home</a>
+    <a href="/regime-screener"><span class="ic">🎯</span>Regime</a>
+    <a href="/portfolio-brief"><span class="ic">📋</span>Brief</a>
+    <a href="/compare" class="on"><span class="ic">📈</span>Compare</a>
+    <a href="/performance-lab"><span class="ic">🔬</span>Perf</a>
+    <a href="/options-lab"><span class="ic">🔮</span>Options</a>
+    <a href="/signals/explorer"><span class="ic">📡</span>Signals</a>
+</div></nav>
+
+<script>
+function CO(){return{
+    tickers:['NVDA','SPY'],newT:'',period:'6M',mode:'norm',
+    ldg:false,hasData:false,chartData:{},stats:{},corrMx:{},
+    colors:['#00d4aa','#58a6ff','#fbbf24','#f472b6','#bc8cff','#fb923c'],
+    chart:null,
+
+    init(){},
+    addT(){const t=this.newT.toUpperCase().trim();if(t&&!this.tickers.includes(t)&&this.tickers.length<6){this.tickers.push(t);this.newT=''}},
+    gc(a,b){if(a===b)return 1;return this.corrMx[a+'-'+b]||this.corrMx[b+'-'+a]||0},
+    corrBg(v){const a=Math.abs(v);if(v>.7)return'rgba(255,92,92,'+(a*.3)+')';if(v>.3)return'rgba(251,191,36,'+(a*.2)+')';return'rgba(0,212,170,'+(a*.2)+')'},
+
+    async compare(){
+        if(this.tickers.length<1)return;this.ldg=true;
+        try{
+            const r=await fetch('/api/v7/compare-overlay?tickers='+this.tickers.join(',')+'&period='+this.period);
+            if(!r.ok)throw 0;const d=await r.json();
+            this.chartData=d.series||{};this.stats=d.stats||{};this.corrMx=d.correlation_matrix||{};
+            this.hasData=true;this.renderChart();
+        }catch(e){console.error(e)}
+        this.ldg=false;
+    },
+    renderChart(){
+        const ctx=document.getElementById('cmpChart');if(!ctx||!this.hasData)return;
+        if(this.chart)this.chart.destroy();
+        const dates=this.chartData._dates||[];
+
+        if(this.mode==='norm'){
+            const ds=this.tickers.map((t,i)=>({label:t,data:this.chartData[t]||[],borderColor:this.colors[i],borderWidth:2,pointRadius:0,tension:.3,fill:false}));
+            this.chart=new Chart(ctx,{type:'line',data:{labels:dates.map(()=>''),datasets:ds},options:this.lineOpts()});
+        }else if(this.mode==='rel'&&this.tickers.length>=2){
+            const a=this.chartData[this.tickers[0]]||[],b=this.chartData[this.tickers[1]]||[];
+            const ratio=a.map((v,i)=>b[i]?v/b[i]*100:100);
+            this.chart=new Chart(ctx,{type:'line',data:{labels:dates.map(()=>''),datasets:[
+                {label:this.tickers[0]+'/'+this.tickers[1],data:ratio,borderColor:this.colors[0],borderWidth:2,pointRadius:0,tension:.3,fill:{target:'origin',above:'rgba(0,212,170,0.04)',below:'rgba(255,92,92,0.04)'}},
+                {label:'Baseline',data:Array(ratio.length).fill(100),borderColor:'#484f58',borderWidth:1,borderDash:[4,4],pointRadius:0}
+            ]},options:this.lineOpts()});
+        }else if(this.mode==='corr'&&this.tickers.length>=2){
+            const a=this.chartData[this.tickers[0]]||[],b=this.chartData[this.tickers[1]]||[];
+            const sc=[];for(let i=1;i<Math.min(a.length,b.length);i++){sc.push({x:(a[i]-a[i-1])/a[i-1]*100,y:(b[i]-b[i-1])/b[i-1]*100})}
+            this.chart=new Chart(ctx,{type:'scatter',data:{datasets:[{data:sc,backgroundColor:this.colors[0]+'60',pointRadius:3}]},
+            options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{title:{display:true,text:this.tickers[0]+' Daily %',color:'#484f58'},grid:{color:'#21262d'},ticks:{color:'#484f58',font:{size:9}}},y:{title:{display:true,text:this.tickers[1]+' Daily %',color:'#484f58'},grid:{color:'#21262d'},ticks:{color:'#484f58',font:{size:9}}}}}});
+        }
+    },
+    lineOpts(){return{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8b949e',font:{size:10},usePointStyle:true,pointStyle:'line'}},tooltip:{mode:'index',intersect:false}},scales:{x:{display:false},y:{grid:{color:'#21262d',lineWidth:.5},ticks:{color:'#484f58',font:{size:9,family:'JetBrains Mono'}}}},interaction:{intersect:false,mode:'index'}}}
+}}
+</script>
+</body>
+</html>

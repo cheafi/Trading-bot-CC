@@ -1,0 +1,1108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <meta name="theme-color" content="#0d1117" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Macro Intelligence - TradingAI Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script
+      defer
+      src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"
+    ></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0d1117;
+        --s1: #161b22;
+        --s2: #1c2333;
+        --bd: #21262d;
+        --bd2: #30363d;
+        --t1: #e6edf3;
+        --t2: #8b949e;
+        --t3: #484f58;
+        --green: #00d4aa;
+        --red: #ff5c5c;
+        --amber: #fbbf24;
+        --blue: #58a6ff;
+        --purple: #bc8cff;
+      }
+      * {
+        font-family: "Inter", sans-serif;
+        box-sizing: border-box;
+        margin: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--t1);
+        overflow-x: hidden;
+      }
+      .mono {
+        font-family: "JetBrains Mono", monospace;
+      }
+
+      /* Top risk banner */
+      .risk-banner {
+        padding: 6px 20px;
+        font-size: 12px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        letter-spacing: 0.3px;
+      }
+      .rb-high {
+        background: #ff5c5c12;
+        border-bottom: 2px solid var(--red);
+        color: var(--red);
+      }
+      .rb-elev {
+        background: #fbbf2412;
+        border-bottom: 2px solid var(--amber);
+        color: var(--amber);
+      }
+      .rb-low {
+        background: #00d4aa12;
+        border-bottom: 2px solid var(--green);
+        color: var(--green);
+      }
+
+      /* Tab bar */
+      .tab-bar {
+        display: flex;
+        gap: 0;
+        border-bottom: 1px solid var(--bd);
+        background: var(--s1);
+        padding: 0 16px;
+        overflow-x: auto;
+      }
+      .tab-btn {
+        padding: 10px 14px;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--t3);
+        cursor: pointer;
+        border: none;
+        background: none;
+        border-bottom: 2px solid transparent;
+        white-space: nowrap;
+      }
+      .tab-btn:hover {
+        color: var(--t2);
+      }
+      .tab-btn.on {
+        color: var(--green);
+        border-bottom-color: var(--green);
+        font-weight: 600;
+      }
+
+      /* KPI strip */
+      .kpi-strip {
+        display: flex;
+        gap: 0;
+        background: var(--s1);
+        border-bottom: 1px solid var(--bd);
+      }
+      .kpi-item {
+        flex: 1;
+        padding: 14px 10px;
+        text-align: center;
+        border-right: 1px solid var(--bd);
+      }
+      .kpi-item:last-child {
+        border-right: none;
+      }
+      .kpi-item .v {
+        font-size: 18px;
+        font-weight: 800;
+        line-height: 1.1;
+      }
+      .kpi-item .l {
+        font-size: 9px;
+        color: var(--t3);
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        margin-top: 3px;
+      }
+      .kpi-item .sub {
+        font-size: 10px;
+        margin-top: 2px;
+      }
+
+      /* Data table */
+      .dt {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 11px;
+      }
+      .dt th {
+        text-align: left;
+        padding: 6px 8px;
+        color: var(--t3);
+        font-size: 9px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        border-bottom: 1px solid var(--bd);
+        background: var(--s2);
+      }
+      .dt td {
+        padding: 5px 8px;
+        border-bottom: 1px solid var(--bd);
+      }
+      .dt tr:hover {
+        background: var(--s2);
+      }
+      .dt .r {
+        text-align: right;
+      }
+      .dt .c {
+        text-align: center;
+      }
+
+      /* Section header */
+      .sec-h {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--t3);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 10px 14px;
+        background: var(--s2);
+        border-bottom: 1px solid var(--bd);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .sec-h .icon {
+        font-size: 14px;
+      }
+
+      /* Correlation matrix */
+      .corr-cell {
+        width: 42px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 3px;
+        font-size: 9px;
+        font-weight: 700;
+      }
+
+      /* Insight cards */
+      .insight {
+        padding: 8px 12px;
+        background: var(--s2);
+        border-left: 3px solid var(--blue);
+        border-radius: 0 4px 4px 0;
+        margin-bottom: 4px;
+        font-size: 11px;
+      }
+      .insight.warn {
+        border-left-color: var(--amber);
+      }
+      .insight .factor {
+        font-weight: 700;
+        font-size: 10px;
+        color: var(--t3);
+        text-transform: uppercase;
+        margin-bottom: 2px;
+      }
+
+      /* Cards */
+      .card {
+        background: var(--s1);
+        border: 1px solid var(--bd);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .card-p {
+        padding: 12px 14px;
+      }
+
+      /* Signal pills */
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 9px;
+        font-weight: 600;
+      }
+      .pill-g {
+        background: #00d4aa18;
+        color: var(--green);
+      }
+      .pill-r {
+        background: #ff5c5c18;
+        color: var(--red);
+      }
+      .pill-y {
+        background: #fbbf2418;
+        color: var(--amber);
+      }
+      .pill-b {
+        background: #58a6ff18;
+        color: var(--blue);
+      }
+      .pill-p {
+        background: #bc8cff18;
+        color: var(--purple);
+      }
+
+      input,
+      select {
+        background: var(--s2);
+        color: var(--t1);
+        border: 1px solid var(--bd);
+        border-radius: 4px;
+        padding: 6px 10px;
+        font-size: 11px;
+        width: 100%;
+      }
+      .fade {
+        animation: fadeIn 0.2s;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      a {
+        color: var(--blue);
+      }
+    </style>
+  </head>
+  <body x-data="MI()" x-init="load()">
+    <!-- Risk Banner -->
+    <div
+      class="risk-banner"
+      :class="{'rb-high': D.summary?.war_risk==='HIGH', 'rb-elev': D.summary?.war_risk==='ELEVATED', 'rb-low': D.summary?.war_risk==='LOW'}"
+    >
+      <span
+        >⚡ MACRO INTELLIGENCE —
+        <span x-text="D.summary?.war_risk||'...'"></span> GEOPOLITICAL
+        RISK</span
+      >
+      <span
+        class="mono"
+        style="font-size: 10px"
+        x-text="D.generated_at?.slice(0,16)||''"
+      ></span>
+    </div>
+
+    <!-- KPI Strip -->
+    <div class="kpi-strip">
+      <div class="kpi-item">
+        <div
+          class="v mono"
+          :style="{color: D.rates?.direction==='RISING'?'var(--red)':'var(--green)'}"
+          x-text="(D.rates?.yields?.[2]?.yield_pct||0).toFixed(2)+'%'"
+        ></div>
+        <div class="l">10Y Yield</div>
+        <div
+          class="sub mono"
+          :style="{color: D.rates?.direction==='RISING'?'var(--red)':'var(--green)'}"
+          x-text="D.rates?.direction||''"
+        ></div>
+      </div>
+      <div class="kpi-item">
+        <div
+          class="v mono"
+          :style="{color: D.rates?.curve?.status==='INVERTED'?'var(--red)':D.rates?.curve?.status==='FLAT'?'var(--amber)':'var(--green)'}"
+          x-text="D.rates?.curve?.status||'...'"
+        ></div>
+        <div class="l">Yield Curve</div>
+        <div
+          class="sub mono"
+          x-text="(D.rates?.curve?.spread_10y_3m||0)+'bp'"
+        ></div>
+      </div>
+      <div class="kpi-item">
+        <div
+          class="v mono"
+          :style="{color: D.political_risk?.trump_sentiment==='BULLISH'?'var(--green)':D.political_risk?.trump_sentiment==='BEARISH'?'var(--red)':'var(--t2)'}"
+          x-text="D.political_risk?.trump_sentiment||'...'"
+        ></div>
+        <div class="l">Trump 信心</div>
+        <div
+          class="sub mono"
+          x-text="'DJT $'+(D.political_risk?.djt_price||0).toFixed(1)"
+        ></div>
+      </div>
+      <div class="kpi-item">
+        <div
+          class="v mono"
+          :style="{color: D.war_geopolitical?.risk_label==='HIGH'?'var(--red)':D.war_geopolitical?.risk_label==='ELEVATED'?'var(--amber)':'var(--green)'}"
+          x-text="D.war_geopolitical?.risk_score||'...'"
+        ></div>
+        <div class="l">戰爭風險</div>
+        <div class="sub" x-text="D.war_geopolitical?.risk_label||''"></div>
+      </div>
+      <div class="kpi-item">
+        <div
+          class="v mono"
+          :style="{color: D.war_geopolitical?.vix>22?'var(--red)':D.war_geopolitical?.vix<15?'var(--green)':'var(--amber)'}"
+          x-text="(D.war_geopolitical?.vix||0).toFixed(1)"
+        ></div>
+        <div class="l">VIX</div>
+        <div
+          class="sub"
+          x-text="D.war_geopolitical?.vix>22?'⚠ 恐慌':'正常'"
+        ></div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tab-bar">
+      <button class="tab-btn" :class="{on:tab==='rates'}" @click="tab='rates'">
+        🏦 利率追蹤
+      </button>
+      <button
+        class="tab-btn"
+        :class="{on:tab==='political'}"
+        @click="tab='political'"
+      >
+        🏛️ 政治風險
+      </button>
+      <button class="tab-btn" :class="{on:tab==='war'}" @click="tab='war'">
+        ⚔️ 戰爭/地緣
+      </button>
+      <button
+        class="tab-btn"
+        :class="{on:tab==='insider'}"
+        @click="tab='insider'"
+      >
+        👔 高管持倉
+      </button>
+      <button class="tab-btn" :class="{on:tab==='corr'}" @click="tab='corr'">
+        📊 相關性矩陣
+      </button>
+      <button
+        class="tab-btn"
+        :class="{on:tab==='insights'}"
+        @click="tab='insights'"
+      >
+        💡 AI 洞察
+      </button>
+    </div>
+
+    <!-- Loading -->
+    <div x-show="loading" class="p-8 text-center">
+      <div class="text-sm" style="color: var(--t3)">
+        ⏳ 正在載入宏觀情報... (需要30-60秒)
+      </div>
+    </div>
+
+    <!-- ═══ RATES TAB ═══ -->
+    <div x-show="tab==='rates' && !loading" class="fade">
+      <div class="sec-h">
+        <span class="icon">📈</span> US Treasury Yields & Bond ETFs
+      </div>
+      <table class="dt">
+        <thead>
+          <tr>
+            <th>期限</th>
+            <th>名稱</th>
+            <th class="r">殖利率%</th>
+            <th class="r">日變化(bp)</th>
+            <th class="r">週變化</th>
+            <th class="r">月變化</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="r in D.rates?.yields||[]">
+            <tr>
+              <td class="mono font-bold" x-text="r.tenor"></td>
+              <td x-text="r.name" style="color: var(--t2)"></td>
+              <td
+                class="r mono font-bold"
+                x-text="r.yield_pct?.toFixed(3)+'%'"
+              ></td>
+              <td
+                class="r mono"
+                :style="{color:r.change_bps>0?'var(--red)':'var(--green)'}"
+                x-text="(r.change_bps>0?'+':'')+r.change_bps"
+              ></td>
+              <td
+                class="r mono"
+                :style="{color:r.week1_bps>0?'var(--red)':'var(--green)'}"
+                x-text="(r.week1_bps>0?'+':'')+r.week1_bps"
+              ></td>
+              <td
+                class="r mono"
+                :style="{color:r.month1_bps>0?'var(--red)':'var(--green)'}"
+                x-text="(r.month1_bps>0?'+':'')+r.month1_bps"
+              ></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+
+      <!-- Yield Curve Summary -->
+      <div
+        style="
+          padding: 12px 14px;
+          background: var(--s2);
+          border-bottom: 1px solid var(--bd);
+          display: flex;
+          gap: 24px;
+          flex-wrap: wrap;
+        "
+      >
+        <div>
+          <span style="font-size: 10px; color: var(--t3)">10Y-3M Spread:</span>
+          <span
+            class="mono font-bold"
+            :style="{color:D.rates?.curve?.spread_10y_3m<0?'var(--red)':'var(--green)'}"
+            x-text="D.rates?.curve?.spread_10y_3m||'N/A'"
+          ></span>
+        </div>
+        <div>
+          <span style="font-size: 10px; color: var(--t3)">30Y-10Y Spread:</span>
+          <span
+            class="mono font-bold"
+            x-text="D.rates?.curve?.spread_30y_10y||'N/A'"
+          ></span>
+        </div>
+        <div>
+          <span style="font-size: 10px; color: var(--t3)">殖利率曲線:</span>
+          <span
+            class="pill"
+            :class="{'pill-r':D.rates?.curve?.status==='INVERTED','pill-y':D.rates?.curve?.status==='FLAT','pill-g':D.rates?.curve?.status==='NORMAL'}"
+            x-text="D.rates?.curve?.status"
+          ></span>
+        </div>
+      </div>
+
+      <!-- Bond ETFs -->
+      <div class="sec-h"><span class="icon">📉</span> Bond ETF Monitor</div>
+      <table class="dt">
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>名稱</th>
+            <th class="r">價格</th>
+            <th class="r">今日%</th>
+            <th class="r">1W%</th>
+            <th class="r">1M%</th>
+            <th class="r">YTD%</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="e in D.rates?.etfs||[]">
+            <tr>
+              <td class="mono font-bold" x-text="e.symbol"></td>
+              <td style="color: var(--t2)" x-text="e.name"></td>
+              <td class="r mono" x-text="'$'+e.price?.toFixed(2)"></td>
+              <td
+                class="r mono"
+                :style="{color:e.change_pct>0?'var(--green)':'var(--red)'}"
+                x-text="(e.change_pct>0?'+':'')+e.change_pct+'%'"
+              ></td>
+              <td
+                class="r mono"
+                :style="{color:e.week1_pct>0?'var(--green)':'var(--red)'}"
+                x-text="(e.week1_pct>0?'+':'')+e.week1_pct+'%'"
+              ></td>
+              <td
+                class="r mono"
+                :style="{color:e.month1_pct>0?'var(--green)':'var(--red)'}"
+                x-text="(e.month1_pct>0?'+':'')+e.month1_pct+'%'"
+              ></td>
+              <td
+                class="r mono"
+                :style="{color:e.ytd_pct>0?'var(--green)':'var(--red)'}"
+                x-text="(e.ytd_pct>0?'+':'')+e.ytd_pct+'%'"
+              ></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ═══ POLITICAL TAB ═══ -->
+    <div x-show="tab==='political' && !loading" class="fade">
+      <div class="sec-h">
+        <span class="icon">🏛️</span> 政治風險籃 — Trump 相關 & 國防
+      </div>
+      <div
+        style="
+          padding: 10px 14px;
+          background: var(--s2);
+          border-bottom: 1px solid var(--bd);
+          font-size: 11px;
+        "
+      >
+        <span style="color: var(--t3)">Trump 情緒指標 (DJT proxy):</span>
+        <span
+          class="pill"
+          :class="{'pill-g':D.political_risk?.trump_sentiment==='BULLISH','pill-r':D.political_risk?.trump_sentiment==='BEARISH','pill-y':D.political_risk?.trump_sentiment==='NEUTRAL'}"
+          x-text="D.political_risk?.trump_sentiment"
+        ></span>
+        <span
+          class="mono ml-2"
+          x-text="'DJT $'+(D.political_risk?.djt_price||0).toFixed(2)"
+        ></span>
+        <span
+          class="mono ml-1"
+          :style="{color:D.political_risk?.djt_change>0?'var(--green)':'var(--red)'}"
+          x-text="(D.political_risk?.djt_change>0?'+':'')+D.political_risk?.djt_change?.toFixed(2)+'%'"
+        ></span>
+        <span class="ml-3" style="color: var(--t3)">| 政治籃動量(1M):</span>
+        <span
+          class="mono"
+          :style="{color:D.political_risk?.basket_momentum_1m>0?'var(--green)':'var(--red)'}"
+          x-text="(D.political_risk?.basket_momentum_1m>0?'+':'')+D.political_risk?.basket_momentum_1m+'%'"
+        ></span>
+      </div>
+      <table class="dt">
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>名稱</th>
+            <th class="r">價格</th>
+            <th class="r">今日%</th>
+            <th class="r">1W%</th>
+            <th class="r">1M%</th>
+            <th class="r">YTD%</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="p in D.political_risk?.basket||[]">
+            <tr>
+              <td class="mono font-bold" x-text="p.symbol"></td>
+              <td style="color: var(--t2)" x-text="p.name"></td>
+              <td class="r mono" x-text="'$'+p.price?.toFixed(2)"></td>
+              <td
+                class="r mono"
+                :style="{color:p.change_pct>0?'var(--green)':'var(--red)'}"
+                x-text="(p.change_pct>0?'+':'')+p.change_pct+'%'"
+              ></td>
+              <td
+                class="r mono"
+                :style="{color:p.week1_pct>0?'var(--green)':'var(--red)'}"
+                x-text="(p.week1_pct>0?'+':'')+p.week1_pct+'%'"
+              ></td>
+              <td
+                class="r mono"
+                :style="{color:p.month1_pct>0?'var(--green)':'var(--red)'}"
+                x-text="(p.month1_pct>0?'+':'')+p.month1_pct+'%'"
+              ></td>
+              <td
+                class="r mono"
+                :style="{color:p.ytd_pct>0?'var(--green)':'var(--red)'}"
+                x-text="(p.ytd_pct>0?'+':'')+p.ytd_pct+'%'"
+              ></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+      <div
+        class="card-p"
+        style="
+          font-size: 10px;
+          color: var(--t3);
+          border-top: 1px solid var(--bd);
+        "
+      >
+        📌 DJT (Trump Media) 被用作 Trump 政策信心的實時指標。國防股
+        (LMT/RTX/NOC/GD) 反映地緣政治風險定價。BA 追蹤出口政策敏感度。
+      </div>
+    </div>
+
+    <!-- ═══ WAR TAB ═══ -->
+    <div x-show="tab==='war' && !loading" class="fade">
+      <div class="sec-h"><span class="icon">⚔️</span> 戰爭/地緣政治避險籃</div>
+      <div
+        style="
+          padding: 10px 14px;
+          background: var(--s2);
+          border-bottom: 1px solid var(--bd);
+          display: flex;
+          gap: 20px;
+          flex-wrap: wrap;
+          font-size: 11px;
+        "
+      >
+        <div>
+          <span style="color: var(--t3)">戰爭風險分數:</span>
+          <span
+            class="mono font-bold"
+            :style="{color:D.war_geopolitical?.risk_label==='HIGH'?'var(--red)':D.war_geopolitical?.risk_label==='ELEVATED'?'var(--amber)':'var(--green)'}"
+            x-text="D.war_geopolitical?.risk_score+'/100'"
+          ></span>
+        </div>
+        <div>
+          <span style="color: var(--t3)">國防股動量(1M):</span>
+          <span
+            class="mono"
+            :style="{color:D.war_geopolitical?.defense_momentum_1m>0?'var(--green)':'var(--red)'}"
+            x-text="(D.war_geopolitical?.defense_momentum_1m>0?'+':'')+D.war_geopolitical?.defense_momentum_1m+'%'"
+          ></span>
+        </div>
+        <div>
+          <span style="color: var(--t3)">黃金YTD:</span>
+          <span
+            class="mono"
+            :style="{color:D.war_geopolitical?.gold_ytd>0?'var(--green)':'var(--red)'}"
+            x-text="(D.war_geopolitical?.gold_ytd>0?'+':'')+D.war_geopolitical?.gold_ytd+'%'"
+          ></span>
+        </div>
+        <div>
+          <span style="color: var(--t3)">VIX:</span>
+          <span
+            class="mono font-bold"
+            :style="{color:D.war_geopolitical?.vix>22?'var(--red)':'var(--green)'}"
+            x-text="D.war_geopolitical?.vix?.toFixed(1)"
+          ></span>
+        </div>
+      </div>
+
+      <!-- Group by category -->
+      <template x-for="cat in ['defense','energy','safe_haven','fear','macro']">
+        <div>
+          <div
+            style="
+              padding: 6px 14px;
+              font-size: 10px;
+              font-weight: 600;
+              color: var(--t3);
+              text-transform: uppercase;
+              background: var(--bg);
+              border-bottom: 1px solid var(--bd);
+            "
+            x-text="cat==='defense'?'🛡️ 國防':'cat==='energy'?'⛽ 能源':'cat==='safe_haven'?'🏆 避險資產':'cat==='fear'?'😱 恐慌指標':'🌐 宏觀'"
+          ></div>
+          <table class="dt">
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>名稱</th>
+                <th class="r">價格</th>
+                <th class="r">今日%</th>
+                <th class="r">1W%</th>
+                <th class="r">1M%</th>
+                <th class="r">YTD%</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template
+                x-for="w in (D.war_geopolitical?.basket||[]).filter(x=>x.category===cat)"
+              >
+                <tr>
+                  <td class="mono font-bold" x-text="w.symbol"></td>
+                  <td style="color: var(--t2)" x-text="w.name"></td>
+                  <td class="r mono" x-text="w.price?.toFixed(2)"></td>
+                  <td
+                    class="r mono"
+                    :style="{color:w.change_pct>0?'var(--green)':'var(--red)'}"
+                    x-text="(w.change_pct>0?'+':'')+w.change_pct+'%'"
+                  ></td>
+                  <td
+                    class="r mono"
+                    :style="{color:w.week1_pct>0?'var(--green)':'var(--red)'}"
+                    x-text="(w.week1_pct>0?'+':'')+w.week1_pct+'%'"
+                  ></td>
+                  <td
+                    class="r mono"
+                    :style="{color:w.month1_pct>0?'var(--green)':'var(--red)'}"
+                    x-text="(w.month1_pct>0?'+':'')+w.month1_pct+'%'"
+                  ></td>
+                  <td
+                    class="r mono"
+                    :style="{color:w.ytd_pct>0?'var(--green)':'var(--red)'}"
+                    x-text="(w.ytd_pct>0?'+':'')+w.ytd_pct+'%'"
+                  ></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </template>
+    </div>
+
+    <!-- ═══ INSIDER TAB ═══ -->
+    <div x-show="tab==='insider' && !loading" class="fade">
+      <div class="sec-h">
+        <span class="icon">👔</span> 高管持倉情緒 (價格動量代理)
+      </div>
+      <div
+        style="
+          padding: 10px 14px;
+          background: var(--s2);
+          border-bottom: 1px solid var(--bd);
+          display: flex;
+          gap: 20px;
+          font-size: 11px;
+        "
+      >
+        <div>
+          <span style="color: var(--t3)">累積信號:</span>
+          <span
+            class="pill pill-g"
+            x-text="D.insider_proxy?.accumulate_count||0"
+          ></span>
+        </div>
+        <div>
+          <span style="color: var(--t3)">減持信號:</span>
+          <span
+            class="pill pill-r"
+            x-text="D.insider_proxy?.distribute_count||0"
+          ></span>
+        </div>
+        <div>
+          <span style="color: var(--t3)">持有:</span>
+          <span
+            class="pill pill-y"
+            x-text="(D.insider_proxy?.watchlist||[]).length - (D.insider_proxy?.accumulate_count||0) - (D.insider_proxy?.distribute_count||0)"
+          ></span>
+        </div>
+      </div>
+      <table class="dt">
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>高管/家族</th>
+            <th class="r">價格</th>
+            <th class="r">今日%</th>
+            <th class="r">1M%</th>
+            <th class="r">YTD%</th>
+            <th class="c">信號</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="ins in D.insider_proxy?.watchlist||[]">
+            <tr>
+              <td class="mono font-bold" x-text="ins.ticker"></td>
+              <td x-text="ins.name" style="color: var(--t2)"></td>
+              <td class="r mono" x-text="'$'+ins.price?.toFixed(2)"></td>
+              <td
+                class="r mono"
+                :style="{color:ins.change_pct>0?'var(--green)':'var(--red)'}"
+                x-text="(ins.change_pct>0?'+':'')+ins.change_pct+'%'"
+              ></td>
+              <td
+                class="r mono"
+                :style="{color:ins.month1_pct>0?'var(--green)':'var(--red)'}"
+                x-text="(ins.month1_pct>0?'+':'')+ins.month1_pct+'%'"
+              ></td>
+              <td
+                class="r mono"
+                :style="{color:ins.ytd_pct>0?'var(--green)':'var(--red)'}"
+                x-text="(ins.ytd_pct>0?'+':'')+ins.ytd_pct+'%'"
+              ></td>
+              <td class="c">
+                <span
+                  class="pill"
+                  :class="{'pill-g':ins.insider_signal==='ACCUMULATE','pill-r':ins.insider_signal==='DISTRIBUTE','pill-y':ins.insider_signal==='HOLD'}"
+                  x-text="ins.insider_signal"
+                ></span>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+      <div
+        class="card-p"
+        style="
+          font-size: 10px;
+          color: var(--t3);
+          border-top: 1px solid var(--bd);
+        "
+      >
+        📌 基於1個月價格動量推斷: >+5% = ACCUMULATE (累積), <-5% = DISTRIBUTE
+        (減持)。此為代理指標,非實際SEC Form 4申報數據。Trump Family 透過 DJT
+        追蹤。
+      </div>
+    </div>
+
+    <!-- ═══ CORRELATION TAB ═══ -->
+    <div x-show="tab==='corr' && !loading" class="fade">
+      <div class="sec-h">
+        <span class="icon">📊</span> 6個月相關性矩陣 (日收益率)
+      </div>
+      <div style="overflow-x: auto; padding: 8px">
+        <table class="dt" style="font-size: 10px">
+          <thead>
+            <tr>
+              <th style="min-width: 80px"></th>
+              <template x-for="lb in D.correlations?.labels||[]">
+                <th
+                  class="c"
+                  style="
+                    min-width: 48px;
+                    font-size: 8px;
+                    writing-mode: vertical-lr;
+                    transform: rotate(180deg);
+                    height: 60px;
+                  "
+                  x-text="lb"
+                ></th>
+              </template>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="a in D.correlations?.labels||[]">
+              <tr>
+                <td class="font-bold" style="font-size: 10px" x-text="a"></td>
+                <template x-for="b in D.correlations?.labels||[]">
+                  <td class="c" style="padding: 2px">
+                    <span
+                      class="corr-cell"
+                      :style="{background: corrBg(D.correlations?.matrix?.[a]?.[b]||0)}"
+                      x-text="(D.correlations?.matrix?.[a]?.[b]||0).toFixed(2)"
+                    ></span>
+                  </td>
+                </template>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- SPY factor correlations bar -->
+      <div class="sec-h"><span class="icon">🎯</span> SPY 相關因子排名</div>
+      <div style="padding: 10px 14px">
+        <template x-for="[fac, val] in spySorted()">
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              margin-bottom: 6px;
+            "
+          >
+            <span
+              style="
+                font-size: 10px;
+                width: 90px;
+                color: var(--t2);
+                text-align: right;
+              "
+              x-text="fac"
+            ></span>
+            <div
+              style="
+                flex: 1;
+                height: 18px;
+                background: var(--s2);
+                border-radius: 3px;
+                position: relative;
+                overflow: hidden;
+              "
+            >
+              <div
+                style="
+                  position: absolute;
+                  left: 50%;
+                  top: 0;
+                  bottom: 0;
+                  width: 1px;
+                  background: var(--bd2);
+                "
+              ></div>
+              <div
+                style="
+                  position: absolute;
+                  top: 2px;
+                  bottom: 2px;
+                  border-radius: 2px;
+                  transition: all 0.3s;
+                "
+                :style="{
+                             left: val>=0 ? '50%' : (50+val*50)+'%',
+                             width: Math.abs(val)*50+'%',
+                             background: val>0?'var(--green)':'var(--red)'
+                         }"
+              ></div>
+            </div>
+            <span
+              class="mono"
+              style="font-size: 10px; width: 40px"
+              :style="{color:val>0?'var(--green)':'var(--red)'}"
+              x-text="val?.toFixed(2)"
+            ></span>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ═══ INSIGHTS TAB ═══ -->
+    <div x-show="tab==='insights' && !loading" class="fade">
+      <div class="sec-h"><span class="icon">💡</span> AI 相關性洞察</div>
+      <div style="padding: 10px 14px">
+        <template x-for="ins in D.correlations?.insights||[]">
+          <div class="insight" :class="{'warn':ins.severity==='warning'}">
+            <div class="factor" x-text="ins.factor+' (r='+ins.corr+')'"></div>
+            <div x-text="ins.text"></div>
+          </div>
+        </template>
+        <div
+          x-show="!(D.correlations?.insights||[]).length"
+          style="
+            font-size: 12px;
+            color: var(--t3);
+            padding: 20px;
+            text-align: center;
+          "
+        >
+          目前各因子相關性在正常範圍內,無需特別警示。
+        </div>
+      </div>
+
+      <!-- Summary Card -->
+      <div class="sec-h"><span class="icon">📋</span> 摘要</div>
+      <div style="padding: 14px">
+        <div class="card">
+          <table class="dt">
+            <tbody>
+              <tr>
+                <td style="color: var(--t3); width: 40%">利率方向</td>
+                <td
+                  class="mono font-bold"
+                  x-text="D.summary?.rate_direction"
+                ></td>
+              </tr>
+              <tr>
+                <td style="color: var(--t3)">殖利率曲線</td>
+                <td>
+                  <span
+                    class="pill"
+                    :class="{'pill-r':D.summary?.yield_curve==='INVERTED','pill-y':D.summary?.yield_curve==='FLAT','pill-g':D.summary?.yield_curve==='NORMAL'}"
+                    x-text="D.summary?.yield_curve"
+                  ></span>
+                </td>
+              </tr>
+              <tr>
+                <td style="color: var(--t3)">Trump 情緒</td>
+                <td>
+                  <span
+                    class="pill"
+                    :class="{'pill-g':D.summary?.trump_sentiment==='BULLISH','pill-r':D.summary?.trump_sentiment==='BEARISH','pill-y':D.summary?.trump_sentiment==='NEUTRAL'}"
+                    x-text="D.summary?.trump_sentiment"
+                  ></span>
+                </td>
+              </tr>
+              <tr>
+                <td style="color: var(--t3)">戰爭風險</td>
+                <td>
+                  <span
+                    class="pill"
+                    :class="{'pill-r':D.summary?.war_risk==='HIGH','pill-y':D.summary?.war_risk==='ELEVATED','pill-g':D.summary?.war_risk==='LOW'}"
+                    x-text="D.summary?.war_risk+' ('+D.summary?.war_risk_score+'/100)'"
+                  ></span>
+                </td>
+              </tr>
+              <tr>
+                <td style="color: var(--t3)">政治籃動量(1M)</td>
+                <td
+                  class="mono"
+                  :style="{color:D.summary?.political_momentum>0?'var(--green)':'var(--red)'}"
+                  x-text="(D.summary?.political_momentum>0?'+':'')+D.summary?.political_momentum+'%'"
+                ></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Nav -->
+    <div
+      style="
+        padding: 12px 14px;
+        border-top: 1px solid var(--bd);
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        justify-content: center;
+      "
+    >
+      <a
+        href="/"
+        style="font-size: 10px; color: var(--t3); text-decoration: none"
+        >Dashboard</a
+      >
+      <span style="color: var(--bd)">|</span>
+      <a
+        href="/regime-screener"
+        style="font-size: 10px; color: var(--t3); text-decoration: none"
+        >Screener</a
+      >
+      <span style="color: var(--bd)">|</span>
+      <a
+        href="/performance-lab"
+        style="font-size: 10px; color: var(--t3); text-decoration: none"
+        >Performance</a
+      >
+      <span style="color: var(--bd)">|</span>
+      <a
+        href="/options-lab"
+        style="font-size: 10px; color: var(--t3); text-decoration: none"
+        >Options</a
+      >
+      <span style="color: var(--bd)">|</span>
+      <a
+        href="/compare"
+        style="font-size: 10px; color: var(--t3); text-decoration: none"
+        >Compare</a
+      >
+      <span style="color: var(--bd)">|</span>
+      <span style="font-size: 10px; color: var(--green); font-weight: 600"
+        >Macro Intel</span
+      >
+    </div>
+
+    <script>
+      function MI() {
+        return {
+          D: {},
+          tab: "rates",
+          loading: true,
+          async load() {
+            try {
+              const r = await fetch("/api/v7/macro-intel");
+              this.D = await r.json();
+            } catch (e) {
+              console.error(e);
+              this.D = {};
+            }
+            this.loading = false;
+          },
+          corrBg(v) {
+            if (v > 0.7) return "rgba(0,212,170,0.5)";
+            if (v > 0.4) return "rgba(0,212,170,0.25)";
+            if (v > 0.1) return "rgba(0,212,170,0.1)";
+            if (v > -0.1) return "transparent";
+            if (v > -0.4) return "rgba(255,92,92,0.1)";
+            if (v > -0.7) return "rgba(255,92,92,0.25)";
+            return "rgba(255,92,92,0.5)";
+          },
+          spySorted() {
+            const sc = this.D?.correlations?.spy_factors || {};
+            return Object.entries(sc)
+              .filter(([k]) => k !== "S&P 500")
+              .sort((a, b) => b[1] - a[1]);
+          },
+        };
+      }
+    </script>
+  </body>
+</html>

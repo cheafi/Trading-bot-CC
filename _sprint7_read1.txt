@@ -1,0 +1,50 @@
+   1: """
+   2: TradingAI Bot - Professional Autonomous Trading Engine
+   3: 
+   4: Runs 24/7 without human intervention. Handles:
+   5: - Market session awareness (US, HK, JP, Crypto)
+   6: - Signal generation → validation → execution pipeline
+   7: - Position monitoring with trailing stops
+   8: - Auto risk management (daily loss limit, drawdown circuit breaker)
+   9: - Self-healing: auto-restart, stale data detection
+  10: - Learning loop: records outcomes for ML retraining
+  11: """
+  12: import asyncio
+  13: import logging
+  14: import time
+  15: from collections import defaultdict
+  16: from datetime import datetime, date, timedelta, timezone
+  17: from typing import Any, Dict, List, Optional, Set
+  18: 
+  19: from src.core.config import get_settings, get_trading_config
+  20: from src.core.models import Direction, Signal, SignalStatus
+  21: from src.engines.regime_router import RegimeRouter
+  22: from src.engines.opportunity_ensembler import OpportunityEnsembler
+  23: from src.engines.context_assembler import ContextAssembler
+  24: from src.engines.strategy_leaderboard import StrategyLeaderboard
+  25: from src.algo.position_manager import PositionManager, RiskParameters
+  26: from src.ml.trade_learner import TradeLearningLoop, TradeOutcomeRecord
+  27: from src.core.errors import BrokerError, DataError, RiskLimitError
+  28: 
+  29: logger = logging.getLogger(__name__)
+  30: settings = get_settings()
+  31: trading_config = get_trading_config()
+  32: 
+  33: 
+  34: # ---------------------------------------------------------------------------
+  35: # Market session schedule (UTC)
+  36: # ---------------------------------------------------------------------------
+  37: MARKET_SESSIONS = {
+  38:     "us_premarket":  {"open": (9, 0),  "close": (13, 30), "markets": ["us"]},
+  39:     "us_regular":    {"open": (13, 30), "close": (20, 0),  "markets": ["us"]},
+  40:     "us_afterhours": {"open": (20, 0),  "close": (24, 0),  "markets": ["us"]},
+  41:     "hk_regular":    {"open": (1, 30),  "close": (8, 0),   "markets": ["hk"]},
+  42:     "jp_regular":    {"open": (0, 0),   "close": (6, 0),   "markets": ["jp"]},
+  43:     "crypto_247":    {"open": (0, 0),   "close": (24, 0),  "markets": ["crypto"]},
+  44: }
+  45: 
+  46: 
+  47: class RiskCircuitBreaker:
+  48:     """
+  49:     Portfolio-level risk controls that halt trading automatically.
+  50: 

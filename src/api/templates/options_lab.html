@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0d1117">
+    <title>Options Lab - TradingAI Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root{--bg:#0d1117;--s1:#161b22;--s2:#1c2333;--bd:#21262d;--t1:#e6edf3;--t2:#8b949e;--t3:#484f58;--green:#00d4aa;--red:#ff5c5c;--amber:#fbbf24;--blue:#58a6ff}
+        *{font-family:'Inter',sans-serif;box-sizing:border-box;margin:0}
+        body{background:var(--bg);color:var(--t1);overflow-x:hidden}
+        .mono{font-family:'JetBrains Mono',monospace}
+
+        /* Clean table (report style like screenshot 3) */
+        .report-tbl{width:100%;border-collapse:collapse;font-size:12px}
+        .report-tbl th{text-align:left;padding:8px 12px;color:var(--t3);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;border-bottom:2px solid var(--bd);background:var(--s1)}
+        .report-tbl td{padding:7px 12px;border-bottom:1px solid var(--bd)}
+        .report-tbl tr:hover{background:var(--s2)}
+        .report-tbl .r{text-align:right}
+        .report-tbl .c{text-align:center}
+
+        /* Context table (screenshot 3 style - clean 2-column) */
+        .ctx-tbl{width:100%;border-collapse:collapse;font-size:12px}
+        .ctx-tbl td{padding:8px 12px;border-bottom:1px solid var(--bd)}
+        .ctx-tbl td:first-child{color:var(--t3);font-weight:500;width:40%}
+        .ctx-tbl td:nth-child(2){font-weight:600;width:30%}
+        .ctx-tbl td:nth-child(3){color:var(--t2);font-size:11px}
+
+        .section{padding:16px;border-bottom:1px solid var(--bd)}
+        .section-title{font-size:13px;font-weight:700;color:var(--t1);margin-bottom:12px}
+
+        input,select{background:var(--s1);border:1px solid var(--bd);color:var(--t1);border-radius:4px;padding:7px 10px;font-size:13px;outline:none}
+        input:focus,select:focus{border-color:var(--green)}
+        .btn-go{padding:7px 18px;border-radius:4px;font-weight:700;font-size:13px;cursor:pointer;border:none;background:var(--green);color:#000}
+        .btn-go:hover{opacity:.9}
+
+        .pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600}
+        .pg{background:#00d4aa18;color:var(--green)}.pr{background:#ff5c5c18;color:var(--red)}.py{background:#fbbf2418;color:var(--amber)}.pb{background:#58a6ff18;color:var(--blue)}
+
+        .spin{display:inline-block;width:24px;height:24px;border:2px solid var(--bd);border-top-color:var(--green);border-radius:50%;animation:sp .5s linear infinite}
+        @keyframes sp{to{transform:rotate(360deg)}}
+        .fade{animation:f .2s ease}@keyframes f{from{opacity:0}to{opacity:1}}
+
+        .nav-b{position:fixed;bottom:0;left:0;right:0;background:var(--bg);border-top:1px solid var(--bd);z-index:100;padding:5px 0 env(safe-area-inset-bottom,5px)}
+        .nav-b a{display:flex;flex-direction:column;align-items:center;font-size:9px;color:var(--t3);text-decoration:none;padding:3px 0}
+        .nav-b a.on{color:var(--green)}.nav-b a .ic{font-size:17px;margin-bottom:1px}
+        .safe-b{padding-bottom:env(safe-area-inset-bottom,68px)}
+
+        .explain-box{background:var(--s2);border:1px solid var(--bd);border-radius:4px;padding:10px 14px;margin-top:8px;font-size:12px}
+    </style>
+</head>
+<body x-data="OL()" x-init="init()" class="safe-b">
+
+<!-- Header -->
+<header style="background:var(--s1);border-bottom:1px solid var(--bd)" class="flex items-center justify-between px-4 py-2.5">
+    <div class="flex items-center gap-2.5">
+        <a href="/" class="text-base">📈</a>
+        <div>
+            <div class="text-[13px] font-bold text-white" x-text="ticker?ticker+' LEAPS Call 篩選結果':'Options Lab'"></div>
+            <div class="text-[10px]" style="color:var(--t3)">Research-Grade Options Surface</div>
+        </div>
+    </div>
+</header>
+
+<!-- Search bar -->
+<div class="flex items-center gap-2 px-4 py-3" style="border-bottom:1px solid var(--bd);background:var(--s1)">
+    <input type="text" x-model="ticker" @keyup.enter="screen()" placeholder="Ticker..." class="w-28 mono" maxlength="5" style="text-transform:uppercase">
+    <select x-model="strategy" class="w-36">
+        <option value="long_call">Long Call</option>
+        <option value="long_put">Long Put</option>
+        <option value="debit_spread">Debit Spread</option>
+        <option value="credit_spread">Credit Spread</option>
+        <option value="auto">Auto (Best)</option>
+    </select>
+    <button @click="screen()" class="btn-go">Screen</button>
+    <div x-show="spot" class="ml-3 flex items-center gap-2 text-sm">
+        <span style="color:var(--t3)">現況：</span>
+        <span class="text-white font-bold mono" x-text="ticker.toUpperCase()+' 現價 $'+spot.toFixed(2)"></span>
+        <span class="text-white">|</span>
+        <span class="mono" style="color:var(--t2)" x-text="'找到 '+contracts.length+' 個合約'"></span>
+    </div>
+</div>
+
+<div x-show="ldg" class="flex justify-center py-20"><span class="spin"></span></div>
+
+<template x-if="!ldg && hasData">
+<div class="fade">
+
+    <!-- Decision banner -->
+    <div class="px-4 py-2.5 flex items-center gap-2 text-sm" style="border-bottom:1px solid var(--bd)">
+        <span style="color:var(--t3)">Expression Decision:</span>
+        <span class="pill" :class="expr.includes('call')||expr.includes('CALL')?'pg':expr.includes('put')?'pr':'pb'" x-text="expr.toUpperCase()"></span>
+    </div>
+
+    <!-- Market Context (clean table, matching screenshot 3) -->
+    <div class="section">
+        <div class="section-title">市場背景注意事項</div>
+        <div style="background:var(--s1);border:1px solid var(--bd);border-radius:4px;overflow:hidden">
+            <table class="ctx-tbl">
+                <thead><tr style="background:var(--s2)"><td style="color:var(--t3);font-size:10px;font-weight:600">指標</td><td style="color:var(--t3);font-size:10px;font-weight:600">數值</td><td style="color:var(--t3);font-size:10px;font-weight:600">說明</td></tr></thead>
+                <tbody>
+                    <tr>
+                        <td>IV 期限結構斜率</td>
+                        <td class="mono" :class="Math.abs(ctx.skew)<0.05?'':'text-amber-400'" x-text="(ctx.skew>=0?'+':'')+ctx.skew.toFixed(3)+(ctx.skew>=0?' (倒掛/正值)':' (順斜)')"></td>
+                        <td>拒絕 IV 偏離（~37%），LEAPS IV 約 32-34% 相對合理</td>
+                    </tr>
+                    <tr>
+                        <td>財報距今</td>
+                        <td class="mono" x-text="ctx.dte+' 天'"></td>
+                        <td>下次如報距 IV 可能配升，如報時 IV crush</td>
+                    </tr>
+                    <tr>
+                        <td>除息日</td>
+                        <td class="mono" x-text="ctx.exdiv+' 天'"></td>
+                        <td>Call 賣方不保證配息，需特入空倉</td>
+                    </tr>
+                    <tr>
+                        <td>IV Skew</td>
+                        <td class="mono" x-text="(ctx.skew>=0?'+':'')+ctx.skew.toFixed(3)+' (輕微正 skew)'"></td>
+                        <td>Call 略貴於 Put，正常</td>
+                    </tr>
+                    <tr>
+                        <td style="color:var(--red)" x-text="ctx.warn?'警告 HIGH IV / EARNINGS':'狀態'"></td>
+                        <td class="mono" :class="ctx.warn?'text-red-400':'text-green-400'" x-text="ctx.warn?'⚠ 注意':'✓ OK'"></td>
+                        <td x-text="ctx.warn?'LEAPS 期間有配息，需考慮調整':'LEAPS 無異常風險'"></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Contract Ranking (dense table) -->
+    <div class="section">
+        <div class="section-title">TOP <span x-text="contracts.length"></span> 合約一覽（按 EV 最佳計算順序）</div>
+        <div class="text-[11px] mb-2" style="color:var(--t3)">注意：所有合約均為 OTM，delta 0.20-0.38，市場目前價位的 LEAPS 建議 OTM 為主</div>
+        <div style="background:var(--s1);border:1px solid var(--bd);border-radius:4px;overflow:hidden">
+            <table class="report-tbl">
+                <thead><tr>
+                    <th>排名</th><th class="r">行權價</th><th class="c">DTE</th><th class="r">Mid</th><th class="r">Delta</th><th class="r">EV</th><th class="r">OI</th><th class="r">盈虧平衡</th><th class="r">最理想回報率</th>
+                </tr></thead>
+                <tbody>
+                    <template x-for="(c,i) in contracts" :key="i">
+                        <tr>
+                            <td class="mono" style="color:var(--t3)" x-text="i+1"></td>
+                            <td class="r mono font-semibold text-white" x-text="'$'+c.strike"></td>
+                            <td class="c mono" x-text="c.dte"></td>
+                            <td class="r mono text-white" x-text="'$'+c.mid.toFixed(2)"></td>
+                            <td class="r mono" x-text="c.delta.toFixed(2)"></td>
+                            <td class="r mono text-green-400 font-semibold" x-text="'$'+c.ev.toFixed(2)"></td>
+                            <td class="r mono" style="color:var(--t2)" x-text="c.oi.toLocaleString()"></td>
+                            <td class="r mono" style="color:var(--t2)" x-text="'$'+(c.strike+c.mid).toFixed(2)"></td>
+                            <td class="r">
+                                <span class="text-green-400 mono font-bold" x-text="'$'+(c.ev*2).toFixed(2)"></span>
+                                <div class="text-[9px] mono text-green-400" x-text="'(+'+(c.ev/c.mid*100).toFixed(1)+'%)'"></div>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Charts: EV vs Liquidity + IV Term Structure -->
+    <div class="grid grid-cols-1 lg:grid-cols-2">
+        <div class="section">
+            <div class="section-title">EV vs Liquidity</div>
+            <div style="height:200px;position:relative;background:var(--s1);border:1px solid var(--bd);border-radius:4px;padding:8px">
+                <canvas id="evChart"></canvas>
+            </div>
+        </div>
+        <div class="section">
+            <div class="section-title">IV Term Structure</div>
+            <div style="height:200px;position:relative;background:var(--s1);border:1px solid var(--bd);border-radius:4px;padding:8px">
+                <canvas id="ivChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Explainability -->
+    <div class="section">
+        <div class="section-title">🧠 Explainability</div>
+        <div class="explain-box" style="border-left:3px solid var(--green)">
+            <div class="text-[10px] uppercase mb-1" style="color:var(--t3)">✅ Why <span class="text-green-400" x-text="expr.toUpperCase()"></span></div>
+            <div style="color:var(--t2)" x-text="why.chosen"></div>
+        </div>
+        <div class="explain-box" x-show="why.not_stock">
+            <div class="text-[10px] uppercase mb-1" style="color:var(--t3)">❌ Why not Stock</div>
+            <div style="color:var(--t2)" x-text="why.not_stock"></div>
+        </div>
+        <div class="explain-box" x-show="why.not_spread">
+            <div class="text-[10px] uppercase mb-1" style="color:var(--t3)">❌ Why not Spread</div>
+            <div style="color:var(--t2)" x-text="why.not_spread"></div>
+        </div>
+        <div class="explain-box" style="border-left:3px solid var(--red)" x-show="why.no_trade_conditions?.length">
+            <div class="text-[10px] uppercase mb-1" style="color:var(--t3)">⛔ No-trade conditions</div>
+            <div class="flex flex-wrap gap-1.5">
+                <template x-for="c in (why.no_trade_conditions||[])"><span class="pill pr" x-text="c"></span></template>
+            </div>
+        </div>
+    </div>
+
+</div>
+</template>
+
+<nav class="nav-b"><div class="flex justify-around max-w-lg mx-auto">
+    <a href="/"><span class="ic">📊</span>Home</a>
+    <a href="/regime-screener"><span class="ic">🎯</span>Regime</a>
+    <a href="/portfolio-brief"><span class="ic">📋</span>Brief</a>
+    <a href="/compare"><span class="ic">📈</span>Compare</a>
+    <a href="/performance-lab"><span class="ic">🔬</span>Perf</a>
+    <a href="/options-lab" class="on"><span class="ic">🔮</span>Options</a>
+    <a href="/signals/explorer"><span class="ic">📡</span>Signals</a>
+</div></nav>
+
+<script>
+function OL(){return{
+    ticker:'',strategy:'auto',ldg:false,hasData:false,
+    spot:0,expr:'',
+    ctx:{ivr:0,ivp:0,skew:0,dte:0,exdiv:0,warn:false},
+    contracts:[],why:{chosen:'',not_stock:'',not_spread:'',no_trade_conditions:[]},
+    ivTerm:[],charts:{},
+
+    init(){},
+    async screen(){
+        if(!this.ticker)return;this.ldg=true;this.hasData=false;
+        try{
+            const r=await fetch('/api/v7/options-screen?ticker='+this.ticker.toUpperCase()+'&strategy='+this.strategy);
+            if(!r.ok)throw 0;const d=await r.json();
+            this.spot=d.spot_price||0;this.expr=d.expression_decision||'stock';
+            const mc=d.market_context||{};
+            this.ctx={ivr:mc.iv_rank||0,ivp:mc.iv_percentile||0,skew:mc.skew||0,dte:mc.days_to_earnings||0,exdiv:mc.ex_dividend_days||0,warn:mc.high_iv_warning||false};
+            this.contracts=d.contracts||[];this.why=d.why_this_expression||this.why;
+            this.ivTerm=d.iv_term_structure||[];this.hasData=true;
+            this.$nextTick(()=>this.drawCharts());
+        }catch(e){console.error(e)}
+        this.ldg=false;
+    },
+    drawCharts(){this.drawEV();this.drawIV()},
+    drawEV(){
+        const c=document.getElementById('evChart');if(!c)return;
+        if(this.charts.ev)this.charts.ev.destroy();
+        const data=this.contracts.map(x=>({x:Math.log10(Math.max(1,x.oi)),y:x.ev,r:Math.max(3,x.delta*15)}));
+        this.charts.ev=new Chart(c,{type:'bubble',data:{datasets:[{data,backgroundColor:this.contracts.map(x=>x.delta>.5?'#00d4aa80':x.delta>.3?'#fbbf2480':'#58a6ff80')}]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:(_,i)=>{const x=this.contracts[i.dataIndex];return'$'+x.strike+' | Δ'+x.delta.toFixed(2)+' | EV $'+x.ev.toFixed(2)}}}},
+        scales:{x:{title:{display:true,text:'log₁₀(OI)',color:'#484f58'},grid:{color:'#21262d'},ticks:{color:'#484f58',font:{size:9}}},y:{title:{display:true,text:'EV ($)',color:'#484f58'},grid:{color:'#21262d'},ticks:{color:'#484f58',font:{size:9}}}}}});
+    },
+    drawIV(){
+        const c=document.getElementById('ivChart');if(!c)return;
+        if(this.charts.iv)this.charts.iv.destroy();
+        this.charts.iv=new Chart(c,{type:'line',data:{labels:this.ivTerm.map(p=>p.dte+'d'),datasets:[{label:'IV',data:this.ivTerm.map(p=>p.iv*100),borderColor:'#58a6ff',borderWidth:2,pointRadius:4,pointBackgroundColor:'#58a6ff',tension:.3,fill:{target:'origin',above:'rgba(88,166,255,0.06)'}}]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'#21262d'},ticks:{color:'#484f58',font:{size:9}}},y:{title:{display:true,text:'IV %',color:'#484f58'},grid:{color:'#21262d'},ticks:{color:'#484f58',font:{size:9},callback:v=>v.toFixed(0)+'%'}}}}});
+    }
+}}
+</script>
+</body>
+</html>

@@ -1,0 +1,71 @@
+ 280: # ═══════════════════════════════════════════════════════════════════════
+ 281: # CALIBRATED EDGE MODEL (historically-conditioned probabilities)
+ 282: # ═══════════════════════════════════════════════════════════════════════
+ 283: 
+ 284: class EdgeCalculator:
+ 285:     """
+ 286:     Computes calibrated P(T1), P(T2), P(stop), EV
+ 287:     conditioned on strategy × regime × setup tags.
+ 288: 
+ 289:     Data source: analytics.signal_outcomes + analytics.regime_edge_stats tables.
+ 290:     Falls back to base-rate estimates when insufficient data.
+ 291:     """
+ 292: 
+ 293:     # Base-rate priors (used when calibration data is insufficient)
+ 294:     BASE_RATES = {
+ 295:         "momentum_breakout":  {"p_t1": 0.55, "p_t2": 0.35, "p_stop": 0.40, "ev": 0.8, "mae": -1.5, "days": 8},
+ 296:         "vcp":                {"p_t1": 0.58, "p_t2": 0.38, "p_stop": 0.35, "ev": 1.0, "mae": -1.2, "days": 10},
+ 297:         "mean_reversion":     {"p_t1": 0.62, "p_t2": 0.30, "p_stop": 0.38, "ev": 0.6, "mae": -1.8, "days": 5},
+ 298:         "trend_following":    {"p_t1": 0.50, "p_t2": 0.32, "p_stop": 0.42, "ev": 0.9, "mae": -2.0, "days": 15},
+ 299:         "classic_swing":      {"p_t1": 0.52, "p_t2": 0.33, "p_stop": 0.40, "ev": 0.7, "mae": -1.6, "days": 7},
+ 300:     }
+ 301:     DEFAULT_RATE = {"p_t1": 0.50, "p_t2": 0.30, "p_stop": 0.45, "ev": 0.5, "mae": -1.5, "days": 7}
+ 302: 
+ 303:     def __init__(self):
+ 304:         self._calibration_cache: Dict[str, Dict] = {}
+ 305:         self.logger = logging.getLogger(__name__)
+ 306: 
+ 307:     def load_calibration(self, rows: List[Dict]):
+ 308:         """Load pre-computed regime edge stats from DB."""
+ 309:         for r in rows:
+ 310:             key = r.get("calibration_bucket", "")
+ 311:             self._calibration_cache[key] = r
+ 312: 
+ 313:     def compute(
+ 314:         self,
+ 315:         signal: Signal,
+ 316:         regime: MarketRegime,
+ 317:         features: Dict[str, Any],
+ 318:     ) -> EdgeModel:
+ 319:         """
+ 320:         Compute edge model for a signal.
+ 321:         Uses calibration data if available, else base-rate priors with regime adjustments.
+ 322:         """
+ 323:         strategy = signal.strategy_id or "unknown"
+ 324:         bucket = f"{strategy}|{regime.risk.value}|{regime.volatility.value}"
+ 325: 
+ 326:         # Check calibration cache
+ 327:         calibrated = self._calibration_cache.get(bucket)
+ 328:         if calibrated and calibrated.get("sample_size", 0) >= 30:
+ 329:             return EdgeModel(
+ 330:                 p_stop=calibrated.get("p_stop", 0.5),
+ 331:                 p_t1=calibrated.get("p_t1", 0.5),
+ 332:                 p_t2=calibrated.get("p_t2", 0.3),
+ 333:                 expected_return_pct=calibrated.get("expected_return_pct", 0),
+ 334:                 expected_mae_pct=calibrated.get("expected_mae_pct", -1.5),
+ 335:                 expected_holding_days=calibrated.get("expected_holding_days", 7),
+ 336:                 calibration_bucket=bucket,
+ 337:                 sample_size=calibrated.get("sample_size", 0),
+ 338:             )
+ 339: 
+ 340:         # Base rate + regime adjustments
+ 341:         base = self.BASE_RATES.get(strategy, self.DEFAULT_RATE)
+ 342:         p_t1 = base["p_t1"]
+ 343:         p_t2 = base["p_t2"]
+ 344:         p_stop = base["p_stop"]
+ 345:         ev = base["ev"]
+ 346:         mae = base["mae"]
+ 347:         days = base["days"]
+ 348: 
+ 349:         # Regime adjustments (mechanical, not guessed)
+ 350:         if regime.risk == RiskRegime.RISK_ON and regime.trend in [TrendRegime.UPTREND, TrendRegime.STRONG_UPTREND]:
