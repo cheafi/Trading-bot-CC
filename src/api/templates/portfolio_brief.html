@@ -1,190 +1,466 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#0d1117">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <meta name="theme-color" content="#0d1117" />
     <title>Portfolio Brief - TradingAI Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script
+      defer
+      src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"
+    ></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <style>
-        :root{--bg:#0d1117;--s1:#161b22;--s2:#1c2333;--bd:#21262d;--t1:#e6edf3;--t2:#8b949e;--t3:#484f58;--green:#00d4aa;--red:#ff5c5c;--amber:#fbbf24;--blue:#58a6ff}
-        *{font-family:'Inter',sans-serif;box-sizing:border-box;margin:0}
-        body{background:var(--bg);color:var(--t1);overflow-x:hidden}
-        .mono{font-family:'JetBrains Mono',monospace}
+      :root {
+        --bg: #0d1117;
+        --s1: #161b22;
+        --s2: #1c2333;
+        --bd: #21262d;
+        --t1: #e6edf3;
+        --t2: #8b949e;
+        --t3: #484f58;
+        --green: #00d4aa;
+        --red: #ff5c5c;
+        --amber: #fbbf24;
+        --blue: #58a6ff;
+      }
+      * {
+        font-family: "Inter", sans-serif;
+        box-sizing: border-box;
+        margin: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--t1);
+        overflow-x: hidden;
+      }
+      .mono {
+        font-family: "JetBrains Mono", monospace;
+      }
 
-        /* Chat-style cards */
-        .brief-card{background:var(--s1);border:1px solid var(--bd);border-radius:6px;padding:14px 16px;margin-bottom:10px}
-        .brief-card h3{font-size:14px;font-weight:700;margin-bottom:8px}
-        .holding-row{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--s2);border:1px solid var(--bd);border-radius:4px;margin-bottom:4px}
-        .holding-row .ticker{font-weight:700;font-size:13px;min-width:50px}
-        .holding-row .chg{font-weight:700;font-size:13px;min-width:60px}
-        .holding-row .note{font-size:11px;color:var(--t2);flex:1;margin-left:12px}
-        .holding-row .badges{display:flex;gap:3px;margin-left:8px}
+      /* Chat-style cards */
+      .brief-card {
+        background: var(--s1);
+        border: 1px solid var(--bd);
+        border-radius: 6px;
+        padding: 14px 16px;
+        margin-bottom: 10px;
+      }
+      .brief-card h3 {
+        font-size: 14px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      .holding-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 12px;
+        background: var(--s2);
+        border: 1px solid var(--bd);
+        border-radius: 4px;
+        margin-bottom: 4px;
+      }
+      .holding-row .ticker {
+        font-weight: 700;
+        font-size: 13px;
+        min-width: 50px;
+      }
+      .holding-row .chg {
+        font-weight: 700;
+        font-size: 13px;
+        min-width: 60px;
+      }
+      .holding-row .note {
+        font-size: 11px;
+        color: var(--t2);
+        flex: 1;
+        margin-left: 12px;
+      }
+      .holding-row .badges {
+        display: flex;
+        gap: 3px;
+        margin-left: 8px;
+      }
 
-        .pill{display:inline-flex;align-items:center;padding:2px 6px;border-radius:3px;font-size:9px;font-weight:600}
-        .pg{background:#00d4aa18;color:var(--green)}.pr{background:#ff5c5c18;color:var(--red)}.py{background:#fbbf2418;color:var(--amber)}
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 9px;
+        font-weight: 600;
+      }
+      .pg {
+        background: #00d4aa18;
+        color: var(--green);
+      }
+      .pr {
+        background: #ff5c5c18;
+        color: var(--red);
+      }
+      .py {
+        background: #fbbf2418;
+        color: var(--amber);
+      }
 
-        .cluster-box{background:var(--s2);border:1px solid var(--bd);border-radius:4px;padding:10px 12px;margin-bottom:6px}
-        .catalyst-item{display:flex;align-items:flex-start;gap:6px;padding:4px 0;font-size:12px;color:var(--t2)}
+      .cluster-box {
+        background: var(--s2);
+        border: 1px solid var(--bd);
+        border-radius: 4px;
+        padding: 10px 12px;
+        margin-bottom: 6px;
+      }
+      .catalyst-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        padding: 4px 0;
+        font-size: 12px;
+        color: var(--t2);
+      }
 
-        .q-btn{background:var(--s2);border:1px solid var(--bd);color:var(--t2);padding:6px 12px;border-radius:4px;font-size:11px;cursor:pointer;transition:all .15s}
-        .q-btn:hover{border-color:var(--green);color:var(--green)}
+      .q-btn {
+        background: var(--s2);
+        border: 1px solid var(--bd);
+        color: var(--t2);
+        padding: 6px 12px;
+        border-radius: 4px;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .q-btn:hover {
+        border-color: var(--green);
+        color: var(--green);
+      }
 
-        .answer-box{background:#58a6ff08;border:1px solid #58a6ff30;border-radius:4px;padding:10px 12px;margin-top:8px;font-size:12px;color:var(--t2)}
+      .answer-box {
+        background: #58a6ff08;
+        border: 1px solid #58a6ff30;
+        border-radius: 4px;
+        padding: 10px 12px;
+        margin-top: 8px;
+        font-size: 12px;
+        color: var(--t2);
+      }
 
-        .spin{display:inline-block;width:24px;height:24px;border:2px solid var(--bd);border-top-color:var(--green);border-radius:50%;animation:sp .5s linear infinite}
-        @keyframes sp{to{transform:rotate(360deg)}}
-        .fade{animation:f .2s ease}@keyframes f{from{opacity:0}to{opacity:1}}
+      .spin {
+        display: inline-block;
+        width: 24px;
+        height: 24px;
+        border: 2px solid var(--bd);
+        border-top-color: var(--green);
+        border-radius: 50%;
+        animation: sp 0.5s linear infinite;
+      }
+      @keyframes sp {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .fade {
+        animation: f 0.2s ease;
+      }
+      @keyframes f {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
 
-        input[type=date]{background:var(--s1);border:1px solid var(--bd);color:var(--t2);border-radius:4px;padding:4px 8px;font-size:11px;outline:none}
+      input[type="date"] {
+        background: var(--s1);
+        border: 1px solid var(--bd);
+        color: var(--t2);
+        border-radius: 4px;
+        padding: 4px 8px;
+        font-size: 11px;
+        outline: none;
+      }
 
-        .nav-b{position:fixed;bottom:0;left:0;right:0;background:var(--bg);border-top:1px solid var(--bd);z-index:100;padding:5px 0 env(safe-area-inset-bottom,5px)}
-        .nav-b a{display:flex;flex-direction:column;align-items:center;font-size:9px;color:var(--t3);text-decoration:none;padding:3px 0}
-        .nav-b a.on{color:var(--green)}.nav-b a .ic{font-size:17px;margin-bottom:1px}
-        .safe-b{padding-bottom:env(safe-area-inset-bottom,68px)}
+      .nav-b {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: var(--bg);
+        border-top: 1px solid var(--bd);
+        z-index: 100;
+        padding: 5px 0 env(safe-area-inset-bottom, 5px);
+      }
+      .nav-b a {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        font-size: 9px;
+        color: var(--t3);
+        text-decoration: none;
+        padding: 3px 0;
+      }
+      .nav-b a.on {
+        color: var(--green);
+      }
+      .nav-b a .ic {
+        font-size: 17px;
+        margin-bottom: 1px;
+      }
+      .safe-b {
+        padding-bottom: env(safe-area-inset-bottom, 68px);
+      }
     </style>
-</head>
-<body x-data="PB()" x-init="init()" class="safe-b">
-
-<!-- Header -->
-<header style="background:var(--s1);border-bottom:1px solid var(--bd)" class="flex items-center justify-between px-4 py-2.5">
-    <div class="flex items-center gap-2.5">
+  </head>
+  <body x-data="PB()" x-init="init()" class="safe-b">
+    <!-- Header -->
+    <header
+      style="background: var(--s1); border-bottom: 1px solid var(--bd)"
+      class="flex items-center justify-between px-4 py-2.5"
+    >
+      <div class="flex items-center gap-2.5">
         <a href="/" class="text-base">📈</a>
         <div>
-            <div class="text-[13px] font-bold text-white">📊 Portfolio Weekly</div>
-            <div class="text-[10px] mono" style="color:var(--t3)" x-text="briefDate"></div>
+          <div class="text-[13px] font-bold text-white">
+            📊 Portfolio Weekly
+          </div>
+          <div
+            class="text-[10px] mono"
+            style="color: var(--t3)"
+            x-text="briefDate"
+          ></div>
         </div>
-    </div>
-    <input type="date" x-model="briefDate" @change="load()">
-</header>
+      </div>
+      <input type="date" x-model="briefDate" @change="load()" />
+    </header>
 
-<div x-show="ldg" class="flex justify-center py-20"><span class="spin"></span></div>
-
-<template x-if="!ldg && B">
-<div class="p-4 space-y-0 fade">
-
-    <!-- Headline -->
-    <div class="brief-card">
-        <h3 x-text="B.headline"></h3>
-        <div class="text-sm" style="color:var(--t2)" x-text="B.portfolio_story"></div>
-        <div class="text-[10px] mono mt-2" style="color:var(--t3)" x-text="'Generated: '+new Date(B.generated_at).toLocaleString()"></div>
+    <div x-show="ldg" class="flex justify-center py-20">
+      <span class="spin"></span>
     </div>
 
-    <!-- Holdings with signals -->
-    <div class="brief-card" x-show="B.holdings_with_signals?.length">
-        <h3><span class="text-green-400">📈</span> <span x-text="B.holdings_with_signals.length+' holdings with signal changes:'"></span></h3>
-        <template x-for="h in B.holdings_with_signals" :key="h.ticker">
+    <template x-if="!ldg && B">
+      <div class="p-4 space-y-0 fade">
+        <!-- Headline -->
+        <div class="brief-card">
+          <h3 x-text="B.headline"></h3>
+          <div
+            class="text-sm"
+            style="color: var(--t2)"
+            x-text="B.portfolio_story"
+          ></div>
+          <div
+            class="text-[10px] mono mt-2"
+            style="color: var(--t3)"
+            x-text="'Generated: '+new Date(B.generated_at).toLocaleString()"
+          ></div>
+        </div>
+
+        <!-- Holdings with signals -->
+        <div class="brief-card" x-show="B.holdings_with_signals?.length">
+          <h3>
+            <span class="text-green-400">📈</span>
+            <span
+              x-text="B.holdings_with_signals.length+' holdings with signal changes:'"
+            ></span>
+          </h3>
+          <template x-for="h in B.holdings_with_signals" :key="h.ticker">
             <div class="holding-row">
-                <span class="ticker text-white" x-text="h.ticker"></span>
-                <span class="chg mono" :class="h.change_pct>=0?'text-green-400':'text-red-400'" x-text="(h.change_pct>=0?'+':'')+h.change_pct.toFixed(1)+'%'"></span>
-                <span class="note" x-text="h.note||'—'"></span>
-                <div class="badges">
-                    <span x-show="h.indicators?.above_ma20" class="pill pg">▲ MA20</span>
-                    <span x-show="h.indicators?.above_ma50" class="pill pg">▲ MA50</span>
-                    <span x-show="h.indicators?.rsi>70" class="pill pr" x-text="'RSI '+h.indicators?.rsi"></span>
-                    <span x-show="h.indicators?.rsi<30" class="pill py" x-text="'RSI '+h.indicators?.rsi"></span>
-                </div>
+              <span class="ticker text-white" x-text="h.ticker"></span>
+              <span
+                class="chg mono"
+                :class="h.change_pct>=0?'text-green-400':'text-red-400'"
+                x-text="(h.change_pct>=0?'+':'')+h.change_pct.toFixed(1)+'%'"
+              ></span>
+              <span class="note" x-text="h.note||'—'"></span>
+              <div class="badges">
+                <span x-show="h.indicators?.above_ma20" class="pill pg"
+                  >▲ MA20</span
+                >
+                <span x-show="h.indicators?.above_ma50" class="pill pg"
+                  >▲ MA50</span
+                >
+                <span
+                  x-show="h.indicators?.rsi>70"
+                  class="pill pr"
+                  x-text="'RSI '+h.indicators?.rsi"
+                ></span>
+                <span
+                  x-show="h.indicators?.rsi<30"
+                  class="pill py"
+                  x-text="'RSI '+h.indicators?.rsi"
+                ></span>
+              </div>
             </div>
-        </template>
-    </div>
+          </template>
+        </div>
 
-    <!-- Sector clustering -->
-    <div class="brief-card" x-show="Object.keys(B.sector_clustering||{}).length">
-        <h3>🏭 Sector Clustering</h3>
-        <template x-for="(cl,sect) in (B.sector_clustering||{})">
+        <!-- Sector clustering -->
+        <div
+          class="brief-card"
+          x-show="Object.keys(B.sector_clustering||{}).length"
+        >
+          <h3>🏭 Sector Clustering</h3>
+          <template x-for="(cl,sect) in (B.sector_clustering||{})">
             <div class="cluster-box">
-                <div class="flex items-center justify-between mb-1">
-                    <span class="text-sm font-bold text-white" x-text="sect"></span>
-                    <span class="mono font-bold text-green-400" x-text="'+'+cl.avg_change.toFixed(1)+'%'"></span>
-                </div>
-                <div class="flex gap-1.5 mb-1.5">
-                    <template x-for="t in cl.tickers"><span class="pill pg" x-text="t"></span></template>
-                </div>
-                <div class="text-[11px]" style="color:var(--t2)" x-text="cl.narrative"></div>
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-sm font-bold text-white" x-text="sect"></span>
+                <span
+                  class="mono font-bold text-green-400"
+                  x-text="'+'+cl.avg_change.toFixed(1)+'%'"
+                ></span>
+              </div>
+              <div class="flex gap-1.5 mb-1.5">
+                <template x-for="t in cl.tickers"
+                  ><span class="pill pg" x-text="t"></span
+                ></template>
+              </div>
+              <div
+                class="text-[11px]"
+                style="color: var(--t2)"
+                x-text="cl.narrative"
+              ></div>
             </div>
-        </template>
-    </div>
+          </template>
+        </div>
 
-    <!-- Catalysts -->
-    <div class="brief-card" x-show="B.top_catalysts?.length">
-        <h3>🔥 Top Catalysts</h3>
-        <template x-for="c in B.top_catalysts">
-            <div class="catalyst-item"><span class="text-amber-400 mt-0.5">•</span><span x-text="c"></span></div>
-        </template>
-    </div>
+        <!-- Catalysts -->
+        <div class="brief-card" x-show="B.top_catalysts?.length">
+          <h3>🔥 Top Catalysts</h3>
+          <template x-for="c in B.top_catalysts">
+            <div class="catalyst-item">
+              <span class="text-amber-400 mt-0.5">•</span
+              ><span x-text="c"></span>
+            </div>
+          </template>
+        </div>
 
-    <!-- Watch -->
-    <div class="brief-card" x-show="B.holdings_no_signal?.length">
-        <h3>👁 Watch — No Signal</h3>
-        <template x-for="h in B.holdings_no_signal" :key="h.ticker">
+        <!-- Watch -->
+        <div class="brief-card" x-show="B.holdings_no_signal?.length">
+          <h3>👁 Watch — No Signal</h3>
+          <template x-for="h in B.holdings_no_signal" :key="h.ticker">
             <div class="holding-row">
-                <span class="ticker text-white" x-text="h.ticker"></span>
-                <span class="chg mono" :class="h.change_pct>=0?'text-green-400':'text-red-400'" x-text="(h.change_pct>=0?'+':'')+h.change_pct.toFixed(1)+'%'"></span>
-                <span class="note" x-text="h.note||'—'"></span>
+              <span class="ticker text-white" x-text="h.ticker"></span>
+              <span
+                class="chg mono"
+                :class="h.change_pct>=0?'text-green-400':'text-red-400'"
+                x-text="(h.change_pct>=0?'+':'')+h.change_pct.toFixed(1)+'%'"
+              ></span>
+              <span class="note" x-text="h.note||'—'"></span>
             </div>
-        </template>
-    </div>
+          </template>
+        </div>
 
-    <!-- No change -->
-    <div class="brief-card" x-show="B.no_change_summary">
-        <h3>✅ No Change</h3>
-        <div class="text-sm" style="color:var(--t2)" x-text="B.no_change_summary"></div>
-    </div>
+        <!-- No change -->
+        <div class="brief-card" x-show="B.no_change_summary">
+          <h3>✅ No Change</h3>
+          <div
+            class="text-sm"
+            style="color: var(--t2)"
+            x-text="B.no_change_summary"
+          ></div>
+        </div>
 
-    <!-- Saved artifact -->
-    <div class="text-[10px] mono my-2" style="color:var(--t3)" x-text="'Full report saved to data/brief-'+briefDate+'.md'"></div>
+        <!-- Saved artifact -->
+        <div
+          class="text-[10px] mono my-2"
+          style="color: var(--t3)"
+          x-text="'Full report saved to data/brief-'+briefDate+'.md'"
+        ></div>
 
-    <!-- Follow-up Q&A -->
-    <div class="brief-card" x-show="B.follow_up_prompts?.length">
-        <h3>❓ Follow-up Questions</h3>
-        <div class="flex flex-wrap gap-2 mb-2">
+        <!-- Follow-up Q&A -->
+        <div class="brief-card" x-show="B.follow_up_prompts?.length">
+          <h3>❓ Follow-up Questions</h3>
+          <div class="flex flex-wrap gap-2 mb-2">
             <template x-for="q in B.follow_up_prompts">
-                <button @click="ask(q)" class="q-btn" x-text="q"></button>
+              <button @click="ask(q)" class="q-btn" x-text="q"></button>
             </template>
-        </div>
-        <div x-show="ans" class="answer-box">
-            <div class="text-[10px] uppercase mb-1" style="color:var(--t3)" x-text="'Q: '+aq"></div>
+          </div>
+          <div x-show="ans" class="answer-box">
+            <div
+              class="text-[10px] uppercase mb-1"
+              style="color: var(--t3)"
+              x-text="'Q: '+aq"
+            ></div>
             <div x-text="ans"></div>
+          </div>
         </div>
+      </div>
+    </template>
+
+    <div x-show="!ldg && !B" class="text-center py-20" style="color: var(--t3)">
+      <div class="text-3xl mb-2">📋</div>
+      <div class="text-sm">No brief available for this date</div>
     </div>
 
-</div>
-</template>
+    <nav class="nav-b">
+      <div class="flex justify-around max-w-lg mx-auto">
+        <a href="/"><span class="ic">📊</span>Home</a>
+        <a href="/regime-screener"><span class="ic">🎯</span>Regime</a>
+        <a href="/portfolio-brief" class="on"
+          ><span class="ic">📋</span>Brief</a
+        >
+        <a href="/compare"><span class="ic">📈</span>Compare</a>
+        <a href="/performance-lab"><span class="ic">🔬</span>Perf</a>
+        <a href="/options-lab"><span class="ic">🔮</span>Options</a>
+        <a href="/signals/explorer"><span class="ic">📡</span>Signals</a>
+      </div>
+    </nav>
 
-<div x-show="!ldg && !B" class="text-center py-20" style="color:var(--t3)">
-    <div class="text-3xl mb-2">📋</div>
-    <div class="text-sm">No brief available for this date</div>
-</div>
-
-<nav class="nav-b"><div class="flex justify-around max-w-lg mx-auto">
-    <a href="/"><span class="ic">📊</span>Home</a>
-    <a href="/regime-screener"><span class="ic">🎯</span>Regime</a>
-    <a href="/portfolio-brief" class="on"><span class="ic">📋</span>Brief</a>
-    <a href="/compare"><span class="ic">📈</span>Compare</a>
-    <a href="/performance-lab"><span class="ic">🔬</span>Perf</a>
-    <a href="/options-lab"><span class="ic">🔮</span>Options</a>
-    <a href="/signals/explorer"><span class="ic">📡</span>Signals</a>
-</div></nav>
-
-<script>
-function PB(){return{
-    ldg:true,briefDate:new Date().toISOString().split('T')[0],B:null,aq:'',ans:'',
-    async init(){await this.load()},
-    async load(){
-        this.ldg=true;this.B=null;this.ans='';
-        try{const r=await fetch('/api/v7/portfolio-brief?date='+this.briefDate);if(r.ok)this.B=await r.json()}catch(e){console.error(e)}
-        this.ldg=false;
-    },
-    async ask(q){
-        this.aq=q;this.ans='Loading...';
-        const m=q.match(/([A-Z]{1,5})/);
-        if(m){try{const r=await fetch('/api/v7/why-moved/'+m[1]);if(r.ok){const d=await r.json();this.ans=d.reasons?.map(r=>r.text).join('\n• ')||'No info.';return}}catch(e){}}
-        this.ans='AI advisor required.';
-    }
-}}
-</script>
-</body>
+    <script>
+      function PB() {
+        return {
+          ldg: true,
+          briefDate: new Date().toISOString().split("T")[0],
+          B: null,
+          aq: "",
+          ans: "",
+          async init() {
+            await this.load();
+          },
+          async load() {
+            this.ldg = true;
+            this.B = null;
+            this.ans = "";
+            try {
+              const r = await fetch(
+                "/api/v7/portfolio-brief?date=" + this.briefDate,
+              );
+              if (r.ok) this.B = await r.json();
+            } catch (e) {
+              console.error(e);
+            }
+            this.ldg = false;
+          },
+          async ask(q) {
+            this.aq = q;
+            this.ans = "Loading...";
+            const m = q.match(/([A-Z]{1,5})/);
+            if (m) {
+              try {
+                const r = await fetch("/api/v7/why-moved/" + m[1]);
+                if (r.ok) {
+                  const d = await r.json();
+                  this.ans =
+                    d.reasons?.map((r) => r.text).join("\n• ") || "No info.";
+                  return;
+                }
+              } catch (e) {}
+            }
+            this.ans = "AI advisor required.";
+          },
+        };
+      }
+    </script>
+  </body>
 </html>

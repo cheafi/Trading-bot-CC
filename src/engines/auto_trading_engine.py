@@ -13,30 +13,28 @@ import asyncio
 import logging
 import time
 from collections import defaultdict
-from datetime import datetime, date, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set
 
-from src.core.config import get_settings, get_trading_config
-from src.core.models import Direction, Signal, SignalStatus, TradeRecommendation
-from src.engines.regime_router import RegimeRouter
-from src.engines.opportunity_ensembler import OpportunityEnsembler
-from src.scanners.universe_builder import UniverseBuilder
-from src.engines.context_assembler import ContextAssembler
-from src.engines.strategy_leaderboard import StrategyLeaderboard
-from src.engines.portfolio_risk_budget import PortfolioRiskBudget
-from src.engines.professional_kpi import ProfessionalKPI, CoverageFunnel
-from src.core.trust_metadata import (
-    TrustMetadata, TrustBadge, PnLBreakdown,
-    TradeAttribution, NoTradeCard,
-)
 from src.algo.position_manager import PositionManager, RiskParameters
-from src.ml.trade_learner import TradeLearningLoop, TradeOutcomeRecord
-from src.core.logging_config import set_correlation_id, get_correlation_id
+from src.core.config import get_settings, get_trading_config
+from src.core.errors import (BrokerError, ConfigError, DataError,
+                             RiskLimitError, SignalError, ValidationError)
+from src.core.logging_config import get_correlation_id, set_correlation_id
+from src.core.models import (Direction, Signal, SignalStatus,
+                             TradeRecommendation)
 from src.core.trade_repo import TradeOutcomeRepository
-from src.core.errors import (
-    BrokerError, ConfigError, DataError,
-    RiskLimitError, SignalError, ValidationError,
-)
+from src.core.trust_metadata import (NoTradeCard, PnLBreakdown,
+                                     TradeAttribution, TrustBadge,
+                                     TrustMetadata)
+from src.engines.context_assembler import ContextAssembler
+from src.engines.opportunity_ensembler import OpportunityEnsembler
+from src.engines.portfolio_risk_budget import PortfolioRiskBudget
+from src.engines.professional_kpi import CoverageFunnel, ProfessionalKPI
+from src.engines.regime_router import RegimeRouter
+from src.engines.strategy_leaderboard import StrategyLeaderboard
+from src.ml.trade_learner import TradeLearningLoop, TradeOutcomeRecord
+from src.scanners.universe_builder import UniverseBuilder
 
 try:
     from src.engines.insight_engine import EdgeCalculator
@@ -842,8 +840,9 @@ class AutoTradingEngine:
         """
         try:
             import pandas as pd
-            from src.engines.signal_engine import SignalEngine
+
             from src.engines.feature_engine import FeatureEngine
+            from src.engines.signal_engine import SignalEngine
 
             # 1. Build universe via staged pipeline
             spec = self.universe_builder.build(
@@ -1400,9 +1399,7 @@ class AutoTradingEngine:
         freshness, model version) in the notification dict.
         """
         try:
-            from src.notifications.multi_channel import (
-                MultiChannelNotifier,
-            )
+            from src.notifications.multi_channel import MultiChannelNotifier
             notifier = MultiChannelNotifier()
             await notifier.send_trade_alert({
                 "ticker": rec.ticker,
@@ -1432,9 +1429,7 @@ class AutoTradingEngine:
         (what worked / what failed).
         """
         try:
-            from src.notifications.multi_channel import (
-                MultiChannelNotifier,
-            )
+            from src.notifications.multi_channel import MultiChannelNotifier
             notifier = MultiChannelNotifier()
             _hold = 0.0
             if closed_pos.entry_date and closed_pos.exit_date:

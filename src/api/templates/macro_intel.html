@@ -540,7 +540,8 @@
     <!-- ═══ POLITICAL TAB ═══ -->
     <div x-show="tab==='political' && !loading" class="fade">
       <div class="sec-h">
-        <span class="icon">🏛️</span> Political Risk Basket — Trump-Related & Defense
+        <span class="icon">🏛️</span> Political Risk Basket — Trump-Related &
+        Defense
       </div>
       <div
         style="
@@ -565,7 +566,9 @@
           :style="{color:D.political_risk?.djt_change>0?'var(--green)':'var(--red)'}"
           x-text="(D.political_risk?.djt_change>0?'+':'')+D.political_risk?.djt_change?.toFixed(2)+'%'"
         ></span>
-        <span class="ml-3" style="color: var(--t3)">| Political Basket Momentum(1M):</span>
+        <span class="ml-3" style="color: var(--t3)"
+          >| Political Basket Momentum(1M):</span
+        >
         <span
           class="mono"
           :style="{color:D.political_risk?.basket_momentum_1m>0?'var(--green)':'var(--red)'}"
@@ -622,14 +625,17 @@
           border-top: 1px solid var(--bd);
         "
       >
-        📌 DJT (Trump Media) used as real-time proxy for Trump policy confidence. Defense stocks
-        (LMT/RTX/NOC/GD) reflect geopolitical risk pricing. BA tracks export policy sensitivity.
+        📌 DJT (Trump Media) used as real-time proxy for Trump policy
+        confidence. Defense stocks (LMT/RTX/NOC/GD) reflect geopolitical risk
+        pricing. BA tracks export policy sensitivity.
       </div>
     </div>
 
     <!-- ═══ WAR TAB ═══ -->
     <div x-show="tab==='war' && !loading" class="fade">
-      <div class="sec-h"><span class="icon">⚔️</span> War/Geopolitical Hedge Basket</div>
+      <div class="sec-h">
+        <span class="icon">⚔️</span> War/Geopolitical Hedge Basket
+      </div>
       <div
         style="
           padding: 10px 14px;
@@ -827,8 +833,9 @@
           border-top: 1px solid var(--bd);
         "
       >
-        📌 Based on 1-month price momentum: >+5% = ACCUMULATE, <-5% = DISTRIBUTE.
-        This is a proxy indicator, not actual SEC Form 4 data. Trump Family tracked via DJT.
+        📌 Based on 1-month price momentum: >+5% = ACCUMULATE, <-5% =
+        DISTRIBUTE. This is a proxy indicator, not actual SEC Form 4 data. Trump
+        Family tracked via DJT.
       </div>
     </div>
 
@@ -877,7 +884,9 @@
       </div>
 
       <!-- SPY factor correlations bar -->
-      <div class="sec-h"><span class="icon">🎯</span> SPY Factor Correlation Ranking</div>
+      <div class="sec-h">
+        <span class="icon">🎯</span> SPY Factor Correlation Ranking
+      </div>
       <div style="padding: 10px 14px">
         <template x-for="[fac, val] in spySorted()">
           <div
@@ -945,7 +954,9 @@
 
     <!-- ═══ INSIGHTS TAB ═══ -->
     <div x-show="tab==='insights' && !loading" class="fade">
-      <div class="sec-h"><span class="icon">💡</span> AI Correlation Insights</div>
+      <div class="sec-h">
+        <span class="icon">💡</span> AI Correlation Insights
+      </div>
       <div style="padding: 10px 14px">
         <template x-for="ins in D.correlations?.insights||[]">
           <div class="insight" :class="{'warn':ins.severity==='warning'}">
@@ -962,7 +973,8 @@
             text-align: center;
           "
         >
-          All factor correlations currently within normal range. No special alerts.
+          All factor correlations currently within normal range. No special
+          alerts.
         </div>
       </div>
 

@@ -1,409 +1,1235 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#0d1117">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <meta name="theme-color" content="#0d1117" />
     <title>Performance Lab - TradingAI Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script
+      defer
+      src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"
+    ></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <style>
-        :root{--bg:#0d1117;--s1:#161b22;--s2:#1c2333;--bd:#21262d;--t1:#e6edf3;--t2:#8b949e;--t3:#484f58;--green:#00d4aa;--red:#ff5c5c;--amber:#fbbf24;--blue:#58a6ff}
-        *{font-family:'Inter',sans-serif;box-sizing:border-box;margin:0}
-        body{background:var(--bg);color:var(--t1);overflow-x:hidden}
-        .mono{font-family:'JetBrains Mono',monospace}
+      :root {
+        --bg: #0d1117;
+        --s1: #161b22;
+        --s2: #1c2333;
+        --bd: #21262d;
+        --t1: #e6edf3;
+        --t2: #8b949e;
+        --t3: #484f58;
+        --green: #00d4aa;
+        --red: #ff5c5c;
+        --amber: #fbbf24;
+        --blue: #58a6ff;
+      }
+      * {
+        font-family: "Inter", sans-serif;
+        box-sizing: border-box;
+        margin: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--t1);
+        overflow-x: hidden;
+      }
+      .mono {
+        font-family: "JetBrains Mono", monospace;
+      }
 
-        /* Category tabs (FinLab style) */
-        .cat-bar{display:flex;gap:0;border-bottom:1px solid var(--bd);background:var(--s1);padding:0 16px;overflow-x:auto}
-        .cat-btn{padding:10px 16px;font-size:12px;font-weight:500;color:var(--t3);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;white-space:nowrap}
-        .cat-btn:hover{color:var(--t2)}
-        .cat-btn.on{color:var(--green);border-bottom-color:var(--green);font-weight:600}
+      /* Category tabs (FinLab style) */
+      .cat-bar {
+        display: flex;
+        gap: 0;
+        border-bottom: 1px solid var(--bd);
+        background: var(--s1);
+        padding: 0 16px;
+        overflow-x: auto;
+      }
+      .cat-btn {
+        padding: 10px 16px;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--t3);
+        cursor: pointer;
+        border: none;
+        background: none;
+        border-bottom: 2px solid transparent;
+        white-space: nowrap;
+      }
+      .cat-btn:hover {
+        color: var(--t2);
+      }
+      .cat-btn.on {
+        color: var(--green);
+        border-bottom-color: var(--green);
+        font-weight: 600;
+      }
 
-        /* KPI banner (FinLab style) */
-        .kpi-banner{display:flex;gap:0;background:var(--s1);border-bottom:1px solid var(--bd)}
-        .kpi-pill{flex:1;padding:16px 14px;text-align:center;border-right:1px solid var(--bd);position:relative}
-        .kpi-pill:last-child{border-right:none}
-        .kpi-pill .val{font-size:24px;font-weight:800;line-height:1.1}
-        .kpi-pill .lbl{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.4px;margin-top:4px}
-        .kpi-pill .cmp{font-size:10px;margin-top:3px;display:flex;align-items:center;justify-content:center;gap:3px}
-        .kpi-pill .arrow{font-size:8px}
+      /* KPI banner (FinLab style) */
+      .kpi-banner {
+        display: flex;
+        gap: 0;
+        background: var(--s1);
+        border-bottom: 1px solid var(--bd);
+      }
+      .kpi-pill {
+        flex: 1;
+        padding: 16px 14px;
+        text-align: center;
+        border-right: 1px solid var(--bd);
+        position: relative;
+      }
+      .kpi-pill:last-child {
+        border-right: none;
+      }
+      .kpi-pill .val {
+        font-size: 24px;
+        font-weight: 800;
+        line-height: 1.1;
+      }
+      .kpi-pill .lbl {
+        font-size: 10px;
+        color: var(--t3);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-top: 4px;
+      }
+      .kpi-pill .cmp {
+        font-size: 10px;
+        margin-top: 3px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+      }
+      .kpi-pill .arrow {
+        font-size: 8px;
+      }
 
-        /* Sub-tabs */
-        .sub-bar{display:flex;gap:0;border-bottom:1px solid var(--bd);background:var(--s2);padding:0 16px;overflow-x:auto}
-        .sub-btn{padding:8px 14px;font-size:11px;font-weight:500;color:var(--t3);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;white-space:nowrap}
-        .sub-btn:hover{color:var(--t2)}
-        .sub-btn.on{color:var(--t1);border-bottom-color:var(--t1);font-weight:600}
+      /* Sub-tabs */
+      .sub-bar {
+        display: flex;
+        gap: 0;
+        border-bottom: 1px solid var(--bd);
+        background: var(--s2);
+        padding: 0 16px;
+        overflow-x: auto;
+      }
+      .sub-btn {
+        padding: 8px 14px;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--t3);
+        cursor: pointer;
+        border: none;
+        background: none;
+        border-bottom: 2px solid transparent;
+        white-space: nowrap;
+      }
+      .sub-btn:hover {
+        color: var(--t2);
+      }
+      .sub-btn.on {
+        color: var(--t1);
+        border-bottom-color: var(--t1);
+        font-weight: 600;
+      }
 
-        /* Heatmap */
-        .hm-table{border-collapse:collapse;font-size:11px;width:100%}
-        .hm-table th{padding:4px 6px;color:var(--t3);font-size:10px;font-weight:500;text-align:center;border-bottom:1px solid var(--bd)}
-        .hm-table td{padding:2px;text-align:center}
-        .hm-cell{width:42px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:3px;font-weight:600;font-size:10px}
+      /* Heatmap */
+      .hm-table {
+        border-collapse: collapse;
+        font-size: 11px;
+        width: 100%;
+      }
+      .hm-table th {
+        padding: 4px 6px;
+        color: var(--t3);
+        font-size: 10px;
+        font-weight: 500;
+        text-align: center;
+        border-bottom: 1px solid var(--bd);
+      }
+      .hm-table td {
+        padding: 2px;
+        text-align: center;
+      }
+      .hm-cell {
+        width: 42px;
+        height: 30px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 3px;
+        font-weight: 600;
+        font-size: 10px;
+      }
 
-        /* Heatmap summary bar */
-        .hm-summary{display:flex;gap:24px;padding:12px 16px;border-bottom:1px solid var(--bd);background:var(--s2)}
-        .hm-summary .item{text-align:center}
-        .hm-summary .item .v{font-size:18px;font-weight:800}
-        .hm-summary .item .l{font-size:10px;color:var(--t3);margin-top:2px}
+      /* Heatmap summary bar */
+      .hm-summary {
+        display: flex;
+        gap: 24px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--bd);
+        background: var(--s2);
+      }
+      .hm-summary .item {
+        text-align: center;
+      }
+      .hm-summary .item .v {
+        font-size: 18px;
+        font-weight: 800;
+      }
+      .hm-summary .item .l {
+        font-size: 10px;
+        color: var(--t3);
+        margin-top: 2px;
+      }
 
-        /* Win rate bar */
-        .wr-bar{display:flex;height:14px;border-radius:3px;overflow:hidden;margin-top:4px}
-        .wr-bar .win{background:var(--green)}
-        .wr-bar .loss{background:var(--red)}
+      /* Win rate bar */
+      .wr-bar {
+        display: flex;
+        height: 14px;
+        border-radius: 3px;
+        overflow: hidden;
+        margin-top: 4px;
+      }
+      .wr-bar .win {
+        background: var(--green);
+      }
+      .wr-bar .loss {
+        background: var(--red);
+      }
 
-        .spin{display:inline-block;width:24px;height:24px;border:2px solid var(--bd);border-top-color:var(--green);border-radius:50%;animation:sp .5s linear infinite}
-        @keyframes sp{to{transform:rotate(360deg)}}
-        .fade{animation:f .2s ease}@keyframes f{from{opacity:0}to{opacity:1}}
+      .spin {
+        display: inline-block;
+        width: 24px;
+        height: 24px;
+        border: 2px solid var(--bd);
+        border-top-color: var(--green);
+        border-radius: 50%;
+        animation: sp 0.5s linear infinite;
+      }
+      @keyframes sp {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .fade {
+        animation: f 0.2s ease;
+      }
+      @keyframes f {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
 
-        .source-sel{display:flex;gap:4px;padding:4px}
-        .source-sel button{padding:4px 10px;border-radius:4px;font-size:11px;font-weight:500;border:1px solid var(--bd);background:none;color:var(--t3);cursor:pointer}
-        .source-sel button.on{background:var(--green);color:#000;border-color:var(--green);font-weight:700}
+      .source-sel {
+        display: flex;
+        gap: 4px;
+        padding: 4px;
+      }
+      .source-sel button {
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 500;
+        border: 1px solid var(--bd);
+        background: none;
+        color: var(--t3);
+        cursor: pointer;
+      }
+      .source-sel button.on {
+        background: var(--green);
+        color: #000;
+        border-color: var(--green);
+        font-weight: 700;
+      }
 
-        .nav-b{position:fixed;bottom:0;left:0;right:0;background:var(--bg);border-top:1px solid var(--bd);z-index:100;padding:5px 0 env(safe-area-inset-bottom,5px)}
-        .nav-b a{display:flex;flex-direction:column;align-items:center;font-size:9px;color:var(--t3);text-decoration:none;padding:3px 0}
-        .nav-b a.on{color:var(--green)}
-        .nav-b a .ic{font-size:17px;margin-bottom:1px}
-        .safe-b{padding-bottom:env(safe-area-inset-bottom,68px)}
+      .nav-b {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: var(--bg);
+        border-top: 1px solid var(--bd);
+        z-index: 100;
+        padding: 5px 0 env(safe-area-inset-bottom, 5px);
+      }
+      .nav-b a {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        font-size: 9px;
+        color: var(--t3);
+        text-decoration: none;
+        padding: 3px 0;
+      }
+      .nav-b a.on {
+        color: var(--green);
+      }
+      .nav-b a .ic {
+        font-size: 17px;
+        margin-bottom: 1px;
+      }
+      .safe-b {
+        padding-bottom: env(safe-area-inset-bottom, 68px);
+      }
 
-        .dd-card{background:var(--s1);border:1px solid var(--bd);border-radius:6px;padding:12px;display:flex;align-items:center;gap:12px}
-        .risk-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--bd);border-radius:6px;overflow:hidden}
-        .risk-cell{background:var(--s1);padding:14px;text-align:center}
-        .risk-cell .v{font-size:20px;font-weight:800}
-        .risk-cell .l{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.3px;margin-top:4px}
+      .dd-card {
+        background: var(--s1);
+        border: 1px solid var(--bd);
+        border-radius: 6px;
+        padding: 12px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .risk-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 1px;
+        background: var(--bd);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .risk-cell {
+        background: var(--s1);
+        padding: 14px;
+        text-align: center;
+      }
+      .risk-cell .v {
+        font-size: 20px;
+        font-weight: 800;
+      }
+      .risk-cell .l {
+        font-size: 9px;
+        color: var(--t3);
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        margin-top: 4px;
+      }
     </style>
-</head>
-<body x-data="PL()" x-init="init()" class="safe-b">
-
-<!-- Header -->
-<header style="background:var(--s1);border-bottom:1px solid var(--bd)" class="flex items-center justify-between px-4 py-2.5">
-    <div class="flex items-center gap-2.5">
+  </head>
+  <body x-data="PL()" x-init="init()" class="safe-b">
+    <!-- Header -->
+    <header
+      style="background: var(--s1); border-bottom: 1px solid var(--bd)"
+      class="flex items-center justify-between px-4 py-2.5"
+    >
+      <div class="flex items-center gap-2.5">
         <a href="/" class="text-base">📈</a>
         <div>
-            <div class="text-[13px] font-bold text-white">TradingAI Pro</div>
-            <div class="text-[10px]" style="color:var(--t3)">Performance Lab · Track Record</div>
+          <div class="text-[13px] font-bold text-white">TradingAI Pro</div>
+          <div class="text-[10px]" style="color: var(--t3)">
+            Performance Lab · Track Record
+          </div>
         </div>
-    </div>
-    <div class="source-sel">
+      </div>
+      <div class="source-sel">
         <template x-for="s in ['live','paper','backtest']">
-            <button @click="src=s;load()" :class="src===s&&'on'" x-text="s"></button>
+          <button
+            @click="src=s;load()"
+            :class="src===s&&'on'"
+            x-text="s"
+          ></button>
         </template>
+      </div>
+    </header>
+
+    <!-- Category tabs -->
+    <div class="cat-bar">
+      <button
+        @click="cat='profit'"
+        class="cat-btn"
+        :class="cat==='profit'&&'on'"
+      >
+        📈 Profitability
+      </button>
+      <button @click="cat='risk'" class="cat-btn" :class="cat==='risk'&&'on'">
+        🛡 Risk Metrics
+      </button>
+      <button
+        @click="cat='detail'"
+        class="cat-btn"
+        :class="cat==='detail'&&'on'"
+      >
+        📊 Strategy Detail
+      </button>
     </div>
-</header>
 
-<!-- Category tabs -->
-<div class="cat-bar">
-    <button @click="cat='profit'" class="cat-btn" :class="cat==='profit'&&'on'">📈 Profitability</button>
-    <button @click="cat='risk'" class="cat-btn" :class="cat==='risk'&&'on'">🛡 Risk Metrics</button>
-    <button @click="cat='detail'" class="cat-btn" :class="cat==='detail'&&'on'">📊 Strategy Detail</button>
-</div>
+    <div x-show="ldg" class="flex justify-center py-20">
+      <span class="spin"></span>
+    </div>
 
-<div x-show="ldg" class="flex justify-center py-20"><span class="spin"></span></div>
-
-<template x-if="!ldg && P">
-<div class="fade">
-
-    <!-- ═══ PROFIT CATEGORY ═══ -->
-    <div x-show="cat==='profit'">
-        <!-- KPI Banner -->
-        <div class="kpi-banner">
+    <template x-if="!ldg && P">
+      <div class="fade">
+        <!-- ═══ PROFIT CATEGORY ═══ -->
+        <div x-show="cat==='profit'">
+          <!-- KPI Banner -->
+          <div class="kpi-banner">
             <div class="kpi-pill">
-                <div class="val mono" :class="P.summary.annual_return>=0?'text-green-400':'text-red-400'" x-text="(P.summary.annual_return>=0?'+':'')+P.summary.annual_return.toFixed(1)+'%'"></div>
-                <div class="lbl">Annual Return</div>
-                <div class="cmp" style="color:var(--t3)"><span class="arrow">▲</span> vs 10%</div>
+              <div
+                class="val mono"
+                :class="P.summary.annual_return>=0?'text-green-400':'text-red-400'"
+                x-text="(P.summary.annual_return>=0?'+':'')+P.summary.annual_return.toFixed(1)+'%'"
+              ></div>
+              <div class="lbl">Annual Return</div>
+              <div class="cmp" style="color: var(--t3)">
+                <span class="arrow">▲</span> vs 10%
+              </div>
             </div>
             <div class="kpi-pill">
-                <div class="val mono" :class="P.summary.alpha>=0?'text-green-400':'text-red-400'" x-text="(P.summary.alpha>=0?'+':'')+P.summary.alpha.toFixed(1)+'%'"></div>
-                <div class="lbl">ALPHA</div>
-                <div class="cmp" style="color:var(--t3)"><span class="arrow">▲</span> vs 10%</div>
+              <div
+                class="val mono"
+                :class="P.summary.alpha>=0?'text-green-400':'text-red-400'"
+                x-text="(P.summary.alpha>=0?'+':'')+P.summary.alpha.toFixed(1)+'%'"
+              ></div>
+              <div class="lbl">ALPHA</div>
+              <div class="cmp" style="color: var(--t3)">
+                <span class="arrow">▲</span> vs 10%
+              </div>
             </div>
             <div class="kpi-pill">
-                <div class="val mono text-white" x-text="P.summary.beta.toFixed(2)"></div>
-                <div class="lbl">BETA</div>
-                <div class="cmp" style="color:var(--t3)">Market Sensitivity</div>
+              <div
+                class="val mono text-white"
+                x-text="P.summary.beta.toFixed(2)"
+              ></div>
+              <div class="lbl">BETA</div>
+              <div class="cmp" style="color: var(--t3)">Market Sensitivity</div>
             </div>
             <div class="kpi-pill">
-                <div class="val mono" :class="P.summary.sharpe>=1.5?'text-green-400':'text-amber-400'" x-text="P.summary.sharpe.toFixed(2)"></div>
-                <div class="lbl">SHARPE</div>
-                <div class="cmp" style="color:var(--t3)">Risk/Reward Ratio</div>
+              <div
+                class="val mono"
+                :class="P.summary.sharpe>=1.5?'text-green-400':'text-amber-400'"
+                x-text="P.summary.sharpe.toFixed(2)"
+              ></div>
+              <div class="lbl">SHARPE</div>
+              <div class="cmp" style="color: var(--t3)">Risk/Reward Ratio</div>
             </div>
             <div class="kpi-pill">
-                <div class="val mono" :class="(P.summary.win_rate||0)>=0.6?'text-green-400':'text-amber-400'" x-text="((P.summary.win_rate||0)*100).toFixed(0)+'%'"></div>
-                <div class="lbl">WIN RATE</div>
-                <div class="cmp" style="color:var(--t3)">Win Rate</div>
+              <div
+                class="val mono"
+                :class="(P.summary.win_rate||0)>=0.6?'text-green-400':'text-amber-400'"
+                x-text="((P.summary.win_rate||0)*100).toFixed(0)+'%'"
+              ></div>
+              <div class="lbl">WIN RATE</div>
+              <div class="cmp" style="color: var(--t3)">Win Rate</div>
             </div>
-        </div>
+          </div>
 
-        <!-- Sub-tabs -->
-        <div class="sub-bar">
-            <button @click="ptab='equity'" class="sub-btn" :class="ptab==='equity'&&'on'">Historical Performance</button>
-            <button @click="ptab='monthly'" class="sub-btn" :class="ptab==='monthly'&&'on'">Monthly Returns</button>
-            <button @click="ptab='annual'" class="sub-btn" :class="ptab==='annual'&&'on'">Position Details</button>
-            <button @click="ptab='vs'" class="sub-btn" :class="ptab==='vs'&&'on'">vs Benchmark</button>
-            <button @click="ptab='excess'" class="sub-btn" :class="ptab==='excess'&&'on'">Excess Returns</button>
-        </div>
+          <!-- Sub-tabs -->
+          <div class="sub-bar">
+            <button
+              @click="ptab='equity'"
+              class="sub-btn"
+              :class="ptab==='equity'&&'on'"
+            >
+              Historical Performance
+            </button>
+            <button
+              @click="ptab='monthly'"
+              class="sub-btn"
+              :class="ptab==='monthly'&&'on'"
+            >
+              Monthly Returns
+            </button>
+            <button
+              @click="ptab='annual'"
+              class="sub-btn"
+              :class="ptab==='annual'&&'on'"
+            >
+              Position Details
+            </button>
+            <button
+              @click="ptab='vs'"
+              class="sub-btn"
+              :class="ptab==='vs'&&'on'"
+            >
+              vs Benchmark
+            </button>
+            <button
+              @click="ptab='excess'"
+              class="sub-btn"
+              :class="ptab==='excess'&&'on'"
+            >
+              Excess Returns
+            </button>
+          </div>
 
-        <!-- Equity Curve -->
-        <div x-show="ptab==='equity'" class="p-4 fade">
-            <div class="text-xs mb-3" style="color:var(--t2)">Cumulative return chart. Purple = strategy, gray = benchmark. Annualized return: <span class="text-green-400 font-bold" x-text="'+'+P.summary.annual_return.toFixed(1)+'%'"></span></div>
-            <div style="height:300px;position:relative;background:var(--s1);border:1px solid var(--bd);border-radius:6px;padding:10px">
-                <canvas id="eqChart"></canvas>
+          <!-- Equity Curve -->
+          <div x-show="ptab==='equity'" class="p-4 fade">
+            <div class="text-xs mb-3" style="color: var(--t2)">
+              Cumulative return chart. Purple = strategy, gray = benchmark.
+              Annualized return:
+              <span
+                class="text-green-400 font-bold"
+                x-text="'+'+P.summary.annual_return.toFixed(1)+'%'"
+              ></span>
+            </div>
+            <div
+              style="
+                height: 300px;
+                position: relative;
+                background: var(--s1);
+                border: 1px solid var(--bd);
+                border-radius: 6px;
+                padding: 10px;
+              "
+            >
+              <canvas id="eqChart"></canvas>
             </div>
             <!-- Annual bar below chart -->
-            <div class="mt-3 flex items-end gap-1 justify-center" style="height:40px">
-                <template x-for="a in (P.annual_returns||[])">
-                    <div class="text-center" style="min-width:32px">
-                        <div class="text-[9px] mono" :class="a.return_pct>=0?'text-green-400':'text-red-400'" x-text="a.return_pct.toFixed(0)+'%'"></div>
-                        <div class="text-[8px] mono" style="color:var(--t3)" x-text="a.year"></div>
-                    </div>
-                </template>
+            <div
+              class="mt-3 flex items-end gap-1 justify-center"
+              style="height: 40px"
+            >
+              <template x-for="a in (P.annual_returns||[])">
+                <div class="text-center" style="min-width: 32px">
+                  <div
+                    class="text-[9px] mono"
+                    :class="a.return_pct>=0?'text-green-400':'text-red-400'"
+                    x-text="a.return_pct.toFixed(0)+'%'"
+                  ></div>
+                  <div
+                    class="text-[8px] mono"
+                    style="color: var(--t3)"
+                    x-text="a.year"
+                  ></div>
+                </div>
+              </template>
             </div>
-        </div>
+          </div>
 
-        <!-- Monthly Heatmap -->
-        <div x-show="ptab==='monthly'" class="fade">
+          <!-- Monthly Heatmap -->
+          <div x-show="ptab==='monthly'" class="fade">
             <!-- Summary -->
             <div class="hm-summary">
-                <div class="item">
-                    <div class="v mono text-green-400" x-text="'+'+avgMonthly().toFixed(2)+'%'"></div>
-                    <div class="l">Avg Monthly<br>Return</div>
+              <div class="item">
+                <div
+                  class="v mono text-green-400"
+                  x-text="'+'+avgMonthly().toFixed(2)+'%'"
+                ></div>
+                <div class="l">Avg Monthly<br />Return</div>
+              </div>
+              <div class="item">
+                <div
+                  class="v mono text-green-400"
+                  x-text="winRate().toFixed(1)+'%'"
+                ></div>
+                <div class="l">
+                  Monthly Win Rate<br /><span
+                    x-text="winCount()+'/'+totalMonths()"
+                  ></span>
                 </div>
-                <div class="item">
-                    <div class="v mono text-green-400" x-text="winRate().toFixed(1)+'%'"></div>
-                    <div class="l">Monthly Win Rate<br><span x-text="winCount()+'/'+totalMonths()"></span></div>
-                    <div class="wr-bar" style="width:120px">
-                        <div class="win" :style="'width:'+winRate()+'%'"></div>
-                        <div class="loss" :style="'width:'+(100-winRate())+'%'"></div>
-                    </div>
+                <div class="wr-bar" style="width: 120px">
+                  <div class="win" :style="'width:'+winRate()+'%'"></div>
+                  <div class="loss" :style="'width:'+(100-winRate())+'%'"></div>
                 </div>
+              </div>
             </div>
             <!-- Heatmap table -->
             <div class="p-4 overflow-x-auto">
-                <table class="hm-table">
-                    <thead><tr>
-                        <th style="text-align:left;width:50px">Year</th>
-                        <template x-for="m in mos"><th x-text="m"></th></template>
-                        <th>YTD</th>
-                    </tr></thead>
-                    <tbody>
-                        <template x-for="(row,year) in (P.monthly_returns||{})">
-                            <tr>
-                                <td class="mono font-semibold text-left" style="color:var(--t2);padding:4px 8px" x-text="year"></td>
-                                <template x-for="m in mos">
-                                    <td><div class="hm-cell" :style="'background:'+hc(row[m])+';color:'+(Math.abs(row[m]||0)>3?'#fff':'var(--t2)')" x-text="row[m]!=null?row[m].toFixed(1):''"></div></td>
-                                </template>
-                                <td><div class="mono font-bold text-center" :class="ytd(row)>=0?'text-green-400':'text-red-400'" x-text="ytd(row).toFixed(1)+'%'" style="font-size:11px"></div></td>
-                            </tr>
-                        </template>
-                    </tbody>
-                </table>
+              <table class="hm-table">
+                <thead>
+                  <tr>
+                    <th style="text-align: left; width: 50px">Year</th>
+                    <template x-for="m in mos"><th x-text="m"></th></template>
+                    <th>YTD</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="(row,year) in (P.monthly_returns||{})">
+                    <tr>
+                      <td
+                        class="mono font-semibold text-left"
+                        style="color: var(--t2); padding: 4px 8px"
+                        x-text="year"
+                      ></td>
+                      <template x-for="m in mos">
+                        <td>
+                          <div
+                            class="hm-cell"
+                            :style="'background:'+hc(row[m])+';color:'+(Math.abs(row[m]||0)>3?'#fff':'var(--t2)')"
+                            x-text="row[m]!=null?row[m].toFixed(1):''"
+                          ></div>
+                        </td>
+                      </template>
+                      <td>
+                        <div
+                          class="mono font-bold text-center"
+                          :class="ytd(row)>=0?'text-green-400':'text-red-400'"
+                          x-text="ytd(row).toFixed(1)+'%'"
+                          style="font-size: 11px"
+                        ></div>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
             </div>
+          </div>
+
+          <!-- Annual bars -->
+          <div x-show="ptab==='annual'" class="p-4 fade">
+            <div
+              style="
+                height: 280px;
+                position: relative;
+                background: var(--s1);
+                border: 1px solid var(--bd);
+                border-radius: 6px;
+                padding: 10px;
+              "
+            >
+              <canvas id="annChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Vs benchmark -->
+          <div x-show="ptab==='vs'" class="p-4 fade">
+            <div
+              style="
+                height: 280px;
+                position: relative;
+                background: var(--s1);
+                border: 1px solid var(--bd);
+                border-radius: 6px;
+                padding: 10px;
+              "
+            >
+              <canvas id="vsChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Excess -->
+          <div x-show="ptab==='excess'" class="p-4 fade">
+            <div
+              style="
+                height: 280px;
+                position: relative;
+                background: var(--s1);
+                border: 1px solid var(--bd);
+                border-radius: 6px;
+                padding: 10px;
+              "
+            >
+              <canvas id="exChart"></canvas>
+            </div>
+          </div>
         </div>
 
-        <!-- Annual bars -->
-        <div x-show="ptab==='annual'" class="p-4 fade">
-            <div style="height:280px;position:relative;background:var(--s1);border:1px solid var(--bd);border-radius:6px;padding:10px">
-                <canvas id="annChart"></canvas>
-            </div>
-        </div>
-
-        <!-- Vs benchmark -->
-        <div x-show="ptab==='vs'" class="p-4 fade">
-            <div style="height:280px;position:relative;background:var(--s1);border:1px solid var(--bd);border-radius:6px;padding:10px">
-                <canvas id="vsChart"></canvas>
-            </div>
-        </div>
-
-        <!-- Excess -->
-        <div x-show="ptab==='excess'" class="p-4 fade">
-            <div style="height:280px;position:relative;background:var(--s1);border:1px solid var(--bd);border-radius:6px;padding:10px">
-                <canvas id="exChart"></canvas>
-            </div>
-        </div>
-    </div>
-
-    <!-- ═══ RISK CATEGORY ═══ -->
-    <div x-show="cat==='risk'">
-        <div class="kpi-banner">
+        <!-- ═══ RISK CATEGORY ═══ -->
+        <div x-show="cat==='risk'">
+          <div class="kpi-banner">
             <div class="kpi-pill">
-                <div class="val mono text-red-400" x-text="P.summary.max_drawdown.toFixed(1)+'%'"></div>
-                <div class="lbl">MAX DRAWDOWN</div>
-                <div class="cmp" style="color:var(--t3)">Max Drawdown</div>
+              <div
+                class="val mono text-red-400"
+                x-text="P.summary.max_drawdown.toFixed(1)+'%'"
+              ></div>
+              <div class="lbl">MAX DRAWDOWN</div>
+              <div class="cmp" style="color: var(--t3)">Max Drawdown</div>
             </div>
             <div class="kpi-pill">
-                <div class="val mono text-red-400" x-text="(P.summary.avg_drawdown||P.summary.max_drawdown*.4).toFixed(1)+'%'"></div>
-                <div class="lbl">AVG DRAWDOWN</div>
-                <div class="cmp" style="color:var(--t3)">Avg Drawdown</div>
+              <div
+                class="val mono text-red-400"
+                x-text="(P.summary.avg_drawdown||P.summary.max_drawdown*.4).toFixed(1)+'%'"
+              ></div>
+              <div class="lbl">AVG DRAWDOWN</div>
+              <div class="cmp" style="color: var(--t3)">Avg Drawdown</div>
             </div>
             <div class="kpi-pill">
-                <div class="val mono text-white" x-text="(P.summary.recovery_days||Math.abs(P.summary.max_drawdown)*3).toFixed(0)"></div>
-                <div class="lbl">RECOVERY DAYS</div>
-                <div class="cmp" style="color:var(--t3)">Recovery Days</div>
+              <div
+                class="val mono text-white"
+                x-text="(P.summary.recovery_days||Math.abs(P.summary.max_drawdown)*3).toFixed(0)"
+              ></div>
+              <div class="lbl">RECOVERY DAYS</div>
+              <div class="cmp" style="color: var(--t3)">Recovery Days</div>
             </div>
             <div class="kpi-pill">
-                <div class="val mono text-red-400" x-text="(P.summary.var_95||0).toFixed(1)+'%'"></div>
-                <div class="lbl">VALUE AT RISK</div>
-                <div class="cmp" style="color:var(--t3)">VaR 95%</div>
+              <div
+                class="val mono text-red-400"
+                x-text="(P.summary.var_95||0).toFixed(1)+'%'"
+              ></div>
+              <div class="lbl">VALUE AT RISK</div>
+              <div class="cmp" style="color: var(--t3)">VaR 95%</div>
             </div>
             <div class="kpi-pill">
-                <div class="val mono text-red-400" x-text="(P.summary.cvar_95||0).toFixed(1)+'%'"></div>
-                <div class="lbl">CONDITIONAL</div>
-                <div class="cmp" style="color:var(--t3)">CVaR 95%</div>
+              <div
+                class="val mono text-red-400"
+                x-text="(P.summary.cvar_95||0).toFixed(1)+'%'"
+              ></div>
+              <div class="lbl">CONDITIONAL</div>
+              <div class="cmp" style="color: var(--t3)">CVaR 95%</div>
             </div>
-        </div>
+          </div>
 
-        <div class="sub-bar">
-            <button @click="rtab='dd'" class="sub-btn" :class="rtab==='dd'&&'on'">Drawdown History</button>
-            <button @click="rtab='periods'" class="sub-btn" :class="rtab==='periods'&&'on'">Drawdown Periods</button>
-            <button @click="rtab='metrics'" class="sub-btn" :class="rtab==='metrics'&&'on'">Risk Metrics</button>
-        </div>
+          <div class="sub-bar">
+            <button
+              @click="rtab='dd'"
+              class="sub-btn"
+              :class="rtab==='dd'&&'on'"
+            >
+              Drawdown History
+            </button>
+            <button
+              @click="rtab='periods'"
+              class="sub-btn"
+              :class="rtab==='periods'&&'on'"
+            >
+              Drawdown Periods
+            </button>
+            <button
+              @click="rtab='metrics'"
+              class="sub-btn"
+              :class="rtab==='metrics'&&'on'"
+            >
+              Risk Metrics
+            </button>
+          </div>
 
-        <!-- Drawdown chart -->
-        <div x-show="rtab==='dd'" class="fade">
-            <div class="px-4 pt-3 text-xs" style="color:var(--t2)">Worst historical drawdown periods. Max drawdown: <span class="text-red-400 font-bold" x-text="P.summary.max_drawdown.toFixed(1)+'%'"></span></div>
+          <!-- Drawdown chart -->
+          <div x-show="rtab==='dd'" class="fade">
+            <div class="px-4 pt-3 text-xs" style="color: var(--t2)">
+              Worst historical drawdown periods. Max drawdown:
+              <span
+                class="text-red-400 font-bold"
+                x-text="P.summary.max_drawdown.toFixed(1)+'%'"
+              ></span>
+            </div>
             <!-- Major drawdown periods -->
             <div class="flex gap-2 px-4 py-3 overflow-x-auto">
-                <template x-for="dd in (P.drawdowns||[]).slice(0,5)">
-                    <div style="background:var(--s2);border:1px solid var(--bd);border-radius:4px;min-width:80px" class="px-3 py-2 text-center flex-shrink-0">
-                        <div class="text-sm font-bold mono text-red-400" x-text="dd.depth.toFixed(1)+'%'"></div>
-                        <div class="text-[9px] mono" style="color:var(--t3)" x-text="dd.start?.slice(0,4)||''"></div>
-                    </div>
-                </template>
+              <template x-for="dd in (P.drawdowns||[]).slice(0,5)">
+                <div
+                  style="
+                    background: var(--s2);
+                    border: 1px solid var(--bd);
+                    border-radius: 4px;
+                    min-width: 80px;
+                  "
+                  class="px-3 py-2 text-center flex-shrink-0"
+                >
+                  <div
+                    class="text-sm font-bold mono text-red-400"
+                    x-text="dd.depth.toFixed(1)+'%'"
+                  ></div>
+                  <div
+                    class="text-[9px] mono"
+                    style="color: var(--t3)"
+                    x-text="dd.start?.slice(0,4)||''"
+                  ></div>
+                </div>
+              </template>
             </div>
             <div class="px-4 pb-4">
-                <div style="height:220px;position:relative;background:var(--s1);border:1px solid var(--bd);border-radius:6px;padding:10px">
-                    <canvas id="ddChart"></canvas>
-                </div>
+              <div
+                style="
+                  height: 220px;
+                  position: relative;
+                  background: var(--s1);
+                  border: 1px solid var(--bd);
+                  border-radius: 6px;
+                  padding: 10px;
+                "
+              >
+                <canvas id="ddChart"></canvas>
+              </div>
             </div>
-        </div>
+          </div>
 
-        <!-- Drawdown periods list -->
-        <div x-show="rtab==='periods'" class="p-4 fade space-y-2">
+          <!-- Drawdown periods list -->
+          <div x-show="rtab==='periods'" class="p-4 fade space-y-2">
             <template x-for="dd in (P.drawdowns||[])">
-                <div class="dd-card">
-                    <div class="text-xl font-bold mono text-red-400" style="min-width:70px" x-text="dd.depth.toFixed(1)+'%'"></div>
-                    <div class="flex-1 text-[11px]">
-                        <div style="color:var(--t2)"><span style="color:var(--t3)">Start:</span> <span x-text="dd.start"></span></div>
-                        <div style="color:var(--t2)"><span style="color:var(--t3)">Trough:</span> <span x-text="dd.trough"></span></div>
-                        <div style="color:var(--t2)"><span style="color:var(--t3)">Recovery:</span> <span x-text="dd.recovery||'ongoing'"></span></div>
-                    </div>
-                    <div class="text-right"><div class="text-sm font-bold mono" x-text="dd.days+' days'"></div><div class="text-[9px]" style="color:var(--t3)">duration</div></div>
+              <div class="dd-card">
+                <div
+                  class="text-xl font-bold mono text-red-400"
+                  style="min-width: 70px"
+                  x-text="dd.depth.toFixed(1)+'%'"
+                ></div>
+                <div class="flex-1 text-[11px]">
+                  <div style="color: var(--t2)">
+                    <span style="color: var(--t3)">Start:</span>
+                    <span x-text="dd.start"></span>
+                  </div>
+                  <div style="color: var(--t2)">
+                    <span style="color: var(--t3)">Trough:</span>
+                    <span x-text="dd.trough"></span>
+                  </div>
+                  <div style="color: var(--t2)">
+                    <span style="color: var(--t3)">Recovery:</span>
+                    <span x-text="dd.recovery||'ongoing'"></span>
+                  </div>
                 </div>
+                <div class="text-right">
+                  <div
+                    class="text-sm font-bold mono"
+                    x-text="dd.days+' days'"
+                  ></div>
+                  <div class="text-[9px]" style="color: var(--t3)">
+                    duration
+                  </div>
+                </div>
+              </div>
             </template>
-        </div>
+          </div>
 
-        <!-- Risk metrics -->
-        <div x-show="rtab==='metrics'" class="p-4 fade">
+          <!-- Risk metrics -->
+          <div x-show="rtab==='metrics'" class="p-4 fade">
             <div class="risk-grid">
-                <div class="risk-cell"><div class="v mono" :class="(P.summary.sortino||0)>=2?'text-green-400':'text-amber-400'" x-text="(P.summary.sortino||0).toFixed(2)"></div><div class="l">Sortino</div></div>
-                <div class="risk-cell"><div class="v mono" :class="(P.summary.calmar||0)>=2?'text-green-400':'text-amber-400'" x-text="(P.summary.calmar||0).toFixed(2)"></div><div class="l">Calmar</div></div>
-                <div class="risk-cell"><div class="v mono" :class="(P.summary.profit_factor||0)>=2?'text-green-400':'text-amber-400'" x-text="(P.summary.profit_factor||0).toFixed(2)"></div><div class="l">Profit Factor</div></div>
+              <div class="risk-cell">
+                <div
+                  class="v mono"
+                  :class="(P.summary.sortino||0)>=2?'text-green-400':'text-amber-400'"
+                  x-text="(P.summary.sortino||0).toFixed(2)"
+                ></div>
+                <div class="l">Sortino</div>
+              </div>
+              <div class="risk-cell">
+                <div
+                  class="v mono"
+                  :class="(P.summary.calmar||0)>=2?'text-green-400':'text-amber-400'"
+                  x-text="(P.summary.calmar||0).toFixed(2)"
+                ></div>
+                <div class="l">Calmar</div>
+              </div>
+              <div class="risk-cell">
+                <div
+                  class="v mono"
+                  :class="(P.summary.profit_factor||0)>=2?'text-green-400':'text-amber-400'"
+                  x-text="(P.summary.profit_factor||0).toFixed(2)"
+                ></div>
+                <div class="l">Profit Factor</div>
+              </div>
             </div>
+          </div>
         </div>
-    </div>
 
-    <!-- ═══ DETAIL CATEGORY ═══ -->
-    <div x-show="cat==='detail'" class="p-4 fade">
-        <div style="height:280px;position:relative;background:var(--s1);border:1px solid var(--bd);border-radius:6px;padding:10px">
+        <!-- ═══ DETAIL CATEGORY ═══ -->
+        <div x-show="cat==='detail'" class="p-4 fade">
+          <div
+            style="
+              height: 280px;
+              position: relative;
+              background: var(--s1);
+              border: 1px solid var(--bd);
+              border-radius: 6px;
+              padding: 10px;
+            "
+          >
             <canvas id="distChart"></canvas>
+          </div>
+          <div class="flex justify-center gap-6 mt-3 text-xs">
+            <div class="text-center">
+              <span style="color: var(--t3)">Avg Hold:</span>
+              <span
+                class="mono text-white"
+                x-text="(P.holding_period?.avg_hours||0).toFixed(0)+'h'"
+              ></span>
+            </div>
+            <div class="text-center">
+              <span style="color: var(--t3)">Median:</span>
+              <span
+                class="mono text-white"
+                x-text="(P.holding_period?.median_hours||0).toFixed(0)+'h'"
+              ></span>
+            </div>
+          </div>
         </div>
-        <div class="flex justify-center gap-6 mt-3 text-xs">
-            <div class="text-center"><span style="color:var(--t3)">Avg Hold:</span> <span class="mono text-white" x-text="(P.holding_period?.avg_hours||0).toFixed(0)+'h'"></span></div>
-            <div class="text-center"><span style="color:var(--t3)">Median:</span> <span class="mono text-white" x-text="(P.holding_period?.median_hours||0).toFixed(0)+'h'"></span></div>
+
+        <!-- Source & timestamp -->
+        <div
+          class="flex items-center gap-2 px-4 py-2"
+          style="
+            border-top: 1px solid var(--bd);
+            font-size: 10px;
+            color: var(--t3);
+          "
+        >
+          <span
+            class="mono"
+            style="padding: 1px 6px; border-radius: 3px"
+            :style="src==='live'?'background:#00d4aa20;color:var(--green)':src==='paper'?'background:#fbbf2420;color:var(--amber)':'background:#ff5c5c20;color:var(--red)'"
+            x-text="src.toUpperCase()"
+          ></span>
+          <span x-text="(P.summary.gross_or_net||'gross').toUpperCase()"></span>
+          <span
+            class="ml-auto"
+            x-text="'Updated: '+new Date(P.generated_at).toLocaleString()"
+          ></span>
         </div>
-    </div>
+      </div>
+    </template>
 
-    <!-- Source & timestamp -->
-    <div class="flex items-center gap-2 px-4 py-2" style="border-top:1px solid var(--bd);font-size:10px;color:var(--t3)">
-        <span class="mono" style="padding:1px 6px;border-radius:3px" :style="src==='live'?'background:#00d4aa20;color:var(--green)':src==='paper'?'background:#fbbf2420;color:var(--amber)':'background:#ff5c5c20;color:var(--red)'" x-text="src.toUpperCase()"></span>
-        <span x-text="(P.summary.gross_or_net||'gross').toUpperCase()"></span>
-        <span class="ml-auto" x-text="'Updated: '+new Date(P.generated_at).toLocaleString()"></span>
-    </div>
-</div>
-</template>
+    <nav class="nav-b">
+      <div class="flex justify-around max-w-lg mx-auto">
+        <a href="/"><span class="ic">📊</span>Home</a>
+        <a href="/regime-screener"><span class="ic">🎯</span>Regime</a>
+        <a href="/portfolio-brief"><span class="ic">📋</span>Brief</a>
+        <a href="/compare"><span class="ic">📈</span>Compare</a>
+        <a href="/performance-lab" class="on"><span class="ic">🔬</span>Perf</a>
+        <a href="/options-lab"><span class="ic">🔮</span>Options</a>
+        <a href="/signals/explorer"><span class="ic">📡</span>Signals</a>
+      </div>
+    </nav>
 
-<nav class="nav-b"><div class="flex justify-around max-w-lg mx-auto">
-    <a href="/"><span class="ic">📊</span>Home</a>
-    <a href="/regime-screener"><span class="ic">🎯</span>Regime</a>
-    <a href="/portfolio-brief"><span class="ic">📋</span>Brief</a>
-    <a href="/compare"><span class="ic">📈</span>Compare</a>
-    <a href="/performance-lab" class="on"><span class="ic">🔬</span>Perf</a>
-    <a href="/options-lab"><span class="ic">🔮</span>Options</a>
-    <a href="/signals/explorer"><span class="ic">📡</span>Signals</a>
-</div></nav>
+    <script>
+      function PL() {
+        return {
+          ldg: true,
+          src: "live",
+          cat: "profit",
+          ptab: "equity",
+          rtab: "dd",
+          P: null,
+          mos: [
+            "Jan",
+            "Feb",
+            "Mar",
+            "Apr",
+            "May",
+            "Jun",
+            "Jul",
+            "Aug",
+            "Sep",
+            "Oct",
+            "Nov",
+            "Dec",
+          ],
+          charts: {},
 
-<script>
-function PL(){return{
-    ldg:true,src:'live',cat:'profit',ptab:'equity',rtab:'dd',P:null,
-    mos:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
-    charts:{},
+          async init() {
+            await this.load();
+            this.$watch("ptab", () => this.$nextTick(() => this.render()));
+            this.$watch("rtab", () => this.$nextTick(() => this.render()));
+            this.$watch("cat", () => this.$nextTick(() => this.render()));
+          },
+          async load() {
+            this.ldg = true;
+            try {
+              const r = await fetch(
+                "/api/v7/performance-lab?source=" + this.src,
+              );
+              if (r.ok) {
+                this.P = await r.json();
+                this.$nextTick(() => this.render());
+              }
+            } catch (e) {
+              console.error(e);
+            }
+            this.ldg = false;
+          },
+          render() {
+            if (this.cat === "profit") {
+              if (this.ptab === "equity") this.drawEq();
+              else if (this.ptab === "annual" || this.ptab === "vs")
+                this.drawAnn();
+              else if (this.ptab === "excess") this.drawEx();
+            } else if (this.cat === "risk" && this.rtab === "dd") {
+              this.drawDD();
+            } else if (this.cat === "detail") {
+              this.drawDist();
+            }
+          },
 
-    async init(){await this.load();this.$watch('ptab',()=>this.$nextTick(()=>this.render()));this.$watch('rtab',()=>this.$nextTick(()=>this.render()));this.$watch('cat',()=>this.$nextTick(()=>this.render()))},
-    async load(){
-        this.ldg=true;
-        try{const r=await fetch('/api/v7/performance-lab?source='+this.src);if(r.ok){this.P=await r.json();this.$nextTick(()=>this.render())}}catch(e){console.error(e)}
-        this.ldg=false;
-    },
-    render(){
-        if(this.cat==='profit'){
-            if(this.ptab==='equity')this.drawEq();
-            else if(this.ptab==='annual'||this.ptab==='vs')this.drawAnn();
-            else if(this.ptab==='excess')this.drawEx();
-        }else if(this.cat==='risk'&&this.rtab==='dd'){this.drawDD()}
-        else if(this.cat==='detail'){this.drawDist()}
-    },
+          drawEq() {
+            const c = document.getElementById("eqChart");
+            if (!c || !this.P?.equity_curve) return;
+            if (this.charts.eq) this.charts.eq.destroy();
+            const ec = this.P.equity_curve;
+            this.charts.eq = new Chart(c, {
+              type: "line",
+              data: {
+                labels: (ec.dates || []).map(() => ""),
+                datasets: [
+                  {
+                    label: "Portfolio",
+                    data: ec.values || [],
+                    borderColor: "#bc8cff",
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    tension: 0.3,
+                    fill: { target: "origin", above: "rgba(188,140,255,0.06)" },
+                  },
+                  {
+                    label: "SPY",
+                    data: ec.benchmark || [],
+                    borderColor: "#484f58",
+                    borderWidth: 1,
+                    borderDash: [4, 4],
+                    pointRadius: 0,
+                    tension: 0.3,
+                  },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    labels: {
+                      color: "#8b949e",
+                      font: { size: 10 },
+                      usePointStyle: true,
+                      pointStyle: "line",
+                    },
+                  },
+                },
+                scales: {
+                  x: { display: false },
+                  y: {
+                    grid: { color: "#21262d", lineWidth: 0.5 },
+                    ticks: {
+                      color: "#484f58",
+                      font: { size: 9, family: "JetBrains Mono" },
+                    },
+                  },
+                },
+                interaction: { intersect: false, mode: "index" },
+              },
+            });
+          },
+          drawAnn() {
+            const id = this.ptab === "vs" ? "vsChart" : "annChart";
+            const c = document.getElementById(id);
+            if (!c || !this.P?.annual_returns) return;
+            if (this.charts[id]) this.charts[id].destroy();
+            const ar = this.P.annual_returns;
+            this.charts[id] = new Chart(c, {
+              type: "bar",
+              data: {
+                labels: ar.map((a) => a.year),
+                datasets: [
+                  {
+                    label: "Strategy",
+                    data: ar.map((a) => a.return_pct),
+                    backgroundColor: ar.map((a) =>
+                      a.return_pct >= 0 ? "#00d4aa80" : "#ff5c5c80",
+                    ),
+                    borderRadius: 3,
+                  },
+                  {
+                    label: "Benchmark",
+                    data: ar.map((a) => a.benchmark),
+                    backgroundColor: "#484f5850",
+                    borderRadius: 3,
+                  },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { labels: { color: "#8b949e", font: { size: 10 } } },
+                },
+                scales: {
+                  x: {
+                    ticks: { color: "#484f58", font: { size: 9 } },
+                    grid: { display: false },
+                  },
+                  y: {
+                    grid: { color: "#21262d", lineWidth: 0.5 },
+                    ticks: {
+                      color: "#484f58",
+                      font: { size: 9 },
+                      callback: (v) => v + "%",
+                    },
+                  },
+                },
+              },
+            });
+          },
+          drawEx() {
+            const c = document.getElementById("exChart");
+            if (!c || !this.P?.annual_returns) return;
+            if (this.charts.ex) this.charts.ex.destroy();
+            const ar = this.P.annual_returns;
+            const excess = ar.map((a) => a.return_pct - a.benchmark);
+            this.charts.ex = new Chart(c, {
+              type: "bar",
+              data: {
+                labels: ar.map((a) => a.year),
+                datasets: [
+                  {
+                    label: "Excess Return",
+                    data: excess,
+                    backgroundColor: excess.map((v) =>
+                      v >= 0 ? "#00d4aa80" : "#ff5c5c80",
+                    ),
+                    borderRadius: 3,
+                  },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { labels: { color: "#8b949e", font: { size: 10 } } },
+                },
+                scales: {
+                  x: { ticks: { color: "#484f58" }, grid: { display: false } },
+                  y: {
+                    grid: { color: "#21262d", lineWidth: 0.5 },
+                    ticks: { color: "#484f58", callback: (v) => v + "%" },
+                  },
+                },
+              },
+            });
+          },
+          drawDD() {
+            const c = document.getElementById("ddChart");
+            if (!c || !this.P?.equity_curve) return;
+            if (this.charts.dd) this.charts.dd.destroy();
+            const vals = this.P.equity_curve.values || [];
+            let peak = vals[0] || 100;
+            const dd = vals.map((v) => {
+              if (v > peak) peak = v;
+              return ((v - peak) / peak) * 100;
+            });
+            this.charts.dd = new Chart(c, {
+              type: "line",
+              data: {
+                labels: dd.map(() => ""),
+                datasets: [
+                  {
+                    data: dd,
+                    borderColor: "#bc8cff",
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    tension: 0.3,
+                    fill: {
+                      target: "origin",
+                      above: "rgba(188,140,255,0.08)",
+                      below: "rgba(255,92,92,0.12)",
+                    },
+                  },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                  x: { display: false },
+                  y: {
+                    grid: { color: "#21262d", lineWidth: 0.5 },
+                    ticks: {
+                      color: "#484f58",
+                      font: { size: 9, family: "JetBrains Mono" },
+                      callback: (v) => v.toFixed(0) + "%",
+                    },
+                  },
+                },
+                interaction: { intersect: false, mode: "index" },
+              },
+            });
+          },
+          drawDist() {
+            const c = document.getElementById("distChart");
+            if (!c || !this.P?.win_loss_distribution) return;
+            if (this.charts.dist) this.charts.dist.destroy();
+            const d = this.P.win_loss_distribution;
+            this.charts.dist = new Chart(c, {
+              type: "bar",
+              data: {
+                labels: d.bins || [],
+                datasets: [
+                  {
+                    data: d.counts || [],
+                    backgroundColor: (d.bins || []).map((b) =>
+                      b >= 0 ? "#00d4aa60" : "#ff5c5c60",
+                    ),
+                    borderRadius: 2,
+                  },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                  x: {
+                    ticks: { color: "#484f58", callback: (v) => v + "%" },
+                    grid: { display: false },
+                  },
+                  y: {
+                    grid: { color: "#21262d" },
+                    ticks: { color: "#484f58" },
+                  },
+                },
+              },
+            });
+          },
 
-    drawEq(){
-        const c=document.getElementById('eqChart');if(!c||!this.P?.equity_curve)return;
-        if(this.charts.eq)this.charts.eq.destroy();
-        const ec=this.P.equity_curve;
-        this.charts.eq=new Chart(c,{type:'line',data:{labels:(ec.dates||[]).map(()=>''),datasets:[
-            {label:'Portfolio',data:ec.values||[],borderColor:'#bc8cff',borderWidth:2,pointRadius:0,tension:.3,fill:{target:'origin',above:'rgba(188,140,255,0.06)'}},
-            {label:'SPY',data:ec.benchmark||[],borderColor:'#484f58',borderWidth:1,borderDash:[4,4],pointRadius:0,tension:.3}
-        ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8b949e',font:{size:10},usePointStyle:true,pointStyle:'line'}}},scales:{x:{display:false},y:{grid:{color:'#21262d',lineWidth:.5},ticks:{color:'#484f58',font:{size:9,family:'JetBrains Mono'}}}},interaction:{intersect:false,mode:'index'}}});
-    },
-    drawAnn(){
-        const id=this.ptab==='vs'?'vsChart':'annChart';
-        const c=document.getElementById(id);if(!c||!this.P?.annual_returns)return;
-        if(this.charts[id])this.charts[id].destroy();
-        const ar=this.P.annual_returns;
-        this.charts[id]=new Chart(c,{type:'bar',data:{labels:ar.map(a=>a.year),datasets:[
-            {label:'Strategy',data:ar.map(a=>a.return_pct),backgroundColor:ar.map(a=>a.return_pct>=0?'#00d4aa80':'#ff5c5c80'),borderRadius:3},
-            {label:'Benchmark',data:ar.map(a=>a.benchmark),backgroundColor:'#484f5850',borderRadius:3}
-        ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8b949e',font:{size:10}}}},scales:{x:{ticks:{color:'#484f58',font:{size:9}},grid:{display:false}},y:{grid:{color:'#21262d',lineWidth:.5},ticks:{color:'#484f58',font:{size:9},callback:v=>v+'%'}}}}});
-    },
-    drawEx(){
-        const c=document.getElementById('exChart');if(!c||!this.P?.annual_returns)return;
-        if(this.charts.ex)this.charts.ex.destroy();
-        const ar=this.P.annual_returns;const excess=ar.map(a=>a.return_pct-a.benchmark);
-        this.charts.ex=new Chart(c,{type:'bar',data:{labels:ar.map(a=>a.year),datasets:[
-            {label:'Excess Return',data:excess,backgroundColor:excess.map(v=>v>=0?'#00d4aa80':'#ff5c5c80'),borderRadius:3}
-        ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8b949e',font:{size:10}}}},scales:{x:{ticks:{color:'#484f58'},grid:{display:false}},y:{grid:{color:'#21262d',lineWidth:.5},ticks:{color:'#484f58',callback:v=>v+'%'}}}}});
-    },
-    drawDD(){
-        const c=document.getElementById('ddChart');if(!c||!this.P?.equity_curve)return;
-        if(this.charts.dd)this.charts.dd.destroy();
-        const vals=this.P.equity_curve.values||[];let peak=vals[0]||100;const dd=vals.map(v=>{if(v>peak)peak=v;return((v-peak)/peak)*100});
-        this.charts.dd=new Chart(c,{type:'line',data:{labels:dd.map(()=>''),datasets:[
-            {data:dd,borderColor:'#bc8cff',borderWidth:1.5,pointRadius:0,tension:.3,fill:{target:'origin',above:'rgba(188,140,255,0.08)',below:'rgba(255,92,92,0.12)'}}
-        ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{display:false},y:{grid:{color:'#21262d',lineWidth:.5},ticks:{color:'#484f58',font:{size:9,family:'JetBrains Mono'},callback:v=>v.toFixed(0)+'%'}}},interaction:{intersect:false,mode:'index'}}});
-    },
-    drawDist(){
-        const c=document.getElementById('distChart');if(!c||!this.P?.win_loss_distribution)return;
-        if(this.charts.dist)this.charts.dist.destroy();
-        const d=this.P.win_loss_distribution;
-        this.charts.dist=new Chart(c,{type:'bar',data:{labels:d.bins||[],datasets:[{data:d.counts||[],backgroundColor:(d.bins||[]).map(b=>b>=0?'#00d4aa60':'#ff5c5c60'),borderRadius:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#484f58',callback:v=>v+'%'},grid:{display:false}},y:{grid:{color:'#21262d'},ticks:{color:'#484f58'}}}}});
-    },
-
-    hc(v){if(v==null)return'transparent';const a=Math.min(1,Math.abs(v)/10);return v>0?`rgba(0,212,170,${.15+a*.65})`:`rgba(255,92,92,${.15+a*.65})`},
-    ytd(r){let v=1;for(const m of this.mos){if(r[m]!=null)v*=(1+r[m]/100)}return(v-1)*100},
-    avgMonthly(){const mr=this.P?.monthly_returns||{};let s=0,n=0;for(const y in mr)for(const m of this.mos)if(mr[y][m]!=null){s+=mr[y][m];n++}return n?s/n:0},
-    winRate(){const mr=this.P?.monthly_returns||{};let w=0,n=0;for(const y in mr)for(const m of this.mos)if(mr[y][m]!=null){n++;if(mr[y][m]>0)w++}return n?w/n*100:0},
-    winCount(){const mr=this.P?.monthly_returns||{};let w=0;for(const y in mr)for(const m of this.mos)if(mr[y]?.[m]>0)w++;return w},
-    totalMonths(){const mr=this.P?.monthly_returns||{};let n=0;for(const y in mr)for(const m of this.mos)if(mr[y]?.[m]!=null)n++;return n}
-}}
-</script>
-</body>
+          hc(v) {
+            if (v == null) return "transparent";
+            const a = Math.min(1, Math.abs(v) / 10);
+            return v > 0
+              ? `rgba(0,212,170,${0.15 + a * 0.65})`
+              : `rgba(255,92,92,${0.15 + a * 0.65})`;
+          },
+          ytd(r) {
+            let v = 1;
+            for (const m of this.mos) {
+              if (r[m] != null) v *= 1 + r[m] / 100;
+            }
+            return (v - 1) * 100;
+          },
+          avgMonthly() {
+            const mr = this.P?.monthly_returns || {};
+            let s = 0,
+              n = 0;
+            for (const y in mr)
+              for (const m of this.mos)
+                if (mr[y][m] != null) {
+                  s += mr[y][m];
+                  n++;
+                }
+            return n ? s / n : 0;
+          },
+          winRate() {
+            const mr = this.P?.monthly_returns || {};
+            let w = 0,
+              n = 0;
+            for (const y in mr)
+              for (const m of this.mos)
+                if (mr[y][m] != null) {
+                  n++;
+                  if (mr[y][m] > 0) w++;
+                }
+            return n ? (w / n) * 100 : 0;
+          },
+          winCount() {
+            const mr = this.P?.monthly_returns || {};
+            let w = 0;
+            for (const y in mr)
+              for (const m of this.mos) if (mr[y]?.[m] > 0) w++;
+            return w;
+          },
+          totalMonths() {
+            const mr = this.P?.monthly_returns || {};
+            let n = 0;
+            for (const y in mr)
+              for (const m of this.mos) if (mr[y]?.[m] != null) n++;
+            return n;
+          },
+        };
+      }
+    </script>
+  </body>
 </html>

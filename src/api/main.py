@@ -214,8 +214,8 @@ def _init_shared_services():
     Stored on ``app.state`` so every endpoint, bot, and background
     task reads the same cached objects — no ad-hoc instantiation.
     """
-    from src.services.market_data import get_market_data_service
     from src.engines.regime_router import RegimeRouter
+    from src.services.market_data import get_market_data_service
 
     app.state.market_data = get_market_data_service()
     app.state.regime_router = RegimeRouter()

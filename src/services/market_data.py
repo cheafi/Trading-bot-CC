@@ -62,6 +62,12 @@ MIN_ROWS: Dict[str, int] = {
     "1m": 10,
 }
 
+# Approximate max trading-day rows each period can deliver (daily interval)
+_PERIOD_MAX_DAILY: Dict[str, int] = {
+    "1d": 1, "5d": 5, "1mo": 22, "3mo": 66, "6mo": 132,
+    "1y": 252, "2y": 504, "5y": 1260, "10y": 2520, "max": 99999,
+}
+
 MAX_NAN_FRACTION = 0.20     # reject if >20% of Close values are NaN
 BACKOFF_BASE     = 1.5      # base for exponential back-off
 BACKOFF_MAX      = 60.0     # cap on back-off delay (seconds)
@@ -342,7 +348,7 @@ class MarketDataService:
                         period=period, interval=interval, auto_adjust=True
                     ),
                 )
-                validated = _validate_frame(df, ticker, interval)
+                validated = _validate_frame(df, ticker, interval, period)
                 if validated is not None:
                     return validated
                 # Validation failed — may be transient (partial data); retry
@@ -374,14 +380,14 @@ class MarketDataService:
 # ── frame validation (module-level, stateless) ───────────────────────────────
 
 def _validate_frame(
-    df: Any, ticker: str, interval: str
+    df: Any, ticker: str, interval: str, period: str = "1y"
 ) -> Optional[pd.DataFrame]:
     """
     Accept a DataFrame only if it passes all quality gates:
       1. Is a non-empty DataFrame.
       2. Has a recognised Close column.
       3. NaN fraction in Close ≤ MAX_NAN_FRACTION.
-      4. Has at least MIN_ROWS non-NaN Close values.
+      4. Has at least MIN_ROWS non-NaN Close values (capped by period).
     Returns the validated (possibly column-normalised) df, or None.
     """
     if not isinstance(df, pd.DataFrame) or df.empty:
@@ -406,6 +412,10 @@ def _validate_frame(
     close     = df["Close"]
     nan_frac  = close.isna().mean()
     min_valid = MIN_ROWS.get(interval, 10)
+    # Cap min_valid by what the period can actually deliver.
+    # E.g. period="5d" + interval="1d" → max 5 rows; don't require 10.
+    period_max = _PERIOD_MAX_DAILY.get(period, 99999)
+    min_valid = min(min_valid, max(1, period_max - 2))   # 2-row slack for holidays
 
     if nan_frac > MAX_NAN_FRACTION:
         logger.warning(
