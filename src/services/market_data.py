@@ -232,6 +232,67 @@ class MarketDataService:
         self._cache[cache_key] = _CacheEntry(cache_key, result)
         return result
 
+    # ── market-state helpers (used by ContextAssembler / regime) ────────────
+
+    async def get_vix(self) -> float:
+        """Return current VIX level.  Cached via standard get_history TTL."""
+        q = await self.get_quote("^VIX")
+        return q["price"] if q else 18.0
+
+    async def get_spy_return(self, window: int = 20) -> float:
+        """Return SPY % return over *window* trading days."""
+        df = await self.get_history("SPY", period="3mo", interval="1d")
+        if df is None or len(df) < window:
+            return 0.0
+        try:
+            close = df["Close"]
+            ret = (float(close.iloc[-1]) / float(close.iloc[-window]) - 1)
+            return round(ret, 4)
+        except Exception:
+            return 0.0
+
+    async def get_market_breadth(self) -> float:
+        """Approximate breadth: fraction of 11 sector ETFs above SMA(20)."""
+        sectors = ["XLK", "XLF", "XLV", "XLE", "XLI", "XLY",
+                    "XLP", "XLU", "XLRE", "XLC", "XLB"]
+        above = 0
+        total = 0
+        results = await asyncio.gather(
+            *[self.get_history(s, period="2mo", interval="1d") for s in sectors],
+            return_exceptions=True,
+        )
+        for df in results:
+            if isinstance(df, Exception) or df is None or len(df) < 20:
+                continue
+            try:
+                close = df["Close"]
+                sma20 = float(close.rolling(20).mean().iloc[-1])
+                total += 1
+                if float(close.iloc[-1]) > sma20:
+                    above += 1
+            except Exception:
+                continue
+        return round(above / total, 2) if total > 0 else 0.50
+
+    async def get_market_state(self) -> Dict[str, Any]:
+        """
+        One-shot helper: fetch VIX, SPY return, breadth concurrently.
+        Returns dict ready for RegimeRouter.classify().
+        """
+        vix, spy_ret, breadth = await asyncio.gather(
+            self.get_vix(),
+            self.get_spy_return(20),
+            self.get_market_breadth(),
+        )
+        return {
+            "vix": vix,
+            "spy_return_20d": spy_ret,
+            "breadth_pct": breadth,
+            "hy_spread": 0.0,
+            "realized_vol_20d": 0.15,
+            "vix_term_slope": 0.0,
+        }
+
     def cache_stats(self) -> Dict[str, Any]:
         """
         Health snapshot for /status command.

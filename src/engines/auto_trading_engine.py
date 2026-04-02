@@ -212,8 +212,18 @@ class AutoTradingEngine:
         # Sprint 4: decision-layer components
         self.regime_router = RegimeRouter()
         self.ensembler = OpportunityEnsembler()
+
+        # Sprint 42: wire MarketDataService into ContextAssembler
+        # so it uses get_vix/get_spy_return/get_market_breadth
+        # instead of falling back to raw yfinance or defaults.
+        try:
+            from src.services.market_data import get_market_data_service
+            _mds = get_market_data_service()
+        except Exception:
+            _mds = None
+
         self.context_assembler = ContextAssembler(
-            market_data_service=getattr(self, 'market_data', None),
+            market_data_service=_mds,
             broker_manager=getattr(self, 'broker_manager', None),
             news_service=getattr(self, 'news_service', None),
         )

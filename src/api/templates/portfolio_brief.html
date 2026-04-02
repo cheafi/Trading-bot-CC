@@ -54,7 +54,7 @@
     <div class="flex items-center gap-2.5">
         <a href="/" class="text-base">📈</a>
         <div>
-            <div class="text-[13px] font-bold text-white">📊 Portfolio 週報</div>
+            <div class="text-[13px] font-bold text-white">📊 Portfolio Weekly</div>
             <div class="text-[10px] mono" style="color:var(--t3)" x-text="briefDate"></div>
         </div>
     </div>
@@ -75,7 +75,7 @@
 
     <!-- Holdings with signals -->
     <div class="brief-card" x-show="B.holdings_with_signals?.length">
-        <h3><span class="text-green-400">📈</span> <span x-text="B.holdings_with_signals.length+' 個持倉有訊號轉變：'"></span></h3>
+        <h3><span class="text-green-400">📈</span> <span x-text="B.holdings_with_signals.length+' holdings with signal changes:'"></span></h3>
         <template x-for="h in B.holdings_with_signals" :key="h.ticker">
             <div class="holding-row">
                 <span class="ticker text-white" x-text="h.ticker"></span>
@@ -93,7 +93,7 @@
 
     <!-- Sector clustering -->
     <div class="brief-card" x-show="Object.keys(B.sector_clustering||{}).length">
-        <h3>🏭 半導體群聚</h3>
+        <h3>🏭 Sector Clustering</h3>
         <template x-for="(cl,sect) in (B.sector_clustering||{})">
             <div class="cluster-box">
                 <div class="flex items-center justify-between mb-1">
@@ -135,7 +135,7 @@
     </div>
 
     <!-- Saved artifact -->
-    <div class="text-[10px] mono my-2" style="color:var(--t3)" x-text="'完整報告已存於 data/brief-'+briefDate+'.md'"></div>
+    <div class="text-[10px] mono my-2" style="color:var(--t3)" x-text="'Full report saved to data/brief-'+briefDate+'.md'"></div>
 
     <!-- Follow-up Q&A -->
     <div class="brief-card" x-show="B.follow_up_prompts?.length">

@@ -82,7 +82,7 @@
     <div class="flex items-center gap-2.5">
         <a href="/" class="text-base">📈</a>
         <div>
-            <div class="text-[13px] font-bold text-white">FinLab</div>
+            <div class="text-[13px] font-bold text-white">TradingAI Pro</div>
             <div class="text-[10px]" style="color:var(--t3)">Performance Lab · Track Record</div>
         </div>
     </div>
@@ -93,11 +93,11 @@
     </div>
 </header>
 
-<!-- Category tabs (FinLab: 獲利能力 / 抗風險能力 / etc) -->
+<!-- Category tabs -->
 <div class="cat-bar">
-    <button @click="cat='profit'" class="cat-btn" :class="cat==='profit'&&'on'">📈 獲利能力</button>
-    <button @click="cat='risk'" class="cat-btn" :class="cat==='risk'&&'on'">🛡 抗風險能力</button>
-    <button @click="cat='detail'" class="cat-btn" :class="cat==='detail'&&'on'">📊 策略細節</button>
+    <button @click="cat='profit'" class="cat-btn" :class="cat==='profit'&&'on'">📈 Profitability</button>
+    <button @click="cat='risk'" class="cat-btn" :class="cat==='risk'&&'on'">🛡 Risk Metrics</button>
+    <button @click="cat='detail'" class="cat-btn" :class="cat==='detail'&&'on'">📊 Strategy Detail</button>
 </div>
 
 <div x-show="ldg" class="flex justify-center py-20"><span class="spin"></span></div>
@@ -111,7 +111,7 @@
         <div class="kpi-banner">
             <div class="kpi-pill">
                 <div class="val mono" :class="P.summary.annual_return>=0?'text-green-400':'text-red-400'" x-text="(P.summary.annual_return>=0?'+':'')+P.summary.annual_return.toFixed(1)+'%'"></div>
-                <div class="lbl">年度回報</div>
+                <div class="lbl">Annual Return</div>
                 <div class="cmp" style="color:var(--t3)"><span class="arrow">▲</span> vs 10%</div>
             </div>
             <div class="kpi-pill">
@@ -122,32 +122,32 @@
             <div class="kpi-pill">
                 <div class="val mono text-white" x-text="P.summary.beta.toFixed(2)"></div>
                 <div class="lbl">BETA</div>
-                <div class="cmp" style="color:var(--t3)">市場敏感度</div>
+                <div class="cmp" style="color:var(--t3)">Market Sensitivity</div>
             </div>
             <div class="kpi-pill">
                 <div class="val mono" :class="P.summary.sharpe>=1.5?'text-green-400':'text-amber-400'" x-text="P.summary.sharpe.toFixed(2)"></div>
                 <div class="lbl">SHARPE</div>
-                <div class="cmp" style="color:var(--t3)">風險回報比</div>
+                <div class="cmp" style="color:var(--t3)">Risk/Reward Ratio</div>
             </div>
             <div class="kpi-pill">
                 <div class="val mono" :class="(P.summary.win_rate||0)>=0.6?'text-green-400':'text-amber-400'" x-text="((P.summary.win_rate||0)*100).toFixed(0)+'%'"></div>
-                <div class="lbl">交易勝率</div>
+                <div class="lbl">WIN RATE</div>
                 <div class="cmp" style="color:var(--t3)">Win Rate</div>
             </div>
         </div>
 
         <!-- Sub-tabs -->
         <div class="sub-bar">
-            <button @click="ptab='equity'" class="sub-btn" :class="ptab==='equity'&&'on'">歷史績效</button>
-            <button @click="ptab='monthly'" class="sub-btn" :class="ptab==='monthly'&&'on'">月報酬率</button>
-            <button @click="ptab='annual'" class="sub-btn" :class="ptab==='annual'&&'on'">持倉細節</button>
-            <button @click="ptab='vs'" class="sub-btn" :class="ptab==='vs'&&'on'">與大盤年報酬比比</button>
-            <button @click="ptab='excess'" class="sub-btn" :class="ptab==='excess'&&'on'">超額績效</button>
+            <button @click="ptab='equity'" class="sub-btn" :class="ptab==='equity'&&'on'">Historical Performance</button>
+            <button @click="ptab='monthly'" class="sub-btn" :class="ptab==='monthly'&&'on'">Monthly Returns</button>
+            <button @click="ptab='annual'" class="sub-btn" :class="ptab==='annual'&&'on'">Position Details</button>
+            <button @click="ptab='vs'" class="sub-btn" :class="ptab==='vs'&&'on'">vs Benchmark</button>
+            <button @click="ptab='excess'" class="sub-btn" :class="ptab==='excess'&&'on'">Excess Returns</button>
         </div>
 
         <!-- Equity Curve -->
         <div x-show="ptab==='equity'" class="p-4 fade">
-            <div class="text-xs mb-3" style="color:var(--t2)">策略的累計報酬走勢圖，紫色線為策略，灰色為大盤。灰色條為大型，化年回報率為 <span class="text-green-400 font-bold" x-text="'+'+P.summary.annual_return.toFixed(1)+'%'"></span>。</div>
+            <div class="text-xs mb-3" style="color:var(--t2)">Cumulative return chart. Purple = strategy, gray = benchmark. Annualized return: <span class="text-green-400 font-bold" x-text="'+'+P.summary.annual_return.toFixed(1)+'%'"></span></div>
             <div style="height:300px;position:relative;background:var(--s1);border:1px solid var(--bd);border-radius:6px;padding:10px">
                 <canvas id="eqChart"></canvas>
             </div>
@@ -168,11 +168,11 @@
             <div class="hm-summary">
                 <div class="item">
                     <div class="v mono text-green-400" x-text="'+'+avgMonthly().toFixed(2)+'%'"></div>
-                    <div class="l">平均月報酬<br>平均</div>
+                    <div class="l">Avg Monthly<br>Return</div>
                 </div>
                 <div class="item">
                     <div class="v mono text-green-400" x-text="winRate().toFixed(1)+'%'"></div>
-                    <div class="l">月勝率<br><span x-text="winCount()+'/'+totalMonths()"></span></div>
+                    <div class="l">Monthly Win Rate<br><span x-text="winCount()+'/'+totalMonths()"></span></div>
                     <div class="wr-bar" style="width:120px">
                         <div class="win" :style="'width:'+winRate()+'%'"></div>
                         <div class="loss" :style="'width:'+(100-winRate())+'%'"></div>
@@ -229,17 +229,17 @@
         <div class="kpi-banner">
             <div class="kpi-pill">
                 <div class="val mono text-red-400" x-text="P.summary.max_drawdown.toFixed(1)+'%'"></div>
-                <div class="lbl">最大回檔</div>
+                <div class="lbl">MAX DRAWDOWN</div>
                 <div class="cmp" style="color:var(--t3)">Max Drawdown</div>
             </div>
             <div class="kpi-pill">
                 <div class="val mono text-red-400" x-text="(P.summary.avg_drawdown||P.summary.max_drawdown*.4).toFixed(1)+'%'"></div>
-                <div class="lbl">平均回檔</div>
+                <div class="lbl">AVG DRAWDOWN</div>
                 <div class="cmp" style="color:var(--t3)">Avg Drawdown</div>
             </div>
             <div class="kpi-pill">
                 <div class="val mono text-white" x-text="(P.summary.recovery_days||Math.abs(P.summary.max_drawdown)*3).toFixed(0)"></div>
-                <div class="lbl">回復期間</div>
+                <div class="lbl">RECOVERY DAYS</div>
                 <div class="cmp" style="color:var(--t3)">Recovery Days</div>
             </div>
             <div class="kpi-pill">
@@ -255,14 +255,14 @@
         </div>
 
         <div class="sub-bar">
-            <button @click="rtab='dd'" class="sub-btn" :class="rtab==='dd'&&'on'">衝撞歷史</button>
-            <button @click="rtab='periods'" class="sub-btn" :class="rtab==='periods'&&'on'">持倉細節</button>
-            <button @click="rtab='metrics'" class="sub-btn" :class="rtab==='metrics'&&'on'">風險指標</button>
+            <button @click="rtab='dd'" class="sub-btn" :class="rtab==='dd'&&'on'">Drawdown History</button>
+            <button @click="rtab='periods'" class="sub-btn" :class="rtab==='periods'&&'on'">Drawdown Periods</button>
+            <button @click="rtab='metrics'" class="sub-btn" :class="rtab==='metrics'&&'on'">Risk Metrics</button>
         </div>
 
         <!-- Drawdown chart -->
         <div x-show="rtab==='dd'" class="fade">
-            <div class="px-4 pt-3 text-xs" style="color:var(--t2)">歷史上最嚴重的回檔期間，最大回檔為 <span class="text-red-400 font-bold" x-text="P.summary.max_drawdown.toFixed(1)+'%'"></span>。</div>
+            <div class="px-4 pt-3 text-xs" style="color:var(--t2)">Worst historical drawdown periods. Max drawdown: <span class="text-red-400 font-bold" x-text="P.summary.max_drawdown.toFixed(1)+'%'"></span></div>
             <!-- Major drawdown periods -->
             <div class="flex gap-2 px-4 py-3 overflow-x-auto">
                 <template x-for="dd in (P.drawdowns||[]).slice(0,5)">

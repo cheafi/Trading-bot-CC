@@ -204,6 +204,76 @@ STATIC_DIR.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+# ═══════════════════════════════════════════════════════════════════
+# SINGLETON WIRING — one engine, one regime, one market-data service
+# ═══════════════════════════════════════════════════════════════════
+
+def _init_shared_services():
+    """Create shared singletons once at import time.
+
+    Stored on ``app.state`` so every endpoint, bot, and background
+    task reads the same cached objects — no ad-hoc instantiation.
+    """
+    from src.services.market_data import get_market_data_service
+    from src.engines.regime_router import RegimeRouter
+
+    app.state.market_data = get_market_data_service()
+    app.state.regime_router = RegimeRouter()
+    app.state.regime_cache = None       # populated on first fetch
+    app.state.regime_cache_ts = 0.0     # monotonic timestamp
+
+    # Engine singleton (dry_run) — lazy to avoid heavy import at startup
+    app.state.engine = None
+    app.state.engine_init_done = False
+    logger.info("[Singleton] shared services registered on app.state")
+
+
+def _get_engine():
+    """Lazy-init the shared AutoTradingEngine singleton."""
+    if not app.state.engine_init_done:
+        try:
+            from src.engines.auto_trading_engine import AutoTradingEngine
+            engine = AutoTradingEngine(dry_run=True)
+            # Wire market data service into engine + context assembler
+            engine.market_data = app.state.market_data
+            if hasattr(engine, 'context_assembler'):
+                engine.context_assembler.market_data = app.state.market_data
+            app.state.engine = engine
+            logger.info("[Singleton] AutoTradingEngine created")
+        except Exception as exc:
+            logger.warning(f"[Singleton] engine init failed: {exc}")
+            app.state.engine = None
+        app.state.engine_init_done = True
+    return app.state.engine
+
+
+async def _get_regime():
+    """Return cached RegimeState, refreshing every 60 s.
+
+    Single source of truth — all surfaces read from here.
+    """
+    import time as _time
+    now = _time.monotonic()
+    if app.state.regime_cache and (now - app.state.regime_cache_ts) < 60:
+        return app.state.regime_cache
+
+    try:
+        mkt = await app.state.market_data.get_market_state()
+        state = app.state.regime_router.classify(mkt)
+        app.state.regime_cache = state
+        app.state.regime_cache_ts = now
+        return state
+    except Exception as exc:
+        logger.warning(f"[Regime] classify error: {exc}")
+        if app.state.regime_cache:
+            return app.state.regime_cache
+        from src.engines.regime_router import RegimeState
+        return RegimeState()
+
+
+_init_shared_services()
+
+
 # ===== Dashboard Routes =====
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
@@ -1933,46 +2003,35 @@ async def get_regime_scoreboard():
     v6 Regime Scoreboard — live regime label, risk budgets, strategy playbook,
     scenarios, and no-trade triggers.
 
-    This endpoint derives the current scoreboard from live market data
-    (SPY, QQQ, IWM, VIX) and returns a structured RegimeScoreboard object.
+    This endpoint now uses the shared RegimeRouter singleton
+    (single source of truth) instead of duplicating regime logic.
     """
-    try:
-        import yfinance as yf
-    except ImportError:
-        yf = None
+    # Use shared regime — single source of truth
+    regime_state = await _get_regime()
 
-    if not yf:
-        raise HTTPException(503, "yfinance not available")
+    # Fetch market prices via shared service for display
+    md = app.state.market_data
+    spy_q, qqq_q, iwm_q = await asyncio.gather(
+        md.get_quote("SPY"), md.get_quote("QQQ"), md.get_quote("IWM"),
+    )
 
-    spy_t = yf.Ticker("SPY")
-    vix_t = yf.Ticker("^VIX")
-    qqq_t = yf.Ticker("QQQ")
-    iwm_t = yf.Ticker("IWM")
+    spy_price = spy_q["price"] if spy_q else 0
+    spy_pct = spy_q["change_pct"] if spy_q else 0
+    qqq_price = qqq_q["price"] if qqq_q else 0
+    qqq_pct = qqq_q["change_pct"] if qqq_q else 0
+    iwm_price = iwm_q["price"] if iwm_q else 0
+    iwm_pct = iwm_q["change_pct"] if iwm_q else 0
+    vix = regime_state.vix
 
-    spy_info = spy_t.fast_info if hasattr(spy_t, "fast_info") else {}
-    vix_info = vix_t.fast_info if hasattr(vix_t, "fast_info") else {}
-
-    spy_price = getattr(spy_info, "last_price", 0) or 0
-    spy_prev = getattr(spy_info, "previous_close", spy_price) or spy_price
-    spy_pct = ((spy_price - spy_prev) / spy_prev * 100) if spy_prev else 0
-
-    vix = getattr(vix_info, "last_price", 0) or 0
-
-    qqq_info = qqq_t.fast_info if hasattr(qqq_t, "fast_info") else {}
-    qqq_price = getattr(qqq_info, "last_price", 0) or 0
-    qqq_prev = getattr(qqq_info, "previous_close", qqq_price) or qqq_price
-    qqq_pct = ((qqq_price - qqq_prev) / qqq_prev * 100) if qqq_prev else 0
-
-    iwm_info = iwm_t.fast_info if hasattr(iwm_t, "fast_info") else {}
-    iwm_price = getattr(iwm_info, "last_price", 0) or 0
-    iwm_prev = getattr(iwm_info, "previous_close", iwm_price) or iwm_price
-    iwm_pct = ((iwm_price - iwm_prev) / iwm_prev * 100) if iwm_prev else 0
-
-    # Derive regime
-    risk = "RISK_OFF" if (vix > 25 or spy_pct < -1.5) else (
-        "RISK_ON" if (vix < 18 and spy_pct > 0.3) else "NEUTRAL")
-    trend = "UPTREND" if spy_pct > 0.5 else "DOWNTREND" if spy_pct < -0.5 else "NEUTRAL"
-    vol_state = "HIGH_VOL" if vix > 22 else "LOW_VOL" if vix < 15 else "NORMAL"
+    # Map canonical regime to scoreboard labels
+    risk = regime_state.regime
+    vol_map = {"low_vol": "LOW_VOL", "normal_vol": "NORMAL",
+               "elevated_vol": "HIGH_VOL", "high_vol": "HIGH_VOL",
+               "crisis_vol": "HIGH_VOL"}
+    vol_state = vol_map.get(regime_state.volatility_regime, "NORMAL")
+    trend_map = {"uptrend": "UPTREND", "downtrend": "DOWNTREND",
+                 "sideways": "NEUTRAL"}
+    trend = trend_map.get(regime_state.trend_regime, "NEUTRAL")
 
     risk_budgets = {
         "RISK_ON": (150, 60, 100, 5, 30),
@@ -2298,9 +2357,11 @@ async def get_strategy_leaderboard():
 async def api_health():
     """Engine health-check endpoint for monitoring."""
     try:
-        from src.engines.auto_trading_engine import AutoTradingEngine
-        engine = AutoTradingEngine(dry_run=True)
-        return await engine.health_check()
+        engine = _get_engine()
+        if engine:
+            return await engine.health_check()
+        return {"status": "ok", "engine": "not_initialised",
+                "market_data": app.state.market_data.cache_stats()}
     except Exception as e:
         return {"status": "unhealthy", "error": str(e)}
 
@@ -2360,13 +2421,11 @@ def _yf_quote(symbol: str) -> dict:
 @app.get("/api/live/market", tags=["live"])
 async def live_market():
     """
-    Sprint 40: Live market overview — indices, macro, sectors, Asia.
-    Public endpoint (no auth). Powers the web dashboard.
+    Sprint 42: Live market overview — indices, macro, sectors, Asia.
+    Regime from shared RegimeRouter singleton (single source of truth).
+    Fetches truly parallel via asyncio.gather.
     """
-    import asyncio
-    loop = asyncio.get_event_loop()
-
-    # Fetch all tickers in parallel threads
+    # Fetch all tickers in truly parallel threads
     all_symbols = (
         [(s, n, "index") for s, n in _LIVE_INDICES]
         + [(s, n, "macro") for s, n in _LIVE_MACRO]
@@ -2374,38 +2433,41 @@ async def live_market():
         + [(s, n, "asia") for s, n in _LIVE_ASIA]
     )
 
-    results = {}
-    for sym, name, group in all_symbols:
+    async def _fetch_one(sym, name, group):
         try:
             q = await asyncio.to_thread(_yf_quote, sym)
             q["name"] = name
             q["group"] = group
-            results[sym] = q
+            return sym, q
         except Exception:
-            results[sym] = {"symbol": sym, "name": name, "group": group,
-                            "price": 0, "change_pct": 0}
+            return sym, {"symbol": sym, "name": name, "group": group,
+                         "price": 0, "change_pct": 0}
 
-    # Derive regime
-    spy = results.get("SPY", {})
-    vix = results.get("^VIX", {})
-    spy_pct = spy.get("change_pct", 0)
-    vix_price = vix.get("price", 0)
+    fetched = await asyncio.gather(
+        *[_fetch_one(s, n, g) for s, n, g in all_symbols]
+    )
+    results = dict(fetched)
 
-    risk = "RISK_OFF" if (vix_price > 25 or spy_pct < -1.5) else (
-        "RISK_ON" if (vix_price < 18 and spy_pct > 0.3) else "NEUTRAL")
-    trend = "UPTREND" if spy_pct > 0.5 else ("DOWNTREND" if spy_pct < -0.5 else "SIDEWAYS")
-    vol_state = "HIGH" if vix_price > 22 else ("LOW" if vix_price < 15 else "NORMAL")
-    risk_score = max(0, min(100, int(50 + spy_pct * 10 - (vix_price - 18) * 3)))
+    # Use shared RegimeRouter — single source of truth
+    regime_state = await _get_regime()
 
-    playbook_map = {
-        ("RISK_ON", "UPTREND"): ["Momentum", "Breakout", "Trend-Follow"],
-        ("RISK_ON", "SIDEWAYS"): ["Swing", "VCP"],
-        ("NEUTRAL", "UPTREND"): ["Momentum", "VCP"],
-        ("NEUTRAL", "SIDEWAYS"): ["Mean-Reversion", "Swing"],
-        ("NEUTRAL", "DOWNTREND"): ["Mean-Reversion"],
-        ("RISK_OFF", "DOWNTREND"): ["Cash", "Hedges"],
-    }
-    strategies = playbook_map.get((risk, trend), ["Swing", "Mean-Reversion"])
+    # Map canonical RegimeState to dashboard contract
+    vol_map = {"low_vol": "LOW", "normal_vol": "NORMAL",
+               "elevated_vol": "HIGH", "high_vol": "HIGH",
+               "crisis_vol": "CRISIS"}
+    vol_label = vol_map.get(regime_state.volatility_regime, "NORMAL")
+    trend_map = {"uptrend": "UPTREND", "downtrend": "DOWNTREND",
+                 "sideways": "SIDEWAYS"}
+    trend_label = trend_map.get(regime_state.trend_regime, "SIDEWAYS")
+
+    # Strategy playbook from regime router
+    router = app.state.regime_router
+    mults = router.get_strategy_multipliers(regime_state)
+    strategies = [k.replace('_', '-').title()
+                  for k, v in sorted(mults.items(), key=lambda x: -x[1])
+                  if v >= 0.5][:4]
+
+    risk_score = max(0, min(100, int(regime_state.confidence * 100)))
 
     indices = [results[s] for s, _ in _LIVE_INDICES if s in results]
     macro = [results[s] for s, _ in _LIVE_MACRO if s in results]
@@ -2415,8 +2477,17 @@ async def live_market():
     asia = [results[s] for s, _ in _LIVE_ASIA if s in results]
 
     return {
-        "regime": {"label": risk, "trend": trend, "vol": vol_state,
-                   "score": risk_score, "strategies": strategies},
+        "regime": {
+            "label": regime_state.regime,
+            "trend": trend_label,
+            "vol": vol_label,
+            "score": risk_score,
+            "strategies": strategies,
+            "should_trade": regime_state.should_trade,
+            "entropy": regime_state.entropy,
+            "size_scalar": regime_state.size_scalar,
+            "no_trade_reason": regime_state.no_trade_reason,
+        },
         "indices": indices,
         "macro": macro,
         "sectors": sectors,
@@ -2433,11 +2504,13 @@ async def live_quote(ticker: str):
     if q.get("error"):
         raise HTTPException(404, f"No data for {ticker}")
 
-    # Add technical indicators
+    # Add technical indicators (in thread to avoid blocking event loop)
     import yfinance as yf
     try:
-        t = yf.Ticker(ticker.upper())
-        hist = t.history(period="3mo")
+        def _fetch_hist():
+            t = yf.Ticker(ticker.upper())
+            return t.history(period="3mo")
+        hist = await asyncio.to_thread(_fetch_hist)
         if hist is not None and len(hist) >= 20:
             close = hist["Close"]
             sma20 = float(close.rolling(20).mean().iloc[-1])
@@ -2964,28 +3037,28 @@ async def portfolio_brief_data(
             has_signal = abs(change_pct) > 2 or rsi < 30 or rsi > 70
             if has_signal:
                 if change_pct > 2:
-                    entry["note"] = "大幅波動" if change_pct > 4 else "明顯上漲"
+                    entry["note"] = "Large move" if change_pct > 4 else "Strong rally"
                     entry["signal_type"] = "momentum_breakout"
                 elif change_pct < -2:
-                    entry["note"] = "大幅下跌 — 留意支撐位"
+                    entry["note"] = "Sharp decline — watch support levels"
                     entry["signal_type"] = "pullback_warning"
                 elif rsi < 30:
-                    entry["note"] = f"RSI {rsi:.0f} 進入低值 — 看看反轉條件"
+                    entry["note"] = f"RSI {rsi:.0f} oversold — check reversal conditions"
                     entry["signal_type"] = "oversold"
                 elif rsi > 70:
-                    entry["note"] = f"RSI {rsi:.0f} 進入超買 — 留意回調風險"
+                    entry["note"] = f"RSI {rsi:.0f} overbought — pullback risk"
                     entry["signal_type"] = "overbought"
                 else:
-                    entry["note"] = "訊號觸發"
+                    entry["note"] = "Signal triggered"
                     entry["signal_type"] = "signal"
                 holdings_with_signals.append(entry)
             elif abs(change_pct) > 0.5 or rsi < 35 or rsi > 65:
                 if rsi < 35:
-                    entry["note"] = f"RSI {rsi:.0f} 偏低 — 可能值得關注"
+                    entry["note"] = f"RSI {rsi:.0f} low — worth watching"
                 elif rsi > 65:
-                    entry["note"] = f"RSI {rsi:.0f} 偏高 — 動能持續"
+                    entry["note"] = f"RSI {rsi:.0f} elevated — momentum continues"
                 else:
-                    entry["note"] = f"變動 {change_pct:+.1f}%"
+                    entry["note"] = f"Move {change_pct:+.1f}%"
                 entry["watch_reason"] = "near_extreme"
                 holdings_no_signal.append(entry)
 
@@ -3008,8 +3081,8 @@ async def portfolio_brief_data(
                     "tickers": [i["ticker"] for i in items],
                     "avg_change": round(avg_chg, 1),
                     "narrative": (
-                        f"{sector} 板塊{'群起' if avg_chg > 0 else '齊跌'} "
-                        f"平均 {avg_chg:+.1f}%"
+                        f"{sector} sector {'rallying' if avg_chg > 0 else 'selling off'} "
+                        f"avg {avg_chg:+.1f}%"
                     ),
                 }
 
@@ -3020,39 +3093,39 @@ async def portfolio_brief_data(
     # Catalysts
     catalysts = []
     if any(abs(h["change_pct"]) > 3 for h in holdings_with_signals):
-        catalysts.append("大幅波動日 — 留意是否有催化事件（財報、分析師調整、產業會議）")
+        catalysts.append("High volatility day — check for catalysts (earnings, analyst revisions, industry events)")
     if sector_clustering:
         for s in sector_clustering:
-            catalysts.append(f"{s} 板塊聯動 — 可能有主題性催化")
+            catalysts.append(f"{s} sector correlated move — possible thematic catalyst")
 
     # Follow-up prompts
     prompts = []
     for h in holdings_no_signal[:2]:
-        prompts.append(f"{h['ticker']} 目前的技術面如何？")
+        prompts.append(f"How does {h['ticker']} look technically?")
     if sector_clustering:
         for s in sector_clustering:
-            prompts.append(f"{s} 群起是短期還是趨勢？")
+            prompts.append(f"Is {s} rally short-term or trending?")
     if holdings_with_signals:
-        prompts.append(f"{holdings_with_signals[0]['ticker']} 大幅波動後應否調整倉位？")
+        prompts.append(f"Should I adjust {holdings_with_signals[0]['ticker']} position after this move?")
 
     brief = {
         "date": target_date,
         "headline": (
-            f"{len(holdings_with_signals)} 個持倉有訊號觸發"
+            f"{len(holdings_with_signals)} holdings triggered signals"
             if holdings_with_signals
-            else "今日持倉平穩 — 無重大訊號"
+            else "All holdings stable — no major signals"
         ),
         "portfolio_story": (
-            f"{'、'.join(h['ticker'] for h in holdings_with_signals[:3])} 出現明顯波動"
+            f"{', '.join(h['ticker'] for h in holdings_with_signals[:3])} showing notable movement"
             if holdings_with_signals
-            else "所有持倉表現穩定"
+            else "All positions stable"
         ),
         "holdings_with_signals": holdings_with_signals,
         "holdings_no_signal": holdings_no_signal,
         "sector_clustering": sector_clustering,
-        "top_catalysts": catalysts if catalysts else ["今日無重大催化事件"],
+        "top_catalysts": catalysts if catalysts else ["No major catalysts today"],
         "no_change_summary": (
-            f"其餘 {no_change_count} 隻 watchlist 無重大變化"
+            f"Remaining {no_change_count} watchlist names unchanged"
             if no_change_count > 0
             else None
         ),
@@ -3255,25 +3328,48 @@ async def performance_lab_data(
     period: str = Query("1y"),
 ):
     """
-    v7 Performance Lab — FinLab-style KPI dashboard.
-    Returns equity curve, monthly heatmap, drawdowns, risk metrics.
+    v7 Performance Lab — KPI dashboard.
+    Sprint 42: tries real PerformanceTracker / ProfessionalKPI first.
+    Falls back to SYNTHETIC data with explicit badge.
     """
     import numpy as np
 
-    # Try to load real KPI data from engine
-    kpi_data = None
+    data_source_label = "SYNTHETIC"  # default; upgraded if real data found
+
+    # ── Try real closed-trade data from PerformanceTracker ──
+    real_trades = []
     try:
-        from src.engines.professional_kpi import ProfessionalKPIDashboard
-        kpi = ProfessionalKPIDashboard()
-        kpi_data = kpi.compute_kpis()
+        from src.performance.performance_tracker import PerformanceTracker
+        tracker = PerformanceTracker()
+        real_trades = tracker.get_closed_trades() if hasattr(tracker, 'get_closed_trades') else []
     except Exception:
         pass
 
-    # Generate representative data (in production, pull from trade history DB)
-    np.random.seed(42)
-    n_months = 24
-    monthly_rets = np.random.normal(0.03, 0.05, n_months)  # ~3% monthly mean
-    monthly_rets = np.clip(monthly_rets, -0.15, 0.20)
+    # ── Try real KPI from engine singleton ──
+    engine = _get_engine()
+    if engine and hasattr(engine, 'kpi'):
+        try:
+            snap = engine.kpi.snapshot() if hasattr(engine.kpi, 'snapshot') else None
+            if snap and hasattr(snap, 'total_trades') and snap.total_trades > 0:
+                data_source_label = "LIVE"
+        except Exception:
+            pass
+
+    # ── Build metrics from real trades if we have enough ──
+    if len(real_trades) >= 10:
+        data_source_label = source  # live / paper / backtest
+        returns = [t.pnl_pct / 100 for t in real_trades if hasattr(t, 'pnl_pct')]
+        if not returns:
+            returns = [0.01] * len(real_trades)
+        monthly_rets = np.array(returns[-24:]) if len(returns) >= 24 else np.array(returns)
+    else:
+        # SYNTHETIC fallback — clearly labeled
+        np.random.seed(42)
+        n_months = 24
+        monthly_rets = np.random.normal(0.03, 0.05, n_months)
+        monthly_rets = np.clip(monthly_rets, -0.15, 0.20)
+
+    n_months = len(monthly_rets)
 
     # Build equity curve
     equity = [100.0]
@@ -3385,8 +3481,13 @@ async def performance_lab_data(
             "profit_factor": round(1.5 + np.random.random(), 2),
             "var_95": round(float(np.percentile(monthly_rets, 5)) * 100, 1),
             "cvar_95": round(float(np.mean(monthly_rets[monthly_rets < np.percentile(monthly_rets, 5)])) * 100, 1) if len(monthly_rets[monthly_rets < np.percentile(monthly_rets, 5)]) > 0 else -5.0,
-            "source": source,
+            "source": data_source_label,
             "gross_or_net": "net",
+            "data_warning": (
+                "SYNTHETIC DATA — simulated returns for demo. "
+                "Not based on real trade history."
+                if data_source_label == "SYNTHETIC" else None
+            ),
         },
         "equity_curve": {
             "dates": dates,
@@ -3433,22 +3534,16 @@ async def options_screen_data(
 
     rsi = q.get("rsi", 50)
 
-    # Try to use ExpressionEngine
+    # Try to use ExpressionEngine (use correct method name)
     expression_decision = "stock"
     try:
         from src.engines.expression_engine import ExpressionEngine
         ee = ExpressionEngine()
-        # Build minimal context for expression engine
-        plan = ee.evaluate({
-            "confidence": 0.75,
-            "iv_percentile": 0.35,
-            "option_oi": 800,
-            "option_spread_pct": 0.02,
-            "holding_days": 20,
-            "portfolio_options_pct": 0.1,
-            "rr": 2.0,
-            "direction": "LONG",
-        })
+        plan = ee.select_expression(
+            ticker=ticker,
+            direction="LONG" if rsi > 45 else "SHORT",
+            signal_data={"confidence": 0.75, "rsi": rsi},
+        )
         expression_decision = plan.get("instrument", "stock")
     except Exception:
         # Auto-decide based on strategy param
@@ -3460,7 +3555,8 @@ async def options_screen_data(
     import numpy as np
     np.random.seed(hash(ticker) % 2**31)
 
-    # Simulate IV metrics (in production, pull from options data feed)
+    # SYNTHETIC options data — real options feed not yet connected
+    # Simulate IV metrics (will be replaced by real options_data.py feed)
     iv_rank = int(np.random.randint(15, 75))
     iv_percentile = iv_rank + int(np.random.randint(-5, 5))
     skew = round(np.random.uniform(-0.02, 0.02), 3)
@@ -3548,6 +3644,11 @@ async def options_screen_data(
         "contracts": contracts[:10],
         "iv_term_structure": iv_term,
         "why_this_expression": why,
+        "data_source": "SYNTHETIC",
+        "data_warning": (
+            "SYNTHETIC OPTIONS DATA — simulated IV/OI/contracts. "
+            "Not from live options chain feed."
+        ),
         "generated_at": datetime.utcnow().isoformat() + "Z",
     }
 

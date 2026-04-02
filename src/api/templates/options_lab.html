@@ -61,7 +61,7 @@
     <div class="flex items-center gap-2.5">
         <a href="/" class="text-base">📈</a>
         <div>
-            <div class="text-[13px] font-bold text-white" x-text="ticker?ticker+' LEAPS Call 篩選結果':'Options Lab'"></div>
+            <div class="text-[13px] font-bold text-white" x-text="ticker?ticker+' LEAPS Call Screen Results':'Options Lab'"></div>
             <div class="text-[10px]" style="color:var(--t3)">Research-Grade Options Surface</div>
         </div>
     </div>
@@ -79,10 +79,10 @@
     </select>
     <button @click="screen()" class="btn-go">Screen</button>
     <div x-show="spot" class="ml-3 flex items-center gap-2 text-sm">
-        <span style="color:var(--t3)">現況：</span>
-        <span class="text-white font-bold mono" x-text="ticker.toUpperCase()+' 現價 $'+spot.toFixed(2)"></span>
+        <span style="color:var(--t3)">Current:</span>
+        <span class="text-white font-bold mono" x-text="ticker.toUpperCase()+' $'+spot.toFixed(2)"></span>
         <span class="text-white">|</span>
-        <span class="mono" style="color:var(--t2)" x-text="'找到 '+contracts.length+' 個合約'"></span>
+        <span class="mono" style="color:var(--t2)" x-text="'Found '+contracts.length+' contracts'"></span>
     </div>
 </div>
 
@@ -99,35 +99,35 @@
 
     <!-- Market Context (clean table, matching screenshot 3) -->
     <div class="section">
-        <div class="section-title">市場背景注意事項</div>
+        <div class="section-title">Market Context Notes</div>
         <div style="background:var(--s1);border:1px solid var(--bd);border-radius:4px;overflow:hidden">
             <table class="ctx-tbl">
-                <thead><tr style="background:var(--s2)"><td style="color:var(--t3);font-size:10px;font-weight:600">指標</td><td style="color:var(--t3);font-size:10px;font-weight:600">數值</td><td style="color:var(--t3);font-size:10px;font-weight:600">說明</td></tr></thead>
+                <thead><tr style="background:var(--s2)"><td style="color:var(--t3);font-size:10px;font-weight:600">Indicator</td><td style="color:var(--t3);font-size:10px;font-weight:600">Value</td><td style="color:var(--t3);font-size:10px;font-weight:600">Description</td></tr></thead>
                 <tbody>
                     <tr>
-                        <td>IV 期限結構斜率</td>
-                        <td class="mono" :class="Math.abs(ctx.skew)<0.05?'':'text-amber-400'" x-text="(ctx.skew>=0?'+':'')+ctx.skew.toFixed(3)+(ctx.skew>=0?' (倒掛/正值)':' (順斜)')"></td>
-                        <td>拒絕 IV 偏離（~37%），LEAPS IV 約 32-34% 相對合理</td>
+                        <td>IV Term Structure Slope</td>
+                        <td class="mono" :class="Math.abs(ctx.skew)<0.05?'':'text-amber-400'" x-text="(ctx.skew>=0?'+':'')+ctx.skew.toFixed(3)+(ctx.skew>=0?' (Inverted)':' (Normal)')"></td>
+                        <td>IV deviation rejected (~37%). LEAPS IV ~32-34% relatively reasonable</td>
                     </tr>
                     <tr>
-                        <td>財報距今</td>
-                        <td class="mono" x-text="ctx.dte+' 天'"></td>
-                        <td>下次如報距 IV 可能配升，如報時 IV crush</td>
+                        <td>Days to Earnings</td>
+                        <td class="mono" x-text="ctx.dte+' days'"></td>
+                        <td>IV may rise ahead of earnings; IV crush on release</td>
                     </tr>
                     <tr>
-                        <td>除息日</td>
-                        <td class="mono" x-text="ctx.exdiv+' 天'"></td>
-                        <td>Call 賣方不保證配息，需特入空倉</td>
+                        <td>Ex-Div Date</td>
+                        <td class="mono" x-text="ctx.exdiv+' days'"></td>
+                        <td>Call sellers not guaranteed dividend; consider adjusting</td>
                     </tr>
                     <tr>
                         <td>IV Skew</td>
-                        <td class="mono" x-text="(ctx.skew>=0?'+':'')+ctx.skew.toFixed(3)+' (輕微正 skew)'"></td>
-                        <td>Call 略貴於 Put，正常</td>
+                        <td class="mono" x-text="(ctx.skew>=0?'+':'')+ctx.skew.toFixed(3)+' (Slight positive skew)'"></td>
+                        <td>Calls slightly pricier than puts; normal</td>
                     </tr>
                     <tr>
-                        <td style="color:var(--red)" x-text="ctx.warn?'警告 HIGH IV / EARNINGS':'狀態'"></td>
-                        <td class="mono" :class="ctx.warn?'text-red-400':'text-green-400'" x-text="ctx.warn?'⚠ 注意':'✓ OK'"></td>
-                        <td x-text="ctx.warn?'LEAPS 期間有配息，需考慮調整':'LEAPS 無異常風險'"></td>
+                        <td style="color:var(--red)" x-text="ctx.warn?'Warning: HIGH IV / EARNINGS':'Status'"></td>
+                        <td class="mono" :class="ctx.warn?'text-red-400':'text-green-400'" x-text="ctx.warn?'⚠ Caution':'✓ OK'"></td>
+                        <td x-text="ctx.warn?'LEAPS period has dividends; consider adjusting':'LEAPS no abnormal risk'"></td>
                     </tr>
                 </tbody>
             </table>
@@ -136,12 +136,12 @@
 
     <!-- Contract Ranking (dense table) -->
     <div class="section">
-        <div class="section-title">TOP <span x-text="contracts.length"></span> 合約一覽（按 EV 最佳計算順序）</div>
-        <div class="text-[11px] mb-2" style="color:var(--t3)">注意：所有合約均為 OTM，delta 0.20-0.38，市場目前價位的 LEAPS 建議 OTM 為主</div>
+        <div class="section-title">TOP <span x-text="contracts.length"></span> Contract Overview (sorted by best EV)</div>
+        <div class="text-[11px] mb-2" style="color:var(--t3)">Note: All contracts are OTM, delta 0.20-0.38. LEAPS at current price suggest OTM preferred</div>
         <div style="background:var(--s1);border:1px solid var(--bd);border-radius:4px;overflow:hidden">
             <table class="report-tbl">
                 <thead><tr>
-                    <th>排名</th><th class="r">行權價</th><th class="c">DTE</th><th class="r">Mid</th><th class="r">Delta</th><th class="r">EV</th><th class="r">OI</th><th class="r">盈虧平衡</th><th class="r">最理想回報率</th>
+                    <th>Rank</th><th class="r">Strike</th><th class="c">DTE</th><th class="r">Mid</th><th class="r">Delta</th><th class="r">EV</th><th class="r">OI</th><th class="r">Breakeven</th><th class="r">Best Return</th>
                 </tr></thead>
                 <tbody>
                     <template x-for="(c,i) in contracts" :key="i">

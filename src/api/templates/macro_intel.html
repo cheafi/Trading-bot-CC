@@ -340,7 +340,7 @@
           :style="{color: D.political_risk?.trump_sentiment==='BULLISH'?'var(--green)':D.political_risk?.trump_sentiment==='BEARISH'?'var(--red)':'var(--t2)'}"
           x-text="D.political_risk?.trump_sentiment||'...'"
         ></div>
-        <div class="l">Trump 信心</div>
+        <div class="l">Trump Confidence</div>
         <div
           class="sub mono"
           x-text="'DJT $'+(D.political_risk?.djt_price||0).toFixed(1)"
@@ -352,7 +352,7 @@
           :style="{color: D.war_geopolitical?.risk_label==='HIGH'?'var(--red)':D.war_geopolitical?.risk_label==='ELEVATED'?'var(--amber)':'var(--green)'}"
           x-text="D.war_geopolitical?.risk_score||'...'"
         ></div>
-        <div class="l">戰爭風險</div>
+        <div class="l">War Risk</div>
         <div class="sub" x-text="D.war_geopolitical?.risk_label||''"></div>
       </div>
       <div class="kpi-item">
@@ -364,7 +364,7 @@
         <div class="l">VIX</div>
         <div
           class="sub"
-          x-text="D.war_geopolitical?.vix>22?'⚠ 恐慌':'正常'"
+          x-text="D.war_geopolitical?.vix>22?'⚠ Panic':'Normal'"
         ></div>
       </div>
     </div>
@@ -372,41 +372,41 @@
     <!-- Tabs -->
     <div class="tab-bar">
       <button class="tab-btn" :class="{on:tab==='rates'}" @click="tab='rates'">
-        🏦 利率追蹤
+        🏦 Rate Tracker
       </button>
       <button
         class="tab-btn"
         :class="{on:tab==='political'}"
         @click="tab='political'"
       >
-        🏛️ 政治風險
+        🏛️ Political Risk
       </button>
       <button class="tab-btn" :class="{on:tab==='war'}" @click="tab='war'">
-        ⚔️ 戰爭/地緣
+        ⚔️ War/Geopolitical
       </button>
       <button
         class="tab-btn"
         :class="{on:tab==='insider'}"
         @click="tab='insider'"
       >
-        👔 高管持倉
+        👔 Insider Holdings
       </button>
       <button class="tab-btn" :class="{on:tab==='corr'}" @click="tab='corr'">
-        📊 相關性矩陣
+        📊 Correlation Matrix
       </button>
       <button
         class="tab-btn"
         :class="{on:tab==='insights'}"
         @click="tab='insights'"
       >
-        💡 AI 洞察
+        💡 AI Insights
       </button>
     </div>
 
     <!-- Loading -->
     <div x-show="loading" class="p-8 text-center">
       <div class="text-sm" style="color: var(--t3)">
-        ⏳ 正在載入宏觀情報... (需要30-60秒)
+        ⏳ Loading macro intelligence... (30-60 seconds)
       </div>
     </div>
 
@@ -418,12 +418,12 @@
       <table class="dt">
         <thead>
           <tr>
-            <th>期限</th>
-            <th>名稱</th>
-            <th class="r">殖利率%</th>
-            <th class="r">日變化(bp)</th>
-            <th class="r">週變化</th>
-            <th class="r">月變化</th>
+            <th>Tenor</th>
+            <th>Name</th>
+            <th class="r">Yield%</th>
+            <th class="r">Day Δ(bp)</th>
+            <th class="r">1W Δ</th>
+            <th class="r">1M Δ</th>
           </tr>
         </thead>
         <tbody>
@@ -482,7 +482,7 @@
           ></span>
         </div>
         <div>
-          <span style="font-size: 10px; color: var(--t3)">殖利率曲線:</span>
+          <span style="font-size: 10px; color: var(--t3)">Yield Curve:</span>
           <span
             class="pill"
             :class="{'pill-r':D.rates?.curve?.status==='INVERTED','pill-y':D.rates?.curve?.status==='FLAT','pill-g':D.rates?.curve?.status==='NORMAL'}"
@@ -497,9 +497,9 @@
         <thead>
           <tr>
             <th>Symbol</th>
-            <th>名稱</th>
-            <th class="r">價格</th>
-            <th class="r">今日%</th>
+            <th>Name</th>
+            <th class="r">Price</th>
+            <th class="r">Today%</th>
             <th class="r">1W%</th>
             <th class="r">1M%</th>
             <th class="r">YTD%</th>
@@ -540,7 +540,7 @@
     <!-- ═══ POLITICAL TAB ═══ -->
     <div x-show="tab==='political' && !loading" class="fade">
       <div class="sec-h">
-        <span class="icon">🏛️</span> 政治風險籃 — Trump 相關 & 國防
+        <span class="icon">🏛️</span> Political Risk Basket — Trump-Related & Defense
       </div>
       <div
         style="
@@ -550,7 +550,7 @@
           font-size: 11px;
         "
       >
-        <span style="color: var(--t3)">Trump 情緒指標 (DJT proxy):</span>
+        <span style="color: var(--t3)">Trump Sentiment (DJT proxy):</span>
         <span
           class="pill"
           :class="{'pill-g':D.political_risk?.trump_sentiment==='BULLISH','pill-r':D.political_risk?.trump_sentiment==='BEARISH','pill-y':D.political_risk?.trump_sentiment==='NEUTRAL'}"
@@ -565,7 +565,7 @@
           :style="{color:D.political_risk?.djt_change>0?'var(--green)':'var(--red)'}"
           x-text="(D.political_risk?.djt_change>0?'+':'')+D.political_risk?.djt_change?.toFixed(2)+'%'"
         ></span>
-        <span class="ml-3" style="color: var(--t3)">| 政治籃動量(1M):</span>
+        <span class="ml-3" style="color: var(--t3)">| Political Basket Momentum(1M):</span>
         <span
           class="mono"
           :style="{color:D.political_risk?.basket_momentum_1m>0?'var(--green)':'var(--red)'}"
@@ -576,9 +576,9 @@
         <thead>
           <tr>
             <th>Symbol</th>
-            <th>名稱</th>
-            <th class="r">價格</th>
-            <th class="r">今日%</th>
+            <th>Name</th>
+            <th class="r">Price</th>
+            <th class="r">Today%</th>
             <th class="r">1W%</th>
             <th class="r">1M%</th>
             <th class="r">YTD%</th>
@@ -622,14 +622,14 @@
           border-top: 1px solid var(--bd);
         "
       >
-        📌 DJT (Trump Media) 被用作 Trump 政策信心的實時指標。國防股
-        (LMT/RTX/NOC/GD) 反映地緣政治風險定價。BA 追蹤出口政策敏感度。
+        📌 DJT (Trump Media) used as real-time proxy for Trump policy confidence. Defense stocks
+        (LMT/RTX/NOC/GD) reflect geopolitical risk pricing. BA tracks export policy sensitivity.
       </div>
     </div>
 
     <!-- ═══ WAR TAB ═══ -->
     <div x-show="tab==='war' && !loading" class="fade">
-      <div class="sec-h"><span class="icon">⚔️</span> 戰爭/地緣政治避險籃</div>
+      <div class="sec-h"><span class="icon">⚔️</span> War/Geopolitical Hedge Basket</div>
       <div
         style="
           padding: 10px 14px;
@@ -642,7 +642,7 @@
         "
       >
         <div>
-          <span style="color: var(--t3)">戰爭風險分數:</span>
+          <span style="color: var(--t3)">War Risk Score:</span>
           <span
             class="mono font-bold"
             :style="{color:D.war_geopolitical?.risk_label==='HIGH'?'var(--red)':D.war_geopolitical?.risk_label==='ELEVATED'?'var(--amber)':'var(--green)'}"
@@ -650,7 +650,7 @@
           ></span>
         </div>
         <div>
-          <span style="color: var(--t3)">國防股動量(1M):</span>
+          <span style="color: var(--t3)">Defense Momentum(1M):</span>
           <span
             class="mono"
             :style="{color:D.war_geopolitical?.defense_momentum_1m>0?'var(--green)':'var(--red)'}"
@@ -658,7 +658,7 @@
           ></span>
         </div>
         <div>
-          <span style="color: var(--t3)">黃金YTD:</span>
+          <span style="color: var(--t3)">Gold YTD:</span>
           <span
             class="mono"
             :style="{color:D.war_geopolitical?.gold_ytd>0?'var(--green)':'var(--red)'}"
@@ -688,15 +688,15 @@
               background: var(--bg);
               border-bottom: 1px solid var(--bd);
             "
-            x-text="cat==='defense'?'🛡️ 國防':'cat==='energy'?'⛽ 能源':'cat==='safe_haven'?'🏆 避險資產':'cat==='fear'?'😱 恐慌指標':'🌐 宏觀'"
+            x-text="cat==='defense'?'🛡️ Defense':'cat==='energy'?'⛽ Energy':'cat==='safe_haven'?'🏆 Safe Haven':'cat==='fear'?'😱 Fear Index':'🌐 Macro'"
           ></div>
           <table class="dt">
             <thead>
               <tr>
                 <th>Symbol</th>
-                <th>名稱</th>
-                <th class="r">價格</th>
-                <th class="r">今日%</th>
+                <th>Name</th>
+                <th class="r">Price</th>
+                <th class="r">Today%</th>
                 <th class="r">1W%</th>
                 <th class="r">1M%</th>
                 <th class="r">YTD%</th>
@@ -741,7 +741,7 @@
     <!-- ═══ INSIDER TAB ═══ -->
     <div x-show="tab==='insider' && !loading" class="fade">
       <div class="sec-h">
-        <span class="icon">👔</span> 高管持倉情緒 (價格動量代理)
+        <span class="icon">👔</span> Insider Sentiment (Price Momentum Proxy)
       </div>
       <div
         style="
@@ -754,21 +754,21 @@
         "
       >
         <div>
-          <span style="color: var(--t3)">累積信號:</span>
+          <span style="color: var(--t3)">Accumulate:</span>
           <span
             class="pill pill-g"
             x-text="D.insider_proxy?.accumulate_count||0"
           ></span>
         </div>
         <div>
-          <span style="color: var(--t3)">減持信號:</span>
+          <span style="color: var(--t3)">Distribute:</span>
           <span
             class="pill pill-r"
             x-text="D.insider_proxy?.distribute_count||0"
           ></span>
         </div>
         <div>
-          <span style="color: var(--t3)">持有:</span>
+          <span style="color: var(--t3)">Hold:</span>
           <span
             class="pill pill-y"
             x-text="(D.insider_proxy?.watchlist||[]).length - (D.insider_proxy?.accumulate_count||0) - (D.insider_proxy?.distribute_count||0)"
@@ -779,12 +779,12 @@
         <thead>
           <tr>
             <th>Ticker</th>
-            <th>高管/家族</th>
-            <th class="r">價格</th>
-            <th class="r">今日%</th>
+            <th>Executive/Family</th>
+            <th class="r">Price</th>
+            <th class="r">Today%</th>
             <th class="r">1M%</th>
             <th class="r">YTD%</th>
-            <th class="c">信號</th>
+            <th class="c">Signal</th>
           </tr>
         </thead>
         <tbody>
@@ -827,16 +827,15 @@
           border-top: 1px solid var(--bd);
         "
       >
-        📌 基於1個月價格動量推斷: >+5% = ACCUMULATE (累積), <-5% = DISTRIBUTE
-        (減持)。此為代理指標,非實際SEC Form 4申報數據。Trump Family 透過 DJT
-        追蹤。
+        📌 Based on 1-month price momentum: >+5% = ACCUMULATE, <-5% = DISTRIBUTE.
+        This is a proxy indicator, not actual SEC Form 4 data. Trump Family tracked via DJT.
       </div>
     </div>
 
     <!-- ═══ CORRELATION TAB ═══ -->
     <div x-show="tab==='corr' && !loading" class="fade">
       <div class="sec-h">
-        <span class="icon">📊</span> 6個月相關性矩陣 (日收益率)
+        <span class="icon">📊</span> 6-Month Correlation Matrix (Daily Returns)
       </div>
       <div style="overflow-x: auto; padding: 8px">
         <table class="dt" style="font-size: 10px">
@@ -878,7 +877,7 @@
       </div>
 
       <!-- SPY factor correlations bar -->
-      <div class="sec-h"><span class="icon">🎯</span> SPY 相關因子排名</div>
+      <div class="sec-h"><span class="icon">🎯</span> SPY Factor Correlation Ranking</div>
       <div style="padding: 10px 14px">
         <template x-for="[fac, val] in spySorted()">
           <div
@@ -946,7 +945,7 @@
 
     <!-- ═══ INSIGHTS TAB ═══ -->
     <div x-show="tab==='insights' && !loading" class="fade">
-      <div class="sec-h"><span class="icon">💡</span> AI 相關性洞察</div>
+      <div class="sec-h"><span class="icon">💡</span> AI Correlation Insights</div>
       <div style="padding: 10px 14px">
         <template x-for="ins in D.correlations?.insights||[]">
           <div class="insight" :class="{'warn':ins.severity==='warning'}">
@@ -963,25 +962,25 @@
             text-align: center;
           "
         >
-          目前各因子相關性在正常範圍內,無需特別警示。
+          All factor correlations currently within normal range. No special alerts.
         </div>
       </div>
 
       <!-- Summary Card -->
-      <div class="sec-h"><span class="icon">📋</span> 摘要</div>
+      <div class="sec-h"><span class="icon">📋</span> Summary</div>
       <div style="padding: 14px">
         <div class="card">
           <table class="dt">
             <tbody>
               <tr>
-                <td style="color: var(--t3); width: 40%">利率方向</td>
+                <td style="color: var(--t3); width: 40%">Rate Direction</td>
                 <td
                   class="mono font-bold"
                   x-text="D.summary?.rate_direction"
                 ></td>
               </tr>
               <tr>
-                <td style="color: var(--t3)">殖利率曲線</td>
+                <td style="color: var(--t3)">Yield Curve</td>
                 <td>
                   <span
                     class="pill"
@@ -991,7 +990,7 @@
                 </td>
               </tr>
               <tr>
-                <td style="color: var(--t3)">Trump 情緒</td>
+                <td style="color: var(--t3)">Trump Sentiment</td>
                 <td>
                   <span
                     class="pill"
@@ -1001,7 +1000,7 @@
                 </td>
               </tr>
               <tr>
-                <td style="color: var(--t3)">戰爭風險</td>
+                <td style="color: var(--t3)">War Risk</td>
                 <td>
                   <span
                     class="pill"
@@ -1011,7 +1010,7 @@
                 </td>
               </tr>
               <tr>
-                <td style="color: var(--t3)">政治籃動量(1M)</td>
+                <td style="color: var(--t3)">Political Momentum(1M)</td>
                 <td
                   class="mono"
                   :style="{color:D.summary?.political_momentum>0?'var(--green)':'var(--red)'}"
