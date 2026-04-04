@@ -2105,26 +2105,28 @@ async def get_delta_snapshot():
     v6 Delta Snapshot — 1-day index changes, VIX, breadth estimate.
     Captures "what changed" since yesterday close.
     """
-    try:
-        import yfinance as yf
-    except ImportError:
-        raise HTTPException(503, "yfinance not available")
+    mds = app.state.market_data
 
-    tickers = {"SPY": "spx_1d_pct", "QQQ": "ndx_1d_pct", "IWM": "iwm_1d_pct"}
+    tickers = {
+        "SPY": "spx_1d_pct",
+        "QQQ": "ndx_1d_pct",
+        "IWM": "iwm_1d_pct",
+    }
     changes = {}
+    quotes = await mds.get_multi_quotes(list(tickers.keys()))
     for sym, field in tickers.items():
-        t = yf.Ticker(sym)
-        info = t.fast_info if hasattr(t, "fast_info") else {}
-        price = getattr(info, "last_price", 0) or 0
-        prev = getattr(info, "previous_close", price) or price
-        pct = ((price - prev) / prev * 100) if prev else 0
+        q = quotes.get(sym)
+        pct = q["change_pct"] if q else 0
         changes[field] = round(pct, 3)
 
-    vix_t = yf.Ticker("^VIX")
-    vix_info = vix_t.fast_info if hasattr(vix_t, "fast_info") else {}
-    vix = getattr(vix_info, "last_price", 0) or 0
-    vix_prev = getattr(vix_info, "previous_close", vix) or vix
-    vix_chg = ((vix - vix_prev) / vix_prev * 100) if vix_prev else 0
+    vix_q = await mds.get_quote("^VIX")
+    vix = vix_q["price"] if vix_q else 0
+    vix_prev = (
+        vix - vix_q["change"] if vix_q and vix_q.get("change") else vix
+    )
+    vix_chg = (
+        ((vix - vix_prev) / vix_prev * 100) if vix_prev else 0
+    )
 
     delta = DeltaSnapshot(
         snapshot_date=date.today(),
@@ -2290,41 +2292,44 @@ async def get_regime_state():
 
 @app.get("/api/recommendations", tags=["decision-layer"])
 async def get_recommendations(limit: int = Query(10, ge=1, le=50)):
-    """Get ranked trade recommendations from the ensemble scorer."""
+    """Get ranked trade recommendations from the singleton engine cache.
+
+    Reads the single shared AutoTradingEngine state — no ad-hoc
+    ContextAssembler / RegimeRouter instantiation.
+    """
     try:
-        from src.engines.context_assembler import ContextAssembler
-        from src.engines.opportunity_ensembler import OpportunityEnsembler
-        from src.engines.regime_router import RegimeRouter
-        from src.engines.strategy_leaderboard import StrategyLeaderboard
+        engine = _get_engine()
+        regime = await _get_regime()
+        regime_dict = regime if isinstance(regime, dict) else (
+            regime.__dict__ if hasattr(regime, '__dict__') else {"label": str(regime)}
+        )
 
-        assembler = ContextAssembler()
-        ctx = assembler.assemble_sync()
-        mkt = ctx.get("market_state", {})
+        # ── Read cached recommendations from live engine ──
+        cached_recs: list = []
+        strategy_scores: dict = {}
+        no_trade_reason: str | None = None
+        mode = "LIVE"
 
-        router = RegimeRouter()
-        regime = router.classify(mkt)
-
-        leaderboard = StrategyLeaderboard()
-        ensembler = OpportunityEnsembler()
-
-        # Try to get cached recommendations from a running engine
-        cached_recs = []
-        try:
-            from src.engines.auto_trading_engine import AutoTradingEngine
-
-            # Note: in production the engine instance is a singleton;
-            # here we return the class-level structure for the endpoint.
-            cached_recs = []  # Populated by engine.get_cached_state()
-        except Exception:
-            pass
+        if engine:
+            cached_recs = list(getattr(engine, '_cached_recommendations', []))[:limit]
+            strategy_scores = getattr(engine, '_cached_leaderboard', {})
+            if hasattr(engine, '_no_trade_card') and engine._no_trade_card:
+                no_trade_reason = str(engine._no_trade_card)
+            if getattr(engine, 'dry_run', False):
+                mode = "PAPER"
+        else:
+            mode = "OFFLINE"
 
         return {
             "status": "ok",
-            "regime": regime,
+            "mode": mode,
+            "regime": regime_dict,
             "recommendations": cached_recs,
-            "strategy_scores": leaderboard.get_strategy_scores(),
-            "note": "Live data populated when AutoTradingEngine is running.",
-            "timestamp": datetime.utcnow().isoformat(),
+            "count": len(cached_recs),
+            "strategy_scores": strategy_scores,
+            "no_trade_reason": no_trade_reason,
+            "source": "engine_cache",
+            "as_of": datetime.utcnow().isoformat() + "Z",
         }
     except Exception as e:
         logger.error(f"Recommendations endpoint error: {e}")
@@ -2392,30 +2397,55 @@ _LIVE_ASIA = [
 ]
 
 
-def _yf_quote(symbol: str) -> dict:
-    """Fetch a single quote via yfinance (sync helper)."""
-    import yfinance as yf
+async def _mds_quote(symbol: str) -> dict:
+    """Fetch a single quote via MarketDataService."""
+    mds = app.state.market_data
     try:
-        t = yf.Ticker(symbol)
-        info = t.fast_info if hasattr(t, "fast_info") else {}
-        price = getattr(info, "last_price", 0) or 0
-        prev = getattr(info, "previous_close", price) or price
-        pct = ((price - prev) / prev * 100) if prev else 0
-        high = getattr(info, "day_high", price) or price
-        low = getattr(info, "day_low", price) or price
-        vol = getattr(info, "last_volume", 0) or 0
-        mcap = getattr(info, "market_cap", 0) or 0
-        h52 = getattr(info, "year_high", 0) or 0
-        l52 = getattr(info, "year_low", 0) or 0
+        q = await mds.get_quote(symbol)
+        if q is None:
+            return {
+                "symbol": symbol, "price": 0,
+                "change_pct": 0, "error": True,
+            }
+        # Enrich with history-based fields
+        hist = await mds.get_history(
+            symbol, period="3mo", interval="1d",
+        )
+        high = low = q["price"]
+        vol = q.get("volume", 0)
+        h52 = l52 = mcap = 0
+        if hist is not None and len(hist) >= 2:
+            c_col = (
+                "Close" if "Close" in hist.columns else "close"
+            )
+            h_col = (
+                "High" if "High" in hist.columns else "high"
+            )
+            l_col = (
+                "Low" if "Low" in hist.columns else "low"
+            )
+            high = float(hist[h_col].iloc[-1])
+            low = float(hist[l_col].iloc[-1])
+            h52 = float(hist[h_col].max())
+            l52 = float(hist[l_col].min())
+        prev = q["price"] - q.get("change", 0)
         return {
-            "symbol": symbol, "price": round(price, 2),
-            "change_pct": round(pct, 2), "prev_close": round(prev, 2),
-            "high": round(high, 2), "low": round(low, 2),
-            "volume": vol, "market_cap": mcap,
-            "high_52w": round(h52, 2), "low_52w": round(l52, 2),
+            "symbol": symbol,
+            "price": round(q["price"], 2),
+            "change_pct": round(q["change_pct"], 2),
+            "prev_close": round(prev, 2),
+            "high": round(high, 2),
+            "low": round(low, 2),
+            "volume": vol,
+            "market_cap": mcap,
+            "high_52w": round(h52, 2),
+            "low_52w": round(l52, 2),
         }
     except Exception:
-        return {"symbol": symbol, "price": 0, "change_pct": 0, "error": True}
+        return {
+            "symbol": symbol, "price": 0,
+            "change_pct": 0, "error": True,
+        }
 
 
 @app.get("/api/live/market", tags=["live"])
@@ -2435,7 +2465,7 @@ async def live_market():
 
     async def _fetch_one(sym, name, group):
         try:
-            q = await asyncio.to_thread(_yf_quote, sym)
+            q = await _mds_quote(sym)
             q["name"] = name
             q["group"] = group
             return sym, q
@@ -2499,43 +2529,76 @@ async def live_market():
 @app.get("/api/live/quote/{ticker}", tags=["live"])
 async def live_quote(ticker: str):
     """Sprint 40: Live quote for any ticker. Public, no auth."""
-    import asyncio
-    q = await asyncio.to_thread(_yf_quote, ticker.upper())
-    if q.get("error"):
+    mds = app.state.market_data
+    q_raw = await mds.get_quote(ticker.upper())
+    if q_raw is None:
         raise HTTPException(404, f"No data for {ticker}")
 
-    # Add technical indicators (in thread to avoid blocking event loop)
-    import yfinance as yf
+    q = {
+        "symbol": ticker.upper(),
+        "price": q_raw["price"],
+        "change_pct": q_raw["change_pct"],
+        "prev_close": round(
+            q_raw["price"] - q_raw.get("change", 0), 2,
+        ),
+        "volume": q_raw.get("volume", 0),
+    }
+
+    # Technical indicators via MarketDataService history
     try:
-        def _fetch_hist():
-            t = yf.Ticker(ticker.upper())
-            return t.history(period="3mo")
-        hist = await asyncio.to_thread(_fetch_hist)
+        hist = await mds.get_history(
+            ticker.upper(), period="3mo", interval="1d",
+        )
         if hist is not None and len(hist) >= 20:
-            close = hist["Close"]
-            sma20 = float(close.rolling(20).mean().iloc[-1])
-            sma50 = float(close.rolling(50).mean().iloc[-1]) if len(close) >= 50 else 0
+            c_col = (
+                "Close" if "Close" in hist.columns
+                else "close"
+            )
+            close = hist[c_col]
+            sma20 = float(
+                close.rolling(20).mean().iloc[-1],
+            )
+            sma50 = (
+                float(close.rolling(50).mean().iloc[-1])
+                if len(close) >= 50 else 0
+            )
             # RSI
             delta = close.diff()
             gain = delta.clip(lower=0).rolling(14).mean()
             loss = (-delta.clip(upper=0)).rolling(14).mean()
             rs = gain / loss
             rsi_series = 100 - (100 / (1 + rs))
-            rsi = float(rsi_series.iloc[-1]) if not rsi_series.empty else 50
+            rsi = (
+                float(rsi_series.iloc[-1])
+                if not rsi_series.empty else 50
+            )
             # Volume ratio
-            vol_avg = float(hist["Volume"].rolling(20).mean().iloc[-1])
-            vol_now = float(hist["Volume"].iloc[-1])
-            vol_ratio = vol_now / vol_avg if vol_avg > 0 else 1.0
+            v_col = (
+                "Volume" if "Volume" in hist.columns
+                else "volume"
+            )
+            vol_avg = float(
+                hist[v_col].rolling(20).mean().iloc[-1],
+            )
+            vol_now = float(hist[v_col].iloc[-1])
+            vol_ratio = (
+                vol_now / vol_avg if vol_avg > 0 else 1.0
+            )
             q["sma20"] = round(sma20, 2)
             q["sma50"] = round(sma50, 2)
             q["rsi"] = round(rsi, 1)
             q["volume_ratio"] = round(vol_ratio, 2)
             q["above_sma20"] = q["price"] > sma20
-            q["above_sma50"] = q["price"] > sma50 if sma50 else None
+            q["above_sma50"] = (
+                q["price"] > sma50 if sma50 else None
+            )
     except Exception:
         pass
 
-    return {"quote": q, "timestamp": datetime.utcnow().isoformat()}
+    return {
+        "quote": q,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
 
 
 @app.get("/api/live/strategies", tags=["live"])
@@ -2577,19 +2640,27 @@ async def live_backtest(
     import asyncio
 
     import numpy as np
-    import yfinance as yf
 
     ticker = ticker.upper().strip()
 
-    # Fetch historical data
+    # Fetch historical data via MarketDataService
+    mds = app.state.market_data
     try:
-        t = yf.Ticker(ticker)
         if start_date and end_date:
-            hist = t.history(start=start_date, end=end_date)
+            # For custom date range, use full period and slice
+            hist = await mds.get_history(
+                ticker, period="5y", interval="1d",
+            )
+            if hist is not None and not hist.empty:
+                hist = hist.loc[start_date:end_date]
         else:
-            hist = t.history(period=period)
+            hist = await mds.get_history(
+                ticker, period=period, interval="1d",
+            )
     except Exception as e:
-        raise HTTPException(400, f"Failed to fetch data for {ticker}: {e}")
+        raise HTTPException(
+            400, f"Failed to fetch data for {ticker}: {e}",
+        )
 
     if hist is None or hist.empty or len(hist) < 30:
         raise HTTPException(400, f"Insufficient data for {ticker} (need 30+ bars)")
@@ -2992,22 +3063,43 @@ async def regime_screener_data():
 @app.get("/api/v7/portfolio-brief", tags=["v7-surface"])
 async def portfolio_brief_data(
     date_str: Optional[str] = Query(None, alias="date"),
+    holdings: Optional[str] = Query(
+        None,
+        description=(
+            "Comma-separated ticker list to use as real holdings. "
+            "Overrides static watchlist. e.g. NVDA,AAPL,MSFT"
+        ),
+    ),
 ):
     """
     v7 Portfolio Brief — aggregated intelligence for holdings.
+
+    Accepts optional ``holdings`` param for real portfolio input.
+    Falls back to static watchlist when not provided.
+    Integrates catalyst narrative via CatalystSummarizer.
     """
     target_date = date_str or date.today().isoformat()
 
     # Try to load from artifact file first
     artifact_path = Path("data") / f"brief-{target_date}.json"
-    if artifact_path.exists():
+    if artifact_path.exists() and not holdings:
         import json
         with open(artifact_path) as f:
             return json.load(f)
 
-    # Build live brief from watchlist / top holdings
-    watchlist = ["NVDA", "AAPL", "MSFT", "AMD", "MU", "CRDO", "SOFI",
-                 "INTC", "PLTR", "AVGO", "SMCI", "META", "GOOGL", "AMZN"]
+    # Determine watchlist source
+    if holdings:
+        watchlist = [
+            t.strip().upper() for t in holdings.split(",")
+            if t.strip()
+        ]
+        watchlist_type = "user_holdings"
+    else:
+        watchlist = [
+            "NVDA", "AAPL", "MSFT", "AMD", "MU", "CRDO", "SOFI",
+            "INTC", "PLTR", "AVGO", "SMCI", "META", "GOOGL", "AMZN",
+        ]
+        watchlist_type = "static_default"
 
     holdings_with_signals = []
     holdings_no_signal = []
@@ -3090,23 +3182,42 @@ async def portfolio_brief_data(
     signaled_tickers = {h["ticker"] for h in holdings_with_signals + holdings_no_signal}
     no_change_count = sum(1 for t in watchlist if t not in signaled_tickers)
 
-    # Catalysts
-    catalysts = []
-    if any(abs(h["change_pct"]) > 3 for h in holdings_with_signals):
-        catalysts.append("High volatility day — check for catalysts (earnings, analyst revisions, industry events)")
-    if sector_clustering:
-        for s in sector_clustering:
-            catalysts.append(f"{s} sector correlated move — possible thematic catalyst")
+    # Catalysts — use CatalystSummarizer for real news narrative
+    catalyst_data = None
+    try:
+        from src.services.catalyst_summarizer import CatalystSummarizer
+        mds = app.state.market_data
+        cs = CatalystSummarizer(mds)
+        catalyst_data = await cs.summarize(watchlist, max_items_per_ticker=3)
+    except Exception as exc:
+        logger.warning("catalyst summarizer error: %s", exc)
 
-    # Follow-up prompts
+    # Fallback heuristic catalysts if summarizer failed
+    catalysts = []
+    if catalyst_data and catalyst_data.get("catalysts"):
+        catalysts = catalyst_data["catalysts"][:10]
+    else:
+        if any(abs(h["change_pct"]) > 3 for h in holdings_with_signals):
+            catalysts.append({"headline": "High volatility day — check for catalysts", "sentiment": "neutral"})
+        if sector_clustering:
+            for s in sector_clustering:
+                catalysts.append({"headline": f"{s} sector correlated move", "sentiment": "neutral"})
+
+    # Follow-up prompts — prefer catalyst summarizer output
     prompts = []
-    for h in holdings_no_signal[:2]:
-        prompts.append(f"How does {h['ticker']} look technically?")
-    if sector_clustering:
-        for s in sector_clustering:
-            prompts.append(f"Is {s} rally short-term or trending?")
-    if holdings_with_signals:
-        prompts.append(f"Should I adjust {holdings_with_signals[0]['ticker']} position after this move?")
+    if catalyst_data and catalyst_data.get("follow_up_questions"):
+        prompts = catalyst_data["follow_up_questions"]
+    else:
+        for h in holdings_no_signal[:2]:
+            prompts.append(f"How does {h['ticker']} look technically?")
+        if sector_clustering:
+            for s in sector_clustering:
+                prompts.append(f"Is {s} rally short-term or trending?")
+        if holdings_with_signals:
+            prompts.append(
+                f"Should I adjust {holdings_with_signals[0]['ticker']} "
+                f"position after this move?"
+            )
 
     brief = {
         "date": target_date,
@@ -3123,14 +3234,31 @@ async def portfolio_brief_data(
         "holdings_with_signals": holdings_with_signals,
         "holdings_no_signal": holdings_no_signal,
         "sector_clustering": sector_clustering,
-        "top_catalysts": catalysts if catalysts else ["No major catalysts today"],
+        "top_catalysts": catalysts if catalysts else [{"headline": "No major catalysts today", "sentiment": "neutral"}],
+        "sector_summary": (
+            catalyst_data.get("sector_summary", "")
+            if catalyst_data else ""
+        ),
         "no_change_summary": (
             f"Remaining {no_change_count} watchlist names unchanged"
             if no_change_count > 0
             else None
         ),
         "follow_up_prompts": prompts[:5],
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "trust": {
+            "mode": "LIVE",
+            "source": (
+                "catalyst_summarizer"
+                if catalyst_data else "watchlist_heuristic"
+            ),
+            "watchlist_type": watchlist_type,
+            "data_note": (
+                "Uses real holdings input. "
+                if watchlist_type == "user_holdings"
+                else "Uses static watchlist, not real holdings. "
+            ) + "Indicators from MarketDataService.",
+        },
+        "as_of": datetime.utcnow().isoformat() + "Z",
     }
 
     # Save artifact
@@ -3205,169 +3333,228 @@ async def why_moved(ticker: str):
 async def compare_overlay_data(
     tickers: str = Query(..., description="Comma-separated tickers"),
     period: str = Query("6M", description="1M, 3M, 6M, 1Y, 2Y"),
+    mode: str = Query(
+        "normalized",
+        description=(
+            "normalized / relative_strength / "
+            "rolling_correlation / rolling_beta"
+        ),
+    ),
+    join: str = Query(
+        "strict",
+        description="strict (inner join) / smooth (outer + ffill)",
+    ),
+    benchmark: str = Query("SPY", description="Benchmark ticker"),
+    rolling_window: int = Query(
+        60, description="Rolling window for corr/beta",
+    ),
 ):
     """
-    v7 Compare Overlay — normalized return, relative strength, correlation.
+    v7 Compare Overlay — date-aligned multi-instrument comparison.
+
+    Modes:
+      - **normalized** — rebased to 100
+      - **relative_strength** — ticker / benchmark ratio
+      - **rolling_correlation** — pairwise rolling Pearson
+      - **rolling_beta** — rolling OLS beta vs benchmark
+
+    Join strategies:
+      - **strict** — inner join (only shared trading dates)
+      - **smooth** — outer join + forward-fill (mixed calendars)
     """
     import asyncio
-    ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+
+    from src.services.compare_overlay_service import CompareOverlayService
+
+    ticker_list = [
+        t.strip().upper() for t in tickers.split(",") if t.strip()
+    ]
     if not ticker_list:
         raise HTTPException(400, "Provide at least one ticker")
 
-    period_map = {"1M": "1mo", "3M": "3mo", "6M": "6mo", "1Y": "1y", "2Y": "2y"}
-    yf_period = period_map.get(period, "6mo")
+    # Ensure benchmark is included for relative_strength / rolling_beta
+    if benchmark.upper() not in ticker_list and mode in (
+        "relative_strength", "rolling_beta",
+    ):
+        ticker_list.append(benchmark.upper())
 
-    series = {}
-    dates_list = []
-    raw_returns = {}
+    period_map = {
+        "1M": "1mo", "3M": "3mo", "6M": "6mo",
+        "1Y": "1y", "2Y": "2y",
+    }
+    yf_period = period_map.get(period.upper(), "6mo")
+    mds = app.state.market_data
 
-    try:
-        import numpy as np
-        import yfinance as yf
-    except ImportError:
-        raise HTTPException(503, "yfinance/numpy not available")
-
-    async def _fetch_ticker(sym: str):
-        """Fetch history for one ticker with timeout."""
+    # Fetch histories concurrently
+    async def _fetch(sym: str):
         try:
-            t = yf.Ticker(sym)
-            hist = await asyncio.to_thread(t.history, period=yf_period)
-            if hist is None or hist.empty:
-                return sym, None, None
-            close = hist["Close"].values
-            normalized = (close / close[0] * 100).tolist()
-            rets = np.diff(close) / close[:-1]
-            dates = [str(d.date()) for d in hist.index]
-            return sym, [round(v, 2) for v in normalized], rets, dates
+            return sym, await mds.get_history(
+                sym, period=yf_period, interval="1d",
+            )
         except Exception:
-            return sym, None, None, []
+            return sym, None
 
-    tasks = await asyncio.gather(*[_fetch_ticker(s) for s in ticker_list], return_exceptions=True)
-    for result in tasks:
-        if isinstance(result, Exception):
-            continue
-        sym, norm, rets, dts = result[0], result[1], result[2], result[3] if len(result) > 3 else []
-        if norm is not None:
-            series[sym] = norm
-            raw_returns[sym] = rets
-            if not dates_list and dts:
-                dates_list = dts
+    results = await asyncio.gather(
+        *[_fetch(s) for s in ticker_list],
+    )
+    history_map = {
+        sym: df for sym, df in results
+        if df is not None and not df.empty
+    }
 
-    if not series:
+    if not history_map:
         raise HTTPException(404, "No data for any ticker")
 
-    series["_dates"] = dates_list
+    # Run comparison engine
+    svc = CompareOverlayService()
+    try:
+        result = svc.compare(
+            history_map,
+            mode=mode,
+            join=join,
+            benchmark=benchmark.upper(),
+            rolling_window=rolling_window,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
 
-    # Compute stats
-    stats = {}
-    spy_returns = raw_returns.get("SPY", np.array([]))
-
-    for sym in ticker_list:
-        if sym not in raw_returns:
-            continue
-        rets = raw_returns[sym]
-        total_ret = (series[sym][-1] / 100 - 1) * 100 if sym in series else 0
-        vol = float(np.std(rets) * np.sqrt(252) * 100) if len(rets) > 1 else 0
-        sharpe = float(np.mean(rets) / np.std(rets) * np.sqrt(252)) if np.std(rets) > 0 else 0
-
-        # Max drawdown
-        cum = np.cumprod(1 + rets)
-        peak = np.maximum.accumulate(cum)
-        dd = (cum - peak) / peak
-        max_dd = float(np.min(dd) * 100) if len(dd) > 0 else 0
-
-        # Beta and correlation vs SPY
-        beta = 0.0
-        corr_spy = 0.0
-        if len(spy_returns) > 0 and sym != "SPY":
-            min_len = min(len(rets), len(spy_returns))
-            if min_len > 10:
-                cov = np.cov(rets[:min_len], spy_returns[:min_len])
-                beta = float(cov[0, 1] / cov[1, 1]) if cov[1, 1] > 0 else 0
-                corr = np.corrcoef(rets[:min_len], spy_returns[:min_len])
-                corr_spy = float(corr[0, 1])
-        elif sym == "SPY":
-            beta = 1.0
-            corr_spy = 1.0
-
-        stats[sym] = {
-            "total_return": round(total_ret, 1),
-            "sharpe": round(sharpe, 2),
-            "max_dd": round(max_dd, 1),
-            "volatility": round(vol, 1),
-            "beta": round(beta, 2),
-            "corr_spy": round(corr_spy, 2),
-        }
-
-    # Correlation matrix
-    correlation_matrix = {}
-    syms = [s for s in ticker_list if s in raw_returns]
-    for i, s1 in enumerate(syms):
-        for s2 in syms[i + 1:]:
-            min_len = min(len(raw_returns[s1]), len(raw_returns[s2]))
-            if min_len > 10:
-                corr = float(np.corrcoef(
-                    raw_returns[s1][:min_len],
-                    raw_returns[s2][:min_len]
-                )[0, 1])
-                correlation_matrix[f"{s1}-{s2}"] = round(corr, 2)
-
-    return {
-        "series": series,
-        "stats": stats,
-        "correlation_matrix": correlation_matrix,
+    response = {
+        "tickers": result.tickers,
+        "dates": result.dates,
+        "series": result.series,
+        "stats": result.stats,
+        "correlation_matrix": result.correlation_matrix,
+        "alignment": result.alignment,
         "period": period,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "trust": {
+            "mode": "LIVE",
+            "source": "market_data_service",
+            "join_strategy": join,
+            "comparison_mode": mode,
+        },
+        "as_of": datetime.utcnow().isoformat() + "Z",
     }
+
+    # ── Write immutable research artifact ──
+    try:
+        from src.services.artifacts.research_artifact_writer import \
+            ResearchArtifactWriter
+        writer = ResearchArtifactWriter()
+        response["artifact"] = writer.write(
+            "compare-overlay", response,
+        )
+    except Exception as exc:
+        logger.warning("compare-overlay artifact write failed: %s", exc)
+        response["artifact"] = None
+
+    return response
 
 
 @app.get("/api/v7/performance-lab", tags=["v7-surface"])
 async def performance_lab_data(
-    source: str = Query("live", description="live / paper / backtest"),
+    source: str = Query(
+        "live", description="live / paper / backtest / synthetic",
+    ),
     strategy: str = Query("all"),
     period: str = Query("1y"),
 ):
     """
-    v7 Performance Lab — KPI dashboard.
-    Sprint 42: tries real PerformanceTracker / ProfessionalKPI first.
-    Falls back to SYNTHETIC data with explicit badge.
+    v7 Performance Lab — auditable KPI dashboard.
+
+    Data priority:
+      1. TradeOutcomeRepository (persistent closed trades)
+      2. Engine singleton KPI snapshot
+      3. Explicit SYNTHETIC demo mode — only when requested
+         or when no real data exists.
+
+    Every response carries ``mode``, ``source``, ``sample_size``,
+    ``assumptions``, and ``as_of`` for full trust/audit.
     """
+    from datetime import timedelta
+
     import numpy as np
 
-    data_source_label = "SYNTHETIC"  # default; upgraded if real data found
+    mode = source.upper()          # LIVE / PAPER / BACKTEST / SYNTHETIC
+    sample_size = 0
+    assumptions = {
+        "gross_or_net": "net",
+        "fees_bps": 5,
+        "slippage_bps": 3,
+    }
 
-    # ── Try real closed-trade data from PerformanceTracker ──
+    # ── 1. Try persistent closed trades from TradeOutcomeRepository ──
     real_trades = []
     try:
-        from src.performance.performance_tracker import PerformanceTracker
-        tracker = PerformanceTracker()
-        real_trades = tracker.get_closed_trades() if hasattr(tracker, 'get_closed_trades') else []
+        engine = _get_engine()
+        if engine and hasattr(engine, 'trade_repo'):
+            repo = engine.trade_repo
+            if hasattr(repo, 'get_closed_trades'):
+                real_trades = repo.get_closed_trades() or []
     except Exception:
         pass
 
-    # ── Try real KPI from engine singleton ──
-    engine = _get_engine()
-    if engine and hasattr(engine, 'kpi'):
+    if not real_trades:
         try:
-            snap = engine.kpi.snapshot() if hasattr(engine.kpi, 'snapshot') else None
-            if snap and hasattr(snap, 'total_trades') and snap.total_trades > 0:
-                data_source_label = "LIVE"
+            from src.core.trade_repo import TradeOutcomeRepository
+            repo = TradeOutcomeRepository()
+            if hasattr(repo, 'get_closed_trades'):
+                real_trades = repo.get_closed_trades() or []
         except Exception:
             pass
 
-    # ── Build metrics from real trades if we have enough ──
-    if len(real_trades) >= 10:
-        data_source_label = source  # live / paper / backtest
-        returns = [t.pnl_pct / 100 for t in real_trades if hasattr(t, 'pnl_pct')]
+    # ── 2. Try PerformanceTracker as secondary source ──
+    if not real_trades:
+        try:
+            from src.performance.performance_tracker import PerformanceTracker
+            tracker = PerformanceTracker()
+            if hasattr(tracker, 'get_closed_trades'):
+                real_trades = tracker.get_closed_trades() or []
+        except Exception:
+            pass
+
+    # ── 3. Try engine KPI snapshot ──
+    engine_kpi_snap = None
+    engine = _get_engine()
+    if engine and hasattr(engine, 'kpi'):
+        try:
+            if hasattr(engine.kpi, 'snapshot'):
+                engine_kpi_snap = engine.kpi.snapshot()
+        except Exception:
+            pass
+
+    # ── Decide mode based on what data we actually have ──
+    has_real_data = len(real_trades) >= 5
+    has_kpi = (
+        engine_kpi_snap
+        and hasattr(engine_kpi_snap, 'total_trades')
+        and engine_kpi_snap.total_trades > 0
+    )
+
+    if mode != "SYNTHETIC" and not has_real_data and not has_kpi:
+        # Caller asked for live/paper/backtest but no real data
+        mode = "SYNTHETIC"
+
+    # ── Build return series ──
+    if has_real_data and mode != "SYNTHETIC":
+        returns = [
+            t.pnl_pct / 100
+            for t in real_trades
+            if hasattr(t, 'pnl_pct')
+        ]
         if not returns:
-            returns = [0.01] * len(real_trades)
-        monthly_rets = np.array(returns[-24:]) if len(returns) >= 24 else np.array(returns)
+            returns = [0.0] * len(real_trades)
+        monthly_rets = np.array(
+            returns[-24:] if len(returns) >= 24 else returns,
+        )
+        sample_size = len(real_trades)
     else:
-        # SYNTHETIC fallback — clearly labeled
+        # SYNTHETIC — deterministic seed, clearly labelled
+        mode = "SYNTHETIC"
         np.random.seed(42)
         n_months = 24
         monthly_rets = np.random.normal(0.03, 0.05, n_months)
         monthly_rets = np.clip(monthly_rets, -0.15, 0.20)
+        sample_size = 0
 
     n_months = len(monthly_rets)
 
@@ -3376,14 +3563,30 @@ async def performance_lab_data(
     for r in monthly_rets:
         equity.append(round(equity[-1] * (1 + r), 2))
 
-    # SPY benchmark
-    spy_monthly = np.random.normal(0.008, 0.035, n_months)
+    # SPY benchmark — fetch real if possible, else synthetic
+    spy_monthly = None
+    if mode != "SYNTHETIC":
+        try:
+            mds = app.state.market_data
+            spy_df = await mds.get_history(
+                "SPY", period="2y", interval="1mo",
+            )
+            if spy_df is not None and len(spy_df) >= n_months:
+                c = "Close" if "Close" in spy_df.columns else "close"
+                spy_c = spy_df[c].values[-n_months - 1:]
+                spy_monthly = np.diff(spy_c) / spy_c[:-1]
+        except Exception:
+            pass
+
+    if spy_monthly is None or len(spy_monthly) < n_months:
+        np.random.seed(99)
+        spy_monthly = np.random.normal(0.008, 0.035, n_months)
+
     benchmark = [100.0]
-    for r in spy_monthly:
+    for r in spy_monthly[:n_months]:
         benchmark.append(round(benchmark[-1] * (1 + r), 2))
 
     # Dates
-    from datetime import datetime, timedelta
     end_date = date.today()
     dates = []
     for i in range(n_months + 1):
@@ -3392,19 +3595,25 @@ async def performance_lab_data(
 
     # Monthly returns heatmap
     monthly_returns = {}
-    month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    idx = 0
+    month_names = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ]
     for i in range(n_months):
-        d = end_date - timedelta(days=(n_months - 1 - i) * 30)
+        d = end_date - timedelta(
+            days=(n_months - 1 - i) * 30,
+        )
         year = str(d.year)
         month = month_names[d.month - 1]
         if year not in monthly_returns:
             monthly_returns[year] = {}
-        monthly_returns[year][month] = round(monthly_rets[i] * 100, 1)
+        monthly_returns[year][month] = round(
+            float(monthly_rets[i]) * 100, 1,
+        )
 
-    # Annual returns
+    # Annual returns — real benchmark where available
     annual_returns = []
+    spy_ann = float(np.mean(spy_monthly) * 12 * 100)
     for year_str, months_data in monthly_returns.items():
         yr_ret = 1.0
         for v in months_data.values():
@@ -3413,8 +3622,8 @@ async def performance_lab_data(
         annual_returns.append({
             "year": int(year_str),
             "return_pct": round(yr_ret, 1),
-            "benchmark": round(np.random.normal(12, 5), 1),
-            "alpha": round(yr_ret - 12, 1),
+            "benchmark": round(spy_ann, 1),
+            "alpha": round(yr_ret - spy_ann, 1),
         })
 
     # Drawdowns
@@ -3425,7 +3634,7 @@ async def performance_lab_data(
     in_dd = False
     dd_start = None
     dd_trough = None
-    dd_depth = 0
+    dd_depth = 0.0
     for i, d_val in enumerate(dd):
         if d_val < -1 and not in_dd:
             in_dd = True
@@ -3434,59 +3643,118 @@ async def performance_lab_data(
             dd_trough = dd_start
         elif in_dd and d_val < dd_depth:
             dd_depth = d_val
-            dd_trough = dates[i] if i < len(dates) else ""
+            dd_trough = (
+                dates[i] if i < len(dates) else ""
+            )
         elif in_dd and d_val >= -0.5:
             drawdowns.append({
                 "start": dd_start,
                 "trough": dd_trough,
-                "recovery": dates[i] if i < len(dates) else "",
+                "recovery": (
+                    dates[i] if i < len(dates) else ""
+                ),
                 "depth": round(dd_depth, 1),
-                "days": (i - dates.index(dd_start)) * 30 if dd_start in dates else 30,
             })
             in_dd = False
     if in_dd:
         drawdowns.append({
-            "start": dd_start, "trough": dd_trough,
-            "recovery": None, "depth": round(dd_depth, 1), "days": 30,
+            "start": dd_start,
+            "trough": dd_trough,
+            "recovery": None,
+            "depth": round(dd_depth, 1),
         })
 
-    # Summary metrics
+    # Summary metrics — all computed, never random
     total_ret = (equity[-1] / equity[0] - 1) * 100
-    ann_ret = total_ret / (n_months / 12)
+    ann_ret = total_ret / max(n_months / 12, 0.01)
     vol = float(np.std(monthly_rets) * np.sqrt(12) * 100)
-    sharpe = float(np.mean(monthly_rets) / np.std(monthly_rets) * np.sqrt(12)) if np.std(monthly_rets) > 0 else 0
+    sharpe = (
+        float(
+            np.mean(monthly_rets)
+            / np.std(monthly_rets)
+            * np.sqrt(12)
+        )
+        if np.std(monthly_rets) > 0
+        else 0.0
+    )
     sortino_d = monthly_rets[monthly_rets < 0]
-    sortino = float(np.mean(monthly_rets) / np.std(sortino_d) * np.sqrt(12)) if len(sortino_d) > 0 and np.std(sortino_d) > 0 else sharpe * 1.3
+    sortino = (
+        float(
+            np.mean(monthly_rets)
+            / np.std(sortino_d)
+            * np.sqrt(12)
+        )
+        if len(sortino_d) > 0 and np.std(sortino_d) > 0
+        else sharpe * 1.3
+    )
     max_dd = float(np.min(dd))
     calmar = ann_ret / abs(max_dd) if max_dd != 0 else 0
 
-    # Win/loss distribution
-    trade_returns = np.random.normal(0.02, 0.06, 100)
-    bins = list(range(-10, 16, 2))
-    counts = [int(np.sum((trade_returns * 100 >= b) & (trade_returns * 100 < b + 2))) for b in bins]
+    # Beta from real covariance (not random)
+    beta = 0.0
+    if len(spy_monthly) >= n_months and n_months > 2:
+        cov = np.cov(monthly_rets, spy_monthly[:n_months])
+        if cov[1, 1] > 0:
+            beta = float(cov[0, 1] / cov[1, 1])
 
-    alpha = ann_ret - 12  # vs SPY ~12%
+    alpha = ann_ret - spy_ann
     win_rate = float(np.mean(monthly_rets > 0))
 
-    return {
+    # Win/loss distribution from real trades if available
+    if has_real_data and mode != "SYNTHETIC":
+        trade_rets = np.array([
+            t.pnl_pct for t in real_trades
+            if hasattr(t, 'pnl_pct')
+        ])
+    else:
+        np.random.seed(42)
+        trade_rets = np.random.normal(2, 6, 100)
+    bins = list(range(-10, 16, 2))
+    counts = [
+        int(np.sum((trade_rets >= b) & (trade_rets < b + 2)))
+        for b in bins
+    ]
+
+    # Profit factor from real trades
+    wins = monthly_rets[monthly_rets > 0]
+    losses = monthly_rets[monthly_rets < 0]
+    profit_factor = (
+        float(np.sum(wins) / abs(np.sum(losses)))
+        if len(losses) > 0 and np.sum(losses) != 0
+        else 2.0
+    )
+
+    # VaR / CVaR
+    p5 = float(np.percentile(monthly_rets, 5))
+    tail = monthly_rets[monthly_rets <= p5]
+    cvar = float(np.mean(tail)) if len(tail) > 0 else p5
+
+    response = {
         "summary": {
             "annual_return": round(ann_ret, 1),
             "alpha": round(alpha, 1),
-            "beta": round(0.3 + np.random.random() * 0.4, 2),
+            "beta": round(beta, 2),
             "sharpe": round(sharpe, 2),
             "sortino": round(sortino, 2),
             "calmar": round(calmar, 2),
             "max_drawdown": round(max_dd, 1),
             "win_rate": round(win_rate, 2),
-            "profit_factor": round(1.5 + np.random.random(), 2),
-            "var_95": round(float(np.percentile(monthly_rets, 5)) * 100, 1),
-            "cvar_95": round(float(np.mean(monthly_rets[monthly_rets < np.percentile(monthly_rets, 5)])) * 100, 1) if len(monthly_rets[monthly_rets < np.percentile(monthly_rets, 5)]) > 0 else -5.0,
-            "source": data_source_label,
-            "gross_or_net": "net",
+            "profit_factor": round(profit_factor, 2),
+            "var_95": round(p5 * 100, 1),
+            "cvar_95": round(cvar * 100, 1),
+        },
+        "trust": {
+            "mode": mode,
+            "source": (
+                "trade_repository" if has_real_data
+                else "synthetic_demo"
+            ),
+            "sample_size": sample_size,
+            "assumptions": assumptions,
             "data_warning": (
-                "SYNTHETIC DATA — simulated returns for demo. "
+                "SYNTHETIC DATA \u2014 simulated returns for demo. "
                 "Not based on real trade history."
-                if data_source_label == "SYNTHETIC" else None
+                if mode == "SYNTHETIC" else None
             ),
         },
         "equity_curve": {
@@ -3501,12 +3769,177 @@ async def performance_lab_data(
             "bins": bins,
             "counts": counts,
         },
-        "holding_period": {
-            "avg_hours": 72,
-            "median_hours": 48,
-        },
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "as_of": datetime.utcnow().isoformat() + "Z",
     }
+
+    # ── Write immutable artifact bundle (json/csv/png/md) ──
+    try:
+        from src.services.artifacts.performance_artifact_writer import \
+            PerformanceArtifactWriter
+        writer = PerformanceArtifactWriter()
+        artifact_meta = writer.write(response)
+        response["artifact"] = artifact_meta
+    except Exception as exc:
+        logger.warning("performance artifact write failed: %s", exc)
+        response["artifact"] = None
+
+    return response
+
+
+# ──────────────────────────────────────────────────────────────────
+# Strategy Portfolio Lab — multi-strategy sleeve optimizer
+# ──────────────────────────────────────────────────────────────────
+
+@app.get("/api/v7/strategy-portfolio-lab", tags=["v7-surface"])
+async def strategy_portfolio_lab_data(
+    strategies: str = Query(
+        "swing,momentum,mean_reversion",
+        description="Comma-separated strategy names",
+    ),
+    period: str = Query(
+        "1y", description="Lookback: 6m / 1y / 2y",
+    ),
+):
+    """
+    v7 Strategy Portfolio Lab — "How to mix strategy sleeves optimally?"
+
+    Accepts strategy return streams (real or synthetic demo),
+    runs max-Sharpe / min-drawdown / risk-parity optimization,
+    returns weights, correlation matrix, combined equity curve,
+    and attribution breakdown.
+    """
+    import numpy as np
+
+    from src.services.strategy_portfolio_lab import StrategyPortfolioLab
+
+    strategy_names = [
+        s.strip() for s in strategies.split(",") if s.strip()
+    ]
+    if len(strategy_names) < 2:
+        raise HTTPException(
+            400, "Need ≥ 2 strategy names (comma-separated)",
+        )
+
+    # ── Try to source real strategy returns from engine ──
+    return_streams: Dict[str, list] = {}
+    engine = _get_engine()
+    regime_label = None
+
+    if engine:
+        try:
+            regime = _get_regime()
+            if regime:
+                regime_label = regime.get(
+                    "regime_label",
+                    regime.get("risk", "NEUTRAL"),
+                )
+        except Exception:
+            pass
+
+        # Check if engine has strategy-level return tracking
+        for sname in strategy_names:
+            try:
+                if hasattr(engine, "strategy_returns"):
+                    sr = engine.strategy_returns.get(sname)
+                    if sr and len(sr) >= 10:
+                        return_streams[sname] = list(sr)
+            except Exception:
+                pass
+
+    # ── Fallback: synthetic demo returns for unmatched strategies ──
+    mode = "LIVE" if return_streams else "SYNTHETIC"
+    np.random.seed(42)
+    n_periods = {"6m": 126, "1y": 252, "2y": 504}.get(period, 252)
+
+    # Strategy archetypes for synthetic demo
+    archetypes = {
+        "swing": (0.0008, 0.015),        # moderate return, moderate vol
+        "momentum": (0.0012, 0.022),      # higher return, higher vol
+        "mean_reversion": (0.0005, 0.010),  # lower return, low vol
+        "trend_following": (0.0010, 0.020),
+        "breakout": (0.0009, 0.018),
+        "value": (0.0006, 0.012),
+        "pairs": (0.0004, 0.008),
+        "volatility": (0.0007, 0.025),
+    }
+
+    for sname in strategy_names:
+        if sname not in return_streams:
+            mu, sigma = archetypes.get(sname, (0.0006, 0.015))
+            return_streams[sname] = list(
+                np.random.normal(mu, sigma, n_periods),
+            )
+            if mode != "SYNTHETIC":
+                mode = "MIXED"  # some real, some synthetic
+
+    # ── Run optimizer ──
+    lab = StrategyPortfolioLab()
+    try:
+        result = lab.optimize(
+            return_streams,
+            regime=regime_label,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+    # Build response
+    optimizations = []
+    for opt in result.optimizations:
+        optimizations.append({
+            "objective": opt.objective,
+            "weights": opt.weights,
+            "expected_return_pct": opt.expected_return,
+            "expected_vol_pct": opt.expected_vol,
+            "sharpe": opt.sharpe,
+            "max_drawdown_pct": opt.max_drawdown,
+            "equity_curve": opt.equity_curve,
+        })
+
+    response = {
+        "strategies": result.strategies,
+        "correlation_matrix": result.correlation_matrix,
+        "optimizations": optimizations,
+        "recommended": optimizations[0] if optimizations else None,
+        "combined_equity": result.combined_equity,
+        "combined_dates": result.combined_dates,
+        "attribution": result.attribution,
+        "regime_weights": result.regime_weights,
+        "trust": {
+            "mode": mode,
+            "source": (
+                "engine_strategy_returns"
+                if mode == "LIVE"
+                else "synthetic_archetypes"
+            ),
+            "sample_size": n_periods,
+            "assumptions": {
+                "risk_free_rate": lab.rf,
+                "annualization": (
+                    "daily" if n_periods > 60 else "monthly"
+                ),
+            },
+            "data_warning": (
+                "SYNTHETIC DATA — simulated strategy returns. "
+                "Not based on real trade history."
+                if mode == "SYNTHETIC" else None
+            ),
+        },
+        "as_of": datetime.utcnow().isoformat() + "Z",
+    }
+
+    # ── Write immutable research artifact ──
+    try:
+        from src.services.artifacts.research_artifact_writer import \
+            ResearchArtifactWriter
+        writer = ResearchArtifactWriter()
+        response["artifact"] = writer.write(
+            "strategy-portfolio-lab", response,
+        )
+    except Exception as exc:
+        logger.warning("strategy-lab artifact write failed: %s", exc)
+        response["artifact"] = None
+
+    return response
 
 
 @app.get("/api/v7/options-screen", tags=["v7-surface"])
@@ -3516,11 +3949,21 @@ async def options_screen_data(
 ):
     """
     v7 Options Lab — research-grade options surface.
-    Contract ranking, IV term structure, EV vs liquidity, explainability.
+
+    Uses OptionsMapper + ExpressionEngine pipeline:
+      1. Fetch chain from OptionsDataProvider
+      2. Run ExpressionEngine to decide instrument type
+      3. Rank contracts by liquidity score + EV
+      4. Generate IV term structure
+      5. Surface warnings (earnings, IV-crush, ex-div)
     """
+    from src.engines.expression_engine import ExpressionEngine
+    from src.ingestors.options_data import get_options_provider
+    from src.services.options.options_mapper import OptionsMapper
+
     ticker = ticker.upper()
 
-    # Get spot price
+    # Get spot price from live_quote endpoint
     try:
         q_resp = await live_quote(ticker)
         q = q_resp.get("quote", {})
@@ -3534,122 +3977,256 @@ async def options_screen_data(
 
     rsi = q.get("rsi", 50)
 
-    # Try to use ExpressionEngine (use correct method name)
-    expression_decision = "stock"
+    # Resolve regime from singleton
+    regime_label = "NEUTRAL"
     try:
-        from src.engines.expression_engine import ExpressionEngine
-        ee = ExpressionEngine()
-        plan = ee.select_expression(
-            ticker=ticker,
-            direction="LONG" if rsi > 45 else "SHORT",
-            signal_data={"confidence": 0.75, "rsi": rsi},
-        )
-        expression_decision = plan.get("instrument", "stock")
+        regime = await _get_regime()
+        if regime:
+            regime_label = regime.get(
+                "regime_label",
+                regime.get("risk", "NEUTRAL"),
+            )
     except Exception:
-        # Auto-decide based on strategy param
-        if strategy == "auto":
-            expression_decision = "long_call" if rsi > 45 else "long_put"
-        else:
-            expression_decision = strategy
+        pass
 
-    import numpy as np
-    np.random.seed(hash(ticker) % 2**31)
+    # Build screen via OptionsMapper + ExpressionEngine pipeline
+    provider = get_options_provider()
+    ee = ExpressionEngine()
+    mapper = OptionsMapper(
+        options_provider=provider,
+        expression_engine=ee,
+    )
 
-    # SYNTHETIC options data — real options feed not yet connected
-    # Simulate IV metrics (will be replaced by real options_data.py feed)
-    iv_rank = int(np.random.randint(15, 75))
-    iv_percentile = iv_rank + int(np.random.randint(-5, 5))
-    skew = round(np.random.uniform(-0.02, 0.02), 3)
-    days_to_earnings = int(np.random.randint(10, 90))
-    ex_div = int(np.random.randint(30, 120))
+    result = await mapper.build_screen(
+        ticker=ticker,
+        spot=spot,
+        rsi=rsi,
+        strategy=strategy,
+        regime=regime_label,
+    )
 
-    # Market context
-    context = {
-        "iv_rank": iv_rank,
-        "iv_percentile": max(5, min(95, iv_percentile)),
-        "skew": skew,
-        "days_to_earnings": days_to_earnings,
-        "ex_dividend_days": ex_div,
-        "high_iv_warning": iv_rank > 60,
-        "earnings_proximity_warning": days_to_earnings < 14,
-    }
-
-    # Generate contract ranking
-    contracts = []
-    is_call = "call" in expression_decision or "put" not in expression_decision
-    base_strike = int(spot / 5) * 5  # Round to nearest 5
-
-    for i in range(10):
-        strike = base_strike + (i - 3) * 5 * (1 if is_call else -1)
-        dte = int(np.random.choice([30, 45, 60, 90, 120, 180, 365, 540, 720]))
-        delta = round(max(0.1, min(0.9, 0.5 - abs(strike - spot) / spot * 2 + np.random.uniform(-0.05, 0.05))), 2)
-        mid = round(max(0.5, spot * delta * 0.05 * (dte / 365) ** 0.5 + np.random.uniform(-1, 3)), 2)
-        oi = int(np.random.randint(100, 5000))
-        spread_pct = round(np.random.uniform(0.5, 5.0), 1)
-        breakeven = round(strike + mid if is_call else strike - mid, 2)
-        ev = round(max(0, delta * 2 - spread_pct * 0.1 + np.random.uniform(-0.3, 0.5)), 2)
-
-        contracts.append({
-            "rank": i + 1,
-            "strike": strike,
-            "expiry": "",
-            "dte": dte,
-            "delta": delta,
-            "mid": mid,
-            "oi": oi,
-            "spread_pct": spread_pct,
-            "ev": ev,
-            "breakeven": breakeven,
-            "breakeven_pct": round((breakeven / spot - 1) * 100, 1),
-            "max_loss": int(mid * 100),
-        })
-
-    # Sort by EV descending
-    contracts.sort(key=lambda c: c["ev"], reverse=True)
-    for i, c in enumerate(contracts):
-        c["rank"] = i + 1
-
-    # IV term structure
-    iv_term = []
-    base_iv = 0.20 + np.random.uniform(-0.05, 0.1)
-    for dte in [7, 14, 30, 60, 90, 120, 180, 365]:
-        iv = base_iv + np.log(dte / 30) * 0.03 + np.random.uniform(-0.01, 0.01)
-        iv_term.append({"dte": dte, "iv": round(max(0.08, iv), 4)})
-
-    # Explainability
-    why = {
-        "chosen": (
-            f"IV percentile {iv_percentile}% "
-            + ("< 40% — cheap" if iv_percentile < 40 else "> 60% — rich" if iv_percentile > 60 else "— neutral")
-            + f", RSI {rsi:.0f}"
-        ),
-        "not_stock": (
-            "Options provide leverage — capital efficient for directional view"
-            if "call" in expression_decision or "put" in expression_decision
-            else "Stock selected — IV too expensive or liquidity insufficient for options"
-        ),
-        "not_spread": (
-            "IV is cheap — no need to sell premium to fund the trade"
-            if iv_percentile < 40
-            else "Consider spread if want to reduce cost basis"
-        ),
-        "no_trade_conditions": ["OI < 500", "Spread > 5%", "DTE < 7"],
-    }
-
-    return {
-        "ticker": ticker,
-        "spot_price": round(spot, 2),
-        "expression_decision": expression_decision,
-        "market_context": context,
-        "contracts": contracts[:10],
-        "iv_term_structure": iv_term,
-        "why_this_expression": why,
-        "data_source": "SYNTHETIC",
+    response = {
+        "ticker": result.ticker,
+        "spot_price": result.spot_price,
+        "expression_decision": result.expression_decision,
+        "expression_rationale": result.expression_rationale,
+        "rejection_reasons": result.rejection_reasons,
+        "market_context": result.market_context,
+        "contracts": result.contracts[:10],
+        "iv_term_structure": result.iv_term_structure,
+        "warnings": result.warnings,
+        "data_source": result.data_source,
         "data_warning": (
             "SYNTHETIC OPTIONS DATA — simulated IV/OI/contracts. "
             "Not from live options chain feed."
+            if result.data_source == "SYNTHETIC"
+            else None
         ),
+        "trust": result.trust,
         "generated_at": datetime.utcnow().isoformat() + "Z",
+    }
+
+    # ── Write immutable research artifact ──
+    try:
+        from src.services.artifacts.research_artifact_writer import \
+            ResearchArtifactWriter
+        writer = ResearchArtifactWriter()
+        response["artifact"] = writer.write(
+            "options-screen", response,
+        )
+    except Exception as exc:
+        logger.warning("options-screen artifact write failed: %s", exc)
+        response["artifact"] = None
+
+    return response
+
+
+# ═══════════════════════════════════════════════════════════════════
+# v7 RESEARCH ARTIFACT REPLAY — immutable artifact retrieval
+# ═══════════════════════════════════════════════════════════════════
+
+@app.get("/api/v7/research/artifacts/{artifact_id}", tags=["v7-surface"])
+async def research_artifact_replay(artifact_id: str):
+    """
+    Replay a research artifact by its immutable ID.
+
+    Returns the full JSON snapshot that was recorded when the
+    research surface was originally executed.
+    """
+    from src.services.artifacts.research_artifact_writer import \
+        ResearchArtifactWriter
+    writer = ResearchArtifactWriter()
+    data = writer.load(artifact_id)
+    if data is None:
+        raise HTTPException(
+            404, f"Artifact '{artifact_id}' not found",
+        )
+    return data
+
+
+@app.get("/api/v7/research/artifacts", tags=["v7-surface"])
+async def research_artifact_list(
+    surface: Optional[str] = Query(
+        None,
+        description=(
+            "Filter by surface: compare-overlay, "
+            "options-screen, strategy-portfolio-lab"
+        ),
+    ),
+    limit: int = Query(50, description="Max results"),
+):
+    """List recent research artifacts with optional surface filter."""
+    from src.services.artifacts.research_artifact_writer import \
+        ResearchArtifactWriter
+    writer = ResearchArtifactWriter()
+    return {
+        "artifacts": writer.list_artifacts(
+            surface=surface, limit=limit,
+        ),
+        "as_of": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# MARKET INTEL — read-only macro endpoints (external contract)
+# ═══════════════════════════════════════════════════════════════════
+
+@app.get("/api/market-intel/regime", tags=["market-intel"])
+async def market_intel_regime():
+    """
+    Market regime classification — risk, trend, volatility labels.
+
+    Returns the current regime from the singleton RegimeRouter,
+    refreshed every 60 s.  Read-only, no side effects.
+    """
+    regime = await _get_regime()
+    if not regime:
+        return {
+            "regime": "UNKNOWN",
+            "detail": "Regime router unavailable",
+            "as_of": datetime.utcnow().isoformat() + "Z",
+        }
+    return {
+        "regime_label": regime.get(
+            "regime_label", regime.get("risk", "NEUTRAL"),
+        ),
+        "risk": regime.get("risk", "NEUTRAL"),
+        "trend": regime.get("trend", "NEUTRAL"),
+        "volatility": regime.get("volatility", "NORMAL"),
+        "strategy_playbook": regime.get("playbook", {}),
+        "as_of": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+@app.get("/api/market-intel/vix", tags=["market-intel"])
+async def market_intel_vix():
+    """Current VIX level with classification."""
+    mds = app.state.market_data
+    try:
+        vix = await mds.get_vix()
+    except Exception:
+        vix = None
+
+    if vix is None:
+        return {"vix": None, "label": "UNAVAILABLE",
+                "as_of": datetime.utcnow().isoformat() + "Z"}
+
+    label = (
+        "LOW" if vix < 15
+        else "NORMAL" if vix < 20
+        else "ELEVATED" if vix < 30
+        else "HIGH" if vix < 40
+        else "EXTREME"
+    )
+    return {
+        "vix": round(vix, 2),
+        "label": label,
+        "as_of": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+@app.get("/api/market-intel/breadth", tags=["market-intel"])
+async def market_intel_breadth():
+    """Market breadth — advance/decline ratio, new highs/lows."""
+    mds = app.state.market_data
+    try:
+        breadth = await mds.get_market_breadth()
+    except Exception:
+        breadth = {}
+
+    return {
+        "breadth": breadth or {},
+        "as_of": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+@app.get("/api/market-intel/spy-return", tags=["market-intel"])
+async def market_intel_spy_return():
+    """SPY return over various periods (1d, 5d, 1mo, 3mo, ytd)."""
+    mds = app.state.market_data
+    periods: Dict[str, Any] = {}
+
+    async def _ret(period: str, label: str):
+        try:
+            r = await mds.get_spy_return(period=period)
+            periods[label] = round(r * 100, 2) if r else None
+        except Exception:
+            periods[label] = None
+
+    import asyncio
+    await asyncio.gather(
+        _ret("5d", "1w_pct"),
+        _ret("1mo", "1m_pct"),
+        _ret("3mo", "3m_pct"),
+        _ret("ytd", "ytd_pct"),
+    )
+
+    return {
+        "spy_returns": periods,
+        "as_of": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+@app.get("/api/market-intel/rates", tags=["market-intel"])
+async def market_intel_rates():
+    """US Treasury yield curve snapshot (3M, 5Y, 10Y, 30Y)."""
+    import asyncio
+
+    mds = app.state.market_data
+    rate_tickers = [
+        ("^IRX", "3M"), ("^FVX", "5Y"),
+        ("^TNX", "10Y"), ("^TYX", "30Y"),
+    ]
+
+    async def _rate(sym: str) -> Optional[float]:
+        try:
+            q = await mds.get_quote(sym)
+            return q["price"] if q else None
+        except Exception:
+            return None
+
+    results = await asyncio.gather(
+        *[_rate(sym) for sym, _ in rate_tickers],
+    )
+
+    yields_out: Dict[str, Any] = {}
+    for (_, tenor), val in zip(rate_tickers, results):
+        yields_out[tenor] = round(val, 3) if val else None
+
+    y10 = yields_out.get("10Y")
+    y3m = yields_out.get("3M")
+    spread = round(y10 - y3m, 3) if y10 and y3m else None
+    curve_status = (
+        "INVERTED" if spread and spread < 0
+        else "FLAT" if spread is not None and spread < 0.5
+        else "NORMAL" if spread else "UNKNOWN"
+    )
+
+    return {
+        "yields": yields_out,
+        "spread_10y_3m": spread,
+        "curve_status": curve_status,
+        "as_of": datetime.utcnow().isoformat() + "Z",
     }
 
 
@@ -3713,53 +4290,68 @@ async def macro_intel_data():
     import asyncio
 
     import numpy as np
-    import yfinance as yf
 
-    def _factor(sym):
+    mds = app.state.market_data
+
+    async def _factor(sym):
         try:
-            t = yf.Ticker(sym)
-            fi = t.fast_info if hasattr(t, "fast_info") else {}
-            price = getattr(fi, "last_price", 0) or 0
-            prev = getattr(fi, "previous_close", price) or price
-            chg = ((price - prev) / prev * 100) if prev else 0
-            h = t.history(period="3mo")
+            q = await mds.get_quote(sym)
+            price = q["price"] if q else 0
+            chg = q["change_pct"] if q else 0
+            h = await mds.get_history(
+                sym, period="3mo", interval="1d",
+            )
             w1 = w4 = ytd_pct = 0
             if h is not None and len(h) >= 2:
-                c = h["Close"]
+                c_col = (
+                    "Close" if "Close" in h.columns
+                    else "close"
+                )
+                c = h[c_col]
                 if len(c) >= 5:
-                    w1 = float((c.iloc[-1] / c.iloc[-5] - 1) * 100)
+                    w1 = float(
+                        (c.iloc[-1] / c.iloc[-5] - 1) * 100,
+                    )
                 if len(c) >= 20:
                     w4 = float(
-                        (c.iloc[-1] / c.iloc[-20] - 1) * 100)
+                        (c.iloc[-1] / c.iloc[-20] - 1) * 100,
+                    )
                 yr = f"{datetime.utcnow().year}-01-01"
                 jan = c.loc[c.index >= yr]
                 if len(jan) >= 2:
                     ytd_pct = float(
-                        (c.iloc[-1] / jan.iloc[0] - 1) * 100)
-            return {"symbol": sym, "price": round(price, 4),
-                    "change_pct": round(chg, 2),
-                    "week1_pct": round(w1, 2),
-                    "month1_pct": round(w4, 2),
-                    "ytd_pct": round(ytd_pct, 2)}
+                        (c.iloc[-1] / jan.iloc[0] - 1) * 100,
+                    )
+            return {
+                "symbol": sym,
+                "price": round(price, 4),
+                "change_pct": round(chg, 2),
+                "week1_pct": round(w1, 2),
+                "month1_pct": round(w4, 2),
+                "ytd_pct": round(ytd_pct, 2),
+            }
         except Exception:
-            return {"symbol": sym, "price": 0,
-                    "change_pct": 0, "week1_pct": 0,
-                    "month1_pct": 0, "ytd_pct": 0}
+            return {
+                "symbol": sym, "price": 0,
+                "change_pct": 0, "week1_pct": 0,
+                "month1_pct": 0, "ytd_pct": 0,
+            }
 
-    def _hist(sym, period="6mo"):
+    async def _hist(sym, period="6mo"):
         try:
-            h = yf.Ticker(sym).history(period=period)
+            h = await mds.get_history(
+                sym, period=period, interval="1d",
+            )
             return h if h is not None and len(h) > 5 else None
         except Exception:
             return None
 
     # ── 1. US Rates ────────────────────────────────
     rate_r = await asyncio.gather(
-        *[asyncio.to_thread(_factor, s)
-          for s, _, _ in _RATE_TICKERS],
+        *[_factor(s) for s, _, _ in _RATE_TICKERS],
         return_exceptions=True)
     etf_r = await asyncio.gather(
-        *[asyncio.to_thread(_factor, s) for s, _ in _RATE_ETF],
+        *[_factor(s) for s, _ in _RATE_ETF],
         return_exceptions=True)
 
     rates = []
@@ -3792,8 +4384,7 @@ async def macro_intel_data():
 
     # ── 2. Political Risk Basket ───────────────────
     pol_r = await asyncio.gather(
-        *[asyncio.to_thread(_factor, s)
-          for s, _ in _POLITICAL_TICKERS],
+        *[_factor(s) for s, _ in _POLITICAL_TICKERS],
         return_exceptions=True)
     political = []
     for i, (sym, name) in enumerate(_POLITICAL_TICKERS):
@@ -3809,8 +4400,7 @@ async def macro_intel_data():
 
     # ── 3. War / Geopolitical Hedge Basket ─────────
     war_r = await asyncio.gather(
-        *[asyncio.to_thread(_factor, s)
-          for s, _, _ in _WAR_HEDGE],
+        *[_factor(s) for s, _, _ in _WAR_HEDGE],
         return_exceptions=True)
     war_basket = []
     for i, (sym, name, cat) in enumerate(_WAR_HEDGE):
@@ -3836,8 +4426,7 @@ async def macro_intel_data():
 
     # ── 4. Insider / Executive Proxy ───────────────
     ins_r = await asyncio.gather(
-        *[asyncio.to_thread(_factor, s)
-          for s, _ in _INSIDER_WATCH],
+        *[_factor(s) for s, _ in _INSIDER_WATCH],
         return_exceptions=True)
     insiders = []
     for i, (sym, exec_name) in enumerate(_INSIDER_WATCH):
@@ -3854,14 +4443,18 @@ async def macro_intel_data():
 
     # ── 5. Cross-Correlation Matrix ────────────────
     ch = await asyncio.gather(
-        *[asyncio.to_thread(_hist, s) for s, _ in _CORR_SYMBOLS],
+        *[_hist(s) for s, _ in _CORR_SYMBOLS],
         return_exceptions=True)
     rd = {}
     for i, (sym, label) in enumerate(_CORR_SYMBOLS):
         h = ch[i]
         if h is not None and not isinstance(h, Exception):
             if len(h) > 5:
-                rd[label] = h["Close"].pct_change().dropna()
+                c_col = (
+                    "Close" if "Close" in h.columns
+                    else "close"
+                )
+                rd[label] = h[c_col].pct_change().dropna()
     cl = list(rd.keys())
     cm = {}
     for a in cl:

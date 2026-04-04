@@ -38,12 +38,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import socket
 import traceback
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
 import aiohttp
-import socket
 
 from src.core.config import get_settings
 
@@ -65,12 +65,10 @@ def _get_dashboard_url() -> str:
 
 # v6: report generator for signal cards, memos, scoreboard
 try:
-    from src.notifications.report_generator import (
-        build_signal_card,
-        build_regime_snapshot,
-        build_morning_memo,
-        build_eod_scorecard,
-    )
+    from src.notifications.report_generator import (build_eod_scorecard,
+                                                    build_morning_memo,
+                                                    build_regime_snapshot,
+                                                    build_signal_card)
     _HAS_REPORT_GEN = True
 except ImportError:
     _HAS_REPORT_GEN = False
@@ -449,79 +447,92 @@ class DiscordInteractiveBot:
             logger.error("discord.py not installed — pip install discord.py")
             return
 
-        # Pre-import yfinance once (avoid repeated slow imports)
+        # Pre-import yfinance as fallback only
         try:
             import yfinance as yf
             _yf = yf
         except ImportError:
             _yf = None
-            logger.warning("yfinance not installed — market data unavailable")
 
-        # Centralised cached market-data service (async-safe, TTL cache)
+        # Centralised cached market-data service (primary)
         from src.services.market_data import get_market_data_service
         _mds = get_market_data_service()
 
         intents = discord.Intents.default()
         intents.message_content = True
 
-        bot = commands.Bot(command_prefix="!", intents=intents,
-                           description="TradingAI Pro — AI Trading Command Center")
+        bot = commands.Bot(
+            command_prefix="!",
+            intents=intents,
+            description="TradingAI Pro",
+        )
         self._bot = bot
 
-        # ══════════════════════════════════════════════════════════════
-        # HELPERS
-        # ══════════════════════════════════════════════════════════════
-
-        def _sync_fetch_stock(ticker: str) -> Dict[str, Any]:
-            """Synchronous yfinance fetch — runs in thread to avoid blocking."""
-            if not _yf:
-                return {"ticker": ticker.upper(), "error": "yfinance not installed"}
-            try:
-                t = _yf.Ticker(ticker.upper())
-                info = t.fast_info if hasattr(t, "fast_info") else t.info
-                if hasattr(info, "last_price"):
-                    return {
-                        "ticker": ticker.upper(),
-                        "price": info.last_price or 0,
-                        "prev_close": info.previous_close or 0,
-                        "change_pct": ((info.last_price - info.previous_close)
-                                       / info.previous_close * 100
-                                       if info.previous_close else 0),
-                        "volume": info.last_volume or 0,
-                        "market_cap": info.market_cap or 0,
-                        "high": info.day_high or 0,
-                        "low": info.day_low or 0,
-                        "open": info.open or 0,
-                        "year_high": info.year_high or 0,
-                        "year_low": info.year_low or 0,
-                    }
-                d = dict(info) if not isinstance(info, dict) else info
-                price = d.get("regularMarketPrice", d.get("currentPrice", 0)) or 0
-                prev = d.get("regularMarketPreviousClose", d.get("previousClose", 0)) or 0
-                return {
-                    "ticker": ticker.upper(), "price": price, "prev_close": prev,
-                    "change_pct": ((price - prev) / prev * 100 if prev else 0),
-                    "volume": d.get("volume", 0) or 0,
-                    "market_cap": d.get("marketCap", 0) or 0,
-                    "high": d.get("dayHigh", 0) or 0,
-                    "low": d.get("dayLow", 0) or 0,
-                    "open": d.get("open", 0) or 0,
-                    "year_high": d.get("fiftyTwoWeekHigh", 0) or 0,
-                    "year_low": d.get("fiftyTwoWeekLow", 0) or 0,
-                    "name": d.get("shortName", ticker.upper()),
-                    "sector": d.get("sector", ""),
-                    "pe": d.get("trailingPE", 0) or 0,
-                    "eps": d.get("trailingEps", 0) or 0,
-                    "dividend": d.get("dividendYield", 0) or 0,
-                    "beta": d.get("beta", 0) or 0,
-                }
-            except Exception as exc:
-                logger.error(f"yfinance error {ticker}: {exc}")
-                return {"ticker": ticker.upper(), "error": str(exc)}
+        # ═══════════════════════════════════════════════════
+        # HELPERS — MarketDataService first, yfinance fallback
+        # ═══════════════════════════════════════════════════
 
         async def _fetch_stock(ticker: str) -> Dict[str, Any]:
-            """Non-blocking wrapper — runs yfinance in a thread pool."""
-            return await asyncio.to_thread(_sync_fetch_stock, ticker)
+            """Fetch via MarketDataService; yfinance fallback."""
+            sym = ticker.upper()
+            try:
+                q = await _mds.get_quote(sym)
+                if q is None:
+                    raise ValueError("no data")
+                prev = q["price"] - q.get("change", 0)
+                return {
+                    "ticker": sym,
+                    "price": q["price"],
+                    "prev_close": round(prev, 2),
+                    "change_pct": q["change_pct"],
+                    "volume": q.get("volume", 0),
+                    "market_cap": 0,
+                    "high": q["price"],
+                    "low": q["price"],
+                    "open": q["price"],
+                    "year_high": 0,
+                    "year_low": 0,
+                }
+            except Exception:
+                if _yf:
+                    return await asyncio.to_thread(
+                        _sync_yf, sym,
+                    )
+                return {"ticker": sym, "error": "N/A"}
+
+        async def _fetch_history(
+            ticker: str, period: str = "6mo",
+        ):
+            """Fetch OHLCV via MarketDataService."""
+            return await _mds.get_history(
+                ticker.upper(), period=period,
+                interval="1d",
+            )
+
+        def _sync_yf(ticker: str) -> Dict[str, Any]:
+            """yfinance sync fallback."""
+            try:
+                t = _yf.Ticker(ticker)
+                fi = t.fast_info
+                return {
+                    "ticker": ticker,
+                    "price": fi.last_price or 0,
+                    "prev_close": fi.previous_close or 0,
+                    "change_pct": (
+                        (fi.last_price - fi.previous_close)
+                        / fi.previous_close * 100
+                        if fi.previous_close else 0
+                    ),
+                    "volume": fi.last_volume or 0,
+                    "market_cap": fi.market_cap or 0,
+                    "high": fi.day_high or 0,
+                    "low": fi.day_low or 0,
+                    "open": fi.open or 0,
+                    "year_high": fi.year_high or 0,
+                    "year_low": fi.year_low or 0,
+                }
+            except Exception as exc:
+                return {"ticker": ticker, "error": str(exc)}
 
         def _bar(pct: float, w: int = 10) -> str:
             f = max(0, min(w, int(abs(pct) / 10 * w)))
@@ -1812,8 +1823,7 @@ class DiscordInteractiveBot:
                 try:
                     hist = (hist_map or {}).get(ticker)
                     if hist is None:
-                        if not _yf: continue
-                        hist = _yf.Ticker(ticker).history(period="6mo")
+                        continue  # pre-fetched via _prefetch; skip if missing
                     if hist is None or hist.empty or len(hist) < 60:
                         continue
                     d = _compute_technicals(hist)
@@ -1919,8 +1929,7 @@ class DiscordInteractiveBot:
                 try:
                     hist = (hist_map or {}).get(ticker)
                     if hist is None:
-                        if not _yf: continue
-                        hist = _yf.Ticker(ticker).history(period="6mo")
+                        continue  # pre-fetched via _prefetch; skip if missing
                     if hist is None or hist.empty or len(hist) < 60:
                         continue
                     d = _compute_technicals(hist)
@@ -2030,8 +2039,7 @@ class DiscordInteractiveBot:
                 try:
                     hist = (hist_map or {}).get(ticker)
                     if hist is None:
-                        if not _yf: continue
-                        hist = _yf.Ticker(ticker).history(period="3mo")
+                        continue  # pre-fetched via _prefetch; skip if missing
                     if hist is None or hist.empty or len(hist) < 30:
                         continue
                     d = _compute_technicals(hist)
@@ -2151,13 +2159,13 @@ class DiscordInteractiveBot:
         def _attach_ml_rank(signals: list, hist_cache: dict) -> list:
             """Attach ML regime rank and win probability to each signal."""
             opt = _get_optimizer()
-            if opt is None or not _yf:
+            if opt is None:
                 return signals
             for sig in signals:
                 ticker = sig.get("ticker", "")
                 try:
                     if ticker not in hist_cache:
-                        hist_cache[ticker] = _yf.Ticker(ticker).history(period="3mo")
+                        continue  # pre-fetched; skip if missing
                     hist = hist_cache[ticker]
                     if not hist.empty and len(hist) >= 30:
                         ranked = opt.quick_regime_rank(hist)
@@ -2725,8 +2733,11 @@ class DiscordInteractiveBot:
                 strats_on, strats_cond, strats_off = playbook_map.get(
                     key, (["Swing", "Mean-Reversion"], [], []))
 
-                from src.core.models import RegimeScoreboard as RSB, ScenarioPlan, DeltaSnapshot
                 from datetime import date as _date
+
+                from src.core.models import DeltaSnapshot
+                from src.core.models import RegimeScoreboard as RSB
+                from src.core.models import ScenarioPlan
 
                 risk_on_score = max(0, min(100, 50 + spy_pct * 10 - (vix - 18) * 3))
                 scoreboard = RSB(
@@ -2897,8 +2908,7 @@ class DiscordInteractiveBot:
                         try:
                             hist = wh_hist.get(ticker)
                             if hist is None:
-                                if not _yf: continue
-                                hist = _yf.Ticker(ticker).history(period="1mo")
+                                continue
                             if hist.empty or len(hist) < 10:
                                 continue
                             vol = hist["Volume"].iloc[-1]
@@ -2974,28 +2984,14 @@ class DiscordInteractiveBot:
 
         # ── 12. Real-time price spike / crash alert (every 3 min, 24/7) ──
         async def _fetch_ticker_news_for_alert(sym: str, max_items: int = 3) -> list:
-            """Fetch recent news headlines for a ticker — attached to spike alert embeds."""
-            def _sync():
-                if not _yf:
-                    return []
-                try:
-                    t = _yf.Ticker(sym)
-                    raw = t.news if hasattr(t, "news") else []
-                    out = []
-                    for item in (raw or [])[:max_items + 3]:
-                        url = item.get("link", item.get("url", ""))
-                        title = item.get("title", "")
-                        if url and title and len(out) < max_items:
-                            out.append({
-                                "title": title[:90],
-                                "url": url,
-                                "publisher": item.get("publisher", ""),
-                            })
-                    return out
-                except Exception:
-                    return []
+            """Fetch recent news headlines for a ticker."""
             try:
-                return await asyncio.wait_for(asyncio.to_thread(_sync), timeout=5.0)
+                return await asyncio.wait_for(
+                    _mds.get_news(sym, max_items=max_items),
+                    timeout=5.0,
+                )
+            except Exception:
+                return []
             except Exception:
                 return []
 
@@ -3133,32 +3129,32 @@ class DiscordInteractiveBot:
             try:
                 now = datetime.now(timezone.utc)
 
-                def _sync_fetch_news():
-                    if not _yf:
-                        return []
+                async def _async_fetch_news():
                     all_news = []
-                    # Get market-wide news from major tickers
                     _news_scan_universe = (
                         ["SPY", "QQQ", "^VIX", "BTC-USD", "ETH-USD"]
                         + _WATCH_US[:20]
                     )
-                    for sym in _news_scan_universe:
-                        try:
-                            t = _yf.Ticker(sym)
-                            news = t.news if hasattr(t, "news") else []
-                            if news:
-                                for item in news[:3]:
-                                    url = item.get("link", item.get("url", ""))
-                                    if url and url not in _news_seen:
-                                        all_news.append({
-                                            "title": item.get("title", "")[:200],
-                                            "publisher": item.get("publisher", "Unknown"),
-                                            "url": url,
-                                            "symbol": sym,
-                                            "time": item.get("providerPublishTime", 0),
-                                        })
-                        except Exception:
+                    results = await asyncio.gather(
+                        *[_mds.get_news(s, max_items=3)
+                          for s in _news_scan_universe],
+                        return_exceptions=True,
+                    )
+                    for sym, news in zip(
+                        _news_scan_universe, results,
+                    ):
+                        if isinstance(news, Exception):
                             continue
+                        for item in (news or [])[:3]:
+                            url = item.get("link", item.get("url", ""))
+                            if url and url not in _news_seen:
+                                all_news.append({
+                                    "title": item.get("title", "")[:200],
+                                    "publisher": item.get("publisher", "Unknown"),
+                                    "url": url,
+                                    "symbol": sym,
+                                    "time": item.get("providerPublishTime", 0),
+                                })
                     # Sort by recency, deduplicate by title prefix
                     all_news.sort(key=lambda x: x.get("time", 0), reverse=True)
                     seen_titles = set()
@@ -3170,7 +3166,7 @@ class DiscordInteractiveBot:
                             unique.append(n)
                     return unique[:8]
 
-                news = await asyncio.to_thread(_sync_fetch_news)
+                news = await _async_fetch_news()
                 if not news:
                     return
 
@@ -3214,33 +3210,33 @@ class DiscordInteractiveBot:
                 idx = int(_tt.time() / 900) % 3
                 chunk = _WATCH_US[idx * chunk_sz:(idx + 1) * chunk_sz]
 
-                def _sync_chunk_news(syms):
-                    if not _yf:
-                        return []
+                async def _async_chunk_news(syms):
                     results = []
-                    for sym in syms:
-                        try:
-                            t = _yf.Ticker(sym)
-                            raw = t.news if hasattr(t, "news") else []
-                            for item in (raw or [])[:3]:
-                                url = item.get("link", item.get("url", ""))
-                                title = item.get("title", "")
-                                if not url or not title:
-                                    continue
-                                if url in _ticker_news_seen.get(sym, set()):
-                                    continue
-                                results.append({
-                                    "ticker": sym,
-                                    "title": title[:150],
-                                    "publisher": item.get("publisher", ""),
-                                    "url": url,
-                                    "time": item.get("providerPublishTime", 0),
-                                })
-                        except Exception:
+                    news_batch = await asyncio.gather(
+                        *[_mds.get_news(s, max_items=3)
+                          for s in syms],
+                        return_exceptions=True,
+                    )
+                    for sym, raw in zip(syms, news_batch):
+                        if isinstance(raw, Exception):
                             continue
+                        for item in (raw or [])[:3]:
+                            url = item.get("link", item.get("url", ""))
+                            title = item.get("title", "")
+                            if not url or not title:
+                                continue
+                            if url in _ticker_news_seen.get(sym, set()):
+                                continue
+                            results.append({
+                                "ticker": sym,
+                                "title": title[:150],
+                                "publisher": item.get("publisher", ""),
+                                "url": url,
+                                "time": item.get("providerPublishTime", 0),
+                            })
                     return results
 
-                fresh = await asyncio.to_thread(_sync_chunk_news, chunk)
+                fresh = await _async_chunk_news(chunk)
                 if not fresh:
                     return
                 fresh.sort(key=lambda x: x.get("time", 0), reverse=True)
@@ -3294,8 +3290,7 @@ class DiscordInteractiveBot:
                         try:
                             hist = learn_hist.get(sym)
                             if hist is None:
-                                if not _yf: continue
-                                hist = _yf.Ticker(sym).history(period="1y")
+                                continue
                             if hist is None or hist.empty or len(hist) < 60:
                                 continue
                             analysis = opt.full_analysis(sym, hist, "1y")
@@ -4028,8 +4023,11 @@ class DiscordInteractiveBot:
 
                 risk_on_score = max(0, min(100, 50 + spy_pct * 10 - (vix - 18) * 3))
 
-                from src.core.models import RegimeScoreboard as RSB, ScenarioPlan, DeltaSnapshot, ChangeItem
                 from datetime import date as _date
+
+                from src.core.models import ChangeItem, DeltaSnapshot
+                from src.core.models import RegimeScoreboard as RSB
+                from src.core.models import ScenarioPlan
 
                 scoreboard = RSB(
                     regime_label=risk, risk_on_score=risk_on_score,
@@ -4327,10 +4325,9 @@ class DiscordInteractiveBot:
         async def cmd_news(interaction: discord.Interaction, ticker: str):
             await interaction.response.defer()
             try:
-                def _sync_news():
-                    t = _yf.Ticker(ticker.upper())
-                    return t.news[:5] if t.news else []
-                news = await asyncio.to_thread(_sync_news)
+                news = await _mds.get_news(
+                    ticker.upper(), max_items=5,
+                )
                 if not news:
                     await interaction.followup.send(f"No news for {ticker.upper()}")
                     return
@@ -4536,21 +4533,20 @@ class DiscordInteractiveBot:
             ticker = ticker.upper().strip()
             now = datetime.now(timezone.utc)
 
-            def _sync_why_analysis(sym, pre_hist=None):
+            async def _why_analysis(sym, pre_hist=None):
                 try:
                     hist = pre_hist
                     if hist is None:
-                        if not _yf: return {}
-                        hist = _yf.Ticker(sym).history(period="3mo")
+                        hist = await _fetch_history(sym, "3mo")
                     if hist is None or hist.empty or len(hist) < 20:
                         return {}
                     techs = _compute_technicals(hist)
                     news, analyst = [], {}
                     try:
-                        if _yf:
-                            t = _yf.Ticker(sym)
-                            raw_news = t.news if hasattr(t, "news") else []
-                            ts_now = now.timestamp()
+                        raw_news = await _mds.get_news(
+                            sym, max_items=8,
+                        )
+                        ts_now = now.timestamp()
                         for item in (raw_news or [])[:8]:
                             url = item.get("link", item.get("url", ""))
                             title = item.get("title", "")
@@ -4562,10 +4558,9 @@ class DiscordInteractiveBot:
                     except Exception:
                         pass
                     try:
-                        info = t.info or {}
+                        info = (await _mds.get_quote(sym)) or {}
                         analyst = {
                             "recommendation": info.get("recommendationKey", ""),
-                            "analyst_count": info.get("numberOfAnalystOpinions", 0),
                             "target_mean": info.get("targetMeanPrice", 0),
                         }
                     except Exception:
@@ -4575,7 +4570,7 @@ class DiscordInteractiveBot:
                     return {}
 
             why_hist = await _mds.get_history(ticker, period="3mo")
-            data = await asyncio.to_thread(_sync_why_analysis, ticker, why_hist)
+            data = await _why_analysis(ticker, pre_hist=why_hist)
             d = await _fetch_stock(ticker)
             if not data:
                 await interaction.followup.send(
@@ -5219,13 +5214,13 @@ class DiscordInteractiveBot:
 
                 # Direct computation (same as API)
                 async def _run_bt():
-                    import yfinance as yf
                     import numpy as np
-                    t = yf.Ticker(ticker)
                     if start_date and end_date:
-                        hist = t.history(start=start_date, end=end_date)
+                        hist = await _fetch_history(ticker, "5y")
+                        if hist is not None and not hist.empty:
+                            hist = hist.loc[start_date:end_date]
                     else:
-                        hist = t.history(period=period)
+                        hist = await _fetch_history(ticker, period)
                     if hist is None or hist.empty or len(hist) < 30:
                         return None
                     close = hist["Close"].values
@@ -6050,8 +6045,8 @@ class DiscordInteractiveBot:
         async def regime_cmd(interaction: discord.Interaction):
             await interaction.response.defer()
             try:
-                from src.engines.regime_router import RegimeRouter
                 from src.engines.context_assembler import ContextAssembler
+                from src.engines.regime_router import RegimeRouter
                 assembler = ContextAssembler()
                 ctx = assembler.assemble_sync()
                 router = RegimeRouter()
@@ -6093,7 +6088,8 @@ class DiscordInteractiveBot:
         async def leaderboard_cmd(interaction: discord.Interaction):
             await interaction.response.defer()
             try:
-                from src.engines.strategy_leaderboard import StrategyLeaderboard
+                from src.engines.strategy_leaderboard import \
+                    StrategyLeaderboard
                 lb = StrategyLeaderboard()
                 scores = lb.get_strategy_scores()
                 rankings = lb.get_rankings()
@@ -6127,8 +6123,8 @@ class DiscordInteractiveBot:
         async def recommendations_cmd(interaction: discord.Interaction):
             await interaction.response.defer()
             try:
-                from src.engines.regime_router import RegimeRouter
                 from src.engines.context_assembler import ContextAssembler
+                from src.engines.regime_router import RegimeRouter
                 assembler = ContextAssembler()
                 ctx = assembler.assemble_sync()
                 router = RegimeRouter()
@@ -6165,7 +6161,8 @@ class DiscordInteractiveBot:
 
                 # Fetch cached recommendations from the running engine
                 try:
-                    from src.engines.auto_trading_engine import AutoTradingEngine
+                    from src.engines.auto_trading_engine import \
+                        AutoTradingEngine
                     engine = AutoTradingEngine(dry_run=True)
                     cached = engine.get_cached_state()
                     recs = cached.get("recommendations", [])
@@ -6462,7 +6459,8 @@ class DiscordInteractiveBot:
 
                 # Live calibration count
                 try:
-                    from src.engines.auto_trading_engine import AutoTradingEngine
+                    from src.engines.auto_trading_engine import \
+                        AutoTradingEngine
                     eng = AutoTradingEngine(dry_run=True)
                     if eng.edge_calculator:
                         n = len(eng.edge_calculator._calibration_cache)
@@ -6489,9 +6487,8 @@ class DiscordInteractiveBot:
         async def cmd_playbook(interaction: discord.Interaction):
             await interaction.response.defer()
             try:
-                from src.notifications.daily_playbook import (
-                    DailyPlaybookBuilder,
-                )
+                from src.notifications.daily_playbook import \
+                    DailyPlaybookBuilder
 
                 state = engine.get_cached_state() if engine else {}
                 regime = state.get("regime_state", {})
@@ -6537,9 +6534,8 @@ class DiscordInteractiveBot:
         async def cmd_scorecard(interaction: discord.Interaction):
             await interaction.response.defer()
             try:
-                from src.notifications.monthly_scorecard import (
-                    MonthlyScorecardBuilder,
-                )
+                from src.notifications.monthly_scorecard import \
+                    MonthlyScorecardBuilder
 
                 state = engine.get_cached_state() if engine else {}
                 perf = state.get("performance", {})
@@ -6600,10 +6596,8 @@ class DiscordInteractiveBot:
         ):
             await interaction.response.defer(ephemeral=True)
             try:
-                from src.core.user_preferences import (
-                    OutputMode,
-                    get_preference_manager,
-                )
+                from src.core.user_preferences import (OutputMode,
+                                                       get_preference_manager)
 
                 mgr = get_preference_manager()
                 uid = str(interaction.user.id)

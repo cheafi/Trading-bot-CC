@@ -2,11 +2,12 @@
 TradingAI Bot - Data Models
 Pydantic models for all data structures.
 """
-from datetime import datetime, date, timezone
-from typing import Optional, List, Dict, Any
+from datetime import date, datetime, timezone
 from enum import Enum
+from typing import Any, Dict, List, Optional
 from uuid import UUID
-from pydantic import BaseModel, Field, ConfigDict
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def _utcnow() -> datetime:
@@ -926,6 +927,14 @@ class TradeRecommendation(BaseModel):
     execution_time: Optional[datetime] = None
     fill_price: float = 0.0
 
+    # ── Signal lifecycle (Sprint VNext) ───────────────────────
+    lifecycle_status: str = "TRIGGERED"  # TRIGGERED/ACTIVE/TP/SL/EXPIRED/CANCELLED
+    exited_at: Optional[datetime] = None
+    exit_reason: str = ""  # tp_hit / sl_hit / expired / manual / trailing_stop
+    expected_r: float = 0.0
+    realized_r: float = 0.0
+    realized_pnl_pct: float = 0.0
+
     # ── Source tracking ───────────────────────────────────────
     source_signal_id: Optional[str] = None
     source_strategies: List[str] = Field(default_factory=list)
@@ -997,7 +1006,7 @@ class TradeRecommendation(BaseModel):
             d["why_this_expression"] = (
                 self.expression.why_this_expression
             )
-        for ts_key in ("timestamp", "execution_time"):
+        for ts_key in ("timestamp", "execution_time", "exited_at"):
             if d.get(ts_key) and hasattr(d[ts_key], "isoformat"):
                 d[ts_key] = d[ts_key].isoformat()
         # Sprint 36: include trust metadata if populated

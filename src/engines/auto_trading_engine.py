@@ -464,7 +464,7 @@ class AutoTradingEngine:
         # Assemble decision context
         try:
             async with self._timed_phase("context_assembly"):
-                self._context = self.context_assembler.assemble_sync()
+                self._context = await self.context_assembler.assemble()
         except DataError as e:
             logger.warning("Context assembly DataError: %s", e)
             self._context = {}
@@ -855,20 +855,42 @@ class AutoTradingEngine:
                 logger.warning("No tickers for active markets")
                 return []
 
-            # 2. Fetch OHLCV data via yfinance (lightweight)
+            # 2. Fetch OHLCV data via MarketDataService (centralised)
             try:
-                import yfinance as yf
+                mds = getattr(self, 'market_data', None)
+                if mds is None:
+                    from src.services.market_data import \
+                        get_market_data_service
+                    mds = get_market_data_service()
 
-                data = yf.download(
-                    tickers,
-                    period="200d",
-                    progress=False,
-                    group_by="ticker",
-                    threads=True,
+                import asyncio
+                histories = await asyncio.gather(
+                    *[mds.get_history(t, period="1y", interval="1d")
+                      for t in tickers],
+                    return_exceptions=True,
                 )
-                if data.empty:
+                # Build a dict of ticker → DataFrame
+                ticker_frames = {}
+                for t, h in zip(tickers, histories):
+                    if isinstance(h, Exception) or h is None:
+                        continue
+                    if not h.empty:
+                        ticker_frames[t] = h
+
+                if not ticker_frames:
                     logger.warning("No market data returned")
                     return []
+
+                # Build combined DataFrame like yf.download group_by="ticker"
+                if len(ticker_frames) == 1:
+                    single_t = list(ticker_frames.keys())[0]
+                    data = ticker_frames[single_t]
+                    tickers = [single_t]
+                else:
+                    data = pd.concat(
+                        ticker_frames, axis=1,
+                    )
+                    tickers = list(ticker_frames.keys())
             except DataError as e:
                 logger.error(
                     "Market data fetch DataError: %s", e,
