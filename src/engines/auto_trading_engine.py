@@ -9,6 +9,7 @@ Runs 24/7 without human intervention. Handles:
 - Self-healing: auto-restart, stale data detection
 - Learning loop: records outcomes for ML retraining
 """
+
 import asyncio
 import logging
 import time
@@ -18,15 +19,24 @@ from typing import Any, Dict, List, Optional, Set
 
 from src.algo.position_manager import PositionManager, RiskParameters
 from src.core.config import get_settings, get_trading_config
-from src.core.errors import (BrokerError, ConfigError, DataError,
-                             RiskLimitError, SignalError, ValidationError)
+from src.core.errors import (
+    BrokerError,
+    ConfigError,
+    DataError,
+    RiskLimitError,
+    SignalError,
+    ValidationError,
+)
 from src.core.logging_config import get_correlation_id, set_correlation_id
-from src.core.models import (Direction, Signal, SignalStatus,
-                             TradeRecommendation)
+from src.core.models import Direction, Signal, SignalStatus, TradeRecommendation
 from src.core.trade_repo import TradeOutcomeRepository
-from src.core.trust_metadata import (NoTradeCard, PnLBreakdown,
-                                     TradeAttribution, TrustBadge,
-                                     TrustMetadata)
+from src.core.trust_metadata import (
+    NoTradeCard,
+    PnLBreakdown,
+    TradeAttribution,
+    TrustBadge,
+    TrustMetadata,
+)
 from src.engines.context_assembler import ContextAssembler
 from src.engines.opportunity_ensembler import OpportunityEnsembler
 from src.engines.portfolio_risk_budget import PortfolioRiskBudget
@@ -38,6 +48,7 @@ from src.scanners.universe_builder import UniverseBuilder
 
 try:
     from src.engines.insight_engine import EdgeCalculator
+
     _HAS_EDGE_CALC = True
 except ImportError:
     _HAS_EDGE_CALC = False
@@ -51,12 +62,12 @@ trading_config = get_trading_config()
 # Market session schedule (UTC)
 # ---------------------------------------------------------------------------
 MARKET_SESSIONS = {
-    "us_premarket":  {"open": (9, 0),  "close": (13, 30), "markets": ["us"]},
-    "us_regular":    {"open": (13, 30), "close": (20, 0),  "markets": ["us"]},
-    "us_afterhours": {"open": (20, 0),  "close": (24, 0),  "markets": ["us"]},
-    "hk_regular":    {"open": (1, 30),  "close": (8, 0),   "markets": ["hk"]},
-    "jp_regular":    {"open": (0, 0),   "close": (6, 0),   "markets": ["jp"]},
-    "crypto_247":    {"open": (0, 0),   "close": (24, 0),  "markets": ["crypto"]},
+    "us_premarket": {"open": (9, 0), "close": (13, 30), "markets": ["us"]},
+    "us_regular": {"open": (13, 30), "close": (20, 0), "markets": ["us"]},
+    "us_afterhours": {"open": (20, 0), "close": (24, 0), "markets": ["us"]},
+    "hk_regular": {"open": (1, 30), "close": (8, 0), "markets": ["hk"]},
+    "jp_regular": {"open": (0, 0), "close": (6, 0), "markets": ["jp"]},
+    "crypto_247": {"open": (0, 0), "close": (24, 0), "markets": ["crypto"]},
 }
 
 
@@ -216,14 +227,15 @@ class AutoTradingEngine:
         # instead of falling back to raw yfinance or defaults.
         try:
             from src.services.market_data import get_market_data_service
+
             _mds = get_market_data_service()
         except Exception:
             _mds = None
 
         self.context_assembler = ContextAssembler(
             market_data_service=_mds,
-            broker_manager=getattr(self, 'broker_manager', None),
-            news_service=getattr(self, 'news_service', None),
+            broker_manager=getattr(self, "broker_manager", None),
+            news_service=getattr(self, "news_service", None),
         )
         self.leaderboard = StrategyLeaderboard()
         self.universe_builder = UniverseBuilder()
@@ -274,30 +286,21 @@ class AutoTradingEngine:
             _mcr = _tc2.max_correlated_held
             # Guard against mock / invalid types
             self._signal_cooldown_hours = (
-                int(_cdh) if isinstance(_cdh, (int, float))
-                else 4
+                int(_cdh) if isinstance(_cdh, (int, float)) else 4
             )
-            self._anti_flip_hours = (
-                int(_afh) if isinstance(_afh, (int, float))
-                else 6
-            )
-            self._max_correlated = (
-                int(_mcr) if isinstance(_mcr, (int, float))
-                else 3
-            )
+            self._anti_flip_hours = int(_afh) if isinstance(_afh, (int, float)) else 6
+            self._max_correlated = int(_mcr) if isinstance(_mcr, (int, float)) else 3
         except (ConfigError, KeyError, ValueError, TypeError):
             self._signal_cooldown_hours = 4
             self._anti_flip_hours = 6
             self._max_correlated = 3
         from src.engines.signal_engine import SignalCooldown
+
         self._signal_cooldown = SignalCooldown(
             cooldown_hours=self._signal_cooldown_hours,
             anti_flip_hours=self._anti_flip_hours,
         )
-        self._last_price_data: Dict[
-            str, Any
-        ] = {}  # ticker→close Series cache
-
+        self._last_price_data: Dict[str, Any] = {}  # ticker→close Series cache
 
     async def _boot(self) -> bool:
         """
@@ -352,6 +355,7 @@ class AutoTradingEngine:
         checks_total += 1
         try:
             from src.core.database import check_database_health
+
             db_ok = await check_database_health()
             if db_ok:
                 checks_passed += 1
@@ -386,7 +390,8 @@ class AutoTradingEngine:
         all_ok = checks_passed >= checks_total
         logger.info(
             "Boot checks: %d/%d passed — %s",
-            checks_passed, checks_total,
+            checks_passed,
+            checks_total,
             "✅ READY" if all_ok else "❌ FAILED",
         )
 
@@ -399,7 +404,8 @@ class AutoTradingEngine:
             )
         except Exception as e:
             logger.warning(
-                "  ⚠️  position state load skipped: %s", e,
+                "  ⚠️  position state load skipped: %s",
+                e,
             )
 
         return all_ok
@@ -425,10 +431,9 @@ class AutoTradingEngine:
         """Write heartbeat file for Docker healthcheck."""
         try:
             import pathlib
+
             hb = pathlib.Path("/tmp/engine_heartbeat")
-            hb.write_text(
-                datetime.now(timezone.utc).isoformat()
-            )
+            hb.write_text(datetime.now(timezone.utc).isoformat())
         except OSError:
             pass
 
@@ -479,21 +484,26 @@ class AutoTradingEngine:
         # Persist regime snapshot to DB
         try:
             import json as _json
-            await self.trade_repo.save_regime_snapshot({
-                "snapshot_time": now.isoformat(),
-                "risk_regime": self._regime_state.get("risk_regime", ""),
-                "trend_regime": self._regime_state.get("trend_regime", ""),
-                "volatility_regime": self._regime_state.get("volatility_regime", ""),
-                "composite_regime": self._regime_state.get("regime", ""),
-                "should_trade": self._regime_state.get("should_trade", True),
-                "entropy": self._regime_state.get("entropy", 0),
-                "vix_level": self._regime_state.get("vix", 0),
-                "pct_above_sma50": self._regime_state.get("pct_above_sma50", 0),
-                "context_snapshot": _json.dumps(
-                    {k: str(v) for k, v in list(self._regime_state.items())[:20]},
-                    default=str,
-                ),
-            })
+
+            await self.trade_repo.save_regime_snapshot(
+                {
+                    "snapshot_time": now.isoformat(),
+                    "risk_regime": self._regime_state.get("risk_regime", ""),
+                    "trend_regime": self._regime_state.get("trend_regime", ""),
+                    "volatility_regime": self._regime_state.get(
+                        "volatility_regime", ""
+                    ),
+                    "composite_regime": self._regime_state.get("regime", ""),
+                    "should_trade": self._regime_state.get("should_trade", True),
+                    "entropy": self._regime_state.get("entropy", 0),
+                    "vix_level": self._regime_state.get("vix", 0),
+                    "pct_above_sma50": self._regime_state.get("pct_above_sma50", 0),
+                    "context_snapshot": _json.dumps(
+                        {k: str(v) for k, v in list(self._regime_state.items())[:20]},
+                        default=str,
+                    ),
+                }
+            )
         except (OSError, ConnectionError, RuntimeError) as e:
             logger.debug("Regime DB persist skipped: %s", e)
 
@@ -508,6 +518,19 @@ class AutoTradingEngine:
         # Validate signals
         async with self._timed_phase("signal_validation"):
             validated = await self._validate_signals(signals)
+
+        # ── Hydrate ticker-specific news for top candidates ──
+        try:
+            top_tickers = list({s.ticker for s in validated if hasattr(s, "ticker")})[
+                :15
+            ]
+            if top_tickers and self.context_assembler:
+                news_ctx = await self.context_assembler.assemble(
+                    tickers=top_tickers,
+                )
+                self._context["news_by_ticker"] = news_ctx.get("news_by_ticker", {})
+        except Exception as exc:
+            logger.debug("News hydration skipped: %s", exc)
 
         # Rank through ensemble scorer (with calibrated edge if available)
         # Sprint 30: use generate_recommendations() bridge
@@ -526,9 +549,7 @@ class AutoTradingEngine:
         )
 
         # Cache ranked results for API (JSON-safe)
-        self._cached_recommendations = [
-            rec.to_api_dict() for rec in ranked
-        ]
+        self._cached_recommendations = [rec.to_api_dict() for rec in ranked]
         self._cached_regime = self._regime_state
         self._cached_leaderboard = self.leaderboard.get_strategy_scores()
 
@@ -547,18 +568,17 @@ class AutoTradingEngine:
 
             # Sprint 31: correlation guard — skip if
             # candidate is too correlated with held positions
-            corr_ok, corr_reason = (
-                self.position_mgr.check_correlation_guard(
-                    rec.ticker,
-                    price_data=self._last_price_data,
-                    max_correlated=self._max_correlated,
-                    threshold=0.70,
-                )
+            corr_ok, corr_reason = self.position_mgr.check_correlation_guard(
+                rec.ticker,
+                price_data=self._last_price_data,
+                max_correlated=self._max_correlated,
+                threshold=0.70,
             )
             if not corr_ok:
                 logger.info(
                     "Correlation guard skipped %s: %s",
-                    rec.ticker, corr_reason,
+                    rec.ticker,
+                    corr_reason,
                 )
                 continue
 
@@ -575,7 +595,8 @@ class AutoTradingEngine:
                 if _ml_grade == "D":
                     logger.info(
                         "ML gate rejected %s (grade=D, p=%.2f)",
-                        rec.ticker, _ml_prob,
+                        rec.ticker,
+                        _ml_prob,
                     )
                     continue
             # Store grade for sizing layer
@@ -584,7 +605,9 @@ class AutoTradingEngine:
             if self.dry_run:
                 logger.info(
                     "[DRY RUN] Would execute: %s %s (score=%.3f)",
-                    rec.ticker, rec.direction, rec.composite_score,
+                    rec.ticker,
+                    rec.direction,
+                    rec.composite_score,
                 )
             else:
                 result = await self._execute_recommendation(rec)
@@ -593,22 +616,17 @@ class AutoTradingEngine:
                     self._trades_today.append(result)
                     # Record in PositionManager for trailing stops
                     try:
-                        _is_short = (
-                            rec.direction == Direction.SHORT.value
-                        )
+                        _is_short = rec.direction == Direction.SHORT.value
                         _entry = result.get(
-                            "entry_price", rec.entry_price,
+                            "entry_price",
+                            rec.entry_price,
                         )
                         if rec.stop_price and rec.stop_price > 0:
                             _stop = rec.stop_price
                         elif _is_short:
-                            _stop = _entry * (
-                                1 + trading_config.stop_loss_pct
-                            )
+                            _stop = _entry * (1 + trading_config.stop_loss_pct)
                         else:
-                            _stop = _entry * (
-                                1 - trading_config.stop_loss_pct
-                            )
+                            _stop = _entry * (1 - trading_config.stop_loss_pct)
                         self.position_mgr.open_position(
                             ticker=rec.ticker,
                             strategy_id=rec.strategy_id,
@@ -616,19 +634,19 @@ class AutoTradingEngine:
                             shares=rec.position_size_shares or 1,
                             stop_loss_price=_stop,
                             max_hold_days=trading_config.max_hold_days,
-                            direction=(
-                                "short" if _is_short else "long"
-                            ),
+                            direction=("short" if _is_short else "long"),
                         )
                     except RiskLimitError as e:
                         logger.warning(
-                            "PositionManager risk limit "
-                            "for %s: %s", rec.ticker, e,
+                            "PositionManager risk limit " "for %s: %s",
+                            rec.ticker,
+                            e,
                         )
                     except Exception as e:
                         logger.warning(
-                            "PositionManager track error "
-                            "for %s: %s", rec.ticker, e,
+                            "PositionManager track error " "for %s: %s",
+                            rec.ticker,
+                            e,
                         )
                     # Sprint 24: persist state after open
                     self.position_mgr.save_state()
@@ -637,24 +655,25 @@ class AutoTradingEngine:
         _traded = len(self._trades_today) > 0
         try:
             _funnel = CoverageFunnel(
-                watched=len(
-                    self.universe_builder.build(
-                        markets=active_markets,
-                        regime_state=self._regime_state,
-                    ).tickers
-                ) if active_markets else 0,
+                watched=(
+                    len(
+                        self.universe_builder.build(
+                            markets=active_markets,
+                            regime_state=self._regime_state,
+                        ).tickers
+                    )
+                    if active_markets
+                    else 0
+                ),
                 eligible=len(signals),
                 ranked=len(ranked),
-                approved=sum(
-                    1 for r in ranked if r.trade_decision
-                ),
-                rejected=sum(
-                    1 for r in ranked if not r.trade_decision
-                ),
+                approved=sum(1 for r in ranked if r.trade_decision),
+                rejected=sum(1 for r in ranked if not r.trade_decision),
                 executed=len(self._trades_today),
             )
             self.kpi.record_cycle(
-                traded=_traded, funnel=_funnel,
+                traded=_traded,
+                funnel=_funnel,
             )
         except Exception as e:
             logger.debug("KPI record_cycle error: %s", e)
@@ -707,8 +726,7 @@ class AutoTradingEngine:
         """
         if self._cycle_count % 30 == 0:
             logger.info(
-                "Regime gate: no-trade "
-                "(entropy=%.2f, regime=%s)",
+                "Regime gate: no-trade " "(entropy=%.2f, regime=%s)",
                 self._regime_state.get("entropy", 0),
                 self._regime_state.get("regime", "unknown"),
             )
@@ -731,10 +749,12 @@ class AutoTradingEngine:
                         timezone.utc,
                     ).isoformat(),
                     "regime": self._regime_state.get(
-                        "regime", "",
+                        "regime",
+                        "",
                     ),
                     "entropy": self._regime_state.get(
-                        "entropy", 0,
+                        "entropy",
+                        0,
                     ),
                     "should_trade": False,
                     "universe_size": len(spec.tickers),
@@ -744,13 +764,15 @@ class AutoTradingEngine:
                         "high_entropy",
                     ),
                     "risk_regime": self._regime_state.get(
-                        "risk_regime", "",
+                        "risk_regime",
+                        "",
                     ),
                     "probabilities": {
                         k: round(v, 3)
                         for k, v in self._regime_state.items()
                         if k.startswith("prob_")
-                        or k in (
+                        or k
+                        in (
                             "risk_on_uptrend",
                             "neutral_range",
                             "risk_off_downtrend",
@@ -772,7 +794,8 @@ class AutoTradingEngine:
             self._no_trade_card = NoTradeCard.from_regime(
                 self._regime_state,
                 tickers=self._no_trade_readiness.get(
-                    "tickers", [],
+                    "tickers",
+                    [],
                 ),
             )
         except (KeyError, TypeError, ValueError):
@@ -783,7 +806,8 @@ class AutoTradingEngine:
     # ------------------------------------------------------------------
 
     def _signals_to_recommendations(
-        self, signals: List[Signal],
+        self,
+        signals: List[Signal],
     ) -> List[TradeRecommendation]:
         """Convert validated signals to TradeRecommendations.
 
@@ -798,7 +822,9 @@ class AutoTradingEngine:
         for b in blocked:
             logger.info(
                 "Signal blocked: %s %s — %s",
-                b["ticker"], b["direction"], b["reason"],
+                b["ticker"],
+                b["direction"],
+                b["reason"],
             )
         self._signal_cooldown.record_batch(kept)
 
@@ -812,7 +838,9 @@ class AutoTradingEngine:
                         regime=self._regime_state,
                         features={
                             "relative_volume": getattr(
-                                sig, "relative_volume", 1.0,
+                                sig,
+                                "relative_volume",
+                                1.0,
                             ),
                             "rsi_14": getattr(sig, "rsi", 50),
                         },
@@ -857,16 +885,16 @@ class AutoTradingEngine:
 
             # 2. Fetch OHLCV data via MarketDataService (centralised)
             try:
-                mds = getattr(self, 'market_data', None)
+                mds = getattr(self, "market_data", None)
                 if mds is None:
-                    from src.services.market_data import \
-                        get_market_data_service
+                    from src.services.market_data import get_market_data_service
+
                     mds = get_market_data_service()
 
                 import asyncio
+
                 histories = await asyncio.gather(
-                    *[mds.get_history(t, period="1y", interval="1d")
-                      for t in tickers],
+                    *[mds.get_history(t, period="1y", interval="1d") for t in tickers],
                     return_exceptions=True,
                 )
                 # Build a dict of ticker → DataFrame
@@ -888,17 +916,20 @@ class AutoTradingEngine:
                     tickers = [single_t]
                 else:
                     data = pd.concat(
-                        ticker_frames, axis=1,
+                        ticker_frames,
+                        axis=1,
                     )
                     tickers = list(ticker_frames.keys())
             except DataError as e:
                 logger.error(
-                    "Market data fetch DataError: %s", e,
+                    "Market data fetch DataError: %s",
+                    e,
                 )
                 return []
             except Exception as e:
                 logger.error(
-                    "Market data fetch error: %s", e,
+                    "Market data fetch error: %s",
+                    e,
                 )
                 return []
 
@@ -915,9 +946,7 @@ class AutoTradingEngine:
                         df = data.dropna()
                     if df.empty or len(df) < 50:
                         continue
-                    df.columns = [
-                        c.lower() for c in df.columns
-                    ]
+                    df.columns = [c.lower() for c in df.columns]
                     feats = feature_engine.calculate_features(
                         df,
                     )
@@ -928,11 +957,14 @@ class AutoTradingEngine:
                         )
                         valid_tickers.append(ticker)
                 except (
-                    ValueError, KeyError, TypeError,
+                    ValueError,
+                    KeyError,
+                    TypeError,
                 ) as e:
                     logger.debug(
                         "Feature calc skipped for %s: %s",
-                        ticker, e,
+                        ticker,
+                        e,
                     )
                     continue
 
@@ -954,7 +986,8 @@ class AutoTradingEngine:
                     pass
 
             features_df = pd.concat(
-                all_features, ignore_index=True,
+                all_features,
+                ignore_index=True,
             )
 
             # 4. Generate signals
@@ -964,14 +997,14 @@ class AutoTradingEngine:
             _mkt = {
                 "vix": _ctx_mkt.get("vix", 20),
                 "vix_term_structure": _ctx_mkt.get(
-                    "vix_term_slope", 1.0,
+                    "vix_term_slope",
+                    1.0,
                 ),
-                "pct_above_sma50": int(
-                    _ctx_mkt.get("breadth_pct", 0.55) * 100
-                ),
+                "pct_above_sma50": int(_ctx_mkt.get("breadth_pct", 0.55) * 100),
                 "hy_spread": _ctx_mkt.get("hy_spread", 350),
                 "spx_change_pct": _ctx_mkt.get(
-                    "spy_return_20d", 0,
+                    "spy_return_20d",
+                    0,
                 ),
             }
 
@@ -1000,6 +1033,7 @@ class AutoTradingEngine:
             return []
         try:
             from src.engines.gpt_validator import GPTSignalValidator
+
             validator = GPTSignalValidator()
             # validate_batch returns list of dicts with 'validation_result' key
             results = await validator.validate_batch(
@@ -1021,7 +1055,8 @@ class AutoTradingEngine:
             return signals
 
     async def _execute_recommendation(
-        self, rec: "TradeRecommendation",
+        self,
+        rec: "TradeRecommendation",
     ) -> Optional[Dict[str, Any]]:
         """Execute a TradeRecommendation through the broker manager.
 
@@ -1038,12 +1073,15 @@ class AutoTradingEngine:
                 if rec.direction == Direction.LONG.value
                 else OrderSide.SELL_SHORT
             )
-            qty = max(1, self._calculate_position_size(
-                rec,
-                edge_pwin=rec.edge_p_t1,
-                edge_rr=rec.risk_reward_ratio,
-                strategy_name=rec.strategy_id,
-            ))
+            qty = max(
+                1,
+                self._calculate_position_size(
+                    rec,
+                    edge_pwin=rec.edge_p_t1,
+                    edge_rr=rec.risk_reward_ratio,
+                    strategy_name=rec.strategy_id,
+                ),
+            )
             rec.position_size_shares = qty
 
             result = await manager.place_order(
@@ -1055,7 +1093,9 @@ class AutoTradingEngine:
 
             if result.success:
                 _entry_price = getattr(
-                    result, "avg_fill_price", rec.entry_price,
+                    result,
+                    "avg_fill_price",
+                    rec.entry_price,
                 )
 
                 rec.executed = True
@@ -1063,22 +1103,18 @@ class AutoTradingEngine:
                 rec.fill_price = _entry_price
 
                 # Sprint 36: attach trust metadata to entry
-                _badge = (
-                    TrustBadge.PAPER
-                    if self.dry_run
-                    else TrustBadge.LIVE
-                )
+                _badge = TrustBadge.PAPER if self.dry_run else TrustBadge.LIVE
                 rec.trust = TrustMetadata.for_entry(
                     badge=_badge,
                     confidence=rec.signal_confidence,
-                    source_count=len(
-                        rec.source_strategies
-                    ) or 1,
+                    source_count=len(rec.source_strategies) or 1,
                     regime_label=self._cached_regime.get(
-                        "regime", "",
+                        "regime",
+                        "",
                     ),
                     risk_regime=self._cached_regime.get(
-                        "risk_regime", "",
+                        "risk_regime",
+                        "",
                     ),
                 ).to_dict()
 
@@ -1095,7 +1131,8 @@ class AutoTradingEngine:
                     "composite_score": rec.composite_score,
                     "ml_grade": getattr(rec, "ml_grade", ""),
                     "regime_at_entry": self._cached_regime.get(
-                        "regime", "",
+                        "regime",
+                        "",
                     ),
                     "entry_snapshot": rec.to_entry_snapshot(),
                     "trust": rec.trust,
@@ -1112,12 +1149,15 @@ class AutoTradingEngine:
             return None
         except Exception as e:
             logger.error(
-                "Execution error for %s: %s", rec.ticker, e,
+                "Execution error for %s: %s",
+                rec.ticker,
+                e,
             )
             return None
 
     async def _execute_signal(
-        self, signal: Signal,
+        self,
+        signal: Signal,
         opp: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         """Legacy wrapper: convert Signal+opp to TradeRecommendation.
@@ -1127,14 +1167,17 @@ class AutoTradingEngine:
         ``_execute_recommendation()`` directly.
         """
         rec = TradeRecommendation.from_signal(
-            signal, regime_state=self._regime_state,
+            signal,
+            regime_state=self._regime_state,
         )
         if opp:
             rec.composite_score = opp.get(
-                "composite_score", 0,
+                "composite_score",
+                0,
             )
             rec.trade_decision = opp.get(
-                "trade_decision", False,
+                "trade_decision",
+                False,
             )
         return await self._execute_recommendation(rec)
 
@@ -1163,12 +1206,10 @@ class AutoTradingEngine:
                 current_price = getattr(pos, "current_price", 0)
                 if current_price and current_price > 0:
                     prices[ticker] = current_price
-                    broker_qty[ticker] = abs(int(
-                        getattr(pos, "quantity",
-                                getattr(pos, "qty", 0))
-                    ))
-                    _dir = getattr(pos, "direction",
-                                   getattr(pos, "side", "long"))
+                    broker_qty[ticker] = abs(
+                        int(getattr(pos, "quantity", getattr(pos, "qty", 0)))
+                    )
+                    _dir = getattr(pos, "direction", getattr(pos, "side", "long"))
                     broker_side[ticker] = _dir
 
             if not prices:
@@ -1177,9 +1218,7 @@ class AutoTradingEngine:
             now = datetime.now(timezone.utc)
 
             # Use PositionManager to check all exit conditions
-            positions_to_close = self.position_mgr.update_all_positions(
-                prices, now
-            )
+            positions_to_close = self.position_mgr.update_all_positions(prices, now)
 
             for close_info in positions_to_close:
                 ticker = close_info["ticker"]
@@ -1193,12 +1232,13 @@ class AutoTradingEngine:
 
                 logger.warning(
                     "Exit signal for %s: %s @ $%.2f",
-                    ticker, reason, exit_price,
+                    ticker,
+                    reason,
+                    exit_price,
                 )
                 try:
                     close_side = (
-                        OrderSide.SELL if side == "long"
-                        else OrderSide.BUY_TO_COVER
+                        OrderSide.SELL if side == "long" else OrderSide.BUY_TO_COVER
                     )
                     await manager.place_order(
                         ticker=ticker,
@@ -1213,32 +1253,31 @@ class AutoTradingEngine:
                         ticker, exit_price, reason
                     )
                     if closed_pos:
-                        pnl = getattr(
-                            closed_pos, "realized_pnl_pct", 0
-                        )
+                        pnl = getattr(closed_pos, "realized_pnl_pct", 0)
                         self.circuit_breaker.update(
                             equity=await self._get_equity(),
                             trade_pnl=pnl,
                         )
-                        self._record_learning_outcome(
-                            closed_pos, reason
-                        )
+                        self._record_learning_outcome(closed_pos, reason)
                         # Sprint 24: persist after close
                         self.position_mgr.save_state()
                         # Sprint 25: send exit notification
                         await self._notify_position_closed(
-                            closed_pos, reason,
+                            closed_pos,
+                            reason,
                         )
 
                 except BrokerError as e:
                     logger.error(
                         "Close order broker error for %s: %s",
-                        ticker, e,
+                        ticker,
+                        e,
                     )
                 except Exception as e:
                     logger.error(
                         "Close order failed for %s: %s",
-                        ticker, e,
+                        ticker,
+                        e,
                     )
 
         except BrokerError as e:
@@ -1252,11 +1291,7 @@ class AutoTradingEngine:
             # Resolve direction from position or default
             _dir = getattr(closed_pos, "direction", None)
             if not _dir:
-                _dir = (
-                    "LONG"
-                    if getattr(closed_pos, "quantity", 1) >= 0
-                    else "SHORT"
-                )
+                _dir = "LONG" if getattr(closed_pos, "quantity", 1) >= 0 else "SHORT"
 
             # Look up entry snapshot from _trades_today
             # Sprint 29: also extract ml_grade, composite_score,
@@ -1273,7 +1308,8 @@ class AutoTradingEngine:
                     _ml_grade = t.get("ml_grade", "")
                     _composite = t.get("composite_score", 0.0)
                     _regime_at_entry = t.get(
-                        "regime_at_entry", "",
+                        "regime_at_entry",
+                        "",
                     )
                     break
 
@@ -1284,12 +1320,10 @@ class AutoTradingEngine:
 
             # Sprint 29: merge enriched fields into snapshot
             # so TradeOutcomeRecord has full decision context
-            _snapshot["composite_score"] = (
-                _composite or _snapshot.get("composite_score", 0)
+            _snapshot["composite_score"] = _composite or _snapshot.get(
+                "composite_score", 0
             )
-            _snapshot["ml_grade"] = (
-                _ml_grade or _snapshot.get("ml_grade", "")
-            )
+            _snapshot["ml_grade"] = _ml_grade or _snapshot.get("ml_grade", "")
 
             record = TradeOutcomeRecord(
                 trade_id=closed_pos.position_id,
@@ -1299,12 +1333,10 @@ class AutoTradingEngine:
                 entry_price=closed_pos.entry_price,
                 exit_price=closed_pos.exit_price,
                 entry_time=(
-                    closed_pos.entry_date.isoformat()
-                    if closed_pos.entry_date else ""
+                    closed_pos.entry_date.isoformat() if closed_pos.entry_date else ""
                 ),
                 exit_time=(
-                    closed_pos.exit_date.isoformat()
-                    if closed_pos.exit_date else ""
+                    closed_pos.exit_date.isoformat() if closed_pos.exit_date else ""
                 ),
                 pnl_pct=closed_pos.realized_pnl_pct,
                 confidence=_conf,
@@ -1317,7 +1349,9 @@ class AutoTradingEngine:
             self.learning_loop.record_outcome(record)
             logger.info(
                 "Recorded learning outcome: %s %s %.2f%%",
-                closed_pos.ticker, reason, closed_pos.realized_pnl_pct,
+                closed_pos.ticker,
+                reason,
+                closed_pos.realized_pnl_pct,
             )
 
             # Sprint 34: update leaderboard from *closed* trade
@@ -1330,20 +1364,18 @@ class AutoTradingEngine:
                     _pnl,
                     regime=_regime_at_entry,
                     direction=_dir,
-                    market=getattr(
-                        closed_pos, "market", "us"
-                    ),
+                    market=getattr(closed_pos, "market", "us"),
                 )
             except Exception as e:
                 logger.warning(
-                    "Leaderboard update error: %s", e,
+                    "Leaderboard update error: %s",
+                    e,
                 )
 
             # Sprint 35: record into professional KPI tracker
             try:
                 _r_mult = (
-                    closed_pos.realized_pnl_pct
-                    / (trading_config.risk_per_trade * 100)
+                    closed_pos.realized_pnl_pct / (trading_config.risk_per_trade * 100)
                     if trading_config.risk_per_trade > 0
                     else 0.0
                 )
@@ -1361,45 +1393,46 @@ class AutoTradingEngine:
             # composite_score from the trade record / snapshot
             try:
                 import asyncio as _aio
+
                 _aio.get_event_loop().create_task(
-                    self.trade_repo.save_outcome({
-                        "trade_id": closed_pos.position_id,
-                        "ticker": closed_pos.ticker,
-                        "direction": _dir,
-                        "strategy": closed_pos.strategy_id,
-                        "entry_price": closed_pos.entry_price,
-                        "exit_price": closed_pos.exit_price,
-                        "entry_time": (
-                            closed_pos.entry_date.isoformat()
-                            if closed_pos.entry_date else None
-                        ),
-                        "exit_time": (
-                            closed_pos.exit_date.isoformat()
-                            if closed_pos.exit_date else None
-                        ),
-                        "pnl_pct": closed_pos.realized_pnl_pct,
-                        "confidence": _conf,
-                        "horizon": "swing",
-                        "exit_reason": reason,
-                        "regime_at_entry": (
-                            _regime_at_entry
-                            or self._cached_regime.get("regime")
-                        ),
-                        "vix_at_entry": (
-                            _snapshot.get("vix_at_entry")
-                            or self._cached_regime.get("vix")
-                        ),
-                        "rsi_at_entry": _snapshot.get("rsi_at_entry"),
-                        "adx_at_entry": _snapshot.get("adx_at_entry"),
-                        "relative_volume": _snapshot.get("relative_volume"),
-                        "setup_grade": (
-                            _snapshot.get("setup_grade")
-                            or _ml_grade
-                        ),
-                        "composite_score": _composite,
-                        "hold_hours": _hold,
-                        "feature_snapshot": _snapshot or None,
-                    })
+                    self.trade_repo.save_outcome(
+                        {
+                            "trade_id": closed_pos.position_id,
+                            "ticker": closed_pos.ticker,
+                            "direction": _dir,
+                            "strategy": closed_pos.strategy_id,
+                            "entry_price": closed_pos.entry_price,
+                            "exit_price": closed_pos.exit_price,
+                            "entry_time": (
+                                closed_pos.entry_date.isoformat()
+                                if closed_pos.entry_date
+                                else None
+                            ),
+                            "exit_time": (
+                                closed_pos.exit_date.isoformat()
+                                if closed_pos.exit_date
+                                else None
+                            ),
+                            "pnl_pct": closed_pos.realized_pnl_pct,
+                            "confidence": _conf,
+                            "horizon": "swing",
+                            "exit_reason": reason,
+                            "regime_at_entry": (
+                                _regime_at_entry or self._cached_regime.get("regime")
+                            ),
+                            "vix_at_entry": (
+                                _snapshot.get("vix_at_entry")
+                                or self._cached_regime.get("vix")
+                            ),
+                            "rsi_at_entry": _snapshot.get("rsi_at_entry"),
+                            "adx_at_entry": _snapshot.get("adx_at_entry"),
+                            "relative_volume": _snapshot.get("relative_volume"),
+                            "setup_grade": (_snapshot.get("setup_grade") or _ml_grade),
+                            "composite_score": _composite,
+                            "hold_hours": _hold,
+                            "feature_snapshot": _snapshot or None,
+                        }
+                    )
                 )
             except (OSError, ConnectionError, RuntimeError) as e:
                 logger.debug("Trade outcome DB persist skipped: %s", e)
@@ -1407,13 +1440,14 @@ class AutoTradingEngine:
         except Exception as e:
             logger.warning("Learning loop record error: %s", e)
 
-
     # ------------------------------------------------------------------
     # Sprint 25: trade-execution notifications
     # ------------------------------------------------------------------
 
     async def _notify_trade_executed(
-        self, rec: "TradeRecommendation", fill_price: float,
+        self,
+        rec: "TradeRecommendation",
+        fill_price: float,
     ):
         """Best-effort push notification on trade entry.
 
@@ -1422,27 +1456,31 @@ class AutoTradingEngine:
         """
         try:
             from src.notifications.multi_channel import MultiChannelNotifier
+
             notifier = MultiChannelNotifier()
-            await notifier.send_trade_alert({
-                "ticker": rec.ticker,
-                "direction": rec.direction,
-                "quantity": rec.position_size_shares or 0,
-                "fill_price": fill_price,
-                "strategy": rec.strategy_id,
-                "confidence": rec.signal_confidence,
-                "stop_price": rec.stop_price,
-                "composite_score": rec.composite_score,
-                "time": (
-                    rec.execution_time.isoformat()
-                    if rec.execution_time else "now"
-                ),
-                "trust": rec.trust,
-            })
+            await notifier.send_trade_alert(
+                {
+                    "ticker": rec.ticker,
+                    "direction": rec.direction,
+                    "quantity": rec.position_size_shares or 0,
+                    "fill_price": fill_price,
+                    "strategy": rec.strategy_id,
+                    "confidence": rec.signal_confidence,
+                    "stop_price": rec.stop_price,
+                    "composite_score": rec.composite_score,
+                    "time": (
+                        rec.execution_time.isoformat() if rec.execution_time else "now"
+                    ),
+                    "trust": rec.trust,
+                }
+            )
         except Exception as e:
             logger.debug("Trade notification skipped: %s", e)
 
     async def _notify_position_closed(
-        self, closed_pos, reason: str,
+        self,
+        closed_pos,
+        reason: str,
     ):
         """Best-effort push notification on position exit.
 
@@ -1452,6 +1490,7 @@ class AutoTradingEngine:
         """
         try:
             from src.notifications.multi_channel import MultiChannelNotifier
+
             notifier = MultiChannelNotifier()
             _hold = 0.0
             if closed_pos.entry_date and closed_pos.exit_date:
@@ -1461,10 +1500,14 @@ class AutoTradingEngine:
             # Sprint 36: build PnL breakdown
             _gross = closed_pos.realized_pnl_pct
             _fees = getattr(
-                closed_pos, "fees_pct", 0.05,
+                closed_pos,
+                "fees_pct",
+                0.05,
             )
             _slip = getattr(
-                closed_pos, "slippage_pct", 0.02,
+                closed_pos,
+                "slippage_pct",
+                0.02,
             )
             pnl_bd = PnLBreakdown.from_trade(
                 gross_pnl_pct=_gross,
@@ -1482,7 +1525,8 @@ class AutoTradingEngine:
             for t in self._trades_today:
                 if t.get("ticker") == closed_pos.ticker:
                     _regime_entry = t.get(
-                        "regime_at_entry", "",
+                        "regime_at_entry",
+                        "",
                     )
                     break
             attribution = TradeAttribution.from_closed_trade(
@@ -1490,44 +1534,48 @@ class AutoTradingEngine:
                 exit_reason=reason,
                 regime_at_entry=_regime_entry,
                 regime_at_exit=self._cached_regime.get(
-                    "regime", "",
+                    "regime",
+                    "",
                 ),
                 hold_hours=_hold,
                 entry_price=closed_pos.entry_price,
                 exit_price=closed_pos.exit_price,
                 stop_price=getattr(
-                    closed_pos, "stop_price", 0,
+                    closed_pos,
+                    "stop_price",
+                    0,
                 ),
                 target_price=getattr(
-                    closed_pos, "target_price", 0,
+                    closed_pos,
+                    "target_price",
+                    0,
                 ),
                 direction=_dir,
             )
 
-            _badge = (
-                TrustBadge.PAPER
-                if self.dry_run
-                else TrustBadge.LIVE
-            )
+            _badge = TrustBadge.PAPER if self.dry_run else TrustBadge.LIVE
             trust = TrustMetadata.for_exit(
                 badge=_badge,
                 pnl=pnl_bd,
                 attribution=attribution,
                 regime_label=self._cached_regime.get(
-                    "regime", "",
+                    "regime",
+                    "",
                 ),
             )
 
-            await notifier.send_exit_alert({
-                "ticker": closed_pos.ticker,
-                "exit_price": closed_pos.exit_price,
-                "pnl_pct": closed_pos.realized_pnl_pct,
-                "reason": reason,
-                "hold_hours": _hold,
-                "trust": trust.to_dict(),
-                "pnl_breakdown": pnl_bd.to_dict(),
-                "attribution": attribution.to_dict(),
-            })
+            await notifier.send_exit_alert(
+                {
+                    "ticker": closed_pos.ticker,
+                    "exit_price": closed_pos.exit_price,
+                    "pnl_pct": closed_pos.realized_pnl_pct,
+                    "reason": reason,
+                    "hold_hours": _hold,
+                    "trust": trust.to_dict(),
+                    "pnl_breakdown": pnl_bd.to_dict(),
+                    "attribution": attribution.to_dict(),
+                }
+            )
         except Exception as e:
             logger.debug("Exit notification skipped: %s", e)
 
@@ -1605,6 +1653,7 @@ class AutoTradingEngine:
         """Send end-of-day performance report."""
         try:
             from src.notifications.multi_channel import MultiChannelNotifier
+
             notifier = MultiChannelNotifier()
             summary = self.learning_loop.get_performance_summary()
             regime = self._cached_regime.get("regime", "unknown")
@@ -1623,8 +1672,6 @@ class AutoTradingEngine:
         except Exception as e:
             logger.error("EOD report error: %s", e)
 
-
-
     async def _with_retry(self, coro_func, *args, retries=3, delay=1.0, **kwargs):
         """Retry an async callable with exponential backoff."""
         last_exc = None
@@ -1633,10 +1680,13 @@ class AutoTradingEngine:
                 return await coro_func(*args, **kwargs)
             except BrokerError as e:
                 last_exc = e
-                wait = delay * (2 ** attempt)
+                wait = delay * (2**attempt)
                 logger.warning(
                     "Retry %d/%d after BrokerError: %s (wait %.1fs)",
-                    attempt + 1, retries, e, wait,
+                    attempt + 1,
+                    retries,
+                    e,
+                    wait,
                 )
                 await asyncio.sleep(wait)
             except Exception as e:
@@ -1647,6 +1697,7 @@ class AutoTradingEngine:
         """Get or create the singleton BrokerManager instance."""
         if self._broker_mgr is None:
             from src.brokers.broker_manager import BrokerManager
+
             self._broker_mgr = BrokerManager()
             await self._broker_mgr.initialize()
             logger.info("BrokerManager singleton initialized")
@@ -1693,6 +1744,7 @@ class AutoTradingEngine:
         """Send periodic status update to all channels."""
         try:
             from src.notifications.multi_channel import MultiChannelNotifier
+
             notifier = MultiChannelNotifier()
             status = (
                 f"📊 TradingAI Status Update\n"
@@ -1704,7 +1756,6 @@ class AutoTradingEngine:
             await notifier.send_message(status)
         except Exception as e:
             logger.error(f"Status update error: {e}")
-
 
     def get_cached_state(self) -> Dict[str, Any]:
         """Return cached engine state for API / dashboard.
@@ -1737,9 +1788,7 @@ class AutoTradingEngine:
                 "triggered": self.circuit_breaker.triggered,
                 "reason": self.circuit_breaker.trigger_reason,
                 "daily_pnl": self.circuit_breaker.daily_pnl,
-                "consecutive_losses": (
-                    self.circuit_breaker.consecutive_losses
-                ),
+                "consecutive_losses": (self.circuit_breaker.consecutive_losses),
             },
             "dry_run": self.dry_run,
             # Sprint 30: no-trade readiness snapshot
@@ -1752,8 +1801,7 @@ class AutoTradingEngine:
             "pro_kpis": self._build_pro_kpis(),
             # Sprint 36: no-trade card
             "no_trade_card": (
-                self._no_trade_card.to_dict()
-                if self._no_trade_card else None
+                self._no_trade_card.to_dict() if self._no_trade_card else None
             ),
             # Sprint 37: professional KPI snapshot
             "kpi_snapshot": self._build_kpi_snapshot(),
@@ -1779,40 +1827,27 @@ class AutoTradingEngine:
                 total_pnl += entry.get("total_pnl", 0.0)
                 all_pnl.extend(entry.get("pnl_history", []))
 
-            win_rate = (
-                total_wins / total_trades
-                if total_trades > 0 else 0
-            )
-            avg_pnl = (
-                total_pnl / total_trades
-                if total_trades > 0 else 0
-            )
+            win_rate = total_wins / total_trades if total_trades > 0 else 0
+            avg_pnl = total_pnl / total_trades if total_trades > 0 else 0
             wins_pnl = [p for p in all_pnl if p > 0]
             losses_pnl = [p for p in all_pnl if p <= 0]
-            avg_win = (
-                sum(wins_pnl) / len(wins_pnl)
-                if wins_pnl else 0
-            )
-            avg_loss = (
-                abs(sum(losses_pnl) / len(losses_pnl))
-                if losses_pnl else 0
-            )
+            avg_win = sum(wins_pnl) / len(wins_pnl) if wins_pnl else 0
+            avg_loss = abs(sum(losses_pnl) / len(losses_pnl)) if losses_pnl else 0
             profit_factor = (
                 sum(wins_pnl) / abs(sum(losses_pnl))
                 if losses_pnl and sum(losses_pnl) != 0
                 else 0.0
             )
-            net_expectancy = (
-                win_rate * avg_win
-                - (1 - win_rate) * avg_loss
-            )
+            net_expectancy = win_rate * avg_win - (1 - win_rate) * avg_loss
             max_dd = min(all_pnl) if all_pnl else 0.0
 
             # Coverage funnel
             signals_generated = len(self._signals_today)
             trades_executed = len(self._trades_today)
             no_trade_count = getattr(
-                self, "_no_trade_count", 0,
+                self,
+                "_no_trade_count",
+                0,
             )
             total_cycles = max(self._cycle_count, 1)
             no_trade_rate = no_trade_count / total_cycles
@@ -1859,18 +1894,24 @@ class AutoTradingEngine:
             elapsed = (time.monotonic() - t0) * 1000
             logger.error(
                 "Phase %s FAILED after %.1fms: %s",
-                phase_name, elapsed, exc,
+                phase_name,
+                elapsed,
+                exc,
             )
             raise
         else:
             elapsed = (time.monotonic() - t0) * 1000
             if elapsed > 5000:
                 logger.warning(
-                    "Phase %s SLOW: %.1fms", phase_name, elapsed,
+                    "Phase %s SLOW: %.1fms",
+                    phase_name,
+                    elapsed,
                 )
             else:
                 logger.debug(
-                    "Phase %s OK: %.1fms", phase_name, elapsed,
+                    "Phase %s OK: %.1fms",
+                    phase_name,
+                    elapsed,
                 )
 
     async def health_check(self) -> Dict[str, Any]:
@@ -1942,22 +1983,17 @@ class AutoTradingEngine:
             manager = await self._get_broker()
             positions = await manager.get_positions()
             for pos in positions:
-                ticker = getattr(
-                    pos, "symbol", getattr(pos, "ticker", "???")
-                )
-                qty = abs(int(
-                    getattr(pos, "quantity",
-                            getattr(pos, "qty", 0))
-                ))
+                ticker = getattr(pos, "symbol", getattr(pos, "ticker", "???"))
+                qty = abs(int(getattr(pos, "quantity", getattr(pos, "qty", 0))))
                 _dir = getattr(
-                    pos, "direction",
+                    pos,
+                    "direction",
                     getattr(pos, "side", "long"),
                 )
                 if qty <= 0:
                     continue
                 close_side = (
-                    OrderSide.SELL if _dir == "long"
-                    else OrderSide.BUY_TO_COVER
+                    OrderSide.SELL if _dir == "long" else OrderSide.BUY_TO_COVER
                 )
                 try:
                     await manager.place_order(
@@ -1968,12 +2004,11 @@ class AutoTradingEngine:
                     )
                     logger.info(
                         "Shutdown: closed %s (%d shares)",
-                        ticker, qty,
+                        ticker,
+                        qty,
                     )
                 except BrokerError as e:
-                    logger.error(
-                        "Shutdown close failed %s: %s", ticker, e
-                    )
+                    logger.error("Shutdown close failed %s: %s", ticker, e)
         except BrokerError as e:
             logger.error("Shutdown broker error: %s", e)
         except Exception as e:
@@ -1988,7 +2023,9 @@ class AutoTradingEngine:
         logger.info("🛑 Graceful shutdown complete")
 
     def _calculate_position_size(
-        self, signal, edge_pwin: float = 0.0,
+        self,
+        signal,
+        edge_pwin: float = 0.0,
         edge_rr: float = 0.0,
         strategy_name: str = "",
     ) -> int:
@@ -2016,7 +2053,7 @@ class AutoTradingEngine:
         _dir = getattr(signal, "direction", "LONG")
         if hasattr(_dir, "value"):
             _dir = _dir.value
-        _is_short = (_dir == "SHORT")
+        _is_short = _dir == "SHORT"
 
         if _is_short:
             stop_price = price * (1 + trading_config.stop_loss_pct)
@@ -2027,9 +2064,8 @@ class AutoTradingEngine:
         _direct_stop = getattr(signal, "stop_price", 0)
         if _direct_stop and _direct_stop > 0:
             stop_price = _direct_stop
-        elif (
-            getattr(signal, "invalidation", None)
-            and getattr(signal.invalidation, "stop_price", 0)
+        elif getattr(signal, "invalidation", None) and getattr(
+            signal.invalidation, "stop_price", 0
         ):
             stop_price = signal.invalidation.stop_price
 
@@ -2049,11 +2085,7 @@ class AutoTradingEngine:
 
         # Fallback: simple 1% risk using cached equity
         if base_shares <= 0:
-            equity = (
-                self._last_known_equity
-                if self._last_known_equity > 0
-                else 10000.0
-            )
+            equity = self._last_known_equity if self._last_known_equity > 0 else 10000.0
             risk_per_trade = equity * 0.01
             stop_distance = abs(price - stop_price)
             if stop_distance <= 0:
@@ -2065,18 +2097,23 @@ class AutoTradingEngine:
         # ── 1. Confidence / ML grade multiplier ───────────
         _grade = getattr(signal, "ml_grade", "B")
         confidence_mult = {
-            "A": 1.0, "B": 0.75, "C": 0.5,
+            "A": 1.0,
+            "B": 0.75,
+            "C": 0.5,
         }.get(_grade, 0.75)
 
         # ── 2. Regime multiplier ──────────────────────────
         _regime = self._regime_state.get("risk_regime", "neutral")
         regime_mult = {
-            "risk_on": 1.0, "neutral": 0.75, "risk_off": 0.5,
+            "risk_on": 1.0,
+            "neutral": 0.75,
+            "risk_off": 0.5,
         }.get(_regime, 0.75)
 
         # Sprint 35: graduated regime size_scalar
         _size_scalar = self._regime_state.get(
-            "size_scalar", 1.0,
+            "size_scalar",
+            1.0,
         )
         if isinstance(_size_scalar, (int, float)):
             regime_mult *= _size_scalar
@@ -2123,9 +2160,7 @@ class AutoTradingEngine:
             _ticker = getattr(signal, "ticker", "UNKNOWN")
             _sector = getattr(signal, "sector", "")
             _equity = (
-                self._last_known_equity
-                if self._last_known_equity > 0
-                else 10000.0
+                self._last_known_equity if self._last_known_equity > 0 else 10000.0
             )
             _pos_weight = (price * base_shares) / _equity if _equity > 0 else 0
             _exposure = self.risk_budget.build_exposure(
@@ -2149,7 +2184,8 @@ class AutoTradingEngine:
             if not budget.get("allowed", True):
                 logger.info(
                     "Risk budget blocked %s: %s",
-                    _ticker, budget.get("violations", []),
+                    _ticker,
+                    budget.get("violations", []),
                 )
                 return 1  # minimum 1 share
         except Exception as e:

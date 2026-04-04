@@ -2,6 +2,7 @@
 TradingAI Bot - Data Models
 Pydantic models for all data structures.
 """
+
 from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -18,6 +19,7 @@ def _utcnow() -> datetime:
 # =============================================================================
 # ENUMS
 # =============================================================================
+
 
 class Direction(str, Enum):
     LONG = "LONG"
@@ -80,8 +82,10 @@ class SentimentLabel(str, Enum):
 # MARKET DATA MODELS
 # =============================================================================
 
+
 class OHLCV(BaseModel):
     """OHLCV price bar."""
+
     ts: datetime
     ticker: str
     open: float
@@ -96,6 +100,7 @@ class OHLCV(BaseModel):
 
 class Quote(BaseModel):
     """Real-time quote."""
+
     ticker: str
     price: float
     change: float
@@ -108,8 +113,9 @@ class Quote(BaseModel):
 
 class MarketSnapshot(BaseModel):
     """Market overview snapshot."""
+
     timestamp: datetime
-    
+
     # Indices
     spx_close: float
     spx_change_pct: float
@@ -119,16 +125,16 @@ class MarketSnapshot(BaseModel):
     djia_change_pct: float
     iwm_close: float
     iwm_change_pct: float
-    
+
     # Volatility
     vix: float
     vix_change: float
     vix_term_structure: float  # VIX / VIX3M
-    
+
     # Futures
     es_futures: Optional[float] = None
     nq_futures: Optional[float] = None
-    
+
     # Put/Call
     put_call_ratio: Optional[float] = None
 
@@ -137,22 +143,24 @@ class MarketSnapshot(BaseModel):
 # FEATURE MODELS
 # =============================================================================
 
+
 class TechnicalFeatures(BaseModel):
     """Technical analysis features for a ticker."""
+
     ticker: str
     ts: datetime
-    
+
     # Returns
     return_1d: float
     return_5d: float
     return_21d: float
     return_63d: Optional[float] = None
-    
+
     # Volatility
     volatility_21d: float
     atr_14: float
     rsi_14: float
-    
+
     # Moving averages
     sma_20: float
     sma_50: float
@@ -160,23 +168,23 @@ class TechnicalFeatures(BaseModel):
     dist_from_sma20: float
     dist_from_sma50: float
     dist_from_sma200: float
-    
+
     # Bollinger bands
     bb_upper: float
     bb_lower: float
     bb_width: float
-    
+
     # Volume
     volume_sma_20: float
     relative_volume: float
     obv: Optional[float] = None
-    
+
     # Trend
     adx_14: float
     macd: float
     macd_signal: float
     macd_histogram: float
-    
+
     # Composite scores
     momentum_score: Optional[float] = None
     trend_score: Optional[float] = None
@@ -185,8 +193,9 @@ class TechnicalFeatures(BaseModel):
 
 class MarketBreadth(BaseModel):
     """Market breadth indicators."""
+
     ts: datetime
-    
+
     # Advance/Decline
     advancers: int
     decliners: int
@@ -195,24 +204,24 @@ class MarketBreadth(BaseModel):
     ad_line: float
     mcclellan_oscillator: float
     mcclellan_summation: float
-    
+
     # Highs/Lows
     new_52w_highs: int
     new_52w_lows: int
     hi_lo_ratio: float
-    
+
     # % Above MAs
     pct_above_sma20: float
     pct_above_sma50: float
     pct_above_sma200: float
-    
+
     # Volatility
     vix_close: float
     vix_term_structure: float
-    
+
     # Sector performance
     sector_performance: Dict[str, float]
-    
+
     # Regime
     risk_on_score: float
     regime_label: str
@@ -220,20 +229,21 @@ class MarketBreadth(BaseModel):
 
 class MarketRegime(BaseModel):
     """Current market regime classification."""
+
     timestamp: datetime
     volatility: VolatilityRegime
     trend: TrendRegime
     risk: RiskRegime
     active_strategies: List[str]
     strategy_weights: Dict[str, float] = Field(default_factory=dict)
-    
+
     @property
     def should_trade(self) -> bool:
         """Check if conditions allow trading."""
         return (
-            self.volatility != VolatilityRegime.CRISIS and
-            self.trend != TrendRegime.STRONG_DOWNTREND and
-            len(self.active_strategies) > 0
+            self.volatility != VolatilityRegime.CRISIS
+            and self.trend != TrendRegime.STRONG_DOWNTREND
+            and len(self.active_strategies) > 0
         )
 
 
@@ -241,14 +251,17 @@ class MarketRegime(BaseModel):
 # SIGNAL MODELS
 # =============================================================================
 
+
 class Target(BaseModel):
     """Price target with position allocation."""
+
     price: float
     pct_position: float = Field(ge=0, le=100)
 
 
 class Invalidation(BaseModel):
     """Stop loss / invalidation logic."""
+
     stop_price: float
     stop_type: StopType
     condition: Optional[str] = None
@@ -256,74 +269,79 @@ class Invalidation(BaseModel):
 
 class Signal(BaseModel):
     """Trading signal output."""
+
     id: Optional[UUID] = None
     generated_at: datetime = Field(default_factory=_utcnow)
-    
+
     # Core signal — supports US (AAPL), HK (0700.HK), JP (7203.T), Crypto (BTC)
     ticker: str = Field(pattern=r"^[A-Z0-9]{1,10}(\.[A-Z]{1,3})?$")
     direction: Direction
     horizon: Horizon
-    
+
     # Price levels
     entry_price: float
     entry_type: str = "market"
     invalidation: Invalidation
     targets: List[Target] = Field(min_length=1, max_length=3)
-    
+
     # Context
     entry_logic: str = Field(max_length=200)
     catalyst: str
     key_risks: List[str] = Field(max_length=5)
-    
+
     # Scoring
     confidence: int = Field(ge=0, le=100)
     rationale: str = Field(max_length=500)
-    
+
     # Risk management
     position_size_pct: Optional[float] = None
     risk_reward_ratio: Optional[float] = None
-    
+
     # Strategy metadata
     strategy_id: Optional[str] = None
     strategy_version: Optional[str] = None
-    
+
     # Feature snapshot for backtesting
     feature_snapshot: Optional[Dict[str, Any]] = None
-    
+
     # Lifecycle
     status: SignalStatus = SignalStatus.PENDING
     gpt_validated: bool = False
     gpt_rationale: Optional[str] = None
-    
+
     # --- v6: Pro Desk fields ---
-    setup_grade: Optional[str] = None          # A / B / C / D
-    edge_type: Optional[str] = None            # trend / reversion / pattern / swing / mixed
-    time_stop_days: Optional[int] = None       # max holding period before forced exit
-    event_risk: Optional[str] = None           # e.g. "AAPL earnings in 2d"
+    setup_grade: Optional[str] = None  # A / B / C / D
+    edge_type: Optional[str] = None  # trend / reversion / pattern / swing / mixed
+    time_stop_days: Optional[int] = None  # max holding period before forced exit
+    event_risk: Optional[str] = None  # e.g. "AAPL earnings in 2d"
     scenario_plan: Optional[Dict[str, Any]] = None  # base / bull / bear cases
-    portfolio_fit: Optional[str] = None        # "good" / "overlap" / "concentrated"
+    portfolio_fit: Optional[str] = None  # "good" / "overlap" / "concentrated"
     evidence: List[str] = Field(default_factory=list)  # supporting data points
-    expected_value: Optional[float] = None     # EV from edge model
-    approval_status: str = "conditional"       # approved / conditional / rejected
+    expected_value: Optional[float] = None  # EV from edge model
+    approval_status: str = "conditional"  # approved / conditional / rejected
     approval_flags: Dict[str, bool] = Field(default_factory=dict)  # per-check flags
-    why_now: Optional[str] = None              # catalyst + timing rationale
-    
+    why_now: Optional[str] = None  # catalyst + timing rationale
+
     def to_table_row(self) -> str:
         """Format as structured table row."""
-        targets_str = " / ".join([f"${t.price:.2f} ({t.pct_position}%)" for t in self.targets])
+        targets_str = " / ".join(
+            [f"${t.price:.2f} ({t.pct_position}%)" for t in self.targets]
+        )
         risks_str = "; ".join(self.key_risks[:3])
-        
+
         return (
             f"| {self.ticker} | {self.direction.value} | {self.horizon.value} | "
             f"{self.entry_logic[:50]}... | ${self.invalidation.stop_price:.2f} | "
             f"{targets_str} | {self.catalyst[:30]}... | {risks_str[:50]}... | "
             f"{self.confidence} | {self.rationale[:50]}... |"
         )
+
     model_config = ConfigDict(from_attributes=True)
 
 
 class ValidatedSignal(BaseModel):
     """Signal after GPT validation."""
+
     signal: Signal
     approved: bool
     issues: List[str] = []
@@ -336,8 +354,10 @@ class ValidatedSignal(BaseModel):
 # DOCUMENT MODELS
 # =============================================================================
 
+
 class NewsArticle(BaseModel):
     """News article with sentiment."""
+
     id: Optional[UUID] = None
     published_at: datetime
     source: str
@@ -346,15 +366,15 @@ class NewsArticle(BaseModel):
     summary: Optional[str] = None
     content: Optional[str] = None
     url: str
-    
+
     tickers: List[str] = []
     sectors: List[str] = []
     topics: List[str] = []
-    
+
     sentiment_score: Optional[float] = None  # -100 to +100
     sentiment_label: Optional[SentimentLabel] = None
     sentiment_rationale: Optional[str] = None
-    
+
     article_type: Optional[str] = None
     urgency: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
@@ -362,26 +382,27 @@ class NewsArticle(BaseModel):
 
 class SocialPost(BaseModel):
     """Social media post with sentiment."""
+
     id: Optional[UUID] = None
     platform: str
     post_id: str
     posted_at: datetime
     author_handle: str
     author_followers: Optional[int] = None
-    
+
     content: str
     url: Optional[str] = None
-    
+
     likes: int = 0
     reposts: int = 0
     replies: int = 0
-    
+
     tickers: List[str] = []
     cashtags: List[str] = []
-    
+
     sentiment_score: Optional[float] = None
     sentiment_label: Optional[SentimentLabel] = None
-    
+
     is_influencer: bool = False
     is_verified: bool = False
     spam_score: Optional[float] = None
@@ -390,23 +411,24 @@ class SocialPost(BaseModel):
 
 class CalendarEvent(BaseModel):
     """Calendar event (earnings, macro, etc.)."""
+
     id: Optional[UUID] = None
     event_date: date
     event_time: Optional[str] = None
-    
+
     event_type: str
     ticker: Optional[str] = None
-    
+
     title: str
     description: Optional[str] = None
-    
+
     # Earnings-specific
     eps_estimate: Optional[float] = None
     eps_actual: Optional[float] = None
     revenue_estimate: Optional[float] = None
     revenue_actual: Optional[float] = None
     surprise_pct: Optional[float] = None
-    
+
     importance: str = "medium"
     status: str = "scheduled"
     model_config = ConfigDict(from_attributes=True)
@@ -416,19 +438,21 @@ class CalendarEvent(BaseModel):
 # REPORT MODELS
 # =============================================================================
 
+
 class DailyReport(BaseModel):
     """Daily market report."""
+
     id: Optional[UUID] = None
     report_date: date
     generated_at: datetime
-    
+
     markdown_content: str
     html_content: Optional[str] = None
-    
+
     market_summary: Dict[str, Any]
     signals_generated: List[Dict[str, Any]]
     key_events: List[Dict[str, Any]]
-    
+
     generation_time_ms: Optional[int] = None
     gpt_tokens_used: Optional[int] = None
 
@@ -441,8 +465,10 @@ class DailyReport(BaseModel):
 # V5: INSIGHT ENGINE MODELS  (Market Playbook · Trade Brief · Edge Model)
 # =============================================================================
 
+
 class ExecutionPlan(BaseModel):
     """How and when to enter a trade — not just 'market buy'."""
+
     order_type: str = "STOP_LIMIT"  # MARKET, LIMIT, STOP, STOP_LIMIT
     entry_window: str = "first_90_min_or_after_11am"
     avoid_times: List[str] = Field(default_factory=list)
@@ -452,6 +478,7 @@ class ExecutionPlan(BaseModel):
 
 class RiskPlan(BaseModel):
     """Per-trade risk budget derived from portfolio-level risk model."""
+
     risk_per_trade_pct: float = 1.0
     position_size_pct: float = 0.0
     rr_to_t1: float = 0.0
@@ -465,6 +492,7 @@ class EdgeModel(BaseModel):
     Calibrated probabilities + EV conditioned on strategy × regime × setup.
     Replaces vague 'confidence' with historically-backed numbers.
     """
+
     p_stop: float = Field(ge=0, le=1, default=0.5)
     p_t1: float = Field(ge=0, le=1, default=0.5)
     p_t2: float = Field(ge=0, le=1, default=0.3)
@@ -481,6 +509,7 @@ class EdgeModel(BaseModel):
 
 class SetupBlock(BaseModel):
     """Structured setup metadata per signal."""
+
     setup_tags: List[str] = Field(default_factory=list)
     trigger: str = ""
     time_stop_days: Optional[int] = None
@@ -488,6 +517,7 @@ class SetupBlock(BaseModel):
 
 class EvidenceBlock(BaseModel):
     """Data sources that informed this signal."""
+
     market_regime: Dict[str, str] = Field(default_factory=dict)
     features: Dict[str, float] = Field(default_factory=dict)
     sources_used: Dict[str, List[str]] = Field(default_factory=dict)
@@ -495,6 +525,7 @@ class EvidenceBlock(BaseModel):
 
 class KeyLevel(BaseModel):
     """A technically significant price level."""
+
     label: str
     price: float
     significance: str = ""  # e.g. "20D breakout", "SPX 200-day SMA"
@@ -502,6 +533,7 @@ class KeyLevel(BaseModel):
 
 class ChangeItem(BaseModel):
     """A single 'what changed?' item for daily brief."""
+
     category: str  # "regime", "breadth", "volatility", "leadership", "macro"
     description: str
     severity: str = "info"  # "info", "warning", "critical"
@@ -512,6 +544,7 @@ class MarketPlaybook(BaseModel):
     Daily decision document: regime → recommended strategies → risk stance.
     One per trading session.
     """
+
     playbook_date: date
     session: str = "US_RTH"
 
@@ -542,6 +575,7 @@ class TradeBrief(BaseModel):
     Institutional trade brief — one per signal.
     Answers: why now, how to enter, what kills it, historical edge.
     """
+
     ticker: str
     direction: Direction
     horizon: Horizon
@@ -564,6 +598,7 @@ class TradeBrief(BaseModel):
 
 class RiskBulletin(BaseModel):
     """Portfolio-level + market-structure warning bulletin."""
+
     generated_at: datetime = Field(default_factory=_utcnow)
     warnings: List[str] = Field(default_factory=list)
     earnings_cluster_risk: bool = False
@@ -577,8 +612,10 @@ class RiskBulletin(BaseModel):
 # BACKTEST MODELS
 # =============================================================================
 
+
 class BacktestTrade(BaseModel):
     """Individual trade in backtest."""
+
     ticker: str
     direction: Direction
     entry_date: datetime
@@ -593,20 +630,21 @@ class BacktestTrade(BaseModel):
 
 class BacktestResult(BaseModel):
     """Complete backtest results."""
+
     id: Optional[UUID] = None
     run_id: str
     run_at: datetime
-    
+
     # Config
     strategy_id: str
     strategy_version: str
     parameters: Dict[str, Any]
-    
+
     # Period
     start_date: date
     end_date: date
     universe: List[str]
-    
+
     # Performance
     total_return: float
     annualized_return: float
@@ -615,7 +653,7 @@ class BacktestResult(BaseModel):
     calmar_ratio: float
     max_drawdown: float
     max_drawdown_days: int
-    
+
     # Trade stats
     total_trades: int
     winning_trades: int
@@ -625,14 +663,14 @@ class BacktestResult(BaseModel):
     avg_loss: float
     profit_factor: float
     expectancy: float
-    
+
     # Risk
     var_95: float
     cvar_95: float
     volatility: float
     beta: float
     alpha: float
-    
+
     # Details
     trades: List[BacktestTrade]
     equity_curve: List[Dict[str, Any]]
@@ -644,8 +682,10 @@ class BacktestResult(BaseModel):
 # V6: PRO DESK MODELS  (Scenario · Flows · Delta · Scoreboard · Diagnostics · DQ)
 # =============================================================================
 
+
 class ScenarioPlan(BaseModel):
     """Base / bull / bear scenario map attached to a regime scoreboard."""
+
     base_case: Dict[str, Any] = Field(default_factory=dict)
     bull_case: Dict[str, Any] = Field(default_factory=dict)
     bear_case: Dict[str, Any] = Field(default_factory=dict)
@@ -654,17 +694,19 @@ class ScenarioPlan(BaseModel):
 
 class FlowsPositioning(BaseModel):
     """Options flow and market positioning snapshot."""
+
     put_call_ratio: Optional[float] = None
-    put_call_trend: Optional[str] = None           # "rising" / "falling" / "flat"
-    iv_rank_spy: Optional[float] = None             # 0-100
-    iv_vs_rv: Optional[str] = None                  # "premium" / "discount" / "fair"
-    gamma_zone: Optional[str] = None                # "positive" / "negative" / "neutral"
+    put_call_trend: Optional[str] = None  # "rising" / "falling" / "flat"
+    iv_rank_spy: Optional[float] = None  # 0-100
+    iv_vs_rv: Optional[str] = None  # "premium" / "discount" / "fair"
+    gamma_zone: Optional[str] = None  # "positive" / "negative" / "neutral"
     etf_flow_signals: List[str] = Field(default_factory=list)
     crowding_flags: List[str] = Field(default_factory=list)
 
 
 class DeltaSnapshot(BaseModel):
     """What changed since yesterday / last week — the 'delta deck'."""
+
     snapshot_date: date
     session: str = "US_RTH"
 
@@ -706,7 +748,14 @@ class DeltaSnapshot(BaseModel):
 
 
 class RegimeScoreboard(BaseModel):
-    """Regime summary → strategy playbook → risk budget."""
+    """Regime summary → strategy playbook → risk budget.
+
+    NOTE: This is the Pydantic serialization view of the canonical
+    ``RegimeState`` (src/engines/regime_router.py). Do NOT add
+    regime classification logic here — read from the singleton
+    ``_get_regime()`` and serialize into this model for API output.
+    """
+
     regime_label: str = "NEUTRAL"
     risk_on_score: float = 0.0
     trend_state: str = "NEUTRAL"
@@ -729,11 +778,102 @@ class RegimeScoreboard(BaseModel):
     top_drivers: List[str] = Field(default_factory=list)
     scenarios: Optional[ScenarioPlan] = None
 
+    @classmethod
+    def from_regime_state(cls, state) -> "RegimeScoreboard":
+        """Build from the canonical RegimeState dataclass.
+
+        Accepts either a RegimeState object or a dict with
+        the same keys. This is the ONLY sanctioned way to
+        create a RegimeScoreboard — never classify locally.
+        """
+        if hasattr(state, "to_dict"):
+            d = state.to_dict()
+        elif isinstance(state, dict):
+            d = state
+        else:
+            d = {}
+
+        regime = d.get("regime", "NEUTRAL")
+        risk = d.get("risk_regime", "neutral")
+
+        # Map canonical regime → label
+        label_map = {
+            "RISK_ON": "RISK_ON",
+            "RISK_OFF": "RISK_OFF",
+            "NEUTRAL": "NEUTRAL",
+        }
+        label = label_map.get(regime, regime)
+
+        # Map trend / vol
+        trend_map = {
+            "uptrend": "BULLISH",
+            "downtrend": "BEARISH",
+            "sideways": "NEUTRAL",
+        }
+        vol_map = {
+            "low_vol": "LOW",
+            "normal_vol": "NORMAL",
+            "elevated_vol": "ELEVATED",
+            "high_vol": "HIGH",
+            "crisis_vol": "CRISIS",
+        }
+
+        trend = trend_map.get(
+            d.get("trend_regime", "sideways"),
+            "NEUTRAL",
+        )
+        vol = vol_map.get(
+            d.get("volatility_regime", "normal_vol"),
+            "NORMAL",
+        )
+
+        # Derive risk budget from regime
+        size_scalar = d.get("size_scalar", 1.0)
+        max_gross = round(size_scalar * 100, 0)
+
+        # Build strategy playbook from regime
+        strategies_on = []
+        strategies_off = []
+        if label == "RISK_ON":
+            strategies_on = ["Momentum", "Breakout", "Swing"]
+        elif label == "RISK_OFF":
+            strategies_on = ["Mean Reversion", "Defensive"]
+            strategies_off = ["Momentum", "Breakout"]
+        else:
+            strategies_on = ["Swing", "Mean Reversion"]
+
+        no_trade = []
+        if not d.get("should_trade", True):
+            reason = d.get("no_trade_reason", "")
+            no_trade = [reason] if reason else ["Regime uncertainty"]
+
+        return cls(
+            regime_label=label,
+            risk_on_score=round(
+                d.get("risk_on_uptrend", 0.333) * 100,
+                1,
+            ),
+            trend_state=trend,
+            vol_state=vol,
+            max_gross_pct=max_gross,
+            max_single_name_pct=5.0 if label != "RISK_OFF" else 3.0,
+            max_sector_pct=25.0,
+            strategies_on=strategies_on,
+            strategies_off=strategies_off,
+            no_trade_triggers=no_trade,
+            top_drivers=[
+                f"VIX={d.get('vix', 0):.1f}",
+                f"Breadth={d.get('breadth_pct', 0):.0%}",
+                f"RealVol={d.get('realized_vol_20d', 0):.1%}",
+            ],
+        )
+
 
 class BacktestDiagnostic(BaseModel):
     """Sliced backtest metrics for edge model calibration."""
-    slice_type: str          # "regime", "volatility", "sector", "setup_grade"
-    slice_label: str         # e.g. "RISK_ON", "HIGH_VOL", "Technology", "A"
+
+    slice_type: str  # "regime", "volatility", "sector", "setup_grade"
+    slice_label: str  # e.g. "RISK_ON", "HIGH_VOL", "Technology", "A"
     total_trades: int = 0
     wins: int = 0
     losses: int = 0
@@ -752,12 +892,13 @@ class BacktestDiagnostic(BaseModel):
 
 class DataQualityReport(BaseModel):
     """Result of a single data-quality check."""
+
     check_time: datetime = Field(default_factory=_utcnow)
-    feed_name: str                             # "ohlcv", "features", "news", etc.
-    check_type: str                            # "freshness", "missing_bars", "outlier", etc.
+    feed_name: str  # "ohlcv", "features", "news", etc.
+    check_type: str  # "freshness", "missing_bars", "outlier", etc.
     passed: bool = True
-    severity: str = "info"                     # "info" / "warning" / "critical"
-    details: Optional[Dict[str, Any]] = None   # free-form context
+    severity: str = "info"  # "info" / "warning" / "critical"
+    details: Optional[Dict[str, Any]] = None  # free-form context
     affected_tickers: List[str] = Field(default_factory=list)
 
 
@@ -765,8 +906,10 @@ class DataQualityReport(BaseModel):
 # TRADE RECOMMENDATION LAYER (Sprint 3)
 # ═══════════════════════════════════════════════════════════════════
 
+
 class InstrumentType(str, Enum):
     """What vehicle to use for the trade."""
+
     STOCK = "stock"
     CALL = "call"
     PUT = "put"
@@ -778,6 +921,7 @@ class InstrumentType(str, Enum):
 
 class SetupGrade(str, Enum):
     """Quality grade for a setup."""
+
     A = "A"
     B = "B"
     C = "C"
@@ -786,6 +930,7 @@ class SetupGrade(str, Enum):
 
 class MistakeType(str, Enum):
     """Categories for post-trade learning."""
+
     CHASED_ENTRY = "chased_entry"
     IGNORED_REGIME = "ignored_regime"
     OVERSIZED = "oversized"
@@ -798,6 +943,7 @@ class MistakeType(str, Enum):
 
 class LearningTag(str, Enum):
     """Tags for outcome attribution."""
+
     REGIME_CORRECT = "regime_correct"
     REGIME_WRONG = "regime_wrong"
     EXPRESSION_OPTIMAL = "expression_optimal"
@@ -810,10 +956,11 @@ class LearningTag(str, Enum):
 
 class OptionLeg(BaseModel):
     """Single leg of an options trade."""
-    action: str = "buy"          # "buy" or "sell"
-    right: str = "call"          # "call" or "put"
+
+    action: str = "buy"  # "buy" or "sell"
+    right: str = "call"  # "call" or "put"
     strike: float = 0.0
-    expiry: str = ""             # ISO date string
+    expiry: str = ""  # ISO date string
     quantity: int = 1
     premium: Optional[float] = None
     iv: Optional[float] = None
@@ -822,11 +969,12 @@ class OptionLeg(BaseModel):
 
 class ExpressionPlan(BaseModel):
     """How to express the trade thesis (stock, option, spread)."""
-    instrument_type: str = "stock"       # InstrumentType value
+
+    instrument_type: str = "stock"  # InstrumentType value
     legs: List[OptionLeg] = Field(default_factory=list)
-    expiry_logic: str = ""               # e.g. "30-45 DTE for swing"
-    strike_logic: str = ""               # e.g. "ATM call, 70-delta"
-    iv_rank: Optional[float] = None      # 0-100
+    expiry_logic: str = ""  # e.g. "30-45 DTE for swing"
+    strike_logic: str = ""  # e.g. "ATM call, 70-delta"
+    iv_rank: Optional[float] = None  # 0-100
     iv_percentile: Optional[float] = None
     theta_note: Optional[str] = None
     liquidity_note: Optional[str] = None
@@ -859,14 +1007,14 @@ class TradeRecommendation(BaseModel):
 
     # ── Identity ──────────────────────────────────────────────
     ticker: str
-    direction: str = "LONG"               # Direction enum .value
+    direction: str = "LONG"  # Direction enum .value
     strategy_id: str = "unknown"
     recommendation_id: str = ""
     timestamp: datetime = Field(default_factory=_utcnow)
 
     # ── Signal origin ─────────────────────────────────────────
-    signal_confidence: int = 50            # 0-100 raw from Signal
-    score: float = 0.5                     # 0-1 normalised (confidence / 100)
+    signal_confidence: int = 50  # 0-100 raw from Signal
+    score: float = 0.5  # 0-1 normalised (confidence / 100)
     entry_price: float = 0.0
     stop_price: float = 0.0
     risk_reward_ratio: float = 1.5
@@ -876,9 +1024,9 @@ class TradeRecommendation(BaseModel):
     catalyst: str = ""
 
     # ── Edge Calculator ───────────────────────────────────────
-    edge_p_t1: float = 0.0                # calibrated win probability
-    edge_p_stop: float = 0.0              # calibrated stop probability
-    edge_ev: float = 0.0                  # expected value %
+    edge_p_t1: float = 0.0  # calibrated win probability
+    edge_p_stop: float = 0.0  # calibrated stop probability
+    edge_ev: float = 0.0  # expected value %
 
     # ── Ensemble scoring (set by OpportunityEnsembler) ────────
     composite_score: float = 0.0
@@ -1003,9 +1151,7 @@ class TradeRecommendation(BaseModel):
         if self.expression:
             expr = self.expression.model_dump()
             d["expression"] = expr
-            d["why_this_expression"] = (
-                self.expression.why_this_expression
-            )
+            d["why_this_expression"] = self.expression.why_this_expression
         for ts_key in ("timestamp", "execution_time", "exited_at"):
             if d.get(ts_key) and hasattr(d[ts_key], "isoformat"):
                 d[ts_key] = d[ts_key].isoformat()
@@ -1166,7 +1312,8 @@ class TradeRecommendation(BaseModel):
 
     @classmethod
     def from_dict(
-        cls, d: Dict[str, Any],
+        cls,
+        d: Dict[str, Any],
     ) -> "TradeRecommendation":
         """Build from a legacy signal dict (backward compat).
 
@@ -1202,6 +1349,7 @@ class TradeRecommendation(BaseModel):
 
 class RegimeState(BaseModel):
     """Probabilistic regime assessment."""
+
     risk_on_uptrend: float = 0.0
     neutral_range: float = 0.0
     risk_off_downtrend: float = 0.0
@@ -1218,6 +1366,7 @@ class RegimeState(BaseModel):
 
 class StrategyScore(BaseModel):
     """Leaderboard entry for a strategy."""
+
     strategy_id: str
     regime_bucket: str = ""
     horizon: str = ""
@@ -1233,6 +1382,6 @@ class StrategyScore(BaseModel):
     options_suitability: float = 0.0
     correlation_penalty: float = 0.0
     composite_score: float = 0.0
-    status: str = "active"           # active / reduced / cooldown / retired
+    status: str = "active"  # active / reduced / cooldown / retired
     cooldown_until: Optional[datetime] = None
     last_updated: datetime = Field(default_factory=_utcnow)

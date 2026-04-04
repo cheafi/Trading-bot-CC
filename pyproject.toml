@@ -12,9 +12,7 @@ python = "^3.11"
 # Core (from base.txt)
 asyncpg = "0.29.0"
 psycopg2-binary = "2.9.9"
-sqlalchemy[asyncio] = "2.0.23"
 alembic = "1.13.1"
-redis = {extras = ["asyncio"], version = "5.0.1"}
 httpx = "0.26.0"
 aiohttp = "3.9.1"
 requests = "2.31.0"
@@ -32,6 +30,10 @@ pytz = "2023.3.post1"
 tenacity = "8.2.3"
 azure-identity = "1.15.0"
 
+# SQLAlchemy with extras
+sqlalchemy = {version = "2.0.23", extras = ["asyncio"]}
+redis = {extras = ["asyncio"], version = "5.0.1"}
+
 # Engine (from engine.txt)
 pandas-ta = "0.3.14b0"
 talib-binary = "0.4.24"
@@ -44,11 +46,11 @@ joblib = "1.3.2"
 
 # API (from api.txt)
 fastapi = "0.108.0"
-uvicorn[standard] = "0.25.0"
 python-multipart = "0.0.6"
-python-jose[cryptography] = "3.3.0"
-passlib[bcrypt] = "1.7.4"
 slowapi = "0.1.9"
+uvicorn = {version = "0.25.0", extras = ["standard"]}
+python-jose = {version = "3.3.0", extras = ["cryptography"]}
+passlib = {version = "1.7.4", extras = ["bcrypt"]}
 
 # Ingestors (from ingestor.txt)
 yfinance = "0.2.35"
@@ -59,7 +61,7 @@ websockets = "12.0"
 python-binance = "1.0.19"
 
 # Notifications (from notifications.txt)
-discord.py = "2.3.2"
+discord-py = "2.3.2"
 python-telegram-bot = "20.7"
 twilio = "8.10.3"
 
