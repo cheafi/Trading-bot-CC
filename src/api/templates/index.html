@@ -338,6 +338,25 @@
       </div>
     </header>
 
+    <!-- Trust Strip -->
+    <div
+      x-show="live && trust"
+      class="flex items-center gap-3 px-4 py-1"
+      style="
+        background: #1c2333;
+        border-bottom: 1px solid #21262d;
+        color: #484f58;
+        font-family: &quot;JetBrains Mono&quot;, monospace;
+        font-size: 10px;
+      "
+    >
+      <span
+        :class="trust.mode==='SYNTHETIC'?'text-amber-400':'text-green-400'"
+        x-text="'● '+(trust.mode||'LIVE')"
+      ></span>
+      <span x-text="'Source: '+(trust.source||'market_data_service')"></span>
+    </div>
+
     <!-- TAB BAR -->
     <div class="tab-bar">
       <template x-for="t in tabs">
@@ -1005,6 +1024,7 @@
           macro: [],
           sectors: [],
           asia: [],
+          trust: {},
           bt: {
             ticker: "AAPL",
             strategy: "all",
@@ -1114,6 +1134,7 @@
               this.macro = d.macro || [];
               this.sectors = d.sectors || [];
               this.asia = d.asia || [];
+              this.trust = d.trust || {};
               this.live = true;
             } catch (e) {
               this.live = false;

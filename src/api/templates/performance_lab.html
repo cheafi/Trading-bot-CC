@@ -353,6 +353,33 @@
       </div>
     </header>
 
+    <!-- Trust Strip -->
+    <div
+      x-show="P && P.trust"
+      class="flex items-center gap-3 px-4 py-1.5 text-[10px] mono"
+      style="
+        background: var(--s2);
+        border-bottom: 1px solid var(--bd);
+        color: var(--t3);
+      "
+    >
+      <span
+        :class="P?.trust?.mode==='SYNTHETIC'?'text-amber-400':'text-green-400'"
+        x-text="'● '+(P?.trust?.mode||'')"
+      ></span>
+      <span x-text="'Source: '+(P?.trust?.source||'—')"></span>
+      <span
+        x-text="'Benchmark: '+(P?.trust?.benchmark||'SPY')+' ('+(P?.trust?.benchmark_source||'—')+')'"
+      ></span>
+      <span x-text="'n='+(P?.trust?.sample_size??'—')"></span>
+      <span x-text="P?.as_of?.slice(0,16)||''"></span>
+      <span
+        x-show="P?.trust?.data_warning"
+        class="text-amber-400"
+        x-text="P?.trust?.data_warning"
+      ></span>
+    </div>
+
     <!-- Category tabs -->
     <div class="cat-bar">
       <button

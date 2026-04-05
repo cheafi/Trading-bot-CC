@@ -3393,24 +3393,88 @@ async def portfolio_brief_data(
                 entry["watch_reason"] = "near_extreme"
                 holdings_no_signal.append(entry)
 
-            # Sector clustering (simplified — use tech for chip stocks)
-            tech_chips = [
-                "NVDA",
-                "AMD",
-                "MU",
-                "CRDO",
-                "INTC",
-                "AVGO",
-                "SMCI",
-                "MRVL",
-                "ARM",
-            ]
-            if sym in tech_chips:
-                sector_tickers.setdefault("Semiconductor", []).append(
-                    {"ticker": sym, "change": change_pct}
-                )
+            # Sector clustering — broader map
+            _SECTOR_MAP = {
+                "Semiconductor": [
+                    "NVDA",
+                    "AMD",
+                    "MU",
+                    "CRDO",
+                    "INTC",
+                    "AVGO",
+                    "SMCI",
+                    "MRVL",
+                    "ARM",
+                    "QCOM",
+                    "TXN",
+                    "LRCX",
+                    "ASML",
+                    "KLAC",
+                ],
+                "Big Tech": [
+                    "AAPL",
+                    "MSFT",
+                    "GOOGL",
+                    "GOOG",
+                    "META",
+                    "AMZN",
+                ],
+                "Software / AI": [
+                    "PLTR",
+                    "CRM",
+                    "SNOW",
+                    "NET",
+                    "DDOG",
+                    "PANW",
+                    "ZS",
+                ],
+                "Fintech": ["SOFI", "SQ", "PYPL", "COIN", "HOOD"],
+            }
+            for sector_name, sector_syms in _SECTOR_MAP.items():
+                if sym in sector_syms:
+                    sector_tickers.setdefault(
+                        sector_name,
+                        [],
+                    ).append({"ticker": sym, "change": change_pct})
         except Exception:
             continue
+
+    # ── What-changed-since-yesterday (diff against prior artifact) ──
+    what_changed = []
+    try:
+        from datetime import timedelta as _td
+
+        yesterday_date = (date.fromisoformat(target_date) - _td(days=1)).isoformat()
+        yesterday_path = Path("data") / f"brief-{yesterday_date}.json"
+        if yesterday_path.exists():
+            import json as _json
+
+            with open(yesterday_path) as _f:
+                prev = _json.load(_f)
+            prev_signals = {h["ticker"] for h in prev.get("holdings_with_signals", [])}
+            curr_signals = {h["ticker"] for h in holdings_with_signals}
+            new_signals = curr_signals - prev_signals
+            cleared = prev_signals - curr_signals
+            if new_signals:
+                what_changed.append(f"New signals: {', '.join(sorted(new_signals))}")
+            if cleared:
+                what_changed.append(f"Cleared: {', '.join(sorted(cleared))}")
+            if not new_signals and not cleared:
+                what_changed.append("No signal changes vs yesterday")
+    except Exception:
+        pass
+
+    # ── Classify: actionable vs watch ──
+    for h in holdings_with_signals:
+        # Actionable = strong move + directional RSI alignment
+        rsi_v = h["indicators"]["rsi"]
+        chg = h["change_pct"]
+        if abs(chg) > 3 or rsi_v < 25 or rsi_v > 75:
+            h["action"] = "ACTIONABLE"
+        else:
+            h["action"] = "REVIEW"
+    for h in holdings_no_signal:
+        h["action"] = "WATCH"
 
     # Build sector clusters
     sector_clustering = {}
@@ -3476,18 +3540,62 @@ async def portfolio_brief_data(
                 f"position after this move?"
             )
 
+    # ── Build analyst-quality narrative ──
+    actionable_count = sum(
+        1 for h in holdings_with_signals if h.get("action") == "ACTIONABLE"
+    )
+    review_count = sum(1 for h in holdings_with_signals if h.get("action") == "REVIEW")
+
+    # Headline: analyst-note style
+    if actionable_count > 0:
+        top = [
+            h["ticker"]
+            for h in holdings_with_signals
+            if h.get("action") == "ACTIONABLE"
+        ]
+        headline = (
+            f"{actionable_count} actionable signal"
+            f"{'s' if actionable_count > 1 else ''}: "
+            f"{', '.join(top[:3])}"
+        )
+    elif holdings_with_signals:
+        headline = (
+            f"{len(holdings_with_signals)} signals for review"
+            " — none requiring immediate action"
+        )
+    else:
+        headline = "All holdings stable — no major signals"
+
+    # Portfolio story: analyst-note paragraph
+    story_parts = []
+    if sector_clustering:
+        for sn, sc in sector_clustering.items():
+            story_parts.append(sc["narrative"])
+    if actionable_count:
+        story_parts.append(
+            f"{actionable_count} position"
+            f"{'s' if actionable_count > 1 else ''}"
+            " warrant attention"
+        )
+    if review_count:
+        story_parts.append(f"{review_count} under review")
+    if what_changed:
+        story_parts.extend(what_changed)
+    portfolio_story = (
+        ". ".join(story_parts) + "." if story_parts else "All positions stable."
+    )
+
     brief = {
         "date": target_date,
-        "headline": (
-            f"{len(holdings_with_signals)} holdings triggered signals"
-            if holdings_with_signals
-            else "All holdings stable — no major signals"
-        ),
-        "portfolio_story": (
-            f"{', '.join(h['ticker'] for h in holdings_with_signals[:3])} showing notable movement"
-            if holdings_with_signals
-            else "All positions stable"
-        ),
+        "headline": headline,
+        "portfolio_story": portfolio_story,
+        "what_changed": what_changed,
+        "actionable": [
+            h for h in holdings_with_signals if h.get("action") == "ACTIONABLE"
+        ],
+        "review": [h for h in holdings_with_signals if h.get("action") == "REVIEW"],
+        "watch": holdings_no_signal,
+        # backward compat
         "holdings_with_signals": holdings_with_signals,
         "holdings_no_signal": holdings_no_signal,
         "sector_clustering": sector_clustering,
@@ -3511,6 +3619,7 @@ async def portfolio_brief_data(
                 "catalyst_summarizer" if catalyst_data else "watchlist_heuristic"
             ),
             "watchlist_type": watchlist_type,
+            "sample_size": len(watchlist),
             "data_note": (
                 "Uses real holdings input. "
                 if watchlist_type == "user_holdings"
@@ -3754,10 +3863,15 @@ async def performance_lab_data(
 
     mode = source.upper()  # LIVE / PAPER / BACKTEST / SYNTHETIC
     sample_size = 0
+    FEES_BPS = 5  # round-trip commission estimate
+    SLIPPAGE_BPS = 3  # market-impact estimate
+    TOTAL_COST_BPS = FEES_BPS + SLIPPAGE_BPS  # 8 bps per trade
     assumptions = {
         "gross_or_net": "net",
-        "fees_bps": 5,
-        "slippage_bps": 3,
+        "fees_bps": FEES_BPS,
+        "slippage_bps": SLIPPAGE_BPS,
+        "total_cost_bps": TOTAL_COST_BPS,
+        "benchmark": "SPY (S&P 500 ETF)",
     }
 
     # ── 1. Try persistent closed trades from TradeOutcomeRepository ──
@@ -3853,6 +3967,7 @@ async def performance_lab_data(
 
     # SPY benchmark — fetch real if possible, else synthetic
     spy_monthly = None
+    benchmark_source = "SYNTHETIC"
     if mode != "SYNTHETIC":
         try:
             mds = app.state.market_data
@@ -3865,6 +3980,7 @@ async def performance_lab_data(
                 c = "Close" if "Close" in spy_df.columns else "close"
                 spy_c = spy_df[c].values[-n_months - 1 :]
                 spy_monthly = np.diff(spy_c) / spy_c[:-1]
+                benchmark_source = "LIVE"
         except Exception:
             pass
 
@@ -3970,6 +4086,8 @@ async def performance_lab_data(
     # Summary metrics — all computed, never random
     total_ret = (equity[-1] / equity[0] - 1) * 100
     ann_ret = total_ret / max(n_months / 12, 0.01)
+    # Gross return: add back the cost assumption
+    gross_ann_ret = ann_ret + (TOTAL_COST_BPS / 100) * 12
     vol = float(np.std(monthly_rets) * np.sqrt(12) * 100)
     sharpe = (
         float(np.mean(monthly_rets) / np.std(monthly_rets) * np.sqrt(12))
@@ -4020,7 +4138,9 @@ async def performance_lab_data(
 
     response = {
         "summary": {
-            "annual_return": round(ann_ret, 1),
+            "annual_return_net": round(ann_ret, 1),
+            "annual_return_gross": round(gross_ann_ret, 1),
+            "annual_return": round(ann_ret, 1),  # backward compat
             "alpha": round(alpha, 1),
             "beta": round(beta, 2),
             "sharpe": round(sharpe, 2),
@@ -4035,6 +4155,8 @@ async def performance_lab_data(
         "trust": {
             "mode": mode,
             "source": ("trade_repository" if has_real_data else "synthetic_demo"),
+            "benchmark": "SPY",
+            "benchmark_source": benchmark_source,
             "sample_size": sample_size,
             "assumptions": assumptions,
             "data_warning": (
@@ -4117,7 +4239,7 @@ async def strategy_portfolio_lab_data(
 
     if engine:
         try:
-            regime = _get_regime()
+            regime = await _get_regime()
             if regime:
                 regime_label = regime.get(
                     "regime_label",

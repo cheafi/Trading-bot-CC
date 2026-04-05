@@ -245,6 +245,26 @@
       <input type="date" x-model="briefDate" @change="load()" />
     </header>
 
+    <!-- Trust Strip -->
+    <div
+      x-show="B && B.trust"
+      class="flex items-center gap-3 px-4 py-1.5 text-[10px] mono"
+      style="
+        background: var(--s2);
+        border-bottom: 1px solid var(--bd);
+        color: var(--t3);
+      "
+    >
+      <span
+        class="text-green-400"
+        x-text="'● '+(B?.trust?.mode||'LIVE')"
+      ></span>
+      <span x-text="'Source: '+(B?.trust?.source||'—')"></span>
+      <span x-text="'Watchlist: '+(B?.trust?.watchlist_type||'—')"></span>
+      <span x-text="'n='+(B?.trust?.sample_size??'—')"></span>
+      <span x-text="B?.as_of?.slice(0,16)||''"></span>
+    </div>
+
     <div x-show="ldg" class="flex justify-center py-20">
       <span class="spin"></span>
     </div>

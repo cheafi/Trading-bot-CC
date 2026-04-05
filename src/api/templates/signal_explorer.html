@@ -1,200 +1,725 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#0d1117">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <meta name="theme-color" content="#0d1117" />
     <title>Signal Explorer - TradingAI Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script
+      defer
+      src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"
+    ></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <style>
-        :root{--bg:#0d1117;--s1:#161b22;--s2:#1c2333;--bd:#21262d;--t1:#e6edf3;--t2:#8b949e;--t3:#484f58;--green:#00d4aa;--red:#ff5c5c;--amber:#fbbf24;--blue:#58a6ff}
-        *{font-family:'Inter',sans-serif;box-sizing:border-box;margin:0}
-        body{background:var(--bg);color:var(--t1);overflow-x:hidden}
-        .mono{font-family:'JetBrains Mono',monospace}
+      :root {
+        --bg: #0d1117;
+        --s1: #161b22;
+        --s2: #1c2333;
+        --bd: #21262d;
+        --t1: #e6edf3;
+        --t2: #8b949e;
+        --t3: #484f58;
+        --green: #00d4aa;
+        --red: #ff5c5c;
+        --amber: #fbbf24;
+        --blue: #58a6ff;
+      }
+      * {
+        font-family: "Inter", sans-serif;
+        box-sizing: border-box;
+        margin: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--t1);
+        overflow-x: hidden;
+      }
+      .mono {
+        font-family: "JetBrains Mono", monospace;
+      }
 
-        .dt{width:100%;border-collapse:collapse;font-size:12px}
-        .dt th{text-align:left;padding:7px 10px;color:var(--t3);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--bd);background:var(--s2)}
-        .dt td{padding:6px 10px;border-bottom:1px solid var(--bd)}
-        .dt tr:hover{background:var(--s2);cursor:pointer}
-        .dt .r{text-align:right}
-        .dt .c{text-align:center}
+      .dt {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      .dt th {
+        text-align: left;
+        padding: 7px 10px;
+        color: var(--t3);
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        border-bottom: 1px solid var(--bd);
+        background: var(--s2);
+      }
+      .dt td {
+        padding: 6px 10px;
+        border-bottom: 1px solid var(--bd);
+      }
+      .dt tr:hover {
+        background: var(--s2);
+        cursor: pointer;
+      }
+      .dt .r {
+        text-align: right;
+      }
+      .dt .c {
+        text-align: center;
+      }
 
-        .kpi-strip{display:flex;gap:0;background:var(--s1);border-bottom:1px solid var(--bd)}
-        .kpi-item{flex:1;padding:14px 12px;text-align:center;border-right:1px solid var(--bd)}
-        .kpi-item:last-child{border-right:none}
-        .kpi-item .v{font-size:20px;font-weight:800}
-        .kpi-item .l{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.3px;margin-top:3px}
+      .kpi-strip {
+        display: flex;
+        gap: 0;
+        background: var(--s1);
+        border-bottom: 1px solid var(--bd);
+      }
+      .kpi-item {
+        flex: 1;
+        padding: 14px 12px;
+        text-align: center;
+        border-right: 1px solid var(--bd);
+      }
+      .kpi-item:last-child {
+        border-right: none;
+      }
+      .kpi-item .v {
+        font-size: 20px;
+        font-weight: 800;
+      }
+      .kpi-item .l {
+        font-size: 9px;
+        color: var(--t3);
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        margin-top: 3px;
+      }
 
-        .filter-bar{display:flex;flex-wrap:wrap;gap:8px;padding:12px 16px;background:var(--s1);border-bottom:1px solid var(--bd);align-items:flex-end}
-        .filter-bar label{font-size:10px;color:var(--t3);display:block;margin-bottom:2px}
-        .filter-bar input,.filter-bar select{background:var(--s2);border:1px solid var(--bd);color:var(--t1);border-radius:4px;padding:5px 8px;font-size:11px;outline:none}
-        .filter-bar input:focus,.filter-bar select:focus{border-color:var(--green)}
+      .filter-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 12px 16px;
+        background: var(--s1);
+        border-bottom: 1px solid var(--bd);
+        align-items: flex-end;
+      }
+      .filter-bar label {
+        font-size: 10px;
+        color: var(--t3);
+        display: block;
+        margin-bottom: 2px;
+      }
+      .filter-bar input,
+      .filter-bar select {
+        background: var(--s2);
+        border: 1px solid var(--bd);
+        color: var(--t1);
+        border-radius: 4px;
+        padding: 5px 8px;
+        font-size: 11px;
+        outline: none;
+      }
+      .filter-bar input:focus,
+      .filter-bar select:focus {
+        border-color: var(--green);
+      }
 
-        .pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600}
-        .pg{background:#00d4aa18;color:var(--green)}.pr{background:#ff5c5c18;color:var(--red)}.py{background:#fbbf2418;color:var(--amber)}.pb{background:#58a6ff18;color:var(--blue)}
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 7px;
+        border-radius: 3px;
+        font-size: 10px;
+        font-weight: 600;
+      }
+      .pg {
+        background: #00d4aa18;
+        color: var(--green);
+      }
+      .pr {
+        background: #ff5c5c18;
+        color: var(--red);
+      }
+      .py {
+        background: #fbbf2418;
+        color: var(--amber);
+      }
+      .pb {
+        background: #58a6ff18;
+        color: var(--blue);
+      }
 
-        .bar{background:var(--bd);border-radius:3px;height:4px;overflow:hidden;width:48px;display:inline-block;vertical-align:middle}
-        .bar-f{height:100%;border-radius:3px;background:var(--green)}
+      .bar {
+        background: var(--bd);
+        border-radius: 3px;
+        height: 4px;
+        overflow: hidden;
+        width: 48px;
+        display: inline-block;
+        vertical-align: middle;
+      }
+      .bar-f {
+        height: 100%;
+        border-radius: 3px;
+        background: var(--green);
+      }
 
-        .spin{display:inline-block;width:24px;height:24px;border:2px solid var(--bd);border-top-color:var(--green);border-radius:50%;animation:sp .5s linear infinite}
-        @keyframes sp{to{transform:rotate(360deg)}}
-        .fade{animation:f .2s ease}@keyframes f{from{opacity:0}to{opacity:1}}
+      .spin {
+        display: inline-block;
+        width: 24px;
+        height: 24px;
+        border: 2px solid var(--bd);
+        border-top-color: var(--green);
+        border-radius: 50%;
+        animation: sp 0.5s linear infinite;
+      }
+      @keyframes sp {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .fade {
+        animation: f 0.2s ease;
+      }
+      @keyframes f {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
 
-        /* Modal */
-        .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:200}
-        .modal{background:var(--s1);border:1px solid var(--bd);border-radius:8px;padding:20px;max-width:640px;width:calc(100% - 32px);max-height:80vh;overflow-y:auto}
+      /* Modal */
+      .modal-bg {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 200;
+      }
+      .modal {
+        background: var(--s1);
+        border: 1px solid var(--bd);
+        border-radius: 8px;
+        padding: 20px;
+        max-width: 640px;
+        width: calc(100% - 32px);
+        max-height: 80vh;
+        overflow-y: auto;
+      }
 
-        .nav-b{position:fixed;bottom:0;left:0;right:0;background:var(--bg);border-top:1px solid var(--bd);z-index:100;padding:5px 0 env(safe-area-inset-bottom,5px)}
-        .nav-b a{display:flex;flex-direction:column;align-items:center;font-size:9px;color:var(--t3);text-decoration:none;padding:3px 0}
-        .nav-b a.on{color:var(--green)}.nav-b a .ic{font-size:17px;margin-bottom:1px}
-        .safe-b{padding-bottom:env(safe-area-inset-bottom,68px)}
+      .nav-b {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: var(--bg);
+        border-top: 1px solid var(--bd);
+        z-index: 100;
+        padding: 5px 0 env(safe-area-inset-bottom, 5px);
+      }
+      .nav-b a {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        font-size: 9px;
+        color: var(--t3);
+        text-decoration: none;
+        padding: 3px 0;
+      }
+      .nav-b a.on {
+        color: var(--green);
+      }
+      .nav-b a .ic {
+        font-size: 17px;
+        margin-bottom: 1px;
+      }
+      .safe-b {
+        padding-bottom: env(safe-area-inset-bottom, 68px);
+      }
     </style>
-</head>
-<body x-data="SE()" x-init="init()" class="safe-b">
-
-<header style="background:var(--s1);border-bottom:1px solid var(--bd)" class="flex items-center justify-between px-4 py-2.5">
-    <div class="flex items-center gap-2.5">
+  </head>
+  <body x-data="SE()" x-init="init()" class="safe-b">
+    <header
+      style="background: var(--s1); border-bottom: 1px solid var(--bd)"
+      class="flex items-center justify-between px-4 py-2.5"
+    >
+      <div class="flex items-center gap-2.5">
         <a href="/" class="text-base">📈</a>
         <div>
-            <div class="text-[13px] font-bold text-white">Signal Explorer</div>
-            <div class="text-[10px]" style="color:var(--t3)">Browse & Filter Live Signals</div>
+          <div class="text-[13px] font-bold text-white">Signal Explorer</div>
+          <div class="text-[10px]" style="color: var(--t3)">
+            Browse & Filter Live Signals
+          </div>
         </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span
+          class="text-[10px] mono"
+          style="color: var(--t3)"
+          x-text="lastUp"
+        ></span>
+        <button @click="refresh()" class="text-[10px]" style="color: var(--t3)">
+          ↻
+        </button>
+      </div>
+    </header>
+
+    <!-- Trust Strip -->
+    <div
+      x-show="trust && trust.mode"
+      class="flex items-center gap-3 px-4 py-1 text-[10px]"
+      style="
+        background: #1c2333;
+        border-bottom: 1px solid #21262d;
+        color: #484f58;
+        font-family: &quot;JetBrains Mono&quot;, monospace;
+      "
+    >
+      <span
+        :class="trust.mode==='SYNTHETIC'?'text-amber-400':'text-green-400'"
+        x-text="'● '+trust.mode"
+      ></span>
+      <span x-text="'Source: '+(trust.source||'—')"></span>
+      <span x-text="asOf?.slice(0,16)||''"></span>
     </div>
-    <div class="flex items-center gap-2">
-        <span class="text-[10px] mono" style="color:var(--t3)" x-text="lastUp"></span>
-        <button @click="refresh()" class="text-[10px]" style="color:var(--t3)">↻</button>
+
+    <!-- KPI strip -->
+    <div class="kpi-strip">
+      <div class="kpi-item">
+        <div class="v mono text-green-400" x-text="stats.generated"></div>
+        <div class="l">Generated</div>
+      </div>
+      <div class="kpi-item">
+        <div class="v mono text-amber-400" x-text="stats.rejected"></div>
+        <div class="l">Rejected</div>
+      </div>
+      <div class="kpi-item">
+        <div class="v mono text-blue-400" x-text="stats.active"></div>
+        <div class="l">Active</div>
+      </div>
+      <div class="kpi-item">
+        <div class="v mono text-green-400" x-text="stats.winRate+'%'"></div>
+        <div class="l">Win Rate (30d)</div>
+      </div>
     </div>
-</header>
 
-<!-- KPI strip -->
-<div class="kpi-strip">
-    <div class="kpi-item"><div class="v mono text-green-400" x-text="stats.generated"></div><div class="l">Generated</div></div>
-    <div class="kpi-item"><div class="v mono text-amber-400" x-text="stats.rejected"></div><div class="l">Rejected</div></div>
-    <div class="kpi-item"><div class="v mono text-blue-400" x-text="stats.active"></div><div class="l">Active</div></div>
-    <div class="kpi-item"><div class="v mono text-green-400" x-text="stats.winRate+'%'"></div><div class="l">Win Rate (30d)</div></div>
-</div>
+    <!-- Filters -->
+    <div class="filter-bar">
+      <div><label>Date</label><input type="date" x-model="F.date" /></div>
+      <div>
+        <label>Strategy</label
+        ><select x-model="F.strategy">
+          <option value="">All</option>
+          <option value="momentum">Momentum</option>
+          <option value="mean_reversion">Mean Rev</option>
+          <option value="swing">Swing</option>
+          <option value="trend_following">Trend</option>
+        </select>
+      </div>
+      <div>
+        <label>Direction</label
+        ><select x-model="F.direction">
+          <option value="">All</option>
+          <option value="LONG">Long</option>
+          <option value="SHORT">Short</option>
+        </select>
+      </div>
+      <div>
+        <label>Min Confidence</label>
+        <div class="flex items-center gap-1">
+          <input
+            type="range"
+            min="0"
+            max="100"
+            x-model="F.minConf"
+            style="width: 80px"
+          /><span
+            class="text-[10px] mono"
+            style="color: var(--t2)"
+            x-text="F.minConf+'%'"
+          ></span>
+        </div>
+      </div>
+      <div>
+        <label>Status</label
+        ><select x-model="F.status">
+          <option value="">All</option>
+          <option value="active">Active</option>
+          <option value="triggered">Triggered</option>
+          <option value="expired">Expired</option>
+        </select>
+      </div>
+    </div>
 
-<!-- Filters -->
-<div class="filter-bar">
-    <div><label>Date</label><input type="date" x-model="F.date"></div>
-    <div><label>Strategy</label><select x-model="F.strategy"><option value="">All</option><option value="momentum">Momentum</option><option value="mean_reversion">Mean Rev</option><option value="swing">Swing</option><option value="trend_following">Trend</option></select></div>
-    <div><label>Direction</label><select x-model="F.direction"><option value="">All</option><option value="LONG">Long</option><option value="SHORT">Short</option></select></div>
-    <div><label>Min Confidence</label><div class="flex items-center gap-1"><input type="range" min="0" max="100" x-model="F.minConf" style="width:80px"><span class="text-[10px] mono" style="color:var(--t2)" x-text="F.minConf+'%'"></span></div></div>
-    <div><label>Status</label><select x-model="F.status"><option value="">All</option><option value="active">Active</option><option value="triggered">Triggered</option><option value="expired">Expired</option></select></div>
-</div>
-
-<!-- Signals Table -->
-<div class="overflow-x-auto">
-    <table class="dt">
-        <thead><tr>
-            <th>Time</th><th>Ticker</th><th>Dir</th><th>Strategy</th><th class="r">Entry</th><th class="r">Stop</th><th class="r">Targets</th><th class="r">R:R</th><th class="c">Confidence</th><th class="c">Status</th><th></th>
-        </tr></thead>
+    <!-- Signals Table -->
+    <div class="overflow-x-auto">
+      <table class="dt">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Ticker</th>
+            <th>Dir</th>
+            <th>Strategy</th>
+            <th class="r">Entry</th>
+            <th class="r">Stop</th>
+            <th class="r">Targets</th>
+            <th class="r">R:R</th>
+            <th class="c">Confidence</th>
+            <th class="c">Status</th>
+            <th></th>
+          </tr>
+        </thead>
         <tbody>
-            <template x-for="s in filtered" :key="s.id">
-                <tr @click="sel=s">
-                    <td class="mono text-[11px]" style="color:var(--t3)" x-text="s.time"></td>
-                    <td class="font-semibold text-white" x-text="s.ticker"></td>
-                    <td><span class="mono font-bold" :class="s.direction==='LONG'?'text-green-400':'text-red-400'" x-text="s.direction"></span></td>
-                    <td class="text-[11px]" style="color:var(--t2)" x-text="s.strategy"></td>
-                    <td class="r mono text-white" x-text="'$'+s.entry.toFixed(2)"></td>
-                    <td class="r mono text-red-400" x-text="'$'+s.stop.toFixed(2)"></td>
-                    <td class="r mono text-green-400 text-[11px]" x-text="s.targets.map(t=>'$'+t.toFixed(0)).join(' / ')"></td>
-                    <td class="r mono" x-text="s.rr.toFixed(1)+':1'"></td>
-                    <td class="c"><div class="flex items-center justify-center gap-1"><div class="bar"><div class="bar-f" :style="'width:'+s.confidence+'%'"></div></div><span class="text-[10px] mono" x-text="s.confidence+'%'"></span></div></td>
-                    <td class="c"><span class="pill" :class="s.status==='active'?'pg':s.status==='triggered'?'pb':s.status==='stopped'?'pr':'py'" x-text="s.status"></span></td>
-                    <td><button @click.stop="sel=s" class="text-[10px] px-2 py-1 rounded" style="background:var(--s2);border:1px solid var(--bd);color:var(--t2);cursor:pointer">Details</button></td>
-                </tr>
-            </template>
+          <template x-for="s in filtered" :key="s.id">
+            <tr @click="sel=s">
+              <td
+                class="mono text-[11px]"
+                style="color: var(--t3)"
+                x-text="s.time"
+              ></td>
+              <td class="font-semibold text-white" x-text="s.ticker"></td>
+              <td>
+                <span
+                  class="mono font-bold"
+                  :class="s.direction==='LONG'?'text-green-400':'text-red-400'"
+                  x-text="s.direction"
+                ></span>
+              </td>
+              <td
+                class="text-[11px]"
+                style="color: var(--t2)"
+                x-text="s.strategy"
+              ></td>
+              <td
+                class="r mono text-white"
+                x-text="'$'+s.entry.toFixed(2)"
+              ></td>
+              <td
+                class="r mono text-red-400"
+                x-text="'$'+s.stop.toFixed(2)"
+              ></td>
+              <td
+                class="r mono text-green-400 text-[11px]"
+                x-text="s.targets.map(t=>'$'+t.toFixed(0)).join(' / ')"
+              ></td>
+              <td class="r mono" x-text="s.rr.toFixed(1)+':1'"></td>
+              <td class="c">
+                <div class="flex items-center justify-center gap-1">
+                  <div class="bar">
+                    <div class="bar-f" :style="'width:'+s.confidence+'%'"></div>
+                  </div>
+                  <span
+                    class="text-[10px] mono"
+                    x-text="s.confidence+'%'"
+                  ></span>
+                </div>
+              </td>
+              <td class="c">
+                <span
+                  class="pill"
+                  :class="s.status==='active'?'pg':s.status==='triggered'?'pb':s.status==='stopped'?'pr':'py'"
+                  x-text="s.status"
+                ></span>
+              </td>
+              <td>
+                <button
+                  @click.stop="sel=s"
+                  class="text-[10px] px-2 py-1 rounded"
+                  style="
+                    background: var(--s2);
+                    border: 1px solid var(--bd);
+                    color: var(--t2);
+                    cursor: pointer;
+                  "
+                >
+                  Details
+                </button>
+              </td>
+            </tr>
+          </template>
         </tbody>
-    </table>
-</div>
-<div x-show="!filtered.length" class="text-center py-16 text-sm" style="color:var(--t3)">No signals match filters</div>
+      </table>
+    </div>
+    <div
+      x-show="!filtered.length"
+      class="text-center py-16 text-sm"
+      style="color: var(--t3)"
+    >
+      No signals match filters
+    </div>
 
-<!-- Detail Modal -->
-<div x-show="sel" x-cloak class="modal-bg" @click="sel=null">
-    <div class="modal" @click.stop>
+    <!-- Detail Modal -->
+    <div x-show="sel" x-cloak class="modal-bg" @click="sel=null">
+      <div class="modal" @click.stop>
         <div class="flex justify-between items-start mb-4">
-            <div><span class="text-lg font-bold text-white" x-text="sel?.ticker"></span><span class="ml-2 mono font-bold" :class="sel?.direction==='LONG'?'text-green-400':'text-red-400'" x-text="sel?.direction"></span></div>
-            <button @click="sel=null" style="color:var(--t3);background:none;border:none;cursor:pointer;font-size:16px">✕</button>
+          <div>
+            <span
+              class="text-lg font-bold text-white"
+              x-text="sel?.ticker"
+            ></span
+            ><span
+              class="ml-2 mono font-bold"
+              :class="sel?.direction==='LONG'?'text-green-400':'text-red-400'"
+              x-text="sel?.direction"
+            ></span>
+          </div>
+          <button
+            @click="sel=null"
+            style="
+              color: var(--t3);
+              background: none;
+              border: none;
+              cursor: pointer;
+              font-size: 16px;
+            "
+          >
+            ✕
+          </button>
         </div>
         <div class="grid grid-cols-2 gap-4 mb-4 text-sm">
-            <div>
-                <div class="text-[10px] uppercase mb-2" style="color:var(--t3)">📍 Entry / Exit</div>
-                <div>Entry: <span class="mono font-semibold" x-text="'$'+sel?.entry?.toFixed(2)"></span></div>
-                <div>Stop: <span class="mono font-semibold text-red-400" x-text="'$'+sel?.stop?.toFixed(2)"></span></div>
-                <div>Target 1: <span class="mono font-semibold text-green-400" x-text="'$'+sel?.targets?.[0]?.toFixed(2)"></span></div>
-                <div>Target 2: <span class="mono font-semibold text-green-400" x-text="'$'+sel?.targets?.[1]?.toFixed(2)"></span></div>
+          <div>
+            <div class="text-[10px] uppercase mb-2" style="color: var(--t3)">
+              📍 Entry / Exit
             </div>
             <div>
-                <div class="text-[10px] uppercase mb-2" style="color:var(--t3)">📊 Stats</div>
-                <div>Strategy: <span class="font-semibold" x-text="sel?.strategy"></span></div>
-                <div>Confidence: <span class="font-semibold" x-text="sel?.confidence+'%'"></span></div>
-                <div>R:R: <span class="font-semibold" x-text="sel?.rr?.toFixed(1)+':1'"></span></div>
-                <div>Horizon: <span class="font-semibold" x-text="sel?.horizon||'Swing'"></span></div>
+              Entry:
+              <span
+                class="mono font-semibold"
+                x-text="'$'+sel?.entry?.toFixed(2)"
+              ></span>
             </div>
+            <div>
+              Stop:
+              <span
+                class="mono font-semibold text-red-400"
+                x-text="'$'+sel?.stop?.toFixed(2)"
+              ></span>
+            </div>
+            <div>
+              Target 1:
+              <span
+                class="mono font-semibold text-green-400"
+                x-text="'$'+sel?.targets?.[0]?.toFixed(2)"
+              ></span>
+            </div>
+            <div>
+              Target 2:
+              <span
+                class="mono font-semibold text-green-400"
+                x-text="'$'+sel?.targets?.[1]?.toFixed(2)"
+              ></span>
+            </div>
+          </div>
+          <div>
+            <div class="text-[10px] uppercase mb-2" style="color: var(--t3)">
+              📊 Stats
+            </div>
+            <div>
+              Strategy:
+              <span class="font-semibold" x-text="sel?.strategy"></span>
+            </div>
+            <div>
+              Confidence:
+              <span class="font-semibold" x-text="sel?.confidence+'%'"></span>
+            </div>
+            <div>
+              R:R:
+              <span
+                class="font-semibold"
+                x-text="sel?.rr?.toFixed(1)+':1'"
+              ></span>
+            </div>
+            <div>
+              Horizon:
+              <span class="font-semibold" x-text="sel?.horizon||'Swing'"></span>
+            </div>
+          </div>
         </div>
-        <div class="mb-3"><div class="text-[10px] uppercase mb-1" style="color:var(--t3)">🎯 Why Generated</div><div style="background:var(--s2);border:1px solid var(--bd);border-radius:4px;padding:8px 10px;font-size:12px;color:var(--t2)" x-text="sel?.reason||'—'"></div></div>
-        <div class="mb-3"><div class="text-[10px] uppercase mb-1" style="color:var(--t3)">⚠ Key Risks</div><div style="background:var(--s2);border:1px solid var(--bd);border-radius:4px;padding:8px 10px;font-size:12px;color:var(--t2)" x-text="sel?.risks||'—'"></div></div>
-        <div class="mb-3"><div class="text-[10px] uppercase mb-1" style="color:var(--t3)">🤖 GPT Validator</div><div style="background:#58a6ff08;border:1px solid #58a6ff30;border-radius:4px;padding:8px 10px;font-size:12px;color:var(--t2)" x-text="sel?.gptValidation||'—'"></div></div>
-        <div class="flex justify-between text-[10px]" style="color:var(--t3)">
-            <span x-text="'Generated: '+sel?.generatedAt"></span>
-            <span x-text="'Data: '+sel?.dataAsOf"></span>
+        <div class="mb-3">
+          <div class="text-[10px] uppercase mb-1" style="color: var(--t3)">
+            🎯 Why Generated
+          </div>
+          <div
+            style="
+              background: var(--s2);
+              border: 1px solid var(--bd);
+              border-radius: 4px;
+              padding: 8px 10px;
+              font-size: 12px;
+              color: var(--t2);
+            "
+            x-text="sel?.reason||'—'"
+          ></div>
         </div>
+        <div class="mb-3">
+          <div class="text-[10px] uppercase mb-1" style="color: var(--t3)">
+            ⚠ Key Risks
+          </div>
+          <div
+            style="
+              background: var(--s2);
+              border: 1px solid var(--bd);
+              border-radius: 4px;
+              padding: 8px 10px;
+              font-size: 12px;
+              color: var(--t2);
+            "
+            x-text="sel?.risks||'—'"
+          ></div>
+        </div>
+        <div class="mb-3">
+          <div class="text-[10px] uppercase mb-1" style="color: var(--t3)">
+            🤖 GPT Validator
+          </div>
+          <div
+            style="
+              background: #58a6ff08;
+              border: 1px solid #58a6ff30;
+              border-radius: 4px;
+              padding: 8px 10px;
+              font-size: 12px;
+              color: var(--t2);
+            "
+            x-text="sel?.gptValidation||'—'"
+          ></div>
+        </div>
+        <div class="flex justify-between text-[10px]" style="color: var(--t3)">
+          <span x-text="'Generated: '+sel?.generatedAt"></span>
+          <span x-text="'Data: '+sel?.dataAsOf"></span>
+        </div>
+      </div>
     </div>
-</div>
 
-<nav class="nav-b"><div class="flex justify-around max-w-lg mx-auto">
-    <a href="/"><span class="ic">📊</span>Home</a>
-    <a href="/regime-screener"><span class="ic">🎯</span>Regime</a>
-    <a href="/portfolio-brief"><span class="ic">📋</span>Brief</a>
-    <a href="/compare"><span class="ic">📈</span>Compare</a>
-    <a href="/performance-lab"><span class="ic">🔬</span>Perf</a>
-    <a href="/options-lab"><span class="ic">🔮</span>Options</a>
-    <a href="/signals/explorer" class="on"><span class="ic">📡</span>Signals</a>
-</div></nav>
+    <nav class="nav-b">
+      <div class="flex justify-around max-w-lg mx-auto">
+        <a href="/"><span class="ic">📊</span>Home</a>
+        <a href="/regime-screener"><span class="ic">🎯</span>Regime</a>
+        <a href="/portfolio-brief"><span class="ic">📋</span>Brief</a>
+        <a href="/compare"><span class="ic">📈</span>Compare</a>
+        <a href="/performance-lab"><span class="ic">🔬</span>Perf</a>
+        <a href="/options-lab"><span class="ic">🔮</span>Options</a>
+        <a href="/signals/explorer" class="on"
+          ><span class="ic">📡</span>Signals</a
+        >
+      </div>
+    </nav>
 
-<script>
-function SE(){return{
-    lastUp:'',sel:null,
-    F:{date:new Date().toISOString().split('T')[0],strategy:'',direction:'',minConf:60,status:''},
-    stats:{generated:0,rejected:0,active:0,winRate:0},
-    signals:[],
+    <script>
+      function SE() {
+        return {
+          lastUp: "",
+          sel: null,
+          F: {
+            date: new Date().toISOString().split("T")[0],
+            strategy: "",
+            direction: "",
+            minConf: 60,
+            status: "",
+          },
+          stats: { generated: 0, rejected: 0, active: 0, winRate: 0 },
+          signals: [],
+          trust: {},
+          asOf: "",
 
-    async init(){await this.refresh();setInterval(()=>this.refresh(),60000)},
+          async init() {
+            await this.refresh();
+            setInterval(() => this.refresh(), 60000);
+          },
 
-    get filtered(){
-        return this.signals.filter(s=>{
-            if(this.F.strategy&&s.strategy.toLowerCase()!==this.F.strategy)return false;
-            if(this.F.direction&&s.direction!==this.F.direction)return false;
-            if(s.confidence<this.F.minConf)return false;
-            if(this.F.status&&s.status!==this.F.status)return false;
-            return true;
-        });
-    },
+          get filtered() {
+            return this.signals.filter((s) => {
+              if (
+                this.F.strategy &&
+                s.strategy.toLowerCase() !== this.F.strategy
+              )
+                return false;
+              if (this.F.direction && s.direction !== this.F.direction)
+                return false;
+              if (s.confidence < this.F.minConf) return false;
+              if (this.F.status && s.status !== this.F.status) return false;
+              return true;
+            });
+          },
 
-    async refresh(){
-        this.lastUp=new Date().toLocaleTimeString();
-        try{
-            const r=await fetch('/api/v7/regime-screener');if(!r.ok)throw 0;
-            const d=await r.json();const cands=d.candidates||[];
-            this.signals=cands.map((c,i)=>({
-                id:i+1,time:new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}),
-                ticker:c.ticker,direction:c.direction||'LONG',strategy:c.engine||'Momentum',
-                entry:c.entry||0,stop:c.stop||0,targets:[c.tp1||0,c.tp2||0],rr:c.rr||0,confidence:c.confidence||0,
-                status:c.score>.7?'active':c.score>.5?'triggered':'expired',
-                generatedAt:new Date().toLocaleString(),dataAsOf:new Date().toLocaleString(),
-                horizon:'Swing (1-3w)',reason:c.why||'Regime-aligned setup',
-                risks:(c.risks||[]).join('. '),
-                gptValidation:c.score>.6?'VALID: Setup meets criteria.':'CONDITIONAL: Review risks.',
-                ev:c.ev||0
-            }));
-            this.stats={generated:this.signals.length,rejected:Math.max(0,(d.universe_size||0)-this.signals.length),active:this.signals.filter(s=>s.status==='active').length,winRate:this.signals.length?Math.round(this.signals.filter(s=>s.ev>0).length/this.signals.length*100):0};
-        }catch(e){console.error(e)}
-    }
-}}
-</script>
-</body>
+          async refresh() {
+            this.lastUp = new Date().toLocaleTimeString();
+            try {
+              const r = await fetch("/api/v7/regime-screener");
+              if (!r.ok) throw 0;
+              const d = await r.json();
+              const cands = d.candidates || [];
+              this.signals = cands.map((c, i) => ({
+                id: i + 1,
+                time: new Date().toLocaleTimeString("en-US", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+                ticker: c.ticker,
+                direction: c.direction || "LONG",
+                strategy: c.engine || "Momentum",
+                entry: c.entry || 0,
+                stop: c.stop || 0,
+                targets: [c.tp1 || 0, c.tp2 || 0],
+                rr: c.rr || 0,
+                confidence: c.confidence || 0,
+                status:
+                  c.score > 0.7
+                    ? "active"
+                    : c.score > 0.5
+                      ? "triggered"
+                      : "expired",
+                generatedAt: new Date().toLocaleString(),
+                dataAsOf: new Date().toLocaleString(),
+                horizon: "Swing (1-3w)",
+                reason: c.why || "Regime-aligned setup",
+                risks: (c.risks || []).join(". "),
+                gptValidation:
+                  c.score > 0.6
+                    ? "VALID: Setup meets criteria."
+                    : "CONDITIONAL: Review risks.",
+                ev: c.ev || 0,
+              }));
+              this.stats = {
+                generated: this.signals.length,
+                rejected: Math.max(
+                  0,
+                  (d.universe_size || 0) - this.signals.length,
+                ),
+                active: this.signals.filter((s) => s.status === "active")
+                  .length,
+                winRate: this.signals.length
+                  ? Math.round(
+                      (this.signals.filter((s) => s.ev > 0).length /
+                        this.signals.length) *
+                        100,
+                    )
+                  : 0,
+              };
+              this.trust = d.trust || {};
+              this.asOf = d.as_of || "";
+            } catch (e) {
+              console.error(e);
+            }
+          },
+        };
+      }
+    </script>
+  </body>
 </html>

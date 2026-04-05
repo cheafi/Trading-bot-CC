@@ -41,7 +41,7 @@ class OptionsScreenResult:
     contracts: List[Dict[str, Any]]
     iv_term_structure: List[Dict[str, Any]]
     warnings: List[str]
-    data_source: str          # LIVE / SYNTHETIC
+    data_source: str  # LIVE / SYNTHETIC
     trust: Dict[str, Any]
 
 
@@ -96,10 +96,7 @@ class OptionsMapper:
             try:
                 chain = await self._provider.fetch_chain(ticker)
                 if chain and chain.ticker:
-                    data_source = (
-                        "LIVE" if chain.expiry != "synthetic"
-                        else "SYNTHETIC"
-                    )
+                    data_source = "LIVE" if chain.expiry != "synthetic" else "SYNTHETIC"
             except Exception as exc:
                 logger.warning("options provider error: %s", exc)
 
@@ -118,8 +115,14 @@ class OptionsMapper:
             hv = hist_vol or 0.25
 
         # Estimate earnings/ex-div proximity (synthetic)
+        import hashlib
+
         import numpy as np
-        np.random.seed(hash(ticker) % 2**31)
+
+        # Use hashlib for deterministic seed across Python restarts
+        # (hash() is randomized per-process via PYTHONHASHSEED)
+        _stable_seed = int(hashlib.md5(ticker.encode()).hexdigest(), 16) % 2**31
+        np.random.seed(_stable_seed)
         days_to_earnings = int(np.random.randint(10, 90))
         ex_div_days = int(np.random.randint(30, 120))
 
@@ -128,9 +131,7 @@ class OptionsMapper:
             "iv_percentile": round(iv_pct, 1),
             "atm_iv": round(atm_iv, 4),
             "hv_20d": round(hv, 4),
-            "iv_hv_ratio": (
-                round(atm_iv / hv, 2) if hv > 0 else 1.0
-            ),
+            "iv_hv_ratio": (round(atm_iv / hv, 2) if hv > 0 else 1.0),
             "skew_25d": round(skew, 4),
             "days_to_earnings": days_to_earnings,
             "ex_dividend_days": ex_div_days,
@@ -144,13 +145,11 @@ class OptionsMapper:
             )
         if iv_rank > 60:
             warnings.append(
-                f"⚠️ IV rank {iv_rank:.0f}% — options are "
-                "expensive (rich IV)"
+                f"⚠️ IV rank {iv_rank:.0f}% — options are " "expensive (rich IV)"
             )
         if iv_pct > 70 and atm_iv / hv > 1.3:
             warnings.append(
-                "⚠️ IV significantly above HV — consider "
-                "spreads over single-leg"
+                "⚠️ IV significantly above HV — consider " "spreads over single-leg"
             )
         if ex_div_days < 14:
             warnings.append(
@@ -167,9 +166,7 @@ class OptionsMapper:
             try:
                 options_data = {
                     "iv_percentile": iv_pct,
-                    "avg_open_interest": (
-                        chain.total_oi // 10 if chain else 0
-                    ),
+                    "avg_open_interest": (chain.total_oi // 10 if chain else 0),
                     "avg_bid_ask_spread": 0.03,
                 }
                 plan = self._ee.select_expression(
@@ -185,14 +182,16 @@ class OptionsMapper:
                     options_data=options_data,
                 )
                 expression_decision = plan.get(
-                    "instrument", "stock",
+                    "instrument",
+                    "stock",
                 )
                 expression_rationale = {
                     "chosen_instrument": expression_decision,
                     "reason": plan.get("reason", ""),
                     "legs": plan.get("option_legs", []),
                     "leverage_ratio": plan.get(
-                        "leverage_ratio", 1.0,
+                        "leverage_ratio",
+                        1.0,
                     ),
                     "max_risk_pct": plan.get("max_risk_pct", 0.01),
                 }
@@ -200,26 +199,17 @@ class OptionsMapper:
                 # Collect rejection reasons
                 reason = plan.get("reason", "")
                 if reason == "options_disabled":
-                    rejection_reasons.append(
-                        "Options trading is disabled in config"
-                    )
+                    rejection_reasons.append("Options trading is disabled in config")
                 elif reason == "no_options_data":
-                    rejection_reasons.append(
-                        "No options chain data available"
-                    )
+                    rejection_reasons.append("No options chain data available")
                 elif reason == "illiquid_options":
                     rejection_reasons.append(
-                        f"OI below {self._ee.MIN_OPTION_OI} "
-                        "threshold"
+                        f"OI below {self._ee.MIN_OPTION_OI} " "threshold"
                     )
                 elif reason == "wide_spreads":
-                    rejection_reasons.append(
-                        "Bid-ask spreads too wide"
-                    )
+                    rejection_reasons.append("Bid-ask spreads too wide")
                 elif reason == "hold_too_long_for_options":
-                    rejection_reasons.append(
-                        "Hold period > 30 days — stock preferred"
-                    )
+                    rejection_reasons.append("Hold period > 30 days — stock preferred")
 
             except Exception as exc:
                 logger.warning("expression engine error: %s", exc)
@@ -231,8 +221,13 @@ class OptionsMapper:
 
         # ── 5. Build contract table ──
         contracts = self._build_contracts(
-            ticker, spot, iv_pct, atm_iv, expression_decision,
-            chain, data_source,
+            ticker,
+            spot,
+            iv_pct,
+            atm_iv,
+            expression_decision,
+            chain,
+            data_source,
         )
 
         # ── 6. IV term structure ──
@@ -241,15 +236,15 @@ class OptionsMapper:
         trust = {
             "mode": "LIVE" if data_source == "LIVE" else "SYNTHETIC",
             "source": (
-                "options_provider" if data_source == "LIVE"
-                else "synthetic_estimates"
+                "options_provider" if data_source == "LIVE" else "synthetic_estimates"
             ),
             "chain_available": chain is not None,
             "expression_engine_used": self._ee is not None,
             "data_warning": (
                 "SYNTHETIC OPTIONS DATA — simulated contracts. "
                 "Not from live options chain feed."
-                if data_source == "SYNTHETIC" else None
+                if data_source == "SYNTHETIC"
+                else None
             ),
         }
 
@@ -285,16 +280,15 @@ class OptionsMapper:
         import numpy as np
 
         contracts = []
-        is_call = (
-            "call" in expression.lower()
-            or "put" not in expression.lower()
-        )
+        is_call = "call" in expression.lower() or "put" not in expression.lower()
 
         # Use real strikes if chain has them
         if chain and chain.strikes:
             for strike_data in chain.strikes[:15]:
                 c = self._score_contract(
-                    strike_data, spot, is_call,
+                    strike_data,
+                    spot,
+                    is_call,
                 )
                 if c:
                     contracts.append(c)
@@ -302,11 +296,15 @@ class OptionsMapper:
             # Generate synthetic contracts
             base_strike = int(spot / 5) * 5
             for i in range(12):
-                strike = base_strike + (i - 4) * 5 * (
-                    1 if is_call else -1
-                )
+                strike = base_strike + (i - 4) * 5 * (1 if is_call else -1)
                 dte_choices = [
-                    30, 45, 60, 90, 120, 180, 365,
+                    30,
+                    45,
+                    60,
+                    90,
+                    120,
+                    180,
+                    365,
                 ]
                 dte = int(np.random.choice(dte_choices))
                 moneyness = abs(strike - spot) / spot
@@ -322,48 +320,56 @@ class OptionsMapper:
                 )
                 oi = int(np.random.randint(100, 5000))
                 spread_pct = round(
-                    np.random.uniform(0.5, 4.0), 1,
+                    np.random.uniform(0.5, 4.0),
+                    1,
                 )
 
                 # Liquidity score (0-100)
-                liq_score = min(100, int(
-                    (min(oi, 3000) / 3000 * 50)
-                    + (max(0, 5 - spread_pct) / 5 * 50)
-                ))
+                liq_score = min(
+                    100,
+                    int(
+                        (min(oi, 3000) / 3000 * 50) + (max(0, 5 - spread_pct) / 5 * 50)
+                    ),
+                )
 
                 breakeven = (
-                    round(strike + mid, 2) if is_call
-                    else round(strike - mid, 2)
+                    round(strike + mid, 2) if is_call else round(strike - mid, 2)
                 )
 
                 # EV estimate
-                ev = round(max(
-                    0,
-                    d * 2 - spread_pct * 0.1
-                    + (50 - iv_pct) / 100,
-                ), 2)
-
-                contracts.append({
-                    "strike": strike,
-                    "dte": dte,
-                    "type": "CALL" if is_call else "PUT",
-                    "delta": round(d, 3),
-                    "mid": round(mid, 2),
-                    "oi": oi,
-                    "spread_pct": spread_pct,
-                    "liquidity_score": liq_score,
-                    "ev": ev,
-                    "breakeven": breakeven,
-                    "breakeven_pct": round(
-                        (breakeven / spot - 1) * 100, 1,
+                ev = round(
+                    max(
+                        0,
+                        d * 2 - spread_pct * 0.1 + (50 - iv_pct) / 100,
                     ),
-                    "max_loss": int(mid * 100),
-                    "source": source,
-                })
+                    2,
+                )
+
+                contracts.append(
+                    {
+                        "strike": strike,
+                        "dte": dte,
+                        "type": "CALL" if is_call else "PUT",
+                        "delta": round(d, 3),
+                        "mid": round(mid, 2),
+                        "oi": oi,
+                        "spread_pct": spread_pct,
+                        "liquidity_score": liq_score,
+                        "ev": ev,
+                        "breakeven": breakeven,
+                        "breakeven_pct": round(
+                            (breakeven / spot - 1) * 100,
+                            1,
+                        ),
+                        "max_loss": int(mid * 100),
+                        "source": source,
+                    }
+                )
 
         # Rank by EV
         contracts.sort(
-            key=lambda c: c.get("ev", 0), reverse=True,
+            key=lambda c: c.get("ev", 0),
+            reverse=True,
         )
         for i, c in enumerate(contracts):
             c["rank"] = i + 1
@@ -372,7 +378,9 @@ class OptionsMapper:
 
     @staticmethod
     def _score_contract(
-        strike_data: Dict, spot: float, is_call: bool,
+        strike_data: Dict,
+        spot: float,
+        is_call: bool,
     ) -> Optional[Dict[str, Any]]:
         """Score a single real contract from chain data."""
         try:
@@ -389,21 +397,18 @@ class OptionsMapper:
             ask = strike_data.get("ask", 0)
             iv = strike_data.get("iv", 0.3)
 
-            spread_pct = (
-                round((ask - bid) / mid * 100, 1)
-                if mid > 0 else 99.0
+            spread_pct = round((ask - bid) / mid * 100, 1) if mid > 0 else 99.0
+
+            liq_score = min(
+                100,
+                int(
+                    (min(oi, 3000) / 3000 * 40)
+                    + (min(volume, 500) / 500 * 30)
+                    + (max(0, 5 - spread_pct) / 5 * 30)
+                ),
             )
 
-            liq_score = min(100, int(
-                (min(oi, 3000) / 3000 * 40)
-                + (min(volume, 500) / 500 * 30)
-                + (max(0, 5 - spread_pct) / 5 * 30)
-            ))
-
-            breakeven = (
-                round(strike + mid, 2) if is_call
-                else round(strike - mid, 2)
-            )
+            breakeven = round(strike + mid, 2) if is_call else round(strike - mid, 2)
 
             ev = round(max(0, abs(delta) * 2 - spread_pct * 0.1), 2)
 
@@ -423,7 +428,8 @@ class OptionsMapper:
                 "ev": ev,
                 "breakeven": breakeven,
                 "breakeven_pct": round(
-                    (breakeven / spot - 1) * 100, 1,
+                    (breakeven / spot - 1) * 100,
+                    1,
                 ),
                 "max_loss": int(mid * 100),
                 "source": "LIVE",
@@ -437,7 +443,8 @@ class OptionsMapper:
 
     @staticmethod
     def _build_iv_term(
-        atm_iv: float, skew: float,
+        atm_iv: float,
+        skew: float,
     ) -> List[Dict[str, Any]]:
         """Build IV term structure across DTEs."""
         import numpy as np
@@ -451,8 +458,10 @@ class OptionsMapper:
                 + skew * (dte / 365)
                 + np.random.uniform(-0.005, 0.005)
             )
-            term.append({
-                "dte": dte,
-                "iv": round(max(0.05, iv), 4),
-            })
+            term.append(
+                {
+                    "dte": dte,
+                    "iv": round(max(0.05, iv), 4),
+                }
+            )
         return term

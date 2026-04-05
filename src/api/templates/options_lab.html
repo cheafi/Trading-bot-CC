@@ -255,6 +255,27 @@
       </div>
     </header>
 
+    <!-- Trust Strip -->
+    <div
+      x-show="hasData && trust"
+      class="flex items-center gap-3 px-4 py-1.5 text-[10px] mono"
+      style="
+        background: var(--s2);
+        border-bottom: 1px solid var(--bd);
+        color: var(--t3);
+      "
+    >
+      <span
+        :class="trust.data_source==='SYNTHETIC'?'text-amber-400':'text-green-400'"
+        x-text="'● '+(trust.data_source||trust.mode||'')"
+      ></span>
+      <span x-text="'Source: '+(trust.source||trust.data_source||'—')"></span>
+      <span x-text="asOf?.slice(0,16)||''"></span>
+      <span x-show="trust.data_source==='SYNTHETIC'" class="text-amber-400"
+        >Synthetic chain — no live options data</span
+      >
+    </div>
+
     <!-- Search bar -->
     <div
       class="flex items-center gap-2 px-4 py-3"
@@ -576,6 +597,8 @@
           },
           ivTerm: [],
           charts: {},
+          trust: {},
+          asOf: "",
 
           init() {},
           async screen() {
@@ -605,6 +628,8 @@
               this.contracts = d.contracts || [];
               this.why = d.why_this_expression || this.why;
               this.ivTerm = d.iv_term_structure || [];
+              this.trust = d.trust || {};
+              this.asOf = d.as_of || "";
               this.hasData = true;
               this.$nextTick(() => this.drawCharts());
             } catch (e) {

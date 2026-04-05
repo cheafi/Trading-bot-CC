@@ -307,6 +307,25 @@
       ></span>
     </div>
 
+    <!-- Trust Strip -->
+    <div
+      x-show="D && D.trust"
+      class="flex items-center gap-3 px-4 py-1.5 text-[10px]"
+      style="
+        background: #1c2333;
+        border-bottom: 1px solid #21262d;
+        color: #484f58;
+        font-family: &quot;JetBrains Mono&quot;, monospace;
+      "
+    >
+      <span
+        :class="D?.trust?.mode==='SYNTHETIC'?'text-amber-400':'text-green-400'"
+        x-text="'● '+(D?.trust?.mode||'')"
+      ></span>
+      <span x-text="'Source: '+(D?.trust?.source||'—')"></span>
+      <span x-text="D?.generated_at?.slice(0,16)||''"></span>
+    </div>
+
     <!-- KPI Strip -->
     <div class="kpi-strip">
       <div class="kpi-item">

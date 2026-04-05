@@ -270,6 +270,24 @@
       </div>
     </header>
 
+    <!-- Trust Strip -->
+    <div
+      x-show="hasData && trust"
+      class="flex items-center gap-3 px-4 py-1.5 text-[10px] mono"
+      style="
+        background: var(--s2);
+        border-bottom: 1px solid var(--bd);
+        color: var(--t3);
+      "
+    >
+      <span
+        :class="trust.mode==='SYNTHETIC'?'text-amber-400':'text-green-400'"
+        x-text="'● '+(trust.mode||'')"
+      ></span>
+      <span x-text="'Source: '+(trust.source||'—')"></span>
+      <span x-text="asOf?.slice(0,16)||''"></span>
+    </div>
+
     <!-- Ticker input + period -->
     <div
       class="px-4 py-3"
@@ -539,6 +557,8 @@
           stats: {},
           corrMx: {},
           _dates: [],
+          trust: {},
+          asOf: "",
           colors: [
             "#00d4aa",
             "#58a6ff",
@@ -584,6 +604,8 @@
               this._dates = d.dates || [];
               this.stats = d.stats || {};
               this.corrMx = d.correlation_matrix || {};
+              this.trust = d.trust || {};
+              this.asOf = d.as_of || "";
               this.hasData = true;
               this.renderChart();
             } catch (e) {
