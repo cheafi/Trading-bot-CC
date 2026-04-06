@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
+    <meta name="theme-color" content="#0d1117" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>TradingAI Pro — Live Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      :root{--bg:#0d1117;--s1:#161b22;--s2:#1c2333;--bd:#21262d;--bd2:#30363d;--t1:#e6edf3;--t2:#8b949e;--t3:#484f58;--green:#00d4aa;--red:#ff5c5c;--amber:#fbbf24;--blue:#58a6ff}
+      *{font-family:'Inter',sans-serif;box-sizing:border-box;margin:0}
+      body{background:var(--bg);color:var(--t1);overflow-x:hidden}
+      .mono{font-family:'JetBrains Mono',monospace}
+      .card{background:var(--s1);border:1px solid var(--bd);border-radius:10px;overflow:hidden}
+      .card-p{padding:14px}
+      .pill{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.5px}
+      .pg{background:rgba(0,212,170,.12);color:var(--green)}.pr{background:rgba(255,92,92,.12);color:var(--red)}
+      .pa{background:rgba(251,191,36,.12);color:var(--amber)}.pb{background:rgba(88,166,255,.12);color:var(--blue)}
+      .pw{background:rgba(230,237,243,.08);color:var(--t2)}
+      .tab-bar{display:flex;gap:2px;padding:6px 12px;background:var(--s1);border-bottom:1px solid var(--bd);overflow-x:auto}
+      .tab-btn{padding:6px 14px;border-radius:6px;font-size:11px;font-weight:600;color:var(--t2);background:none;border:none;cursor:pointer;white-space:nowrap;transition:.15s}
+      .tab-btn.on{background:var(--s2);color:var(--t1);box-shadow:0 0 0 1px var(--bd2)}
+      .nav-b{position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--bd);padding:6px 0 max(env(safe-area-inset-bottom),6px);z-index:50}
+      .nav-b a{display:flex;flex-direction:column;align-items:center;font-size:9px;color:var(--t3);text-decoration:none;gap:2px;padding:2px 0}
+      .nav-b a.on{color:var(--green)}.nav-b .ic{font-size:16px}
+      .scroll-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+      .scroll-row::-webkit-scrollbar{display:none}
+      .kpi-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:10px 12px}
+      .kpi-box{background:var(--s1);border:1px solid var(--bd);border-radius:8px;padding:10px;text-align:center}
+      .kpi-val{font-size:18px;font-weight:800;line-height:1.2}.kpi-lbl{font-size:9px;font-weight:600;text-transform:uppercase;color:var(--t3);letter-spacing:.5px;margin-top:2px}
+      .section-hdr{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--t3);letter-spacing:.5px;padding:0 12px;margin-top:12px;margin-bottom:6px}
+      .qa-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;padding:0 12px}
+      .qa-card{display:block;background:var(--s1);border:1px solid var(--bd);border-radius:8px;padding:12px;text-decoration:none;transition:.15s;cursor:pointer}
+      .qa-card:hover{border-color:var(--bd2);background:var(--s2)}
+      .qa-card .qa-icon{font-size:20px;margin-bottom:4px}.qa-card .qa-title{font-size:11px;font-weight:700;color:var(--t1)}.qa-card .qa-sub{font-size:9px;color:var(--t3);margin-top:2px}
+      .fade{animation:fi .3s ease}@keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+      .spin{display:inline-block;width:12px;height:12px;border:2px solid var(--t3);border-top-color:var(--green);border-radius:50%;animation:sp .6s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
+      input,select{background:var(--s2);border:1px solid var(--bd);border-radius:6px;padding:8px 10px;color:var(--t1);font-size:12px;width:100%}
+      input:focus,select:focus{outline:none;border-color:var(--blue)}
+      .btn-p{background:var(--green);color:#000;font-weight:700;border:none;border-radius:6px;padding:8px 16px;font-size:12px;cursor:pointer}
+      .btn-p:disabled{opacity:.5;cursor:not-allowed}
+      .btn-s{background:var(--s2);color:var(--t2);font-weight:600;border:1px solid var(--bd);border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer}
+      /* Modal */
+      .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:200}
+      .modal{background:var(--s1);border:1px solid var(--bd);border-radius:10px;padding:24px;max-width:640px;width:calc(100% - 32px);max-height:85vh;overflow-y:auto}
+      .dt{width:100%;border-collapse:collapse;font-size:11px}
+      .dt th{text-align:left;padding:6px 10px;color:var(--t3);font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--bd);background:var(--s2)}
+      .dt td{padding:5px 10px;border-bottom:1px solid var(--bd)}.dt .r{text-align:right}
+    </style>
+  </head>
+  <body x-data="app()" x-init="init()" style="padding-bottom:60px">
+
+    <!-- HEADER -->
+    <header style="background:var(--s1);border-bottom:1px solid var(--bd);padding:10px 14px">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div style="width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,var(--green),var(--blue));display:flex;align-items:center;justify-content:center;font-size:14px">📊</div>
+          <div>
+            <div class="text-sm font-bold text-white">TradingAI Pro</div>
+            <div class="text-[9px] mono" style="color:var(--t3)">v6.41 · Sprint 41 · GitHub Pages Demo</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="text-[10px] mono" style="color:var(--t2)" x-text="clock"></div>
+          <div class="flex items-center gap-1">
+            <div style="width:6px;height:6px;border-radius:50%;background:var(--amber)"></div>
+            <span class="text-[9px]" style="color:var(--amber)">DEMO</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Trust Strip -->
+    <div class="flex items-center gap-3 px-4 py-1" style="background:#1c2333;border-bottom:1px solid #21262d;color:#484f58;font-family:'JetBrains Mono',monospace;font-size:10px">
+      <span class="text-amber-400">● SYNTHETIC</span>
+      <span>Source: demo_snapshot</span>
+      <span>GitHub Pages · Static Demo · No live API</span>
+    </div>
+
+    <!-- TAB BAR -->
+    <div class="tab-bar">
+      <template x-for="t in tabs">
+        <button class="tab-btn" :class="tab===t.id?'on':''" @click="tab=t.id" x-text="t.icon+' '+t.label"></button>
+      </template>
+    </div>
+
+    <!-- ═══ HOME TAB ═══ -->
+    <main x-show="tab==='home'" class="fade">
+      <!-- KPI Strip -->
+      <div class="kpi-strip">
+        <div class="kpi-box">
+          <div class="kpi-val mono" :class="regime.score>=60?'text-green-400':regime.score>=40?'text-amber-300':'text-red-400'" x-text="regime.score"></div>
+          <div class="kpi-lbl">AI Score</div>
+        </div>
+        <div class="kpi-box">
+          <div class="kpi-val text-sm" :class="regime.label==='RISK_ON'?'text-green-400':'text-amber-300'" x-text="regime.label.replace('_',' ')"></div>
+          <div class="kpi-lbl">Regime</div>
+        </div>
+        <div class="kpi-box">
+          <div class="kpi-val text-sm text-green-400" x-text="regime.trend"></div>
+          <div class="kpi-lbl">Trend</div>
+        </div>
+        <div class="kpi-box">
+          <div class="kpi-val text-sm text-amber-300" x-text="regime.vol"></div>
+          <div class="kpi-lbl">Volatility</div>
+        </div>
+      </div>
+
+      <!-- Playbook -->
+      <div style="padding:0 12px 4px;display:flex;gap:4px;flex-wrap:wrap">
+        <span class="text-[9px] font-bold uppercase" style="color:var(--t3);margin-right:4px">Playbook:</span>
+        <template x-for="s in regime.strategies"><span class="pill pb" x-text="s"></span></template>
+      </div>
+
+      <!-- US Indices -->
+      <div class="section-hdr">📈 US Indices</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;padding:0 12px">
+        <template x-for="i in indices">
+          <div class="card card-p" style="padding:10px">
+            <div class="flex items-center justify-between">
+              <div class="text-[10px] font-bold" style="color:var(--t2)" x-text="i.name"></div>
+              <span class="pill mono" :class="i.change_pct>=0?'pg':'pr'" x-text="(i.change_pct>=0?'+':'')+i.change_pct.toFixed(2)+'%'"></span>
+            </div>
+            <div class="text-base font-bold mono text-white mt-1" x-text="'$'+i.price.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})"></div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Macro -->
+      <div class="section-hdr" style="margin-top:14px">🌐 Macro Indicators</div>
+      <div class="scroll-row" style="padding:0 12px">
+        <template x-for="m in macro">
+          <div class="card" style="min-width:120px;padding:10px;flex-shrink:0">
+            <div class="text-[9px] font-bold" style="color:var(--t3)" x-text="m.name"></div>
+            <div class="text-sm font-bold mono text-white" x-text="m.symbol==='^VIX'?m.price.toFixed(2):'$'+m.price.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})"></div>
+            <div class="text-[10px] mono" :class="m.change_pct>=0?'text-green-400':'text-red-400'" x-text="(m.change_pct>=0?'+':'')+m.change_pct.toFixed(2)+'%'"></div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Sectors -->
+      <div class="section-hdr" style="margin-top:14px">📊 Sector Performance</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:4px;padding:0 12px">
+        <template x-for="s in sectors">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--s1);border:1px solid var(--bd);border-radius:6px">
+            <span class="text-[10px]" style="color:var(--t2)" x-text="s.name"></span>
+            <span class="text-[10px] mono font-bold" :class="s.change_pct>=0?'text-green-400':'text-red-400'" x-text="(s.change_pct>=0?'+':'')+s.change_pct.toFixed(2)+'%'"></span>
+          </div>
+        </template>
+      </div>
+
+      <!-- Asia-Pacific -->
+      <div class="section-hdr" style="margin-top:14px">🌏 Asia-Pacific Markets</div>
+      <div class="scroll-row" style="padding:0 12px">
+        <template x-for="a in asia">
+          <div class="card" style="min-width:110px;padding:10px;flex-shrink:0">
+            <div class="text-[9px] font-bold" style="color:var(--t3)" x-text="a.name"></div>
+            <div class="text-xs font-bold mono text-white" x-text="a.price.toLocaleString(undefined,{maximumFractionDigits:0})"></div>
+            <div class="text-[10px] mono" :class="a.change_pct>=0?'text-green-400':'text-red-400'" x-text="(a.change_pct>=0?'+':'')+a.change_pct.toFixed(2)+'%'"></div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Quick Access -->
+      <div class="section-hdr" style="margin-top:16px">⚡ Product Surfaces</div>
+      <div class="qa-grid" style="margin-bottom:16px">
+        <div class="qa-card" @click="showPage='regime'"><div class="qa-icon">🎯</div><div class="qa-title">Regime Screener</div><div class="qa-sub">AI scoring + filtering</div></div>
+        <div class="qa-card" @click="showPage='brief'"><div class="qa-icon">📋</div><div class="qa-title">Portfolio Brief</div><div class="qa-sub">Daily intelligence report</div></div>
+        <div class="qa-card" @click="showPage='compare'"><div class="qa-icon">📈</div><div class="qa-title">Compare Overlay</div><div class="qa-sub">Multi-ticker normalized return</div></div>
+        <div class="qa-card" @click="showPage='perf'"><div class="qa-icon">🔬</div><div class="qa-title">Performance Lab</div><div class="qa-sub">FinLab-style P&L metrics</div></div>
+        <div class="qa-card" @click="showPage='options'"><div class="qa-icon">🔮</div><div class="qa-title">Options Lab</div><div class="qa-sub">LEAPS screen + IV analysis</div></div>
+        <div class="qa-card" @click="showPage='signals'"><div class="qa-icon">📡</div><div class="qa-title">Signal Explorer</div><div class="qa-sub">Browse trading signals</div></div>
+        <div class="qa-card" @click="showPage='macro'" style="border-color:var(--amber);grid-column:span 2">
+          <div class="flex items-center gap-3"><div class="qa-icon" style="font-size:24px">🌍</div><div><div class="qa-title" style="font-size:12px">Macro Intelligence</div><div class="qa-sub">Rates · Political Risk · War/Geopolitical · Insider · Correlations</div></div></div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ═══ SIGNALS TAB ═══ -->
+    <main x-show="tab==='signals'" class="fade">
+      <div style="display:flex;gap:0;background:var(--s1);border-bottom:1px solid var(--bd)">
+        <template x-for="kpi in signalKPIs">
+          <div style="flex:1;padding:14px 12px;text-align:center;border-right:1px solid var(--bd)">
+            <div class="text-xl font-black mono" :class="kpi.color" x-text="kpi.value"></div>
+            <div class="text-[9px] font-bold uppercase" style="color:var(--t3);letter-spacing:.3px;margin-top:3px" x-text="kpi.label"></div>
+          </div>
+        </template>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="dt">
+          <thead><tr><th>Ticker</th><th>Direction</th><th>Strategy</th><th class="r">Conf</th><th class="r">Entry</th><th class="r">Target</th><th>Status</th></tr></thead>
+          <tbody>
+            <template x-for="s in demoSignals">
+              <tr>
+                <td class="mono font-bold text-white" x-text="s.ticker"></td>
+                <td><span class="pill" :class="s.dir==='LONG'?'pg':'pr'" x-text="s.dir"></span></td>
+                <td class="text-[11px]" style="color:var(--t2)" x-text="s.strategy"></td>
+                <td class="r mono font-bold" :class="s.conf>=70?'text-green-400':'text-amber-300'" x-text="s.conf+'%'"></td>
+                <td class="r mono text-white" x-text="'$'+s.entry"></td>
+                <td class="r mono text-green-400" x-text="'$'+s.target"></td>
+                <td><span class="pill" :class="s.status==='active'?'pg':'pw'" x-text="s.status"></span></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </main>
+
+    <!-- ═══ BACKTEST TAB ═══ -->
+    <main x-show="tab==='backtest'" class="p-4 space-y-3 fade">
+      <div class="card card-p">
+        <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">🔬 Backtest Engine (Demo)</div>
+        <div class="space-y-2">
+          <input type="text" x-model="bt.ticker" placeholder="Ticker (e.g. AAPL)" style="text-transform:uppercase" />
+          <select x-model="bt.strategy"><option value="all">All Strategies</option><option value="swing">Swing Trading</option><option value="momentum">Momentum</option><option value="mean_reversion">Mean Reversion</option></select>
+          <button @click="runBT()" class="btn-p w-full">Run Backtest</button>
+        </div>
+      </div>
+      <template x-if="bt.result">
+        <div class="space-y-2 fade">
+          <div class="card card-p">
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-sm font-bold text-white mono" x-text="bt.result.ticker"></div>
+              <span class="pill pg" x-text="bt.result.best_strategy"></span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;font-size:11px">
+              <div><div style="color:var(--t3)">Buy&Hold</div><div class="font-bold mono text-green-400" x-text="'+'+bt.result.benchmark_return+'%'"></div></div>
+              <div><div style="color:var(--t3)">Best</div><div class="font-bold mono text-green-400" x-text="'+'+bt.result.strategies[0].total_return+'%'"></div></div>
+              <div><div style="color:var(--t3)">Bars</div><div class="font-bold mono text-white" x-text="bt.result.bars"></div></div>
+            </div>
+          </div>
+          <template x-for="(s,i) in bt.result.strategies">
+            <div class="card card-p" :style="i===0?'border-color:var(--green)':''">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2"><span class="text-base" x-text="i===0?'🥇':i===1?'🥈':'🥉'"></span><span class="text-sm font-bold text-white" x-text="s.strategy"></span></div>
+                <span class="text-[10px] mono" style="color:var(--t3)" x-text="'Score '+s.score"></span>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;font-size:11px">
+                <div><div style="color:var(--t3)">Trades</div><div class="font-bold mono text-white" x-text="s.total_trades"></div></div>
+                <div><div style="color:var(--t3)">Win</div><div class="font-bold mono" :class="s.win_rate>50?'text-green-400':'text-red-400'" x-text="s.win_rate+'%'"></div></div>
+                <div><div style="color:var(--t3)">Return</div><div class="font-bold mono text-green-400" x-text="'+'+s.total_return+'%'"></div></div>
+                <div><div style="color:var(--t3)">Sharpe</div><div class="font-bold mono text-white" x-text="s.sharpe"></div></div>
+                <div><div style="color:var(--t3)">Max DD</div><div class="font-bold mono text-red-400" x-text="s.max_drawdown+'%'"></div></div>
+                <div><div style="color:var(--t3)">P.Factor</div><div class="font-bold mono text-white" x-text="s.profit_factor"></div></div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+    </main>
+
+    <!-- ═══ PAGE MODALS ═══ -->
+    <template x-if="showPage">
+      <div class="modal-bg" @click="showPage=null">
+        <div class="modal" @click.stop>
+          <div class="flex justify-between items-center mb-4">
+            <div class="text-lg font-bold text-white" x-text="pageData[showPage]?.title"></div>
+            <button @click="showPage=null" style="color:var(--t3);font-size:18px;background:none;border:none;cursor:pointer">✕</button>
+          </div>
+
+          <!-- Regime Screener -->
+          <template x-if="showPage==='regime'">
+            <div>
+              <div class="pill pg mb-3" style="font-size:12px;padding:4px 12px">🎯 RISK_ON — Uptrend · Moderate Vol</div>
+              <table class="dt"><thead><tr><th>Ticker</th><th>AI Score</th><th>Signal</th><th>Sector</th><th class="r">Confidence</th></tr></thead>
+                <tbody>
+                  <template x-for="c in demoCandidates"><tr>
+                    <td class="mono font-bold text-white" x-text="c.ticker"></td>
+                    <td class="mono" :class="c.score>=75?'text-green-400':'text-amber-300'" x-text="c.score"></td>
+                    <td><span class="pill" :class="c.signal==='BUY'?'pg':'py'" x-text="c.signal"></span></td>
+                    <td style="color:var(--t2)" x-text="c.sector"></td>
+                    <td class="r mono font-bold" :class="c.conf>=70?'text-green-400':'text-amber-300'" x-text="c.conf+'%'"></td>
+                  </tr></template>
+                </tbody>
+              </table>
+            </div>
+          </template>
+
+          <!-- Portfolio Brief -->
+          <template x-if="showPage==='brief'">
+            <div>
+              <div class="text-sm font-bold text-green-400 mb-2">📊 Weekly Portfolio Intelligence</div>
+              <div class="text-xs mb-3" style="color:var(--t2)">Tech recovery accelerating. NVDA +8.2% on AI spending cycle. Rotate from defensive to growth. 3 actionable, 2 review, 4 watch.</div>
+              <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">Actionable Holdings</div>
+              <template x-for="h in briefHoldings.filter(x=>x.action==='ACTIONABLE')">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--s2);border:1px solid var(--bd);border-radius:4px;margin-bottom:4px">
+                  <div class="mono font-bold text-white text-sm" x-text="h.ticker"></div>
+                  <div class="text-[11px]" style="color:var(--t2)" x-text="h.note"></div>
+                  <span class="pill" :class="h.chg>=0?'pg':'pr'" x-text="(h.chg>=0?'+':'')+h.chg+'%'"></span>
+                </div>
+              </template>
+              <div class="text-[10px] font-bold uppercase mb-2 mt-3" style="color:var(--t3)">Review</div>
+              <template x-for="h in briefHoldings.filter(x=>x.action==='REVIEW')">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--s2);border:1px solid var(--bd);border-radius:4px;margin-bottom:4px">
+                  <div class="mono font-bold text-white text-sm" x-text="h.ticker"></div>
+                  <div class="text-[11px]" style="color:var(--t2)" x-text="h.note"></div>
+                  <span class="pill" :class="h.chg>=0?'pg':'pr'" x-text="(h.chg>=0?'+':'')+h.chg+'%'"></span>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <!-- Compare -->
+          <template x-if="showPage==='compare'">
+            <div>
+              <div class="text-sm mb-2" style="color:var(--t2)">Normalized Return Comparison (6M)</div>
+              <table class="dt"><thead><tr><th>Ticker</th><th class="r">Return</th><th class="r">Sharpe</th><th class="r">Max DD</th><th class="r">Volatility</th></tr></thead>
+                <tbody>
+                  <tr><td class="mono font-bold text-white">NVDA</td><td class="r mono text-green-400">+42.1%</td><td class="r mono text-white">1.85</td><td class="r mono text-red-400">-12.3%</td><td class="r mono text-amber-300">38.2%</td></tr>
+                  <tr><td class="mono font-bold text-white">AAPL</td><td class="r mono text-green-400">+11.5%</td><td class="r mono text-white">1.22</td><td class="r mono text-red-400">-8.1%</td><td class="r mono text-amber-300">22.4%</td></tr>
+                  <tr><td class="mono font-bold text-white">MSFT</td><td class="r mono text-green-400">+14.8%</td><td class="r mono text-white">1.41</td><td class="r mono text-red-400">-7.5%</td><td class="r mono text-amber-300">20.1%</td></tr>
+                  <tr><td class="mono font-bold text-white">SPY</td><td class="r mono text-green-400">+9.2%</td><td class="r mono text-white">1.05</td><td class="r mono text-red-400">-5.4%</td><td class="r mono text-amber-300">15.8%</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+
+          <!-- Performance Lab -->
+          <template x-if="showPage==='perf'">
+            <div>
+              <div class="text-sm font-bold text-green-400 mb-3">📈 Performance Summary (Synthetic)</div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--bd);border-radius:6px;overflow:hidden;margin-bottom:12px">
+                <div style="background:var(--s1);padding:14px;text-align:center"><div class="text-xl font-black mono text-green-400">+18.4%</div><div class="text-[9px] font-bold uppercase" style="color:var(--t3)">Annual Return (Net)</div></div>
+                <div style="background:var(--s1);padding:14px;text-align:center"><div class="text-xl font-black mono text-green-400">+19.2%</div><div class="text-[9px] font-bold uppercase" style="color:var(--t3)">Annual Return (Gross)</div></div>
+                <div style="background:var(--s1);padding:14px;text-align:center"><div class="text-xl font-black mono text-white">1.42</div><div class="text-[9px] font-bold uppercase" style="color:var(--t3)">Sharpe Ratio</div></div>
+                <div style="background:var(--s1);padding:14px;text-align:center"><div class="text-xl font-black mono text-red-400">-11.2%</div><div class="text-[9px] font-bold uppercase" style="color:var(--t3)">Max Drawdown</div></div>
+                <div style="background:var(--s1);padding:14px;text-align:center"><div class="text-xl font-black mono text-white">62%</div><div class="text-[9px] font-bold uppercase" style="color:var(--t3)">Win Rate</div></div>
+                <div style="background:var(--s1);padding:14px;text-align:center"><div class="text-xl font-black mono text-white">1.85</div><div class="text-[9px] font-bold uppercase" style="color:var(--t3)">Profit Factor</div></div>
+              </div>
+              <div class="text-[10px] mono" style="color:var(--t3)">Benchmark: SPY (SYNTHETIC) · Total cost: 8 bps (5 fees + 3 slippage) · n=42 trades</div>
+            </div>
+          </template>
+
+          <!-- Options Lab -->
+          <template x-if="showPage==='options'">
+            <div>
+              <div class="text-sm font-bold mb-3"><span class="text-green-400">AAPL</span> LEAPS Call Screen</div>
+              <div class="text-xs mb-2" style="color:var(--t2)">Expression Decision: <span class="pill pg">LONG CALL</span></div>
+              <table class="dt"><thead><tr><th>Strike</th><th>DTE</th><th class="r">Mid</th><th class="r">IV</th><th class="r">OI</th><th class="r">EV</th><th>Rank</th></tr></thead>
+                <tbody>
+                  <tr><td class="mono text-white">$200</td><td>120</td><td class="r mono text-white">$12.50</td><td class="r mono">28.4%</td><td class="r mono">3,241</td><td class="r mono text-green-400">+2.8</td><td class="mono text-amber-300">#1</td></tr>
+                  <tr><td class="mono text-white">$210</td><td>120</td><td class="r mono text-white">$8.20</td><td class="r mono">30.1%</td><td class="r mono">2,105</td><td class="r mono text-green-400">+2.4</td><td class="mono">#2</td></tr>
+                  <tr><td class="mono text-white">$195</td><td>90</td><td class="r mono text-white">$11.80</td><td class="r mono">27.8%</td><td class="r mono">4,532</td><td class="r mono text-green-400">+2.1</td><td class="mono">#3</td></tr>
+                </tbody>
+              </table>
+              <div class="text-[10px] mono mt-2" style="color:var(--t3)">⚠️ SYNTHETIC OPTIONS DATA — simulated contracts</div>
+            </div>
+          </template>
+
+          <!-- Signal Explorer -->
+          <template x-if="showPage==='signals'">
+            <div>
+              <div class="text-sm font-bold text-white mb-3">📡 Signal Explorer</div>
+              <table class="dt"><thead><tr><th>Ticker</th><th>Dir</th><th>Strategy</th><th class="r">Conf</th><th class="r">Entry</th><th>Status</th></tr></thead>
+                <tbody><template x-for="s in demoSignals"><tr>
+                  <td class="mono font-bold text-white" x-text="s.ticker"></td>
+                  <td><span class="pill" :class="s.dir==='LONG'?'pg':'pr'" x-text="s.dir"></span></td>
+                  <td style="color:var(--t2)" x-text="s.strategy"></td>
+                  <td class="r mono" :class="s.conf>=70?'text-green-400':'text-amber-300'" x-text="s.conf+'%'"></td>
+                  <td class="r mono text-white" x-text="'$'+s.entry"></td>
+                  <td><span class="pill" :class="s.status==='active'?'pg':'pw'" x-text="s.status"></span></td>
+                </tr></template></tbody>
+              </table>
+            </div>
+          </template>
+
+          <!-- Macro Intel -->
+          <template x-if="showPage==='macro'">
+            <div>
+              <div class="text-sm font-bold mb-3" style="color:var(--amber)">🌍 Macro Intelligence</div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--bd);border-radius:6px;overflow:hidden;margin-bottom:12px">
+                <div style="background:var(--s1);padding:12px;text-align:center"><div class="text-lg font-black mono text-white">4.28%</div><div class="text-[9px] uppercase" style="color:var(--t3)">10Y Yield</div></div>
+                <div style="background:var(--s1);padding:12px;text-align:center"><div class="text-lg font-black mono text-amber-300">18.4</div><div class="text-[9px] uppercase" style="color:var(--t3)">VIX</div></div>
+                <div style="background:var(--s1);padding:12px;text-align:center"><div class="text-lg font-black mono text-green-400">LOW</div><div class="text-[9px] uppercase" style="color:var(--t3)">War Risk</div></div>
+              </div>
+              <table class="dt"><thead><tr><th>Factor</th><th>Level</th><th class="r">Impact</th></tr></thead>
+                <tbody>
+                  <tr><td class="text-white">Fed Funds Rate</td><td class="mono">5.25–5.50%</td><td class="r"><span class="pill pr">Bearish</span></td></tr>
+                  <tr><td class="text-white">Yield Curve (2-10)</td><td class="mono">-0.12%</td><td class="r"><span class="pill py">Caution</span></td></tr>
+                  <tr><td class="text-white">Dollar Index (DXY)</td><td class="mono">104.2</td><td class="r"><span class="pill py">Neutral</span></td></tr>
+                  <tr><td class="text-white">Gold</td><td class="mono">$2,342</td><td class="r"><span class="pill pg">Hedge</span></td></tr>
+                  <tr><td class="text-white">Oil (WTI)</td><td class="mono">$78.40</td><td class="r"><span class="pill py">Neutral</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+
+          <div class="text-[10px] mono mt-4" style="color:var(--t3)">Demo snapshot · Synthetic data · Full interactive version runs on localhost:8000</div>
+        </div>
+      </div>
+    </template>
+
+    <footer class="px-4 py-2 text-center text-[9px]" style="color:var(--t3);border-top:1px solid var(--bd)">
+      TradingAI Pro v6.41 · Sprint 41 · <a href="https://github.com/cheafi/Trading-bot-CC" style="color:var(--blue);text-decoration:none">GitHub Repo</a> · Research & Education Only
+    </footer>
+
+    <nav class="nav-b">
+      <div class="flex justify-around max-w-lg mx-auto">
+        <a href="#" @click.prevent="tab='home';showPage=null" :class="tab==='home'&&!showPage?'on':''"><span class="ic">📊</span>Home</a>
+        <a href="#" @click.prevent="showPage='regime'" :class="showPage==='regime'?'on':''"><span class="ic">🎯</span>Regime</a>
+        <a href="#" @click.prevent="showPage='brief'" :class="showPage==='brief'?'on':''"><span class="ic">📋</span>Brief</a>
+        <a href="#" @click.prevent="showPage='compare'" :class="showPage==='compare'?'on':''"><span class="ic">📈</span>Compare</a>
+        <a href="#" @click.prevent="showPage='perf'" :class="showPage==='perf'?'on':''"><span class="ic">🔬</span>Perf</a>
+        <a href="#" @click.prevent="showPage='options'" :class="showPage==='options'?'on':''"><span class="ic">🔮</span>Options</a>
+        <a href="#" @click.prevent="tab='signals';showPage=null" :class="tab==='signals'?'on':''"><span class="ic">📡</span>Signals</a>
+      </div>
+    </nav>
+
+    <script>
+      function app(){return{
+        tab:'home',showPage:null,clock:'',
+        tabs:[{id:'home',icon:'📊',label:'Home'},{id:'signals',icon:'📡',label:'Signals'},{id:'backtest',icon:'🔬',label:'Backtest'}],
+        regime:{score:72,label:'RISK_ON',trend:'UPTREND',vol:'MODERATE',strategies:['Momentum','Swing','Mean Reversion']},
+        indices:[
+          {name:'S&P 500',symbol:'SPY',price:5248.32,change_pct:0.65},
+          {name:'Nasdaq 100',symbol:'QQQ',price:18421.50,change_pct:1.12},
+          {name:'Russell 2000',symbol:'IWM',price:2052.18,change_pct:-0.34},
+          {name:'Dow Jones',symbol:'DIA',price:39142.80,change_pct:0.28}
+        ],
+        macro:[
+          {name:'VIX',symbol:'^VIX',price:18.42,change_pct:-3.21},
+          {name:'Gold',symbol:'GLD',price:2342.50,change_pct:0.45},
+          {name:'Bonds 20Y',symbol:'TLT',price:92.15,change_pct:-0.18},
+          {name:'Bitcoin',symbol:'BTC-USD',price:71245.00,change_pct:2.34},
+          {name:'Ethereum',symbol:'ETH-USD',price:3580.00,change_pct:1.82},
+          {name:'Oil',symbol:'USO',price:78.40,change_pct:-0.52}
+        ],
+        sectors:[
+          {name:'Technology',change_pct:1.24},{name:'Financials',change_pct:0.45},
+          {name:'Healthcare',change_pct:-0.32},{name:'Energy',change_pct:-0.18},
+          {name:'Industrials',change_pct:0.67},{name:'Consumer Disc',change_pct:0.89},
+          {name:'Consumer Staples',change_pct:0.12},{name:'Utilities',change_pct:-0.08},
+          {name:'Real Estate',change_pct:-0.54},{name:'Communication',change_pct:1.05},
+          {name:'Materials',change_pct:0.33}
+        ],
+        asia:[
+          {name:'Nikkei 225',price:39872,change_pct:0.92},
+          {name:'Hang Seng',price:16845,change_pct:-0.68},
+          {name:'Shanghai',price:3078,change_pct:0.15},
+          {name:'KOSPI',price:2685,change_pct:0.43},
+          {name:'TAIEX',price:20145,change_pct:1.32},
+          {name:'ASX 200',price:7842,change_pct:0.28},
+          {name:'BSE Sensex',price:74521,change_pct:0.56}
+        ],
+        signalKPIs:[
+          {value:'24',label:'Generated',color:'text-green-400'},
+          {value:'8',label:'Rejected',color:'text-amber-400'},
+          {value:'12',label:'Active',color:'text-blue-400'},
+          {value:'68%',label:'Win Rate (30d)',color:'text-green-400'}
+        ],
+        demoSignals:[
+          {ticker:'NVDA',dir:'LONG',strategy:'Momentum',conf:85,entry:880.50,target:950,status:'active'},
+          {ticker:'AAPL',dir:'LONG',strategy:'Swing',conf:72,entry:195.20,target:212,status:'active'},
+          {ticker:'MSFT',dir:'LONG',strategy:'Mean Reversion',conf:68,entry:415.00,target:440,status:'active'},
+          {ticker:'AMZN',dir:'LONG',strategy:'Breakout',conf:78,entry:182.30,target:198,status:'active'},
+          {ticker:'TSLA',dir:'SHORT',strategy:'Mean Reversion',conf:64,entry:175.80,target:158,status:'active'},
+          {ticker:'META',dir:'LONG',strategy:'Momentum',conf:82,entry:502.40,target:545,status:'triggered'},
+          {ticker:'GOOGL',dir:'LONG',strategy:'Swing',conf:71,entry:155.60,target:168,status:'active'},
+          {ticker:'AMD',dir:'LONG',strategy:'Momentum',conf:76,entry:162.80,target:185,status:'active'}
+        ],
+        demoCandidates:[
+          {ticker:'NVDA',score:88,signal:'BUY',sector:'Semiconductor',conf:85},
+          {ticker:'AAPL',score:76,signal:'BUY',sector:'Big Tech',conf:72},
+          {ticker:'MSFT',score:74,signal:'BUY',sector:'Software / AI',conf:68},
+          {ticker:'AMZN',score:79,signal:'BUY',sector:'Big Tech',conf:78},
+          {ticker:'AMD',score:72,signal:'BUY',sector:'Semiconductor',conf:76},
+          {ticker:'GOOGL',score:71,signal:'HOLD',sector:'Big Tech',conf:65}
+        ],
+        briefHoldings:[
+          {ticker:'NVDA',chg:8.2,note:'AI cycle accelerating; upgrade target',action:'ACTIONABLE'},
+          {ticker:'AAPL',chg:2.1,note:'iPhone restock; steady momentum',action:'ACTIONABLE'},
+          {ticker:'AMZN',chg:4.5,note:'AWS beat; cloud re-acceleration',action:'ACTIONABLE'},
+          {ticker:'MSFT',chg:1.8,note:'Copilot revenue not yet material',action:'REVIEW'},
+          {ticker:'TSLA',chg:-3.4,note:'Margins compressing; watch $160 support',action:'REVIEW'}
+        ],
+        pageData:{
+          regime:{title:'🎯 Regime Screener'},brief:{title:'📋 Portfolio Brief'},
+          compare:{title:'📈 Compare Overlay'},perf:{title:'🔬 Performance Lab'},
+          options:{title:'🔮 Options Lab'},signals:{title:'📡 Signal Explorer'},
+          macro:{title:'🌍 Macro Intelligence'}
+        },
+        bt:{ticker:'AAPL',strategy:'all',result:null},
+        init(){this.tick();setInterval(()=>this.tick(),1000)},
+        tick(){this.clock=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'})},
+        runBT(){
+          const t=this.bt.ticker.toUpperCase()||'AAPL';
+          this.bt.result={ticker:t,bars:252,benchmark_return:12.4,best_strategy:'Momentum',strategies:[
+            {strategy:'Momentum',score:87,total_trades:28,win_rate:64,total_return:24.8,sharpe:1.52,max_drawdown:-8.4,profit_factor:1.92},
+            {strategy:'Swing Trading',score:74,total_trades:42,win_rate:57,total_return:18.2,sharpe:1.18,max_drawdown:-11.2,profit_factor:1.65},
+            {strategy:'Mean Reversion',score:68,total_trades:56,win_rate:52,total_return:14.5,sharpe:0.95,max_drawdown:-13.8,profit_factor:1.42}
+          ]};
+        }
+      }}
+    </script>
+  </body>
+</html>
