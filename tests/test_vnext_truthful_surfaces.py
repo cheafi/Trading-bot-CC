@@ -7,18 +7,16 @@ Verifies that core API endpoints:
   3. Never emit random data in non-SYNTHETIC mode.
   4. Include signal lifecycle fields on recommendations.
 """
-import asyncio
-import importlib
-import sys
+
 from datetime import datetime, timezone
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_fake_engine(
     cached_recs=None,
@@ -32,9 +30,9 @@ def _make_fake_engine(
     engine.dry_run = dry_run
     engine._no_trade_card = None
     engine.trade_repo = MagicMock()
-    engine.trade_repo.get_closed_trades = MagicMock(
-        return_value=[],
-    )
+    engine.trade_repo.get_recent_outcomes = AsyncMock(return_value=[])
+    # backward compat alias
+    engine.trade_repo.get_closed_trades = MagicMock(return_value=[])
     engine.kpi = MagicMock()
     engine.kpi.snapshot = MagicMock(return_value=None)
     return engine
@@ -43,6 +41,7 @@ def _make_fake_engine(
 # ---------------------------------------------------------------------------
 # 1. TradeRecommendation lifecycle fields
 # ---------------------------------------------------------------------------
+
 
 class TestTradeRecommendationLifecycle:
     """Signal lifecycle fields exist and serialise correctly."""
@@ -91,6 +90,7 @@ class TestTradeRecommendationLifecycle:
 # 2. /api/recommendations reads singleton engine
 # ---------------------------------------------------------------------------
 
+
 class TestRecommendationsEndpoint:
     """Recommendations endpoint must use _get_engine(), not local instances."""
 
@@ -101,6 +101,7 @@ class TestRecommendationsEndpoint:
             from fastapi.testclient import TestClient
 
             from src.api.main import app
+
             return TestClient(app)
         except Exception:
             pytest.skip("FastAPI TestClient not available")
@@ -125,8 +126,9 @@ class TestRecommendationsEndpoint:
         resp = client.get("/api/recommendations")
         data = resp.json()
         # Should not contain the old placeholder note
-        assert data.get("note") != \
-            "Live data populated when AutoTradingEngine is running."
+        assert (
+            data.get("note") != "Live data populated when AutoTradingEngine is running."
+        )
 
     def test_count_matches_recommendations(self, client):
         resp = client.get("/api/recommendations?limit=5")
@@ -138,6 +140,7 @@ class TestRecommendationsEndpoint:
 # 3. Performance Lab never returns random in live mode
 # ---------------------------------------------------------------------------
 
+
 class TestPerformanceLabTruth:
     """Performance Lab must clearly separate LIVE from SYNTHETIC."""
 
@@ -147,6 +150,7 @@ class TestPerformanceLabTruth:
             from fastapi.testclient import TestClient
 
             from src.api.main import app
+
             return TestClient(app)
         except Exception:
             pytest.skip("FastAPI TestClient not available")
@@ -205,6 +209,7 @@ class TestPerformanceLabTruth:
 # 4. Compare Overlay uses MarketDataService
 # ---------------------------------------------------------------------------
 
+
 class TestCompareOverlayTrust:
 
     @pytest.fixture
@@ -213,6 +218,7 @@ class TestCompareOverlayTrust:
             from fastapi.testclient import TestClient
 
             from src.api.main import app
+
             return TestClient(app)
         except Exception:
             pytest.skip("FastAPI TestClient not available")
@@ -232,6 +238,7 @@ class TestCompareOverlayTrust:
 # 5. Portfolio Brief trust badge
 # ---------------------------------------------------------------------------
 
+
 class TestPortfolioBriefTrust:
 
     @pytest.fixture
@@ -240,6 +247,7 @@ class TestPortfolioBriefTrust:
             from fastapi.testclient import TestClient
 
             from src.api.main import app
+
             return TestClient(app)
         except Exception:
             pytest.skip("FastAPI TestClient not available")
@@ -250,9 +258,7 @@ class TestPortfolioBriefTrust:
             data = resp.json()
             # If loaded from artifact cache, may not have trust
             if "generated_at" in data and "trust" not in data:
-                pytest.skip(
-                    "Loaded from artifact cache (pre-VNext)"
-                )
+                pytest.skip("Loaded from artifact cache (pre-VNext)")
             assert "trust" in data
             trust = data["trust"]
             assert "mode" in trust

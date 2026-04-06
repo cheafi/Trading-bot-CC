@@ -15,7 +15,6 @@ import logging
 import time
 from collections import defaultdict
 from datetime import date, datetime, timedelta
-from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -31,7 +30,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.core.config import get_settings
 from src.core.models import (
-    BacktestDiagnostic,
     ChangeItem,
     DataQualityReport,
     DeltaSnapshot,
@@ -313,13 +311,10 @@ async def get_dashboard_data():
     """
     from datetime import datetime
 
-    # Try to load engine state
+    # Try to load engine state from the singleton
     state: Dict[str, Any] = {}
     try:
-        from src.engines.auto_trading_engine import AutoTradingEngine
-
-        # If the engine singleton is available, use its cached state
-        engine = getattr(app, "_engine_instance", None)
+        engine = _get_engine()
         if engine and hasattr(engine, "get_cached_state"):
             state = engine.get_cached_state()
     except Exception:
@@ -2144,8 +2139,8 @@ async def get_regime_scoreboard():
                 "probability": "55%",
                 "description": "Range-bound near current levels",
             },
-            bull_case={"probability": "25%", "description": f"Break above resistance"},
-            bear_case={"probability": "20%", "description": f"Lose support, vol spike"},
+            bull_case={"probability": "25%", "description": "Break above resistance"},
+            bear_case={"probability": "20%", "description": "Lose support, vol spike"},
             triggers=["Macro data", "Fed commentary", "Earnings surprises"],
         ),
     )
@@ -2790,7 +2785,6 @@ async def live_backtest(
     # Simple vectorized backtest engine
     def _run_strategy(strat_id: str) -> dict:
         """Run a single strategy backtest."""
-        import numpy as np
 
         n = len(close)
         # Compute indicators
@@ -3881,7 +3875,6 @@ async def performance_lab_data(
         if engine and hasattr(engine, "trade_repo"):
             repo = engine.trade_repo
             if hasattr(repo, "get_recent_outcomes"):
-                import asyncio
 
                 real_trades = (
                     await repo.get_recent_outcomes(
@@ -3913,7 +3906,9 @@ async def performance_lab_data(
             from src.performance.performance_tracker import PerformanceTracker
 
             tracker = PerformanceTracker()
-            if hasattr(tracker, "get_closed_trades"):
+            if hasattr(tracker, "get_recent_outcomes"):
+                real_trades = tracker.get_recent_outcomes() or []
+            elif hasattr(tracker, "get_closed_trades"):
                 real_trades = tracker.get_closed_trades() or []
         except Exception:
             pass
