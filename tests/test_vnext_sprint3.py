@@ -11,14 +11,11 @@ Tests for:
 """
 
 import json
-import math
 import os
-import shutil
 import sys
 import tempfile
-from datetime import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import numpy as np
 import pytest
@@ -38,8 +35,11 @@ class TestOptionsMapper:
 
     @pytest.mark.anyio
     async def test_build_screen_returns_result_object(self):
-        from src.services.options.options_mapper import (OptionsMapper,
-                                                         OptionsScreenResult)
+        from src.services.options.options_mapper import (
+            OptionsMapper,
+            OptionsScreenResult,
+        )
+
         mapper = OptionsMapper()
         result = await mapper.build_screen(
             ticker="AAPL", spot=175.0, rsi=55,
@@ -260,8 +260,10 @@ class TestResearchArtifactWriter:
         }
 
     def test_write_compare_overlay(self):
-        from src.services.artifacts.research_artifact_writer import \
-            ResearchArtifactWriter
+        from src.services.artifacts.research_artifact_writer import (
+            ResearchArtifactWriter,
+        )
+
         with tempfile.TemporaryDirectory() as tmpdir:
             writer = ResearchArtifactWriter(data_dir=Path(tmpdir))
             meta = writer.write(
@@ -273,8 +275,10 @@ class TestResearchArtifactWriter:
             assert "md" in meta["artifact_paths"]
 
     def test_write_options_screen(self):
-        from src.services.artifacts.research_artifact_writer import \
-            ResearchArtifactWriter
+        from src.services.artifacts.research_artifact_writer import (
+            ResearchArtifactWriter,
+        )
+
         with tempfile.TemporaryDirectory() as tmpdir:
             writer = ResearchArtifactWriter(data_dir=Path(tmpdir))
             meta = writer.write(
@@ -283,8 +287,10 @@ class TestResearchArtifactWriter:
             assert meta["artifact_id"].startswith("options-screen-")
 
     def test_write_strategy_lab(self):
-        from src.services.artifacts.research_artifact_writer import \
-            ResearchArtifactWriter
+        from src.services.artifacts.research_artifact_writer import (
+            ResearchArtifactWriter,
+        )
+
         with tempfile.TemporaryDirectory() as tmpdir:
             writer = ResearchArtifactWriter(data_dir=Path(tmpdir))
             meta = writer.write(
@@ -296,8 +302,10 @@ class TestResearchArtifactWriter:
             )
 
     def test_load_artifact_by_id(self):
-        from src.services.artifacts.research_artifact_writer import \
-            ResearchArtifactWriter
+        from src.services.artifacts.research_artifact_writer import (
+            ResearchArtifactWriter,
+        )
+
         with tempfile.TemporaryDirectory() as tmpdir:
             writer = ResearchArtifactWriter(data_dir=Path(tmpdir))
             meta = writer.write(
@@ -309,15 +317,19 @@ class TestResearchArtifactWriter:
             assert loaded["artifact_id"] == aid
 
     def test_load_missing_returns_none(self):
-        from src.services.artifacts.research_artifact_writer import \
-            ResearchArtifactWriter
+        from src.services.artifacts.research_artifact_writer import (
+            ResearchArtifactWriter,
+        )
+
         with tempfile.TemporaryDirectory() as tmpdir:
             writer = ResearchArtifactWriter(data_dir=Path(tmpdir))
             assert writer.load("nonexistent-id") is None
 
     def test_list_artifacts_all(self):
-        from src.services.artifacts.research_artifact_writer import \
-            ResearchArtifactWriter
+        from src.services.artifacts.research_artifact_writer import (
+            ResearchArtifactWriter,
+        )
+
         with tempfile.TemporaryDirectory() as tmpdir:
             writer = ResearchArtifactWriter(data_dir=Path(tmpdir))
             writer.write("compare-overlay", self._sample_compare_payload())
@@ -328,8 +340,10 @@ class TestResearchArtifactWriter:
             assert len(all_artifacts) == 3
 
     def test_list_artifacts_filter_by_surface(self):
-        from src.services.artifacts.research_artifact_writer import \
-            ResearchArtifactWriter
+        from src.services.artifacts.research_artifact_writer import (
+            ResearchArtifactWriter,
+        )
+
         with tempfile.TemporaryDirectory() as tmpdir:
             writer = ResearchArtifactWriter(data_dir=Path(tmpdir))
             writer.write("compare-overlay", self._sample_compare_payload())
@@ -340,8 +354,10 @@ class TestResearchArtifactWriter:
             assert len(compare_only) == 2
 
     def test_json_artifact_is_valid_json(self):
-        from src.services.artifacts.research_artifact_writer import \
-            ResearchArtifactWriter
+        from src.services.artifacts.research_artifact_writer import (
+            ResearchArtifactWriter,
+        )
+
         with tempfile.TemporaryDirectory() as tmpdir:
             writer = ResearchArtifactWriter(data_dir=Path(tmpdir))
             meta = writer.write(
@@ -353,8 +369,10 @@ class TestResearchArtifactWriter:
             assert "artifact_id" in data
 
     def test_index_file_maintained(self):
-        from src.services.artifacts.research_artifact_writer import \
-            ResearchArtifactWriter
+        from src.services.artifacts.research_artifact_writer import (
+            ResearchArtifactWriter,
+        )
+
         with tempfile.TemporaryDirectory() as tmpdir:
             writer = ResearchArtifactWriter(data_dir=Path(tmpdir))
             writer.write("compare-overlay", self._sample_compare_payload())
@@ -750,6 +768,7 @@ class TestPhase2Endpoints:
     @pytest.fixture
     def client(self):
         from httpx import ASGITransport, AsyncClient
+
         from src.api.main import app
         transport = ASGITransport(app=app)
         return AsyncClient(transport=transport, base_url="http://test")
@@ -918,3 +937,94 @@ class TestPhase2Endpoints:
     def test_patterns_importable(self):
         from src.research_lab.patterns import detect_patterns  # noqa: F401
         assert callable(detect_patterns)
+
+
+# ════════════════════════════════════════════════════════════════
+# Phase 3 — Operator Console + Data Catalog endpoints
+# ════════════════════════════════════════════════════════════════
+
+
+class TestPhase3OpsEndpoints:
+    """Tests for Phase 3 operator console and data catalog endpoints."""
+
+    @pytest.fixture
+    def client(self):
+        from httpx import ASGITransport, AsyncClient
+
+        from src.api.main import app
+
+        transport = ASGITransport(app=app)
+        return AsyncClient(transport=transport, base_url="http://test")
+
+    @pytest.mark.anyio
+    async def test_ops_status_returns_200(self, client):
+        async with client as c:
+            r = await c.get("/api/ops/status")
+            assert r.status_code == 200
+            d = r.json()
+            assert "uptime" in d
+            assert "uptime_seconds" in d
+            assert "version" in d
+            assert "engine" in d
+            assert "latency" in d
+            assert "trust" in d
+
+    @pytest.mark.anyio
+    async def test_ops_status_engine_fields(self, client):
+        async with client as c:
+            r = await c.get("/api/ops/status")
+            eng = r.json()["engine"]
+            for key in [
+                "running",
+                "dry_run",
+                "cycle_count",
+                "signals_today",
+                "trades_today",
+                "cached_recommendations",
+                "circuit_breaker",
+            ]:
+                assert key in eng, f"Missing {key} in engine"
+
+    @pytest.mark.anyio
+    async def test_ops_status_latency(self, client):
+        async with client as c:
+            r = await c.get("/api/ops/status")
+            lat = r.json()["latency"]
+            assert "regime_ms" in lat
+            assert isinstance(lat["regime_ms"], (int, float))
+
+    @pytest.mark.anyio
+    async def test_ops_endpoints_returns_200(self, client):
+        async with client as c:
+            r = await c.get("/api/ops/endpoints")
+            assert r.status_code == 200
+            d = r.json()
+            assert "count" in d
+            assert "endpoints" in d
+            assert d["count"] > 0
+            assert isinstance(d["endpoints"], list)
+
+    @pytest.mark.anyio
+    async def test_ops_endpoints_includes_known_routes(self, client):
+        async with client as c:
+            r = await c.get("/api/ops/endpoints")
+            paths = [ep["path"] for ep in r.json()["endpoints"]]
+            for expected in [
+                "/api/health",
+                "/api/live/market",
+                "/api/live/dossier/{ticker}",
+                "/api/live/brief",
+                "/api/live/options/{ticker}",
+                "/api/ops/status",
+                "/api/ops/endpoints",
+            ]:
+                assert expected in paths, f"Missing {expected} in endpoint inventory"
+
+    @pytest.mark.anyio
+    async def test_ops_endpoints_structure(self, client):
+        async with client as c:
+            r = await c.get("/api/ops/endpoints")
+            ep = r.json()["endpoints"][0]
+            assert "method" in ep
+            assert "path" in ep
+            assert ep["method"] in ("GET", "POST", "PUT", "DELETE")

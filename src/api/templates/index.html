@@ -587,8 +587,9 @@
     <!-- ═══════════════════════════════════════════════════════ -->
     <main x-show="tab==='ops'" class="fade">
       <div class="trust-strip">
-        <span style="color:var(--blue)">● SYSTEM</span>
-        <span x-text="'Polled: '+new Date().toISOString().slice(0,19)"></span>
+        <span :style="opsDetail.trust?'color:var(--blue)':'color:var(--blue)'" x-text="'● '+(opsDetail.trust?opsDetail.trust.mode:'SYSTEM')"></span>
+        <span x-text="opsDetail.version?'v'+opsDetail.version:'—'"></span>
+        <span x-text="opsDetail.trust?'As-of: '+opsDetail.trust.as_of.slice(0,19):'Polled: '+new Date().toISOString().slice(0,19)"></span>
       </div>
       <div class="p-3 space-y-3">
         <div class="card card-p">
@@ -608,6 +609,18 @@
             <span class="pill pw" x-text="'Trades today: '+(ops.trades_today||0)"></span>
           </div>
         </div>
+        <!-- Uptime + Latency -->
+        <div class="card card-p">
+          <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">⏱ Uptime & Latency</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;font-size:12px">
+            <div><div class="text-[10px]" style="color:var(--t3)">Uptime</div><div class="font-bold mono text-white" x-text="opsDetail.uptime||'—'"></div></div>
+            <div><div class="text-[10px]" style="color:var(--t3)">Regime Latency</div><div class="font-bold mono" :class="(opsDetail.latency&&opsDetail.latency.regime_ms||0)<500?'text-green-400':(opsDetail.latency&&opsDetail.latency.regime_ms||0)<2000?'text-amber-300':'text-red-400'" x-text="opsDetail.latency?opsDetail.latency.regime_ms+'ms':'—'"></div></div>
+            <div><div class="text-[10px]" style="color:var(--t3)">Cached Recs</div><div class="font-bold mono text-white" x-text="opsDetail.engine?opsDetail.engine.cached_recommendations||0:'—'"></div></div>
+          </div>
+          <div class="text-[9px] mt-2 mono" style="color:var(--t3)" x-text="opsDetail.startup_time?'Boot: '+opsDetail.startup_time.slice(0,19):''"></div>
+          <template x-if="opsDetail.engine&&opsDetail.engine.last_cycle"><div class="text-[9px] mono" style="color:var(--t3)" x-text="'Last cycle: '+opsDetail.engine.last_cycle"></div></template>
+        </div>
+        <!-- Component Health -->
         <div class="card card-p">
           <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">🔧 Component Health</div>
           <template x-for="[name,ok] in Object.entries(ops.components||{})">
@@ -617,6 +630,7 @@
             </div>
           </template>
         </div>
+        <!-- Data Providers -->
         <div class="card card-p">
           <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📡 Data Providers</div>
           <div class="text-[11px]" style="color:var(--t2)">
@@ -625,6 +639,18 @@
             <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)"><span>Broker (Alpaca)</span><span :class="ops.components?.broker?'text-green-400':'text-amber-300'" x-text="ops.components?.broker?'Connected':'Paper Only'"></span></div>
           </div>
         </div>
+        <!-- Cache Stats -->
+        <template x-if="opsDetail.cache_stats&&Object.keys(opsDetail.cache_stats).length>0">
+          <div class="card card-p">
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">💾 Cache Statistics</div>
+            <template x-for="[k,v] in Object.entries(opsDetail.cache_stats)">
+              <div class="flex items-center justify-between py-1 text-[11px]" style="border-bottom:1px solid var(--bd)">
+                <span style="color:var(--t2)" x-text="k.replace(/_/g,' ')"></span>
+                <span class="mono text-white" x-text="typeof v==='number'?v.toLocaleString():v"></span>
+              </div>
+            </template>
+          </div>
+        </template>
       </div>
     </main>
 
@@ -632,8 +658,28 @@
     <!-- SURFACE 8: DATA CATALOG                                -->
     <!-- ═══════════════════════════════════════════════════════ -->
     <main x-show="tab==='catalog'" class="fade">
-      <div class="trust-strip"><span style="color:var(--t2)">● REFERENCE</span><span>Static documentation</span></div>
+      <div class="trust-strip"><span style="color:var(--t2)">● REFERENCE</span><span x-text="opsDetail.version?'v'+opsDetail.version:'—'"></span><span>Static + live documentation</span></div>
       <div class="p-3 space-y-3">
+        <!-- Live API Endpoint Inventory -->
+        <div class="card card-p">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">🔌 API Endpoints (<span x-text="apiEndpoints.length"></span>)</div>
+            <button @click="fetchEndpoints()" class="btn-s text-[10px]">Refresh</button>
+          </div>
+          <template x-if="apiEndpoints.length>0">
+            <div style="max-height:240px;overflow-y:auto">
+              <template x-for="ep in apiEndpoints">
+                <div class="flex items-center gap-2 py-1 text-[10px]" style="border-bottom:1px solid var(--bd)">
+                  <span class="pill" :class="ep.method==='GET'?'pg':ep.method==='POST'?'pb':'pa'" style="font-size:8px;min-width:36px;text-align:center" x-text="ep.method"></span>
+                  <span class="mono text-white flex-1" style="word-break:break-all" x-text="ep.path"></span>
+                  <span class="text-[8px] hidden sm:inline" style="color:var(--t3);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="ep.description||''"></span>
+                </div>
+              </template>
+            </div>
+          </template>
+          <template x-if="apiEndpoints.length===0"><div class="text-[11px]" style="color:var(--t3);text-align:center;padding:12px">Loading endpoints…</div></template>
+        </div>
+        <!-- Data Coverage -->
         <div class="card card-p">
           <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📚 Data Coverage</div>
           <table class="tbl">
@@ -644,10 +690,12 @@
               <tr><td>Indices</td><td class="mono text-[10px]">yfinance</td><td>SPY QQQ IWM DIA</td><td class="text-green-400">Real-time*</td></tr>
               <tr><td>Macro</td><td class="mono text-[10px]">yfinance</td><td>VIX GLD TLT USO BTC ETH</td><td class="text-green-400">Real-time*</td></tr>
               <tr><td>Asia-Pacific</td><td class="mono text-[10px]">yfinance</td><td>N225 HSI SSE KOSPI TAIEX</td><td class="text-green-400">Delayed</td></tr>
-              <tr><td>Technicals</td><td class="mono text-[10px]">pandas-ta</td><td>RSI SMA EMA MACD</td><td class="text-green-400">Computed</td></tr>
+              <tr><td>Technicals</td><td class="mono text-[10px]">computed</td><td>RSI SMA MACD BBands ATR</td><td class="text-green-400">On request</td></tr>
               <tr><td>Regime</td><td class="mono text-[10px]">HMM + rules</td><td>Single source</td><td class="text-green-400">60s cache</td></tr>
               <tr><td>Signals</td><td class="mono text-[10px]">engine</td><td>5 strategies</td><td class="text-green-400">Engine cycle</td></tr>
               <tr><td>Backtest</td><td class="mono text-[10px]">vectorbt</td><td>Gross returns</td><td class="text-amber-300">On-demand</td></tr>
+              <tr><td>Dossier</td><td class="mono text-[10px]">computed</td><td>Full stock research</td><td class="text-green-400">On request</td></tr>
+              <tr><td>Daily Brief</td><td class="mono text-[10px]">engine+mds</td><td>Analyst-grade brief</td><td class="text-green-400">On request</td></tr>
             </tbody>
           </table>
           <div class="text-[9px] mt-2" style="color:var(--t3)">* yfinance data may be delayed 15-20min. Not suitable for intraday execution.</div>
@@ -717,6 +765,8 @@
       brief:{loading:false,data:null},
       bt:{ticker:'AAPL',strategy:'all',period:'1y',loading:false,result:null},
       ops:{running:false,cycle_count:0,signals_today:0,trades_today:0,circuit_breaker:false,circuit_breaker_reason:'',dry_run:true,components:{}},
+      opsDetail:{},
+      apiEndpoints:[],
 
       init(){
         this.tick();setInterval(()=>this.tick(),1000);
@@ -725,7 +775,7 @@
         this.fetchHealth();setInterval(()=>this.fetchHealth(),120000);
       },
       tick(){this.clock=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'})},
-      switchTab(t){this.tab=t;if(t==='signals')this.fetchSignals();if(t==='ops')this.fetchHealth();if(t==='brief')this.fetchBrief()},
+      switchTab(t){this.tab=t;if(t==='signals')this.fetchSignals();if(t==='ops')this.fetchHealth();if(t==='brief')this.fetchBrief();if(t==='catalog'){this.fetchEndpoints();this.fetchOpsDetail()}},
 
       async fetchMkt(){
         try{const r=await fetch('/api/live/market');if(!r.ok)throw 0;const d=await r.json();this.regime=d.regime||{};this.indices=d.indices||[];this.macro=d.macro||[];this.sectors=d.sectors||[];this.asia=d.asia||[];this.trust=d.trust||{};this.live=true}catch(e){this.live=false}
@@ -752,6 +802,14 @@
       },
       async fetchHealth(){
         try{const r=await fetch('/api/health');if(!r.ok)throw 0;const d=await r.json();this.ops.components=d.components||{};const m=d.metrics||{};this.ops.running=m.running||false;this.ops.cycle_count=m.cycle_count||0;this.ops.signals_today=m.signals_today||0;this.ops.trades_today=m.trades_today||0;this.ops.circuit_breaker=m.circuit_breaker_triggered||false;this.ops.circuit_breaker_reason=m.circuit_breaker_reason||'';this.ops.dry_run=m.dry_run!==false}catch(e){}
+        this.fetchOpsDetail();
+      },
+      async fetchOpsDetail(){
+        try{const r=await fetch('/api/ops/status');if(!r.ok)throw 0;this.opsDetail=await r.json()}catch(e){}
+      },
+      async fetchEndpoints(){
+        if(this.apiEndpoints.length>0)return;
+        try{const r=await fetch('/api/ops/endpoints');if(!r.ok)throw 0;const d=await r.json();this.apiEndpoints=d.endpoints||[]}catch(e){}
       },
     }}
     </script>
