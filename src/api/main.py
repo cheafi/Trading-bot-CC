@@ -12,6 +12,7 @@ Features:
 
 import asyncio
 import logging
+import math
 import time
 from collections import defaultdict
 from datetime import date, datetime, timedelta
@@ -256,6 +257,17 @@ def _get_engine():
             app.state.engine = None
         app.state.engine_init_done = True
     return app.state.engine
+
+
+def _sanitize_for_json(obj):
+    """Recursively replace NaN / Inf floats with None for JSON compliance."""
+    if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_for_json(v) for v in obj]
+    return obj
 
 
 async def _get_regime():
@@ -2377,6 +2389,7 @@ async def get_recommendations(limit: int = Query(10, ge=1, le=50)):
                 else {"label": str(regime)}
             )
         )
+        regime_dict = _sanitize_for_json(regime_dict)
 
         # ── Read cached recommendations from live engine ──
         cached_recs: list = []
@@ -2547,85 +2560,137 @@ async def live_market():
     Regime from shared RegimeRouter singleton (single source of truth).
     Fetches truly parallel via asyncio.gather.
     """
-    # Fetch all tickers in truly parallel threads
-    all_symbols = (
-        [(s, n, "index") for s, n in _LIVE_INDICES]
-        + [(s, n, "macro") for s, n in _LIVE_MACRO]
-        + [(s, n, "sector") for s, n in _LIVE_SECTORS]
-        + [(s, n, "asia") for s, n in _LIVE_ASIA]
-    )
+    try:
+        # Fetch all tickers in truly parallel threads
+        all_symbols = (
+            [(s, n, "index") for s, n in _LIVE_INDICES]
+            + [(s, n, "macro") for s, n in _LIVE_MACRO]
+            + [(s, n, "sector") for s, n in _LIVE_SECTORS]
+            + [(s, n, "asia") for s, n in _LIVE_ASIA]
+        )
 
-    async def _fetch_one(sym, name, group):
-        try:
-            q = await _mds_quote(sym)
-            q["name"] = name
-            q["group"] = group
-            return sym, q
-        except Exception:
-            return sym, {
-                "symbol": sym,
-                "name": name,
-                "group": group,
-                "price": 0,
-                "change_pct": 0,
+        async def _fetch_one(sym, name, group):
+            try:
+                q = await _mds_quote(sym)
+                q["name"] = name
+                q["group"] = group
+                return sym, q
+            except Exception:
+                return sym, {
+                    "symbol": sym,
+                    "name": name,
+                    "group": group,
+                    "price": 0,
+                    "change_pct": 0,
+                }
+
+        fetched = await asyncio.gather(
+            *[_fetch_one(s, n, g) for s, n, g in all_symbols]
+        )
+        results = dict(fetched)
+
+        # Use shared RegimeRouter — single source of truth
+        regime_state = await _get_regime()
+
+        # Map canonical RegimeState to dashboard contract
+        vol_map = {
+            "low_vol": "LOW",
+            "normal_vol": "NORMAL",
+            "elevated_vol": "HIGH",
+            "high_vol": "HIGH",
+            "crisis_vol": "CRISIS",
+        }
+        vol_label = vol_map.get(regime_state.volatility_regime, "NORMAL")
+        trend_map = {
+            "uptrend": "UPTREND",
+            "downtrend": "DOWNTREND",
+            "sideways": "SIDEWAYS",
+        }
+        trend_label = trend_map.get(regime_state.trend_regime, "SIDEWAYS")
+
+        # Strategy playbook from regime router
+        router = app.state.regime_router
+        mults = router.get_strategy_multipliers(regime_state)
+        strategies = [
+            k.replace("_", "-").title()
+            for k, v in sorted(mults.items(), key=lambda x: -x[1])
+            if v >= 0.5
+        ][:4]
+
+        conf = regime_state.confidence
+        risk_score = (
+            max(0, min(100, int(conf * 100)))
+            if isinstance(conf, (int, float)) and not math.isnan(conf)
+            else 50
+        )
+
+        indices = [results[s] for s, _ in _LIVE_INDICES if s in results]
+        macro = [results[s] for s, _ in _LIVE_MACRO if s in results]
+        sectors = sorted(
+            [results[s] for s, _ in _LIVE_SECTORS if s in results],
+            key=lambda x: x.get("change_pct", 0),
+            reverse=True,
+        )
+        asia = [results[s] for s, _ in _LIVE_ASIA if s in results]
+
+        mode = (
+            "PAPER"
+            if getattr(app.state, "engine", None)
+            and getattr(app.state.engine, "dry_run", True)
+            else "LIVE"
+        )
+
+        return _sanitize_for_json(
+            {
+                "regime": {
+                    "label": regime_state.regime,
+                    "trend": trend_label,
+                    "vol": vol_label,
+                    "score": risk_score,
+                    "strategies": strategies,
+                    "should_trade": regime_state.should_trade,
+                    "entropy": regime_state.entropy,
+                    "size_scalar": regime_state.size_scalar,
+                    "no_trade_reason": regime_state.no_trade_reason,
+                },
+                "indices": indices,
+                "macro": macro,
+                "sectors": sectors,
+                "asia": asia,
+                "trust": {
+                    "mode": mode,
+                    "source": "market_data_service",
+                    "as_of": datetime.utcnow().isoformat() + "Z",
+                },
+                "timestamp": datetime.utcnow().isoformat(),
             }
-
-    fetched = await asyncio.gather(*[_fetch_one(s, n, g) for s, n, g in all_symbols])
-    results = dict(fetched)
-
-    # Use shared RegimeRouter — single source of truth
-    regime_state = await _get_regime()
-
-    # Map canonical RegimeState to dashboard contract
-    vol_map = {
-        "low_vol": "LOW",
-        "normal_vol": "NORMAL",
-        "elevated_vol": "HIGH",
-        "high_vol": "HIGH",
-        "crisis_vol": "CRISIS",
-    }
-    vol_label = vol_map.get(regime_state.volatility_regime, "NORMAL")
-    trend_map = {"uptrend": "UPTREND", "downtrend": "DOWNTREND", "sideways": "SIDEWAYS"}
-    trend_label = trend_map.get(regime_state.trend_regime, "SIDEWAYS")
-
-    # Strategy playbook from regime router
-    router = app.state.regime_router
-    mults = router.get_strategy_multipliers(regime_state)
-    strategies = [
-        k.replace("_", "-").title()
-        for k, v in sorted(mults.items(), key=lambda x: -x[1])
-        if v >= 0.5
-    ][:4]
-
-    risk_score = max(0, min(100, int(regime_state.confidence * 100)))
-
-    indices = [results[s] for s, _ in _LIVE_INDICES if s in results]
-    macro = [results[s] for s, _ in _LIVE_MACRO if s in results]
-    sectors = sorted(
-        [results[s] for s, _ in _LIVE_SECTORS if s in results],
-        key=lambda x: x.get("change_pct", 0),
-        reverse=True,
-    )
-    asia = [results[s] for s, _ in _LIVE_ASIA if s in results]
-
-    return {
-        "regime": {
-            "label": regime_state.regime,
-            "trend": trend_label,
-            "vol": vol_label,
-            "score": risk_score,
-            "strategies": strategies,
-            "should_trade": regime_state.should_trade,
-            "entropy": regime_state.entropy,
-            "size_scalar": regime_state.size_scalar,
-            "no_trade_reason": regime_state.no_trade_reason,
-        },
-        "indices": indices,
-        "macro": macro,
-        "sectors": sectors,
-        "asia": asia,
-        "timestamp": datetime.utcnow().isoformat(),
-    }
+        )
+    except Exception as e:
+        logger.error(f"live_market error: {e}")
+        # Return a degraded but valid response so the UI stays LIVE
+        return {
+            "regime": {
+                "label": "unknown",
+                "trend": "SIDEWAYS",
+                "vol": "NORMAL",
+                "score": 50,
+                "strategies": [],
+                "should_trade": False,
+                "entropy": None,
+                "size_scalar": 1.0,
+                "no_trade_reason": f"data unavailable: {e}",
+            },
+            "indices": [],
+            "macro": [],
+            "sectors": [],
+            "asia": [],
+            "trust": {
+                "mode": "PAPER",
+                "source": "fallback",
+                "as_of": datetime.utcnow().isoformat() + "Z",
+            },
+            "timestamp": datetime.utcnow().isoformat(),
+        }
 
 
 @app.get("/api/live/quote/{ticker}", tags=["live"])

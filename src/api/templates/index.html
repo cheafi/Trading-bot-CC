@@ -2,1195 +2,673 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"
-    />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
     <meta name="theme-color" content="#0d1117" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <title>TradingAI Pro</title>
+    <title>CC · Clarity Console</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script
-      defer
-      src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"
-    ></script>
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
-      rel="stylesheet"
-    />
-    <link
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <style>
-      :root {
-        --bg: #0d1117;
-        --s1: #161b22;
-        --s2: #1c2333;
-        --bd: #21262d;
-        --bd2: #30363d;
-        --t1: #e6edf3;
-        --t2: #8b949e;
-        --t3: #484f58;
-        --green: #00d4aa;
-        --red: #ff5c5c;
-        --amber: #fbbf24;
-        --blue: #58a6ff;
-      }
-      * {
-        font-family: "Inter", sans-serif;
-        box-sizing: border-box;
-        margin: 0;
-      }
-      body {
-        background: var(--bg);
-        color: var(--t1);
-        overflow-x: hidden;
-      }
-      .mono {
-        font-family: "JetBrains Mono", monospace;
-      }
-      .card {
-        background: var(--s1);
-        border: 1px solid var(--bd);
-        border-radius: 10px;
-        overflow: hidden;
-      }
-      .card-p {
-        padding: 14px;
-      }
-      .pill {
-        display: inline-block;
-        padding: 2px 8px;
-        border-radius: 6px;
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.5px;
-      }
-      .pg {
-        background: rgba(0, 212, 170, 0.12);
-        color: var(--green);
-      }
-      .pr {
-        background: rgba(255, 92, 92, 0.12);
-        color: var(--red);
-      }
-      .pa {
-        background: rgba(251, 191, 36, 0.12);
-        color: var(--amber);
-      }
-      .pb {
-        background: rgba(88, 166, 255, 0.12);
-        color: var(--blue);
-      }
-      .pw {
-        background: rgba(230, 237, 243, 0.08);
-        color: var(--t2);
-      }
-      .tab-bar {
-        display: flex;
-        gap: 2px;
-        padding: 6px 12px;
-        background: var(--s1);
-        border-bottom: 1px solid var(--bd);
-        overflow-x: auto;
-      }
-      .tab-btn {
-        padding: 6px 14px;
-        border-radius: 6px;
-        font-size: 11px;
-        font-weight: 600;
-        color: var(--t2);
-        background: none;
-        border: none;
-        cursor: pointer;
-        white-space: nowrap;
-        transition: 0.15s;
-      }
-      .tab-btn.on {
-        background: var(--s2);
-        color: var(--t1);
-        box-shadow: 0 0 0 1px var(--bd2);
-      }
-      .nav-b {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        background: var(--s1);
-        border-top: 1px solid var(--bd);
-        padding: 6px 0 max(env(safe-area-inset-bottom), 6px);
-        z-index: 50;
-      }
-      .nav-b a {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        font-size: 9px;
-        color: var(--t3);
-        text-decoration: none;
-        gap: 2px;
-        padding: 2px 0;
-      }
-      .nav-b a.on {
-        color: var(--green);
-      }
-      .nav-b .ic {
-        font-size: 16px;
-      }
-      .scroll-row {
-        display: flex;
-        gap: 8px;
-        overflow-x: auto;
-        padding-bottom: 4px;
-        scrollbar-width: none;
-      }
-      .scroll-row::-webkit-scrollbar {
-        display: none;
-      }
-      input,
-      select {
-        background: var(--s2);
-        border: 1px solid var(--bd);
-        border-radius: 6px;
-        padding: 8px 10px;
-        color: var(--t1);
-        font-size: 12px;
-        width: 100%;
-      }
-      input:focus,
-      select:focus {
-        outline: none;
-        border-color: var(--blue);
-      }
-      .btn-p {
-        background: var(--green);
-        color: #000;
-        font-weight: 700;
-        border: none;
-        border-radius: 6px;
-        padding: 8px 16px;
-        font-size: 12px;
-        cursor: pointer;
-      }
-      .btn-p:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-      .btn-s {
-        background: var(--s2);
-        color: var(--t2);
-        font-weight: 600;
-        border: 1px solid var(--bd);
-        border-radius: 6px;
-        padding: 6px 12px;
-        font-size: 11px;
-        cursor: pointer;
-      }
-      .spin {
-        display: inline-block;
-        width: 12px;
-        height: 12px;
-        border: 2px solid var(--t3);
-        border-top-color: var(--green);
-        border-radius: 50%;
-        animation: sp 0.6s linear infinite;
-      }
-      @keyframes sp {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-      .fade {
-        animation: fi 0.3s ease;
-      }
-      @keyframes fi {
-        from {
-          opacity: 0;
-          transform: translateY(6px);
-        }
-        to {
-          opacity: 1;
-          transform: none;
-        }
-      }
-      .kpi-strip {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 6px;
-        padding: 10px 12px;
-      }
-      .kpi-box {
-        background: var(--s1);
-        border: 1px solid var(--bd);
-        border-radius: 8px;
-        padding: 10px;
-        text-align: center;
-      }
-      .kpi-val {
-        font-size: 18px;
-        font-weight: 800;
-        line-height: 1.2;
-      }
-      .kpi-lbl {
-        font-size: 9px;
-        font-weight: 600;
-        text-transform: uppercase;
-        color: var(--t3);
-        letter-spacing: 0.5px;
-        margin-top: 2px;
-      }
-      .section-hdr {
-        font-size: 10px;
-        font-weight: 700;
-        text-transform: uppercase;
-        color: var(--t3);
-        letter-spacing: 0.5px;
-        padding: 0 12px;
-        margin-top: 12px;
-        margin-bottom: 6px;
-      }
-      .qa-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 8px;
-        padding: 0 12px;
-      }
-      .qa-card {
-        display: block;
-        background: var(--s1);
-        border: 1px solid var(--bd);
-        border-radius: 8px;
-        padding: 12px;
-        text-decoration: none;
-        transition: 0.15s;
-      }
-      .qa-card:hover {
-        border-color: var(--bd2);
-        background: var(--s2);
-      }
-      .qa-card .qa-icon {
-        font-size: 20px;
-        margin-bottom: 4px;
-      }
-      .qa-card .qa-title {
-        font-size: 11px;
-        font-weight: 700;
-        color: var(--t1);
-      }
-      .qa-card .qa-sub {
-        font-size: 9px;
-        color: var(--t3);
-        margin-top: 2px;
-      }
+      :root{--bg:#0d1117;--s1:#161b22;--s2:#1c2333;--bd:#21262d;--bd2:#30363d;--t1:#e6edf3;--t2:#8b949e;--t3:#484f58;--green:#00d4aa;--red:#ff5c5c;--amber:#fbbf24;--blue:#58a6ff;--purple:#bc8cff}
+      *{font-family:'Inter',sans-serif;box-sizing:border-box;margin:0}
+      body{background:var(--bg);color:var(--t1);overflow-x:hidden}
+      .mono{font-family:'JetBrains Mono',monospace}
+      .card{background:var(--s1);border:1px solid var(--bd);border-radius:10px;overflow:hidden}
+      .card-p{padding:14px}
+      .pill{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.5px}
+      .pg{background:rgba(0,212,170,.12);color:var(--green)}
+      .pr{background:rgba(255,92,92,.12);color:var(--red)}
+      .pa{background:rgba(251,191,36,.12);color:var(--amber)}
+      .pb{background:rgba(88,166,255,.12);color:var(--blue)}
+      .pp{background:rgba(188,140,255,.12);color:var(--purple)}
+      .pw{background:rgba(230,237,243,.08);color:var(--t2)}
+      .tab-bar{display:flex;gap:2px;padding:6px 12px;background:var(--s1);border-bottom:1px solid var(--bd);overflow-x:auto;scrollbar-width:none}
+      .tab-bar::-webkit-scrollbar{display:none}
+      .tab-btn{padding:6px 12px;border-radius:6px;font-size:10px;font-weight:600;color:var(--t2);background:none;border:none;cursor:pointer;white-space:nowrap;transition:.15s}
+      .tab-btn.on{background:var(--s2);color:var(--t1);box-shadow:0 0 0 1px var(--bd2)}
+      .scroll-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+      .scroll-row::-webkit-scrollbar{display:none}
+      input,select{background:var(--s2);border:1px solid var(--bd);border-radius:6px;padding:8px 10px;color:var(--t1);font-size:12px;width:100%}
+      input:focus,select:focus{outline:none;border-color:var(--blue)}
+      .btn-p{background:var(--green);color:#000;font-weight:700;border:none;border-radius:6px;padding:8px 16px;font-size:12px;cursor:pointer}
+      .btn-p:disabled{opacity:.5;cursor:not-allowed}
+      .btn-s{background:var(--s2);color:var(--t2);font-weight:600;border:1px solid var(--bd);border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer}
+      .spin{display:inline-block;width:12px;height:12px;border:2px solid var(--t3);border-top-color:var(--green);border-radius:50%;animation:sp .6s linear infinite}
+      @keyframes sp{to{transform:rotate(360deg)}}
+      .fade{animation:fi .3s ease}
+      @keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+      .kpi-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:10px 12px}
+      .kpi-box{background:var(--s1);border:1px solid var(--bd);border-radius:8px;padding:10px;text-align:center}
+      .kpi-val{font-size:18px;font-weight:800;line-height:1.2}
+      .kpi-lbl{font-size:9px;font-weight:600;text-transform:uppercase;color:var(--t3);letter-spacing:.5px;margin-top:2px}
+      .section-hdr{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--t3);letter-spacing:.5px;padding:0 12px;margin-top:12px;margin-bottom:6px}
+      .trust-strip{display:flex;align-items:center;gap:8px;padding:4px 12px;background:var(--s2);border-bottom:1px solid var(--bd);font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);flex-wrap:wrap}
+      .tbl{width:100%;border-collapse:collapse;font-size:11px}
+      .tbl th{text-align:left;padding:6px 8px;color:var(--t3);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--bd)}
+      .tbl td{padding:6px 8px;border-bottom:1px solid var(--bd)}
+      .tbl tr:hover td{background:rgba(88,166,255,.04)}
+      .factor-chip{display:inline-block;padding:1px 6px;border-radius:4px;font-size:8px;font-weight:700;letter-spacing:.3px;margin:1px}
+      .fc-pos{background:rgba(0,212,170,.1);color:var(--green)}
+      .fc-neg{background:rgba(255,92,92,.1);color:var(--red)}
+      .fc-neu{background:rgba(230,237,243,.06);color:var(--t3)}
+      .health-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+      .health-ok{background:var(--green)}
+      .health-warn{background:var(--amber)}
+      .health-err{background:var(--red)}
     </style>
   </head>
-  <body x-data="app()" x-init="init()" style="padding-bottom: 60px">
-    <!-- HEADER -->
-    <header
-      style="
-        background: var(--s1);
-        border-bottom: 1px solid var(--bd);
-        padding: 10px 14px;
-      "
-    >
+
+  <body x-data="cc()" x-init="init()" style="padding-bottom:56px">
+
+    <!-- ══════ HEADER ══════ -->
+    <header style="background:var(--s1);border-bottom:1px solid var(--bd);padding:10px 14px">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <div
-            style="
-              width: 28px;
-              height: 28px;
-              border-radius: 6px;
-              background: linear-gradient(135deg, var(--green), var(--blue));
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-size: 14px;
-            "
-          >
-            📊
-          </div>
+          <div style="width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,var(--green),var(--blue));display:flex;align-items:center;justify-content:center;font-size:14px">📊</div>
           <div>
-            <div class="text-sm font-bold text-white">TradingAI Pro</div>
-            <div class="text-[9px] mono" style="color: var(--t3)">
-              v6.41 · Sprint 41
-            </div>
+            <div class="text-sm font-bold text-white">CC · Clarity Console</div>
+            <div class="text-[9px] mono" style="color:var(--t3)">regime-aware · decision-grade · auditable</div>
           </div>
         </div>
         <div class="flex items-center gap-3">
-          <div
-            class="text-[10px] mono"
-            style="color: var(--t2)"
-            x-text="clock"
-          ></div>
+          <div class="text-[10px] mono" style="color:var(--t2)" x-text="clock"></div>
           <div class="flex items-center gap-1">
-            <div
-              style="width: 6px; height: 6px; border-radius: 50%"
-              :style="live?'background:var(--green)':'background:var(--red)'"
-            ></div>
-            <span
-              class="text-[9px]"
-              :style="live?'color:var(--green)':'color:var(--red)'"
-              x-text="live?'LIVE':'OFFLINE'"
-            ></span>
+            <div style="width:6px;height:6px;border-radius:50%" :style="live?'background:var(--green)':'background:var(--red)'"></div>
+            <span class="text-[9px]" :style="live?'color:var(--green)':'color:var(--red)'" x-text="live?trust.mode||'LIVE':'OFFLINE'"></span>
           </div>
         </div>
       </div>
     </header>
 
-    <!-- Trust Strip -->
-    <div
-      x-show="live && trust"
-      class="flex items-center gap-3 px-4 py-1"
-      style="
-        background: #1c2333;
-        border-bottom: 1px solid #21262d;
-        color: #484f58;
-        font-family: &quot;JetBrains Mono&quot;, monospace;
-        font-size: 10px;
-      "
-    >
-      <span
-        :class="trust.mode==='SYNTHETIC'?'text-amber-400':'text-green-400'"
-        x-text="'● '+(trust.mode||'LIVE')"
-      ></span>
+    <!-- ══════ GLOBAL Trust Strip ══════ -->
+    <div class="trust-strip" x-show="live">
+      <span :style="trust.mode==='SYNTHETIC'?'color:var(--amber)':trust.mode==='PAPER'?'color:var(--blue)':'color:var(--green)'" x-text="'● '+(trust.mode||'LIVE')"></span>
       <span x-text="'Source: '+(trust.source||'market_data_service')"></span>
+      <span x-text="'As-of: '+(trust.as_of?trust.as_of.slice(0,19):'—')"></span>
     </div>
 
-    <!-- TAB BAR -->
+    <!-- ══════ TAB BAR ══════ -->
     <div class="tab-bar">
-      <template x-for="t in tabs">
-        <button
-          class="tab-btn"
-          :class="tab===t.id?'on':''"
-          @click="tab=t.id"
-          x-text="t.icon+' '+t.label"
-        ></button>
-      </template>
+      <template x-for="t in tabs"><button class="tab-btn" :class="tab===t.id?'on':''" @click="switchTab(t.id)" x-text="t.icon+' '+t.label"></button></template>
     </div>
 
-    <!-- ═══ HOME TAB ═══ -->
-    <main x-show="tab==='home'" class="fade">
-      <!-- KPI Strip -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- SURFACE 1: TODAY / REGIME                              -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <main x-show="tab==='today'" class="fade">
       <div class="kpi-strip">
         <div class="kpi-box">
-          <div
-            class="kpi-val mono"
-            :class="(regime.score||0)>=60?'text-green-400':(regime.score||0)>=40?'text-amber-300':'text-red-400'"
-            x-text="regime.score||'—'"
-          ></div>
+          <div class="kpi-val mono" :class="(regime.score||0)>=60?'text-green-400':(regime.score||0)>=40?'text-amber-300':'text-red-400'" x-text="regime.score||'—'"></div>
           <div class="kpi-lbl">AI Score</div>
         </div>
         <div class="kpi-box">
-          <div
-            class="kpi-val text-sm"
-            :class="regime.label==='RISK_ON'?'text-green-400':regime.label==='RISK_OFF'?'text-red-400':'text-amber-300'"
-            x-text="(regime.label||'—').replace('_',' ')"
-          ></div>
+          <div class="kpi-val text-sm" :class="regime.label==='RISK_ON'?'text-green-400':regime.label==='RISK_OFF'?'text-red-400':'text-amber-300'" x-text="(regime.label||'—').replace('_',' ')"></div>
           <div class="kpi-lbl">Regime</div>
         </div>
         <div class="kpi-box">
-          <div
-            class="kpi-val text-sm"
-            :class="regime.trend==='UPTREND'?'text-green-400':regime.trend==='DOWNTREND'?'text-red-400':'text-amber-300'"
-            x-text="regime.trend||'—'"
-          ></div>
+          <div class="kpi-val text-sm" :class="regime.trend==='UPTREND'?'text-green-400':regime.trend==='DOWNTREND'?'text-red-400':'text-amber-300'" x-text="regime.trend||'—'"></div>
           <div class="kpi-lbl">Trend</div>
         </div>
         <div class="kpi-box">
-          <div
-            class="kpi-val text-sm"
-            :class="regime.vol==='LOW'?'text-green-400':regime.vol==='HIGH'?'text-red-400':'text-amber-300'"
-            x-text="regime.vol||'—'"
-          ></div>
+          <div class="kpi-val text-sm" :class="regime.vol==='LOW'?'text-green-400':regime.vol==='HIGH'||regime.vol==='CRISIS'?'text-red-400':'text-amber-300'" x-text="regime.vol||'—'"></div>
           <div class="kpi-lbl">Volatility</div>
         </div>
       </div>
-
-      <!-- Strategies -->
-      <template x-if="regime.strategies && regime.strategies.length">
-        <div
-          style="padding: 0 12px 4px; display: flex; gap: 4px; flex-wrap: wrap"
-        >
-          <span
-            class="text-[9px] font-bold uppercase"
-            style="color: var(--t3); margin-right: 4px"
-            >Playbook:</span
-          >
-          <template x-for="s in regime.strategies">
-            <span class="pill pb" x-text="s"></span>
-          </template>
+      <!-- Strategies Playbook -->
+      <template x-if="regime.strategies&&regime.strategies.length">
+        <div style="padding:0 12px 4px;display:flex;gap:4px;flex-wrap:wrap">
+          <span class="text-[9px] font-bold uppercase" style="color:var(--t3);margin-right:4px">Playbook:</span>
+          <template x-for="s in regime.strategies"><span class="pill pb" x-text="s"></span></template>
         </div>
       </template>
-
+      <!-- No-trade warning -->
+      <template x-if="regime.no_trade_reason">
+        <div style="margin:0 12px 8px;padding:8px 12px;background:rgba(255,92,92,.08);border:1px solid rgba(255,92,92,.2);border-radius:8px;font-size:11px;color:var(--red)">
+          ⚠️ <span x-text="regime.no_trade_reason"></span>
+        </div>
+      </template>
       <!-- US Indices -->
       <div class="section-hdr">📈 US Indices</div>
-      <div
-        style="
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 6px;
-          padding: 0 12px;
-        "
-      >
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;padding:0 12px">
         <template x-for="i in indices">
-          <div class="card card-p" style="padding: 10px">
+          <div class="card card-p" style="padding:10px">
             <div class="flex items-center justify-between">
-              <div
-                class="text-[10px] font-bold"
-                style="color: var(--t2)"
-                x-text="i.name"
-              ></div>
-              <span
-                class="pill mono"
-                :class="(i.change_pct||0)>=0?'pg':'pr'"
-                x-text="((i.change_pct||0)>=0?'+':'')+(i.change_pct||0).toFixed(2)+'%'"
-              ></span>
+              <div class="text-[10px] font-bold" style="color:var(--t2)" x-text="i.name"></div>
+              <span class="pill mono" :class="(i.change_pct||0)>=0?'pg':'pr'" x-text="((i.change_pct||0)>=0?'+':'')+(i.change_pct||0).toFixed(2)+'%'"></span>
             </div>
-            <div
-              class="text-base font-bold mono text-white mt-1"
-              x-text="'$'+(i.price||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})"
-            ></div>
+            <div class="text-base font-bold mono text-white mt-1" x-text="'$'+(i.price||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})"></div>
           </div>
         </template>
       </div>
-
       <!-- Macro -->
-      <div class="section-hdr" style="margin-top: 14px">
-        🌐 Macro Indicators
-      </div>
-      <div class="scroll-row" style="padding: 0 12px">
+      <div class="section-hdr" style="margin-top:14px">🌐 Macro Indicators</div>
+      <div class="scroll-row" style="padding:0 12px">
         <template x-for="m in macro">
-          <div
-            class="card"
-            style="min-width: 120px; padding: 10px; flex-shrink: 0"
-          >
-            <div
-              class="text-[9px] font-bold"
-              style="color: var(--t3)"
-              x-text="m.name"
-            ></div>
-            <div
-              class="text-sm font-bold mono text-white"
-              x-text="m.symbol==='^VIX'?(m.price||0).toFixed(2):'$'+(m.price||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})"
-            ></div>
-            <div
-              class="text-[10px] mono"
-              :class="(m.change_pct||0)>=0?'text-green-400':'text-red-400'"
-              x-text="((m.change_pct||0)>=0?'+':'')+(m.change_pct||0).toFixed(2)+'%'"
-            ></div>
+          <div class="card" style="min-width:120px;padding:10px;flex-shrink:0">
+            <div class="text-[9px] font-bold" style="color:var(--t3)" x-text="m.name"></div>
+            <div class="text-sm font-bold mono text-white" x-text="m.symbol==='^VIX'?(m.price||0).toFixed(2):'$'+(m.price||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})"></div>
+            <div class="text-[10px] mono" :class="(m.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="((m.change_pct||0)>=0?'+':'')+(m.change_pct||0).toFixed(2)+'%'"></div>
           </div>
         </template>
       </div>
-
       <!-- Sectors -->
-      <div class="section-hdr" style="margin-top: 14px">
-        📊 Sector Performance
-      </div>
-      <div
-        style="
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 4px;
-          padding: 0 12px;
-        "
-      >
+      <div class="section-hdr" style="margin-top:14px">📊 Sector Heatmap</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:4px;padding:0 12px">
         <template x-for="s in sectors">
-          <div
-            style="
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              padding: 6px 10px;
-              background: var(--s1);
-              border: 1px solid var(--bd);
-              border-radius: 6px;
-            "
-          >
-            <span
-              class="text-[10px]"
-              style="color: var(--t2)"
-              x-text="s.name"
-            ></span>
-            <span
-              class="text-[10px] mono font-bold"
-              :class="(s.change_pct||0)>=0?'text-green-400':'text-red-400'"
-              x-text="((s.change_pct||0)>=0?'+':'')+(s.change_pct||0).toFixed(2)+'%'"
-            ></span>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--s1);border:1px solid var(--bd);border-radius:6px">
+            <span class="text-[10px]" style="color:var(--t2)" x-text="s.name"></span>
+            <span class="text-[10px] mono font-bold" :class="(s.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="((s.change_pct||0)>=0?'+':'')+(s.change_pct||0).toFixed(2)+'%'"></span>
           </div>
         </template>
       </div>
-
-      <!-- Asia-Pacific -->
-      <div class="section-hdr" style="margin-top: 14px">
-        🌏 Asia-Pacific Markets
-      </div>
-      <div class="scroll-row" style="padding: 0 12px">
+      <!-- Asia -->
+      <div class="section-hdr" style="margin-top:14px">🌏 Asia-Pacific</div>
+      <div class="scroll-row" style="padding:0 12px;margin-bottom:16px">
         <template x-for="a in asia">
-          <div
-            class="card"
-            style="min-width: 110px; padding: 10px; flex-shrink: 0"
-          >
-            <div
-              class="text-[9px] font-bold"
-              style="color: var(--t3)"
-              x-text="a.name"
-            ></div>
-            <div
-              class="text-xs font-bold mono text-white"
-              x-text="(a.price||0).toLocaleString(undefined,{maximumFractionDigits:0})"
-            ></div>
-            <div
-              class="text-[10px] mono"
-              :class="(a.change_pct||0)>=0?'text-green-400':'text-red-400'"
-              x-text="((a.change_pct||0)>=0?'+':'')+(a.change_pct||0).toFixed(2)+'%'"
-            ></div>
+          <div class="card" style="min-width:110px;padding:10px;flex-shrink:0">
+            <div class="text-[9px] font-bold" style="color:var(--t3)" x-text="a.name"></div>
+            <div class="text-xs font-bold mono text-white" x-text="(a.price||0).toLocaleString(undefined,{maximumFractionDigits:0})"></div>
+            <div class="text-[10px] mono" :class="(a.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="((a.change_pct||0)>=0?'+':'')+(a.change_pct||0).toFixed(2)+'%'"></div>
           </div>
         </template>
       </div>
+    </main>
 
-      <!-- Quick Access -->
-      <div class="section-hdr" style="margin-top: 16px">⚡ Quick Access</div>
-      <div class="qa-grid" style="margin-bottom: 16px">
-        <a href="/regime-screener" class="qa-card">
-          <div class="qa-icon">🎯</div>
-          <div class="qa-title">Regime Screener</div>
-          <div class="qa-sub">AI scoring + filtering</div>
-        </a>
-        <a href="/portfolio-brief" class="qa-card">
-          <div class="qa-icon">📋</div>
-          <div class="qa-title">Portfolio Brief</div>
-          <div class="qa-sub">Daily intelligence report</div>
-        </a>
-        <a href="/compare" class="qa-card">
-          <div class="qa-icon">📈</div>
-          <div class="qa-title">Compare</div>
-          <div class="qa-sub">Multi-ticker overlay</div>
-        </a>
-        <a href="/performance-lab" class="qa-card">
-          <div class="qa-icon">🔬</div>
-          <div class="qa-title">Performance Lab</div>
-          <div class="qa-sub">FinLab-style metrics</div>
-        </a>
-        <a href="/options-lab" class="qa-card">
-          <div class="qa-icon">🔮</div>
-          <div class="qa-title">Options Lab</div>
-          <div class="qa-sub">Options analysis report</div>
-        </a>
-        <a href="/signals/explorer" class="qa-card">
-          <div class="qa-icon">📡</div>
-          <div class="qa-title">Signal Explorer</div>
-          <div class="qa-sub">Browse trading signals</div>
-        </a>
-        <a
-          href="/macro-intel"
-          class="qa-card"
-          style="border-color: var(--amber); grid-column: span 2"
-        >
-          <div class="flex items-center gap-3">
-            <div class="qa-icon" style="font-size: 24px">🌍</div>
-            <div>
-              <div class="qa-title" style="font-size: 12px">
-                Macro Intelligence
-              </div>
-              <div class="qa-sub">
-                Rates · Political Risk · War/Geopolitical · Insider Holdings ·
-                Correlations
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- SURFACE 2: SIGNALS / SCANNER                           -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <main x-show="tab==='signals'" class="fade">
+      <div class="trust-strip">
+        <span :style="sig.mode==='PAPER'?'color:var(--blue)':sig.mode==='OFFLINE'?'color:var(--red)':'color:var(--green)'" x-text="'● '+(sig.mode||'—')"></span>
+        <span x-text="'Source: '+(sig.source||'engine_cache')"></span>
+        <span x-text="'As-of: '+(sig.as_of?sig.as_of.slice(0,19):'—')"></span>
+        <span x-text="'Count: '+(sig.recs.length||0)"></span>
+      </div>
+      <div style="padding:8px 12px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span class="pill" :class="regime.label==='RISK_ON'?'pg':regime.label==='RISK_OFF'?'pr':'pa'" x-text="(regime.label||'—').replace('_',' ')"></span>
+        <span class="pill pw" x-text="'Trend: '+(regime.trend||'—')"></span>
+        <span class="pill pw" x-text="'Vol: '+(regime.vol||'—')"></span>
+        <template x-if="sig.no_trade_reason"><span class="pill pr" x-text="'⚠ '+sig.no_trade_reason"></span></template>
+      </div>
+      <div style="padding:0 12px;overflow-x:auto">
+        <template x-if="sig.recs.length===0">
+          <div class="card card-p" style="text-align:center;color:var(--t3);font-size:12px;padding:30px">No active signals. Engine may be idle or market closed.</div>
+        </template>
+        <template x-if="sig.recs.length>0">
+          <div class="card" style="overflow-x:auto">
+            <table class="tbl">
+              <thead><tr><th>Ticker</th><th>Score</th><th>Dir</th><th>Strategy</th><th>Entry</th><th>Target</th><th>Stop</th><th>R:R</th></tr></thead>
+              <tbody>
+                <template x-for="r in sig.recs">
+                  <tr @click="openDossier(r.ticker||r.symbol)" style="cursor:pointer">
+                    <td class="mono font-bold text-white" x-text="r.ticker||r.symbol||'—'"></td>
+                    <td class="mono font-bold" :class="(r.score||r.confidence||0)>=7?'text-green-400':(r.score||r.confidence||0)>=5?'text-amber-300':'text-red-400'" x-text="r.score!=null?Number(r.score).toFixed(1):r.confidence!=null?Number(r.confidence).toFixed(1):'—'"></td>
+                    <td><span class="pill" :class="(r.direction||'').toLowerCase()==='long'?'pg':'pr'" x-text="r.direction||'—'"></span></td>
+                    <td class="text-[10px]" style="color:var(--t2)" x-text="(r.strategy||'—').replace('_',' ')"></td>
+                    <td class="mono" x-text="r.entry_price?'$'+Number(r.entry_price).toFixed(2):'—'"></td>
+                    <td class="mono text-green-400" x-text="r.target_price?'$'+Number(r.target_price).toFixed(2):'—'"></td>
+                    <td class="mono text-red-400" x-text="r.stop_price?'$'+Number(r.stop_price).toFixed(2):'—'"></td>
+                    <td class="mono" x-text="r.risk_reward?Number(r.risk_reward).toFixed(1)+'x':'—'"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </template>
+      </div>
+      <div class="section-hdr" style="margin-top:14px">🏆 Strategy Health</div>
+      <div style="padding:0 12px;margin-bottom:16px">
+        <div class="card card-p">
+          <template x-if="Object.keys(sig.strategy_scores||{}).length===0">
+            <div class="text-[11px]" style="color:var(--t3)">Leaderboard populates after engine cycles.</div>
+          </template>
+          <template x-for="[k,v] in Object.entries(sig.strategy_scores||{}).sort((a,b)=>b[1]-a[1])">
+            <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)">
+              <span class="text-[11px] text-white" x-text="k.replace(/_/g,' ')"></span>
+              <div class="flex items-center gap-2">
+                <div style="width:60px;height:4px;background:var(--bd);border-radius:2px;overflow:hidden">
+                  <div :style="'width:'+Math.min(100,Math.max(0,(v||0)*10))+'%;height:100%;background:var(--green);border-radius:2px'"></div>
+                </div>
+                <span class="mono text-[10px]" :class="v>=7?'text-green-400':v>=4?'text-amber-300':'text-red-400'" x-text="Number(v||0).toFixed(1)"></span>
               </div>
             </div>
-          </div>
-        </a>
+          </template>
+        </div>
       </div>
     </main>
 
-    <!-- ═══ BACKTEST TAB ═══ -->
-    <main x-show="tab==='backtest'" class="p-4 space-y-3 fade">
-      <div class="card card-p">
-        <div
-          class="text-[10px] font-bold uppercase mb-3"
-          style="color: var(--t3)"
-        >
-          🔬 Backtest Engine
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- SURFACE 3: SYMBOL DOSSIER                              -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <main x-show="tab==='dossier'" class="fade">
+      <div class="trust-strip">
+        <span style="color:var(--blue)">● RESEARCH</span>
+        <span>Source: market_data_service</span>
+        <span x-text="dos.data?'As-of: '+new Date().toISOString().slice(0,19):'Awaiting query'"></span>
+      </div>
+      <div class="p-3">
+        <div class="flex gap-2 mb-3">
+          <input type="text" x-model="dos.ticker" @keydown.enter="fetchDossier()" placeholder="Enter ticker (e.g. AAPL)" style="text-transform:uppercase" />
+          <button @click="fetchDossier()" class="btn-p flex-shrink-0 px-4" :disabled="dos.loading"><span x-show="!dos.loading">Research</span><span x-show="dos.loading"><span class="spin"></span></span></button>
         </div>
-        <div class="space-y-2">
-          <input
-            type="text"
-            x-model="bt.ticker"
-            placeholder="Ticker (e.g. AAPL)"
-            style="text-transform: uppercase"
-          />
-          <select x-model="bt.strategy">
-            <option value="all">All Strategies</option>
-            <option value="swing">Swing Trading</option>
-            <option value="breakout">Breakout / VCP</option>
-            <option value="momentum">Momentum</option>
-            <option value="mean_reversion">Mean Reversion</option>
-          </select>
+      </div>
+      <template x-if="dos.data">
+        <div class="space-y-2 px-3 fade" style="padding-bottom:16px">
+          <div class="card card-p">
+            <div class="flex items-center justify-between mb-1">
+              <div class="text-lg font-bold text-white mono" x-text="dos.data.symbol"></div>
+              <span class="pill" :class="(dos.data.change_pct||0)>=0?'pg':'pr'" x-text="((dos.data.change_pct||0)>=0?'+':'')+(dos.data.change_pct||0).toFixed(2)+'%'"></span>
+            </div>
+            <div class="text-2xl font-black mono" :class="(dos.data.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="'$'+(dos.data.price||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})"></div>
+            <div class="text-[10px] mono mt-1" style="color:var(--t3)" x-text="'Prev $'+(dos.data.prev_close||0)+' · Vol '+(dos.data.volume||0).toLocaleString()"></div>
+          </div>
+          <div class="card card-p">
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📈 Technical State</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;font-size:12px">
+              <div><div class="text-[10px]" style="color:var(--t3)">RSI(14)</div><div class="font-bold mono" :class="(dos.data.rsi||50)>70?'text-red-400':(dos.data.rsi||50)<30?'text-green-400':'text-white'" x-text="dos.data.rsi||'—'"></div></div>
+              <div><div class="text-[10px]" style="color:var(--t3)">SMA 20</div><div class="font-bold mono text-white" x-text="dos.data.sma20?'$'+dos.data.sma20:'—'"></div><div class="text-[9px]" :class="dos.data.above_sma20?'text-green-400':'text-red-400'" x-text="dos.data.above_sma20?'Above ✓':'Below ✗'"></div></div>
+              <div><div class="text-[10px]" style="color:var(--t3)">SMA 50</div><div class="font-bold mono text-white" x-text="dos.data.sma50?'$'+dos.data.sma50:'—'"></div><div class="text-[9px]" :class="dos.data.above_sma50?'text-green-400':'text-red-400'" x-text="dos.data.above_sma50===true?'Above ✓':dos.data.above_sma50===false?'Below ✗':''"></div></div>
+              <div><div class="text-[10px]" style="color:var(--t3)">Vol Ratio</div><div class="font-bold mono" :class="(dos.data.volume_ratio||1)>1.5?'text-green-400':'text-white'" x-text="(dos.data.volume_ratio||1).toFixed(1)+'x'"></div></div>
+              <div><div class="text-[10px]" style="color:var(--t3)">52W High</div><div class="font-bold mono text-white" x-text="dos.data.high_52w?'$'+dos.data.high_52w:'—'"></div></div>
+              <div><div class="text-[10px]" style="color:var(--t3)">52W Low</div><div class="font-bold mono text-white" x-text="dos.data.low_52w?'$'+dos.data.low_52w:'—'"></div></div>
+            </div>
+          </div>
+          <div class="card card-p">
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🧬 Factor Chips</div>
+            <div class="flex flex-wrap">
+              <span class="factor-chip" :class="(dos.data.rsi||50)<30?'fc-pos':(dos.data.rsi||50)>70?'fc-neg':'fc-neu'" x-text="'RSI '+(dos.data.rsi||'—')"></span>
+              <span class="factor-chip" :class="dos.data.above_sma20?'fc-pos':'fc-neg'" x-text="dos.data.above_sma20?'MA20 ↑':'MA20 ↓'"></span>
+              <span class="factor-chip" :class="dos.data.above_sma50?'fc-pos':'fc-neg'" x-text="dos.data.above_sma50?'MA50 ↑':'MA50 ↓'"></span>
+              <span class="factor-chip" :class="(dos.data.volume_ratio||1)>1.3?'fc-pos':'fc-neu'" x-text="'Vol '+(dos.data.volume_ratio||1).toFixed(1)+'x'"></span>
+              <span class="factor-chip" :class="(dos.data.change_pct||0)>0?'fc-pos':(dos.data.change_pct||0)<0?'fc-neg':'fc-neu'" x-text="'Mom '+((dos.data.change_pct||0)>=0?'+':'')+(dos.data.change_pct||0).toFixed(2)+'%'"></span>
+            </div>
+          </div>
+          <div class="card card-p">
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📋 Trade Plan Skeleton</div>
+            <div class="text-[11px] space-y-1" style="color:var(--t2)">
+              <div><strong class="text-white">Entry Zone:</strong> <span class="mono" x-text="'$'+((dos.data.price||0)*0.98).toFixed(2)+' — $'+((dos.data.price||0)*1.01).toFixed(2)"></span></div>
+              <div><strong class="text-white">Target (1R):</strong> <span class="mono text-green-400" x-text="'$'+((dos.data.price||0)*1.05).toFixed(2)"></span></div>
+              <div><strong class="text-white">Stop:</strong> <span class="mono text-red-400" x-text="'$'+((dos.data.price||0)*0.95).toFixed(2)"></span></div>
+              <div><strong class="text-white">R:R:</strong> <span class="mono">~1:2.5</span></div>
+            </div>
+            <div class="text-[9px] mt-2 italic" style="color:var(--t3)">⚠ Skeleton plan. Real entry/target/stop require engine signal confirmation.</div>
+          </div>
+          <div class="card card-p" style="border-color:rgba(255,92,92,.3)">
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--red)">🔴 Counter-Thesis</div>
+            <div class="text-[11px] space-y-1" style="color:var(--t2)">
+              <div x-text="(dos.data.rsi||50)>60?'• RSI elevated — momentum may be overextended':'• RSI neutral/low — dip risk if broader market weakens'"></div>
+              <div x-text="!dos.data.above_sma50?'• Below 50-day MA — intermediate trend is down':'• Above 50-day MA — reversals happen at trend extremes'"></div>
+              <div>• Event risk: earnings, ex-div, macro may override technicals</div>
+              <div>• Single-stock analysis — size position to reflect conviction</div>
+            </div>
+          </div>
           <div class="flex gap-2">
-            <select x-model="bt.period" class="flex-1">
-              <option value="1mo">1 Month</option>
-              <option value="3mo">3 Months</option>
-              <option value="6mo">6 Months</option>
-              <option value="1y" selected>1 Year</option>
-              <option value="2y">2 Years</option>
+            <button @click="bt.ticker=dos.data.symbol;switchTab('track')" class="btn-s flex-1">🔬 Backtest</button>
+            <button @click="opt.ticker=dos.data.symbol;switchTab('options');fetchOptions()" class="btn-s flex-1">🔮 Options</button>
+          </div>
+        </div>
+      </template>
+      <div x-show="dos.error" class="mx-3 card card-p" style="border-color:var(--red)"><div class="text-red-400 text-sm" x-text="dos.error"></div></div>
+    </main>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- SURFACE 4: PORTFOLIO BRIEF                             -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <main x-show="tab==='brief'" class="fade">
+      <div class="trust-strip">
+        <span :style="sig.mode==='PAPER'?'color:var(--blue)':'color:var(--amber)'" x-text="'● '+(sig.mode==='LIVE'?'LIVE':sig.mode==='PAPER'?'PAPER':'SYNTHETIC')"></span>
+        <span>Source: engine_cache + market_data</span>
+        <span x-text="'As-of: '+new Date().toISOString().slice(0,19)"></span>
+      </div>
+      <div class="p-3 space-y-3">
+        <div class="card card-p">
+          <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📋 Daily Brief · <span x-text="new Date().toLocaleDateString()"></span></div>
+          <div class="text-[12px]" style="color:var(--t2);line-height:1.6">
+            <p><strong class="text-white">Regime:</strong> <span x-text="(regime.label||'Unknown').replace('_',' ')"></span> · <span x-text="regime.trend||'Sideways'"></span> · <span x-text="regime.vol||'Normal'"></span> vol</p>
+            <p class="mt-1"><strong class="text-white">What Changed:</strong> Review sector rotation and macro on Today tab.</p>
+          </div>
+        </div>
+        <div class="card card-p" style="border-left:3px solid var(--green)">
+          <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--green)">✅ ACTIONABLE</div>
+          <template x-if="sig.recs.length>0">
+            <div>
+              <template x-for="r in sig.recs.slice(0,3)">
+                <div class="flex items-center gap-2 py-1 text-[11px]" style="border-bottom:1px solid var(--bd)">
+                  <span class="mono font-bold text-white" x-text="r.ticker||r.symbol"></span>
+                  <span class="pill" :class="(r.direction||'').toLowerCase()==='long'?'pg':'pr'" style="font-size:8px" x-text="r.direction||'—'"></span>
+                  <span style="color:var(--t3)" x-text="(r.strategy||'').replace('_',' ')"></span>
+                  <span class="mono ml-auto" style="color:var(--t2)" x-text="r.score?'Score '+Number(r.score).toFixed(1):'—'"></span>
+                </div>
+              </template>
+            </div>
+          </template>
+          <template x-if="sig.recs.length===0"><div class="text-[11px]" style="color:var(--t2)">No actionable signals right now.</div></template>
+        </div>
+        <div class="card card-p" style="border-left:3px solid var(--amber)">
+          <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--amber)">👁 WATCH</div>
+          <div class="text-[11px]" style="color:var(--t2)">Review sector leaders/laggards on Today tab. Opportunities emerge when regime shifts align with technical setups.</div>
+        </div>
+        <div class="card card-p" style="border-left:3px solid var(--red)">
+          <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--red)">🚫 NO TRADE</div>
+          <div class="text-[11px]" style="color:var(--t2)" x-text="regime.no_trade_reason||'No restrictions active. Normal sizing applies.'"></div>
+        </div>
+        <div class="card card-p">
+          <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📊 Sector Snapshot</div>
+          <template x-for="s in sectors.slice(0,6)">
+            <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)">
+              <span class="text-[11px]" x-text="s.name"></span>
+              <span class="mono text-[11px] font-bold" :class="(s.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="((s.change_pct||0)>=0?'+':'')+(s.change_pct||0).toFixed(2)+'%'"></span>
+            </div>
+          </template>
+        </div>
+        <div class="card card-p">
+          <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">💡 What to Ask Next</div>
+          <div class="flex flex-wrap gap-2">
+            <button @click="dos.ticker='AAPL';switchTab('dossier');fetchDossier()" class="btn-s text-[10px]">Research AAPL</button>
+            <button @click="switchTab('signals')" class="btn-s text-[10px]">All Signals</button>
+            <button @click="switchTab('track')" class="btn-s text-[10px]">Track Record</button>
+            <button @click="switchTab('ops')" class="btn-s text-[10px]">Engine Health</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- SURFACE 5: OPTIONS RESEARCH                            -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <main x-show="tab==='options'" class="fade">
+      <div class="trust-strip">
+        <span style="color:var(--amber)">● SYNTHETIC</span>
+        <span>Source: heuristic_model</span>
+        <span>Sample: illustrative only</span>
+      </div>
+      <div class="p-3">
+        <div class="flex gap-2 mb-3">
+          <input type="text" x-model="opt.ticker" placeholder="Ticker for options research" style="text-transform:uppercase" />
+          <button @click="fetchOptions()" class="btn-p flex-shrink-0 px-4" :disabled="opt.loading"><span x-show="!opt.loading">Analyze</span><span x-show="opt.loading"><span class="spin"></span></span></button>
+        </div>
+      </div>
+      <template x-if="opt.data">
+        <div class="space-y-2 px-3 fade" style="padding-bottom:16px">
+          <div class="card" style="overflow-x:auto">
+            <div class="card-p" style="padding-bottom:6px"><div class="text-[10px] font-bold uppercase" style="color:var(--t3)">🔮 Contract Candidates · <span class="text-white" x-text="opt.ticker.toUpperCase()"></span></div></div>
+            <table class="tbl">
+              <thead><tr><th>Strike</th><th>DTE</th><th>Type</th><th>Delta</th><th>IV</th><th>OI</th><th>Spread</th><th>EV</th></tr></thead>
+              <tbody>
+                <template x-for="c in opt.data.contracts||[]">
+                  <tr>
+                    <td class="mono font-bold text-white" x-text="'$'+c.strike"></td>
+                    <td class="mono" x-text="c.dte+'d'"></td>
+                    <td><span class="pill" :class="c.type==='CALL'?'pg':'pr'" x-text="c.type"></span></td>
+                    <td class="mono" x-text="c.delta.toFixed(2)"></td>
+                    <td class="mono" :class="c.iv>0.5?'text-red-400':c.iv>0.3?'text-amber-300':'text-green-400'" x-text="(c.iv*100).toFixed(0)+'%'"></td>
+                    <td class="mono" x-text="c.oi.toLocaleString()"></td>
+                    <td class="mono" :class="c.spread_quality==='TIGHT'?'text-green-400':'text-amber-300'" x-text="c.spread_quality"></td>
+                    <td class="mono font-bold" :class="c.ev>0?'text-green-400':'text-red-400'" x-text="(c.ev>0?'+':'')+c.ev.toFixed(1)+'%'"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+          <div class="card card-p">
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📊 IV Context</div>
+            <div class="text-[11px]" style="color:var(--t2);line-height:1.6">
+              <div><strong class="text-white">IV Rank:</strong> <span class="mono" x-text="opt.data.iv_rank!=null?opt.data.iv_rank+'%':'N/A'"></span></div>
+              <div><strong class="text-white">Term Structure:</strong> <span x-text="opt.data.term_structure||'N/A'"></span></div>
+              <div><strong class="text-white">Skew:</strong> <span x-text="opt.data.skew_note||'N/A'"></span></div>
+            </div>
+          </div>
+          <div class="card card-p" style="border-color:rgba(255,92,92,.3)">
+            <div class="text-[9px]" style="color:var(--red);line-height:1.5">⚠ Options data is <strong>synthetic/heuristic</strong>. Real trading requires live chain data from your broker. Always verify strike, expiry, bid-ask, and OI before execution.</div>
+          </div>
+        </div>
+      </template>
+      <template x-if="!opt.data&&!opt.loading"><div class="p-3"><div class="card card-p" style="text-align:center;color:var(--t3);font-size:12px;padding:30px">Enter a ticker to generate options research.</div></div></template>
+    </main>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- SURFACE 6: TRACK RECORD                                -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <main x-show="tab==='track'" class="fade">
+      <div class="trust-strip">
+        <span style="color:var(--amber)">● BACKTEST</span>
+        <span>Source: vectorbt</span>
+        <span>Fees: 0 (gross) · Slippage: 0</span>
+        <span>NOT executed capital</span>
+      </div>
+      <div class="p-3 space-y-3">
+        <div class="card card-p">
+          <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">🔬 Backtest Engine</div>
+          <div class="space-y-2">
+            <input type="text" x-model="bt.ticker" placeholder="Ticker (e.g. AAPL)" style="text-transform:uppercase" />
+            <select x-model="bt.strategy">
+              <option value="all">All Strategies</option>
+              <option value="swing">Swing Trading</option>
+              <option value="breakout">Breakout / VCP</option>
+              <option value="momentum">Momentum</option>
+              <option value="mean_reversion">Mean Reversion</option>
             </select>
-            <button
-              @click="runBT()"
-              class="btn-p flex-shrink-0 px-6"
-              :disabled="bt.loading"
-            >
-              <span x-show="!bt.loading">Run</span
-              ><span x-show="bt.loading"><span class="spin"></span></span>
-            </button>
+            <div class="flex gap-2">
+              <select x-model="bt.period" class="flex-1">
+                <option value="1mo">1 Month</option><option value="3mo">3 Months</option><option value="6mo">6 Months</option><option value="1y" selected>1 Year</option><option value="2y">2 Years</option>
+              </select>
+              <button @click="runBT()" class="btn-p flex-shrink-0 px-6" :disabled="bt.loading"><span x-show="!bt.loading">Run</span><span x-show="bt.loading"><span class="spin"></span></span></button>
+            </div>
           </div>
         </div>
-      </div>
-      <template x-if="bt.result">
-        <div class="space-y-2 fade">
-          <div class="card card-p">
-            <div class="flex items-center justify-between mb-2">
-              <div
-                class="text-sm font-bold text-white mono"
-                x-text="bt.result.ticker||bt.ticker"
-              ></div>
-              <span
-                class="pill pg"
-                x-text="bt.result.best_strategy?.replace('_',' ')"
-              ></span>
-            </div>
-            <div
-              style="
-                display: grid;
-                grid-template-columns: repeat(3, 1fr);
-                gap: 8px;
-                text-align: center;
-                font-size: 11px;
-              "
-            >
-              <div>
-                <div style="color: var(--t3)">Buy&Hold</div>
-                <div
-                  class="font-bold mono"
-                  :class="(bt.result.benchmark_return||0)>=0?'text-green-400':'text-red-400'"
-                  x-text="((bt.result.benchmark_return||0)>=0?'+':'')+(bt.result.benchmark_return||0)+'%'"
-                ></div>
-              </div>
-              <div>
-                <div style="color: var(--t3)">Best</div>
-                <div
-                  class="font-bold mono text-green-400"
-                  x-text="bt.result.strategies?.[0]?.total_return+'%'||'—'"
-                ></div>
-              </div>
-              <div>
-                <div style="color: var(--t3)">Bars</div>
-                <div
-                  class="font-bold mono text-white"
-                  x-text="bt.result.bars||0"
-                ></div>
-              </div>
-            </div>
-          </div>
-          <template x-for="(s,i) in (bt.result.strategies||[])">
-            <div
-              class="card card-p fade"
-              :style="i===0?'border-color:var(--green)':''"
-            >
+        <template x-if="bt.result">
+          <div class="space-y-2 fade">
+            <div class="card card-p">
               <div class="flex items-center justify-between mb-2">
-                <div class="flex items-center gap-2">
-                  <span
-                    class="text-base"
-                    x-text="i===0?'🥇':i===1?'🥈':i===2?'🥉':'#'+(i+1)"
-                  ></span>
-                  <span
-                    class="text-sm font-bold text-white"
-                    x-text="(s.strategy||'').replace('_',' ').replace(/\b\w/g,l=>l.toUpperCase())"
-                  ></span>
-                </div>
-                <span
-                  class="text-[10px] mono"
-                  style="color: var(--t3)"
-                  x-text="'Score '+s.score"
-                ></span>
+                <div class="text-sm font-bold text-white mono" x-text="bt.result.ticker||bt.ticker"></div>
+                <span class="pill pg" x-text="(bt.result.best_strategy||'').replace('_',' ')"></span>
               </div>
-              <div
-                style="
-                  display: grid;
-                  grid-template-columns: repeat(3, 1fr);
-                  gap: 6px;
-                  text-align: center;
-                  font-size: 11px;
-                "
-              >
-                <div>
-                  <div style="color: var(--t3)">Trades</div>
-                  <div
-                    class="font-bold mono text-white"
-                    x-text="s.total_trades||0"
-                  ></div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;font-size:11px">
+                <div><div style="color:var(--t3)">Buy&Hold</div><div class="font-bold mono" :class="(bt.result.benchmark_return||0)>=0?'text-green-400':'text-red-400'" x-text="((bt.result.benchmark_return||0)>=0?'+':'')+(bt.result.benchmark_return||0)+'%'"></div></div>
+                <div><div style="color:var(--t3)">Best</div><div class="font-bold mono text-green-400" x-text="bt.result.strategies?.[0]?.total_return+'%'||'—'"></div></div>
+                <div><div style="color:var(--t3)">Bars</div><div class="font-bold mono text-white" x-text="bt.result.bars||0"></div></div>
+              </div>
+            </div>
+            <template x-for="(s,i) in (bt.result.strategies||[])">
+              <div class="card card-p fade" :style="i===0?'border-color:var(--green)':''">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <span class="text-base" x-text="i===0?'🥇':i===1?'🥈':i===2?'🥉':'#'+(i+1)"></span>
+                    <span class="text-sm font-bold text-white" x-text="(s.strategy||'').replace('_',' ').replace(/\b\w/g,l=>l.toUpperCase())"></span>
+                  </div>
+                  <span class="text-[10px] mono" style="color:var(--t3)" x-text="'Score '+s.score"></span>
                 </div>
-                <div>
-                  <div style="color: var(--t3)">Win</div>
-                  <div
-                    class="font-bold mono"
-                    :class="(s.win_rate||0)>50?'text-green-400':'text-red-400'"
-                    x-text="(s.win_rate||0)+'%'"
-                  ></div>
-                </div>
-                <div>
-                  <div style="color: var(--t3)">Return</div>
-                  <div
-                    class="font-bold mono"
-                    :class="(s.total_return||0)>=0?'text-green-400':'text-red-400'"
-                    x-text="((s.total_return||0)>=0?'+':'')+(s.total_return||0)+'%'"
-                  ></div>
-                </div>
-                <div>
-                  <div style="color: var(--t3)">Sharpe</div>
-                  <div
-                    class="font-bold mono text-white"
-                    x-text="s.sharpe||0"
-                  ></div>
-                </div>
-                <div>
-                  <div style="color: var(--t3)">Max DD</div>
-                  <div
-                    class="font-bold mono text-red-400"
-                    x-text="(s.max_drawdown||0)+'%'"
-                  ></div>
-                </div>
-                <div>
-                  <div style="color: var(--t3)">P.Factor</div>
-                  <div
-                    class="font-bold mono text-white"
-                    x-text="s.profit_factor||0"
-                  ></div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;font-size:11px">
+                  <div><div style="color:var(--t3)">Trades</div><div class="font-bold mono text-white" x-text="s.total_trades||0"></div></div>
+                  <div><div style="color:var(--t3)">Win</div><div class="font-bold mono" :class="(s.win_rate||0)>50?'text-green-400':'text-red-400'" x-text="(s.win_rate||0)+'%'"></div></div>
+                  <div><div style="color:var(--t3)">Return</div><div class="font-bold mono" :class="(s.total_return||0)>=0?'text-green-400':'text-red-400'" x-text="((s.total_return||0)>=0?'+':'')+(s.total_return||0)+'%'"></div></div>
+                  <div><div style="color:var(--t3)">Sharpe</div><div class="font-bold mono text-white" x-text="s.sharpe||0"></div></div>
+                  <div><div style="color:var(--t3)">Max DD</div><div class="font-bold mono text-red-400" x-text="(s.max_drawdown||0)+'%'"></div></div>
+                  <div><div style="color:var(--t3)">P.Factor</div><div class="font-bold mono text-white" x-text="s.profit_factor||0"></div></div>
                 </div>
               </div>
+            </template>
+            <div class="card card-p" style="border-color:rgba(251,191,36,.3)">
+              <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--amber)">⚠ Methodology</div>
+              <div class="text-[9px]" style="color:var(--t3);line-height:1.5">Returns are <strong>gross</strong> — no commissions, fees, or slippage. Benchmark: buy-and-hold same ticker. Past performance ≠ future results. NOT executed trades.</div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </main>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- SURFACE 7: OPERATOR CONSOLE                            -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <main x-show="tab==='ops'" class="fade">
+      <div class="trust-strip">
+        <span style="color:var(--blue)">● SYSTEM</span>
+        <span x-text="'Polled: '+new Date().toISOString().slice(0,19)"></span>
+      </div>
+      <div class="p-3 space-y-3">
+        <div class="card card-p">
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">⚙️ Engine State</div>
+            <button @click="fetchHealth()" class="btn-s text-[10px]">🔄 Refresh</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
+            <div class="card card-p" style="text-align:center"><div class="text-[20px]" x-text="ops.running?'🟢':'🔴'"></div><div class="text-[10px] font-bold" :class="ops.running?'text-green-400':'text-red-400'" x-text="ops.running?'RUNNING':'STOPPED'"></div><div class="kpi-lbl">Engine</div></div>
+            <div class="card card-p" style="text-align:center"><div class="text-[20px]" x-text="ops.circuit_breaker?'🛑':'✅'"></div><div class="text-[10px] font-bold" :class="ops.circuit_breaker?'text-red-400':'text-green-400'" x-text="ops.circuit_breaker?'TRIPPED':'CLEAR'"></div><div class="kpi-lbl">Circuit Breaker</div></div>
+            <div class="card card-p" style="text-align:center"><div class="kpi-val mono text-white" x-text="ops.cycle_count||0"></div><div class="kpi-lbl">Cycles</div></div>
+            <div class="card card-p" style="text-align:center"><div class="kpi-val mono text-white" x-text="ops.signals_today||0"></div><div class="kpi-lbl">Signals Today</div></div>
+          </div>
+          <template x-if="ops.circuit_breaker_reason"><div style="margin-top:8px;padding:6px 10px;background:rgba(255,92,92,.08);border:1px solid rgba(255,92,92,.2);border-radius:6px;font-size:10px;color:var(--red)" x-text="'⚠ '+ops.circuit_breaker_reason"></div></template>
+          <div class="flex items-center gap-2 mt-3">
+            <span class="pill" :class="ops.dry_run?'pa':'pg'" x-text="ops.dry_run?'DRY RUN / PAPER':'LIVE TRADING'"></span>
+            <span class="pill pw" x-text="'Trades today: '+(ops.trades_today||0)"></span>
+          </div>
+        </div>
+        <div class="card card-p">
+          <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">🔧 Component Health</div>
+          <template x-for="[name,ok] in Object.entries(ops.components||{})">
+            <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)">
+              <span class="text-[11px]" x-text="name.replace(/_/g,' ')"></span>
+              <div class="flex items-center gap-2"><span class="health-dot" :class="ok?'health-ok':'health-err'"></span><span class="text-[10px] mono" :class="ok?'text-green-400':'text-red-400'" x-text="ok?'OK':'FAIL'"></span></div>
             </div>
           </template>
         </div>
-      </template>
-    </main>
-
-    <!-- ═══ QUOTE TAB ═══ -->
-    <main x-show="tab==='quote'" class="p-4 space-y-3 fade">
-      <div class="card card-p">
-        <div
-          class="text-[10px] font-bold uppercase mb-3"
-          style="color: var(--t3)"
-        >
-          🔍 Stock Lookup
-        </div>
-        <div class="flex gap-2">
-          <input
-            type="text"
-            x-model="qt.ticker"
-            @keydown.enter="getQ()"
-            placeholder="AAPL, NVDA..."
-            style="text-transform: uppercase"
-          />
-          <button
-            @click="getQ()"
-            class="btn-p flex-shrink-0 px-4"
-            :disabled="qt.loading"
-          >
-            <span x-show="!qt.loading">Go</span
-            ><span x-show="qt.loading"><span class="spin"></span></span>
-          </button>
-        </div>
-      </div>
-      <template x-if="qt.data">
-        <div class="space-y-2 fade">
-          <div class="card card-p">
-            <div class="flex items-center justify-between mb-2">
-              <div
-                class="text-lg font-bold text-white mono"
-                x-text="qt.data.symbol"
-              ></div>
-              <button
-                @click="bt.ticker=qt.data.symbol;tab='backtest'"
-                class="btn-s text-[10px]"
-              >
-                🔬 Backtest
-              </button>
-            </div>
-            <div
-              class="text-2xl font-black mono"
-              :class="(qt.data.change_pct||0)>=0?'text-green-400':'text-red-400'"
-              x-text="'$'+(qt.data.price||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})"
-            ></div>
-            <div
-              class="text-lg font-bold mono"
-              :class="(qt.data.change_pct||0)>=0?'text-green-400':'text-red-400'"
-              x-text="((qt.data.change_pct||0)>=0?'+':'')+(qt.data.change_pct||0).toFixed(2)+'%'"
-            ></div>
-          </div>
-          <div class="card card-p">
-            <div
-              class="text-[10px] font-bold uppercase mb-2"
-              style="color: var(--t3)"
-            >
-              📊 Key Data
-            </div>
-            <div class="grid grid-cols-2 gap-2 text-xs">
-              <div>
-                <span style="color: var(--t3)">Day Range</span><br /><span
-                  class="mono text-white"
-                  x-text="'$'+(qt.data.low||0)+' — $'+(qt.data.high||0)"
-                ></span>
-              </div>
-              <div>
-                <span style="color: var(--t3)">52W Range</span><br /><span
-                  class="mono text-white"
-                  x-text="'$'+(qt.data.low_52w||0)+' — $'+(qt.data.high_52w||0)"
-                ></span>
-              </div>
-              <div>
-                <span style="color: var(--t3)">Volume</span><br /><span
-                  class="mono text-white"
-                  x-text="(qt.data.volume||0).toLocaleString()"
-                ></span>
-              </div>
-              <div>
-                <span style="color: var(--t3)">Prev Close</span><br /><span
-                  class="mono text-white"
-                  x-text="'$'+(qt.data.prev_close||0)"
-                ></span>
-              </div>
-            </div>
-          </div>
-          <div class="card card-p" x-show="qt.data.rsi">
-            <div
-              class="text-[10px] font-bold uppercase mb-2"
-              style="color: var(--t3)"
-            >
-              📈 Technicals
-            </div>
-            <div
-              style="
-                display: grid;
-                grid-template-columns: repeat(3, 1fr);
-                gap: 8px;
-                text-align: center;
-                font-size: 12px;
-              "
-            >
-              <div>
-                <div class="text-[10px]" style="color: var(--t3)">RSI(14)</div>
-                <div
-                  class="font-bold mono"
-                  :class="(qt.data.rsi||50)>70?'text-red-400':(qt.data.rsi||50)<30?'text-green-400':'text-white'"
-                  x-text="qt.data.rsi||'—'"
-                ></div>
-              </div>
-              <div>
-                <div class="text-[10px]" style="color: var(--t3)">SMA 20</div>
-                <div
-                  class="font-bold mono text-white"
-                  x-text="'$'+(qt.data.sma20||'—')"
-                ></div>
-                <div
-                  class="text-[9px]"
-                  :class="qt.data.above_sma20?'text-green-400':'text-red-400'"
-                  x-text="qt.data.above_sma20?'Above ✓':'Below ✗'"
-                ></div>
-              </div>
-              <div>
-                <div class="text-[10px]" style="color: var(--t3)">SMA 50</div>
-                <div
-                  class="font-bold mono text-white"
-                  x-text="'$'+(qt.data.sma50||'—')"
-                ></div>
-                <div
-                  class="text-[9px]"
-                  :class="qt.data.above_sma50?'text-green-400':'text-red-400'"
-                  x-text="qt.data.above_sma50===true?'Above ✓':qt.data.above_sma50===false?'Below ✗':''"
-                ></div>
-              </div>
-              <div>
-                <div class="text-[10px]" style="color: var(--t3)">
-                  Vol Ratio
-                </div>
-                <div
-                  class="font-bold mono"
-                  :class="(qt.data.volume_ratio||1)>1.5?'text-green-400':'text-white'"
-                  x-text="(qt.data.volume_ratio||1).toFixed(1)+'x'"
-                ></div>
-              </div>
-              <div>
-                <div class="text-[10px]" style="color: var(--t3)">Mkt Cap</div>
-                <div
-                  class="font-bold mono text-white"
-                  x-text="(qt.data.market_cap||0)>1e12?'$'+((qt.data.market_cap||0)/1e12).toFixed(1)+'T':(qt.data.market_cap||0)>1e9?'$'+((qt.data.market_cap||0)/1e9).toFixed(1)+'B':'$'+((qt.data.market_cap||0)/1e6).toFixed(0)+'M'"
-                ></div>
-              </div>
-            </div>
+        <div class="card card-p">
+          <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📡 Data Providers</div>
+          <div class="text-[11px]" style="color:var(--t2)">
+            <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)"><span>Market Data (yfinance)</span><span :class="live?'text-green-400':'text-red-400'" x-text="live?'Connected':'Disconnected'"></span></div>
+            <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)"><span>Regime Router</span><span :class="ops.components?.regime_router?'text-green-400':'text-red-400'" x-text="ops.components?.regime_router?'Active':'Down'"></span></div>
+            <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)"><span>Broker (Alpaca)</span><span :class="ops.components?.broker?'text-green-400':'text-amber-300'" x-text="ops.components?.broker?'Connected':'Paper Only'"></span></div>
           </div>
         </div>
-      </template>
-      <div
-        x-show="qt.error"
-        class="card card-p"
-        style="border-color: var(--red)"
-      >
-        <div class="text-red-400 text-sm" x-text="qt.error"></div>
       </div>
     </main>
 
-    <!-- ═══ COMMANDS TAB ═══ -->
-    <main x-show="tab==='cmds'" class="p-4 space-y-3 fade">
-      <div class="card card-p">
-        <div
-          class="text-[10px] font-bold uppercase mb-1"
-          style="color: var(--t3)"
-        >
-          💬 Discord Commands
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- SURFACE 8: DATA CATALOG                                -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <main x-show="tab==='catalog'" class="fade">
+      <div class="trust-strip"><span style="color:var(--t2)">● REFERENCE</span><span>Static documentation</span></div>
+      <div class="p-3 space-y-3">
+        <div class="card card-p">
+          <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📚 Data Coverage</div>
+          <table class="tbl">
+            <thead><tr><th>Category</th><th>Provider</th><th>Coverage</th><th>Freshness</th></tr></thead>
+            <tbody>
+              <tr><td>US Equities</td><td class="mono text-[10px]">yfinance</td><td>Full US market</td><td class="text-green-400">Real-time*</td></tr>
+              <tr><td>Options</td><td class="mono text-[10px]">heuristic</td><td>Synthetic</td><td class="text-amber-300">Model-based</td></tr>
+              <tr><td>Indices</td><td class="mono text-[10px]">yfinance</td><td>SPY QQQ IWM DIA</td><td class="text-green-400">Real-time*</td></tr>
+              <tr><td>Macro</td><td class="mono text-[10px]">yfinance</td><td>VIX GLD TLT USO BTC ETH</td><td class="text-green-400">Real-time*</td></tr>
+              <tr><td>Asia-Pacific</td><td class="mono text-[10px]">yfinance</td><td>N225 HSI SSE KOSPI TAIEX</td><td class="text-green-400">Delayed</td></tr>
+              <tr><td>Technicals</td><td class="mono text-[10px]">pandas-ta</td><td>RSI SMA EMA MACD</td><td class="text-green-400">Computed</td></tr>
+              <tr><td>Regime</td><td class="mono text-[10px]">HMM + rules</td><td>Single source</td><td class="text-green-400">60s cache</td></tr>
+              <tr><td>Signals</td><td class="mono text-[10px]">engine</td><td>5 strategies</td><td class="text-green-400">Engine cycle</td></tr>
+              <tr><td>Backtest</td><td class="mono text-[10px]">vectorbt</td><td>Gross returns</td><td class="text-amber-300">On-demand</td></tr>
+            </tbody>
+          </table>
+          <div class="text-[9px] mt-2" style="color:var(--t3)">* yfinance data may be delayed 15-20min. Not suitable for intraday execution.</div>
         </div>
-        <div class="text-[11px]" style="color: var(--t2)">
-          All features via Discord. Type
-          <code
-            style="
-              background: var(--s2);
-              padding: 1px 4px;
-              border-radius: 2px;
-              font-size: 10px;
-            "
-            >/menu</code
-          >
-          to start.
+        <div class="card card-p">
+          <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🏷️ Mode Definitions</div>
+          <div class="space-y-2 text-[11px]" style="color:var(--t2)">
+            <div><span class="pill pg" style="font-size:9px">LIVE</span> Real broker. Trades execute with real capital.</div>
+            <div><span class="pill pb" style="font-size:9px">PAPER</span> Paper trading. Simulated execution.</div>
+            <div><span class="pill pa" style="font-size:9px">BACKTEST</span> Historical simulation. Gross returns, no fees.</div>
+            <div><span class="pill pa" style="font-size:9px">SYNTHETIC</span> Heuristic/model-generated. Not real market feeds.</div>
+            <div><span class="pill pr" style="font-size:9px">OFFLINE</span> No connection. Stale/cached data only.</div>
+          </div>
+        </div>
+        <div class="card card-p">
+          <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🏗️ Architecture</div>
+          <div class="text-[11px] mono" style="color:var(--t2);line-height:1.8">
+            <div>Market Data → Regime Router → Signal Engine</div>
+            <div style="padding-left:16px">├── Strategy Ensemble (5 strategies)</div>
+            <div style="padding-left:16px">├── Context Assembler (macro + sector)</div>
+            <div style="padding-left:16px">├── Edge Calculator</div>
+            <div style="padding-left:16px">├── Position Sizer (Kelly + regime)</div>
+            <div style="padding-left:16px">└── Circuit Breaker</div>
+            <div>→ Recommendations → Dashboard / Discord / API</div>
+          </div>
+        </div>
+        <div class="card card-p" style="border-color:rgba(255,92,92,.3)">
+          <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--red)">⚠ Risk Disclaimer</div>
+          <div class="text-[9px]" style="color:var(--t3);line-height:1.5">CC is a research and education tool. NOT financial advice. All signals are algorithm-generated and may contain errors. Past backtest performance ≠ future results. Options trading involves substantial risk. Never risk capital you cannot afford to lose. Verify all information with your broker.</div>
         </div>
       </div>
-      <template x-for="cat in cmdCats">
-        <div class="card card-p fade">
-          <div
-            class="text-xs font-bold text-white mb-2"
-            x-text="cat.icon+' '+cat.name"
-          ></div>
-          <template x-for="c in cat.cmds">
-            <div
-              class="flex items-center justify-between py-1.5"
-              style="border-bottom: 1px solid var(--bd)"
-            >
-              <code
-                class="text-[11px] mono"
-                style="color: var(--blue)"
-                x-text="c[0]"
-              ></code>
-              <span
-                class="text-[10px] text-right"
-                style="color: var(--t2)"
-                x-text="c[1]"
-              ></span>
-            </div>
-          </template>
-        </div>
-      </template>
     </main>
 
-    <footer
-      class="px-4 py-2 text-center text-[9px]"
-      style="color: var(--t3); border-top: 1px solid var(--bd)"
-    >
-      TradingAI Pro v6.41 · Sprint 41 · Research & Education
-    </footer>
+    <!-- ══════ FOOTER ══════ -->
+    <footer class="px-4 py-2 text-center text-[9px]" style="color:var(--t3);border-top:1px solid var(--bd)">CC · Clarity Console · regime-aware market intelligence · MIT License</footer>
 
-    <nav class="nav-b">
+    <!-- ══════ BOTTOM NAV ══════ -->
+    <nav style="position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--bd);padding:6px 0 max(env(safe-area-inset-bottom),6px);z-index:50">
       <div class="flex justify-around max-w-lg mx-auto">
-        <a href="/" class="on"><span class="ic">📊</span>Home</a>
-        <a href="/regime-screener"><span class="ic">🎯</span>Regime</a>
-        <a href="/portfolio-brief"><span class="ic">📋</span>Brief</a>
-        <a href="/compare"><span class="ic">📈</span>Compare</a>
-        <a href="/performance-lab"><span class="ic">🔬</span>Perf</a>
-        <a href="/options-lab"><span class="ic">🔮</span>Options</a>
-        <a href="/signals/explorer"><span class="ic">📡</span>Signals</a>
+        <a href="#" @click.prevent="switchTab('today')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='today'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📊</span>Today</a>
+        <a href="#" @click.prevent="switchTab('signals')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='signals'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🎯</span>Signals</a>
+        <a href="#" @click.prevent="switchTab('dossier')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='dossier'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🔍</span>Dossier</a>
+        <a href="#" @click.prevent="switchTab('brief')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='brief'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📋</span>Brief</a>
+        <a href="#" @click.prevent="switchTab('track')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='track'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🔬</span>Track</a>
+        <a href="#" @click.prevent="switchTab('ops')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='ops'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">⚙️</span>Ops</a>
       </div>
     </nav>
 
+    <!-- ══════ ALPINE JS ══════ -->
     <script>
-      function app() {
-        return {
-          tab: "home",
-          tabs: [
-            { id: "home", icon: "📊", label: "Home" },
-            { id: "backtest", icon: "🔬", label: "Backtest" },
-            { id: "quote", icon: "🔍", label: "Quote" },
-            { id: "cmds", icon: "💬", label: "Commands" },
-          ],
-          live: false,
-          clock: "",
-          regime: {},
-          indices: [],
-          macro: [],
-          sectors: [],
-          asia: [],
-          trust: {},
-          bt: {
-            ticker: "AAPL",
-            strategy: "all",
-            startDate: "",
-            endDate: "",
-            period: "1y",
-            loading: false,
-            result: null,
-          },
-          qt: { ticker: "", loading: false, data: null, error: "" },
-          cmdCats: [
-            {
-              icon: "📊",
-              name: "Markets",
-              cmds: [
-                ["/price AAPL", "Real-time price"],
-                ["/quote AAPL", "Detailed quote"],
-                ["/market", "US indices"],
-                ["/sector", "Sector heatmap"],
-                ["/macro", "Gold, Oil, Bonds"],
-                ["/movers", "Gainers & losers"],
-              ],
-            },
-            {
-              icon: "🎯",
-              name: "AI Signals",
-              cmds: [
-                ["/signals", "Latest signals"],
-                ["/scan vcp", "Scan setups"],
-                ["/breakout", "Breakout picks"],
-                ["/momentum", "Momentum picks"],
-                ["/swing", "Swing setups"],
-              ],
-            },
-            {
-              icon: "🧠",
-              name: "Analysis",
-              cmds: [
-                ["/ai AAPL", "Full AI breakdown"],
-                ["/score AAPL", "AI score 1-10"],
-                ["/analyze AAPL", "SMA, RSI, volume"],
-                ["/advise AAPL", "Buy/Hold/Sell"],
-                ["/why TSLA", "Why moving?"],
-              ],
-            },
-            {
-              icon: "💰",
-              name: "Portfolio",
-              cmds: [
-                ["/portfolio", "Full portfolio"],
-                ["/positions", "Open positions"],
-                ["/pnl", "Today P&L"],
-                ["/buy AAPL 10", "Buy (paper)"],
-                ["/sell AAPL 10", "Sell (paper)"],
-              ],
-            },
-            {
-              icon: "🔬",
-              name: "Backtest",
-              cmds: [
-                ["/backtest AAPL", "All strategies"],
-                ["/backtest AAPL swing", "Test swing"],
-                ["/best_strategy AAPL", "Best strategy now"],
-              ],
-            },
-            {
-              icon: "🌏",
-              name: "Global",
-              cmds: [
-                ["/asia", "Asia dashboard"],
-                ["/japan", "Japan picks"],
-                ["/hk", "Hong Kong picks"],
-                ["/crypto", "Crypto overview"],
-              ],
-            },
-            {
-              icon: "⚙️",
-              name: "Tools",
-              cmds: [
-                ["/alert AAPL 200", "Set alert"],
-                ["/my_alerts", "View alerts"],
-                ["/watchlist", "Your watchlist"],
-                ["/status", "System check"],
-              ],
-            },
-          ],
-          init() {
-            this.tick();
-            setInterval(() => this.tick(), 1000);
-            this.fetchMkt();
-            setInterval(() => this.fetchMkt(), 60000);
-          },
-          tick() {
-            this.clock = new Date().toLocaleTimeString("en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-              second: "2-digit",
-            });
-          },
-          async fetchMkt() {
-            try {
-              const r = await fetch("/api/live/market");
-              if (!r.ok) throw 0;
-              const d = await r.json();
-              this.regime = d.regime || {};
-              this.indices = d.indices || [];
-              this.macro = d.macro || [];
-              this.sectors = d.sectors || [];
-              this.asia = d.asia || [];
-              this.trust = d.trust || {};
-              this.live = true;
-            } catch (e) {
-              this.live = false;
-            }
-          },
-          async runBT() {
-            if (!this.bt.ticker) return;
-            this.bt.loading = true;
-            this.bt.result = null;
-            try {
-              let u =
-                "/api/live/backtest?ticker=" +
-                encodeURIComponent(this.bt.ticker) +
-                "&strategy=" +
-                this.bt.strategy;
-              if (this.bt.startDate && this.bt.endDate)
-                u +=
-                  "&start_date=" +
-                  this.bt.startDate +
-                  "&end_date=" +
-                  this.bt.endDate;
-              else u += "&period=" + this.bt.period;
-              const r = await fetch(u, { method: "POST" });
-              if (!r.ok) {
-                const e = await r.json();
-                throw new Error(e.detail || "Failed");
-              }
-              this.bt.result = await r.json();
-            } catch (e) {
-              alert("Error: " + e.message);
-            } finally {
-              this.bt.loading = false;
-            }
-          },
-          async getQ() {
-            if (!this.qt.ticker) return;
-            this.qt.loading = true;
-            this.qt.data = null;
-            this.qt.error = "";
-            try {
-              const r = await fetch(
-                "/api/live/quote/" + encodeURIComponent(this.qt.ticker),
-              );
-              if (!r.ok) {
-                const e = await r.json();
-                throw new Error(e.detail || "Not found");
-              }
-              this.qt.data = (await r.json()).quote;
-            } catch (e) {
-              this.qt.error = e.message;
-            } finally {
-              this.qt.loading = false;
-            }
-          },
-        };
-      }
+    function cc(){return{
+      tab:'today',
+      tabs:[
+        {id:'today',icon:'📊',label:'Today'},
+        {id:'signals',icon:'🎯',label:'Signals'},
+        {id:'dossier',icon:'🔍',label:'Dossier'},
+        {id:'brief',icon:'📋',label:'Brief'},
+        {id:'options',icon:'🔮',label:'Options'},
+        {id:'track',icon:'🔬',label:'Track Record'},
+        {id:'ops',icon:'⚙️',label:'Operator'},
+        {id:'catalog',icon:'📚',label:'Catalog'},
+      ],
+      live:false,clock:'',regime:{},indices:[],macro:[],sectors:[],asia:[],trust:{},
+      sig:{mode:'—',source:'',as_of:'',recs:[],strategy_scores:{},no_trade_reason:null},
+      dos:{ticker:'',loading:false,data:null,error:''},
+      opt:{ticker:'',loading:false,data:null},
+      bt:{ticker:'AAPL',strategy:'all',period:'1y',loading:false,result:null},
+      ops:{running:false,cycle_count:0,signals_today:0,trades_today:0,circuit_breaker:false,circuit_breaker_reason:'',dry_run:true,components:{}},
+
+      init(){
+        this.tick();setInterval(()=>this.tick(),1000);
+        this.fetchMkt();setInterval(()=>this.fetchMkt(),60000);
+        this.fetchSignals();setInterval(()=>this.fetchSignals(),60000);
+        this.fetchHealth();setInterval(()=>this.fetchHealth(),120000);
+      },
+      tick(){this.clock=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'})},
+      switchTab(t){this.tab=t;if(t==='signals')this.fetchSignals();if(t==='ops')this.fetchHealth()},
+
+      async fetchMkt(){
+        try{const r=await fetch('/api/live/market');if(!r.ok)throw 0;const d=await r.json();this.regime=d.regime||{};this.indices=d.indices||[];this.macro=d.macro||[];this.sectors=d.sectors||[];this.asia=d.asia||[];this.trust=d.trust||{};this.live=true}catch(e){this.live=false}
+      },
+      async fetchSignals(){
+        try{const r=await fetch('/api/recommendations');if(!r.ok)throw 0;const d=await r.json();this.sig.mode=d.mode||'—';this.sig.source=d.source||'';this.sig.as_of=d.as_of||'';this.sig.recs=d.recommendations||[];this.sig.strategy_scores=d.strategy_scores||{};this.sig.no_trade_reason=d.no_trade_reason||null}catch(e){this.sig.mode='OFFLINE'}
+      },
+      async fetchDossier(){
+        if(!this.dos.ticker)return;this.dos.loading=true;this.dos.data=null;this.dos.error='';
+        try{const r=await fetch('/api/live/quote/'+encodeURIComponent(this.dos.ticker));if(!r.ok){const e=await r.json();throw new Error(e.detail||'Not found')}this.dos.data=(await r.json()).quote}catch(e){this.dos.error=e.message}finally{this.dos.loading=false}
+      },
+      openDossier(ticker){if(ticker){this.dos.ticker=ticker;this.switchTab('dossier');this.fetchDossier()}},
+      async fetchOptions(){
+        if(!this.opt.ticker)return;this.opt.loading=true;this.opt.data=null;
+        var p=100;try{const r=await fetch('/api/live/quote/'+encodeURIComponent(this.opt.ticker));if(r.ok){const d=await r.json();p=(d.quote||d).price||100}}catch(e){}
+        const strikes=[Math.round(p*0.95),Math.round(p*0.975),Math.round(p),Math.round(p*1.025),Math.round(p*1.05)];
+        const contracts=strikes.map((s,i)=>({strike:s,dte:[30,30,45,45,60][i],type:i<3?'CALL':'PUT',delta:parseFloat(([0.65,0.55,0.50,-0.45,-0.35][i]).toFixed(2)),iv:parseFloat((0.25+Math.random()*0.15).toFixed(3)),oi:Math.round(1000+Math.random()*9000),spread_quality:Math.random()>0.4?'TIGHT':'WIDE',ev:parseFloat((-5+Math.random()*15).toFixed(1))}));
+        this.opt.data={contracts,iv_rank:Math.round(30+Math.random()*40),term_structure:'Normal contango — front month IV < back month',skew_note:'Moderate put skew — standard risk-off hedge demand'};this.opt.loading=false
+      },
+      async runBT(){
+        if(!this.bt.ticker)return;this.bt.loading=true;this.bt.result=null;
+        try{const u='/api/live/backtest?ticker='+encodeURIComponent(this.bt.ticker)+'&strategy='+this.bt.strategy+'&period='+this.bt.period;const r=await fetch(u,{method:'POST'});if(!r.ok){const e=await r.json();throw new Error(e.detail||'Failed')}this.bt.result=await r.json()}catch(e){alert('Error: '+e.message)}finally{this.bt.loading=false}
+      },
+      async fetchHealth(){
+        try{const r=await fetch('/api/health');if(!r.ok)throw 0;const d=await r.json();this.ops.components=d.components||{};const m=d.metrics||{};this.ops.running=m.running||false;this.ops.cycle_count=m.cycle_count||0;this.ops.signals_today=m.signals_today||0;this.ops.trades_today=m.trades_today||0;this.ops.circuit_breaker=m.circuit_breaker_triggered||false;this.ops.circuit_breaker_reason=m.circuit_breaker_reason||'';this.ops.dry_run=m.dry_run!==false}catch(e){}
+      },
+    }}
     </script>
   </body>
 </html>
