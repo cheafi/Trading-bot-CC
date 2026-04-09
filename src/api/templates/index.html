@@ -244,9 +244,9 @@
     <!-- ═══════════════════════════════════════════════════════ -->
     <main x-show="tab==='dossier'" class="fade">
       <div class="trust-strip">
-        <span style="color:var(--blue)">● RESEARCH</span>
-        <span>Source: market_data_service</span>
-        <span x-text="dos.data?'As-of: '+new Date().toISOString().slice(0,19):'Awaiting query'"></span>
+        <span :style="dos.data&&dos.data.trust?'color:var(--blue)':'color:var(--blue)'" x-text="'● '+(dos.data&&dos.data.trust?dos.data.trust.mode:'RESEARCH')"></span>
+        <span x-text="dos.data&&dos.data.trust?'Source: '+dos.data.trust.source:'Source: market_data_service'"></span>
+        <span x-text="dos.data&&dos.data.trust?'As-of: '+dos.data.trust.as_of.slice(0,19):'Awaiting query'"></span>
       </div>
       <div class="p-3">
         <div class="flex gap-2 mb-3">
@@ -256,6 +256,7 @@
       </div>
       <template x-if="dos.data">
         <div class="space-y-2 px-3 fade" style="padding-bottom:16px">
+          <!-- Price header -->
           <div class="card card-p">
             <div class="flex items-center justify-between mb-1">
               <div class="text-lg font-bold text-white mono" x-text="dos.data.symbol"></div>
@@ -263,47 +264,76 @@
             </div>
             <div class="text-2xl font-black mono" :class="(dos.data.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="'$'+(dos.data.price||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})"></div>
             <div class="text-[10px] mono mt-1" style="color:var(--t3)" x-text="'Prev $'+(dos.data.prev_close||0)+' · Vol '+(dos.data.volume||0).toLocaleString()"></div>
+            <div class="text-[9px] mt-1" style="color:var(--t3)" x-text="'Regime: '+(dos.data.regime?dos.data.regime.label||'—':'—')+' · '+(dos.data.regime&&dos.data.regime.should_trade?'Trading OK':'⚠ No Trade')"></div>
           </div>
+          <!-- Technical State -->
           <div class="card card-p">
             <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📈 Technical State</div>
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;font-size:12px">
-              <div><div class="text-[10px]" style="color:var(--t3)">RSI(14)</div><div class="font-bold mono" :class="(dos.data.rsi||50)>70?'text-red-400':(dos.data.rsi||50)<30?'text-green-400':'text-white'" x-text="dos.data.rsi||'—'"></div></div>
-              <div><div class="text-[10px]" style="color:var(--t3)">SMA 20</div><div class="font-bold mono text-white" x-text="dos.data.sma20?'$'+dos.data.sma20:'—'"></div><div class="text-[9px]" :class="dos.data.above_sma20?'text-green-400':'text-red-400'" x-text="dos.data.above_sma20?'Above ✓':'Below ✗'"></div></div>
-              <div><div class="text-[10px]" style="color:var(--t3)">SMA 50</div><div class="font-bold mono text-white" x-text="dos.data.sma50?'$'+dos.data.sma50:'—'"></div><div class="text-[9px]" :class="dos.data.above_sma50?'text-green-400':'text-red-400'" x-text="dos.data.above_sma50===true?'Above ✓':dos.data.above_sma50===false?'Below ✗':''"></div></div>
-              <div><div class="text-[10px]" style="color:var(--t3)">Vol Ratio</div><div class="font-bold mono" :class="(dos.data.volume_ratio||1)>1.5?'text-green-400':'text-white'" x-text="(dos.data.volume_ratio||1).toFixed(1)+'x'"></div></div>
-              <div><div class="text-[10px]" style="color:var(--t3)">52W High</div><div class="font-bold mono text-white" x-text="dos.data.high_52w?'$'+dos.data.high_52w:'—'"></div></div>
-              <div><div class="text-[10px]" style="color:var(--t3)">52W Low</div><div class="font-bold mono text-white" x-text="dos.data.low_52w?'$'+dos.data.low_52w:'—'"></div></div>
+              <div><div class="text-[10px]" style="color:var(--t3)">RSI(14)</div><div class="font-bold mono" :class="(dos.data.technicals.rsi||50)>70?'text-red-400':(dos.data.technicals.rsi||50)<30?'text-green-400':'text-white'" x-text="dos.data.technicals.rsi||'—'"></div></div>
+              <div><div class="text-[10px]" style="color:var(--t3)">SMA 20</div><div class="font-bold mono text-white" x-text="dos.data.technicals.sma20?'$'+dos.data.technicals.sma20:'—'"></div><div class="text-[9px]" :class="dos.data.technicals.above_sma20?'text-green-400':'text-red-400'" x-text="dos.data.technicals.above_sma20?'Above ✓':'Below ✗'"></div></div>
+              <div><div class="text-[10px]" style="color:var(--t3)">SMA 50</div><div class="font-bold mono text-white" x-text="dos.data.technicals.sma50?'$'+dos.data.technicals.sma50:'—'"></div><div class="text-[9px]" :class="dos.data.technicals.above_sma50?'text-green-400':'text-red-400'" x-text="dos.data.technicals.above_sma50?'Above ✓':'Below ✗'"></div></div>
+              <div><div class="text-[10px]" style="color:var(--t3)">SMA 200</div><div class="font-bold mono text-white" x-text="dos.data.technicals.sma200?'$'+dos.data.technicals.sma200:'—'"></div><div class="text-[9px]" :class="dos.data.technicals.above_sma200?'text-green-400':'text-red-400'" x-text="dos.data.technicals.above_sma200?'Above ✓':dos.data.technicals.above_sma200===false?'Below ✗':''"></div></div>
+              <div><div class="text-[10px]" style="color:var(--t3)">ATR(14)</div><div class="font-bold mono text-white" x-text="dos.data.technicals.atr?'$'+dos.data.technicals.atr:'—'"></div></div>
+              <div><div class="text-[10px]" style="color:var(--t3)">MACD</div><div class="font-bold mono" :class="dos.data.technicals.macd_signal==='BULLISH'?'text-green-400':'text-red-400'" x-text="dos.data.technicals.macd_signal||'—'"></div></div>
+              <div><div class="text-[10px]" style="color:var(--t3)">Vol Ratio</div><div class="font-bold mono" :class="(dos.data.technicals.volume_ratio||1)>1.5?'text-green-400':'text-white'" x-text="(dos.data.technicals.volume_ratio||1).toFixed(1)+'x'"></div></div>
+              <div><div class="text-[10px]" style="color:var(--t3)">Support</div><div class="font-bold mono text-white" x-text="dos.data.technicals.support?'$'+dos.data.technicals.support:'—'"></div></div>
+              <div><div class="text-[10px]" style="color:var(--t3)">Resistance</div><div class="font-bold mono text-white" x-text="dos.data.technicals.resistance?'$'+dos.data.technicals.resistance:'—'"></div></div>
+              <div><div class="text-[10px]" style="color:var(--t3)">52W High</div><div class="font-bold mono text-white" x-text="dos.data.technicals.high_52w?'$'+dos.data.technicals.high_52w:'—'"></div></div>
+              <div><div class="text-[10px]" style="color:var(--t3)">52W Low</div><div class="font-bold mono text-white" x-text="dos.data.technicals.low_52w?'$'+dos.data.technicals.low_52w:'—'"></div></div>
+              <div><div class="text-[10px]" style="color:var(--t3)">BBands</div><div class="font-bold mono text-white" x-text="dos.data.technicals.bbands_lower&&dos.data.technicals.bbands_upper?'$'+dos.data.technicals.bbands_lower+' – $'+dos.data.technicals.bbands_upper:'—'"></div></div>
             </div>
           </div>
+          <!-- Factor Chips (from backend) -->
           <div class="card card-p">
-            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🧬 Factor Chips</div>
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🧬 Factor Chips · <span class="text-green-400" x-text="(dos.data.factor_summary||{}).positive||0"></span>+ <span class="text-red-400" x-text="(dos.data.factor_summary||{}).negative||0"></span>−</div>
             <div class="flex flex-wrap">
-              <span class="factor-chip" :class="(dos.data.rsi||50)<30?'fc-pos':(dos.data.rsi||50)>70?'fc-neg':'fc-neu'" x-text="'RSI '+(dos.data.rsi||'—')"></span>
-              <span class="factor-chip" :class="dos.data.above_sma20?'fc-pos':'fc-neg'" x-text="dos.data.above_sma20?'MA20 ↑':'MA20 ↓'"></span>
-              <span class="factor-chip" :class="dos.data.above_sma50?'fc-pos':'fc-neg'" x-text="dos.data.above_sma50?'MA50 ↑':'MA50 ↓'"></span>
-              <span class="factor-chip" :class="(dos.data.volume_ratio||1)>1.3?'fc-pos':'fc-neu'" x-text="'Vol '+(dos.data.volume_ratio||1).toFixed(1)+'x'"></span>
-              <span class="factor-chip" :class="(dos.data.change_pct||0)>0?'fc-pos':(dos.data.change_pct||0)<0?'fc-neg':'fc-neu'" x-text="'Mom '+((dos.data.change_pct||0)>=0?'+':'')+(dos.data.change_pct||0).toFixed(2)+'%'"></span>
+              <template x-for="f in dos.data.factors||[]">
+                <span class="factor-chip" :class="f.signal==='positive'?'fc-pos':f.signal==='negative'?'fc-neg':'fc-neu'" x-text="f.name+' '+f.value"></span>
+              </template>
             </div>
           </div>
+          <!-- WHY BUY -->
+          <div class="card card-p" style="border-left:3px solid var(--green)">
+            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--green)">🟢 WHY BUY</div>
+            <template x-for="w in dos.data.why_buy||[]"><div class="text-[11px] py-0.5" style="color:var(--t2)" x-text="'• '+w"></div></template>
+          </div>
+          <!-- WHY STOP -->
+          <div class="card card-p" style="border-left:3px solid var(--red)">
+            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--red)">🔴 WHY STOP</div>
+            <template x-for="w in dos.data.why_stop||[]"><div class="text-[11px] py-0.5" style="color:var(--t2)" x-text="'• '+w"></div></template>
+          </div>
+          <!-- Trade Plan (from backend, ATR-based) -->
           <div class="card card-p">
-            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📋 Trade Plan Skeleton</div>
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📋 Trade Plan <span class="text-[8px] font-normal" x-text="'('+(dos.data.trade_plan&&dos.data.trade_plan.note||'')+')'"></span></div>
             <div class="text-[11px] space-y-1" style="color:var(--t2)">
-              <div><strong class="text-white">Entry Zone:</strong> <span class="mono" x-text="'$'+((dos.data.price||0)*0.98).toFixed(2)+' — $'+((dos.data.price||0)*1.01).toFixed(2)"></span></div>
-              <div><strong class="text-white">Target (1R):</strong> <span class="mono text-green-400" x-text="'$'+((dos.data.price||0)*1.05).toFixed(2)"></span></div>
-              <div><strong class="text-white">Stop:</strong> <span class="mono text-red-400" x-text="'$'+((dos.data.price||0)*0.95).toFixed(2)"></span></div>
-              <div><strong class="text-white">R:R:</strong> <span class="mono">~1:2.5</span></div>
+              <div><strong class="text-white">Entry Zone:</strong> <span class="mono" x-text="dos.data.trade_plan?'$'+dos.data.trade_plan.entry_zone[0]+' — $'+dos.data.trade_plan.entry_zone[1]:'—'"></span></div>
+              <div><strong class="text-white">Target 1R:</strong> <span class="mono text-green-400" x-text="dos.data.trade_plan?'$'+dos.data.trade_plan.target_1r:'—'"></span></div>
+              <div><strong class="text-white">Target 2R:</strong> <span class="mono text-green-400" x-text="dos.data.trade_plan?'$'+dos.data.trade_plan.target_2r:'—'"></span></div>
+              <div><strong class="text-white">Stop:</strong> <span class="mono text-red-400" x-text="dos.data.trade_plan?'$'+dos.data.trade_plan.stop:'—'"></span></div>
+              <div><strong class="text-white">Risk/Share:</strong> <span class="mono" x-text="dos.data.trade_plan?'$'+dos.data.trade_plan.risk_per_share:'—'"></span> · <strong class="text-white">R:R:</strong> <span class="mono" x-text="dos.data.trade_plan?dos.data.trade_plan.rr_ratio:'—'"></span></div>
+              <div><strong class="text-white">Invalidation:</strong> <span class="text-red-300 text-[10px]" x-text="dos.data.trade_plan?dos.data.trade_plan.invalidation:'—'"></span></div>
             </div>
-            <div class="text-[9px] mt-2 italic" style="color:var(--t3)">⚠ Skeleton plan. Real entry/target/stop require engine signal confirmation.</div>
+            <div class="text-[9px] mt-2 italic" style="color:var(--t3)">⚠ Plan based on current technicals. Real entry/target/stop require engine signal confirmation.</div>
           </div>
-          <div class="card card-p" style="border-color:rgba(255,92,92,.3)">
-            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--red)">🔴 Counter-Thesis</div>
-            <div class="text-[11px] space-y-1" style="color:var(--t2)">
-              <div x-text="(dos.data.rsi||50)>60?'• RSI elevated — momentum may be overextended':'• RSI neutral/low — dip risk if broader market weakens'"></div>
-              <div x-text="!dos.data.above_sma50?'• Below 50-day MA — intermediate trend is down':'• Above 50-day MA — reversals happen at trend extremes'"></div>
-              <div>• Event risk: earnings, ex-div, macro may override technicals</div>
-              <div>• Single-stock analysis — size position to reflect conviction</div>
+          <!-- Historical Analogs -->
+          <template x-if="(dos.data.analogs||[]).length>0">
+            <div class="card card-p">
+              <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📊 Historical Analogs (similar past setups)</div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;font-size:11px">
+                <template x-for="a in dos.data.analogs">
+                  <div class="card card-p" style="padding:8px">
+                    <div class="font-bold text-white" x-text="a.window+' fwd'"></div>
+                    <div class="text-[10px]" style="color:var(--t3)" x-text="a.sample_size+' samples'"></div>
+                    <div class="mono font-bold mt-1" :class="a.median_return>=0?'text-green-400':'text-red-400'" x-text="(a.median_return>=0?'+':'')+a.median_return+'%'"></div>
+                    <div class="text-[9px]" style="color:var(--t3)" x-text="'Win '+a.win_rate+'%'"></div>
+                    <div class="text-[8px] mono" style="color:var(--t3)" x-text="a.worst+'% — '+a.best+'%'"></div>
+                  </div>
+                </template>
+              </div>
+              <div class="text-[8px] mt-1 italic" style="color:var(--t3)">Analogs based on similar 5-day momentum within 1Y history. Not a forecast.</div>
             </div>
-          </div>
+          </template>
           <div class="flex gap-2">
             <button @click="bt.ticker=dos.data.symbol;switchTab('track')" class="btn-s flex-1">🔬 Backtest</button>
             <button @click="opt.ticker=dos.data.symbol;switchTab('options');fetchOptions()" class="btn-s flex-1">🔮 Options</button>
@@ -318,25 +348,42 @@
     <!-- ═══════════════════════════════════════════════════════ -->
     <main x-show="tab==='brief'" class="fade">
       <div class="trust-strip">
-        <span :style="sig.mode==='PAPER'?'color:var(--blue)':'color:var(--amber)'" x-text="'● '+(sig.mode==='LIVE'?'LIVE':sig.mode==='PAPER'?'PAPER':'SYNTHETIC')"></span>
-        <span>Source: engine_cache + market_data</span>
-        <span x-text="'As-of: '+new Date().toISOString().slice(0,19)"></span>
+        <span :style="brief.data&&brief.data.trust?'color:var(--blue)':'color:var(--amber)'" x-text="'● '+(brief.data&&brief.data.trust?brief.data.trust.mode:'—')"></span>
+        <span x-text="brief.data&&brief.data.trust?'Source: '+brief.data.trust.source:'Source: —'"></span>
+        <span x-text="brief.data&&brief.data.trust?'As-of: '+brief.data.trust.as_of.slice(0,19):'Awaiting load'"></span>
       </div>
       <div class="p-3 space-y-3">
+        <div class="flex justify-between items-center">
+          <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">📋 Daily Brief · <span x-text="new Date().toLocaleDateString()"></span></div>
+          <button @click="fetchBrief()" class="btn-s text-[10px]" :disabled="brief.loading"><span x-show="!brief.loading">Refresh</span><span x-show="brief.loading"><span class="spin"></span></span></button>
+        </div>
+        <!-- Regime narrative -->
         <div class="card card-p">
-          <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📋 Daily Brief · <span x-text="new Date().toLocaleDateString()"></span></div>
+          <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🌐 Regime</div>
           <div class="text-[12px]" style="color:var(--t2);line-height:1.6">
-            <p><strong class="text-white">Regime:</strong> <span x-text="(regime.label||'Unknown').replace('_',' ')"></span> · <span x-text="regime.trend||'Sideways'"></span> · <span x-text="regime.vol||'Normal'"></span> vol</p>
-            <p class="mt-1"><strong class="text-white">What Changed:</strong> Review sector rotation and macro on Today tab.</p>
+            <p x-text="brief.data&&brief.data.regime?brief.data.regime.narrative:(regime.label||'Unknown').replace('_',' ')+' regime'"></p>
+            <div class="flex gap-2 mt-2">
+              <span class="pill" :class="brief.data&&brief.data.regime&&brief.data.regime.trend==='UPTREND'?'pg':brief.data&&brief.data.regime&&brief.data.regime.trend==='DOWNTREND'?'pr':''" x-text="brief.data&&brief.data.regime?brief.data.regime.trend:(regime.trend||'—')"></span>
+              <span class="pill" x-text="brief.data&&brief.data.regime?brief.data.regime.vol+' Vol':(regime.vol||'Normal')+' Vol'"></span>
+              <span class="pill" :class="brief.data&&brief.data.regime&&brief.data.regime.should_trade?'pg':'pr'" x-text="brief.data&&brief.data.regime&&brief.data.regime.should_trade?'✓ Trade OK':'✗ No Trade'"></span>
+            </div>
           </div>
         </div>
+        <!-- What Changed -->
+        <template x-if="brief.data&&(brief.data.what_changed||[]).length>0">
+          <div class="card card-p" style="border-left:3px solid var(--blue)">
+            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--blue)">⚡ What Changed</div>
+            <template x-for="c in brief.data.what_changed"><div class="text-[11px] py-0.5" style="color:var(--t2)" x-text="'→ '+c"></div></template>
+          </div>
+        </template>
+        <!-- Actionable -->
         <div class="card card-p" style="border-left:3px solid var(--green)">
           <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--green)">✅ ACTIONABLE</div>
-          <template x-if="sig.recs.length>0">
+          <template x-if="brief.data&&(brief.data.actionable||[]).length>0">
             <div>
-              <template x-for="r in sig.recs.slice(0,3)">
+              <template x-for="r in brief.data.actionable">
                 <div class="flex items-center gap-2 py-1 text-[11px]" style="border-bottom:1px solid var(--bd)">
-                  <span class="mono font-bold text-white" x-text="r.ticker||r.symbol"></span>
+                  <span class="mono font-bold text-white cursor-pointer" @click="openDossier(r.ticker||r.symbol)" x-text="r.ticker||r.symbol||'—'"></span>
                   <span class="pill" :class="(r.direction||'').toLowerCase()==='long'?'pg':'pr'" style="font-size:8px" x-text="r.direction||'—'"></span>
                   <span style="color:var(--t3)" x-text="(r.strategy||'').replace('_',' ')"></span>
                   <span class="mono ml-auto" style="color:var(--t2)" x-text="r.score?'Score '+Number(r.score).toFixed(1):'—'"></span>
@@ -344,25 +391,58 @@
               </template>
             </div>
           </template>
-          <template x-if="sig.recs.length===0"><div class="text-[11px]" style="color:var(--t2)">No actionable signals right now.</div></template>
+          <template x-if="!brief.data||(brief.data.actionable||[]).length===0">
+            <div>
+              <template x-if="sig.recs.length>0">
+                <div>
+                  <template x-for="r in sig.recs.slice(0,3)">
+                    <div class="flex items-center gap-2 py-1 text-[11px]" style="border-bottom:1px solid var(--bd)">
+                      <span class="mono font-bold text-white cursor-pointer" @click="openDossier(r.ticker||r.symbol)" x-text="r.ticker||r.symbol"></span>
+                      <span class="pill" :class="(r.direction||'').toLowerCase()==='long'?'pg':'pr'" style="font-size:8px" x-text="r.direction||'—'"></span>
+                      <span style="color:var(--t3)" x-text="(r.strategy||'').replace('_',' ')"></span>
+                      <span class="mono ml-auto" style="color:var(--t2)" x-text="r.score?'Score '+Number(r.score).toFixed(1):'—'"></span>
+                    </div>
+                  </template>
+                </div>
+              </template>
+              <template x-if="sig.recs.length===0"><div class="text-[11px]" style="color:var(--t2)">No actionable signals right now.</div></template>
+            </div>
+          </template>
         </div>
+        <!-- Watch -->
         <div class="card card-p" style="border-left:3px solid var(--amber)">
           <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--amber)">👁 WATCH</div>
-          <div class="text-[11px]" style="color:var(--t2)">Review sector leaders/laggards on Today tab. Opportunities emerge when regime shifts align with technical setups.</div>
+          <template x-if="brief.data&&(brief.data.watch||[]).length>0">
+            <div>
+              <template x-for="r in brief.data.watch.slice(0,5)">
+                <div class="flex items-center gap-2 py-1 text-[11px]" style="border-bottom:1px solid var(--bd)">
+                  <span class="mono font-bold cursor-pointer" style="color:var(--t2)" @click="openDossier(r.ticker||r.symbol)" x-text="r.ticker||r.symbol||'—'"></span>
+                  <span style="color:var(--t3)" x-text="(r.strategy||'').replace('_',' ')"></span>
+                  <span class="mono ml-auto" style="color:var(--t3)" x-text="r.score?'Score '+Number(r.score).toFixed(1):'—'"></span>
+                </div>
+              </template>
+            </div>
+          </template>
+          <template x-if="!brief.data||(brief.data.watch||[]).length===0">
+            <div class="text-[11px]" style="color:var(--t2)">Review sector leaders/laggards on Today tab. Opportunities emerge when regime shifts align with technical setups.</div>
+          </template>
         </div>
+        <!-- No Trade -->
         <div class="card card-p" style="border-left:3px solid var(--red)">
           <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--red)">🚫 NO TRADE</div>
-          <div class="text-[11px]" style="color:var(--t2)" x-text="regime.no_trade_reason||'No restrictions active. Normal sizing applies.'"></div>
+          <div class="text-[11px]" style="color:var(--t2)" x-text="brief.data&&brief.data.no_trade_reason?brief.data.no_trade_reason:(regime.no_trade_reason||'No restrictions active. Normal sizing applies.')"></div>
         </div>
+        <!-- Sectors -->
         <div class="card card-p">
           <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📊 Sector Snapshot</div>
-          <template x-for="s in sectors.slice(0,6)">
+          <template x-for="s in (brief.data&&brief.data.sectors?brief.data.sectors:sectors).slice(0,8)">
             <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)">
               <span class="text-[11px]" x-text="s.name"></span>
               <span class="mono text-[11px] font-bold" :class="(s.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="((s.change_pct||0)>=0?'+':'')+(s.change_pct||0).toFixed(2)+'%'"></span>
             </div>
           </template>
         </div>
+        <!-- Follow up -->
         <div class="card card-p">
           <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">💡 What to Ask Next</div>
           <div class="flex flex-wrap gap-2">
@@ -381,8 +461,8 @@
     <main x-show="tab==='options'" class="fade">
       <div class="trust-strip">
         <span style="color:var(--amber)">● SYNTHETIC</span>
-        <span>Source: heuristic_model</span>
-        <span>Sample: illustrative only</span>
+        <span x-text="opt.data&&opt.data.trust?'Source: '+opt.data.trust.source:'Source: heuristic_model'"></span>
+        <span x-text="opt.data&&opt.data.trust?'As-of: '+opt.data.trust.as_of.slice(0,19):'Sample: illustrative only'"></span>
       </div>
       <div class="p-3">
         <div class="flex gap-2 mb-3">
@@ -393,9 +473,9 @@
       <template x-if="opt.data">
         <div class="space-y-2 px-3 fade" style="padding-bottom:16px">
           <div class="card" style="overflow-x:auto">
-            <div class="card-p" style="padding-bottom:6px"><div class="text-[10px] font-bold uppercase" style="color:var(--t3)">🔮 Contract Candidates · <span class="text-white" x-text="opt.ticker.toUpperCase()"></span></div></div>
+            <div class="card-p" style="padding-bottom:6px"><div class="text-[10px] font-bold uppercase" style="color:var(--t3)">🔮 Contract Candidates · <span class="text-white" x-text="opt.data.symbol||opt.ticker.toUpperCase()"></span> · $<span x-text="opt.data.price||'—'"></span></div></div>
             <table class="tbl">
-              <thead><tr><th>Strike</th><th>DTE</th><th>Type</th><th>Delta</th><th>IV</th><th>OI</th><th>Spread</th><th>EV</th></tr></thead>
+              <thead><tr><th>Strike</th><th>DTE</th><th>Type</th><th>Delta</th><th>IV</th><th>OI</th><th>Spread</th><th>B/E</th><th>EV</th></tr></thead>
               <tbody>
                 <template x-for="c in opt.data.contracts||[]">
                   <tr>
@@ -406,6 +486,7 @@
                     <td class="mono" :class="c.iv>0.5?'text-red-400':c.iv>0.3?'text-amber-300':'text-green-400'" x-text="(c.iv*100).toFixed(0)+'%'"></td>
                     <td class="mono" x-text="c.oi.toLocaleString()"></td>
                     <td class="mono" :class="c.spread_quality==='TIGHT'?'text-green-400':'text-amber-300'" x-text="c.spread_quality"></td>
+                    <td class="mono" x-text="'$'+c.break_even"></td>
                     <td class="mono font-bold" :class="c.ev>0?'text-green-400':'text-red-400'" x-text="(c.ev>0?'+':'')+c.ev.toFixed(1)+'%'"></td>
                   </tr>
                 </template>
@@ -415,9 +496,11 @@
           <div class="card card-p">
             <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📊 IV Context</div>
             <div class="text-[11px]" style="color:var(--t2);line-height:1.6">
-              <div><strong class="text-white">IV Rank:</strong> <span class="mono" x-text="opt.data.iv_rank!=null?opt.data.iv_rank+'%':'N/A'"></span></div>
+              <div><strong class="text-white">IV Rank:</strong> <span class="mono" :class="(opt.data.iv_rank||0)>60?'text-red-400':(opt.data.iv_rank||0)<30?'text-green-400':''" x-text="opt.data.iv_rank!=null?opt.data.iv_rank+'%':'N/A'"></span></div>
+              <div><strong class="text-white">IV Percentile:</strong> <span class="mono" x-text="opt.data.iv_percentile!=null?opt.data.iv_percentile+'%':'N/A'"></span></div>
               <div><strong class="text-white">Term Structure:</strong> <span x-text="opt.data.term_structure||'N/A'"></span></div>
               <div><strong class="text-white">Skew:</strong> <span x-text="opt.data.skew_note||'N/A'"></span></div>
+              <div class="mt-1"><strong class="text-white">Regime Context:</strong> <span x-text="opt.data.regime_context||'N/A'"></span></div>
             </div>
           </div>
           <div class="card card-p" style="border-color:rgba(255,92,92,.3)">
@@ -631,6 +714,7 @@
       sig:{mode:'—',source:'',as_of:'',recs:[],strategy_scores:{},no_trade_reason:null},
       dos:{ticker:'',loading:false,data:null,error:''},
       opt:{ticker:'',loading:false,data:null},
+      brief:{loading:false,data:null},
       bt:{ticker:'AAPL',strategy:'all',period:'1y',loading:false,result:null},
       ops:{running:false,cycle_count:0,signals_today:0,trades_today:0,circuit_breaker:false,circuit_breaker_reason:'',dry_run:true,components:{}},
 
@@ -641,7 +725,7 @@
         this.fetchHealth();setInterval(()=>this.fetchHealth(),120000);
       },
       tick(){this.clock=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'})},
-      switchTab(t){this.tab=t;if(t==='signals')this.fetchSignals();if(t==='ops')this.fetchHealth()},
+      switchTab(t){this.tab=t;if(t==='signals')this.fetchSignals();if(t==='ops')this.fetchHealth();if(t==='brief')this.fetchBrief()},
 
       async fetchMkt(){
         try{const r=await fetch('/api/live/market');if(!r.ok)throw 0;const d=await r.json();this.regime=d.regime||{};this.indices=d.indices||[];this.macro=d.macro||[];this.sectors=d.sectors||[];this.asia=d.asia||[];this.trust=d.trust||{};this.live=true}catch(e){this.live=false}
@@ -649,17 +733,18 @@
       async fetchSignals(){
         try{const r=await fetch('/api/recommendations');if(!r.ok)throw 0;const d=await r.json();this.sig.mode=d.mode||'—';this.sig.source=d.source||'';this.sig.as_of=d.as_of||'';this.sig.recs=d.recommendations||[];this.sig.strategy_scores=d.strategy_scores||{};this.sig.no_trade_reason=d.no_trade_reason||null}catch(e){this.sig.mode='OFFLINE'}
       },
+      async fetchBrief(){
+        this.brief.loading=true;
+        try{const r=await fetch('/api/live/brief');if(!r.ok)throw 0;this.brief.data=await r.json()}catch(e){this.brief.data=null}finally{this.brief.loading=false}
+      },
       async fetchDossier(){
         if(!this.dos.ticker)return;this.dos.loading=true;this.dos.data=null;this.dos.error='';
-        try{const r=await fetch('/api/live/quote/'+encodeURIComponent(this.dos.ticker));if(!r.ok){const e=await r.json();throw new Error(e.detail||'Not found')}this.dos.data=(await r.json()).quote}catch(e){this.dos.error=e.message}finally{this.dos.loading=false}
+        try{const r=await fetch('/api/live/dossier/'+encodeURIComponent(this.dos.ticker));if(!r.ok){const e=await r.json();throw new Error(e.detail||'Not found')}this.dos.data=await r.json()}catch(e){this.dos.error=e.message}finally{this.dos.loading=false}
       },
       openDossier(ticker){if(ticker){this.dos.ticker=ticker;this.switchTab('dossier');this.fetchDossier()}},
       async fetchOptions(){
         if(!this.opt.ticker)return;this.opt.loading=true;this.opt.data=null;
-        var p=100;try{const r=await fetch('/api/live/quote/'+encodeURIComponent(this.opt.ticker));if(r.ok){const d=await r.json();p=(d.quote||d).price||100}}catch(e){}
-        const strikes=[Math.round(p*0.95),Math.round(p*0.975),Math.round(p),Math.round(p*1.025),Math.round(p*1.05)];
-        const contracts=strikes.map((s,i)=>({strike:s,dte:[30,30,45,45,60][i],type:i<3?'CALL':'PUT',delta:parseFloat(([0.65,0.55,0.50,-0.45,-0.35][i]).toFixed(2)),iv:parseFloat((0.25+Math.random()*0.15).toFixed(3)),oi:Math.round(1000+Math.random()*9000),spread_quality:Math.random()>0.4?'TIGHT':'WIDE',ev:parseFloat((-5+Math.random()*15).toFixed(1))}));
-        this.opt.data={contracts,iv_rank:Math.round(30+Math.random()*40),term_structure:'Normal contango — front month IV < back month',skew_note:'Moderate put skew — standard risk-off hedge demand'};this.opt.loading=false
+        try{const r=await fetch('/api/live/options/'+encodeURIComponent(this.opt.ticker));if(!r.ok){const e=await r.json();throw new Error(e.detail||'Not found')}this.opt.data=await r.json()}catch(e){this.opt.data=null}finally{this.opt.loading=false}
       },
       async runBT(){
         if(!this.bt.ticker)return;this.bt.loading=true;this.bt.result=null;

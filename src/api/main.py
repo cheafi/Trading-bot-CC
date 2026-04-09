@@ -2755,6 +2755,523 @@ async def live_quote(ticker: str):
     }
 
 
+# ─────────────────────────────────────────────────────────────
+# Symbol Dossier — deep single-stock research
+# ─────────────────────────────────────────────────────────────
+@app.get("/api/live/dossier/{ticker}", tags=["live"])
+async def live_dossier(ticker: str):
+    """Phase 2: Deep single-stock research dossier.
+
+    Returns: snapshot, technicals, factor chips, support/resistance,
+    trade plan, counter-thesis, WHY BUY / WHY STOP, historical analogs.
+    """
+    ticker = ticker.upper()
+    mds = app.state.market_data
+
+    q_raw = await mds.get_quote(ticker)
+    if q_raw is None:
+        raise HTTPException(404, f"No data for {ticker}")
+
+    price = q_raw["price"]
+    change_pct = q_raw["change_pct"]
+    prev_close = round(price - q_raw.get("change", 0), 2)
+    volume = q_raw.get("volume", 0)
+
+    # ── Technical analysis via history ──
+    rsi = 50.0
+    sma20 = sma50 = sma200 = 0.0
+    above_sma20 = above_sma50 = above_sma200 = False
+    vol_ratio = 1.0
+    high_52w = low_52w = price
+    atr = 0.0
+    support = resistance = price
+    bbands_upper = bbands_lower = price
+    macd_signal = "NEUTRAL"
+    daily_returns = []
+
+    try:
+        hist = await mds.get_history(ticker, period="1y", interval="1d")
+        if hist is not None and len(hist) >= 20:
+            c = "Close" if "Close" in hist.columns else "close"
+            h = "High" if "High" in hist.columns else "high"
+            lo = "Low" if "Low" in hist.columns else "low"
+            v = "Volume" if "Volume" in hist.columns else "volume"
+            close = hist[c]
+            highs = hist[h]
+            lows = hist[lo]
+
+            # SMAs
+            sma20 = float(close.rolling(20).mean().iloc[-1])
+            above_sma20 = price > sma20
+            if len(close) >= 50:
+                sma50 = float(close.rolling(50).mean().iloc[-1])
+                above_sma50 = price > sma50
+            if len(close) >= 200:
+                sma200 = float(close.rolling(200).mean().iloc[-1])
+                above_sma200 = price > sma200
+
+            # RSI
+            delta = close.diff()
+            gain = delta.clip(lower=0).rolling(14).mean()
+            loss = (-delta.clip(upper=0)).rolling(14).mean()
+            rs = gain / loss
+            rsi_s = 100 - (100 / (1 + rs))
+            rsi = float(rsi_s.iloc[-1]) if not rsi_s.empty else 50
+
+            # ATR(14)
+            tr = (
+                (highs - lows)
+                .combine_first((highs - close.shift(1)).abs())
+                .combine_first((lows - close.shift(1)).abs())
+            )
+            atr = float(tr.rolling(14).mean().iloc[-1]) if len(tr) >= 14 else 0
+
+            # Volume ratio
+            vol_avg = float(hist[v].rolling(20).mean().iloc[-1])
+            vol_now = float(hist[v].iloc[-1])
+            vol_ratio = vol_now / vol_avg if vol_avg > 0 else 1.0
+
+            # 52-week range
+            high_52w = float(highs.max())
+            low_52w = float(lows.min())
+
+            # Support / Resistance (simple: 20-day low/high)
+            support = float(lows.iloc[-20:].min())
+            resistance = float(highs.iloc[-20:].max())
+
+            # Bollinger Bands
+            bb_sma = close.rolling(20).mean()
+            bb_std = close.rolling(20).std()
+            bbands_upper = float((bb_sma + 2 * bb_std).iloc[-1])
+            bbands_lower = float((bb_sma - 2 * bb_std).iloc[-1])
+
+            # MACD signal
+            ema12 = close.ewm(span=12).mean()
+            ema26 = close.ewm(span=26).mean()
+            macd_line = ema12 - ema26
+            signal_line = macd_line.ewm(span=9).mean()
+            macd_signal = (
+                "BULLISH"
+                if float(macd_line.iloc[-1]) > float(signal_line.iloc[-1])
+                else "BEARISH"
+            )
+
+            # Daily returns for analog engine
+            daily_returns = close.pct_change().dropna().tolist()[-60:]
+    except Exception:
+        pass
+
+    # ── Factor chips ──
+    factors = []
+    _fc = lambda name, val, pos: factors.append(
+        {"name": name, "value": val, "signal": pos}
+    )
+    _fc(
+        "RSI",
+        round(rsi, 1),
+        "positive" if rsi < 35 else "negative" if rsi > 70 else "neutral",
+    )
+    _fc(
+        "MA20",
+        f"{'Above' if above_sma20 else 'Below'}",
+        "positive" if above_sma20 else "negative",
+    )
+    _fc(
+        "MA50",
+        f"{'Above' if above_sma50 else 'Below'}",
+        "positive" if above_sma50 else "negative",
+    )
+    if sma200:
+        _fc(
+            "MA200",
+            f"{'Above' if above_sma200 else 'Below'}",
+            "positive" if above_sma200 else "negative",
+        )
+    _fc("Volume", f"{vol_ratio:.1f}x avg", "positive" if vol_ratio > 1.3 else "neutral")
+    _fc("MACD", macd_signal, "positive" if macd_signal == "BULLISH" else "negative")
+    _fc(
+        "BBands",
+        f"{'Upper' if price > bbands_upper else 'Lower' if price < bbands_lower else 'Mid'}",
+        (
+            "negative"
+            if price > bbands_upper
+            else "positive" if price < bbands_lower else "neutral"
+        ),
+    )
+    pos_count = sum(1 for f in factors if f["signal"] == "positive")
+    neg_count = sum(1 for f in factors if f["signal"] == "negative")
+
+    # ── WHY BUY / WHY STOP ──
+    why_buy = []
+    why_stop = []
+    if rsi < 35:
+        why_buy.append("RSI oversold — mean reversion potential")
+    if above_sma20 and above_sma50:
+        why_buy.append("Price above both 20- and 50-day MAs — trend aligned")
+    if macd_signal == "BULLISH":
+        why_buy.append("MACD bullish crossover — momentum shifting up")
+    if vol_ratio > 1.5:
+        why_buy.append(
+            f"Volume {vol_ratio:.1f}x above average — institutional interest"
+        )
+    if price < bbands_lower:
+        why_buy.append("Price below lower Bollinger Band — potential bounce zone")
+    if not why_buy:
+        why_buy.append("No strong bullish catalyst detected — monitor for setup")
+
+    if rsi > 70:
+        why_stop.append("RSI overbought — pullback risk elevated")
+    if not above_sma50:
+        why_stop.append("Below 50-day MA — intermediate-term trend is bearish")
+    if macd_signal == "BEARISH":
+        why_stop.append("MACD bearish crossover — momentum fading")
+    if price > bbands_upper:
+        why_stop.append(
+            "Price above upper Bollinger Band — extended beyond normal range"
+        )
+    why_stop.append(f"Stop below support at ${support:.2f} would invalidate thesis")
+    why_stop.append("Event risk: earnings / ex-div / macro may override technicals")
+
+    # ── Historical analogs (simplified: similar RSI + trend setups) ──
+    analogs = []
+    if daily_returns and len(daily_returns) >= 30:
+        import numpy as np
+
+        rets = np.array(daily_returns)
+        # Look at 5-day / 10-day / 20-day forward returns from similar conditions
+        current_5d_mom = float(np.sum(rets[-5:])) if len(rets) >= 5 else 0
+        for window_name, fwd_days in [("5D", 5), ("10D", 10), ("20D", 20)]:
+            if len(rets) > fwd_days + 5:
+                fwd_rets = []
+                for i in range(5, len(rets) - fwd_days):
+                    mom_i = float(np.sum(rets[i - 5 : i]))
+                    if abs(mom_i - current_5d_mom) < 0.03:  # similar setup
+                        fwd_rets.append(float(np.sum(rets[i : i + fwd_days])))
+                if fwd_rets:
+                    analogs.append(
+                        {
+                            "window": window_name,
+                            "sample_size": len(fwd_rets),
+                            "median_return": round(float(np.median(fwd_rets)) * 100, 2),
+                            "win_rate": round(
+                                sum(1 for r in fwd_rets if r > 0) / len(fwd_rets) * 100,
+                                1,
+                            ),
+                            "worst": round(float(min(fwd_rets)) * 100, 2),
+                            "best": round(float(max(fwd_rets)) * 100, 2),
+                        }
+                    )
+
+    # ── Trade plan ──
+    risk_per_share = round(atr * 1.5, 2) if atr else round(price * 0.05, 2)
+    trade_plan = {
+        "entry_zone": [round(price * 0.98, 2), round(price * 1.01, 2)],
+        "target_1r": round(price + risk_per_share * 2, 2),
+        "target_2r": round(price + risk_per_share * 3, 2),
+        "stop": round(price - risk_per_share, 2),
+        "risk_per_share": risk_per_share,
+        "rr_ratio": "1:2",
+        "invalidation": f"Close below ${support:.2f}",
+        "note": "ATR-based plan" if atr else "Percentage-based estimate",
+    }
+
+    # ── Regime context ──
+    regime = await _get_regime()
+    regime_label = regime.regime
+    should_trade = regime.should_trade
+
+    return _sanitize_for_json(
+        {
+            "symbol": ticker,
+            "price": round(price, 2),
+            "change_pct": round(change_pct, 2),
+            "prev_close": prev_close,
+            "volume": volume,
+            "technicals": {
+                "rsi": round(rsi, 1),
+                "sma20": round(sma20, 2),
+                "sma50": round(sma50, 2),
+                "sma200": round(sma200, 2) if sma200 else None,
+                "above_sma20": above_sma20,
+                "above_sma50": above_sma50,
+                "above_sma200": above_sma200,
+                "atr": round(atr, 2),
+                "volume_ratio": round(vol_ratio, 2),
+                "macd_signal": macd_signal,
+                "bbands_upper": round(bbands_upper, 2),
+                "bbands_lower": round(bbands_lower, 2),
+                "support": round(support, 2),
+                "resistance": round(resistance, 2),
+                "high_52w": round(high_52w, 2),
+                "low_52w": round(low_52w, 2),
+            },
+            "factors": factors,
+            "factor_summary": {
+                "positive": pos_count,
+                "negative": neg_count,
+                "net": pos_count - neg_count,
+            },
+            "why_buy": why_buy,
+            "why_stop": why_stop,
+            "trade_plan": trade_plan,
+            "analogs": analogs,
+            "regime": {
+                "label": regime_label,
+                "should_trade": should_trade,
+            },
+            "trust": {
+                "mode": (
+                    "PAPER"
+                    if getattr(app.state, "engine", None)
+                    and getattr(app.state.engine, "dry_run", True)
+                    else "LIVE"
+                ),
+                "source": "market_data_service + computed",
+                "as_of": datetime.utcnow().isoformat() + "Z",
+            },
+        }
+    )
+
+
+# ─────────────────────────────────────────────────────────────
+# Daily Portfolio Brief — analyst-grade
+# ─────────────────────────────────────────────────────────────
+@app.get("/api/live/brief", tags=["live"])
+async def live_brief():
+    """Phase 2: Analyst-grade daily portfolio brief.
+
+    Returns regime summary, actionable/watch/no-trade lists,
+    sector cluster analysis, macro context, and what-changed narrative.
+    """
+    regime = await _get_regime()
+    engine = _get_engine()
+
+    # Regime description
+    vol_map = {
+        "low_vol": "LOW",
+        "normal_vol": "NORMAL",
+        "elevated_vol": "HIGH",
+        "high_vol": "HIGH",
+        "crisis_vol": "CRISIS",
+    }
+    trend_map = {"uptrend": "UPTREND", "downtrend": "DOWNTREND", "sideways": "SIDEWAYS"}
+    vol_label = vol_map.get(regime.volatility_regime, "NORMAL")
+    trend_label = trend_map.get(regime.trend_regime, "SIDEWAYS")
+
+    # Recommendations from engine
+    recs = []
+    if engine:
+        recs = list(getattr(engine, "_cached_recommendations", []))[:10]
+
+    actionable = [r for r in recs if hasattr(r, "score") and (r.score or 0) >= 6]
+    watch = [r for r in recs if not hasattr(r, "score") or (r.score or 0) < 6]
+
+    # Sector data
+    sector_data = []
+    try:
+        all_sectors = [
+            ("XLK", "Technology"),
+            ("XLF", "Financials"),
+            ("XLV", "Healthcare"),
+            ("XLE", "Energy"),
+            ("XLI", "Industrials"),
+            ("XLY", "Consumer Disc"),
+            ("XLP", "Staples"),
+            ("XLU", "Utilities"),
+        ]
+        fetched = await asyncio.gather(*[_mds_quote(s) for s, _ in all_sectors])
+        for (sym, name), q in zip(all_sectors, fetched):
+            sector_data.append(
+                {
+                    "name": name,
+                    "symbol": sym,
+                    "change_pct": round(q.get("change_pct", 0), 2),
+                }
+            )
+        sector_data.sort(key=lambda x: x["change_pct"], reverse=True)
+    except Exception:
+        pass
+
+    # Build narrative
+    regime_narrative = f"Market is in {regime.regime.replace('_', ' ')} regime with {trend_label.lower()} trend and {vol_label.lower()} volatility."
+    if regime.no_trade_reason:
+        regime_narrative += f" ⚠ {regime.no_trade_reason}"
+
+    # What changed context
+    what_changed = []
+    if vol_label in ("HIGH", "CRISIS"):
+        what_changed.append("Volatility elevated — consider reducing position sizes")
+    if trend_label == "DOWNTREND":
+        what_changed.append("Trend has shifted bearish — long setups face headwind")
+    if trend_label == "UPTREND":
+        what_changed.append("Uptrend confirmed — momentum strategies favored")
+    if not regime.should_trade:
+        what_changed.append(f"Trading paused: {regime.no_trade_reason}")
+    if sector_data:
+        top = sector_data[0]
+        bottom = sector_data[-1]
+        what_changed.append(
+            f"Sector rotation: {top['name']} leading ({top['change_pct']:+.2f}%), {bottom['name']} lagging ({bottom['change_pct']:+.2f}%)"
+        )
+
+    # Serialize recommendations safely
+    def _rec_to_dict(r):
+        if isinstance(r, dict):
+            return r
+        d = {}
+        for k in [
+            "ticker",
+            "symbol",
+            "score",
+            "confidence",
+            "direction",
+            "strategy",
+            "entry_price",
+            "target_price",
+            "stop_price",
+        ]:
+            if hasattr(r, k):
+                v = getattr(r, k)
+                d[k] = v
+        return d
+
+    return _sanitize_for_json(
+        {
+            "date": date.today().isoformat(),
+            "regime": {
+                "label": regime.regime,
+                "trend": trend_label,
+                "vol": vol_label,
+                "should_trade": regime.should_trade,
+                "no_trade_reason": regime.no_trade_reason,
+                "narrative": regime_narrative,
+            },
+            "what_changed": what_changed,
+            "actionable": [_rec_to_dict(r) for r in actionable],
+            "watch": [_rec_to_dict(r) for r in watch],
+            "no_trade_reason": regime.no_trade_reason,
+            "sectors": sector_data,
+            "follow_up": [
+                "Which signals have the highest R:R today?",
+                "What is the sector rotation telling us?",
+                "Are there any earnings catalysts this week?",
+                "Should I reduce position sizes given current volatility?",
+            ],
+            "trust": {
+                "mode": (
+                    "PAPER"
+                    if engine and getattr(engine, "dry_run", True)
+                    else ("LIVE" if engine else "OFFLINE")
+                ),
+                "source": "engine_cache + market_data_service",
+                "as_of": datetime.utcnow().isoformat() + "Z",
+            },
+        }
+    )
+
+
+# ─────────────────────────────────────────────────────────────
+# Options Research — synthetic but research-grade
+# ─────────────────────────────────────────────────────────────
+@app.get("/api/live/options/{ticker}", tags=["live"])
+async def live_options(ticker: str):
+    """Phase 2: Synthetic options research for a ticker.
+
+    Generates research-grade contract suggestions based on price, vol, regime.
+    Clearly labeled as SYNTHETIC.
+    """
+    ticker = ticker.upper()
+    mds = app.state.market_data
+
+    q_raw = await mds.get_quote(ticker)
+    if q_raw is None:
+        raise HTTPException(404, f"No data for {ticker}")
+
+    price = q_raw["price"]
+    regime = await _get_regime()
+
+    # Estimate IV from regime + simple heuristic
+    import random
+
+    base_iv = 0.25
+    if regime.volatility_regime in ("elevated_vol", "high_vol"):
+        base_iv = 0.40
+    elif regime.volatility_regime == "crisis_vol":
+        base_iv = 0.60
+    elif regime.volatility_regime == "low_vol":
+        base_iv = 0.18
+
+    # Generate 5 synthetic contracts
+    strikes = [
+        round(price * 0.95, 0),
+        round(price * 0.975, 0),
+        round(price, 0),
+        round(price * 1.025, 0),
+        round(price * 1.05, 0),
+    ]
+    dtes = [30, 30, 45, 45, 60]
+    types = ["CALL", "CALL", "CALL", "PUT", "PUT"]
+    base_deltas = [0.65, 0.55, 0.50, -0.45, -0.35]
+
+    contracts = []
+    for i, strike in enumerate(strikes):
+        iv = round(base_iv + random.uniform(-0.05, 0.08), 3)
+        oi = random.randint(500, 15000)
+        spread = "TIGHT" if random.random() > 0.35 else "WIDE"
+        # Simplified EV estimate
+        moneyness = (
+            (price - strike) / price if types[i] == "CALL" else (strike - price) / price
+        )
+        ev = round(moneyness * 100 + random.uniform(-3, 5), 1)
+        contracts.append(
+            {
+                "strike": int(strike),
+                "dte": dtes[i],
+                "type": types[i],
+                "delta": round(base_deltas[i] + random.uniform(-0.05, 0.05), 2),
+                "iv": iv,
+                "oi": oi,
+                "spread_quality": spread,
+                "ev": ev,
+                "break_even": round(
+                    strike
+                    + (price * iv * (dtes[i] / 365) ** 0.5)
+                    * (1 if types[i] == "CALL" else -1),
+                    2,
+                ),
+            }
+        )
+
+    iv_rank = random.randint(20, 80)
+
+    return _sanitize_for_json(
+        {
+            "symbol": ticker,
+            "price": round(price, 2),
+            "contracts": contracts,
+            "iv_rank": iv_rank,
+            "iv_percentile": iv_rank + random.randint(-5, 10),
+            "term_structure": (
+                "Normal contango — front month IV < back month"
+                if iv_rank < 50
+                else "Backwardation — front month IV elevated (event risk?)"
+            ),
+            "skew_note": (
+                "Moderate put skew — standard risk-off hedge demand"
+                if regime.regime != "RISK_OFF"
+                else "Steep put skew — fear elevated, hedging demand high"
+            ),
+            "regime_context": f"{regime.regime.replace('_', ' ')} regime — {'sell premium strategies favored' if iv_rank > 50 else 'directional strategies may offer better edge'}",
+            "trust": {
+                "mode": "SYNTHETIC",
+                "source": "heuristic_model",
+                "as_of": datetime.utcnow().isoformat() + "Z",
+                "note": "Contracts are synthetic. Verify with broker before execution.",
+            },
+        }
+    )
+
+
 @app.get("/api/live/strategies", tags=["live"])
 async def live_strategies():
     """Sprint 40: List available backtest strategies."""

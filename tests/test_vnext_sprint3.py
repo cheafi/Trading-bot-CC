@@ -739,6 +739,182 @@ class TestDocumentation:
         """research_lab package should be importable."""
         import src.research_lab  # noqa: F401
 
+
+# ════════════════════════════════════════════════════════════════
+# Phase 2 — New endpoint tests (dossier, brief, options)
+# ════════════════════════════════════════════════════════════════
+
+class TestPhase2Endpoints:
+    """Tests for Phase 2 decision-compression endpoints."""
+
+    @pytest.fixture
+    def client(self):
+        from httpx import ASGITransport, AsyncClient
+        from src.api.main import app
+        transport = ASGITransport(app=app)
+        return AsyncClient(transport=transport, base_url="http://test")
+
+    @pytest.mark.anyio
+    async def test_dossier_endpoint_returns_200(self, client):
+        async with client as c:
+            r = await c.get("/api/live/dossier/AAPL")
+            assert r.status_code == 200
+            d = r.json()
+            assert d["symbol"] == "AAPL"
+            assert "price" in d
+            assert "technicals" in d
+            assert "factors" in d
+            assert "why_buy" in d
+            assert "why_stop" in d
+            assert "trade_plan" in d
+            assert "trust" in d
+
+    @pytest.mark.anyio
+    async def test_dossier_technicals_structure(self, client):
+        async with client as c:
+            r = await c.get("/api/live/dossier/MSFT")
+            assert r.status_code == 200
+            t = r.json()["technicals"]
+            for key in ["rsi", "sma20", "sma50", "atr", "volume_ratio",
+                        "macd_signal", "support", "resistance",
+                        "high_52w", "low_52w", "bbands_upper", "bbands_lower"]:
+                assert key in t, f"Missing {key} in technicals"
+
+    @pytest.mark.anyio
+    async def test_dossier_factor_chips(self, client):
+        async with client as c:
+            r = await c.get("/api/live/dossier/AAPL")
+            d = r.json()
+            assert len(d["factors"]) >= 5
+            for f in d["factors"]:
+                assert "name" in f
+                assert "value" in f
+                assert f["signal"] in ("positive", "negative", "neutral")
+            assert "factor_summary" in d
+            assert "positive" in d["factor_summary"]
+            assert "negative" in d["factor_summary"]
+
+    @pytest.mark.anyio
+    async def test_dossier_trade_plan(self, client):
+        async with client as c:
+            r = await c.get("/api/live/dossier/AAPL")
+            tp = r.json()["trade_plan"]
+            assert "entry_zone" in tp
+            assert len(tp["entry_zone"]) == 2
+            assert "target_1r" in tp
+            assert "target_2r" in tp
+            assert "stop" in tp
+            assert "risk_per_share" in tp
+
+    @pytest.mark.anyio
+    async def test_dossier_why_buy_stop(self, client):
+        async with client as c:
+            r = await c.get("/api/live/dossier/AAPL")
+            d = r.json()
+            assert isinstance(d["why_buy"], list) and len(d["why_buy"]) > 0
+            assert isinstance(d["why_stop"], list) and len(d["why_stop"]) > 0
+
+    @pytest.mark.anyio
+    async def test_dossier_404_bad_ticker(self, client):
+        async with client as c:
+            r = await c.get("/api/live/dossier/ZZZZZZZZ999")
+            assert r.status_code == 404
+
+    @pytest.mark.anyio
+    async def test_brief_endpoint_returns_200(self, client):
+        async with client as c:
+            r = await c.get("/api/live/brief")
+            assert r.status_code == 200
+            d = r.json()
+            assert "date" in d
+            assert "regime" in d
+            assert "narrative" in d["regime"]
+            assert "what_changed" in d
+            assert isinstance(d["what_changed"], list)
+            assert "trust" in d
+
+    @pytest.mark.anyio
+    async def test_brief_has_actionable_and_watch(self, client):
+        async with client as c:
+            r = await c.get("/api/live/brief")
+            d = r.json()
+            assert "actionable" in d
+            assert "watch" in d
+            assert isinstance(d["actionable"], list)
+            assert isinstance(d["watch"], list)
+
+    @pytest.mark.anyio
+    async def test_brief_sectors(self, client):
+        async with client as c:
+            r = await c.get("/api/live/brief")
+            d = r.json()
+            assert "sectors" in d
+            assert isinstance(d["sectors"], list)
+
+    @pytest.mark.anyio
+    async def test_brief_follow_up(self, client):
+        async with client as c:
+            r = await c.get("/api/live/brief")
+            d = r.json()
+            assert "follow_up" in d
+            assert len(d["follow_up"]) >= 3
+
+    @pytest.mark.anyio
+    async def test_options_endpoint_returns_200(self, client):
+        async with client as c:
+            r = await c.get("/api/live/options/AAPL")
+            assert r.status_code == 200
+            d = r.json()
+            assert d["symbol"] == "AAPL"
+            assert "contracts" in d
+            assert len(d["contracts"]) == 5
+            assert "trust" in d
+            assert d["trust"]["mode"] == "SYNTHETIC"
+
+    @pytest.mark.anyio
+    async def test_options_contract_structure(self, client):
+        async with client as c:
+            r = await c.get("/api/live/options/MSFT")
+            d = r.json()
+            for c_item in d["contracts"]:
+                for key in ["strike", "dte", "type", "delta", "iv", "oi",
+                            "spread_quality", "ev", "break_even"]:
+                    assert key in c_item, f"Missing {key} in contract"
+
+    @pytest.mark.anyio
+    async def test_options_iv_context(self, client):
+        async with client as c:
+            r = await c.get("/api/live/options/AAPL")
+            d = r.json()
+            assert "iv_rank" in d
+            assert "iv_percentile" in d
+            assert "term_structure" in d
+            assert "skew_note" in d
+            assert "regime_context" in d
+
+    @pytest.mark.anyio
+    async def test_options_404_bad_ticker(self, client):
+        async with client as c:
+            r = await c.get("/api/live/options/ZZZZZZZZ999")
+            assert r.status_code == 404
+
+    @pytest.mark.anyio
+    async def test_dossier_trust_has_as_of(self, client):
+        async with client as c:
+            r = await c.get("/api/live/dossier/AAPL")
+            trust = r.json()["trust"]
+            assert "as_of" in trust
+            assert "source" in trust
+            assert "mode" in trust
+
+    @pytest.mark.anyio
+    async def test_brief_trust_has_as_of(self, client):
+        async with client as c:
+            r = await c.get("/api/live/brief")
+            trust = r.json()["trust"]
+            assert "as_of" in trust
+            assert "source" in trust
+
     def test_patterns_importable(self):
         from src.research_lab.patterns import detect_patterns  # noqa: F401
         assert callable(detect_patterns)
