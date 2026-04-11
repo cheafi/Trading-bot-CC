@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <style>
-      :root{--bg:#0d1117;--s1:#161b22;--s2:#1c2333;--bd:#21262d;--bd2:#30363d;--t1:#e6edf3;--t2:#8b949e;--t3:#484f58;--green:#00d4aa;--red:#ff5c5c;--amber:#fbbf24;--blue:#58a6ff;--purple:#bc8cff}
+      :root{--bg:#0d1117;--s1:#161b22;--s2:#1c2333;--bd:#21262d;--bd2:#30363d;--t1:#e6edf3;--t2:#8b949e;--t3:#484f58;--green:#00d4aa;--red:#ff5c5c;--amber:#fbbf24;--blue:#58a6ff;--purple:#bc8cff;color-scheme:dark}
       *{font-family:'Inter',sans-serif;box-sizing:border-box;margin:0}
       body{background:var(--bg);color:var(--t1);overflow-x:hidden}
       .mono{font-family:'JetBrains Mono',monospace}
@@ -30,7 +30,9 @@
       .tab-btn.on{background:var(--s2);color:var(--t1);box-shadow:0 0 0 1px var(--bd2)}
       .scroll-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
       .scroll-row::-webkit-scrollbar{display:none}
-      input,select{background:var(--s2);border:1px solid var(--bd);border-radius:6px;padding:8px 10px;color:var(--t1);font-size:12px;width:100%}
+      input,select{background:var(--s2);border:1px solid var(--bd);border-radius:6px;padding:8px 10px;color:var(--t1);font-size:12px;width:100%;color-scheme:dark}
+      input[type="date"]{-webkit-appearance:none;appearance:none;min-height:40px;cursor:pointer}
+      input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.6;cursor:pointer}
       input:focus,select:focus{outline:none;border-color:var(--blue)}
       .btn-p{background:var(--green);color:#000;font-weight:700;border:none;border-radius:6px;padding:8px 16px;font-size:12px;cursor:pointer}
       .btn-p:disabled{opacity:.5;cursor:not-allowed}
@@ -686,7 +688,10 @@
           <div class="text-[9px] mb-3" style="color:var(--t3);line-height:1.5">Pick a date and ticker to see what CC would have suggested on that day, with the 4-layer confidence score, expert council opinions, and actual forward returns (hindsight).</div>
           <div class="space-y-2">
             <input type="text" x-model="tt.ticker" placeholder="Ticker (e.g. SPY)" style="text-transform:uppercase" />
-            <input type="date" x-model="tt.date" />
+            <div style="position:relative">
+              <label class="text-[9px] font-bold uppercase mb-1 block" style="color:var(--t3)">Target Date</label>
+              <input type="date" x-model="tt.date" min="2020-01-01" :max="new Date().toISOString().slice(0,10)" style="min-height:44px;font-size:14px" />
+            </div>
             <select x-model="tt.strategy">
               <option value="all">All Strategies</option>
               <option value="swing">Swing Trading</option>
@@ -1054,7 +1059,7 @@
       opt:{ticker:'',loading:false,data:null},
       brief:{loading:false,data:null},
       bt:{ticker:'AAPL',strategy:'all',period:'5y',loading:false,result:null},
-      tt:{ticker:'SPY',date:'',strategy:'all',loading:false,result:null},
+      tt:{ticker:'SPY',date:new Date(Date.now()-5*86400000).toISOString().slice(0,10),strategy:'all',loading:false,result:null},
       ops:{running:false,cycle_count:0,signals_today:0,trades_today:0,circuit_breaker:false,circuit_breaker_reason:'',dry_run:true,components:{}},
       opsDetail:{},
       apiEndpoints:[],
