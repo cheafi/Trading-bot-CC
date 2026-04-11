@@ -518,18 +518,19 @@
     </main>
 
     <!-- ═══════════════════════════════════════════════════════ -->
-    <!-- SURFACE 6: TRACK RECORD                                -->
+    <!-- SURFACE 6: TRACK RECORD + 5Y STRESS TEST              -->
     <!-- ═══════════════════════════════════════════════════════ -->
     <main x-show="tab==='track'" class="fade">
       <div class="trust-strip">
         <span style="color:var(--amber)">● BACKTEST</span>
-        <span>Source: vectorbt</span>
+        <span>Source: yfinance (real data)</span>
         <span>Fees: 0 (gross) · Slippage: 0</span>
         <span>NOT executed capital</span>
       </div>
       <div class="p-3 space-y-3">
+        <!-- ── Input form ── -->
         <div class="card card-p">
-          <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">🔬 Backtest Engine</div>
+          <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">🔬 Stress-Test Engine</div>
           <div class="space-y-2">
             <input type="text" x-model="bt.ticker" placeholder="Ticker (e.g. AAPL)" style="text-transform:uppercase" />
             <select x-model="bt.strategy">
@@ -541,25 +542,30 @@
             </select>
             <div class="flex gap-2">
               <select x-model="bt.period" class="flex-1">
-                <option value="1mo">1 Month</option><option value="3mo">3 Months</option><option value="6mo">6 Months</option><option value="1y" selected>1 Year</option><option value="2y">2 Years</option>
+                <option value="1mo">1 Month</option><option value="3mo">3 Months</option><option value="6mo">6 Months</option><option value="1y">1 Year</option><option value="2y">2 Years</option><option value="5y" selected>5 Years (Stress Test)</option>
               </select>
               <button @click="runBT()" class="btn-p flex-shrink-0 px-6" :disabled="bt.loading"><span x-show="!bt.loading">Run</span><span x-show="bt.loading"><span class="spin"></span></span></button>
             </div>
           </div>
         </div>
+
         <template x-if="bt.result">
           <div class="space-y-2 fade">
+            <!-- ── Summary ── -->
             <div class="card card-p">
               <div class="flex items-center justify-between mb-2">
                 <div class="text-sm font-bold text-white mono" x-text="bt.result.ticker||bt.ticker"></div>
                 <span class="pill pg" x-text="(bt.result.best_strategy||'').replace('_',' ')"></span>
               </div>
+              <div class="text-[9px] mb-2" style="color:var(--t3)" x-text="bt.result.date_range+' · '+bt.result.bars+' bars'"></div>
               <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;font-size:11px">
                 <div><div style="color:var(--t3)">Buy&Hold</div><div class="font-bold mono" :class="(bt.result.benchmark_return||0)>=0?'text-green-400':'text-red-400'" x-text="((bt.result.benchmark_return||0)>=0?'+':'')+(bt.result.benchmark_return||0)+'%'"></div></div>
-                <div><div style="color:var(--t3)">Best</div><div class="font-bold mono text-green-400" x-text="bt.result.strategies?.[0]?.total_return+'%'||'—'"></div></div>
-                <div><div style="color:var(--t3)">Bars</div><div class="font-bold mono text-white" x-text="bt.result.bars||0"></div></div>
+                <div><div style="color:var(--t3)">Best Strategy</div><div class="font-bold mono text-green-400" x-text="bt.result.strategies?.[0]?.total_return+'%'||'—'"></div></div>
+                <div><div style="color:var(--t3)">Data</div><div class="font-bold mono text-white" x-text="bt.result.trust?.data_points+' pts'||bt.result.bars+' bars'"></div></div>
               </div>
             </div>
+
+            <!-- ── Strategy ranking cards ── -->
             <template x-for="(s,i) in (bt.result.strategies||[])">
               <div class="card card-p fade" :style="i===0?'border-color:var(--green)':''">
                 <div class="flex items-center justify-between mb-2">
@@ -577,11 +583,87 @@
                   <div><div style="color:var(--t3)">Max DD</div><div class="font-bold mono text-red-400" x-text="(s.max_drawdown||0)+'%'"></div></div>
                   <div><div style="color:var(--t3)">P.Factor</div><div class="font-bold mono text-white" x-text="s.profit_factor||0"></div></div>
                 </div>
+                <!-- Exit reason breakdown -->
+                <div x-show="s.exit_reasons" class="mt-2 pt-2" style="border-top:1px solid rgba(255,255,255,.06)">
+                  <div class="flex gap-3 text-[9px]" style="color:var(--t3)">
+                    <span x-show="s.exit_reasons?.target">🎯 Target: <strong class="text-green-400" x-text="s.exit_reasons.target"></strong></span>
+                    <span x-show="s.exit_reasons?.stop">🛑 Stop: <strong class="text-red-400" x-text="s.exit_reasons.stop"></strong></span>
+                    <span x-show="s.exit_reasons?.time">⏰ Time: <strong class="text-amber-400" x-text="s.exit_reasons.time"></strong></span>
+                  </div>
+                </div>
+                <!-- Yearly breakdown -->
+                <template x-if="s.yearly && Object.keys(s.yearly).length>1">
+                  <div class="mt-2 pt-2" style="border-top:1px solid rgba(255,255,255,.06)">
+                    <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">Year-by-Year</div>
+                    <div class="flex flex-wrap gap-2">
+                      <template x-for="yr in Object.keys(s.yearly).sort()">
+                        <div class="text-center" style="min-width:48px">
+                          <div class="text-[9px]" style="color:var(--t3)" x-text="yr"></div>
+                          <div class="text-[10px] font-bold mono" :class="s.yearly[yr].return_pct>=0?'text-green-400':'text-red-400'" x-text="(s.yearly[yr].return_pct>=0?'+':'')+s.yearly[yr].return_pct+'%'"></div>
+                          <div class="text-[8px]" style="color:var(--t3)" x-text="s.yearly[yr].trades+'T '+s.yearly[yr].win_rate+'%W'"></div>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </template>
               </div>
             </template>
+
+            <!-- ── Market Event Stress Test ── -->
+            <template x-if="bt.result.events && bt.result.events.length>0">
+              <div class="card card-p" style="border-color:rgba(239,68,68,.3)">
+                <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--red)">🔥 Stress Test — Market Events</div>
+                <div class="text-[9px] mb-2" style="color:var(--t3)">How the best strategy performed during detected market events</div>
+                <div class="space-y-2">
+                  <template x-for="ev in bt.result.events">
+                    <div style="background:rgba(255,255,255,.03);border-radius:6px;padding:6px 8px">
+                      <div class="flex items-center justify-between mb-1">
+                        <div class="flex items-center gap-2">
+                          <span class="text-xs" x-text="ev.type==='crash'?'📉':ev.type==='rally'?'📈':ev.type==='high_vol'?'🌊':'📌'"></span>
+                          <span class="text-[10px] font-bold text-white" x-text="ev.name"></span>
+                        </div>
+                        <span class="text-[8px] mono" style="color:var(--t3)" x-text="ev.start+' → '+ev.end"></span>
+                      </div>
+                      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center;font-size:10px">
+                        <div><div class="text-[8px]" style="color:var(--t3)">Market</div><div class="font-bold mono" :class="ev.market_return>=0?'text-green-400':'text-red-400'" x-text="(ev.market_return>=0?'+':'')+ev.market_return+'%'"></div></div>
+                        <div><div class="text-[8px]" style="color:var(--t3)">Strategy</div><div class="font-bold mono" :class="ev.strategy_return>=0?'text-green-400':'text-red-400'" x-text="(ev.strategy_return>=0?'+':'')+ev.strategy_return+'%'"></div></div>
+                        <div><div class="text-[8px]" style="color:var(--t3)">Alpha</div><div class="font-bold mono" :class="ev.alpha>=0?'text-green-400':'text-red-400'" x-text="(ev.alpha>=0?'+':'')+ev.alpha+'%'"></div></div>
+                        <div><div class="text-[8px]" style="color:var(--t3)">Trades</div><div class="font-bold mono text-white" x-text="ev.strategy_trades+(ev.strategy_trades>0?' ('+ev.win_rate+'%W)':'')"></div></div>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+            <!-- ── Worst Losing Streaks ── -->
+            <template x-if="bt.result.worst_streaks && bt.result.worst_streaks.length>0">
+              <div class="card card-p" style="border-color:rgba(239,68,68,.2)">
+                <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--red)">💀 Worst Losing Streaks</div>
+                <div class="flex flex-wrap gap-3">
+                  <template x-for="(ws,i) in bt.result.worst_streaks">
+                    <div class="text-center">
+                      <div class="text-[10px] font-bold mono text-red-400" x-text="ws.total_pct+'%'"></div>
+                      <div class="text-[8px]" style="color:var(--t3)" x-text="ws.losses+' consecutive losses'"></div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+            <!-- ── Methodology ── -->
             <div class="card card-p" style="border-color:rgba(251,191,36,.3)">
               <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--amber)">⚠ Methodology</div>
-              <div class="text-[9px]" style="color:var(--t3);line-height:1.5">Returns are <strong>gross</strong> — no commissions, fees, or slippage. Benchmark: buy-and-hold same ticker. Past performance ≠ future results. NOT executed trades.</div>
+              <div class="text-[9px]" style="color:var(--t3);line-height:1.5">
+                <strong>Real data</strong> from Yahoo Finance. Returns are <strong>gross</strong> — no commissions, fees, or slippage. Market events are auto-detected from price action (drawdowns >10%, rallies >20%, vol regimes >35% annualized) plus named events (COVID, rate hikes). Benchmark: buy-and-hold same ticker. Past performance ≠ future results. NOT executed trades.
+              </div>
+            </div>
+
+            <!-- ── Trust strip ── -->
+            <div class="trust-strip" x-show="bt.result.trust">
+              <span style="color:var(--amber)" x-text="'● '+(bt.result.trust?.mode||'BACKTEST')"></span>
+              <span x-text="bt.result.trust?.source||'yfinance'"></span>
+              <span x-text="bt.result.trust?.data_points+' data points'||''"></span>
             </div>
           </div>
         </template>
@@ -699,7 +781,7 @@
               <tr><td>Technicals</td><td class="mono text-[10px]">computed</td><td>RSI SMA MACD BBands ATR</td><td class="text-green-400">On request</td></tr>
               <tr><td>Regime</td><td class="mono text-[10px]">HMM + rules</td><td>Single source</td><td class="text-green-400">60s cache</td></tr>
               <tr><td>Signals</td><td class="mono text-[10px]">engine</td><td>5 strategies</td><td class="text-green-400">Engine cycle</td></tr>
-              <tr><td>Backtest</td><td class="mono text-[10px]">vectorbt</td><td>Gross returns</td><td class="text-amber-300">On-demand</td></tr>
+              <tr><td>Backtest</td><td class="mono text-[10px]">yfinance</td><td>5Y stress test</td><td class="text-green-400">Real data</td></tr>
               <tr><td>Dossier</td><td class="mono text-[10px]">computed</td><td>Full stock research</td><td class="text-green-400">On request</td></tr>
               <tr><td>Daily Brief</td><td class="mono text-[10px]">engine+mds</td><td>Analyst-grade brief</td><td class="text-green-400">On request</td></tr>
             </tbody>
@@ -769,7 +851,7 @@
       dos:{ticker:'',loading:false,data:null,error:''},
       opt:{ticker:'',loading:false,data:null},
       brief:{loading:false,data:null},
-      bt:{ticker:'AAPL',strategy:'all',period:'1y',loading:false,result:null},
+      bt:{ticker:'AAPL',strategy:'all',period:'5y',loading:false,result:null},
       ops:{running:false,cycle_count:0,signals_today:0,trades_today:0,circuit_breaker:false,circuit_breaker_reason:'',dry_run:true,components:{}},
       opsDetail:{},
       apiEndpoints:[],

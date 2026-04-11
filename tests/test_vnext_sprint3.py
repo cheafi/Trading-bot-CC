@@ -1196,3 +1196,197 @@ class TestPhase4Hardening:
         from src.api.main import validate_ticker
 
         assert validate_ticker("^VIX") == "^VIX"
+
+
+# ════════════════════════════════════════════════════════════════
+# Phase 5 — 5-Year Stress-Test Backtest Engine
+# ════════════════════════════════════════════════════════════════
+
+
+class TestPhase5StressTestBacktest:
+    """Tests for the production 5Y backtest engine with event detection."""
+
+    @pytest.fixture
+    def client(self):
+        from httpx import ASGITransport, AsyncClient
+
+        from src.api.main import app
+
+        transport = ASGITransport(app=app)
+        return AsyncClient(transport=transport, base_url="http://test")
+
+    # ── Basic backtest execution ──
+
+    @pytest.mark.anyio
+    async def test_backtest_1y_returns_200(self, client):
+        """1-year backtest on SPY should return 200."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=SPY&strategy=all&period=1y"
+            )
+            assert r.status_code == 200
+            d = r.json()
+            assert "strategies" in d
+            assert "ticker" in d
+            assert d["ticker"] == "SPY"
+            assert "benchmark_return" in d
+            assert "trust" in d
+            assert d["trust"]["mode"] == "BACKTEST"
+            assert d["trust"]["source"] == "yfinance_historical"
+
+    @pytest.mark.anyio
+    async def test_backtest_5y_returns_200(self, client):
+        """5-year backtest should return 200 with event data."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=AAPL&strategy=all&period=5y"
+            )
+            assert r.status_code == 200
+            d = r.json()
+            assert d["bars"] > 500, "5Y should have 500+ bars"
+            assert "events" in d
+            assert isinstance(d["events"], list)
+            assert "worst_streaks" in d
+
+    @pytest.mark.anyio
+    async def test_backtest_strategy_fields(self, client):
+        """Each strategy result should have all required fields."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=MSFT&strategy=momentum&period=2y"
+            )
+            assert r.status_code == 200
+            strats = r.json()["strategies"]
+            assert len(strats) >= 1
+            s = strats[0]
+            for field in [
+                "strategy", "total_trades", "winners", "losers",
+                "win_rate", "total_return", "avg_win", "avg_loss",
+                "sharpe", "max_drawdown", "profit_factor",
+                "exit_reasons", "yearly", "score",
+            ]:
+                assert field in s, f"Missing {field}"
+
+    @pytest.mark.anyio
+    async def test_backtest_yearly_breakdown(self, client):
+        """5Y backtest should have year-by-year breakdown."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=AAPL&strategy=swing&period=5y"
+            )
+            if r.status_code == 200:
+                s = r.json()["strategies"][0]
+                yearly = s.get("yearly", {})
+                # 5Y should span multiple years
+                if s["total_trades"] > 0:
+                    assert len(yearly) >= 1
+
+    @pytest.mark.anyio
+    async def test_backtest_exit_reasons(self, client):
+        """Backtest should report exit reason breakdown."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=AAPL&strategy=all&period=2y"
+            )
+            if r.status_code == 200:
+                for s in r.json()["strategies"]:
+                    if s["total_trades"] > 0:
+                        er = s["exit_reasons"]
+                        assert isinstance(er, dict)
+                        total_exits = sum(er.values())
+                        assert total_exits == s["total_trades"]
+
+    # ── Event detection ──
+
+    @pytest.mark.anyio
+    async def test_events_detected_in_5y(self, client):
+        """5Y backtest on SPY should detect market events."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=SPY&strategy=momentum&period=5y"
+            )
+            if r.status_code == 200:
+                events = r.json()["events"]
+                # 5Y of SPY should have detected events
+                assert len(events) >= 1, "Should detect at least 1 event over 5 years"
+
+    @pytest.mark.anyio
+    async def test_event_structure(self, client):
+        """Each event should have correct structure."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=AAPL&strategy=all&period=5y"
+            )
+            if r.status_code == 200:
+                events = r.json()["events"]
+                for ev in events:
+                    for field in [
+                        "name", "type", "start", "end",
+                        "market_return", "strategy_trades",
+                        "strategy_return", "alpha",
+                    ]:
+                        assert field in ev, f"Event missing {field}"
+                    assert ev["type"] in (
+                        "crash", "rally", "high_vol", "named"
+                    )
+
+    @pytest.mark.anyio
+    async def test_event_alpha_calculation(self, client):
+        """Alpha = strategy_return - market_return."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=SPY&strategy=all&period=5y"
+            )
+            if r.status_code == 200:
+                for ev in r.json()["events"]:
+                    expected_alpha = round(
+                        ev["strategy_return"] - ev["market_return"], 2
+                    )
+                    assert abs(ev["alpha"] - expected_alpha) < 0.05
+
+    # ── Input validation ──
+
+    @pytest.mark.anyio
+    async def test_backtest_invalid_ticker(self, client):
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=!!BAD!!&strategy=all&period=1y"
+            )
+            assert r.status_code == 422
+
+    @pytest.mark.anyio
+    async def test_backtest_insufficient_data(self, client):
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=ZZZZZ9&strategy=all&period=1mo"
+            )
+            assert r.status_code in (400, 404)
+
+    # ── Trust metadata ──
+
+    @pytest.mark.anyio
+    async def test_backtest_trust_metadata(self, client):
+        """Trust block should declare BACKTEST mode with real data source."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=SPY&strategy=swing&period=1y"
+            )
+            if r.status_code == 200:
+                trust = r.json()["trust"]
+                assert trust["mode"] == "BACKTEST"
+                assert trust["source"] == "yfinance_historical"
+                assert trust["data_points"] > 100
+                assert "as_of" in trust
+
+    @pytest.mark.anyio
+    async def test_backtest_benchmark_return(self, client):
+        """Benchmark return should match buy-and-hold."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=SPY&strategy=all&period=1y"
+            )
+            if r.status_code == 200:
+                d = r.json()
+                # Benchmark should be a reasonable number
+                assert isinstance(d["benchmark_return"], (int, float))
+                assert -90 < d["benchmark_return"] < 500

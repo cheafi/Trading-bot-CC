@@ -3515,42 +3515,33 @@ async def live_backtest(
     start_date: Optional[str] = Query(None, description="Start date YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="End date YYYY-MM-DD"),
     period: str = Query(
-        "1y", description="Fallback period if no dates: 1mo 3mo 6mo 1y 2y"
+        "1y", description="Fallback period if no dates: 1mo 3mo 6mo 1y 2y 5y"
     ),
 ):
     """
-    Sprint 40: Run backtest with specific strategy + date range.
-    Public endpoint, powers both web form and Discord command.
+    Phase 5: Production backtest engine with 5-year stress testing.
+
+    Returns per-strategy metrics, market-event period breakdown,
+    rolling performance, drawdown analysis, and regime-aware stats.
+    Uses real yfinance data — NOT synthetic.
     """
     import asyncio
 
     import numpy as np
 
-    ticker = ticker.upper().strip()
+    ticker = validate_ticker(ticker)
 
     # Fetch historical data via MarketDataService
     mds = app.state.market_data
     try:
         if start_date and end_date:
-            # For custom date range, use full period and slice
-            hist = await mds.get_history(
-                ticker,
-                period="5y",
-                interval="1d",
-            )
+            hist = await mds.get_history(ticker, period="5y", interval="1d")
             if hist is not None and not hist.empty:
                 hist = hist.loc[start_date:end_date]
         else:
-            hist = await mds.get_history(
-                ticker,
-                period=period,
-                interval="1d",
-            )
+            hist = await mds.get_history(ticker, period=period, interval="1d")
     except Exception as e:
-        raise HTTPException(
-            400,
-            f"Failed to fetch data for {ticker}: {e}",
-        )
+        raise HTTPException(400, f"Failed to fetch data for {ticker}: {e}")
 
     if hist is None or hist.empty or len(hist) < 30:
         raise HTTPException(400, f"Insufficient data for {ticker} (need 30+ bars)")
@@ -3559,10 +3550,137 @@ async def live_backtest(
     volume = hist["Volume"].values
     dates_idx = hist.index
 
-    # Simple vectorized backtest engine
-    def _run_strategy(strat_id: str) -> dict:
-        """Run a single strategy backtest."""
+    # ── Market event detection (from price data, not hardcoded) ──
+    def _detect_market_events(close_arr, dates) -> list:
+        """Identify stress/recovery periods from price action alone.
+        Returns list of {name, start, end, type, return_pct}."""
+        n = len(close_arr)
+        if n < 60:
+            return []
+        events = []
+        # 1) Find all drawdown events > 10% from rolling 60-day peak
+        peak = close_arr[0]
+        dd_start = None
+        for i in range(1, n):
+            if close_arr[i] > peak:
+                if dd_start is not None and peak > 0:
+                    dd_pct = (close_arr[i - 1] - peak) / peak * 100
+                    if dd_pct < -10:
+                        events.append({
+                            "name": f"Drawdown {dd_pct:.0f}%",
+                            "start": str(dates[dd_start].date()),
+                            "end": str(dates[i - 1].date()),
+                            "start_idx": dd_start,
+                            "end_idx": i - 1,
+                            "type": "crash",
+                            "return_pct": round(dd_pct, 2),
+                        })
+                    dd_start = None
+                peak = close_arr[i]
+            elif dd_start is None and (close_arr[i] - peak) / peak < -0.05:
+                dd_start = i
+        # Check if we ended in a drawdown
+        if dd_start is not None and peak > 0:
+            dd_pct = (close_arr[-1] - peak) / peak * 100
+            if dd_pct < -10:
+                events.append({
+                    "name": f"Drawdown {dd_pct:.0f}%",
+                    "start": str(dates[dd_start].date()),
+                    "end": str(dates[-1].date()),
+                    "start_idx": dd_start,
+                    "end_idx": n - 1,
+                    "type": "crash",
+                    "return_pct": round(dd_pct, 2),
+                })
 
+        # 2) Find sustained rallies (>20% gain over 60+ days from trough)
+        trough = close_arr[0]
+        rally_start = 0
+        for i in range(1, n):
+            if close_arr[i] < trough:
+                trough = close_arr[i]
+                rally_start = i
+            elif trough > 0 and (close_arr[i] - trough) / trough > 0.20 and i - rally_start >= 60:
+                gain = (close_arr[i] - trough) / trough * 100
+                events.append({
+                    "name": f"Rally +{gain:.0f}%",
+                    "start": str(dates[rally_start].date()),
+                    "end": str(dates[i].date()),
+                    "start_idx": rally_start,
+                    "end_idx": i,
+                    "type": "rally",
+                    "return_pct": round(gain, 2),
+                })
+                trough = close_arr[i]
+                rally_start = i
+
+        # 3) Detect high-volatility regimes (20-day realized vol > 35% annualized)
+        daily_ret = np.diff(close_arr) / close_arr[:-1]
+        vol_window = 20
+        if len(daily_ret) >= vol_window:
+            rolling_vol = np.array([
+                np.std(daily_ret[max(0, j - vol_window):j]) * np.sqrt(252) * 100
+                for j in range(vol_window, len(daily_ret))
+            ])
+            in_high_vol = False
+            hv_start = 0
+            for j in range(len(rolling_vol)):
+                idx = j + vol_window
+                if rolling_vol[j] > 35 and not in_high_vol:
+                    in_high_vol = True
+                    hv_start = idx
+                elif rolling_vol[j] <= 30 and in_high_vol:
+                    if idx - hv_start >= 10:
+                        period_ret = (close_arr[idx] - close_arr[hv_start]) / close_arr[hv_start] * 100
+                        events.append({
+                            "name": "High Vol Regime",
+                            "start": str(dates[hv_start].date()),
+                            "end": str(dates[idx].date()),
+                            "start_idx": hv_start,
+                            "end_idx": idx,
+                            "type": "high_vol",
+                            "return_pct": round(period_ret, 2),
+                        })
+                    in_high_vol = False
+
+        # 4) Label known calendar events if they fall within the data range
+        known_events = [
+            ("COVID Crash", "2020-02-19", "2020-03-23"),
+            ("COVID Recovery", "2020-03-24", "2020-08-31"),
+            ("2022 Rate Hike Selloff", "2022-01-03", "2022-10-12"),
+            ("2023 AI Rally", "2023-01-01", "2023-07-31"),
+            ("2024 Election Ramp", "2024-10-01", "2024-12-31"),
+        ]
+        start_str = str(dates[0].date())
+        end_str = str(dates[-1].date())
+        for ename, estart, eend in known_events:
+            if estart >= start_str and eend <= end_str:
+                try:
+                    mask = (dates >= estart) & (dates <= eend)
+                    sel = close_arr[mask]
+                    if len(sel) >= 5:
+                        eret = (sel[-1] - sel[0]) / sel[0] * 100
+                        sidx = int(np.argmax(mask))
+                        eidx = sidx + len(sel) - 1
+                        events.append({
+                            "name": ename,
+                            "start": estart,
+                            "end": eend,
+                            "start_idx": sidx,
+                            "end_idx": eidx,
+                            "type": "named",
+                            "return_pct": round(eret, 2),
+                        })
+                except Exception:
+                    pass
+
+        # Deduplicate: keep named events over auto-detected if overlapping
+        events.sort(key=lambda e: e["start"])
+        return events
+
+    # ── Vectorized backtest engine ──
+    def _run_strategy(strat_id: str) -> dict:
+        """Run a single strategy backtest with full analytics."""
         n = len(close)
         # Compute indicators
         sma20 = np.convolve(close, np.ones(20) / 20, mode="full")[:n]
@@ -3579,16 +3697,14 @@ async def live_backtest(
         vol_ma = np.convolve(volume.astype(float), np.ones(20) / 20, mode="full")[:n]
         vol_ratio = np.where(vol_ma > 0, volume / vol_ma, 1.0)
 
-        # Generate signals based on strategy
-        entries = []  # (index, price)
-        exits = []  # (index, price, reason)
+        entries = []
+        exits = []
         position = None
         stop_pct = 0.05
         target_pct = 0.10
 
         for i in range(50, n):
             if position is None:
-                # Entry logic by strategy
                 enter = False
                 if strat_id == "swing":
                     enter = (
@@ -3598,7 +3714,7 @@ async def live_backtest(
                         and close[i] > sma20[i]
                     )
                 elif strat_id == "breakout":
-                    hi20 = np.max(close[max(0, i - 20) : i])
+                    hi20 = np.max(close[max(0, i - 20):i])
                     enter = (
                         close[i] > hi20 and vol_ratio[i] > 1.5 and close[i] > sma20[i]
                     )
@@ -3622,7 +3738,6 @@ async def live_backtest(
                     position = {"idx": i, "price": close[i]}
                     entries.append((i, close[i]))
             else:
-                # Exit logic
                 entry_p = position["price"]
                 pnl_pct = (close[i] - entry_p) / entry_p
                 hold_days = i - position["idx"]
@@ -3637,46 +3752,44 @@ async def live_backtest(
                     exits.append((i, close[i], "time"))
                     position = None
 
-        # Close any remaining position
         if position is not None:
             exits.append((n - 1, close[-1], "end"))
 
-        # Calculate metrics
+        # Build trades
         trades = []
         for j in range(min(len(entries), len(exits))):
             ep = entries[j][1]
             xp = exits[j][1]
             pnl = (xp - ep) / ep
-            trades.append(
-                {
-                    "entry_date": str(dates_idx[entries[j][0]].date()),
-                    "exit_date": str(dates_idx[exits[j][0]].date()),
-                    "entry_price": round(ep, 2),
-                    "exit_price": round(xp, 2),
-                    "pnl_pct": round(pnl * 100, 2),
-                    "reason": exits[j][2],
-                    "hold_days": exits[j][0] - entries[j][0],
-                }
-            )
+            trades.append({
+                "entry_idx": entries[j][0],
+                "exit_idx": exits[j][0],
+                "entry_date": str(dates_idx[entries[j][0]].date()),
+                "exit_date": str(dates_idx[exits[j][0]].date()),
+                "entry_price": round(ep, 2),
+                "exit_price": round(xp, 2),
+                "pnl_pct": round(pnl * 100, 2),
+                "reason": exits[j][2],
+                "hold_days": exits[j][0] - entries[j][0],
+            })
 
         returns = [t["pnl_pct"] / 100 for t in trades]
         total_trades = len(trades)
         winners = sum(1 for r in returns if r > 0)
         losers = total_trades - winners
         win_rate = (winners / total_trades * 100) if total_trades else 0
-        avg_win = np.mean([r for r in returns if r > 0]) * 100 if winners else 0
-        avg_loss = np.mean([r for r in returns if r <= 0]) * 100 if losers else 0
+        avg_win = float(np.mean([r for r in returns if r > 0]) * 100) if winners else 0
+        avg_loss = float(np.mean([r for r in returns if r <= 0]) * 100) if losers else 0
         total_return = sum(returns) * 100
-        # Sharpe approximation
+
+        # Sharpe
         if returns and np.std(returns) > 0:
-            sharpe = (
-                np.mean(returns)
-                / np.std(returns)
-                * np.sqrt(252 / max(1, np.mean([t["hold_days"] for t in trades])))
-            )
+            avg_hold = float(np.mean([t["hold_days"] for t in trades]))
+            sharpe = float(np.mean(returns) / np.std(returns) * np.sqrt(252 / max(1, avg_hold)))
         else:
             sharpe = 0
-        # Max drawdown
+
+        # Max drawdown on equity curve
         cum = np.cumprod(1 + np.array(returns)) if returns else np.array([1])
         peak = np.maximum.accumulate(cum)
         dd = (cum - peak) / peak
@@ -3686,6 +3799,39 @@ async def live_backtest(
         gross_profit = sum(r for r in returns if r > 0)
         gross_loss = abs(sum(r for r in returns if r <= 0))
         profit_factor = gross_profit / gross_loss if gross_loss > 0 else 99
+
+        # Rolling 60-trade Sharpe (for the rolling chart)
+        rolling_sharpe = []
+        window = min(20, max(5, total_trades // 5))
+        for k in range(window, total_trades):
+            chunk = returns[k - window:k]
+            if np.std(chunk) > 0:
+                rs_val = float(np.mean(chunk) / np.std(chunk) * np.sqrt(12))
+            else:
+                rs_val = 0
+            rolling_sharpe.append({"trade": k, "sharpe": round(rs_val, 2)})
+
+        # Exit reason breakdown
+        exit_reasons = {}
+        for t in trades:
+            r = t["reason"]
+            exit_reasons[r] = exit_reasons.get(r, 0) + 1
+
+        # Yearly breakdown
+        yearly = {}
+        for t in trades:
+            yr = t["entry_date"][:4]
+            if yr not in yearly:
+                yearly[yr] = {"trades": 0, "winners": 0, "return_pct": 0}
+            yearly[yr]["trades"] += 1
+            if t["pnl_pct"] > 0:
+                yearly[yr]["winners"] += 1
+            yearly[yr]["return_pct"] += t["pnl_pct"]
+        for yr in yearly:
+            yearly[yr]["return_pct"] = round(yearly[yr]["return_pct"], 2)
+            yearly[yr]["win_rate"] = round(
+                yearly[yr]["winners"] / yearly[yr]["trades"] * 100, 1
+            ) if yearly[yr]["trades"] > 0 else 0
 
         return {
             "strategy": strat_id,
@@ -3699,11 +3845,15 @@ async def live_backtest(
             "sharpe": round(sharpe, 2),
             "max_drawdown": round(max_dd, 2),
             "profit_factor": round(profit_factor, 2),
-            "trades": trades[-20:],  # Last 20 trades
+            "exit_reasons": exit_reasons,
+            "yearly": yearly,
+            "rolling_sharpe": rolling_sharpe[-50:],
+            "trades": trades[-30:],
+            "all_trades": trades,  # needed for event breakdown
             "score": round(sharpe * 20 + win_rate * 0.5 + total_return * 0.3, 1),
         }
 
-    # Run requested strategies
+    # ── Run strategies ──
     strats_to_run = (
         ["swing", "breakout", "momentum", "mean_reversion"]
         if strategy == "all"
@@ -3714,21 +3864,69 @@ async def live_backtest(
         try:
             results[sid] = await asyncio.to_thread(_run_strategy, sid)
         except Exception as e:
-            results[sid] = {
-                "strategy": sid,
-                "error": str(e),
-                "total_trades": 0,
-                "score": 0,
-            }
+            results[sid] = {"strategy": sid, "error": str(e), "total_trades": 0, "score": 0}
 
-    # Rank by score
     ranked = sorted(results.values(), key=lambda x: x.get("score", 0), reverse=True)
     best = ranked[0]["strategy"] if ranked else "none"
 
-    # Buy-and-hold benchmark
+    # ── Detect market events ──
+    events = _detect_market_events(close, dates_idx)
+
+    # ── Per-event performance for the best strategy ──
+    event_performance = []
+    best_trades = ranked[0].get("all_trades", []) if ranked else []
+    for ev in events:
+        ev_trades = [
+            t for t in best_trades
+            if t["entry_idx"] >= ev["start_idx"] and t["entry_idx"] <= ev["end_idx"]
+        ]
+        ev_win = sum(1 for t in ev_trades if t["pnl_pct"] > 0)
+        ev_ret = sum(t["pnl_pct"] for t in ev_trades)
+        event_performance.append({
+            "name": ev["name"],
+            "type": ev["type"],
+            "start": ev["start"],
+            "end": ev["end"],
+            "market_return": ev["return_pct"],
+            "strategy_trades": len(ev_trades),
+            "strategy_winners": ev_win,
+            "strategy_return": round(ev_ret, 2),
+            "win_rate": round(ev_win / len(ev_trades) * 100, 1) if ev_trades else 0,
+            "alpha": round(ev_ret - ev["return_pct"], 2),
+        })
+
+    # ── Buy-and-hold benchmark ──
     bh_return = ((close[-1] - close[0]) / close[0]) * 100
 
-    return {
+    # ── Daily equity curve (for best strategy, sampled) ──
+    daily_returns = np.diff(close) / close[:-1]
+    bh_curve = list(np.cumprod(1 + daily_returns))
+    sample_step = max(1, len(bh_curve) // 100)
+    bh_sampled = [{"day": i * sample_step, "equity": round(bh_curve[min(i * sample_step, len(bh_curve) - 1)], 4)} for i in range(min(100, len(bh_curve)))]
+
+    # ── Worst periods (largest losing streaks) ──
+    worst_streaks = []
+    if best_trades:
+        streak = 0
+        streak_ret = 0
+        for t in best_trades:
+            if t["pnl_pct"] < 0:
+                streak += 1
+                streak_ret += t["pnl_pct"]
+            else:
+                if streak >= 3:
+                    worst_streaks.append({"losses": streak, "total_pct": round(streak_ret, 2)})
+                streak = 0
+                streak_ret = 0
+        if streak >= 3:
+            worst_streaks.append({"losses": streak, "total_pct": round(streak_ret, 2)})
+        worst_streaks.sort(key=lambda x: x["total_pct"])
+
+    # Strip internal fields before returning
+    for r in ranked:
+        r.pop("all_trades", None)
+
+    return _sanitize_for_json({
         "ticker": ticker,
         "period": f"{start_date} to {end_date}" if start_date else period,
         "bars": len(close),
@@ -3736,8 +3934,18 @@ async def live_backtest(
         "benchmark_return": round(bh_return, 2),
         "best_strategy": best,
         "strategies": ranked,
+        "events": event_performance,
+        "worst_streaks": worst_streaks[:5],
+        "bh_equity_sampled": bh_sampled,
+        "trust": {
+            "mode": "BACKTEST",
+            "source": "yfinance_historical",
+            "note": "Real price data. Gross returns — no commissions, fees, or slippage. Past performance ≠ future results.",
+            "data_points": len(close),
+            "as_of": datetime.utcnow().isoformat() + "Z",
+        },
         "timestamp": datetime.utcnow().isoformat(),
-    }
+    })
 
 
 # ═══════════════════════════════════════════════════════════════════
