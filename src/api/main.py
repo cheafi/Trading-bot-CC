@@ -11,8 +11,11 @@ Features:
 """
 
 import asyncio
+import hashlib
 import logging
 import math
+import random as _random_module
+import re
 import time
 from collections import defaultdict
 from datetime import date, datetime, timedelta
@@ -443,6 +446,29 @@ async def general_exception_handler(request: Request, exc: Exception):
             "timestamp": datetime.utcnow().isoformat(),
         },
     )
+
+
+# ===== Ticker Validation =====
+
+_TICKER_RE = re.compile(r"^[A-Z0-9.\-^]{1,10}$")
+
+
+def validate_ticker(ticker: str) -> str:
+    """Sanitize and validate a ticker symbol.
+
+    - Strips whitespace, uppercases
+    - Rejects if >10 chars or contains invalid characters
+    - Returns cleaned ticker or raises 422
+    """
+    cleaned = ticker.strip().upper()
+    if not cleaned:
+        raise HTTPException(status_code=422, detail="Ticker symbol is required.")
+    if not _TICKER_RE.match(cleaned):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid ticker '{ticker}'. Allowed: letters, digits, '.', '-', '^'. Max 10 chars.",
+        )
+    return cleaned
 
 
 # ===== Authentication =====
@@ -1685,15 +1711,7 @@ async def get_strategy_analytics(strategy: str, _: bool = Depends(verify_api_key
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request, exc):
-    return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
-
-
-@app.exception_handler(Exception)
-async def general_exception_handler(request, exc):
-    logger.error(f"Unhandled exception: {exc}")
-    return JSONResponse(status_code=500, content={"error": "Internal server error"})
+# (duplicate exception handlers removed — detailed versions at app startup take precedence)
 
 
 # ===== Broker Endpoints =====
@@ -1963,60 +1981,109 @@ def start():
 
 @app.get("/api/ai-advisor", tags=["ai"])
 async def get_ai_advisor():
-    """Get AI advisor market brief and recommendation."""
+    """Get AI advisor market brief and recommendation — driven by live regime + engine state."""
+    regime = await _get_regime()
+    engine = _get_engine()
+
+    # Build chain of thought from real state
+    regime_label = regime.regime.replace("_", " ").title()
+    vol_label = regime.volatility_regime.replace("_", " ").title()
+    should_trade = getattr(regime, "should_trade", True)
+
+    chain = [
+        f"Regime: {regime_label} (vol: {vol_label})",
+        f"Should trade: {'YES' if should_trade else 'NO — paused by regime filter'}",
+    ]
+
+    # Engine metrics if available
+    signals_today = 0
+    trades_today = 0
+    cached_recs = 0
+    if engine:
+        signals_today = getattr(engine, "signals_generated_today", 0)
+        trades_today = getattr(engine, "trades_executed_today", 0)
+        cached_recs = len(getattr(engine, "_recommendation_cache", {}))
+        chain.append(f"Signals today: {signals_today}")
+        chain.append(f"Trades today: {trades_today}")
+        chain.append(f"Cached recommendations: {cached_recs}")
+    else:
+        chain.append("Engine: not loaded (paper mode)")
+
+    # Recommendation logic
+    if not should_trade:
+        rec = "PAUSE"
+        reasoning = f"Regime filter says NO TRADE. {regime_label} regime with {vol_label} volatility. Wait for regime shift."
+    elif signals_today >= 5:
+        rec = "REDUCE"
+        reasoning = "High signal count today — tighten selection to top 2-3 setups."
+    else:
+        rec = "NORMAL"
+        reasoning = (
+            f"{regime_label} regime is tradable. Standard sizing and stop discipline."
+        )
+
+    chain.append(f"Decision: {rec}")
+
     return {
-        "status": "active",
-        "market_brief": (
-            "Markets in risk-on regime with tech leading. "
-            "VIX subdued, breadth healthy. Focus on momentum setups "
-            "in semiconductor leaders."
-        ),
-        "recommendation": "NORMAL",
-        "reasoning": (
-            "Favorable trend with moderate event risk ahead. "
-            "Maintain standard sizing and stop discipline."
-        ),
-        "chain_of_thought": [
-            "Regime: Risk-On (VIX low, breadth positive)",
-            "Sector: Tech leading, defensives lagging",
-            "Portfolio: 45% invested, ample dry powder",
-            "Signals: 4 high-conviction setups available",
-            "Risk: Drawdown 5.2% within limits",
-            "Decision: NORMAL mode — execute best setups",
-        ],
+        "status": "live",
+        "market_brief": f"{regime_label} regime ({vol_label} volatility). {signals_today} signals, {trades_today} trades today.",
+        "recommendation": rec,
+        "reasoning": reasoning,
+        "chain_of_thought": chain,
+        "trust": {
+            "mode": "LIVE",
+            "source": "regime_router + engine",
+            "as_of": datetime.utcnow().isoformat() + "Z",
+        },
         "timestamp": datetime.utcnow().isoformat(),
     }
 
 
 @app.get("/api/ml-status", tags=["ai"])
 async def get_ml_status():
-    """Get ML model training status and metrics."""
-    return {
-        "model_ready": True,
-        "accuracy": 72.5,
-        "samples": 147,
-        "kelly_edge": 8.3,
-        "last_retrain": "2h ago",
-        "feature_importance": {
-            "momentum_score": 0.18,
-            "volume_ratio": 0.15,
-            "regime_alignment": 0.12,
-            "gpt_confidence": 0.11,
-            "rsi_14": 0.09,
-        },
-        "failure_analyses": [
-            {
-                "ticker": "COIN",
-                "loss": "-7.23%",
-                "insight": "Regulatory headline risk not in model",
+    """Get ML model training status — honest report from engine state."""
+    engine = _get_engine()
+
+    if engine is None:
+        return {
+            "model_ready": False,
+            "status": "Engine not loaded. ML models unavailable.",
+            "trust": {
+                "mode": "HONEST",
+                "note": "No engine instance — cannot report model metrics.",
             },
-            {
-                "ticker": "AMD",
-                "loss": "-6.06%",
-                "insight": "Peer earnings contagion effect",
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+    # Pull real metrics from engine if available
+    model_ready = hasattr(engine, "ml_model") and engine.ml_model is not None
+    cached_recs = len(getattr(engine, "_recommendation_cache", {}))
+    signals_today = getattr(engine, "signals_generated_today", 0)
+    trades_today = getattr(engine, "trades_executed_today", 0)
+    cycle_count = getattr(engine, "cycle_count", 0)
+
+    return _sanitize_for_json(
+        {
+            "model_ready": model_ready,
+            "status": "loaded" if model_ready else "not_loaded",
+            "engine_metrics": {
+                "cycle_count": cycle_count,
+                "signals_today": signals_today,
+                "trades_today": trades_today,
+                "cached_recommendations": cached_recs,
             },
-        ],
-    }
+            "trust": {
+                "mode": "LIVE" if model_ready else "HONEST",
+                "note": (
+                    "Real engine metrics. ML accuracy not tracked until learning loop is wired."
+                    if not model_ready
+                    else "Model loaded and reporting live metrics."
+                ),
+                "as_of": datetime.utcnow().isoformat() + "Z",
+            },
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -2821,13 +2888,14 @@ async def live_market():
 @app.get("/api/live/quote/{ticker}", tags=["live"])
 async def live_quote(ticker: str):
     """Sprint 40: Live quote for any ticker. Public, no auth."""
+    ticker = validate_ticker(ticker)
     mds = app.state.market_data
-    q_raw = await mds.get_quote(ticker.upper())
+    q_raw = await mds.get_quote(ticker)
     if q_raw is None:
         raise HTTPException(404, f"No data for {ticker}")
 
     q = {
-        "symbol": ticker.upper(),
+        "symbol": ticker,
         "price": q_raw["price"],
         "change_pct": q_raw["change_pct"],
         "prev_close": round(
@@ -2840,7 +2908,7 @@ async def live_quote(ticker: str):
     # Technical indicators via MarketDataService history
     try:
         hist = await mds.get_history(
-            ticker.upper(),
+            ticker,
             period="3mo",
             interval="1d",
         )
@@ -2890,7 +2958,7 @@ async def live_dossier(ticker: str):
     Returns: snapshot, technicals, factor chips, support/resistance,
     trade plan, counter-thesis, WHY BUY / WHY STOP, historical analogs.
     """
-    ticker = ticker.upper()
+    ticker = validate_ticker(ticker)
     mds = app.state.market_data
 
     q_raw = await mds.get_quote(ticker)
@@ -3305,7 +3373,7 @@ async def live_options(ticker: str):
     Generates research-grade contract suggestions based on price, vol, regime.
     Clearly labeled as SYNTHETIC.
     """
-    ticker = ticker.upper()
+    ticker = validate_ticker(ticker)
     mds = app.state.market_data
 
     q_raw = await mds.get_quote(ticker)
@@ -3316,7 +3384,9 @@ async def live_options(ticker: str):
     regime = await _get_regime()
 
     # Estimate IV from regime + simple heuristic
-    import random
+    # Deterministic RNG seeded by ticker + date (stable within a trading day)
+    _seed = hashlib.md5(f"{ticker}:{date.today()}".encode()).hexdigest()
+    rng = _random_module.Random(int(_seed, 16))
 
     base_iv = 0.25
     if regime.volatility_regime in ("elevated_vol", "high_vol"):
@@ -3340,20 +3410,20 @@ async def live_options(ticker: str):
 
     contracts = []
     for i, strike in enumerate(strikes):
-        iv = round(base_iv + random.uniform(-0.05, 0.08), 3)
-        oi = random.randint(500, 15000)
-        spread = "TIGHT" if random.random() > 0.35 else "WIDE"
+        iv = round(base_iv + rng.uniform(-0.05, 0.08), 3)
+        oi = rng.randint(500, 15000)
+        spread = "TIGHT" if rng.random() > 0.35 else "WIDE"
         # Simplified EV estimate
         moneyness = (
             (price - strike) / price if types[i] == "CALL" else (strike - price) / price
         )
-        ev = round(moneyness * 100 + random.uniform(-3, 5), 1)
+        ev = round(moneyness * 100 + rng.uniform(-3, 5), 1)
         contracts.append(
             {
                 "strike": int(strike),
                 "dte": dtes[i],
                 "type": types[i],
-                "delta": round(base_deltas[i] + random.uniform(-0.05, 0.05), 2),
+                "delta": round(base_deltas[i] + rng.uniform(-0.05, 0.05), 2),
                 "iv": iv,
                 "oi": oi,
                 "spread_quality": spread,
@@ -3367,7 +3437,7 @@ async def live_options(ticker: str):
             }
         )
 
-    iv_rank = random.randint(20, 80)
+    iv_rank = rng.randint(20, 80)
 
     return _sanitize_for_json(
         {
@@ -3375,7 +3445,7 @@ async def live_options(ticker: str):
             "price": round(price, 2),
             "contracts": contracts,
             "iv_rank": iv_rank,
-            "iv_percentile": iv_rank + random.randint(-5, 10),
+            "iv_percentile": iv_rank + rng.randint(-5, 10),
             "term_structure": (
                 "Normal contango — front month IV < back month"
                 if iv_rank < 50

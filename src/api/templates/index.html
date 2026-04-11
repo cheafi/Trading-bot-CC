@@ -89,6 +89,12 @@
       <span x-text="'As-of: '+(trust.as_of?trust.as_of.slice(0,19):'—')"></span>
     </div>
 
+    <!-- ══════ ERROR BANNER ══════ -->
+    <div x-show="apiError" x-cloak style="background:#7f1d1d;border:1px solid #ef4444;border-radius:8px;margin:6px 12px;padding:8px 12px;display:flex;align-items:center;justify-content:space-between">
+      <span style="color:#fca5a5;font-size:11px" x-text="'⚠ '+apiError"></span>
+      <button @click="fetchMkt()" style="background:#ef4444;color:#fff;font-size:10px;padding:2px 10px;border:0;border-radius:4px;cursor:pointer">Retry now</button>
+    </div>
+
     <!-- ══════ TAB BAR ══════ -->
     <div class="tab-bar">
       <template x-for="t in tabs"><button class="tab-btn" :class="tab===t.id?'on':''" @click="switchTab(t.id)" x-text="t.icon+' '+t.label"></button></template>
@@ -767,6 +773,9 @@
       ops:{running:false,cycle_count:0,signals_today:0,trades_today:0,circuit_breaker:false,circuit_breaker_reason:'',dry_run:true,components:{}},
       opsDetail:{},
       apiEndpoints:[],
+      _failCount:0,
+      _retryTimer:null,
+      apiError:'',
 
       init(){
         this.tick();setInterval(()=>this.tick(),1000);
@@ -778,7 +787,7 @@
       switchTab(t){this.tab=t;if(t==='signals')this.fetchSignals();if(t==='ops')this.fetchHealth();if(t==='brief')this.fetchBrief();if(t==='catalog'){this.fetchEndpoints();this.fetchOpsDetail()}},
 
       async fetchMkt(){
-        try{const r=await fetch('/api/live/market');if(!r.ok)throw 0;const d=await r.json();this.regime=d.regime||{};this.indices=d.indices||[];this.macro=d.macro||[];this.sectors=d.sectors||[];this.asia=d.asia||[];this.trust=d.trust||{};this.live=true}catch(e){this.live=false}
+        try{const r=await fetch('/api/live/market');if(!r.ok)throw 0;const d=await r.json();this.regime=d.regime||{};this.indices=d.indices||[];this.macro=d.macro||[];this.sectors=d.sectors||[];this.asia=d.asia||[];this.trust=d.trust||{};this.live=true;this._failCount=0;this.apiError='';if(this._retryTimer){clearTimeout(this._retryTimer);this._retryTimer=null}}catch(e){this._failCount++;this.live=false;const delay=Math.min(5000*Math.pow(2,this._failCount-1),120000);this.apiError='Connection lost. Retrying in '+Math.round(delay/1000)+'s…';if(this._retryTimer)clearTimeout(this._retryTimer);this._retryTimer=setTimeout(()=>this.fetchMkt(),delay)}
       },
       async fetchSignals(){
         try{const r=await fetch('/api/recommendations');if(!r.ok)throw 0;const d=await r.json();this.sig.mode=d.mode||'—';this.sig.source=d.source||'';this.sig.as_of=d.as_of||'';this.sig.recs=d.recommendations||[];this.sig.strategy_scores=d.strategy_scores||{};this.sig.no_trade_reason=d.no_trade_reason||null}catch(e){this.sig.mode='OFFLINE'}

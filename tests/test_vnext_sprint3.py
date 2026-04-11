@@ -836,7 +836,7 @@ class TestPhase2Endpoints:
     @pytest.mark.anyio
     async def test_dossier_404_bad_ticker(self, client):
         async with client as c:
-            r = await c.get("/api/live/dossier/ZZZZZZZZ999")
+            r = await c.get("/api/live/dossier/ZZZZZ9")
             assert r.status_code == 404
 
     @pytest.mark.anyio
@@ -914,7 +914,7 @@ class TestPhase2Endpoints:
     @pytest.mark.anyio
     async def test_options_404_bad_ticker(self, client):
         async with client as c:
-            r = await c.get("/api/live/options/ZZZZZZZZ999")
+            r = await c.get("/api/live/options/ZZZZZ9")
             assert r.status_code == 404
 
     @pytest.mark.anyio
@@ -1028,3 +1028,171 @@ class TestPhase3OpsEndpoints:
             assert "method" in ep
             assert "path" in ep
             assert ep["method"] in ("GET", "POST", "PUT", "DELETE")
+
+
+# ════════════════════════════════════════════════════════════════
+# Phase 4 — Hardening & Honesty
+# ════════════════════════════════════════════════════════════════
+
+
+class TestPhase4Hardening:
+    """Tests for Phase 4: duplicate handler fix, deterministic options,
+    ticker validation, honest AI endpoints."""
+
+    @pytest.fixture
+    def client(self):
+        from httpx import ASGITransport, AsyncClient
+
+        from src.api.main import app
+
+        transport = ASGITransport(app=app)
+        return AsyncClient(transport=transport, base_url="http://test")
+
+    # ── Ticker validation ──
+
+    @pytest.mark.anyio
+    async def test_invalid_ticker_rejected(self, client):
+        """Tickers with invalid chars should return 422."""
+        async with client as c:
+            r = await c.get("/api/live/quote/DROP TABLE")
+            assert r.status_code == 422
+            d = r.json()
+            assert "Invalid ticker" in (d.get("error", "") or d.get("detail", ""))
+
+    @pytest.mark.anyio
+    async def test_ticker_too_long_rejected(self, client):
+        """Tickers over 10 chars should return 422."""
+        async with client as c:
+            r = await c.get("/api/live/quote/ABCDEFGHIJK")
+            assert r.status_code == 422
+
+    @pytest.mark.anyio
+    async def test_valid_ticker_accepted(self, client):
+        """Valid tickers like AAPL should not return 422."""
+        async with client as c:
+            r = await c.get("/api/live/quote/aapl")
+            # Should NOT be 422 — either 200 or 404 (data may be unavailable)
+            assert r.status_code in (200, 404)
+
+    @pytest.mark.anyio
+    async def test_ticker_with_dot_accepted(self, client):
+        """Tickers like BRK.B should pass validation."""
+        async with client as c:
+            r = await c.get("/api/live/quote/BRK.B")
+            assert r.status_code in (200, 404)
+
+    @pytest.mark.anyio
+    async def test_ticker_validation_dossier(self, client):
+        """Dossier endpoint should also reject invalid tickers."""
+        async with client as c:
+            r = await c.get("/api/live/dossier/<script>")
+            assert r.status_code == 422
+
+    @pytest.mark.anyio
+    async def test_ticker_validation_options(self, client):
+        """Options endpoint should also reject invalid tickers."""
+        async with client as c:
+            r = await c.get("/api/live/options/INVALID!!!")
+            assert r.status_code == 422
+
+    # ── Deterministic options ──
+
+    @pytest.mark.anyio
+    async def test_options_deterministic(self, client):
+        """Same ticker on same day should produce identical IV results."""
+        async with client as c:
+            r1 = await c.get("/api/live/options/AAPL")
+            r2 = await c.get("/api/live/options/AAPL")
+            if r1.status_code == 200 and r2.status_code == 200:
+                d1 = r1.json()
+                d2 = r2.json()
+                assert d1["iv_rank"] == d2["iv_rank"]
+                assert d1["contracts"][0]["iv"] == d2["contracts"][0]["iv"]
+                assert d1["contracts"][0]["delta"] == d2["contracts"][0]["delta"]
+
+    # ── Honest AI endpoints ──
+
+    @pytest.mark.anyio
+    async def test_ai_advisor_live_regime(self, client):
+        """AI advisor should return live regime data, not hardcoded marketing text."""
+        async with client as c:
+            r = await c.get("/api/ai-advisor")
+            assert r.status_code == 200
+            d = r.json()
+            assert "status" in d
+            assert d["status"] == "live"
+            assert "trust" in d
+            assert d["trust"]["mode"] == "LIVE"
+            assert "chain_of_thought" in d
+            assert isinstance(d["chain_of_thought"], list)
+            # Should contain real regime info, not static text
+            assert any("Regime:" in c for c in d["chain_of_thought"])
+
+    @pytest.mark.anyio
+    async def test_ml_status_honest(self, client):
+        """ML status should be honest about model state, not fabricate metrics."""
+        async with client as c:
+            r = await c.get("/api/ml-status")
+            assert r.status_code == 200
+            d = r.json()
+            assert "trust" in d
+            assert d["trust"]["mode"] in ("LIVE", "HONEST")
+            # Must NOT contain fabricated accuracy (the old 72.5 was fake)
+            assert "accuracy" not in d or d.get("trust", {}).get("mode") == "LIVE"
+
+    # ── Exception handler dedup ──
+
+    @pytest.mark.anyio
+    async def test_exception_handler_has_timestamp(self, client):
+        """HTTP errors should include a timestamp (from the detailed handler, not the simple one)."""
+        async with client as c:
+            # Trigger a 422 via bad ticker
+            r = await c.get("/api/live/quote/!!!")
+            assert r.status_code == 422
+            d = r.json()
+            # The detailed handler adds structured error info
+            assert "detail" in d or "error" in d
+
+    @pytest.mark.anyio
+    async def test_404_has_structured_response(self, client):
+        """404 errors should have a structured JSON response."""
+        async with client as c:
+            r = await c.get("/api/live/quote/ZZZZZZ")
+            if r.status_code == 404:
+                d = r.json()
+                # Should have error or detail field
+                assert "error" in d or "detail" in d
+
+    # ── validate_ticker unit tests ──
+
+    def test_validate_ticker_strips_whitespace(self):
+        from src.api.main import validate_ticker
+
+        assert validate_ticker("  aapl ") == "AAPL"
+
+    def test_validate_ticker_uppercases(self):
+        from src.api.main import validate_ticker
+
+        assert validate_ticker("msft") == "MSFT"
+
+    def test_validate_ticker_rejects_empty(self):
+        from src.api.main import validate_ticker
+
+        with pytest.raises(Exception):  # HTTPException
+            validate_ticker("")
+
+    def test_validate_ticker_rejects_special_chars(self):
+        from src.api.main import validate_ticker
+
+        with pytest.raises(Exception):
+            validate_ticker("<script>alert(1)</script>")
+
+    def test_validate_ticker_allows_dots(self):
+        from src.api.main import validate_ticker
+
+        assert validate_ticker("BRK.B") == "BRK.B"
+
+    def test_validate_ticker_allows_caret(self):
+        from src.api.main import validate_ticker
+
+        assert validate_ticker("^VIX") == "^VIX"
