@@ -2694,8 +2694,22 @@ _LIVE_ASIA = [
 ]
 
 
+# ── Market data cache (TTL-based) to avoid repeated yfinance calls ──
+_market_cache: dict = {}  # {symbol: {"data": {...}, "ts": float}}
+_MARKET_CACHE_TTL = 120  # seconds — cache quotes for 2 minutes
+_market_overview_cache: dict = {"data": None, "ts": 0.0}
+_OVERVIEW_CACHE_TTL = 90  # full market overview cached for 90s
+
+
 async def _mds_quote(symbol: str) -> dict:
-    """Fetch a single quote via MarketDataService."""
+    """Fetch a single quote via MarketDataService (with TTL cache)."""
+    import time as _t
+
+    now = _t.time()
+    cached = _market_cache.get(symbol)
+    if cached and (now - cached["ts"]) < _MARKET_CACHE_TTL:
+        return cached["data"]
+
     mds = app.state.market_data
     try:
         q = await mds.get_quote(symbol)
@@ -2706,17 +2720,47 @@ async def _mds_quote(symbol: str) -> dict:
                 "change_pct": 0,
                 "error": True,
             }
-        # Enrich with history-based fields
-        hist = await mds.get_history(
-            symbol,
-            period="3mo",
-            interval="1d",
-        )
+        prev = q["price"] - q.get("change", 0)
+        result = {
+            "symbol": symbol,
+            "price": round(q["price"], 2),
+            "change_pct": round(q["change_pct"], 2),
+            "prev_close": round(prev, 2),
+            "high": round(q.get("high", q["price"]), 2),
+            "low": round(q.get("low", q["price"]), 2),
+            "volume": q.get("volume", 0),
+            "market_cap": q.get("market_cap", 0),
+            "high_52w": round(q.get("high_52w", 0), 2),
+            "low_52w": round(q.get("low_52w", 0), 2),
+        }
+        _market_cache[symbol] = {"data": result, "ts": now}
+        return result
+    except Exception:
+        return {
+            "symbol": symbol,
+            "price": 0,
+            "change_pct": 0,
+            "error": True,
+        }
+
+
+async def _mds_quote_full(symbol: str) -> dict:
+    """Full quote with 3mo history — used by dossier, not market overview."""
+    mds = app.state.market_data
+    try:
+        q = await mds.get_quote(symbol)
+        if q is None:
+            return {
+                "symbol": symbol,
+                "price": 0,
+                "change_pct": 0,
+                "error": True,
+            }
+        hist = await mds.get_history(symbol, period="3mo", interval="1d")
         high = low = q["price"]
         vol = q.get("volume", 0)
         h52 = l52 = mcap = 0
         if hist is not None and len(hist) >= 2:
-            c_col = "Close" if "Close" in hist.columns else "close"
             h_col = "High" if "High" in hist.columns else "high"
             l_col = "Low" if "Low" in hist.columns else "low"
             high = float(hist[h_col].iloc[-1])
@@ -2750,8 +2794,17 @@ async def live_market():
     """
     Sprint 42: Live market overview — indices, macro, sectors, Asia.
     Regime from shared RegimeRouter singleton (single source of truth).
-    Fetches truly parallel via asyncio.gather.
+    Fetches truly parallel via asyncio.gather. Cached for 90s.
     """
+    import time as _t
+
+    now = _t.time()
+    if (
+        _market_overview_cache["data"]
+        and (now - _market_overview_cache["ts"]) < _OVERVIEW_CACHE_TTL
+    ):
+        return _market_overview_cache["data"]
+
     try:
         # Fetch all tickers in truly parallel threads
         all_symbols = (
@@ -2832,7 +2885,7 @@ async def live_market():
             else "LIVE"
         )
 
-        return _sanitize_for_json(
+        result = _sanitize_for_json(
             {
                 "regime": {
                     "label": regime_state.regime,
@@ -2857,6 +2910,9 @@ async def live_market():
                 "timestamp": datetime.utcnow().isoformat(),
             }
         )
+        _market_overview_cache["data"] = result
+        _market_overview_cache["ts"] = _t.time()
+        return result
     except Exception as e:
         logger.error(f"live_market error: {e}")
         # Return a degraded but valid response so the UI stays LIVE
