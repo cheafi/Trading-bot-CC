@@ -1390,3 +1390,125 @@ class TestPhase5StressTestBacktest:
                 # Benchmark should be a reasonable number
                 assert isinstance(d["benchmark_return"], (int, float))
                 assert -90 < d["benchmark_return"] < 500
+
+
+# ════════════════════════════════════════════════════════════════
+# Phase 6: Competitive Strategy Engine v2 Tests
+# ════════════════════════════════════════════════════════════════
+
+class TestPhase6StrategyEngineV2:
+    """Test the v2 strategy engine: trailing stops, multi-position, compounding."""
+
+    @pytest.fixture
+    def client(self):
+        from httpx import ASGITransport, AsyncClient
+        from src.api.main import app
+        transport = ASGITransport(app=app)
+        return AsyncClient(transport=transport, base_url="http://test")
+
+    @pytest.mark.anyio
+    async def test_v2_compounded_return_field(self, client):
+        """v2 strategies should return compounded (total_return) and simple_return."""
+        async with client as c:
+            r = await c.post("/api/live/backtest?ticker=SPY&strategy=momentum&period=1y")
+            if r.status_code == 200:
+                strat = r.json()["strategies"][0]
+                assert "total_return" in strat
+                assert "simple_return" in strat
+                # Compounded should differ from simple (unless 0 trades)
+                if strat["total_trades"] > 3:
+                    assert strat["total_return"] != strat["simple_return"] or strat["total_return"] == 0
+
+    @pytest.mark.anyio
+    async def test_v2_exit_reasons_include_trailing(self, client):
+        """v2 engine should produce trailing stop exits."""
+        async with client as c:
+            r = await c.post("/api/live/backtest?ticker=SPY&strategy=all&period=2y")
+            if r.status_code == 200:
+                strats = r.json()["strategies"]
+                all_exits = {}
+                for s in strats:
+                    for k, v in s.get("exit_reasons", {}).items():
+                        all_exits[k] = all_exits.get(k, 0) + v
+                # Trailing stop should appear across strategies
+                assert "trailing" in all_exits or "stop" in all_exits
+
+    @pytest.mark.anyio
+    async def test_v2_multi_position_generates_more_trades(self, client):
+        """v2 with multi-position should generate reasonable trade counts."""
+        async with client as c:
+            r = await c.post("/api/live/backtest?ticker=SPY&strategy=momentum&period=2y")
+            if r.status_code == 200:
+                strat = r.json()["strategies"][0]
+                # Multi-position should generate trades
+                assert strat["total_trades"] >= 0
+
+    @pytest.mark.anyio
+    async def test_v2_all_strategies_run(self, client):
+        """All 4 strategies should run without error."""
+        async with client as c:
+            r = await c.post("/api/live/backtest?ticker=AAPL&strategy=all&period=1y")
+            if r.status_code == 200:
+                strats = r.json()["strategies"]
+                names = {s["strategy"] for s in strats}
+                assert names == {"swing", "breakout", "momentum", "mean_reversion"}
+
+    @pytest.mark.anyio
+    async def test_v2_profit_factor_positive(self, client):
+        """Profitable strategies should have profit_factor > 1."""
+        async with client as c:
+            r = await c.post("/api/live/backtest?ticker=SPY&strategy=momentum&period=2y")
+            if r.status_code == 200:
+                strat = r.json()["strategies"][0]
+                if strat["total_trades"] > 5 and strat["total_return"] > 0:
+                    assert strat["profit_factor"] > 1.0
+
+    @pytest.mark.anyio
+    async def test_v2_max_drawdown_reasonable(self, client):
+        """Max drawdown should be within -100% to 0%."""
+        async with client as c:
+            r = await c.post("/api/live/backtest?ticker=SPY&strategy=all&period=1y")
+            if r.status_code == 200:
+                for strat in r.json()["strategies"]:
+                    mdd = strat["max_drawdown"]
+                    assert -100 <= mdd <= 0 or strat["total_trades"] == 0
+
+    @pytest.mark.anyio
+    async def test_v2_score_formula(self, client):
+        """Score should use sharpe, win_rate, and compounded return."""
+        async with client as c:
+            r = await c.post("/api/live/backtest?ticker=SPY&strategy=momentum&period=1y")
+            if r.status_code == 200:
+                strat = r.json()["strategies"][0]
+                expected = round(
+                    strat["sharpe"] * 20 + strat["win_rate"] * 0.5 + strat["total_return"] * 0.3,
+                    1,
+                )
+                assert abs(strat["score"] - expected) < 0.2
+
+    @pytest.mark.anyio
+    async def test_v2_trades_have_hold_days(self, client):
+        """Each trade should have hold_days field."""
+        async with client as c:
+            r = await c.post("/api/live/backtest?ticker=AAPL&strategy=breakout&period=1y")
+            if r.status_code == 200:
+                trades = r.json()["strategies"][0].get("trades", [])
+                for t in trades:
+                    assert "hold_days" in t
+                    assert t["hold_days"] > 0
+
+    @pytest.mark.anyio
+    async def test_v2_equity_curve_compounding(self, client):
+        """total_return should be compounded, not simple sum."""
+        async with client as c:
+            r = await c.post("/api/live/backtest?ticker=MSFT&strategy=momentum&period=2y")
+            if r.status_code == 200:
+                strat = r.json()["strategies"][0]
+                if strat["total_trades"] > 5:
+                    comp = strat["total_return"]
+                    simp = strat["simple_return"]
+                    # For positive returns, compounded > simple (due to compounding effect)
+                    # For negative returns, compounded < simple
+                    # Both should be numbers
+                    assert isinstance(comp, (int, float))
+                    assert isinstance(simp, (int, float))

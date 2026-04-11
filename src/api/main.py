@@ -3678,109 +3678,165 @@ async def live_backtest(
         events.sort(key=lambda e: e["start"])
         return events
 
-    # ── Vectorized backtest engine ──
+    # ── Strategy Engine v2 ── trailing stops, multi-position, regime-adaptive ──
     def _run_strategy(strat_id: str) -> dict:
-        """Run a single strategy backtest with full analytics."""
+        """Run a single strategy backtest – v2 competitive engine."""
         n = len(close)
-        # Compute indicators
+        # ── Indicators ──
         sma20 = np.convolve(close, np.ones(20) / 20, mode="full")[:n]
         sma50 = np.convolve(close, np.ones(50) / 50, mode="full")[:n]
-        # RSI
+        sma200 = np.convolve(close, np.ones(200) / 200, mode="full")[:n]
+        # RSI (14)
         deltas = np.diff(close, prepend=close[0])
         gains = np.where(deltas > 0, deltas, 0)
         losses = np.where(deltas < 0, -deltas, 0)
         avg_gain = np.convolve(gains, np.ones(14) / 14, mode="full")[:n]
-        avg_loss = np.convolve(losses, np.ones(14) / 14, mode="full")[:n]
-        rs = np.where(avg_loss > 0, avg_gain / avg_loss, 100)
+        avg_loss_arr = np.convolve(losses, np.ones(14) / 14, mode="full")[:n]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            rs = np.where(avg_loss_arr > 0, avg_gain / avg_loss_arr, 100)
         rsi = 100 - (100 / (1 + rs))
         # Volume ratio
         vol_ma = np.convolve(volume.astype(float), np.ones(20) / 20, mode="full")[:n]
         vol_ratio = np.where(vol_ma > 0, volume / vol_ma, 1.0)
+        # ATR (14-day, estimated from close)
+        true_range = np.abs(np.diff(close, prepend=close[0]))
+        atr = np.convolve(true_range, np.ones(14) / 14, mode="full")[:n]
+        atr_pct = np.where(close > 0, atr / close, 0.02)
 
-        entries = []
-        exits = []
-        position = None
-        stop_pct = 0.05
-        target_pct = 0.10
+        # ── Multi-position tracking ──
+        MAX_POS = 3
+        positions: list = []  # [{idx, price, trailing_high, stop_pct, target_pct, max_hold}]
+        trades: list = []
 
-        for i in range(50, n):
-            if position is None:
-                enter = False
-                if strat_id == "swing":
-                    enter = (
-                        rsi[i] < 35
-                        and close[i] > sma50[i]
-                        and close[i - 1] < sma20[i - 1]
-                        and close[i] > sma20[i]
-                    )
-                elif strat_id == "breakout":
-                    hi20 = np.max(close[max(0, i - 20):i])
-                    enter = (
-                        close[i] > hi20 and vol_ratio[i] > 1.5 and close[i] > sma20[i]
-                    )
-                elif strat_id == "momentum":
-                    enter = (
-                        close[i] > sma20[i] > sma50[i]
-                        and rsi[i] > 50
-                        and rsi[i] < 75
-                        and vol_ratio[i] > 1.0
-                    )
-                elif strat_id == "mean_reversion":
-                    enter = (
-                        rsi[i] < 30
-                        and close[i] < sma20[i] * 0.97
-                        and vol_ratio[i] > 1.2
-                    )
-                    target_pct = 0.06
-                    stop_pct = 0.04
-
-                if enter:
-                    position = {"idx": i, "price": close[i]}
-                    entries.append((i, close[i]))
-            else:
-                entry_p = position["price"]
-                pnl_pct = (close[i] - entry_p) / entry_p
-                hold_days = i - position["idx"]
-
-                if pnl_pct >= target_pct:
-                    exits.append((i, close[i], "target"))
-                    position = None
-                elif pnl_pct <= -stop_pct:
-                    exits.append((i, close[i], "stop"))
-                    position = None
-                elif hold_days >= 15:
-                    exits.append((i, close[i], "time"))
-                    position = None
-
-        if position is not None:
-            exits.append((n - 1, close[-1], "end"))
-
-        # Build trades
-        trades = []
-        for j in range(min(len(entries), len(exits))):
-            ep = entries[j][1]
-            xp = exits[j][1]
+        def _close_position(pos, bar_idx, reason):
+            ep = pos["price"]
+            xp = close[bar_idx]
             pnl = (xp - ep) / ep
             trades.append({
-                "entry_idx": entries[j][0],
-                "exit_idx": exits[j][0],
-                "entry_date": str(dates_idx[entries[j][0]].date()),
-                "exit_date": str(dates_idx[exits[j][0]].date()),
+                "entry_idx": pos["idx"],
+                "exit_idx": bar_idx,
+                "entry_date": str(dates_idx[pos["idx"]].date()),
+                "exit_date": str(dates_idx[bar_idx].date()),
                 "entry_price": round(ep, 2),
                 "exit_price": round(xp, 2),
                 "pnl_pct": round(pnl * 100, 2),
-                "reason": exits[j][2],
-                "hold_days": exits[j][0] - entries[j][0],
+                "reason": reason,
+                "hold_days": bar_idx - pos["idx"],
             })
 
+        for i in range(200, n):
+            # ── Regime detection ──
+            trending = close[i] > sma50[i] and sma50[i] > sma200[i]
+            cur_atr = max(atr_pct[i], 0.005)
+
+            # ── Exit logic (trailing + stop + target + time) ──
+            still_open = []
+            for pos in positions:
+                ep = pos["price"]
+                pnl_pct = (close[i] - ep) / ep
+                hold_days = i - pos["idx"]
+                # Update trailing high
+                if close[i] > pos["trailing_high"]:
+                    pos["trailing_high"] = close[i]
+                # Trailing stop: activates when price > 50% of target
+                trail_active = pnl_pct > pos["target_pct"] * 0.5
+                if trail_active:
+                    trail_stop = pos["trailing_high"] * (1 - pos["stop_pct"] * 0.6)
+                    if close[i] < trail_stop:
+                        _close_position(pos, i, "trailing")
+                        continue
+                # Hard stop
+                if pnl_pct <= -pos["stop_pct"]:
+                    _close_position(pos, i, "stop")
+                    continue
+                # Target hit
+                if pnl_pct >= pos["target_pct"]:
+                    _close_position(pos, i, "target")
+                    continue
+                # Time exit
+                if hold_days >= pos["max_hold"]:
+                    _close_position(pos, i, "time")
+                    continue
+                still_open.append(pos)
+            positions = still_open
+
+            # ── Entry logic (multi-position, proximity filter) ──
+            if len(positions) >= MAX_POS:
+                continue
+            # Proximity filter – no new entry within 2% of existing position
+            if any(abs(close[i] - p["price"]) / p["price"] < 0.02 for p in positions):
+                continue
+
+            enter = False
+            if strat_id == "momentum":
+                enter = (
+                    close[i] > sma20[i] > sma50[i]
+                    and rsi[i] > 50 and rsi[i] < 75
+                    and vol_ratio[i] > 1.0
+                )
+                stop_pct = cur_atr * 2
+                target_pct = 0.15 if trending else 0.08
+                max_hold = 60 if trending else 25
+            elif strat_id == "breakout":
+                hi20 = np.max(close[max(0, i - 20):i])
+                enter = (
+                    close[i] > hi20
+                    and vol_ratio[i] > 1.3
+                    and close[i] > sma20[i]
+                )
+                stop_pct = cur_atr * 1.5
+                target_pct = 0.12 if trending else 0.07
+                max_hold = 45 if trending else 20
+            elif strat_id == "mean_reversion":
+                enter = (
+                    rsi[i] < 30
+                    and close[i] < sma20[i] * 0.97
+                    and vol_ratio[i] > 1.0
+                )
+                stop_pct = cur_atr * 1.5
+                target_pct = cur_atr * 3
+                max_hold = 20
+            elif strat_id == "swing":
+                # Swing: oversold bounce near moving average support
+                enter = (
+                    rsi[i] < 45
+                    and close[i] > sma50[i] * 0.98
+                    and (close[i] > sma20[i] or close[i - 1] < sma20[i - 1])
+                    and close[i] > close[i - 1]  # uptick confirmation
+                )
+                stop_pct = cur_atr * 2
+                target_pct = 0.10 if trending else 0.06
+                max_hold = 40 if trending else 15
+
+            if enter:
+                positions.append({
+                    "idx": i,
+                    "price": close[i],
+                    "trailing_high": close[i],
+                    "stop_pct": stop_pct,
+                    "target_pct": target_pct,
+                    "max_hold": max_hold,
+                })
+
+        # Close remaining positions at end
+        for pos in positions:
+            _close_position(pos, n - 1, "end")
+
+        # ── Analytics ──
         returns = [t["pnl_pct"] / 100 for t in trades]
         total_trades = len(trades)
         winners = sum(1 for r in returns if r > 0)
         losers = total_trades - winners
         win_rate = (winners / total_trades * 100) if total_trades else 0
         avg_win = float(np.mean([r for r in returns if r > 0]) * 100) if winners else 0
-        avg_loss = float(np.mean([r for r in returns if r <= 0]) * 100) if losers else 0
-        total_return = sum(returns) * 100
+        avg_loss_val = float(np.mean([r for r in returns if r <= 0]) * 100) if losers else 0
+
+        # Compounded return (equity curve)
+        equity = 1.0
+        for r in returns:
+            equity *= (1 + r)
+        compounded_return = (equity - 1) * 100
+        simple_return = sum(returns) * 100
 
         # Sharpe
         if returns and np.std(returns) > 0:
@@ -3789,10 +3845,15 @@ async def live_backtest(
         else:
             sharpe = 0
 
-        # Max drawdown on equity curve
-        cum = np.cumprod(1 + np.array(returns)) if returns else np.array([1])
-        peak = np.maximum.accumulate(cum)
-        dd = (cum - peak) / peak
+        # Max drawdown on compounded equity curve
+        eq_curve = []
+        eq = 1.0
+        for r in returns:
+            eq *= (1 + r)
+            eq_curve.append(eq)
+        eq_arr = np.array(eq_curve) if eq_curve else np.array([1])
+        peak = np.maximum.accumulate(eq_arr)
+        dd = (eq_arr - peak) / peak
         max_dd = float(np.min(dd)) * 100 if len(dd) else 0
 
         # Profit factor
@@ -3800,7 +3861,7 @@ async def live_backtest(
         gross_loss = abs(sum(r for r in returns if r <= 0))
         profit_factor = gross_profit / gross_loss if gross_loss > 0 else 99
 
-        # Rolling 60-trade Sharpe (for the rolling chart)
+        # Rolling Sharpe
         rolling_sharpe = []
         window = min(20, max(5, total_trades // 5))
         for k in range(window, total_trades):
@@ -3839,9 +3900,10 @@ async def live_backtest(
             "winners": winners,
             "losers": losers,
             "win_rate": round(win_rate, 1),
-            "total_return": round(total_return, 2),
+            "total_return": round(compounded_return, 2),
+            "simple_return": round(simple_return, 2),
             "avg_win": round(avg_win, 2),
-            "avg_loss": round(avg_loss, 2),
+            "avg_loss": round(avg_loss_val, 2),
             "sharpe": round(sharpe, 2),
             "max_drawdown": round(max_dd, 2),
             "profit_factor": round(profit_factor, 2),
@@ -3850,7 +3912,7 @@ async def live_backtest(
             "rolling_sharpe": rolling_sharpe[-50:],
             "trades": trades[-30:],
             "all_trades": trades,  # needed for event breakdown
-            "score": round(sharpe * 20 + win_rate * 0.5 + total_return * 0.3, 1),
+            "score": round(sharpe * 20 + win_rate * 0.5 + compounded_return * 0.3, 1),
         }
 
     # ── Run strategies ──
