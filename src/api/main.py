@@ -4067,6 +4067,736 @@ async def live_backtest(
 
 
 # ═══════════════════════════════════════════════════════════════════
+# Phase 7: TIME TRAVEL — historical replay + 4-Layer Confidence
+#           + Expert Council + Evidence Decomposition
+# ═══════════════════════════════════════════════════════════════════
+
+
+def _compute_4layer_confidence(
+    close,
+    sma20,
+    sma50,
+    sma200,
+    rsi,
+    atr_pct,
+    vol_ratio,
+    idx,
+    volume,
+    regime_trending,
+    days_to_earnings=None,
+    data_freshness=1.0,
+) -> dict:
+    """Compute 4-layer confidence: Thesis / Timing / Execution / Data.
+
+    Returns dict with each layer 0-100, composite, grade, action.
+    """
+    import numpy as np
+
+    i = idx
+    # ── 1) Thesis Confidence ──
+    thesis_factors = []
+    # Trend alignment
+    if close[i] > sma50[i] > sma200[i]:
+        thesis_factors.append(("Strong uptrend (price > SMA50 > SMA200)", 25))
+    elif close[i] > sma50[i]:
+        thesis_factors.append(("Moderate uptrend (price > SMA50)", 15))
+    elif close[i] < sma50[i] < sma200[i]:
+        thesis_factors.append(("Downtrend (price < SMA50 < SMA200)", -10))
+    else:
+        thesis_factors.append(("Sideways / mixed trend", 5))
+    # RSI regime
+    if 40 < rsi[i] < 65:
+        thesis_factors.append(("RSI in healthy zone", 15))
+    elif rsi[i] < 30:
+        thesis_factors.append(("RSI oversold — bounce potential", 10))
+    elif rsi[i] > 75:
+        thesis_factors.append(("RSI overbought — caution", -5))
+    else:
+        thesis_factors.append(("RSI neutral", 5))
+    # Volume confirmation
+    if vol_ratio[i] > 1.3:
+        thesis_factors.append(("Volume surge (>1.3x avg)", 15))
+    elif vol_ratio[i] > 1.0:
+        thesis_factors.append(("Normal volume", 8))
+    else:
+        thesis_factors.append(("Below-avg volume", -3))
+    # SMA slope (momentum)
+    if i > 20 and sma20[i] > sma20[i - 10]:
+        thesis_factors.append(("SMA20 rising", 10))
+    elif i > 20:
+        thesis_factors.append(("SMA20 falling", -5))
+    thesis_score = max(0, min(100, 50 + sum(f[1] for f in thesis_factors)))
+
+    # ── 2) Timing Confidence ──
+    timing_factors = []
+    # Distance from SMA20 (near = better timing)
+    dist_sma20 = abs(close[i] - sma20[i]) / sma20[i] if sma20[i] > 0 else 0
+    if dist_sma20 < 0.02:
+        timing_factors.append(("Price near SMA20 support", 20))
+    elif dist_sma20 < 0.05:
+        timing_factors.append(("Moderate distance from SMA20", 10))
+    else:
+        timing_factors.append(("Extended from SMA20", -5))
+    # ATR — not too volatile
+    if atr_pct[i] < 0.02:
+        timing_factors.append(("Low volatility — good for entry", 15))
+    elif atr_pct[i] < 0.04:
+        timing_factors.append(("Normal volatility", 10))
+    else:
+        timing_factors.append(("High volatility — wait for calm", -10))
+    # Recent pullback (close dipped then recovered)
+    if i > 5 and close[i] > close[i - 1] and close[i - 1] < close[i - 3]:
+        timing_factors.append(("Pullback bounce pattern", 15))
+    else:
+        timing_factors.append(("No clear pullback entry", 0))
+    # Event proximity
+    if days_to_earnings is not None and days_to_earnings <= 3:
+        timing_factors.append(("Earnings in ≤3 days — BLACKOUT", -25))
+    elif days_to_earnings is not None and days_to_earnings <= 7:
+        timing_factors.append(("Earnings within 7 days — caution", -10))
+    timing_score = max(0, min(100, 50 + sum(f[1] for f in timing_factors)))
+
+    # ── 3) Execution Confidence ──
+    exec_factors = []
+    # Volume / liquidity proxy
+    avg_vol = float(np.mean(volume[max(0, i - 20) : i + 1])) if i > 0 else 0
+    if avg_vol > 5_000_000:
+        exec_factors.append(("High liquidity (>5M avg vol)", 25))
+    elif avg_vol > 1_000_000:
+        exec_factors.append(("Adequate liquidity (>1M)", 15))
+    elif avg_vol > 100_000:
+        exec_factors.append(("Low liquidity — wider spreads", 5))
+    else:
+        exec_factors.append(("Very low liquidity — risky", -15))
+    # Price level (penny stock?)
+    if close[i] > 20:
+        exec_factors.append(("Price >$20 — normal spreads", 15))
+    elif close[i] > 5:
+        exec_factors.append(("Price $5-20 — moderate", 5))
+    else:
+        exec_factors.append(("Price <$5 — wide spreads likely", -10))
+    exec_score = max(0, min(100, 50 + sum(f[1] for f in exec_factors)))
+
+    # ── 4) Data Confidence ──
+    data_factors = []
+    bar_count = i + 1
+    if bar_count >= 200:
+        data_factors.append(("200+ bars of history — full indicators", 25))
+    elif bar_count >= 50:
+        data_factors.append(("50+ bars — basic indicators OK", 15))
+    else:
+        data_factors.append(("Limited history (<50 bars)", -10))
+    if data_freshness >= 0.9:
+        data_factors.append(("Fresh data", 15))
+    elif data_freshness >= 0.5:
+        data_factors.append(("Slightly stale data", 5))
+    else:
+        data_factors.append(("Stale data — low trust", -15))
+    data_score = max(0, min(100, 50 + sum(f[1] for f in data_factors)))
+
+    # ── Composite ──
+    composite = round(
+        0.35 * thesis_score
+        + 0.30 * timing_score
+        + 0.20 * exec_score
+        + 0.15 * data_score,
+        1,
+    )
+    # Penalties
+    penalties = []
+    if days_to_earnings is not None and days_to_earnings <= 2:
+        penalties.append("earnings_blackout")
+        composite -= 15
+    if atr_pct[i] > 0.06:
+        penalties.append("extreme_volatility")
+        composite -= 10
+    composite = max(0, min(100, composite))
+
+    if composite >= 85:
+        grade, action = "A", "Strong conviction — full size"
+    elif composite >= 70:
+        grade, action = "B", "Tradeable — normal size"
+    elif composite >= 55:
+        grade, action = "C", "Watch or pilot size only"
+    else:
+        grade, action = "D", "No Trade — conditions unfavorable"
+
+    return {
+        "thesis": {"score": round(thesis_score, 1), "factors": thesis_factors},
+        "timing": {"score": round(timing_score, 1), "factors": timing_factors},
+        "execution": {"score": round(exec_score, 1), "factors": exec_factors},
+        "data": {"score": round(data_score, 1), "factors": data_factors},
+        "composite": round(composite, 1),
+        "grade": grade,
+        "action": action,
+        "penalties": penalties,
+    }
+
+
+def _run_expert_council(
+    close,
+    sma20,
+    sma50,
+    sma200,
+    rsi,
+    vol_ratio,
+    atr_pct,
+    idx,
+    volume,
+    regime_trending,
+) -> list:
+    """Run 7-member Expert Council. Each returns structured verdict."""
+    i = idx
+    council = []
+
+    # 1) Technical Analyst
+    tech_score = 50
+    tech_reasons = []
+    tech_risks = []
+    if close[i] > sma20[i] > sma50[i]:
+        tech_score += 20
+        tech_reasons.append("Price above SMA20 and SMA50 — bullish structure")
+    elif close[i] < sma50[i]:
+        tech_score -= 15
+        tech_reasons.append("Price below SMA50 — bearish structure")
+    if 40 < rsi[i] < 65:
+        tech_score += 10
+        tech_reasons.append("RSI healthy — room to run")
+    elif rsi[i] > 70:
+        tech_score -= 5
+        tech_risks.append("RSI overbought — pullback risk")
+    if i > 20 and close[i] > max(close[max(0, i - 20) : i]):
+        tech_score += 10
+        tech_reasons.append("New 20-day high — breakout")
+    if not tech_reasons:
+        tech_reasons.append("Mixed technicals — no clear setup")
+    if not tech_risks:
+        tech_risks.append("Gap down risk on broad market weakness")
+    tech_score = max(0, min(100, tech_score))
+    verdict = (
+        "Bullish" if tech_score >= 65 else "Bearish" if tech_score < 40 else "Neutral"
+    )
+    council.append(
+        {
+            "role": "Technical Analyst",
+            "verdict": verdict,
+            "score": tech_score,
+            "reasons": tech_reasons[:3],
+            "risks": tech_risks[:2],
+            "action_bias": (
+                "buy" if tech_score >= 65 else "sell" if tech_score < 35 else "watch"
+            ),
+        }
+    )
+
+    # 2) Fundamental Analyst (proxy from price/volume)
+    fund_score = 50
+    fund_reasons = []
+    fund_risks = []
+    if regime_trending:
+        fund_score += 15
+        fund_reasons.append("Trending regime — fundamentals likely supportive")
+    if close[i] > sma200[i]:
+        fund_score += 10
+        fund_reasons.append("Price > 200-day MA — long-term uptrend intact")
+    else:
+        fund_score -= 10
+        fund_risks.append("Below 200-day MA — fundamental deterioration possible")
+    if not fund_reasons:
+        fund_reasons.append("Insufficient fundamental signals")
+    if not fund_risks:
+        fund_risks.append("Earnings risk unknown without calendar data")
+    fund_score = max(0, min(100, fund_score))
+    verdict = (
+        "Bullish" if fund_score >= 65 else "Bearish" if fund_score < 40 else "Neutral"
+    )
+    council.append(
+        {
+            "role": "Fundamental Analyst",
+            "verdict": verdict,
+            "score": fund_score,
+            "reasons": fund_reasons[:3],
+            "risks": fund_risks[:2],
+            "action_bias": (
+                "buy" if fund_score >= 65 else "sell" if fund_score < 35 else "watch"
+            ),
+        }
+    )
+
+    # 3) News / Macro Analyst
+    macro_score = 50
+    macro_reasons = []
+    macro_risks = []
+    if sma50[i] > sma200[i]:
+        macro_score += 10
+        macro_reasons.append("Broad trend positive — macro tailwind likely")
+    else:
+        macro_score -= 5
+        macro_risks.append("Macro headwinds — SMA50 < SMA200")
+    if atr_pct[i] < 0.03:
+        macro_score += 5
+        macro_reasons.append("Low volatility — calm macro environment")
+    else:
+        macro_score -= 5
+        macro_risks.append("Elevated volatility — macro uncertainty")
+    if not macro_reasons:
+        macro_reasons.append("No strong macro signal")
+    if not macro_risks:
+        macro_risks.append("Geopolitical / event risk always present")
+    macro_score = max(0, min(100, macro_score))
+    verdict = (
+        "Bullish" if macro_score >= 60 else "Bearish" if macro_score < 40 else "Mixed"
+    )
+    council.append(
+        {
+            "role": "News / Macro Analyst",
+            "verdict": verdict,
+            "score": macro_score,
+            "reasons": macro_reasons[:3],
+            "risks": macro_risks[:2],
+            "action_bias": (
+                "buy" if macro_score >= 60 else "sell" if macro_score < 35 else "watch"
+            ),
+        }
+    )
+
+    # 4) Flow / Options Analyst
+    flow_score = 50
+    flow_reasons = []
+    flow_risks = []
+    if vol_ratio[i] > 1.5:
+        flow_score += 15
+        flow_reasons.append(
+            f"Volume surge {vol_ratio[i]:.1f}x — institutional interest"
+        )
+    elif vol_ratio[i] > 1.2:
+        flow_score += 8
+        flow_reasons.append("Above-average volume — moderate flow signal")
+    elif vol_ratio[i] < 0.7:
+        flow_score -= 10
+        flow_risks.append("Very low volume — no conviction in flow")
+    if close[i] > close[i - 1] and vol_ratio[i] > 1.2:
+        flow_score += 10
+        flow_reasons.append("Up day + high volume — bullish flow")
+    if not flow_reasons:
+        flow_reasons.append("Flow data neutral")
+    if not flow_risks:
+        flow_risks.append("Volume may include hedging / rebalancing noise")
+    flow_score = max(0, min(100, flow_score))
+    verdict = (
+        "Bullish" if flow_score >= 65 else "Bearish" if flow_score < 35 else "Neutral"
+    )
+    council.append(
+        {
+            "role": "Flow / Options Analyst",
+            "verdict": verdict,
+            "score": flow_score,
+            "reasons": flow_reasons[:3],
+            "risks": flow_risks[:2],
+            "action_bias": (
+                "buy" if flow_score >= 65 else "sell" if flow_score < 35 else "watch"
+            ),
+        }
+    )
+
+    # 5) Risk Officer
+    risk_score = 50
+    risk_reasons = []
+    risk_risks = []
+    if atr_pct[i] < 0.025:
+        risk_score += 15
+        risk_reasons.append("Low ATR — manageable risk per trade")
+    elif atr_pct[i] > 0.05:
+        risk_score -= 20
+        risk_risks.append("High ATR — stop distance too wide for normal sizing")
+    # Drawdown proximity
+    if i > 20:
+        recent_high = max(close[max(0, i - 60) : i + 1])
+        dd_pct = (close[i] - recent_high) / recent_high
+        if dd_pct < -0.15:
+            risk_score -= 15
+            risk_risks.append(f"In drawdown ({dd_pct:.1%} from recent high)")
+        elif dd_pct > -0.05:
+            risk_score += 10
+            risk_reasons.append("Near highs — no drawdown concern")
+    if not risk_reasons:
+        risk_reasons.append("Risk within normal parameters")
+    if not risk_risks:
+        risk_risks.append("Black swan / gap risk always exists")
+    risk_score = max(0, min(100, risk_score))
+    verdict = (
+        "Approve" if risk_score >= 60 else "Cautious" if risk_score >= 40 else "Reject"
+    )
+    council.append(
+        {
+            "role": "Risk Officer",
+            "verdict": verdict,
+            "score": risk_score,
+            "reasons": risk_reasons[:3],
+            "risks": risk_risks[:2],
+            "action_bias": (
+                "approve"
+                if risk_score >= 60
+                else "reduce" if risk_score >= 40 else "reject"
+            ),
+        }
+    )
+
+    # 6) Portfolio Manager
+    pm_score = 50
+    pm_reasons = []
+    pm_risks = []
+    if regime_trending and tech_score >= 60:
+        pm_score += 15
+        pm_reasons.append("Regime + technicals aligned — tradeable setup")
+    if risk_score >= 55 and flow_score >= 50:
+        pm_score += 10
+        pm_reasons.append("Risk and flow both acceptable")
+    if tech_score < 45:
+        pm_score -= 10
+        pm_risks.append("Technicals weak — entry premature")
+    if not pm_reasons:
+        pm_reasons.append("Setup has merits but not high conviction")
+    if not pm_risks:
+        pm_risks.append("Opportunity cost — better setups may exist")
+    pm_score = max(0, min(100, pm_score))
+    verdict = "Buy" if pm_score >= 65 else "Watch" if pm_score >= 45 else "Pass"
+    council.append(
+        {
+            "role": "Portfolio Manager",
+            "verdict": verdict,
+            "score": pm_score,
+            "reasons": pm_reasons[:3],
+            "risks": pm_risks[:2],
+            "action_bias": (
+                "buy" if pm_score >= 65 else "watch" if pm_score >= 45 else "pass"
+            ),
+        }
+    )
+
+    # 7) Devil's Advocate
+    da_score = 50
+    da_reasons = []
+    if rsi[i] > 65:
+        da_score -= 10
+        da_reasons.append("RSI elevated — this may be a late entry")
+    if close[i] > sma20[i] * 1.05:
+        da_score -= 10
+        da_reasons.append("Price 5%+ above SMA20 — mean reversion risk")
+    if atr_pct[i] > 0.04:
+        da_score -= 10
+        da_reasons.append("Volatility too high — stop will be wide and costly")
+    if vol_ratio[i] < 0.8:
+        da_score -= 5
+        da_reasons.append("Volume declining — smart money may have already exited")
+    if not da_reasons:
+        da_reasons.append("No strong counter-argument found")
+    da_score = max(0, min(100, da_score))
+    council.append(
+        {
+            "role": "Devil's Advocate",
+            "verdict": (
+                "Challenge"
+                if da_score < 40
+                else "Minor concerns" if da_score < 55 else "No objection"
+            ),
+            "score": da_score,
+            "reasons": da_reasons[:3],
+            "risks": [],
+            "action_bias": (
+                "object" if da_score < 35 else "caution" if da_score < 50 else "ok"
+            ),
+        }
+    )
+
+    return council
+
+
+@app.post("/api/live/time-travel", tags=["live"])
+async def live_time_travel(
+    ticker: str = Query(..., description="Stock symbol"),
+    target_date: str = Query(
+        ..., description="Target date YYYY-MM-DD — what would the system suggest?"
+    ),
+    strategy: str = Query(
+        "all", description="momentum / breakout / swing / mean_reversion / all"
+    ),
+):
+    """
+    Phase 7: Time Travel — go back to any date and see what the system
+    would have recommended. Includes:
+    - Regime detection as of that date
+    - 4-layer confidence (Thesis / Timing / Execution / Data)
+    - 7-member Expert Council
+    - Strategy signals
+    - What actually happened after (forward returns)
+    """
+    import asyncio
+
+    import numpy as np
+
+    ticker = validate_ticker(ticker)
+
+    # Parse target date
+    try:
+        from datetime import datetime as _dt
+
+        tgt = _dt.strptime(target_date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(422, "Invalid date format. Use YYYY-MM-DD.")
+
+    # Fetch enough history: ~2 years before target + after for forward returns
+    mds = app.state.market_data
+    try:
+        hist = await mds.get_history(ticker, period="5y", interval="1d")
+    except Exception as e:
+        raise HTTPException(400, f"Failed to fetch data for {ticker}: {e}")
+
+    if hist is None or hist.empty or len(hist) < 50:
+        raise HTTPException(404, f"Insufficient data for {ticker}")
+
+    # Resolve columns
+    c_col = "Close" if "Close" in hist.columns else "close"
+    v_col = "Volume" if "Volume" in hist.columns else "volume"
+    h_col = "High" if "High" in hist.columns else "high"
+    l_col = "Low" if "Low" in hist.columns else "low"
+
+    all_dates = hist.index
+    # Find the target date index (nearest trading day)
+    target_idx = None
+    for j, d in enumerate(all_dates):
+        if d.date() >= tgt:
+            target_idx = j
+            break
+    if target_idx is None:
+        target_idx = len(all_dates) - 1
+
+    if target_idx < 200:
+        raise HTTPException(
+            400,
+            f"Not enough history before {target_date}. Need 200+ trading days of prior data.",
+        )
+
+    actual_date = str(all_dates[target_idx].date())
+
+    # Slice data up to target date (inclusive)
+    close_all = hist[c_col].values.astype(float)
+    volume_all = hist[v_col].values.astype(float)
+    close = close_all[: target_idx + 1]
+    volume = volume_all[: target_idx + 1]
+    n = len(close)
+    i = n - 1  # last bar = target date
+
+    # ── Indicators ──
+    sma20 = np.convolve(close, np.ones(20) / 20, mode="full")[:n]
+    sma50 = np.convolve(close, np.ones(50) / 50, mode="full")[:n]
+    sma200 = np.convolve(close, np.ones(200) / 200, mode="full")[:n]
+    deltas = np.diff(close, prepend=close[0])
+    gains = np.where(deltas > 0, deltas, 0)
+    losses = np.where(deltas < 0, -deltas, 0)
+    avg_gain = np.convolve(gains, np.ones(14) / 14, mode="full")[:n]
+    avg_loss_arr = np.convolve(losses, np.ones(14) / 14, mode="full")[:n]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        rs = np.where(avg_loss_arr > 0, avg_gain / avg_loss_arr, 100)
+    rsi = 100 - (100 / (1 + rs))
+    vol_ma = np.convolve(volume.astype(float), np.ones(20) / 20, mode="full")[:n]
+    vol_ratio = np.where(vol_ma > 0, volume / vol_ma, 1.0)
+    true_range = np.abs(np.diff(close, prepend=close[0]))
+    atr = np.convolve(true_range, np.ones(14) / 14, mode="full")[:n]
+    atr_pct = np.where(close > 0, atr / close, 0.02)
+
+    # ── Regime as of target date ──
+    trending = bool(close[i] > sma50[i] and sma50[i] > sma200[i])
+    if trending:
+        regime_label = "UPTREND"
+    elif close[i] < sma50[i] and sma50[i] < sma200[i]:
+        regime_label = "DOWNTREND"
+    else:
+        regime_label = "SIDEWAYS"
+    vol_regime = (
+        "LOW" if atr_pct[i] < 0.015 else "HIGH" if atr_pct[i] > 0.035 else "NORMAL"
+    )
+
+    # ── 4-Layer Confidence ──
+    confidence = _compute_4layer_confidence(
+        close,
+        sma20,
+        sma50,
+        sma200,
+        rsi,
+        atr_pct,
+        vol_ratio,
+        i,
+        volume,
+        trending,
+    )
+
+    # ── Expert Council ──
+    council = _run_expert_council(
+        close,
+        sma20,
+        sma50,
+        sma200,
+        rsi,
+        vol_ratio,
+        atr_pct,
+        i,
+        volume,
+        trending,
+    )
+
+    # ── Strategy signals as of target date ──
+    cur_atr = max(float(atr_pct[i]), 0.005)
+    strategy_signals = {}
+    strats_to_check = (
+        ["momentum", "breakout", "swing", "mean_reversion"]
+        if strategy == "all"
+        else [strategy]
+    )
+    for sid in strats_to_check:
+        enter = False
+        stop_pct = target_pct = 0.0
+        max_hold = 20
+        if sid == "momentum":
+            enter = bool(
+                close[i] > sma20[i] > sma50[i]
+                and rsi[i] > 50
+                and rsi[i] < 75
+                and vol_ratio[i] > 1.0
+            )
+            stop_pct = cur_atr * 2
+            target_pct = 0.15 if trending else 0.08
+            max_hold = 60 if trending else 25
+        elif sid == "breakout":
+            hi20 = float(np.max(close[max(0, i - 20) : i]))
+            enter = bool(close[i] > hi20 and vol_ratio[i] > 1.3 and close[i] > sma20[i])
+            stop_pct = cur_atr * 1.5
+            target_pct = 0.12 if trending else 0.07
+            max_hold = 45 if trending else 20
+        elif sid == "mean_reversion":
+            enter = bool(
+                rsi[i] < 30 and close[i] < sma20[i] * 0.97 and vol_ratio[i] > 1.0
+            )
+            stop_pct = cur_atr * 1.5
+            target_pct = cur_atr * 3
+            max_hold = 20
+        elif sid == "swing":
+            enter = bool(
+                rsi[i] < 45
+                and close[i] > sma50[i] * 0.98
+                and (close[i] > sma20[i] or close[i - 1] < sma20[i - 1])
+                and close[i] > close[i - 1]
+            )
+            stop_pct = cur_atr * 2
+            target_pct = 0.10 if trending else 0.06
+            max_hold = 40 if trending else 15
+        entry_price = round(float(close[i]), 2)
+        strategy_signals[sid] = {
+            "triggered": enter,
+            "entry_price": entry_price,
+            "stop_loss": round(entry_price * (1 - stop_pct), 2),
+            "target": round(entry_price * (1 + target_pct), 2),
+            "stop_pct": round(stop_pct * 100, 2),
+            "target_pct": round(target_pct * 100, 2),
+            "max_hold_days": max_hold,
+        }
+
+    # ── Final action (arbiter) ──
+    active_signals = [s for s, v in strategy_signals.items() if v["triggered"]]
+    avg_council = round(sum(c["score"] for c in council) / len(council), 1)
+
+    if confidence["grade"] == "D" or avg_council < 40:
+        final_action = "NO TRADE"
+        final_reason = "Confidence too low or expert council bearish"
+    elif not active_signals:
+        final_action = "WATCH"
+        final_reason = "No strategy triggered — monitor for setup"
+    elif confidence["grade"] == "A":
+        final_action = "BUY — FULL SIZE"
+        final_reason = f"High confidence + {', '.join(active_signals)} triggered"
+    elif confidence["grade"] == "B":
+        final_action = "BUY — NORMAL SIZE"
+        final_reason = f"Good confidence + {', '.join(active_signals)} triggered"
+    elif confidence["grade"] == "C":
+        final_action = "BUY — PILOT SIZE"
+        final_reason = f"Moderate confidence — small position only"
+    else:
+        final_action = "WATCH"
+        final_reason = "Mixed signals"
+
+    # ── Forward returns (what actually happened) ──
+    forward = {}
+    for days in [1, 5, 10, 20, 60]:
+        fwd_idx = target_idx + days
+        if fwd_idx < len(close_all):
+            fwd_return = (
+                (close_all[fwd_idx] - close_all[target_idx])
+                / close_all[target_idx]
+                * 100
+            )
+            forward[f"{days}d"] = {
+                "return_pct": round(float(fwd_return), 2),
+                "price": round(float(close_all[fwd_idx]), 2),
+                "date": (
+                    str(all_dates[fwd_idx].date()) if fwd_idx < len(all_dates) else None
+                ),
+            }
+
+    # ── Price context ──
+    pct_from_high = round(
+        (close[i] - max(close[max(0, i - 252) :]))
+        / max(close[max(0, i - 252) :])
+        * 100,
+        2,
+    )
+    pct_from_low = round(
+        (close[i] - min(close[max(0, i - 252) :]))
+        / min(close[max(0, i - 252) :])
+        * 100,
+        2,
+    )
+
+    return _sanitize_for_json(
+        {
+            "ticker": ticker,
+            "target_date": actual_date,
+            "price": round(float(close[i]), 2),
+            "regime": {
+                "label": regime_label,
+                "trending": trending,
+                "volatility": vol_regime,
+                "rsi": round(float(rsi[i]), 1),
+                "atr_pct": round(float(atr_pct[i]) * 100, 2),
+                "vol_ratio": round(float(vol_ratio[i]), 2),
+                "sma20": round(float(sma20[i]), 2),
+                "sma50": round(float(sma50[i]), 2),
+                "sma200": round(float(sma200[i]), 2),
+            },
+            "confidence": confidence,
+            "expert_council": council,
+            "council_avg": avg_council,
+            "strategy_signals": strategy_signals,
+            "final_action": final_action,
+            "final_reason": final_reason,
+            "forward_returns": forward,
+            "price_context": {
+                "pct_from_52w_high": pct_from_high,
+                "pct_from_52w_low": pct_from_low,
+            },
+            "bars_before": target_idx,
+            "bars_after": len(close_all) - target_idx - 1,
+            "trust": {
+                "mode": "TIME_TRAVEL",
+                "source": "yfinance_historical",
+                "note": "Historical replay — shows what system would have suggested on this date. NOT a live recommendation.",
+                "data_points": n,
+                "as_of": datetime.utcnow().isoformat() + "Z",
+            },
+        }
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════
 # v7 PRODUCT SURFACE PAGES — Regime Screener · Portfolio Brief
 # Compare Overlay · Performance Lab · Options Lab
 # ═══════════════════════════════════════════════════════════════════

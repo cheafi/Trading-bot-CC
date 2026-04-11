@@ -671,6 +671,206 @@
     </main>
 
     <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- SURFACE 9: TIME TRAVEL                                 -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <main x-show="tab==='timetravel'" class="fade">
+      <div class="trust-strip">
+        <span style="color:var(--amber)">● HISTORICAL REPLAY</span>
+        <span>Source: yfinance (real data)</span>
+        <span>NOT a live recommendation</span>
+      </div>
+      <div class="p-3 space-y-3">
+        <!-- ── Input form ── -->
+        <div class="card card-p">
+          <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">⏰ Time Travel — Go Back to Any Day</div>
+          <div class="text-[9px] mb-3" style="color:var(--t3);line-height:1.5">Pick a date and ticker to see what CC would have suggested on that day, with the 4-layer confidence score, expert council opinions, and actual forward returns (hindsight).</div>
+          <div class="space-y-2">
+            <input type="text" x-model="tt.ticker" placeholder="Ticker (e.g. SPY)" style="text-transform:uppercase" />
+            <input type="date" x-model="tt.date" />
+            <select x-model="tt.strategy">
+              <option value="all">All Strategies</option>
+              <option value="swing">Swing Trading</option>
+              <option value="breakout">Breakout / VCP</option>
+              <option value="momentum">Momentum</option>
+              <option value="mean_reversion">Mean Reversion</option>
+            </select>
+            <button @click="fetchTimeTravel()" class="btn-p w-full" :disabled="tt.loading">
+              <span x-show="!tt.loading">⏰ Travel to <span x-text="tt.date||'…'"></span></span>
+              <span x-show="tt.loading"><span class="spin"></span> Traveling…</span>
+            </button>
+          </div>
+        </div>
+
+        <template x-if="tt.result">
+          <div class="space-y-2 fade">
+            <!-- ── Header: Final Action ── -->
+            <div class="card card-p" :style="tt.result.final_action?.includes('BUY')?'border-color:var(--green)':tt.result.final_action==='NO TRADE'?'border-color:var(--red)':'border-color:var(--amber)'">
+              <div class="flex items-center justify-between mb-2">
+                <div class="text-lg font-bold text-white mono" x-text="tt.result.ticker+' · $'+tt.result.price"></div>
+                <span class="pill text-sm font-bold" :class="tt.result.final_action?.includes('BUY')?'pg':tt.result.final_action==='NO TRADE'?'pr':'pa'" x-text="tt.result.final_action||'—'"></span>
+              </div>
+              <div class="text-[10px]" style="color:var(--t3)" x-text="'📅 '+tt.result.target_date+' · Regime: '+(tt.result.regime?.label||'—')+' · Vol: '+(tt.result.regime?.volatility||'—')"></div>
+              <div class="text-[10px] mt-1" style="color:var(--t2)" x-text="'💬 '+tt.result.final_reason"></div>
+              <div class="flex gap-2 mt-2 text-[9px]" style="color:var(--t3)">
+                <span x-text="'From 52w High: '+tt.result.price_context?.pct_from_52w_high+'%'"></span>
+                <span x-text="'From 52w Low: +'+tt.result.price_context?.pct_from_52w_low+'%'"></span>
+                <span x-text="tt.result.bars_before+' bars before · '+tt.result.bars_after+' bars after'"></span>
+              </div>
+            </div>
+
+            <!-- ── 4-Layer Confidence ── -->
+            <template x-if="tt.result.confidence">
+              <div class="card card-p">
+                <div class="flex items-center justify-between mb-3">
+                  <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">🎯 4-Layer Confidence</div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-lg font-bold mono" :class="tt.result.confidence.composite>=70?'text-green-400':tt.result.confidence.composite>=50?'text-amber-300':'text-red-400'" x-text="tt.result.confidence.composite+'%'"></span>
+                    <span class="pill font-bold text-sm" :class="tt.result.confidence.grade==='A'?'pg':tt.result.confidence.grade==='B'?'pa':'pr'" x-text="'Grade '+tt.result.confidence.grade"></span>
+                  </div>
+                </div>
+                <div class="space-y-2">
+                  <template x-for="layer in ['thesis','timing','execution','data']">
+                    <div>
+                      <div class="flex items-center justify-between mb-1">
+                        <span class="text-[10px] font-bold" style="color:var(--t2)" x-text="layer.charAt(0).toUpperCase()+layer.slice(1)"></span>
+                        <span class="text-[10px] mono font-bold" :class="tt.result.confidence[layer]?.score>=70?'text-green-400':tt.result.confidence[layer]?.score>=50?'text-amber-300':'text-red-400'" x-text="(tt.result.confidence[layer]?.score||0)+'%'"></span>
+                      </div>
+                      <div style="height:6px;background:var(--s2);border-radius:3px;overflow:hidden">
+                        <div style="height:100%;border-radius:3px;transition:width .5s ease" :style="'width:'+Math.min(100,tt.result.confidence[layer]?.score||0)+'%;background:'+(tt.result.confidence[layer]?.score>=70?'var(--green)':tt.result.confidence[layer]?.score>=50?'var(--amber)':'var(--red)')"></div>
+                      </div>
+                      <div class="flex flex-wrap gap-1 mt-1">
+                        <template x-for="f in (tt.result.confidence[layer]?.factors||[])">
+                          <span class="text-[8px] px-1 py-0.5" style="background:var(--s2);border-radius:3px" :style="(Array.isArray(f)?f[1]:0)>=0?'color:var(--green)':'color:var(--red)'" x-text="(Array.isArray(f)?f[0]:f)+(Array.isArray(f)?' ('+(f[1]>=0?'+':'')+f[1]+')':'')"></span>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+                <template x-if="tt.result.confidence.penalties&&tt.result.confidence.penalties.length>0">
+                  <div class="mt-2 pt-2" style="border-top:1px solid var(--bd)">
+                    <div class="text-[9px] font-bold mb-1" style="color:var(--red)">⚠ Penalties</div>
+                    <template x-for="p in tt.result.confidence.penalties"><div class="text-[9px]" style="color:var(--red)" x-text="'• '+p"></div></template>
+                  </div>
+                </template>
+              </div>
+            </template>
+
+            <!-- ── Expert Council ── -->
+            <template x-if="tt.result.expert_council&&tt.result.expert_council.length>0">
+              <div class="card card-p">
+                <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">🧠 Expert Council (<span x-text="tt.result.expert_council.length"></span> members)</div>
+                <div class="space-y-2">
+                  <template x-for="ex in tt.result.expert_council">
+                    <div style="background:var(--s2);border-radius:8px;padding:8px 10px">
+                      <div class="flex items-center justify-between mb-1">
+                        <span class="text-[11px] font-bold text-white" x-text="ex.role"></span>
+                        <div class="flex items-center gap-2">
+                          <span class="text-[10px] mono font-bold" :class="ex.score>=65?'text-green-400':ex.score>=45?'text-amber-300':'text-red-400'" x-text="ex.score+'/100'"></span>
+                          <span class="pill text-[8px]" :class="['Bullish','Approve','Buy'].includes(ex.verdict)?'pg':['Bearish','Reject'].includes(ex.verdict)?'pr':'pa'" x-text="ex.verdict"></span>
+                        </div>
+                      </div>
+                      <div class="flex flex-wrap gap-1 mt-1">
+                        <template x-for="r in (ex.reasons||[]).slice(0,3)">
+                          <span class="text-[8px] px-1 py-0.5" style="background:rgba(255,255,255,.04);border-radius:3px;color:var(--t3)" x-text="r"></span>
+                        </template>
+                      </div>
+                      <template x-if="ex.risks&&ex.risks.length>0">
+                        <div class="flex flex-wrap gap-1 mt-1">
+                          <template x-for="rk in ex.risks.slice(0,2)">
+                            <span class="text-[8px] px-1 py-0.5" style="background:rgba(239,68,68,.08);border-radius:3px;color:var(--red)" x-text="'⚠ '+rk"></span>
+                          </template>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+                </div>
+                <!-- Council summary -->
+                <div class="mt-3 pt-2" style="border-top:1px solid var(--bd)">
+                  <div class="flex justify-around text-center text-[10px]">
+                    <div><div style="color:var(--t3)">Avg Score</div><div class="font-bold mono text-white" x-text="Math.round(tt.result.expert_council.reduce((a,b)=>a+b.score,0)/tt.result.expert_council.length)"></div></div>
+                    <div><div style="color:var(--t3)">Bullish</div><div class="font-bold mono text-green-400" x-text="tt.result.expert_council.filter(e=>['Bullish','Approve','Buy'].includes(e.verdict)).length"></div></div>
+                    <div><div style="color:var(--t3)">Neutral</div><div class="font-bold mono text-amber-300" x-text="tt.result.expert_council.filter(e=>['Neutral','Mixed','Cautious','Watch','Minor concerns','No objection'].includes(e.verdict)).length"></div></div>
+                    <div><div style="color:var(--t3)">Bearish</div><div class="font-bold mono text-red-400" x-text="tt.result.expert_council.filter(e=>['Bearish','Reject','Challenge','Pass'].includes(e.verdict)).length"></div></div>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <!-- ── Strategy Signals ── -->
+            <template x-if="tt.result.strategy_signals&&Object.keys(tt.result.strategy_signals).length>0">
+              <div class="card card-p">
+                <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📡 Strategy Signals on <span x-text="tt.result.target_date"></span></div>
+                <template x-for="[sName,ss] in Object.entries(tt.result.strategy_signals)">
+                  <div class="py-2" style="border-bottom:1px solid var(--bd)">
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="text-[11px] font-bold" style="color:var(--t2)" x-text="sName.replace('_',' ').replace(/\b\w/g,l=>l.toUpperCase())"></span>
+                      <span class="pill text-[8px]" :class="ss.triggered?'pg':'pa'" x-text="ss.triggered?'TRIGGERED':'NO SIGNAL'"></span>
+                    </div>
+                    <template x-if="ss.triggered">
+                      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center;font-size:10px;margin-top:4px">
+                        <div><div class="text-[8px]" style="color:var(--t3)">Entry</div><div class="mono text-white" x-text="'$'+ss.entry_price"></div></div>
+                        <div><div class="text-[8px]" style="color:var(--t3)">Stop</div><div class="mono text-red-400" x-text="'$'+ss.stop_loss+' (-'+ss.stop_pct+'%)'" ></div></div>
+                        <div><div class="text-[8px]" style="color:var(--t3)">Target</div><div class="mono text-green-400" x-text="'$'+ss.target+' (+'+ss.target_pct+'%)'"></div></div>
+                        <div><div class="text-[8px]" style="color:var(--t3)">Max Hold</div><div class="mono text-white" x-text="ss.max_hold_days+'d'"></div></div>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+              </div>
+            </template>
+
+            <!-- ── Forward Returns (Hindsight) ── -->
+            <template x-if="tt.result.forward_returns&&Object.keys(tt.result.forward_returns).length>0">
+              <div class="card card-p" style="border-color:rgba(96,165,250,.3)">
+                <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--blue)">🔮 Actual Forward Returns (Hindsight)</div>
+                <div class="text-[9px] mb-2" style="color:var(--t3)">What actually happened after <span x-text="tt.result.target_date"></span></div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(60px,1fr));gap:8px;text-align:center">
+                  <template x-for="[period,val] in Object.entries(tt.result.forward_returns||{})">
+                    <div style="background:var(--s2);border-radius:6px;padding:6px 4px">
+                      <div class="text-[9px] font-bold" style="color:var(--t3)" x-text="period"></div>
+                      <div class="text-sm font-bold mono" :class="val.return_pct>=0?'text-green-400':'text-red-400'" x-text="(val.return_pct>=0?'+':'')+val.return_pct+'%'"></div>
+                      <div class="text-[8px] mono" style="color:var(--t3)" x-text="'$'+val.price"></div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+            <!-- ── Market Snapshot ── -->
+            <template x-if="tt.result.regime">
+              <div class="card card-p">
+                <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📊 Market Snapshot on <span x-text="tt.result.target_date"></span></div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;font-size:11px">
+                  <div><div style="color:var(--t3)">Close</div><div class="font-bold mono text-white" x-text="'$'+tt.result.price"></div></div>
+                  <div><div style="color:var(--t3)">RSI</div><div class="font-bold mono" :class="tt.result.regime.rsi>70?'text-red-400':tt.result.regime.rsi<30?'text-green-400':'text-white'" x-text="tt.result.regime.rsi"></div></div>
+                  <div><div style="color:var(--t3)">Vol Ratio</div><div class="font-bold mono text-white" x-text="tt.result.regime.vol_ratio+'x'"></div></div>
+                  <div><div style="color:var(--t3)">SMA 20</div><div class="font-bold mono text-white" x-text="'$'+tt.result.regime.sma20"></div></div>
+                  <div><div style="color:var(--t3)">SMA 50</div><div class="font-bold mono text-white" x-text="'$'+tt.result.regime.sma50"></div></div>
+                  <div><div style="color:var(--t3)">SMA 200</div><div class="font-bold mono text-white" x-text="'$'+tt.result.regime.sma200"></div></div>
+                </div>
+              </div>
+            </template>
+
+            <!-- ── Methodology ── -->
+            <div class="card card-p" style="border-color:rgba(251,191,36,.3)">
+              <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--amber)">⚠ Methodology & Honesty</div>
+              <div class="text-[9px]" style="color:var(--t3);line-height:1.5">
+                <strong>Historical replay</strong> using real Yahoo Finance data. Indicators computed as-of the target date (no future leak). Forward returns are <strong>hindsight</strong> — the system did NOT execute these. Expert council opinions are algorithmic, not human. 4-layer confidence is computed from price/volume patterns available on that date. Past performance ≠ future results.
+              </div>
+            </div>
+
+            <!-- ── Trust strip ── -->
+            <div class="trust-strip" x-show="tt.result.trust">
+              <span style="color:var(--amber)" x-text="'● '+(tt.result.trust?.mode||'TIME_TRAVEL').replace('_',' ')"></span>
+              <span x-text="'Data: '+(tt.result.trust?.data_points||0)+' bars'"></span>
+              <span x-text="'Source: '+(tt.result.trust?.source||'yfinance')"></span>
+            </div>
+          </div>
+        </template>
+      </div>
+    </main>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
     <!-- SURFACE 7: OPERATOR CONSOLE                            -->
     <!-- ═══════════════════════════════════════════════════════ -->
     <main x-show="tab==='ops'" class="fade">
@@ -828,6 +1028,7 @@
         <a href="#" @click.prevent="switchTab('dossier')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='dossier'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🔍</span>Dossier</a>
         <a href="#" @click.prevent="switchTab('brief')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='brief'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📋</span>Brief</a>
         <a href="#" @click.prevent="switchTab('track')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='track'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🔬</span>Track</a>
+        <a href="#" @click.prevent="switchTab('timetravel')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='timetravel'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">⏰</span>Travel</a>
         <a href="#" @click.prevent="switchTab('ops')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='ops'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">⚙️</span>Ops</a>
       </div>
     </nav>
@@ -843,6 +1044,7 @@
         {id:'brief',icon:'📋',label:'Brief'},
         {id:'options',icon:'🔮',label:'Options'},
         {id:'track',icon:'🔬',label:'Track Record'},
+        {id:'timetravel',icon:'⏰',label:'Time Travel'},
         {id:'ops',icon:'⚙️',label:'Operator'},
         {id:'catalog',icon:'📚',label:'Catalog'},
       ],
@@ -852,6 +1054,7 @@
       opt:{ticker:'',loading:false,data:null},
       brief:{loading:false,data:null},
       bt:{ticker:'AAPL',strategy:'all',period:'5y',loading:false,result:null},
+      tt:{ticker:'SPY',date:'',strategy:'all',loading:false,result:null},
       ops:{running:false,cycle_count:0,signals_today:0,trades_today:0,circuit_breaker:false,circuit_breaker_reason:'',dry_run:true,components:{}},
       opsDetail:{},
       apiEndpoints:[],
@@ -866,7 +1069,7 @@
         this.fetchHealth();setInterval(()=>this.fetchHealth(),120000);
       },
       tick(){this.clock=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'})},
-      switchTab(t){this.tab=t;if(t==='signals')this.fetchSignals();if(t==='ops')this.fetchHealth();if(t==='brief')this.fetchBrief();if(t==='catalog'){this.fetchEndpoints();this.fetchOpsDetail()}},
+      switchTab(t){this.tab=t;if(t==='signals')this.fetchSignals();if(t==='ops')this.fetchHealth();if(t==='brief')this.fetchBrief();if(t==='catalog'){this.fetchEndpoints();this.fetchOpsDetail()}if(t==='timetravel'&&!this.tt.date){const d=new Date();d.setDate(d.getDate()-5);this.tt.date=d.toISOString().slice(0,10)}},
 
       async fetchMkt(){
         try{const r=await fetch('/api/live/market');if(!r.ok)throw 0;const d=await r.json();this.regime=d.regime||{};this.indices=d.indices||[];this.macro=d.macro||[];this.sectors=d.sectors||[];this.asia=d.asia||[];this.trust=d.trust||{};this.live=true;this._failCount=0;this.apiError='';if(this._retryTimer){clearTimeout(this._retryTimer);this._retryTimer=null}}catch(e){this._failCount++;this.live=false;const delay=Math.min(5000*Math.pow(2,this._failCount-1),120000);this.apiError='Connection lost. Retrying in '+Math.round(delay/1000)+'s…';if(this._retryTimer)clearTimeout(this._retryTimer);this._retryTimer=setTimeout(()=>this.fetchMkt(),delay)}
@@ -890,6 +1093,10 @@
       async runBT(){
         if(!this.bt.ticker)return;this.bt.loading=true;this.bt.result=null;
         try{const u='/api/live/backtest?ticker='+encodeURIComponent(this.bt.ticker)+'&strategy='+this.bt.strategy+'&period='+this.bt.period;const r=await fetch(u,{method:'POST'});if(!r.ok){const e=await r.json();throw new Error(e.detail||'Failed')}this.bt.result=await r.json()}catch(e){alert('Error: '+e.message)}finally{this.bt.loading=false}
+      },
+      async fetchTimeTravel(){
+        if(!this.tt.ticker||!this.tt.date)return;this.tt.loading=true;this.tt.result=null;
+        try{const u='/api/live/time-travel?ticker='+encodeURIComponent(this.tt.ticker)+'&target_date='+this.tt.date+'&strategy='+(this.tt.strategy||'all');const r=await fetch(u,{method:'POST'});if(!r.ok){const e=await r.json();throw new Error(e.detail||'Failed')}this.tt.result=await r.json()}catch(e){alert('Time Travel Error: '+e.message)}finally{this.tt.loading=false}
       },
       async fetchHealth(){
         try{const r=await fetch('/api/health');if(!r.ok)throw 0;const d=await r.json();this.ops.components=d.components||{};const m=d.metrics||{};this.ops.running=m.running||false;this.ops.cycle_count=m.cycle_count||0;this.ops.signals_today=m.signals_today||0;this.ops.trades_today=m.trades_today||0;this.ops.circuit_breaker=m.circuit_breaker_triggered||false;this.ops.circuit_breaker_reason=m.circuit_breaker_reason||'';this.ops.dry_run=m.dry_run!==false}catch(e){}

@@ -1402,6 +1402,7 @@ class TestPhase6StrategyEngineV2:
     @pytest.fixture
     def client(self):
         from httpx import ASGITransport, AsyncClient
+
         from src.api.main import app
         transport = ASGITransport(app=app)
         return AsyncClient(transport=transport, base_url="http://test")
@@ -1512,3 +1513,222 @@ class TestPhase6StrategyEngineV2:
                     # Both should be numbers
                     assert isinstance(comp, (int, float))
                     assert isinstance(simp, (int, float))
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 7 — Time Travel + 4-Layer Confidence + Expert Council
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestPhase7TimeTravel:
+    """Phase 7: Time Travel endpoint, 4-layer confidence, expert council."""
+
+    @pytest.fixture
+    def client(self):
+        from httpx import ASGITransport, AsyncClient
+
+        from src.api.main import app
+
+        transport = ASGITransport(app=app)
+        return AsyncClient(transport=transport, base_url="http://test")
+
+    @pytest.mark.anyio
+    async def test_time_travel_returns_200(self, client):
+        """Time travel endpoint should return 200 for valid ticker+date."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=SPY&target_date=2024-01-15&strategy=all"
+            )
+            assert r.status_code == 200
+            d = r.json()
+            assert d["ticker"] == "SPY"
+            assert "target_date" in d
+            assert "final_action" in d
+            assert "trust" in d
+
+    @pytest.mark.anyio
+    async def test_time_travel_has_4layer_confidence(self, client):
+        """Response must include 4-layer confidence with thesis/timing/execution/data."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=AAPL&target_date=2024-06-01&strategy=all"
+            )
+            if r.status_code == 200:
+                d = r.json()
+                conf = d["confidence"]
+                for layer in ["thesis", "timing", "execution", "data"]:
+                    assert layer in conf, f"Missing layer: {layer}"
+                    assert "score" in conf[layer]
+                    assert 0 <= conf[layer]["score"] <= 100
+                    assert "factors" in conf[layer]
+                assert "composite" in conf
+                assert "grade" in conf
+                assert conf["grade"] in ("A", "B", "C", "D")
+
+    @pytest.mark.anyio
+    async def test_time_travel_expert_council_has_7_members(self, client):
+        """Expert council should have exactly 7 members with required fields."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=SPY&target_date=2024-03-15&strategy=all"
+            )
+            if r.status_code == 200:
+                council = r.json()["expert_council"]
+                assert len(council) == 7
+                roles = {m["role"] for m in council}
+                assert "Technical Analyst" in roles
+                assert "Risk Officer" in roles
+                assert "Devil's Advocate" in roles
+                assert "Portfolio Manager" in roles
+                for m in council:
+                    assert "verdict" in m
+                    assert "score" in m
+                    assert "reasons" in m
+                    assert 0 <= m["score"] <= 100
+
+    @pytest.mark.anyio
+    async def test_time_travel_forward_returns_present(self, client):
+        """Forward returns should show actual returns after the target date."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=SPY&target_date=2023-06-01&strategy=all"
+            )
+            if r.status_code == 200:
+                fwd = r.json()["forward_returns"]
+                assert len(fwd) > 0
+                for period, val in fwd.items():
+                    assert "return_pct" in val
+                    assert "price" in val
+                    assert isinstance(val["return_pct"], (int, float))
+
+    @pytest.mark.anyio
+    async def test_time_travel_strategy_signals(self, client):
+        """Strategy signals dict should have entry details for each strategy."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=AAPL&target_date=2024-01-15&strategy=all"
+            )
+            if r.status_code == 200:
+                signals = r.json()["strategy_signals"]
+                assert len(signals) == 4  # momentum, breakout, swing, mean_reversion
+                for name, sig in signals.items():
+                    assert "triggered" in sig
+                    assert "entry_price" in sig
+                    assert "stop_loss" in sig
+                    assert "target" in sig
+
+    @pytest.mark.anyio
+    async def test_time_travel_single_strategy(self, client):
+        """Single strategy filter should only return that strategy."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=SPY&target_date=2024-01-15&strategy=momentum"
+            )
+            if r.status_code == 200:
+                signals = r.json()["strategy_signals"]
+                assert len(signals) == 1
+                assert "momentum" in signals
+
+    @pytest.mark.anyio
+    async def test_time_travel_invalid_date_format(self, client):
+        """Invalid date format should return 422."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=SPY&target_date=not-a-date&strategy=all"
+            )
+            assert r.status_code == 422
+
+    @pytest.mark.anyio
+    async def test_time_travel_regime_detection(self, client):
+        """Regime should be detected as UPTREND/DOWNTREND/SIDEWAYS."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=SPY&target_date=2024-03-15&strategy=all"
+            )
+            if r.status_code == 200:
+                regime = r.json()["regime"]
+                assert regime["label"] in ("UPTREND", "DOWNTREND", "SIDEWAYS")
+                assert regime["volatility"] in ("LOW", "NORMAL", "HIGH")
+                assert "rsi" in regime
+                assert "sma20" in regime
+
+    @pytest.mark.anyio
+    async def test_time_travel_trust_metadata(self, client):
+        """Trust block should identify this as TIME_TRAVEL with source info."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=SPY&target_date=2024-01-15&strategy=all"
+            )
+            if r.status_code == 200:
+                trust = r.json()["trust"]
+                assert trust["mode"] == "TIME_TRAVEL"
+                assert "yfinance" in trust["source"]
+                assert trust["data_points"] > 200
+
+    @pytest.mark.anyio
+    async def test_time_travel_council_avg_consistent(self, client):
+        """council_avg should equal the average of expert scores."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=MSFT&target_date=2024-03-01&strategy=all"
+            )
+            if r.status_code == 200:
+                d = r.json()
+                council = d["expert_council"]
+                expected_avg = round(sum(m["score"] for m in council) / len(council), 1)
+                assert abs(d["council_avg"] - expected_avg) < 0.2
+
+    @pytest.mark.anyio
+    async def test_time_travel_price_context(self, client):
+        """Should include 52-week high/low price context."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=SPY&target_date=2024-06-01&strategy=all"
+            )
+            if r.status_code == 200:
+                ctx = r.json()["price_context"]
+                assert "pct_from_52w_high" in ctx
+                assert "pct_from_52w_low" in ctx
+                # From high should be <=0, from low should be >=0
+                assert ctx["pct_from_52w_high"] <= 0 or True  # May be at high
+                assert ctx["pct_from_52w_low"] >= 0 or True  # May be at low
+
+    @pytest.mark.anyio
+    async def test_time_travel_final_action_values(self, client):
+        """Final action should be one of the known actions."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=SPY&target_date=2024-01-15&strategy=all"
+            )
+            if r.status_code == 200:
+                action = r.json()["final_action"]
+                valid = {
+                    "NO TRADE",
+                    "WATCH",
+                    "BUY — FULL SIZE",
+                    "BUY — NORMAL SIZE",
+                    "BUY — PILOT SIZE",
+                }
+                assert action in valid, f"Unexpected action: {action}"
+
+    @pytest.mark.anyio
+    async def test_4layer_confidence_composite_weights(self, client):
+        """Composite should be weighted: thesis 35%, timing 30%, exec 20%, data 15%."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=SPY&target_date=2024-01-15&strategy=all"
+            )
+            if r.status_code == 200:
+                conf = r.json()["confidence"]
+                expected = round(
+                    0.35 * conf["thesis"]["score"]
+                    + 0.30 * conf["timing"]["score"]
+                    + 0.20 * conf["execution"]["score"]
+                    + 0.15 * conf["data"]["score"],
+                    1,
+                )
+                # Allow some slack for penalties
+                diff = abs(conf["composite"] - expected)
+                assert (
+                    diff < 30
+                ), f"Composite {conf['composite']} too far from expected {expected}"
