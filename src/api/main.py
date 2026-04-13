@@ -2437,12 +2437,370 @@ async def get_regime_state():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ═══════════════════════════════════════════════════════════════════
+# Ticker Dictionary — autocomplete + company names (EN + 中文)
+# ═══════════════════════════════════════════════════════════════════
+_TICKER_DB: list[dict] = [
+    # ── Mega-cap Tech ──
+    {"s": "AAPL", "n": "Apple Inc.", "z": "蘋果"},
+    {"s": "MSFT", "n": "Microsoft Corp.", "z": "微軟"},
+    {"s": "GOOGL", "n": "Alphabet (Google)", "z": "谷歌"},
+    {"s": "GOOG", "n": "Alphabet Class C", "z": "谷歌C"},
+    {"s": "AMZN", "n": "Amazon.com Inc.", "z": "亞馬遜"},
+    {"s": "NVDA", "n": "NVIDIA Corp.", "z": "英偉達"},
+    {"s": "META", "n": "Meta Platforms", "z": "臉書/Meta"},
+    {"s": "TSLA", "n": "Tesla Inc.", "z": "特斯拉"},
+    {"s": "TSM", "n": "Taiwan Semiconductor", "z": "台積電"},
+    {"s": "AVGO", "n": "Broadcom Inc.", "z": "博通"},
+    {"s": "ORCL", "n": "Oracle Corp.", "z": "甲骨文"},
+    {"s": "CRM", "n": "Salesforce Inc.", "z": "賽富時"},
+    {"s": "ADBE", "n": "Adobe Inc.", "z": "奧多比"},
+    {"s": "AMD", "n": "Advanced Micro Devices", "z": "超微半導體"},
+    {"s": "INTC", "n": "Intel Corp.", "z": "英特爾"},
+    {"s": "CSCO", "n": "Cisco Systems", "z": "思科"},
+    {"s": "NFLX", "n": "Netflix Inc.", "z": "網飛"},
+    {"s": "QCOM", "n": "Qualcomm Inc.", "z": "高通"},
+    {"s": "INTU", "n": "Intuit Inc.", "z": "財捷"},
+    {"s": "AMAT", "n": "Applied Materials", "z": "應用材料"},
+    {"s": "MU", "n": "Micron Technology", "z": "美光"},
+    {"s": "NOW", "n": "ServiceNow Inc.", "z": "ServiceNow"},
+    {"s": "SNOW", "n": "Snowflake Inc.", "z": "雪花"},
+    {"s": "SHOP", "n": "Shopify Inc.", "z": "Shopify"},
+    {"s": "SQ", "n": "Block Inc.", "z": "Block"},
+    {"s": "PLTR", "n": "Palantir Technologies", "z": "Palantir"},
+    {"s": "UBER", "n": "Uber Technologies", "z": "優步"},
+    {"s": "ABNB", "n": "Airbnb Inc.", "z": "愛彼迎"},
+    {"s": "COIN", "n": "Coinbase Global", "z": "Coinbase"},
+    {"s": "MRVL", "n": "Marvell Technology", "z": "邁威爾"},
+    {"s": "PANW", "n": "Palo Alto Networks", "z": "派拓網絡"},
+    {"s": "CRWD", "n": "CrowdStrike Holdings", "z": "CrowdStrike"},
+    # ── Finance ──
+    {"s": "JPM", "n": "JPMorgan Chase", "z": "摩根大通"},
+    {"s": "V", "n": "Visa Inc.", "z": "維薩"},
+    {"s": "MA", "n": "Mastercard Inc.", "z": "萬事達"},
+    {"s": "BAC", "n": "Bank of America", "z": "美國銀行"},
+    {"s": "WFC", "n": "Wells Fargo", "z": "富國銀行"},
+    {"s": "GS", "n": "Goldman Sachs", "z": "高盛"},
+    {"s": "MS", "n": "Morgan Stanley", "z": "摩根士丹利"},
+    {"s": "BRK.B", "n": "Berkshire Hathaway B", "z": "巴郡B"},
+    {"s": "AXP", "n": "American Express", "z": "美國運通"},
+    {"s": "SCHW", "n": "Charles Schwab", "z": "嘉信理財"},
+    {"s": "C", "n": "Citigroup Inc.", "z": "花旗"},
+    {"s": "PYPL", "n": "PayPal Holdings", "z": "貝寶"},
+    # ── Healthcare ──
+    {"s": "UNH", "n": "UnitedHealth Group", "z": "聯合健康"},
+    {"s": "JNJ", "n": "Johnson & Johnson", "z": "強生"},
+    {"s": "LLY", "n": "Eli Lilly & Co.", "z": "禮來"},
+    {"s": "PFE", "n": "Pfizer Inc.", "z": "輝瑞"},
+    {"s": "ABBV", "n": "AbbVie Inc.", "z": "艾伯維"},
+    {"s": "MRK", "n": "Merck & Co.", "z": "默克"},
+    {"s": "TMO", "n": "Thermo Fisher Scientific", "z": "賽默飛"},
+    {"s": "NVO", "n": "Novo Nordisk", "z": "諾和諾德"},
+    # ── Consumer ──
+    {"s": "COST", "n": "Costco Wholesale", "z": "好市多"},
+    {"s": "WMT", "n": "Walmart Inc.", "z": "沃爾瑪"},
+    {"s": "HD", "n": "Home Depot", "z": "家得寶"},
+    {"s": "PG", "n": "Procter & Gamble", "z": "寶潔"},
+    {"s": "KO", "n": "Coca-Cola Co.", "z": "可口可樂"},
+    {"s": "PEP", "n": "PepsiCo Inc.", "z": "百事"},
+    {"s": "MCD", "n": "McDonald's Corp.", "z": "麥當勞"},
+    {"s": "NKE", "n": "Nike Inc.", "z": "耐克"},
+    {"s": "SBUX", "n": "Starbucks Corp.", "z": "星巴克"},
+    {"s": "DIS", "n": "Walt Disney Co.", "z": "迪士尼"},
+    {"s": "TGT", "n": "Target Corp.", "z": "塔吉特"},
+    {"s": "LOW", "n": "Lowe's Companies", "z": "勞氏"},
+    # ── Industrial / Energy ──
+    {"s": "XOM", "n": "Exxon Mobil", "z": "埃克森美孚"},
+    {"s": "CVX", "n": "Chevron Corp.", "z": "雪佛龍"},
+    {"s": "BA", "n": "Boeing Co.", "z": "波音"},
+    {"s": "CAT", "n": "Caterpillar Inc.", "z": "卡特彼勒"},
+    {"s": "UPS", "n": "United Parcel Service", "z": "聯合包裹"},
+    {"s": "GE", "n": "GE Aerospace", "z": "通用電氣"},
+    {"s": "RTX", "n": "RTX Corp.", "z": "雷神"},
+    {"s": "HON", "n": "Honeywell International", "z": "霍尼韋爾"},
+    {"s": "DE", "n": "Deere & Co.", "z": "迪爾"},
+    {"s": "LMT", "n": "Lockheed Martin", "z": "洛歇馬丁"},
+    # ── Telecom / Media ──
+    {"s": "T", "n": "AT&T Inc.", "z": "AT&T"},
+    {"s": "VZ", "n": "Verizon Communications", "z": "威瑞森"},
+    {"s": "CMCSA", "n": "Comcast Corp.", "z": "康卡斯特"},
+    {"s": "TMUS", "n": "T-Mobile US", "z": "T-Mobile"},
+    # ── ETFs ──
+    {"s": "SPY", "n": "S&P 500 ETF", "z": "標普500"},
+    {"s": "QQQ", "n": "Nasdaq-100 ETF", "z": "納指100"},
+    {"s": "IWM", "n": "Russell 2000 ETF", "z": "羅素2000"},
+    {"s": "DIA", "n": "Dow Jones ETF", "z": "道指"},
+    {"s": "VOO", "n": "Vanguard S&P 500", "z": "先鋒標普500"},
+    {"s": "VTI", "n": "Vanguard Total Market", "z": "先鋒全市場"},
+    {"s": "ARKK", "n": "ARK Innovation ETF", "z": "方舟創新"},
+    {"s": "XLF", "n": "Financial Select SPDR", "z": "金融板塊"},
+    {"s": "XLK", "n": "Technology Select SPDR", "z": "科技板塊"},
+    {"s": "XLE", "n": "Energy Select SPDR", "z": "能源板塊"},
+    {"s": "XLV", "n": "Health Care Select SPDR", "z": "醫療板塊"},
+    {"s": "GLD", "n": "SPDR Gold Shares", "z": "黃金"},
+    {"s": "SLV", "n": "iShares Silver Trust", "z": "白銀"},
+    {"s": "TLT", "n": "20+ Year Treasury Bond", "z": "長期國債"},
+    {"s": "HYG", "n": "High Yield Corporate Bond", "z": "高收益債"},
+    {"s": "EEM", "n": "Emerging Markets ETF", "z": "新興市場"},
+    {"s": "FXI", "n": "China Large-Cap ETF", "z": "中國大盤"},
+    {"s": "KWEB", "n": "China Internet ETF", "z": "中概互聯網"},
+    {"s": "EWJ", "n": "Japan ETF", "z": "日本"},
+    {"s": "EWZ", "n": "Brazil ETF", "z": "巴西"},
+    {"s": "VNQ", "n": "Real Estate ETF", "z": "房地產"},
+    {"s": "SOXX", "n": "Semiconductor ETF", "z": "半導體"},
+    # ── Crypto-adjacent ──
+    {"s": "MSTR", "n": "MicroStrategy", "z": "微策略"},
+    {"s": "MARA", "n": "Marathon Digital", "z": "Marathon"},
+    {"s": "RIOT", "n": "Riot Platforms", "z": "Riot"},
+    # ── China ADR ──
+    {"s": "BABA", "n": "Alibaba Group", "z": "阿里巴巴"},
+    {"s": "JD", "n": "JD.com Inc.", "z": "京東"},
+    {"s": "PDD", "n": "PDD Holdings (Pinduoduo)", "z": "拼多多"},
+    {"s": "BIDU", "n": "Baidu Inc.", "z": "百度"},
+    {"s": "NIO", "n": "NIO Inc.", "z": "蔚來"},
+    {"s": "XPEV", "n": "XPeng Inc.", "z": "小鵬"},
+    {"s": "LI", "n": "Li Auto Inc.", "z": "理想汽車"},
+    {"s": "BILI", "n": "Bilibili Inc.", "z": "嗶哩嗶哩"},
+    {"s": "TME", "n": "Tencent Music", "z": "騰訊音樂"},
+    {"s": "ZH", "n": "Zhihu Inc.", "z": "知乎"},
+    # ── Airlines / Travel ──
+    {"s": "AAL", "n": "American Airlines", "z": "美國航空"},
+    {"s": "DAL", "n": "Delta Air Lines", "z": "達美航空"},
+    {"s": "UAL", "n": "United Airlines", "z": "聯合航空"},
+    {"s": "LUV", "n": "Southwest Airlines", "z": "西南航空"},
+    {"s": "MAR", "n": "Marriott International", "z": "萬豪"},
+    {"s": "BKNG", "n": "Booking Holdings", "z": "Booking"},
+    # ── Other popular ──
+    {"s": "F", "n": "Ford Motor Co.", "z": "福特"},
+    {"s": "GM", "n": "General Motors", "z": "通用汽車"},
+    {"s": "RIVN", "n": "Rivian Automotive", "z": "Rivian"},
+    {"s": "LCID", "n": "Lucid Group", "z": "Lucid"},
+    {"s": "SOFI", "n": "SoFi Technologies", "z": "SoFi"},
+    {"s": "HOOD", "n": "Robinhood Markets", "z": "Robinhood"},
+    {"s": "SNAP", "n": "Snap Inc.", "z": "Snapchat"},
+    {"s": "PINS", "n": "Pinterest Inc.", "z": "Pinterest"},
+    {"s": "ROKU", "n": "Roku Inc.", "z": "Roku"},
+    {"s": "ZM", "n": "Zoom Video", "z": "Zoom"},
+    {"s": "DKNG", "n": "DraftKings Inc.", "z": "DraftKings"},
+    {"s": "PATH", "n": "UiPath Inc.", "z": "UiPath"},
+    {"s": "AI", "n": "C3.ai Inc.", "z": "C3.ai"},
+    {"s": "SMCI", "n": "Super Micro Computer", "z": "超微電腦"},
+    {"s": "ARM", "n": "Arm Holdings", "z": "安謀"},
+    {"s": "DELL", "n": "Dell Technologies", "z": "戴爾"},
+    {"s": "HPQ", "n": "HP Inc.", "z": "惠普"},
+    {"s": "IBM", "n": "IBM Corp.", "z": "IBM"},
+]
+# Build lookup index
+_TICKER_INDEX = {t["s"].upper(): t for t in _TICKER_DB}
+
+
+@app.get("/api/tickers", tags=["reference"])
+async def search_tickers(q: str = Query("", description="Search query")):
+    """Autocomplete — search tickers by symbol or company name (EN/中文)."""
+    q = q.strip().upper()
+    if not q:
+        return {"results": [], "count": 0}
+    matches = []
+    for t in _TICKER_DB:
+        if (
+            t["s"].upper().startswith(q)
+            or q in t["n"].upper()
+            or q in t.get("z", "")
+        ):
+            matches.append(t)
+        if len(matches) >= 12:
+            break
+    return {"results": matches, "count": len(matches)}
+
+
+# ── Live Signal Scanner (on-demand when engine cache is empty) ──
+_SCAN_WATCHLIST = [
+    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA",
+    "JPM", "V", "UNH", "HD", "PG", "JNJ", "MA",
+    "SPY", "QQQ", "IWM", "DIA",
+    "AMD", "CRM", "NFLX", "COST", "AVGO", "LLY",
+]
+_scan_cache: dict = {"recs": [], "scores": {}, "ts": 0.0}
+_SCAN_CACHE_TTL = 300  # 5 minutes
+
+
+async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
+    """Scan watchlist for live signals using current market data.
+
+    Returns (recommendations, strategy_scores) — same format as engine cache.
+    Uses 6mo history + indicators to check all 4 strategies for each ticker.
+    Results are cached for 5 minutes.
+    """
+    import time as _t
+
+    import numpy as np
+
+    now = _t.time()
+    if _scan_cache["recs"] and (now - _scan_cache["ts"]) < _SCAN_CACHE_TTL:
+        return _scan_cache["recs"][:limit], _scan_cache["scores"]
+
+    mds = app.state.market_data
+    recs = []
+    strat_wins = {"momentum": 0, "breakout": 0, "swing": 0, "mean_reversion": 0}
+    strat_total = {"momentum": 0, "breakout": 0, "swing": 0, "mean_reversion": 0}
+
+    for ticker in _SCAN_WATCHLIST:
+        try:
+            hist = await mds.get_history(ticker, period="1y", interval="1d")
+            if hist is None or hist.empty or len(hist) < 60:
+                continue
+
+            c_col = "Close" if "Close" in hist.columns else "close"
+            v_col = "Volume" if "Volume" in hist.columns else "volume"
+            close = hist[c_col].values.astype(float)
+            volume = hist[v_col].values.astype(float)
+            n = len(close)
+            i = n - 1  # latest bar
+
+            if n < 60:
+                continue
+
+            # ── Compute indicators ──
+            sma20 = np.convolve(close, np.ones(20) / 20, mode="full")[:n]
+            sma50 = np.convolve(close, np.ones(50) / 50, mode="full")[:n]
+            sma200 = np.convolve(
+                close, np.ones(min(200, n)) / min(200, n), mode="full"
+            )[:n]
+
+            deltas = np.diff(close, prepend=close[0])
+            gains = np.where(deltas > 0, deltas, 0)
+            losses = np.where(deltas < 0, -deltas, 0)
+            avg_gain = np.convolve(gains, np.ones(14) / 14, mode="full")[:n]
+            avg_loss = np.convolve(losses, np.ones(14) / 14, mode="full")[:n]
+            with np.errstate(divide="ignore", invalid="ignore"):
+                rs = np.where(avg_loss > 0, avg_gain / avg_loss, 100)
+            rsi = 100 - (100 / (1 + rs))
+
+            vol_ma = np.convolve(volume, np.ones(20) / 20, mode="full")[:n]
+            vol_ratio = np.where(vol_ma > 0, volume / vol_ma, 1.0)
+
+            true_range = np.abs(np.diff(close, prepend=close[0]))
+            atr = np.convolve(true_range, np.ones(14) / 14, mode="full")[:n]
+            atr_pct = np.where(close > 0, atr / close, 0.02)
+            cur_atr = max(float(atr_pct[i]), 0.005)
+
+            trending = bool(close[i] > sma50[i] and sma50[i] > sma200[i])
+
+            # ── Check each strategy ──
+            strategies = {
+                "momentum": bool(
+                    close[i] > sma20[i] > sma50[i]
+                    and rsi[i] > 50
+                    and rsi[i] < 75
+                    and vol_ratio[i] > 1.0
+                ),
+                "breakout": bool(
+                    close[i] > float(np.max(close[max(0, i - 20):i]))
+                    and vol_ratio[i] > 1.3
+                    and close[i] > sma20[i]
+                ) if i > 20 else False,
+                "swing": bool(
+                    rsi[i] < 45
+                    and close[i] > sma50[i] * 0.98
+                    and (close[i] > sma20[i] or close[i - 1] < sma20[i - 1])
+                    and close[i] > close[i - 1]
+                ) if i > 1 else False,
+                "mean_reversion": bool(
+                    rsi[i] < 30
+                    and close[i] < sma20[i] * 0.97
+                    and vol_ratio[i] > 1.0
+                ),
+            }
+
+            # Strategy params
+            strat_params = {
+                "momentum": {
+                    "stop": cur_atr * 2,
+                    "target": 0.15 if trending else 0.08,
+                },
+                "breakout": {
+                    "stop": cur_atr * 1.5,
+                    "target": 0.12 if trending else 0.07,
+                },
+                "swing": {
+                    "stop": cur_atr * 2,
+                    "target": 0.10 if trending else 0.06,
+                },
+                "mean_reversion": {
+                    "stop": cur_atr * 1.5,
+                    "target": cur_atr * 3,
+                },
+            }
+
+            for strat_name, triggered in strategies.items():
+                strat_total[strat_name] += 1
+                if not triggered:
+                    continue
+                strat_wins[strat_name] += 1
+
+                params = strat_params[strat_name]
+                entry_price = round(float(close[i]), 2)
+                stop_price = round(entry_price * (1 - params["stop"]), 2)
+                target_price = round(entry_price * (1 + params["target"]), 2)
+                risk = entry_price - stop_price
+                reward = target_price - entry_price
+                rr = round(reward / risk, 1) if risk > 0 else 0
+
+                # Confidence from 4-layer
+                conf = _compute_4layer_confidence(
+                    close, sma20, sma50, sma200, rsi, atr_pct,
+                    vol_ratio, i, volume, trending,
+                )
+                score = round(conf["composite"] / 10, 1)  # 0-10 scale
+
+                recs.append({
+                    "ticker": ticker,
+                    "symbol": ticker,
+                    "score": score,
+                    "confidence": conf["composite"],
+                    "grade": conf["grade"],
+                    "direction": "LONG",
+                    "strategy": strat_name,
+                    "entry_price": entry_price,
+                    "target_price": target_price,
+                    "stop_price": stop_price,
+                    "risk_reward": rr,
+                    "regime": "UPTREND" if trending else "SIDEWAYS",
+                    "rsi": round(float(rsi[i]), 1),
+                    "vol_ratio": round(float(vol_ratio[i]), 2),
+                    "atr_pct": round(float(atr_pct[i]) * 100, 2),
+                })
+        except Exception as exc:
+            logger.debug(f"[Scanner] {ticker} skip: {exc}")
+            continue
+
+    # Sort by score desc
+    recs.sort(key=lambda r: r["score"], reverse=True)
+
+    # Strategy scores (0-10 scale)
+    scores = {}
+    for s in strat_wins:
+        total = strat_total[s]
+        wins = strat_wins[s]
+        scores[s] = round((wins / total * 10) if total > 0 else 5.0, 1)
+
+    _scan_cache["recs"] = recs
+    _scan_cache["scores"] = scores
+    _scan_cache["ts"] = now
+    logger.info(
+        f"[Scanner] scanned {len(_SCAN_WATCHLIST)} tickers → "
+        f"{len(recs)} signals"
+    )
+    return recs[:limit], scores
+
+
 @app.get("/api/recommendations", tags=["decision-layer"])
 async def get_recommendations(limit: int = Query(10, ge=1, le=50)):
-    """Get ranked trade recommendations from the singleton engine cache.
+    """Get ranked trade recommendations.
 
-    Reads the single shared AutoTradingEngine state — no ad-hoc
-    ContextAssembler / RegimeRouter instantiation.
+    Priority: engine cache → live scanner fallback.
+    The live scanner checks 24 popular tickers across 4 strategies
+    using real-time market data when the engine is idle.
     """
     try:
         engine = _get_engine()
@@ -2474,7 +2832,45 @@ async def get_recommendations(limit: int = Query(10, ge=1, le=50)):
         else:
             mode = "OFFLINE"
 
-        return {
+        # ── Fallback: live scanner when engine has no signals ──
+        source = "engine_cache"
+        scan_meta = None
+        if not cached_recs:
+            try:
+                scanned, scan_scores = await _scan_live_signals(limit)
+                tickers_checked = len(_SCAN_WATCHLIST)
+                scan_meta = {
+                    "tickers_checked": tickers_checked,
+                    "signals_found": len(scanned),
+                    "strategies": ["momentum", "breakout", "swing", "mean_reversion"],
+                    "cache_ttl_sec": _SCAN_CACHE_TTL,
+                }
+                if scanned:
+                    cached_recs = scanned
+                    strategy_scores = scan_scores
+                    source = "live_scanner"
+                    mode = "SCAN"
+                else:
+                    source = "live_scanner"
+                    mode = "SCAN"
+                    if not no_trade_reason:
+                        no_trade_reason = (
+                            f"✅ Scanner ran successfully — checked "
+                            f"{tickers_checked} tickers × 4 strategies. "
+                            f"No setups met entry criteria right now. "
+                            f"This is normal — it means the system is being "
+                            f"selective. Check back in a few minutes."
+                        )
+            except Exception as exc:
+                logger.warning(f"[Scanner] fallback failed: {exc}")
+                source = "scanner_error"
+                no_trade_reason = (
+                    f"⚠ Scanner encountered an error: {exc}. "
+                    "This is a system issue, not a market condition. "
+                    "Try refreshing in a moment."
+                )
+
+        return _sanitize_for_json({
             "status": "ok",
             "mode": mode,
             "regime": regime_dict,
@@ -2482,9 +2878,10 @@ async def get_recommendations(limit: int = Query(10, ge=1, le=50)):
             "count": len(cached_recs),
             "strategy_scores": strategy_scores,
             "no_trade_reason": no_trade_reason,
-            "source": "engine_cache",
+            "source": source,
+            "scan_meta": scan_meta,
             "as_of": datetime.utcnow().isoformat() + "Z",
-        }
+        })
     except Exception as e:
         logger.error(f"Recommendations endpoint error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

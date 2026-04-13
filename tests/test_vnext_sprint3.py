@@ -1732,3 +1732,237 @@ class TestPhase7TimeTravel:
                 assert (
                     diff < 30
                 ), f"Composite {conf['composite']} too far from expected {expected}"
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 7b — Live Signal Scanner
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestPhase7bLiveScanner:
+    """Phase 7b: Live scanner fallback for /api/recommendations."""
+
+    @pytest.fixture
+    def client(self):
+        from httpx import ASGITransport, AsyncClient
+
+        from src.api.main import app
+
+        transport = ASGITransport(app=app)
+        return AsyncClient(transport=transport, base_url="http://test")
+
+    @pytest.mark.anyio
+    async def test_recommendations_returns_200(self, client):
+        """Recommendations endpoint should always return 200."""
+        async with client as c:
+            r = await c.get("/api/recommendations")
+            assert r.status_code == 200
+            d = r.json()
+            assert d["status"] == "ok"
+            assert "recommendations" in d
+            assert "mode" in d
+            assert "source" in d
+
+    @pytest.mark.anyio
+    async def test_scanner_fallback_produces_signals(self, client):
+        """When engine is idle, scanner should produce signals."""
+        async with client as c:
+            r = await c.get("/api/recommendations")
+            assert r.status_code == 200
+            d = r.json()
+            # Scanner should find at least some signals
+            # across 24 popular tickers and 4 strategies
+            if d["source"] == "live_scanner":
+                assert d["mode"] == "SCAN"
+                assert d["count"] > 0
+                # Check signal structure
+                rec = d["recommendations"][0]
+                assert "ticker" in rec
+                assert "score" in rec
+                assert "strategy" in rec
+                assert "entry_price" in rec
+                assert "target_price" in rec
+                assert "stop_price" in rec
+                assert "risk_reward" in rec
+                assert "grade" in rec
+
+    @pytest.mark.anyio
+    async def test_scanner_strategy_scores(self, client):
+        """Scanner should return strategy health scores."""
+        async with client as c:
+            r = await c.get("/api/recommendations")
+            if r.status_code == 200:
+                d = r.json()
+                scores = d.get("strategy_scores", {})
+                if d["source"] == "live_scanner":
+                    assert len(scores) > 0
+                    for name, val in scores.items():
+                        assert isinstance(val, (int, float))
+                        assert 0 <= val <= 10
+
+    @pytest.mark.anyio
+    async def test_scanner_signals_sorted_by_score(self, client):
+        """Scanner signals should be sorted by score descending."""
+        async with client as c:
+            r = await c.get("/api/recommendations")
+            if r.status_code == 200:
+                recs = r.json()["recommendations"]
+                if len(recs) >= 2:
+                    scores = [r["score"] for r in recs]
+                    assert scores == sorted(scores, reverse=True)
+
+    @pytest.mark.anyio
+    async def test_scanner_respects_limit(self, client):
+        """Limit parameter should cap the number of results."""
+        async with client as c:
+            r = await c.get("/api/recommendations?limit=3")
+            if r.status_code == 200:
+                recs = r.json()["recommendations"]
+                assert len(recs) <= 3
+
+    @pytest.mark.anyio
+    async def test_scanner_risk_reward_positive(self, client):
+        """All scanner signals should have positive risk:reward."""
+        async with client as c:
+            r = await c.get("/api/recommendations")
+            if r.status_code == 200:
+                for rec in r.json()["recommendations"]:
+                    assert rec["risk_reward"] >= 0
+                    assert rec["target_price"] > rec["entry_price"]
+                    assert rec["stop_price"] < rec["entry_price"]
+
+    @pytest.mark.anyio
+    async def test_scanner_no_trade_message(self, client):
+        """When no signals found, should have explanatory message."""
+        async with client as c:
+            r = await c.get("/api/recommendations")
+            if r.status_code == 200:
+                d = r.json()
+                if d["count"] == 0:
+                    assert d["no_trade_reason"] is not None
+                    assert len(d["no_trade_reason"]) > 10
+
+    @pytest.mark.anyio
+    async def test_scanner_includes_scan_meta(self, client):
+        """Scanner response should include scan_meta with details."""
+        async with client as c:
+            r = await c.get("/api/recommendations")
+            if r.status_code == 200:
+                d = r.json()
+                if d["source"] in ("live_scanner", "scanner_error"):
+                    meta = d.get("scan_meta")
+                    assert meta is not None
+                    assert meta["tickers_checked"] >= 20
+                    assert "signals_found" in meta
+                    assert meta["strategies"] == [
+                        "momentum", "breakout",
+                        "swing", "mean_reversion",
+                    ]
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 8 — Ticker Autocomplete
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestPhase8TickerAutocomplete:
+    """Phase 8: Ticker autocomplete search with company names."""
+
+    @pytest.fixture
+    def client(self):
+        from httpx import ASGITransport, AsyncClient
+
+        from src.api.main import app
+
+        transport = ASGITransport(app=app)
+        return AsyncClient(transport=transport, base_url="http://test")
+
+    @pytest.mark.anyio
+    async def test_ticker_search_aapl(self, client):
+        """Searching 'AAPL' should return Apple."""
+        async with client as c:
+            r = await c.get("/api/tickers?q=AAPL")
+            assert r.status_code == 200
+            d = r.json()
+            assert d["count"] >= 1
+            assert d["results"][0]["s"] == "AAPL"
+            assert "Apple" in d["results"][0]["n"]
+            assert d["results"][0]["z"] == "蘋果"
+
+    @pytest.mark.anyio
+    async def test_ticker_search_prefix_a(self, client):
+        """Searching 'A' should return multiple matches."""
+        async with client as c:
+            r = await c.get("/api/tickers?q=A")
+            assert r.status_code == 200
+            d = r.json()
+            assert d["count"] >= 3
+            symbols = [t["s"] for t in d["results"]]
+            assert "AAPL" in symbols
+
+    @pytest.mark.anyio
+    async def test_ticker_search_by_company_name(self, client):
+        """Searching 'APPLE' should find AAPL."""
+        async with client as c:
+            r = await c.get("/api/tickers?q=APPLE")
+            assert r.status_code == 200
+            symbols = [t["s"] for t in r.json()["results"]]
+            assert "AAPL" in symbols
+
+    @pytest.mark.anyio
+    async def test_ticker_search_chinese(self, client):
+        """Searching in Chinese should work."""
+        async with client as c:
+            r = await c.get("/api/tickers?q=蘋果")
+            assert r.status_code == 200
+            # Chinese search is case-sensitive match
+            if r.json()["count"] > 0:
+                symbols = [t["s"] for t in r.json()["results"]]
+                assert "AAPL" in symbols
+
+    @pytest.mark.anyio
+    async def test_ticker_search_empty_query(self, client):
+        """Empty query should return empty results."""
+        async with client as c:
+            r = await c.get("/api/tickers?q=")
+            assert r.status_code == 200
+            assert r.json()["count"] == 0
+
+    @pytest.mark.anyio
+    async def test_ticker_search_max_12(self, client):
+        """Results should be capped at 12."""
+        async with client as c:
+            r = await c.get("/api/tickers?q=S")
+            assert r.status_code == 200
+            assert r.json()["count"] <= 12
+
+    @pytest.mark.anyio
+    async def test_ticker_search_has_all_fields(self, client):
+        """Each result should have s (symbol), n (name), z (chinese)."""
+        async with client as c:
+            r = await c.get("/api/tickers?q=SPY")
+            assert r.status_code == 200
+            for item in r.json()["results"]:
+                assert "s" in item
+                assert "n" in item
+                assert "z" in item
+
+    @pytest.mark.anyio
+    async def test_ticker_search_etf(self, client):
+        """ETFs like SPY, QQQ should be findable."""
+        async with client as c:
+            r = await c.get("/api/tickers?q=SPY")
+            assert r.status_code == 200
+            symbols = [t["s"] for t in r.json()["results"]]
+            assert "SPY" in symbols
+
+    @pytest.mark.anyio
+    async def test_ticker_search_china_adr(self, client):
+        """China ADR stocks should be searchable."""
+        async with client as c:
+            r = await c.get("/api/tickers?q=BABA")
+            assert r.status_code == 200
+            d = r.json()
+            assert d["count"] >= 1
+            assert d["results"][0]["s"] == "BABA"
+            assert "阿里巴巴" in d["results"][0]["z"]

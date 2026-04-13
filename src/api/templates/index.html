@@ -34,6 +34,15 @@
       input[type="date"]{-webkit-appearance:none;appearance:none;min-height:40px;cursor:pointer}
       input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.6;cursor:pointer}
       input:focus,select:focus{outline:none;border-color:var(--blue)}
+      .ac-wrap{position:relative}
+      .ac-drop{position:absolute;top:100%;left:0;right:0;z-index:100;background:var(--s1);border:1px solid var(--bd2);border-radius:8px;max-height:240px;overflow-y:auto;margin-top:2px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+      .ac-drop:empty{display:none}
+      .ac-item{display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--bd);transition:.1s}
+      .ac-item:hover,.ac-item.ac-sel{background:var(--s2)}
+      .ac-item:last-child{border-bottom:none}
+      .ac-sym{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--green);min-width:48px}
+      .ac-name{font-size:11px;color:var(--t2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .ac-zh{font-size:10px;color:var(--t3);white-space:nowrap}
       .btn-p{background:var(--green);color:#000;font-weight:700;border:none;border-radius:6px;padding:8px 16px;font-size:12px;cursor:pointer}
       .btn-p:disabled{opacity:.5;cursor:not-allowed}
       .btn-s{background:var(--s2);color:var(--t2);font-weight:600;border:1px solid var(--bd);border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer}
@@ -189,10 +198,10 @@
     <!-- ═══════════════════════════════════════════════════════ -->
     <main x-show="tab==='signals'" class="fade">
       <div class="trust-strip">
-        <span :style="sig.mode==='PAPER'?'color:var(--blue)':sig.mode==='OFFLINE'?'color:var(--red)':'color:var(--green)'" x-text="'● '+(sig.mode||'—')"></span>
-        <span x-text="'Source: '+(sig.source||'engine_cache')"></span>
+        <span :style="sig.mode==='SCAN'?'color:var(--green)':sig.mode==='PAPER'?'color:var(--blue)':sig.mode==='OFFLINE'?'color:var(--red)':'color:var(--green)'" x-text="'● '+(sig.mode||'—')"></span>
+        <span x-text="'Source: '+(sig.source||'engine_cache').replace('_',' ')"></span>
         <span x-text="'As-of: '+(sig.as_of?sig.as_of.slice(0,19):'—')"></span>
-        <span x-text="'Count: '+(sig.recs.length||0)"></span>
+        <span x-text="sig.recs.length+' signals'"></span>
       </div>
       <div style="padding:8px 12px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <span class="pill" :class="regime.label==='RISK_ON'?'pg':regime.label==='RISK_OFF'?'pr':'pa'" x-text="(regime.label||'—').replace('_',' ')"></span>
@@ -202,18 +211,46 @@
       </div>
       <div style="padding:0 12px;overflow-x:auto">
         <template x-if="sig.recs.length===0">
-          <div class="card card-p" style="text-align:center;color:var(--t3);font-size:12px;padding:30px">No active signals. Engine may be idle or market closed.</div>
+          <div class="card card-p" style="padding:20px">
+            <!-- Status icon -->
+            <div style="text-align:center;margin-bottom:12px">
+              <div style="font-size:28px" x-text="sig.source==='scanner_error'?'⚠️':sig.mode==='SCAN'?'✅':'🔍'"></div>
+              <div class="text-sm font-bold mt-1" :style="sig.source==='scanner_error'?'color:var(--red)':'color:var(--t1)'" x-text="sig.source==='scanner_error'?'Scanner Error':sig.mode==='SCAN'?'Scanner Completed':'Loading…'"></div>
+            </div>
+            <!-- Explanation -->
+            <div style="background:var(--s2);border-radius:8px;padding:12px;margin-bottom:12px">
+              <div class="text-[11px]" style="color:var(--t2);line-height:1.6" x-text="sig.no_trade_reason||'Scanning 24 tickers × 4 strategies…'"></div>
+            </div>
+            <!-- Scan meta if available -->
+            <template x-if="sig.scan_meta">
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;margin-bottom:12px">
+                <div class="card card-p" style="padding:8px"><div class="kpi-val mono text-white text-sm" x-text="sig.scan_meta.tickers_checked||0"></div><div class="kpi-lbl">Tickers Checked</div></div>
+                <div class="card card-p" style="padding:8px"><div class="kpi-val mono text-sm" :class="sig.scan_meta.signals_found>0?'text-green-400':'text-amber-300'" x-text="sig.scan_meta.signals_found||0"></div><div class="kpi-lbl">Signals Found</div></div>
+                <div class="card card-p" style="padding:8px"><div class="kpi-val mono text-white text-sm">4</div><div class="kpi-lbl">Strategies</div></div>
+              </div>
+            </template>
+            <!-- What this means -->
+            <div class="text-[9px]" style="color:var(--t3);line-height:1.6;padding:0 4px">
+              <strong style="color:var(--t2)">What does this mean?</strong><br>
+              <span x-show="sig.mode==='SCAN'&&sig.source!=='scanner_error'">The live scanner successfully ran and found no stocks meeting entry criteria. This is <strong style="color:var(--green)">normal and expected</strong> — it means the system is being selective. Good setups are rare by design. The scanner refreshes automatically every 5 minutes.</span>
+              <span x-show="sig.source==='scanner_error'">The scanner encountered a technical issue. This is a <strong style="color:var(--red)">system problem</strong>, not a market condition. Try refreshing below.</span>
+              <span x-show="sig.mode!=='SCAN'">Waiting for initial scan to complete. This may take a moment on first load.</span>
+            </div>
+            <div style="text-align:center;margin-top:12px">
+              <button @click="fetchSignals()" class="btn-s text-[10px]">🔄 Refresh Now</button>
+            </div>
+          </div>
         </template>
         <template x-if="sig.recs.length>0">
           <div class="card" style="overflow-x:auto">
             <table class="tbl">
-              <thead><tr><th>Ticker</th><th>Score</th><th>Dir</th><th>Strategy</th><th>Entry</th><th>Target</th><th>Stop</th><th>R:R</th></tr></thead>
+              <thead><tr><th>Ticker</th><th>Score</th><th>Grade</th><th>Strategy</th><th>Entry</th><th>Target</th><th>Stop</th><th>R:R</th></tr></thead>
               <tbody>
                 <template x-for="r in sig.recs">
                   <tr @click="openDossier(r.ticker||r.symbol)" style="cursor:pointer">
                     <td class="mono font-bold text-white" x-text="r.ticker||r.symbol||'—'"></td>
-                    <td class="mono font-bold" :class="(r.score||r.confidence||0)>=7?'text-green-400':(r.score||r.confidence||0)>=5?'text-amber-300':'text-red-400'" x-text="r.score!=null?Number(r.score).toFixed(1):r.confidence!=null?Number(r.confidence).toFixed(1):'—'"></td>
-                    <td><span class="pill" :class="(r.direction||'').toLowerCase()==='long'?'pg':'pr'" x-text="r.direction||'—'"></span></td>
+                    <td class="mono font-bold" :class="(r.score||0)>=7?'text-green-400':(r.score||0)>=5?'text-amber-300':'text-red-400'" x-text="r.score!=null?Number(r.score).toFixed(1):'—'"></td>
+                    <td><span class="pill" :class="r.grade==='A'?'pg':r.grade==='B'?'pa':'pr'" x-text="r.grade||'—'"></span></td>
                     <td class="text-[10px]" style="color:var(--t2)" x-text="(r.strategy||'—').replace('_',' ')"></td>
                     <td class="mono" x-text="r.entry_price?'$'+Number(r.entry_price).toFixed(2):'—'"></td>
                     <td class="mono text-green-400" x-text="r.target_price?'$'+Number(r.target_price).toFixed(2):'—'"></td>
@@ -258,7 +295,18 @@
       </div>
       <div class="p-3">
         <div class="flex gap-2 mb-3">
-          <input type="text" x-model="dos.ticker" @keydown.enter="fetchDossier()" placeholder="Enter ticker (e.g. AAPL)" style="text-transform:uppercase" />
+          <div class="ac-wrap flex-1">
+            <input type="text" x-model="dos.ticker" @input="acInput(dos.ticker,'dos')" @keydown="acKey($event)" @keydown.enter="if(ac.selIdx<0){ac.show=false;fetchDossier()}" @blur="setTimeout(()=>ac.show=false,200)" @focus="if(dos.ticker)acInput(dos.ticker,'dos')" placeholder="Search ticker or company… (e.g. AAPL, 蘋果)" style="text-transform:uppercase" autocomplete="off" />
+            <div class="ac-drop" x-show="ac.show&&ac.target==='dos'">
+              <template x-for="(item,idx) in ac.results">
+                <div class="ac-item" :class="idx===ac.selIdx?'ac-sel':''" @mousedown.prevent="acSelect(item)">
+                  <span class="ac-sym" x-text="item.s"></span>
+                  <span class="ac-name" x-text="item.n"></span>
+                  <span class="ac-zh" x-text="item.z"></span>
+                </div>
+              </template>
+            </div>
+          </div>
           <button @click="fetchDossier()" class="btn-p flex-shrink-0 px-4" :disabled="dos.loading"><span x-show="!dos.loading">Research</span><span x-show="dos.loading"><span class="spin"></span></span></button>
         </div>
       </div>
@@ -474,7 +522,18 @@
       </div>
       <div class="p-3">
         <div class="flex gap-2 mb-3">
-          <input type="text" x-model="opt.ticker" placeholder="Ticker for options research" style="text-transform:uppercase" />
+          <div class="ac-wrap">
+            <input type="text" x-model="opt.ticker" @input="acInput(opt.ticker,'opt')" @keydown="acKey($event)" @keydown.enter="if(ac.selIdx<0){ac.show=false;fetchOptions()}" @blur="setTimeout(()=>ac.show=false,200)" @focus="if(opt.ticker)acInput(opt.ticker,'opt')" placeholder="Search ticker or company…" style="text-transform:uppercase" autocomplete="off" />
+            <div class="ac-drop" x-show="ac.show&&ac.target==='opt'">
+              <template x-for="(item,idx) in ac.results">
+                <div class="ac-item" :class="idx===ac.selIdx?'ac-sel':''" @mousedown.prevent="acSelect(item)">
+                  <span class="ac-sym" x-text="item.s"></span>
+                  <span class="ac-name" x-text="item.n"></span>
+                  <span class="ac-zh" x-text="item.z"></span>
+                </div>
+              </template>
+            </div>
+          </div>
           <button @click="fetchOptions()" class="btn-p flex-shrink-0 px-4" :disabled="opt.loading"><span x-show="!opt.loading">Analyze</span><span x-show="opt.loading"><span class="spin"></span></span></button>
         </div>
       </div>
@@ -534,7 +593,18 @@
         <div class="card card-p">
           <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">🔬 Stress-Test Engine</div>
           <div class="space-y-2">
-            <input type="text" x-model="bt.ticker" placeholder="Ticker (e.g. AAPL)" style="text-transform:uppercase" />
+            <div class="ac-wrap">
+              <input type="text" x-model="bt.ticker" @input="acInput(bt.ticker,'bt')" @keydown="acKey($event)" @keydown.enter="if(ac.selIdx<0){ac.show=false}" @blur="setTimeout(()=>ac.show=false,200)" @focus="if(bt.ticker)acInput(bt.ticker,'bt')" placeholder="Search ticker or company…" style="text-transform:uppercase" autocomplete="off" />
+              <div class="ac-drop" x-show="ac.show&&ac.target==='bt'">
+                <template x-for="(item,idx) in ac.results">
+                  <div class="ac-item" :class="idx===ac.selIdx?'ac-sel':''" @mousedown.prevent="acSelect(item)">
+                    <span class="ac-sym" x-text="item.s"></span>
+                    <span class="ac-name" x-text="item.n"></span>
+                    <span class="ac-zh" x-text="item.z"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
             <select x-model="bt.strategy">
               <option value="all">All Strategies</option>
               <option value="swing">Swing Trading</option>
@@ -687,7 +757,18 @@
           <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">⏰ Time Travel — Go Back to Any Day</div>
           <div class="text-[9px] mb-3" style="color:var(--t3);line-height:1.5">Pick a date and ticker to see what CC would have suggested on that day, with the 4-layer confidence score, expert council opinions, and actual forward returns (hindsight).</div>
           <div class="space-y-2">
-            <input type="text" x-model="tt.ticker" placeholder="Ticker (e.g. SPY)" style="text-transform:uppercase" />
+            <div class="ac-wrap">
+              <input type="text" x-model="tt.ticker" @input="acInput(tt.ticker,'tt')" @keydown="acKey($event)" @keydown.enter="if(ac.selIdx<0){ac.show=false}" @blur="setTimeout(()=>ac.show=false,200)" @focus="if(tt.ticker)acInput(tt.ticker,'tt')" placeholder="Search ticker or company…" style="text-transform:uppercase" autocomplete="off" />
+              <div class="ac-drop" x-show="ac.show&&ac.target==='tt'">
+                <template x-for="(item,idx) in ac.results">
+                  <div class="ac-item" :class="idx===ac.selIdx?'ac-sel':''" @mousedown.prevent="acSelect(item)">
+                    <span class="ac-sym" x-text="item.s"></span>
+                    <span class="ac-name" x-text="item.n"></span>
+                    <span class="ac-zh" x-text="item.z"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
             <div style="position:relative">
               <label class="text-[9px] font-bold uppercase mb-1 block" style="color:var(--t3)">Target Date</label>
               <input type="date" x-model="tt.date" min="2020-01-01" :max="new Date().toISOString().slice(0,10)" style="min-height:44px;font-size:14px" />
@@ -1054,7 +1135,7 @@
         {id:'catalog',icon:'📚',label:'Catalog'},
       ],
       live:false,clock:'',regime:{},indices:[],macro:[],sectors:[],asia:[],trust:{},
-      sig:{mode:'—',source:'',as_of:'',recs:[],strategy_scores:{},no_trade_reason:null},
+      sig:{mode:'—',source:'',as_of:'',recs:[],strategy_scores:{},no_trade_reason:null,scan_meta:null},
       dos:{ticker:'',loading:false,data:null,error:''},
       opt:{ticker:'',loading:false,data:null},
       brief:{loading:false,data:null},
@@ -1066,6 +1147,7 @@
       _failCount:0,
       _retryTimer:null,
       apiError:'',
+      ac:{query:'',results:[],show:false,target:'',selIdx:-1,timer:null},
 
       init(){
         this.tick();setInterval(()=>this.tick(),1000);
@@ -1076,11 +1158,34 @@
       tick(){this.clock=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'})},
       switchTab(t){this.tab=t;if(t==='signals')this.fetchSignals();if(t==='ops')this.fetchHealth();if(t==='brief')this.fetchBrief();if(t==='catalog'){this.fetchEndpoints();this.fetchOpsDetail()}if(t==='timetravel'&&!this.tt.date){const d=new Date();d.setDate(d.getDate()-5);this.tt.date=d.toISOString().slice(0,10)}},
 
+      acInput(val,target){
+        this.ac.target=target;
+        if(this.ac.timer)clearTimeout(this.ac.timer);
+        if(!val||val.length<1){this.ac.results=[];this.ac.show=false;return}
+        this.ac.timer=setTimeout(async()=>{
+          try{const r=await fetch('/api/tickers?q='+encodeURIComponent(val));if(r.ok){const d=await r.json();this.ac.results=d.results||[];this.ac.show=this.ac.results.length>0;this.ac.selIdx=-1}}catch(e){this.ac.show=false}
+        },150);
+      },
+      acSelect(item){
+        const t=this.ac.target;
+        if(t==='dos')this.dos.ticker=item.s;
+        else if(t==='opt')this.opt.ticker=item.s;
+        else if(t==='bt')this.bt.ticker=item.s;
+        else if(t==='tt')this.tt.ticker=item.s;
+        this.ac.show=false;this.ac.results=[];this.ac.selIdx=-1;
+      },
+      acKey(e){
+        if(!this.ac.show)return;
+        if(e.key==='ArrowDown'){e.preventDefault();this.ac.selIdx=Math.min(this.ac.selIdx+1,this.ac.results.length-1)}
+        else if(e.key==='ArrowUp'){e.preventDefault();this.ac.selIdx=Math.max(this.ac.selIdx-1,0)}
+        else if(e.key==='Enter'&&this.ac.selIdx>=0){e.preventDefault();this.acSelect(this.ac.results[this.ac.selIdx])}
+        else if(e.key==='Escape'){this.ac.show=false}
+      },
       async fetchMkt(){
         try{const r=await fetch('/api/live/market');if(!r.ok)throw 0;const d=await r.json();this.regime=d.regime||{};this.indices=d.indices||[];this.macro=d.macro||[];this.sectors=d.sectors||[];this.asia=d.asia||[];this.trust=d.trust||{};this.live=true;this._failCount=0;this.apiError='';if(this._retryTimer){clearTimeout(this._retryTimer);this._retryTimer=null}}catch(e){this._failCount++;this.live=false;const delay=Math.min(5000*Math.pow(2,this._failCount-1),120000);this.apiError='Connection lost. Retrying in '+Math.round(delay/1000)+'s…';if(this._retryTimer)clearTimeout(this._retryTimer);this._retryTimer=setTimeout(()=>this.fetchMkt(),delay)}
       },
       async fetchSignals(){
-        try{const r=await fetch('/api/recommendations');if(!r.ok)throw 0;const d=await r.json();this.sig.mode=d.mode||'—';this.sig.source=d.source||'';this.sig.as_of=d.as_of||'';this.sig.recs=d.recommendations||[];this.sig.strategy_scores=d.strategy_scores||{};this.sig.no_trade_reason=d.no_trade_reason||null}catch(e){this.sig.mode='OFFLINE'}
+        try{const r=await fetch('/api/recommendations');if(!r.ok)throw 0;const d=await r.json();this.sig.mode=d.mode||'—';this.sig.source=d.source||'';this.sig.as_of=d.as_of||'';this.sig.recs=d.recommendations||[];this.sig.strategy_scores=d.strategy_scores||{};this.sig.no_trade_reason=d.no_trade_reason||null;this.sig.scan_meta=d.scan_meta||null}catch(e){this.sig.mode='OFFLINE';this.sig.source='error';this.sig.no_trade_reason='⚠ Failed to connect to the scanner. Check if the server is running.'}
       },
       async fetchBrief(){
         this.brief.loading=true;
