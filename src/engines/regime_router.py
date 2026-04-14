@@ -8,9 +8,13 @@ should_trade flag.
 Sprint 34: canonical RegimeState dataclass — one object used by
 AutoTradingEngine, SignalEngine, OpportunityEnsembler,
 ExpressionEngine, API, bots, and dashboard.
+
+P3: Added EMA smoothing + minimum hold time to prevent regime whipsaw.
 """
+
 import logging
 import math
+import time as _time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -93,13 +97,27 @@ class RegimeRouter:
     BREADTH_BULL = 0.65
     BREADTH_BEAR = 0.35
 
-    def __init__(self, no_trade_entropy: float = None,
-                 min_confidence: float = None):
+    def __init__(
+        self,
+        no_trade_entropy: float = None,
+        min_confidence: float = None,
+        ema_alpha: float = 0.3,
+        min_hold_seconds: int = 300,
+    ):
         """
         Args:
             no_trade_entropy: if entropy exceeds this, should_trade = False
             min_confidence: if max regime prob < this, reduce sizing
+            ema_alpha: smoothing factor for probability EMA (0=no update, 1=no smoothing)
+            min_hold_seconds: minimum seconds before regime can flip (default 5 min)
         """
+        # ── Hysteresis state (P3) ──
+        self._ema_probs: Optional[np.ndarray] = None  # [risk_on, neutral, risk_off]
+        self._ema_alpha = ema_alpha
+        self._min_hold_seconds = min_hold_seconds
+        self._last_regime: Optional[str] = None
+        self._regime_since: float = 0.0  # timestamp of last regime change
+
         # Read from config with fallback defaults
         try:
             from src.core.config import get_trading_config
@@ -175,7 +193,16 @@ class RegimeRouter:
             max(neutral_score, 0.01),
             max(risk_off_score, 0.01),
         ])
-        probs = self._softmax(scores, temperature=1.5)
+        raw_probs = self._softmax(scores, temperature=1.5)
+
+        # ── EMA smoothing (P3: regime hysteresis) ──
+        # Prevents whipsaw by smoothing probability transitions.
+        if self._ema_probs is None:
+            self._ema_probs = raw_probs.copy()
+        else:
+            a = self._ema_alpha
+            self._ema_probs = a * raw_probs + (1 - a) * self._ema_probs
+        probs = self._ema_probs
 
         risk_on_prob = float(probs[0])
         neutral_prob = float(probs[1])
@@ -205,7 +232,34 @@ class RegimeRouter:
             "NEUTRAL": neutral_prob,
             "RISK_OFF": risk_off_prob,
         }
-        regime = max(_probs, key=_probs.get)
+        raw_regime = max(_probs, key=_probs.get)
+
+        # ── Minimum hold time (P3: regime hysteresis) ──
+        # Don't flip regime label unless min_hold_seconds have elapsed,
+        # UNLESS it's a crisis override (VIX spike).
+        now_ts = _time.time()
+        if self._last_regime is None:
+            # First call — accept whatever the model says
+            regime = raw_regime
+            self._last_regime = regime
+            self._regime_since = now_ts
+        elif raw_regime != self._last_regime:
+            elapsed = now_ts - self._regime_since
+            is_crisis = vix >= self.VIX_CRISIS
+            if elapsed >= self._min_hold_seconds or is_crisis:
+                # Enough time has passed (or crisis) — allow the flip
+                regime = raw_regime
+                self._last_regime = regime
+                self._regime_since = now_ts
+                logger.info(
+                    f"Regime flip: {self._last_regime} → {regime} "
+                    f"(after {elapsed:.0f}s, crisis={is_crisis})"
+                )
+            else:
+                # Hold the old regime — too soon to flip
+                regime = self._last_regime
+        else:
+            regime = self._last_regime
 
         # risk_regime: simplified risk-appetite label
         if risk_on_prob >= 0.50:

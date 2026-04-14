@@ -1,6 +1,6 @@
 """
-VNext P2 Institutional Review Tests
-=====================================
+VNext P2/P3 Institutional Review Tests
+========================================
 
 Tests for P2 critical fixes:
   - P2-A: Look-ahead bias fix (_rolling_mean, _compute_indicators)
@@ -583,3 +583,152 @@ class TestRiskLimitsWiring:
         assert SIGNAL_THRESHOLDS.volume_strong_surge == 1.5
         assert hasattr(SIGNAL_THRESHOLDS, "high_confidence_threshold")
         assert SIGNAL_THRESHOLDS.high_confidence_threshold == 75.0
+
+
+# ═══════════════════════════════════════════════════════════════
+# P3 — Correlation Guard, Regime Hysteresis, Stale Data
+# ═══════════════════════════════════════════════════════════════
+
+
+class TestSectorCorrelationGuard:
+    """Verify sector clustering and max-signals-per-sector filter."""
+
+    def test_ticker_sector_map_exists(self):
+        from src.api.main import _TICKER_SECTOR
+
+        assert isinstance(_TICKER_SECTOR, dict)
+        assert len(_TICKER_SECTOR) > 10
+
+    def test_sector_clusters_defined(self):
+        from src.api.main import _SECTOR_CLUSTERS
+
+        assert "Semiconductor" in _SECTOR_CLUSTERS
+        assert "Big Tech" in _SECTOR_CLUSTERS
+        assert "NVDA" in _SECTOR_CLUSTERS["Semiconductor"]
+        assert "AAPL" in _SECTOR_CLUSTERS["Big Tech"]
+
+    def test_max_signals_per_sector_uses_risk_limits(self):
+        from src.api.main import _MAX_SIGNALS_PER_SECTOR
+        from src.core.risk_limits import RISK
+
+        assert _MAX_SIGNALS_PER_SECTOR == RISK.max_correlated_names
+
+    def test_ticker_to_sector_lookup(self):
+        from src.api.main import _TICKER_SECTOR
+
+        assert _TICKER_SECTOR.get("NVDA") == "Semiconductor"
+        assert _TICKER_SECTOR.get("AAPL") == "Big Tech"
+        assert _TICKER_SECTOR.get("JPM") == "Financials"
+        assert _TICKER_SECTOR.get("SPY") == "ETF"
+
+    def test_scanner_output_includes_sector_field(self):
+        """Source code should add 'sector' to each recommendation."""
+        src = (Path(__file__).parent.parent / "src" / "api" / "main.py").read_text()
+        assert 'rec["sector"]' in src or "rec['sector']" in src
+
+    def test_sector_cap_filter_in_scanner(self):
+        """Scanner should have sector_counts filtering logic."""
+        src = (Path(__file__).parent.parent / "src" / "api" / "main.py").read_text()
+        assert "sector_counts" in src
+        assert "_MAX_SIGNALS_PER_SECTOR" in src
+
+
+class TestRegimeHysteresis:
+    """Verify EMA smoothing + minimum hold time in RegimeRouter."""
+
+    def test_regime_router_has_ema_state(self):
+        from src.engines.regime_router import RegimeRouter
+
+        router = RegimeRouter()
+        assert hasattr(router, "_ema_probs")
+        assert hasattr(router, "_ema_alpha")
+        assert hasattr(router, "_min_hold_seconds")
+
+    def test_ema_smoothing_dampens_transitions(self):
+        """With alpha=0.3, a sudden shift should be dampened."""
+        from src.engines.regime_router import RegimeRouter
+
+        router = RegimeRouter(ema_alpha=0.3, min_hold_seconds=0)
+        # First call: risk-on market
+        r1 = router.classify({"vix": 14, "spy_return_20d": 0.05, "breadth_pct": 0.7})
+        assert r1.risk_on_uptrend > 0.4  # should be risk-on
+
+        # Second call: suddenly risk-off
+        r2 = router.classify({"vix": 32, "spy_return_20d": -0.05, "breadth_pct": 0.25})
+        # EMA should smooth this — risk_off shouldn't immediately dominate
+        # The EMA of (old risk_on + new risk_off) creates a blended state
+        assert r2.risk_off_downtrend < 0.8  # dampened, not 100% risk-off
+
+    def test_minimum_hold_time_prevents_whipsaw(self):
+        """Regime should not flip if min_hold_seconds hasn't elapsed."""
+        from src.engines.regime_router import RegimeRouter
+
+        router = RegimeRouter(ema_alpha=1.0, min_hold_seconds=600)
+        # First call establishes a regime
+        r1 = router.classify({"vix": 14, "spy_return_20d": 0.05, "breadth_pct": 0.7})
+        first_regime = r1.regime
+
+        # Immediately call with opposite data — should NOT flip (hold time)
+        r2 = router.classify({"vix": 32, "spy_return_20d": -0.05, "breadth_pct": 0.25})
+        assert r2.regime == first_regime  # held due to min_hold
+
+    def test_crisis_overrides_hold_time(self):
+        """VIX crisis should override the minimum hold time."""
+        from src.engines.regime_router import RegimeRouter
+
+        router = RegimeRouter(ema_alpha=1.0, min_hold_seconds=600)
+        # Establish risk-on
+        r1 = router.classify({"vix": 14, "spy_return_20d": 0.05, "breadth_pct": 0.7})
+        # Crisis VIX — should flip immediately despite hold time
+        r2 = router.classify({"vix": 40, "spy_return_20d": -0.08, "breadth_pct": 0.20})
+        assert r2.should_trade is False  # crisis override
+
+
+class TestStaleDataDetection:
+    """Verify stale data detection helper."""
+
+    def test_check_data_freshness_exists(self):
+        from src.api.main import _check_data_freshness
+
+        assert callable(_check_data_freshness)
+
+    def test_fresh_data_returns_true(self):
+        import time
+
+        from src.api.main import _check_data_freshness
+
+        result = _check_data_freshness(time.time() - 10, "test")
+        assert result["fresh"] is True
+        assert result["warning"] is None
+
+    def test_stale_data_returns_warning(self):
+        import time
+
+        from src.api.main import _check_data_freshness
+
+        result = _check_data_freshness(time.time() - 100000, "test")
+        assert result["fresh"] is False
+        assert result["warning"] is not None
+        assert (
+            "stale" in result["warning"].lower() or "old" in result["warning"].lower()
+        )
+
+    def test_none_timestamp_returns_unknown(self):
+        from src.api.main import _check_data_freshness
+
+        result = _check_data_freshness(None, "test")
+        assert result["fresh"] is False
+        assert "unknown" in result["warning"].lower()
+
+    def test_dashboard_has_stale_banner(self):
+        """Dashboard should render a stale data warning banner."""
+        src = (
+            Path(__file__).parent.parent / "src" / "api" / "templates" / "index.html"
+        ).read_text()
+        assert "data_freshness" in src
+        assert "DATA MAY BE STALE" in src
+
+    def test_recommendations_endpoint_includes_freshness(self):
+        """The recommendations endpoint should include data_freshness."""
+        src = (Path(__file__).parent.parent / "src" / "api" / "main.py").read_text()
+        assert '"data_freshness"' in src or "'data_freshness'" in src

@@ -235,6 +235,16 @@
           <div class="text-[9px] mt-1" style="color:var(--t2)" x-text="regime.no_trade_reason||'Risk-off regime \u2014 new entries not recommended. Existing positions should be reviewed for tighter stops.'"></div>
         </div>
       </template>
+      <!-- P3: Stale data warning banner -->
+      <template x-if="sig.data_freshness && !sig.data_freshness.fresh">
+        <div style="margin:0 12px 6px;padding:8px 12px;border-radius:8px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);display:flex;align-items:center;gap:8px">
+          <span style="font-size:16px">⏳</span>
+          <div>
+            <div class="text-[11px] font-bold" style="color:#fbbf24">DATA MAY BE STALE</div>
+            <div class="text-[10px]" style="color:var(--t2)" x-text="sig.data_freshness.warning||'Market data age exceeds freshness threshold'"></div>
+          </div>
+        </div>
+      </template>
       <div style="padding:8px 12px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <span class="pill" :class="regime.label==='RISK_ON'?'pg':regime.label==='RISK_OFF'?'pr':'pa'" x-text="(regime.label||'—').replace('_',' ')"></span>
         <span class="pill pw" x-text="'Trend: '+(regime.trend||'—')"></span>
@@ -276,7 +286,7 @@
         <template x-if="sig.recs.length>0">
           <div class="card" style="overflow-x:auto">
             <table class="tbl">
-              <thead><tr><th>Ticker</th><th>Score</th><th>Grade</th><th>Strategy</th><th>Entry</th><th>Target</th><th>Stop</th><th>R:R</th></tr></thead>
+              <thead><tr><th>Ticker</th><th>Score</th><th>Grade</th><th>Strategy</th><th>Sector</th><th>Entry</th><th>Target</th><th>Stop</th><th>R:R</th></tr></thead>
               <tbody>
                 <template x-for="r in sig.recs">
                   <tr @click="openDossier(r.ticker||r.symbol)" style="cursor:pointer">
@@ -284,6 +294,7 @@
                     <td class="mono font-bold" :class="(r.score||0)>=7?'text-green-400':(r.score||0)>=5?'text-amber-300':'text-red-400'" x-text="r.score!=null?Number(r.score).toFixed(1):'—'"></td>
                     <td><span class="pill" :class="r.grade==='A'?'pg':r.grade==='B'?'pa':'pr'" x-text="r.grade||'—'"></span></td>
                     <td class="text-[10px]" style="color:var(--t2)" x-text="(r.strategy||'—').replace('_',' ')"></td>
+                    <td class="text-[10px]" style="color:var(--t3)" x-text="r.sector||'—'"></td>
                     <td class="mono" x-text="r.entry_price?'$'+Number(r.entry_price).toFixed(2):'—'"></td>
                     <td class="mono text-green-400" x-text="r.target_price?'$'+Number(r.target_price).toFixed(2):'—'"></td>
                     <td class="mono text-red-400" x-text="r.stop_price?'$'+Number(r.stop_price).toFixed(2):'—'"></td>
@@ -1271,7 +1282,7 @@
         try{const r=await fetch('/api/live/market');if(!r.ok)throw 0;const d=await r.json();this.regime=d.regime||{};this.indices=d.indices||[];this.macro=d.macro||[];this.sectors=d.sectors||[];this.asia=d.asia||[];this.trust=d.trust||{};this.live=true;this._failCount=0;this.apiError='';if(this._retryTimer){clearTimeout(this._retryTimer);this._retryTimer=null}}catch(e){this._failCount++;this.live=false;const delay=Math.min(5000*Math.pow(2,this._failCount-1),120000);this.apiError='Connection lost. Retrying in '+Math.round(delay/1000)+'s…';if(this._retryTimer)clearTimeout(this._retryTimer);this._retryTimer=setTimeout(()=>this.fetchMkt(),delay)}
       },
       async fetchSignals(){
-        try{const r=await fetch('/api/recommendations');if(!r.ok)throw 0;const d=await r.json();this.sig.mode=d.mode||'—';this.sig.source=d.source||'';this.sig.as_of=d.as_of||'';this.sig.recs=d.recommendations||[];this.sig.strategy_scores=d.strategy_scores||{};this.sig.no_trade_reason=d.no_trade_reason||null;this.sig.scan_meta=d.scan_meta||null}catch(e){this.sig.mode='OFFLINE';this.sig.source='error';this.sig.no_trade_reason='⚠ Failed to connect to the scanner. Check if the server is running.'}
+        try{const r=await fetch('/api/recommendations');if(!r.ok)throw 0;const d=await r.json();this.sig.mode=d.mode||'—';this.sig.source=d.source||'';this.sig.as_of=d.as_of||'';this.sig.recs=d.recommendations||[];this.sig.strategy_scores=d.strategy_scores||{};this.sig.no_trade_reason=d.no_trade_reason||null;this.sig.scan_meta=d.scan_meta||null;this.sig.data_freshness=d.data_freshness||null}catch(e){this.sig.mode='OFFLINE';this.sig.source='error';this.sig.no_trade_reason='⚠ Failed to connect to the scanner. Check if the server is running.'}
       },
       async fetchBrief(){
         this.brief.loading=true;

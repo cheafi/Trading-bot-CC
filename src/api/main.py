@@ -546,6 +546,50 @@ startup_time = datetime.utcnow()
 
 
 # ═══════════════════════════════════════════════════════════════════
+# Stale data detection (P3)
+# ═══════════════════════════════════════════════════════════════════
+
+_DATA_STALENESS_THRESHOLD_SEC = 900  # 15 minutes during market hours
+_DATA_STALENESS_AFTER_HOURS_SEC = 86400  # 24 hours after market close
+
+
+def _check_data_freshness(
+    data_timestamp: float | None,
+    label: str = "market_data",
+) -> dict:
+    """Return a freshness report for a data source.
+
+    Args:
+        data_timestamp: epoch time of last data refresh (or None if unknown)
+        label: human-readable name for the data source
+
+    Returns:
+        dict with {fresh: bool, age_seconds: int, warning: str|None}
+    """
+    if data_timestamp is None:
+        return {
+            "fresh": False,
+            "age_seconds": -1,
+            "warning": f"⚠ {label}: timestamp unknown — data may be stale or synthetic",
+        }
+    age = time.time() - data_timestamp
+    # Use tighter threshold during market hours
+    threshold = _DATA_STALENESS_THRESHOLD_SEC
+    try:
+        if not _is_market_open():
+            threshold = _DATA_STALENESS_AFTER_HOURS_SEC
+    except Exception:
+        pass
+    if age > threshold:
+        return {
+            "fresh": False,
+            "age_seconds": int(age),
+            "warning": f"⚠ {label}: data is {int(age)}s old (threshold {threshold}s)",
+        }
+    return {"fresh": True, "age_seconds": int(age), "warning": None}
+
+
+# ═══════════════════════════════════════════════════════════════════
 # Indicator helpers — right-aligned rolling (NO look-ahead bias)
 # ═══════════════════════════════════════════════════════════════════
 
@@ -2842,6 +2886,25 @@ _SCAN_WATCHLIST = [
     "SPY", "QQQ", "IWM", "DIA",
     "AMD", "CRM", "NFLX", "COST", "AVGO", "LLY",
 ]
+
+# ── Sector clustering for correlation guard (P3) ──
+# Prevents hidden concentration: max N signals from the same sector cluster.
+_TICKER_SECTOR: dict[str, str] = {}
+_SECTOR_CLUSTERS = {
+    "Semiconductor": ["NVDA", "AMD", "AVGO", "MU", "INTC", "SMCI", "ARM", "QCOM"],
+    "Big Tech": ["AAPL", "MSFT", "GOOGL", "AMZN", "META"],
+    "Software/Cloud": ["CRM", "NFLX", "PLTR", "SNOW", "NET", "DDOG"],
+    "Financials": ["JPM", "V", "MA", "GS", "SOFI", "COIN"],
+    "Healthcare": ["UNH", "JNJ", "LLY", "PFE", "ABBV"],
+    "Consumer": ["COST", "HD", "PG", "WMT", "TGT"],
+    "EV/Auto": ["TSLA", "RIVN", "F", "GM"],
+    "ETF": ["SPY", "QQQ", "IWM", "DIA"],
+}
+for _sector, _tickers in _SECTOR_CLUSTERS.items():
+    for _t in _tickers:
+        _TICKER_SECTOR[_t] = _sector
+_MAX_SIGNALS_PER_SECTOR = RISK.max_correlated_names  # default 3
+
 _scan_cache: dict = {"recs": [], "scores": {}, "ts": 0.0}
 _SCAN_CACHE_TTL = 300  # 5 minutes
 
@@ -3002,6 +3065,24 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
     # Sort by score desc
     recs.sort(key=lambda r: r["score"], reverse=True)
 
+    # ── Sector correlation guard (P3) ──
+    # Cap signals per sector cluster to prevent hidden concentration.
+    # Walk the sorted list top-down; skip if sector already at capacity.
+    sector_counts: dict[str, int] = {}
+    filtered_recs: list = []
+    demoted: list = []
+    for rec in recs:
+        sector = _TICKER_SECTOR.get(rec["ticker"], "Other")
+        rec["sector"] = sector
+        cur = sector_counts.get(sector, 0)
+        if cur < _MAX_SIGNALS_PER_SECTOR:
+            sector_counts[sector] = cur + 1
+            filtered_recs.append(rec)
+        else:
+            rec["demoted_reason"] = f"Sector cap ({sector}: {_MAX_SIGNALS_PER_SECTOR} max)"
+            demoted.append(rec)
+    recs = filtered_recs  # demoted signals dropped from active list
+
     # Strategy scores (0-10 scale)
     scores = {}
     for s in strat_wins:
@@ -3012,9 +3093,10 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
     _scan_cache["recs"] = recs
     _scan_cache["scores"] = scores
     _scan_cache["ts"] = now
+    _scan_cache["demoted"] = demoted
     logger.info(
         f"[Scanner] scanned {len(_SCAN_WATCHLIST)} tickers → "
-        f"{len(recs)} signals"
+        f"{len(recs)} signals ({len(demoted)} demoted by sector cap)"
     )
     return recs[:limit], scores
 
@@ -3095,6 +3177,13 @@ async def get_recommendations(limit: int = Query(10, ge=1, le=50)):
                     "Try refreshing in a moment."
                 )
 
+        # ── Data freshness check (P3: stale data detection) ──
+        scan_ts = _scan_cache.get("ts", 0.0) if _scan_cache else 0.0
+        data_freshness = _check_data_freshness(
+            scan_ts if scan_ts > 0 else None,
+            label="scanner",
+        )
+
         return _sanitize_for_json({
             "status": "ok",
             "mode": mode,
@@ -3105,6 +3194,7 @@ async def get_recommendations(limit: int = Query(10, ge=1, le=50)):
             "no_trade_reason": no_trade_reason,
             "source": source,
             "scan_meta": scan_meta,
+            "data_freshness": data_freshness,
             "as_of": datetime.utcnow().isoformat() + "Z",
         })
     except Exception as e:
