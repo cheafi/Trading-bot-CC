@@ -790,13 +790,20 @@
         <template x-if="tt.result">
           <div class="space-y-2 fade">
             <!-- ── Header: Final Action ── -->
-            <div class="card card-p" :style="tt.result.final_action?.includes('BUY')?'border-color:var(--green)':tt.result.final_action==='NO TRADE'?'border-color:var(--red)':'border-color:var(--amber)'">
+            <div class="card card-p" :style="tt.result.final_action?.includes('BUY')?'border-color:var(--green)':tt.result.final_action?.includes('NO TRADE')?'border-color:var(--red)':'border-color:var(--amber)'">
               <div class="flex items-center justify-between mb-2">
                 <div class="text-lg font-bold text-white mono" x-text="tt.result.ticker+' · $'+tt.result.price"></div>
-                <span class="pill text-sm font-bold" :class="tt.result.final_action?.includes('BUY')?'pg':tt.result.final_action==='NO TRADE'?'pr':'pa'" x-text="tt.result.final_action||'—'"></span>
+                <span class="pill text-sm font-bold" :class="tt.result.final_action?.includes('BUY')?'pg':tt.result.final_action?.includes('NO TRADE')?'pr':'pa'" x-text="tt.result.final_action||'—'"></span>
               </div>
               <div class="text-[10px]" style="color:var(--t3)" x-text="'📅 '+tt.result.target_date+' · Regime: '+(tt.result.regime?.label||'—')+' · Vol: '+(tt.result.regime?.volatility||'—')"></div>
               <div class="text-[10px] mt-1" style="color:var(--t2)" x-text="'💬 '+tt.result.final_reason"></div>
+              <!-- Decision tier + sizing row -->
+              <template x-if="tt.result.confidence?.decision_tier">
+                <div class="flex items-center gap-2 mt-2">
+                  <span class="pill text-[8px] font-bold" :class="tt.result.confidence.decision_tier==='STRONG_BUY'?'pg':tt.result.confidence.decision_tier==='BUY_SMALL'?'pg':tt.result.confidence.decision_tier==='HEDGE'?'pr':tt.result.confidence.decision_tier==='NO_TRADE'?'pr':'pa'" x-text="'Tier: '+tt.result.confidence.decision_tier"></span>
+                  <span class="text-[9px] mono" style="color:var(--t2)" x-text="'Sizing: '+(tt.result.confidence.sizing||'—')"></span>
+                </div>
+              </template>
               <div class="flex gap-2 mt-2 text-[9px]" style="color:var(--t3)">
                 <span x-text="'From 52w High: '+tt.result.price_context?.pct_from_52w_high+'%'"></span>
                 <span x-text="'From 52w Low: +'+tt.result.price_context?.pct_from_52w_low+'%'"></span>
@@ -838,13 +845,50 @@
                     <template x-for="p in tt.result.confidence.penalties"><div class="text-[9px]" style="color:var(--red)" x-text="'• '+p"></div></template>
                   </div>
                 </template>
+                <!-- Reasons For / Against -->
+                <template x-if="tt.result.confidence.reasons_for||tt.result.confidence.reasons_against">
+                  <div class="mt-2 pt-2" style="border-top:1px solid var(--bd)">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                      <div>
+                        <div class="text-[9px] font-bold mb-1" style="color:var(--green)">✅ Reasons For</div>
+                        <template x-for="r in (tt.result.confidence.reasons_for||[])"><div class="text-[8px]" style="color:var(--green)" x-text="'• '+r"></div></template>
+                        <template x-if="!tt.result.confidence.reasons_for||tt.result.confidence.reasons_for.length===0"><div class="text-[8px]" style="color:var(--t3)">None</div></template>
+                      </div>
+                      <div>
+                        <div class="text-[9px] font-bold mb-1" style="color:var(--red)">❌ Reasons Against</div>
+                        <template x-for="r in (tt.result.confidence.reasons_against||[])"><div class="text-[8px]" style="color:var(--red)" x-text="'• '+r"></div></template>
+                        <template x-if="!tt.result.confidence.reasons_against||tt.result.confidence.reasons_against.length===0"><div class="text-[8px]" style="color:var(--t3)">None</div></template>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+                <!-- Invalidation Map -->
+                <template x-if="tt.result.confidence.invalidation&&tt.result.confidence.invalidation.length>0">
+                  <div class="mt-2 pt-2" style="border-top:1px solid var(--bd)">
+                    <div class="text-[9px] font-bold mb-1" style="color:var(--amber)">🚫 Invalidation Levels</div>
+                    <div class="flex flex-wrap gap-2">
+                      <template x-for="inv in tt.result.confidence.invalidation">
+                        <span class="text-[8px] px-2 py-1" style="background:rgba(251,191,36,.08);border-radius:4px;color:var(--amber)" x-text="typeof inv==='string'?inv:(inv.label+': $'+(inv.price||'—'))"></span>
+                      </template>
+                    </div>
+                  </div>
+                </template>
               </div>
             </template>
 
-            <!-- ── Expert Council ── -->
+            <!-- ── Expert Council v2 ── -->
             <template x-if="tt.result.expert_council&&tt.result.expert_council.length>0">
               <div class="card card-p">
-                <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">🧠 Expert Council (<span x-text="tt.result.expert_council.length"></span> members)</div>
+                <div class="flex items-center justify-between mb-3">
+                  <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">🧠 Expert Council (<span x-text="tt.result.expert_council.length"></span> members)</div>
+                  <template x-if="tt.result.council_summary?.consensus">
+                    <span class="pill text-[8px] font-bold" :class="tt.result.council_summary.consensus.includes('bullish')?'pg':tt.result.council_summary.consensus.includes('bearish')?'pr':'pa'" x-text="tt.result.council_summary.consensus.replace(/_/g,' ')"></span>
+                  </template>
+                </div>
+                <!-- Council headline -->
+                <template x-if="tt.result.council_summary?.headline">
+                  <div class="text-[10px] mb-2" style="color:var(--t2)" x-text="'📋 '+tt.result.council_summary.headline"></div>
+                </template>
                 <div class="space-y-2">
                   <template x-for="ex in tt.result.expert_council">
                     <div style="background:var(--s2);border-radius:8px;padding:8px 10px">
@@ -852,14 +896,16 @@
                         <span class="text-[11px] font-bold text-white" x-text="ex.role"></span>
                         <div class="flex items-center gap-2">
                           <span class="text-[10px] mono font-bold" :class="ex.score>=65?'text-green-400':ex.score>=45?'text-amber-300':'text-red-400'" x-text="ex.score+'/100'"></span>
-                          <span class="pill text-[8px]" :class="['Bullish','Approve','Buy'].includes(ex.verdict)?'pg':['Bearish','Reject'].includes(ex.verdict)?'pr':'pa'" x-text="ex.verdict"></span>
+                          <span class="pill text-[8px]" :class="(ex.stance||ex.verdict)==='bullish'||['Bullish','Approve','Buy'].includes(ex.stance||ex.verdict)?'pg':(ex.stance||ex.verdict)==='bearish'||['Bearish','Reject'].includes(ex.stance||ex.verdict)?'pr':'pa'" x-text="(ex.stance||ex.verdict||'—')"></span>
                         </div>
                       </div>
+                      <!-- Evidence / reasons -->
                       <div class="flex flex-wrap gap-1 mt-1">
-                        <template x-for="r in (ex.reasons||[]).slice(0,3)">
+                        <template x-for="r in (ex.evidence||ex.reasons||[]).slice(0,4)">
                           <span class="text-[8px] px-1 py-0.5" style="background:rgba(255,255,255,.04);border-radius:3px;color:var(--t3)" x-text="r"></span>
                         </template>
                       </div>
+                      <!-- Risks -->
                       <template x-if="ex.risks&&ex.risks.length>0">
                         <div class="flex flex-wrap gap-1 mt-1">
                           <template x-for="rk in ex.risks.slice(0,2)">
@@ -867,16 +913,24 @@
                           </template>
                         </div>
                       </template>
+                      <!-- Invalidation + Time Horizon row -->
+                      <template x-if="ex.invalidation||ex.time_horizon">
+                        <div class="flex gap-2 mt-1 text-[8px]" style="color:var(--t3)">
+                          <template x-if="ex.invalidation"><span x-text="'🚫 '+ex.invalidation"></span></template>
+                          <template x-if="ex.time_horizon"><span x-text="'⏱ '+ex.time_horizon"></span></template>
+                        </div>
+                      </template>
                     </div>
                   </template>
                 </div>
-                <!-- Council summary -->
+                <!-- Council summary (server-computed) -->
                 <div class="mt-3 pt-2" style="border-top:1px solid var(--bd)">
                   <div class="flex justify-around text-center text-[10px]">
-                    <div><div style="color:var(--t3)">Avg Score</div><div class="font-bold mono text-white" x-text="Math.round(tt.result.expert_council.reduce((a,b)=>a+b.score,0)/tt.result.expert_council.length)"></div></div>
-                    <div><div style="color:var(--t3)">Bullish</div><div class="font-bold mono text-green-400" x-text="tt.result.expert_council.filter(e=>['Bullish','Approve','Buy'].includes(e.verdict)).length"></div></div>
-                    <div><div style="color:var(--t3)">Neutral</div><div class="font-bold mono text-amber-300" x-text="tt.result.expert_council.filter(e=>['Neutral','Mixed','Cautious','Watch','Minor concerns','No objection'].includes(e.verdict)).length"></div></div>
-                    <div><div style="color:var(--t3)">Bearish</div><div class="font-bold mono text-red-400" x-text="tt.result.expert_council.filter(e=>['Bearish','Reject','Challenge','Pass'].includes(e.verdict)).length"></div></div>
+                    <div><div style="color:var(--t3)">Avg Score</div><div class="font-bold mono text-white" x-text="tt.result.council_summary?.avg_score||tt.result.council_avg||'—'"></div></div>
+                    <div><div style="color:var(--t3)">Bullish</div><div class="font-bold mono text-green-400" x-text="tt.result.council_summary?.bullish||tt.result.expert_council.filter(e=>(e.stance||e.verdict)==='bullish'||['Bullish','Approve','Buy'].includes(e.stance||e.verdict)).length"></div></div>
+                    <div><div style="color:var(--t3)">Neutral</div><div class="font-bold mono text-amber-300" x-text="tt.result.council_summary?.neutral||'—'"></div></div>
+                    <div><div style="color:var(--t3)">Bearish</div><div class="font-bold mono text-red-400" x-text="tt.result.council_summary?.bearish||tt.result.expert_council.filter(e=>(e.stance||e.verdict)==='bearish'||['Bearish','Reject'].includes(e.stance||e.verdict)).length"></div></div>
+                    <div><div style="color:var(--t3)">Disagreement</div><div class="font-bold mono" :class="(tt.result.council_summary?.disagreement||0)>25?'text-red-400':(tt.result.council_summary?.disagreement||0)>15?'text-amber-300':'text-green-400'" x-text="(tt.result.council_summary?.disagreement||0).toFixed(0)"></div></div>
                   </div>
                 </div>
               </div>

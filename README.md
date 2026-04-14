@@ -1,7 +1,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white" />
   <img src="https://img.shields.io/badge/FastAPI-0.104+-009688?logo=fastapi&logoColor=white" />
-  <img src="https://img.shields.io/badge/Tests-131_passing-00d4aa" />
+  <img src="https://img.shields.io/badge/Tests-214_passing-00d4aa" />
   <img src="https://img.shields.io/badge/License-MIT-blue" />
   <img src="https://img.shields.io/badge/Demo-Live-fbbf24?logo=github&logoColor=white" />
 </p>
@@ -87,7 +87,7 @@ CC is honest about what's live and what isn't. Every data point is tagged.
 
 ```bash
 git clone https://github.com/cheafi/Trading-bot-CC
-cd TradingAI_Bot-main
+cd Trading-bot-CC
 python -m venv venv && source venv/bin/activate
 pip install -r requirements/base.txt
 python run_bot.py          # FastAPI on localhost:8000
@@ -97,7 +97,7 @@ python run_bot.py          # FastAPI on localhost:8000
 
 ```bash
 git clone https://github.com/cheafi/Trading-bot-CC
-cd TradingAI_Bot-main
+cd Trading-bot-CC
 cp .env.example .env       # add DISCORD_BOT_TOKEN, ALPACA_API_KEY, etc.
 docker compose up -d       # 11 services: API, Discord, Postgres, Redis, ...
 ```

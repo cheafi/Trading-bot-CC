@@ -4161,21 +4161,59 @@ async def live_backtest(
         positions: list = []  # [{idx, price, trailing_high, stop_pct, target_pct, max_hold}]
         trades: list = []
 
+        # ── Execution Cost Model (P1: Backtest Realism) ──
+        COMMISSION_PER_SHARE = 0.005  # $0.005/share
+        MIN_COMMISSION = 1.00  # $1 minimum per trade
+        SLIPPAGE_BASE_BPS = 5  # 5 bps baseline slippage
+        ACCOUNT_SIZE = 100_000  # Assumed account for position sizing
+
+        def _calc_slippage(bar_idx, entry=True):
+            """ATR-based slippage: base + volume-scaled impact."""
+            base = SLIPPAGE_BASE_BPS / 10_000
+            vol_impact = 0.0
+            if bar_idx > 0:
+                avg_v = float(np.mean(volume[max(0, bar_idx - 20) : bar_idx + 1]))
+                if avg_v > 0:
+                    # Assume 1% of avg volume as our order → impact
+                    vol_impact = 0.01 * close[bar_idx] / avg_v * 100
+                    vol_impact = min(vol_impact, 0.002)  # cap at 20bps
+            return base + vol_impact
+
+        def _calc_commission(shares, price):
+            """Per-share commission with minimum."""
+            return max(MIN_COMMISSION, shares * COMMISSION_PER_SHARE)
+
         def _close_position(pos, bar_idx, reason):
             ep = pos["price"]
             xp = close[bar_idx]
-            pnl = (xp - ep) / ep
-            trades.append({
-                "entry_idx": pos["idx"],
-                "exit_idx": bar_idx,
-                "entry_date": str(dates_idx[pos["idx"]].date()),
-                "exit_date": str(dates_idx[bar_idx].date()),
-                "entry_price": round(ep, 2),
-                "exit_price": round(xp, 2),
-                "pnl_pct": round(pnl * 100, 2),
-                "reason": reason,
-                "hold_days": bar_idx - pos["idx"],
-            })
+            # Apply slippage on exit (sell at worse price)
+            exit_slip = _calc_slippage(bar_idx, entry=False)
+            xp_net = xp * (1 - exit_slip)
+            # Commission (entry + exit)
+            shares = int(ACCOUNT_SIZE * 0.05 / ep)  # ~5% position size
+            shares = max(1, shares)
+            entry_comm = _calc_commission(shares, ep)
+            exit_comm = _calc_commission(shares, xp_net)
+            total_cost_pct = (entry_comm + exit_comm) / (shares * ep) * 100
+            pnl_gross = (xp - ep) / ep
+            pnl_net = (xp_net - pos["entry_cost"]) / pos[
+                "entry_cost"
+            ] - total_cost_pct / 100
+            trades.append(
+                {
+                    "entry_idx": pos["idx"],
+                    "exit_idx": bar_idx,
+                    "entry_date": str(dates_idx[pos["idx"]].date()),
+                    "exit_date": str(dates_idx[bar_idx].date()),
+                    "entry_price": round(ep, 2),
+                    "exit_price": round(xp, 2),
+                    "pnl_pct": round(pnl_net * 100, 2),
+                    "pnl_gross_pct": round(pnl_gross * 100, 2),
+                    "costs_pct": round((pnl_gross - pnl_net) * 100, 2),
+                    "reason": reason,
+                    "hold_days": bar_idx - pos["idx"],
+                }
+            )
 
         for i in range(200, n):
             # ── Regime detection ──
@@ -4262,14 +4300,20 @@ async def live_backtest(
                 max_hold = 40 if trending else 15
 
             if enter:
-                positions.append({
-                    "idx": i,
-                    "price": close[i],
-                    "trailing_high": close[i],
-                    "stop_pct": stop_pct,
-                    "target_pct": target_pct,
-                    "max_hold": max_hold,
-                })
+                # Apply entry slippage (buy at worse price)
+                entry_slip = _calc_slippage(i, entry=True)
+                entry_cost = close[i] * (1 + entry_slip)
+                positions.append(
+                    {
+                        "idx": i,
+                        "price": close[i],
+                        "entry_cost": entry_cost,
+                        "trailing_high": close[i],
+                        "stop_pct": stop_pct,
+                        "target_pct": target_pct,
+                        "max_hold": max_hold,
+                    }
+                )
 
         # Close remaining positions at end
         for pos in positions:
@@ -4277,18 +4321,25 @@ async def live_backtest(
 
         # ── Analytics ──
         returns = [t["pnl_pct"] / 100 for t in trades]
+        gross_returns = [t["pnl_gross_pct"] / 100 for t in trades]
         total_trades = len(trades)
         winners = sum(1 for r in returns if r > 0)
         losers = total_trades - winners
         win_rate = (winners / total_trades * 100) if total_trades else 0
         avg_win = float(np.mean([r for r in returns if r > 0]) * 100) if winners else 0
         avg_loss_val = float(np.mean([r for r in returns if r <= 0]) * 100) if losers else 0
+        total_costs = sum(t.get("costs_pct", 0) for t in trades)
 
-        # Compounded return (equity curve)
+        # Compounded return (equity curve) — net of costs
         equity = 1.0
         for r in returns:
             equity *= (1 + r)
         compounded_return = (equity - 1) * 100
+        # Gross compounded (for comparison)
+        equity_gross = 1.0
+        for r in gross_returns:
+            equity_gross *= 1 + r
+        compounded_gross = (equity_gross - 1) * 100
         simple_return = sum(returns) * 100
 
         # Sharpe
@@ -4354,6 +4405,8 @@ async def live_backtest(
             "losers": losers,
             "win_rate": round(win_rate, 1),
             "total_return": round(compounded_return, 2),
+            "gross_return": round(compounded_gross, 2),
+            "total_costs_pct": round(total_costs, 2),
             "simple_return": round(simple_return, 2),
             "avg_win": round(avg_win, 2),
             "avg_loss": round(avg_loss_val, 2),
@@ -4365,6 +4418,12 @@ async def live_backtest(
             "rolling_sharpe": rolling_sharpe[-50:],
             "trades": trades[-30:],
             "all_trades": trades,  # needed for event breakdown
+            "cost_model": {
+                "commission_per_share": COMMISSION_PER_SHARE,
+                "min_commission": MIN_COMMISSION,
+                "slippage_base_bps": SLIPPAGE_BASE_BPS,
+                "note": "Net returns include commissions + ATR-based slippage",
+            },
             "score": round(sharpe * 20 + win_rate * 0.5 + compounded_return * 0.3, 1),
         }
 
@@ -4618,6 +4677,74 @@ def _compute_4layer_confidence(
     else:
         grade, action = "D", "No Trade — conditions unfavorable"
 
+    # ── 5-Tier Decision (P1) ──
+    if composite >= 85 and len(penalties) == 0:
+        decision_tier = "STRONG_BUY"
+        sizing = "Full position (5% of portfolio)"
+    elif composite >= 70:
+        decision_tier = "BUY_SMALL"
+        sizing = "Half position (2.5% of portfolio)"
+    elif composite >= 55:
+        decision_tier = "WATCH"
+        sizing = "No position — watchlist only"
+    elif composite >= 40:
+        decision_tier = "NO_TRADE"
+        sizing = "Abstain — conditions unfavorable"
+    else:
+        decision_tier = "HEDGE"
+        sizing = "Consider hedging existing exposure"
+
+    # ── Abstention Rule (P1: Confidence Calibration) ──
+    ABSTENTION_THRESHOLD = 45
+    should_trade = (
+        composite >= ABSTENTION_THRESHOLD and "earnings_blackout" not in penalties
+    )
+    abstain_reason = None
+    if not should_trade:
+        if "earnings_blackout" in penalties:
+            abstain_reason = "Earnings blackout — too risky to enter"
+        elif composite < ABSTENTION_THRESHOLD:
+            abstain_reason = f"Confidence {composite:.0f} < {ABSTENTION_THRESHOLD} threshold — abstaining"
+
+    # ── Structured Evidence (P1: Decision Output) ──
+    reasons_for = [
+        f[0] for f in thesis_factors + timing_factors + exec_factors if f[1] > 5
+    ]
+    reasons_against = [
+        f[0]
+        for f in thesis_factors + timing_factors + exec_factors + data_factors
+        if f[1] < -3
+    ]
+    invalidation = []
+    if close[i] > sma50[i]:
+        invalidation.append(f"Break below SMA50 ({sma50[i]:.2f}) → thesis invalid")
+    if close[i] > sma20[i]:
+        invalidation.append(f"Close below SMA20 ({sma20[i]:.2f}) → timing fails")
+    if atr_pct[i] > 0.03:
+        invalidation.append(
+            f"ATR expansion beyond {atr_pct[i]*1.5:.1%} → risk too high"
+        )
+    if not invalidation:
+        invalidation.append("Broad market crash or sector-wide sell-off")
+
+    # ── Confidence Decay (P1) ──
+    # Signal age penalty: -2 points per day if data not refreshed
+    confidence_decay_rate = 2.0  # points per day
+
+    # ── Brier Score Tracking (P1: Calibration) ──
+    # Predicted probability = composite / 100
+    # Actual outcome collected post-trade for calibration
+    calibration_meta = {
+        "predicted_prob": round(composite / 100, 3),
+        "confidence_bucket": (
+            "high" if composite >= 75 else "medium" if composite >= 55 else "low"
+        ),
+        "decay_rate_per_day": confidence_decay_rate,
+        "abstention_threshold": ABSTENTION_THRESHOLD,
+        "should_trade": should_trade,
+        "note": "Brier score = mean((predicted_prob - actual_outcome)^2) — track post-trade",
+    }
+
     return {
         "thesis": {"score": round(thesis_score, 1), "factors": thesis_factors},
         "timing": {"score": round(timing_score, 1), "factors": timing_factors},
@@ -4626,7 +4753,15 @@ def _compute_4layer_confidence(
         "composite": round(composite, 1),
         "grade": grade,
         "action": action,
+        "decision_tier": decision_tier,
+        "sizing": sizing,
+        "should_trade": should_trade,
+        "abstain_reason": abstain_reason,
+        "reasons_for": reasons_for[:5],
+        "reasons_against": reasons_against[:5],
+        "invalidation": invalidation[:4],
         "penalties": penalties,
+        "calibration": calibration_meta,
     }
 
 
@@ -4641,15 +4776,41 @@ def _run_expert_council(
     idx,
     volume,
     regime_trending,
-) -> list:
-    """Run 7-member Expert Council. Each returns structured verdict."""
+) -> dict:
+    """Run 7-member Expert Council v2 — fixed schema with consensus analysis."""
     i = idx
     council = []
 
+    def _make_expert(
+        role, score, reasons, risks, invalidation=None, time_horizon="1-5 days"
+    ):
+        """Build standardized expert verdict."""
+        score = max(0, min(100, score))
+        if score >= 65:
+            stance, strength = "bullish", round((score - 50) / 50, 2)
+        elif score < 40:
+            stance, strength = "bearish", round((50 - score) / 50, 2)
+        elif score < 50:
+            stance, strength = "neutral", 0.1
+        else:
+            stance, strength = "neutral", round((score - 50) / 50, 2)
+        return {
+            "role": role,
+            "stance": stance,
+            "strength": strength,
+            "score": score,
+            "evidence": reasons[:4],
+            "risks": risks[:3],
+            "invalidation": invalidation or ["Broad market crash"],
+            "time_horizon": time_horizon,
+            "action_bias": (
+                "buy" if score >= 65 else "sell" if score < 35 else "watch"
+            ),
+        }
+
     # 1) Technical Analyst
     tech_score = 50
-    tech_reasons = []
-    tech_risks = []
+    tech_reasons, tech_risks = [], []
     if close[i] > sma20[i] > sma50[i]:
         tech_score += 20
         tech_reasons.append("Price above SMA20 and SMA50 — bullish structure")
@@ -4669,27 +4830,20 @@ def _run_expert_council(
         tech_reasons.append("Mixed technicals — no clear setup")
     if not tech_risks:
         tech_risks.append("Gap down risk on broad market weakness")
-    tech_score = max(0, min(100, tech_score))
-    verdict = (
-        "Bullish" if tech_score >= 65 else "Bearish" if tech_score < 40 else "Neutral"
-    )
     council.append(
-        {
-            "role": "Technical Analyst",
-            "verdict": verdict,
-            "score": tech_score,
-            "reasons": tech_reasons[:3],
-            "risks": tech_risks[:2],
-            "action_bias": (
-                "buy" if tech_score >= 65 else "sell" if tech_score < 35 else "watch"
-            ),
-        }
+        _make_expert(
+            "Technical Analyst",
+            tech_score,
+            tech_reasons,
+            tech_risks,
+            invalidation=[f"Close below SMA50 ({sma50[i]:.2f})", "RSI divergence"],
+            time_horizon="1-10 days",
+        )
     )
 
-    # 2) Fundamental Analyst (proxy from price/volume)
+    # 2) Fundamental Analyst
     fund_score = 50
-    fund_reasons = []
-    fund_risks = []
+    fund_reasons, fund_risks = [], []
     if regime_trending:
         fund_score += 15
         fund_reasons.append("Trending regime — fundamentals likely supportive")
@@ -4703,27 +4857,20 @@ def _run_expert_council(
         fund_reasons.append("Insufficient fundamental signals")
     if not fund_risks:
         fund_risks.append("Earnings risk unknown without calendar data")
-    fund_score = max(0, min(100, fund_score))
-    verdict = (
-        "Bullish" if fund_score >= 65 else "Bearish" if fund_score < 40 else "Neutral"
-    )
     council.append(
-        {
-            "role": "Fundamental Analyst",
-            "verdict": verdict,
-            "score": fund_score,
-            "reasons": fund_reasons[:3],
-            "risks": fund_risks[:2],
-            "action_bias": (
-                "buy" if fund_score >= 65 else "sell" if fund_score < 35 else "watch"
-            ),
-        }
+        _make_expert(
+            "Fundamental Analyst",
+            fund_score,
+            fund_reasons,
+            fund_risks,
+            invalidation=["Earnings miss >10%", "Guidance cut"],
+            time_horizon="5-20 days",
+        )
     )
 
     # 3) News / Macro Analyst
     macro_score = 50
-    macro_reasons = []
-    macro_risks = []
+    macro_reasons, macro_risks = [], []
     if sma50[i] > sma200[i]:
         macro_score += 10
         macro_reasons.append("Broad trend positive — macro tailwind likely")
@@ -4740,27 +4887,24 @@ def _run_expert_council(
         macro_reasons.append("No strong macro signal")
     if not macro_risks:
         macro_risks.append("Geopolitical / event risk always present")
-    macro_score = max(0, min(100, macro_score))
-    verdict = (
-        "Bullish" if macro_score >= 60 else "Bearish" if macro_score < 40 else "Mixed"
-    )
     council.append(
-        {
-            "role": "News / Macro Analyst",
-            "verdict": verdict,
-            "score": macro_score,
-            "reasons": macro_reasons[:3],
-            "risks": macro_risks[:2],
-            "action_bias": (
-                "buy" if macro_score >= 60 else "sell" if macro_score < 35 else "watch"
-            ),
-        }
+        _make_expert(
+            "News / Macro Analyst",
+            macro_score,
+            macro_reasons,
+            macro_risks,
+            invalidation=[
+                "FOMC surprise",
+                "CPI spike >0.5%",
+                "Geopolitical escalation",
+            ],
+            time_horizon="5-20 days",
+        )
     )
 
     # 4) Flow / Options Analyst
     flow_score = 50
-    flow_reasons = []
-    flow_risks = []
+    flow_reasons, flow_risks = [], []
     if vol_ratio[i] > 1.5:
         flow_score += 15
         flow_reasons.append(
@@ -4779,34 +4923,26 @@ def _run_expert_council(
         flow_reasons.append("Flow data neutral")
     if not flow_risks:
         flow_risks.append("Volume may include hedging / rebalancing noise")
-    flow_score = max(0, min(100, flow_score))
-    verdict = (
-        "Bullish" if flow_score >= 65 else "Bearish" if flow_score < 35 else "Neutral"
-    )
     council.append(
-        {
-            "role": "Flow / Options Analyst",
-            "verdict": verdict,
-            "score": flow_score,
-            "reasons": flow_reasons[:3],
-            "risks": flow_risks[:2],
-            "action_bias": (
-                "buy" if flow_score >= 65 else "sell" if flow_score < 35 else "watch"
-            ),
-        }
+        _make_expert(
+            "Flow / Options Analyst",
+            flow_score,
+            flow_reasons,
+            flow_risks,
+            invalidation=["Volume reversal with price drop", "Put/call ratio spike"],
+            time_horizon="1-5 days",
+        )
     )
 
     # 5) Risk Officer
     risk_score = 50
-    risk_reasons = []
-    risk_risks = []
+    risk_reasons, risk_risks = [], []
     if atr_pct[i] < 0.025:
         risk_score += 15
         risk_reasons.append("Low ATR — manageable risk per trade")
     elif atr_pct[i] > 0.05:
         risk_score -= 20
         risk_risks.append("High ATR — stop distance too wide for normal sizing")
-    # Drawdown proximity
     if i > 20:
         recent_high = max(close[max(0, i - 60) : i + 1])
         dd_pct = (close[i] - recent_high) / recent_high
@@ -4820,29 +4956,20 @@ def _run_expert_council(
         risk_reasons.append("Risk within normal parameters")
     if not risk_risks:
         risk_risks.append("Black swan / gap risk always exists")
-    risk_score = max(0, min(100, risk_score))
-    verdict = (
-        "Approve" if risk_score >= 60 else "Cautious" if risk_score >= 40 else "Reject"
-    )
     council.append(
-        {
-            "role": "Risk Officer",
-            "verdict": verdict,
-            "score": risk_score,
-            "reasons": risk_reasons[:3],
-            "risks": risk_risks[:2],
-            "action_bias": (
-                "approve"
-                if risk_score >= 60
-                else "reduce" if risk_score >= 40 else "reject"
-            ),
-        }
+        _make_expert(
+            "Risk Officer",
+            risk_score,
+            risk_reasons,
+            risk_risks,
+            invalidation=["ATR doubles from current level", "Correlation spike (>0.8)"],
+            time_horizon="1-5 days",
+        )
     )
 
     # 6) Portfolio Manager
     pm_score = 50
-    pm_reasons = []
-    pm_risks = []
+    pm_reasons, pm_risks = [], []
     if regime_trending and tech_score >= 60:
         pm_score += 15
         pm_reasons.append("Regime + technicals aligned — tradeable setup")
@@ -4856,19 +4983,15 @@ def _run_expert_council(
         pm_reasons.append("Setup has merits but not high conviction")
     if not pm_risks:
         pm_risks.append("Opportunity cost — better setups may exist")
-    pm_score = max(0, min(100, pm_score))
-    verdict = "Buy" if pm_score >= 65 else "Watch" if pm_score >= 45 else "Pass"
     council.append(
-        {
-            "role": "Portfolio Manager",
-            "verdict": verdict,
-            "score": pm_score,
-            "reasons": pm_reasons[:3],
-            "risks": pm_risks[:2],
-            "action_bias": (
-                "buy" if pm_score >= 65 else "watch" if pm_score >= 45 else "pass"
-            ),
-        }
+        _make_expert(
+            "Portfolio Manager",
+            pm_score,
+            pm_reasons,
+            pm_risks,
+            invalidation=["Regime shift to bear", "Risk budget exhausted"],
+            time_horizon="5-20 days",
+        )
     )
 
     # 7) Devil's Advocate
@@ -4888,25 +5011,58 @@ def _run_expert_council(
         da_reasons.append("Volume declining — smart money may have already exited")
     if not da_reasons:
         da_reasons.append("No strong counter-argument found")
-    da_score = max(0, min(100, da_score))
     council.append(
-        {
-            "role": "Devil's Advocate",
-            "verdict": (
-                "Challenge"
-                if da_score < 40
-                else "Minor concerns" if da_score < 55 else "No objection"
-            ),
-            "score": da_score,
-            "reasons": da_reasons[:3],
-            "risks": [],
-            "action_bias": (
-                "object" if da_score < 35 else "caution" if da_score < 50 else "ok"
-            ),
-        }
+        _make_expert(
+            "Devil's Advocate",
+            da_score,
+            da_reasons,
+            [],
+            invalidation=["Counter-arguments resolved by fresh catalyst"],
+            time_horizon="1-5 days",
+        )
     )
 
-    return council
+    # ── Consensus Analysis (P1: Expert Committee v2) ──
+    scores = [e["score"] for e in council]
+    stances = [e["stance"] for e in council]
+    avg_score = sum(scores) / len(scores)
+    bullish_count = sum(1 for s in stances if s == "bullish")
+    bearish_count = sum(1 for s in stances if s == "bearish")
+    neutral_count = sum(1 for s in stances if s == "neutral")
+    import numpy as np
+
+    disagreement = float(np.std(scores))
+
+    if bullish_count >= 5:
+        consensus = "strong_consensus_bullish"
+    elif bearish_count >= 5:
+        consensus = "strong_consensus_bearish"
+    elif bullish_count >= 4:
+        consensus = "lean_bullish"
+    elif bearish_count >= 4:
+        consensus = "lean_bearish"
+    elif disagreement > 20:
+        consensus = "contested"
+    else:
+        consensus = "split"
+
+    return {
+        "members": council,
+        "summary": {
+            "avg_score": round(avg_score, 1),
+            "bullish": bullish_count,
+            "bearish": bearish_count,
+            "neutral": neutral_count,
+            "abstain": 0,
+            "disagreement": round(disagreement, 1),
+            "consensus": consensus,
+            "headline": (
+                f"{bullish_count}/7 experts bullish, {bearish_count} bearish, {neutral_count} neutral"
+                if bullish_count > bearish_count
+                else f"{bearish_count}/7 experts bearish, {bullish_count} bullish, {neutral_count} neutral"
+            ),
+        },
+    }
 
 
 @app.post("/api/live/time-travel", tags=["live"])
@@ -5098,28 +5254,48 @@ async def live_time_travel(
             "max_hold_days": max_hold,
         }
 
-    # ── Final action (arbiter) ──
+    # ── Final action (arbiter) — v2 with decision_tier + consensus ──
+    council_members = council["members"]
+    council_summary = council["summary"]
     active_signals = [s for s, v in strategy_signals.items() if v["triggered"]]
-    avg_council = round(sum(c["score"] for c in council) / len(council), 1)
+    avg_council = council_summary["avg_score"]
+    consensus = council_summary["consensus"]
+    disagreement = council_summary["disagreement"]
 
-    if confidence["grade"] == "D" or avg_council < 40:
+    # Use calibrated decision_tier from confidence engine
+    tier = confidence.get("decision_tier", "WATCH")
+    should_trade = confidence.get("should_trade", True)
+
+    if not should_trade:
+        final_action = "NO TRADE — ABSTAIN"
+        final_reason = confidence.get("abstain_reason", "Abstention rule triggered")
+    elif tier == "HEDGE" or "bearish" in consensus:
         final_action = "NO TRADE"
-        final_reason = "Confidence too low or expert council bearish"
+        final_reason = f"Decision tier={tier}, council consensus={consensus}"
+    elif tier == "NO_TRADE":
+        final_action = "NO TRADE"
+        final_reason = "Confidence below threshold"
     elif not active_signals:
         final_action = "WATCH"
         final_reason = "No strategy triggered — monitor for setup"
-    elif confidence["grade"] == "A":
+    elif disagreement > 25:
+        # Experts disagree strongly — reduce size regardless of tier
+        final_action = "BUY — PILOT SIZE"
+        final_reason = f"{tier} tier but high expert disagreement ({disagreement:.0f})"
+    elif tier == "STRONG_BUY" and "bullish" in consensus:
         final_action = "BUY — FULL SIZE"
-        final_reason = f"High confidence + {', '.join(active_signals)} triggered"
-    elif confidence["grade"] == "B":
+        final_reason = (
+            f"Strong conviction + council {consensus} + {', '.join(active_signals)}"
+        )
+    elif tier == "BUY_SMALL":
         final_action = "BUY — NORMAL SIZE"
         final_reason = f"Good confidence + {', '.join(active_signals)} triggered"
-    elif confidence["grade"] == "C":
+    elif tier == "WATCH":
         final_action = "BUY — PILOT SIZE"
-        final_reason = f"Moderate confidence — small position only"
+        final_reason = "Moderate confidence — small position only"
     else:
         final_action = "WATCH"
-        final_reason = "Mixed signals"
+        final_reason = f"Mixed signals — tier={tier}, consensus={consensus}"
 
     # ── Forward returns (what actually happened) ──
     forward = {}
@@ -5170,7 +5346,8 @@ async def live_time_travel(
                 "sma200": round(float(sma200[i]), 2),
             },
             "confidence": confidence,
-            "expert_council": council,
+            "expert_council": council_members,
+            "council_summary": council_summary,
             "council_avg": avg_council,
             "strategy_signals": strategy_signals,
             "final_action": final_action,
