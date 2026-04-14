@@ -93,9 +93,12 @@ class SignalThresholds:
     rsi_momentum_low: float = 50.0
     rsi_momentum_high: float = 75.0
     rsi_swing_entry: float = 45.0
+    rsi_near_oversold: float = 35.0  # "approaching oversold" — display / why-buy
+    rsi_near_overbought: float = 65.0  # symmetric complement
 
     # ── Volume ──
     volume_surge_threshold: float = 1.3  # breakout needs 1.3x avg volume
+    volume_strong_surge: float = 1.5  # strong institutional interest
     volume_confirmation: float = 1.0  # momentum needs 1.0x avg
 
     # ── SMA proximity ──
@@ -130,6 +133,7 @@ class SignalThresholds:
     strong_buy_threshold: float = 85.0
     buy_threshold: float = 70.0
     watch_threshold: float = 55.0
+    high_confidence_threshold: float = 75.0  # display bucket: "high" vs "medium"
 
     # ── VIX ──
     vix_crisis: float = 35.0  # VIX > this → NO TRADE

@@ -22,8 +22,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import uvicorn
 import numpy as np
+import uvicorn
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -42,6 +42,7 @@ from src.core.models import (
     ScenarioPlan,
     Signal,
 )
+from src.core.risk_limits import BACKTEST_DEFAULTS, RISK, SIGNAL_THRESHOLDS
 
 # v6 optional imports (graceful fallback)
 try:
@@ -2303,7 +2304,7 @@ async def get_regime_scoreboard():
     risk_on_score = max(0, min(100, 50 + spy_pct * 10 - (vix - 18) * 3))
 
     risk_flags = []
-    if vix > 25:
+    if vix > SIGNAL_THRESHOLDS.vix_elevated:
         risk_flags.append(f"VIX {vix:.1f} — reduce position sizes")
     if vix > 18 and spy_pct < -1:
         risk_flags.append("Selling into elevated vol — stop discipline critical")
@@ -2519,7 +2520,8 @@ async def get_signal_card(ticker: str):
                     [
                         above_sma20,
                         above_sma50,
-                        cur_rsi > 50 and cur_rsi < 70,
+                        cur_rsi > SIGNAL_THRESHOLDS.rsi_momentum_low
+                        and cur_rsi < SIGNAL_THRESHOLDS.rsi_overbought,
                         cur_atr_pct < 0.04,
                     ]
                 )
@@ -2893,47 +2895,64 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
             trending = bool(close[i] > sma50[i] and sma50[i] > sma200[i])
 
             # ── Check each strategy ──
+            _ST = SIGNAL_THRESHOLDS
             strategies = {
                 "momentum": bool(
                     close[i] > sma20[i] > sma50[i]
-                    and rsi[i] > 50
-                    and rsi[i] < 75
-                    and vol_ratio[i] > 1.0
+                    and rsi[i] > _ST.rsi_momentum_low
+                    and rsi[i] < _ST.rsi_momentum_high
+                    and vol_ratio[i] > _ST.volume_confirmation
                 ),
-                "breakout": bool(
-                    close[i] > float(np.max(close[max(0, i - 20):i]))
-                    and vol_ratio[i] > 1.3
-                    and close[i] > sma20[i]
-                ) if i > 20 else False,
-                "swing": bool(
-                    rsi[i] < 45
-                    and close[i] > sma50[i] * 0.98
-                    and (close[i] > sma20[i] or close[i - 1] < sma20[i - 1])
-                    and close[i] > close[i - 1]
-                ) if i > 1 else False,
+                "breakout": (
+                    bool(
+                        close[i] > float(np.max(close[max(0, i - 20) : i]))
+                        and vol_ratio[i] > _ST.volume_surge_threshold
+                        and close[i] > sma20[i]
+                    )
+                    if i > 20
+                    else False
+                ),
+                "swing": (
+                    bool(
+                        rsi[i] < _ST.rsi_swing_entry
+                        and close[i] > sma50[i] * (1 - _ST.swing_sma_distance)
+                        and (close[i] > sma20[i] or close[i - 1] < sma20[i - 1])
+                        and close[i] > close[i - 1]
+                    )
+                    if i > 1
+                    else False
+                ),
                 "mean_reversion": bool(
-                    rsi[i] < 30
-                    and close[i] < sma20[i] * 0.97
-                    and vol_ratio[i] > 1.0
+                    rsi[i] < _ST.rsi_oversold
+                    and close[i] < sma20[i] * (1 - _ST.mean_rev_sma_distance)
+                    and vol_ratio[i] > _ST.volume_confirmation
                 ),
             }
 
             # Strategy params
             strat_params = {
                 "momentum": {
-                    "stop": cur_atr * 2,
-                    "target": 0.15 if trending else 0.08,
+                    "stop": cur_atr * _ST.stop_atr_multiplier_momentum,
+                    "target": _ST.target_trending if trending else _ST.target_normal,
                 },
                 "breakout": {
-                    "stop": cur_atr * 1.5,
-                    "target": 0.12 if trending else 0.07,
+                    "stop": cur_atr * _ST.stop_atr_multiplier_breakout,
+                    "target": (
+                        _ST.target_breakout_trending
+                        if trending
+                        else _ST.target_breakout_normal
+                    ),
                 },
                 "swing": {
-                    "stop": cur_atr * 2,
-                    "target": 0.10 if trending else 0.06,
+                    "stop": cur_atr * _ST.stop_atr_multiplier_swing,
+                    "target": (
+                        _ST.target_swing_trending
+                        if trending
+                        else _ST.target_swing_normal
+                    ),
                 },
                 "mean_reversion": {
-                    "stop": cur_atr * 1.5,
+                    "stop": cur_atr * _ST.stop_atr_multiplier_mean_rev,
                     "target": cur_atr * 3,
                 },
             }
@@ -3721,7 +3740,11 @@ async def live_dossier(ticker: str):
     _fc(
         "RSI",
         round(rsi, 1),
-        "positive" if rsi < 35 else "negative" if rsi > 70 else "neutral",
+        (
+            "positive"
+            if rsi < SIGNAL_THRESHOLDS.rsi_near_oversold
+            else "negative" if rsi > SIGNAL_THRESHOLDS.rsi_overbought else "neutral"
+        ),
     )
     _fc(
         "MA20",
@@ -3739,7 +3762,15 @@ async def live_dossier(ticker: str):
             f"{'Above' if above_sma200 else 'Below'}",
             "positive" if above_sma200 else "negative",
         )
-    _fc("Volume", f"{vol_ratio:.1f}x avg", "positive" if vol_ratio > 1.3 else "neutral")
+    _fc(
+        "Volume",
+        f"{vol_ratio:.1f}x avg",
+        (
+            "positive"
+            if vol_ratio > SIGNAL_THRESHOLDS.volume_surge_threshold
+            else "neutral"
+        ),
+    )
     _fc("MACD", macd_signal, "positive" if macd_signal == "BULLISH" else "negative")
     _fc(
         "BBands",
@@ -3756,13 +3787,13 @@ async def live_dossier(ticker: str):
     # ── WHY BUY / WHY STOP ──
     why_buy = []
     why_stop = []
-    if rsi < 35:
+    if rsi < SIGNAL_THRESHOLDS.rsi_near_oversold:
         why_buy.append("RSI oversold — mean reversion potential")
     if above_sma20 and above_sma50:
         why_buy.append("Price above both 20- and 50-day MAs — trend aligned")
     if macd_signal == "BULLISH":
         why_buy.append("MACD bullish crossover — momentum shifting up")
-    if vol_ratio > 1.5:
+    if vol_ratio > SIGNAL_THRESHOLDS.volume_strong_surge:
         why_buy.append(
             f"Volume {vol_ratio:.1f}x above average — institutional interest"
         )
@@ -3771,7 +3802,7 @@ async def live_dossier(ticker: str):
     if not why_buy:
         why_buy.append("No strong bullish catalyst detected — monitor for setup")
 
-    if rsi > 70:
+    if rsi > SIGNAL_THRESHOLDS.rsi_overbought:
         why_stop.append("RSI overbought — pullback risk elevated")
     if not above_sma50:
         why_stop.append("Below 50-day MA — intermediate-term trend is bearish")
@@ -4356,10 +4387,10 @@ async def live_backtest(
         trades: list = []
 
         # ── Execution Cost Model (P1: Backtest Realism) ──
-        COMMISSION_PER_SHARE = 0.005  # $0.005/share
-        MIN_COMMISSION = 1.00  # $1 minimum per trade
-        SLIPPAGE_BASE_BPS = 5  # 5 bps baseline slippage
-        ACCOUNT_SIZE = 100_000  # Assumed account for position sizing
+        COMMISSION_PER_SHARE = BACKTEST_DEFAULTS.commission_per_share
+        MIN_COMMISSION = BACKTEST_DEFAULTS.min_commission
+        SLIPPAGE_BASE_BPS = BACKTEST_DEFAULTS.slippage_base_bps
+        ACCOUNT_SIZE = BACKTEST_DEFAULTS.account_size
 
         def _calc_slippage(bar_idx, entry=True):
             """ATR-based slippage: base + volume-scaled impact."""
@@ -4384,7 +4415,7 @@ async def live_backtest(
             exit_slip = _calc_slippage(bar_idx, entry=False)
             xp_net = xp * (1 - exit_slip)
             # Commission (entry + exit)
-            shares = int(ACCOUNT_SIZE * 0.05 / ep)  # ~5% position size
+            shares = int(ACCOUNT_SIZE * RISK.max_position_pct / ep)
             shares = max(1, shares)
             entry_comm = _calc_commission(shares, ep)
             exit_comm = _calc_commission(shares, xp_net)
@@ -4456,42 +4487,68 @@ async def live_backtest(
             if strat_id == "momentum":
                 enter = (
                     close[i] > sma20[i] > sma50[i]
-                    and rsi[i] > 50 and rsi[i] < 75
-                    and vol_ratio[i] > 1.0
+                    and rsi[i] > SIGNAL_THRESHOLDS.rsi_momentum_low
+                    and rsi[i] < SIGNAL_THRESHOLDS.rsi_momentum_high
+                    and vol_ratio[i] > SIGNAL_THRESHOLDS.volume_confirmation
                 )
-                stop_pct = cur_atr * 2
-                target_pct = 0.15 if trending else 0.08
-                max_hold = 60 if trending else 25
+                stop_pct = cur_atr * SIGNAL_THRESHOLDS.stop_atr_multiplier_momentum
+                target_pct = (
+                    SIGNAL_THRESHOLDS.target_trending
+                    if trending
+                    else SIGNAL_THRESHOLDS.target_normal
+                )
+                max_hold = (
+                    SIGNAL_THRESHOLDS.max_hold_momentum_trending
+                    if trending
+                    else SIGNAL_THRESHOLDS.max_hold_momentum_normal
+                )
             elif strat_id == "breakout":
                 hi20 = np.max(close[max(0, i - 20):i])
                 enter = (
                     close[i] > hi20
-                    and vol_ratio[i] > 1.3
+                    and vol_ratio[i] > SIGNAL_THRESHOLDS.volume_surge_threshold
                     and close[i] > sma20[i]
                 )
-                stop_pct = cur_atr * 1.5
-                target_pct = 0.12 if trending else 0.07
-                max_hold = 45 if trending else 20
+                stop_pct = cur_atr * SIGNAL_THRESHOLDS.stop_atr_multiplier_breakout
+                target_pct = (
+                    SIGNAL_THRESHOLDS.target_breakout_trending
+                    if trending
+                    else SIGNAL_THRESHOLDS.target_breakout_normal
+                )
+                max_hold = (
+                    SIGNAL_THRESHOLDS.max_hold_breakout_trending
+                    if trending
+                    else SIGNAL_THRESHOLDS.max_hold_breakout_normal
+                )
             elif strat_id == "mean_reversion":
                 enter = (
-                    rsi[i] < 30
-                    and close[i] < sma20[i] * 0.97
-                    and vol_ratio[i] > 1.0
+                    rsi[i] < SIGNAL_THRESHOLDS.rsi_oversold
+                    and close[i]
+                    < sma20[i] * (1 - SIGNAL_THRESHOLDS.mean_rev_sma_distance)
+                    and vol_ratio[i] > SIGNAL_THRESHOLDS.volume_confirmation
                 )
-                stop_pct = cur_atr * 1.5
+                stop_pct = cur_atr * SIGNAL_THRESHOLDS.stop_atr_multiplier_mean_rev
                 target_pct = cur_atr * 3
-                max_hold = 20
+                max_hold = SIGNAL_THRESHOLDS.max_hold_mean_rev
             elif strat_id == "swing":
                 # Swing: oversold bounce near moving average support
                 enter = (
-                    rsi[i] < 45
-                    and close[i] > sma50[i] * 0.98
+                    rsi[i] < SIGNAL_THRESHOLDS.rsi_swing_entry
+                    and close[i] > sma50[i] * (1 - SIGNAL_THRESHOLDS.swing_sma_distance)
                     and (close[i] > sma20[i] or close[i - 1] < sma20[i - 1])
                     and close[i] > close[i - 1]  # uptick confirmation
                 )
-                stop_pct = cur_atr * 2
-                target_pct = 0.10 if trending else 0.06
-                max_hold = 40 if trending else 15
+                stop_pct = cur_atr * SIGNAL_THRESHOLDS.stop_atr_multiplier_swing
+                target_pct = (
+                    SIGNAL_THRESHOLDS.target_swing_trending
+                    if trending
+                    else SIGNAL_THRESHOLDS.target_swing_normal
+                )
+                max_hold = (
+                    SIGNAL_THRESHOLDS.max_hold_swing_trending
+                    if trending
+                    else SIGNAL_THRESHOLDS.max_hold_swing_normal
+                )
 
             if enter:
                 # Apply entry slippage (buy at worse price)
@@ -4756,18 +4813,20 @@ def _compute_4layer_confidence(
     else:
         thesis_factors.append(("Sideways / mixed trend", 5))
     # RSI regime
-    if 40 < rsi[i] < 65:
+    if 40 < rsi[i] < SIGNAL_THRESHOLDS.rsi_near_overbought:
         thesis_factors.append(("RSI in healthy zone", 15))
-    elif rsi[i] < 30:
+    elif rsi[i] < SIGNAL_THRESHOLDS.rsi_oversold:
         thesis_factors.append(("RSI oversold — bounce potential", 10))
-    elif rsi[i] > 75:
+    elif rsi[i] > SIGNAL_THRESHOLDS.rsi_momentum_high:
         thesis_factors.append(("RSI overbought — caution", -5))
     else:
         thesis_factors.append(("RSI neutral", 5))
     # Volume confirmation
-    if vol_ratio[i] > 1.3:
-        thesis_factors.append(("Volume surge (>1.3x avg)", 15))
-    elif vol_ratio[i] > 1.0:
+    if vol_ratio[i] > SIGNAL_THRESHOLDS.volume_surge_threshold:
+        thesis_factors.append(
+            (f"Volume surge (>{SIGNAL_THRESHOLDS.volume_surge_threshold}x avg)", 15)
+        )
+    elif vol_ratio[i] > SIGNAL_THRESHOLDS.volume_confirmation:
         thesis_factors.append(("Normal volume", 8))
     else:
         thesis_factors.append(("Below-avg volume", -3))
@@ -4858,28 +4917,28 @@ def _compute_4layer_confidence(
     if days_to_earnings is not None and days_to_earnings <= 2:
         penalties.append("earnings_blackout")
         composite -= 15
-    if atr_pct[i] > 0.06:
+    if atr_pct[i] > RISK.max_atr_pct_for_entry:
         penalties.append("extreme_volatility")
         composite -= 10
     composite = max(0, min(100, composite))
 
-    if composite >= 85:
+    if composite >= SIGNAL_THRESHOLDS.strong_buy_threshold:
         grade, action = "A", "Strong conviction — full size"
-    elif composite >= 70:
+    elif composite >= SIGNAL_THRESHOLDS.buy_threshold:
         grade, action = "B", "Tradeable — normal size"
-    elif composite >= 55:
+    elif composite >= SIGNAL_THRESHOLDS.watch_threshold:
         grade, action = "C", "Watch or pilot size only"
     else:
         grade, action = "D", "No Trade — conditions unfavorable"
 
     # ── 5-Tier Decision (P1) ──
-    if composite >= 85 and len(penalties) == 0:
+    if composite >= SIGNAL_THRESHOLDS.strong_buy_threshold and len(penalties) == 0:
         decision_tier = "STRONG_BUY"
-        sizing = "Full position (5% of portfolio)"
-    elif composite >= 70:
+        sizing = f"Full position ({RISK.max_position_pct*100:.0f}% of portfolio)"
+    elif composite >= SIGNAL_THRESHOLDS.buy_threshold:
         decision_tier = "BUY_SMALL"
-        sizing = "Half position (2.5% of portfolio)"
-    elif composite >= 55:
+        sizing = f"Half position ({RISK.max_position_pct*50:.1f}% of portfolio)"
+    elif composite >= SIGNAL_THRESHOLDS.watch_threshold:
         decision_tier = "WATCH"
         sizing = "No position — watchlist only"
     elif composite >= 40:
@@ -4890,7 +4949,7 @@ def _compute_4layer_confidence(
         sizing = "Consider hedging existing exposure"
 
     # ── Abstention Rule (P1: Confidence Calibration) ──
-    ABSTENTION_THRESHOLD = 45
+    ABSTENTION_THRESHOLD = SIGNAL_THRESHOLDS.abstention_threshold
     should_trade = (
         composite >= ABSTENTION_THRESHOLD and "earnings_blackout" not in penalties
     )
@@ -4932,7 +4991,9 @@ def _compute_4layer_confidence(
     calibration_meta = {
         "predicted_prob": round(composite / 100, 3),
         "confidence_bucket": (
-            "high" if composite >= 75 else "medium" if composite >= 55 else "low"
+            "high"
+            if composite >= SIGNAL_THRESHOLDS.high_confidence_threshold
+            else "medium" if composite >= SIGNAL_THRESHOLDS.watch_threshold else "low"
         ),
         "decay_rate_per_day": confidence_decay_rate,
         "abstention_threshold": ABSTENTION_THRESHOLD,
@@ -5012,10 +5073,10 @@ def _run_expert_council(
     elif close[i] < sma50[i]:
         tech_score -= 15
         tech_reasons.append("Price below SMA50 — bearish structure")
-    if 40 < rsi[i] < 65:
+    if 40 < rsi[i] < SIGNAL_THRESHOLDS.rsi_near_overbought:
         tech_score += 10
         tech_reasons.append("RSI healthy — room to run")
-    elif rsi[i] > 70:
+    elif rsi[i] > SIGNAL_THRESHOLDS.rsi_overbought:
         tech_score -= 5
         tech_risks.append("RSI overbought — pullback risk")
     if i > 20 and close[i] > max(close[max(0, i - 20) : i]):
@@ -5100,7 +5161,7 @@ def _run_expert_council(
     # 4) Flow / Options Analyst
     flow_score = 50
     flow_reasons, flow_risks = [], []
-    if vol_ratio[i] > 1.5:
+    if vol_ratio[i] > SIGNAL_THRESHOLDS.volume_strong_surge:
         flow_score += 15
         flow_reasons.append(
             f"Volume surge {vol_ratio[i]:.1f}x — institutional interest"
@@ -5387,6 +5448,7 @@ async def live_time_travel(
     # ── Strategy signals as of target date ──
     cur_atr = max(float(atr_pct[i]), 0.005)
     strategy_signals = {}
+    _ST = SIGNAL_THRESHOLDS
     strats_to_check = (
         ["momentum", "breakout", "swing", "mean_reversion"]
         if strategy == "all"
@@ -5395,40 +5457,60 @@ async def live_time_travel(
     for sid in strats_to_check:
         enter = False
         stop_pct = target_pct = 0.0
-        max_hold = 20
+        max_hold = _ST.max_hold_mean_rev
         if sid == "momentum":
             enter = bool(
                 close[i] > sma20[i] > sma50[i]
-                and rsi[i] > 50
-                and rsi[i] < 75
-                and vol_ratio[i] > 1.0
+                and rsi[i] > _ST.rsi_momentum_low
+                and rsi[i] < _ST.rsi_momentum_high
+                and vol_ratio[i] > _ST.volume_confirmation
             )
-            stop_pct = cur_atr * 2
-            target_pct = 0.15 if trending else 0.08
-            max_hold = 60 if trending else 25
+            stop_pct = cur_atr * _ST.stop_atr_multiplier_momentum
+            target_pct = _ST.target_trending if trending else _ST.target_normal
+            max_hold = (
+                _ST.max_hold_momentum_trending
+                if trending
+                else _ST.max_hold_momentum_normal
+            )
         elif sid == "breakout":
             hi20 = float(np.max(close[max(0, i - 20) : i]))
-            enter = bool(close[i] > hi20 and vol_ratio[i] > 1.3 and close[i] > sma20[i])
-            stop_pct = cur_atr * 1.5
-            target_pct = 0.12 if trending else 0.07
-            max_hold = 45 if trending else 20
+            enter = bool(
+                close[i] > hi20
+                and vol_ratio[i] > _ST.volume_surge_threshold
+                and close[i] > sma20[i]
+            )
+            stop_pct = cur_atr * _ST.stop_atr_multiplier_breakout
+            target_pct = (
+                _ST.target_breakout_trending if trending else _ST.target_breakout_normal
+            )
+            max_hold = (
+                _ST.max_hold_breakout_trending
+                if trending
+                else _ST.max_hold_breakout_normal
+            )
         elif sid == "mean_reversion":
             enter = bool(
-                rsi[i] < 30 and close[i] < sma20[i] * 0.97 and vol_ratio[i] > 1.0
+                rsi[i] < _ST.rsi_oversold
+                and close[i] < sma20[i] * (1 - _ST.mean_rev_sma_distance)
+                and vol_ratio[i] > _ST.volume_confirmation
             )
-            stop_pct = cur_atr * 1.5
+            stop_pct = cur_atr * _ST.stop_atr_multiplier_mean_rev
             target_pct = cur_atr * 3
-            max_hold = 20
+            max_hold = _ST.max_hold_mean_rev
         elif sid == "swing":
             enter = bool(
-                rsi[i] < 45
-                and close[i] > sma50[i] * 0.98
+                rsi[i] < _ST.rsi_swing_entry
+                and close[i] > sma50[i] * (1 - _ST.swing_sma_distance)
                 and (close[i] > sma20[i] or close[i - 1] < sma20[i - 1])
                 and close[i] > close[i - 1]
             )
-            stop_pct = cur_atr * 2
-            target_pct = 0.10 if trending else 0.06
-            max_hold = 40 if trending else 15
+            stop_pct = cur_atr * _ST.stop_atr_multiplier_swing
+            target_pct = (
+                _ST.target_swing_trending if trending else _ST.target_swing_normal
+            )
+            max_hold = (
+                _ST.max_hold_swing_trending if trending else _ST.max_hold_swing_normal
+            )
         entry_price = round(float(close[i]), 2)
         strategy_signals[sid] = {
             "triggered": enter,
@@ -5724,12 +5806,16 @@ async def regime_screener_data():
                 if regime_label == "RISK_ON":
                     if above_sma20 and above_sma50:
                         score += 0.15
-                    if 50 < rsi < 70:
+                    if (
+                        SIGNAL_THRESHOLDS.rsi_momentum_low
+                        < rsi
+                        < SIGNAL_THRESHOLDS.rsi_overbought
+                    ):
                         score += 0.1
-                    if vol_ratio > 1.3:
+                    if vol_ratio > SIGNAL_THRESHOLDS.volume_surge_threshold:
                         score += 0.1
                 elif regime_label == "RISK_OFF":
-                    if rsi < 35:
+                    if rsi < SIGNAL_THRESHOLDS.rsi_near_oversold:
                         score += 0.15
                     if change_pct < -2:
                         score += 0.1
@@ -5798,11 +5884,11 @@ async def regime_screener_data():
                     reasons.append("Above SMA20")
                 if above_sma50:
                     reasons.append("Above SMA50")
-                if vol_ratio > 1.3:
+                if vol_ratio > SIGNAL_THRESHOLDS.volume_surge_threshold:
                     reasons.append(f"Volume {vol_ratio:.1f}x avg")
-                if rsi < 35:
+                if rsi < SIGNAL_THRESHOLDS.rsi_near_oversold:
                     reasons.append(f"RSI oversold {rsi:.0f}")
-                elif rsi > 65:
+                elif rsi > SIGNAL_THRESHOLDS.rsi_near_overbought:
                     reasons.append(f"RSI strong {rsi:.0f}")
 
                 return {
@@ -5950,7 +6036,11 @@ async def portfolio_brief_data(
             }
 
             # Determine if this has a "signal"
-            has_signal = abs(change_pct) > 2 or rsi < 30 or rsi > 70
+            has_signal = (
+                abs(change_pct) > 2
+                or rsi < SIGNAL_THRESHOLDS.rsi_oversold
+                or rsi > SIGNAL_THRESHOLDS.rsi_overbought
+            )
             if has_signal:
                 if change_pct > 2:
                     entry["note"] = "Large move" if change_pct > 4 else "Strong rally"
@@ -5958,22 +6048,26 @@ async def portfolio_brief_data(
                 elif change_pct < -2:
                     entry["note"] = "Sharp decline — watch support levels"
                     entry["signal_type"] = "pullback_warning"
-                elif rsi < 30:
+                elif rsi < SIGNAL_THRESHOLDS.rsi_oversold:
                     entry["note"] = (
                         f"RSI {rsi:.0f} oversold — check reversal conditions"
                     )
                     entry["signal_type"] = "oversold"
-                elif rsi > 70:
+                elif rsi > SIGNAL_THRESHOLDS.rsi_overbought:
                     entry["note"] = f"RSI {rsi:.0f} overbought — pullback risk"
                     entry["signal_type"] = "overbought"
                 else:
                     entry["note"] = "Signal triggered"
                     entry["signal_type"] = "signal"
                 holdings_with_signals.append(entry)
-            elif abs(change_pct) > 0.5 or rsi < 35 or rsi > 65:
-                if rsi < 35:
+            elif (
+                abs(change_pct) > 0.5
+                or rsi < SIGNAL_THRESHOLDS.rsi_near_oversold
+                or rsi > SIGNAL_THRESHOLDS.rsi_near_overbought
+            ):
+                if rsi < SIGNAL_THRESHOLDS.rsi_near_oversold:
                     entry["note"] = f"RSI {rsi:.0f} low — worth watching"
-                elif rsi > 65:
+                elif rsi > SIGNAL_THRESHOLDS.rsi_near_overbought:
                     entry["note"] = f"RSI {rsi:.0f} elevated — momentum continues"
                 else:
                     entry["note"] = f"Move {change_pct:+.1f}%"
@@ -6253,21 +6347,21 @@ async def why_moved(ticker: str):
                 "text": f"價格變動 {change_pct:+.1f}%，{'突破' if change_pct > 0 else '跌破'}重要技術位",
             }
         )
-    if vol_ratio > 1.5:
+    if vol_ratio > SIGNAL_THRESHOLDS.volume_strong_surge:
         reasons.append(
             {
                 "source": "volume",
                 "text": f"成交量 {vol_ratio:.1f}x 平均 — 有異常資金流入",
             }
         )
-    if rsi > 70:
+    if rsi > SIGNAL_THRESHOLDS.rsi_overbought:
         reasons.append(
             {
                 "source": "technical",
                 "text": f"RSI {rsi:.0f} 超買區域",
             }
         )
-    elif rsi < 30:
+    elif rsi < SIGNAL_THRESHOLDS.rsi_oversold:
         reasons.append(
             {
                 "source": "technical",

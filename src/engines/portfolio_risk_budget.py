@@ -22,6 +22,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
+from src.core.risk_limits import RISK
+
 logger = logging.getLogger(__name__)
 
 
@@ -57,7 +59,7 @@ class ExposureSnapshot:
 
     # Open count
     open_positions: int = 0
-    max_positions: int = 15
+    max_positions: int = RISK.max_positions
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -92,14 +94,14 @@ class PortfolioRiskBudget:
     """
 
     DEFAULT_LIMITS = {
-        "max_single_position": 0.05,     # 5 %
-        "max_sector_weight": 0.30,       # 30 %
-        "max_high_beta_weight": 0.25,    # 25 %
-        "max_earnings_48h_weight": 0.10, # 10 %
-        "max_correlated_bucket": 3,      # max names
-        "max_gross_risk_off": 0.50,      # 50 %
-        "max_positions": 15,
-        "portfolio_beta_limit": 1.50,    # vs SPY
+        "max_single_position": RISK.max_position_pct,
+        "max_sector_weight": RISK.max_sector_pct,
+        "max_high_beta_weight": RISK.max_high_beta_pct,
+        "max_earnings_48h_weight": RISK.earnings_max_exposure_pct,
+        "max_correlated_bucket": RISK.max_correlated_names,
+        "max_gross_risk_off": RISK.risk_off_max_exposure,
+        "max_positions": RISK.max_positions,
+        "portfolio_beta_limit": RISK.max_portfolio_beta,
     }
 
     def __init__(

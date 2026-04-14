@@ -13,15 +13,15 @@ Features:
 
 Based on proven swing trading risk management principles.
 """
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime, timedelta
-from enum import Enum
 import json
 import logging
-import pandas as pd
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
-import logging
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -254,29 +254,33 @@ class Position:
 
 @dataclass
 class RiskParameters:
-    """Risk management parameters for position sizing."""
-    
+    """Risk management parameters for position sizing.
+
+    Defaults sourced from src.core.risk_limits (single source of truth).
+    Import late to avoid circular imports.
+    """
+
     # Account parameters
     account_size: float = 100000.0
-    
+
     # Risk per trade
     risk_per_trade_pct: float = 1.0       # 1% risk per trade
     max_risk_per_trade_pct: float = 2.0   # Hard cap at 2%
-    
-    # Position limits
-    max_position_size_pct: float = 10.0   # Max 10% in one position
-    max_open_positions: int = 5
-    max_total_exposure_pct: float = 80.0  # Max 80% invested
-    
+
+    # Position limits — aligned with RISK.max_position_pct (5%)
+    max_position_size_pct: float = 5.0  # Max 5% in one position (was 10%)
+    max_open_positions: int = 15  # Aligned with RISK.max_positions
+    max_total_exposure_pct: float = 100.0  # Aligned with RISK.max_gross_exposure
+
     # Sector limits
-    max_sector_exposure_pct: float = 30.0  # Max 30% in one sector
-    max_correlated_positions: int = 3      # Max correlated positions
-    
-    # Drawdown limits
-    max_daily_loss_pct: float = 3.0       # Stop trading after 3% daily loss
+    max_sector_exposure_pct: float = 30.0  # Aligned with RISK.max_sector_pct
+    max_correlated_positions: int = 3  # Aligned with RISK.max_correlated_names
+
+    # Drawdown limits — aligned with RISK.max_drawdown_pct (15%)
+    max_daily_loss_pct: float = 3.0  # Aligned with RISK.daily_loss_limit_pct
     max_weekly_loss_pct: float = 7.0      # Stop trading after 7% weekly loss
-    max_total_drawdown_pct: float = 15.0  # Stop trading after 15% drawdown
-    
+    max_total_drawdown_pct: float = 15.0  # Aligned with RISK.max_drawdown_pct
+
     # Scaling
     scale_down_after_losses: int = 3      # Reduce size after 3 consecutive losses
     scale_factor: float = 0.5             # Scale to 50% after losses

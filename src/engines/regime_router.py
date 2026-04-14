@@ -11,9 +11,9 @@ ExpressionEngine, API, bots, and dashboard.
 """
 import logging
 import math
-from dataclasses import dataclass, field, asdict
-from typing import Dict, Optional, Any
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from typing import Any, Dict, Optional
 
 import numpy as np
 
@@ -142,7 +142,9 @@ class RegimeRouter:
         vix = market_data.get("vix", 18.0)
         spy_ret = market_data.get("spy_return_20d", 0.0)
         breadth = market_data.get("breadth_pct", 0.50)
-        hy_spread = market_data.get("hy_spread", 0.0)
+        hy_spread = market_data.get(
+            "hy_spread", 0.0
+        )  # percentage points (e.g. 3.5 = 350bps)
         realized_vol = market_data.get("realized_vol_20d", 0.15)
         vix_term_slope = market_data.get("vix_term_slope", 0.0)
 

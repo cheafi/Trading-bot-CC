@@ -476,3 +476,110 @@ class TestCrossCuttingIntegrity:
         src = (Path(__file__).parent.parent / "src" / "api" / "main.py").read_text()
         assert "def _compute_indicators(" in src
         assert "def _rolling_mean(" in src
+
+
+# ═══════════════════════════════════════════════════════════════
+# P2.1 — Risk Limits Wiring
+# ═══════════════════════════════════════════════════════════════
+
+
+class TestRiskLimitsWiring:
+    """Verify all modules reference risk_limits instead of hardcoded values."""
+
+    def test_main_imports_risk_limits(self):
+        """main.py should import from risk_limits."""
+        src = (Path(__file__).parent.parent / "src" / "api" / "main.py").read_text()
+        assert "from src.core.risk_limits import" in src
+
+    def test_main_uses_signal_thresholds_for_rsi(self):
+        """main.py should reference SIGNAL_THRESHOLDS for RSI checks."""
+        src = (Path(__file__).parent.parent / "src" / "api" / "main.py").read_text()
+        assert "SIGNAL_THRESHOLDS.rsi_oversold" in src
+        assert "SIGNAL_THRESHOLDS.rsi_overbought" in src
+        assert "SIGNAL_THRESHOLDS.rsi_momentum_low" in src
+        assert "SIGNAL_THRESHOLDS.rsi_momentum_high" in src
+
+    def test_main_uses_backtest_defaults(self):
+        """Backtest constants should come from BACKTEST_DEFAULTS."""
+        src = (Path(__file__).parent.parent / "src" / "api" / "main.py").read_text()
+        assert "BACKTEST_DEFAULTS.commission_per_share" in src
+        assert "BACKTEST_DEFAULTS.slippage_base_bps" in src
+        assert "BACKTEST_DEFAULTS.account_size" in src
+
+    def test_main_uses_risk_max_position_pct(self):
+        """Position sizing should reference RISK.max_position_pct."""
+        src = (Path(__file__).parent.parent / "src" / "api" / "main.py").read_text()
+        assert "RISK.max_position_pct" in src
+
+    def test_main_uses_signal_thresholds_for_volume(self):
+        """Volume surge thresholds should reference SIGNAL_THRESHOLDS."""
+        src = (Path(__file__).parent.parent / "src" / "api" / "main.py").read_text()
+        assert "SIGNAL_THRESHOLDS.volume_surge_threshold" in src
+        assert "SIGNAL_THRESHOLDS.volume_strong_surge" in src
+
+    def test_main_uses_signal_thresholds_for_stops(self):
+        """ATR stop multipliers should reference SIGNAL_THRESHOLDS."""
+        src = (Path(__file__).parent.parent / "src" / "api" / "main.py").read_text()
+        assert "SIGNAL_THRESHOLDS.stop_atr_multiplier_momentum" in src
+        assert "SIGNAL_THRESHOLDS.stop_atr_multiplier_breakout" in src
+        assert "SIGNAL_THRESHOLDS.stop_atr_multiplier_swing" in src
+
+    def test_main_uses_signal_thresholds_for_targets(self):
+        """Target return percentages should reference SIGNAL_THRESHOLDS."""
+        src = (Path(__file__).parent.parent / "src" / "api" / "main.py").read_text()
+        assert "SIGNAL_THRESHOLDS.target_trending" in src
+        assert "SIGNAL_THRESHOLDS.target_swing_trending" in src
+
+    def test_main_uses_signal_thresholds_for_confidence(self):
+        """Grade thresholds should reference SIGNAL_THRESHOLDS."""
+        src = (Path(__file__).parent.parent / "src" / "api" / "main.py").read_text()
+        assert "SIGNAL_THRESHOLDS.strong_buy_threshold" in src
+        assert "SIGNAL_THRESHOLDS.buy_threshold" in src
+        assert "SIGNAL_THRESHOLDS.watch_threshold" in src
+        assert "SIGNAL_THRESHOLDS.abstention_threshold" in src
+
+    def test_portfolio_risk_budget_imports_risk(self):
+        """portfolio_risk_budget.py should import RISK from risk_limits."""
+        src = (
+            Path(__file__).parent.parent
+            / "src"
+            / "engines"
+            / "portfolio_risk_budget.py"
+        ).read_text()
+        assert "from src.core.risk_limits import RISK" in src
+
+    def test_portfolio_risk_budget_uses_risk_values(self):
+        """DEFAULT_LIMITS should reference RISK singleton fields."""
+        src = (
+            Path(__file__).parent.parent
+            / "src"
+            / "engines"
+            / "portfolio_risk_budget.py"
+        ).read_text()
+        assert "RISK.max_position_pct" in src
+        assert "RISK.max_sector_pct" in src
+        assert "RISK.max_positions" in src
+
+    def test_position_manager_aligned(self):
+        """position_manager RiskParameters should match RISK defaults."""
+        from src.algo.position_manager import RiskParameters
+        from src.core.risk_limits import RISK
+
+        rp = RiskParameters()
+        assert rp.max_position_size_pct == RISK.max_position_pct * 100
+        assert rp.max_open_positions == RISK.max_positions
+        assert rp.max_total_drawdown_pct == RISK.max_drawdown_pct * 100
+        assert rp.max_daily_loss_pct == RISK.daily_loss_limit_pct * 100
+
+    def test_signal_thresholds_has_new_fields(self):
+        """Verify newly added fields exist."""
+        from src.core.risk_limits import SIGNAL_THRESHOLDS
+
+        assert hasattr(SIGNAL_THRESHOLDS, "rsi_near_oversold")
+        assert SIGNAL_THRESHOLDS.rsi_near_oversold == 35.0
+        assert hasattr(SIGNAL_THRESHOLDS, "rsi_near_overbought")
+        assert SIGNAL_THRESHOLDS.rsi_near_overbought == 65.0
+        assert hasattr(SIGNAL_THRESHOLDS, "volume_strong_surge")
+        assert SIGNAL_THRESHOLDS.volume_strong_surge == 1.5
+        assert hasattr(SIGNAL_THRESHOLDS, "high_confidence_threshold")
+        assert SIGNAL_THRESHOLDS.high_confidence_threshold == 75.0
