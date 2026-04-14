@@ -115,6 +115,31 @@
     <!-- SURFACE 1: TODAY / REGIME                              -->
     <!-- ═══════════════════════════════════════════════════════ -->
     <main x-show="tab==='today'" class="fade">
+      <!-- ── Regime Alert Banner ── -->
+      <template x-if="regime.label==='RISK_OFF'||regime.no_trade_reason">
+        <div style="margin:8px 12px;padding:10px 14px;border-radius:10px;border:1px solid rgba(255,92,92,.3);background:linear-gradient(135deg,rgba(255,92,92,.06),rgba(255,92,92,.02))">
+          <div class="flex items-center gap-2 mb-1">
+            <span style="font-size:16px">🛑</span>
+            <span class="text-[12px] font-bold" style="color:var(--red)" x-text="regime.no_trade_reason?'TRADING HALTED':'RISK-OFF REGIME'"></span>
+          </div>
+          <div class="text-[10px]" style="color:var(--t2);line-height:1.5" x-text="regime.no_trade_reason||'Market conditions unfavorable. Reduce exposure and avoid new entries. Capital preservation mode.'"></div>
+          <div class="flex gap-2 mt-2">
+            <span class="pill pr text-[8px]" x-text="'Regime: '+(regime.label||'—').replace('_',' ')"></span>
+            <template x-if="regime.vol==='HIGH'||regime.vol==='CRISIS'"><span class="pill pr text-[8px]" x-text="'Vol: '+regime.vol"></span></template>
+            <template x-if="regime.trend==='DOWNTREND'"><span class="pill pr text-[8px]">Downtrend</span></template>
+          </div>
+        </div>
+      </template>
+      <template x-if="regime.label==='RISK_ON'&&!regime.no_trade_reason">
+        <div style="margin:8px 12px;padding:8px 14px;border-radius:10px;border:1px solid rgba(0,212,170,.2);background:linear-gradient(135deg,rgba(0,212,170,.04),rgba(0,212,170,.01))">
+          <div class="flex items-center gap-2">
+            <span style="font-size:14px">✅</span>
+            <span class="text-[11px] font-bold" style="color:var(--green)">RISK-ON — Normal Trading Conditions</span>
+            <span class="pill pg text-[8px]" x-text="'Trend: '+(regime.trend||'—')"></span>
+            <span class="pill pg text-[8px]" x-text="'Vol: '+(regime.vol||'—')"></span>
+          </div>
+        </div>
+      </template>
       <div class="kpi-strip">
         <div class="kpi-box">
           <div class="kpi-val mono" :class="(regime.score||0)>=60?'text-green-400':(regime.score||0)>=40?'text-amber-300':'text-red-400'" x-text="regime.score||'—'"></div>
@@ -203,6 +228,13 @@
         <span x-text="'As-of: '+(sig.as_of?sig.as_of.slice(0,19):'—')"></span>
         <span x-text="sig.recs.length+' signals'"></span>
       </div>
+      <!-- Risk Guard Banner -->
+      <template x-if="regime.label==='RISK_OFF'||regime.no_trade_reason">
+        <div style="margin:8px 12px 4px;padding:8px 12px;background:rgba(255,92,92,.06);border:1px solid rgba(255,92,92,.2);border-radius:8px">
+          <div class="text-[10px] font-bold" style="color:var(--red)">🛡️ Risk Guard Active</div>
+          <div class="text-[9px] mt-1" style="color:var(--t2)" x-text="regime.no_trade_reason||'Risk-off regime \u2014 new entries not recommended. Existing positions should be reviewed for tighter stops.'"></div>
+        </div>
+      </template>
       <div style="padding:8px 12px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <span class="pill" :class="regime.label==='RISK_ON'?'pg':regime.label==='RISK_OFF'?'pr':'pa'" x-text="(regime.label||'—').replace('_',' ')"></span>
         <span class="pill pw" x-text="'Trend: '+(regime.trend||'—')"></span>
@@ -993,9 +1025,9 @@
 
             <!-- ── Methodology ── -->
             <div class="card card-p" style="border-color:rgba(251,191,36,.3)">
-              <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--amber)">⚠ Methodology & Honesty</div>
+              <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--amber)">⚠ Methodology & Limitations</div>
               <div class="text-[9px]" style="color:var(--t3);line-height:1.5">
-                <strong>Historical replay</strong> using real Yahoo Finance data. Indicators computed as-of the target date (no future leak). Forward returns are <strong>hindsight</strong> — the system did NOT execute these. Expert council opinions are algorithmic, not human. 4-layer confidence is computed from price/volume patterns available on that date. Past performance ≠ future results.
+                <strong>Historical replay</strong> using real Yahoo Finance data. Indicators computed as-of the target date using causal (right-aligned) rolling windows — no future data leak. Forward returns are <strong>hindsight</strong> — the system did NOT execute these trades. Expert council opinions are <strong>algorithmic rule-based</strong>, not human judgment. 4-layer confidence is computed from price/volume patterns only — does not include news, earnings, or fundamental analysis. Backtest includes realistic transaction costs (commission + ATR-based slippage). <strong>Past performance ≠ future results. This is not financial advice.</strong>
               </div>
             </div>
 

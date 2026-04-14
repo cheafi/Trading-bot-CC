@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import uvicorn
+import numpy as np
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -541,6 +542,119 @@ class ErrorResponse(BaseModel):
 
 # Track startup time for uptime calculation
 startup_time = datetime.utcnow()
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Indicator helpers — right-aligned rolling (NO look-ahead bias)
+# ═══════════════════════════════════════════════════════════════════
+
+
+def _rolling_mean(arr: np.ndarray, window: int) -> np.ndarray:
+    """Causal (right-aligned) simple moving average.
+
+    For bar i, result[i] = mean(arr[i-window+1 .. i]).
+    First (window-1) bars use expanding mean (partial window).
+    This avoids the look-ahead bias of np.convolve(mode='full')[:n].
+    """
+    n = len(arr)
+    window = min(window, n)  # clamp to array length
+    out = np.empty(n, dtype=float)
+    cumsum = np.cumsum(arr)
+    out[:window] = cumsum[:window] / np.arange(1, window + 1)
+    if window < n:
+        out[window:] = (cumsum[window:] - cumsum[:-window]) / window
+    return out
+
+
+def _compute_indicators(close: np.ndarray, volume: np.ndarray) -> dict:
+    """Compute standard indicator suite with correct causal alignment.
+
+    Returns dict with: sma20, sma50, sma200, rsi, vol_ratio, atr, atr_pct.
+    All arrays are length n, right-aligned (no future leak).
+    """
+    n = len(close)
+    sma20 = _rolling_mean(close, 20)
+    sma50 = _rolling_mean(close, 50)
+    sma200 = _rolling_mean(close, min(200, n))
+
+    # RSI-14 (Wilder smoothing approximation via SMA)
+    deltas = np.diff(close, prepend=close[0])
+    gains = np.where(deltas > 0, deltas, 0.0)
+    losses = np.where(deltas < 0, -deltas, 0.0)
+    avg_gain = _rolling_mean(gains, 14)
+    avg_loss = _rolling_mean(losses, 14)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        rs = np.where(avg_loss > 0, avg_gain / avg_loss, 100.0)
+    rsi = 100.0 - (100.0 / (1.0 + rs))
+
+    # Volume ratio
+    vol_float = volume.astype(float)
+    vol_ma = _rolling_mean(vol_float, 20)
+    vol_ratio = np.where(vol_ma > 0, vol_float / vol_ma, 1.0)
+
+    # ATR-14 (from close-to-close as proxy)
+    true_range = np.abs(np.diff(close, prepend=close[0]))
+    atr = _rolling_mean(true_range, 14)
+    atr_pct = np.where(close > 0, atr / close, 0.02)
+
+    return {
+        "sma20": sma20,
+        "sma50": sma50,
+        "sma200": sma200,
+        "rsi": rsi,
+        "vol_ratio": vol_ratio,
+        "atr": atr,
+        "atr_pct": atr_pct,
+    }
+
+
+# US market holidays (fixed + observed). Not exhaustive but covers majors.
+_US_MARKET_HOLIDAYS_2024_2027 = {
+    # 2024
+    (2024, 1, 1),
+    (2024, 1, 15),
+    (2024, 2, 19),
+    (2024, 3, 29),
+    (2024, 5, 27),
+    (2024, 6, 19),
+    (2024, 7, 4),
+    (2024, 9, 2),
+    (2024, 11, 28),
+    (2024, 12, 25),
+    # 2025
+    (2025, 1, 1),
+    (2025, 1, 20),
+    (2025, 2, 17),
+    (2025, 4, 18),
+    (2025, 5, 26),
+    (2025, 6, 19),
+    (2025, 7, 4),
+    (2025, 9, 1),
+    (2025, 11, 27),
+    (2025, 12, 25),
+    # 2026
+    (2026, 1, 1),
+    (2026, 1, 19),
+    (2026, 2, 16),
+    (2026, 4, 3),
+    (2026, 5, 25),
+    (2026, 6, 19),
+    (2026, 7, 3),
+    (2026, 9, 7),
+    (2026, 11, 26),
+    (2026, 12, 25),
+    # 2027
+    (2027, 1, 1),
+    (2027, 1, 18),
+    (2027, 2, 15),
+    (2027, 3, 26),
+    (2027, 5, 31),
+    (2027, 6, 18),
+    (2027, 7, 5),
+    (2027, 9, 6),
+    (2027, 11, 25),
+    (2027, 12, 24),
+}
 
 
 # ===== Health Endpoints =====
@@ -1267,7 +1381,7 @@ async def list_jobs(_: bool = Depends(verify_api_key)):
 
 
 def _is_market_open() -> bool:
-    """Check if US market is currently open."""
+    """Check if US market is currently open (incl. major holidays)."""
     import pytz
 
     et = pytz.timezone("US/Eastern")
@@ -1275,6 +1389,10 @@ def _is_market_open() -> bool:
 
     # Check weekday
     if now.weekday() >= 5:
+        return False
+
+    # Check US market holidays
+    if (now.year, now.month, now.day) in _US_MARKET_HOLIDAYS_2024_2027:
         return False
 
     # Check time
@@ -2366,34 +2484,135 @@ async def get_signal_card(ticker: str):
     if not _HAS_REPORT_GEN:
         raise HTTPException(503, "Report generator not available")
 
-    # Build a sample signal for demonstration — in production, fetch from DB
+    ticker = validate_ticker(ticker)
+
+    # Attempt to build a real signal from live market data
+    mds = app.state.market_data
+    try:
+        q = await mds.get_quote(ticker)
+        price = float(q["price"]) if q and "price" in q else 0.0
+    except Exception:
+        price = 0.0
+
+    if price > 0:
+        # Build signal from live data
+        try:
+            hist = await mds.get_history(ticker, period="3mo", interval="1d")
+            c_col = "Close" if hist is not None and "Close" in hist.columns else "close"
+            close_data = (
+                hist[c_col].values.astype(float)
+                if hist is not None and len(hist) > 20
+                else np.array([])
+            )
+
+            if len(close_data) > 50:
+                _ind = _compute_indicators(close_data, np.ones(len(close_data)))
+                cur_rsi = float(_ind["rsi"][-1])
+                cur_atr_pct = float(_ind["atr_pct"][-1])
+                cur_sma20 = float(_ind["sma20"][-1])
+                cur_sma50 = float(_ind["sma50"][-1])
+                above_sma20 = price > cur_sma20
+                above_sma50 = price > cur_sma50
+
+                # Determine direction and confidence from indicators
+                bullish_factors = sum(
+                    [
+                        above_sma20,
+                        above_sma50,
+                        cur_rsi > 50 and cur_rsi < 70,
+                        cur_atr_pct < 0.04,
+                    ]
+                )
+                confidence = min(0.95, 0.40 + bullish_factors * 0.12)
+                direction = "BUY" if bullish_factors >= 2 else "WATCH"
+
+                stop_pct = max(0.03, cur_atr_pct * 2)
+                target_pct = stop_pct * 2.5
+
+                evidence = []
+                if above_sma20:
+                    evidence.append(f"Price ${price:.2f} > SMA20 ${cur_sma20:.2f}")
+                if above_sma50:
+                    evidence.append(f"Price > SMA50 ${cur_sma50:.2f}")
+                evidence.append(f"RSI {cur_rsi:.0f}")
+                evidence.append(f"ATR {cur_atr_pct*100:.1f}%")
+
+                reasons = []
+                if above_sma20 and above_sma50:
+                    reasons.append("Trend alignment — above key SMAs")
+                if 40 < cur_rsi < 65:
+                    reasons.append("RSI in healthy range")
+                if cur_atr_pct < 0.03:
+                    reasons.append("Low volatility — controlled risk")
+
+                setup_grade = (
+                    "A" if confidence >= 0.75 else "B" if confidence >= 0.60 else "C"
+                )
+            else:
+                raise ValueError("Insufficient data")
+        except Exception:
+            # Fallback to basic signal
+            confidence = 0.50
+            direction = "WATCH"
+            stop_pct = 0.05
+            target_pct = 0.10
+            evidence = [f"Price: ${price:.2f}", "Limited technical data"]
+            reasons = ["Insufficient history for full analysis"]
+            setup_grade = "C"
+            cur_rsi = 50.0
+    else:
+        # No live data available — return placeholder with clear warning
+        confidence = 0.0
+        direction = "NO DATA"
+        price = 0.0
+        stop_pct = 0.05
+        target_pct = 0.10
+        evidence = ["⚠ No live data available"]
+        reasons = ["Cannot compute — market data unavailable"]
+        setup_grade = "N/A"
+
+    entry_price = round(price, 2)
     signal = Signal(
         ticker=ticker.upper(),
-        direction="BUY",
-        confidence=0.78,
-        strategy="momentum",
-        entry_price=150.0,
-        stop_loss=142.5,
-        take_profit=165.0,
-        reasons=["Strong momentum", "Volume breakout", "Above SMA20"],
+        direction=direction,
+        confidence=round(confidence, 2),
+        strategy="momentum" if direction == "BUY" else "none",
+        entry_price=entry_price,
+        stop_loss=round(entry_price * (1 - stop_pct), 2) if entry_price > 0 else 0,
+        take_profit=round(entry_price * (1 + target_pct), 2) if entry_price > 0 else 0,
+        reasons=reasons[:3],
         # v6 fields
-        setup_grade="A",
-        edge_type="trend_continuation",
-        approval_status="APPROVED",
-        why_now=f"{ticker.upper()} breaking multi-week consolidation with volume confirmation",
-        evidence=["Price > SMA20 > SMA50", "RSI 62 rising", "Vol 2.1x avg"],
+        setup_grade=setup_grade,
+        edge_type="trend_continuation" if direction == "BUY" else "none",
+        approval_status=(
+            "APPROVED"
+            if confidence >= 0.65
+            else "REVIEW" if confidence >= 0.50 else "REJECTED"
+        ),
+        why_now=(
+            f"{ticker.upper()} technical signal based on live market data"
+            if price > 0
+            else "No data available"
+        ),
+        evidence=evidence[:4],
         scenario_plan={
-            "base_case": {"probability": "55%", "description": "Grind to +8% target"},
-            "bull_case": {"probability": "30%", "description": "Squeeze to +15%"},
-            "bear_case": {
-                "probability": "15%",
-                "description": "Fail at resistance, -5%",
+            "base_case": {
+                "probability": f"{int(confidence*60+20)}%",
+                "description": f"Move to target +{target_pct*100:.0f}%",
             },
-            "triggers": ["Earnings", "Sector rotation"],
+            "bull_case": {
+                "probability": f"{int(confidence*20+10)}%",
+                "description": f"Extended move +{target_pct*200:.0f}%",
+            },
+            "bear_case": {
+                "probability": f"{int(100-confidence*80-30)}%",
+                "description": f"Stop hit -{stop_pct*100:.0f}%",
+            },
+            "triggers": ["Earnings", "Sector rotation", "Macro events"],
         },
         time_stop_days=10,
-        event_risk="Earnings in 5 days",
-        portfolio_fit="adds_diversification",
+        event_risk="Check earnings calendar",
+        portfolio_fit="review_required",
     )
 
     card = build_signal_card(signal)
@@ -2402,6 +2621,7 @@ async def get_signal_card(ticker: str):
         "ticker": ticker.upper(),
         "timestamp": datetime.utcnow().isoformat(),
         "version": "v6",
+        "data_source": "live" if price > 0 else "unavailable",
     }
 
 
@@ -2660,28 +2880,14 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
             if n < 60:
                 continue
 
-            # ── Compute indicators ──
-            sma20 = np.convolve(close, np.ones(20) / 20, mode="full")[:n]
-            sma50 = np.convolve(close, np.ones(50) / 50, mode="full")[:n]
-            sma200 = np.convolve(
-                close, np.ones(min(200, n)) / min(200, n), mode="full"
-            )[:n]
-
-            deltas = np.diff(close, prepend=close[0])
-            gains = np.where(deltas > 0, deltas, 0)
-            losses = np.where(deltas < 0, -deltas, 0)
-            avg_gain = np.convolve(gains, np.ones(14) / 14, mode="full")[:n]
-            avg_loss = np.convolve(losses, np.ones(14) / 14, mode="full")[:n]
-            with np.errstate(divide="ignore", invalid="ignore"):
-                rs = np.where(avg_loss > 0, avg_gain / avg_loss, 100)
-            rsi = 100 - (100 / (1 + rs))
-
-            vol_ma = np.convolve(volume, np.ones(20) / 20, mode="full")[:n]
-            vol_ratio = np.where(vol_ma > 0, volume / vol_ma, 1.0)
-
-            true_range = np.abs(np.diff(close, prepend=close[0]))
-            atr = np.convolve(true_range, np.ones(14) / 14, mode="full")[:n]
-            atr_pct = np.where(close > 0, atr / close, 0.02)
+            # ── Compute indicators (causal, no look-ahead) ──
+            _ind = _compute_indicators(close, volume)
+            sma20 = _ind["sma20"]
+            sma50 = _ind["sma50"]
+            sma200 = _ind["sma200"]
+            rsi = _ind["rsi"]
+            vol_ratio = _ind["vol_ratio"]
+            atr_pct = _ind["atr_pct"]
             cur_atr = max(float(atr_pct[i]), 0.005)
 
             trending = bool(close[i] > sma50[i] and sma50[i] > sma200[i])
@@ -4135,26 +4341,14 @@ async def live_backtest(
     def _run_strategy(strat_id: str) -> dict:
         """Run a single strategy backtest – v2 competitive engine."""
         n = len(close)
-        # ── Indicators ──
-        sma20 = np.convolve(close, np.ones(20) / 20, mode="full")[:n]
-        sma50 = np.convolve(close, np.ones(50) / 50, mode="full")[:n]
-        sma200 = np.convolve(close, np.ones(200) / 200, mode="full")[:n]
-        # RSI (14)
-        deltas = np.diff(close, prepend=close[0])
-        gains = np.where(deltas > 0, deltas, 0)
-        losses = np.where(deltas < 0, -deltas, 0)
-        avg_gain = np.convolve(gains, np.ones(14) / 14, mode="full")[:n]
-        avg_loss_arr = np.convolve(losses, np.ones(14) / 14, mode="full")[:n]
-        with np.errstate(divide="ignore", invalid="ignore"):
-            rs = np.where(avg_loss_arr > 0, avg_gain / avg_loss_arr, 100)
-        rsi = 100 - (100 / (1 + rs))
-        # Volume ratio
-        vol_ma = np.convolve(volume.astype(float), np.ones(20) / 20, mode="full")[:n]
-        vol_ratio = np.where(vol_ma > 0, volume / vol_ma, 1.0)
-        # ATR (14-day, estimated from close)
-        true_range = np.abs(np.diff(close, prepend=close[0]))
-        atr = np.convolve(true_range, np.ones(14) / 14, mode="full")[:n]
-        atr_pct = np.where(close > 0, atr / close, 0.02)
+        # ── Indicators (causal, no look-ahead bias) ──
+        _ind = _compute_indicators(close, volume)
+        sma20 = _ind["sma20"]
+        sma50 = _ind["sma50"]
+        sma200 = _ind["sma200"]
+        rsi = _ind["rsi"]
+        vol_ratio = _ind["vol_ratio"]
+        atr_pct = _ind["atr_pct"]
 
         # ── Multi-position tracking ──
         MAX_POS = 3
@@ -4357,7 +4551,8 @@ async def live_backtest(
             eq_curve.append(eq)
         eq_arr = np.array(eq_curve) if eq_curve else np.array([1])
         peak = np.maximum.accumulate(eq_arr)
-        dd = (eq_arr - peak) / peak
+        with np.errstate(divide="ignore", invalid="ignore"):
+            dd = np.where(peak > 0, (eq_arr - peak) / peak, 0.0)
         max_dd = float(np.min(dd)) * 100 if len(dd) else 0
 
         # Profit factor
@@ -5140,23 +5335,14 @@ async def live_time_travel(
     n = len(close)
     i = n - 1  # last bar = target date
 
-    # ── Indicators ──
-    sma20 = np.convolve(close, np.ones(20) / 20, mode="full")[:n]
-    sma50 = np.convolve(close, np.ones(50) / 50, mode="full")[:n]
-    sma200 = np.convolve(close, np.ones(200) / 200, mode="full")[:n]
-    deltas = np.diff(close, prepend=close[0])
-    gains = np.where(deltas > 0, deltas, 0)
-    losses = np.where(deltas < 0, -deltas, 0)
-    avg_gain = np.convolve(gains, np.ones(14) / 14, mode="full")[:n]
-    avg_loss_arr = np.convolve(losses, np.ones(14) / 14, mode="full")[:n]
-    with np.errstate(divide="ignore", invalid="ignore"):
-        rs = np.where(avg_loss_arr > 0, avg_gain / avg_loss_arr, 100)
-    rsi = 100 - (100 / (1 + rs))
-    vol_ma = np.convolve(volume.astype(float), np.ones(20) / 20, mode="full")[:n]
-    vol_ratio = np.where(vol_ma > 0, volume / vol_ma, 1.0)
-    true_range = np.abs(np.diff(close, prepend=close[0]))
-    atr = np.convolve(true_range, np.ones(14) / 14, mode="full")[:n]
-    atr_pct = np.where(close > 0, atr / close, 0.02)
+    # ── Indicators (causal, no look-ahead bias) ──
+    _ind = _compute_indicators(close, volume)
+    sma20 = _ind["sma20"]
+    sma50 = _ind["sma50"]
+    sma200 = _ind["sma200"]
+    rsi = _ind["rsi"]
+    vol_ratio = _ind["vol_ratio"]
+    atr_pct = _ind["atr_pct"]
 
     # ── Regime as of target date ──
     trending = bool(close[i] > sma50[i] and sma50[i] > sma200[i])

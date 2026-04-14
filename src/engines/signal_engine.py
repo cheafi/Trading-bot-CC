@@ -15,19 +15,25 @@ Upgrades (v6):
 """
 import asyncio
 import hashlib
-from datetime import datetime, date, timedelta, timezone
-from typing import List, Dict, Optional, Any, Tuple
 import logging
+from datetime import date, datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Tuple
+
 import pandas as pd
 
-from src.core.models import (
-    Signal, MarketRegime, VolatilityRegime, TrendRegime, RiskRegime,
-    MarketPlaybook, TradeBrief, RiskBulletin,
-)
 from src.core.config import get_trading_config
-from src.strategies import get_strategy, get_all_strategies, BaseStrategy
+from src.core.models import (
+    MarketPlaybook,
+    MarketRegime,
+    RiskBulletin,
+    RiskRegime,
+    Signal,
+    TradeBrief,
+    TrendRegime,
+    VolatilityRegime,
+)
 from src.engines.insight_engine import InsightEngine
-
+from src.strategies import BaseStrategy, get_all_strategies, get_strategy
 
 # ═══════════════════════════════════════════════════════════════════════
 # UNIVERSE QUALITY FILTER
@@ -485,9 +491,8 @@ class RegimeDetector:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         try:
-            from src.engines.regime_router import (
-                RegimeRouter, RegimeState,
-            )
+            from src.engines.regime_router import RegimeRouter, RegimeState
+
             self._router = RegimeRouter()
         except Exception:
             self._router = None
@@ -603,7 +608,7 @@ class RegimeDetector:
         vix_term = market_data.get('vix_term_structure', 1.0)
         pct_above_50 = market_data.get('pct_above_sma50', 50)
         hy_spread = market_data.get('hy_spread', 350)
-        
+
         # Volatility regime
         if vix > 35:
             vol_regime = VolatilityRegime.CRISIS
@@ -613,7 +618,7 @@ class RegimeDetector:
             vol_regime = VolatilityRegime.NORMAL
         else:
             vol_regime = VolatilityRegime.LOW_VOL
-        
+
         # Trend regime based on breadth
         if pct_above_50 > 70:
             trend_regime = TrendRegime.STRONG_UPTREND
@@ -625,7 +630,7 @@ class RegimeDetector:
             trend_regime = TrendRegime.DOWNTREND
         else:
             trend_regime = TrendRegime.STRONG_DOWNTREND
-        
+
         # Risk regime based on VIX term structure and credit
         if vix_term < 0.9 and hy_spread > 400:
             risk_regime = RiskRegime.RISK_OFF
@@ -633,16 +638,16 @@ class RegimeDetector:
             risk_regime = RiskRegime.RISK_ON
         else:
             risk_regime = RiskRegime.NEUTRAL
-        
+
         # Determine active strategies
         strategy_weights = self._get_active_strategies(vol_regime, trend_regime, risk_regime)
         active_strategies = list(strategy_weights.keys())
-        
+
         self.logger.info(
             f"Regime detected: vol={vol_regime.value}, trend={trend_regime.value}, "
             f"risk={risk_regime.value}, strategies={active_strategies}"
         )
-        
+
         return MarketRegime(
             timestamp=datetime.utcnow(),
             volatility=vol_regime,
@@ -651,7 +656,7 @@ class RegimeDetector:
             active_strategies=active_strategies,
             strategy_weights=strategy_weights,
         )
-    
+
     def _get_active_strategies(
         self, 
         vol: VolatilityRegime, 
@@ -665,22 +670,22 @@ class RegimeDetector:
             Dict mapping strategy_id -> weight (0.0-1.0).
             Higher weight = more regime-appropriate = higher position sizing.
         """
-        
+
         # NO TRADE conditions
         if vol == VolatilityRegime.CRISIS:
             return {}
-        
+
         if trend == TrendRegime.STRONG_DOWNTREND and risk == RiskRegime.RISK_OFF:
             return {}
-        
+
         weights: Dict[str, float] = {}
-        
+
         # ── Base weights by trend alignment ───────────────────────
         is_uptrend = trend in [TrendRegime.UPTREND, TrendRegime.STRONG_UPTREND]
         is_neutral = trend == TrendRegime.NEUTRAL
         is_downtrend = trend in [TrendRegime.DOWNTREND, TrendRegime.STRONG_DOWNTREND]
         is_low_vol = vol in [VolatilityRegime.LOW_VOL, VolatilityRegime.NORMAL]
-        
+
         # Momentum / trend strategies - best in uptrends with normal vol
         if is_uptrend and vol != VolatilityRegime.HIGH_VOL:
             boost = 1.0 if trend == TrendRegime.STRONG_UPTREND else 0.8
@@ -689,35 +694,35 @@ class RegimeDetector:
             weights["short_term_trend_following"] = boost * 0.9
             weights["trend_following"] = boost
             weights["momentum_rotation"] = boost * 0.85
-        
+
         # VCP works in low vol (tight base / squeeze)
         if is_low_vol and not is_downtrend:
             weights["vcp"] = 0.9 if vol == VolatilityRegime.LOW_VOL else 0.7
-        
+
         # Mean reversion - normal/low vol, avoid strong downtrend
         if is_low_vol and not is_downtrend:
             mr_w = 0.85 if is_neutral else 0.65
             weights["mean_reversion"] = mr_w
             weights["mean_reversion_v1"] = mr_w
             weights["short_term_mean_reversion"] = mr_w * 0.9
-        
+
         # Breakout and swing - neutral/uptrend
         if not is_downtrend:
             sw_w = 0.9 if is_uptrend else 0.7
             weights["breakout_v1"] = sw_w
             weights["classic_swing"] = sw_w
-        
+
         # Earnings strategies - always active (self-filter on calendar)
         weights["pre_earnings_momentum"] = 0.6
         weights["post_earnings_drift"] = 0.6
         weights["earnings_breakout"] = 0.6
-        
+
         # ── Global risk dampener ──────────────────────────────────
         if vol == VolatilityRegime.HIGH_VOL:
             weights = {k: v * 0.6 for k, v in weights.items()}
         if risk == RiskRegime.RISK_OFF:
             weights = {k: v * 0.5 for k, v in weights.items()}
-        
+
         return weights
 
 
@@ -880,7 +885,7 @@ class SignalEngine:
     11. Signal v6 field population
     12. Signal output
     """
-    
+
     def __init__(
         self, 
         strategies: Optional[List[BaseStrategy]] = None,
@@ -909,7 +914,7 @@ class SignalEngine:
         self._data_quality_gate = None
         self._delta_tracker = None
         self._scoreboard_builder = None
-    
+
     def _get_data_quality_gate(self):
         if self._data_quality_gate is None:
             from src.engines.data_quality import DataQualityGate
@@ -918,13 +923,12 @@ class SignalEngine:
 
     def _get_delta_tracker(self):
         if self._delta_tracker is None:
-            from src.engines.delta_scoreboard import (
-                DeltaTracker, ScoreboardBuilder,
-            )
+            from src.engines.delta_scoreboard import DeltaTracker, ScoreboardBuilder
+
             self._delta_tracker = DeltaTracker()
             self._scoreboard_builder = ScoreboardBuilder()
         return self._delta_tracker, self._scoreboard_builder
-    
+
     def generate_signals(
         self,
         universe: List[str],
@@ -982,7 +986,7 @@ class SignalEngine:
         if not clean_universe:
             self.logger.warning("No tickers passed universe filter")
             return []
-        
+
         # ── 1. Pre-flight NO TRADE check ───────────────────────
         can_trade, reason = self._preflight_check(market_data)
         self._last_market_state = {
@@ -995,10 +999,10 @@ class SignalEngine:
         if not can_trade:
             self.logger.warning(f"🚫 NO TRADE: {reason}")
             return []
-        
+
         # ── 2. Detect regime ───────────────────────────────────
         regime = self.regime_detector.detect(market_data)
-        
+
         if not regime.should_trade:
             self.logger.warning("Regime indicates no trading")
             self._last_market_state["no_trade_reason"] = (
@@ -1032,7 +1036,7 @@ class SignalEngine:
             )
             self._last_delta_snapshot = None
             self._last_scoreboard = None
-        
+
         # ── 3. Run active strategies ───────────────────────────
         raw_signals = []
         for strategy in self.strategies:
@@ -1050,11 +1054,11 @@ class SignalEngine:
                     self.logger.error(
                         f"Error in strategy {strategy.STRATEGY_ID}: {e}"
                     )
-        
+
         self.logger.info(f"Total raw signals: {len(raw_signals)}")
         if not raw_signals:
             return []
-        
+
         # ── 4. Edge checklist per signal ───────────────────────
         for sig in raw_signals:
             try:
@@ -1080,7 +1084,7 @@ class SignalEngine:
                 self.logger.warning(
                     f"Edge checklist error for {sig.ticker}: {e}"
                 )
-        
+
         # ── 5. Score unification ───────────────────────────────
         for sig in raw_signals:
             scores = self.score_unifier.unify(sig.confidence)
@@ -1095,7 +1099,7 @@ class SignalEngine:
                 sig.feature_snapshot["calibrated_win_rate"] = (
                     round(cal_wr, 4)
                 )
-        
+
         # ── 6. Dedup + conflict resolution ─────────────────────
         deduped_signals, resolutions = (
             self.dedup.resolve_conflicts(raw_signals)
@@ -1109,22 +1113,22 @@ class SignalEngine:
                     f"  {r['ticker']}: kept {r['kept']}, "
                     f"dropped {r['dropped']}"
                 )
-        
+
         for sig in deduped_signals:
             sig.feature_snapshot = sig.feature_snapshot or {}
             sig.feature_snapshot["dedupe_key"] = (
                 self.dedup.dedupe_key(sig)
             )
-        
+
         # ── 7. Risk model filter + sizing ──────────────────────
         filtered_signals = self.risk_model.filter_and_size(
             deduped_signals, portfolio
         )
-        
+
         self.logger.info(
             f"Filtered signals: {len(filtered_signals)}"
         )
-        
+
         # ── 8. Sort + limit ────────────────────────────────────
         filtered_signals = sorted(
             filtered_signals,
@@ -1135,7 +1139,7 @@ class SignalEngine:
         if len(filtered_signals) > max_signals:
             filtered_signals = filtered_signals[:max_signals]
             self.logger.info(f"Limited to top {max_signals} signals")
-        
+
         # ── 9. Insight enrichment (v5) ─────────────────────────
         try:
             features_by_ticker = {}
@@ -1188,9 +1192,9 @@ class SignalEngine:
             filtered_signals, trade_briefs, regime,
             features, calendar_events, portfolio,
         )
-        
+
         return filtered_signals
-    
+
     def _populate_v6_fields(
         self,
         signals: List[Signal],
@@ -1338,7 +1342,7 @@ class SignalEngine:
                     f"v6 field population error for "
                     f"{sig.ticker}: {e}"
                 )
-    
+
     def _get_feature_row(self, ticker: str, features: pd.DataFrame) -> Dict:
         """Extract latest feature row for a ticker."""
         try:
@@ -1353,27 +1357,27 @@ class SignalEngine:
             return tf.iloc[-1].to_dict() if hasattr(tf.iloc[-1], "to_dict") else {}
         except Exception:
             return {}
-    
+
     def get_market_state(self) -> Optional[Dict]:
         """Return the latest market state for display / DB storage."""
         return self._last_market_state
-    
+
     def get_insights(self) -> Optional[Dict]:
         """Return the latest insights (playbook, trade briefs, risk bulletin)."""
         return self._last_insights
-    
+
     def get_playbook(self) -> Optional[MarketPlaybook]:
         """Convenience: return just the playbook."""
         if self._last_insights:
             return self._last_insights.get("playbook")
         return None
-    
+
     def get_trade_briefs(self) -> List[TradeBrief]:
         """Convenience: return trade briefs."""
         if self._last_insights:
             return self._last_insights.get("trade_briefs", [])
         return []
-    
+
     def get_risk_bulletin(self) -> Optional[RiskBulletin]:
         """Convenience: return risk bulletin."""
         if self._last_insights:
@@ -1400,51 +1404,97 @@ class SignalEngine:
     def get_data_quality(self):
         """Return the last data quality report list."""
         return self._last_data_quality
-    
+
     def _preflight_check(self, market_data: Dict) -> tuple[bool, str]:
         """
         Pre-flight checks before signal generation.
-        
+
         Ensures market conditions are suitable for trading.
         Returns (can_trade, reason) tuple.
+
+        Checks: VIX crisis, SPX circuit breaker, FOMC/quad witching,
+        data staleness, account drawdown, daily loss limit.
         """
+        from src.core.risk_limits import RISK
+
         vix = market_data.get('vix', 20)
         spx_change = market_data.get('spx_change_pct', 0)
         is_fomc = market_data.get('is_fomc_day', False)
         is_quad_witching = market_data.get('is_quad_witching', False)
         data_fresh = market_data.get('data_fresh', True)
         data_staleness_seconds = market_data.get('data_staleness_seconds', 0)
-        
+
+        # ── Account-level circuit breakers (P2: drawdown + daily loss) ──
+        account_drawdown_pct = market_data.get("account_drawdown_pct", 0.0)
+        daily_pnl_pct = market_data.get("daily_pnl_pct", 0.0)
+
         # NO TRADE conditions with specific reason codes
         checks = [
-            (vix < 40, "NO_TRADE_vix_crisis", f"VIX too high ({vix:.1f}) - crisis mode"),
-            (spx_change > -3.0, "NO_TRADE_circuit_breaker", f"Market down {abs(spx_change):.1f}% - circuit breaker risk"),
+            (
+                vix < RISK.vix_crisis if hasattr(RISK, "vix_crisis") else vix < 35,
+                "NO_TRADE_vix_crisis",
+                f"VIX too high ({vix:.1f}) - crisis mode",
+            ),
+            (
+                spx_change > -3.0,
+                "NO_TRADE_circuit_breaker",
+                f"Market down {abs(spx_change):.1f}% - circuit breaker risk",
+            ),
             (not is_fomc, "NO_TRADE_fomc_day", "FOMC day - high volatility expected"),
-            (not is_quad_witching, "NO_TRADE_quad_witching", "Quad witching - unusual volume/volatility"),
+            (
+                not is_quad_witching,
+                "NO_TRADE_quad_witching",
+                "Quad witching - unusual volume/volatility",
+            ),
             (data_fresh, "NO_TRADE_stale_data", "Market data too stale"),
-            (data_staleness_seconds < 900, "NO_TRADE_data_15min", f"Data staleness {data_staleness_seconds}s > 15min threshold"),
+            (
+                data_staleness_seconds < 900,
+                "NO_TRADE_data_15min",
+                f"Data staleness {data_staleness_seconds}s > 15min threshold",
+            ),
+            # ── Drawdown circuit breaker ──
+            (
+                abs(account_drawdown_pct) < RISK.max_drawdown_pct * 100,
+                "NO_TRADE_max_drawdown",
+                f"Account drawdown {account_drawdown_pct:.1f}% exceeds limit "
+                f"{RISK.max_drawdown_pct*100:.0f}% — trading halted",
+            ),
+            # ── Daily loss limit ──
+            (
+                daily_pnl_pct > -(RISK.daily_loss_limit_pct * 100),
+                "NO_TRADE_daily_loss",
+                f"Daily loss {daily_pnl_pct:.1f}% exceeds limit "
+                f"{RISK.daily_loss_limit_pct*100:.0f}% — halted for today",
+            ),
         ]
-        
+
         for condition, code, reason in checks:
             if not condition:
                 # Track rejection reasons
                 self._track_rejection(code, reason)
                 return False, f"{code}: {reason}"
-        
+
+        # ── Drawdown warning: reduce sizing but allow trading ──
+        if abs(account_drawdown_pct) >= RISK.drawdown_warning_pct * 100:
+            self.logger.warning(
+                f"Account drawdown {account_drawdown_pct:.1f}% >= "
+                f"warning level {RISK.drawdown_warning_pct*100:.0f}% — sizing reduced"
+            )
+
         return True, "All checks passed"
-    
+
     def _track_rejection(self, code: str, reason: str):
         """Track rejection reasons for observability."""
         if not hasattr(self, '_rejection_counts'):
             self._rejection_counts = {}
-        
+
         self._rejection_counts[code] = self._rejection_counts.get(code, 0) + 1
         self.logger.info(f"Signal rejected: {code} - {reason}")
-    
+
     def get_rejection_stats(self) -> Dict[str, int]:
         """Get rejection reason statistics."""
         return getattr(self, '_rejection_counts', {})
-    
+
     async def generate_signals_async(
         self,
         universe: List[str],
