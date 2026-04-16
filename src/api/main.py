@@ -2996,24 +2996,181 @@ async def search_tickers(q: str = Query("", description="Search query")):
 
 # ── Live Signal Scanner (on-demand when engine cache is empty) ──
 _SCAN_WATCHLIST = [
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA",
-    "JPM", "V", "UNH", "HD", "PG", "JNJ", "MA",
-    "SPY", "QQQ", "IWM", "DIA",
-    "AMD", "CRM", "NFLX", "COST", "AVGO", "LLY",
+    # ── Information Technology (75) ──
+    "AAPL", "MSFT", "NVDA", "AVGO", "ORCL", "CRM", "AMD", "CSCO", "ACN", "ADBE",
+    "IBM", "INTC", "TXN", "QCOM", "INTU", "AMAT", "NOW", "MU", "LRCX", "ADI",
+    "KLAC", "PANW", "SNPS", "CDNS", "CRWD", "MSI", "NXPI", "FTNT", "ROP", "APH",
+    "MCHP", "TEL", "ADSK", "ANSS", "KEYS", "ON", "CDW", "FICO", "IT", "FSLR",
+    "MPWR", "SMCI", "ARM", "PLTR", "NET", "DDOG", "SNOW", "ZS", "SHOP", "TTD",
+    "HUBS", "TEAM", "MDB", "ESTC", "CFLT", "S", "CRDO", "ONTO", "ANET", "DELL",
+    "HPQ", "HPE", "WDC", "STX", "ENPH", "SEDG", "WOLF", "GLOB", "EPAM", "PAYC",
+    "PCTY", "MANH", "BILL", "DOCU", "OKTA",
+    # ── Communication Services (25) ──
+    "META", "GOOGL", "GOOG", "NFLX", "T", "TMUS", "VZ", "DIS", "CMCSA", "CHTR",
+    "EA", "TTWO", "MTCH", "WBD", "PARA", "LYV", "RBLX", "PINS", "SNAP", "ROKU",
+    "ZM", "SPOT", "RDDT", "DASH", "UBER",
+    # ── Consumer Discretionary (40) ──
+    "AMZN", "TSLA", "HD", "MCD", "NKE", "SBUX", "TJX", "BKNG", "LOW", "CMG",
+    "ORLY", "ABNB", "MAR", "GM", "F", "ROST", "YUM", "DHI", "LEN", "LULU",
+    "AZO", "GPC", "POOL", "DECK", "ULTA", "DPZ", "WYNN", "MGM", "LVS", "RCL",
+    "CCL", "NCLH", "ETSY", "W", "RIVN", "NIO", "XPEV", "LI", "LCID", "QS",
+    # ── Financials (45) ──
+    "JPM", "V", "MA", "BAC", "WFC", "GS", "MS", "SPGI", "BLK", "AXP",
+    "SCHW", "C", "CB", "MMC", "PGR", "ICE", "AON", "CME", "MCO", "USB",
+    "AJG", "MSCI", "PNC", "TFC", "AIG", "MET", "PRU", "TROW", "BK", "STT",
+    "FITB", "RF", "CFG", "HBAN", "KEY", "ALLY", "SOFI", "COIN", "HOOD", "MKTX",
+    "FIS", "FISV", "PYPL", "SQ", "AFRM",
+    # ── Healthcare (45) ──
+    "UNH", "JNJ", "LLY", "ABBV", "MRK", "TMO", "ABT", "DHR", "PFE", "BMY",
+    "AMGN", "MDT", "ISRG", "SYK", "GILD", "VRTX", "REGN", "BSX", "ELV", "CI",
+    "ZTS", "BDX", "HCA", "MRNA", "BNTX", "DXCM", "IDXX", "IQV", "MTD", "ALGN",
+    "HOLX", "PODD", "INCY", "BIIB", "ILMN", "A", "WST", "RMD", "EW", "BAX",
+    "CNC", "MOH", "HZNP", "NBIX", "IONS",
+    # ── Industrials (40) ──
+    "GE", "CAT", "UNP", "HON", "RTX", "BA", "LMT", "DE", "UPS", "ADP",
+    "ETN", "WM", "ITW", "EMR", "NSC", "CSX", "GD", "NOC", "TDG", "CTAS",
+    "PCAR", "CARR", "FAST", "ODFL", "CPRT", "WCN", "RSG", "LHX", "VRSK", "PWR",
+    "IR", "ROK", "SWK", "FTV", "AXON", "TDY", "HEI", "RKLB", "ASTS", "LUNR",
+    # ── Consumer Staples (20) ──
+    "PG", "COST", "KO", "PEP", "WMT", "PM", "MO", "MDLZ", "CL", "EL",
+    "KMB", "GIS", "SJM", "HSY", "K", "STZ", "ADM", "TSN", "TGT", "DG",
+    # ── Energy (25) ──
+    "XOM", "CVX", "COP", "SLB", "EOG", "MPC", "PSX", "VLO", "PXD", "OXY",
+    "HES", "DVN", "HAL", "BKR", "FANG", "KMI", "WMB", "OKE", "TRGP", "ET",
+    "PBR", "BP", "SHEL", "TTE", "VALE",
+    # ── Materials (15) ──
+    "LIN", "APD", "SHW", "ECL", "DD", "NEM", "FCX", "NUE", "VMC", "MLM",
+    "PPG", "ALB", "EMN", "CF", "MOS",
+    # ── Utilities (10) ──
+    "NEE", "SO", "DUK", "D", "AEP", "SRE", "EXC", "XEL", "WEC", "ED",
+    # ── Real Estate (15) ──
+    "PLD", "AMT", "CCI", "EQIX", "PSA", "O", "WELL", "DLR", "SPG", "VICI",
+    "ARE", "AVB", "EQR", "MAA", "INVH",
+    # ── ETFs (15) ──
+    "SPY", "QQQ", "IWM", "DIA", "XLF", "XLK", "XLE", "XLV", "XLI", "XLP",
+    "XLY", "ARKK", "ARKG", "SMH", "SOXX",
+    # ── Crypto-adjacent (8) ──
+    "MSTR", "MARA", "RIOT", "CLSK", "BTBT", "HUT", "BITF", "CIFR",
+    # ── International ADRs (20) ──
+    "BABA", "TSM", "ASML", "NVO", "SAP", "TM", "SNY", "AZN", "DEO", "UL",
+    "INFY", "WIT", "GRAB", "SE", "MELI", "NU", "BIDU", "JD", "PDD", "KWEB",
+    # ── Additional Mid/Small-Cap & Popular (110+) ──
+    # Fintech / Payments
+    "UPST", "LMND", "OPEN", "LC", "TOST", "FOUR", "GPN", "WEX", "PAGS", "STNE",
+    # Cybersecurity
+    "CYBR", "TENB", "RPD", "VRNS", "QLYS", "SAIL",
+    # AI / Data / Analytics
+    "AI", "PATH", "BRZE", "DV", "CWAN", "GTLB", "SUMO",
+    # Cannabis
+    "TLRY", "CGC", "ACB", "SNDL",
+    # Biotech Small-Cap
+    "SMMT", "LEGN", "SRPT", "ALNY", "BMRN", "EXAS", "NTRA", "RXRX", "DNA",
+    # Solar / Clean Energy
+    "RUN", "NOVA", "ARRY", "MAXN", "SHLS", "STEM",
+    # Retail / E-commerce
+    "CHWY", "COUR", "DUOL", "ASAN", "FVRR", "UPWK",
+    # Gaming / Entertainment
+    "DKNG", "PENN", "RSI", "GENI", "U", "SKLZ",
+    # Telecom / Infrastructure
+    "LUMN", "ATUS", "TNET", "CALIX",
+    # Travel / Hospitality
+    "EXPE", "TRIP", "HTHT", "LIND",
+    # Industrials Small-Cap
+    "GNRC", "TTC", "SITE", "AZEK", "BLDR", "TREX",
+    # Food / Beverage
+    "CELH", "MNST", "SAM", "FIZZ",
+    # Insurance
+    "ROOT", "LMND", "ACGL", "RNR", "ERIE",
+    # Mining / Metals
+    "GOLD", "AEM", "WPM", "RGLD", "PAAS", "AG",
+    # REITs Small
+    "REXR", "SUI", "ELS", "CUBE", "LSI",
+    # Misc Popular
+    "CAVA", "BROS", "DJT", "IONQ", "RGTI", "QUBT", "SOUN", "JOBY", "ACHR",
+    "VST", "TXRH", "WING", "COKE", "TMDX", "PRCT", "AXSM", "KRYS", "CVNA",
+    "PLTR", "SMCI",  # duplicate-safe: set() dedup below
 ]
+# Deduplicate while preserving order
+_SCAN_WATCHLIST = list(dict.fromkeys(_SCAN_WATCHLIST))
 
 # ── Sector clustering for correlation guard (P3) ──
 # Prevents hidden concentration: max N signals from the same sector cluster.
 _TICKER_SECTOR: dict[str, str] = {}
 _SECTOR_CLUSTERS = {
-    "Semiconductor": ["NVDA", "AMD", "AVGO", "MU", "INTC", "SMCI", "ARM", "QCOM"],
-    "Big Tech": ["AAPL", "MSFT", "GOOGL", "AMZN", "META"],
-    "Software/Cloud": ["CRM", "NFLX", "PLTR", "SNOW", "NET", "DDOG"],
-    "Financials": ["JPM", "V", "MA", "GS", "SOFI", "COIN"],
-    "Healthcare": ["UNH", "JNJ", "LLY", "PFE", "ABBV"],
-    "Consumer": ["COST", "HD", "PG", "WMT", "TGT"],
-    "EV/Auto": ["TSLA", "RIVN", "F", "GM"],
-    "ETF": ["SPY", "QQQ", "IWM", "DIA"],
+    "Semiconductor": [
+        "NVDA", "AMD", "AVGO", "MU", "INTC", "SMCI", "ARM", "QCOM", "TXN",
+        "AMAT", "LRCX", "ADI", "KLAC", "NXPI", "MCHP", "ON", "MPWR", "FSLR",
+        "CRDO", "ONTO", "TSM", "ASML", "SOXX", "SMH",
+    ],
+    "Big Tech": ["AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "META"],
+    "Software/Cloud": [
+        "CRM", "ORCL", "ADBE", "NOW", "INTU", "PANW", "SNPS", "CDNS", "CRWD",
+        "FTNT", "ADSK", "ANSS", "FICO", "PLTR", "NET", "DDOG", "SNOW", "ZS",
+        "SHOP", "TTD", "HUBS", "TEAM", "MDB", "ESTC", "CFLT", "OKTA", "DOCU",
+        "BILL", "PAYC", "PCTY", "MANH", "SAP",
+    ],
+    "Financials": [
+        "JPM", "V", "MA", "BAC", "WFC", "GS", "MS", "SPGI", "BLK", "AXP",
+        "SCHW", "C", "CB", "MMC", "PGR", "ICE", "AON", "CME", "MCO", "USB",
+        "AJG", "MSCI", "PNC", "TFC", "AIG", "MET", "PRU", "TROW", "BK", "STT",
+        "FITB", "RF", "CFG", "HBAN", "KEY", "ALLY", "SOFI", "COIN", "HOOD",
+        "MKTX", "FIS", "FISV", "PYPL", "SQ", "AFRM", "XLF",
+    ],
+    "Healthcare": [
+        "UNH", "JNJ", "LLY", "ABBV", "MRK", "TMO", "ABT", "DHR", "PFE", "BMY",
+        "AMGN", "MDT", "ISRG", "SYK", "GILD", "VRTX", "REGN", "BSX", "ELV",
+        "CI", "ZTS", "BDX", "HCA", "MRNA", "BNTX", "DXCM", "IDXX", "IQV",
+        "MTD", "ALGN", "HOLX", "PODD", "INCY", "BIIB", "ILMN", "A", "WST",
+        "RMD", "EW", "BAX", "CNC", "MOH", "HZNP", "NBIX", "IONS", "XLV",
+    ],
+    "Consumer Disc": [
+        "HD", "MCD", "NKE", "SBUX", "TJX", "BKNG", "LOW", "CMG", "ORLY",
+        "ABNB", "MAR", "ROST", "YUM", "DHI", "LEN", "LULU", "AZO", "GPC",
+        "POOL", "DECK", "ULTA", "DPZ", "WYNN", "MGM", "LVS", "RCL", "CCL",
+        "NCLH", "ETSY", "W", "XLY",
+    ],
+    "Consumer Staples": [
+        "PG", "COST", "KO", "PEP", "WMT", "PM", "MO", "MDLZ", "CL", "EL",
+        "KMB", "GIS", "SJM", "HSY", "K", "STZ", "ADM", "TSN", "TGT", "DG", "XLP",
+    ],
+    "EV/Auto": ["TSLA", "RIVN", "NIO", "XPEV", "LI", "LCID", "QS", "GM", "F"],
+    "ETF": [
+        "SPY", "QQQ", "IWM", "DIA", "XLK", "XLE", "XLI",
+        "ARKK", "ARKG", "KWEB",
+    ],
+    "Aerospace/Defense": [
+        "RTX", "BA", "LMT", "GE", "GD", "NOC", "TDG", "LHX", "TDY", "HEI",
+        "RKLB", "ASTS", "LUNR", "AXON", "XLI",
+    ],
+    "Energy": [
+        "XOM", "CVX", "COP", "SLB", "EOG", "MPC", "PSX", "VLO", "PXD", "OXY",
+        "HES", "DVN", "HAL", "BKR", "FANG", "KMI", "WMB", "OKE", "TRGP", "ET",
+        "PBR", "BP", "SHEL", "TTE", "VALE", "XLE",
+    ],
+    "Materials": [
+        "LIN", "APD", "SHW", "ECL", "DD", "NEM", "FCX", "NUE", "VMC", "MLM",
+        "PPG", "ALB", "EMN", "CF", "MOS",
+    ],
+    "Industrials": [
+        "CAT", "UNP", "HON", "DE", "UPS", "ADP", "ETN", "WM", "ITW", "EMR",
+        "NSC", "CSX", "CTAS", "PCAR", "CARR", "FAST", "ODFL", "CPRT", "WCN",
+        "RSG", "VRSK", "PWR", "IR", "ROK", "SWK", "FTV",
+    ],
+    "Utilities": ["NEE", "SO", "DUK", "D", "AEP", "SRE", "EXC", "XEL", "WEC", "ED"],
+    "Real Estate": [
+        "PLD", "AMT", "CCI", "EQIX", "PSA", "O", "WELL", "DLR", "SPG", "VICI",
+        "ARE", "AVB", "EQR", "MAA", "INVH",
+    ],
+    "Crypto-adjacent": ["MSTR", "MARA", "RIOT", "CLSK", "BTBT", "HUT", "BITF", "CIFR"],
+    "Intl ADR": [
+        "BABA", "TSM", "ASML", "NVO", "SAP", "TM", "SNY", "AZN", "DEO", "UL",
+        "INFY", "WIT", "GRAB", "SE", "MELI", "NU", "BIDU", "JD", "PDD",
+    ],
+    "Communication": [
+        "NFLX", "T", "TMUS", "VZ", "DIS", "CMCSA", "CHTR", "EA", "TTWO",
+        "MTCH", "WBD", "PARA", "LYV", "RBLX", "PINS", "SNAP", "ROKU", "ZM",
+        "SPOT", "RDDT", "DASH", "UBER",
+    ],
 }
 for _sector, _tickers in _SECTOR_CLUSTERS.items():
     for _t in _tickers:
