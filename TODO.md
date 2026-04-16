@@ -89,10 +89,10 @@
 - [x] Execution slippage ceiling
 
 ### System Architecture
-- [ ] Decompose discord_bot.py (5,596 lines) into modules
-- [ ] Separate engine boundaries from API monolith
-- [ ] CI/CD pipeline with test gates
-- [ ] Render → proper deployment with health checks
+- [x] Decompose discord_bot.py into modules (cogs/, tasks/, _constants, _embeds, _helpers)
+- [x] Separate engine boundaries from API monolith (src/engines/interfaces.py — ABCs)
+- [x] CI/CD pipeline with test gates (Black, Ruff, mypy, pytest, Docker — .github/workflows/ci.yml)
+- [x] Render → proper deployment with health checks (render.yaml — API + Discord + Redis + Postgres)
 
 ### Institutional Review Items (Sprint 41)
 - [x] Meta-labeler engine (go/no-go + size per signal, vetoes, composite scoring)
