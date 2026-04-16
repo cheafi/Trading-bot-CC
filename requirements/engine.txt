@@ -2,21 +2,21 @@
 -r base.txt
 
 # Technical analysis
-ta-lib==0.4.28  # requires TA-Lib C library
-pandas-ta==0.3.14b0
-talib-binary==0.4.24  # precompiled alternative
+ta-lib>=0.4.28  # requires TA-Lib C library
+pandas-ta>=0.3.14b0
+# talib-binary>=0.4.24  # precompiled alternative (ta-lib covers this)
 
 # Statistics
-scipy==1.11.4
-statsmodels==0.14.1
-scikit-learn==1.3.2
+scipy>=1.11.4
+statsmodels>=0.14.1
+scikit-learn>=1.3.2
 
 # OpenAI for GPT validation & AI advisor
-openai==1.6.1
-tiktoken==0.5.2
+openai>=1.6.1
+tiktoken>=0.5.2
 
 # Feature engineering
 # feature-engine removed — not imported; using src/engines/feature_engine.py
 
 # ML trade learning
-joblib==1.3.2
+joblib>=1.3.2

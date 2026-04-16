@@ -2,19 +2,19 @@
 -r base.txt
 
 # Telegram
-python-telegram-bot==20.7
+python-telegram-bot>=20.7
 
 # Discord
-discord.py==2.3.2
+discord.py>=2.3.2
 
 # WhatsApp (via Twilio)
-twilio==8.10.3
+twilio>=8.10.3
 
 # Slack (install when Slack integration is wired)
-# slack-sdk==3.26.1
+# slack-sdk>=3.26.1
 
 # Email (install when email notifications are wired)
-# sendgrid==6.11.0
+# sendgrid>=6.11.0
 
 # OpenAI for message formatting
-openai==1.6.1
+openai>=1.6.1
