@@ -1,47 +1,41 @@
-# Environment & Secrets
-.env
-*.env.local
 
-# Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-venv/
-env/
-.venv/
-ENV/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-.DS_Store
-
-# Logs
-*.log
-logs/
-
-# Build
-build/
-dist/
-*.egg-info/
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Jupyter
-.ipynb_checkpoints/
-
-# Runtime data & models
-data/
-models/
-reports/
-notebooks/
-
-# Sprint patch files (development only)
 _sprint*_patch.py
+.coverage
+.DS_Store
+.env
+.idea/
+.ipynb_checkpoints/
+.pytest_cache/
+.Python
+.venv/
+.vscode/
+*.egg-info/
+*.env.local
+*.log
+*.py[cod]
+*.pyc
+*.so
+*.swo
+*.swp
+*$py.class
+# Build
+# Environment & Secrets
+# IDE
+# Jupyter
+# Logs
+# Python
+# Runtime data & models
+# Sprint patch files (development only)
+# Testing
+build/
+data/
+dist/
+env/
+ENV/
+htmlcov/
+logs/
+models/
+notebooks/
+reports/
+venv/
