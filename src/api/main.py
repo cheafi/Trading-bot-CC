@@ -14,6 +14,7 @@ import asyncio
 import hashlib
 import logging
 import math
+import os
 import random as _random_module
 import re
 import time
@@ -206,16 +207,21 @@ Use the `X-API-Key` header for authenticated endpoints.
 
 # Add middleware
 app.add_middleware(RateLimitMiddleware)
-# CORS: restricted in production, open in dev
-_CORS_ORIGINS = [
-    origin.strip()
-    for origin in (settings.api_secret_key and "").split(",")
-    if origin.strip()
-] or (["*"] if settings.environment != "production" else ["https://cheafi.github.io"])
+# CORS: explicit origins only — never wildcard with credentials
+_CORS_ORIGINS_ENV = os.environ.get("CORS_ORIGINS", "")
+_CORS_ORIGINS = (
+    [o.strip() for o in _CORS_ORIGINS_ENV.split(",") if o.strip()]
+    if _CORS_ORIGINS_ENV
+    else (
+        ["https://cheafi.github.io"]
+        if settings.environment == "production"
+        else ["http://localhost:8000", "http://127.0.0.1:8000"]
+    )
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_CORS_ORIGINS,
-    allow_credentials=settings.environment != "production",
+    allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["X-API-Key", "Content-Type", "Authorization"],
 )
@@ -1034,9 +1040,8 @@ async def exposure_dashboard():
 )
 async def meta_label_ticker(ticker: str):
     """Evaluate go/no-go + size for a candidate signal."""
-    from src.engines.meta_labeler import (
-        MetaLabeler, SignalContext,
-    )
+    from src.engines.meta_labeler import MetaLabeler, SignalContext
+
     ml = MetaLabeler()
     ctx = SignalContext(ticker=ticker.upper())
     label = ml.evaluate(ctx)
@@ -1050,9 +1055,8 @@ async def meta_label_ticker(ticker: str):
 )
 async def post_trade_report():
     """Stated reasons vs realized outcomes."""
-    from src.engines.post_trade_attribution import (
-        post_trade_attribution,
-    )
+    from src.engines.post_trade_attribution import post_trade_attribution
+
     return post_trade_attribution.full_report()
 
 
@@ -1063,9 +1067,8 @@ async def post_trade_report():
 )
 async def regime_heatmap():
     """PnL by regime × strategy matrix."""
-    from src.engines.post_trade_attribution import (
-        post_trade_attribution,
-    )
+    from src.engines.post_trade_attribution import post_trade_attribution
+
     return {
         "heatmap": post_trade_attribution.regime_heatmap(),
     }
@@ -1078,9 +1081,8 @@ async def regime_heatmap():
 )
 async def broker_reconciliation_status():
     """Order tracking and reconciliation gate."""
-    from src.engines.broker_reconciliation import (
-        broker_reconciliation,
-    )
+    from src.engines.broker_reconciliation import broker_reconciliation
+
     return broker_reconciliation.status()
 
 
@@ -3022,6 +3024,153 @@ _scan_cache: dict = {"recs": [], "scores": {}, "ts": 0.0}
 _SCAN_CACHE_TTL = 300  # 5 minutes
 
 
+# ═══════════════════════════════════════════════════════════════════
+# ENRICHMENT HELPERS — calibration, action state, trust, contradiction
+# ═══════════════════════════════════════════════════════════════════
+
+
+def _enrich_calibration(conf: dict, strategy: str) -> dict:
+    """Build 6-layer calibrated confidence from 4-layer confidence output.
+
+    Layers: forecast_probability, historical_reliability, uncertainty_band,
+    data_confidence, execution_confidence, portfolio_fit_confidence.
+    """
+    composite = conf.get("composite", 50)
+    cal = conf.get("calibration", {})
+    bucket = cal.get("confidence_bucket", "medium")
+    predicted_prob = cal.get("predicted_prob", composite / 100)
+
+    # Uncertainty band: ±12% for high-confidence, ±18% for medium, ±25% for low
+    band_half = {"high": 12, "medium": 18, "low": 25}.get(bucket, 18)
+    low_bound = max(0, round(composite - band_half, 1))
+    high_bound = min(100, round(composite + band_half, 1))
+
+    return {
+        "forecast_probability": round(predicted_prob, 3),
+        "historical_reliability_bucket": bucket,
+        "uncertainty_band": {"low": low_bound, "high": high_bound},
+        "uncertainty_display": f"{low_bound:.0f}–{high_bound:.0f}%",
+        "data_confidence": conf.get("data", {}).get("score", 50),
+        "execution_confidence": conf.get("execution", {}).get("score", 50),
+        "portfolio_fit_confidence": None,  # populated when portfolio context available
+        "sample_size": None,  # populated from shadow tracker when available
+        "calibration_note": "Brier-tracked; uncertainty bands are conformal estimates, not guarantees.",
+        "display_recommendation": (
+            f"{bucket.title()} confidence | {low_bound:.0f}–{high_bound:.0f}% range"
+        ),
+    }
+
+
+def _compute_action_state(conf: dict, rr: float, trending: bool) -> dict:
+    """Compute 5-tier action state: STRONG_BUY, BUY, WATCH, REDUCE, NO_TRADE, HEDGE."""
+    tier = conf.get("decision_tier", "WATCH")
+    sizing = conf.get("sizing", "")
+    should_trade = conf.get("should_trade", False)
+    abstain = conf.get("abstain_reason")
+
+    return {
+        "action": tier,
+        "sizing_guidance": sizing,
+        "should_trade": should_trade,
+        "abstain_reason": abstain,
+        "risk_reward": rr,
+        "regime_aligned": trending,
+        "display": f"{'✅' if should_trade else '⏸️'} {tier.replace('_', ' ').title()}",
+    }
+
+
+def _build_reasons_for(
+    close, sma20, sma50, sma200, rsi, vol_ratio, i, strategy, trending
+):
+    """Build bullish evidence list."""
+    reasons = []
+    if close[i] > sma50[i] > sma200[i]:
+        reasons.append("Strong uptrend: price > SMA50 > SMA200")
+    elif close[i] > sma50[i]:
+        reasons.append("Above SMA50 — uptrend intact")
+    if 40 < rsi[i] < 70:
+        reasons.append(f"RSI {rsi[i]:.0f} in healthy zone")
+    if vol_ratio[i] > 1.5:
+        reasons.append(
+            f"Volume {vol_ratio[i]:.1f}x above average — institutional interest"
+        )
+    elif vol_ratio[i] > 1.0:
+        reasons.append("Volume confirms move")
+    if trending:
+        reasons.append("Regime-aligned: trending market")
+    if strategy == "swing" and rsi[i] < 40:
+        reasons.append("RSI oversold — bounce potential")
+    if strategy == "breakout" and vol_ratio[i] > 2.0:
+        reasons.append("Breakout with surge volume — high conviction")
+    return reasons[:5]
+
+
+def _build_reasons_against(
+    close, sma20, sma50, sma200, rsi, vol_ratio, atr_pct, i, strategy
+):
+    """Build bearish / caution evidence list."""
+    reasons = []
+    if rsi[i] > 70:
+        reasons.append(f"RSI {rsi[i]:.0f} overbought — risk of pullback")
+    if rsi[i] > 80:
+        reasons.append("Extremely overbought — high reversal risk")
+    if close[i] < sma200[i]:
+        reasons.append("Below SMA200 — long-term downtrend")
+    if vol_ratio[i] < 0.8:
+        reasons.append("Below-average volume — weak conviction")
+    if float(atr_pct[i]) > 0.04:
+        reasons.append(
+            f"High volatility ({float(atr_pct[i])*100:.1f}% ATR) — wider stops needed"
+        )
+    dist_sma20 = abs(close[i] - sma20[i]) / sma20[i] if sma20[i] > 0 else 0
+    if dist_sma20 > 0.05:
+        reasons.append(f"Extended {dist_sma20*100:.1f}% from SMA20 — may need pullback")
+    if strategy == "mean_reversion" and close[i] < sma200[i]:
+        reasons.append("Counter-trend trade in downtrend — higher failure rate")
+    if not reasons:
+        reasons.append("No significant bearish factors identified")
+    return reasons[:5]
+
+
+def _build_pre_mortem(strategy: str, trending: bool) -> str:
+    """Most likely failure scenario for this trade."""
+    pre_mortems = {
+        "momentum": (
+            "Momentum stalls at resistance and reverses on profit-taking"
+            if trending
+            else "False breakout in range-bound market — trapped longs"
+        ),
+        "breakout": (
+            "Breakout fails on declining volume — price returns inside range"
+            if not trending
+            else "Breakout extends into exhaustion gap — sharp reversal"
+        ),
+        "swing": ("Bounce fails to hold — lower low confirms downtrend continuation"),
+        "mean_reversion": (
+            "Mean reversion premature — stock continues falling as trend accelerates"
+        ),
+    }
+    return pre_mortems.get(strategy, "Unexpected macro event or sector-wide sell-off")
+
+
+def _build_why_wait(conf: dict, rr: float) -> str | None:
+    """Suggest conditions that would improve entry quality."""
+    composite = conf.get("composite", 50)
+    reasons = []
+    if composite < 60:
+        reasons.append("confidence below 60 — wait for stronger setup confirmation")
+    if rr < 2.0:
+        reasons.append(
+            f"risk/reward {rr:.1f}:1 — wait for tighter stop or higher target"
+        )
+    timing = conf.get("timing", {}).get("score", 50)
+    if timing < 45:
+        reasons.append("timing score weak — wait for pullback to support")
+    if not reasons:
+        return None
+    return "Consider waiting: " + "; ".join(reasons)
+
+
 async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
     """Scan watchlist for live signals using current market data.
 
@@ -3154,23 +3303,64 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                 )
                 score = round(conf["composite"] / 10, 1)  # 0-10 scale
 
-                recs.append({
-                    "ticker": ticker,
-                    "symbol": ticker,
-                    "score": score,
-                    "confidence": conf["composite"],
-                    "grade": conf["grade"],
-                    "direction": "LONG",
-                    "strategy": strat_name,
-                    "entry_price": entry_price,
-                    "target_price": target_price,
-                    "stop_price": stop_price,
-                    "risk_reward": rr,
-                    "regime": "UPTREND" if trending else "SIDEWAYS",
-                    "rsi": round(float(rsi[i]), 1),
-                    "vol_ratio": round(float(vol_ratio[i]), 2),
-                    "atr_pct": round(float(atr_pct[i]) * 100, 2),
-                })
+                recs.append(
+                    {
+                        "ticker": ticker,
+                        "symbol": ticker,
+                        "score": score,
+                        "confidence": conf["composite"],
+                        "grade": conf["grade"],
+                        "direction": "LONG",
+                        "strategy": strat_name,
+                        "entry_price": entry_price,
+                        "target_price": target_price,
+                        "stop_price": stop_price,
+                        "risk_reward": rr,
+                        "regime": "UPTREND" if trending else "SIDEWAYS",
+                        "rsi": round(float(rsi[i]), 1),
+                        "vol_ratio": round(float(vol_ratio[i]), 2),
+                        "atr_pct": round(float(atr_pct[i]) * 100, 2),
+                        # ── Calibrated confidence (6-layer) ──
+                        "calibrated_confidence": _enrich_calibration(conf, strat_name),
+                        # ── Action state ──
+                        "action_state": _compute_action_state(conf, rr, trending),
+                        # ── Trust strip ──
+                        "trust_strip": {
+                            "mode": "SCAN",
+                            "source": "yfinance",
+                            "freshness": "delayed_15m",
+                            "sample_size": None,
+                            "assumptions": "gross returns, no commissions/slippage",
+                            "feature_stage": "BETA",
+                        },
+                        # ── Contradiction / reasons against ──
+                        "reasons_for": _build_reasons_for(
+                            close,
+                            sma20,
+                            sma50,
+                            sma200,
+                            rsi,
+                            vol_ratio,
+                            i,
+                            strat_name,
+                            trending,
+                        ),
+                        "reasons_against": _build_reasons_against(
+                            close,
+                            sma20,
+                            sma50,
+                            sma200,
+                            rsi,
+                            vol_ratio,
+                            atr_pct,
+                            i,
+                            strat_name,
+                        ),
+                        "invalidation": f"Close below ${stop_price}",
+                        "pre_mortem": _build_pre_mortem(strat_name, trending),
+                        "why_wait": _build_why_wait(conf, rr),
+                    }
+                )
         except Exception as exc:
             logger.debug(f"[Scanner] {ticker} skip: {exc}")
             continue
@@ -3297,19 +3487,58 @@ async def get_recommendations(limit: int = Query(10, ge=1, le=50)):
             label="scanner",
         )
 
-        return _sanitize_for_json({
-            "status": "ok",
-            "mode": mode,
-            "regime": regime_dict,
-            "recommendations": cached_recs,
-            "count": len(cached_recs),
-            "strategy_scores": strategy_scores,
-            "no_trade_reason": no_trade_reason,
-            "source": source,
-            "scan_meta": scan_meta,
-            "data_freshness": data_freshness,
-            "as_of": datetime.utcnow().isoformat() + "Z",
-        })
+        # ── Portfolio heat snapshot ──
+        portfolio_heat_summary = None
+        try:
+            from src.engines.portfolio_heat import PortfolioHeatEngine
+
+            phe = PortfolioHeatEngine()
+            portfolio_heat_summary = phe.snapshot()
+        except Exception:
+            pass
+
+        # ── Shadow-mode: record predictions for calibration ──
+        try:
+            from src.engines.shadow_tracker import shadow_tracker
+
+            for rec in cached_recs:
+                shadow_tracker.record_prediction(
+                    ticker=rec.get("ticker", ""),
+                    direction=rec.get("direction", "LONG"),
+                    confidence=rec.get("confidence", 50),
+                    strategy=rec.get("strategy", ""),
+                    entry_price=rec.get("entry_price", 0),
+                    target_price=rec.get("target_price", 0),
+                    stop_price=rec.get("stop_price", 0),
+                )
+        except Exception:
+            pass
+
+        return _sanitize_for_json(
+            {
+                "status": "ok",
+                "mode": mode,
+                "regime": regime_dict,
+                "recommendations": cached_recs,
+                "count": len(cached_recs),
+                "strategy_scores": strategy_scores,
+                "no_trade_reason": no_trade_reason,
+                "source": source,
+                "scan_meta": scan_meta,
+                "data_freshness": data_freshness,
+                "portfolio_heat": portfolio_heat_summary,
+                "trust_strip": {
+                    "mode": mode,
+                    "source": source,
+                    "freshness": data_freshness,
+                    "assumptions": "gross returns, no commissions or slippage applied",
+                    "feature_stage": (
+                        "PRODUCTION" if source == "engine_cache" else "BETA"
+                    ),
+                },
+                "as_of": datetime.utcnow().isoformat() + "Z",
+            }
+        )
     except Exception as e:
         logger.error(f"Recommendations endpoint error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

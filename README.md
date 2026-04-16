@@ -99,7 +99,7 @@ python run_bot.py          # FastAPI on localhost:8000
 git clone https://github.com/cheafi/Trading-bot-CC
 cd Trading-bot-CC
 cp .env.example .env       # add DISCORD_BOT_TOKEN, ALPACA_API_KEY, etc.
-docker compose up -d       # 11 services: API, Discord, Postgres, Redis, ...
+docker compose up -d       # 9 services: API, Discord, Postgres, Redis, ...
 ```
 
 ### Option C — Discord Bot Only

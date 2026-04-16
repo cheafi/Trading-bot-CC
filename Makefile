@@ -2,7 +2,7 @@
 
 # Default target
 help:
-	@echo "TradingAI Bot v6 - Professional Development Workflow"
+	@echo "CC — Regime-Aware Market Intelligence Platform (v6.1)"
 	@echo "Usage:"
 	@echo "  make dev     # Local development (venv + services)"
 	@echo "  make prod    # Production Docker"

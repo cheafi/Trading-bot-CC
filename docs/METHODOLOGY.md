@@ -6,7 +6,7 @@
 
 Each engine cycle:
 1. **Universe scan** — `UniverseBuilder` selects 500+ tickers across US, HK, JP, and crypto markets using a 3-stage pipeline (source → filter → prioritise).
-2. **Strategy signals** — 8 registered strategies run independently: `momentum_breakout`, `vcp`, `mean_reversion`, `trend_following`, `short_term_trend_following`, `classic_swing`, `momentum_rotation`, `short_term_mean_reversion`.
+2. **Strategy signals** — 4 registered strategies run independently: `momentum`, `breakout`, `swing`, `mean_reversion`.
 3. **Signal validation** — Each signal includes entry/stop/target prices, confidence (0–100), and catalyst text.
 
 ## 2. Edge Calibration

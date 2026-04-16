@@ -22,7 +22,7 @@
 
 ```bash
 git clone https://github.com/cheafi/Trading-bot-CC
-cd TradingAI_Bot-main
+cd Trading-bot-CC
 python -m venv venv
 source venv/bin/activate          # macOS / Linux
 # venv\Scripts\activate           # Windows
@@ -94,7 +94,7 @@ Expected startup output:
 ```
 ✅ Signal Engine loaded
 ✅ Strategy Optimizer ready
-✅ Logged in as TradingAI Bot#8419
+✅ Logged in as CC Bot
 📋 Synced 64 commands to CC
 🚀 CC v6.1.0 online
 ```
