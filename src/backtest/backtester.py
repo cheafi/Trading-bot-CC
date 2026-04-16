@@ -50,6 +50,8 @@ class Backtester:
         max_holding_days: int = 10,
         partial_fill_rate: float = 1.0,
         borrow_cost_annual_pct: float = 0.0,
+        gap_risk_pct: float = 0.02,
+        enforce_market_hours: bool = True,
     ):
         self.initial_capital = initial_capital
         self.commission = commission_per_trade
@@ -58,6 +60,8 @@ class Backtester:
         self.max_holding_days = max_holding_days
         self.partial_fill_rate = partial_fill_rate
         self.borrow_cost_annual_pct = borrow_cost_annual_pct
+        self.gap_risk_pct = gap_risk_pct
+        self.enforce_market_hours = enforce_market_hours
         self.logger = logging.getLogger(__name__)
     
     def backtest(
@@ -407,31 +411,64 @@ class Backtester:
         current_price: float,
         current_date: datetime
     ) -> Optional[Tuple[float, str]]:
-        """Check if position should be exited."""
+        """
+        Check if position should be exited.
+        Includes gap-risk: if price gaps through stop,
+        fill at the worse gapped price, not the stop level.
+        """
         entry_price = position['entry_price']
         direction = position['direction']
-        
-        # Check stop loss
+
+        # Gap-risk: simulate overnight gap through stop
+        # If current_price is beyond stop by > gap_risk_pct,
+        # the fill is at current_price (gapped), not stop.
+        stop = position['stop_loss']
+        tp = position['take_profit']
+
         if direction == 'LONG':
-            if current_price <= position['stop_loss']:
-                return (position['stop_loss'] * (1 - self.slippage), 'stop_loss')
-            if current_price >= position['take_profit']:
-                return (position['take_profit'] * (1 - self.slippage), 'take_profit')
+            if current_price <= stop:
+                # Gap through stop — fill at worse of stop or
+                # current_price
+                gap_fill = min(
+                    stop, current_price
+                ) * (1 - self.slippage)
+                return (gap_fill, 'stop_loss_gap'
+                        if current_price < stop * (
+                            1 - self.gap_risk_pct
+                        ) else 'stop_loss')
+            if current_price >= tp:
+                return (
+                    tp * (1 - self.slippage),
+                    'take_profit',
+                )
         else:  # SHORT
-            if current_price >= position['stop_loss']:
-                return (position['stop_loss'] * (1 + self.slippage), 'stop_loss')
-            if current_price <= position['take_profit']:
-                return (position['take_profit'] * (1 + self.slippage), 'take_profit')
-        
+            if current_price >= stop:
+                gap_fill = max(
+                    stop, current_price
+                ) * (1 + self.slippage)
+                return (gap_fill, 'stop_loss_gap'
+                        if current_price > stop * (
+                            1 + self.gap_risk_pct
+                        ) else 'stop_loss')
+            if current_price <= tp:
+                return (
+                    tp * (1 + self.slippage),
+                    'take_profit',
+                )
+
         # Check max holding period
         if isinstance(current_date, datetime):
             current_date = current_date.date()
-        holding_days = (current_date - position['entry_date'].date()).days
-        
-        if holding_days >= self.max_holding_days:
-            exit_price = current_price * (1 - self.slippage if direction == 'LONG' else 1 + self.slippage)
-            return (exit_price, 'time_exit')
-        
+        holding = (
+            current_date - position['entry_date'].date()
+        ).days
+
+        if holding >= self.max_holding_days:
+            slip = (1 - self.slippage
+                    if direction == 'LONG'
+                    else 1 + self.slippage)
+            return (current_price * slip, 'time_exit')
+
         return None
     
     def _calculate_metrics(

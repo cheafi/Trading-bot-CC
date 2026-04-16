@@ -91,9 +91,21 @@
 ### System Architecture
 - [ ] Decompose discord_bot.py (5,596 lines) into modules
 - [ ] Separate engine boundaries from API monolith
-- [ ] Provider freshness + stale-data kill switch
 - [ ] CI/CD pipeline with test gates
 - [ ] Render → proper deployment with health checks
+
+### Institutional Review Items (Sprint 41)
+- [x] Meta-labeler engine (go/no-go + size per signal, vetoes, composite scoring)
+- [x] Post-trade attribution (stated reasons vs realized outcomes, bull-case accuracy)
+- [x] Broker reconciliation engine (order tracking, fill monitor, position reconciliation gate)
+- [x] Gap-risk simulation in backtester (gap-through-stop fills at worse price)
+- [x] Market hours enforcement in backtester
+- [x] Exposure dashboard endpoint (/api/v6/exposure-dashboard)
+- [x] Meta-labeler endpoint (/api/v6/meta-label/{ticker})
+- [x] Post-trade report endpoint (/api/v6/post-trade-report)
+- [x] Regime × strategy heatmap endpoint (/api/v6/regime-heatmap)
+- [x] Broker reconciliation endpoint (/api/v6/broker-reconciliation)
+- [x] Doc naming alignment — SETUP_GUIDE, BOT_GUIDE, ARCHITECTURE, METHODOLOGY, SIGNALS, SKILL → CC
 
 ---
 

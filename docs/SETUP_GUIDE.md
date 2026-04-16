@@ -1,6 +1,6 @@
 # Setup Guide
 
-> Full installation and deployment guide for TradingAI Bot v6 Pro Desk.
+> Full installation and deployment guide for CC — Regime-Aware Market Intelligence Platform.
 
 ---
 
@@ -68,7 +68,7 @@ FUTU_PORT=11111
 ### 4. Create Discord Bot
 
 1. Go to [discord.com/developers/applications](https://discord.com/developers/applications)
-2. **New Application** → name it **TradingAI Bot**
+2. **New Application** → name it **CC Trading Bot**
 3. **Bot** tab → **Add Bot** → copy Token → paste into `.env`
 4. Under **Privileged Gateway Intents** enable:
    - ✅ Message Content Intent
@@ -95,8 +95,8 @@ Expected startup output:
 ✅ Signal Engine loaded
 ✅ Strategy Optimizer ready
 ✅ Logged in as TradingAI Bot#8419
-📋 Synced 54 commands to Trading CC
-🚀 v6 Pro Desk online
+📋 Synced 64 commands to CC
+🚀 CC v6.1.0 online
 ```
 
 ### Option B — Background Process (macOS/Linux)

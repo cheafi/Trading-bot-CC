@@ -1,4 +1,4 @@
-# TradingAI Bot — Capability SKILL Sheet
+# CC — Capability SKILL Sheet
 
 > What this platform **can** and **cannot** do.
 

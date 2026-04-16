@@ -1,6 +1,6 @@
 # Trading Methodology
 
-> How TradingAI Bot makes decisions — from signal to execution.
+> How CC makes decisions — from signal to execution.
 
 ## 1. Signal Generation
 

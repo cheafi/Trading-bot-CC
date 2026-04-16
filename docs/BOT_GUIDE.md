@@ -1,6 +1,6 @@
-# Bot Guide — All 54 Commands
+# Bot Guide — All 64 Commands
 
-> Complete reference for every slash command in TradingAI Bot v6 Pro Desk.
+> Complete reference for every slash command in CC v6.1.
 
 ---
 

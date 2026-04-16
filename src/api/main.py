@@ -1014,6 +1014,76 @@ async def pnl_by_regime():
     }
 
 
+@app.get(
+    "/api/v6/exposure-dashboard",
+    tags=["analytics"],
+    summary="Portfolio exposure dashboard: sector, beta, theme",
+)
+async def exposure_dashboard():
+    """Full portfolio exposure snapshot for PM views."""
+    from src.engines.portfolio_heat import PortfolioHeatEngine
+    engine = PortfolioHeatEngine()
+    snap = engine.snapshot()
+    return snap.to_dict()
+
+
+@app.get(
+    "/api/v6/meta-label/{ticker}",
+    tags=["analytics"],
+    summary="Meta-labeler: should I trade this now?",
+)
+async def meta_label_ticker(ticker: str):
+    """Evaluate go/no-go + size for a candidate signal."""
+    from src.engines.meta_labeler import (
+        MetaLabeler, SignalContext,
+    )
+    ml = MetaLabeler()
+    ctx = SignalContext(ticker=ticker.upper())
+    label = ml.evaluate(ctx)
+    return label.to_dict()
+
+
+@app.get(
+    "/api/v6/post-trade-report",
+    tags=["analytics"],
+    summary="Post-trade attribution report",
+)
+async def post_trade_report():
+    """Stated reasons vs realized outcomes."""
+    from src.engines.post_trade_attribution import (
+        post_trade_attribution,
+    )
+    return post_trade_attribution.full_report()
+
+
+@app.get(
+    "/api/v6/regime-heatmap",
+    tags=["analytics"],
+    summary="PnL heatmap: regime × strategy",
+)
+async def regime_heatmap():
+    """PnL by regime × strategy matrix."""
+    from src.engines.post_trade_attribution import (
+        post_trade_attribution,
+    )
+    return {
+        "heatmap": post_trade_attribution.regime_heatmap(),
+    }
+
+
+@app.get(
+    "/api/v6/broker-reconciliation",
+    tags=["operator"],
+    summary="Broker reconciliation status",
+)
+async def broker_reconciliation_status():
+    """Order tracking and reconciliation gate."""
+    from src.engines.broker_reconciliation import (
+        broker_reconciliation,
+    )
+    return broker_reconciliation.status()
+
+
 # ===== Signal Endpoints =====
 
 

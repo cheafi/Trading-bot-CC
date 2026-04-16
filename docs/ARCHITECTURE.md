@@ -1,6 +1,6 @@
 # Architecture
 
-> Full technical architecture of TradingAI Bot v6 Pro Desk.
+> Full technical architecture of CC — Regime-Aware Market Intelligence Platform.
 
 ---
 
