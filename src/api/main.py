@@ -43,6 +43,8 @@ from src.core.models import (
     Signal,
 )
 from src.core.risk_limits import BACKTEST_DEFAULTS, RISK, SIGNAL_THRESHOLDS
+from src.core.telemetry import telemetry
+from src.core.version import APP_VERSION, PRODUCT_NAME
 
 # v6 optional imports (graceful fallback)
 try:
@@ -191,7 +193,7 @@ Use the `X-API-Key` header for authenticated endpoints.
 - 120 requests per minute per API key
 - Rate limit headers included in responses
     """,
-    version="6.0.0",
+    version=APP_VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_tags=[
@@ -204,12 +206,18 @@ Use the `X-API-Key` header for authenticated endpoints.
 
 # Add middleware
 app.add_middleware(RateLimitMiddleware)
+# CORS: restricted in production, open in dev
+_CORS_ORIGINS = [
+    origin.strip()
+    for origin in (settings.api_secret_key and "").split(",")
+    if origin.strip()
+] or (["*"] if settings.environment != "production" else ["https://cheafi.github.io"])
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_CORS_ORIGINS,
+    allow_credentials=settings.environment != "production",
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["X-API-Key", "Content-Type", "Authorization"],
 )
 
 # Mount static files for PWA
@@ -477,9 +485,20 @@ def validate_ticker(ticker: str) -> str:
 
 
 async def verify_api_key(x_api_key: str = Header(None, alias="X-API-Key")):
-    """Verify API key from header."""
+    """Verify API key from header.
+
+    Security hardening: in production, a missing API_SECRET_KEY
+    means ALL authenticated endpoints are locked. In development,
+    we allow open access for local testing.
+    """
     if not settings.api_secret_key:
-        return True
+        # Secure default: reject in production, allow in dev
+        if settings.environment == "production":
+            raise HTTPException(
+                status_code=503,
+                detail="API key not configured. Set API_SECRET_KEY.",
+            )
+        return True  # dev/staging: open access
 
     if not x_api_key or x_api_key != settings.api_secret_key:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
@@ -721,8 +740,8 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
-        "version": "2.0.0",
-        "uptime_seconds": (datetime.utcnow() - startup_time).total_seconds(),
+        "version": APP_VERSION,
+        "uptime_seconds": telemetry.get_uptime_seconds(),
     }
 
 
@@ -745,7 +764,7 @@ async def detailed_health_check(_: bool = Depends(verify_api_key)):
     return {
         "status": "healthy" if db_status == "connected" else "degraded",
         "timestamp": datetime.utcnow().isoformat(),
-        "version": "1.0.0",
+        "version": APP_VERSION,
         "database": db_status,
     }
 
@@ -787,10 +806,9 @@ async def health_ready():
     except Exception:
         checks["cache"] = False
 
-    # Check data freshness (prices should be < 15 min old)
+    # Check data freshness (real telemetry)
     try:
-        # This would check your actual data staleness
-        checks["data_freshness"] = True  # Placeholder
+        checks["data_freshness"] = telemetry.get_data_freshness_ready()
     except Exception:
         checks["data_freshness"] = False
 
@@ -807,168 +825,134 @@ async def health_ready():
 async def status_data(_: bool = Depends(verify_api_key)):
     """
     Check data freshness for each data source.
-    Returns last update time and staleness status.
+    Returns last update time and staleness status — all values tracked live.
     """
-    now = datetime.utcnow()
-
-    # These would be populated from actual tracking
-    sources = {
-        "prices": {
-            "last_update": now.isoformat(),
-            "staleness_seconds": 0,
-            "status": "fresh",
-            "threshold_seconds": 900,  # 15 min
-        },
-        "news": {
-            "last_update": (now - timedelta(minutes=5)).isoformat(),
-            "staleness_seconds": 300,
-            "status": "fresh",
-            "threshold_seconds": 1800,  # 30 min
-        },
-        "social": {
-            "last_update": (now - timedelta(minutes=10)).isoformat(),
-            "staleness_seconds": 600,
-            "status": "fresh",
-            "threshold_seconds": 3600,  # 1 hour
-        },
-        "options": {
-            "last_update": (now - timedelta(minutes=20)).isoformat(),
-            "staleness_seconds": 1200,
-            "status": "stale",
-            "threshold_seconds": 900,  # 15 min
-        },
-    }
-
-    # Determine if any source is stale
-    all_fresh = all(s["status"] == "fresh" for s in sources.values())
-
-    return {
-        "timestamp": now.isoformat(),
-        "all_sources_fresh": all_fresh,
-        "can_generate_signals": all_fresh,
-        "sources": sources,
-    }
+    return telemetry.get_data_status()
 
 
 @app.get("/status/jobs", tags=["health"], summary="Scheduler job status")
 async def status_jobs(_: bool = Depends(verify_api_key)):
     """
-    Get status of scheduled jobs.
-    Shows last run, next run, and any failures.
+    Get status of scheduled jobs — all values tracked live.
     """
-    now = datetime.utcnow()
-
-    # These would be populated from actual job tracking
-    jobs = {
-        "signal_generation": {
-            "last_run": (now - timedelta(minutes=30)).isoformat(),
-            "next_run": (now + timedelta(minutes=30)).isoformat(),
-            "status": "success",
-            "interval_minutes": 60,
-            "last_duration_seconds": 45.2,
-        },
-        "price_ingestion": {
-            "last_run": (now - timedelta(minutes=1)).isoformat(),
-            "next_run": (now + timedelta(minutes=1)).isoformat(),
-            "status": "success",
-            "interval_minutes": 2,
-            "last_duration_seconds": 1.8,
-        },
-        "news_ingestion": {
-            "last_run": (now - timedelta(minutes=15)).isoformat(),
-            "next_run": (now + timedelta(minutes=15)).isoformat(),
-            "status": "success",
-            "interval_minutes": 30,
-            "last_duration_seconds": 12.5,
-        },
-        "daily_report": {
-            "last_run": (now - timedelta(hours=8)).isoformat(),
-            "next_run": (now + timedelta(hours=16)).isoformat(),
-            "status": "success",
-            "interval_minutes": 1440,  # Daily
-            "last_duration_seconds": 120.0,
-        },
-    }
-
-    failures = [k for k, v in jobs.items() if v["status"] == "failure"]
-
-    return {
-        "timestamp": now.isoformat(),
-        "total_jobs": len(jobs),
-        "healthy_jobs": len(jobs) - len(failures),
-        "failed_jobs": failures,
-        "jobs": jobs,
-    }
+    return telemetry.get_jobs_status()
 
 
 @app.get("/status/signals", tags=["health"], summary="Signal generation status")
 async def status_signals(_: bool = Depends(verify_api_key)):
     """
-    Get signal generation statistics.
-    Shows generated, rejected, and reasons for rejection.
+    Get signal generation statistics — all values tracked live.
     """
-    now = datetime.utcnow()
-
-    # These would be populated from actual signal tracking
-    return {
-        "timestamp": now.isoformat(),
-        "last_generation": (now - timedelta(minutes=30)).isoformat(),
-        "signals_today": {"generated": 15, "rejected": 42, "active": 8},
-        "rejection_reasons": {
-            "NO_TRADE_stale_data": 12,
-            "NO_TRADE_low_confidence": 18,
-            "NO_TRADE_regime_mismatch": 5,
-            "NO_TRADE_correlation_breach": 4,
-            "NO_TRADE_max_positions": 3,
-        },
-        "by_strategy": {
-            "momentum": {"generated": 5, "rejected": 15},
-            "mean_reversion": {"generated": 3, "rejected": 10},
-            "trend_following": {"generated": 4, "rejected": 8},
-            "swing": {"generated": 3, "rejected": 9},
-        },
-    }
+    return telemetry.get_signals_status()
 
 
 @app.get("/metrics", tags=["health"], summary="Prometheus-style metrics")
 async def metrics():
     """
     Prometheus-compatible metrics endpoint.
-    Returns metrics in text format for scraping.
+    Returns metrics in text format — all counters are real.
     """
-    now = datetime.utcnow()
-    uptime = (now - startup_time).total_seconds()
+    telemetry.record_api_request("/metrics")
+    return Response(
+        content=telemetry.get_metrics_text(),
+        media_type="text/plain",
+    )
 
-    # Build Prometheus-style metrics
-    lines = [
-        "# HELP tradingai_up Service is up",
-        "# TYPE tradingai_up gauge",
-        "tradingai_up 1",
-        "",
-        "# HELP tradingai_uptime_seconds Service uptime in seconds",
-        "# TYPE tradingai_uptime_seconds counter",
-        f"tradingai_uptime_seconds {uptime:.2f}",
-        "",
-        "# HELP tradingai_signals_generated_total Total signals generated",
-        "# TYPE tradingai_signals_generated_total counter",
-        "tradingai_signals_generated_total 1543",
-        "",
-        "# HELP tradingai_signals_rejected_total Total signals rejected",
-        "# TYPE tradingai_signals_rejected_total counter",
-        "tradingai_signals_rejected_total 4821",
-        "",
-        "# HELP tradingai_api_requests_total Total API requests",
-        "# TYPE tradingai_api_requests_total counter",
-        "tradingai_api_requests_total 12847",
-        "",
-        "# HELP tradingai_data_staleness_seconds Data staleness per source",
-        "# TYPE tradingai_data_staleness_seconds gauge",
-        'tradingai_data_staleness_seconds{source="prices"} 5',
-        'tradingai_data_staleness_seconds{source="news"} 300',
-        'tradingai_data_staleness_seconds{source="options"} 1200',
-    ]
 
-    return Response(content="\n".join(lines), media_type="text/plain")
+# ===== Calibration & Confidence Endpoints =====
+
+
+@app.get(
+    "/api/v6/calibration",
+    tags=["health"],
+    summary="Calibration diagnostics",
+)
+async def calibration_report(_: bool = Depends(verify_api_key)):
+    """
+    Calibration diagnostics: reliability diagrams, sample sizes,
+    forecast-vs-realized hit rates per bucket × regime.
+    """
+    from src.engines.calibration_engine import get_calibration_engine
+
+    engine = get_calibration_engine()
+    return engine.calibration_report()
+
+
+@app.get(
+    "/api/v6/portfolio-heat",
+    tags=["portfolio"],
+    summary="Portfolio exposure and heat",
+)
+async def portfolio_heat(_: bool = Depends(verify_api_key)):
+    """
+    Portfolio heat: exposure, concentration, factor overlap,
+    event proximity, throttle state, and risk budget consumed.
+    """
+    from src.engines.portfolio_heat import get_portfolio_heat_engine
+
+    engine = get_portfolio_heat_engine()
+    snap = engine.snapshot()
+    return snap.to_dict()
+
+
+@app.get(
+    "/api/v6/event-context/{ticker}",
+    tags=["signals"],
+    summary="Event context for a ticker",
+)
+async def event_context(ticker: str, _: bool = Depends(verify_api_key)):
+    """
+    Event context: SEC filings, insider transactions,
+    macro data, positioning — for timing/conviction/risk.
+    """
+    ticker = _sanitise_ticker(ticker)
+    from src.services.event_data import get_event_data_service
+
+    svc = get_event_data_service()
+    return await svc.get_ticker_events(ticker)
+
+
+@app.get(
+    "/api/v6/macro-context",
+    tags=["reports"],
+    summary="Macro context for regime decisions",
+)
+async def macro_context(_: bool = Depends(verify_api_key)):
+    """
+    Macro context: FRED/ALFRED series for regime classification,
+    risk budget, and positioning context.
+    """
+    from src.services.event_data import get_event_data_service
+
+    svc = get_event_data_service()
+    return await svc.get_macro_context()
+
+
+@app.get(
+    "/api/v6/version",
+    tags=["health"],
+    summary="System version and identity",
+)
+async def version_info():
+    """Single source of truth for version and product identity."""
+    from src.core.version import (
+        APP_VERSION,
+        DECISION_SURFACES,
+        DISCORD_COMMAND_COUNT,
+        DOCKER_SERVICE_COUNT,
+        STRATEGY_COUNT,
+        UNIVERSE_SUMMARY,
+    )
+
+    return {
+        "product": PRODUCT_NAME,
+        "version": APP_VERSION,
+        "strategies": STRATEGY_COUNT,
+        "discord_commands": DISCORD_COMMAND_COUNT,
+        "docker_services": DOCKER_SERVICE_COUNT,
+        "decision_surfaces": list(DECISION_SURFACES),
+        "universe": UNIVERSE_SUMMARY,
+    }
 
 
 # ===== Signal Endpoints =====
@@ -5430,7 +5414,6 @@ async def live_time_travel(
     - Strategy signals
     - What actually happened after (forward returns)
     """
-    import asyncio
 
     import numpy as np
 
@@ -6628,7 +6611,6 @@ async def performance_lab_data(
     Every response carries ``mode``, ``source``, ``sample_size``,
     ``assumptions``, and ``as_of`` for full trust/audit.
     """
-    from datetime import timedelta
 
     import numpy as np
 

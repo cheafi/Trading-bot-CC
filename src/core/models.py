@@ -1104,6 +1104,21 @@ class TradeRecommendation(BaseModel):
     why_not_trade: str = ""
     better_alternative: str = ""
 
+    # ── Calibrated confidence (Sprint — institutional review) ─
+    action_state: str = "WATCH"  # ActionState canonical values
+    confidence_layers: Dict[str, Any] = Field(default_factory=dict)
+    bull_case: str = ""
+    bear_case: str = ""
+    invalidation_conditions: List[str] = Field(default_factory=list)
+    why_wait: str = ""
+    what_improves_confidence: List[str] = Field(default_factory=list)
+    what_reduces_confidence: List[str] = Field(default_factory=list)
+    pre_mortem: str = ""  # "most likely failure mode"
+    forecast_probability: float = 0.0
+    uncertainty_low: float = 0.0
+    uncertainty_high: float = 1.0
+    reliability_sample_size: int = 0
+
     # ── Metadata (catch-all for extensions) ───────────────────
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
@@ -1181,8 +1196,27 @@ class TradeRecommendation(BaseModel):
             explanation["better_alternative"] = self.better_alternative
         if self.key_risks:
             explanation["key_risks"] = self.key_risks
+        # Institutional review: enhanced explanation fields
+        if self.bull_case:
+            explanation["bull_case"] = self.bull_case
+        if self.bear_case:
+            explanation["bear_case"] = self.bear_case
+        if self.invalidation_conditions:
+            explanation["invalidation_conditions"] = self.invalidation_conditions
+        if self.why_wait:
+            explanation["why_wait"] = self.why_wait
+        if self.what_improves_confidence:
+            explanation["what_improves_confidence"] = self.what_improves_confidence
+        if self.what_reduces_confidence:
+            explanation["what_reduces_confidence"] = self.what_reduces_confidence
+        if self.pre_mortem:
+            explanation["pre_mortem"] = self.pre_mortem
         if explanation:
             d["explanation"] = explanation
+        # Action state and confidence layers
+        d["action_state"] = self.action_state
+        if self.confidence_layers:
+            d["confidence_layers"] = self.confidence_layers
         return d
 
     def to_entry_snapshot(self) -> Dict[str, Any]:
