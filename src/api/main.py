@@ -3365,6 +3365,86 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
             logger.debug(f"[Scanner] {ticker} skip: {exc}")
             continue
 
+    # ── Fallback: if no strategy triggered, rank all tickers by strength ──
+    if not recs:
+        _fallback: list[tuple[str, dict]] = []
+        for ticker in _SCAN_WATCHLIST:
+            try:
+                hist = await mds.get_history(ticker, period="1y", interval="1d")
+                if hist is None or hist.empty or len(hist) < 60:
+                    continue
+                c_col = "Close" if "Close" in hist.columns else "close"
+                v_col = "Volume" if "Volume" in hist.columns else "volume"
+                close = hist[c_col].values.astype(float)
+                volume = hist[v_col].values.astype(float)
+                n = len(close)
+                ii = n - 1
+                _ind = _compute_indicators(close, volume)
+                sma20 = _ind["sma20"]
+                sma50 = _ind["sma50"]
+                sma200 = _ind["sma200"]
+                rsi_v = _ind["rsi"]
+                vol_ratio_v = _ind["vol_ratio"]
+                atr_pct_v = _ind["atr_pct"]
+                cur_atr = max(float(atr_pct_v[ii]), 0.005)
+                trending = bool(close[ii] > sma50[ii] and sma50[ii] > sma200[ii])
+
+                conf = _compute_4layer_confidence(
+                    close, sma20, sma50, sma200, rsi_v, atr_pct_v,
+                    vol_ratio_v, ii, volume, trending,
+                )
+                score = round(conf["composite"] / 10, 1)
+                entry_price = round(float(close[ii]), 2)
+                stop_price = round(entry_price * (1 - cur_atr * 2), 2)
+                target_price = round(entry_price * 1.05, 2)
+                risk = entry_price - stop_price
+                reward = target_price - entry_price
+                rr = round(reward / risk, 1) if risk > 0 else 0
+
+                _fallback.append((ticker, {
+                    "ticker": ticker,
+                    "symbol": ticker,
+                    "score": score,
+                    "confidence": conf["composite"],
+                    "grade": conf["grade"],
+                    "direction": "LONG",
+                    "strategy": "watch",
+                    "entry_price": entry_price,
+                    "target_price": target_price,
+                    "stop_price": stop_price,
+                    "risk_reward": rr,
+                    "regime": "UPTREND" if trending else "SIDEWAYS",
+                    "rsi": round(float(rsi_v[ii]), 1),
+                    "vol_ratio": round(float(vol_ratio_v[ii]), 2),
+                    "atr_pct": round(float(atr_pct_v[ii]) * 100, 2),
+                    "calibrated_confidence": _enrich_calibration(conf, "momentum"),
+                    "action_state": _compute_action_state(conf, rr, trending),
+                    "trust_strip": {
+                        "mode": "WATCH",
+                        "source": "yfinance",
+                        "freshness": "delayed_15m",
+                        "sample_size": None,
+                        "assumptions": "no entry criteria met — ranked by technical strength",
+                        "feature_stage": "BETA",
+                    },
+                    "reasons_for": _build_reasons_for(
+                        close, sma20, sma50, sma200, rsi_v, vol_ratio_v,
+                        ii, "momentum", trending,
+                    ),
+                    "reasons_against": _build_reasons_against(
+                        close, sma20, sma50, sma200, rsi_v, vol_ratio_v,
+                        atr_pct_v, ii, "momentum",
+                    ),
+                    "invalidation": f"Close below ${stop_price}",
+                    "pre_mortem": "No strategy triggered — watch only",
+                    "why_wait": "Wait for a defined entry setup before committing capital",
+                }))
+            except Exception:
+                continue
+        _fallback.sort(key=lambda x: x[1]["score"], reverse=True)
+        recs = [r for _, r in _fallback[:limit]]
+        logger.info(f"[Scanner] no strategy triggered — returning top {len(recs)} by strength")
+
     # Sort by score desc
     recs.sort(key=lambda r: r["score"], reverse=True)
 
