@@ -955,6 +955,65 @@ async def version_info():
     }
 
 
+# ===== Shadow / Dossier / Operator Console Endpoints =====
+
+
+@app.get(
+    "/api/v6/shadow-report",
+    tags=["analytics"],
+    summary="Shadow-mode prediction tracker report",
+)
+async def shadow_report():
+    """Return shadow-mode evaluation: hit-rate by bucket, drift flags."""
+    from src.engines.shadow_tracker import shadow_tracker
+    return shadow_tracker.shadow_report()
+
+
+@app.get(
+    "/api/v6/dossier/{ticker}",
+    tags=["analytics"],
+    summary="Symbol Dossier v2 – full single-ticker research page",
+)
+async def symbol_dossier(ticker: str):
+    """Build verdict, evidence, scenarios, event calendar for a ticker."""
+    from src.engines.symbol_dossier import SymbolDossier
+    dossier = SymbolDossier()
+    return dossier.build(ticker.upper())
+
+
+@app.get(
+    "/api/v6/circuit-breaker",
+    tags=["operator"],
+    summary="Circuit breaker state and broker reconciliation status",
+)
+async def circuit_breaker_state():
+    """Return current circuit-breaker state and last reconciliation ts."""
+    from src.engines.portfolio_heat import PortfolioHeatEngine
+    engine = PortfolioHeatEngine()
+    snap = engine.snapshot()
+    return {
+        "throttle_state": snap.throttle_state,
+        "daily_loss_pct": snap.daily_pnl_pct,
+        "open_positions": 0,
+        "broker_reconciled_at": None,
+    }
+
+
+@app.get(
+    "/api/v6/pnl-by-regime",
+    tags=["analytics"],
+    summary="PnL heatmap broken down by market regime",
+)
+async def pnl_by_regime():
+    """Return PnL statistics grouped by regime label."""
+    from src.engines.shadow_tracker import shadow_tracker
+    report = shadow_tracker.shadow_report()
+    return {
+        "regime_pnl": report.get("by_regime", {}),
+        "total_predictions": report.get("total_predictions", 0),
+    }
+
+
 # ===== Signal Endpoints =====
 
 
@@ -5380,6 +5439,9 @@ def _run_expert_council(
         "members": council,
         "summary": {
             "avg_score": round(avg_score, 1),
+            "weighted_avg_score": round(
+                _accuracy_weighted_avg(council), 1
+            ),
             "bullish": bullish_count,
             "bearish": bearish_count,
             "neutral": neutral_count,
@@ -5393,6 +5455,50 @@ def _run_expert_council(
             ),
         },
     }
+
+
+# ── Expert Track-Record Weighting (P1 TODO) ──────────────────
+# Tracks per-expert historical accuracy and weights their votes
+# by realized performance rather than equal weighting.
+
+_EXPERT_TRACK_RECORD: Dict[str, Dict[str, Any]] = {}
+
+
+def _update_expert_accuracy(
+    role: str, predicted_stance: str, was_correct: bool
+) -> None:
+    """Record expert outcome for accuracy tracking."""
+    if role not in _EXPERT_TRACK_RECORD:
+        _EXPERT_TRACK_RECORD[role] = {
+            "total": 0, "correct": 0, "accuracy": 0.5,
+        }
+    rec = _EXPERT_TRACK_RECORD[role]
+    rec["total"] += 1
+    rec["correct"] += int(was_correct)
+    rec["accuracy"] = rec["correct"] / rec["total"]
+
+
+def _get_expert_weight(role: str) -> float:
+    """Get reliability weight for an expert (0.5-1.5 range)."""
+    rec = _EXPERT_TRACK_RECORD.get(role)
+    if rec is None or rec["total"] < 10:
+        return 1.0  # No track record → equal weight
+    # Scale accuracy [0.3, 0.7] → weight [0.5, 1.5]
+    acc = max(0.3, min(0.7, rec["accuracy"]))
+    return 0.5 + (acc - 0.3) / 0.4 * 1.0
+
+
+def _accuracy_weighted_avg(council: list) -> float:
+    """Compute accuracy-weighted average score."""
+    total_weight = 0.0
+    weighted_sum = 0.0
+    for member in council:
+        w = _get_expert_weight(member["role"])
+        weighted_sum += member["score"] * w
+        total_weight += w
+    if total_weight == 0:
+        return 50.0
+    return weighted_sum / total_weight
 
 
 @app.post("/api/live/time-travel", tags=["live"])

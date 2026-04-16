@@ -47,13 +47,17 @@ class Backtester:
         commission_per_trade: float = 1.0,
         slippage_pct: float = 0.001,
         max_position_size: float = 0.05,
-        max_holding_days: int = 10
+        max_holding_days: int = 10,
+        partial_fill_rate: float = 1.0,
+        borrow_cost_annual_pct: float = 0.0,
     ):
         self.initial_capital = initial_capital
         self.commission = commission_per_trade
         self.slippage = slippage_pct
         self.max_position_size = max_position_size
         self.max_holding_days = max_holding_days
+        self.partial_fill_rate = partial_fill_rate
+        self.borrow_cost_annual_pct = borrow_cost_annual_pct
         self.logger = logging.getLogger(__name__)
     
     def backtest(
@@ -118,6 +122,11 @@ class Backtester:
                         pnl = (pos['entry_price'] - exit_price) * pos['shares']
                     
                     pnl -= self.commission * 2  # Entry + exit
+                    # Deduct borrow cost for SHORT positions
+                    if pos['direction'] == 'SHORT' and self.borrow_cost_annual_pct > 0:
+                        holding_days = (current_date - pos['entry_date'].date()).days
+                        borrow_cost = pos['capital_allocated'] * self.borrow_cost_annual_pct / 100 * holding_days / 365
+                        pnl -= borrow_cost
                     pnl_pct = pnl / pos['capital_allocated']
                     
                     # Record trade
@@ -171,6 +180,8 @@ class Backtester:
                     entry_price *= (1 - self.slippage)
                 
                 shares = int(position_size / entry_price)
+                # Apply partial fill rate
+                shares = max(1, int(shares * self.partial_fill_rate))
                 if shares == 0:
                     continue
                 

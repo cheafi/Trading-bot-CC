@@ -12,10 +12,13 @@ conformal prediction concepts.
 
 from __future__ import annotations
 
+import logging
 import math
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════════
 # ACTION STATES — first-class decision outputs
@@ -429,6 +432,207 @@ class CalibrationEngine:
         if correlation < 0.3:
             return "diversifying"
         return "neutral"
+
+
+# ═══════════════════════════════════════════════════════════════════
+# PER-HORIZON CALIBRATION (1D / 5D / 20D)
+# ═══════════════════════════════════════════════════════════════════
+
+HORIZON_LABELS = ("1D", "5D", "20D")
+
+
+class HorizonCalibration:
+    """
+    Tracks calibration per time horizon.
+    Separate bucket stats for 1D, 5D, and 20D forecasts.
+    """
+
+    def __init__(self) -> None:
+        # _engines[horizon] = CalibrationEngine
+        self._engines: Dict[str, CalibrationEngine] = {
+            h: CalibrationEngine() for h in HORIZON_LABELS
+        }
+
+    def record_outcome(
+        self,
+        horizon: str,
+        forecast_p: float,
+        won: bool,
+        regime: str = "unknown",
+        strategy: str = "unknown",
+    ) -> None:
+        h = self._resolve_horizon(horizon)
+        self._engines[h].record_outcome(
+            forecast_p, won, regime, strategy
+        )
+
+    def build_confidence(
+        self, horizon: str, raw_score: float, **kwargs
+    ) -> ConfidenceLayers:
+        h = self._resolve_horizon(horizon)
+        return self._engines[h].build_confidence(
+            raw_score, **kwargs
+        )
+
+    def report(self) -> Dict[str, Any]:
+        return {
+            h: eng.calibration_report()
+            for h, eng in self._engines.items()
+        }
+
+    @staticmethod
+    def _resolve_horizon(horizon: str) -> str:
+        h = horizon.upper().replace(" ", "")
+        if "1" in h or "INTRADAY" in h:
+            return "1D"
+        if "20" in h or "POSITION" in h:
+            return "20D"
+        return "5D"  # default swing
+
+
+# ═══════════════════════════════════════════════════════════════════
+# SKLEARN CALIBRATION WRAPPER (CalibratedClassifierCV)
+# ═══════════════════════════════════════════════════════════════════
+
+
+class SklearnCalibrationWrapper:
+    """
+    Wraps sklearn CalibratedClassifierCV for model-based calibration.
+
+    Uses isotonic or sigmoid calibration on top of any base classifier.
+    Graceful degradation: if sklearn not available, falls back to
+    the bucket-based CalibrationEngine.
+    """
+
+    def __init__(self, method: str = "isotonic"):
+        self.method = method
+        self._model = None
+        self._fitted = False
+        self._raw_forecasts: List[float] = []
+        self._outcomes: List[int] = []
+
+    def record(self, forecast_p: float, won: bool) -> None:
+        self._raw_forecasts.append(forecast_p)
+        self._outcomes.append(1 if won else 0)
+        # Re-fit periodically when enough new data
+        if len(self._raw_forecasts) >= 50 and (
+            len(self._raw_forecasts) % 20 == 0
+        ):
+            self.fit()
+
+    def fit(self) -> bool:
+        """Fit calibration model using sklearn."""
+        if len(self._raw_forecasts) < 30:
+            return False
+        try:
+            from sklearn.calibration import CalibratedClassifierCV
+            from sklearn.linear_model import LogisticRegression
+            import numpy as np
+
+            X = np.array(self._raw_forecasts).reshape(-1, 1)
+            y = np.array(self._outcomes)
+
+            base = LogisticRegression()
+            self._model = CalibratedClassifierCV(
+                base, method=self.method, cv=3
+            )
+            self._model.fit(X, y)
+            self._fitted = True
+            logger.info(
+                f"Sklearn calibration fitted on {len(y)} samples"
+            )
+            return True
+        except ImportError:
+            logger.warning(
+                "sklearn not available — using bucket calibration"
+            )
+            return False
+        except Exception as e:
+            logger.warning(f"Calibration fit failed: {e}")
+            return False
+
+    def calibrate(self, raw_p: float) -> float:
+        """Return calibrated probability, or raw if not fitted."""
+        if not self._fitted or self._model is None:
+            return raw_p
+        try:
+            import numpy as np
+            proba = self._model.predict_proba(
+                np.array([[raw_p]])
+            )
+            return float(proba[0][1])
+        except Exception:
+            return raw_p
+
+    @property
+    def is_fitted(self) -> bool:
+        return self._fitted
+
+    @property
+    def sample_count(self) -> int:
+        return len(self._raw_forecasts)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# CONFORMAL PREDICTION (MAPIE-inspired)
+# ═══════════════════════════════════════════════════════════════════
+
+
+class ConformalPredictor:
+    """
+    MAPIE-inspired conformal prediction intervals.
+
+    Computes nonconformity scores from calibration residuals
+    to produce valid prediction sets at a given alpha level.
+    """
+
+    def __init__(self, alpha: float = 0.10):
+        self.alpha = alpha  # 1 - coverage level (90% default)
+        self._residuals: List[float] = []
+
+    def record_residual(
+        self, forecast_p: float, realized: float
+    ) -> None:
+        """Record |forecast - outcome| as nonconformity score."""
+        self._residuals.append(abs(forecast_p - realized))
+
+    def prediction_interval(
+        self, forecast_p: float
+    ) -> Tuple[float, float]:
+        """
+        Return (low, high) prediction interval.
+        Uses quantile of historical residuals (split conformal).
+        """
+        if len(self._residuals) < 20:
+            # Not enough data — wide interval
+            return (max(0.0, forecast_p - 0.35),
+                    min(1.0, forecast_p + 0.35))
+
+        # Sort residuals, take (1 - alpha) quantile
+        sorted_r = sorted(self._residuals)
+        idx = int(math.ceil((1 - self.alpha) * len(sorted_r))) - 1
+        idx = min(idx, len(sorted_r) - 1)
+        q = sorted_r[idx]
+
+        low = max(0.0, forecast_p - q)
+        high = min(1.0, forecast_p + q)
+        return (low, high)
+
+    @property
+    def coverage_width(self) -> float:
+        """Average width of recent intervals."""
+        if not self._residuals:
+            return 0.70
+        sorted_r = sorted(self._residuals)
+        idx = int(math.ceil(
+            (1 - self.alpha) * len(sorted_r)
+        )) - 1
+        idx = min(idx, len(sorted_r) - 1)
+        return 2 * sorted_r[idx]
+
+    @property
+    def sample_count(self) -> int:
+        return len(self._residuals)
 
 
 # ── Module-level singleton ────────────────────────────────────

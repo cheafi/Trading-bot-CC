@@ -162,6 +162,8 @@ class PortfolioHeatEngine:
         max_beta: float = 1.5,
         daily_loss_limit_pct: float = 3.0,
         max_drawdown_pct: float = 15.0,
+        spread_kill_switch_bps: float = 100.0,
+        slippage_ceiling_bps: float = 50.0,
     ):
         self.max_heat_pct = max_heat_pct
         self.max_single_name_pct = max_single_name_pct
@@ -171,6 +173,8 @@ class PortfolioHeatEngine:
         self.max_beta = max_beta
         self.daily_loss_limit_pct = daily_loss_limit_pct
         self.max_drawdown_pct = max_drawdown_pct
+        self.spread_kill_switch_bps = spread_kill_switch_bps
+        self.slippage_ceiling_bps = slippage_ceiling_bps
 
         self._positions: Dict[str, Position] = {}
         self._daily_pnl_pct: float = 0.0
@@ -279,14 +283,35 @@ class PortfolioHeatEngine:
     # ── Marginal risk check ───────────────────────────────────
 
     def check_new_position(
-        self, ticker: str, sector: str, weight_pct: float, beta: float
+        self,
+        ticker: str,
+        sector: str,
+        weight_pct: float,
+        beta: float,
+        spread_bps: float = 0.0,
+        avg_slippage_bps: float = 0.0,
     ) -> Dict[str, Any]:
         """
         Check if a new position would breach any limits.
+        Includes spread/liquidity kill switch and slippage ceiling.
         Returns approval status + reasons.
         """
         snap = self.snapshot()
         issues: list = []
+
+        # Spread / liquidity kill switch
+        if spread_bps > self.spread_kill_switch_bps:
+            issues.append(
+                f"Spread {spread_bps:.0f}bps > kill switch "
+                f"{self.spread_kill_switch_bps:.0f}bps"
+            )
+
+        # Execution slippage ceiling
+        if avg_slippage_bps > self.slippage_ceiling_bps:
+            issues.append(
+                f"Avg slippage {avg_slippage_bps:.0f}bps > "
+                f"ceiling {self.slippage_ceiling_bps:.0f}bps"
+            )
 
         # Single name
         if weight_pct > self.max_single_name_pct:

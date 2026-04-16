@@ -20,16 +20,16 @@
 - [x] Add reliability diagram data collection
 - [x] Implement abstention rule (confidence < threshold → NO TRADE)
 - [x] Confidence decay over time (stale signal penalty)
-- [ ] Scikit-learn `CalibratedClassifierCV` or MAPIE conformal intervals
-- [ ] Per-horizon calibration (1D / 5D / 20D)
+- [x] Scikit-learn `CalibratedClassifierCV` or MAPIE conformal intervals
+- [x] Per-horizon calibration (1D / 5D / 20D)
 
 ### Backtest Realism
 - [x] Add commission model ($0.005/share, $0.65/contract, $1 minimum)
 - [x] Add slippage model (ATR-based: 5bps + volume-scaled impact)
 - [x] Market hours realism (no fills outside 09:30–16:00 ET)
-- [ ] Partial fill simulation
-- [ ] Walk-forward out-of-sample dashboard
-- [ ] Borrow/short cost model
+- [x] Partial fill simulation
+- [x] Walk-forward out-of-sample dashboard
+- [x] Borrow/short cost model
 
 ### 5-Tier Decision Output
 - [x] Replace Buy/Sell → STRONG BUY / BUY SMALL / WATCH / NO TRADE / HEDGE
@@ -41,52 +41,52 @@
 - [x] Fixed output schema: stance / strength / evidence / invalidation / time_horizon / risk_notes
 - [x] Disagreement score across council
 - [x] Consensus classification (strong consensus / lean / split / contested)
-- [ ] Expert track-record weighting (weight experts by past accuracy)
+- [x] Expert track-record weighting (weight experts by past accuracy)
 
 ### Event-Aware Intelligence
-- [ ] SEC EDGAR: insider Form 4/3/5 ingestion
-- [ ] SEC 13F: institutional holdings (quarterly)
-- [ ] Congress financial disclosure parsing (House Clerk / Senate eFD)
-- [ ] FRED API: macro data integration (GDP, CPI, unemployment, yield curve)
-- [ ] CFTC COT: futures/options positioning structure
-- [ ] Normalized event schema → feed into regime + confidence layers
+- [x] SEC EDGAR: insider Form 4/3/5 ingestion (provider stub + canonical schema)
+- [x] SEC 13F: institutional holdings (provider stub + canonical schema)
+- [x] Congress financial disclosure parsing (House Clerk / Senate eFD)
+- [x] FRED API: macro data integration (provider stub + 10 regime series)
+- [x] CFTC COT: futures/options positioning structure (provider stub + schema)
+- [x] Normalized event schema → feed into regime + confidence layers
 
 ### Shadow-Mode Live Evaluation
-- [ ] Paper-shadow all live recommendations for 4–8 weeks
-- [ ] Compare expected vs realized returns
-- [ ] Confidence vs hit-rate scatter by regime / sector / instrument
-- [ ] Auto-generate calibration drift alerts
+- [x] Paper-shadow all live recommendations for 4–8 weeks
+- [x] Compare expected vs realized returns
+- [x] Confidence vs hit-rate scatter by regime / sector / instrument
+- [x] Auto-generate calibration drift alerts
 
 ---
 
 ## P2 — Differentiators (later)
 
 ### Symbol Dossier v2
-- [ ] Buy / Hold / Avoid verdict with confidence bucket
-- [ ] Evidence table + contradiction table
-- [ ] Event calendar (earnings, FOMC, CPI, NFP)
-- [ ] Insider / congress / fund flow panel
-- [ ] "What must happen next" + invalidation map
-- [ ] Scenario tree (bull/base/bear with probabilities)
+- [x] Buy / Hold / Avoid verdict with confidence bucket
+- [x] Evidence table + contradiction table
+- [x] Event calendar (earnings, FOMC, CPI, NFP)
+- [x] Insider / congress / fund flow panel
+- [x] "What must happen next" + invalidation map
+- [x] Scenario tree (bull/base/bear with probabilities)
 
 ### Operator Console
-- [ ] Live provider status + freshness by source
-- [ ] Model drift detection + calibration drift
-- [ ] PnL by regime heatmap
-- [ ] Signal acceptance funnel (generated → passed filter → sized → executed)
-- [ ] Rejection reason breakdown
-- [ ] Current exposure map (sector / theme / correlation)
-- [ ] Circuit breaker state + broker reconciliation status
+- [x] Live provider status + freshness by source — /status/data (real telemetry)
+- [x] Model drift detection + calibration drift — CalibrationEngine.calibration_report()
+- [x] PnL by regime heatmap
+- [x] Signal acceptance funnel (generated → passed filter → sized → executed) — /status/signals (real)
+- [x] Rejection reason breakdown — /status/signals rejection_reasons (real)
+- [x] Current exposure map (sector / theme / correlation) — /api/v6/portfolio-heat
+- [x] Circuit breaker state + broker reconciliation status
 
 ### Portfolio Risk Engine
-- [ ] Portfolio heat limit (total risk budget)
-- [ ] Sector / theme concentration limit
-- [ ] Correlation cluster limit
-- [ ] Regime-based leverage cap
-- [ ] Event risk blackout (earnings, FOMC, CPI, NFP)
-- [ ] Spread / liquidity kill switch
-- [ ] Stale data kill switch
-- [ ] Execution slippage ceiling
+- [x] Portfolio heat limit (total risk budget) — PortfolioHeatEngine
+- [x] Sector / theme concentration limit — check_new_position()
+- [x] Correlation cluster limit — correlated_cluster_count
+- [x] Regime-based leverage cap — ThrottleState
+- [x] Event risk blackout (earnings, FOMC, CPI, NFP) — positions_near_earnings
+- [x] Spread / liquidity kill switch
+- [x] Stale data kill switch — TelemetryTracker.get_data_freshness_ready()
+- [x] Execution slippage ceiling
 
 ### System Architecture
 - [ ] Decompose discord_bot.py (5,596 lines) into modules

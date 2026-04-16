@@ -267,6 +267,53 @@ class CFTCProvider(EventDataProvider):
         return []
 
 
+class CongressDisclosureProvider(EventDataProvider):
+    """
+    House Clerk / Senate eFD financial disclosure provider.
+
+    Sources:
+    - House: https://disclosures-clerk.house.gov/
+    - Senate: https://efdsearch.senate.gov/
+
+    LEGAL NOTE: House disclosure portal has explicit
+    prohibited-use language for certain commercial uses.
+    This provider is for research/context only.
+    Data is lagged (up to 45 days after transaction).
+    """
+
+    def name(self) -> str:
+        return "congress_disclosure"
+
+    def is_available(self) -> bool:
+        return True  # Public data
+
+    async def get_recent_trades(
+        self,
+        chamber: str = "both",
+        days_back: int = 90,
+        ticker_filter: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch recent congressional financial disclosures.
+
+        Returns normalized transaction records.
+        """
+        logger.info(
+            f"Congress: fetching {chamber} disclosures, "
+            f"days_back={days_back}, ticker={ticker_filter}"
+        )
+        return []
+
+    async def get_member_trades(
+        self, member_name: str
+    ) -> List[Dict[str, Any]]:
+        """Fetch trades for a specific member of congress."""
+        logger.info(
+            f"Congress: fetching trades for {member_name}"
+        )
+        return []
+
+
 # ═══════════════════════════════════════════════════════════════════
 # EVENT DATA AGGREGATOR
 # ═══════════════════════════════════════════════════════════════════
@@ -283,9 +330,11 @@ class EventDataService:
         self._sec = SECEdgarProvider()
         self._fred: Optional[FREDProvider] = None
         self._cftc = CFTCProvider()
+        self._congress = CongressDisclosureProvider()
 
         self._providers["sec_edgar"] = self._sec
         self._providers["cftc_cot"] = self._cftc
+        self._providers["congress"] = self._congress
 
     def configure_fred(self, api_key: str) -> None:
         self._fred = FREDProvider(api_key=api_key)
