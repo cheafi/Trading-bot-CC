@@ -3516,6 +3516,12 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                         "invalidation": f"Close below ${stop_price}",
                         "pre_mortem": _build_pre_mortem(strat_name, trending),
                         "why_wait": _build_why_wait(conf, rr),
+                        # ── Sprint 44: uncertainty + reliability ──
+                        "reliability": {
+                            "bucket": reliability_bucket(len(close) - 60),
+                            "sample_size": len(close) - 60,
+                            "note": reliability_note(len(close) - 60),
+                        },
                     }
                 )
         except Exception as exc:
@@ -8447,6 +8453,331 @@ async def macro_intel_data():
     }
 
 
+# ═══════════════════════════════════════════════════════════════════
+# SPRINT 44 — Institutional Review Implementation
+# Conformal predictor, expert committee, scenario/stress,
+# FRED macro, SEC EDGAR, operator console
+# ═══════════════════════════════════════════════════════════════════
+
+from src.engines.conformal_predictor import (
+    ConformalPredictor,
+    PredictionInterval,
+    reliability_bucket,
+    reliability_note,
+)
+from src.engines.expert_committee import ExpertCommittee, CommitteeVerdict
+from src.engines.scenario_engine import ScenarioEngine
+from src.ingestors.fred import FredClient, FRED_SERIES
+from src.ingestors.edgar import EdgarClient
+
+# ── Singletons ──
+_conformal = ConformalPredictor(confidence_level=0.90)
+_expert_committee = ExpertCommittee()
+_scenario_engine = ScenarioEngine()
+_fred_client = FredClient()
+_edgar_client = EdgarClient()
+
+# ── Operator console state ──
+_operator_state: dict = {
+    "kill_switch": False,
+    "throttle": "NORMAL",  # NORMAL, STARTER_ONLY, HALF_SIZE, HEDGE_ONLY, NO_TRADE
+    "reason": "",
+    "set_by": "",
+    "set_at": "",
+    "max_new_positions": 10,
+    "allow_overnight": True,
+}
+
+
+# ═══════════════════════════════════════════════════════════════
+# Operator Console
+# ═══════════════════════════════════════════════════════════════
+
+
+@app.get("/api/operator/status", tags=["operator"])
+async def operator_status():
+    """Get current operator console state."""
+    return {
+        "state": _operator_state,
+        "throttle_options": [
+            "NORMAL", "STARTER_ONLY", "HALF_SIZE",
+            "HEDGE_ONLY", "NO_TRADE",
+        ],
+        "description": {
+            "NORMAL": "All strategies active, full sizing",
+            "STARTER_ONLY": "Only starter positions allowed (1/3 size)",
+            "HALF_SIZE": "All strategies active but half position size",
+            "HEDGE_ONLY": "Only hedging/defensive trades allowed",
+            "NO_TRADE": "Kill switch — no new positions",
+        },
+    }
+
+
+@app.post("/api/operator/throttle", tags=["operator"])
+async def operator_set_throttle(
+    throttle: str = Query(..., description="Throttle state"),
+    reason: str = Query("manual", description="Reason for change"),
+):
+    """Set operator throttle state (kill switch / sizing control)."""
+    valid = {"NORMAL", "STARTER_ONLY", "HALF_SIZE", "HEDGE_ONLY", "NO_TRADE"}
+    if throttle not in valid:
+        raise HTTPException(400, f"Invalid throttle: {throttle}. Valid: {valid}")
+
+    _operator_state["throttle"] = throttle
+    _operator_state["kill_switch"] = throttle == "NO_TRADE"
+    _operator_state["reason"] = reason
+    _operator_state["set_at"] = datetime.utcnow().isoformat() + "Z"
+    logger.info(f"[Operator] throttle → {throttle} (reason: {reason})")
+    return {"status": "ok", "state": _operator_state}
+
+
+@app.post("/api/operator/kill-switch", tags=["operator"])
+async def operator_kill_switch(
+    enabled: bool = Query(...),
+    reason: str = Query("emergency", description="Reason"),
+):
+    """Emergency kill switch — stops all new trading."""
+    _operator_state["kill_switch"] = enabled
+    _operator_state["throttle"] = "NO_TRADE" if enabled else "NORMAL"
+    _operator_state["reason"] = reason
+    _operator_state["set_at"] = datetime.utcnow().isoformat() + "Z"
+    logger.warning(f"[Operator] KILL SWITCH {'ENGAGED' if enabled else 'RELEASED'}: {reason}")
+    return {"status": "ok", "kill_switch": enabled, "state": _operator_state}
+
+
+# ═══════════════════════════════════════════════════════════════
+# Scenario / Stress Testing
+# ═══════════════════════════════════════════════════════════════
+
+
+@app.get("/api/scenarios", tags=["risk"])
+async def list_scenarios():
+    """List available stress test scenarios."""
+    return {"scenarios": _scenario_engine.list_scenarios()}
+
+
+@app.post("/api/scenarios/run", tags=["risk"])
+async def run_stress_scenario(
+    scenario_key: str = Query(..., description="Scenario key"),
+):
+    """Run portfolio through a stress scenario.
+
+    Uses current recommendations as proxy portfolio if no
+    active positions exist.
+    """
+    # Build proxy portfolio from current recommendations
+    try:
+        scanned, _ = await _scan_live_signals(limit=10)
+        positions = [
+            {
+                "ticker": r.get("ticker", ""),
+                "weight": 1.0 / max(len(scanned), 1),
+                "entry_price": r.get("entry_price", 100),
+            }
+            for r in scanned
+        ]
+    except Exception:
+        positions = [{"ticker": "SPY", "weight": 1.0, "entry_price": 500}]
+
+    result = _scenario_engine.run_scenario(scenario_key, positions)
+    return result.to_dict()
+
+
+@app.get("/api/scenarios/run-all", tags=["risk"])
+async def run_all_scenarios():
+    """Run portfolio through ALL stress scenarios."""
+    try:
+        scanned, _ = await _scan_live_signals(limit=10)
+        positions = [
+            {
+                "ticker": r.get("ticker", ""),
+                "weight": 1.0 / max(len(scanned), 1),
+                "entry_price": r.get("entry_price", 100),
+            }
+            for r in scanned
+        ]
+    except Exception:
+        positions = [{"ticker": "SPY", "weight": 1.0, "entry_price": 500}]
+
+    results = _scenario_engine.run_all_scenarios(positions)
+    return {"portfolio_size": len(positions), "scenarios": results}
+
+
+# ═══════════════════════════════════════════════════════════════
+# Expert Committee
+# ═══════════════════════════════════════════════════════════════
+
+
+@app.get("/api/expert-committee/{ticker}", tags=["decision-layer"])
+async def expert_committee_verdict(ticker: str):
+    """Get expert committee verdict for a ticker.
+
+    Collects votes from 7 domain experts (trend, mean-reversion,
+    macro, volatility, execution, portfolio, risk) and returns
+    a reliability-weighted consensus.
+    """
+    mds = app.state.market_data
+    try:
+        hist = await mds.get_history(ticker, period="6mo", interval="1d")
+        if hist is None or hist.empty or len(hist) < 60:
+            raise HTTPException(404, f"Insufficient data for {ticker}")
+
+        c_col = "Close" if "Close" in hist.columns else "close"
+        v_col = "Volume" if "Volume" in hist.columns else "volume"
+        close = hist[c_col].values.astype(float)
+        volume = hist[v_col].values.astype(float)
+
+        _ind = _compute_indicators(close, volume)
+        i = len(close) - 1
+        trending = bool(
+            close[i] > _ind["sma50"][i]
+            and _ind["sma50"][i] > _ind["sma200"][i]
+        )
+
+        rsi = float(_ind["rsi"][i])
+        vol_ratio = float(_ind["vol_ratio"][i])
+        atr_pct = float(_ind["atr_pct"][i])
+
+        votes = _expert_committee.collect_votes(
+            regime="UPTREND" if trending else "SIDEWAYS",
+            rsi=rsi,
+            vol_ratio=vol_ratio,
+            trending=trending,
+            rr_ratio=2.0,
+            atr_pct=atr_pct,
+        )
+        verdict = _expert_committee.deliberate(
+            votes, regime="UPTREND" if trending else "SIDEWAYS"
+        )
+        return {
+            "ticker": ticker,
+            "verdict": verdict.to_dict(),
+            "experts": [e.to_dict() for e in _expert_committee.experts],
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(500, f"Expert committee error: {exc}") from exc
+
+
+# ═══════════════════════════════════════════════════════════════
+# FRED Macro
+# ═══════════════════════════════════════════════════════════════
+
+
+@app.get("/api/macro/fred", tags=["data-layer"])
+async def fred_macro_snapshot():
+    """Get FRED macro snapshot — yields, inflation, labor, credit."""
+    snapshot = await _fred_client.fetch_snapshot()
+    return {
+        "configured": _fred_client.is_configured,
+        "snapshot": snapshot.to_dict(),
+        "available_series": list(FRED_SERIES.keys()),
+        "note": (
+            "Set FRED_API_KEY env var for live data. "
+            "Free key: https://fred.stlouisfed.org/docs/api/api_key.html"
+            if not _fred_client.is_configured
+            else "Live FRED data"
+        ),
+    }
+
+
+@app.get("/api/macro/fred/{series_id}", tags=["data-layer"])
+async def fred_series(series_id: str, limit: int = Query(10, ge=1, le=100)):
+    """Get specific FRED series observations."""
+    meta = FRED_SERIES.get(series_id)
+    if not meta:
+        raise HTTPException(404, f"Unknown series: {series_id}. Available: {list(FRED_SERIES.keys())}")
+    obs = await _fred_client.fetch_series(series_id, limit=limit)
+    return {
+        "series_id": series_id,
+        "meta": meta,
+        "observations": obs,
+        "configured": _fred_client.is_configured,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+# SEC EDGAR
+# ═══════════════════════════════════════════════════════════════
+
+
+@app.get("/api/edgar/{ticker}/filings", tags=["data-layer"])
+async def edgar_filings(
+    ticker: str,
+    form_type: Optional[str] = Query(None, description="Filter: 10-K, 10-Q, 8-K, 4"),
+    limit: int = Query(10, ge=1, le=50),
+):
+    """Get recent SEC filings for a ticker."""
+    form_types = [form_type] if form_type else None
+    filings = await _edgar_client.get_recent_filings(
+        ticker.upper(), form_types=form_types, limit=limit,
+    )
+    return {
+        "ticker": ticker.upper(),
+        "filings": [f.to_dict() for f in filings],
+        "count": len(filings),
+    }
+
+
+@app.get("/api/edgar/{ticker}/insider", tags=["data-layer"])
+async def edgar_insider(ticker: str):
+    """Get insider transaction summary for a ticker."""
+    summary = await _edgar_client.get_insider_summary(ticker.upper())
+    return summary
+
+
+@app.get("/api/edgar/{ticker}/earnings", tags=["data-layer"])
+async def edgar_earnings(ticker: str):
+    """Get recent earnings-related filings (10-K, 10-Q, 8-K)."""
+    filings = await _edgar_client.get_earnings_filings(ticker.upper())
+    return {"ticker": ticker.upper(), "filings": filings}
+
+
+# ═══════════════════════════════════════════════════════════════
+# Conformal Prediction (uncertainty bands)
+# ═══════════════════════════════════════════════════════════════
+
+
+@app.get("/api/uncertainty/{ticker}", tags=["decision-layer"])
+async def ticker_uncertainty(ticker: str):
+    """Get prediction interval (uncertainty band) for a ticker.
+
+    Uses split-conformal prediction calibrated on the ticker's
+    own historical data to provide a 90% prediction interval.
+    """
+    mds = app.state.market_data
+    try:
+        hist = await mds.get_history(ticker, period="1y", interval="1d")
+        if hist is None or hist.empty or len(hist) < 60:
+            raise HTTPException(404, f"Insufficient data for {ticker}")
+
+        c_col = "Close" if "Close" in hist.columns else "close"
+        close = hist[c_col].values.astype(float)
+
+        # Calibrate on this ticker's history
+        cp = ConformalPredictor(confidence_level=0.90)
+        cp.calibrate_from_returns(close, horizon_days=20)
+
+        # Generate interval around current price + 5% target
+        current = float(close[-1])
+        target_5pct = round(current * 1.05, 2)
+
+        interval = cp.predict(target_5pct)
+
+        return {
+            "ticker": ticker.upper(),
+            "current_price": round(current, 2),
+            "prediction_interval": interval.to_dict(),
+            "calibration": cp.summary(),
+            "reliability": reliability_bucket(cp.sample_size),
+            "reliability_note": reliability_note(cp.sample_size),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(500, f"Uncertainty error: {exc}") from exc
+
+
 if __name__ == "__main__":
-    start()
     start()
