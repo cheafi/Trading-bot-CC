@@ -311,5 +311,60 @@ class ShadowTracker:
         return result
 
 
+
+    async def auto_resolve(self, market_data_service) -> dict:
+        """Auto-resolve expired predictions by checking actual prices.
+
+        For each unresolved, expired prediction, fetches current price
+        and determines if target or stop was hit.
+        Returns summary of resolved predictions.
+        """
+        resolved_count = 0
+        results = []
+        with self._lock:
+            for pred in self._predictions:
+                if pred.realized or not pred.is_expired:
+                    continue
+                if pred.entry_price <= 0:
+                    continue
+                try:
+                    hist = await market_data_service.get_history(
+                        pred.ticker, period="1mo", interval="1d"
+                    )
+                    if hist is None or hist.empty:
+                        continue
+                    c_col = "Close" if "Close" in hist.columns else "close"
+                    current = float(hist[c_col].iloc[-1])
+
+                    pnl_pct = (current - pred.entry_price) / pred.entry_price
+                    hit_target = current >= pred.target_price if pred.target_price > 0 else False
+                    hit_stop = current <= pred.stop_price if pred.stop_price > 0 else False
+
+                    pred.realized = True
+                    pred.realized_pnl_pct = round(pnl_pct, 4)
+                    pred.hit_target = hit_target
+                    pred.hit_stop = hit_stop
+                    pred.exit_reason = (
+                        "target_hit" if hit_target
+                        else "stop_hit" if hit_stop
+                        else "horizon_expired"
+                    )
+                    pred.realized_at = _utcnow()
+                    resolved_count += 1
+                    results.append({
+                        "ticker": pred.ticker,
+                        "pnl_pct": round(pnl_pct * 100, 2),
+                        "exit_reason": pred.exit_reason,
+                    })
+                except Exception:
+                    continue
+        return {
+            "resolved": resolved_count,
+            "total_pending": sum(
+                1 for p in self._predictions if not p.realized
+            ),
+            "results": results,
+        }
+
 # ── Module singleton ──────────────────────────────────────────
 shadow_tracker = ShadowTracker()

@@ -964,6 +964,175 @@ async def version_info():
 # ===== Shadow / Dossier / Operator Console Endpoints =====
 
 
+
+# ── Sprint 46: Swing_Project best-practices endpoints ────
+
+@app.get("/api/v6/rs-strength/{ticker}")
+async def api_rs_strength(ticker: str):
+    """Relative Strength vs SPY for a single ticker."""
+    ticker = ticker.upper()
+    try:
+        import yfinance as yf
+        stock = yf.download(ticker, period="6mo", progress=False)
+        spy = yf.download("SPY", period="6mo", progress=False)
+        if stock.empty or spy.empty:
+            return {"ticker": ticker, "error": "no data"}
+        stock_closes = stock["Close"].dropna().tolist()
+        spy_closes = spy["Close"].dropna().tolist()
+        # Handle MultiIndex columns from yfinance
+        if hasattr(stock_closes[0], '__len__'):
+            stock_closes = [float(x) for x in stock["Close"].values.flatten()]
+            spy_closes = [float(x) for x in spy["Close"].values.flatten()]
+        rs = _compute_rs_vs_spy(stock_closes, spy_closes)
+        return {"ticker": ticker, **rs}
+    except Exception as e:
+        return {"ticker": ticker, "error": str(e)}
+
+
+@app.get("/api/v6/vcp-scan/{ticker}")
+async def api_vcp_scan(ticker: str):
+    """VCP (Volatility Contraction Pattern) scan for a ticker."""
+    ticker = ticker.upper()
+    try:
+        import yfinance as yf
+        df = yf.download(ticker, period="1y", progress=False)
+        if df.empty:
+            return {"ticker": ticker, "error": "no data"}
+        highs = df["High"].dropna().values.flatten().tolist()
+        lows = df["Low"].dropna().values.flatten().tolist()
+        closes = df["Close"].dropna().values.flatten().tolist()
+        volumes = df["Volume"].dropna().values.flatten().tolist()
+        vcp = _detect_vcp_pattern(highs, lows, closes, volumes)
+        vol_quality = _compute_volume_quality(volumes, closes)
+        return {"ticker": ticker, **vcp, **vol_quality}
+    except Exception as e:
+        return {"ticker": ticker, "error": str(e)}
+
+
+@app.get("/api/v6/swing-analysis/{ticker}")
+async def api_swing_analysis(ticker: str):
+    """Full swing analysis with RS, VCP, volume quality, pullback detection,
+    and dual-axis Leadership/Actionability scoring (Swing_Project methodology)."""
+    ticker = ticker.upper()
+    try:
+        import yfinance as yf
+        df = yf.download(ticker, period="1y", progress=False)
+        spy_df = yf.download("SPY", period="1y", progress=False)
+        if df.empty:
+            return {"ticker": ticker, "error": "no data"}
+
+        closes = df["Close"].dropna().values.flatten().tolist()
+        highs = df["High"].dropna().values.flatten().tolist()
+        lows = df["Low"].dropna().values.flatten().tolist()
+        volumes = df["Volume"].dropna().values.flatten().tolist()
+        spy_closes = spy_df["Close"].dropna().values.flatten().tolist() if not spy_df.empty else closes
+
+        # RS vs SPY
+        rs = _compute_rs_vs_spy(closes, spy_closes)
+
+        # VCP pattern
+        vcp = _detect_vcp_pattern(highs, lows, closes, volumes)
+
+        # Volume quality
+        vol_q = _compute_volume_quality(volumes, closes)
+
+        # SMA20 for pullback engine
+        sma20 = sum(closes[-20:]) / 20 if len(closes) >= 20 else closes[-1]
+        sma200 = sum(closes[-200:]) / 200 if len(closes) >= 200 else sum(closes) / len(closes)
+
+        # Pullback entry
+        pullback = _detect_pullback_entry(closes, highs, lows, volumes, sma20)
+
+        # RSI
+        rsi = 50.0  # simplified
+        if len(closes) >= 15:
+            gains, losses = [], []
+            for i in range(1, min(15, len(closes))):
+                delta = closes[-i] - closes[-i-1]
+                if delta > 0: gains.append(delta)
+                else: losses.append(abs(delta))
+            avg_gain = sum(gains) / 14 if gains else 0.001
+            avg_loss = sum(losses) / 14 if losses else 0.001
+            rsi = 100 - (100 / (1 + avg_gain / avg_loss))
+
+        atr_pct = 0.0
+        if len(closes) >= 2 and closes[-1] > 0:
+            trs = []
+            for i in range(-14, 0):
+                if i-1 >= -len(closes):
+                    tr = max(highs[i] - lows[i], abs(highs[i] - closes[i-1]), abs(lows[i] - closes[i-1]))
+                    trs.append(tr)
+            atr_pct = (sum(trs) / len(trs) / closes[-1] * 100) if trs else 0
+
+        # Leadership + Actionability dual-axis scoring
+        la = _compute_leadership_actionability(rs, vcp, vol_q, pullback, rsi, atr_pct, closes[-1], sma200)
+
+        return {
+            "ticker": ticker,
+            "close": round(closes[-1], 2),
+            "sma20": round(sma20, 2),
+            "sma200": round(sma200, 2),
+            "rsi": round(rsi, 1),
+            "atr_pct": round(atr_pct, 2),
+            "relative_strength": rs,
+            "vcp_pattern": vcp,
+            "volume_quality": vol_q,
+            "pullback_entry": pullback,
+            "scoring": la,
+        }
+    except Exception as e:
+        return {"ticker": ticker, "error": str(e)}
+
+
+@app.post("/api/v6/swing-batch")
+async def api_swing_batch(request: Request):
+    """Batch swing analysis for multiple tickers. Returns ranked by final_score."""
+    try:
+        body = await request.json()
+        tickers = body.get("tickers", [])
+        if not tickers:
+            return {"error": "provide tickers list"}
+        results = []
+        for t in tickers[:20]:  # limit to 20
+            r = await api_swing_analysis(t)
+            if "error" not in r:
+                results.append(r)
+        results.sort(key=lambda x: x.get("scoring", {}).get("final_score", 0), reverse=True)
+        return {"count": len(results), "candidates": results}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/v6/distribution-days")
+async def api_distribution_days():
+    """IBD-style distribution day count for SPY (last 25 trading days)."""
+    try:
+        import yfinance as yf
+        spy = yf.download("SPY", period="3mo", progress=False)
+        if spy.empty:
+            return {"error": "no SPY data"}
+        spy_data = []
+        for _, row in spy.iterrows():
+            spy_data.append({
+                "close": float(row["Close"].item() if hasattr(row["Close"], 'item') else row["Close"]),
+                "volume": float(row["Volume"].item() if hasattr(row["Volume"], 'item') else row["Volume"]),
+            })
+        dd = _detect_distribution_days(spy_data)
+        return {"benchmark": "SPY", **dd}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/v6/shadow-resolve", tags=["analytics"],
+         summary="Auto-resolve expired shadow predictions")
+async def shadow_resolve():
+    """Check actual prices for all expired predictions and mark results."""
+    from src.engines.shadow_tracker import shadow_tracker
+    mds = app.state.market_data
+    result = await shadow_tracker.auto_resolve(mds)
+    return result
+
+
 @app.get(
     "/api/v6/shadow-report",
     tags=["analytics"],
@@ -3186,6 +3355,367 @@ _SCAN_CACHE_TTL = 300  # 5 minutes
 # ═══════════════════════════════════════════════════════════════════
 
 
+
+
+# ── Swing_Project best-practices (RS, VCP, DistDays, Volume, Pullback) ────
+
+def _compute_rs_vs_spy(
+    stock_closes: list, spy_closes: list
+) -> dict:
+    """Relative Strength vs SPY — leadership filter from Swing_Project."""
+    if len(stock_closes) < 90 or len(spy_closes) < 90:
+        return {"rs_score": 0, "rs_trending_up": False, "rs_return_20d": 0.0,
+                "rs_return_60d": 0.0, "rs_return_90d": 0.0}
+    def _ret(arr, n):
+        if len(arr) < n + 1 or arr[-n-1] == 0:
+            return 0.0
+        return (arr[-1] / arr[-n-1]) - 1.0
+
+    stock_r20 = _ret(stock_closes, 20)
+    stock_r60 = _ret(stock_closes, 60)
+    stock_r90 = _ret(stock_closes, 90)
+    spy_r20 = _ret(spy_closes, 20)
+    spy_r60 = _ret(spy_closes, 60)
+    spy_r90 = _ret(spy_closes, 90)
+
+    rs_20 = (stock_r20 - spy_r20) if spy_r20 != 0 else stock_r20
+    rs_60 = (stock_r60 - spy_r60) if spy_r60 != 0 else stock_r60
+    rs_90 = (stock_r90 - spy_r90) if spy_r90 != 0 else stock_r90
+
+    # RS line = stock/SPY ratio
+    rs_line = [s / b if b > 0 else 0 for s, b in zip(stock_closes[-50:], spy_closes[-50:])]
+    rs_sma10 = sum(rs_line[-10:]) / 10 if len(rs_line) >= 10 else 0
+    rs_sma50 = sum(rs_line) / len(rs_line) if rs_line else 0
+    rs_trending_up = rs_sma10 > rs_sma50
+
+    rs_score = 0
+    if rs_20 > 0: rs_score += 1
+    if rs_60 > 0: rs_score += 1
+    if rs_90 > 0: rs_score += 1
+    if rs_trending_up: rs_score += 2
+
+    return {
+        "rs_score": rs_score,
+        "rs_trending_up": rs_trending_up,
+        "rs_return_20d": round(rs_20 * 100, 2),
+        "rs_return_60d": round(rs_60 * 100, 2),
+        "rs_return_90d": round(rs_90 * 100, 2),
+    }
+
+
+def _detect_distribution_days(spy_data: list, lookback: int = 25) -> dict:
+    """IBD-style distribution day counting.
+    A distribution day = SPY down >= 0.2% on higher volume than prior day.
+    """
+    if len(spy_data) < lookback + 1:
+        return {"distribution_day_count": 0, "ftd_count": 0, "regime_pressure": "neutral"}
+    dd_count = 0
+    ftd_count = 0
+    for i in range(-lookback, 0):
+        if i - 1 < -len(spy_data):
+            continue
+        today = spy_data[i]
+        yesterday = spy_data[i - 1]
+        if not today or not yesterday:
+            continue
+        today_close = today.get("close", 0)
+        yesterday_close = yesterday.get("close", 0)
+        today_vol = today.get("volume", 0)
+        yesterday_vol = yesterday.get("volume", 0)
+        if yesterday_close == 0:
+            continue
+        pct_change = (today_close / yesterday_close) - 1.0
+        # Distribution day: down >= 0.2% on higher volume
+        if pct_change <= -0.002 and today_vol > yesterday_vol:
+            dd_count += 1
+        # Follow-through day: up >= 1.25% on higher volume after 4+ day decline
+        if pct_change >= 0.0125 and today_vol > yesterday_vol:
+            ftd_count += 1
+
+    if dd_count >= 5:
+        pressure = "heavy_distribution"
+    elif dd_count >= 3:
+        pressure = "moderate_distribution"
+    else:
+        pressure = "neutral"
+
+    return {
+        "distribution_day_count": dd_count,
+        "ftd_count": ftd_count,
+        "regime_pressure": pressure,
+    }
+
+
+def _detect_vcp_pattern(
+    highs: list, lows: list, closes: list, volumes: list
+) -> dict:
+    """Simplified VCP (Volatility Contraction Pattern) detection.
+    Looks for progressively tighter contractions in price range.
+    """
+    result = {"is_vcp": False, "contraction_count": 0, "tightness_ratio": 0.0,
+              "vcp_score": 0.0, "pivot_price": None}
+    if len(closes) < 60:
+        return result
+
+    # Find swing highs and lows in last 120 bars
+    window = min(len(closes), 120)
+    h = highs[-window:]
+    l = lows[-window:]
+    c = closes[-window:]
+    v = volumes[-window:]
+
+    # Find contractions: periods where range gets progressively smaller
+    contractions = []
+    chunk_size = max(10, window // 6)
+    for start in range(0, window - chunk_size, chunk_size):
+        end = start + chunk_size
+        chunk_h = max(h[start:end])
+        chunk_l = min(l[start:end])
+        if chunk_h > 0:
+            depth = (chunk_h - chunk_l) / chunk_h
+            contractions.append(depth)
+
+    if len(contractions) < 2:
+        return result
+
+    # Check if contractions are getting tighter
+    tightening_count = 0
+    for i in range(1, len(contractions)):
+        if contractions[i] < contractions[i-1]:
+            tightening_count += 1
+
+    tightness_ratio = tightening_count / (len(contractions) - 1) if len(contractions) > 1 else 0
+
+    # Volume dryup: recent volume vs older volume
+    recent_vol = sum(v[-10:]) / 10 if len(v) >= 10 else 0
+    older_vol = sum(v[-50:-10]) / 40 if len(v) >= 50 else recent_vol
+    vol_dryup = recent_vol / older_vol if older_vol > 0 else 1.0
+
+    is_vcp = tightness_ratio >= 0.5 and len(contractions) >= 3 and vol_dryup < 0.8
+    vcp_score = min(1.0, (tightness_ratio * 0.4) + (0.3 if vol_dryup < 0.6 else 0.1) + (0.3 if len(contractions) >= 4 else 0.15))
+
+    pivot_price = max(h[-20:]) if is_vcp else None
+
+    return {
+        "is_vcp": is_vcp,
+        "contraction_count": len(contractions),
+        "tightness_ratio": round(tightness_ratio, 3),
+        "vcp_score": round(vcp_score, 3),
+        "pivot_price": round(pivot_price, 2) if pivot_price else None,
+        "volume_dryup_ratio": round(vol_dryup, 3),
+    }
+
+
+def _compute_volume_quality(volumes: list, closes: list) -> dict:
+    """Volume quality scoring from Swing_Project.
+    Measures accumulation/distribution patterns.
+    """
+    if len(volumes) < 50 or len(closes) < 50:
+        return {"volume_quality_score": 0, "up_down_volume_ratio": 1.0,
+                "volume_dryup_ratio": 1.0, "pocket_pivot_detected": False}
+
+    # Up/Down volume ratio (last 20 days)
+    up_vol = 0.0
+    down_vol = 0.0
+    for i in range(-20, 0):
+        if closes[i] > closes[i-1]:
+            up_vol += volumes[i]
+        else:
+            down_vol += volumes[i]
+    ud_ratio = up_vol / down_vol if down_vol > 0 else 2.0
+
+    # Volume dryup ratio (SMA10 / SMA50)
+    sma10_vol = sum(volumes[-10:]) / 10
+    sma50_vol = sum(volumes[-50:]) / 50
+    dryup = sma10_vol / sma50_vol if sma50_vol > 0 else 1.0
+
+    # Pocket pivot detection: volume > max down-volume of last 10 days
+    max_down_vol_10d = 0
+    for i in range(-10, 0):
+        if closes[i] < closes[i-1]:
+            max_down_vol_10d = max(max_down_vol_10d, volumes[i])
+    pocket_pivot = (closes[-1] > closes[-2] and volumes[-1] > max_down_vol_10d and max_down_vol_10d > 0)
+
+    # Composite score
+    score = 0
+    if dryup < 0.6: score += 2
+    elif dryup < 0.8: score += 1
+    if ud_ratio > 1.5: score += 1
+    if ud_ratio > 2.0: score += 1
+    if pocket_pivot: score += 1
+
+    return {
+        "volume_quality_score": min(score, 5),
+        "up_down_volume_ratio": round(ud_ratio, 3),
+        "volume_dryup_ratio": round(dryup, 3),
+        "pocket_pivot_detected": pocket_pivot,
+    }
+
+
+def _detect_pullback_entry(
+    closes: list, highs: list, lows: list, volumes: list, sma20: float
+) -> dict:
+    """Pullback entry engine from Swing_Project.
+    Detects post-breakout pullback to SMA20 support with rebound confirmation.
+    """
+    result = {"pullback_state": "none", "entry_ready": False,
+              "distance_to_sma20_pct": None, "support_rebound": False}
+    if len(closes) < 25 or sma20 <= 0:
+        return result
+
+    current = closes[-1]
+    distance_pct = ((current / sma20) - 1.0) * 100
+
+    # Check if recently broke out (was above 20-day high within last 10 bars)
+    high_20d = max(highs[-25:-5]) if len(highs) >= 25 else max(highs)
+    was_breakout = any(c >= high_20d * 0.995 for c in closes[-10:-2])
+
+    # Currently pulling back toward SMA20
+    is_near_support = abs(distance_pct) < 3.0  # within 3% of SMA20
+
+    # Volume quiet during pullback
+    recent_vol = sum(volumes[-5:]) / 5 if len(volumes) >= 5 else 0
+    avg_vol = sum(volumes[-20:]) / 20 if len(volumes) >= 20 else recent_vol
+    vol_quiet = recent_vol < avg_vol
+
+    # Rebound candle: close > open and close > prior close, near SMA20
+    rebound = (closes[-1] > closes[-2] and lows[-1] >= sma20 * 0.98)
+
+    if was_breakout and is_near_support and vol_quiet:
+        state = "post-breakout-watch"
+        if rebound:
+            state = "pullback-entry-ready"
+    elif was_breakout:
+        state = "post-breakout"
+    else:
+        state = "none"
+
+    return {
+        "pullback_state": state,
+        "entry_ready": state == "pullback-entry-ready",
+        "distance_to_sma20_pct": round(distance_pct, 2),
+        "support_rebound": rebound,
+    }
+
+
+def _compute_leadership_actionability(
+    rs_data: dict, vcp_data: dict, vol_data: dict, pullback_data: dict,
+    rsi: float, atr_pct: float, close: float, sma200: float
+) -> dict:
+    """Dual-axis scoring from Swing_Project.
+    Leadership = RS strength + trend quality.
+    Actionability = breakout proximity + compression + volume + setup stage.
+    Final score = weighted combination (0-100).
+    """
+    # Leadership axis (0-1)
+    rs_norm = min(1.0, rs_data.get("rs_score", 0) / 5.0)
+    trend_strength = min(1.0, max(0.0, (close / sma200 - 1.0) * 5)) if sma200 > 0 else 0.5
+    leadership = rs_norm * 0.6 + trend_strength * 0.4
+
+    # Actionability axis (0-1)
+    vcp_component = vcp_data.get("vcp_score", 0)
+    vol_component = min(1.0, vol_data.get("volume_quality_score", 0) / 5.0)
+
+    pullback_stage_score = {
+        "pullback-entry-ready": 1.0,
+        "post-breakout-watch": 0.8,
+        "post-breakout": 0.5,
+        "none": 0.2,
+    }.get(pullback_data.get("pullback_state", "none"), 0.2)
+
+    actionability = vcp_component * 0.3 + vol_component * 0.3 + pullback_stage_score * 0.4
+
+    # Final score (0-100)
+    final_score = (leadership * 0.45 + actionability * 0.55) * 100
+
+    # Setup tag
+    if leadership >= 0.7 and actionability >= 0.7:
+        tag = "leader-actionable"
+    elif leadership >= 0.7:
+        tag = "leader-watch"
+    elif actionability >= 0.7:
+        tag = "setup-forming"
+    else:
+        tag = "early-stage"
+
+    return {
+        "leadership_score": round(leadership, 3),
+        "actionability_score": round(actionability, 3),
+        "final_score": round(final_score, 1),
+        "setup_tag": tag,
+    }
+
+def _honest_confidence_label(composite: float) -> dict:
+    """Return honest labeling for confidence scores.
+
+    CRITICAL: The composite score measures indicator alignment, NOT
+    probability of profit. This function adds honest framing.
+    """
+    if composite >= 85:
+        alignment = "Strong indicator alignment"
+        honest_note = ("Indicators are well-aligned. This does NOT guarantee profit. "
+                       "No backtest validates this specific threshold.")
+    elif composite >= 70:
+        alignment = "Good indicator alignment"
+        honest_note = ("Most indicators agree. This is a technical alignment score, "
+                       "not a win probability. Historical hit rate unknown.")
+    elif composite >= 55:
+        alignment = "Moderate indicator alignment"
+        honest_note = ("Mixed signals. Some indicators support, others neutral. "
+                       "This is NOT a 55% win probability.")
+    else:
+        alignment = "Weak indicator alignment"
+        honest_note = ("Indicators are poorly aligned. Low-quality setup. "
+                       "Consider waiting for better conditions.")
+
+    return {
+        "composite": composite,
+        "label": alignment,
+        "is_probability": False,
+        "honest_note": honest_note,
+        "what_this_measures": "Degree of technical indicator agreement (0-100)",
+        "what_this_does_NOT_measure": "Probability of profit, expected return, or edge",
+        "calibration_status": "uncalibrated — no realized hit-rate data yet",
+    }
+
+
+
+async def _days_to_earnings(ticker: str, mds) -> int | None:
+    """Estimate days to next earnings for a ticker.
+
+    Uses yfinance calendar if available, otherwise returns None.
+    """
+    try:
+        import yfinance as yf
+        t = yf.Ticker(ticker)
+        cal = t.calendar
+        if cal is not None and not cal.empty:
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            # Calendar may be a DataFrame with 'Earnings Date' column
+            if hasattr(cal, 'iloc'):
+                for col in cal.columns:
+                    val = cal[col].iloc[0]
+                    if hasattr(val, 'date'):
+                        delta = (val - now).days
+                        if delta >= 0:
+                            return delta
+        # Try .earnings_dates attribute
+        ed = getattr(t, 'earnings_dates', None)
+        if ed is not None and not ed.empty:
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            for dt in ed.index:
+                if hasattr(dt, 'tz_localize'):
+                    dt = dt.tz_localize('UTC')
+                delta = (dt - now).days
+                if delta >= 0:
+                    return int(delta)
+    except Exception:
+        pass
+    return None
+
+
 def _enrich_calibration(conf: dict, strategy: str) -> dict:
     """Build 6-layer calibrated confidence from 4-layer confidence output.
 
@@ -3517,6 +4047,7 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                         "pre_mortem": _build_pre_mortem(strat_name, trending),
                         "why_wait": _build_why_wait(conf, rr),
                         # ── Sprint 44: uncertainty + reliability ──
+                        "honest_confidence": _honest_confidence_label(conf["composite"]),
                         "reliability": {
                             "bucket": reliability_bucket(len(close) - 60),
                             "sample_size": len(close) - 60,
