@@ -3713,6 +3713,9 @@ class DiscordInteractiveBot:
             logger.info(f"✅ Discord bot online as {bot.user}")
             print(f"✅ TradingAI Bot connected as {bot.user}")
             print(f"   Servers: {', '.join(g.name for g in bot.guilds)}")
+            # Register external command modules
+            _register_swing_commands(bot)
+            _register_analytics_commands(bot)
             # Re-register persistent views
             bot.add_view(VerifyView())
             bot.add_view(RolePickView())
@@ -6979,6 +6982,93 @@ def _register_swing_commands(bot_instance):
                    f"{emoji} Pressure: {pressure}\n"
                    f"Dist Days: {data.get('distribution_day_count', 0)} | "
                    f"FTD: {data.get('ftd_count', 0)}")
+            await interaction.followup.send(msg)
+        except Exception as e:
+            await interaction.followup.send(f"Error: {e}")
+
+
+def _register_analytics_commands(bot_instance):
+    """Register meta-ensemble, trust-card, model-version, options-scan commands (Sprint 48)."""
+    from discord import app_commands
+    tree = bot_instance.tree if hasattr(bot_instance, 'tree') else bot_instance.bot.tree
+
+    @tree.command(name="meta-ensemble",
+                  description="Meta-ensemble model state and weights")
+    @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
+    async def meta_ensemble_cmd(interaction):
+        await interaction.response.defer()
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as s:
+                async with s.get("http://localhost:8000/api/v6/meta-ensemble", timeout=aiohttp.ClientTimeout(total=10)) as r:
+                    data = await r.json()
+            n = data.get("n_samples", 0)
+            trained = data.get("is_trained", False)
+            weights = data.get("weights", {})
+            w_str = " | ".join(f"{k}: {v:.3f}" for k, v in list(weights.items())[:5]) if weights else "N/A"
+            status = "\u2705 Trained" if trained else "\u23f3 Collecting"
+            msg = (f"**Meta-Ensemble State**\n"
+                   f"{status} | Samples: {n}\n"
+                   f"Weights: {w_str}")
+            await interaction.followup.send(msg)
+        except Exception as e:
+            await interaction.followup.send(f"Error: {e}")
+
+    @tree.command(name="trust-card",
+                  description="Trust metadata card for a ticker")
+    @app_commands.describe(ticker="Stock symbol")
+    @app_commands.checks.cooldown(1, 8, key=lambda i: i.user.id)
+    async def trust_card_cmd(interaction, ticker: str):
+        await interaction.response.defer()
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as s:
+                async with s.get(f"http://localhost:8000/api/v6/trust-card/{ticker.upper()}", timeout=aiohttp.ClientTimeout(total=10)) as r:
+                    data = await r.json()
+            badge = data.get("badge", "unknown")
+            badge_emoji = {"PAPER": "\U0001f4c4", "VERIFIED": "\u2705", "LIVE": "\U0001f7e2"}.get(badge, "\u2753")
+            sources = data.get("source_count", 0)
+            version = data.get("model_version", "?")
+            msg = (f"**Trust Card — {ticker.upper()}**\n"
+                   f"{badge_emoji} Badge: {badge}\n"
+                   f"Sources: {sources} | Model: {version}")
+            await interaction.followup.send(msg)
+        except Exception as e:
+            await interaction.followup.send(f"Error: {e}")
+
+    @tree.command(name="model-version",
+                  description="Current model version and build info")
+    @app_commands.checks.cooldown(1, 15, key=lambda i: i.user.id)
+    async def model_version_cmd(interaction):
+        await interaction.response.defer()
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as s:
+                async with s.get("http://localhost:8000/api/v6/model-version", timeout=aiohttp.ClientTimeout(total=10)) as r:
+                    data = await r.json()
+            ver = data.get("model_version", "?")
+            msg = f"**Model Version:** `{ver}`"
+            await interaction.followup.send(msg)
+        except Exception as e:
+            await interaction.followup.send(f"Error: {e}")
+
+    @tree.command(name="options-scan",
+                  description="Futu-style options scan — put-selling candidates with annualized yield")
+    @app_commands.describe(ticker="Stock symbol (default: AAPL)")
+    @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
+    async def options_scan_cmd(interaction, ticker: str = "AAPL"):
+        await interaction.response.defer()
+        try:
+            t = ticker.upper()
+            msg = (f"**Options Scan — {t}** (Synthetic)\n"
+                   f"\U0001f4b0 Put-Selling Candidates (Futu-style):\n"
+                   f"```\n"
+                   f"Strike  DTE  Delta   IV    Ann.Yield\n"
+                   f"$246P   30d  -0.30   24%   18.2%\n"
+                   f"$240P   30d  -0.22   22%   11.8%\n"
+                   f"$253C   30d  +0.55   25%   38.4%\n"
+                   f"```\n"
+                   f"\u26a0\ufe0f Synthetic data — verify with broker")
             await interaction.followup.send(msg)
         except Exception as e:
             await interaction.followup.send(f"Error: {e}")
