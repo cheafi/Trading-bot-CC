@@ -8778,6 +8778,346 @@ async def ticker_uncertainty(ticker: str):
     except Exception as exc:
         raise HTTPException(500, f"Uncertainty error: {exc}") from exc
 
+# ══════════════════════════════════════════════════════════════════════
+# Sprint 45 — Batch Portfolio Import / Futu Sync / Portfolio Advise
+# ══════════════════════════════════════════════════════════════════════
+
+_user_portfolio: dict = {"holdings": [], "source": "manual", "updated_at": ""}
+
+
+class HoldingInput(BaseModel):
+    ticker: str
+    shares: float = 0
+    avg_cost: float = 0
+
+
+class PortfolioImportRequest(BaseModel):
+    holdings: List[HoldingInput]
+    source: str = "manual"
+
+
+@app.post("/api/portfolio/import", tags=["portfolio"])
+async def portfolio_import(req: PortfolioImportRequest):
+    """Batch-import portfolio holdings — multiple stocks at once."""
+    global _user_portfolio
+    now = datetime.utcnow().isoformat() + "Z"
+    enriched = []
+    mds = app.state.market_data
+    for h in req.holdings:
+        t = h.ticker.upper().strip()
+        price = None
+        try:
+            hist = await mds.get_history(t, period="5d", interval="1d")
+            if hist is not None and not hist.empty:
+                c_col = "Close" if "Close" in hist.columns else "close"
+                price = float(hist[c_col].iloc[-1])
+        except Exception:
+            pass
+        enriched.append({
+            "ticker": t,
+            "shares": h.shares,
+            "avg_cost": h.avg_cost,
+            "current_price": price,
+            "market_value": round(price * h.shares, 2) if price else None,
+            "unrealized_pnl": round((price - h.avg_cost) * h.shares, 2) if price and h.avg_cost else None,
+            "pnl_pct": round((price / h.avg_cost - 1) * 100, 2) if price and h.avg_cost else None,
+        })
+    _user_portfolio = {
+        "holdings": enriched,
+        "source": req.source,
+        "updated_at": now,
+        "count": len(enriched),
+    }
+    return _user_portfolio
+
+
+@app.get("/api/portfolio/holdings", tags=["portfolio"])
+async def portfolio_holdings():
+    """Return the currently stored portfolio."""
+    return _user_portfolio
+
+
+@app.get("/api/portfolio/futu", tags=["portfolio"])
+async def portfolio_from_futu():
+    """Auto-fetch positions from Futu OpenD and store as portfolio."""
+    global _user_portfolio
+    try:
+        from src.brokers.futu_broker import FutuBroker
+        fb = FutuBroker()
+        await fb.connect()
+        positions = await fb.get_positions()
+        account = await fb.get_account()
+        await fb.disconnect()
+        enriched = []
+        for p in positions:
+            enriched.append({
+                "ticker": p.ticker, "shares": p.quantity,
+                "avg_cost": p.avg_price, "current_price": p.current_price,
+                "market_value": p.market_value,
+                "unrealized_pnl": p.unrealized_pnl,
+                "pnl_pct": p.unrealized_pnl_pct,
+            })
+        now = datetime.utcnow().isoformat() + "Z"
+        _user_portfolio = {
+            "holdings": enriched, "source": "futu", "updated_at": now,
+            "count": len(enriched),
+            "account": {"portfolio_value": account.portfolio_value,
+                        "cash": account.cash, "buying_power": account.buying_power},
+        }
+        return _user_portfolio
+    except Exception as exc:
+        raise HTTPException(500, f"Futu fetch failed: {exc}") from exc
+
+
+@app.post("/api/portfolio/advise", tags=["portfolio"])
+async def portfolio_advise():
+    """Analyse imported portfolio — expert committee + conformal prediction per holding."""
+    holdings = _user_portfolio.get("holdings", [])
+    if not holdings:
+        raise HTTPException(400, "No portfolio imported. POST /api/portfolio/import first.")
+    mds = app.state.market_data
+    advice_items = []
+    total_value = 0
+    total_pnl = 0
+    for h in holdings:
+        ticker = h["ticker"]
+        mv = h.get("market_value") or 0
+        total_value += mv
+        total_pnl += h.get("unrealized_pnl") or 0
+        verdict_str = "N/A"
+        confidence = 0
+        interval = None
+        try:
+            hist = await mds.get_history(ticker, period="6mo", interval="1d")
+            if hist is not None and not hist.empty:
+                c_col = "Close" if "Close" in hist.columns else "close"
+                close = hist[c_col].values.astype(float)
+                v_col = "Volume" if "Volume" in hist.columns else "volume"
+                volume = hist[v_col].values.astype(float) if v_col in hist.columns else None
+                from src.engines.expert_committee import ExpertCommittee
+                ec = ExpertCommittee()
+                _ind = _compute_indicators(close, volume if volume is not None else np.ones(len(close)))
+                i = len(close) - 1
+                trending = bool(close[i] > _ind["sma50"][i] and _ind["sma50"][i] > _ind["sma200"][i])
+                rsi_val = float(_ind["rsi"][i])
+                vol_r = float(_ind["vol_ratio"][i])
+                atr_p = float(_ind["atr_pct"][i])
+                votes = ec.collect_votes(
+                    regime="UPTREND" if trending else "SIDEWAYS",
+                    rsi=rsi_val, vol_ratio=vol_r, trending=trending,
+                    rr_ratio=2.0, atr_pct=atr_p,
+                )
+                v = ec.deliberate(votes, regime="UPTREND" if trending else "SIDEWAYS")
+                verdict_str = v.direction
+                confidence = v.agreement_ratio
+                cp = ConformalPredictor(confidence_level=0.90)
+                cp.calibrate_from_returns(close, horizon_days=20)
+                interval = cp.predict(float(close[-1]) * 1.05)
+        except Exception:
+            pass
+        pnl_pct = h.get("pnl_pct") or 0
+        if verdict_str == "STRONG_BUY":
+            action, reason = "ADD", "Expert committee strongly bullish"
+        elif verdict_str == "BUY":
+            action, reason = "HOLD / ADD on dip", "Committee bullish"
+        elif verdict_str in ("SELL", "STRONG_SELL"):
+            action, reason = "TRIM / EXIT", "Committee bearish"
+        elif pnl_pct < -15:
+            action, reason = "REVIEW", f"Down {pnl_pct:.1f}%"
+        elif pnl_pct > 50:
+            action, reason = "CONSIDER TRIM", f"Up {pnl_pct:.1f}%"
+        else:
+            action, reason = "HOLD", "Neutral signal"
+        advice_items.append({
+            "ticker": ticker, "shares": h.get("shares"), "market_value": mv,
+            "pnl_pct": pnl_pct, "committee_verdict": verdict_str,
+            "committee_confidence": confidence, "action": action, "reason": reason,
+            "prediction_interval": interval.to_dict() if interval else None,
+        })
+    concentration_warnings = []
+    if total_value > 0:
+        for item in advice_items:
+            w = (item["market_value"] / total_value) * 100
+            item["portfolio_weight_pct"] = round(w, 1)
+            if w > 25:
+                concentration_warnings.append(f"{item['ticker']} is {w:.0f}% — over-concentrated")
+    return {
+        "portfolio_summary": {"total_value": round(total_value, 2), "total_pnl": round(total_pnl, 2),
+                              "holdings_count": len(holdings), "source": _user_portfolio.get("source")},
+        "advice": advice_items, "concentration_warnings": concentration_warnings,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+    }
+
+# ══════════════════════════════════════════════════════════════════════
+# Sprint 45 — Batch Portfolio Import / Futu Sync / Portfolio Advise
+# ══════════════════════════════════════════════════════════════════════
+
+_user_portfolio: dict = {"holdings": [], "source": "manual", "updated_at": ""}
+
+
+class HoldingInput(BaseModel):
+    ticker: str
+    shares: float = 0
+    avg_cost: float = 0
+
+
+class PortfolioImportRequest(BaseModel):
+    holdings: List[HoldingInput]
+    source: str = "manual"
+
+
+@app.post("/api/portfolio/import", tags=["portfolio"])
+async def portfolio_import(req: PortfolioImportRequest):
+    """Batch-import portfolio holdings — multiple stocks at once."""
+    global _user_portfolio
+    now = datetime.utcnow().isoformat() + "Z"
+    enriched = []
+    mds = app.state.market_data
+    for h in req.holdings:
+        t = h.ticker.upper().strip()
+        price = None
+        try:
+            hist = await mds.get_history(t, period="5d", interval="1d")
+            if hist is not None and not hist.empty:
+                c_col = "Close" if "Close" in hist.columns else "close"
+                price = float(hist[c_col].iloc[-1])
+        except Exception:
+            pass
+        enriched.append({
+            "ticker": t,
+            "shares": h.shares,
+            "avg_cost": h.avg_cost,
+            "current_price": price,
+            "market_value": round(price * h.shares, 2) if price else None,
+            "unrealized_pnl": round((price - h.avg_cost) * h.shares, 2) if price and h.avg_cost else None,
+            "pnl_pct": round((price / h.avg_cost - 1) * 100, 2) if price and h.avg_cost else None,
+        })
+    _user_portfolio = {
+        "holdings": enriched,
+        "source": req.source,
+        "updated_at": now,
+        "count": len(enriched),
+    }
+    return _user_portfolio
+
+
+@app.get("/api/portfolio/holdings", tags=["portfolio"])
+async def portfolio_holdings():
+    """Return the currently stored portfolio."""
+    return _user_portfolio
+
+
+@app.get("/api/portfolio/futu", tags=["portfolio"])
+async def portfolio_from_futu():
+    """Auto-fetch positions from Futu OpenD and store as portfolio."""
+    global _user_portfolio
+    try:
+        from src.brokers.futu_broker import FutuBroker
+        fb = FutuBroker()
+        await fb.connect()
+        positions = await fb.get_positions()
+        account = await fb.get_account()
+        await fb.disconnect()
+        enriched = []
+        for p in positions:
+            enriched.append({
+                "ticker": p.ticker, "shares": p.quantity,
+                "avg_cost": p.avg_price, "current_price": p.current_price,
+                "market_value": p.market_value,
+                "unrealized_pnl": p.unrealized_pnl,
+                "pnl_pct": p.unrealized_pnl_pct,
+            })
+        now = datetime.utcnow().isoformat() + "Z"
+        _user_portfolio = {
+            "holdings": enriched, "source": "futu", "updated_at": now,
+            "count": len(enriched),
+            "account": {"portfolio_value": account.portfolio_value,
+                        "cash": account.cash, "buying_power": account.buying_power},
+        }
+        return _user_portfolio
+    except Exception as exc:
+        raise HTTPException(500, f"Futu fetch failed: {exc}") from exc
+
+
+@app.post("/api/portfolio/advise", tags=["portfolio"])
+async def portfolio_advise():
+    """Analyse imported portfolio — expert committee + conformal prediction per holding."""
+    holdings = _user_portfolio.get("holdings", [])
+    if not holdings:
+        raise HTTPException(400, "No portfolio imported. POST /api/portfolio/import first.")
+    mds = app.state.market_data
+    advice_items = []
+    total_value = 0
+    total_pnl = 0
+    for h in holdings:
+        ticker = h["ticker"]
+        mv = h.get("market_value") or 0
+        total_value += mv
+        total_pnl += h.get("unrealized_pnl") or 0
+        verdict_str = "N/A"
+        confidence = 0
+        interval = None
+        try:
+            hist = await mds.get_history(ticker, period="6mo", interval="1d")
+            if hist is not None and not hist.empty:
+                c_col = "Close" if "Close" in hist.columns else "close"
+                close = hist[c_col].values.astype(float)
+                v_col = "Volume" if "Volume" in hist.columns else "volume"
+                volume = hist[v_col].values.astype(float) if v_col in hist.columns else None
+                from src.engines.expert_committee import ExpertCommittee
+                ec = ExpertCommittee()
+                _ind = _compute_indicators(close, volume if volume is not None else np.ones(len(close)))
+                i = len(close) - 1
+                trending = bool(close[i] > _ind["sma50"][i] and _ind["sma50"][i] > _ind["sma200"][i])
+                rsi_val = float(_ind["rsi"][i])
+                vol_r = float(_ind["vol_ratio"][i])
+                atr_p = float(_ind["atr_pct"][i])
+                votes = ec.collect_votes(
+                    regime="UPTREND" if trending else "SIDEWAYS",
+                    rsi=rsi_val, vol_ratio=vol_r, trending=trending,
+                    rr_ratio=2.0, atr_pct=atr_p,
+                )
+                v = ec.deliberate(votes, regime="UPTREND" if trending else "SIDEWAYS")
+                verdict_str = v.direction
+                confidence = v.agreement_ratio
+                cp = ConformalPredictor(confidence_level=0.90)
+                cp.calibrate_from_returns(close, horizon_days=20)
+                interval = cp.predict(float(close[-1]) * 1.05)
+        except Exception:
+            pass
+        pnl_pct = h.get("pnl_pct") or 0
+        if verdict_str == "STRONG_BUY":
+            action, reason = "ADD", "Expert committee strongly bullish"
+        elif verdict_str == "BUY":
+            action, reason = "HOLD / ADD on dip", "Committee bullish"
+        elif verdict_str in ("SELL", "STRONG_SELL"):
+            action, reason = "TRIM / EXIT", "Committee bearish"
+        elif pnl_pct < -15:
+            action, reason = "REVIEW", f"Down {pnl_pct:.1f}%"
+        elif pnl_pct > 50:
+            action, reason = "CONSIDER TRIM", f"Up {pnl_pct:.1f}%"
+        else:
+            action, reason = "HOLD", "Neutral signal"
+        advice_items.append({
+            "ticker": ticker, "shares": h.get("shares"), "market_value": mv,
+            "pnl_pct": pnl_pct, "committee_verdict": verdict_str,
+            "committee_confidence": confidence, "action": action, "reason": reason,
+            "prediction_interval": interval.to_dict() if interval else None,
+        })
+    concentration_warnings = []
+    if total_value > 0:
+        for item in advice_items:
+            w = (item["market_value"] / total_value) * 100
+            item["portfolio_weight_pct"] = round(w, 1)
+            if w > 25:
+                concentration_warnings.append(f"{item['ticker']} is {w:.0f}% — over-concentrated")
+    return {
+        "portfolio_summary": {"total_value": round(total_value, 2), "total_pnl": round(total_pnl, 2),
+                              "holdings_count": len(holdings), "source": _user_portfolio.get("source")},
+        "advice": advice_items, "concentration_warnings": concentration_warnings,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+    }
+
 
 if __name__ == "__main__":
     start()

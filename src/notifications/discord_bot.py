@@ -4992,6 +4992,162 @@ class DiscordInteractiveBot:
                 logger.error(f"portfolio error: {exc}")
                 await interaction.followup.send(f"❌ Error: {exc}")
 
+
+        # ── Sprint 45: Batch Portfolio Import + Advise ──────────────
+
+        @bot.tree.command(name="portfolio-import",
+                          description="Import multiple stocks at once (comma-separated)")
+        @app_commands.describe(
+            tickers="Comma-separated tickers, e.g. AAPL,TSLA,NVDA,RKLB",
+            shares="Comma-separated share counts (same order)",
+            costs="Comma-separated avg costs (optional)")
+        @app_commands.checks.cooldown(1, 10, key=lambda i: i.user.id)
+        async def cmd_portfolio_import(interaction: discord.Interaction,
+                                       tickers: str, shares: str = "",
+                                       costs: str = ""):
+            """Batch-import portfolio via comma-separated lists."""
+            await interaction.response.defer()
+            try:
+                ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+                share_list = ([float(s.strip()) for s in shares.split(",") if s.strip()]
+                              if shares else [0] * len(ticker_list))
+                cost_list = ([float(c.strip()) for c in costs.split(",") if c.strip()]
+                             if costs else [0] * len(ticker_list))
+                while len(share_list) < len(ticker_list):
+                    share_list.append(0)
+                while len(cost_list) < len(ticker_list):
+                    cost_list.append(0)
+                payload = {"holdings": [], "source": "discord"}
+                for i, t in enumerate(ticker_list):
+                    payload["holdings"].append({
+                        "ticker": t, "shares": share_list[i],
+                        "avg_cost": cost_list[i],
+                    })
+                async with aiohttp.ClientSession() as sess:
+                    async with sess.post(
+                        f"{API_BASE}/api/portfolio/import",
+                        json=payload,
+                        timeout=aiohttp.ClientTimeout(total=30),
+                    ) as resp:
+                        data = await resp.json()
+                e = discord.Embed(
+                    title="\U0001f4e6 Portfolio Imported",
+                    description=f"**{data.get('count', 0)} holdings** imported",
+                    color=COLOR_BUY,
+                    timestamp=datetime.now(timezone.utc))
+                for h in data.get("holdings", [])[:25]:
+                    pnl_s = ""
+                    if h.get("pnl_pct"):
+                        pnl_s = f" | P&L: {h['pnl_pct']:+.1f}%"
+                    price_s = f"${h['current_price']:,.2f}" if h.get("current_price") else "N/A"
+                    e.add_field(
+                        name=h["ticker"],
+                        value=f"{h['shares']:.0f} shares @ {price_s}{pnl_s}",
+                        inline=True)
+                e.set_footer(text="Use /portfolio-advise for recs")
+                await interaction.followup.send(embed=e)
+            except Exception as exc:
+                await interaction.followup.send(
+                    f"\u274c Import failed: {exc}")
+
+        @bot.tree.command(name="portfolio-futu",
+                          description="Auto-import portfolio from Futu OpenD")
+        @app_commands.checks.cooldown(1, 15, key=lambda i: i.user.id)
+        async def cmd_portfolio_futu(interaction: discord.Interaction):
+            """Fetch all positions from Futu and import them."""
+            await interaction.response.defer()
+            try:
+                async with aiohttp.ClientSession() as sess:
+                    async with sess.get(
+                        f"{API_BASE}/api/portfolio/futu",
+                        timeout=aiohttp.ClientTimeout(total=30),
+                    ) as resp:
+                        if resp.status != 200:
+                            txt = await resp.text()
+                            await interaction.followup.send(
+                                f"\u274c Futu failed: {txt}")
+                            return
+                        data = await resp.json()
+                e = discord.Embed(
+                    title="\U0001f517 Futu Portfolio Synced",
+                    description=f"**{data.get('count', 0)} positions** from Futu",
+                    color=COLOR_BUY,
+                    timestamp=datetime.now(timezone.utc))
+                acct = data.get("account", {})
+                if acct:
+                    e.add_field(name="Value",
+                                value=f"${acct.get('portfolio_value', 0):,.2f}")
+                    e.add_field(name="Cash",
+                                value=f"${acct.get('cash', 0):,.2f}")
+                for h in data.get("holdings", [])[:20]:
+                    e.add_field(
+                        name=h["ticker"],
+                        value=f"{h['shares']:.0f} sh | {h.get('pnl_pct', 0):+.1f}%",
+                        inline=True)
+                e.set_footer(text="Use /portfolio-advise for recs")
+                await interaction.followup.send(embed=e)
+            except Exception as exc:
+                await interaction.followup.send(
+                    f"\u274c Futu sync failed: {exc}")
+
+        @bot.tree.command(name="portfolio-advise",
+                          description="Get AI recs for your portfolio")
+        @app_commands.checks.cooldown(1, 30, key=lambda i: i.user.id)
+        async def cmd_portfolio_advise(interaction: discord.Interaction):
+            """Analyse portfolio with expert committee."""
+            await interaction.response.defer()
+            try:
+                async with aiohttp.ClientSession() as sess:
+                    async with sess.post(
+                        f"{API_BASE}/api/portfolio/advise",
+                        timeout=aiohttp.ClientTimeout(total=60),
+                    ) as resp:
+                        if resp.status == 400:
+                            await interaction.followup.send(
+                                "\u26a0\ufe0f No portfolio. Use /portfolio-import first.")
+                            return
+                        data = await resp.json()
+                summary = data.get("portfolio_summary", {})
+                e = discord.Embed(
+                    title="\U0001f9e0 Portfolio Advice",
+                    description=(
+                        f"**${summary.get('total_value', 0):,.2f}** total | "
+                        f"P&L **${summary.get('total_pnl', 0):+,.2f}** | "
+                        f"{summary.get('holdings_count', 0)} holdings"
+                    ),
+                    color=COLOR_GOLD,
+                    timestamp=datetime.now(timezone.utc))
+                for item in data.get("advice", [])[:25]:
+                    emoji = {"ADD": "\U0001f7e2", "HOLD": "\u26aa",
+                             "HOLD / ADD on dip": "\U0001f7e1",
+                             "TRIM / EXIT": "\U0001f534",
+                             "REVIEW": "\U0001f7e0",
+                             "CONSIDER TRIM": "\U0001f7e1"}.get(
+                        item["action"], "\u26aa")
+                    wt = ""
+                    if item.get("portfolio_weight_pct"):
+                        wt = f" ({item['portfolio_weight_pct']:.0f}%)"
+                    verdict_line = (
+                        f"**{item['action']}** \u2014 {item['reason']}"
+                        f"\nVerdict: {item['committee_verdict']} "
+                        f"({item['committee_confidence']:.0%} conf)"
+                    )
+                    e.add_field(
+                        name=f"{emoji} {item['ticker']}{wt}",
+                        value=verdict_line,
+                        inline=False)
+                warnings = data.get("concentration_warnings", [])
+                if warnings:
+                    warn_text = "\n".join(warnings)
+                    e.add_field(
+                        name="\u26a0\ufe0f Concentration",
+                        value=warn_text, inline=False)
+                e.set_footer(text="Expert Committee + Conformal Predictor")
+                await interaction.followup.send(embed=e)
+            except Exception as exc:
+                await interaction.followup.send(
+                    f"\u274c Advise failed: {exc}")
+
         @bot.tree.command(name="buy", description="Buy shares (paper) — with confirmation")
         @app_commands.describe(ticker="Stock symbol", quantity="Shares")
         @app_commands.checks.cooldown(1, 3, key=lambda i: i.user.id)
