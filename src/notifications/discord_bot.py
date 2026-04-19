@@ -6857,6 +6857,133 @@ class DiscordInteractiveBot:
 # Standalone launcher — 24/7 supervisor with auto-restart
 # ═══════════════════════════════════════════════════════════════════════
 
+
+
+class SwingCommandsMixin:
+    """Sprint 47: Swing analysis Discord commands (mixed into bot)."""
+    pass
+
+
+# Monkey-patch swing commands into DiscordInteractiveBot
+def _register_swing_commands(bot_instance):
+    """Register swing analysis slash commands on the bot's command tree."""
+    tree = bot_instance.tree if hasattr(bot_instance, 'tree') else None
+    if tree is None:
+        return
+    api_base = bot_instance.api_base if hasattr(bot_instance, 'api_base') else "http://127.0.0.1:8000"
+
+    @tree.command(name="swing-analysis",
+                  description="Full swing analysis (RS, VCP, volume, pullback)")
+    async def swing_analysis_cmd(interaction: discord.Interaction, ticker: str):
+        await interaction.response.defer()
+        try:
+            async with aiohttp.ClientSession() as s:
+                url = f"{api_base}/api/v6/swing-analysis/{ticker.upper()}"
+                async with s.get(url) as r:
+                    data = await r.json()
+            if "error" in data:
+                await interaction.followup.send(f"Error: {data['error']}")
+                return
+            sc = data.get("scoring", {})
+            rs = data.get("relative_strength", {})
+            vcp = data.get("vcp_pattern", {})
+            vol = data.get("volume_quality", {})
+            pb = data.get("pullback_entry", {})
+            color = 0x00ff00 if sc.get("final_score", 0) >= 60 else 0xffaa00
+            embed = discord.Embed(
+                title=f"Swing Analysis: {data['ticker']}", color=color)
+            embed.add_field(name="Price",
+                            value=f"${data.get('close', 0):.2f}", inline=True)
+            embed.add_field(name="Score",
+                            value=f"{sc.get('final_score', 0):.1f}/100 "
+                                  f"({sc.get('setup_tag', 'N/A')})",
+                            inline=True)
+            embed.add_field(name="RS",
+                            value=f"{rs.get('rs_score', 0)}/5", inline=True)
+            vcp_txt = "YES" if vcp.get("is_vcp") else "No"
+            embed.add_field(name="VCP",
+                            value=f"{vcp_txt} ({vcp.get('vcp_score', 0):.2f})",
+                            inline=True)
+            embed.add_field(name="Vol Quality",
+                            value=f"{vol.get('volume_quality_score', 0)}/5",
+                            inline=True)
+            embed.add_field(name="Pullback",
+                            value=pb.get("pullback_state", "none"),
+                            inline=True)
+            embed.set_footer(
+                text=f"Leadership: {sc.get('leadership_score', 0):.2f} | "
+                     f"Actionability: {sc.get('actionability_score', 0):.2f}")
+            await interaction.followup.send(embed=embed)
+        except Exception as e:
+            await interaction.followup.send(f"Error: {e}")
+
+    @tree.command(name="vcp-scan",
+                  description="VCP pattern + volume quality scan")
+    async def vcp_scan_cmd(interaction: discord.Interaction, ticker: str):
+        await interaction.response.defer()
+        try:
+            async with aiohttp.ClientSession() as s:
+                url = f"{api_base}/api/v6/vcp-scan/{ticker.upper()}"
+                async with s.get(url) as r:
+                    data = await r.json()
+            if "error" in data:
+                await interaction.followup.send(f"Error: {data['error']}")
+                return
+            is_vcp = "YES" if data.get("is_vcp") else "No"
+            msg = (f"**VCP Scan: {data['ticker']}**\n"
+                   f"Pattern: {is_vcp} | Score: {data.get('vcp_score', 0):.2f}\n"
+                   f"Vol Dryup: {data.get('volume_dryup_ratio', 0):.3f}")
+            await interaction.followup.send(msg)
+        except Exception as e:
+            await interaction.followup.send(f"Error: {e}")
+
+    @tree.command(name="rs-strength",
+                  description="Relative Strength vs SPY")
+    async def rs_strength_cmd(interaction: discord.Interaction, ticker: str):
+        await interaction.response.defer()
+        try:
+            async with aiohttp.ClientSession() as s:
+                url = f"{api_base}/api/v6/rs-strength/{ticker.upper()}"
+                async with s.get(url) as r:
+                    data = await r.json()
+            if "error" in data:
+                await interaction.followup.send(f"Error: {data['error']}")
+                return
+            trending = "UP" if data.get("rs_trending_up") else "DOWN"
+            msg = (f"**RS Strength: {data['ticker']}**\n"
+                   f"Score: {data.get('rs_score', 0)}/5 | Trending: {trending}\n"
+                   f"20d: {data.get('rs_return_20d', 0):+.2f}% | "
+                   f"60d: {data.get('rs_return_60d', 0):+.2f}% | "
+                   f"90d: {data.get('rs_return_90d', 0):+.2f}%")
+            await interaction.followup.send(msg)
+        except Exception as e:
+            await interaction.followup.send(f"Error: {e}")
+
+    @tree.command(name="distribution-days",
+                  description="IBD distribution day count for SPY")
+    async def distribution_days_cmd(interaction: discord.Interaction):
+        await interaction.response.defer()
+        try:
+            async with aiohttp.ClientSession() as s:
+                url = f"{api_base}/api/v6/distribution-days"
+                async with s.get(url) as r:
+                    data = await r.json()
+            if "error" in data:
+                await interaction.followup.send(f"Error: {data['error']}")
+                return
+            pressure = data.get("regime_pressure", "unknown")
+            emoji = {"neutral": "\U0001f7e2",
+                     "moderate_distribution": "\U0001f7e1",
+                     "heavy_distribution": "\U0001f534"}.get(pressure, "\u26aa")
+            msg = (f"**Distribution Days (SPY, 25-day)**\n"
+                   f"{emoji} Pressure: {pressure}\n"
+                   f"Dist Days: {data.get('distribution_day_count', 0)} | "
+                   f"FTD: {data.get('ftd_count', 0)}")
+            await interaction.followup.send(msg)
+        except Exception as e:
+            await interaction.followup.send(f"Error: {e}")
+
+
 async def main():
     bot = DiscordInteractiveBot()
     if not bot.is_configured:

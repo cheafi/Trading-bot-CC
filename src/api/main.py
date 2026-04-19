@@ -9000,11 +9000,17 @@ from src.engines.expert_committee import ExpertCommittee, CommitteeVerdict
 from src.engines.scenario_engine import ScenarioEngine
 from src.ingestors.fred import FredClient, FRED_SERIES
 from src.ingestors.edgar import EdgarClient
+from src.engines.meta_ensemble import MetaEnsemble, MetaEnsembleState
+from src.core.trust_metadata import (
+    TrustBadge, FreshnessLevel, TrustMetadata, PnLBreakdown,
+    TradeAttribution, MODEL_VERSION,
+)
 
 # ── Singletons ──
 _conformal = ConformalPredictor(confidence_level=0.90)
 _expert_committee = ExpertCommittee()
 _scenario_engine = ScenarioEngine()
+_meta_ensemble: MetaEnsemble = MetaEnsemble()
 _fred_client = FredClient()
 _edgar_client = EdgarClient()
 
@@ -9652,3 +9658,68 @@ async def portfolio_advise():
 
 if __name__ == "__main__":
     start()
+
+# ── Sprint 47: MetaEnsemble + TrustMetadata endpoints ────
+
+@app.get("/api/v6/meta-ensemble", tags=["analytics"])
+async def api_meta_ensemble():
+    """MetaEnsemble state: learned weights, sample count, training status."""
+    global _meta_ensemble
+    state = _meta_ensemble.get_state()
+    learned = _meta_ensemble.get_learned_weights()
+    return {
+        "is_trained": _meta_ensemble.is_trained,
+        "sample_count": _meta_ensemble.sample_count,
+        "min_samples_required": 30,
+        "learned_weights": learned,
+        "state": state.to_dict(),
+    }
+
+
+@app.post("/api/v6/meta-ensemble/record", tags=["analytics"])
+async def api_meta_ensemble_record(request: Request):
+    """Record a closed trade outcome for meta-ensemble learning."""
+    global _meta_ensemble
+    body = await request.json()
+    components = body.get("components", {})
+    pnl_pct = body.get("pnl_pct", 0.0)
+    r_multiple = body.get("r_multiple", 0.0)
+    regime = body.get("regime", "unknown")
+    strategy = body.get("strategy", "unknown")
+    _meta_ensemble.record_outcome(
+        components=components, pnl_pct=pnl_pct,
+        r_multiple=r_multiple, regime_label=regime, strategy_id=strategy,
+    )
+    return {
+        "recorded": True,
+        "sample_count": _meta_ensemble.sample_count,
+        "is_trained": _meta_ensemble.is_trained,
+    }
+
+
+@app.get("/api/v6/trust-card/{ticker}", tags=["analytics"])
+async def api_trust_card(ticker: str):
+    """Trust metadata card — badge, freshness, model version."""
+    ticker = ticker.upper()
+    meta = TrustMetadata.for_entry(
+        badge=TrustBadge.PAPER,
+        source_count=3,
+        model_version=MODEL_VERSION,
+    )
+    return {
+        "ticker": ticker,
+        "trust": meta.to_dict(),
+        "header": meta.header_line(),
+        "footer": meta.footer_line(),
+    }
+
+
+@app.get("/api/v6/model-version", tags=["analytics"])
+async def api_model_version():
+    """Current model version and trust badge defaults."""
+    return {
+        "model_version": MODEL_VERSION,
+        "trust_badges": [b.value for b in TrustBadge],
+        "freshness_levels": [f.value for f in FreshnessLevel],
+    }
+
