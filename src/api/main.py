@@ -9786,6 +9786,10 @@ from src.engines.decision_journal import DecisionJournal
 from src.engines.market_intel import MarketIntelEngine
 from src.engines.risk_scorecard import RiskScorecardEngine
 from src.engines.watchlist_intel import WatchlistIntelEngine
+from src.engines.expert_tracker import ExpertTracker
+from src.engines.regime_filter import RegimeFilter
+from src.engines.cross_asset_monitor import CrossAssetMonitor
+from src.engines.confidence_calibrator import ConfidenceCalibrator
 
 _signal_decay = SignalDecayTracker()
 _learning_loop = LearningLoopPipeline()
@@ -9800,6 +9804,12 @@ _decision_journal = DecisionJournal()
 _market_intel = MarketIntelEngine()
 _risk_scorecard = RiskScorecardEngine()
 _watchlist_intel = WatchlistIntelEngine()
+
+# Sprint 52 — Expert Tracker, Regime Filter, Cross-Asset, Confidence Calibrator
+_expert_tracker = ExpertTracker()
+_regime_filter = RegimeFilter()
+_cross_asset_monitor = CrossAssetMonitor()
+_confidence_calibrator = ConfidenceCalibrator()
 
 
 @app.get("/api/v6/signal-decay", tags=["analytics"],
@@ -10130,4 +10140,93 @@ async def watchlist_remove_endpoint(
     """Remove a ticker from the watchlist."""
     removed = _watchlist_intel.remove(ticker)
     return {"removed": removed, "ticker": ticker}
+
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Sprint 52 — Expert Tracker, Regime Filter, Cross-Asset, Calibration
+# ══════════════════════════════════════════════════════════════════════
+
+
+@app.get("/api/v6/expert-tracker", tags=["v6-intel"])
+async def expert_tracker_endpoint(
+    _: bool = Depends(verify_api_key),
+):
+    """View expert track-record leaderboard and weights."""
+    return _expert_tracker.summary()
+
+
+@app.post("/api/v6/expert-tracker/record", tags=["v6-intel"])
+async def expert_tracker_record(
+    expert_role: str = "trend_expert",
+    predicted_direction: str = "LONG",
+    actual_direction: str = "LONG",
+    regime: str = "ALL",
+    _: bool = Depends(verify_api_key),
+):
+    """Record an expert prediction outcome for track-record tracking."""
+    rec = _expert_tracker.record_outcome(
+        expert_role=expert_role,
+        predicted_direction=predicted_direction,
+        actual_direction=actual_direction,
+        regime=regime,
+    )
+    if rec is None:
+        return {"recorded": False}
+    return {"recorded": True, "expert": rec.to_dict()}
+
+
+@app.get("/api/v6/regime-filter", tags=["v6-intel"])
+async def regime_filter_endpoint(
+    score: float = 0.6,
+    setup_grade: str = "B",
+    regime: str = "SIDEWAYS",
+    direction: str = "LONG",
+    rsi: float = 50.0,
+    _: bool = Depends(verify_api_key),
+):
+    """Evaluate whether a signal passes regime-adjusted quality filters."""
+    result = _regime_filter.evaluate(
+        score=score, setup_grade=setup_grade,
+        regime=regime, direction=direction, rsi=rsi,
+    )
+    return result.to_dict()
+
+
+@app.get("/api/v6/cross-asset", tags=["v6-intel"])
+async def cross_asset_endpoint(
+    vix: float = 20.0,
+    spy_change_pct: float = 0.0,
+    tlt_change_pct: float = 0.0,
+    gld_change_pct: float = 0.0,
+    iwm_change_pct: float = 0.0,
+    dxy_change_pct: float = 0.0,
+    breadth_pct: float = 50.0,
+    _: bool = Depends(verify_api_key),
+):
+    """Cross-asset stress analysis and divergence detection."""
+    report = _cross_asset_monitor.analyse(
+        vix=vix, spy_change_pct=spy_change_pct,
+        tlt_change_pct=tlt_change_pct,
+        gld_change_pct=gld_change_pct,
+        iwm_change_pct=iwm_change_pct,
+        dxy_change_pct=dxy_change_pct,
+        breadth_pct=breadth_pct,
+    )
+    return report.to_dict()
+
+
+@app.get("/api/v6/confidence-calibration", tags=["v6-intel"])
+async def confidence_calibration_endpoint(
+    raw_confidence: float = 0.75,
+    _: bool = Depends(verify_api_key),
+):
+    """Get calibrated confidence and calibration analysis."""
+    calibrated = _confidence_calibrator.calibrate(raw_confidence)
+    summary = _confidence_calibrator.summary()
+    return {
+        "raw_confidence": raw_confidence,
+        "calibrated_confidence": calibrated,
+        "calibration_status": summary,
+    }
 
