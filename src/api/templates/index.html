@@ -114,198 +114,177 @@
     <!-- ═══════════════════════════════════════════════════════ -->
     <!-- SURFACE 1: TODAY / REGIME                              -->
     <!-- ═══════════════════════════════════════════════════════ -->
-    <main x-show="tab==='today'" class="fade">
-      <!-- ── Regime Alert Banner ── -->
-      <template x-if="regime.label==='RISK_OFF'||regime.no_trade_reason">
-        <div style="margin:8px 12px;padding:10px 14px;border-radius:10px;border:1px solid rgba(255,92,92,.3);background:linear-gradient(135deg,rgba(255,92,92,.06),rgba(255,92,92,.02))">
+        <main x-show="tab==='today'" class="fade">
+      <!-- ── Regime Action Banner ── -->
+      <template x-if="today7.regime">
+        <div :style="'margin:8px 12px;padding:12px 14px;border-radius:10px;border:1px solid '+(today7.regime.risk_state==='LOW'?'rgba(0,212,170,.25)':today7.regime.risk_state==='ELEVATED'?'rgba(251,191,36,.25)':'rgba(255,92,92,.3)')+';background:linear-gradient(135deg,'+(today7.regime.risk_state==='LOW'?'rgba(0,212,170,.06),rgba(0,212,170,.02)':today7.regime.risk_state==='ELEVATED'?'rgba(251,191,36,.06),rgba(251,191,36,.02)':'rgba(255,92,92,.06),rgba(255,92,92,.02)')+')'">
           <div class="flex items-center gap-2 mb-1">
-            <span style="font-size:16px">🛑</span>
-            <span class="text-[12px] font-bold" style="color:var(--red)" x-text="regime.no_trade_reason?'TRADING HALTED':'RISK-OFF REGIME'"></span>
+            <span style="font-size:16px" x-text="today7.regime.risk_state==='LOW'?'✅':today7.regime.risk_state==='ELEVATED'?'⚠️':'🛑'"></span>
+            <span class="text-[12px] font-bold" :style="'color:var(--'+(today7.regime.risk_state==='LOW'?'green':today7.regime.risk_state==='ELEVATED'?'amber':'red')+')'" x-text="today7.regime.label||'—'"></span>
+            <span class="pill pw text-[8px] ml-auto" x-text="today7.regime.tradeability||'—'"></span>
           </div>
-          <div class="text-[10px]" style="color:var(--t2);line-height:1.5" x-text="regime.no_trade_reason||'Market conditions unfavorable. Reduce exposure and avoid new entries. Capital preservation mode.'"></div>
-          <div class="flex gap-2 mt-2">
-            <span class="pill pr text-[8px]" x-text="'Regime: '+(regime.label||'—').replace('_',' ')"></span>
-            <template x-if="regime.vol==='HIGH'||regime.vol==='CRISIS'"><span class="pill pr text-[8px]" x-text="'Vol: '+regime.vol"></span></template>
-            <template x-if="regime.trend==='DOWNTREND'"><span class="pill pr text-[8px]">Downtrend</span></template>
-          </div>
-        </div>
-      </template>
-      <template x-if="regime.label==='RISK_ON'&&!regime.no_trade_reason">
-        <div style="margin:8px 12px;padding:8px 14px;border-radius:10px;border:1px solid rgba(0,212,170,.2);background:linear-gradient(135deg,rgba(0,212,170,.04),rgba(0,212,170,.01))">
-          <div class="flex items-center gap-2">
-            <span style="font-size:14px">✅</span>
-            <span class="text-[11px] font-bold" style="color:var(--green)">RISK-ON — Normal Trading Conditions</span>
-            <span class="pill pg text-[8px]" x-text="'Trend: '+(regime.trend||'—')"></span>
-            <span class="pill pg text-[8px]" x-text="'Vol: '+(regime.vol||'—')"></span>
+          <div class="text-[10px]" style="color:var(--t2);line-height:1.5" x-text="today7.regime.summary||''"></div>
+          <div class="flex gap-2 mt-2 flex-wrap">
+            <span class="pill pb text-[8px]" x-text="'Trend: '+(today7.regime.trend||'—')"></span>
+            <span class="pill pb text-[8px]" x-text="'Vol: '+(today7.regime.volatility||'—')"></span>
+            <template x-if="today7.regime.score!=null"><span class="pill mono text-[8px]" :class="today7.regime.score>=60?'pg':today7.regime.score>=40?'pa':'pr'" x-text="'Score: '+today7.regime.score"></span></template>
           </div>
         </div>
       </template>
-      <div class="kpi-strip">
-        <div class="kpi-box">
-          <div class="kpi-val mono" :class="(regime.score||0)>=60?'text-green-400':(regime.score||0)>=40?'text-amber-300':'text-red-400'" x-text="regime.score||'—'"></div>
-          <div class="kpi-lbl">AI Score</div>
-        </div>
-        <div class="kpi-box">
-          <div class="kpi-val text-sm" :class="regime.label==='RISK_ON'?'text-green-400':regime.label==='RISK_OFF'?'text-red-400':'text-amber-300'" x-text="(regime.label||'—').replace('_',' ')"></div>
-          <div class="kpi-lbl">Regime</div>
-        </div>
-        <div class="kpi-box">
-          <div class="kpi-val text-sm" :class="regime.trend==='UPTREND'?'text-green-400':regime.trend==='DOWNTREND'?'text-red-400':'text-amber-300'" x-text="regime.trend||'—'"></div>
-          <div class="kpi-lbl">Trend</div>
-        </div>
-        <div class="kpi-box">
-          <div class="kpi-val text-sm" :class="regime.vol==='LOW'?'text-green-400':regime.vol==='HIGH'||regime.vol==='CRISIS'?'text-red-400':'text-amber-300'" x-text="regime.vol||'—'"></div>
-          <div class="kpi-lbl">Volatility</div>
-        </div>
-      </div>
-      <!-- Strategies Playbook -->
-      <template x-if="regime.strategies&&regime.strategies.length">
-        <div style="padding:0 12px 4px;display:flex;gap:4px;flex-wrap:wrap">
-          <span class="text-[9px] font-bold uppercase" style="color:var(--t3);margin-right:4px">Playbook:</span>
-          <template x-for="s in regime.strategies"><span class="pill pb" x-text="s"></span></template>
+
+      <!-- ── Filter Funnel ── -->
+      <template x-if="today7.filter_funnel">
+        <div style="padding:8px 12px">
+          <div class="section-hdr" style="margin:0 0 6px">🔽 Filter Funnel</div>
+          <div style="display:flex;gap:4px;align-items:end">
+            <template x-for="(step, i) in ['universe','triggered','score_gte_6','score_gte_7','score_gte_8']">
+              <div style="flex:1;text-align:center">
+                <div class="text-sm font-bold mono" :class="i>=3?'text-green-400':i>=2?'text-amber-300':'text-white'" x-text="today7.filter_funnel[step]!=null?today7.filter_funnel[step]:'—'"></div>
+                <div :style="'height:'+Math.max(4,Math.min(40,(today7.filter_funnel[step]||0)/(today7.filter_funnel.universe||1)*40))+'px;background:var(--'+(i>=3?'green':i>=2?'amber':'blue')+');border-radius:3px;margin:4px auto;width:80%'"></div>
+                <div class="text-[8px]" style="color:var(--t3)" x-text="['Universe','Triggered','≥6','≥7','≥8'][i]"></div>
+              </div>
+            </template>
+          </div>
         </div>
       </template>
-      <!-- No-trade warning -->
-      <template x-if="regime.no_trade_reason">
-        <div style="margin:0 12px 8px;padding:8px 12px;background:rgba(255,92,92,.08);border:1px solid rgba(255,92,92,.2);border-radius:8px;font-size:11px;color:var(--red)">
-          ⚠️ <span x-text="regime.no_trade_reason"></span>
-        </div>
-      </template>
-      <!-- US Indices -->
-      <div class="section-hdr">📈 US Indices</div>
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;padding:0 12px">
-        <template x-for="i in indices">
-          <div class="card card-p" style="padding:10px">
-            <div class="flex items-center justify-between">
-              <div class="text-[10px] font-bold" style="color:var(--t2)" x-text="i.name"></div>
-              <span class="pill mono" :class="(i.change_pct||0)>=0?'pg':'pr'" x-text="((i.change_pct||0)>=0?'+':'')+(i.change_pct||0).toFixed(2)+'%'"></span>
+
+      <!-- ── Top Ranked Opportunities ── -->
+      <div class="section-hdr">🏆 Top Opportunities</div>
+      <template x-if="today7.top_ranked && today7.top_ranked.length > 0">
+        <div style="padding:0 12px;display:flex;flex-direction:column;gap:6px">
+          <template x-for="(opp,idx) in today7.top_ranked">
+            <div class="card card-p" style="padding:10px;cursor:pointer" @click="openDossier(opp.ticker)">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-[10px] font-bold mono" style="color:var(--amber);min-width:16px" x-text="'#'+(idx+1)"></span>
+                <span class="text-[12px] font-bold text-white" x-text="opp.ticker"></span>
+                <span class="pill pb text-[8px]" x-text="(opp.strategy||'').replace(/_/g,' ')"></span>
+                <span class="pill mono text-[8px] ml-auto" :class="(opp.score||0)>=7?'pg':(opp.score||0)>=5?'pa':'pr'" x-text="opp.score!=null?Number(opp.score).toFixed(1):'—'"></span>
+              </div>
+              <div class="flex gap-3 text-[10px]" style="color:var(--t2)">
+                <span x-text="'⏱ '+(opp.timing||'—')"></span>
+                <span x-text="'📈 R:R '+(opp.risk_reward||'—')"></span>
+                <span class="font-bold" :style="'color:var(--'+(opp.action==='BUY'||opp.action==='STRONG BUY'?'green':opp.action==='AVOID'?'red':'amber')+')'" x-text="opp.action||'—'"></span>
+              </div>
+              <template x-if="opp.why_now">
+                <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'✅ '+opp.why_now"></div>
+              </template>
+              <template x-if="opp.why_not">
+                <div class="text-[9px]" style="color:var(--amber);line-height:1.4" x-text="'⚠️ '+opp.why_not"></div>
+              </template>
             </div>
-            <div class="text-base font-bold mono text-white mt-1" x-text="'$'+(i.price||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})"></div>
+          </template>
+        </div>
+      </template>
+      <template x-if="!today7.top_ranked || today7.top_ranked.length===0">
+        <div style="padding:0 12px"><div class="card card-p" style="padding:16px;text-align:center">
+          <div style="font-size:24px;margin-bottom:8px">🔍</div>
+          <div class="text-[11px]" style="color:var(--t2)">No opportunities meet entry criteria right now. The scanner is being selective — good setups are rare by design.</div>
+          <button @click="fetchToday7()" class="btn-s text-[10px] mt-3">🔄 Refresh</button>
+        </div></div>
+      </template>
+
+      <!-- ── Avoid List ── -->
+      <template x-if="today7.avoid_list && today7.avoid_list.length > 0">
+        <div style="padding:0 12px;margin-top:8px">
+          <div class="section-hdr" style="margin:0 0 4px">🚫 Avoid Today</div>
+          <div class="flex gap-2 flex-wrap">
+            <template x-for="a in today7.avoid_list">
+              <span class="pill pr text-[9px]" x-text="a.ticker+' — '+(a.reason||'')"></span>
+            </template>
           </div>
-        </template>
-      </div>
-      <!-- Macro -->
-      <div class="section-hdr" style="margin-top:14px">🌐 Macro Indicators</div>
-      <div class="scroll-row" style="padding:0 12px">
-        <template x-for="m in macro">
-          <div class="card" style="min-width:120px;padding:10px;flex-shrink:0">
-            <div class="text-[9px] font-bold" style="color:var(--t3)" x-text="m.name"></div>
-            <div class="text-sm font-bold mono text-white" x-text="m.symbol==='^VIX'?(m.price||0).toFixed(2):'$'+(m.price||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})"></div>
-            <div class="text-[10px] mono" :class="(m.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="((m.change_pct||0)>=0?'+':'')+(m.change_pct||0).toFixed(2)+'%'"></div>
-          </div>
-        </template>
-      </div>
-      <!-- Sectors -->
-      <div class="section-hdr" style="margin-top:14px">📊 Sector Heatmap</div>
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:4px;padding:0 12px">
-        <template x-for="s in sectors">
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--s1);border:1px solid var(--bd);border-radius:6px">
-            <span class="text-[10px]" style="color:var(--t2)" x-text="s.name"></span>
-            <span class="text-[10px] mono font-bold" :class="(s.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="((s.change_pct||0)>=0?'+':'')+(s.change_pct||0).toFixed(2)+'%'"></span>
-          </div>
-        </template>
-      </div>
-      <!-- Asia -->
-      <div class="section-hdr" style="margin-top:14px">🌏 Asia-Pacific</div>
-      <div class="scroll-row" style="padding:0 12px;margin-bottom:16px">
-        <template x-for="a in asia">
-          <div class="card" style="min-width:110px;padding:10px;flex-shrink:0">
-            <div class="text-[9px] font-bold" style="color:var(--t3)" x-text="a.name"></div>
-            <div class="text-xs font-bold mono text-white" x-text="(a.price||0).toLocaleString(undefined,{maximumFractionDigits:0})"></div>
-            <div class="text-[10px] mono" :class="(a.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="((a.change_pct||0)>=0?'+':'')+(a.change_pct||0).toFixed(2)+'%'"></div>
-          </div>
-        </template>
-      </div>
+        </div>
+      </template>
+
+      <!-- ── Quick Market Strip (collapsed) ── -->
+      <details style="margin:12px 12px 16px">
+        <summary class="text-[10px] font-bold" style="color:var(--t3);cursor:pointer">📈 Market Data</summary>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:8px">
+          <template x-for="i in indices">
+            <div class="card card-p" style="padding:8px">
+              <div class="flex items-center justify-between">
+                <div class="text-[9px] font-bold" style="color:var(--t2)" x-text="i.name"></div>
+                <span class="pill mono text-[8px]" :class="(i.change_pct||0)>=0?'pg':'pr'" x-text="((i.change_pct||0)>=0?'+':'')+(i.change_pct||0).toFixed(2)+'%'"></span>
+              </div>
+              <div class="text-xs font-bold mono text-white mt-1" x-text="'$'+(i.price||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})"></div>
+            </div>
+          </template>
+        </div>
+        <div class="section-hdr" style="margin-top:10px;font-size:10px">📊 Sectors</div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:4px">
+          <template x-for="s in sectors">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px;background:var(--s1);border:1px solid var(--bd);border-radius:6px">
+              <span class="text-[9px]" style="color:var(--t2)" x-text="s.name"></span>
+              <span class="text-[9px] mono font-bold" :class="(s.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="((s.change_pct||0)>=0?'+':'')+(s.change_pct||0).toFixed(2)+'%'"></span>
+            </div>
+          </template>
+        </div>
+      </details>
     </main>
 
     <!-- ═══════════════════════════════════════════════════════ -->
     <!-- SURFACE 2: SIGNALS / SCANNER                           -->
     <!-- ═══════════════════════════════════════════════════════ -->
-    <main x-show="tab==='signals'" class="fade">
+        <main x-show="tab==='signals'" class="fade">
       <div class="trust-strip">
         <span :style="sig.mode==='SCAN'?'color:var(--green)':sig.mode==='PAPER'?'color:var(--blue)':sig.mode==='OFFLINE'?'color:var(--red)':'color:var(--green)'" x-text="'● '+(sig.mode||'—')"></span>
-        <span x-text="'Source: '+(sig.source||'engine_cache').replace('_',' ')"></span>
+        <span x-text="opps.length+' opportunities ranked'"></span>
         <span x-text="'As-of: '+(sig.as_of?sig.as_of.slice(0,19):'—')"></span>
-        <span x-text="sig.recs.length+' signals'"></span>
       </div>
       <!-- Risk Guard Banner -->
       <template x-if="regime.label==='RISK_OFF'||regime.no_trade_reason">
         <div style="margin:8px 12px 4px;padding:8px 12px;background:rgba(255,92,92,.06);border:1px solid rgba(255,92,92,.2);border-radius:8px">
           <div class="text-[10px] font-bold" style="color:var(--red)">🛡️ Risk Guard Active</div>
-          <div class="text-[9px] mt-1" style="color:var(--t2)" x-text="regime.no_trade_reason||'Risk-off regime \u2014 new entries not recommended. Existing positions should be reviewed for tighter stops.'"></div>
+          <div class="text-[9px] mt-1" style="color:var(--t2)" x-text="regime.no_trade_reason||'Risk-off regime — new entries not recommended.'"></div>
         </div>
       </template>
-      <!-- P3: Stale data warning banner -->
-      <template x-if="sig.data_freshness && !sig.data_freshness.fresh">
-        <div style="margin:0 12px 6px;padding:8px 12px;border-radius:8px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);display:flex;align-items:center;gap:8px">
-          <span style="font-size:16px">⏳</span>
-          <div>
-            <div class="text-[11px] font-bold" style="color:#fbbf24">DATA MAY BE STALE</div>
-            <div class="text-[10px]" style="color:var(--t2)" x-text="sig.data_freshness.warning||'Market data age exceeds freshness threshold'"></div>
-          </div>
-        </div>
-      </template>
-      <div style="padding:8px 12px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <span class="pill" :class="regime.label==='RISK_ON'?'pg':regime.label==='RISK_OFF'?'pr':'pa'" x-text="(regime.label||'—').replace('_',' ')"></span>
-        <span class="pill pw" x-text="'Trend: '+(regime.trend||'—')"></span>
-        <span class="pill pw" x-text="'Vol: '+(regime.vol||'—')"></span>
-        <template x-if="sig.no_trade_reason"><span class="pill pr" x-text="'⚠ '+sig.no_trade_reason"></span></template>
+      <!-- Sort/Filter -->
+      <div style="padding:6px 12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <span class="text-[9px] font-bold" style="color:var(--t3)">Sort:</span>
+        <button class="pill pw text-[8px]" :class="oppsSort==='score'?'pg':''" @click="oppsSort='score';sortOpps()">Score</button>
+        <button class="pill pw text-[8px]" :class="oppsSort==='risk_reward'?'pg':''" @click="oppsSort='risk_reward';sortOpps()">R:R</button>
+        <button class="pill pw text-[8px]" :class="oppsSort==='ticker'?'pg':''" @click="oppsSort='ticker';sortOpps()">Ticker</button>
       </div>
       <div style="padding:0 12px;overflow-x:auto">
-        <template x-if="sig.recs.length===0">
-          <div class="card card-p" style="padding:20px">
-            <!-- Status icon -->
-            <div style="text-align:center;margin-bottom:12px">
-              <div style="font-size:28px" x-text="sig.source==='scanner_error'?'⚠️':sig.mode==='SCAN'?'✅':'🔍'"></div>
-              <div class="text-sm font-bold mt-1" :style="sig.source==='scanner_error'?'color:var(--red)':'color:var(--t1)'" x-text="sig.source==='scanner_error'?'Scanner Error':sig.mode==='SCAN'?'Scanner Completed':'Loading…'"></div>
-            </div>
-            <!-- Explanation -->
-            <div style="background:var(--s2);border-radius:8px;padding:12px;margin-bottom:12px">
-              <div class="text-[11px]" style="color:var(--t2);line-height:1.6" x-text="sig.no_trade_reason||'Scanning 24 tickers × 4 strategies…'"></div>
-            </div>
-            <!-- Scan meta if available -->
-            <template x-if="sig.scan_meta">
-              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;margin-bottom:12px">
-                <div class="card card-p" style="padding:8px"><div class="kpi-val mono text-white text-sm" x-text="sig.scan_meta.tickers_checked||0"></div><div class="kpi-lbl">Tickers Checked</div></div>
-                <div class="card card-p" style="padding:8px"><div class="kpi-val mono text-sm" :class="sig.scan_meta.signals_found>0?'text-green-400':'text-amber-300'" x-text="sig.scan_meta.signals_found||0"></div><div class="kpi-lbl">Signals Found</div></div>
-                <div class="card card-p" style="padding:8px"><div class="kpi-val mono text-white text-sm">4</div><div class="kpi-lbl">Strategies</div></div>
-              </div>
-            </template>
-            <!-- What this means -->
-            <div class="text-[9px]" style="color:var(--t3);line-height:1.6;padding:0 4px">
-              <strong style="color:var(--t2)">What does this mean?</strong><br>
-              <span x-show="sig.mode==='SCAN'&&sig.source!=='scanner_error'">The live scanner successfully ran and found no stocks meeting entry criteria. This is <strong style="color:var(--green)">normal and expected</strong> — it means the system is being selective. Good setups are rare by design. The scanner refreshes automatically every 5 minutes.</span>
-              <span x-show="sig.source==='scanner_error'">The scanner encountered a technical issue. This is a <strong style="color:var(--red)">system problem</strong>, not a market condition. Try refreshing below.</span>
-              <span x-show="sig.mode!=='SCAN'">Waiting for initial scan to complete. This may take a moment on first load.</span>
-            </div>
-            <div style="text-align:center;margin-top:12px">
-              <button @click="fetchSignals()" class="btn-s text-[10px]">🔄 Refresh Now</button>
-            </div>
+        <template x-if="opps.length===0">
+          <div class="card card-p" style="padding:20px;text-align:center">
+            <div style="font-size:28px">🔍</div>
+            <div class="text-sm font-bold mt-1" style="color:var(--t1)">No Opportunities</div>
+            <div class="text-[11px] mt-2" style="color:var(--t2)">Scanner found no setups meeting entry criteria. This is normal — the system is selective.</div>
+            <button @click="fetchOpps()" class="btn-s text-[10px] mt-3">🔄 Refresh</button>
           </div>
         </template>
-        <template x-if="sig.recs.length>0">
-          <div class="card" style="overflow-x:auto">
-            <table class="tbl">
-              <thead><tr><th>Ticker</th><th>Score</th><th>Grade</th><th>Strategy</th><th>Sector</th><th>Entry</th><th>Target</th><th>Stop</th><th>R:R</th></tr></thead>
-              <tbody>
-                <template x-for="r in sig.recs">
-                  <tr @click="openDossier(r.ticker||r.symbol)" style="cursor:pointer">
-                    <td class="mono font-bold text-white" x-text="r.ticker||r.symbol||'—'"></td>
-                    <td class="mono font-bold" :class="(r.score||0)>=7?'text-green-400':(r.score||0)>=5?'text-amber-300':'text-red-400'" x-text="r.score!=null?Number(r.score).toFixed(1):'—'"></td>
-                    <td><span class="pill" :class="r.grade==='A'?'pg':r.grade==='B'?'pa':'pr'" x-text="r.grade||'—'"></span></td>
-                    <td class="text-[10px]" style="color:var(--t2)" x-text="(r.strategy||'—').replace('_',' ')"></td>
-                    <td class="text-[10px]" style="color:var(--t3)" x-text="r.sector||'—'"></td>
-                    <td class="mono" x-text="r.entry_price?'$'+Number(r.entry_price).toFixed(2):'—'"></td>
-                    <td class="mono text-green-400" x-text="r.target_price?'$'+Number(r.target_price).toFixed(2):'—'"></td>
-                    <td class="mono text-red-400" x-text="r.stop_price?'$'+Number(r.stop_price).toFixed(2):'—'"></td>
-                    <td class="mono" x-text="r.risk_reward?Number(r.risk_reward).toFixed(1)+'x':'—'"></td>
-                  </tr>
+        <template x-if="opps.length>0">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <template x-for="(r, idx) in opps">
+              <div class="card card-p" style="padding:10px;cursor:pointer" @click="openDossier(r.ticker)">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-[10px] font-bold mono" style="color:var(--amber);min-width:18px" x-text="'#'+(idx+1)"></span>
+                  <span class="text-[12px] font-bold mono text-white" x-text="r.ticker||'—'"></span>
+                  <span class="pill pb text-[8px]" x-text="(r.strategy||'').replace(/_/g,' ')"></span>
+                  <span class="pill mono text-[8px]" :class="(r.score||0)>=7?'pg':(r.score||0)>=5?'pa':'pr'" x-text="r.score!=null?Number(r.score).toFixed(1):'—'"></span>
+                  <span class="text-[10px] font-bold ml-auto" :style="'color:var(--'+(r.action==='BUY'||r.action==='STRONG BUY'?'green':r.action==='AVOID'?'red':'amber')+')'" x-text="r.action||'—'"></span>
+                </div>
+                <div class="flex gap-3 text-[10px]" style="color:var(--t2)">
+                  <span x-text="'⏱ '+(r.timing||'—')"></span>
+                  <span x-text="'📈 R:R '+(r.risk_reward||'—')"></span>
+                  <template x-if="r.entry_price"><span class="mono" x-text="'Entry $'+Number(r.entry_price).toFixed(2)"></span></template>
+                  <template x-if="r.position_hint"><span style="color:var(--purple)" x-text="'💰 '+r.position_hint"></span></template>
+                </div>
+                <template x-if="r.why_now">
+                  <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'✅ Why now: '+r.why_now"></div>
                 </template>
-              </tbody>
-            </table>
+                <template x-if="r.why_not">
+                  <div class="text-[9px]" style="color:var(--amber);line-height:1.4" x-text="'⚠️ Risk: '+r.why_not"></div>
+                </template>
+                <template x-if="r.invalidation">
+                  <div class="text-[9px]" style="color:var(--red);line-height:1.4" x-text="'❌ Invalid if: '+r.invalidation"></div>
+                </template>
+              </div>
+            </template>
           </div>
         </template>
       </div>
+      <!-- Strategy Health (kept) -->
       <div class="section-hdr" style="margin-top:14px">🏆 Strategy Health</div>
       <div style="padding:0 12px;margin-bottom:16px">
         <div class="card card-p">
@@ -1207,7 +1186,7 @@
     <nav style="position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--bd);padding:6px 0 max(env(safe-area-inset-bottom),6px);z-index:50">
       <div class="flex justify-around max-w-lg mx-auto">
         <a href="#" @click.prevent="switchTab('today')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='today'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📊</span>Today</a>
-        <a href="#" @click.prevent="switchTab('signals')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='signals'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🎯</span>Signals</a>
+        <a href="#" @click.prevent="switchTab('signals')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='signals'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📊</span>Board</a>
         <a href="#" @click.prevent="switchTab('dossier')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='dossier'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🔍</span>Dossier</a>
         <a href="#" @click.prevent="switchTab('brief')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='brief'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📋</span>Brief</a>
         <a href="#" @click.prevent="switchTab('track')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='track'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🔬</span>Track</a>
@@ -1221,8 +1200,8 @@
     function cc(){return{
       tab:'today',
       tabs:[
-        {id:'today',icon:'📊',label:'Today'},
-        {id:'signals',icon:'🎯',label:'Signals'},
+        {id:'today',icon:'🎯',label:'Today'},
+        {id:'signals',icon:'📊',label:'Board'},
         {id:'dossier',icon:'🔍',label:'Dossier'},
         {id:'brief',icon:'📋',label:'Brief'},
         {id:'options',icon:'🔮',label:'Options'},
@@ -1240,6 +1219,8 @@
       tt:{ticker:'SPY',date:new Date(Date.now()-5*86400000).toISOString().slice(0,10),strategy:'all',loading:false,result:null},
       ops:{running:false,cycle_count:0,signals_today:0,trades_today:0,circuit_breaker:false,circuit_breaker_reason:'',dry_run:true,components:{}},
       opsDetail:{},
+      today7:{regime:null,top_ranked:[],filter_funnel:null,avoid_list:[],tradeability:''},
+      opps:[],oppsSort:'score',
       apiEndpoints:[],
       _failCount:0,
       _retryTimer:null,
@@ -1250,10 +1231,11 @@
         this.tick();setInterval(()=>this.tick(),1000);
         this.fetchMkt();setInterval(()=>this.fetchMkt(),60000);
         this.fetchSignals();setInterval(()=>this.fetchSignals(),60000);
+        this.fetchToday7();setInterval(()=>this.fetchToday7(),120000);
         this.fetchHealth();setInterval(()=>this.fetchHealth(),120000);
       },
       tick(){this.clock=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'})},
-      switchTab(t){this.tab=t;if(t==='signals')this.fetchSignals();if(t==='ops')this.fetchHealth();if(t==='brief')this.fetchBrief();if(t==='catalog'){this.fetchEndpoints();this.fetchOpsDetail()}if(t==='timetravel'&&!this.tt.date){const d=new Date();d.setDate(d.getDate()-5);this.tt.date=d.toISOString().slice(0,10)}},
+      switchTab(t){this.tab=t;if(t==='today'){this.fetchToday7();this.fetchMkt()}if(t==='signals'){this.fetchSignals();this.fetchOpps()}if(t==='ops')this.fetchHealth();if(t==='brief')this.fetchBrief();if(t==='catalog'){this.fetchEndpoints();this.fetchOpsDetail()}if(t==='timetravel'&&!this.tt.date){const d=new Date();d.setDate(d.getDate()-5);this.tt.date=d.toISOString().slice(0,10)}},
 
       acInput(val,target){
         this.ac.target=target;
@@ -1311,6 +1293,16 @@
       },
       async fetchOpsDetail(){
         try{const r=await fetch('/api/ops/status');if(!r.ok)throw 0;this.opsDetail=await r.json()}catch(e){}
+      },
+      sortOpps(){
+        const k=this.oppsSort;
+        this.opps.sort((a,b)=>k==='ticker'?(a.ticker||'').localeCompare(b.ticker||''):(Number(b[k])||0)-(Number(a[k])||0));
+      },
+      async fetchToday7(){
+        try{const r=await fetch('/api/v7/today');if(!r.ok)throw 0;const d=await r.json();this.today7.regime=d.regime||null;this.today7.top_ranked=d.top_ranked||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.avoid_list=d.avoid_list||[];this.today7.tradeability=d.tradeability||''}catch(e){console.warn('v7/today fetch failed',e)}
+      },
+      async fetchOpps(){
+        try{const r=await fetch('/api/v7/opportunities');if(!r.ok)throw 0;const d=await r.json();this.opps=d.opportunities||[];this.sortOpps()}catch(e){console.warn('v7/opportunities fetch failed',e)}
       },
       async fetchEndpoints(){
         if(this.apiEndpoints.length>0)return;

@@ -1,62 +1,174 @@
-# ═══════════════════════════════════════════════════════════════
-# TradingAI Bot — Default Configuration
-# Override via environment variables or .env file
-# ═══════════════════════════════════════════════════════════════
+# ============================================================================
+# CC — Default Configuration
+# ============================================================================
+# Override per-environment by setting env vars or using config/<env>.yaml
+# See docs/SETUP_GUIDE.md for full configuration reference.
+# ============================================================================
 
-engine:
-  cycle_interval_seconds: 60      # Main loop interval
-  dry_run: false                  # true = paper-trade only
-  log_level: INFO                 # DEBUG / INFO / WARNING / ERROR
-  log_format: auto                # json / text / auto (json in Docker)
+app:
+  name: "CC"
+  version: "6.0.0"
+  env: "development"           # development | staging | production
+  log_level: "INFO"
 
-risk:
-  risk_per_trade: 0.01            # 1% of equity per trade
-  max_position_pct: 0.05          # 5% max single position
-  max_sector_pct: 0.20            # 20% max single sector
-  max_portfolio_var: 0.15         # 15% portfolio VaR limit
-  max_drawdown_pct: 10.0          # 10% drawdown circuit breaker
-  max_daily_loss_pct: 3.0         # 3% daily loss circuit breaker
-  max_consecutive_losses: 5       # pause after 5 consecutive losses
-  max_open_positions: 15          # max concurrent positions
-  stop_loss_pct: 0.05             # 5% default stop loss
-  max_hold_days: 15               # max holding period (swing)
-
-strategies:
-  enabled:
-    - momentum_breakout
-    - trend_following
-    - vcp
-    - mean_reversion
-    - classic_swing
-    - earnings_drift
-  ml_quality_gate: true           # reject D-grade signals
-  retrain_interval: 20            # retrain ML after N new trades
-
-markets:
-  regions:
-    - us
-    - hk
-    - crypto
-  universe_max_tickers: 50        # cap to avoid rate limits
-  min_price: 5.0                  # filter penny stocks
-  min_dollar_volume_20d: 5000000  # $5M daily minimum
-
+# ---------------------------------------------------------------------------
+# Notifications — Discord is the primary interface
+# ---------------------------------------------------------------------------
 notifications:
-  discord: true
-  telegram: true
-  eod_report: true
-  signal_alerts: true
-  risk_alerts: true
+  primary: discord
+  discord:
+    enabled: true
+    prefix: "!"
+    sync_commands_on_start: true
+    embed_color: 0x5865F2       # Discord blurple
+    # Channel IDs are set via environment variables (DISCORD_ALERT_CHANNEL_ID, etc.)
+    alert_severity_tiers:
+      urgent: "🔴"              # Immediate action needed (circuit breaker, tail risk)
+      important: "🟡"           # Actionable signal (new setup, stop hit)
+      informational: "🔵"       # Context update (regime shift, news digest)
+    deduplication:
+      enabled: true
+      cooldown_seconds: 300     # Suppress duplicate alerts within 5 min
+    bilingual:
+      enabled: false            # Set true for English + Traditional Chinese
+      languages: ["en", "zh-TW"]
 
+# ---------------------------------------------------------------------------
+# Market Data
+# ---------------------------------------------------------------------------
+market_data:
+  source: "yfinance"            # yfinance | alpaca | polygon
+  cache_ttl_seconds: 60
+  universes:
+    us_equities: true           # S&P 500/400, NASDAQ-100, Russell 2000
+    hk_equities: true           # HSI + H-shares + tech
+    jp_equities: true           # TOPIX / Nikkei 225
+    crypto: true                # BTC, ETH, SOL + DeFi
+    macro_indices: true         # VIX, DXY, yields, gold, oil
+  rate_limit:
+    max_concurrent: 5
+    delay_between_ms: 200
+
+# ---------------------------------------------------------------------------
+# Regime Detection
+# ---------------------------------------------------------------------------
+regime:
+  enabled: true
+  states:
+    - bull_trending
+    - bull_volatile
+    - bull_exhaustion
+    - neutral_consolidation
+    - sideways
+    - bear_rally
+    - bear_trending
+    - bear_volatile
+    - crisis
+  update_interval_minutes: 15
+  # Signal throttling: reduce alert volume in hostile regimes
+  throttle:
+    bear_volatile: 0.5          # Emit 50% of normal signal volume
+    crisis: 0.25                # Emit 25% of normal signal volume
+
+# ---------------------------------------------------------------------------
+# Signal Engine
+# ---------------------------------------------------------------------------
+signals:
+  strategies:
+    swing:
+      enabled: true
+      min_score: 55
+      holding_period: "3d-15d"
+    breakout:
+      enabled: true
+      min_score: 60
+      volume_confirm: true
+    momentum:
+      enabled: true
+      min_score: 55
+    mean_reversion:
+      enabled: true
+      min_score: 60
+      # Only active in sideways/consolidation regimes by default
+      regime_filter: ["sideways", "neutral_consolidation"]
+
+  # Score thresholds for alert tiers
+  scoring:
+    strong_buy: 80              # Score >= 80 → strong conviction
+    buy: 65                     # Score >= 65 → standard signal
+    watch: 50                   # Score >= 50 → watchlist only
+    # Scores below 50 are not alerted
+
+  # Invalidation: always show stop/invalidation on alerts
+  invalidation:
+    require_stop: true          # Every signal must have a stop price
+    require_why_not: true       # Every signal must explain risk/contradiction
+
+# ---------------------------------------------------------------------------
+# Risk Controls
+# ---------------------------------------------------------------------------
+risk:
+  max_portfolio_heat: 0.06      # Max 6% total portfolio risk
+  max_single_position: 0.02     # Max 2% risk per position
+  max_correlated_exposure: 0.10 # Max 10% in highly correlated names
+  circuit_breaker:
+    daily_loss_limit: 0.03      # Pause trading after 3% daily drawdown
+    weekly_loss_limit: 0.05     # Pause trading after 5% weekly drawdown
+    enabled: true
+
+# ---------------------------------------------------------------------------
+# Broker
+# ---------------------------------------------------------------------------
+broker:
+  default: "paper"              # paper | alpaca | futu | ibkr | mt5
+  paper:
+    initial_capital: 100000
+    commission_per_trade: 0.0
+  # Broker-specific settings come from environment variables.
+  # See .env.example for required keys per broker.
+
+# ---------------------------------------------------------------------------
+# Scheduler (background tasks)
+# ---------------------------------------------------------------------------
+scheduler:
+  enabled: true
+  tasks:
+    morning_scan:
+      cron: "0 9 * * 1-5"      # Weekdays 9:00 AM
+      timezone: "US/Eastern"
+    regime_update:
+      cron: "*/15 9-16 * * 1-5" # Every 15 min during market hours
+      timezone: "US/Eastern"
+    daily_brief:
+      cron: "0 18 * * 1-5"     # Weekdays 6:00 PM
+      timezone: "US/Eastern"
+    health_check:
+      cron: "*/5 * * * *"      # Every 5 minutes
+
+# ---------------------------------------------------------------------------
+# AI / LLM
+# ---------------------------------------------------------------------------
+llm:
+  provider: "openai"            # openai | azure_openai | none
+  model: "gpt-4o-mini"
+  max_tokens: 1024
+  temperature: 0.3              # Low temp for consistent analysis
+  # Used for: signal narratives, news summarization, regime commentary
+  # NOT used for: trade execution decisions (those are rule-based)
+
+# ---------------------------------------------------------------------------
+# Database
+# ---------------------------------------------------------------------------
 database:
-  pool_size: 10
-  max_overflow: 20
-  pool_recycle: 3600
-  query_timeout: 60
+  pool_size: 5
+  max_overflow: 10
+  echo: false                   # Set true for SQL debug logging
 
-api:
-  host: "0.0.0.0"
-  port: 8000
-  cors_origins:
-    - "http://localhost:3000"
-    - "http://localhost:8080"
+# ---------------------------------------------------------------------------
+# Performance Tracking
+# ---------------------------------------------------------------------------
+performance:
+  track_all_signals: true       # Log every signal for post-trade review
+  equity_curve: true
+  sharpe_window_days: 60
+  benchmark: "SPY"

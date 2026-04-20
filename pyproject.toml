@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "tradingai-bot"
 version = "6.0.0"
-description = "TradingAI Bot v6 Pro Desk - AI Trading Intelligence Platform"
-authors = ["TradingAI Team <dev@tradingai.com>"]
+description = "CC — Regime-Aware Market Intelligence Platform"
+authors = ["CC Contributors"]
 readme = "README.md"
 packages = [{include = "src"}]
 
@@ -62,8 +62,10 @@ python-binance = "1.0.19"
 
 # Notifications (from notifications.txt)
 discord-py = "2.3.2"
-python-telegram-bot = "20.7"
-twilio = "8.10.3"
+# python-telegram-bot — REMOVED: Discord is the primary interface.
+# Telegram support is deprecated. See ROADMAP.md.
+# twilio — optional, uncomment if SMS alerts are needed
+# twilio = "8.10.3"
 
 # Scheduler (from scheduler.txt)
 apscheduler = "3.10.4"
@@ -88,7 +90,12 @@ ruff = "^0.1.5"
 mypy = "^1.7.1"
 pre-commit = "^3.6.0"
 
+[tool.black]
+line-length = 88
+
+[tool.ruff]
+line-length = 88
+
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
-

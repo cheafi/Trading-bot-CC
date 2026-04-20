@@ -1,19 +1,20 @@
 # Notification service dependencies
 -r base.txt
 
-# Telegram
-python-telegram-bot>=20.7
-
-# Discord
+# Discord (primary interface)
 discord.py>=2.3.2
 
-# WhatsApp (via Twilio)
-twilio>=8.10.3
+# WhatsApp via Twilio (optional)
+# twilio>=8.10.3
 
-# Slack (install when Slack integration is wired)
+# Telegram — DEPRECATED: Discord is the primary interface.
+# python-telegram-bot is no longer required.
+# python-telegram-bot>=20.7
+
+# Slack (planned — not yet wired)
 # slack-sdk>=3.26.1
 
-# Email (install when email notifications are wired)
+# Email (planned — not yet wired)
 # sendgrid>=6.11.0
 
 # OpenAI for message formatting

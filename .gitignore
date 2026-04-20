@@ -1,41 +1,48 @@
-
+# ── Python ────────────────────────────────────────────
 __pycache__/
-_sprint*_patch.py
-.coverage
-.DS_Store
-.env
-.idea/
-.ipynb_checkpoints/
-.pytest_cache/
-.Python
-.venv/
-.vscode/
-*.egg-info/
-*.env.local
-*.log
 *.py[cod]
+*$py.class
 *.pyc
 *.so
-*.swo
-*.swp
-*$py.class
-# Build
-# Environment & Secrets
-# IDE
-# Jupyter
-# Logs
-# Python
-# Runtime data & models
-# Sprint patch files (development only)
-# Testing
-build/
-data/
-dist/
+*.egg-info/
+.Python
+
+# ── Environment & Secrets ─────────────────────────────
+.env
+*.env.local
+.venv/
+venv/
 env/
 ENV/
+
+# ── IDE ───────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── Testing ───────────────────────────────────────────
+.coverage
+.pytest_cache/
 htmlcov/
+
+# ── Build ─────────────────────────────────────────────
+build/
+dist/
+
+# ── Runtime data & models ────────────────────────────
+data/
 logs/
+*.log
 models/
-notebooks/
 reports/
-venv/
+notebooks/
+
+# ── Jupyter ───────────────────────────────────────────
+.ipynb_checkpoints/
+
+# ── macOS ─────────────────────────────────────────────
+.DS_Store
+
+# ── Sprint patch files (development only) ─────────────
+_sprint*_patch.py

@@ -33,6 +33,7 @@ from src.core.models import (
     VolatilityRegime,
 )
 from src.engines.insight_engine import InsightEngine
+from src.engines.regime_throttle import RegimeThrottle
 from src.strategies import BaseStrategy, get_all_strategies, get_strategy
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -900,6 +901,7 @@ class SignalEngine:
         self.universe_filter = universe_filter or UniverseFilter()
         self.insight_engine = insight_engine or InsightEngine()
         self.dedup = SignalDedup()
+        self.regime_throttle = RegimeThrottle()
         self.score_unifier = ScoreUnifier()
         self.logger = logging.getLogger(__name__)
         self._last_market_state: Optional[Dict] = None
@@ -1139,6 +1141,25 @@ class SignalEngine:
         if len(filtered_signals) > max_signals:
             filtered_signals = filtered_signals[:max_signals]
             self.logger.info(f"Limited to top {max_signals} signals")
+
+        # -- 8b. Regime-based signal throttle ---------------------
+        regime_state = (
+            regime.trend.value
+            if hasattr(regime, 'trend')
+            else 'neutral_consolidation'
+        )
+        filtered_signals = self.regime_throttle.apply(
+            filtered_signals, regime_state
+        )
+        regime_warning = self.regime_throttle.get_regime_warning(
+            regime_state
+        )
+        if regime_warning:
+            self.logger.info(f"Regime warning: {regime_warning}")
+            if self._last_market_state:
+                self._last_market_state["regime_warning"] = (
+                    regime_warning
+                )
 
         # ── 9. Insight enrichment (v5) ─────────────────────────
         try:

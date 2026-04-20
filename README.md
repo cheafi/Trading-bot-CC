@@ -1,35 +1,77 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white" />
   <img src="https://img.shields.io/badge/FastAPI-0.104+-009688?logo=fastapi&logoColor=white" />
-  <img src="https://img.shields.io/badge/Tests-214_passing-00d4aa" />
+  <img src="https://img.shields.io/badge/Discord-Primary_Interface-5865F2?logo=discord&logoColor=white" />
   <img src="https://img.shields.io/badge/License-MIT-blue" />
-  <img src="https://img.shields.io/badge/Demo-Live-fbbf24?logo=github&logoColor=white" />
+  <img src="https://img.shields.io/badge/Status-Beta_(v6.0)-orange" />
 </p>
 
 # CC — Regime-Aware Market Intelligence Platform
 
-> **CC turns signals, options research, portfolio briefs, and track-record analytics into explainable, auditable decision surfaces — so every trade has a clear _why_, a transparent _how confident_, and a verifiable _track record_.**
+> **An open-source, Discord-first AI agent that turns market data into explainable, risk-aware signals — so every trade idea has a clear _why_, a transparent _confidence level_, and an honest _what could go wrong_.**
 
 <p align="center">
-  <a href="https://cheafi.github.io/Trading-bot-CC/">🔗 Live Demo (GitHub Pages)</a> · <a href="docs/ARCHITECTURE.md">📐 Architecture</a> · <a href="docs/SETUP_GUIDE.md">🚀 Setup Guide</a> · <a href="docs/BOT_GUIDE.md">📖 Command Reference</a>
+  <a href="https://cheafi.github.io/Trading-bot-CC/">🔗 Live Demo (Synthetic Data)</a> ·
+  <a href="docs/ARCHITECTURE.md">📐 Architecture</a> ·
+  <a href="docs/SETUP_GUIDE.md">🚀 Setup Guide</a> ·
+  <a href="docs/BOT_GUIDE.md">📖 Command Reference</a>
 </p>
 
 ---
 
-## What CC Does — 6 Decision Surfaces
+## What CC Is
 
-CC is not a feature buffet. It's **6 focused surfaces**, each designed to help you make one decision faster and with more confidence.
+CC is a **financial intelligence and monitoring platform** that:
 
-| # | Surface | What It Answers | Mode |
-|---|---------|----------------|------|
-| 🎯 | **Today / Regime** | "What state is the market in right now? What's the playbook?" | Live · Paper · Synthetic |
-| 📡 | **Signals / Scanner** | "Which setups are worth my attention today, and _why_?" | Live · Backtest · Synthetic |
-| 🔍 | **Symbol Dossier** | "Give me the full picture on this one ticker — technicals, catalysts, risk." | Live · Synthetic |
-| 📋 | **Portfolio Brief** | "What happened to my holdings today? What needs action?" | Live · Paper · Synthetic |
-| 🔮 | **Options Research** | "Which contracts have edge? Show me strike, IV, skew, EV." | Synthetic |
-| 📊 | **Track Record** | "Prove it. Show me win rate, drawdown, sample size, gross vs net." | Backtest · Paper |
+- Detects market regime (bull/bear/sideways/crisis) and adjusts behavior
+- Scores trade setups across 4 strategy families (swing, breakout, momentum, mean reversion)
+- Delivers alerts to Discord with confidence scores, entry/stop/target, and plain-language reasoning
+- Tracks portfolio exposure, risk, and performance
+- Supports paper and live broker connections (Alpaca, Futu, IBKR, MT5)
 
-> **Every surface carries a trust strip** — you always know: data mode (LIVE / PAPER / BACKTEST / SYNTHETIC), source, freshness, sample size, and assumptions.
+**CC is a research and decision-support tool. It is not financial advice, not a guaranteed profit system, and not a replacement for your own judgment.**
+
+## Who It's For
+
+- Traders and investors who want structured, explainable market intelligence
+- Developers who want to build on an open-source quant/trading platform
+- Teams who want a Discord-based monitoring and alerting system
+
+## Who It's NOT For
+
+- Anyone expecting guaranteed profits or zero-risk automation
+- Anyone unwilling to do their own due diligence
+- Anyone looking for a "set and forget" trading bot — CC requires active engagement and judgment
+
+---
+
+## Current Status — Honest Assessment
+
+| Component | Maturity | Notes |
+|---|---|---|
+| Regime detection | ⚙️ Beta | 9-state classifier, needs more validation |
+| Signal scoring | ⚙️ Beta | 4 strategies, research-quality — not battle-tested at scale |
+| Discord bot | ✅ Functional | 64 slash commands, rich embeds |
+| Paper trading | ✅ Functional | Safe for simulation and learning |
+| Live broker execution | ⚠️ Experimental | Use at your own risk with small capital first |
+| Options research | ⚠️ Synthetic only | No live options chain — demo/learning only |
+| AI/LLM narratives | ⚠️ Experimental | May hallucinate — always verify |
+| Backtesting | ⚙️ Beta | Walk-forward + Monte Carlo, needs more robustness testing |
+
+---
+
+## 6 Decision Surfaces
+
+| # | Surface | What It Answers | Data Mode |
+|---|---------|----------------|-----------|
+| 🎯 | **Regime** | "What state is the market in? What's the playbook?" | Live · Paper · Synthetic |
+| 📡 | **Signals** | "Which setups deserve attention today, and _why_?" | Live · Backtest · Synthetic |
+| 🔍 | **Symbol Dossier** | "Full picture on one ticker — technicals, catalysts, risk." | Live · Synthetic |
+| 📋 | **Portfolio Brief** | "What happened today? What needs action?" | Live · Paper · Synthetic |
+| 🔮 | **Options Lab** | "Which contracts have edge?" | Synthetic only |
+| 📊 | **Track Record** | "Show win rate, drawdown, sample size." | Backtest · Paper |
+
+> **Every surface shows a trust strip** — you always see: data mode (LIVE / PAPER / BACKTEST / SYNTHETIC), source, freshness, and assumptions.
 
 ---
 
@@ -53,194 +95,189 @@ CC is not a feature buffet. It's **6 focused surfaces**, each designed to help y
               │  4 strategies   │  │  Engine      │  │  Options Mapper  │
               │  Score 0–100    │  │  Heartbeat   │  │  Compare Overlay │
               │  WHY BUY/STOP   │  │  Circuit-brk │  │  Perf Lab        │
-              │  Factor chips   │  │  R-based size│  │  Portfolio Brief │
               └────────────────┘  └──────────────┘  └─────────────────┘
                            │             │              │
                     ┌──────▼─────────────▼──────────────▼─────────┐
                     │           DATA & BROKER LAYER                │
                     │  yfinance · Alpaca · Futu · IBKR · MT5      │
-                    │  3,000+ tickers · US + HK + JP + Crypto     │
                     │  Redis cache · Postgres persistence          │
                     └─────────────────────────────────────────────┘
 ```
 
 ---
 
-## Modes — What Is Real vs Simulated
-
-CC is honest about what's live and what isn't. Every data point is tagged.
-
-| Mode | Meaning | Where Used |
-|------|---------|-----------|
-| 🟢 **LIVE** | Real market data, real broker connection | Quotes, positions, alerts |
-| 🟡 **PAPER** | Real data, simulated execution | Paper trading, demo orders |
-| 🔵 **BACKTEST** | Historical data, strategy replay | Strategy optimizer, track record |
-| 🟠 **SYNTHETIC** | Generated/demo data, no market connection | GitHub Pages demo, offline mode |
-
-> The GitHub Pages demo at [cheafi.github.io/Trading-bot-CC](https://cheafi.github.io/Trading-bot-CC/) runs in **SYNTHETIC** mode — all prices are from a point-in-time snapshot, not live feeds.
-
----
-
 ## Quick Start
 
-### Option A — Standalone (API + Dashboard)
+### Option A — Discord Bot Only (fastest)
 
 ```bash
-git clone https://github.com/cheafi/Trading-bot-CC
-cd Trading-bot-CC
+git clone https://github.com/cheafi/Trading-bot-CC && cd Trading-bot-CC
 python -m venv venv && source venv/bin/activate
+pip install -r requirements/base.txt
+cp .env.example .env       # Add DISCORD_BOT_TOKEN (minimum required)
+python run_discord_bot.py
+```
+
+### Option B — API + Dashboard
+
+```bash
 pip install -r requirements/base.txt
 python run_bot.py          # FastAPI on localhost:8000
 ```
 
-### Option B — Full Stack (Docker Compose)
+### Option C — Full Stack (Docker Compose)
 
 ```bash
-git clone https://github.com/cheafi/Trading-bot-CC
-cd Trading-bot-CC
-cp .env.example .env       # add DISCORD_BOT_TOKEN, ALPACA_API_KEY, etc.
-docker compose up -d       # 9 services: API, Discord, Postgres, Redis, ...
-```
-
-### Option C — Discord Bot Only
-
-```bash
-pip install -r requirements/base.txt discord.py
-cp .env.example .env       # add DISCORD_BOT_TOKEN
-python run_discord_bot.py  # 64 slash commands live
+cp .env.example .env       # Fill in ALL credentials, change default passwords
+docker compose up -d       # API, Discord, Postgres, Redis, scheduler, ...
 ```
 
 📖 Full setup: [docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md)
 
----
-
-## Feature Map
-
-### Core Intelligence
-- **Regime Detection** — 9-state classifier (bull_trending → bear_volatile → sideways) with probability distribution
-- **4 Signal Strategies** — Swing, Breakout, Momentum, Mean Reversion — each scored 0–100
-- **Factor Contribution** — every score decomposed into chips: `Breakout +28`, `Risk Penalty -12`, `Liquidity ✓`
-- **Historical Analog Engine** — "10 most similar past setups" with 5D/10D/20D forward returns and win rate
-- **WHY BUY / WHY THIS STOP** — plain-language conviction narrative on every signal
-
-### Research Surfaces
-- **Compare Overlay** — normalized returns, relative strength, rolling correlation, rolling beta
-- **Options Lab** — LEAPS screen with strike, DTE, IV, OI, EV, delta, skew, spread quality
-- **Portfolio Brief** — daily intelligence: actionable / review / watch classification, sector cluster, what_changed
-- **Macro Intel** — rates, VIX, DXY, yield curve, gold, oil, crypto — structured as signal context, not news
-
-### Execution & Operations
-- **AutoTradingEngine** — autonomous loop: heartbeat, circuit breaker, R-based position sizing
-- **5 Brokers** — Paper (default), Alpaca, Futu, IBKR, MT5
-- **23 Background Tasks** — 24/7 automation: scans, briefs, alerts, health checks
-- **64 Discord Commands** — full interactive interface with rich embeds
-
-### Trust & Auditability
-- **Trust Strip** — every page shows: mode, source, freshness, sample size, assumptions
-- **Performance Lab** — gross/net returns, Sharpe, max drawdown, profit factor, trade count
-- **Artifact Archive** — daily briefs cached as JSON, portfolio snapshots timestamped
-- **131 Automated Tests** — 4 test suites covering all API surfaces and data contracts
+> **⚠️ Security:** Never commit `.env`. Use paper/sandbox mode first. See [SECURITY.md](SECURITY.md).
 
 ---
 
-## Data Coverage
+## Discord Alert Format
 
-| Market | Tickers | Source | Update Freq |
-|--------|---------|--------|-------------|
-| US Equities | 2,751 (S&P 500/400, NASDAQ-100, Russell 2000) | yfinance | 1-min (live) / daily (backtest) |
-| Hong Kong | 78 (HSI + H-shares + tech) | yfinance | 15-min delayed |
-| Japan | 60 (TOPIX / Nikkei 225) | yfinance | 15-min delayed |
-| Korea / Taiwan / AU / IN | 51 | yfinance | 15-min delayed |
-| Crypto | 63 (BTC, ETH, SOL + DeFi + L1/L2) | yfinance | Real-time |
-| Macro / Indices | 20+ (VIX, DXY, yields, gold, oil) | yfinance | 1-min (live) |
-| Options | Derived / synthetic | Options mapper | On-demand |
-| News / Sentiment | Per-ticker | yfinance + optional OpenAI | 15-min rotation |
+CC alerts in Discord include structured, actionable information:
 
-> **Honest about limitations:** yfinance is free but has rate limits and 15-min delay on international markets. CC falls back gracefully when data is stale or missing — never silently serves old numbers as fresh.
+```
+🟢 AAPL — Swing Long (Score: 78/100)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
----
+Strategy:    Swing · Pullback to rising 21 EMA
+Confidence:  ██████░░ 78%  (Grade: B+)
+Regime:      🟢 Bull Trending
 
-## Key Files
+Entry Zone:  $185.20 – $186.00
+Stop:        $181.50 (–2.0%)
+Target 1:    $192.00 (+3.7%)
+Target 2:    $198.00 (+6.9%)
 
-| File | Purpose |
-|------|---------|
-| `src/api/main.py` | FastAPI app — all REST endpoints + 8 HTML dashboard templates |
-| `src/engines/auto_trading_engine.py` | Autonomous trading loop with full decision pipeline |
-| `src/engines/regime_router.py` | Canonical RegimeState — single source of truth for market state |
-| `src/engines/signal_engine.py` | 4-strategy signal generation with scoring |
-| `src/engines/context_assembler.py` | Assembles market context (regime + portfolio + news) |
-| `src/core/models.py` | Pydantic v2 type system — TradeRecommendation, RegimeScoreboard |
-| `src/services/compare_overlay_service.py` | Normalized return comparison engine |
-| `src/services/options/options_mapper.py` | Options chain → scored contract table |
-| `src/algo/indicators.py` | 1,200+ line technical indicator library |
-| `docs/index.html` | GitHub Pages static demo (SYNTHETIC mode) |
+Why Buy:     Pullback to 21 EMA on declining volume in
+             uptrend. RSI 52 — not overbought. Sector
+             (Tech) showing relative strength.
+Why Not:     Earnings in 12 days — event risk. Broad
+             market breadth narrowing.
+Invalidation: Close below $181.50 on volume.
+
+⏱ 14:32 ET · LIVE · yfinance · Freshness: <1min
+```
+
+See [docs/DISCORD_ALERTS.md](docs/DISCORD_ALERTS.md) for the full alert design guide.
 
 ---
 
-## Docker Services (11)
+## Strategy Styles
 
-| Service | Purpose |
-|---------|---------|
-| `postgres` | Primary database (trade outcomes, briefs, signals) |
-| `redis` | Cache + pub/sub (regime state, quote cache) |
-| `market_data_ingestor` | OHLCV ingest pipeline |
-| `signal_engine` | Signal generation + GPT validation |
-| `auto_trader` | AutoTradingEngine (autonomous loop) |
-| `scheduler` | Cron-based task orchestration |
-| `discord_bot` | Discord interface (64 commands) |
-| `api` | FastAPI REST + dashboard |
-| `jupyter` | Research notebooks (dev profile) |
+CC supports (or plans to support) these strategy families:
+
+| Style | Status | Key Filters |
+|-------|--------|-------------|
+| **Swing** | ✅ Active | Pullback quality, trend context, holding 3–15 days |
+| **Breakout** | ✅ Active | Volume expansion, base quality, false-breakout filters |
+| **Momentum** | ✅ Active | Relative strength, acceleration, regime alignment |
+| **Mean Reversion** | ✅ Active | Only in sideways regimes, volatility-adjusted |
+| **VCP** | 🔄 Planned | Contraction quality, pivot detection, volume dry-up |
+| **Trend Following** | 🔄 Planned | Trend persistence, pullback entries vs late chasing |
+| **Event-Driven** | 🔄 Planned | Earnings, macro releases, catalyst timing |
+| **Sector Rotation** | 🔄 Planned | Money flow, relative strength across sectors |
+
+Each alert labels its strategy style so you know _what type_ of setup generated it.
 
 ---
 
 ## Broker Support
 
-| Broker | Status | Markets |
-|--------|--------|---------|
-| Paper | ✅ Default | No API key needed |
-| Alpaca | ✅ | US equities + crypto |
-| Futu (富途) | ✅ | HK / US equities |
-| Interactive Brokers | ✅ | Global multi-asset |
-| MetaTrader 5 | ✅ | Forex + CFDs |
+| Broker | Status | Markets | Notes |
+|--------|--------|---------|-------|
+| Paper | ✅ Default | All | No API key needed. Start here. |
+| Alpaca | ✅ | US equities + crypto | Paper mode available |
+| Futu (富途) | ✅ | HK / US equities | Requires FutuOpenD locally |
+| Interactive Brokers | ✅ | Global multi-asset | Requires TWS/Gateway |
+| MetaTrader 5 | ✅ | Forex + CFDs | Windows only |
+
+> **⚠️ Live trading is experimental.** Start with paper mode. Small positions. Your own risk management. See [SECURITY.md](SECURITY.md) for credential safety.
+
+---
+
+## Data Coverage
+
+| Market | Tickers | Source | Delay |
+|--------|---------|--------|-------|
+| US Equities | ~2,750 | yfinance | ~1 min (live) |
+| Hong Kong | ~78 | yfinance | 15-min delayed |
+| Japan | ~60 | yfinance | 15-min delayed |
+| Crypto | ~63 | yfinance | Real-time |
+| Macro / Indices | 20+ | yfinance | ~1 min |
+
+> **Honest about limits:** yfinance is free but rate-limited with 15-min delay on international markets. CC labels data freshness on every alert and degrades gracefully when data is stale.
+
+---
+
+## Project Structure
+
+```
+src/
+├── algo/           # Trading strategies (swing, breakout, momentum, mean reversion)
+├── api/            # FastAPI REST endpoints + dashboard templates
+├── backtest/       # Walk-forward backtesting with Monte Carlo
+├── brokers/        # Broker integrations (Paper, Alpaca, Futu, IBKR, MT5)
+├── core/           # Shared models, config, risk limits, errors
+├── engines/        # Signal engine, auto-trading engine, regime router
+├── ingestors/      # Market data and news ingestion
+├── ml/             # ML models (regime classification, quality gate)
+├── notifications/  # Discord bot (primary), embeds, formatters, tasks
+├── performance/    # Performance tracking and attribution
+├── research/       # Research artifact generation
+├── scanners/       # Market scanners and screeners
+├── scheduler/      # Background task scheduling
+├── services/       # Shared services (market data, context, options)
+└── strategies/     # Strategy configuration and registry
+```
 
 ---
 
 ## Running Tests
 
 ```bash
-python -m pytest tests/test_vnext_truthful_surfaces.py \
-                 tests/test_vnext_sprint2.py \
-                 tests/test_vnext_sprint3.py \
-                 tests/test_vnext_p1_review.py \
-                 -c /dev/null -v
-# Expected: 131 passed
+python -m pytest tests/ -v --tb=short -c /dev/null
 ```
 
 ---
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, standards, and workflow.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for secrets handling, least-privilege guidance, and responsible disclosure.
+
 ## Roadmap
 
-- [x] Sprint 1–3: Core 16 commits (A–P) — regime, signals, compare, options, brief, perf lab
-- [x] P0 Review: 6 architecture fixes (singleton pattern, decoupled imports, TOML syntax)
-- [x] P1 Review: 6 trust fixes (await bugs, deterministic hashing, trust strips, gross/net returns)
-- [x] Public Readiness: GitHub Pages demo, real-time prices, search stock feature
-- [ ] Symbol Dossier: full single-ticker research page (technicals + catalysts + risk)
-- [ ] Historical Analog Engine: "10 most similar past setups" with forward return validation
-- [ ] Daily Macro Brief: structured table (indicator, actual, consensus, surprise, regime impact)
-- [ ] Operator Console: live system health, exposure, risk budget, provider status
-- [ ] Artifact Archive: browse/replay prior day briefs, signals, regime snapshots
+See [ROADMAP.md](ROADMAP.md) for planned improvements and priorities.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ---
 
-## ⚠️ Risk Disclaimer
+## ⚠️ Disclaimer
 
-**CC is a research and education tool, not financial advice.**
+**CC is a research, education, and decision-support tool. It is not financial advice.**
 
-- All signals, scores, and recommendations are algorithmic outputs for informational purposes only.
+- All signals, scores, and narratives are algorithmic outputs for informational purposes only.
 - Past backtest performance does not guarantee future results.
 - Synthetic/demo data is clearly labeled — never mistake it for live market data.
+- AI/LLM outputs may contain errors or hallucinations — always verify independently.
+- The platform may have bugs, produce incorrect signals, or miss important information.
+- You are solely responsible for your own trading and investment decisions.
 - Always apply your own judgment, risk management, and due diligence.
-- The authors accept no liability for trading losses.
+- The authors accept no liability for trading losses or decisions made using this platform.
+- This software is provided "as is" under the MIT License.
 
 ---
 
@@ -251,5 +288,5 @@ MIT — see [LICENSE](LICENSE) for details.
 ---
 
 <p align="center">
-  <b>CC</b> — clarity · trust · auditability · decision compression
+  <b>CC</b> — clarity · discipline · risk-awareness · better decisions
 </p>

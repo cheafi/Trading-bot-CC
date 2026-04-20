@@ -1,5 +1,5 @@
 """
-TradingAI Pro v6.0 — Institutional-Grade Discord Trading Server Bot
+CC v6.1.0 — Institutional-Grade Discord Trading Server Bot
 =====================================================================
 
 v6 Upgrades (Pro Desk):
@@ -46,6 +46,9 @@ from typing import Any, Dict, List, Optional, Sequence
 import aiohttp
 
 from src.core.config import get_settings
+from src.notifications._embeds import (
+    SignalEmbed, RegimeEmbed, RiskAlertEmbed, AlertSeverity,
+)
 
 
 def _get_lan_ip() -> str:
@@ -273,6 +276,39 @@ class DiscordInteractiveBot:
             except Exception as exc:
                 logger.warning(f"report_generator fallback: {exc}")
 
+        # ── v6.1: Use structured SignalEmbed ──
+        try:
+            ticker = getattr(signal, "ticker", "???")
+            direction = str(getattr(signal, "direction", "LONG"))
+            strategy = getattr(signal, "strategy_id", None) or getattr(signal, "strategy", "multi-factor")
+            score = float(getattr(signal, "confidence", 0) or 0)
+            entry = float(getattr(signal, "entry_price", 0) or 0)
+
+            inv = getattr(signal, "invalidation", None)
+            stop = float(getattr(inv, "stop_price", 0) or 0) if inv else float(getattr(signal, "stop_loss", 0) or 0)
+
+            targets = getattr(signal, "targets", [])
+            target = float(targets[0].price) if targets and hasattr(targets[0], "price") else float(getattr(signal, "take_profit", 0) or 0)
+
+            embed = SignalEmbed.build(
+                ticker=ticker,
+                direction=direction,
+                strategy=strategy,
+                score=score,
+                entry_price=entry,
+                stop_price=stop,
+                target_price=target,
+                why_buy=getattr(signal, "why_now", "") or getattr(signal, "entry_logic", ""),
+                why_not="; ".join(getattr(signal, "key_risks", []) or [])[:200],
+                invalidation=f"${stop:.2f} ({getattr(inv, 'stop_type', 'technical')})" if inv else "",
+                regime=str(getattr(signal, "regime", "")),
+                setup_description=str(getattr(signal, "setup_grade", "")),
+                catalyst=str(getattr(signal, "event_risk", "") or ""),
+            )
+            return embed.to_dict()
+        except Exception as exc:
+            logger.warning(f"SignalEmbed fallback: {exc}")
+
         # ── Fallback: inline v5-compatible build ──
         direction = getattr(signal, "direction", None)
         is_buy = str(direction).upper() in ("LONG", "BUY")
@@ -380,7 +416,7 @@ class DiscordInteractiveBot:
             embed.add_field("📦 Fit", f"{fit_icon} {pf}")
 
         embed.set_footer(
-            f"TradingAI Pro v6 • {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+            f"CC v6.1 • {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
         return embed.to_dict()
 
     # ── Push helpers ──────────────────────────────────────────────────
@@ -423,7 +459,7 @@ class DiscordInteractiveBot:
         e.add_field("Total P&L", f"{report.get('total_pnl', 0):+.2f}%")
         e.add_field("Best Trade", report.get("best_trade", "N/A"))
         e.add_field("Worst Trade", report.get("worst_trade", "N/A"))
-        e.set_footer("TradingAI Pro v6 — End of Day Report")
+        e.set_footer("CC v6.1 — End of Day Report")
         return await self.send_webhook(embeds=[e.to_dict()])
 
     async def push_alert(self, title: str, message: str,
@@ -862,7 +898,7 @@ class DiscordInteractiveBot:
                     e.add_field(name="📉 VIX",
                                 value=f"{'🔴' if vix > 25 else '🟡' if vix > 18 else '🟢'} {vix:.1f}", inline=True)
 
-                    e.set_footer(text="TradingAI Pro v6.41 · AI reads market live · refreshes each tap")
+                    e.set_footer(text="CC v6.1.41 · AI reads market live · refreshes each tap")
                     await interaction.followup.send(embed=e, ephemeral=True)
                 except Exception as exc:
                     await interaction.followup.send(f"❌ {exc}", ephemeral=True)
@@ -1362,7 +1398,7 @@ class DiscordInteractiveBot:
                     if any("TradingAI Pro v" in (em.title or "") for em in msg.embeds):
                         return
             e = discord.Embed(
-                title="🤖 TradingAI Pro v6 — AI Trading Command Center",
+                title="🤖 CC v6.1 — AI Trading Command Center",
                 description=(
                     "Welcome to the AI-powered trading server.\n\n"
                     "**What I do:**\n"
@@ -1393,7 +1429,7 @@ class DiscordInteractiveBot:
                             "**#bot-commands** — use all slash commands\n"
                             "**#trading-chat** — discuss anything market-related"),
                         inline=False)
-            e.set_footer(text="TradingAI Pro v6 • 24/7 AI Trading • Type /help to begin")
+            e.set_footer(text="CC v6.1 • 24/7 AI Trading • Type /help to begin")
             await ch.send(embed=e)
 
         # ══════════════════════════════════════════════════════════════
@@ -2626,7 +2662,7 @@ class DiscordInteractiveBot:
                         for f in embed_dict.get("fields", []):
                             e.add_field(name=f["name"], value=f["value"],
                                         inline=f.get("inline", False))
-                        e.set_footer(text=embed_dict.get("footer", "TradingAI Pro v6"))
+                        e.set_footer(text=embed_dict.get("footer", "CC v6.1"))
                         await _send_ch("daily-brief", embed=e)
 
                     # Fallback top-trades embed if report generator didn't include them
@@ -2830,7 +2866,7 @@ class DiscordInteractiveBot:
                                         value=f"{bicon} {bpct:.0f}% green ({green}/{len(results)})",
                                         inline=True)
 
-                        e.set_footer(text=emb_data.get("footer", "TradingAI Pro v6 • EOD"))
+                        e.set_footer(text=emb_data.get("footer", "CC v6.1 • EOD"))
                         await _send_ch("daily-brief", embed=e)
                 else:
                     # Legacy v5 fallback
@@ -2858,7 +2894,7 @@ class DiscordInteractiveBot:
                     e.add_field(name="🏭 Sector Heat Map", value="\n".join(heat_lines), inline=False)
                     vix_icon = "🔴" if vix > 25 else "🟡" if vix > 18 else "🟢"
                     e.add_field(name="📉 VIX Close", value=f"{vix_icon} {vix:.1f}")
-                    e.set_footer(text="TradingAI Pro v6 • EOD Scorecard")
+                    e.set_footer(text="CC v6.1 • EOD Scorecard")
                     await _send_ch("daily-brief", embed=e)
 
                 await _audit("🌙 v6 EOD Scorecard posted")
@@ -3819,7 +3855,7 @@ class DiscordInteractiveBot:
                     "🔬 Backtest · 🌏 Global · ⚙️ Tools · 📋 Reports"
                 ),
                 color=COLOR_GOLD)
-            e.set_footer(text="TradingAI Pro v6.41 · 65 commands · 3,003 tickers · 8 markets")
+            e.set_footer(text="CC v6.1.41 · 65 commands · 3,003 tickers · 8 markets")
             await interaction.response.send_message(embed=e, view=MenuView(), ephemeral=True)
 
         @bot.tree.command(name="status", description="System connectivity check")
@@ -4095,7 +4131,7 @@ class DiscordInteractiveBot:
                     for s in snapshot_data.get("sections", []):
                         e.add_field(name=s["name"], value=s["value"],
                                     inline=s.get("inline", False))
-                    e.set_footer(text=snapshot_data.get("footer", "TradingAI Pro v6"))
+                    e.set_footer(text=snapshot_data.get("footer", "CC v6.1"))
                     await interaction.followup.send(embed=e)
                 else:
                     # Fallback minimal embed
@@ -4108,7 +4144,7 @@ class DiscordInteractiveBot:
                         color=COLOR_INFO, timestamp=now_ts)
                     strat_str = " · ".join(f"`{s}`" for s in strats_on)
                     e.add_field(name="📋 Playbook", value=strat_str or "—", inline=False)
-                    e.set_footer(text="TradingAI Pro v6")
+                    e.set_footer(text="CC v6.1")
                     await interaction.followup.send(embed=e)
 
                 await _audit(f"🎛️ {interaction.user} → /market_now ({risk})")
@@ -4218,7 +4254,7 @@ class DiscordInteractiveBot:
                     e1.add_field(name="🛡️ Risk Alerts",
                                  value="\n".join(risk_flags), inline=False)
 
-                e1.set_footer(text="TradingAI Pro v6 • /market_now for full regime deck")
+                e1.set_footer(text="CC v6.1 • /market_now for full regime deck")
                 await interaction.followup.send(embed=e1)
 
                 # ── EMBED 2: Market Overview (indices + macro + crypto) ──
@@ -4989,7 +5025,7 @@ class DiscordInteractiveBot:
 
                 e.add_field(name="⚡ Quick Actions", inline=False,
                             value="`/daily_update` brief · `/pnl` P&L · `/risk AAPL` sizing · `/watchlist` tracked")
-                e.set_footer(text="TradingAI Pro v6 • Portfolio Dashboard")
+                e.set_footer(text="CC v6.1 • Portfolio Dashboard")
                 await interaction.followup.send(embed=e)
             except Exception as exc:
                 logger.error(f"portfolio error: {exc}")
@@ -5305,7 +5341,7 @@ class DiscordInteractiveBot:
                     e.add_field(name="💡 Getting Started", inline=False,
                                 value="Start trading to build stats!\n"
                                       "`/buy AAPL 10` · `/scan` for setups · `/signals` for AI picks")
-                e.set_footer(text="TradingAI Pro v6 · /portfolio /pnl for more")
+                e.set_footer(text="CC v6.1 · /portfolio /pnl for more")
                 await interaction.followup.send(embed=e)
             except Exception as exc:
                 await interaction.followup.send(f"❌ {exc}")
@@ -5933,7 +5969,7 @@ class DiscordInteractiveBot:
                 e1.add_field(name="🧠 AI Reasoning",
                              value="\n".join(f"→ {c}" for c in cot), inline=False)
 
-                e1.set_footer(text="TradingAI Pro v6 • Discord-First Dashboard")
+                e1.set_footer(text="CC v6.1 • Discord-First Dashboard")
                 await interaction.followup.send(embed=e1)
 
                 # ── EMBED 2: Market Overview ──
@@ -6084,7 +6120,7 @@ class DiscordInteractiveBot:
                     name=f"📝 {'Pre-Market' if rtype == 'morning' else 'After-Hours'} Notes",
                     value="\n".join(f"• {n}" for n in notes), inline=False)
 
-                e.set_footer(text=f"TradingAI Pro v6 • {label}")
+                e.set_footer(text=f"CC v6.1 • {label}")
                 await interaction.followup.send(embed=e)
                 # Also post to #daily-brief
                 await _send_ch("daily-brief", embed=e)
