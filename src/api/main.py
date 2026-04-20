@@ -9779,9 +9779,19 @@ if __name__ == "__main__":
 
 from src.engines.signal_decay import SignalDecayTracker
 from src.engines.learning_loop import LearningLoopPipeline
+from src.engines.position_sizer import PositionSizer
+from src.engines.correlation_risk import CorrelationRiskEngine
+from src.engines.trade_gate import TradeGate
+from src.engines.decision_journal import DecisionJournal
 
 _signal_decay = SignalDecayTracker()
 _learning_loop = LearningLoopPipeline()
+
+# Sprint 50 — Position Sizing, Concentration Risk, Trade Gate, Decision Journal
+_position_sizer = PositionSizer(equity=100_000)
+_correlation_risk = CorrelationRiskEngine()
+_trade_gate = TradeGate()
+_decision_journal = DecisionJournal()
 
 
 @app.get("/api/v6/signal-decay", tags=["analytics"],
@@ -9886,4 +9896,111 @@ async def api_model_version():
         "trust_badges": [b.value for b in TrustBadge],
         "freshness_levels": [f.value for f in FreshnessLevel],
     }
+
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Sprint 50 — Position Sizing, Concentration Risk, Trade Gate, Decision Journal
+# ══════════════════════════════════════════════════════════════════════
+
+
+@app.get("/api/v6/position-size", tags=["v6-risk"])
+async def position_size_endpoint(
+    ticker: str = "AAPL",
+    price: float = 150.0,
+    stop_price: float = 145.0,
+    method: str = "atr_fixed_risk",
+    _: bool = Depends(verify_api_key),
+):
+    """Calculate recommended position size for a trade."""
+    result = _position_sizer.size_position(
+        ticker=ticker,
+        price=price,
+        stop_price=stop_price,
+        method=method,
+    )
+    return {
+        "ticker": result.ticker,
+        "shares": result.shares,
+        "dollar_amount": result.dollar_amount,
+        "position_pct": result.position_pct,
+        "risk_per_share": result.risk_per_share,
+        "total_risk": result.total_risk,
+        "risk_pct_of_equity": result.risk_pct_of_equity,
+        "method": result.method,
+        "notes": result.notes,
+        "sizer_config": _position_sizer.summary(),
+    }
+
+
+@app.get("/api/v6/concentration-risk", tags=["v6-risk"])
+async def concentration_risk_endpoint(
+    _: bool = Depends(verify_api_key),
+):
+    """Analyse portfolio concentration and correlation risk."""
+    holdings = _user_portfolio.get("holdings", [])
+    if not holdings:
+        return {
+            "status": "no_portfolio",
+            "message": "Import portfolio first via POST /api/portfolio/import",
+        }
+    return _correlation_risk.summary(holdings)
+
+
+@app.get("/api/v6/trade-gate", tags=["v6-risk"])
+async def trade_gate_endpoint(
+    ticker: str = "AAPL",
+    vix: float = 20.0,
+    drawdown_pct: float = 0.0,
+    open_positions: int = 0,
+    portfolio_heat_pct: float = 0.0,
+    regime: str = "UNKNOWN",
+    _: bool = Depends(verify_api_key),
+):
+    """Evaluate pre-trade gate: should we even be trading right now?"""
+    result = _trade_gate.evaluate(
+        current_drawdown_pct=drawdown_pct,
+        open_positions=open_positions,
+        portfolio_heat_pct=portfolio_heat_pct,
+        vix=vix,
+        regime=regime,
+        ticker=ticker,
+    )
+    return result.to_dict()
+
+
+@app.get("/api/v6/decision-journal", tags=["v6-risk"])
+async def decision_journal_endpoint(
+    ticker: str = "",
+    _: bool = Depends(verify_api_key),
+):
+    """View decision journal — audit trail for all signal decisions."""
+    if ticker:
+        entries = _decision_journal.by_ticker(ticker)
+        return {"ticker": ticker, "entries": entries, "count": len(entries)}
+    return _decision_journal.summary()
+
+
+@app.post("/api/v6/decision-journal/record", tags=["v6-risk"])
+async def decision_journal_record(
+    ticker: str = "AAPL",
+    decision: str = "PASS",
+    price: float = 0.0,
+    regime: str = "",
+    score: float = 0.0,
+    confidence: float = 0.0,
+    setup_grade: str = "",
+    _: bool = Depends(verify_api_key),
+):
+    """Manually record a decision in the journal (for testing/integration)."""
+    entry = _decision_journal.record(
+        ticker=ticker,
+        decision=decision,
+        price=price,
+        regime=regime,
+        score=score,
+        confidence=confidence,
+        setup_grade=setup_grade,
+    )
+    return {"recorded": True, "entry_id": entry.entry_id}
 

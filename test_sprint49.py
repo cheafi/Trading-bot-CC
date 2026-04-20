@@ -8,11 +8,9 @@ Sprint 49 Tests — Expert Council Review Fixes
 5. Selectivity / concentration warnings
 6. API endpoints
 """
-import pytest
-import asyncio
-from datetime import datetime, timezone, timedelta
-from unittest.mock import MagicMock, patch
+from datetime import datetime, timedelta, timezone
 
+import pytest
 
 # ── 1. Signal Decay Tracker ──
 
@@ -28,7 +26,7 @@ class TestSignalDecayTracker:
         assert not sig.is_expired
 
     def test_expiry(self):
-        from src.engines.signal_decay import SignalDecayTracker, TrackedSignal
+        from src.engines.signal_decay import SignalDecayTracker
         tracker = SignalDecayTracker()
         sig = tracker.track("MSFT", "LONG", 400.0, 380.0, 440.0, 0.6, "C", time_stop_days=0)
         # Force old creation time
