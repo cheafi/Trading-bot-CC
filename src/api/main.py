@@ -11,11 +11,9 @@ Features:
 """
 
 import asyncio
-import hashlib
 import logging
 import math
 import os
-import random as _random_module
 import re
 import time
 from collections import defaultdict
@@ -2038,19 +2036,25 @@ async def get_earnings_analysis(ticker: str, _: bool = Depends(verify_api_key)):
     try:
         analyzer = EarningsAnalyzer()
 
-        # TODO: Fetch actual earnings data from provider
-        # For now, return structure
+        # Use yfinance for basic earnings data when available
+        import yfinance as yf
+        t = yf.Ticker(ticker.upper())
+        cal = t.calendar or {}
+        info = t.info or {}
+        eps_trail = info.get("trailingEps")
+        eps_fwd = info.get("forwardEps")
+        rev = info.get("totalRevenue")
+        margin = info.get("profitMargins")
         return {
             "ticker": ticker.upper(),
-            "message": "Earnings analysis requires active earnings data feed",
-            "structure": {
-                "eps_result": "beat/miss/inline",
-                "revenue_result": "beat/miss/inline",
-                "guidance": "raised/lowered/maintained",
-                "sentiment": "bullish/bearish/neutral",
-                "ai_summary": "AI-generated summary",
-                "trading_recommendation": "action guidance",
-            },
+            "trailing_eps": eps_trail,
+            "forward_eps": eps_fwd,
+            "total_revenue": rev,
+            "profit_margin": round(margin, 4) if margin else None,
+            "calendar": {k: str(v) for k, v in cal.items()} if cal else {},
+            "recommendation": info.get("recommendationKey", "none"),
+            "source": "yfinance",
+            "note": "Live data from Yahoo Finance. Cross-check with broker.",
         }
 
     except Exception as e:
@@ -5279,11 +5283,7 @@ async def live_options(ticker: str):
     price = q_raw["price"]
     regime = await _get_regime()
 
-    # Estimate IV from regime + simple heuristic
-    # Deterministic RNG seeded by ticker + date (stable within a trading day)
-    _seed = hashlib.md5(f"{ticker}:{date.today()}".encode()).hexdigest()
-    rng = _random_module.Random(int(_seed, 16))
-
+    # Estimate IV from regime (deterministic — no RNG)
     base_iv = 0.25
     if regime.volatility_regime in ("elevated_vol", "high_vol"):
         base_iv = 0.40
@@ -5292,7 +5292,7 @@ async def live_options(ticker: str):
     elif regime.volatility_regime == "low_vol":
         base_iv = 0.18
 
-    # Generate 5 synthetic contracts
+    # Generate 5 synthetic contracts — deterministic from price + IV
     strikes = [
         round(price * 0.95, 0),
         round(price * 0.975, 0),
@@ -5303,23 +5303,26 @@ async def live_options(ticker: str):
     dtes = [30, 30, 45, 45, 60]
     types = ["CALL", "CALL", "CALL", "PUT", "PUT"]
     base_deltas = [0.65, 0.55, 0.50, -0.45, -0.35]
+    # Deterministic IV offsets per contract slot (no randomness)
+    _iv_offsets = [0.01, -0.02, 0.0, 0.03, -0.01]
+    # Deterministic OI estimates from strike distance
+    _base_ois = [2000, 5000, 10000, 4000, 3000]
 
     contracts = []
     for i, strike in enumerate(strikes):
-        iv = round(base_iv + rng.uniform(-0.05, 0.08), 3)
-        oi = rng.randint(500, 15000)
-        spread = "TIGHT" if rng.random() > 0.35 else "WIDE"
-        # Simplified EV estimate
+        iv = round(base_iv + _iv_offsets[i], 3)
+        oi = _base_ois[i]
+        spread = "TIGHT" if iv < 0.35 else "WIDE"
         moneyness = (
             (price - strike) / price if types[i] == "CALL" else (strike - price) / price
         )
-        ev = round(moneyness * 100 + rng.uniform(-3, 5), 1)
+        ev = round(moneyness * 100 + (1 - i) * 0.5, 1)
         contracts.append(
             {
                 "strike": int(strike),
                 "dte": dtes[i],
                 "type": types[i],
-                "delta": round(base_deltas[i] + rng.uniform(-0.05, 0.05), 2),
+                "delta": base_deltas[i],
                 "iv": iv,
                 "oi": oi,
                 "spread_quality": spread,
@@ -5333,7 +5336,7 @@ async def live_options(ticker: str):
             }
         )
 
-    iv_rank = rng.randint(20, 80)
+    iv_rank = min(80, max(20, int(base_iv * 200)))
 
     return _sanitize_for_json(
         {
@@ -5341,7 +5344,7 @@ async def live_options(ticker: str):
             "price": round(price, 2),
             "contracts": contracts,
             "iv_rank": iv_rank,
-            "iv_percentile": iv_rank + rng.randint(-5, 10),
+            "iv_percentile": min(95, iv_rank + 5),
             "term_structure": (
                 "Normal contango — front month IV < back month"
                 if iv_rank < 50
@@ -6530,7 +6533,7 @@ def _run_expert_council(
     }
 
 
-# ── Expert Track-Record Weighting (P1 TODO) ──────────────────
+# ── Expert Track-Record Weighting (RESOLVED → see ExpertTracker engine) ──
 # Tracks per-expert historical accuracy and weights their votes
 # by realized performance rather than equal weighting.
 
@@ -9104,21 +9107,22 @@ async def macro_intel_data():
 # FRED macro, SEC EDGAR, operator console
 # ═══════════════════════════════════════════════════════════════════
 
+from src.core.trust_metadata import (
+    MODEL_VERSION,
+    FreshnessLevel,
+    TrustBadge,
+    TrustMetadata,
+)
 from src.engines.conformal_predictor import (
     ConformalPredictor,
-    PredictionInterval,
     reliability_bucket,
     reliability_note,
 )
-from src.engines.expert_committee import ExpertCommittee, CommitteeVerdict
+from src.engines.expert_committee import ExpertCommittee
+from src.engines.meta_ensemble import MetaEnsemble
 from src.engines.scenario_engine import ScenarioEngine
-from src.ingestors.fred import FredClient, FRED_SERIES
 from src.ingestors.edgar import EdgarClient
-from src.engines.meta_ensemble import MetaEnsemble, MetaEnsembleState
-from src.core.trust_metadata import (
-    TrustBadge, FreshnessLevel, TrustMetadata, PnLBreakdown,
-    TradeAttribution, MODEL_VERSION,
-)
+from src.ingestors.fred import FRED_SERIES, FredClient
 
 # ── Singletons ──
 _conformal = ConformalPredictor(confidence_level=0.90)
@@ -9777,19 +9781,21 @@ if __name__ == "__main__":
 
 # ═══ Signal Decay + Learning Loop (Sprint 49) ═══
 
-from src.engines.signal_decay import SignalDecayTracker
-from src.engines.learning_loop import LearningLoopPipeline
-from src.engines.position_sizer import PositionSizer
-from src.engines.correlation_risk import CorrelationRiskEngine
-from src.engines.trade_gate import TradeGate
-from src.engines.decision_journal import DecisionJournal
-from src.engines.market_intel import MarketIntelEngine
-from src.engines.risk_scorecard import RiskScorecardEngine
-from src.engines.watchlist_intel import WatchlistIntelEngine
-from src.engines.expert_tracker import ExpertTracker
-from src.engines.regime_filter import RegimeFilter
-from src.engines.cross_asset_monitor import CrossAssetMonitor
 from src.engines.confidence_calibrator import ConfidenceCalibrator
+from src.engines.correlation_risk import CorrelationRiskEngine
+from src.engines.cross_asset_monitor import CrossAssetMonitor
+from src.engines.decision_journal import DecisionJournal
+from src.engines.expert_tracker import ExpertTracker
+from src.engines.learning_loop import LearningLoopPipeline
+from src.engines.market_intel import MarketIntelEngine
+from src.engines.portfolio_risk_budget import PortfolioRiskBudget
+from src.engines.position_sizer import PositionSizer
+from src.engines.professional_kpi import ProfessionalKPI
+from src.engines.regime_filter import RegimeFilter
+from src.engines.risk_scorecard import RiskScorecardEngine
+from src.engines.signal_decay import SignalDecayTracker
+from src.engines.trade_gate import TradeGate
+from src.engines.watchlist_intel import WatchlistIntelEngine
 
 _signal_decay = SignalDecayTracker()
 _learning_loop = LearningLoopPipeline()
@@ -9810,6 +9816,10 @@ _expert_tracker = ExpertTracker()
 _regime_filter = RegimeFilter()
 _cross_asset_monitor = CrossAssetMonitor()
 _confidence_calibrator = ConfidenceCalibrator()
+
+# Sprint 53 — Portfolio Risk Budget, Professional KPI
+_portfolio_risk_budget = PortfolioRiskBudget()
+_professional_kpi = ProfessionalKPI()
 
 
 @app.get("/api/v6/signal-decay", tags=["analytics"],
@@ -10229,4 +10239,55 @@ async def confidence_calibration_endpoint(
         "calibrated_confidence": calibrated,
         "calibration_status": summary,
     }
+
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Sprint 53 — Portfolio Risk Budget, Professional KPI
+# ══════════════════════════════════════════════════════════════════════
+
+
+@app.get("/api/v6/portfolio-risk-budget", tags=["v6-intel"])
+async def portfolio_risk_budget_endpoint(
+    _: bool = Depends(verify_api_key),
+):
+    """Portfolio-level risk budget check: exposure, concentration, heat."""
+    # Build exposure from current positions (or empty if none)
+    positions = getattr(app.state, "positions", [])
+    equity = getattr(app.state, "account_value", 100_000)
+    exposure = _portfolio_risk_budget.build_exposure(
+        positions=positions, equity=equity
+    )
+    return _sanitize_for_json(exposure.to_dict())
+
+
+@app.get("/api/v6/professional-kpi", tags=["v6-intel"])
+async def professional_kpi_endpoint(
+    _: bool = Depends(verify_api_key),
+):
+    """Professional trading KPI dashboard — institutional-grade metrics."""
+    snapshot = _professional_kpi.compute()
+    return _sanitize_for_json(snapshot.to_dict())
+
+
+@app.post("/api/v6/professional-kpi/record-trade", tags=["v6-intel"])
+async def professional_kpi_record_trade(
+    pnl_pct: float = 0.0,
+    r_multiple: float = 0.0,
+    hold_hours: float = 0.0,
+    _: bool = Depends(verify_api_key),
+):
+    """Record a trade outcome for KPI tracking."""
+    _professional_kpi.record_trade(pnl_pct=pnl_pct, r_multiple=r_multiple, hold_hours=hold_hours)
+    return {"recorded": True, "kpi": _professional_kpi.compute().to_dict()}
+
+
+@app.post("/api/v6/professional-kpi/record-cycle", tags=["v6-intel"])
+async def professional_kpi_record_cycle(
+    traded: bool = True,
+    _: bool = Depends(verify_api_key),
+):
+    """Record a screening cycle for funnel KPI tracking."""
+    _professional_kpi.record_cycle(traded=traded)
+    return {"recorded": True, "kpi": _professional_kpi.compute().to_dict()}
 
