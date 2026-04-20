@@ -9345,3 +9345,5 @@ from src.api.routers.intel import router as intel_router
 from src.api.routers.portfolio import router as portfolio_router
 app.include_router(intel_router)
 app.include_router(portfolio_router)
+from src.api.routers.decision import router as decision_router
+app.include_router(decision_router)
