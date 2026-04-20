@@ -12,7 +12,7 @@ Checks:
   • Symbol mapping: if > 10% of universe has no features → critical
 """
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.core.models import DataQualityReport
@@ -59,7 +59,7 @@ def _make_report(
 ) -> DataQualityReport:
     """Helper to construct a DataQualityReport with the v6 schema."""
     return DataQualityReport(
-        check_time=datetime.utcnow(),
+        check_time=datetime.now(timezone.utc),
         feed_name=feed,
         check_type=check,
         passed=passed,
@@ -186,7 +186,7 @@ class DataQualityGate:
         """Check each feed timestamp vs its staleness threshold."""
         reports: List[DataQualityReport] = []
         feed_ts = market_data.get("feed_timestamps", {})
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         for feed, cfg in self.thresholds.items():
             ts_raw = feed_ts.get(feed)

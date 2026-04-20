@@ -19,7 +19,7 @@ import random
 import re
 import time
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 import asyncio
 
 from pydantic import BaseModel, Field, ValidationError
@@ -376,7 +376,7 @@ Respond ONLY in JSON:
                 'checklist_violations': result.get('checklist_violations', []),
                 'sources_used': result.get('sources_used', []),
                 'gpt_validation_json': result,
-                'validated_at': datetime.utcnow().isoformat(),
+                'validated_at': datetime.now(timezone.utc).isoformat(),
                 'llm_log': llm_log,
             }
             
@@ -392,7 +392,7 @@ Respond ONLY in JSON:
             return {
                 **result,
                 'error': str(e),
-                'validated_at': datetime.utcnow().isoformat(),
+                'validated_at': datetime.now(timezone.utc).isoformat(),
                 'llm_log': llm_log,
             }
 
@@ -527,7 +527,7 @@ Respond ONLY in JSON:
                 'confidence': result.get('confidence', 0.5),
                 'key_topics': result.get('key_topics', []),
                 'summary': result.get('summary', ''),
-                'analyzed_at': datetime.utcnow().isoformat(),
+                'analyzed_at': datetime.now(timezone.utc).isoformat(),
                 'latency_ms': latency_ms,
             }
 
@@ -539,7 +539,7 @@ Respond ONLY in JSON:
                 'key_topics': [],
                 'summary': 'Analysis failed',
                 'error': str(e),
-                'analyzed_at': datetime.utcnow().isoformat()
+                'analyzed_at': datetime.now(timezone.utc).isoformat()
             }
     
     async def validate_batch(

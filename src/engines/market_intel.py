@@ -23,7 +23,7 @@ Unusual activity is treated as probabilistic evidence, not certainty.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -57,7 +57,7 @@ class IntelReport:
 
     def __post_init__(self):
         if not self.generated_at:
-            self.generated_at = datetime.utcnow().isoformat() + "Z"
+            self.generated_at = datetime.now(timezone.utc).isoformat() + "Z"
 
 
 class MarketIntelEngine:

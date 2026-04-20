@@ -15,7 +15,7 @@ This is NOT just a list of tickers. It's an intelligent queue that:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -42,7 +42,7 @@ class WatchlistItem:
 
     def __post_init__(self):
         if not self.added_at:
-            self.added_at = datetime.utcnow().isoformat() + "Z"
+            self.added_at = datetime.now(timezone.utc).isoformat() + "Z"
 
     def to_dict(self) -> dict:
         return {

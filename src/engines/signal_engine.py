@@ -589,7 +589,7 @@ class RegimeDetector:
         )
 
         mr = MarketRegime(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             volatility=vol_regime,
             trend=trend_regime,
             risk=risk_regime,
@@ -649,7 +649,7 @@ class RegimeDetector:
         )
 
         return MarketRegime(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             volatility=vol_regime,
             trend=trend_regime,
             risk=risk_regime,
@@ -990,7 +990,7 @@ class SignalEngine:
         # ── 1. Pre-flight NO TRADE check ───────────────────────
         can_trade, reason = self._preflight_check(market_data)
         self._last_market_state = {
-            "ts": datetime.utcnow().isoformat(),
+            "ts": datetime.now(timezone.utc).isoformat(),
             "can_trade": can_trade,
             "no_trade_reason": reason if not can_trade else None,
             "vix": market_data.get("vix", 0),

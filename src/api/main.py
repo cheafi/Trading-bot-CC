@@ -17,7 +17,7 @@ import os
 import re
 import time
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -376,7 +376,7 @@ async def get_dashboard_data():
         )
 
     return {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "stats": {
             "totalPnL": cb.get("daily_pnl", 0),
             "todayPnL": cb.get("daily_pnl", 0),
@@ -426,7 +426,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={
             "error": "Validation Error",
             "detail": errors,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )
 
@@ -439,7 +439,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         content={
             "error": exc.detail,
             "status_code": exc.status_code,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )
 
@@ -457,7 +457,7 @@ async def general_exception_handler(request: Request, exc: Exception):
                 if settings.environment == "production"
                 else str(exc)
             ),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )
 
@@ -565,7 +565,7 @@ class ErrorResponse(BaseModel):
 
 
 # Track startup time for uptime calculation
-startup_time = datetime.utcnow()
+startup_time = datetime.now(timezone.utc)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -743,7 +743,7 @@ async def health_check():
     """
     return {
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "version": APP_VERSION,
         "uptime_seconds": telemetry.get_uptime_seconds(),
     }
@@ -767,7 +767,7 @@ async def detailed_health_check(_: bool = Depends(verify_api_key)):
 
     return {
         "status": "healthy" if db_status == "connected" else "degraded",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "version": APP_VERSION,
         "database": db_status,
     }
@@ -779,7 +779,7 @@ async def detailed_health_check(_: bool = Depends(verify_api_key)):
 @app.get("/health/live", tags=["health"], summary="Kubernetes liveness probe")
 async def health_live():
     """Simple liveness check - is the process alive?"""
-    return {"status": "alive", "timestamp": datetime.utcnow().isoformat()}
+    return {"status": "alive", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @app.get("/health/ready", tags=["health"], summary="Kubernetes readiness probe")
@@ -820,7 +820,7 @@ async def health_ready():
 
     return {
         "ready": all_ready,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "checks": checks,
     }
 
@@ -1329,7 +1329,7 @@ async def get_signals(
         return SignalListResponse(
             signals=signals,
             total=len(signals),
-            generated_at=datetime.utcnow().isoformat(),
+            generated_at=datetime.now(timezone.utc).isoformat(),
         )
 
     except Exception as e:
@@ -1420,7 +1420,7 @@ async def get_daily_report(
 
     from src.core.database import AsyncSessionLocal
 
-    report_date = date or datetime.utcnow().strftime("%Y-%m-%d")
+    report_date = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     try:
         async with AsyncSessionLocal() as session:
@@ -1499,7 +1499,7 @@ async def get_market_overview(_: bool = Depends(verify_api_key)):
             }
 
         return {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "indices": indices,
             "sectors": sectors,
             "market_status": "open" if _is_market_open() else "closed",
@@ -1678,18 +1678,18 @@ async def get_ticker_sentiment(
 @app.post("/admin/trigger-job/{job_name}")
 async def trigger_job(job_name: str, _: bool = Depends(verify_api_key)):
     """Manually trigger a scheduled job."""
-    # TODO: Implement job triggering
+    # Job triggering placeholder — scheduler integration pending
     return {
         "status": "triggered",
         "job": job_name,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
 @app.get("/admin/jobs")
 async def list_jobs(_: bool = Depends(verify_api_key)):
     """List all scheduled jobs."""
-    # TODO: Get from scheduler
+    # Scheduler status placeholder — scheduler integration pending
     return {
         "jobs": [
             {"id": "overnight_news", "schedule": "6:00 AM ET"},
@@ -1790,7 +1790,7 @@ async def scan_patterns(
                 all_patterns, key=lambda x: x["confidence"], reverse=True
             ),
             "total": len(all_patterns),
-            "scanned_at": datetime.utcnow().isoformat(),
+            "scanned_at": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -1842,7 +1842,7 @@ async def scan_sectors(_: bool = Depends(verify_api_key)):
                 "rotation_direction": rotation.rotation_direction,
                 "sector_recommendation": rotation.recommendation,
             },
-            "scanned_at": datetime.utcnow().isoformat(),
+            "scanned_at": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -1903,7 +1903,7 @@ async def scan_momentum(
         return {
             "alerts": results,
             "total": len(results),
-            "scanned_at": datetime.utcnow().isoformat(),
+            "scanned_at": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -1954,7 +1954,7 @@ async def get_market_snapshot(_: bool = Depends(verify_api_key)):
             "generated_at": (
                 snapshot.generated_at.isoformat()
                 if snapshot.generated_at
-                else datetime.utcnow().isoformat()
+                else datetime.now(timezone.utc).isoformat()
             ),
         }
 
@@ -2103,7 +2103,7 @@ async def get_performance_stats(
             "current_streak": stats.current_streak,
             "max_win_streak": stats.max_win_streak,
             "strategy_breakdown": stats.strategy_breakdown,
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -2154,7 +2154,7 @@ async def get_strategy_analytics(strategy: str, _: bool = Depends(verify_api_key
             "profit_factor": round(metrics.profit_factor, 2),
             "total_trades": metrics.total_trades,
             "max_consecutive_losses": metrics.max_consecutive_losses,
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -2187,7 +2187,7 @@ async def get_broker_status(_: bool = Depends(verify_api_key)):
         return {
             "active_broker": manager.active_broker_type.value,
             "brokers": brokers,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -2264,7 +2264,7 @@ async def get_broker_account(
             "portfolio_value": round(account.portfolio_value, 2),
             "unrealized_pnl": round(account.unrealized_pnl, 2),
             "realized_pnl_today": round(account.realized_pnl_today, 2),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -2311,7 +2311,7 @@ async def get_broker_positions(
                 for pos in positions
             ],
             "total_positions": len(positions),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -2375,7 +2375,7 @@ async def place_order(
             "filled_qty": result.filled_qty,
             "avg_fill_price": result.avg_fill_price,
             "message": result.message,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     except HTTPException:
@@ -2484,9 +2484,9 @@ async def get_ai_advisor():
         "trust": {
             "mode": "LIVE",
             "source": "regime_router + engine",
-            "as_of": datetime.utcnow().isoformat() + "Z",
+            "as_of": datetime.now(timezone.utc).isoformat() + "Z",
         },
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -2503,7 +2503,7 @@ async def get_ml_status():
                 "mode": "HONEST",
                 "note": "No engine instance — cannot report model metrics.",
             },
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     # Pull real metrics from engine if available
@@ -2530,9 +2530,9 @@ async def get_ml_status():
                     if not model_ready
                     else "Model loaded and reporting live metrics."
                 ),
-                "as_of": datetime.utcnow().isoformat() + "Z",
+                "as_of": datetime.now(timezone.utc).isoformat() + "Z",
             },
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     )
 
@@ -2683,7 +2683,7 @@ async def get_regime_scoreboard():
             "iwm": {"price": iwm_price, "change_pct": round(iwm_pct, 2)},
             "vix": {"price": vix, "change_pct": 0},
         },
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "version": "v6",
     }
 
@@ -2724,7 +2724,7 @@ async def get_delta_snapshot():
 
     return {
         "delta": delta.model_dump(),
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "version": "v6",
     }
 
@@ -2774,7 +2774,7 @@ async def get_regime_snapshot_report():
     return {
         "report": snapshot,
         "markdown": embeds_to_markdown([snapshot]),
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "version": "v6",
     }
 
@@ -2786,7 +2786,7 @@ async def get_data_quality_status():
     Uses the DataQualityReport model to surface data pipeline health.
     """
     # Build a synthetic report from current state
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     report = DataQualityReport(
         report_date=date.today(),
         total_tickers_expected=50,
@@ -2953,7 +2953,7 @@ async def get_signal_card(ticker: str):
     return {
         "card": card,
         "ticker": ticker.upper(),
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "version": "v6",
         "data_source": "live" if price > 0 else "unavailable",
     }
@@ -2984,7 +2984,7 @@ async def get_regime_state():
             "status": "ok",
             "regime": regime_dict,
             "source": "singleton_regime_cache",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     except Exception as e:
         logger.error(f"Regime endpoint error: {e}")
@@ -4314,7 +4314,7 @@ async def get_recommendations(limit: int = Query(10, ge=1, le=50)):
                         "PRODUCTION" if source == "engine_cache" else "BETA"
                     ),
                 },
-                "as_of": datetime.utcnow().isoformat() + "Z",
+                "as_of": datetime.now(timezone.utc).isoformat() + "Z",
             }
         )
     except Exception as e:
@@ -4336,7 +4336,7 @@ async def get_strategy_leaderboard():
             "status": "ok",
             "strategy_scores": scores,
             "rankings": rankings,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     except Exception as e:
         logger.error(f"Leaderboard endpoint error: {e}")
@@ -4368,7 +4368,7 @@ async def ops_status():
     import time as _time
 
     engine = _get_engine()
-    uptime_s = (datetime.utcnow() - startup_time).total_seconds()
+    uptime_s = (datetime.now(timezone.utc) - startup_time).total_seconds()
 
     # Uptime formatting
     days = int(uptime_s // 86400)
@@ -4449,7 +4449,7 @@ async def ops_status():
             "trust": {
                 "mode": "PAPER" if dry_run else "LIVE",
                 "source": "engine + system",
-                "as_of": datetime.utcnow().isoformat() + "Z",
+                "as_of": datetime.now(timezone.utc).isoformat() + "Z",
             },
         }
     )
@@ -4737,9 +4737,9 @@ async def live_market():
                 "trust": {
                     "mode": mode,
                     "source": "market_data_service",
-                    "as_of": datetime.utcnow().isoformat() + "Z",
+                    "as_of": datetime.now(timezone.utc).isoformat() + "Z",
                 },
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )
         _market_overview_cache["data"] = result
@@ -4767,9 +4767,9 @@ async def live_market():
             "trust": {
                 "mode": "PAPER",
                 "source": "fallback",
-                "as_of": datetime.utcnow().isoformat() + "Z",
+                "as_of": datetime.now(timezone.utc).isoformat() + "Z",
             },
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
 
@@ -4832,7 +4832,7 @@ async def live_quote(ticker: str):
 
     return {
         "quote": q,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -5120,7 +5120,7 @@ async def live_dossier(ticker: str):
                     else "LIVE"
                 ),
                 "source": "market_data_service + computed",
-                "as_of": datetime.utcnow().isoformat() + "Z",
+                "as_of": datetime.now(timezone.utc).isoformat() + "Z",
             },
         }
     )
@@ -5257,7 +5257,7 @@ async def live_brief():
                     else ("LIVE" if engine else "OFFLINE")
                 ),
                 "source": "engine_cache + market_data_service",
-                "as_of": datetime.utcnow().isoformat() + "Z",
+                "as_of": datetime.now(timezone.utc).isoformat() + "Z",
             },
         }
     )
@@ -5359,7 +5359,7 @@ async def live_options(ticker: str):
             "trust": {
                 "mode": "SYNTHETIC",
                 "source": "heuristic_model",
-                "as_of": datetime.utcnow().isoformat() + "Z",
+                "as_of": datetime.now(timezone.utc).isoformat() + "Z",
                 "note": "Contracts are synthetic. Verify with broker before execution.",
             },
         }
@@ -5977,9 +5977,9 @@ async def live_backtest(
             "source": "yfinance_historical",
             "note": "Real price data. Gross returns — no commissions, fees, or slippage. Past performance ≠ future results.",
             "data_points": len(close),
-            "as_of": datetime.utcnow().isoformat() + "Z",
+            "as_of": datetime.now(timezone.utc).isoformat() + "Z",
         },
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
 
@@ -6887,7 +6887,7 @@ async def live_time_travel(
                 "source": "yfinance_historical",
                 "note": "Historical replay — shows what system would have suggested on this date. NOT a live recommendation.",
                 "data_points": n,
-                "as_of": datetime.utcnow().isoformat() + "Z",
+                "as_of": datetime.now(timezone.utc).isoformat() + "Z",
             },
         }
     )
@@ -7325,7 +7325,7 @@ async def regime_screener_data():
             "source": data_source,
             "engine_available": engine is not None,
         },
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
     }
 
 
@@ -7677,7 +7677,7 @@ async def portfolio_brief_data(
             )
             + "Indicators from MarketDataService.",
         },
-        "as_of": datetime.utcnow().isoformat() + "Z",
+        "as_of": datetime.now(timezone.utc).isoformat() + "Z",
     }
 
     # Save artifact
@@ -7865,7 +7865,7 @@ async def compare_overlay_data(
             "join_strategy": join,
             "comparison_mode": mode,
         },
-        "as_of": datetime.utcnow().isoformat() + "Z",
+        "as_of": datetime.now(timezone.utc).isoformat() + "Z",
     }
 
     # ── Write immutable research artifact ──
@@ -8228,7 +8228,7 @@ async def performance_lab_data(
             "bins": bins,
             "counts": counts,
         },
-        "as_of": datetime.utcnow().isoformat() + "Z",
+        "as_of": datetime.now(timezone.utc).isoformat() + "Z",
     }
 
     # ── Write immutable artifact bundle (json/csv/png/md) ──
@@ -8385,7 +8385,7 @@ async def strategy_portfolio_lab_data(
                 else None
             ),
         },
-        "as_of": datetime.utcnow().isoformat() + "Z",
+        "as_of": datetime.now(timezone.utc).isoformat() + "Z",
     }
 
     # ── Write immutable research artifact ──
@@ -8489,7 +8489,7 @@ async def options_screen_data(
             else None
         ),
         "trust": result.trust,
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
     }
 
     # ── Write immutable research artifact ──
@@ -8555,7 +8555,7 @@ async def research_artifact_list(
             surface=surface,
             limit=limit,
         ),
-        "as_of": datetime.utcnow().isoformat() + "Z",
+        "as_of": datetime.now(timezone.utc).isoformat() + "Z",
     }
 
 
@@ -8577,7 +8577,7 @@ async def market_intel_regime():
         return {
             "regime": "UNKNOWN",
             "detail": "Regime router unavailable",
-            "as_of": datetime.utcnow().isoformat() + "Z",
+            "as_of": datetime.now(timezone.utc).isoformat() + "Z",
         }
     return {
         "regime_label": regime.get(
@@ -8588,7 +8588,7 @@ async def market_intel_regime():
         "trend": regime.get("trend", "NEUTRAL"),
         "volatility": regime.get("volatility", "NORMAL"),
         "strategy_playbook": regime.get("playbook", {}),
-        "as_of": datetime.utcnow().isoformat() + "Z",
+        "as_of": datetime.now(timezone.utc).isoformat() + "Z",
     }
 
 
@@ -8605,7 +8605,7 @@ async def market_intel_vix():
         return {
             "vix": None,
             "label": "UNAVAILABLE",
-            "as_of": datetime.utcnow().isoformat() + "Z",
+            "as_of": datetime.now(timezone.utc).isoformat() + "Z",
         }
 
     label = (
@@ -8620,7 +8620,7 @@ async def market_intel_vix():
     return {
         "vix": round(vix, 2),
         "label": label,
-        "as_of": datetime.utcnow().isoformat() + "Z",
+        "as_of": datetime.now(timezone.utc).isoformat() + "Z",
     }
 
 
@@ -8635,7 +8635,7 @@ async def market_intel_breadth():
 
     return {
         "breadth": breadth or {},
-        "as_of": datetime.utcnow().isoformat() + "Z",
+        "as_of": datetime.now(timezone.utc).isoformat() + "Z",
     }
 
 
@@ -8663,7 +8663,7 @@ async def market_intel_spy_return():
 
     return {
         "spy_returns": periods,
-        "as_of": datetime.utcnow().isoformat() + "Z",
+        "as_of": datetime.now(timezone.utc).isoformat() + "Z",
     }
 
 
@@ -8712,7 +8712,7 @@ async def market_intel_rates():
         "yields": yields_out,
         "spread_10y_3m": spread,
         "curve_status": curve_status,
-        "as_of": datetime.utcnow().isoformat() + "Z",
+        "as_of": datetime.now(timezone.utc).isoformat() + "Z",
     }
 
 
@@ -8816,7 +8816,7 @@ async def macro_intel_data():
                     w4 = float(
                         (c.iloc[-1] / c.iloc[-20] - 1) * 100,
                     )
-                yr = f"{datetime.utcnow().year}-01-01"
+                yr = f"{datetime.now(timezone.utc).year}-01-01"
                 jan = c.loc[c.index >= yr]
                 if len(jan) >= 2:
                     ytd_pct = float(
@@ -9097,7 +9097,7 @@ async def macro_intel_data():
             "war_risk_score": wrs,
             "political_momentum": pm,
         },
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
     }
 
 
@@ -9181,7 +9181,7 @@ async def operator_set_throttle(
     _operator_state["throttle"] = throttle
     _operator_state["kill_switch"] = throttle == "NO_TRADE"
     _operator_state["reason"] = reason
-    _operator_state["set_at"] = datetime.utcnow().isoformat() + "Z"
+    _operator_state["set_at"] = datetime.now(timezone.utc).isoformat() + "Z"
     logger.info(f"[Operator] throttle → {throttle} (reason: {reason})")
     return {"status": "ok", "state": _operator_state}
 
@@ -9195,7 +9195,7 @@ async def operator_kill_switch(
     _operator_state["kill_switch"] = enabled
     _operator_state["throttle"] = "NO_TRADE" if enabled else "NORMAL"
     _operator_state["reason"] = reason
-    _operator_state["set_at"] = datetime.utcnow().isoformat() + "Z"
+    _operator_state["set_at"] = datetime.now(timezone.utc).isoformat() + "Z"
     logger.warning(f"[Operator] KILL SWITCH {'ENGAGED' if enabled else 'RELEASED'}: {reason}")
     return {"status": "ok", "kill_switch": enabled, "state": _operator_state}
 
@@ -9455,7 +9455,7 @@ class PortfolioImportRequest(BaseModel):
 async def portfolio_import(req: PortfolioImportRequest):
     """Batch-import portfolio holdings — multiple stocks at once."""
     global _user_portfolio
-    now = datetime.utcnow().isoformat() + "Z"
+    now = datetime.now(timezone.utc).isoformat() + "Z"
     enriched = []
     mds = app.state.market_data
     for h in req.holdings:
@@ -9512,7 +9512,7 @@ async def portfolio_from_futu():
                 "unrealized_pnl": p.unrealized_pnl,
                 "pnl_pct": p.unrealized_pnl_pct,
             })
-        now = datetime.utcnow().isoformat() + "Z"
+        now = datetime.now(timezone.utc).isoformat() + "Z"
         _user_portfolio = {
             "holdings": enriched, "source": "futu", "updated_at": now,
             "count": len(enriched),
@@ -9600,179 +9600,8 @@ async def portfolio_advise():
         "portfolio_summary": {"total_value": round(total_value, 2), "total_pnl": round(total_pnl, 2),
                               "holdings_count": len(holdings), "source": _user_portfolio.get("source")},
         "advice": advice_items, "concentration_warnings": concentration_warnings,
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
     }
-
-# ══════════════════════════════════════════════════════════════════════
-# Sprint 45 — Batch Portfolio Import / Futu Sync / Portfolio Advise
-# ══════════════════════════════════════════════════════════════════════
-
-_user_portfolio: dict = {"holdings": [], "source": "manual", "updated_at": ""}
-
-
-class HoldingInput(BaseModel):
-    ticker: str
-    shares: float = 0
-    avg_cost: float = 0
-
-
-class PortfolioImportRequest(BaseModel):
-    holdings: List[HoldingInput]
-    source: str = "manual"
-
-
-@app.post("/api/portfolio/import", tags=["portfolio"])
-async def portfolio_import(req: PortfolioImportRequest):
-    """Batch-import portfolio holdings — multiple stocks at once."""
-    global _user_portfolio
-    now = datetime.utcnow().isoformat() + "Z"
-    enriched = []
-    mds = app.state.market_data
-    for h in req.holdings:
-        t = h.ticker.upper().strip()
-        price = None
-        try:
-            hist = await mds.get_history(t, period="5d", interval="1d")
-            if hist is not None and not hist.empty:
-                c_col = "Close" if "Close" in hist.columns else "close"
-                price = float(hist[c_col].iloc[-1])
-        except Exception:
-            pass
-        enriched.append({
-            "ticker": t,
-            "shares": h.shares,
-            "avg_cost": h.avg_cost,
-            "current_price": price,
-            "market_value": round(price * h.shares, 2) if price else None,
-            "unrealized_pnl": round((price - h.avg_cost) * h.shares, 2) if price and h.avg_cost else None,
-            "pnl_pct": round((price / h.avg_cost - 1) * 100, 2) if price and h.avg_cost else None,
-        })
-    _user_portfolio = {
-        "holdings": enriched,
-        "source": req.source,
-        "updated_at": now,
-        "count": len(enriched),
-    }
-    return _user_portfolio
-
-
-@app.get("/api/portfolio/holdings", tags=["portfolio"])
-async def portfolio_holdings():
-    """Return the currently stored portfolio."""
-    return _user_portfolio
-
-
-@app.get("/api/portfolio/futu", tags=["portfolio"])
-async def portfolio_from_futu():
-    """Auto-fetch positions from Futu OpenD and store as portfolio."""
-    global _user_portfolio
-    try:
-        from src.brokers.futu_broker import FutuBroker
-        fb = FutuBroker()
-        await fb.connect()
-        positions = await fb.get_positions()
-        account = await fb.get_account()
-        await fb.disconnect()
-        enriched = []
-        for p in positions:
-            enriched.append({
-                "ticker": p.ticker, "shares": p.quantity,
-                "avg_cost": p.avg_price, "current_price": p.current_price,
-                "market_value": p.market_value,
-                "unrealized_pnl": p.unrealized_pnl,
-                "pnl_pct": p.unrealized_pnl_pct,
-            })
-        now = datetime.utcnow().isoformat() + "Z"
-        _user_portfolio = {
-            "holdings": enriched, "source": "futu", "updated_at": now,
-            "count": len(enriched),
-            "account": {"portfolio_value": account.portfolio_value,
-                        "cash": account.cash, "buying_power": account.buying_power},
-        }
-        return _user_portfolio
-    except Exception as exc:
-        raise HTTPException(500, f"Futu fetch failed: {exc}") from exc
-
-
-@app.post("/api/portfolio/advise", tags=["portfolio"])
-async def portfolio_advise():
-    """Analyse imported portfolio — expert committee + conformal prediction per holding."""
-    holdings = _user_portfolio.get("holdings", [])
-    if not holdings:
-        raise HTTPException(400, "No portfolio imported. POST /api/portfolio/import first.")
-    mds = app.state.market_data
-    advice_items = []
-    total_value = 0
-    total_pnl = 0
-    for h in holdings:
-        ticker = h["ticker"]
-        mv = h.get("market_value") or 0
-        total_value += mv
-        total_pnl += h.get("unrealized_pnl") or 0
-        verdict_str = "N/A"
-        confidence = 0
-        interval = None
-        try:
-            hist = await mds.get_history(ticker, period="6mo", interval="1d")
-            if hist is not None and not hist.empty:
-                c_col = "Close" if "Close" in hist.columns else "close"
-                close = hist[c_col].values.astype(float)
-                v_col = "Volume" if "Volume" in hist.columns else "volume"
-                volume = hist[v_col].values.astype(float) if v_col in hist.columns else None
-                from src.engines.expert_committee import ExpertCommittee
-                ec = ExpertCommittee()
-                _ind = _compute_indicators(close, volume if volume is not None else np.ones(len(close)))
-                i = len(close) - 1
-                trending = bool(close[i] > _ind["sma50"][i] and _ind["sma50"][i] > _ind["sma200"][i])
-                rsi_val = float(_ind["rsi"][i])
-                vol_r = float(_ind["vol_ratio"][i])
-                atr_p = float(_ind["atr_pct"][i])
-                votes = ec.collect_votes(
-                    regime="UPTREND" if trending else "SIDEWAYS",
-                    rsi=rsi_val, vol_ratio=vol_r, trending=trending,
-                    rr_ratio=2.0, atr_pct=atr_p,
-                )
-                v = ec.deliberate(votes, regime="UPTREND" if trending else "SIDEWAYS")
-                verdict_str = v.direction
-                confidence = v.agreement_ratio
-                cp = ConformalPredictor(confidence_level=0.90)
-                cp.calibrate_from_returns(close, horizon_days=20)
-                interval = cp.predict(float(close[-1]) * 1.05)
-        except Exception:
-            pass
-        pnl_pct = h.get("pnl_pct") or 0
-        if verdict_str == "STRONG_BUY":
-            action, reason = "ADD", "Expert committee strongly bullish"
-        elif verdict_str == "BUY":
-            action, reason = "HOLD / ADD on dip", "Committee bullish"
-        elif verdict_str in ("SELL", "STRONG_SELL"):
-            action, reason = "TRIM / EXIT", "Committee bearish"
-        elif pnl_pct < -15:
-            action, reason = "REVIEW", f"Down {pnl_pct:.1f}%"
-        elif pnl_pct > 50:
-            action, reason = "CONSIDER TRIM", f"Up {pnl_pct:.1f}%"
-        else:
-            action, reason = "HOLD", "Neutral signal"
-        advice_items.append({
-            "ticker": ticker, "shares": h.get("shares"), "market_value": mv,
-            "pnl_pct": pnl_pct, "committee_verdict": verdict_str,
-            "committee_confidence": confidence, "action": action, "reason": reason,
-            "prediction_interval": interval.to_dict() if interval else None,
-        })
-    concentration_warnings = []
-    if total_value > 0:
-        for item in advice_items:
-            w = (item["market_value"] / total_value) * 100
-            item["portfolio_weight_pct"] = round(w, 1)
-            if w > 25:
-                concentration_warnings.append(f"{item['ticker']} is {w:.0f}% — over-concentrated")
-    return {
-        "portfolio_summary": {"total_value": round(total_value, 2), "total_pnl": round(total_pnl, 2),
-                              "holdings_count": len(holdings), "source": _user_portfolio.get("source")},
-        "advice": advice_items, "concentration_warnings": concentration_warnings,
-        "generated_at": datetime.utcnow().isoformat() + "Z",
-    }
-
 
 if __name__ == "__main__":
     start()

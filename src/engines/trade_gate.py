@@ -23,7 +23,7 @@ Soft gates (warn but allow with reduced size):
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -39,7 +39,7 @@ class GateResult:
 
     def __post_init__(self):
         if not self.gate_timestamp:
-            self.gate_timestamp = datetime.utcnow().isoformat() + "Z"
+            self.gate_timestamp = datetime.now(timezone.utc).isoformat() + "Z"
 
     def to_dict(self) -> dict:
         return {

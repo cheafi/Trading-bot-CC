@@ -19,7 +19,7 @@ sizing, and "should we even be trading?" decisions.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 @dataclass
@@ -47,7 +47,7 @@ class CrossAssetReport:
 
     def __post_init__(self):
         if not self.generated_at:
-            self.generated_at = datetime.utcnow().isoformat() + "Z"
+            self.generated_at = datetime.now(timezone.utc).isoformat() + "Z"
 
     def to_dict(self) -> dict:
         return {

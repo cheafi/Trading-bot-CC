@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -113,7 +113,7 @@ class DecisionJournal:
         self._counter += 1
         entry = JournalEntry(
             entry_id=f"DJ-{self._counter:06d}",
-            timestamp=datetime.utcnow().isoformat() + "Z",
+            timestamp=datetime.now(timezone.utc).isoformat() + "Z",
             ticker=ticker,
             decision=decision,
             price=price,
