@@ -36,7 +36,7 @@ jobs:
     - name: Verify imports
       run: python -c "from src.api.main import app; print('OK')"
     - name: Run sprint tests
-      run: python -m pytest test_sprint45.py test_sprint46.py test_sprint47.py test_sprint48.py test_sprint55.py -v --tb=short
+      run: python -m pytest test_sprint45.py test_sprint46.py test_sprint47.py test_sprint48.py test_sprint55.py test_sprint56.py -v --tb=short
 
   syntax-check:
     runs-on: ubuntu-latest

@@ -6,14 +6,23 @@ from datetime import datetime
 
 # ── 1. API endpoint registration ──────────────────────────────────────
 
+
+def _read_all_api_source():
+    """Read main.py + all router files as combined source."""
+    import glob
+    src = ""
+    for p in ["src/api/main.py"] + glob.glob("src/api/routers/*.py"):
+        with open(p) as f:
+            src += f.read()
+    return src
+
 class TestPortfolioEndpointsExist:
     """Verify Sprint 45 routes are registered."""
 
     def _routes(self):
         import importlib, sys
         # We can't easily start the full app, so check source
-        with open("src/api/main.py") as f:
-            src = f.read()
+        src = _read_all_api_source()
         return src
 
     def test_import_endpoint(self):
@@ -39,14 +48,12 @@ class TestPydanticModels:
     """HoldingInput and PortfolioImportRequest parse correctly."""
 
     def test_holding_input_in_source(self):
-        with open("src/api/main.py") as f:
-            src = f.read()
+        src = _read_all_api_source()
         assert "class HoldingInput" in src
         assert "class PortfolioImportRequest" in src
 
     def test_holding_fields(self):
-        with open("src/api/main.py") as f:
-            src = f.read()
+        src = _read_all_api_source()
         assert "ticker: str" in src
         assert "shares: float" in src
         assert "avg_cost: float" in src
@@ -56,8 +63,7 @@ class TestPydanticModels:
 
 class TestPortfolioStore:
     def test_user_portfolio_initial(self):
-        with open("src/api/main.py") as f:
-            src = f.read()
+        src = _read_all_api_source()
         assert '_user_portfolio' in src
         assert '"holdings": []' in src
 
@@ -73,8 +79,7 @@ class TestFutuBrokerIntegration:
         assert "get_account" in src
 
     def test_futu_endpoint_uses_broker(self):
-        with open("src/api/main.py") as f:
-            src = f.read()
+        src = _read_all_api_source()
         assert "from src.brokers.futu_broker import FutuBroker" in src
 
 
@@ -82,25 +87,21 @@ class TestFutuBrokerIntegration:
 
 class TestAdviseLogic:
     def test_advise_uses_expert_committee(self):
-        with open("src/api/main.py") as f:
-            src = f.read()
+        src = _read_all_api_source()
         assert "ExpertCommittee" in src
         assert "ec.collect_votes" in src or "collect_votes" in src
 
     def test_advise_uses_conformal(self):
-        with open("src/api/main.py") as f:
-            src = f.read()
+        src = _read_all_api_source()
         assert "ConformalPredictor" in src
 
     def test_concentration_check(self):
-        with open("src/api/main.py") as f:
-            src = f.read()
+        src = _read_all_api_source()
         assert "concentration_warnings" in src
         assert "over-concentrated" in src
 
     def test_action_categories(self):
-        with open("src/api/main.py") as f:
-            src = f.read()
+        src = _read_all_api_source()
         for action in ["ADD", "HOLD", "TRIM / EXIT", "REVIEW", "CONSIDER TRIM"]:
             assert action in src
 
@@ -193,8 +194,7 @@ class TestScenarioStillWorks:
 class TestE2EFlow:
     def test_import_then_advise_flow_exists(self):
         """Verify the import → advise flow is wired."""
-        with open("src/api/main.py") as f:
-            src = f.read()
+        src = _read_all_api_source()
         # Import stores to _user_portfolio
         assert "global _user_portfolio" in src
         # Advise reads from _user_portfolio

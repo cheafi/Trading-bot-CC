@@ -19,32 +19,40 @@ import pytest
 SRC = pathlib.Path(__file__).resolve().parent / "src"
 MAIN = SRC / "api" / "main.py"
 MAIN_SRC = MAIN.read_text()
+ALL_ROUTER_SRC = ""
+for rf in (SRC / "api" / "routers").glob("*.py"):
+    ALL_ROUTER_SRC += rf.read_text()
+
 
 # ── 1. Duplicate removal ────────────────────────────────────────────
 
 
 class TestDuplicateRemoval:
-    """The duplicate portfolio block (lines 9606-9776) should be gone."""
+    """Portfolio functions should be defined exactly once (main or router)."""
 
     def test_portfolio_import_defined_once(self):
-        matches = re.findall(r"async def portfolio_import\(", MAIN_SRC)
-        assert len(matches) == 1, f"portfolio_import defined {len(matches)} times"
+        combined = MAIN_SRC + ALL_ROUTER_SRC
+        matches = re.findall(r"async def portfolio_import\(", combined)
+        assert len(matches) == 1
 
     def test_portfolio_holdings_defined_once(self):
-        matches = re.findall(r"async def portfolio_holdings\(", MAIN_SRC)
-        assert len(matches) == 1, f"portfolio_holdings defined {len(matches)} times"
+        combined = MAIN_SRC + ALL_ROUTER_SRC
+        matches = re.findall(r"async def portfolio_holdings\(", combined)
+        assert len(matches) == 1
 
     def test_portfolio_from_futu_defined_once(self):
-        matches = re.findall(r"async def portfolio_from_futu\(", MAIN_SRC)
-        assert len(matches) == 1, f"portfolio_from_futu defined {len(matches)} times"
+        combined = MAIN_SRC + ALL_ROUTER_SRC
+        matches = re.findall(r"async def portfolio_from_futu\(", combined)
+        assert len(matches) == 1
 
     def test_portfolio_advise_defined_once(self):
-        matches = re.findall(r"async def portfolio_advise\(", MAIN_SRC)
-        assert len(matches) == 1, f"portfolio_advise defined {len(matches)} times"
+        combined = MAIN_SRC + ALL_ROUTER_SRC
+        matches = re.findall(r"async def portfolio_advise\(", combined)
+        assert len(matches) == 1
 
     def test_main_py_line_count_reduced(self):
         lines = MAIN_SRC.count("\n")
-        assert lines < 9700, f"main.py has {lines} lines (expected <9700)"
+        assert lines < 9700
 
 
 # ── 2. utcnow() deprecation fix ─────────────────────────────────────
@@ -59,13 +67,12 @@ class TestUtcnowRemoval:
             for i, ln in enumerate(MAIN_SRC.splitlines())
             if "datetime.utcnow()" in ln
         ]
-        assert not hits, f"datetime.utcnow() found on lines {hits}"
+        assert not hits, f"datetime.utcnow() on lines {hits}"
 
     def test_no_utcnow_in_engines(self):
         bad = []
         for f in (SRC / "engines").glob("*.py"):
-            txt = f.read_text()
-            if "datetime.utcnow()" in txt:
+            if "datetime.utcnow()" in f.read_text():
                 bad.append(f.name)
         assert not bad, f"datetime.utcnow() still in: {bad}"
 
@@ -75,10 +82,9 @@ class TestUtcnowRemoval:
 
     def test_timezone_imported_in_main(self):
         assert "from datetime import" in MAIN_SRC
-        # find the datetime import line(s)
         for line in MAIN_SRC.splitlines():
             if line.startswith("from datetime import"):
-                assert "timezone" in line, "timezone not in datetime import"
+                assert "timezone" in line
                 break
 
 
@@ -87,7 +93,11 @@ class TestUtcnowRemoval:
 
 class TestTodoCleanup:
     def test_no_todo_comments_in_main(self):
-        hits = [i + 1 for i, l in enumerate(MAIN_SRC.splitlines()) if "# TODO:" in l]
+        hits = [
+            i + 1
+            for i, ln in enumerate(MAIN_SRC.splitlines())
+            if "# TODO:" in ln
+        ]
         assert not hits, f"# TODO: on lines {hits}"
 
 
