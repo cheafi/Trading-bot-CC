@@ -5,9 +5,9 @@ Sprint 50 Tests — Position Sizing, Concentration Risk, Trade Gate, Decision Jo
 """
 
 import sys
-import os
-import pytest
+
 import httpx
+import pytest
 
 # Ensure /tmp/cc_temp is importable
 sys.path.insert(0, "/tmp/cc_temp")
@@ -95,10 +95,7 @@ class TestPositionSizer:
 # 2. Correlation Risk Engine unit tests
 # ═══════════════════════════════════════════════════════════════════
 
-from src.engines.correlation_risk import (
-    CorrelationRiskEngine,
-    get_sector,
-)
+from src.engines.correlation_risk import CorrelationRiskEngine, get_sector
 
 
 class TestCorrelationRisk:
@@ -178,7 +175,7 @@ class TestCorrelationRisk:
 # 3. Trade Gate unit tests
 # ═══════════════════════════════════════════════════════════════════
 
-from src.engines.trade_gate import TradeGate, GateResult
+from src.engines.trade_gate import TradeGate
 
 
 class TestTradeGate:

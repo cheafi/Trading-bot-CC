@@ -9783,6 +9783,9 @@ from src.engines.position_sizer import PositionSizer
 from src.engines.correlation_risk import CorrelationRiskEngine
 from src.engines.trade_gate import TradeGate
 from src.engines.decision_journal import DecisionJournal
+from src.engines.market_intel import MarketIntelEngine
+from src.engines.risk_scorecard import RiskScorecardEngine
+from src.engines.watchlist_intel import WatchlistIntelEngine
 
 _signal_decay = SignalDecayTracker()
 _learning_loop = LearningLoopPipeline()
@@ -9792,6 +9795,11 @@ _position_sizer = PositionSizer(equity=100_000)
 _correlation_risk = CorrelationRiskEngine()
 _trade_gate = TradeGate()
 _decision_journal = DecisionJournal()
+
+# Sprint 51 — Market Intel, Risk Scorecard, Watchlist Intel
+_market_intel = MarketIntelEngine()
+_risk_scorecard = RiskScorecardEngine()
+_watchlist_intel = WatchlistIntelEngine()
 
 
 @app.get("/api/v6/signal-decay", tags=["analytics"],
@@ -10003,4 +10011,123 @@ async def decision_journal_record(
         setup_grade=setup_grade,
     )
     return {"recorded": True, "entry_id": entry.entry_id}
+
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Sprint 51 — Market Intel, Risk Scorecard, Watchlist Intelligence
+# ══════════════════════════════════════════════════════════════════════
+
+
+@app.get("/api/v6/market-intel", tags=["v6-intel"])
+async def market_intel_endpoint(
+    ticker: str = "AAPL",
+    _: bool = Depends(verify_api_key),
+):
+    """Multi-dimensional market intelligence for a ticker."""
+    try:
+        q_resp = await live_quote(ticker)
+        q = q_resp.get("quote", {})
+        price = q.get("price", 0)
+        rsi = q.get("rsi", 50)
+        vol_ratio = q.get("volume_ratio", 1.0)
+        above_sma20 = q.get("above_sma20", False)
+        above_sma50 = q.get("above_sma50", False)
+        change_pct = q.get("change_pct", 0)
+        sb = app.state.scoreboard
+        regime = sb.regime_label if hasattr(sb, "regime_label") else "UNKNOWN"
+        report = _market_intel.analyse(
+            ticker=ticker, price=price, rsi=rsi,
+            volume_ratio=vol_ratio, above_sma20=above_sma20,
+            above_sma50=above_sma50, regime=regime,
+            change_pct=change_pct,
+        )
+        return {
+            "ticker": report.ticker,
+            "fusion_score": report.fusion_score,
+            "fusion_confidence": report.fusion_confidence,
+            "dominant_theme": report.dominant_theme,
+            "agreement_ratio": report.agreement_ratio,
+            "signal_count": report.signal_count,
+            "bullish_signals": report.bullish_signals,
+            "bearish_signals": report.bearish_signals,
+            "neutral_signals": report.neutral_signals,
+            "generated_at": report.generated_at,
+        }
+    except Exception as exc:
+        return {
+            "ticker": ticker,
+            "error": str(exc),
+            "fusion_score": 0,
+            "signal_count": 0,
+        }
+
+
+@app.get("/api/v6/risk-scorecard", tags=["v6-risk"])
+async def risk_scorecard_endpoint(
+    drawdown_pct: float = 0.0,
+    portfolio_heat_pct: float = 0.0,
+    open_positions: int = 0,
+    hhi_score: float = 0.0,
+    concentration_grade: str = "A",
+    vix: float = 20.0,
+    regime: str = "UNKNOWN",
+    _: bool = Depends(verify_api_key),
+):
+    """Unified risk scorecard combining all risk dimensions."""
+    result = _risk_scorecard.evaluate(
+        drawdown_pct=drawdown_pct,
+        portfolio_heat_pct=portfolio_heat_pct,
+        open_positions=open_positions,
+        hhi_score=hhi_score,
+        concentration_grade=concentration_grade,
+        vix=vix,
+        regime=regime,
+    )
+    return result.to_dict()
+
+
+@app.get("/api/v6/watchlist", tags=["v6-intel"])
+async def watchlist_endpoint(
+    top_n: int = 20,
+    urgency: str = "",
+    _: bool = Depends(verify_api_key),
+):
+    """Get ranked intelligent watchlist."""
+    items = _watchlist_intel.ranked(
+        top_n=top_n,
+        urgency_filter=urgency if urgency else None,
+    )
+    stats = _watchlist_intel.stats()
+    return {"items": items, "stats": stats}
+
+
+@app.post("/api/v6/watchlist/add", tags=["v6-intel"])
+async def watchlist_add_endpoint(
+    ticker: str = "AAPL",
+    score: float = 0.5,
+    direction: str = "LONG",
+    setup_grade: str = "C",
+    why_now: str = "",
+    regime: str = "UNKNOWN",
+    price: float = 0.0,
+    _: bool = Depends(verify_api_key),
+):
+    """Add a ticker to the intelligent watchlist."""
+    item = _watchlist_intel.add(
+        ticker=ticker, score=score, direction=direction,
+        setup_grade=setup_grade, why_now=why_now,
+        regime=regime, price=price,
+    )
+    return {"added": True, "ticker": ticker, "urgency": item.urgency}
+
+
+@app.delete("/api/v6/watchlist/{ticker}", tags=["v6-intel"])
+async def watchlist_remove_endpoint(
+    ticker: str,
+    _: bool = Depends(verify_api_key),
+):
+    """Remove a ticker from the watchlist."""
+    removed = _watchlist_intel.remove(ticker)
+    return {"removed": removed, "ticker": ticker}
 
