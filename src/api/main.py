@@ -7143,26 +7143,71 @@ async def regime_screener_data():
                 elif rsi > SIGNAL_THRESHOLDS.rsi_near_overbought:
                     reasons.append(f"RSI strong {rsi:.0f}")
 
-                return {
-                    "ticker": sym,
-                    "engine": "screener_fallback",
-                    "score": round(score, 2),
-                    "direction": direction,
-                    "entry": round(price, 2),
-                    "stop": stop,
-                    "tp1": tp1,
-                    "tp2": round(tp1 + atr_est * 2, 2),
-                    "rr": rr,
-                    "confidence": int(score * 100),
-                    "ev": round(score * rr * 0.3, 2),
-                    "why": ". ".join(reasons) if reasons else "Regime-aligned",
-                    "risks": [],
-                    "change_pct": round(change_pct, 2),
-                    "rsi": round(rsi, 1),
-                    "volume_ratio": round(vol_ratio, 2),
-                    "sector": "",
-                    "source": "live_quote_fallback",
-                }
+                    # ── RSI sanity gates (Sprint 49) ──
+                    extension_warning = ""
+                    if rsi > 80:
+                        score = max(score - 0.25, 0.15)
+                        extension_warning = f"RSI {rsi:.0f} EXTENDED"
+                        direction = "FLAT"
+                    elif rsi > 70:
+                        score = max(score - 0.10, 0.20)
+                        extension_warning = f"RSI {rsi:.0f} overbought"
+
+                    # ── Setup quality grade ──
+                    if score >= 0.75 and rr >= 2.0:
+                        setup_grade = "A"
+                    elif score >= 0.60 and rr >= 1.5:
+                        setup_grade = "B"
+                    elif score >= 0.45:
+                        setup_grade = "C"
+                    else:
+                        setup_grade = "D"
+
+                    # ── Evidence FOR / AGAINST ──
+                    evidence_for = list(reasons)
+                    evidence_against = []
+                    if rsi > 70:
+                        evidence_against.append(f"RSI overbought ({rsi:.0f})")
+                    if rsi > 80:
+                        evidence_against.append("Extremely extended")
+                    if vol_ratio < 0.7:
+                        evidence_against.append(f"Low volume ({vol_ratio:.1f}x)")
+                    if rr < 1.5:
+                        evidence_against.append(f"R:R {rr:.1f} below min")
+                    if not above_sma20:
+                        evidence_against.append("Below SMA20")
+
+                    invalidation = (
+                        f"Close below ${stop:.2f}"
+                        if direction == "LONG"
+                        else f"Close above ${stop:.2f}"
+                    )
+
+                    return {
+                        "ticker": sym,
+                        "engine": "screener_fallback",
+                        "score": round(score, 2),
+                        "direction": direction,
+                        "entry": round(price, 2),
+                        "stop": stop,
+                        "tp1": tp1,
+                        "tp2": round(tp1 + atr_est * 2, 2),
+                        "rr": rr,
+                        "confidence": int(score * 100),
+                        "ev": round(score * rr * 0.3, 2),
+                        "why": ". ".join(reasons) if reasons else "Regime-aligned",
+                        "risks": [extension_warning] if extension_warning else [],
+                        "change_pct": round(change_pct, 2),
+                        "rsi": round(rsi, 1),
+                        "volume_ratio": round(vol_ratio, 2),
+                        "sector": "",
+                        "source": "live_quote_fallback",
+                        "setup_grade": setup_grade,
+                        "evidence_for": evidence_for,
+                        "evidence_against": evidence_against,
+                        "invalidation": invalidation,
+                        "is_fallback": True,
+                    }
             except Exception:
                 return None
 
@@ -7175,11 +7220,62 @@ async def regime_screener_data():
         results = await asyncio.gather(
             *[_limited(s) for s in universe],
         )
-        candidates = sorted(
+        raw_candidates = sorted(
             [r for r in results if r is not None and r["score"] > 0.4],
             key=lambda x: x["score"],
             reverse=True,
         )[:20]
+
+        # ── Expert Committee enrichment (Sprint 49) ──
+        from src.engines.expert_committee import ExpertCommittee as _ECfb
+        _ec_fb = _ECfb()
+        for c in raw_candidates:
+            try:
+                _rsi = c.get("rsi", 50)
+                _vr = c.get("volume_ratio", 1.0)
+                _trending = (
+                    c.get("direction") == "LONG" and _rsi > 40
+                )
+                _entry = c.get('entry', 0)
+                _stop = c.get('stop', 0)
+                _atr_p = (
+                    abs(_entry - _stop) / _entry / 2
+                    if _entry > 0 else 0.02
+                )
+                _rlbl = regime_label or 'SIDEWAYS'
+                votes = _ec_fb.collect_votes(
+                    regime=_rlbl, rsi=_rsi,
+                    vol_ratio=_vr,
+                    trending=_trending,
+                    rr_ratio=c.get('rr', 1.5),
+                    atr_pct=_atr_p,
+                    vix=sb.risk_on_score / 3.5,
+                )
+                vd = _ec_fb.deliberate(
+                    votes, regime=_rlbl,
+                ).to_dict()
+                c['committee'] = {
+                    "direction": vd.get("direction"),
+                    "conviction": round(
+                        vd.get("composite_conviction", 0), 1,
+                    ),
+                    "agreement": round(
+                        vd.get("agreement_ratio", 0), 2,
+                    ),
+                    "dominant_risk": vd.get("dominant_risk"),
+                    "summary": vd.get("verdict_summary"),
+                    "dissent_count": len(
+                        vd.get("dissenting_views", [])
+                    ),
+                }
+            except Exception:
+                c['committee'] = None
+
+        candidates = sorted(
+            raw_candidates,
+            key=lambda x: x.get("score", 0),
+            reverse=True,
+        )
 
     data_source = "engine_cache" if real_recs else "live_quote_fallback"
 
@@ -7203,6 +7299,24 @@ async def regime_screener_data():
         "candidates": candidates,
         "universe_size": len(real_recs) if real_recs else 18,
         "candidate_count": len(candidates),
+        "actionable_count": len(
+            [c for c in candidates
+             if c.get("direction") not in ("FLAT", "ABSTAIN")
+             and c.get("setup_grade", "D") in ("A", "B")]
+        ),
+        "selectivity": {
+            "total_scanned": len(real_recs) if real_recs else 18,
+            "passed_filters": len(candidates),
+            "extended_count": len(
+                [c for c in candidates if c.get("rsi", 0) > 80]
+            ),
+        },
+        "warnings": [
+            w for w in [
+                ("Running on fallback scoring"
+                 if not real_recs else None),
+            ] if w is not None
+        ],
         "trust": {
             "mode": "PAPER" if engine else "SYNTHETIC",
             "source": data_source,
@@ -9660,6 +9774,56 @@ if __name__ == "__main__":
     start()
 
 # ── Sprint 47: MetaEnsemble + TrustMetadata endpoints ────
+
+# ═══ Signal Decay + Learning Loop (Sprint 49) ═══
+
+from src.engines.signal_decay import SignalDecayTracker
+from src.engines.learning_loop import LearningLoopPipeline
+
+_signal_decay = SignalDecayTracker()
+_learning_loop = LearningLoopPipeline()
+
+
+@app.get("/api/v6/signal-decay", tags=["analytics"],
+         summary="Signal freshness tracking")
+async def signal_decay_summary():
+    return _signal_decay.summary()
+
+
+@app.get("/api/v6/signal-decay/active", tags=["analytics"])
+async def signal_decay_active():
+    return {"signals": _signal_decay.active_signals()}
+
+
+@app.post("/api/v6/learning-loop/record", tags=["analytics"],
+          summary="Record closed trade for learning")
+async def learning_loop_record(request: Request):
+    body = await request.json()
+    result = _learning_loop.record_closed_trade(
+        ticker=body["ticker"],
+        direction=body.get("direction", "LONG"),
+        entry_price=body["entry_price"],
+        exit_price=body["exit_price"],
+        entry_time=body.get("entry_time", ""),
+        exit_time=body.get("exit_time", ""),
+        strategy_id=body.get("strategy_id", "manual"),
+        regime_at_entry=body.get("regime", ""),
+        setup_grade=body.get("setup_grade", "C"),
+        component_scores=body.get("component_scores"),
+    )
+    return result
+
+
+@app.get("/api/v6/learning-loop", tags=["analytics"],
+         summary="Learning loop summary")
+async def learning_loop_summary():
+    return _learning_loop.summary()
+
+
+@app.get("/api/v6/learning-loop/trades", tags=["analytics"])
+async def learning_loop_trades(limit: int = 50):
+    return {"trades": _learning_loop.get_trade_log(limit)}
+
 
 @app.get("/api/v6/meta-ensemble", tags=["analytics"])
 async def api_meta_ensemble():
