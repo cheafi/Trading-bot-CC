@@ -1,5 +1,5 @@
 """Sprint 48 tests — CI fix, dashboard upgrade, Discord alignment, Futu options."""
-import pathlib, importlib, types, re, sys, os
+import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent
 
@@ -108,6 +108,10 @@ def test_api_swing_endpoints():
 
 def test_api_analytics_endpoints():
     src = (ROOT / "src" / "api" / "main.py").read_text()
+    # Also check routers (Sprint 54 extraction)
+    router_path = ROOT / "src" / "api" / "routers" / "intel.py"
+    if router_path.exists():
+        src += router_path.read_text()
     for ep in ["/api/v6/meta-ensemble", "/api/v6/trust-card/", "/api/v6/model-version"]:
         assert ep in src, f"Missing endpoint {ep}"
 
