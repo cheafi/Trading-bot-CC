@@ -281,20 +281,20 @@ class TestConfidenceCalibrator:
 class TestAPISprint52:
     def test_main_imports_expert_tracker(self):
         import importlib
-        mod = importlib.import_module("src.api.main")
+        mod = importlib.import_module("src.api.routers.intel")
         assert hasattr(mod, "_expert_tracker")
 
     def test_main_imports_regime_filter(self):
         import importlib
-        mod = importlib.import_module("src.api.main")
+        mod = importlib.import_module("src.api.routers.intel")
         assert hasattr(mod, "_regime_filter")
 
     def test_main_imports_cross_asset_monitor(self):
         import importlib
-        mod = importlib.import_module("src.api.main")
+        mod = importlib.import_module("src.api.routers.intel")
         assert hasattr(mod, "_cross_asset_monitor")
 
     def test_main_imports_confidence_calibrator(self):
         import importlib
-        mod = importlib.import_module("src.api.main")
+        mod = importlib.import_module("src.api.routers.intel")
         assert hasattr(mod, "_confidence_calibrator")

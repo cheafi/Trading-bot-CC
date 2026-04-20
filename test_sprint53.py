@@ -213,11 +213,11 @@ class TestAPISprint53:
     def test_main_has_portfolio_risk_budget(self):
         import importlib
 
-        mod = importlib.import_module("src.api.main")
+        mod = importlib.import_module("src.api.routers.intel")
         assert hasattr(mod, "_portfolio_risk_budget")
 
     def test_main_has_professional_kpi(self):
         import importlib
 
-        mod = importlib.import_module("src.api.main")
+        mod = importlib.import_module("src.api.routers.intel")
         assert hasattr(mod, "_professional_kpi")
