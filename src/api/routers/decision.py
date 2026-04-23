@@ -257,8 +257,31 @@ async def today_summary(request: Request):
         tradeability = "WAIT"
         trade_summary = "No high-conviction setups today. Watch only."
 
+    # 8. What Changed (compare to yesterday-like heuristics)
+    what_changed = []
+    if regime_label == "RISK_OFF":
+        what_changed.append("Regime shifted to RISK_OFF — defensive posture")
+    if actionable >= 5:
+        what_changed.append(f"{actionable} signals above 7.0 — opportunity cluster")
+    if best_family:
+        what_changed.append(f"Best setup family: {best_family}")
+    for sig in ranked[:3]:
+        t = sig.get("ticker", "?")
+        s = sig.get("score", 0)
+        what_changed.append(f"{t} scored {s:.1f} — top of today's board")
+
+    # 9. Event risk (basic — earnings proximity, VIX, etc.)
+    event_risks = []
+    vix_level = getattr(regime_state, "vix", None)
+    if vix_level and vix_level > 25:
+        event_risks.append(f"VIX at {vix_level:.0f} — elevated fear")
+    if not should_trade:
+        event_risks.append("Regime guard active — no new entries")
+
+    now = datetime.now(timezone.utc)
+
     return {
-        "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "date": now.strftime("%Y-%m-%d"),
         "market_regime": {
             "label": regime_label,
             "risk_state": risk_state,
@@ -266,12 +289,23 @@ async def today_summary(request: Request):
             "confidence": round(confidence, 2),
             "tradeability": tradeability,
             "summary": trade_summary,
+            "trend": getattr(regime_state, "trend", "UNKNOWN"),
+            "volatility": getattr(regime_state, "volatility", "NORMAL"),
+            "score": getattr(regime_state, "score", 50),
         },
         "top_5": top5,
         "filter_funnel": funnel,
         "best_setup_family": best_family,
         "avoid": avoid,
-        "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
+        "what_changed": what_changed,
+        "event_risks": event_risks,
+        "trust": {
+            "mode": "LIVE" if should_trade else "PAPER",
+            "source": "decision_engine",
+            "freshness": "REAL_TIME",
+            "as_of": now.isoformat() + "Z",
+        },
+        "generated_at": now.isoformat() + "Z",
     }
 
 

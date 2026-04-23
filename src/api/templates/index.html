@@ -97,7 +97,9 @@
     <div class="trust-strip" x-show="live">
       <span :style="trust.mode==='SYNTHETIC'?'color:var(--amber)':trust.mode==='PAPER'?'color:var(--blue)':'color:var(--green)'" x-text="'● '+(trust.mode||'LIVE')"></span>
       <span x-text="'Source: '+(trust.source||'market_data_service')"></span>
+      <span x-text="'Freshness: REAL_TIME'"></span>
       <span x-text="'As-of: '+(trust.as_of?trust.as_of.slice(0,19):'—')"></span>
+      <span :style="today7.tradeability==='TRADE'?'color:var(--green)':today7.tradeability==='NO_TRADE'?'color:var(--red)':'color:var(--amber)'" x-text="today7.tradeability?'Trade: '+today7.tradeability:''"></span>
     </div>
 
     <!-- ══════ ERROR / LOADING BANNER ══════ -->
@@ -108,7 +110,13 @@
 
     <!-- ══════ TAB BAR ══════ -->
     <div class="tab-bar">
-      <template x-for="t in tabs"><button class="tab-btn" :class="tab===t.id?'on':''" @click="switchTab(t.id)" x-text="t.icon+' '+t.label"></button></template>
+      <template x-for="t in tabs"><button class="tab-btn" :class="tab===t.id?'on':''" @click="showMore=false;switchTab(t.id)" x-text="t.icon+' '+t.label"></button></template>
+      <div style="position:relative;margin-left:auto">
+        <button class="tab-btn" :class="moreTabs.some(t=>t.id===tab)?'on':''" @click="showMore=!showMore" x-text="moreTabs.some(t=>t.id===tab)?moreTabs.find(t=>t.id===tab).icon+' '+moreTabs.find(t=>t.id===tab).label:'⋯ More'"></button>
+        <div x-show="showMore" @click.outside="showMore=false" style="position:absolute;right:0;top:100%;z-index:50;background:var(--s1);border:1px solid var(--bd2);border-radius:8px;padding:4px;min-width:160px;box-shadow:0 8px 24px rgba(0,0,0,.5)">
+          <template x-for="t in moreTabs"><button style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;color:var(--t2);font-size:11px;font-weight:600;cursor:pointer;border-radius:6px" @mouseenter="$el.style.background='var(--s2)'" @mouseleave="$el.style.background='none'" :style="tab===t.id?'color:var(--t1);background:var(--s2)':''" @click="showMore=false;switchTab(t.id)" x-text="t.icon+' '+t.label"></button></template>
+        </div>
+      </div>
     </div>
 
     <!-- ═══════════════════════════════════════════════════════ -->
@@ -128,6 +136,7 @@
             <span class="pill pb text-[8px]" x-text="'Trend: '+(today7.regime.trend||'—')"></span>
             <span class="pill pb text-[8px]" x-text="'Vol: '+(today7.regime.volatility||'—')"></span>
             <template x-if="today7.regime.score!=null"><span class="pill mono text-[8px]" :class="today7.regime.score>=60?'pg':today7.regime.score>=40?'pa':'pr'" x-text="'Score: '+today7.regime.score"></span></template>
+            <template x-if="today7.regime.confidence!=null"><span class="pill mono text-[8px] pp" x-text="'Conf: '+(today7.regime.confidence*100).toFixed(0)+'%'"></span></template>
           </div>
         </div>
       </template>
@@ -137,11 +146,11 @@
         <div style="padding:8px 12px">
           <div class="section-hdr" style="margin:0 0 6px">🔽 Filter Funnel</div>
           <div style="display:flex;gap:4px;align-items:end">
-            <template x-for="(step, i) in ['universe','triggered','score_gte_6','score_gte_7','score_gte_8']">
+            <template x-for="(step, i) in ['universe','signals_triggered','score_above_6','actionable_above_7']">
               <div style="flex:1;text-align:center">
                 <div class="text-sm font-bold mono" :class="i>=3?'text-green-400':i>=2?'text-amber-300':'text-white'" x-text="today7.filter_funnel[step]!=null?today7.filter_funnel[step]:'—'"></div>
                 <div :style="'height:'+Math.max(4,Math.min(40,(today7.filter_funnel[step]||0)/(today7.filter_funnel.universe||1)*40))+'px;background:var(--'+(i>=3?'green':i>=2?'amber':'blue')+');border-radius:3px;margin:4px auto;width:80%'"></div>
-                <div class="text-[8px]" style="color:var(--t3)" x-text="['Universe','Triggered','≥6','≥7','≥8'][i]"></div>
+                <div class="text-[8px]" style="color:var(--t3)" x-text="['Universe','Triggered','≥6','≥7'][i]"></div>
               </div>
             </template>
           </div>
@@ -166,10 +175,10 @@
                 <span class="font-bold" :style="'color:var(--'+(opp.action==='BUY'||opp.action==='STRONG BUY'?'green':opp.action==='AVOID'?'red':'amber')+')'" x-text="opp.action||'—'"></span>
               </div>
               <template x-if="opp.why_now">
-                <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'✅ '+opp.why_now"></div>
+                <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'✅ '+(Array.isArray(opp.why_now)?opp.why_now.join(' · '):opp.why_now)"></div>
               </template>
               <template x-if="opp.why_not">
-                <div class="text-[9px]" style="color:var(--amber);line-height:1.4" x-text="'⚠️ '+opp.why_not"></div>
+                <div class="text-[9px]" style="color:var(--amber);line-height:1.4" x-text="'⚠️ '+(Array.isArray(opp.why_not)?opp.why_not.join(' · '):opp.why_not)"></div>
               </template>
             </div>
           </template>
@@ -189,8 +198,45 @@
           <div class="section-hdr" style="margin:0 0 4px">🚫 Avoid Today</div>
           <div class="flex gap-2 flex-wrap">
             <template x-for="a in today7.avoid_list">
-              <span class="pill pr text-[9px]" x-text="a.ticker+' — '+(a.reason||'')"></span>
+              <span class="pill pr text-[9px]" x-text="(a.ticker||'')+' '+(a.reason||a)"></span>
             </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- ── What Changed ── -->
+      <template x-if="today7.what_changed && today7.what_changed.length > 0">
+        <div style="padding:0 12px;margin-top:10px">
+          <div class="section-hdr" style="margin:0 0 4px">⚡ What Changed</div>
+          <div class="card card-p" style="padding:10px;border-left:3px solid var(--blue)">
+            <template x-for="c in today7.what_changed">
+              <div class="text-[10px] py-0.5" style="color:var(--t2);line-height:1.4" x-text="'→ '+c"></div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- ── Event Risk ── -->
+      <template x-if="today7.event_risks && today7.event_risks.length > 0">
+        <div style="padding:0 12px;margin-top:8px">
+          <div class="section-hdr" style="margin:0 0 4px">🚨 Event Risk</div>
+          <div class="card card-p" style="padding:10px;border-left:3px solid var(--red)">
+            <template x-for="e in today7.event_risks">
+              <div class="text-[10px] py-0.5" style="color:var(--red);line-height:1.4" x-text="'⚠ '+e"></div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- ── Best Setup Family ── -->
+      <template x-if="today7.best_family">
+        <div style="padding:0 12px;margin-top:8px">
+          <div class="card card-p" style="padding:10px;display:flex;align-items:center;gap:8px">
+            <span style="font-size:16px">🏆</span>
+            <div>
+              <div class="text-[9px] font-bold uppercase" style="color:var(--t3)">Best Setup Family Today</div>
+              <div class="text-[12px] font-bold text-white" x-text="today7.best_family"></div>
+            </div>
           </div>
         </div>
       </template>
@@ -271,10 +317,10 @@
                   <template x-if="r.position_hint"><span style="color:var(--purple)" x-text="'💰 '+r.position_hint"></span></template>
                 </div>
                 <template x-if="r.why_now">
-                  <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'✅ Why now: '+r.why_now"></div>
+                  <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'✅ '+(Array.isArray(r.why_now)?r.why_now.join(' · '):r.why_now)"></div>
                 </template>
                 <template x-if="r.why_not">
-                  <div class="text-[9px]" style="color:var(--amber);line-height:1.4" x-text="'⚠️ Risk: '+r.why_not"></div>
+                  <div class="text-[9px]" style="color:var(--amber);line-height:1.4" x-text="'⚠️ '+(Array.isArray(r.why_not)?r.why_not.join(' · '):r.why_not)"></div>
                 </template>
                 <template x-if="r.invalidation">
                   <div class="text-[9px]" style="color:var(--red);line-height:1.4" x-text="'❌ Invalid if: '+r.invalidation"></div>
@@ -1200,16 +1246,19 @@
     function cc(){return{
       tab:'today',
       tabs:[
-        {id:'today',icon:'🎯',label:'Today'},
+        {id:'today',icon:'🎯',label:'Playbook'},
         {id:'signals',icon:'📊',label:'Board'},
         {id:'dossier',icon:'🔍',label:'Dossier'},
         {id:'brief',icon:'📋',label:'Brief'},
+      ],
+      moreTabs:[
         {id:'options',icon:'🔮',label:'Options'},
         {id:'track',icon:'🔬',label:'Track Record'},
         {id:'timetravel',icon:'⏰',label:'Time Travel'},
         {id:'ops',icon:'⚙️',label:'Operator'},
         {id:'catalog',icon:'📚',label:'Catalog'},
       ],
+      showMore:false,
       live:false,clock:'',regime:{},indices:[],macro:[],sectors:[],asia:[],trust:{},
       sig:{mode:'—',source:'',as_of:'',recs:[],strategy_scores:{},no_trade_reason:null,scan_meta:null},
       dos:{ticker:'',loading:false,data:null,error:''},
@@ -1219,7 +1268,7 @@
       tt:{ticker:'SPY',date:new Date(Date.now()-5*86400000).toISOString().slice(0,10),strategy:'all',loading:false,result:null},
       ops:{running:false,cycle_count:0,signals_today:0,trades_today:0,circuit_breaker:false,circuit_breaker_reason:'',dry_run:true,components:{}},
       opsDetail:{},
-      today7:{regime:null,top_ranked:[],filter_funnel:null,avoid_list:[],tradeability:''},
+      today7:{regime:null,top_ranked:[],filter_funnel:null,avoid_list:[],tradeability:'',what_changed:[],event_risks:[],best_family:null},
       opps:[],oppsSort:'score',
       apiEndpoints:[],
       _failCount:0,
@@ -1301,7 +1350,7 @@
         this.opps.sort((a,b)=>k==='ticker'?(a.ticker||'').localeCompare(b.ticker||''):(Number(b[k])||0)-(Number(a[k])||0));
       },
       async fetchToday7(){
-        try{const r=await fetch('/api/v7/today');if(!r.ok)throw 0;const d=await r.json();this.today7.regime=d.regime||null;this.today7.top_ranked=d.top_ranked||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.avoid_list=d.avoid_list||[];this.today7.tradeability=d.tradeability||''}catch(e){console.warn('v7/today fetch failed',e)}
+        try{const r=await fetch('/api/v7/today');if(!r.ok)throw 0;const d=await r.json();this.today7.regime=d.market_regime||null;this.today7.top_ranked=d.top_5||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.avoid_list=(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'⚠',reason:a}:a);this.today7.tradeability=(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null}catch(e){console.warn('v7/today fetch failed',e)}
       },
       async fetchOpps(){
         try{const r=await fetch('/api/v7/opportunities');if(!r.ok)throw 0;const d=await r.json();this.opps=d.opportunities||[];this.sortOpps()}catch(e){console.warn('v7/opportunities fetch failed',e)}
