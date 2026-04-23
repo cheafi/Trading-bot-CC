@@ -28,27 +28,27 @@ def _ensure_registry():
         return
     _registry_built = True
 
-    from src.strategies.algo_adapter import AlgoStrategyAdapter
-    from src.strategies.momentum import MomentumStrategy
-    from src.strategies.mean_reversion import MeanReversionStrategy
-    from src.strategies.breakout import BreakoutStrategy
-    from src.algo.vcp_strategy import VCPStrategy
-    from src.algo.momentum_strategy import MomentumBreakoutStrategy
+    from src.algo.earnings_strategies import (
+        EarningsBreakoutStrategy,
+        PostEarningsDriftStrategy,
+        PreEarningsMomentumStrategy,
+    )
     from src.algo.mean_reversion_strategy import (
         MeanReversionStrategy as AlgoMeanRevStrategy,
     )
-    from src.algo.trend_following_strategy import TrendFollowingStrategy
+    from src.algo.momentum_strategy import MomentumBreakoutStrategy
     from src.algo.swing_strategies import (
-        ShortTermTrendFollowingStrategy,
         ClassicSwingStrategy,
         MomentumRotationStrategy,
         ShortTermMeanReversionStrategy,
+        ShortTermTrendFollowingStrategy,
     )
-    from src.algo.earnings_strategies import (
-        PreEarningsMomentumStrategy,
-        PostEarningsDriftStrategy,
-        EarningsBreakoutStrategy,
-    )
+    from src.algo.trend_following_strategy import TrendFollowingStrategy
+    from src.algo.vcp_strategy import VCPStrategy
+    from src.strategies.algo_adapter import AlgoStrategyAdapter
+    from src.strategies.breakout import BreakoutStrategy
+    from src.strategies.mean_reversion import MeanReversionStrategy
+    from src.strategies.momentum import MomentumStrategy
 
     for cls in [MomentumStrategy, MeanReversionStrategy, BreakoutStrategy]:
         STRATEGY_REGISTRY[cls.STRATEGY_ID] = cls
