@@ -38,30 +38,55 @@ async def health():
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 # Load full app routes in background
 import threading
+
+# Routes the lite server already handles — skip these when merging
+_SKIP_PATHS = {"/", "/health", "/api/health", "/docs", "/redoc", "/openapi.json"}
+
 def _load_full():
     global _full_app
     try:
         logger.info("Background: loading full app...")
         from src.api.main import app as full
-        # Copy all routes from full app
+        # Copy routes, skipping ones we already serve + static mount
         for route in full.routes:
-            if hasattr(route, 'path') and route.path not in ('/', '/health', '/api/health', '/static'):
-                app.routes.append(route)
+            path = getattr(route, "path", None)
+            if path is None:
+                # Mount objects (e.g. /static) have .path on the scope
+                path = getattr(route, "path", "")
+            if path in _SKIP_PATHS:
+                continue
+            # Skip Mount objects (StaticFiles) to avoid conflicts
+            from starlette.routing import Mount
+            if isinstance(route, Mount):
+                continue
+            app.routes.append(route)
         _full_app = full
-        # Copy state
-        if hasattr(full, 'state'):
+        # Copy app.state attributes
+        if hasattr(full, "state"):
             for k in dir(full.state):
-                if not k.startswith('_'):
-                    setattr(app.state, k, getattr(full.state, k))
+                if not k.startswith("_"):
+                    try:
+                        setattr(app.state, k, getattr(full.state, k))
+                    except Exception:
+                        pass
         logger.info("Background: full app loaded! All routes available.")
     except Exception as e:
-        logger.error(f"Background load failed: {e}")
+        logger.error(f"Background load failed: {e}", exc_info=True)
 
-threading.Thread(target=_load_full, daemon=True).start()
+
+@app.on_event("startup")
+async def _on_startup():
+    """Start background loading AFTER uvicorn is listening."""
+    import time
+    def _delayed():
+        time.sleep(2)  # let uvicorn fully bind first
+        _load_full()
+    threading.Thread(target=_delayed, daemon=True).start()
+
 
 if __name__ == "__main__":
     import uvicorn
