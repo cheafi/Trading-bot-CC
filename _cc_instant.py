@@ -1,67 +1,185 @@
 #!/usr/bin/env python3
-"""Ultra-minimal HTTP server - zero dependencies, starts instantly.
-Serves dashboard HTML + proxies to full app once loaded."""
+"""
+CC Instant Server — starts in <1 second, loads full API in background.
+
+Architecture:
+  1. stdlib http.server binds port 8000 instantly → dashboard works
+  2. Background thread imports full FastAPI app + starts uvicorn on :8001
+  3. Once :8001 is ready, all API requests proxy there transparently
+  4. Dashboard (/) is always served locally for speed
+"""
 import http.server
 import json
 import os
+import socketserver
+import subprocess
 import threading
 import time
+import traceback
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)) or ".")
 
 PORT = 8000
+BACKEND_PORT = 8001
 TEMPLATE = Path("src/api/templates/index.html").read_text()
-_full_app = None
+_backend_ready = False
 _start = time.time()
 
 
-class Handler(http.server.SimpleHTTPRequestHandler):
+class Handler(http.server.BaseHTTPRequestHandler):
+    """Serves dashboard instantly; proxies API calls to backend once ready."""
+
     def do_GET(self):
-        if self.path == "/health" or self.path == "/api/health":
-            data = json.dumps({"status": "ok",
-                               "uptime_seconds": round(time.time() - _start, 1),
-                               "mode": "full" if _full_app else "lite"})
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(data.encode())
-        elif self.path == "/" or self.path == "":
+        self._handle()
+
+    def do_POST(self):
+        self._handle()
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self._cors_headers()
+        self.end_headers()
+
+    def _cors_headers(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-API-Key")
+
+    def _handle(self):
+        # Dashboard — always local
+        if self.path in ("/", ""):
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self._cors_headers()
             self.end_headers()
             self.wfile.write(TEMPLATE.encode())
-        elif self.path.startswith("/static/"):
-            self.directory = "src/api"
-            super().do_GET()
-        else:
-            self.send_response(404)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"error": "not found", "path": self.path}).encode())
+            return
 
-    def log_message(self, format, *args):
+        # Health — local fast path
+        if self.path in ("/health", "/api/health"):
+            data = json.dumps({
+                "status": "ok",
+                "uptime_seconds": round(time.time() - _start, 1),
+                "mode": "full" if _backend_ready else "loading",
+            })
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self._cors_headers()
+            self.end_headers()
+            self.wfile.write(data.encode())
+            return
+
+        # Static files — serve locally
+        if self.path.startswith("/static/"):
+            fpath = Path("src/api") / self.path.lstrip("/")
+            if fpath.is_file():
+                self.send_response(200)
+                ct = {".css": "text/css", ".js": "application/javascript",
+                      ".png": "image/png", ".svg": "image/svg+xml",
+                      ".json": "application/json", ".ico": "image/x-icon",
+                      }.get(fpath.suffix, "application/octet-stream")
+                self.send_header("Content-Type", ct)
+                self.end_headers()
+                self.wfile.write(fpath.read_bytes())
+            else:
+                self._json_error(404, "Static file not found")
+            return
+
+        # All other paths → proxy to backend
+        if _backend_ready:
+            self._proxy()
+        else:
+            self._json_error(503, "API is still loading, please retry in ~60s")
+
+    def _proxy(self):
+        """Forward request to uvicorn backend on BACKEND_PORT."""
+        url = f"http://127.0.0.1:{BACKEND_PORT}{self.path}"
+        try:
+            body = None
+            cl = self.headers.get("Content-Length")
+            if cl:
+                body = self.rfile.read(int(cl))
+
+            req = urllib.request.Request(url, data=body, method=self.command)
+            req.add_header("Content-Type",
+                           self.headers.get("Content-Type", "application/json"))
+            api_key = self.headers.get("X-API-Key")
+            if api_key:
+                req.add_header("X-API-Key", api_key)
+
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                status = resp.status
+                data = resp.read()
+                ct = resp.headers.get("Content-Type", "application/json")
+
+            self.send_response(status)
+            self.send_header("Content-Type", ct)
+            self._cors_headers()
+            self.end_headers()
+            self.wfile.write(data)
+        except urllib.error.HTTPError as e:
+            self.send_response(e.code)
+            self.send_header("Content-Type", "application/json")
+            self._cors_headers()
+            self.end_headers()
+            try:
+                self.wfile.write(e.read())
+            except Exception:
+                self.wfile.write(json.dumps({"error": str(e)}).encode())
+        except Exception as e:
+            self._json_error(502, f"Backend error: {e}")
+
+    def _json_error(self, code, msg):
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self._cors_headers()
+        self.end_headers()
+        self.wfile.write(json.dumps({"error": msg}).encode())
+
+    def log_message(self, fmt, *args):
         pass  # quiet
 
 
-def _load_full():
-    global _full_app
-    time.sleep(5)
+class ReusableTCPServer(socketserver.TCPServer):
+    allow_reuse_address = True
+
+
+def _start_backend():
+    """Load full FastAPI app and run uvicorn on BACKEND_PORT."""
+    global _backend_ready
+    time.sleep(2)
     try:
-        print("Loading full FastAPI app in background...", flush=True)
+        print("Loading full FastAPI app...", flush=True)
         from src.api.main import app
-        _full_app = app
-        print("Full app loaded! Restarting on uvicorn...", flush=True)
-        # Replace this server with uvicorn
+        print("App imported. Starting uvicorn on internal port...", flush=True)
         import uvicorn
-        server.shutdown()
-        uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="info")
+        _backend_ready = True
+        uvicorn.run(app, host="127.0.0.1", port=BACKEND_PORT, log_level="info")
     except Exception as e:
-        print(f"Background load failed: {e}", flush=True)
+        print(f"Backend load failed: {e}", flush=True)
+        traceback.print_exc()
 
 
-print(f"CC Lite server starting on http://0.0.0.0:{PORT}", flush=True)
-server = http.server.HTTPServer(("0.0.0.0", PORT), Handler)
-threading.Thread(target=_load_full, daemon=True).start()
-print(f"✅ Dashboard ready at http://localhost:{PORT}", flush=True)
-server.serve_forever()
+# Kill anything on our ports
+subprocess.run(
+    f"kill $(lsof -ti:{PORT}) 2>/dev/null;"
+    f"kill $(lsof -ti:{BACKEND_PORT}) 2>/dev/null",
+    shell=True, capture_output=True,
+)
+time.sleep(0.5)
+
+# Start backend in background
+threading.Thread(target=_start_backend, daemon=True).start()
+
+# Start instant frontend
+server = ReusableTCPServer(("0.0.0.0", PORT), Handler)
+print(f"✅ CC Dashboard ready at http://localhost:{PORT}", flush=True)
+print(f"   API loading in background (→ :{BACKEND_PORT})...", flush=True)
+try:
+    server.serve_forever()
+except KeyboardInterrupt:
+    print("\nShutting down...")
+    server.shutdown()
