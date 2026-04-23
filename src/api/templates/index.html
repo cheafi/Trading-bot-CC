@@ -120,74 +120,161 @@
     </div>
 
     <!-- ═══════════════════════════════════════════════════════ -->
-    <!-- SURFACE 1: TODAY / REGIME                              -->
+    <!-- SURFACE 1: PLAYBOOK                                    -->
     <!-- ═══════════════════════════════════════════════════════ -->
         <main x-show="tab==='today'" class="fade">
-      <!-- ── Regime Action Banner ── -->
-      <template x-if="today7.regime">
-        <div :style="'margin:8px 12px;padding:12px 14px;border-radius:10px;border:1px solid '+(today7.regime.risk_state==='LOW'?'rgba(0,212,170,.25)':today7.regime.risk_state==='ELEVATED'?'rgba(251,191,36,.25)':'rgba(255,92,92,.3)')+';background:linear-gradient(135deg,'+(today7.regime.risk_state==='LOW'?'rgba(0,212,170,.06),rgba(0,212,170,.02)':today7.regime.risk_state==='ELEVATED'?'rgba(251,191,36,.06),rgba(251,191,36,.02)':'rgba(255,92,92,.06),rgba(255,92,92,.02)')+')'">
-          <div class="flex items-center gap-2 mb-1">
-            <span style="font-size:16px" x-text="today7.regime.risk_state==='LOW'?'✅':today7.regime.risk_state==='ELEVATED'?'⚠️':'🛑'"></span>
-            <span class="text-[12px] font-bold" :style="'color:var(--'+(today7.regime.risk_state==='LOW'?'green':today7.regime.risk_state==='ELEVATED'?'amber':'red')+')'" x-text="today7.regime.label||'—'"></span>
-            <span class="pill pw text-[8px] ml-auto" x-text="today7.regime.tradeability||'—'"></span>
-          </div>
-          <div class="text-[10px]" style="color:var(--t2);line-height:1.5" x-text="today7.regime.summary||''"></div>
-          <div class="flex gap-2 mt-2 flex-wrap">
-            <span class="pill pb text-[8px]" x-text="'Trend: '+(today7.regime.trend||'—')"></span>
-            <span class="pill pb text-[8px]" x-text="'Vol: '+(today7.regime.volatility||'—')"></span>
-            <template x-if="today7.regime.score!=null"><span class="pill mono text-[8px]" :class="today7.regime.score>=60?'pg':today7.regime.score>=40?'pa':'pr'" x-text="'Score: '+today7.regime.score"></span></template>
-            <template x-if="today7.regime.confidence!=null"><span class="pill mono text-[8px] pp" x-text="'Conf: '+(today7.regime.confidence*100).toFixed(0)+'%'"></span></template>
+
+      <!-- ── Market Pulse Strip ── -->
+      <template x-if="today7.pulse && today7.pulse.indices && today7.pulse.indices.length>0">
+        <div style="display:flex;gap:2px;padding:6px 12px;overflow-x:auto;scrollbar-width:none">
+          <template x-for="ix in today7.pulse.indices">
+            <div style="flex:0 0 auto;padding:4px 10px;background:var(--s1);border:1px solid var(--bd);border-radius:6px;display:flex;align-items:center;gap:6px">
+              <span class="text-[9px] font-bold" style="color:var(--t2)" x-text="ix.name"></span>
+              <span class="mono text-[10px] font-bold" :class="(ix.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="((ix.change_pct||0)>=0?'+':'')+(ix.change_pct||0).toFixed(2)+'%'"></span>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- ── Narrative Briefing ── -->
+      <template x-if="today7.narrative">
+        <div style="padding:8px 12px">
+          <div class="card card-p" style="padding:12px;border-left:3px solid var(--blue)">
+            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">📋 Morning Briefing · <span x-text="today7.date||new Date().toISOString().slice(0,10)"></span></div>
+            <div class="text-[11px]" style="color:var(--t1);line-height:1.6" x-text="today7.narrative"></div>
           </div>
         </div>
       </template>
 
-      <!-- ── Filter Funnel ── -->
-      <template x-if="today7.filter_funnel">
-        <div style="padding:8px 12px">
-          <div class="section-hdr" style="margin:0 0 6px">🔽 Filter Funnel</div>
-          <div style="display:flex;gap:4px;align-items:end">
-            <template x-for="(step, i) in ['universe','signals_triggered','score_above_6','actionable_above_7']">
-              <div style="flex:1;text-align:center">
-                <div class="text-sm font-bold mono" :class="i>=3?'text-green-400':i>=2?'text-amber-300':'text-white'" x-text="today7.filter_funnel[step]!=null?today7.filter_funnel[step]:'—'"></div>
-                <div :style="'height:'+Math.max(4,Math.min(40,(today7.filter_funnel[step]||0)/(today7.filter_funnel.universe||1)*40))+'px;background:var(--'+(i>=3?'green':i>=2?'amber':'blue')+');border-radius:3px;margin:4px auto;width:80%'"></div>
-                <div class="text-[8px]" style="color:var(--t3)" x-text="['Universe','Triggered','≥6','≥7'][i]"></div>
+      <!-- ── Regime Action Banner ── -->
+      <template x-if="today7.regime">
+        <div :style="'margin:4px 12px;padding:12px 14px;border-radius:10px;border:1px solid '+(today7.regime.tradeability==='NO_TRADE'?'rgba(255,92,92,.3)':today7.regime.tradeability==='WAIT'?'rgba(251,191,36,.25)':'rgba(0,212,170,.25)')+';background:linear-gradient(135deg,'+(today7.regime.tradeability==='NO_TRADE'?'rgba(255,92,92,.06),rgba(255,92,92,.02)':today7.regime.tradeability==='WAIT'?'rgba(251,191,36,.06),rgba(251,191,36,.02)':'rgba(0,212,170,.06),rgba(0,212,170,.02)')+')'">
+          <div class="flex items-center gap-2 mb-1">
+            <span style="font-size:16px" x-text="today7.regime.tradeability==='NO_TRADE'?'🛑':today7.regime.tradeability==='WAIT'?'⏸️':today7.regime.tradeability==='STRONG_TRADE'?'🟢':'✅'"></span>
+            <span class="text-[12px] font-bold" :style="'color:var(--'+(today7.regime.tradeability==='NO_TRADE'?'red':today7.regime.tradeability==='WAIT'?'amber':'green')+')'" x-text="today7.regime.tradeability==='STRONG_TRADE'?'STRONG TRADE DAY':today7.regime.tradeability||'—'"></span>
+            <span class="pill mono text-[8px] ml-auto" :class="today7.regime.score>=60?'pg':today7.regime.score>=40?'pa':'pr'" x-text="'Score '+today7.regime.score"></span>
+          </div>
+          <div class="flex gap-2 mt-1 flex-wrap">
+            <span class="pill pb text-[8px]" x-text="'📈 '+(today7.regime.trend||'—')"></span>
+            <span class="pill pb text-[8px]" x-text="'📊 Vol '+(today7.regime.volatility||'—')"></span>
+            <template x-if="today7.regime.vix"><span class="pill mono text-[8px]" :class="today7.regime.vix>25?'pr':today7.regime.vix>18?'pa':'pg'" x-text="'VIX '+today7.regime.vix"></span></template>
+            <template x-if="today7.regime.breadth!=null"><span class="pill mono text-[8px]" :class="today7.regime.breadth>50?'pg':today7.regime.breadth>35?'pa':'pr'" x-text="'Breadth '+today7.regime.breadth+'%'"></span></template>
+            <span class="pill mono text-[8px] pp" x-text="'Conf '+(today7.regime.confidence*100).toFixed(0)+'%'"></span>
+          </div>
+        </div>
+      </template>
+
+      <!-- ── What Changed + Event Risk (side by side on wide screens) ── -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px 12px">
+        <template x-if="today7.what_changed && today7.what_changed.length > 0">
+          <div class="card card-p" style="padding:10px;border-left:3px solid var(--blue)">
+            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--blue)">⚡ What Changed</div>
+            <template x-for="c in today7.what_changed">
+              <div class="text-[9px] py-0.5" style="color:var(--t2);line-height:1.3" x-text="'→ '+c"></div>
+            </template>
+          </div>
+        </template>
+        <template x-if="today7.event_risks && today7.event_risks.length > 0">
+          <div class="card card-p" style="padding:10px;border-left:3px solid var(--red)">
+            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--red)">🚨 Risk Alerts</div>
+            <template x-for="e in today7.event_risks">
+              <div class="text-[9px] py-0.5" style="color:var(--red);line-height:1.3" x-text="'⚠ '+e"></div>
+            </template>
+          </div>
+        </template>
+      </div>
+
+      <!-- ── Sector Leaders / Laggards ── -->
+      <template x-if="today7.pulse && (today7.pulse.sector_leaders||[]).length>0">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:2px 12px">
+          <div class="card card-p" style="padding:8px">
+            <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--green)">▲ Sector Leaders</div>
+            <template x-for="s in today7.pulse.sector_leaders">
+              <div class="flex justify-between text-[9px] py-0.5" style="border-bottom:1px solid var(--bd)">
+                <span style="color:var(--t2)" x-text="s.name"></span>
+                <span class="mono font-bold text-green-400" x-text="'+'+s.change_pct.toFixed(2)+'%'"></span>
+              </div>
+            </template>
+          </div>
+          <div class="card card-p" style="padding:8px">
+            <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--red)">▼ Sector Laggards</div>
+            <template x-for="s in today7.pulse.sector_laggards||[]">
+              <div class="flex justify-between text-[9px] py-0.5" style="border-bottom:1px solid var(--bd)">
+                <span style="color:var(--t2)" x-text="s.name"></span>
+                <span class="mono font-bold text-red-400" x-text="s.change_pct.toFixed(2)+'%'"></span>
               </div>
             </template>
           </div>
         </div>
       </template>
 
+      <!-- ── Filter Funnel (compact) ── -->
+      <template x-if="today7.filter_funnel">
+        <div style="padding:4px 12px">
+          <div style="display:flex;gap:2px;align-items:center;background:var(--s1);border:1px solid var(--bd);border-radius:8px;padding:8px 10px">
+            <template x-for="(step, i) in ['universe','signals_triggered','score_above_6','actionable_above_7','high_conviction_above_8']">
+              <template x-if="today7.filter_funnel[step]!=null">
+                <div style="flex:1;text-align:center">
+                  <div class="text-[12px] font-bold mono" :class="i>=4?'text-green-400':i>=3?'text-green-300':i>=2?'text-amber-300':'text-white'" x-text="today7.filter_funnel[step]"></div>
+                  <div class="text-[7px] font-bold uppercase" style="color:var(--t3)" x-text="['Universe','Triggered','≥6','≥7','≥8'][i]"></div>
+                </div>
+              </template>
+            </template>
+          </div>
+        </div>
+      </template>
+
       <!-- ── Top Ranked Opportunities ── -->
-      <div class="section-hdr">🏆 Top Opportunities</div>
+      <div class="section-hdr" style="margin-top:6px">🏆 Top Opportunities</div>
       <template x-if="today7.top_ranked && today7.top_ranked.length > 0">
         <div style="padding:0 12px;display:flex;flex-direction:column;gap:6px">
           <template x-for="(opp,idx) in today7.top_ranked">
-            <div class="card card-p" style="padding:10px;cursor:pointer" @click="openDossier(opp.ticker)">
-              <div class="flex items-center gap-2 mb-1">
-                <span class="text-[10px] font-bold mono" style="color:var(--amber);min-width:16px" x-text="'#'+(idx+1)"></span>
-                <span class="text-[12px] font-bold text-white" x-text="opp.ticker"></span>
-                <span class="pill pb text-[8px]" x-text="(opp.strategy||'').replace(/_/g,' ')"></span>
-                <span class="pill mono text-[8px] ml-auto" :class="(opp.score||0)>=7?'pg':(opp.score||0)>=5?'pa':'pr'" x-text="opp.score!=null?Number(opp.score).toFixed(1):'—'"></span>
+            <div class="card" style="cursor:pointer;overflow:hidden" @click="openDossier(opp.ticker)">
+              <!-- Action color bar -->
+              <div :style="'height:3px;background:var(--'+(opp.action==='BUY'?'green':opp.action==='BUY_ON_DIP'?'green':opp.action==='AVOID'?'red':'amber')+')'"></div>
+              <div style="padding:10px 12px">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-[11px] font-bold mono" style="color:var(--amber);min-width:20px" x-text="'#'+(idx+1)"></span>
+                  <span class="text-[13px] font-extrabold mono text-white" x-text="opp.ticker"></span>
+                  <span class="pill pb text-[8px]" x-text="(opp.strategy||'').replace(/_/g,' ')"></span>
+                  <span class="pill mono text-[8px]" :class="(opp.score||0)>=8?'pg':(opp.score||0)>=6?'pa':'pr'" x-text="opp.score!=null?Number(opp.score).toFixed(1):'—'"></span>
+                  <span class="pill text-[8px] font-bold ml-auto" :class="opp.action==='BUY'?'pg':opp.action==='BUY_ON_DIP'?'pg':opp.action==='AVOID'?'pr':'pa'" x-text="opp.action||'—'"></span>
+                </div>
+                <!-- Price row -->
+                <div class="flex gap-4 text-[9px] mono mt-1" style="color:var(--t2)">
+                  <template x-if="opp.entry_price"><span>Entry <strong class="text-white">$<span x-text="Number(opp.entry_price).toFixed(2)"></span></strong></span></template>
+                  <template x-if="opp.target_price"><span>Target <strong class="text-green-400">$<span x-text="Number(opp.target_price).toFixed(2)"></span></strong></span></template>
+                  <template x-if="opp.stop_price"><span>Stop <strong class="text-red-400">$<span x-text="Number(opp.stop_price).toFixed(2)"></span></strong></span></template>
+                  <span>R:R <strong class="text-white" x-text="opp.risk_reward?Number(opp.risk_reward).toFixed(1):'—'"></strong></span>
+                </div>
+                <!-- Why now -->
+                <template x-if="opp.why_now&&(Array.isArray(opp.why_now)?opp.why_now.length:opp.why_now)">
+                  <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'✅ '+(Array.isArray(opp.why_now)?opp.why_now.join(' · '):opp.why_now)"></div>
+                </template>
+                <!-- Why not -->
+                <template x-if="opp.why_not&&(Array.isArray(opp.why_not)?opp.why_not.length:opp.why_not)">
+                  <div class="text-[9px]" style="color:var(--amber);line-height:1.4" x-text="'⚠️ '+(Array.isArray(opp.why_not)?opp.why_not.join(' · '):opp.why_not)"></div>
+                </template>
+                <!-- Invalidation -->
+                <template x-if="opp.invalidation">
+                  <div class="text-[9px]" style="color:var(--red);line-height:1.3" x-text="'❌ '+opp.invalidation"></div>
+                </template>
+                <!-- Timing + Position hint -->
+                <div class="flex gap-3 mt-1 text-[8px]" style="color:var(--t3)">
+                  <span x-text="'⏱ '+opp.timing"></span>
+                  <template x-if="opp.position_hint"><span x-text="'💰 '+opp.position_hint"></span></template>
+                  <template x-if="opp.rsi"><span x-text="'RSI '+(typeof opp.rsi==='number'?opp.rsi.toFixed(0):opp.rsi)"></span></template>
+                </div>
               </div>
-              <div class="flex gap-3 text-[10px]" style="color:var(--t2)">
-                <span x-text="'⏱ '+(opp.timing||'—')"></span>
-                <span x-text="'📈 R:R '+(opp.risk_reward||'—')"></span>
-                <span class="font-bold" :style="'color:var(--'+(opp.action==='BUY'||opp.action==='STRONG BUY'?'green':opp.action==='AVOID'?'red':'amber')+')'" x-text="opp.action||'—'"></span>
-              </div>
-              <template x-if="opp.why_now">
-                <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'✅ '+(Array.isArray(opp.why_now)?opp.why_now.join(' · '):opp.why_now)"></div>
-              </template>
-              <template x-if="opp.why_not">
-                <div class="text-[9px]" style="color:var(--amber);line-height:1.4" x-text="'⚠️ '+(Array.isArray(opp.why_not)?opp.why_not.join(' · '):opp.why_not)"></div>
-              </template>
             </div>
           </template>
         </div>
       </template>
       <template x-if="!today7.top_ranked || today7.top_ranked.length===0">
-        <div style="padding:0 12px"><div class="card card-p" style="padding:16px;text-align:center">
-          <div style="font-size:24px;margin-bottom:8px">🔍</div>
-          <div class="text-[11px]" style="color:var(--t2)">No opportunities meet entry criteria right now. The scanner is being selective — good setups are rare by design.</div>
+        <div style="padding:0 12px"><div class="card card-p" style="padding:20px;text-align:center">
+          <div style="font-size:28px;margin-bottom:8px">🔍</div>
+          <div class="text-[12px] font-bold text-white mb-1">No Opportunities Right Now</div>
+          <div class="text-[10px]" style="color:var(--t2);line-height:1.5">The scanner is being selective — good setups are rare by design. Patience is an edge.</div>
           <button @click="fetchToday7()" class="btn-s text-[10px] mt-3">🔄 Refresh</button>
         </div></div>
       </template>
@@ -199,30 +286,6 @@
           <div class="flex gap-2 flex-wrap">
             <template x-for="a in today7.avoid_list">
               <span class="pill pr text-[9px]" x-text="(a.ticker||'')+' '+(a.reason||a)"></span>
-            </template>
-          </div>
-        </div>
-      </template>
-
-      <!-- ── What Changed ── -->
-      <template x-if="today7.what_changed && today7.what_changed.length > 0">
-        <div style="padding:0 12px;margin-top:10px">
-          <div class="section-hdr" style="margin:0 0 4px">⚡ What Changed</div>
-          <div class="card card-p" style="padding:10px;border-left:3px solid var(--blue)">
-            <template x-for="c in today7.what_changed">
-              <div class="text-[10px] py-0.5" style="color:var(--t2);line-height:1.4" x-text="'→ '+c"></div>
-            </template>
-          </div>
-        </div>
-      </template>
-
-      <!-- ── Event Risk ── -->
-      <template x-if="today7.event_risks && today7.event_risks.length > 0">
-        <div style="padding:0 12px;margin-top:8px">
-          <div class="section-hdr" style="margin:0 0 4px">🚨 Event Risk</div>
-          <div class="card card-p" style="padding:10px;border-left:3px solid var(--red)">
-            <template x-for="e in today7.event_risks">
-              <div class="text-[10px] py-0.5" style="color:var(--red);line-height:1.4" x-text="'⚠ '+e"></div>
             </template>
           </div>
         </div>
@@ -302,29 +365,38 @@
         <template x-if="opps.length>0">
           <div style="display:flex;flex-direction:column;gap:6px">
             <template x-for="(r, idx) in opps">
-              <div class="card card-p" style="padding:10px;cursor:pointer" @click="openDossier(r.ticker)">
-                <div class="flex items-center gap-2 mb-1">
-                  <span class="text-[10px] font-bold mono" style="color:var(--amber);min-width:18px" x-text="'#'+(idx+1)"></span>
-                  <span class="text-[12px] font-bold mono text-white" x-text="r.ticker||'—'"></span>
-                  <span class="pill pb text-[8px]" x-text="(r.strategy||'').replace(/_/g,' ')"></span>
-                  <span class="pill mono text-[8px]" :class="(r.score||0)>=7?'pg':(r.score||0)>=5?'pa':'pr'" x-text="r.score!=null?Number(r.score).toFixed(1):'—'"></span>
-                  <span class="text-[10px] font-bold ml-auto" :style="'color:var(--'+(r.action==='BUY'||r.action==='STRONG BUY'?'green':r.action==='AVOID'?'red':'amber')+')'" x-text="r.action||'—'"></span>
+              <div class="card" style="cursor:pointer;overflow:hidden" @click="openDossier(r.ticker)">
+                <div :style="'height:3px;background:var(--'+(r.action==='BUY'||r.action==='BUY_ON_DIP'?'green':r.action==='AVOID'?'red':'amber')+')'"></div>
+                <div style="padding:10px 12px">
+                  <div class="flex items-center gap-2 mb-1">
+                    <span class="text-[10px] font-bold mono" style="color:var(--amber);min-width:20px" x-text="'#'+(idx+1)"></span>
+                    <span class="text-[13px] font-extrabold mono text-white" x-text="r.ticker||'—'"></span>
+                    <span class="pill pb text-[8px]" x-text="(r.strategy||'').replace(/_/g,' ')"></span>
+                    <span class="pill mono text-[8px]" :class="(r.score||0)>=8?'pg':(r.score||0)>=6?'pa':'pr'" x-text="r.score!=null?Number(r.score).toFixed(1):'—'"></span>
+                    <span class="pill text-[8px] font-bold ml-auto" :class="r.action==='BUY'||r.action==='BUY_ON_DIP'?'pg':r.action==='AVOID'?'pr':'pa'" x-text="r.action||'—'"></span>
+                  </div>
+                  <div class="flex gap-4 text-[9px] mono mt-1" style="color:var(--t2)">
+                    <template x-if="r.entry_price"><span>Entry <strong class="text-white">$<span x-text="Number(r.entry_price).toFixed(2)"></span></strong></span></template>
+                    <template x-if="r.target_price"><span>Target <strong class="text-green-400">$<span x-text="Number(r.target_price).toFixed(2)"></span></strong></span></template>
+                    <template x-if="r.stop_price"><span>Stop <strong class="text-red-400">$<span x-text="Number(r.stop_price).toFixed(2)"></span></strong></span></template>
+                    <span>R:R <strong class="text-white" x-text="Number(r.risk_reward||0).toFixed(1)"></strong></span>
+                  </div>
+                  <div class="flex gap-3 text-[8px] mt-1" style="color:var(--t3)">
+                    <span x-text="'⏱ '+r.timing"></span>
+                    <template x-if="r.rsi"><span x-text="'RSI '+(typeof r.rsi==='number'?r.rsi.toFixed(0):r.rsi)"></span></template>
+                    <template x-if="r.vol_quality"><span x-text="'Vol: '+r.vol_quality"></span></template>
+                    <template x-if="r.position_hint"><span style="color:var(--purple)" x-text="'💰 '+r.position_hint"></span></template>
+                  </div>
+                  <template x-if="r.why_now&&(Array.isArray(r.why_now)?r.why_now.length:r.why_now)">
+                    <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'✅ '+(Array.isArray(r.why_now)?r.why_now.join(' · '):r.why_now)"></div>
+                  </template>
+                  <template x-if="r.why_not&&(Array.isArray(r.why_not)?r.why_not.length:r.why_not)">
+                    <div class="text-[9px]" style="color:var(--amber);line-height:1.4" x-text="'⚠️ '+(Array.isArray(r.why_not)?r.why_not.join(' · '):r.why_not)"></div>
+                  </template>
+                  <template x-if="r.invalidation">
+                    <div class="text-[9px]" style="color:var(--red);line-height:1.3" x-text="'❌ '+r.invalidation"></div>
+                  </template>
                 </div>
-                <div class="flex gap-3 text-[10px]" style="color:var(--t2)">
-                  <span x-text="'⏱ '+(r.timing||'—')"></span>
-                  <span x-text="'📈 R:R '+(r.risk_reward||'—')"></span>
-                  <template x-if="r.entry_price"><span class="mono" x-text="'Entry $'+Number(r.entry_price).toFixed(2)"></span></template>
-                  <template x-if="r.position_hint"><span style="color:var(--purple)" x-text="'💰 '+r.position_hint"></span></template>
-                </div>
-                <template x-if="r.why_now">
-                  <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'✅ '+(Array.isArray(r.why_now)?r.why_now.join(' · '):r.why_now)"></div>
-                </template>
-                <template x-if="r.why_not">
-                  <div class="text-[9px]" style="color:var(--amber);line-height:1.4" x-text="'⚠️ '+(Array.isArray(r.why_not)?r.why_not.join(' · '):r.why_not)"></div>
-                </template>
-                <template x-if="r.invalidation">
-                  <div class="text-[9px]" style="color:var(--red);line-height:1.4" x-text="'❌ Invalid if: '+r.invalidation"></div>
-                </template>
               </div>
             </template>
           </div>
@@ -1268,7 +1340,7 @@
       tt:{ticker:'SPY',date:new Date(Date.now()-5*86400000).toISOString().slice(0,10),strategy:'all',loading:false,result:null},
       ops:{running:false,cycle_count:0,signals_today:0,trades_today:0,circuit_breaker:false,circuit_breaker_reason:'',dry_run:true,components:{}},
       opsDetail:{},
-      today7:{regime:null,top_ranked:[],filter_funnel:null,avoid_list:[],tradeability:'',what_changed:[],event_risks:[],best_family:null},
+      today7:{regime:null,top_ranked:[],filter_funnel:null,avoid_list:[],tradeability:'',what_changed:[],event_risks:[],best_family:null,pulse:null,narrative:'',date:''},
       opps:[],oppsSort:'score',
       apiEndpoints:[],
       _failCount:0,
@@ -1350,7 +1422,7 @@
         this.opps.sort((a,b)=>k==='ticker'?(a.ticker||'').localeCompare(b.ticker||''):(Number(b[k])||0)-(Number(a[k])||0));
       },
       async fetchToday7(){
-        try{const r=await fetch('/api/v7/today');if(!r.ok)throw 0;const d=await r.json();this.today7.regime=d.market_regime||null;this.today7.top_ranked=d.top_5||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.avoid_list=(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'⚠',reason:a}:a);this.today7.tradeability=(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null}catch(e){console.warn('v7/today fetch failed',e)}
+        try{const r=await fetch('/api/v7/today');if(!r.ok)throw 0;const d=await r.json();this.today7.regime=d.market_regime||null;this.today7.top_ranked=d.top_5||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.avoid_list=(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'⚠',reason:a}:a);this.today7.tradeability=(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.date=d.date||''}catch(e){console.warn('v7/today fetch failed',e)}
       },
       async fetchOpps(){
         try{const r=await fetch('/api/v7/opportunities');if(!r.ok)throw 0;const d=await r.json();this.opps=d.opportunities||[];this.sortOpps()}catch(e){console.warn('v7/opportunities fetch failed',e)}

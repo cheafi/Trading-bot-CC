@@ -163,6 +163,37 @@ async def today_summary(request: Request):
     regime_label = getattr(regime_state, "regime", "NEUTRAL")
     should_trade = getattr(regime_state, "should_trade", True)
     confidence = getattr(regime_state, "confidence", 0.5)
+    vix_val = getattr(regime_state, "vix", 18.0)
+    breadth = getattr(regime_state, "breadth_pct", 0.50)
+    entropy = getattr(regime_state, "entropy", 1.0)
+
+    # Map regime fields properly
+    trend_map = {
+        "uptrend": "UPTREND",
+        "downtrend": "DOWNTREND",
+        "sideways": "SIDEWAYS",
+    }
+    vol_map = {
+        "low_vol": "LOW",
+        "normal_vol": "NORMAL",
+        "elevated_vol": "ELEVATED",
+        "high_vol": "HIGH",
+        "crisis_vol": "CRISIS",
+    }
+    trend_label = trend_map.get(
+        getattr(regime_state, "trend_regime", "sideways"), "SIDEWAYS"
+    )
+    vol_label = vol_map.get(
+        getattr(regime_state, "volatility_regime", "normal_vol"),
+        "NORMAL",
+    )
+    score = max(
+        0,
+        min(
+            100,
+            int(confidence * 100) if isinstance(confidence, (int, float)) else 50,
+        ),
+    )
 
     risk_state = (
         "RISK_ON"
@@ -170,31 +201,84 @@ async def today_summary(request: Request):
         else ("RISK_OFF" if regime_label == "RISK_OFF" else "NEUTRAL")
     )
 
-    # 2. Scan signals
+    # 2. Market pulse — fetch indices/sectors from live endpoint
+    market_pulse = {}
+    try:
+        from src.api.main import _LIVE_INDICES, _LIVE_SECTORS
+
+        mds = request.app.state.market_data
+        pulse_tickers = [s for s, _ in _LIVE_INDICES] + [s for s, _ in _LIVE_SECTORS]
+        # Quick lookup from cache if available
+        idx_data = []
+        sec_data = []
+        for sym, name in _LIVE_INDICES:
+            try:
+                hist = await mds.get_history(sym, period="5d", interval="1d")
+                if hist is not None and len(hist) >= 2:
+                    c = "Close" if "Close" in hist.columns else "close"
+                    cur = float(hist[c].iloc[-1])
+                    prev = float(hist[c].iloc[-2])
+                    chg = round((cur / prev - 1) * 100, 2)
+                    idx_data.append(
+                        {
+                            "symbol": sym,
+                            "name": name,
+                            "price": round(cur, 2),
+                            "change_pct": chg,
+                        }
+                    )
+            except Exception:
+                pass
+        for sym, name in _LIVE_SECTORS[:6]:
+            try:
+                hist = await mds.get_history(sym, period="5d", interval="1d")
+                if hist is not None and len(hist) >= 2:
+                    c = "Close" if "Close" in hist.columns else "close"
+                    cur = float(hist[c].iloc[-1])
+                    prev = float(hist[c].iloc[-2])
+                    chg = round((cur / prev - 1) * 100, 2)
+                    sec_data.append(
+                        {
+                            "symbol": sym,
+                            "name": name,
+                            "change_pct": chg,
+                        }
+                    )
+            except Exception:
+                pass
+        sec_data.sort(key=lambda x: x["change_pct"], reverse=True)
+        market_pulse = {
+            "indices": idx_data,
+            "sector_leaders": sec_data[:3],
+            "sector_laggards": (sec_data[-3:][::-1] if len(sec_data) > 3 else []),
+        }
+    except Exception as exc:
+        logger.debug("Market pulse unavailable: %s", exc)
+
+    # 3. Scan signals
     scanned, scores = await _scan_live_signals(limit=50)
 
-    # 3. Filter funnel
+    # 4. Filter funnel
     universe = len(getattr(request.app.state, "_scan_watchlist", []))
     if universe == 0:
         from src.api.main import _SCAN_WATCHLIST
 
         universe = len(_SCAN_WATCHLIST)
 
-    total_scanned = universe
-    with_data = len(scanned) + max(0, universe - len(scanned))
     triggered = len(scanned)
     high_score = len([s for s in scanned if s.get("score", 0) >= 6.0])
     actionable = len([s for s in scanned if s.get("score", 0) >= 7.0])
+    high_conv = len([s for s in scanned if s.get("score", 0) >= 8.0])
 
     funnel = {
-        "universe": total_scanned,
-        "data_available": with_data,
+        "universe": universe,
         "signals_triggered": triggered,
         "score_above_6": high_score,
         "actionable_above_7": actionable,
+        "high_conviction_above_8": high_conv,
     }
 
-    # 4. Top 5 ranked
+    # 5. Top 5 ranked — with entry/stop/target
     ranked = sorted(scanned, key=lambda x: x.get("score", 0), reverse=True)
     top5 = []
     for rank, sig in enumerate(ranked[:5], 1):
@@ -212,14 +296,23 @@ async def today_summary(request: Request):
                 "ticker": sig.get("ticker", ""),
                 "strategy": _setup_family(sig.get("strategy", "")),
                 "score": sig.get("score", 0),
+                "grade": sig.get("grade", ""),
                 "timing": timing,
                 "action": action,
-                "why_now": _why_now(sig)[:2],
+                "action_reason": action_reason,
+                "why_now": _why_now(sig)[:3],
+                "why_not": _why_not(sig)[:2],
                 "risk_reward": sig.get("risk_reward", 0),
+                "entry_price": sig.get("entry_price", 0),
+                "target_price": sig.get("target_price", 0),
+                "stop_price": sig.get("stop_price", 0),
+                "rsi": sig.get("rsi", 0),
+                "invalidation": _invalidation(sig),
+                "position_hint": _position_hint(sig, should_trade),
             }
         )
 
-    # 5. Best setup family today
+    # 6. Best setup family today
     family_counts: Dict[str, int] = {}
     family_scores: Dict[str, float] = {}
     for sig in scanned:
@@ -230,10 +323,11 @@ async def today_summary(request: Request):
     best_family = None
     if family_scores:
         best_family = max(
-            family_scores, key=lambda k: family_scores[k] / max(family_counts[k], 1)
+            family_scores,
+            key=lambda k: family_scores[k] / max(family_counts[k], 1),
         )
 
-    # 6. Avoid list
+    # 7. Avoid list
     avoid = []
     if not should_trade:
         avoid.append("All new positions — regime unfavorable")
@@ -242,60 +336,128 @@ async def today_summary(request: Request):
         avoid.append("Extended momentum plays — reversal risk")
     if confidence < 0.4:
         avoid.append("Large positions — low regime confidence")
+    if vix_val > 30:
+        avoid.append(f"VIX at {vix_val:.0f} — size down or sit out")
 
-    # 7. Trade/Wait/Avoid summary
+    # 8. Narrative — morning-briefing style
+    idx_summary = ""
+    if market_pulse.get("indices"):
+        parts = []
+        for ix in market_pulse["indices"][:3]:
+            sign = "+" if ix["change_pct"] >= 0 else ""
+            parts.append(f"{ix['name']} {sign}{ix['change_pct']:.2f}%")
+        idx_summary = ", ".join(parts)
+
+    if not should_trade:
+        narrative = (
+            f"Risk-off regime detected. VIX at {vix_val:.0f}. "
+            f"No new positions recommended. "
+            f"Protect existing capital."
+        )
+    elif actionable >= 10:
+        narrative = (
+            f"Strong opportunity day. {idx_summary}. "
+            f"{actionable} setups above 7.0, "
+            f"{high_conv} high-conviction above 8.0. "
+            f"Focus on top-ranked. "
+            f"Best family: {best_family or 'Mixed'}."
+        )
+    elif actionable >= 3:
+        narrative = (
+            f"Selective opportunity day. {idx_summary}. "
+            f"{actionable} actionable setups found. "
+            f"Be selective — only trade the best. "
+            f"Regime is {trend_label.lower()} "
+            f"with {vol_label.lower()} volatility."
+        )
+    elif actionable >= 1:
+        narrative = (
+            f"Quiet day. {idx_summary}. "
+            f"Only {actionable} setup(s) meet criteria. "
+            f"Patience is an edge."
+        )
+    else:
+        narrative = (
+            f"No actionable setups today. {idx_summary}. "
+            f"The scanner is being selective — "
+            f"good setups are rare by design. "
+            f"Review the watchlist for developing patterns."
+        )
+
+    # 9. Tradeability
     if not should_trade:
         tradeability = "NO_TRADE"
-        trade_summary = "Market regime says wait. No new positions."
+    elif high_conv >= 3:
+        tradeability = "STRONG_TRADE"
     elif actionable >= 3:
         tradeability = "TRADE"
-        trade_summary = f"{actionable} actionable ideas. Focus on top-ranked."
     elif actionable >= 1:
         tradeability = "SELECTIVE"
-        trade_summary = f"Only {actionable} idea(s) qualify. Be selective."
     else:
         tradeability = "WAIT"
-        trade_summary = "No high-conviction setups today. Watch only."
 
-    # 8. What Changed (compare to yesterday-like heuristics)
+    # 10. What Changed
     what_changed = []
     if regime_label == "RISK_OFF":
         what_changed.append("Regime shifted to RISK_OFF — defensive posture")
-    if actionable >= 5:
-        what_changed.append(f"{actionable} signals above 7.0 — opportunity cluster")
+    if high_conv >= 3:
+        what_changed.append(f"{high_conv} high-conviction signals (≥8.0)")
     if best_family:
-        what_changed.append(f"Best setup family: {best_family}")
-    for sig in ranked[:3]:
-        t = sig.get("ticker", "?")
-        s = sig.get("score", 0)
-        what_changed.append(f"{t} scored {s:.1f} — top of today's board")
+        what_changed.append(f"Leading setup family: {best_family}")
+    # Sector movers
+    leaders = market_pulse.get("sector_leaders", [])
+    if leaders and leaders[0].get("change_pct", 0) > 1.0:
+        what_changed.append(
+            f"Sector leader: {leaders[0]['name']} " f"+{leaders[0]['change_pct']:.1f}%"
+        )
+    laggards = market_pulse.get("sector_laggards", [])
+    if laggards and laggards[0].get("change_pct", 0) < -1.0:
+        what_changed.append(
+            f"Sector laggard: {laggards[0]['name']} "
+            f"{laggards[0]['change_pct']:.1f}%"
+        )
 
-    # 9. Event risk (basic — earnings proximity, VIX, etc.)
+    # 11. Event risk
     event_risks = []
-    vix_level = getattr(regime_state, "vix", None)
-    if vix_level and vix_level > 25:
-        event_risks.append(f"VIX at {vix_level:.0f} — elevated fear")
+    if vix_val > 25:
+        event_risks.append(f"VIX at {vix_val:.0f} — elevated fear")
+    if breadth < 0.35:
+        event_risks.append(f"Breadth {breadth:.0%} — narrow participation")
     if not should_trade:
         event_risks.append("Regime guard active — no new entries")
+    if entropy < 0.5:
+        event_risks.append("Low entropy — regime reading uncertain")
 
     now = datetime.now(timezone.utc)
 
     return {
         "date": now.strftime("%Y-%m-%d"),
+        "narrative": narrative,
         "market_regime": {
             "label": regime_label,
             "risk_state": risk_state,
             "should_trade": should_trade,
             "confidence": round(confidence, 2),
             "tradeability": tradeability,
-            "summary": trade_summary,
-            "trend": getattr(regime_state, "trend", "UNKNOWN"),
-            "volatility": getattr(regime_state, "volatility", "NORMAL"),
-            "score": getattr(regime_state, "score", 50),
+            "summary": narrative,
+            "trend": trend_label,
+            "volatility": vol_label,
+            "score": score,
+            "vix": round(vix_val, 1),
+            "breadth": round(breadth * 100),
+            "entropy": round(entropy, 2),
         },
+        "market_pulse": market_pulse,
         "top_5": top5,
         "filter_funnel": funnel,
         "best_setup_family": best_family,
+        "family_breakdown": {
+            k: {
+                "count": family_counts.get(k, 0),
+                "avg_score": round(v / max(family_counts.get(k, 1), 1), 1),
+            }
+            for k, v in family_scores.items()
+        },
         "avoid": avoid,
         "what_changed": what_changed,
         "event_risks": event_risks,
