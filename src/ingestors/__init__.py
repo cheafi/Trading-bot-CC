@@ -7,17 +7,22 @@ Data ingestion services:
 - NewsIngestor: Financial news aggregation
 - SocialIngestor: Social sentiment tracking
 """
-from src.ingestors.base import BaseIngestor
-from src.ingestors.market_data import MarketDataIngestor
-from src.ingestors.news import NewsIngestor
-from src.ingestors.social import SocialIngestor, SentimentAggregator
-from src.ingestors.realtime_feed import RealtimeFeedManager
+_LAZY = {
+    "BaseIngestor": "src.ingestors.base",
+    "MarketDataIngestor": "src.ingestors.market_data",
+    "NewsIngestor": "src.ingestors.news",
+    "SocialIngestor": "src.ingestors.social",
+    "SentimentAggregator": "src.ingestors.social",
+    "RealtimeFeedManager": "src.ingestors.realtime_feed",
+}
 
-__all__ = [
-    'BaseIngestor',
-    'MarketDataIngestor',
-    'NewsIngestor',
-    'SocialIngestor',
-    'SentimentAggregator',
-    'RealtimeFeedManager',
-]
+__all__ = list(_LAZY)
+
+
+def __getattr__(name):
+    if name in _LAZY:
+        import importlib
+
+        mod = importlib.import_module(_LAZY[name])
+        return getattr(mod, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

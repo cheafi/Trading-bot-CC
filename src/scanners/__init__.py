@@ -1,17 +1,22 @@
 """
 Market Scanners - AI-powered stock scanning and pattern recognition.
 """
-from .pattern_scanner import PatternScanner, ChartPattern
-from .sector_scanner import SectorScanner
-from .momentum_scanner import MomentumScanner
-from .volume_scanner import VolumeScanner
-from .market_monitor import MarketMonitor
+_LAZY = {
+    "PatternScanner": ".pattern_scanner",
+    "ChartPattern": ".pattern_scanner",
+    "SectorScanner": ".sector_scanner",
+    "MomentumScanner": ".momentum_scanner",
+    "VolumeScanner": ".volume_scanner",
+    "MarketMonitor": ".market_monitor",
+}
 
-__all__ = [
-    'PatternScanner',
-    'ChartPattern', 
-    'SectorScanner',
-    'MomentumScanner',
-    'VolumeScanner',
-    'MarketMonitor'
-]
+__all__ = list(_LAZY)
+
+
+def __getattr__(name):
+    if name in _LAZY:
+        import importlib
+
+        mod = importlib.import_module(_LAZY[name], __name__)
+        return getattr(mod, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

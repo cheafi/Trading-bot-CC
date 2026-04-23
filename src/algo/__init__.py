@@ -26,146 +26,109 @@ Strategy Categories:
 """
 
 from .base_strategy import IStrategy, StrategyConfig, StrategyMode, TimeFrame
-from .strategy_manager import StrategyManager
-from .indicators import IndicatorLibrary
 
-# Pattern-based strategies
-from .vcp_strategy import VCPStrategy
-
-# Momentum strategies
-from .momentum_strategy import MomentumBreakoutStrategy
-
-# Mean reversion strategies
-from .mean_reversion_strategy import MeanReversionStrategy
-
-# Trend following strategies
-from .trend_following_strategy import TrendFollowingStrategy
-
-# Swing trading strategies
-from .swing_strategies import (
-    ShortTermTrendFollowingStrategy,
-    ClassicSwingStrategy,
-    MomentumRotationStrategy,
-    ShortTermMeanReversionStrategy,
-    SwingStyle,
-    SwingTradeConfig,
-    SWING_STRATEGIES,
-    get_swing_strategy,
-    list_swing_strategies,
-)
-
-# Earnings and event strategies
-from .earnings_strategies import (
-    PreEarningsMomentumStrategy,
-    PostEarningsDriftStrategy,
-    EarningsBreakoutStrategy,
-    EarningsEvent,
-    EarningsReaction,
-    EarningsCalendar,
-    EARNINGS_STRATEGIES,
-    get_earnings_strategy,
-    list_earnings_strategies,
-)
-
-# Position sizing and risk management
-from .position_manager import (
-    PositionManager,
-    Position,
-    PositionStatus,
-    RiskParameters,
-    calculate_risk_reward,
-    calculate_kelly_fraction,
-    suggested_risk_parameters,
-)
+_LAZY = {
+    "StrategyManager": ".strategy_manager",
+    "IndicatorLibrary": ".indicators",
+    "VCPStrategy": ".vcp_strategy",
+    "MomentumBreakoutStrategy": ".momentum_strategy",
+    "MeanReversionStrategy": ".mean_reversion_strategy",
+    "TrendFollowingStrategy": ".trend_following_strategy",
+    "ShortTermTrendFollowingStrategy": ".swing_strategies",
+    "ClassicSwingStrategy": ".swing_strategies",
+    "MomentumRotationStrategy": ".swing_strategies",
+    "ShortTermMeanReversionStrategy": ".swing_strategies",
+    "SwingStyle": ".swing_strategies",
+    "SwingTradeConfig": ".swing_strategies",
+    "SWING_STRATEGIES": ".swing_strategies",
+    "get_swing_strategy": ".swing_strategies",
+    "list_swing_strategies": ".swing_strategies",
+    "PreEarningsMomentumStrategy": ".earnings_strategies",
+    "PostEarningsDriftStrategy": ".earnings_strategies",
+    "EarningsBreakoutStrategy": ".earnings_strategies",
+    "EarningsEvent": ".earnings_strategies",
+    "EarningsReaction": ".earnings_strategies",
+    "EarningsCalendar": ".earnings_strategies",
+    "EARNINGS_STRATEGIES": ".earnings_strategies",
+    "get_earnings_strategy": ".earnings_strategies",
+    "list_earnings_strategies": ".earnings_strategies",
+    "PositionManager": ".position_manager",
+    "Position": ".position_manager",
+    "PositionStatus": ".position_manager",
+    "RiskParameters": ".position_manager",
+    "calculate_risk_reward": ".position_manager",
+    "calculate_kelly_fraction": ".position_manager",
+    "suggested_risk_parameters": ".position_manager",
+}
 
 __all__ = [
-    # Core classes
-    'IStrategy',
-    'StrategyConfig',
-    'StrategyMode',
-    'TimeFrame',
-    'StrategyManager',
-    'IndicatorLibrary',
-    
-    # Pattern strategies
-    'VCPStrategy',
-    
-    # Momentum strategies
-    'MomentumBreakoutStrategy',
-    'MomentumRotationStrategy',
-    
-    # Mean reversion strategies
-    'MeanReversionStrategy',
-    'ShortTermMeanReversionStrategy',
-    
-    # Trend following strategies
-    'TrendFollowingStrategy',
-    'ShortTermTrendFollowingStrategy',
-    
-    # Swing trading strategies
-    'ClassicSwingStrategy',
-    'SwingStyle',
-    'SwingTradeConfig',
-    'SWING_STRATEGIES',
-    'get_swing_strategy',
-    'list_swing_strategies',
-    
-    # Earnings strategies
-    'PreEarningsMomentumStrategy',
-    'PostEarningsDriftStrategy',
-    'EarningsBreakoutStrategy',
-    'EarningsEvent',
-    'EarningsReaction',
-    'EarningsCalendar',
-    'EARNINGS_STRATEGIES',
-    'get_earnings_strategy',
-    'list_earnings_strategies',
-    
-    # Position management
-    'PositionManager',
-    'Position',
-    'PositionStatus',
-    'RiskParameters',
-    'calculate_risk_reward',
-    'calculate_kelly_fraction',
-    'suggested_risk_parameters',
+    "IStrategy",
+    "StrategyConfig",
+    "StrategyMode",
+    "TimeFrame",
+    *_LAZY,
+    "ALL_STRATEGIES",
+    "get_strategy",
+    "list_all_strategies",
 ]
 
-# Strategy registry for easy access
-ALL_STRATEGIES = {
-    # Pattern
-    'vcp': VCPStrategy,
-    
-    # Momentum
-    'momentum_breakout': MomentumBreakoutStrategy,
-    'momentum_rotation': MomentumRotationStrategy,
-    
-    # Mean Reversion
-    'mean_reversion': MeanReversionStrategy,
-    'short_term_mean_reversion': ShortTermMeanReversionStrategy,
-    
-    # Trend Following
-    'trend_following': TrendFollowingStrategy,
-    'short_term_trend_following': ShortTermTrendFollowingStrategy,
-    
-    # Swing Trading
-    'classic_swing': ClassicSwingStrategy,
-    
-    # Earnings
-    'pre_earnings_momentum': PreEarningsMomentumStrategy,
-    'post_earnings_drift': PostEarningsDriftStrategy,
-    'earnings_breakout': EarningsBreakoutStrategy,
-}
+_all_strategies_cache = None
+
+
+def _build_all_strategies():
+    global _all_strategies_cache
+    if _all_strategies_cache is not None:
+        return _all_strategies_cache
+    import importlib
+
+    _all_strategies_cache = {}
+    for sid, mod_attr in [
+        ("vcp", ("VCPStrategy", ".vcp_strategy")),
+        ("momentum_breakout", ("MomentumBreakoutStrategy", ".momentum_strategy")),
+        ("mean_reversion", ("MeanReversionStrategy", ".mean_reversion_strategy")),
+        ("trend_following", ("TrendFollowingStrategy", ".trend_following_strategy")),
+        (
+            "short_term_trend_following",
+            ("ShortTermTrendFollowingStrategy", ".swing_strategies"),
+        ),
+        ("classic_swing", ("ClassicSwingStrategy", ".swing_strategies")),
+        ("momentum_rotation", ("MomentumRotationStrategy", ".swing_strategies")),
+        (
+            "short_term_mean_reversion",
+            ("ShortTermMeanReversionStrategy", ".swing_strategies"),
+        ),
+        (
+            "pre_earnings_momentum",
+            ("PreEarningsMomentumStrategy", ".earnings_strategies"),
+        ),
+        ("post_earnings_drift", ("PostEarningsDriftStrategy", ".earnings_strategies")),
+        ("earnings_breakout", ("EarningsBreakoutStrategy", ".earnings_strategies")),
+    ]:
+        attr, modname = mod_attr
+        cls = getattr(importlib.import_module(modname, __name__), attr)
+        _all_strategies_cache[sid] = cls
+    return _all_strategies_cache
+
+
+def __getattr__(name):
+    if name in _LAZY:
+        import importlib
+
+        mod = importlib.import_module(_LAZY[name], __name__)
+        return getattr(mod, name)
+    if name == "ALL_STRATEGIES":
+        return _build_all_strategies()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def get_strategy(strategy_id: str) -> IStrategy:
     """Get any strategy by ID."""
-    if strategy_id not in ALL_STRATEGIES:
+    strategies = _build_all_strategies()
+    if strategy_id not in strategies:
         raise ValueError(
-            f"Unknown strategy: {strategy_id}. "
-            f"Available: {list(ALL_STRATEGIES.keys())}"
+            f"Unknown strategy: {strategy_id}. " f"Available: {list(strategies.keys())}"
         )
-    return ALL_STRATEGIES[strategy_id]()
+    return strategies[strategy_id]()
 
 
 def list_all_strategies() -> dict:
@@ -178,4 +141,3 @@ def list_all_strategies() -> dict:
         'swing_trading': ['classic_swing'],
         'earnings': ['pre_earnings_momentum', 'post_earnings_drift', 'earnings_breakout'],
     }
-

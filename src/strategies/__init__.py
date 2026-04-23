@@ -1,47 +1,12 @@
 """
-TradingAI Bot - Unified Strategy Registry
+TradingAI Bot - Unified Strategy Registry  (lazy-loaded)
 
-Single canonical registry consumed by SignalEngine, StrategyOptimizer,
-AutoTradingEngine, and the scheduler.
-
-Merges:
-  - src.strategies  (BaseStrategy subclasses: momentum_v1, etc.)
-  - src.algo        (IStrategy subclasses: vcp, classic_swing, etc.)
-
-IStrategy classes are wrapped in AlgoStrategyAdapter so every strategy
-exposes the same generate_signals(universe, features, market_data) API.
+All heavy imports deferred until first use.
 """
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional
-
-from src.strategies.base import BaseStrategy
-from src.strategies.algo_adapter import AlgoStrategyAdapter
-
-# -- Original BaseStrategy implementations --
-from src.strategies.momentum import MomentumStrategy
-from src.strategies.mean_reversion import MeanReversionStrategy
-from src.strategies.breakout import BreakoutStrategy
-
-# -- IStrategy implementations (wrapped via adapter) --
-from src.algo.vcp_strategy import VCPStrategy
-from src.algo.momentum_strategy import MomentumBreakoutStrategy
-from src.algo.mean_reversion_strategy import (
-    MeanReversionStrategy as AlgoMeanRevStrategy,
-)
-from src.algo.trend_following_strategy import TrendFollowingStrategy
-from src.algo.swing_strategies import (
-    ShortTermTrendFollowingStrategy,
-    ClassicSwingStrategy,
-    MomentumRotationStrategy,
-    ShortTermMeanReversionStrategy,
-)
-from src.algo.earnings_strategies import (
-    PreEarningsMomentumStrategy,
-    PostEarningsDriftStrategy,
-    EarningsBreakoutStrategy,
-)
+from typing import Dict
 
 logger = logging.getLogger(__name__)
 
@@ -53,51 +18,72 @@ __all__ = [
     "get_all_strategies",
 ]
 
-# ================================================================
-# UNIFIED STRATEGY REGISTRY
-#
-# Keys are the canonical strategy IDs used everywhere:
-#   - RegimeDetector._get_active_strategies()
-#   - StrategyOptimizer.STRATEGY_REGISTRY
-#   - Signal.strategy_id
-# ================================================================
 STRATEGY_REGISTRY: Dict[str, type] = {}
+_registry_built = False
 
 
-def _reg_native(cls):
-    """Register a BaseStrategy subclass directly."""
-    STRATEGY_REGISTRY[cls.STRATEGY_ID] = cls
+def _ensure_registry():
+    global _registry_built
+    if _registry_built:
+        return
+    _registry_built = True
 
-
-def _reg_algo(algo_cls):
-    """Register an IStrategy subclass via the adapter factory."""
-    sid = algo_cls.STRATEGY_ID
-    STRATEGY_REGISTRY[sid] = lambda cfg=None, _a=algo_cls: (
-        AlgoStrategyAdapter(_a, cfg)
+    from src.strategies.algo_adapter import AlgoStrategyAdapter
+    from src.strategies.momentum import MomentumStrategy
+    from src.strategies.mean_reversion import MeanReversionStrategy
+    from src.strategies.breakout import BreakoutStrategy
+    from src.algo.vcp_strategy import VCPStrategy
+    from src.algo.momentum_strategy import MomentumBreakoutStrategy
+    from src.algo.mean_reversion_strategy import (
+        MeanReversionStrategy as AlgoMeanRevStrategy,
+    )
+    from src.algo.trend_following_strategy import TrendFollowingStrategy
+    from src.algo.swing_strategies import (
+        ShortTermTrendFollowingStrategy,
+        ClassicSwingStrategy,
+        MomentumRotationStrategy,
+        ShortTermMeanReversionStrategy,
+    )
+    from src.algo.earnings_strategies import (
+        PreEarningsMomentumStrategy,
+        PostEarningsDriftStrategy,
+        EarningsBreakoutStrategy,
     )
 
+    for cls in [MomentumStrategy, MeanReversionStrategy, BreakoutStrategy]:
+        STRATEGY_REGISTRY[cls.STRATEGY_ID] = cls
 
-# -- Native strategies (BaseStrategy) --
-_reg_native(MomentumStrategy)          # momentum_v1
-_reg_native(MeanReversionStrategy)     # mean_reversion_v1
-_reg_native(BreakoutStrategy)          # breakout_v1
+    for algo_cls in [
+        VCPStrategy, MomentumBreakoutStrategy, AlgoMeanRevStrategy,
+        TrendFollowingStrategy, ShortTermTrendFollowingStrategy,
+        ClassicSwingStrategy, MomentumRotationStrategy,
+        ShortTermMeanReversionStrategy, PreEarningsMomentumStrategy,
+        PostEarningsDriftStrategy, EarningsBreakoutStrategy,
+    ]:
+        sid = algo_cls.STRATEGY_ID
+        STRATEGY_REGISTRY[sid] = lambda cfg=None, _a=algo_cls: (
+            AlgoStrategyAdapter(_a, cfg)
+        )
 
-# -- Algo strategies (adapted IStrategy) --
-_reg_algo(VCPStrategy)                          # vcp
-_reg_algo(MomentumBreakoutStrategy)             # momentum_breakout
-_reg_algo(AlgoMeanRevStrategy)                  # mean_reversion (algo)
-_reg_algo(TrendFollowingStrategy)               # trend_following
-_reg_algo(ShortTermTrendFollowingStrategy)      # short_term_trend_following
-_reg_algo(ClassicSwingStrategy)                 # classic_swing
-_reg_algo(MomentumRotationStrategy)             # momentum_rotation
-_reg_algo(ShortTermMeanReversionStrategy)       # short_term_mean_reversion
-_reg_algo(PreEarningsMomentumStrategy)          # pre_earnings_momentum
-_reg_algo(PostEarningsDriftStrategy)            # post_earnings_drift
-_reg_algo(EarningsBreakoutStrategy)             # earnings_breakout
+    logger.debug("Strategy registry built: %d strategies", len(STRATEGY_REGISTRY))
 
 
-def get_strategy(strategy_id: str, config: dict = None) -> BaseStrategy:
+def __getattr__(name):
+    if name == "BaseStrategy":
+        from src.strategies.base import BaseStrategy
+        return BaseStrategy
+    if name == "AlgoStrategyAdapter":
+        from src.strategies.algo_adapter import AlgoStrategyAdapter
+        return AlgoStrategyAdapter
+    if name == "STRATEGY_REGISTRY":
+        _ensure_registry()
+        return STRATEGY_REGISTRY
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def get_strategy(strategy_id: str, config: dict = None):
     """Instantiate a strategy by its canonical ID."""
+    _ensure_registry()
     if strategy_id not in STRATEGY_REGISTRY:
         raise ValueError(
             f"Unknown strategy: {strategy_id}. "
@@ -109,8 +95,9 @@ def get_strategy(strategy_id: str, config: dict = None) -> BaseStrategy:
     return entry(config)
 
 
-def get_all_strategies(configs: dict = None) -> List[BaseStrategy]:
+def get_all_strategies(configs: dict = None) -> list:
     """Instantiate every registered strategy."""
+    _ensure_registry()
     configs = configs or {}
     instances = []
     for sid in STRATEGY_REGISTRY:

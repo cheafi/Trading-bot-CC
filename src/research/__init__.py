@@ -4,16 +4,23 @@ News Intelligence - AI-powered news analysis and summarization.
 Condenses earnings reports, analyst updates, and macroeconomic news
 into actionable trading briefs.
 """
-from .news_analyzer import NewsAnalyzer, NewsItem, NewsBrief
-from .earnings_analyzer import EarningsAnalyzer, EarningsReport
-from .macro_analyzer import MacroAnalyzer, MacroEvent
+_LAZY = {
+    "NewsAnalyzer": ".news_analyzer",
+    "NewsItem": ".news_analyzer",
+    "NewsBrief": ".news_analyzer",
+    "EarningsAnalyzer": ".earnings_analyzer",
+    "EarningsReport": ".earnings_analyzer",
+    "MacroAnalyzer": ".macro_analyzer",
+    "MacroEvent": ".macro_analyzer",
+}
 
-__all__ = [
-    'NewsAnalyzer',
-    'NewsItem',
-    'NewsBrief',
-    'EarningsAnalyzer',
-    'EarningsReport',
-    'MacroAnalyzer',
-    'MacroEvent'
-]
+__all__ = list(_LAZY)
+
+
+def __getattr__(name):
+    if name in _LAZY:
+        import importlib
+
+        mod = importlib.import_module(_LAZY[name], __name__)
+        return getattr(mod, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

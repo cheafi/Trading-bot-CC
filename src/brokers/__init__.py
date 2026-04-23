@@ -8,22 +8,26 @@ Supports:
 - Paper Trading - Simulation mode
 """
 
-from src.brokers.base import BaseBroker, OrderResult, Position, AccountInfo
-from src.brokers.futu_broker import FutuBroker
-from src.brokers.ib_broker import IBBroker
-from src.brokers.paper_broker import PaperBroker
-from src.brokers.mt5_broker import MetaTraderBroker
-from src.brokers.broker_manager import BrokerManager, BrokerType
+_LAZY = {
+    "BaseBroker": "src.brokers.base",
+    "OrderResult": "src.brokers.base",
+    "Position": "src.brokers.base",
+    "AccountInfo": "src.brokers.base",
+    "FutuBroker": "src.brokers.futu_broker",
+    "IBBroker": "src.brokers.ib_broker",
+    "PaperBroker": "src.brokers.paper_broker",
+    "MetaTraderBroker": "src.brokers.mt5_broker",
+    "BrokerManager": "src.brokers.broker_manager",
+    "BrokerType": "src.brokers.broker_manager",
+}
 
-__all__ = [
-    "BaseBroker",
-    "OrderResult",
-    "Position",
-    "AccountInfo",
-    "FutuBroker",
-    "IBBroker",
-    "PaperBroker",
-    "MetaTraderBroker",
-    "BrokerManager",
-    "BrokerType",
-]
+__all__ = list(_LAZY)
+
+
+def __getattr__(name):
+    if name in _LAZY:
+        import importlib
+
+        mod = importlib.import_module(_LAZY[name])
+        return getattr(mod, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

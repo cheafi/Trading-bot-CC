@@ -8,18 +8,23 @@ Contains the core processing engines:
 - AIAdvisor: Chain-of-thought decision making
 - AutoTradingEngine: 24/7 autonomous trading
 """
-from src.engines.feature_engine import FeatureEngine
-from src.engines.signal_engine import SignalEngine, RegimeDetector, RiskModel
-from src.engines.gpt_validator import GPTSignalValidator
-from src.engines.ai_advisor import AIAdvisor
-from src.engines.auto_trading_engine import AutoTradingEngine
+_LAZY = {
+    "FeatureEngine": "src.engines.feature_engine",
+    "SignalEngine": "src.engines.signal_engine",
+    "RegimeDetector": "src.engines.signal_engine",
+    "RiskModel": "src.engines.signal_engine",
+    "GPTSignalValidator": "src.engines.gpt_validator",
+    "AIAdvisor": "src.engines.ai_advisor",
+    "AutoTradingEngine": "src.engines.auto_trading_engine",
+}
 
-__all__ = [
-    'FeatureEngine',
-    'SignalEngine',
-    'RegimeDetector',
-    'RiskModel',
-    'GPTSignalValidator',
-    'AIAdvisor',
-    'AutoTradingEngine',
-]
+__all__ = list(_LAZY)
+
+
+def __getattr__(name):
+    if name in _LAZY:
+        import importlib
+
+        mod = importlib.import_module(_LAZY[name])
+        return getattr(mod, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
