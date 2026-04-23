@@ -95,11 +95,33 @@
 
     <!-- ══════ GLOBAL Trust Strip ══════ -->
     <div class="trust-strip" x-show="live">
-      <span :style="trust.mode==='SYNTHETIC'?'color:var(--amber)':trust.mode==='PAPER'?'color:var(--blue)':'color:var(--green)'" x-text="'● '+(trust.mode||'LIVE')"></span>
-      <span x-text="'Source: '+(trust.source||'market_data_service')"></span>
-      <span x-text="'Freshness: REAL_TIME'"></span>
-      <span x-text="'As-of: '+(trust.as_of?trust.as_of.slice(0,19):'—')"></span>
-      <span :style="today7.tradeability==='TRADE'?'color:var(--green)':today7.tradeability==='NO_TRADE'?'color:var(--red)':'color:var(--amber)'" x-text="today7.tradeability?'Trade: '+today7.tradeability:''"></span>
+      <!-- Mode badge -->
+      <span style="padding:1px 6px;border-radius:3px;font-weight:600;font-size:9px;letter-spacing:.5px"
+        :style="({LIVE:'background:#065f46;color:#6ee7b7',PAPER:'background:#1e3a5f;color:#93c5fd',BACKTEST:'background:#713f12;color:#fde68a',SYNTHETIC:'background:#581c87;color:#d8b4fe'})[trust.mode||'LIVE']||'background:#065f46;color:#6ee7b7'"
+        x-text="trust.mode||'LIVE'"></span>
+      <!-- Source -->
+      <span x-text="trust.source||'engine'"></span>
+      <!-- Freshness dot -->
+      <span class="flex items-center gap-1">
+        <span style="width:5px;height:5px;border-radius:50%;display:inline-block"
+          :style="trust.freshness==='REAL_TIME'?'background:#22c55e':trust.freshness==='DELAYED'?'background:#f59e0b':'background:#ef4444'"></span>
+        <span x-text="trust.freshness||'REAL_TIME'"></span>
+      </span>
+      <!-- Data age -->
+      <span x-text="trust.as_of?'⏱ '+((Date.now()-new Date(trust.as_of).getTime())/1000|0)+'s ago':''" style="color:var(--t3)"></span>
+      <!-- Confidence bar -->
+      <span class="flex items-center gap-1" x-show="today7.regime">
+        <span style="font-size:8px;color:var(--t3)">Conf</span>
+        <span style="width:40px;height:4px;background:var(--s3);border-radius:2px;display:inline-block;overflow:hidden">
+          <span style="height:100%;display:block;border-radius:2px;transition:width .3s"
+            :style="'width:'+(today7.regime?.confidence*100||50)+'%;background:'+(today7.regime?.confidence>.7?'var(--green)':today7.regime?.confidence>.4?'var(--amber)':'var(--red)')"></span>
+        </span>
+        <span style="font-size:8px" x-text="((today7.regime?.confidence||.5)*100|0)+'%'"></span>
+      </span>
+      <!-- Tradeability badge -->
+      <span style="padding:1px 6px;border-radius:3px;font-size:9px;font-weight:600;margin-left:auto"
+        :style="({STRONG_TRADE:'background:#065f46;color:#6ee7b7',TRADE:'background:#065f46;color:#6ee7b7',SELECTIVE:'background:#713f12;color:#fde68a',WAIT:'background:#713f12;color:#fde68a',NO_TRADE:'background:#7f1d1d;color:#fca5a5'})[today7.tradeability]||'background:var(--s3);color:var(--t3)'"
+        x-text="today7.tradeability||'—'"></span>
     </div>
 
     <!-- ══════ ERROR / LOADING BANNER ══════ -->

@@ -33,12 +33,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import math
 import random
 import time
 from typing import Any, Dict, List, Optional
 
-import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -70,9 +68,9 @@ _PERIOD_MAX_DAILY: Dict[str, int] = {
 
 MAX_NAN_FRACTION = 0.20     # reject if >20% of Close values are NaN
 BACKOFF_BASE     = 1.5      # base for exponential back-off
-BACKOFF_MAX      = 60.0     # cap on back-off delay (seconds)
+BACKOFF_MAX = 10.0  # cap on back-off delay (seconds)
 JITTER_FRAC      = 0.30     # ±30% random jitter applied to each delay
-MAX_RETRIES      = 3
+MAX_RETRIES = 2  # reduced: neg-cache handles persistent failures
 
 
 # ── internal cache entry ──────────────────────────────────────────────────────

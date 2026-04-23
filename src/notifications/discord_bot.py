@@ -37,18 +37,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import socket
 import traceback
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Sequence
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 import aiohttp
 
 from src.core.config import get_settings
-from src.notifications._embeds import (
-    SignalEmbed, RegimeEmbed, RiskAlertEmbed, AlertSeverity,
-)
+from src.notifications._embeds import SignalEmbed
 
 
 def _get_lan_ip() -> str:
@@ -2968,7 +2965,7 @@ class DiscordInteractiveBot:
                     return
                 whales.sort(key=lambda x: x["ratio"], reverse=True)
                 e = discord.Embed(
-                    title=f"🐋 Whale Alert — Unusual Volume Detected",
+                    title="🐋 Whale Alert — Unusual Volume Detected",
                     description=f"{len(whales)} stocks with 3x+ avg volume",
                     color=COLOR_WARN, timestamp=now)
                 for w in whales[:5]:
@@ -3488,7 +3485,7 @@ class DiscordInteractiveBot:
                         p = d.get("change_pct", 0)
                         extra_lines.append(f"{'🟢' if p >= 0 else '🔴'} {name}: {p:+.2f}%")
                     if extra_lines:
-                        e.add_field(name=f"📊 Session Markets",
+                        e.add_field(name="📊 Session Markets",
                                     value=" | ".join(extra_lines), inline=False)
 
                     # Macro
@@ -3528,7 +3525,7 @@ class DiscordInteractiveBot:
                     else:
                         e.add_field(name="🛡️ Risk", value="✅ All clear — normal sizing", inline=False)
 
-                    e.set_footer(text=f"Auto-morning brief • /daily_update for full intelligence • /dashboard for everything")
+                    e.set_footer(text="Auto-morning brief • /daily_update for full intelligence • /dashboard for everything")
                     await _send_ch("daily-brief", embed=e)
                     await _audit(f"{emoji} Smart morning ({key}) posted — {risk}")
                 except Exception as exc:
@@ -3670,7 +3667,7 @@ class DiscordInteractiveBot:
             try:
                 e = discord.Embed(
                     title="💚 Bot Health Check",
-                    description=f"All systems operational",
+                    description="All systems operational",
                     color=COLOR_SUCCESS, timestamp=now)
                 e.add_field(name="Uptime", value=f"Since {bot.user.created_at.strftime('%Y-%m-%d') if bot.user else 'N/A'}")
                 e.add_field(name="Guilds", value=str(len(bot.guilds)))
@@ -3782,9 +3779,9 @@ class DiscordInteractiveBot:
                 if not t.is_running():
                     t.start()
             print(f"   🔄 Started {len(all_tasks)} auto-pilot tasks")
-            print(f"   🚨 Real-time alerts: prices(3min) + news(30min) + VIX(5min)")
-            print(f"   ☀️ Smart morning: Asia(01UTC) + Europe(07UTC) + US(13:30UTC)")
-            print(f"   🎯 Opportunity scanner: every 30min, score≥75 only")
+            print("   🚨 Real-time alerts: prices(3min) + news(30min) + VIX(5min)")
+            print("   ☀️ Smart morning: Asia(01UTC) + Europe(07UTC) + US(13:30UTC)")
+            print("   🎯 Opportunity scanner: every 30min, score≥75 only")
             await _audit(f"🤖 Bot started as {bot.user} — {len(all_tasks)} tasks running\n"
                          f"🚨 Real-time: prices + news + VIX + opportunities")
 
@@ -4077,7 +4074,7 @@ class DiscordInteractiveBot:
                     strategies_off=strats_off,
                     no_trade_triggers=risk_flags, top_drivers=drivers,
                     scenarios=ScenarioPlan(
-                        base_case={"probability": "55%", "description": f"Range-bound near current levels"},
+                        base_case={"probability": "55%", "description": "Range-bound near current levels"},
                         bull_case={"probability": "25%", "description": f"Break above R${spy_data.get('high', 0):.0f}"},
                         bear_case={"probability": "20%", "description": f"Lose S${spy_data.get('low', 0):.0f}, vol spike"},
                         triggers=["Macro data", "Fed commentary", "Earnings surprises"],
@@ -4249,7 +4246,7 @@ class DiscordInteractiveBot:
                 if spy_pct < -2:
                     risk_flags.append("⚠️ SPY down >2% — watch for capitulation")
                 if abs(qqq_pct - spy_pct) > 1.5:
-                    risk_flags.append(f"⚠️ QQQ/SPY divergence — rotation risk")
+                    risk_flags.append("⚠️ QQQ/SPY divergence — rotation risk")
                 if risk_flags:
                     e1.add_field(name="🛡️ Risk Alerts",
                                  value="\n".join(risk_flags), inline=False)
@@ -4472,7 +4469,7 @@ class DiscordInteractiveBot:
             try:
                 hist = await _mds.get_history(ticker.upper(), period="3mo")
                 if hist is None or hist.empty:
-                    await interaction.followup.send(f"❌ No data"); return
+                    await interaction.followup.send("❌ No data"); return
                 close = hist["Close"]; price = close.iloc[-1]
                 sma20 = close.rolling(20).mean().iloc[-1]
                 sma50 = close.rolling(50).mean().iloc[-1]
@@ -4548,7 +4545,7 @@ class DiscordInteractiveBot:
             try:
                 hist = await _mds.get_history(ticker.upper(), period="6mo")
                 if hist is None or hist.empty:
-                    await interaction.followup.send(f"❌ No data"); return
+                    await interaction.followup.send("❌ No data"); return
                 close, high, low = hist["Close"], hist["High"], hist["Low"]
                 price = close.iloc[-1]
                 e = discord.Embed(title=f"📏 S/R — {ticker.upper()}",
@@ -4634,15 +4631,15 @@ class DiscordInteractiveBot:
             # Trend
             if price > sma20 > sma50:
                 conviction += 25
-                buy_pts.append(f"✅ Price > SMA20 > SMA50 — uptrend in force")
+                buy_pts.append("✅ Price > SMA20 > SMA50 — uptrend in force")
             elif price > sma50:
                 conviction += 10
-                buy_pts.append(f"🟡 Above SMA50 — holding trend support")
+                buy_pts.append("🟡 Above SMA50 — holding trend support")
             elif price < sma20 < sma50:
                 conviction -= 25
-                sell_pts.append(f"🔴 Below SMA20 & SMA50 — downtrend confirmed, avoid longs")
+                sell_pts.append("🔴 Below SMA20 & SMA50 — downtrend confirmed, avoid longs")
             else:
-                sell_pts.append(f"🟠 Mixed trend — no clear direction, wait for clarity")
+                sell_pts.append("🟠 Mixed trend — no clear direction, wait for clarity")
 
             # Pullback (swing quality)
             if 2 <= pb <= 7:
@@ -4650,7 +4647,7 @@ class DiscordInteractiveBot:
                 buy_pts.append(f"✅ {pb}-day healthy pullback in uptrend — classic swing entry")
             elif pb == 1:
                 conviction += 5
-                buy_pts.append(f"🟡 1-day dip — monitor for follow-through")
+                buy_pts.append("🟡 1-day dip — monitor for follow-through")
 
             # RSI
             if rsi < 30:
@@ -5400,7 +5397,6 @@ class DiscordInteractiveBot:
 
             # Use the live API backtest engine
             try:
-                import aiohttp
                 params = {"ticker": ticker, "strategy": strategy, "period": period}
                 if start_date:
                     params["start_date"] = start_date
@@ -6878,6 +6874,265 @@ class DiscordInteractiveBot:
             except Exception as ex:
                 await interaction.followup.send(f"❌ Error: {ex}")
             await _audit(f"📘 {interaction.user} → /methodology")
+
+        # ══════════════════════════════════════════════════════════════
+        # V7 Decision Product Commands — /today, /regime, /top, /why
+        # ══════════════════════════════════════════════════════════════
+
+        async def _fetch_v7_today() -> dict:
+            """Fetch the v7 decision product from the API."""
+            _api = (
+                self.api_base
+                if hasattr(self, "api_base")
+                else "http://127.0.0.1:8000"
+            )
+            async with aiohttp.ClientSession() as sess:
+                async with sess.get(
+                    f"{_api}/api/v7/today", timeout=aiohttp.ClientTimeout(total=120)
+                ) as resp:
+                    resp.raise_for_status()
+                    return await resp.json()
+
+        @bot.tree.command(
+            name="today",
+            description="Morning briefing — regime + top picks + tradeability",
+        )
+        async def cmd_today(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                data = await _fetch_v7_today()
+                regime = data.get("market_regime", {})
+                narrative = data.get("narrative", "No briefing available.")
+                tradeability = regime.get("tradeability", "—")
+                trend = regime.get("trend", "—")
+                vol = regime.get("volatility", "—")
+                vix = regime.get("vix", 0)
+                breadth = regime.get("breadth", 0)
+                conf = regime.get("confidence", 0)
+                score = regime.get("score", 0)
+
+                # Color
+                color_map = {
+                    "STRONG_TRADE": 0x22C55E,
+                    "TRADE": 0x22C55E,
+                    "SELECTIVE": 0xF59E0B,
+                    "WAIT": 0xF59E0B,
+                    "NO_TRADE": 0xEF4444,
+                }
+                color = color_map.get(tradeability, 0x6B7280)
+
+                e = discord.Embed(
+                    title=f"🎯 Today · {data.get('date', '—')}",
+                    description=narrative[:400],
+                    color=color,
+                )
+                e.add_field(
+                    name="Regime",
+                    value=f"**{trend}** · {vol} vol\nVIX {vix:.0f} · Breadth {breadth:.0f}%",
+                    inline=True,
+                )
+                e.add_field(
+                    name="Tradeability",
+                    value=f"**{tradeability}**\nConfidence {score}%",
+                    inline=True,
+                )
+
+                # Top 5
+                top5 = data.get("top_5", [])
+                if top5:
+                    lines = []
+                    for opp in top5[:5]:
+                        emoji = {"BUY": "🟢", "BUY_ON_DIP": "🟡"}.get(
+                            opp.get("action", ""), "⚪"
+                        )
+                        lines.append(
+                            f"{emoji} **{opp['ticker']}** {opp.get('score', 0):.1f} · "
+                            f"{opp.get('action', '—')} · R:R {opp.get('risk_reward', 0):.1f}"
+                        )
+                    e.add_field(
+                        name="Top 5",
+                        value="\n".join(lines),
+                        inline=False,
+                    )
+
+                # What changed
+                wc = data.get("what_changed", [])
+                if wc:
+                    e.add_field(name="What Changed", value="\n".join(f"• {w}" for w in wc[:3]), inline=False)
+
+                # Risks
+                risks = data.get("event_risks", [])
+                if risks:
+                    e.add_field(name="⚠️ Risks", value="\n".join(f"• {r}" for r in risks[:3]), inline=False)
+
+                trust = data.get("trust", {})
+                e.set_footer(text=f"{trust.get('mode', 'LIVE')} · {trust.get('freshness', 'REAL_TIME')} · v7")
+                await interaction.followup.send(embed=e)
+            except Exception as ex:
+                await interaction.followup.send(f"❌ Failed to fetch today briefing: {ex}")
+            await _audit(f"🎯 {interaction.user} → /today")
+
+        @bot.tree.command(
+            name="regime",
+            description="Current market regime — trend, volatility, VIX, breadth",
+        )
+        async def cmd_regime(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                data = await _fetch_v7_today()
+                r = data.get("market_regime", {})
+                pulse = data.get("market_pulse", {})
+
+                e = discord.Embed(
+                    title="📊 Market Regime",
+                    color=0x22C55E if r.get("should_trade") else 0xEF4444,
+                )
+                e.add_field(name="Trend", value=f"**{r.get('trend', '—')}**", inline=True)
+                e.add_field(name="Volatility", value=f"**{r.get('volatility', '—')}**", inline=True)
+                e.add_field(name="Risk State", value=r.get("risk_state", "—"), inline=True)
+                e.add_field(name="VIX", value=f"{r.get('vix', 0):.1f}", inline=True)
+                e.add_field(name="Breadth", value=f"{r.get('breadth', 0):.0f}%", inline=True)
+                e.add_field(name="Confidence", value=f"{r.get('score', 0)}%", inline=True)
+                e.add_field(
+                    name="Tradeability",
+                    value=f"**{r.get('tradeability', '—')}**",
+                    inline=True,
+                )
+
+                # Indices
+                indices = pulse.get("indices", [])
+                if indices:
+                    idx_text = " · ".join(
+                        f"{ix['symbol']} {'+'if ix['change_pct']>=0 else ''}{ix['change_pct']:.2f}%"
+                        for ix in indices[:4]
+                    )
+                    e.add_field(name="Indices", value=idx_text, inline=False)
+
+                # Sectors
+                leaders = pulse.get("sector_leaders", [])
+                laggards = pulse.get("sector_laggards", [])
+                if leaders:
+                    e.add_field(
+                        name="Sector Leaders",
+                        value=" · ".join(f"{s['name']} +{s['change_pct']:.1f}%" for s in leaders[:3]),
+                        inline=True,
+                    )
+                if laggards:
+                    e.add_field(
+                        name="Sector Laggards",
+                        value=" · ".join(f"{s['name']} {s['change_pct']:.1f}%" for s in laggards[:3]),
+                        inline=True,
+                    )
+
+                e.set_footer(text=f"Should trade: {'Yes' if r.get('should_trade') else 'No'} · v7")
+                await interaction.followup.send(embed=e)
+            except Exception as ex:
+                await interaction.followup.send(f"❌ Failed to fetch regime: {ex}")
+            await _audit(f"📊 {interaction.user} → /regime")
+
+        @bot.tree.command(
+            name="top",
+            description="Top 5 trade opportunities right now",
+        )
+        async def cmd_top(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                data = await _fetch_v7_today()
+                top5 = data.get("top_5", [])
+                regime = data.get("market_regime", {})
+
+                if not top5:
+                    await interaction.followup.send("No actionable setups right now. Patience is an edge. 🧘")
+                    return
+
+                e = discord.Embed(
+                    title="🏆 Top 5 Opportunities",
+                    description=f"Regime: {regime.get('trend', '—')} · {regime.get('tradeability', '—')}",
+                    color=0x22C55E,
+                )
+
+                for opp in top5[:5]:
+                    emoji = {"BUY": "🟢", "BUY_ON_DIP": "🟡", "WATCH": "⚪"}.get(
+                        opp.get("action", ""), "⚫"
+                    )
+                    val = (
+                        f"{emoji} **{opp.get('action', '—')}** · Score {opp.get('score', 0):.1f} "
+                        f"· R:R {opp.get('risk_reward', 0):.1f}\n"
+                        f"Entry ${opp.get('entry_price', 0):.2f} → "
+                        f"Target ${opp.get('target_price', 0):.2f} · "
+                        f"Stop ${opp.get('stop_price', 0):.2f}\n"
+                    )
+                    why = opp.get("why_now", [])
+                    if why:
+                        val += f"📌 {why[0]}\n"
+                    risk = opp.get("why_not", [])
+                    if risk:
+                        val += f"⚠️ {risk[0]}"
+                    e.add_field(
+                        name=f"#{opp.get('rank', 0)} {opp['ticker']} — {opp.get('strategy', '')}",
+                        value=val,
+                        inline=False,
+                    )
+
+                e.set_footer(text="v7 Decision Product")
+                await interaction.followup.send(embed=e)
+            except Exception as ex:
+                await interaction.followup.send(f"❌ Failed to fetch top picks: {ex}")
+            await _audit(f"🏆 {interaction.user} → /top")
+
+        @bot.tree.command(
+            name="why",
+            description="Why this ticker? Decision-grade analysis",
+        )
+        @app_commands.describe(ticker="Stock ticker (e.g. NVDA, AAPL)")
+        async def cmd_why(interaction: discord.Interaction, ticker: str):
+            await interaction.response.defer()
+            try:
+                _api = (
+                    self.api_base
+                    if hasattr(self, "api_base")
+                    else "http://127.0.0.1:8000"
+                )
+                async with aiohttp.ClientSession() as sess:
+                    async with sess.get(
+                        f"{_api}/api/v7/signal-card/{ticker.upper()}",
+                        timeout=aiohttp.ClientTimeout(total=60),
+                    ) as resp:
+                        resp.raise_for_status()
+                        sig = await resp.json()
+
+                action = sig.get("action", "—")
+                color_map = {"BUY": 0x22C55E, "BUY_ON_DIP": 0xF59E0B, "WATCH": 0x6B7280, "AVOID": 0xEF4444}
+                e = discord.Embed(
+                    title=f"🔍 {ticker.upper()} — {action}",
+                    description=sig.get("action_reason", ""),
+                    color=color_map.get(action, 0x6B7280),
+                )
+                e.add_field(name="Score", value=f"{sig.get('score', 0):.1f}", inline=True)
+                e.add_field(name="R:R", value=f"{sig.get('risk_reward', 0):.1f}", inline=True)
+                e.add_field(name="Strategy", value=sig.get("strategy", "—"), inline=True)
+                e.add_field(
+                    name="Prices",
+                    value=f"Entry ${sig.get('entry_price', 0):.2f} · Target ${sig.get('target_price', 0):.2f} · Stop ${sig.get('stop_price', 0):.2f}",
+                    inline=False,
+                )
+
+                why = sig.get("why_now", [])
+                if why:
+                    e.add_field(name="📌 Why Now", value="\n".join(f"• {w}" for w in why[:4]), inline=False)
+                risk = sig.get("why_not", [])
+                if risk:
+                    e.add_field(name="⚠️ Risks", value="\n".join(f"• {r}" for r in risk[:3]), inline=False)
+
+                inv = sig.get("invalidation", "")
+                if inv:
+                    e.add_field(name="❌ Invalidation", value=inv, inline=False)
+
+                e.set_footer(text=f"{sig.get('position_hint', '')} · v7")
+                await interaction.followup.send(embed=e)
+            except Exception as ex:
+                await interaction.followup.send(f"❌ No signal card for {ticker.upper()}: {ex}")
+            await _audit(f"🔍 {interaction.user} → /why {ticker}")
 
         # ══════════════════════════════════════════════════════════════
         # START
