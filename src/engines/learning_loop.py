@@ -7,12 +7,18 @@ Automated pipeline:
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+_DATA_DIR = Path(os.getenv("CC_DATA_DIR", "data"))
+_TRADES_FILE = _DATA_DIR / "closed_trades.jsonl"
 
 
 @dataclass
@@ -59,6 +65,45 @@ class LearningLoopPipeline:
         self._closed_trades: List[ClosedTrade] = []
         self._meta_ensemble = None
         self._attribution_log: List[Dict[str, Any]] = []
+        self._load_persisted_trades()
+
+    def _load_persisted_trades(self) -> None:
+        """Load closed trades from JSONL file."""
+        if not _TRADES_FILE.exists():
+            return
+        try:
+            count = 0
+            for line in _TRADES_FILE.read_text().strip().splitlines():
+                d = json.loads(line)
+                self._closed_trades.append(ClosedTrade(**d))
+                count += 1
+            if count:
+                logger.info("Loaded %d persisted trades", count)
+        except Exception as e:
+            logger.warning("Failed to load trades: %s", e)
+
+    def _persist_trade(self, trade: ClosedTrade) -> None:
+        """Append trade to JSONL file."""
+        try:
+            _DATA_DIR.mkdir(parents=True, exist_ok=True)
+            with open(_TRADES_FILE, "a") as f:
+                row = {
+                    "ticker": trade.ticker,
+                    "direction": trade.direction,
+                    "entry_price": trade.entry_price,
+                    "exit_price": trade.exit_price,
+                    "entry_time": trade.entry_time,
+                    "exit_time": trade.exit_time,
+                    "strategy_id": trade.strategy_id,
+                    "pnl_pct": trade.pnl_pct,
+                    "r_multiple": trade.r_multiple,
+                    "regime_at_entry": trade.regime_at_entry,
+                    "setup_grade": trade.setup_grade,
+                    "hold_days": trade.hold_days,
+                }
+                f.write(json.dumps(row) + "\n")
+        except Exception as e:
+            logger.warning("Failed to persist trade: %s", e)
 
     def _get_ensemble(self):
         if self._meta_ensemble is None:
@@ -110,6 +155,7 @@ class LearningLoopPipeline:
             setup_grade=setup_grade,
         )
         self._closed_trades.append(trade)
+        self._persist_trade(trade)
 
         ensemble = self._get_ensemble()
         if ensemble and component_scores:

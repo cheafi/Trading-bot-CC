@@ -556,27 +556,39 @@ async def ranked_opportunities(
     if min_score > 0:
         scanned = [s for s in scanned if s.get("score", 0) >= min_score]
 
-    # Enrich with decision fields
+    # Enrich via ExpertCouncil pipeline
+    from src.engines.expert_council import ExpertCouncil
+
+    council = ExpertCouncil()
+    regime_label = getattr(regime_state, "trend_regime", "sideways")
+    trend_map = {"uptrend": "UPTREND", "downtrend": "DOWNTREND", "sideways": "SIDEWAYS"}
+    vix_val = getattr(regime_state, "vix", 18.0)
+    breadth = getattr(regime_state, "breadth_pct", 0.5)
+    regime_ctx = {
+        "regime": trend_map.get(regime_label, "SIDEWAYS"),
+        "volatility": "NORMAL",
+        "should_trade": should_trade,
+        "vix": vix_val,
+        "breadth": breadth,
+        "entropy": getattr(regime_state, "entropy", 0.8),
+    }
+    council_results = council.evaluate_batch(scanned, regime_ctx)
+
     enriched = []
-    for sig in scanned:
-        distance = abs(sig.get("entry_price", 0) - sig.get("stop_price", 0))
-        dist_pct = (
-            (distance / sig["entry_price"] * 100) if sig.get("entry_price") else 0
-        )
-        timing = _timing_label(dist_pct)
-        sig["_timing"] = timing
-        action, action_reason = _action_from_signal(sig, should_trade)
-
-        sma20_dist = 0
-        entry = sig.get("entry_price", 0)
-
+    for cr in council_results:
+        pr = cr.pipeline
+        sig = pr.signal
         enriched.append(
             {
                 "ticker": sig.get("ticker", ""),
                 "strategy": _setup_family(sig.get("strategy", "")),
-                "score": sig.get("score", 0),
-                "grade": sig.get("grade", ""),
-                "timing": timing,
+                "score": pr.fit.final_score,
+                "grade": pr.fit.grade,
+                "timing": _timing_label(
+                    abs(sig.get("entry_price", 0) - sig.get("stop_price", 0))
+                    / max(sig.get("entry_price", 1), 1)
+                    * 100
+                ),
                 "risk_reward": sig.get("risk_reward", 0),
                 "rsi": sig.get("rsi", 0),
                 "vol_quality": (
@@ -584,16 +596,24 @@ async def ranked_opportunities(
                     if sig.get("vol_ratio", 0) > 1.5
                     else ("OK" if sig.get("vol_ratio", 0) > 0.8 else "LOW")
                 ),
+                "sector_bucket": pr.sector.sector_bucket.value,
                 "regime_fit": sig.get("regime", ""),
                 "entry_price": sig.get("entry_price", 0),
                 "target_price": sig.get("target_price", 0),
                 "stop_price": sig.get("stop_price", 0),
-                "action": action,
-                "action_reason": action_reason,
-                "why_now": _why_now(sig),
-                "why_not": _why_not(sig),
-                "invalidation": _invalidation(sig),
+                "action": pr.decision.action,
+                "action_reason": pr.decision.rationale,
+                "why_now": [pr.explanation.why_now] if pr.explanation.why_now else [],
+                "why_not": (
+                    [pr.explanation.why_not_stronger]
+                    if pr.explanation.why_not_stronger
+                    else []
+                ),
+                "invalidation": pr.explanation.invalidation,
                 "position_hint": _position_hint(sig, should_trade),
+                "confidence_breakdown": pr.confidence.to_dict(),
+                "decision": pr.decision.to_dict(),
+                "expert_council": cr.verdict.to_dict(),
             }
         )
 
@@ -730,7 +750,7 @@ async def signal_card(ticker: str, request: Request):
         _get_regime,
     )
     from src.engines.conformal_predictor import ConformalPredictor
-    from src.engines.expert_committee import ExpertCommittee
+    from src.engines.expert_council import ExpertCouncil
 
     ticker = ticker.upper().strip()
     mds = request.app.state.market_data
@@ -774,17 +794,16 @@ async def signal_card(ticker: str, request: Request):
             trending,
         )
 
-        # Expert committee
-        ec = ExpertCommittee()
-        votes = ec.collect_votes(
-            regime="UPTREND" if trending else "SIDEWAYS",
-            rsi=float(rsi[i]),
-            vol_ratio=float(vol_ratio[i]),
-            trending=trending,
-            rr_ratio=2.0,
-            atr_pct=float(atr_pct[i]),
-        )
-        verdict = ec.deliberate(votes, regime="UPTREND" if trending else "SIDEWAYS")
+        # Expert Council (sector-adaptive)
+        council = ExpertCouncil()
+        regime_ctx = {
+            "regime": "UPTREND" if trending else "SIDEWAYS",
+            "volatility": "NORMAL",
+            "should_trade": should_trade,
+            "vix": getattr(regime_state, "vix", 18.0),
+            "breadth": getattr(regime_state, "breadth_pct", 0.5),
+            "entropy": getattr(regime_state, "entropy", 0.8),
+        }
 
         # Conformal prediction
         interval = None
@@ -827,29 +846,34 @@ async def signal_card(ticker: str, request: Request):
             "regime": "UPTREND" if trending else "SIDEWAYS",
         }
 
-        timing = _timing_label(abs(dist_20ma))
-        signal["_timing"] = timing
-        action, action_reason = _action_from_signal(signal, should_trade)
+        # Run through ExpertCouncil
+        cr = council.evaluate(signal, regime_ctx)
+        pr = cr.pipeline
 
         return {
             "ticker": ticker,
             "current_price": cur_price,
             "strategy": _setup_family(strategy),
-            "score": signal["score"],
-            "grade": conf["grade"],
-            "direction": verdict.direction,
-            "committee_confidence": round(verdict.agreement_ratio, 2),
-            "timing": timing,
-            "action": action,
-            "action_reason": action_reason,
+            "score": pr.fit.final_score,
+            "grade": pr.fit.grade,
+            "direction": cr.verdict.direction,
+            "committee_confidence": round(
+                cr.verdict.agreement_ratio,
+                2,
+            ),
+            "timing": _timing_label(abs(dist_20ma)),
+            "action": pr.decision.action,
+            "action_reason": pr.decision.rationale,
             "position_hint": _position_hint(signal, should_trade),
             "entry_price": cur_price,
             "target_price": target_price,
             "stop_price": stop_price,
             "risk_reward": rr,
-            "why_now": _why_now(signal),
-            "why_not": _why_not(signal),
-            "invalidation": _invalidation(signal),
+            "sector_bucket": pr.sector.sector_bucket.value,
+            "confidence_breakdown": pr.confidence.to_dict(),
+            "decision": pr.decision.to_dict(),
+            "explanation": pr.explanation.to_dict(),
+            "expert_council": cr.verdict.to_dict(),
             "technicals": {
                 "rsi": signal["rsi"],
                 "vol_ratio": signal["vol_ratio"],
@@ -859,13 +883,123 @@ async def signal_card(ticker: str, request: Request):
                 "above_200sma": bool(close[i] > sma200[i]),
                 "regime": signal["regime"],
             },
-            "prediction_interval": interval.to_dict() if interval else None,
+            "prediction_interval": (interval.to_dict() if interval else None),
             "regime_allows_trading": should_trade,
             "ai_analysis": await _get_ai_signal_analysis(signal),
-            "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
+            "generated_at": (datetime.now(timezone.utc).isoformat() + "Z"),
         }
 
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(500, f"Signal card error: {exc}") from exc
+
+
+# ══════════════════════════════════════════════════════════════════════
+# /api/v7/regime — Market Regime Classification
+# ══════════════════════════════════════════════════════════════════════
+
+
+@router.get("/api/v7/regime")
+async def regime_summary():
+    """Full regime classification with cross-asset context."""
+    from src.api.main import _get_regime
+
+    regime_state = await _get_regime()
+    trend_map = {
+        "uptrend": "UPTREND", "downtrend": "DOWNTREND",
+        "sideways": "SIDEWAYS",
+    }
+    vol_map = {
+        "low_vol": "LOW", "normal_vol": "NORMAL",
+        "elevated_vol": "ELEVATED", "high_vol": "HIGH",
+        "crisis_vol": "CRISIS",
+    }
+
+    label = getattr(regime_state, "regime", "NEUTRAL")
+    trend = trend_map.get(
+        getattr(regime_state, "trend_regime", "sideways"),
+        "SIDEWAYS",
+    )
+    vol = vol_map.get(
+        getattr(regime_state, "volatility_regime", "normal_vol"),
+        "NORMAL",
+    )
+    vix = getattr(regime_state, "vix", 18.0)
+    breadth = getattr(regime_state, "breadth_pct", 0.5)
+    should_trade = getattr(regime_state, "should_trade", True)
+    confidence = getattr(regime_state, "confidence", 0.5)
+
+    # Cross-asset stress
+    cross_asset = {}
+    try:
+        from src.engines.context_assembler import ContextAssembler
+        ca = ContextAssembler()
+        ctx = await ca.assemble()
+        cross_asset = ctx.get("cross_asset", {})
+    except Exception:
+        pass
+
+    return {
+        "regime": label,
+        "trend": trend,
+        "volatility": vol,
+        "vix": round(vix, 1),
+        "breadth_pct": round(breadth * 100, 1),
+        "confidence": round(confidence, 2),
+        "should_trade": should_trade,
+        "cross_asset": cross_asset,
+        "generated_at": (
+            datetime.now(timezone.utc).isoformat() + "Z"
+        ),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════
+# /api/v7/cross-asset — Cross-Asset Stress Monitor
+# ══════════════════════════════════════════════════════════════════════
+
+
+@router.get("/api/v7/cross-asset")
+async def cross_asset_report():
+    """Full cross-asset stress analysis with live data."""
+    from src.engines.context_assembler import ContextAssembler
+
+    ca = ContextAssembler()
+    ctx = await ca.assemble()
+    report = ctx.get("cross_asset", {})
+    market = ctx.get("market_state", {})
+
+    return {
+        "market_state": {
+            "vix": market.get("vix"),
+            "spy_return_20d": market.get("spy_return_20d"),
+            "breadth_pct": market.get("breadth_pct"),
+            "realized_vol_20d": market.get("realized_vol_20d"),
+            "data_source": market.get("data_source"),
+        },
+        "stress_report": report,
+        "generated_at": (
+            datetime.now(timezone.utc).isoformat() + "Z"
+        ),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════
+# /api/v7/learning — Learning Loop Summary
+# ══════════════════════════════════════════════════════════════════════
+
+
+@router.get("/api/v7/learning")
+async def learning_summary():
+    """Learning loop summary: win rates, regime performance."""
+    from src.engines.learning_loop import LearningLoopPipeline
+
+    loop = LearningLoopPipeline()
+    return {
+        "summary": loop.summary(),
+        "recent_trades": loop.get_trade_log(limit=20),
+        "generated_at": (
+            datetime.now(timezone.utc).isoformat() + "Z"
+        ),
+    }
