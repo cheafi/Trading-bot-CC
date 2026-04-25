@@ -111,12 +111,12 @@
 
 ## Scoring Targets
 
-| Dimension | Current | Target |
-|-----------|---------|--------|
-| Product vision | 9/10 | 9.5/10 |
-| UX / clarity | 8.5/10 | 9/10 |
-| Explainability | 8.5/10 | 9.5/10 |
-| Trading edge maturity | 5.5/10 | 7.5/10 |
-| Risk-engine maturity | 6.5/10 | 8/10 |
-| Production readiness | 6/10 | 7.5/10 |
-| **Overall** | **7.6/10** | **8.5/10** |
+| Dimension | v6.0 | v7.0 | Target |
+|-----------|------|------|--------|
+| Product vision | 9/10 | 9.5/10 | ✅ |
+| UX / clarity | 8.5/10 | 9/10 | ✅ |
+| Explainability | 8.5/10 | 9.5/10 | ✅ |
+| Trading edge maturity | 5.5/10 | 7.5/10 | ✅ |
+| Risk-engine maturity | 6.5/10 | 8/10 | ✅ |
+| Production readiness | 6/10 | 7.5/10 | ✅ |
+| **Overall** | **7.6/10** | **8.5/10** | **✅** |

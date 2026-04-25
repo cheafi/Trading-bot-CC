@@ -1,0 +1,76 @@
+{
+  "ticker": "IONQ",
+  "strategy": "Breakout",
+  "sector_context": {
+    "ticker": "IONQ",
+    "sector_bucket": "THEME_HYPE",
+    "theme": "Quantum Computing",
+    "sector_stage": "DISTRIBUTION",
+    "leader_status": "LAGGARD",
+    "benchmark_etf": "QQQ",
+    "relative_strength": -0.15,
+    "crowding_risk": 0.72,
+    "liquidity_quality": "normal"
+  },
+  "fit_scores": {
+    "setup_quality": 5.5,
+    "sector_fit": 3.2,
+    "regime_fit": 5.0,
+    "stage_fit": 2.0,
+    "leader_fit": 3.0,
+    "timing_fit": 3.5,
+    "risk_fit": 4.0,
+    "execution_fit": 5.0,
+    "penalties": 5.0,
+    "evidence_conflicts": [
+      "Laggard chasing in climax stage",
+      "Theme in distribution — avoid",
+      "conflict: 3 contradictory signals vs 2 supportive"
+    ],
+    "final_score": 2.1,
+    "grade": "F"
+  },
+  "confidence_breakdown": {
+    "thesis": 0.32,
+    "timing": 0.25,
+    "execution": 0.41,
+    "data": 0.78,
+    "penalties": 0.15,
+    "penalty_reasons": ["Theme late-stage — reduce confidence"],
+    "final": 0.23,
+    "label": "VERY_LOW"
+  },
+  "decision": {
+    "action": "NO_TRADE",
+    "rationale": "Theme in distribution stage — avoid",
+    "score": 2.1,
+    "grade": "F",
+    "confidence": 0.23,
+    "confidence_label": "VERY_LOW",
+    "risk_level": "EXTREME"
+  },
+  "explanation": {
+    "why_now": "IONQ not actionable now — Theme in distribution stage — avoid. Sector: Quantum Computing (DISTRIBUTION). Caution: laggard, not leader",
+    "why_not_stronger": "Conviction limited by: regime not fully supportive; elevated crowding risk; laggard position in sector; evidence conflict: Laggard chasing in climax stage",
+    "invalidation": "Below recent support",
+    "key_evidence": [],
+    "key_contradiction": [
+      "Sector in DISTRIBUTION stage",
+      "High crowding risk",
+      "Laggard — not leading"
+    ],
+    "better_alternative": "Consider PLTR instead — sector leader, higher confidence. Same sector, cleaner setup."
+  },
+  "conflict": {
+    "bullish_evidence": ["Above-average volume"],
+    "bearish_evidence": [
+      "Sector in DISTRIBUTION stage",
+      "High crowding risk",
+      "Laggard — not leading"
+    ],
+    "conflict_level": "HIGH",
+    "conflict_score": 0.55,
+    "penalty": 1.5,
+    "summary": "3 contradictory signals vs 1 supportive"
+  }
+}

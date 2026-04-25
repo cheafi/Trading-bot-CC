@@ -2399,58 +2399,88 @@ def start():
 
 @app.get("/api/ai-advisor", tags=["ai"])
 async def get_ai_advisor():
-    """Get AI advisor market brief and recommendation — driven by live regime + engine state."""
+    """AI advisor market brief — LLM-powered when available."""
     regime = await _get_regime()
     engine = _get_engine()
 
-    # Build chain of thought from real state
     regime_label = regime.regime.replace("_", " ").title()
     vol_label = regime.volatility_regime.replace("_", " ").title()
     should_trade = getattr(regime, "should_trade", True)
 
     chain = [
         f"Regime: {regime_label} (vol: {vol_label})",
-        f"Should trade: {'YES' if should_trade else 'NO — paused by regime filter'}",
+        f"Should trade: {'YES' if should_trade else 'NO'}",
     ]
 
-    # Engine metrics if available
     signals_today = 0
     trades_today = 0
-    cached_recs = 0
     if engine:
         signals_today = getattr(engine, "signals_generated_today", 0)
         trades_today = getattr(engine, "trades_executed_today", 0)
-        cached_recs = len(getattr(engine, "_recommendation_cache", {}))
         chain.append(f"Signals today: {signals_today}")
         chain.append(f"Trades today: {trades_today}")
-        chain.append(f"Cached recommendations: {cached_recs}")
-    else:
-        chain.append("Engine: not loaded (paper mode)")
 
-    # Recommendation logic
+    # Rule-based recommendation
     if not should_trade:
         rec = "PAUSE"
-        reasoning = f"Regime filter says NO TRADE. {regime_label} regime with {vol_label} volatility. Wait for regime shift."
+        reasoning = f"Regime filter says NO TRADE. {regime_label} regime with {vol_label} volatility."
     elif signals_today >= 5:
         rec = "REDUCE"
-        reasoning = "High signal count today — tighten selection to top 2-3 setups."
+        reasoning = "High signal count — tighten selection to top 2-3."
     else:
         rec = "NORMAL"
-        reasoning = (
-            f"{regime_label} regime is tradable. Standard sizing and stop discipline."
-        )
+        reasoning = f"{regime_label} regime is tradable. Standard sizing."
 
     chain.append(f"Decision: {rec}")
+
+    # ── AI-enhanced brief ──
+    ai_brief = None
+    ai_provider = None
+    try:
+        from src.services.ai_service import get_ai_service
+
+        _ai = get_ai_service()
+        if _ai.is_configured:
+            from src.api.main import _scan_live_signals
+
+            scanned, _ = await _scan_live_signals(limit=5)
+            top5 = [
+                {
+                    "ticker": s.get("ticker", "?"),
+                    "score": s.get("score", 0),
+                    "strategy": s.get("strategy", "?"),
+                    "risk_reward": s.get("risk_reward", 0),
+                    "entry_price": s.get("entry_price", 0),
+                }
+                for s in scanned[:5]
+            ]
+            _r = {
+                "trend": regime_label,
+                "volatility": vol_label,
+                "vix": getattr(regime, "vix", 18),
+                "breadth": getattr(regime, "breadth_pct", 0.5) * 100,
+                "tradeability": rec,
+                "should_trade": should_trade,
+            }
+            ai_brief = await _ai.generate_narrative(
+                _r, top5, {}, {"universe": 484, "actionable_above_7": len(scanned)}
+            )
+            ai_provider = _ai._provider_used
+    except Exception as exc:
+        logger.debug("AI advisor brief unavailable: %s", exc)
 
     return {
         "status": "live",
         "market_brief": f"{regime_label} regime ({vol_label} volatility). {signals_today} signals, {trades_today} trades today.",
         "recommendation": rec,
         "reasoning": reasoning,
+        "ai_brief": ai_brief,
+        "ai_provider": ai_provider,
         "chain_of_thought": chain,
         "trust": {
             "mode": "LIVE",
             "source": "regime_router + engine",
+            "ai_powered": ai_brief is not None,
             "as_of": datetime.now(timezone.utc).isoformat() + "Z",
         },
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -2502,6 +2532,26 @@ async def get_ml_status():
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# AI Service Status
+# ═══════════════════════════════════════════════════════════════════
+
+
+@app.get("/api/ai/status", tags=["ai"])
+async def get_ai_status():
+    """AI service health and usage stats."""
+    try:
+        from src.services.ai_service import get_ai_service
+
+        ai = get_ai_service()
+        return {
+            "status": "ready" if ai.is_configured else "not_configured",
+            **ai.stats,
+        }
+    except Exception as exc:
+        return {"status": "error", "error": str(exc)}
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -5800,6 +5850,36 @@ async def live_dossier(ticker: str):
     regime_label = regime.regime
     should_trade = regime.should_trade
 
+    # ── AI-powered analysis ──
+    ai_analysis = None
+    try:
+        from src.services.ai_service import get_ai_service
+
+        _ai = get_ai_service()
+        if _ai.is_configured:
+            _tech = {
+                "price": price,
+                "change_pct": change_pct,
+                "rsi": rsi,
+                "sma20": sma20,
+                "sma50": sma50,
+                "sma200": sma200,
+                "above_sma20": above_sma20,
+                "above_sma50": above_sma50,
+                "above_sma200": above_sma200,
+                "vol_ratio": vol_ratio,
+                "atr": atr,
+                "macd_signal": macd_signal,
+                "high_52w": high_52w,
+                "low_52w": low_52w,
+                "support": support,
+                "resistance": resistance,
+            }
+            _reg = {"label": regime_label, "should_trade": should_trade}
+            ai_analysis = await _ai.analyze_dossier(ticker, _tech, trade_plan, _reg)
+    except Exception as _ai_exc:
+        logger.debug("AI dossier analysis unavailable: %s", _ai_exc)
+
     return _sanitize_for_json(
         {
             "symbol": ticker,
@@ -5839,6 +5919,7 @@ async def live_dossier(ticker: str):
                 "label": regime_label,
                 "should_trade": should_trade,
             },
+            "ai_analysis": ai_analysis,
             "trust": {
                 "mode": (
                     "PAPER"

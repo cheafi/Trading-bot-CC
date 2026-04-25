@@ -65,10 +65,12 @@ def _get_dashboard_url() -> str:
 
 # v6: report generator for signal cards, memos, scoreboard
 try:
-    from src.notifications.report_generator import (build_eod_scorecard,
-                                                    build_morning_memo,
-                                                    build_regime_snapshot,
-                                                    build_signal_card)
+    from src.notifications.report_generator import (
+        build_eod_scorecard,
+        build_morning_memo,
+        build_regime_snapshot,
+        build_signal_card,
+    )
     _HAS_REPORT_GEN = True
 except ImportError:
     _HAS_REPORT_GEN = False
@@ -2849,9 +2851,8 @@ class DiscordInteractiveBot:
 
                 from datetime import date as _date
 
-                from src.core.models import DeltaSnapshot
+                from src.core.models import DeltaSnapshot, ScenarioPlan
                 from src.core.models import RegimeScoreboard as RSB
-                from src.core.models import ScenarioPlan
 
                 risk_on_score = max(0, min(100, 50 + spy_pct * 10 - (vix - 18) * 3))
                 scoreboard = RSB(
@@ -4142,9 +4143,8 @@ class DiscordInteractiveBot:
 
                 from datetime import date as _date
 
-                from src.core.models import ChangeItem, DeltaSnapshot
+                from src.core.models import ChangeItem, DeltaSnapshot, ScenarioPlan
                 from src.core.models import RegimeScoreboard as RSB
-                from src.core.models import ScenarioPlan
 
                 scoreboard = RSB(
                     regime_label=risk, risk_on_score=risk_on_score,
@@ -6360,8 +6360,7 @@ class DiscordInteractiveBot:
         async def leaderboard_cmd(interaction: discord.Interaction):
             await interaction.response.defer()
             try:
-                from src.engines.strategy_leaderboard import \
-                    StrategyLeaderboard
+                from src.engines.strategy_leaderboard import StrategyLeaderboard
                 lb = StrategyLeaderboard()
                 scores = lb.get_strategy_scores()
                 rankings = lb.get_rankings()
@@ -6433,8 +6432,7 @@ class DiscordInteractiveBot:
 
                 # Fetch cached recommendations from the running engine
                 try:
-                    from src.engines.auto_trading_engine import \
-                        AutoTradingEngine
+                    from src.engines.auto_trading_engine import AutoTradingEngine
                     engine = AutoTradingEngine(dry_run=True)
                     cached = engine.get_cached_state()
                     recs = cached.get("recommendations", [])
@@ -6731,8 +6729,7 @@ class DiscordInteractiveBot:
 
                 # Live calibration count
                 try:
-                    from src.engines.auto_trading_engine import \
-                        AutoTradingEngine
+                    from src.engines.auto_trading_engine import AutoTradingEngine
                     eng = AutoTradingEngine(dry_run=True)
                     if eng.edge_calculator:
                         n = len(eng.edge_calculator._calibration_cache)
@@ -6759,8 +6756,7 @@ class DiscordInteractiveBot:
         async def cmd_playbook(interaction: discord.Interaction):
             await interaction.response.defer()
             try:
-                from src.notifications.daily_playbook import \
-                    DailyPlaybookBuilder
+                from src.notifications.daily_playbook import DailyPlaybookBuilder
 
                 state = engine.get_cached_state() if engine else {}
                 regime = state.get("regime_state", {})
@@ -6806,8 +6802,7 @@ class DiscordInteractiveBot:
         async def cmd_scorecard(interaction: discord.Interaction):
             await interaction.response.defer()
             try:
-                from src.notifications.monthly_scorecard import \
-                    MonthlyScorecardBuilder
+                from src.notifications.monthly_scorecard import MonthlyScorecardBuilder
 
                 state = engine.get_cached_state() if engine else {}
                 perf = state.get("performance", {})
@@ -6868,8 +6863,7 @@ class DiscordInteractiveBot:
         ):
             await interaction.response.defer(ephemeral=True)
             try:
-                from src.core.user_preferences import (OutputMode,
-                                                       get_preference_manager)
+                from src.core.user_preferences import OutputMode, get_preference_manager
 
                 mgr = get_preference_manager()
                 uid = str(interaction.user.id)

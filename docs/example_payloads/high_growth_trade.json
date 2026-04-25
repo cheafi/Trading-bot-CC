@@ -1,0 +1,117 @@
+{
+  "ticker": "NVDA",
+  "strategy": "VCP Breakout",
+  "sector_context": {
+    "ticker": "NVDA",
+    "sector_bucket": "HIGH_GROWTH",
+    "theme": "AI/Semis",
+    "sector_stage": "ACCELERATION",
+    "leader_status": "LEADER",
+    "benchmark_etf": "SOXX",
+    "relative_strength": 0.82,
+    "crowding_risk": 0.35,
+    "liquidity_quality": "deep"
+  },
+  "fit_scores": {
+    "setup_quality": 8.5,
+    "sector_fit": 8.8,
+    "regime_fit": 7.5,
+    "stage_fit": 8.5,
+    "leader_fit": 9.0,
+    "timing_fit": 7.8,
+    "risk_fit": 7.2,
+    "execution_fit": 8.0,
+    "penalties": 0.0,
+    "evidence_conflicts": [],
+    "final_score": 8.3,
+    "grade": "A"
+  },
+  "confidence_breakdown": {
+    "thesis": 0.87,
+    "timing": 0.74,
+    "execution": 0.82,
+    "data": 0.91,
+    "penalties": 0.0,
+    "penalty_reasons": [],
+    "final": 0.83,
+    "label": "VERY_HIGH"
+  },
+  "decision": {
+    "action": "TRADE",
+    "rationale": "High-conviction setup — actionable",
+    "score": 8.3,
+    "grade": "A",
+    "confidence": 0.83,
+    "confidence_label": "VERY_HIGH",
+    "risk_level": "LOW"
+  },
+  "explanation": {
+    "why_now": "NVDA VCP Breakout scores 8.3 (A) with VERY_HIGH confidence. Sector: AI/Semis (ACCELERATION). This is a sector leader",
+    "why_not_stronger": "No major detractors — strong conviction",
+    "invalidation": "Close below $138.00",
+    "key_evidence": [
+      "Strong setup score",
+      "Above-average volume",
+      "Strong relative strength",
+      "Sector leader",
+      "Sector in acceleration",
+      "Supportive market regime"
+    ],
+    "key_contradiction": [],
+    "better_alternative": ""
+  },
+  "conflict": {
+    "bullish_evidence": [
+      "Strong setup score",
+      "Sector leader",
+      "Sector in acceleration"
+    ],
+    "bearish_evidence": [],
+    "conflict_level": "LOW",
+    "conflict_score": 0.0,
+    "penalty": 0.0,
+    "summary": "Clean — no contradictory evidence"
+  },
+  "ranking": {
+    "ticker": "NVDA",
+    "discovery": { "score": 88.5, "rank": 1 },
+    "action": { "score": 82.3, "rank": 1 },
+    "conviction": { "score": 91.2, "rank": 1 }
+  },
+  "vcp": {
+    "grade": "A",
+    "quality_score": 8.2,
+    "context_score": 8.5,
+    "combined_score": 8.3,
+    "phase": "AT_PIVOT",
+    "action": "TRADE",
+    "size_guidance": "FULL",
+    "entry_zone": "Near $145.00 pivot",
+    "invalidation": "Close below $138.00",
+    "detection": {
+      "contraction_count": 3,
+      "contractions": [12.5, 7.2, 3.8],
+      "base_depth_pct": 15.2,
+      "days_in_base": 42,
+      "ma_alignment": "STRONG"
+    },
+    "quality": {
+      "contraction_tightness": 9.0,
+      "volume_dry_up": 8.5,
+      "pivot_clarity": 8.0,
+      "base_structure": 8.5,
+      "support_quality": 7.0,
+      "trend_alignment": 9.0,
+      "overall": 8.4
+    },
+    "context": {
+      "sector_fit": 8.5,
+      "regime_fit": 8.5,
+      "stage_fit": 9.0,
+      "leader_quality": 9.5,
+      "extension_risk": 8.0,
+      "event_proximity": 8.0,
+      "overall": 8.5
+    }
+  }
+}

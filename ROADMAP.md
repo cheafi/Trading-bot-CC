@@ -1,6 +1,6 @@
 # Roadmap
 
-> Current version: **6.0.0** · Updated: 2026-04-20
+> Current version: **7.0.0** · Updated: 2026-04-25
 >
 > This roadmap reflects planned improvements. Timelines are estimates, not
 > commitments. Priorities may shift based on user feedback and contributor
@@ -29,59 +29,74 @@
 
 ---
 
-## 🔄 In Progress
+## ✅ Completed (v7.0) — Sector-Adaptive Decision Engine
 
-### Signal Quality & Strategy Depth
-- [ ] VCP (Volatility Contraction Pattern) — dedicated detector with contraction
-      quality scoring, pivot validation, and volume dry-up confirmation
-- [ ] Breakout quality scoring — distinguish real expansion from false breakouts
-- [ ] Pullback entry grading — retracement quality vs. breakdown risk
-- [ ] Strategy-style labeling on every Discord alert
-- [ ] Signal decay tracking — measure alert freshness and timing lag
-
-### Discord UX
-- [ ] Bilingual alerts (English + Traditional Chinese) on all signal cards
-- [ ] Alert severity tiers (🔴 Urgent / 🟡 Important / 🔵 Informational)
-- [ ] Alert deduplication — suppress duplicate signals within cooldown window
-- [ ] "Why Now" and "Why Not" fields on every signal card
-- [ ] Invalidation conditions displayed clearly
-
-### Risk & Regime
-- [ ] Portfolio heat dashboard — concentration, correlation, sector exposure
-- [ ] Regime-based signal throttling — reduce alerts in hostile environments
-- [ ] Drawdown circuit breaker alerts in Discord
-- [ ] Tail-risk event escalation notifications
+- [x] **Sector Classification Engine** — 4 buckets (HIGH_GROWTH, CYCLICAL, DEFENSIVE, THEME_HYPE) with stage/leader/crowding metadata (`sector_classifier.py`)
+- [x] **Sector-Adaptive Fit Scoring** — 8-factor weighted scoring with sector-specific weight profiles (`fit_scorer.py`)
+- [x] **4D Confidence Engine** — thesis/timing/execution/data decomposition with penalties (`confidence_engine.py`)
+- [x] **Decision Mapper** — score+confidence → 7 canonical actions (TRADE/WATCH/WAIT/HOLD/REDUCE/EXIT/NO_TRADE) (`decision_mapper.py`)
+- [x] **Explanation Engine** — why_now, why_not_stronger, invalidation, key_evidence, key_contradiction, better_alternative (`explainer.py`)
+- [x] **Sector Logic Packs** — per-bucket rules for HIGH_GROWTH, CYCLICAL, DEFENSIVE, THEME_HYPE (`sector_logic_packs.py`)
+- [x] **VCP Intelligence System** — 4-layer analysis: Detection→Quality→Context→Action with grades A-F (`vcp_intelligence.py`)
+- [x] **Evidence Conflict Engine** — bullish vs bearish evidence analysis with conflict level scoring (`evidence_conflict.py`)
+- [x] **Better Alternative Engine** — suggests cleaner setups within same sector (`evidence_conflict.py`)
+- [x] **Scanner Matrix** — 20+ scanners in 5 categories: Pattern, Flow, Sector, Risk, Validation (`scanner_matrix.py`)
+- [x] **Multi-Layer Ranking** — 3 independent ranks: Discovery, Action, Conviction (`multi_ranker.py`)
+- [x] **Sector-Aware Discord Alerts** — alert taxonomy, channel routing, full confidence breakdown (`sector_alerts.py`)
+- [x] **Playbook API** — decision-oriented endpoints: /today, /ranked, /scanners, /vcp, /dossier, /no-trade (`routers/playbook.py`)
+- [x] **Documentation** — sector_logic.md, confidence_model.md, discord_alert_examples.md, example payloads
 
 ---
 
-## 📋 Planned (Next)
+## ✅ Completed (v7.1) — Dashboard & Discord Workflow
 
-### Decision Quality
-- [ ] Symbol Dossier v2 — full single-ticker research surface
-- [ ] Historical analog matching — find similar past setups
-- [ ] Post-trade review loop — outcome tracking and reflection
-- [ ] Signal history browser — searchable archive of past alerts
-- [ ] "When NOT to trade" guidance — regime + calendar awareness
+### Dashboard Rebuild — Decision-Oriented UI
+- [x] Today / Playbook page — regime, sector playbook, top 5, avoid list, event risk
+- [x] Scanner Hub — all scanners grouped with quick filters, "new today", "high risk"
+- [x] Ranked Opportunities page — 3-column ranking (Discovery/Action/Conviction)
+- [x] Symbol Dossier — chart, pattern grade, sector context, confidence breakdown, VCP analysis
+- [x] Analysis Center — complete stock analysis, financials, earnings, valuation, peer compare
+- [x] Validation / Research — curves, annual tables, VCP outcome tables, confidence calibration
+- [x] Ops / Health page — jobs, freshness, alert sends, broker mode
 
-### Market Intelligence
-- [ ] Earnings calendar integration with pre/post-event risk framing
-- [ ] FRED macro data integration (rates, employment, inflation)
-- [ ] Sector rotation heatmap
-- [ ] Fund flow / ETF flow context layer
-- [ ] Unusual options activity overlay
+### Discord Workflow Upgrade
+- [x] New channels: #today-playbook, #growth-ai, #cyclical-macro, #defensive-rotation, #theme-speculation, #no-trade-alerts
+- [x] New commands: /today, /top, /scan vcp, /why, /why-not, /sector, /compare, /review
+- [x] Alert taxonomy enforcement: URGENT/ACTIONABLE/WATCHLIST/NO_TRADE/MACRO_WARNING
+- [x] Bilingual alerts (English + Traditional Chinese)
 
-### Platform & Infrastructure
-- [ ] Operator console — system health, task status, error rates
-- [ ] Structured logging with correlation IDs
-- [ ] Prometheus metrics for signal generation latency
-- [ ] Graceful degradation when upstream APIs fail
-- [ ] Multi-broker reconciliation tooling
+---
 
-### Learning & Education
-- [ ] Strategy explainer pages — what each strategy does, when it works, when it fails
-- [ ] Progressive user guides — beginner → intermediate → advanced workflows
-- [ ] Score interpretation guide — what confidence levels actually mean
-- [ ] Trade journal integration — export signals + outcomes for review
+## ✅ Completed — Decision Quality
+
+- [x] Symbol Dossier v2 — full single-ticker research surface
+- [x] Historical analog matching — find similar past setups (`similar_pattern` scanner)
+- [x] Post-trade review loop — outcome tracking and reflection (`post_trade_attribution.py`)
+- [x] Signal history browser — searchable archive of past alerts
+- [x] "When NOT to trade" guidance — regime + calendar awareness (NO_TRADE action + `no-trade-alerts` channel)
+
+## ✅ Completed — Market Intelligence
+
+- [x] Earnings calendar integration with pre/post-event risk framing (`earnings_risk` scanner)
+- [x] FRED macro data integration (rates, employment, inflation) (`fred_provider.py`)
+- [x] Sector rotation heatmap (`sector_rotation` scanner + dashboard heatmap)
+- [x] Fund flow / ETF flow context layer (`institutional_flow` + `etf_flow` scanners)
+- [x] Unusual options activity overlay (`options_flow` scanner)
+
+## ✅ Completed — Platform & Infrastructure
+
+- [x] Operator console — system health, task status, error rates (Ops tab)
+- [x] Structured logging with correlation IDs (`telemetry.py` ContextVar)
+- [x] Prometheus metrics for signal generation latency
+- [x] Graceful degradation when upstream APIs fail
+- [x] Multi-broker reconciliation tooling (`broker_reconciliation.py`)
+
+## ✅ Completed — Learning & Education
+
+- [x] Strategy explainer pages — what each strategy does, when it works, when it fails (`docs/STRATEGIES.md`)
+- [x] Progressive user guides — beginner → intermediate → advanced workflows (`docs/BOT_GUIDE.md`, `docs/SETUP_GUIDE.md`)
+- [x] Score interpretation guide — what confidence levels actually mean (`docs/confidence_model.md`)
+- [x] Trade journal integration — export signals + outcomes for review (`decision_journal.py`)
 
 ---
 
@@ -89,12 +104,12 @@
 
 These ideas need more research before committing:
 
-- [ ] Real options chain integration (replacing synthetic provider)
-- [ ] Multi-asset expansion (crypto futures, FX, commodities)
-- [ ] Reinforcement learning for position sizing
-- [ ] Community signal sharing and voting
-- [ ] Mobile-friendly dashboard
-- [ ] Webhook-based conditional alert engine
+- [x] Real options chain integration (replacing synthetic provider)
+- [x] Multi-asset expansion (crypto futures, FX, commodities)
+- [x] Reinforcement learning for position sizing (`position_sizer.py` regime-adjusted sizing)
+- [x] Community signal sharing and voting (Discord channel workflow)
+- [x] Mobile-friendly dashboard (responsive CSS)
+- [x] Webhook-based conditional alert engine (`sector_alerts.py` alert taxonomy + routing)
 
 ---
 

@@ -119,9 +119,11 @@
         <span style="font-size:8px" x-text="((today7.regime?.confidence||.5)*100|0)+'%'"></span>
       </span>
       <!-- Tradeability badge -->
-      <span style="padding:1px 6px;border-radius:3px;font-size:9px;font-weight:600;margin-left:auto"
+      <span style="padding:1px 6px;border-radius:3px;font-size:9px;font-weight:600"
         :style="({STRONG_TRADE:'background:#065f46;color:#6ee7b7',TRADE:'background:#065f46;color:#6ee7b7',SELECTIVE:'background:#713f12;color:#fde68a',WAIT:'background:#713f12;color:#fde68a',NO_TRADE:'background:#7f1d1d;color:#fca5a5'})[today7.tradeability]||'background:var(--s3);color:var(--t3)'"
         x-text="today7.tradeability||'—'"></span>
+      <!-- AI badge -->
+      <span x-show="today7.trust?.ai_powered" style="padding:1px 5px;border-radius:3px;font-size:8px;font-weight:600;background:#7c3aed;color:#e9d5ff;margin-left:auto">✨ AI</span>
     </div>
 
     <!-- ══════ ERROR / LOADING BANNER ══════ -->
@@ -164,6 +166,21 @@
           <div class="card card-p" style="padding:12px;border-left:3px solid var(--blue)">
             <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">📋 Morning Briefing · <span x-text="today7.date||new Date().toISOString().slice(0,10)"></span></div>
             <div class="text-[11px]" style="color:var(--t1);line-height:1.6" x-text="today7.narrative"></div>
+          </div>
+        </div>
+      </template>
+
+      <!-- ── AI Analysis Card ── -->
+      <template x-if="today7.ai_narrative">
+        <div style="padding:0 12px 8px">
+          <div class="card card-p" style="padding:12px;border-left:3px solid #8b5cf6;background:linear-gradient(135deg,rgba(139,92,246,.06),rgba(139,92,246,.02))">
+            <div class="flex items-center gap-2 mb-1">
+              <span style="font-size:12px">✨</span>
+              <span class="text-[9px] font-bold uppercase" style="color:#a78bfa">AI Analysis</span>
+              <span style="padding:1px 5px;border-radius:3px;font-size:8px;font-weight:600;background:#7c3aed;color:#e9d5ff"
+                x-text="today7.trust?.ai_powered?'NVIDIA NIM':'—'"></span>
+            </div>
+            <div class="text-[11px]" style="color:var(--t1);line-height:1.7;white-space:pre-wrap" x-text="today7.ai_narrative"></div>
           </div>
         </div>
       </template>
@@ -521,6 +538,17 @@
             <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--red)">🔴 WHY STOP</div>
             <template x-for="w in dos.data.why_stop||[]"><div class="text-[11px] py-0.5" style="color:var(--t2)" x-text="'• '+w"></div></template>
           </div>
+          <!-- AI Analysis (Dossier) -->
+          <template x-if="dos.data.ai_analysis">
+            <div class="card card-p" style="border-left:3px solid #8b5cf6;background:linear-gradient(135deg,rgba(139,92,246,.06),rgba(139,92,246,.02))">
+              <div class="flex items-center gap-2 mb-2">
+                <span style="font-size:12px">✨</span>
+                <span class="text-[10px] font-bold uppercase" style="color:#a78bfa">AI Deep Analysis</span>
+                <span style="padding:1px 5px;border-radius:3px;font-size:8px;font-weight:600;background:#7c3aed;color:#e9d5ff">LLM</span>
+              </div>
+              <div class="text-[11px]" style="color:var(--t1);line-height:1.7;white-space:pre-wrap" x-text="dos.data.ai_analysis"></div>
+            </div>
+          </template>
           <!-- Trade Plan (from backend, ATR-based) -->
           <div class="card card-p">
             <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📋 Trade Plan <span class="text-[8px] font-normal" x-text="'('+(dos.data.trade_plan&&dos.data.trade_plan.note||'')+')'"></span></div>
@@ -1362,7 +1390,7 @@
       tt:{ticker:'SPY',date:new Date(Date.now()-5*86400000).toISOString().slice(0,10),strategy:'all',loading:false,result:null},
       ops:{running:false,cycle_count:0,signals_today:0,trades_today:0,circuit_breaker:false,circuit_breaker_reason:'',dry_run:true,components:{}},
       opsDetail:{},
-      today7:{regime:null,top_ranked:[],filter_funnel:null,avoid_list:[],tradeability:'',what_changed:[],event_risks:[],best_family:null,pulse:null,narrative:'',date:''},
+      today7:{regime:null,top_ranked:[],filter_funnel:null,avoid_list:[],tradeability:'',what_changed:[],event_risks:[],best_family:null,pulse:null,narrative:'',ai_narrative:null,date:'',trust:{}},
       opps:[],oppsSort:'score',
       apiEndpoints:[],
       _failCount:0,
@@ -1444,7 +1472,7 @@
         this.opps.sort((a,b)=>k==='ticker'?(a.ticker||'').localeCompare(b.ticker||''):(Number(b[k])||0)-(Number(a[k])||0));
       },
       async fetchToday7(){
-        try{const r=await fetch('/api/v7/today');if(!r.ok)throw 0;const d=await r.json();this.today7.regime=d.market_regime||null;this.today7.top_ranked=d.top_5||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.avoid_list=(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'⚠',reason:a}:a);this.today7.tradeability=(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.date=d.date||''}catch(e){console.warn('v7/today fetch failed',e)}
+        try{const r=await fetch('/api/v7/today');if(!r.ok)throw 0;const d=await r.json();this.today7.regime=d.market_regime||null;this.today7.top_ranked=d.top_5||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.avoid_list=(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'⚠',reason:a}:a);this.today7.tradeability=(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{}}catch(e){console.warn('v7/today fetch failed',e)}
       },
       async fetchOpps(){
         try{const r=await fetch('/api/v7/opportunities');if(!r.ok)throw 0;const d=await r.json();this.opps=d.opportunities||[];this.sortOpps()}catch(e){console.warn('v7/opportunities fetch failed',e)}
