@@ -352,6 +352,24 @@
                 <template x-if="opp.alternative">
                   <div class="text-[9px] mt-1" style="color:var(--blue);line-height:1.3" x-text="'💡 Better: '+opp.alternative"></div>
                 </template>
+                <!-- Why This Not That — peer comparison -->
+                <template x-if="opp.runner_up">
+                  <div style="margin-top:6px;padding:6px 8px;background:var(--s2);border-radius:6px;border-left:2px solid var(--blue)">
+                    <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--blue)">🔄 Why This Not That</div>
+                    <div class="flex items-center gap-3 text-[9px]">
+                      <div>
+                        <span class="font-bold text-white" x-text="opp.ticker"></span>
+                        <span style="color:var(--green)" x-text="' '+((opp.score||0).toFixed?opp.score.toFixed(1):'—')"></span>
+                      </div>
+                      <span style="color:var(--t3)">vs</span>
+                      <div>
+                        <span class="font-bold" style="color:var(--t2)" x-text="opp.runner_up.ticker||'—'"></span>
+                        <span style="color:var(--amber)" x-text="' '+((opp.runner_up.score||0).toFixed?opp.runner_up.score.toFixed(1):'—')"></span>
+                      </div>
+                    </div>
+                    <div class="text-[8px] mt-1" style="color:var(--t2);line-height:1.4" x-text="opp.runner_up.reason||'Higher conviction score + better risk/reward'"></div>
+                  </div>
+                </template>
                 <!-- Timing + Position hint -->
                 <div class="flex gap-3 mt-1 text-[8px]" style="color:var(--t3)">
                   <span x-text="'⏱ '+opp.timing"></span>

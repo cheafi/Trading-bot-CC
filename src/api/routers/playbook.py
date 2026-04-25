@@ -57,8 +57,9 @@ async def today_playbook() -> Dict[str, Any]:
     results = pipeline.process_batch(signals, regime)
 
     # Top 5 by conviction
-    top5 = [
-        {
+    top5 = []
+    for i, r in enumerate(results[:5]):
+        entry = {
             "rank": i + 1,
             "ticker": r.signal.get("ticker"),
             "sector": r.sector.sector_bucket.value,
@@ -68,8 +69,20 @@ async def today_playbook() -> Dict[str, Any]:
             "confidence": round(r.confidence.final, 2),
             "why_now": r.explanation.why_now,
         }
-        for i, r in enumerate(results[:5])
-    ]
+        # Why This Not That — attach runner-up for comparison
+        if i < len(results) - 1:
+            nxt = results[i + 1]
+            entry["runner_up"] = {
+                "ticker": nxt.signal.get("ticker"),
+                "score": round(nxt.confidence.final, 2),
+                "reason": f"Higher conviction ({round(r.confidence.final, 2)} vs {round(nxt.confidence.final, 2)})"
+                + (
+                    f", better sector fit ({r.sector.sector_bucket.value})"
+                    if r.sector.sector_bucket != nxt.sector.sector_bucket
+                    else ""
+                ),
+            }
+        top5.append(entry)
 
     # Avoid list
     avoid = [
