@@ -279,9 +279,10 @@ async def today_summary(request: Request):
     }
 
     # 5. Top 5 ranked — sector-adaptive pipeline
-    from src.engines.sector_pipeline import SectorPipeline
+    # 5. Top 5 ranked — Expert Council pipeline
+    from src.engines.expert_council import ExpertCouncil
 
-    pipeline = SectorPipeline()
+    council = ExpertCouncil()
     regime_ctx = {
         "regime": trend_label,
         "volatility": vol_label,
@@ -290,12 +291,17 @@ async def today_summary(request: Request):
         "breadth": breadth,
         "entropy": entropy,
     }
-    pipeline_results = pipeline.process_batch(scanned, regime_ctx)
-    sector_summary = pipeline.get_sector_summary(pipeline_results)
-    action_summary = pipeline.get_action_summary(pipeline_results)
+    council_results = council.evaluate_batch(scanned, regime_ctx)
+    sector_summary = council.pipeline.get_sector_summary(
+        [cr.pipeline for cr in council_results]
+    )
+    action_summary = council.pipeline.get_action_summary(
+        [cr.pipeline for cr in council_results]
+    )
 
     top5 = []
-    for rank, pr in enumerate(pipeline_results[:5], 1):
+    for rank, cr in enumerate(council_results[:5], 1):
+        pr = cr.pipeline
         sig = pr.signal
         top5.append(
             {
@@ -328,6 +334,7 @@ async def today_summary(request: Request):
                 "confidence_breakdown": pr.confidence.to_dict(),
                 "decision": pr.decision.to_dict(),
                 "explanation": pr.explanation.to_dict(),
+                "expert_council": cr.verdict.to_dict(),
             }
         )
 
