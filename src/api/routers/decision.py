@@ -10,7 +10,7 @@ Transforms raw signals into decision-ready endpoints:
 
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
@@ -278,37 +278,56 @@ async def today_summary(request: Request):
         "high_conviction_above_8": high_conv,
     }
 
-    # 5. Top 5 ranked — with entry/stop/target
-    ranked = sorted(scanned, key=lambda x: x.get("score", 0), reverse=True)
-    top5 = []
-    for rank, sig in enumerate(ranked[:5], 1):
-        distance = abs(sig.get("entry_price", 0) - sig.get("stop_price", 0))
-        dist_pct = (
-            (distance / sig["entry_price"] * 100) if sig.get("entry_price") else 0
-        )
-        timing = _timing_label(dist_pct)
-        sig["_timing"] = timing
-        action, action_reason = _action_from_signal(sig, should_trade)
+    # 5. Top 5 ranked — sector-adaptive pipeline
+    from src.engines.sector_pipeline import SectorPipeline
 
+    pipeline = SectorPipeline()
+    regime_ctx = {
+        "regime": trend_label,
+        "volatility": vol_label,
+        "should_trade": should_trade,
+        "vix": vix_val,
+        "breadth": breadth,
+        "entropy": entropy,
+    }
+    pipeline_results = pipeline.process_batch(scanned, regime_ctx)
+    sector_summary = pipeline.get_sector_summary(pipeline_results)
+    action_summary = pipeline.get_action_summary(pipeline_results)
+
+    top5 = []
+    for rank, pr in enumerate(pipeline_results[:5], 1):
+        sig = pr.signal
         top5.append(
             {
                 "rank": rank,
                 "ticker": sig.get("ticker", ""),
                 "strategy": _setup_family(sig.get("strategy", "")),
-                "score": sig.get("score", 0),
-                "grade": sig.get("grade", ""),
-                "timing": timing,
-                "action": action,
-                "action_reason": action_reason,
-                "why_now": _why_now(sig)[:3],
-                "why_not": _why_not(sig)[:2],
+                "score": pr.fit.final_score,
+                "grade": pr.fit.grade,
+                "timing": _timing_label(
+                    abs(sig.get("entry_price", 0) - sig.get("stop_price", 0))
+                    / max(sig.get("entry_price", 1), 1)
+                    * 100
+                ),
+                "action": pr.decision.action,
+                "action_reason": pr.decision.rationale,
+                "why_now": [pr.explanation.why_now] if pr.explanation.why_now else [],
+                "why_not": (
+                    [pr.explanation.why_not_stronger]
+                    if pr.explanation.why_not_stronger
+                    else []
+                ),
                 "risk_reward": sig.get("risk_reward", 0),
                 "entry_price": sig.get("entry_price", 0),
                 "target_price": sig.get("target_price", 0),
                 "stop_price": sig.get("stop_price", 0),
                 "rsi": sig.get("rsi", 0),
-                "invalidation": _invalidation(sig),
+                "invalidation": pr.explanation.invalidation,
                 "position_hint": _position_hint(sig, should_trade),
+                "sector_bucket": pr.sector.sector_bucket.value,
+                "confidence_breakdown": pr.confidence.to_dict(),
+                "decision": pr.decision.to_dict(),
+                "explanation": pr.explanation.to_dict(),
             }
         )
 
@@ -383,6 +402,27 @@ async def today_summary(request: Request):
             f"good setups are rare by design. "
             f"Review the watchlist for developing patterns."
         )
+
+    # 8b. AI-enhanced narrative (async, non-blocking)
+    ai_narrative = None
+    try:
+        from src.services.ai_service import get_ai_service
+
+        ai = get_ai_service()
+        if ai.is_configured:
+            _regime_ctx = {
+                "trend": trend_label,
+                "volatility": vol_label,
+                "vix": vix_val,
+                "breadth": round(breadth * 100),
+                "tradeability": "",
+                "should_trade": should_trade,
+            }
+            ai_narrative = await ai.generate_narrative(
+                _regime_ctx, top5, market_pulse, funnel
+            )
+    except Exception as exc:
+        logger.debug("AI narrative unavailable: %s", exc)
 
     # 9. Tradeability
     if not should_trade:
@@ -461,11 +501,15 @@ async def today_summary(request: Request):
         "avoid": avoid,
         "what_changed": what_changed,
         "event_risks": event_risks,
+        "sector_summary": sector_summary,
+        "action_summary": action_summary,
+        "ai_narrative": ai_narrative,
         "trust": {
             "mode": "LIVE" if should_trade else "PAPER",
             "source": "decision_engine",
             "freshness": "REAL_TIME",
             "as_of": now.isoformat() + "Z",
+            "ai_powered": ai_narrative is not None,
         },
         "generated_at": now.isoformat() + "Z",
     }
@@ -641,6 +685,23 @@ async def filter_funnel(request: Request):
 
 
 # ══════════════════════════════════════════════════════════════════════
+# ── AI signal analysis helper ──
+
+
+async def _get_ai_signal_analysis(signal: dict) -> Optional[str]:
+    """Get AI analysis for a signal, returns None if unavailable."""
+    try:
+        from src.services.ai_service import get_ai_service
+
+        ai = get_ai_service()
+        if not ai.is_configured:
+            return None
+        result = await ai.analyze_signal(signal)
+        return result.get("ai_analysis") if result else None
+    except Exception:
+        return None
+
+
 # /api/v7/signal-card/{ticker} — Decision-Grade Signal Card
 # ══════════════════════════════════════════════════════════════════════
 
@@ -793,6 +854,7 @@ async def signal_card(ticker: str, request: Request):
             },
             "prediction_interval": interval.to_dict() if interval else None,
             "regime_allows_trading": should_trade,
+            "ai_analysis": await _get_ai_signal_analysis(signal),
             "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
         }
 
