@@ -2277,6 +2277,87 @@ class DiscordInteractiveBot:
             e.add_field(name="💰 Liquidity", value=f"{liq_icon} {dv_str}/day")
             e.add_field(name="Stop/ATR",
                         value=f"{sig.get('stop_atr', 1):.1f}x ATR")
+
+            # ── Sector-Adaptive Decision Engine fields ──
+            sector_bucket = sig.get("sector_bucket")
+            if sector_bucket:
+                sector_icons = {
+                    "HIGH_GROWTH": "🚀", "CYCLICAL": "🔄",
+                    "DEFENSIVE": "🛡️", "THEME_HYPE": "🔥",
+                }
+                si = sector_icons.get(sector_bucket, "📊")
+                e.add_field(
+                    name="🏷️ Sector",
+                    value=f"{si} {sector_bucket}",
+                )
+
+            conf_bd = sig.get("confidence_breakdown")
+            if conf_bd and isinstance(conf_bd, dict):
+                label = conf_bd.get("label", "?")
+                final = conf_bd.get("final", 0)
+                thesis = conf_bd.get("thesis", 0)
+                timing = conf_bd.get("timing", 0)
+                e.add_field(
+                    name="📊 Confidence",
+                    value=(
+                        f"**{label}** ({final:.0%})\n"
+                        f"Thesis {thesis:.0%} · "
+                        f"Timing {timing:.0%}"
+                    ),
+                )
+
+            decision = sig.get("decision")
+            if decision and isinstance(decision, dict):
+                action = decision.get("action", "?")
+                action_icons = {
+                    "TRADE": "✅", "WATCH": "👀",
+                    "WAIT": "⏳", "HOLD": "🤝",
+                    "REDUCE": "📉", "EXIT": "🚪",
+                    "NO_TRADE": "🚫",
+                }
+                ai = action_icons.get(action, "❓")
+                grade = decision.get("grade", "?")
+                e.add_field(
+                    name="🎬 Decision",
+                    value=f"{ai} **{action}** (Grade {grade})",
+                )
+
+            expert_council = sig.get("expert_council")
+            if expert_council and isinstance(expert_council, dict):
+                direction = expert_council.get("direction", "?")
+                agreement = expert_council.get(
+                    "agreement_ratio", 0
+                )
+                dom_risk = expert_council.get(
+                    "dominant_risk", "?"
+                )
+                e.add_field(
+                    name="🧑‍⚖️ Expert Council",
+                    value=(
+                        f"**{direction}** · "
+                        f"{agreement:.0%} agree\n"
+                        f"Risk: {dom_risk}"
+                    ),
+                    inline=False,
+                )
+
+            explanation = sig.get("explanation")
+            if explanation and isinstance(explanation, dict):
+                why_now = explanation.get("why_now", "")
+                inv = explanation.get("invalidation", "")
+                if why_now:
+                    e.add_field(
+                        name="⏱️ Why Now",
+                        value=why_now[:200],
+                        inline=False,
+                    )
+                if inv:
+                    e.add_field(
+                        name="❌ Invalidation",
+                        value=inv[:200],
+                        inline=False,
+                    )
+
             e.set_footer(text="Buttons below ↓ • Deep Analysis • Position Size • Set Alert")
             return e
 
@@ -6965,8 +7046,18 @@ class DiscordInteractiveBot:
                 if risks:
                     e.add_field(name="⚠️ Risks", value="\n".join(f"• {r}" for r in risks[:3]), inline=False)
 
+                # AI insight
+                ai_narr = data.get("ai_narrative")
+                if ai_narr:
+                    e.add_field(
+                        name="✨ AI Insight",
+                        value=ai_narr[:400],
+                        inline=False,
+                    )
+
                 trust = data.get("trust", {})
-                e.set_footer(text=f"{trust.get('mode', 'LIVE')} · {trust.get('freshness', 'REAL_TIME')} · v7")
+                ai_tag = " · ✨AI" if trust.get("ai_powered") else ""
+                e.set_footer(text=f"{trust.get('mode', 'LIVE')} · {trust.get('freshness', 'REAL_TIME')} · v7{ai_tag}")
                 await interaction.followup.send(embed=e)
             except Exception as ex:
                 await interaction.followup.send(f"❌ Failed to fetch today briefing: {ex}")
@@ -7128,11 +7219,60 @@ class DiscordInteractiveBot:
                 if inv:
                     e.add_field(name="❌ Invalidation", value=inv, inline=False)
 
-                e.set_footer(text=f"{sig.get('position_hint', '')} · v7")
+                ai_text = sig.get("ai_analysis")
+                if ai_text:
+                    e.add_field(name="✨ AI Analysis", value=ai_text[:500], inline=False)
+
+                e.set_footer(text=f"{sig.get('position_hint', '')} · v7{' · ✨AI' if ai_text else ''}")
                 await interaction.followup.send(embed=e)
             except Exception as ex:
                 await interaction.followup.send(f"❌ No signal card for {ticker.upper()}: {ex}")
             await _audit(f"🔍 {interaction.user} → /why {ticker}")
+
+        @bot.tree.command(
+            name="ai_brief",
+            description="AI-powered market analysis and recommendations",
+        )
+        async def cmd_ai_brief(interaction: discord.Interaction):
+            await interaction.response.defer()
+            try:
+                _api = (
+                    self.api_base
+                    if hasattr(self, "api_base")
+                    else "http://127.0.0.1:8000"
+                )
+                async with aiohttp.ClientSession() as sess:
+                    async with sess.get(
+                        f"{_api}/api/ai-advisor",
+                        timeout=aiohttp.ClientTimeout(total=60),
+                    ) as resp:
+                        resp.raise_for_status()
+                        data = await resp.json()
+
+                e = discord.Embed(
+                    title="✨ AI Market Brief",
+                    description=data.get("ai_brief") or data.get("reasoning", "AI unavailable"),
+                    color=0x8B5CF6,  # purple for AI
+                )
+                e.add_field(
+                    name="Recommendation",
+                    value=f"**{data.get('recommendation', '—')}**",
+                    inline=True,
+                )
+                e.add_field(
+                    name="Reasoning",
+                    value=data.get("reasoning", "—")[:200],
+                    inline=True,
+                )
+                trust = data.get("trust", {})
+                provider = data.get("ai_provider", "rule-based")
+                e.set_footer(
+                    text=f"{trust.get('mode', 'LIVE')} · {'✨AI ' + provider if trust.get('ai_powered') else 'Rule-based'}"
+                )
+                await interaction.followup.send(embed=e)
+            except Exception as ex:
+                await interaction.followup.send(f"❌ AI brief unavailable: {ex}")
+            await _audit(f"✨ {interaction.user} → /ai_brief")
 
         # ══════════════════════════════════════════════════════════════
         # START
