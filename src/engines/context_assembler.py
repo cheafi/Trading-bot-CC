@@ -9,10 +9,10 @@ Sprint 25: _get_market_state now fetches **real** VIX, SPY return,
 and market breadth via yfinance instead of returning hardcoded
 defaults.  Falls back gracefully to defaults on any fetch failure.
 """
-import logging
 import asyncio
-from typing import Dict, Any, Optional, List
+import logging
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +75,19 @@ class ContextAssembler:
         results.setdefault("sentiment", {})
         results.setdefault("calendar_events", [])
         results["timestamp"] = datetime.now(timezone.utc).isoformat()
+
+        # Cross-asset analysis (wired to live data)
+        try:
+            from src.engines.cross_asset_monitor import CrossAssetMonitor
+
+            ms = results.get("market_state", {})
+            ca_data = await self._fetch_cross_asset_data(ms)
+            cam = CrossAssetMonitor()
+            report = cam.analyse(**ca_data)
+            results["cross_asset"] = report.to_dict()
+        except Exception as e:
+            logger.debug("Cross-asset analysis skipped: %s", e)
+            results["cross_asset"] = {}
 
         return results
 
@@ -356,3 +369,72 @@ class ContextAssembler:
     def _set_cache(self, key: str, value: Any) -> None:
         """Store value in cache with timestamp."""
         self._cache[key] = (value, datetime.now(timezone.utc))
+
+    async def _fetch_cross_asset_data(
+        self,
+        market_state: Dict[str, Any],
+    ) -> Dict[str, float]:
+        """Fetch daily changes for cross-asset tickers."""
+        loop = asyncio.get_event_loop()
+        data = await loop.run_in_executor(
+            None,
+            self._cross_asset_sync,
+        )
+        # Merge with existing market state
+        data["vix"] = market_state.get("vix", 20.0)
+        data["breadth_pct"] = (
+            market_state.get(
+                "breadth_pct",
+                50.0,
+            )
+            * 100
+        )  # CrossAssetMonitor expects 0-100
+        return data
+
+    @staticmethod
+    def _cross_asset_sync() -> Dict[str, float]:
+        """Fetch daily changes for SPY, QQQ, IWM, TLT, GLD, DX-Y.NYB."""
+        result: Dict[str, float] = {
+            "spy_change_pct": 0.0,
+            "qqq_change_pct": 0.0,
+            "iwm_change_pct": 0.0,
+            "tlt_change_pct": 0.0,
+            "gld_change_pct": 0.0,
+            "dxy_change_pct": 0.0,
+        }
+        try:
+            import yfinance as yf
+        except ImportError:
+            return result
+
+        mapping = {
+            "SPY": "spy_change_pct",
+            "QQQ": "qqq_change_pct",
+            "IWM": "iwm_change_pct",
+            "TLT": "tlt_change_pct",
+            "GLD": "gld_change_pct",
+            "DX-Y.NYB": "dxy_change_pct",
+        }
+
+        try:
+            tickers = list(mapping.keys())
+            data = yf.download(
+                tickers,
+                period="5d",
+                progress=False,
+                group_by="ticker",
+                threads=True,
+            )
+            for sym, key in mapping.items():
+                try:
+                    df = data[sym] if len(tickers) > 1 else data
+                    closes = df["Close"].dropna()
+                    if len(closes) >= 2:
+                        chg = float((closes.iloc[-1] / closes.iloc[-2] - 1) * 100)
+                        result[key] = round(chg, 2)
+                except (KeyError, IndexError):
+                    pass
+        except Exception as e:
+            logger.debug("Cross-asset fetch error: %s", e)
+
+        return result
