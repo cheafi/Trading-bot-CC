@@ -272,6 +272,66 @@ async def no_trade_list() -> Dict[str, Any]:
 # ── Stubs (replace with real data sources) ───────────────────────────
 
 
+def _get_rs_engine():
+    from src.engines.rs_ranking import RSRankingEngine
+
+    return RSRankingEngine()
+
+
+def _get_flow_engine():
+    from src.engines.flow_intelligence import FlowIntelligenceEngine
+
+    return FlowIntelligenceEngine()
+
+
+@router.get("/rs-ranking")
+async def rs_ranking(
+    sector: str = Query(None, description="Filter by sector"),
+    cap: str = Query(None, description="MEGA/LARGE/MID/SMALL"),
+    limit: int = Query(30, ge=1, le=100),
+) -> Dict[str, Any]:
+    """Relative Strength ranking with sector/size filters."""
+    engine = _get_rs_engine()
+    universe = _get_rs_universe_stub()
+
+    entries = engine.rank(universe, _get_benchmark_stub())
+
+    if sector:
+        entries = [e for e in entries if e.sector.upper() == sector.upper()]
+    if cap:
+        entries = [e for e in entries if e.market_cap.upper() == cap.upper()]
+
+    sector_rs = engine.get_sector_rankings(entries)
+    breakouts = engine.get_breakouts(entries)
+    breakdowns = engine.get_breakdowns(entries)
+
+    return {
+        "count": min(limit, len(entries)),
+        "rankings": [e.to_dict() for e in entries[:limit]],
+        "sector_rs": [s.to_dict() for s in sector_rs],
+        "breakouts": [e.to_dict() for e in breakouts[:10]],
+        "breakdowns": [e.to_dict() for e in breakdowns[:10]],
+    }
+
+
+@router.get("/flow")
+async def flow_intelligence(
+    limit: int = Query(20, ge=1, le=50),
+) -> Dict[str, Any]:
+    """Flow / smart money intelligence."""
+    engine = _get_flow_engine()
+    universe = _get_flow_universe_stub()
+
+    profiles = engine.analyze_batch(universe)
+    unusual = engine.get_unusual_activity(profiles)
+
+    return {
+        "count": min(limit, len(profiles)),
+        "profiles": [p.to_dict() for p in profiles[:limit]],
+        "unusual_activity": [p.to_dict() for p in unusual[:10]],
+    }
+
+
 def _get_regime_stub() -> Dict[str, Any]:
     """Stub regime — replace with RegimeDetector output."""
     return {
@@ -291,3 +351,23 @@ def _get_signals_stub() -> List[Dict[str, Any]]:
 def _get_signal_for_ticker(ticker: str) -> Dict[str, Any] | None:
     """Stub single signal lookup."""
     return {"ticker": ticker, "score": 5, "strategy": "scan"}
+
+
+def _get_rs_universe_stub() -> List[Dict[str, Any]]:
+    """Stub RS universe — replace with real market data."""
+    return []
+
+
+def _get_benchmark_stub() -> Dict[str, Any]:
+    """Stub benchmark returns — replace with SPY data."""
+    return {
+        "return_1w": 0.5,
+        "return_1m": 2.1,
+        "return_3m": 5.0,
+        "return_6m": 8.0,
+    }
+
+
+def _get_flow_universe_stub() -> List[Dict[str, Any]]:
+    """Stub flow data — replace with real OHLCV data."""
+    return []

@@ -10184,4 +10184,6 @@ from src.api.routers.decision import router as decision_router
 
 app.include_router(decision_router)
 
-app.include_router(decision_router)
+from src.api.routers.playbook import router as playbook_router
+
+app.include_router(playbook_router)
