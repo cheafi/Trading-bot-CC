@@ -132,7 +132,7 @@ async def ranked_opportunities(
         results = [r for r in results if r.sector.sector_bucket.value == sector.upper()]
 
     rows = []
-    for r in results[:limit]:
+    for i, r in enumerate(results[:limit]):
         row = {
             "ticker": r.signal.get("ticker"),
             "sector_type": r.sector.sector_bucket.value,
@@ -149,6 +149,13 @@ async def ranked_opportunities(
             "final_conf": round(r.confidence.final, 2),
             "action": r.decision.action,
             "risk_level": r.decision.risk_level,
+            "entry_price": r.signal.get("entry_price"),
+            "target_price": r.signal.get("target_price"),
+            "stop_price": r.signal.get("stop_price"),
+            "risk_reward": r.signal.get("risk_reward"),
+            "why_now": r.explanation.why_now if r.explanation else None,
+            "why_not": (r.explanation.why_not_stronger if r.explanation else None),
+            "invalidation": (r.explanation.invalidation if r.explanation else None),
         }
         if r.ranking:
             row["discovery_rank"] = r.ranking.discovery_rank
@@ -156,6 +163,16 @@ async def ranked_opportunities(
             row["conviction_rank"] = r.ranking.conviction_rank
         if r.conflict:
             row["conflict_level"] = r.conflict.conflict_level
+        # Runner-up comparison
+        if i < min(limit, len(results)) - 1:
+            nxt = results[i + 1]
+            row["runner_up"] = {
+                "ticker": nxt.signal.get("ticker"),
+                "score": round(nxt.confidence.final, 2),
+                "reason": f"{r.signal.get('ticker')} has higher conviction"
+                f" ({round(r.confidence.final, 2)} vs"
+                f" {round(nxt.confidence.final, 2)})",
+            }
         rows.append(row)
 
     return {
