@@ -270,14 +270,44 @@
           <template x-for="(opp,idx) in today7.top_ranked">
             <div class="card" style="cursor:pointer;overflow:hidden" @click="openDossier(opp.ticker)">
               <!-- Action color bar -->
-              <div :style="'height:3px;background:var(--'+(opp.action==='BUY'?'green':opp.action==='BUY_ON_DIP'?'green':opp.action==='AVOID'?'red':'amber')+')'"></div>
+              <div :style="'height:3px;background:var(--'+(opp.action==='BUY'||opp.action==='TRADE'?'green':opp.action==='BUY_ON_DIP'?'green':opp.action==='AVOID'||opp.action==='NO_TRADE'?'red':'amber')+')'"></div>
               <div style="padding:10px 12px">
+                <!-- Row 1: Rank + Ticker + Sector + Grade + Action -->
                 <div class="flex items-center gap-2 mb-1">
                   <span class="text-[11px] font-bold mono" style="color:var(--amber);min-width:20px" x-text="'#'+(idx+1)"></span>
                   <span class="text-[13px] font-extrabold mono text-white" x-text="opp.ticker"></span>
-                  <span class="pill pb text-[8px]" x-text="(opp.strategy||'').replace(/_/g,' ')"></span>
+                  <template x-if="opp.sector"><span class="pill pp text-[7px]" x-text="opp.sector"></span></template>
+                  <template x-if="opp.theme"><span class="pill pw text-[7px]" x-text="opp.theme"></span></template>
+                  <template x-if="opp.grade"><span class="pill mono text-[8px]" :class="opp.grade==='A'?'pg':opp.grade==='B'?'pa':'pr'" x-text="'Grade '+opp.grade"></span></template>
                   <span class="pill mono text-[8px]" :class="(opp.score||0)>=8?'pg':(opp.score||0)>=6?'pa':'pr'" x-text="opp.score!=null?Number(opp.score).toFixed(1):'—'"></span>
-                  <span class="pill text-[8px] font-bold ml-auto" :class="opp.action==='BUY'?'pg':opp.action==='BUY_ON_DIP'?'pg':opp.action==='AVOID'?'pr':'pa'" x-text="opp.action||'—'"></span>
+                  <span class="pill text-[8px] font-bold ml-auto" :class="opp.action==='BUY'||opp.action==='TRADE'?'pg':opp.action==='BUY_ON_DIP'?'pg':opp.action==='AVOID'||opp.action==='NO_TRADE'?'pr':'pa'" x-text="opp.action||'—'"></span>
+                </div>
+                <!-- Row 2: Confidence 4-bar breakdown -->
+                <template x-if="opp.confidence||opp.thesis_conf||opp.final_conf">
+                  <div style="margin:6px 0 4px">
+                    <div class="flex items-center gap-1 mb-1">
+                      <span class="text-[8px] font-bold uppercase" style="color:var(--t3)">Confidence</span>
+                      <span class="text-[10px] mono font-bold ml-auto" :class="(opp.confidence||opp.final_conf||0)>=0.7?'text-green-400':(opp.confidence||opp.final_conf||0)>=0.5?'text-amber-300':'text-red-400'" x-text="((opp.confidence||opp.final_conf||0)*100).toFixed(0)+'%'"></span>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:3px">
+                      <template x-for="[lbl,val] in [['Thesis',opp.thesis_conf||opp.confidence||0],['Timing',opp.timing_conf||opp.confidence||0],['Exec',opp.exec_conf||opp.confidence||0],['Data',opp.data_conf||opp.confidence||0]]">
+                        <div>
+                          <div class="text-[7px] font-bold" style="color:var(--t3)" x-text="lbl"></div>
+                          <div style="height:4px;background:var(--s2);border-radius:2px;overflow:hidden">
+                            <div style="height:100%;border-radius:2px;transition:width .5s" :style="'width:'+Math.min(100,(val||0)*100)+'%;background:'+(val>=0.7?'var(--green)':val>=0.5?'var(--amber)':'var(--red)')"></div>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+                <!-- Row 3: Conflict + Stage + Leader -->
+                <div class="flex gap-2 flex-wrap text-[8px]" style="margin-bottom:4px">
+                  <template x-if="opp.conflict_level"><span class="pill" :class="opp.conflict_level==='LOW'?'pg':opp.conflict_level==='MEDIUM'?'pa':'pr'" x-text="'⚡ '+opp.conflict_level+' conflict'"></span></template>
+                  <template x-if="opp.stage"><span class="pill pw" x-text="'📊 '+opp.stage"></span></template>
+                  <template x-if="opp.leader"><span class="pill pb" x-text="'👑 '+opp.leader"></span></template>
+                  <template x-if="opp.discovery_rank"><span class="pill pw" x-text="'🔍 D#'+opp.discovery_rank"></span></template>
+                  <template x-if="opp.conviction_rank"><span class="pill pg" x-text="'💎 C#'+opp.conviction_rank"></span></template>
                 </div>
                 <!-- Price row -->
                 <div class="flex gap-4 text-[9px] mono mt-1" style="color:var(--t2)">
@@ -297,6 +327,10 @@
                 <!-- Invalidation -->
                 <template x-if="opp.invalidation">
                   <div class="text-[9px]" style="color:var(--red);line-height:1.3" x-text="'❌ '+opp.invalidation"></div>
+                </template>
+                <!-- Alternative -->
+                <template x-if="opp.alternative">
+                  <div class="text-[9px] mt-1" style="color:var(--blue);line-height:1.3" x-text="'💡 Better: '+opp.alternative"></div>
                 </template>
                 <!-- Timing + Position hint -->
                 <div class="flex gap-3 mt-1 text-[8px]" style="color:var(--t3)">
@@ -375,7 +409,7 @@
         <main x-show="tab==='signals'" class="fade">
       <div class="trust-strip">
         <span :style="sig.mode==='SCAN'?'color:var(--green)':sig.mode==='PAPER'?'color:var(--blue)':sig.mode==='OFFLINE'?'color:var(--red)':'color:var(--green)'" x-text="'● '+(sig.mode||'—')"></span>
-        <span x-text="opps.length+' opportunities ranked'"></span>
+        <span x-text="(rankedOpps.rows.length||opps.length)+' opportunities ranked'"></span>
         <span x-text="'As-of: '+(sig.as_of?sig.as_of.slice(0,19):'—')"></span>
       </div>
       <!-- Risk Guard Banner -->
@@ -385,59 +419,87 @@
           <div class="text-[9px] mt-1" style="color:var(--t2)" x-text="regime.no_trade_reason||'Risk-off regime — new entries not recommended.'"></div>
         </div>
       </template>
-      <!-- Sort/Filter -->
+      <!-- Action/Sector Filters -->
       <div style="padding:6px 12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-        <span class="text-[9px] font-bold" style="color:var(--t3)">Sort:</span>
-        <button class="pill pw text-[8px]" :class="oppsSort==='score'?'pg':''" @click="oppsSort='score';sortOpps()">Score</button>
-        <button class="pill pw text-[8px]" :class="oppsSort==='risk_reward'?'pg':''" @click="oppsSort='risk_reward';sortOpps()">R:R</button>
-        <button class="pill pw text-[8px]" :class="oppsSort==='ticker'?'pg':''" @click="oppsSort='ticker';sortOpps()">Ticker</button>
+        <span class="text-[9px] font-bold" style="color:var(--t3)">Action:</span>
+        <template x-for="a in ['','TRADE','WATCH','WAIT','NO_TRADE']">
+          <button class="pill pw text-[8px]" :class="rankedOpps.actionFilter===a?'pg':''" @click="rankedOpps.actionFilter=a;fetchRanked()" x-text="a||'All'"></button>
+        </template>
+        <span class="text-[9px] font-bold ml-2" style="color:var(--t3)">Sector:</span>
+        <template x-for="s in ['','HIGH_GROWTH','CYCLICAL','DEFENSIVE','THEME_HYPE']">
+          <button class="pill pw text-[7px]" :class="rankedOpps.sectorFilter===s?'pp':''" @click="rankedOpps.sectorFilter=s;fetchRanked()" x-text="s?s.replace(/_/g,' '):'All'"></button>
+        </template>
       </div>
-      <div style="padding:0 12px;overflow-x:auto">
-        <template x-if="opps.length===0">
+      <!-- Ranked Cards -->
+      <div style="padding:0 12px;display:flex;flex-direction:column;gap:6px">
+        <template x-if="rankedOpps.rows.length>0">
+          <template x-for="(r, idx) in rankedOpps.rows">
+            <div class="card" style="cursor:pointer;overflow:hidden" @click="openDossier(r.ticker)">
+              <div :style="'height:3px;background:var(--'+(r.action==='TRADE'||r.action==='BUY'?'green':r.action==='NO_TRADE'||r.action==='AVOID'?'red':'amber')+')'"></div>
+              <div style="padding:10px 12px">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-[10px] font-bold mono" style="color:var(--amber);min-width:20px" x-text="'#'+(idx+1)"></span>
+                  <span class="text-[13px] font-extrabold mono text-white" x-text="r.ticker||'—'"></span>
+                  <template x-if="r.sector_type"><span class="pill pp text-[7px]" x-text="r.sector_type"></span></template>
+                  <template x-if="r.grade"><span class="pill mono text-[8px]" :class="r.grade==='A'?'pg':r.grade==='B'?'pa':'pr'" x-text="'Grade '+r.grade"></span></template>
+                  <span class="pill text-[8px] font-bold ml-auto" :class="r.action==='TRADE'||r.action==='BUY'?'pg':r.action==='NO_TRADE'||r.action==='AVOID'?'pr':'pa'" x-text="r.action||'—'"></span>
+                </div>
+                <!-- Confidence 4-bar -->
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:3px;margin:4px 0">
+                  <template x-for="[lbl,val] in [['Thesis',r.thesis_conf],['Timing',r.timing_conf],['Exec',r.exec_conf],['Data',r.data_conf]]">
+                    <div>
+                      <div class="flex justify-between"><span class="text-[7px] font-bold" style="color:var(--t3)" x-text="lbl"></span><span class="text-[7px] mono" :style="'color:var(--'+((val||0)>=0.7?'green':(val||0)>=0.5?'amber':'red')+')'" x-text="((val||0)*100).toFixed(0)+'%'"></span></div>
+                      <div style="height:3px;background:var(--s2);border-radius:2px;overflow:hidden"><div style="height:100%;border-radius:2px" :style="'width:'+Math.min(100,(val||0)*100)+'%;background:var(--'+((val||0)>=0.7?'green':(val||0)>=0.5?'amber':'red')+')'"></div></div>
+                    </div>
+                  </template>
+                </div>
+                <!-- Meta row -->
+                <div class="flex gap-2 flex-wrap text-[8px]" style="color:var(--t3)">
+                  <template x-if="r.stage"><span x-text="'📊 '+r.stage"></span></template>
+                  <template x-if="r.leader"><span x-text="'👑 '+r.leader"></span></template>
+                  <template x-if="r.conflict_level"><span :style="'color:var(--'+(r.conflict_level==='LOW'?'green':r.conflict_level==='MEDIUM'?'amber':'red')+')'" x-text="'⚡ '+r.conflict_level"></span></template>
+                  <template x-if="r.discovery_rank"><span x-text="'🔍D#'+r.discovery_rank"></span></template>
+                  <template x-if="r.action_rank"><span x-text="'🎯A#'+r.action_rank"></span></template>
+                  <template x-if="r.conviction_rank"><span x-text="'💎C#'+r.conviction_rank"></span></template>
+                  <template x-if="r.risk_level"><span x-text="'Risk: '+r.risk_level"></span></template>
+                  <span class="ml-auto mono font-bold" :class="(r.final_conf||0)>=0.7?'text-green-400':(r.final_conf||0)>=0.5?'text-amber-300':'text-red-400'" x-text="'Conf '+((r.final_conf||0)*100).toFixed(0)+'%'"></span>
+                </div>
+              </div>
+            </div>
+          </template>
+        </template>
+        <!-- Fallback to old opps -->
+        <template x-if="rankedOpps.rows.length===0&&opps.length>0">
+          <template x-for="(r, idx) in opps">
+            <div class="card" style="cursor:pointer;overflow:hidden" @click="openDossier(r.ticker)">
+              <div :style="'height:3px;background:var(--'+(r.action==='BUY'||r.action==='BUY_ON_DIP'?'green':r.action==='AVOID'?'red':'amber')+')'"></div>
+              <div style="padding:10px 12px">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-[10px] font-bold mono" style="color:var(--amber);min-width:20px" x-text="'#'+(idx+1)"></span>
+                  <span class="text-[13px] font-extrabold mono text-white" x-text="r.ticker||'—'"></span>
+                  <span class="pill pb text-[8px]" x-text="(r.strategy||'').replace(/_/g,' ')"></span>
+                  <span class="pill mono text-[8px]" :class="(r.score||0)>=8?'pg':(r.score||0)>=6?'pa':'pr'" x-text="r.score!=null?Number(r.score).toFixed(1):'—'"></span>
+                  <span class="pill text-[8px] font-bold ml-auto" :class="r.action==='BUY'||r.action==='BUY_ON_DIP'?'pg':r.action==='AVOID'?'pr':'pa'" x-text="r.action||'—'"></span>
+                </div>
+                <div class="flex gap-4 text-[9px] mono mt-1" style="color:var(--t2)">
+                  <template x-if="r.entry_price"><span>Entry <strong class="text-white">$<span x-text="Number(r.entry_price).toFixed(2)"></span></strong></span></template>
+                  <template x-if="r.target_price"><span>Target <strong class="text-green-400">$<span x-text="Number(r.target_price).toFixed(2)"></span></strong></span></template>
+                  <template x-if="r.stop_price"><span>Stop <strong class="text-red-400">$<span x-text="Number(r.stop_price).toFixed(2)"></span></strong></span></template>
+                  <span>R:R <strong class="text-white" x-text="Number(r.risk_reward||0).toFixed(1)"></strong></span>
+                </div>
+                <template x-if="r.why_now&&(Array.isArray(r.why_now)?r.why_now.length:r.why_now)">
+                  <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'✅ '+(Array.isArray(r.why_now)?r.why_now.join(' · '):r.why_now)"></div>
+                </template>
+              </div>
+            </div>
+          </template>
+        </template>
+        <template x-if="rankedOpps.rows.length===0&&opps.length===0">
           <div class="card card-p" style="padding:20px;text-align:center">
             <div style="font-size:28px">🔍</div>
             <div class="text-sm font-bold mt-1" style="color:var(--t1)">No Opportunities</div>
             <div class="text-[11px] mt-2" style="color:var(--t2)">Scanner found no setups meeting entry criteria. This is normal — the system is selective.</div>
-            <button @click="fetchOpps()" class="btn-s text-[10px] mt-3">🔄 Refresh</button>
-          </div>
-        </template>
-        <template x-if="opps.length>0">
-          <div style="display:flex;flex-direction:column;gap:6px">
-            <template x-for="(r, idx) in opps">
-              <div class="card" style="cursor:pointer;overflow:hidden" @click="openDossier(r.ticker)">
-                <div :style="'height:3px;background:var(--'+(r.action==='BUY'||r.action==='BUY_ON_DIP'?'green':r.action==='AVOID'?'red':'amber')+')'"></div>
-                <div style="padding:10px 12px">
-                  <div class="flex items-center gap-2 mb-1">
-                    <span class="text-[10px] font-bold mono" style="color:var(--amber);min-width:20px" x-text="'#'+(idx+1)"></span>
-                    <span class="text-[13px] font-extrabold mono text-white" x-text="r.ticker||'—'"></span>
-                    <span class="pill pb text-[8px]" x-text="(r.strategy||'').replace(/_/g,' ')"></span>
-                    <span class="pill mono text-[8px]" :class="(r.score||0)>=8?'pg':(r.score||0)>=6?'pa':'pr'" x-text="r.score!=null?Number(r.score).toFixed(1):'—'"></span>
-                    <span class="pill text-[8px] font-bold ml-auto" :class="r.action==='BUY'||r.action==='BUY_ON_DIP'?'pg':r.action==='AVOID'?'pr':'pa'" x-text="r.action||'—'"></span>
-                  </div>
-                  <div class="flex gap-4 text-[9px] mono mt-1" style="color:var(--t2)">
-                    <template x-if="r.entry_price"><span>Entry <strong class="text-white">$<span x-text="Number(r.entry_price).toFixed(2)"></span></strong></span></template>
-                    <template x-if="r.target_price"><span>Target <strong class="text-green-400">$<span x-text="Number(r.target_price).toFixed(2)"></span></strong></span></template>
-                    <template x-if="r.stop_price"><span>Stop <strong class="text-red-400">$<span x-text="Number(r.stop_price).toFixed(2)"></span></strong></span></template>
-                    <span>R:R <strong class="text-white" x-text="Number(r.risk_reward||0).toFixed(1)"></strong></span>
-                  </div>
-                  <div class="flex gap-3 text-[8px] mt-1" style="color:var(--t3)">
-                    <span x-text="'⏱ '+r.timing"></span>
-                    <template x-if="r.rsi"><span x-text="'RSI '+(typeof r.rsi==='number'?r.rsi.toFixed(0):r.rsi)"></span></template>
-                    <template x-if="r.vol_quality"><span x-text="'Vol: '+r.vol_quality"></span></template>
-                    <template x-if="r.position_hint"><span style="color:var(--purple)" x-text="'💰 '+r.position_hint"></span></template>
-                  </div>
-                  <template x-if="r.why_now&&(Array.isArray(r.why_now)?r.why_now.length:r.why_now)">
-                    <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'✅ '+(Array.isArray(r.why_now)?r.why_now.join(' · '):r.why_now)"></div>
-                  </template>
-                  <template x-if="r.why_not&&(Array.isArray(r.why_not)?r.why_not.length:r.why_not)">
-                    <div class="text-[9px]" style="color:var(--amber);line-height:1.4" x-text="'⚠️ '+(Array.isArray(r.why_not)?r.why_not.join(' · '):r.why_not)"></div>
-                  </template>
-                  <template x-if="r.invalidation">
-                    <div class="text-[9px]" style="color:var(--red);line-height:1.3" x-text="'❌ '+r.invalidation"></div>
-                  </template>
-                </div>
-              </div>
-            </template>
+            <button @click="fetchRanked()" class="btn-s text-[10px] mt-3">🔄 Refresh</button>
           </div>
         </template>
       </div>
@@ -538,6 +600,50 @@
             <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--red)">🔴 WHY STOP</div>
             <template x-for="w in dos.data.why_stop||[]"><div class="text-[11px] py-0.5" style="color:var(--t2)" x-text="'• '+w"></div></template>
           </div>
+          <!-- Confidence Breakdown (from pipeline) -->
+          <template x-if="dos.data.confidence||dos.data.signal?.confidence">
+            <div class="card card-p">
+              <div class="flex items-center justify-between mb-2">
+                <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">🎯 Confidence Breakdown</div>
+                <span class="text-[12px] mono font-bold" :class="((dos.data.confidence||dos.data.signal?.confidence)?.final||0)>=0.7?'text-green-400':((dos.data.confidence||dos.data.signal?.confidence)?.final||0)>=0.5?'text-amber-300':'text-red-400'" x-text="(((dos.data.confidence||dos.data.signal?.confidence)?.final||0)*100).toFixed(0)+'%'"></span>
+              </div>
+              <div class="space-y-2">
+                <template x-for="[lbl,key] in [['Thesis','thesis'],['Timing','timing'],['Execution','execution'],['Data','data']]">
+                  <div>
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="text-[10px] font-bold" style="color:var(--t2)" x-text="lbl"></span>
+                      <span class="text-[10px] mono font-bold" :class="((dos.data.confidence||dos.data.signal?.confidence)?.[key]||0)>=0.7?'text-green-400':((dos.data.confidence||dos.data.signal?.confidence)?.[key]||0)>=0.5?'text-amber-300':'text-red-400'" x-text="(((dos.data.confidence||dos.data.signal?.confidence)?.[key]||0)*100).toFixed(0)+'%'"></span>
+                    </div>
+                    <div style="height:6px;background:var(--s2);border-radius:3px;overflow:hidden">
+                      <div style="height:100%;border-radius:3px;transition:width .5s" :style="'width:'+Math.min(100,((dos.data.confidence||dos.data.signal?.confidence)?.[key]||0)*100)+'%;background:var(--'+((((dos.data.confidence||dos.data.signal?.confidence)?.[key]||0)>=0.7)?'green':(((dos.data.confidence||dos.data.signal?.confidence)?.[key]||0)>=0.5)?'amber':'red')+')'"></div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+          <!-- Conflict Level -->
+          <template x-if="dos.data.conflict||dos.data.signal?.conflict">
+            <div class="card card-p" :style="'border-left:3px solid var(--'+((dos.data.conflict||dos.data.signal?.conflict)?.conflict_level==='LOW'?'green':(dos.data.conflict||dos.data.signal?.conflict)?.conflict_level==='MEDIUM'?'amber':'red')+')'">
+              <div class="flex items-center justify-between mb-1">
+                <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">⚡ Evidence Conflict</div>
+                <span class="pill text-[8px] font-bold" :class="(dos.data.conflict||dos.data.signal?.conflict)?.conflict_level==='LOW'?'pg':(dos.data.conflict||dos.data.signal?.conflict)?.conflict_level==='MEDIUM'?'pa':'pr'" x-text="(dos.data.conflict||dos.data.signal?.conflict)?.conflict_level||'—'"></span>
+              </div>
+              <div class="text-[10px]" style="color:var(--t2)" x-text="(dos.data.conflict||dos.data.signal?.conflict)?.summary||''"></div>
+            </div>
+          </template>
+          <!-- Sector Context -->
+          <template x-if="dos.data.sector||dos.data.signal?.sector">
+            <div class="card card-p">
+              <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🏭 Sector Context</div>
+              <div class="flex gap-2 flex-wrap">
+                <span class="pill pp text-[9px]" x-text="(dos.data.sector||dos.data.signal?.sector)?.sector_bucket||'—'"></span>
+                <template x-if="(dos.data.sector||dos.data.signal?.sector)?.theme"><span class="pill pw text-[9px]" x-text="(dos.data.sector||dos.data.signal?.sector)?.theme"></span></template>
+                <template x-if="(dos.data.sector||dos.data.signal?.sector)?.sector_stage"><span class="pill pb text-[9px]" x-text="'Stage: '+((dos.data.sector||dos.data.signal?.sector)?.sector_stage||'—')"></span></template>
+                <template x-if="(dos.data.sector||dos.data.signal?.sector)?.leader_status"><span class="pill text-[9px]" :class="(dos.data.sector||dos.data.signal?.sector)?.leader_status==='LEADER'?'pg':'pw'" x-text="(dos.data.sector||dos.data.signal?.sector)?.leader_status"></span></template>
+              </div>
+            </div>
+          </template>
           <!-- AI Analysis (Dossier) -->
           <template x-if="dos.data.ai_analysis">
             <div class="card card-p" style="border-left:3px solid #8b5cf6;background:linear-gradient(135deg,rgba(139,92,246,.06),rgba(139,92,246,.02))">
@@ -587,6 +693,94 @@
         </div>
       </template>
       <div x-show="dos.error" class="mx-3 card card-p" style="border-color:var(--red)"><div class="text-red-400 text-sm" x-text="dos.error"></div></div>
+    </main>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- SURFACE: SCANNER HUB                                   -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <main x-show="tab==='scanners'" class="fade">
+      <div class="trust-strip">
+        <span style="color:var(--blue)">● SCANNER</span>
+        <span x-text="scannerHub.data?'Categories: '+(Object.keys(scannerHub.data.scanners||{}).length||'—'):'Loading…'"></span>
+      </div>
+      <div style="padding:8px 12px">
+        <!-- Category Tabs -->
+        <div class="flex gap-2 mb-3 flex-wrap">
+          <button class="pill text-[9px]" :class="!scannerHub.category?'pg':'pw'" @click="fetchScanners()">All</button>
+          <template x-for="cat in ['PATTERN','FLOW','SECTOR','RISK','VALIDATION']">
+            <button class="pill text-[9px]" :class="scannerHub.category===cat?'pg':'pw'" @click="fetchScanners(cat)" x-text="cat"></button>
+          </template>
+        </div>
+        <!-- Loading -->
+        <template x-if="scannerHub.loading">
+          <div class="card card-p" style="text-align:center;padding:30px"><span class="spin"></span> Scanning…</div>
+        </template>
+        <!-- Results: All categories -->
+        <template x-if="!scannerHub.loading&&scannerHub.data&&scannerHub.data.scanners">
+          <div class="space-y-3">
+            <template x-for="[catName,scanners] in Object.entries(scannerHub.data.scanners||{})">
+              <div class="card" style="overflow:hidden">
+                <div style="padding:8px 12px;background:var(--s2);border-bottom:1px solid var(--bd)">
+                  <div class="flex items-center gap-2">
+                    <span class="text-[10px]" x-text="catName==='PATTERN'?'📐':catName==='FLOW'?'💧':catName==='SECTOR'?'🏭':catName==='RISK'?'⚠️':'✅'"></span>
+                    <span class="text-[10px] font-bold uppercase text-white" x-text="catName"></span>
+                    <span class="pill pw text-[8px] ml-auto" x-text="Object.keys(scanners||{}).length+' scanners'"></span>
+                  </div>
+                </div>
+                <div style="padding:6px 10px">
+                  <template x-for="[scanName,hits] in Object.entries(scanners||{})">
+                    <div style="padding:4px 0;border-bottom:1px solid var(--bd)">
+                      <div class="flex items-center justify-between">
+                        <span class="text-[10px] font-semibold" style="color:var(--t2)" x-text="scanName.replace(/_/g,' ')"></span>
+                        <span class="pill mono text-[8px]" :class="(hits||[]).length>0?'pg':'pw'" x-text="(hits||[]).length+' hits'"></span>
+                      </div>
+                      <template x-if="(hits||[]).length>0">
+                        <div class="flex flex-wrap gap-1 mt-1">
+                          <template x-for="h in (hits||[]).slice(0,8)">
+                            <span class="text-[8px] px-2 py-0.5 mono font-bold cursor-pointer" style="background:var(--s2);border-radius:4px;color:var(--green)" @click="openDossier(h.ticker||h)" x-text="h.ticker||h"></span>
+                          </template>
+                          <template x-if="(hits||[]).length>8"><span class="text-[8px]" style="color:var(--t3)" x-text="'+'+(hits.length-8)+' more'"></span></template>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+        <!-- Results: Single category -->
+        <template x-if="!scannerHub.loading&&scannerHub.data&&scannerHub.data.hits">
+          <div class="card">
+            <div style="padding:8px 12px;background:var(--s2);border-bottom:1px solid var(--bd)">
+              <span class="text-[10px] font-bold uppercase text-white" x-text="scannerHub.data.category||'—'"></span>
+              <span class="pill pw text-[8px] ml-2" x-text="(scannerHub.data.hits||[]).length+' hits'"></span>
+            </div>
+            <div style="padding:6px 10px">
+              <template x-if="(scannerHub.data.hits||[]).length===0">
+                <div class="text-[11px]" style="color:var(--t3);padding:16px;text-align:center">No scanner hits in this category.</div>
+              </template>
+              <template x-for="h in scannerHub.data.hits||[]">
+                <div class="flex items-center gap-2 py-1" style="border-bottom:1px solid var(--bd)">
+                  <span class="text-[11px] mono font-bold text-white cursor-pointer" @click="openDossier(h.ticker)" x-text="h.ticker||'—'"></span>
+                  <span class="pill pb text-[7px]" x-text="h.scanner||'—'"></span>
+                  <span class="text-[9px]" style="color:var(--t2)" x-text="h.reason||''"></span>
+                  <span class="pill mono text-[8px] ml-auto" :class="(h.severity||'INFO')==='WARNING'?'pa':(h.severity||'INFO')==='CRITICAL'?'pr':'pw'" x-text="h.severity||'INFO'"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+        <!-- Empty state -->
+        <template x-if="!scannerHub.loading&&!scannerHub.data">
+          <div class="card card-p" style="text-align:center;padding:30px">
+            <div style="font-size:28px">🔬</div>
+            <div class="text-[12px] font-bold text-white mt-2">Scanner Hub</div>
+            <div class="text-[10px] mt-1" style="color:var(--t2)">20+ scanners across Pattern, Flow, Sector, Risk, and Validation categories.</div>
+            <button @click="fetchScanners()" class="btn-p mt-3 text-[10px]">Run Scanners</button>
+          </div>
+        </template>
+      </div>
     </main>
 
     <!-- ═══════════════════════════════════════════════════════ -->
@@ -1353,12 +1547,12 @@
     <!-- ══════ BOTTOM NAV ══════ -->
     <nav style="position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--bd);padding:6px 0 max(env(safe-area-inset-bottom),6px);z-index:50">
       <div class="flex justify-around max-w-lg mx-auto">
-        <a href="#" @click.prevent="switchTab('today')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='today'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📊</span>Today</a>
+        <a href="#" @click.prevent="switchTab('today')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='today'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🎯</span>Today</a>
         <a href="#" @click.prevent="switchTab('signals')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='signals'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📊</span>Board</a>
+        <a href="#" @click.prevent="switchTab('scanners')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='scanners'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🔬</span>Scanners</a>
         <a href="#" @click.prevent="switchTab('dossier')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='dossier'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🔍</span>Dossier</a>
         <a href="#" @click.prevent="switchTab('brief')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='brief'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📋</span>Brief</a>
-        <a href="#" @click.prevent="switchTab('track')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='track'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🔬</span>Track</a>
-        <a href="#" @click.prevent="switchTab('timetravel')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='timetravel'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">⏰</span>Travel</a>
+        <a href="#" @click.prevent="switchTab('track')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='track'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📈</span>Track</a>
         <a href="#" @click.prevent="switchTab('ops')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='ops'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">⚙️</span>Ops</a>
       </div>
     </nav>
@@ -1374,8 +1568,9 @@
         {id:'brief',icon:'📋',label:'Brief'},
       ],
       moreTabs:[
+        {id:'scanners',icon:'🔬',label:'Scanner Hub'},
         {id:'options',icon:'🔮',label:'Options'},
-        {id:'track',icon:'🔬',label:'Track Record'},
+        {id:'track',icon:'📈',label:'Track Record'},
         {id:'timetravel',icon:'⏰',label:'Time Travel'},
         {id:'ops',icon:'⚙️',label:'Operator'},
         {id:'catalog',icon:'📚',label:'Catalog'},
@@ -1393,6 +1588,8 @@
       today7:{regime:null,top_ranked:[],filter_funnel:null,avoid_list:[],tradeability:'',what_changed:[],event_risks:[],best_family:null,pulse:null,narrative:'',ai_narrative:null,date:'',trust:{}},
       opps:[],oppsSort:'score',
       apiEndpoints:[],
+      scannerHub:{loading:false,data:null,category:null},
+      rankedOpps:{loading:false,rows:[],actionFilter:'',sectorFilter:''},
       _failCount:0,
       _retryTimer:null,
       apiError:'',
@@ -1406,7 +1603,7 @@
         this.fetchHealth();setInterval(()=>this.fetchHealth(),120000);
       },
       tick(){this.clock=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'})},
-      switchTab(t){this.tab=t;if(t==='today'){this.fetchToday7();this.fetchMkt()}if(t==='signals'){this.fetchSignals();this.fetchOpps()}if(t==='ops')this.fetchHealth();if(t==='brief')this.fetchBrief();if(t==='catalog'){this.fetchEndpoints();this.fetchOpsDetail()}if(t==='timetravel'&&!this.tt.date){const d=new Date();d.setDate(d.getDate()-5);this.tt.date=d.toISOString().slice(0,10)}},
+      switchTab(t){this.tab=t;if(t==='today'){this.fetchToday7();this.fetchMkt()}if(t==='signals'){this.fetchSignals();this.fetchRanked()}if(t==='ops')this.fetchHealth();if(t==='brief')this.fetchBrief();if(t==='catalog'){this.fetchEndpoints();this.fetchOpsDetail()}if(t==='scanners')this.fetchScanners();if(t==='timetravel'&&!this.tt.date){const d=new Date();d.setDate(d.getDate()-5);this.tt.date=d.toISOString().slice(0,10)}},
 
       acInput(val,target){
         this.ac.target=target;
@@ -1476,6 +1673,14 @@
       },
       async fetchOpps(){
         try{const r=await fetch('/api/v7/opportunities');if(!r.ok)throw 0;const d=await r.json();this.opps=d.opportunities||[];this.sortOpps()}catch(e){console.warn('v7/opportunities fetch failed',e)}
+      },
+      async fetchRanked(){
+        this.rankedOpps.loading=true;
+        try{let u='/api/v7/playbook/ranked?limit=30';if(this.rankedOpps.actionFilter)u+='&action='+this.rankedOpps.actionFilter;if(this.rankedOpps.sectorFilter)u+='&sector='+this.rankedOpps.sectorFilter;const r=await fetch(u);if(!r.ok)throw 0;const d=await r.json();this.rankedOpps.rows=d.opportunities||[]}catch(e){console.warn('ranked fetch failed',e)}finally{this.rankedOpps.loading=false}
+      },
+      async fetchScanners(cat){
+        this.scannerHub.loading=true;this.scannerHub.category=cat||null;
+        try{let u='/api/v7/playbook/scanners';if(cat)u+='?category='+cat;const r=await fetch(u);if(!r.ok)throw 0;this.scannerHub.data=await r.json()}catch(e){console.warn('scanners fetch failed',e);this.scannerHub.data=null}finally{this.scannerHub.loading=false}
       },
       async fetchEndpoints(){
         if(this.apiEndpoints.length>0)return;
