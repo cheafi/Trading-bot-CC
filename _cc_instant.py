@@ -148,18 +148,47 @@ class ReusableTCPServer(socketserver.TCPServer):
 
 
 def _start_backend():
-    """Load full FastAPI app and run uvicorn on BACKEND_PORT."""
+    """Start full API as a subprocess on BACKEND_PORT."""
     global _backend_ready
-    time.sleep(2)
+    time.sleep(1)
     try:
-        print("Loading full FastAPI app...", flush=True)
-        from src.api.main import app
-        print("App imported. Starting uvicorn on internal port...", flush=True)
-        import uvicorn
-        _backend_ready = True
-        uvicorn.run(app, host="127.0.0.1", port=BACKEND_PORT, log_level="info")
+        print("Starting full API as subprocess...", flush=True)
+        proc = subprocess.Popen(
+            [
+                os.path.join("venv", "bin", "python3"),
+                "-m",
+                "uvicorn",
+                "src.api.main:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(BACKEND_PORT),
+                "--log-level",
+                "warning",
+            ],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        # Poll until backend is up (max 120s)
+        for _ in range(120):
+            time.sleep(1)
+            try:
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{BACKEND_PORT}/health", timeout=2
+                ) as r:
+                    if r.status == 200:
+                        _backend_ready = True
+                        print("✅ Full API ready on internal port.", flush=True)
+                        return
+            except Exception:
+                if proc.poll() is not None:
+                    out = proc.stdout.read().decode() if proc.stdout else ""
+                    print(f"Backend process exited: {out[-500:]}", flush=True)
+                    return
+        print("⚠ Backend did not become ready in 120s", flush=True)
     except Exception as e:
-        print(f"Backend load failed: {e}", flush=True)
+        print(f"Backend start failed: {e}", flush=True)
         traceback.print_exc()
 
 
