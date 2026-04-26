@@ -108,7 +108,7 @@ class VCPScanner(BaseScanner):
                         ticker=sig.get("ticker", ""),
                         score=score,
                         headline=f"VCP ({cc} contractions)",
-                        detail=f"Base depth {sig.get('base_depth_pct', 0):.0f}%",
+                        detail=(f"Base depth" f" {sig.get('base_depth_pct', 0):.0f}%"),
                         priority=(
                             ScannerPriority.HIGH
                             if score >= 7
@@ -296,7 +296,9 @@ class OptionsFlowScanner(BaseScanner):
     def scan(self, signals, regime) -> List[ScannerHit]:
         hits = []
         for sig in signals:
-            if sig.get("options_bullish", False) or sig.get("unusual_options", False):
+            opt_bull = sig.get("options_bullish", False)
+            unusual = sig.get("unusual_options", False)
+            if opt_bull or unusual:
                 hits.append(
                     ScannerHit(
                         scanner_name=self.name,
@@ -382,7 +384,12 @@ class SectorRotationScanner(BaseScanner):
                         category=self.category,
                         ticker=bucket,
                         score=min(10, avg_rs / 10),
-                        headline=f"{bucket} sector rotation (avg RS {avg_rs:.0f})",
+                        headline=(
+                            f"{bucket} sector"
+                            f" rotation"
+                            f" (avg RS"
+                            f" {avg_rs:.0f})"
+                        ),
                     )
                 )
         return hits
@@ -457,7 +464,12 @@ class ExtensionRiskScanner(BaseScanner):
                         category=self.category,
                         ticker=sig.get("ticker", ""),
                         score=3.0,
-                        headline=f"Extended ({dist:.0f}% above 50MA, RSI {rsi:.0f})",
+                        headline=(
+                            f"Extended"
+                            f" ({dist:.0f}%"
+                            f" above 50MA,"
+                            f" RSI {rsi:.0f})"
+                        ),
                         is_warning=True,
                     )
                 )
@@ -677,7 +689,11 @@ class ScannerMatrix:
                 "warnings": sum(1 for h in hits if h.is_warning),
                 "top_hits": [
                     h.to_dict()
-                    for h in sorted(hits, key=lambda x: x.score, reverse=True)[:5]
+                    for h in sorted(
+                        hits,
+                        key=lambda x: x.score,
+                        reverse=True,
+                    )[:5]
                 ],
             }
             for category, hits in all_hits.items()

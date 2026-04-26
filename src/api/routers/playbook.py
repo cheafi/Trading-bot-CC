@@ -15,12 +15,53 @@ Endpoints:
 from __future__ import annotations
 
 import logging
+import statistics
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Query
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v7/playbook", tags=["playbook"])
+
+
+# ── Real data access ─────────────────────────────────────────────────
+
+
+async def _real_regime() -> Dict[str, Any]:
+    """Get real regime from the engine (cached 60s in main)."""
+    try:
+        from src.api.main import _get_regime
+
+        state = await _get_regime()
+        return {
+            "should_trade": getattr(state, "should_trade", True),
+            "trend": getattr(state, "trend_regime", "sideways"),
+            "vix": getattr(state, "vix", 18.0),
+            "macro_trend": getattr(state, "trend_regime", "neutral"),
+            "macro_event_nearby": False,
+            "confidence": getattr(state, "confidence", 0.5),
+        }
+    except Exception as e:
+        logger.warning("Regime fallback: %s", e)
+        return {
+            "should_trade": True,
+            "trend": "NEUTRAL",
+            "vix": 18.5,
+            "macro_trend": "neutral",
+            "macro_event_nearby": False,
+        }
+
+
+async def _real_signals() -> List[Dict[str, Any]]:
+    """Get real signals from live scanner (cached 5min in main)."""
+    try:
+        from src.api.main import _scan_live_signals
+
+        recs, _ = await _scan_live_signals(limit=50)
+        return recs
+    except Exception as e:
+        logger.warning("Signals fallback: %s", e)
+        return []
 
 
 def _get_pipeline():
@@ -50,9 +91,8 @@ async def today_playbook() -> Dict[str, Any]:
     """Today's market regime, sector playbook, top 5, avoid list."""
     pipeline = _get_pipeline()
 
-    # Get current regime (simplified — would come from regime engine)
-    regime = _get_regime_stub()
-    signals = _get_signals_stub()
+    regime = await _real_regime()
+    signals = await _real_signals()
 
     results = pipeline.process_batch(signals, regime)
 
@@ -75,11 +115,15 @@ async def today_playbook() -> Dict[str, Any]:
             entry["runner_up"] = {
                 "ticker": nxt.signal.get("ticker"),
                 "score": round(nxt.confidence.final, 2),
-                "reason": f"Higher conviction ({round(r.confidence.final, 2)} vs {round(nxt.confidence.final, 2)})"
-                + (
-                    f", better sector fit ({r.sector.sector_bucket.value})"
-                    if r.sector.sector_bucket != nxt.sector.sector_bucket
-                    else ""
+                "reason": (
+                    f"Higher conviction"
+                    f" ({round(r.confidence.final, 2)}"
+                    f" vs {round(nxt.confidence.final, 2)})"
+                    + (
+                        ", better sector fit (" + r.sector.sector_bucket.value + ")"
+                        if r.sector.sector_bucket != nxt.sector.sector_bucket
+                        else ""
+                    )
                 ),
             }
         top5.append(entry)
@@ -120,8 +164,8 @@ async def ranked_opportunities(
 ) -> Dict[str, Any]:
     """3-layer ranked opportunity board."""
     pipeline = _get_pipeline()
-    regime = _get_regime_stub()
-    signals = _get_signals_stub()
+    regime = await _real_regime()
+    signals = await _real_signals()
 
     results = pipeline.process_batch(signals, regime)
 
@@ -129,7 +173,8 @@ async def ranked_opportunities(
     if action:
         results = [r for r in results if r.decision.action == action.upper()]
     if sector:
-        results = [r for r in results if r.sector.sector_bucket.value == sector.upper()]
+        sb = sector.upper()
+        results = [r for r in results if r.sector.sector_bucket.value == sb]
 
     rows = []
     for i, r in enumerate(results[:limit]):
@@ -153,7 +198,7 @@ async def ranked_opportunities(
             "target_price": r.signal.get("target_price"),
             "stop_price": r.signal.get("stop_price"),
             "risk_reward": r.signal.get("risk_reward"),
-            "why_now": r.explanation.why_now if r.explanation else None,
+            "why_now": (r.explanation.why_now if r.explanation else None),
             "why_not": (r.explanation.why_not_stronger if r.explanation else None),
             "invalidation": (r.explanation.invalidation if r.explanation else None),
         }
@@ -186,12 +231,15 @@ async def ranked_opportunities(
 
 @router.get("/scanners")
 async def scanner_hub(
-    category: str = Query(None, description="PATTERN/FLOW/SECTOR/RISK/VALIDATION"),
+    category: str = Query(
+        None,
+        description="PATTERN/FLOW/SECTOR/RISK/VALIDATION",
+    ),
 ) -> Dict[str, Any]:
     """Scanner matrix results grouped by category."""
     scanner = _get_scanner()
-    regime = _get_regime_stub()
-    signals = _get_signals_stub()
+    regime = await _real_regime()
+    signals = await _real_signals()
 
     if category:
         from src.engines.scanner_matrix import ScannerCategory
@@ -219,7 +267,7 @@ async def vcp_analysis(ticker: str) -> Dict[str, Any]:
     """Full VCP intelligence analysis for a ticker."""
     pipeline = _get_pipeline()
     vcp = _get_vcp()
-    regime = _get_regime_stub()
+    regime = await _real_regime()
 
     signal = _get_signal_for_ticker(ticker)
     if not signal:
@@ -242,7 +290,7 @@ async def symbol_dossier(ticker: str) -> Dict[str, Any]:
     """Complete decision dossier for a single symbol."""
     pipeline = _get_pipeline()
     vcp = _get_vcp()
-    regime = _get_regime_stub()
+    regime = await _real_regime()
 
     signal = _get_signal_for_ticker(ticker)
     if not signal:
@@ -274,8 +322,8 @@ async def symbol_dossier(ticker: str) -> Dict[str, Any]:
 async def no_trade_list() -> Dict[str, Any]:
     """Current no-trade and avoid signals with reasons."""
     pipeline = _get_pipeline()
-    regime = _get_regime_stub()
-    signals = _get_signals_stub()
+    regime = await _real_regime()
+    signals = await _real_signals()
 
     results = pipeline.process_batch(signals, regime)
 
@@ -299,7 +347,186 @@ async def no_trade_list() -> Dict[str, Any]:
     }
 
 
-# ── Stubs (replace with real data sources) ───────────────────────────
+# ── Data builders for RS / Flow ──────────────────────────────────────
+
+
+_RS_UNIVERSE = [
+    "NVDA",
+    "AAPL",
+    "MSFT",
+    "AMZN",
+    "META",
+    "GOOGL",
+    "TSLA",
+    "AMD",
+    "AVGO",
+    "CRM",
+    "NFLX",
+    "ADBE",
+    "NOW",
+    "UBER",
+    "PLTR",
+    "PANW",
+    "CRWD",
+    "ANET",
+    "XOM",
+    "CVX",
+    "LLY",
+    "UNH",
+    "JPM",
+    "V",
+]
+
+_SECTOR_MAP = {
+    "NVDA": "Tech",
+    "AAPL": "Tech",
+    "MSFT": "Tech",
+    "AMZN": "Consumer",
+    "META": "Tech",
+    "GOOGL": "Tech",
+    "TSLA": "Consumer",
+    "AMD": "Tech",
+    "AVGO": "Tech",
+    "CRM": "Tech",
+    "NFLX": "Consumer",
+    "ADBE": "Tech",
+    "NOW": "Tech",
+    "UBER": "Consumer",
+    "PLTR": "Tech",
+    "PANW": "Tech",
+    "CRWD": "Tech",
+    "ANET": "Tech",
+    "XOM": "Energy",
+    "CVX": "Energy",
+    "LLY": "Health",
+    "UNH": "Health",
+    "JPM": "Finance",
+    "V": "Finance",
+}
+
+
+async def _build_rs_universe() -> List[Dict[str, Any]]:
+    """Build RS universe from real yfinance data."""
+    try:
+        import yfinance as yf
+
+        data = yf.download(
+            _RS_UNIVERSE + ["SPY"],
+            period="6mo",
+            interval="1wk",
+            auto_adjust=True,
+            progress=False,
+        )
+        if data is None or data.empty:
+            return []
+        close = data["Close"]
+        universe = []
+        for t in _RS_UNIVERSE:
+            if t not in close.columns:
+                continue
+            s = close[t].dropna()
+            if len(s) < 4:
+                continue
+            price = float(s.iloc[-1])
+            r1w = float((s.iloc[-1] / s.iloc[-2] - 1) * 100)
+            ret4 = float((s.iloc[-1] / s.iloc[-4] - 1) * 100)
+            r1m = ret4 if len(s) >= 5 else 0.0
+            ret12 = float((s.iloc[-1] / s.iloc[-12] - 1) * 100)
+            r3m = ret12 if len(s) >= 13 else r1m
+            ret0 = float((s.iloc[-1] / s.iloc[0] - 1) * 100)
+            r6m = ret0 if len(s) >= 20 else r3m
+            universe.append(
+                {
+                    "ticker": t,
+                    "sector": _SECTOR_MAP.get(t, "Other"),
+                    "market_cap": "LARGE",
+                    "price": price,
+                    "return_1w": r1w,
+                    "return_1m": r1m,
+                    "return_3m": r3m,
+                    "return_6m": r6m,
+                }
+            )
+        return universe
+    except Exception as e:
+        logger.warning("RS universe build failed: %s", e)
+        return []
+
+
+async def _build_benchmark() -> Dict[str, Any]:
+    """Build benchmark returns from SPY."""
+    try:
+        import yfinance as yf
+
+        data = yf.download(
+            "SPY",
+            period="6mo",
+            interval="1wk",
+            auto_adjust=True,
+            progress=False,
+        )
+        if data is None or data.empty:
+            return {}
+        c = data["Close"].dropna()
+        if len(c) < 4:
+            return {}
+        r1w = float((c.iloc[-1] / c.iloc[-2] - 1) * 100)
+        r1m = float((c.iloc[-1] / c.iloc[-4] - 1) * 100) if len(c) >= 5 else 0.0
+        r3m = float((c.iloc[-1] / c.iloc[-12] - 1) * 100) if len(c) >= 13 else 0.0
+        r6m = float((c.iloc[-1] / c.iloc[0] - 1) * 100) if len(c) >= 20 else 0.0
+        return {
+            "return_1w": r1w,
+            "return_1m": r1m,
+            "return_3m": r3m,
+            "return_6m": r6m,
+        }
+    except Exception as e:
+        logger.warning("Benchmark build failed: %s", e)
+        return {}
+
+
+async def _build_flow_universe() -> List[Dict[str, Any]]:
+    """Build flow universe from real yfinance data."""
+    try:
+        import yfinance as yf
+
+        data = yf.download(
+            _RS_UNIVERSE,
+            period="3mo",
+            interval="1d",
+            auto_adjust=True,
+            progress=False,
+        )
+        if data is None or data.empty:
+            return []
+        universe = []
+        for t in _RS_UNIVERSE:
+            try:
+                c = data["Close"][t].dropna()
+                v = data["Volume"][t].dropna()
+                if len(c) < 20 or len(v) < 20:
+                    continue
+                avg_vol = float(v.iloc[-20:].mean())
+                cur_vol = float(v.iloc[-1])
+                universe.append(
+                    {
+                        "ticker": t,
+                        "price": float(c.iloc[-1]),
+                        "volume": cur_vol,
+                        "avg_volume_20d": avg_vol,
+                        "vol_ratio": (
+                            round(cur_vol / avg_vol, 2) if avg_vol > 0 else 1.0
+                        ),
+                        "close_5d": [float(x) for x in c.iloc[-5:]],
+                        "volume_5d": [float(x) for x in v.iloc[-5:]],
+                    }
+                )
+            except Exception:
+                continue
+        return universe
+    except Exception as e:
+        logger.warning("Flow universe build failed: %s", e)
+        return []
 
 
 def _get_rs_engine():
@@ -322,9 +549,10 @@ async def rs_ranking(
 ) -> Dict[str, Any]:
     """Relative Strength ranking with sector/size filters."""
     engine = _get_rs_engine()
-    universe = _get_rs_universe_stub()
+    universe = await _build_rs_universe()
+    benchmark = await _build_benchmark()
 
-    entries = engine.rank(universe, _get_benchmark_stub())
+    entries = engine.rank(universe, benchmark)
 
     if sector:
         entries = [e for e in entries if e.sector.upper() == sector.upper()]
@@ -350,7 +578,7 @@ async def flow_intelligence(
 ) -> Dict[str, Any]:
     """Flow / smart money intelligence."""
     engine = _get_flow_engine()
-    universe = _get_flow_universe_stub()
+    universe = await _build_flow_universe()
 
     profiles = engine.analyze_batch(universe)
     unusual = engine.get_unusual_activity(profiles)
@@ -496,22 +724,34 @@ async def backtest_vs_benchmark(
     bench_cum = 1.0
     strat_curve = [1.0]
     bench_curve = [1.0]
-    for sr, br in zip(strategy_returns, benchmark_returns):
+    for sr, br in zip(
+        strategy_returns,
+        benchmark_returns,
+        strict=True,
+    ):
         strat_cum *= 1 + sr
         bench_cum *= 1 + br
         strat_curve.append(round(strat_cum, 4))
         bench_curve.append(round(bench_cum, 4))
 
     # Stats
-    import statistics
-
     n = len(strategy_returns)
     strat_ann = (strat_cum ** (12.0 / n) - 1) if n > 0 else 0
     bench_ann = (bench_cum ** (12.0 / n) - 1) if n > 0 else 0
     strat_vol = statistics.stdev(strategy_returns) * (12**0.5) if n > 1 else 0
     bench_vol = statistics.stdev(benchmark_returns) * (12**0.5) if n > 1 else 0
     alpha = strat_ann - bench_ann
-    win_months = sum(1 for s, b in zip(strategy_returns, benchmark_returns) if s > b)
+    win_months = sum(
+        1
+        for s, b in zip(
+            strategy_returns,
+            benchmark_returns,
+            strict=True,
+        )
+        if s > b
+    )
+
+    win_rate = round(win_months / n * 100, 1) if n > 0 else 0
 
     return {
         "period": period,
@@ -522,16 +762,16 @@ async def backtest_vs_benchmark(
             "total_return": round((strat_cum - 1) * 100, 2),
             "annualized": round(strat_ann * 100, 2),
             "volatility": round(strat_vol * 100, 2),
-            "sharpe": round(strat_ann / strat_vol, 2) if strat_vol > 0 else 0,
+            "sharpe": (round(strat_ann / strat_vol, 2) if strat_vol > 0 else 0),
         },
         "benchmark_stats": {
             "total_return": round((bench_cum - 1) * 100, 2),
             "annualized": round(bench_ann * 100, 2),
             "volatility": round(bench_vol * 100, 2),
-            "sharpe": round(bench_ann / bench_vol, 2) if bench_vol > 0 else 0,
+            "sharpe": (round(bench_ann / bench_vol, 2) if bench_vol > 0 else 0),
         },
         "alpha_annualized": round(alpha * 100, 2),
-        "win_rate_vs_benchmark": round(win_months / n * 100, 1) if n > 0 else 0,
+        "win_rate_vs_benchmark": win_rate,
         "equity_curve": {
             "dates": ["start"] + months,
             "strategy": strat_curve,
@@ -541,42 +781,16 @@ async def backtest_vs_benchmark(
     }
 
 
-def _get_regime_stub() -> Dict[str, Any]:
-    """Stub regime — replace with RegimeDetector output."""
-    return {
-        "should_trade": True,
-        "trend": "NEUTRAL",
-        "vix": 18.5,
-        "macro_trend": "neutral",
-        "macro_event_nearby": False,
-    }
+def _get_signal_for_ticker(
+    ticker: str,
+) -> Dict[str, Any] | None:
+    """Look up a ticker from cached scanner signals."""
+    try:
+        from src.api.main import _scan_cache
 
-
-def _get_signals_stub() -> List[Dict[str, Any]]:
-    """Stub signals — replace with SignalEngine output."""
-    return []
-
-
-def _get_signal_for_ticker(ticker: str) -> Dict[str, Any] | None:
-    """Stub single signal lookup."""
+        for rec in _scan_cache.get("recs", []):
+            if rec.get("ticker", "").upper() == ticker.upper():
+                return rec
+    except Exception:
+        pass
     return {"ticker": ticker, "score": 5, "strategy": "scan"}
-
-
-def _get_rs_universe_stub() -> List[Dict[str, Any]]:
-    """Stub RS universe — replace with real market data."""
-    return []
-
-
-def _get_benchmark_stub() -> Dict[str, Any]:
-    """Stub benchmark returns — replace with SPY data."""
-    return {
-        "return_1w": 0.5,
-        "return_1m": 2.1,
-        "return_3m": 5.0,
-        "return_6m": 8.0,
-    }
-
-
-def _get_flow_universe_stub() -> List[Dict[str, Any]]:
-    """Stub flow data — replace with real OHLCV data."""
-    return []

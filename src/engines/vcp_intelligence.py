@@ -130,7 +130,10 @@ class VCPResult:
                 "ma_alignment": self.detection.ma_alignment,
             },
             "quality": {
-                "contraction_tightness": round(self.quality.contraction_tightness, 1),
+                "contraction_tightness": round(
+                    self.quality.contraction_tightness,
+                    1,
+                ),
                 "volume_dry_up": round(self.quality.volume_dry_up, 1),
                 "pivot_clarity": round(self.quality.pivot_clarity, 1),
                 "base_structure": round(self.quality.base_structure, 1),
@@ -183,7 +186,12 @@ class VCPIntelligence:
         result.quality = self._score_quality(signal, result.detection)
 
         # Layer 3: Context
-        result.context = self._score_context(signal, sector, regime, result.detection)
+        result.context = self._score_context(
+            signal,
+            sector,
+            regime,
+            result.detection,
+        )
 
         # Layer 4: Action
         result.action = self._determine_action(
@@ -250,7 +258,8 @@ class VCPIntelligence:
                 contractions[i] <= contractions[i - 1] * 1.1
                 for i in range(1, len(contractions))
             )
-            ratio = contractions[-1] / contractions[0] if contractions[0] > 0 else 1.0
+            c0 = contractions[0]
+            ratio = contractions[-1] / c0 if c0 > 0 else 1.0
             if tightening and ratio < 0.5:
                 q.contraction_tightness = 9.0
             elif tightening:
@@ -273,7 +282,7 @@ class VCPIntelligence:
 
         # Volume dry-up at pivot
         vol_ratio = sig.get("vol_ratio", 1.0)
-        vol_dry = sig.get("volume_dry_up", None)
+        vol_dry = sig.get("volume_dry_up")
         if vol_dry is not None:
             q.volume_dry_up = min(10, vol_dry)
         elif vol_ratio < 0.5:
@@ -493,16 +502,19 @@ class VCPIntelligence:
             a.size_guidance = "PILOT"
 
         # Laggard override
-        if sector.leader_status == LeaderStatus.LAGGARD:
-            if a.action == "TRADE":
-                a.action = "WATCH"
-                a.size_guidance = "PILOT"
+        lag = sector.leader_status == LeaderStatus.LAGGARD
+        if lag and a.action == "TRADE":
+            a.action = "WATCH"
+            a.size_guidance = "PILOT"
 
         # Build explanations
         ticker = sig.get("ticker", "?")
         pivot = sig.get("pivot_price", sig.get("resistance", 0))
 
-        a.entry_zone = f"Near ${pivot:.2f} pivot" if pivot > 0 else "At pivot breakout"
+        if pivot > 0:
+            a.entry_zone = f"Near ${pivot:.2f} pivot"
+        else:
+            a.entry_zone = "At pivot breakout"
 
         # Why now
         parts = [
@@ -530,7 +542,10 @@ class VCPIntelligence:
             why_not_parts.append("laggard — not leading the move")
         if context.event_proximity < 5:
             why_not_parts.append("earnings too close")
-        a.why_not = "; ".join(why_not_parts) if why_not_parts else "Clean setup"
+        if why_not_parts:
+            a.why_not = "; ".join(why_not_parts)
+        else:
+            a.why_not = "Clean setup"
 
         # Invalidation
         stop = sig.get("stop_price", 0)

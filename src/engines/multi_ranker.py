@@ -72,15 +72,27 @@ class MultiLayerRanker:
             ranks[ticker] = mr
 
         # Assign ordinal ranks
-        by_disc = sorted(ranks.values(), key=lambda x: x.discovery_score, reverse=True)
+        by_disc = sorted(
+            ranks.values(),
+            key=lambda x: x.discovery_score,
+            reverse=True,
+        )
         for i, mr in enumerate(by_disc, 1):
             mr.discovery_rank = i
 
-        by_act = sorted(ranks.values(), key=lambda x: x.action_score, reverse=True)
+        by_act = sorted(
+            ranks.values(),
+            key=lambda x: x.action_score,
+            reverse=True,
+        )
         for i, mr in enumerate(by_act, 1):
             mr.action_rank = i
 
-        by_conv = sorted(ranks.values(), key=lambda x: x.conviction_score, reverse=True)
+        by_conv = sorted(
+            ranks.values(),
+            key=lambda x: x.conviction_score,
+            reverse=True,
+        )
         for i, mr in enumerate(by_conv, 1):
             mr.conviction_rank = i
 

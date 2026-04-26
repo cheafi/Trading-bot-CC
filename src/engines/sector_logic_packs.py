@@ -110,7 +110,8 @@ class HighGrowthPack(SectorLogicPack):
             sector.leader_status == LeaderStatus.LAGGARD
             and sector.sector_stage == SectorStage.CLIMAX
         ):
-            adj.warnings.append("Laggard moving after leaders peak — high risk")
+            msg = "Laggard moving after" " leaders peak — high risk"
+            adj.warnings.append(msg)
             adj.score_modifier -= 2.0
             adj.confidence_modifier -= 0.15
             adj.alert_tone = "warning"
@@ -157,7 +158,7 @@ class CyclicalPack(SectorLogicPack):
         # Futures confirmation
         futures_aligned = signal.get("futures_aligned", None)
         if futures_aligned is False:
-            adj.warnings.append("Commodity equity vs futures divergence — caution")
+            adj.warnings.append("Commodity equity vs futures" " divergence — caution")
             adj.score_modifier -= 1.5
             adj.confidence_modifier -= 0.1
             adj.alert_tone = "cautious"
@@ -281,7 +282,7 @@ class ThemeHypePack(SectorLogicPack):
 
             if sector.leader_status == LeaderStatus.LAGGARD:
                 adj.score_modifier -= 2.0
-                adj.warnings.append("Laggard at theme climax — highest risk tier")
+                adj.warnings.append("Laggard at theme climax" " — highest risk tier")
 
         elif stage == SectorStage.DISTRIBUTION:
             adj.alert_tone = "warning"
@@ -292,7 +293,7 @@ class ThemeHypePack(SectorLogicPack):
         # Social heat
         social_heat = signal.get("social_heat", 0)
         if social_heat > 80:
-            adj.warnings.append("Social heat extreme — sentiment exhaustion risk")
+            adj.warnings.append("Social heat extreme" " — sentiment exhaustion risk")
 
         return adj
 

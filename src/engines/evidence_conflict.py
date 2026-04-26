@@ -99,7 +99,7 @@ class EvidenceConflictEngine:
         elif bear <= 1:
             report.summary = f"Minor conflict: {report.bearish_evidence[0]}"
         else:
-            report.summary = f"{bear} contradictory signals vs {bull} supportive"
+            report.summary = f"{bear} contradictory" f" vs {bull} supportive"
 
         return report
 
@@ -141,7 +141,10 @@ class EvidenceConflictEngine:
         atr_pct = sig.get("atr_pct", 2.0)
 
         # Chart bullish but sector late
-        if sector.sector_stage in (SectorStage.CLIMAX, SectorStage.DISTRIBUTION):
+        if sector.sector_stage in (
+            SectorStage.CLIMAX,
+            SectorStage.DISTRIBUTION,
+        ):
             report.bearish_evidence.append(
                 f"Sector in {sector.sector_stage.value} stage"
             )
@@ -158,7 +161,7 @@ class EvidenceConflictEngine:
         # Extended
         dist_ma = sig.get("distance_from_50ma_pct", 0)
         if dist_ma > 15:
-            report.bearish_evidence.append(f"Extended {dist_ma:.0f}% above 50MA")
+            report.bearish_evidence.append(f"Extended {dist_ma:.0f}%" " above 50MA")
 
         # Crowded
         if sector.crowding_risk > 0.6:
@@ -246,11 +249,14 @@ class BetterAlternativeEngine:
 
             # Check specific advantages
             advantages = []
-            if result.sector.leader_status == LeaderStatus.LEADER:
-                if current_sector.leader_status != LeaderStatus.LEADER:
-                    advantages.append("sector leader")
-
-            if result.fit.timing_fit > 7 and current_signal.get("timing_fit", 5) < 5:
+            if (
+                result.sector.leader_status == LeaderStatus.LEADER
+                and current_sector.leader_status != LeaderStatus.LEADER
+            ):
+                advantages.append("sector leader")
+            cur_timing = current_signal.get("timing_fit", 5)
+            better_timing = result.fit.timing_fit > 7 and cur_timing < 5
+            if better_timing:
                 advantages.append("better timing")
 
             if result.confidence.final > 0.65:

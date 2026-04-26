@@ -27,7 +27,10 @@ from src.engines.fit_scorer import FitScorer, FitScores
 from src.engines.multi_ranker import MultiLayerRanker, MultiRank
 from src.engines.scanner_matrix import ScannerMatrix
 from src.engines.sector_classifier import SectorClassifier, SectorContext
-from src.engines.sector_logic_packs import SectorAdjustment, get_sector_adjustment
+from src.engines.sector_logic_packs import (
+    SectorAdjustment,
+    get_sector_adjustment,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +190,11 @@ class SectorPipeline:
 
         # Better alternatives (needs full batch)
         for result in results:
-            alt = self.alt_engine.suggest(result.signal, result.sector, results)
+            alt = self.alt_engine.suggest(
+                result.signal,
+                result.sector,
+                results,
+            )
             if alt:
                 result.explanation.better_alternative = alt
 

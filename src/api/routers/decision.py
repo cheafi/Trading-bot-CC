@@ -75,7 +75,8 @@ def _why_now(signal: dict) -> List[str]:
     if vol_r > 1.5:
         reasons.append(f"Volume {vol_r:.1f}x average — institutional interest")
     if signal.get("risk_reward", 0) >= 3.0:
-        reasons.append(f"R:R {signal['risk_reward']:.1f} — excellent risk/reward")
+        rr = signal["risk_reward"]
+        reasons.append(f"R:R {rr:.1f} — excellent risk/reward")
     if strategy == "breakout":
         reasons.append("Near 20-day high — breakout structure")
     elif strategy == "swing":
@@ -207,7 +208,6 @@ async def today_summary(request: Request):
         from src.api.main import _LIVE_INDICES, _LIVE_SECTORS
 
         mds = request.app.state.market_data
-        pulse_tickers = [s for s, _ in _LIVE_INDICES] + [s for s, _ in _LIVE_SECTORS]
         # Quick lookup from cache if available
         idx_data = []
         sec_data = []
@@ -317,13 +317,7 @@ async def today_summary(request: Request):
                 ),
                 "action": pr.decision.action,
                 "action_reason": pr.decision.rationale,
-                "why_now": [pr.explanation.why_now] if pr.explanation.why_now else [],
-                "why_not": (
-                    [pr.explanation.why_not_stronger]
-                    if pr.explanation.why_not_stronger
-                    else []
-                ),
-                "risk_reward": sig.get("risk_reward", 0),
+                "why_now": ([pr.explanation.why_now] if pr.explanation.why_now else []),
                 "entry_price": sig.get("entry_price", 0),
                 "target_price": sig.get("target_price", 0),
                 "stop_price": sig.get("stop_price", 0),
@@ -454,8 +448,9 @@ async def today_summary(request: Request):
     # Sector movers
     leaders = market_pulse.get("sector_leaders", [])
     if leaders and leaders[0].get("change_pct", 0) > 1.0:
+        ldr = leaders[0]
         what_changed.append(
-            f"Sector leader: {leaders[0]['name']} " f"+{leaders[0]['change_pct']:.1f}%"
+            f"Sector leader: {ldr['name']}" f" +{ldr['change_pct']:.1f}%"
         )
     laggards = market_pulse.get("sector_laggards", [])
     if laggards and laggards[0].get("change_pct", 0) < -1.0:
@@ -561,7 +556,11 @@ async def ranked_opportunities(
 
     council = ExpertCouncil()
     regime_label = getattr(regime_state, "trend_regime", "sideways")
-    trend_map = {"uptrend": "UPTREND", "downtrend": "DOWNTREND", "sideways": "SIDEWAYS"}
+    trend_map = {
+        "uptrend": "UPTREND",
+        "downtrend": "DOWNTREND",
+        "sideways": "SIDEWAYS",
+    }
     vix_val = getattr(regime_state, "vix", 18.0)
     breadth = getattr(regime_state, "breadth_pct", 0.5)
     regime_ctx = {
@@ -603,13 +602,7 @@ async def ranked_opportunities(
                 "stop_price": sig.get("stop_price", 0),
                 "action": pr.decision.action,
                 "action_reason": pr.decision.rationale,
-                "why_now": [pr.explanation.why_now] if pr.explanation.why_now else [],
-                "why_not": (
-                    [pr.explanation.why_not_stronger]
-                    if pr.explanation.why_not_stronger
-                    else []
-                ),
-                "invalidation": pr.explanation.invalidation,
+                "why_now": ([pr.explanation.why_now] if pr.explanation.why_now else []),
                 "position_hint": _position_hint(sig, should_trade),
                 "confidence_breakdown": pr.confidence.to_dict(),
                 "decision": pr.decision.to_dict(),
@@ -827,7 +820,10 @@ async def signal_card(ticker: str, request: Request):
         cur_atr = max(float(atr_pct[i]), 0.005)
         stop_price = round(cur_price * (1 - cur_atr * 2), 2)
         target_price = round(cur_price * (1 + cur_atr * 4), 2)
-        rr = round((target_price - cur_price) / max(cur_price - stop_price, 0.01), 1)
+        rr = round(
+            (target_price - cur_price) / max(cur_price - stop_price, 0.01),
+            1,
+        )
 
         # Distance to 20MA
         dist_20ma = round((cur_price / float(sma20[i]) - 1) * 100, 2)
