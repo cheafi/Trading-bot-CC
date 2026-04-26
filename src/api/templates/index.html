@@ -1365,18 +1365,14 @@
                 <span style="color:var(--t2)" x-text="'Win rate vs BM: '+benchBT.data.win_rate_vs_benchmark+'%'"></span>
                 <span style="color:var(--t3)" x-text="benchBT.data.months+' months'"></span>
               </div>
-              <!-- Equity curve (ASCII sparkline) -->
+              <!-- Equity curve (lightweight-charts) -->
               <template x-if="benchBT.data.equity_curve">
                 <div class="card card-p" style="padding:8px">
-                  <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--t3)">Equity Curve</div>
-                  <div style="display:flex;align-items:flex-end;gap:1px;height:60px;overflow:hidden">
-                    <template x-for="(v,i) in benchBT.data.equity_curve.strategy">
-                      <div style="flex:1;min-width:2px;border-radius:1px 1px 0 0" :style="'height:'+Math.max(2,((v-0.5)/(Math.max(...benchBT.data.equity_curve.strategy)-0.5))*100)+'%;background:'+(v>=1?'var(--green)':'var(--red)')"></div>
-                    </template>
-                  </div>
+                  <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--t3)">Equity Curve (Strategy vs Benchmark)</div>
+                  <div id="bench-bt-chart" style="height:160px;width:100%"></div>
                   <div class="flex justify-between text-[7px] mt-1" style="color:var(--t3)">
                     <span x-text="benchBT.data.equity_curve.dates[1]||''"></span>
-                    <span class="text-green-400">■ Strategy</span>
+                    <span><span style="color:#00d4aa">■</span> Strategy <span style="color:#fbbf24">■</span> <span x-text="benchBT.benchmark"></span></span>
                     <span x-text="benchBT.data.equity_curve.dates[benchBT.data.equity_curve.dates.length-1]||''"></span>
                   </div>
                 </div>
@@ -1448,6 +1444,23 @@
                 <div><div style="color:var(--t3)">Data</div><div class="font-bold mono text-white" x-text="bt.result.trust?.data_points+' pts'||bt.result.bars+' bars'"></div></div>
               </div>
             </div>
+
+            <!-- ── Equity Curve: Strategy vs Buy&Hold ── -->
+            <template x-if="bt.result.equity_chart&&bt.result.equity_chart.bh&&bt.result.equity_chart.bh.length">
+              <div class="card" style="overflow:hidden">
+                <div class="flex items-center justify-between px-3 pt-2 pb-1">
+                  <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">📈 Strategy vs Buy&Hold (Equity Curve)</div>
+                </div>
+                <div id="bt-equity-chart" style="height:220px;width:100%"></div>
+                <div class="px-3 pb-2 flex gap-4 text-[8px]" style="border-top:1px solid var(--bd);padding-top:4px">
+                  <span><span style="color:#00d4aa">━</span> Best Strategy</span>
+                  <span><span style="color:#fbbf24">╌</span> Buy&Hold</span>
+                  <span><span style="color:#00d4aa">▲</span> BUY</span>
+                  <span><span style="color:#ff5c5c">▼</span> SELL</span>
+                  <span class="mono" style="color:var(--t3)" x-text="'Base: 100'"></span>
+                </div>
+              </div>
+            </template>
 
             <!-- ── Strategy ranking cards ── -->
             <template x-for="(s,i) in (bt.result.strategies||[])">
@@ -2367,6 +2380,62 @@
           this.dos.benchStats={stockReturn:Math.round((stockLast-100)*10)/10,spyReturn:Math.round((spyLast-100)*10)/10,alpha:Math.round((stockLast-spyLast)*10)/10};
         }catch(e){console.warn('Bench chart error:',e)}
       },
+      renderBTEquityChart(){
+        const ec=this.bt.result&&this.bt.result.equity_chart;
+        if(!ec||!ec.bh||!ec.bh.length)return;
+        const el=document.getElementById('bt-equity-chart');
+        if(!el||typeof LightweightCharts==='undefined')return;
+        el.innerHTML='';
+        try{
+          const chart=LightweightCharts.createChart(el,{width:el.clientWidth,height:220,layout:{background:{color:'#161b22'},textColor:'#8b949e',fontSize:10},grid:{vertLines:{color:'#21262d'},horzLines:{color:'#21262d'}},crosshair:{mode:0},rightPriceScale:{borderColor:'#21262d'},timeScale:{borderColor:'#21262d',timeVisible:false}});
+          // Strategy line (green)
+          if(ec.strategy&&ec.strategy.length){
+            const sl=chart.addLineSeries({color:'#00d4aa',lineWidth:2,priceLineVisible:false,lastValueVisible:true,title:'Strategy'});
+            sl.setData(ec.strategy);
+            // Signal markers
+            if(ec.signals&&ec.signals.length){sl.setMarkers(ec.signals)}
+          }
+          // Buy-hold line (amber dashed)
+          const bl=chart.addLineSeries({color:'#fbbf24',lineWidth:1,priceLineVisible:false,lastValueVisible:true,title:'Buy&Hold',lineStyle:2});
+          bl.setData(ec.bh);
+          // Base 100 line
+          bl.createPriceLine({price:100,color:'#484f58',lineWidth:1,lineStyle:1,axisLabelVisible:false,title:''});
+          chart.timeScale().fitContent();
+          new ResizeObserver(()=>{chart.applyOptions({width:el.clientWidth})}).observe(el);
+        }catch(e){console.warn('BT equity chart error:',e)}
+      },
+      renderBenchBTChart(){
+        const ec=this.benchBT.data&&this.benchBT.data.equity_curve;
+        if(!ec||!ec.strategy||!ec.strategy.length)return;
+        const el=document.getElementById('bench-bt-chart');
+        if(!el||typeof LightweightCharts==='undefined')return;
+        el.innerHTML='';
+        try{
+          const chart=LightweightCharts.createChart(el,{width:el.clientWidth,height:160,layout:{background:{color:'#161b22'},textColor:'#8b949e',fontSize:10},grid:{vertLines:{color:'#21262d'},horzLines:{color:'#21262d'}},crosshair:{mode:0},rightPriceScale:{borderColor:'#21262d'},timeScale:{borderColor:'#21262d',timeVisible:false}});
+          // Build time-series from arrays + dates
+          const dates=ec.dates||[];
+          const stratVals=ec.strategy||[];
+          const benchVals=ec.benchmark||[];
+          const toData=(vals)=>vals.map((v,i)=>{
+            const d=dates[i]||'';
+            const parts=d.split('-');
+            const ts=parts.length===3?Date.UTC(+parts[0],+parts[1]-1,+parts[2])/1000:i;
+            return{time:ts,value:v*100};
+          }).filter(d=>d.value>0);
+          const sd=toData(stratVals);
+          const bd=toData(benchVals);
+          if(sd.length){
+            const sl=chart.addLineSeries({color:'#00d4aa',lineWidth:2,priceLineVisible:false,lastValueVisible:true,title:'RS Top-5'});
+            sl.setData(sd);
+          }
+          if(bd.length){
+            const bl=chart.addLineSeries({color:'#fbbf24',lineWidth:1,priceLineVisible:false,lastValueVisible:true,title:this.benchBT.benchmark,lineStyle:2});
+            bl.setData(bd);
+          }
+          chart.timeScale().fitContent();
+          new ResizeObserver(()=>{chart.applyOptions({width:el.clientWidth})}).observe(el);
+        }catch(e){console.warn('Bench BT chart error:',e)}
+      },
       openDossier(ticker){if(ticker){this.dos.ticker=ticker;this.switchTab('dossier');this.fetchDossier()}},
       async fetchOptions(){
         if(!this.opt.ticker)return;this.opt.loading=true;this.opt.data=null;
@@ -2374,11 +2443,11 @@
       },
       async runBT(){
         if(!this.bt.ticker)return;this.bt.loading=true;this.bt.result=null;
-        try{const u='/api/live/backtest?ticker='+encodeURIComponent(this.bt.ticker)+'&strategy='+this.bt.strategy+'&period='+this.bt.period;const r=await fetch(u,{method:'POST'});if(!r.ok){const e=await r.json();throw new Error(e.detail||'Failed')}this.bt.result=await r.json()}catch(e){alert('Error: '+e.message)}finally{this.bt.loading=false}
+        try{const u='/api/live/backtest?ticker='+encodeURIComponent(this.bt.ticker)+'&strategy='+this.bt.strategy+'&period='+this.bt.period;const r=await fetch(u,{method:'POST'});if(!r.ok){const e=await r.json();throw new Error(e.detail||'Failed')}this.bt.result=await r.json();this.$nextTick(()=>this.renderBTEquityChart())}catch(e){alert('Error: '+e.message)}finally{this.bt.loading=false}
       },
       async fetchBenchBT(){
         this.benchBT.loading=true;this.benchBT.data=null;this.benchBT.error='';
-        try{const u='/api/v7/playbook/backtest-vs-benchmark?period='+this.benchBT.period+'&benchmark='+this.benchBT.benchmark;const r=await fetch(u);if(!r.ok)throw new Error('Failed');const d=await r.json();if(d.error){this.benchBT.error=d.error}else{this.benchBT.data=d}}catch(e){this.benchBT.error=e.message}finally{this.benchBT.loading=false}
+        try{const u='/api/v7/playbook/backtest-vs-benchmark?period='+this.benchBT.period+'&benchmark='+this.benchBT.benchmark;const r=await fetch(u);if(!r.ok)throw new Error('Failed');const d=await r.json();if(d.error){this.benchBT.error=d.error}else{this.benchBT.data=d;this.$nextTick(()=>this.renderBenchBTChart())}}catch(e){this.benchBT.error=e.message}finally{this.benchBT.loading=false}
       },
       async fetchTimeTravel(){
         if(!this.tt.ticker||!this.tt.date)return;this.tt.loading=true;this.tt.result=null;

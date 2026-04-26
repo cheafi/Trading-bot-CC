@@ -7428,6 +7428,101 @@ async def live_backtest(
     sample_step = max(1, len(bh_curve) // 100)
     bh_sampled = [{"day": i * sample_step, "equity": round(bh_curve[min(i * sample_step, len(bh_curve) - 1)], 4)} for i in range(min(100, len(bh_curve)))]
 
+    # ── Strategy vs Buy-Hold equity curves (time-series for charting) ──
+    # Buy-hold normalized to 100
+    bh_norm = [100.0] + [round(100.0 * v, 2) for v in bh_curve]
+    # Strategy equity from best strategy's trade PnLs
+    strat_equity_ts = [100.0]
+    if best_trades:
+        eq = 100.0
+        trade_map = {}  # date → cumulative equity
+        for t in best_trades:
+            eq *= 1 + t["pnl_pct"] / 100.0
+            trade_map[t.get("exit_date", "")] = round(eq, 2)
+        # Build daily series: equity changes on exit dates, flat otherwise
+        eq = 100.0
+        for k in range(1, len(close)):
+            d_str = (
+                str(dates_idx[k].date())
+                if hasattr(dates_idx[k], "date")
+                else str(dates_idx[k])[:10]
+            )
+            if d_str in trade_map:
+                eq = trade_map[d_str]
+            strat_equity_ts.append(round(eq, 2))
+    else:
+        strat_equity_ts = bh_norm  # fallback if no trades
+
+    # Build timestamped arrays (sampled to ~150 points)
+    n_pts = len(close)
+    sample_eq = max(1, n_pts // 150)
+    equity_chart = {
+        "bh": [],
+        "strategy": [],
+        "signals": [],  # entry/exit markers
+    }
+    for k in range(0, n_pts, sample_eq):
+        ts = int(dates_idx[k].timestamp()) if hasattr(dates_idx[k], "timestamp") else k
+        equity_chart["bh"].append({"time": ts, "value": round(bh_norm[k], 2)})
+        if k < len(strat_equity_ts):
+            equity_chart["strategy"].append({"time": ts, "value": strat_equity_ts[k]})
+    # Always include last point
+    if n_pts - 1 > 0:
+        ts_last = (
+            int(dates_idx[-1].timestamp())
+            if hasattr(dates_idx[-1], "timestamp")
+            else n_pts - 1
+        )
+        equity_chart["bh"].append({"time": ts_last, "value": round(bh_norm[-1], 2)})
+        if len(strat_equity_ts) == n_pts:
+            equity_chart["strategy"].append(
+                {"time": ts_last, "value": strat_equity_ts[-1]}
+            )
+    # Signal markers (entry/exit points from best strategy trades)
+    if best_trades:
+        for t in best_trades[-50:]:  # last 50 trades
+            e_ts = 0
+            x_ts = 0
+            for k2 in range(len(dates_idx)):
+                d_str2 = (
+                    str(dates_idx[k2].date())
+                    if hasattr(dates_idx[k2], "date")
+                    else str(dates_idx[k2])[:10]
+                )
+                if d_str2 == t.get("entry_date", ""):
+                    e_ts = (
+                        int(dates_idx[k2].timestamp())
+                        if hasattr(dates_idx[k2], "timestamp")
+                        else k2
+                    )
+                if d_str2 == t.get("exit_date", ""):
+                    x_ts = (
+                        int(dates_idx[k2].timestamp())
+                        if hasattr(dates_idx[k2], "timestamp")
+                        else k2
+                    )
+            if e_ts:
+                equity_chart["signals"].append(
+                    {
+                        "time": e_ts,
+                        "position": "belowBar",
+                        "color": "#00d4aa",
+                        "shape": "arrowUp",
+                        "text": "BUY",
+                    }
+                )
+            if x_ts:
+                clr = "#00d4aa" if t["pnl_pct"] >= 0 else "#ff5c5c"
+                equity_chart["signals"].append(
+                    {
+                        "time": x_ts,
+                        "position": "aboveBar",
+                        "color": clr,
+                        "shape": "arrowDown",
+                        "text": f"{'+'if t['pnl_pct']>=0 else ''}{t['pnl_pct']:.1f}%",
+                    }
+                )
+
     # ── Worst periods (largest losing streaks) ──
     worst_streaks = []
     if best_trades:
@@ -7450,26 +7545,29 @@ async def live_backtest(
     for r in ranked:
         r.pop("all_trades", None)
 
-    return _sanitize_for_json({
-        "ticker": ticker,
-        "period": f"{start_date} to {end_date}" if start_date else period,
-        "bars": len(close),
-        "date_range": f"{dates_idx[0].date()} → {dates_idx[-1].date()}",
-        "benchmark_return": round(bh_return, 2),
-        "best_strategy": best,
-        "strategies": ranked,
-        "events": event_performance,
-        "worst_streaks": worst_streaks[:5],
-        "bh_equity_sampled": bh_sampled,
-        "trust": {
-            "mode": "BACKTEST",
-            "source": "yfinance_historical",
-            "note": "Real price data. Gross returns — no commissions, fees, or slippage. Past performance ≠ future results.",
-            "data_points": len(close),
-            "as_of": datetime.now(timezone.utc).isoformat() + "Z",
-        },
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    })
+    return _sanitize_for_json(
+        {
+            "ticker": ticker,
+            "period": f"{start_date} to {end_date}" if start_date else period,
+            "bars": len(close),
+            "date_range": f"{dates_idx[0].date()} → {dates_idx[-1].date()}",
+            "benchmark_return": round(bh_return, 2),
+            "best_strategy": best,
+            "strategies": ranked,
+            "events": event_performance,
+            "worst_streaks": worst_streaks[:5],
+            "bh_equity_sampled": bh_sampled,
+            "equity_chart": equity_chart,
+            "trust": {
+                "mode": "BACKTEST",
+                "source": "yfinance_historical",
+                "note": "Real price data. Gross returns — no commissions, fees, or slippage. Past performance ≠ future results.",
+                "data_points": len(close),
+                "as_of": datetime.now(timezone.utc).isoformat() + "Z",
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════
