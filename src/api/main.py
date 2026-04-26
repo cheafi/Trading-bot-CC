@@ -5437,7 +5437,7 @@ async def ops_status():
             "uptime": uptime_str,
             "uptime_seconds": round(uptime_s),
             "startup_time": startup_time.isoformat() + "Z",
-            "version": "2.1.0",
+            "version": APP_VERSION,
             "engine": {
                 "running": running,
                 "dry_run": dry_run,
@@ -7422,8 +7422,8 @@ def _run_expert_council(
                 if _moat.get("has_moat"):
                     fund_score += 5
                     fund_reasons.append("Moat detected — durable advantage")
-        except Exception:
-            pass  # graceful fallback
+        except Exception as _e9:
+            logger.debug("[ExpertCouncil] Fundamentals: %s", _e9)
     if not fund_reasons:
         fund_reasons.append("Insufficient fundamental signals")
     if not fund_risks:
