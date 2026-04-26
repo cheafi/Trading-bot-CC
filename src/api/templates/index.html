@@ -829,13 +829,46 @@
           <div class="card" style="overflow:hidden">
             <div class="flex items-center justify-between px-3 pt-2">
               <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">📊 Price Chart</div>
-              <div class="flex gap-1">
+              <div class="flex gap-1 items-center">
+                <button class="btn-s text-[8px] py-0.5 px-2" :class="dos.showSignals?'':'opacity-50'" @click="dos.showSignals=!dos.showSignals;renderDossierChart()" title="Pattern Signals">📍</button>
+                <span style="width:1px;height:12px;background:var(--bd)"></span>
                 <button class="btn-s text-[8px] py-0.5 px-2" :class="dos.chartPeriod==='3mo'?'':'opacity-50'" @click="dos.chartPeriod='3mo';renderDossierChart()">3M</button>
                 <button class="btn-s text-[8px] py-0.5 px-2" :class="dos.chartPeriod==='6mo'?'':'opacity-50'" @click="dos.chartPeriod='6mo';renderDossierChart()">6M</button>
                 <button class="btn-s text-[8px] py-0.5 px-2" :class="dos.chartPeriod==='1y'?'':'opacity-50'" @click="dos.chartPeriod='1y';renderDossierChart()">1Y</button>
               </div>
             </div>
             <div id="dossier-chart" style="height:260px;width:100%"></div>
+            <!-- Signal Legend -->
+            <template x-if="dos.showSignals && dos.chartSignals && dos.chartSignals.length">
+              <div class="px-3 pb-2 flex flex-wrap gap-2" style="border-top:1px solid var(--bd);padding-top:6px">
+                <span class="text-[8px] font-bold uppercase" style="color:var(--t3)">Signals:</span>
+                <span class="text-[8px]" style="color:#00d4aa">▲ Golden Cross</span>
+                <span class="text-[8px]" style="color:#ff5c5c">▼ Death Cross</span>
+                <span class="text-[8px]" style="color:#58a6ff">● RSI Bounce</span>
+                <span class="text-[8px]" style="color:#fbbf24">● RSI Reversal</span>
+                <span class="text-[8px]" style="color:#bc8cff">▲ Vol Breakout</span>
+                <span class="text-[8px]" style="color:#00d4aa">● PB to SMA20</span>
+              </div>
+            </template>
+          </div>
+          <!-- Performance vs SPY -->
+          <div class="card" style="overflow:hidden">
+            <div class="flex items-center justify-between px-3 pt-2 pb-1">
+              <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">📈 Performance vs SPY</div>
+              <div class="flex gap-1">
+                <button class="btn-s text-[8px] py-0.5 px-2" :class="dos.benchPeriod==='3mo'?'':'opacity-50'" @click="dos.benchPeriod='3mo';renderBenchChart()">3M</button>
+                <button class="btn-s text-[8px] py-0.5 px-2" :class="dos.benchPeriod==='6mo'?'':'opacity-50'" @click="dos.benchPeriod='6mo';renderBenchChart()">6M</button>
+                <button class="btn-s text-[8px] py-0.5 px-2" :class="dos.benchPeriod==='1y'?'':'opacity-50'" @click="dos.benchPeriod='1y';renderBenchChart()">1Y</button>
+              </div>
+            </div>
+            <div id="bench-chart" style="height:200px;width:100%"></div>
+            <template x-if="dos.benchStats">
+              <div class="px-3 pb-2 flex gap-4 text-[9px] mono" style="border-top:1px solid var(--bd);padding-top:6px">
+                <span style="color:var(--t3)">Stock: <strong :class="dos.benchStats.stockReturn>=0?'text-green-400':'text-red-400'" x-text="(dos.benchStats.stockReturn>=0?'+':'')+dos.benchStats.stockReturn+'%'"></strong></span>
+                <span style="color:var(--t3)">SPY: <strong :class="dos.benchStats.spyReturn>=0?'text-green-400':'text-red-400'" x-text="(dos.benchStats.spyReturn>=0?'+':'')+dos.benchStats.spyReturn+'%'"></strong></span>
+                <span style="color:var(--t3)">Alpha: <strong :class="dos.benchStats.alpha>=0?'text-green-400':'text-red-400'" x-text="(dos.benchStats.alpha>=0?'+':'')+dos.benchStats.alpha+'%'"></strong></span>
+              </div>
+            </template>
           </div>
           <!-- Technical State -->
           <div class="card card-p">
@@ -2180,7 +2213,7 @@
       showMore:false,
       live:false,clock:'',regime:{},indices:[],macro:[],sectors:[],asia:[],trust:{},
       sig:{mode:'—',source:'',as_of:'',recs:[],strategy_scores:{},no_trade_reason:null,scan_meta:null},
-      dos:{ticker:'',loading:false,data:null,error:''},
+      dos:{ticker:'',loading:false,data:null,error:'',showSignals:true,chartPeriod:'6mo',benchPeriod:'6mo',chartSignals:[],benchStats:null},
       opt:{ticker:'',loading:false,data:null},
       brief:{loading:false,data:null},
       bt:{ticker:'AAPL',strategy:'all',period:'5y',loading:false,result:null},
@@ -2277,7 +2310,8 @@
         if(!el||typeof LightweightCharts==='undefined')return;
         el.innerHTML='';
         try{
-          const r=await fetch('/api/live/chart/'+encodeURIComponent(this.dos.ticker)+'?period='+(this.dos.chartPeriod||'6mo'));
+          const sig=this.dos.showSignals?'&signals=true':'';
+          const r=await fetch('/api/live/chart/'+encodeURIComponent(this.dos.ticker)+'?period='+(this.dos.chartPeriod||'6mo')+sig);
           if(!r.ok)return;
           const d=await r.json();
           if(!d.candles||!d.candles.length)return;
@@ -2286,6 +2320,13 @@
           cs.setData(d.candles);
           if(d.sma20&&d.sma20.length){const s20=chart.addLineSeries({color:'#58a6ff',lineWidth:1,priceLineVisible:false,lastValueVisible:false});s20.setData(d.sma20)}
           if(d.sma50&&d.sma50.length){const s50=chart.addLineSeries({color:'#fbbf24',lineWidth:1,priceLineVisible:false,lastValueVisible:false});s50.setData(d.sma50)}
+          // Pattern signal markers
+          this.dos.chartSignals=d.signals||[];
+          if(this.dos.showSignals&&d.signals&&d.signals.length){
+            cs.setMarkers(d.signals.map(s=>({
+              time:s.time,position:s.position,color:s.color,shape:s.shape,text:s.text
+            })));
+          }
           // S/R lines from structure
           const st=this.dos.data._p9&&this.dos.data._p9.structure;
           if(st){
@@ -2296,6 +2337,35 @@
           new ResizeObserver(()=>{chart.applyOptions({width:el.clientWidth})}).observe(el);
           this._dossierChart=chart;
         }catch(e){console.warn('Chart error:',e)}
+        // Also render benchmark chart
+        this.renderBenchChart();
+      },
+      async renderBenchChart(){
+        if(!this.dos.ticker)return;
+        const el=document.getElementById('bench-chart');
+        if(!el||typeof LightweightCharts==='undefined')return;
+        el.innerHTML='';
+        try{
+          const r=await fetch('/api/live/chart/'+encodeURIComponent(this.dos.ticker)+'?period='+(this.dos.benchPeriod||'6mo')+'&benchmark=true');
+          if(!r.ok)return;
+          const d=await r.json();
+          if(!d.stock_norm||!d.stock_norm.length||!d.benchmark||!d.benchmark.length)return;
+          const chart=LightweightCharts.createChart(el,{width:el.clientWidth,height:200,layout:{background:{color:'#161b22'},textColor:'#8b949e',fontSize:10},grid:{vertLines:{color:'#21262d'},horzLines:{color:'#21262d'}},crosshair:{mode:0},rightPriceScale:{borderColor:'#21262d'},timeScale:{borderColor:'#21262d',timeVisible:false}});
+          // Stock line (green)
+          const sl=chart.addLineSeries({color:'#00d4aa',lineWidth:2,priceLineVisible:false,lastValueVisible:true,title:this.dos.ticker});
+          sl.setData(d.stock_norm);
+          // SPY line (amber)
+          const bl=chart.addLineSeries({color:'#fbbf24',lineWidth:2,priceLineVisible:false,lastValueVisible:true,title:'SPY',lineStyle:2});
+          bl.setData(d.benchmark);
+          // Base line at 100
+          sl.createPriceLine({price:100,color:'#484f58',lineWidth:1,lineStyle:1,axisLabelVisible:false,title:''});
+          chart.timeScale().fitContent();
+          new ResizeObserver(()=>{chart.applyOptions({width:el.clientWidth})}).observe(el);
+          // Compute stats
+          const stockLast=d.stock_norm[d.stock_norm.length-1].value;
+          const spyLast=d.benchmark[d.benchmark.length-1].value;
+          this.dos.benchStats={stockReturn:Math.round((stockLast-100)*10)/10,spyReturn:Math.round((spyLast-100)*10)/10,alpha:Math.round((stockLast-spyLast)*10)/10};
+        }catch(e){console.warn('Bench chart error:',e)}
       },
       openDossier(ticker){if(ticker){this.dos.ticker=ticker;this.switchTab('dossier');this.fetchDossier()}},
       async fetchOptions(){
