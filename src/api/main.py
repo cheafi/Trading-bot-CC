@@ -4896,7 +4896,7 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                         "symbol": ticker,
                         "score": score,
                         "confidence": conf["composite"],
-                        "grade": conf["grade"],
+                        "grade": conf["grade"] if _gate_passed else "F",
                         "direction": "LONG",
                         "strategy": strat_name,
                         "entry_price": entry_price,

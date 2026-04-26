@@ -333,6 +333,16 @@
                   <template x-if="opp.discovery_rank"><span class="pill pw" x-text="'🔍 D#'+opp.discovery_rank"></span></template>
                   <template x-if="opp.conviction_rank"><span class="pill pg" x-text="'💎 C#'+opp.conviction_rank"></span></template>
                 </div>
+                <!-- Phase 9 pills -->
+                <div class="flex gap-1 flex-wrap mb-1" x-show="opp.structure||opp.entry_quality||opp.earnings||opp.fundamentals||opp.portfolio_gate">
+                  <template x-if="opp.structure&&opp.structure.trend"><span class="pill text-[7px]" :class="opp.structure.trend==='uptrend'?'pg':opp.structure.trend==='downtrend'?'pr':'pa'" x-text="'📊'+opp.structure.trend"></span></template>
+                  <template x-if="opp.entry_quality&&opp.entry_quality.verdict"><span class="pill text-[7px]" :class="opp.entry_quality.verdict==='PASS'?'pg':opp.entry_quality.verdict==='REJECT'?'pr':'pa'" x-text="'🎯'+opp.entry_quality.verdict"></span></template>
+                  <template x-if="opp.fundamentals&&opp.fundamentals.quality"><span class="pill pb text-[7px]" x-text="'💎Q'+opp.fundamentals.quality"></span></template>
+                  <template x-if="opp.fundamentals&&opp.fundamentals.moat"><span class="pill pg text-[7px]">🏰Moat</span></template>
+                  <template x-if="opp.earnings&&opp.earnings.in_blackout"><span class="pill pr text-[7px]">⚠️ER Blackout</span></template>
+                  <template x-if="opp.earnings&&opp.earnings.days_to_earnings!=null&&opp.earnings.days_to_earnings<=7&&!opp.earnings.in_blackout"><span class="pill pa text-[7px]" x-text="'📅ER '+opp.earnings.days_to_earnings+'d'"></span></template>
+                  <template x-if="opp.portfolio_gate&&!opp.portfolio_gate.allowed"><span class="pill pr text-[7px]">⛔Gate</span></template>
+                </div>
                 <!-- Price row -->
                 <div class="flex gap-4 text-[9px] mono mt-1" style="color:var(--t2)">
                   <template x-if="opp.entry_price"><span>Entry <strong class="text-white">$<span x-text="Number(opp.entry_price).toFixed(2)"></span></strong></span></template>

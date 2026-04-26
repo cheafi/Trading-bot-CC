@@ -108,6 +108,12 @@ async def today_playbook() -> Dict[str, Any]:
             "grade": r.fit.grade,
             "confidence": round(r.confidence.final, 2),
             "why_now": r.explanation.why_now,
+            # Phase 9 pass-through
+            "structure": r.signal.get("structure"),
+            "entry_quality": r.signal.get("entry_quality"),
+            "earnings": r.signal.get("earnings"),
+            "fundamentals": r.signal.get("fundamentals"),
+            "portfolio_gate": r.signal.get("portfolio_gate"),
         }
         # Why This Not That — attach runner-up for comparison
         if i < len(results) - 1:
@@ -209,6 +215,12 @@ async def ranked_opportunities(
                 r.explanation.invalidation
                 if r.explanation else None
             ),
+            # Phase 9 pass-through
+            "structure": r.signal.get("structure"),
+            "entry_quality": r.signal.get("entry_quality"),
+            "earnings": r.signal.get("earnings"),
+            "fundamentals": r.signal.get("fundamentals"),
+            "portfolio_gate": r.signal.get("portfolio_gate"),
         }
         if r.ranking:
             row["discovery_rank"] = r.ranking.discovery_rank
