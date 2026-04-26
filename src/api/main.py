@@ -764,6 +764,22 @@ async def health_check():
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "version": APP_VERSION,
         "uptime_seconds": telemetry.get_uptime_seconds(),
+        "phase9_engines": {
+            "loaded": _P9_ENGINES,
+            "components": (
+                [
+                    "StructureDetector",
+                    "EntryQuality",
+                    "BreakoutMonitor",
+                    "PortfolioGate",
+                    "EarningsCalendar",
+                    "FundamentalData",
+                    "DecisionJournal",
+                ]
+                if _P9_ENGINES
+                else []
+            ),
+        },
     }
 
 
@@ -4823,8 +4839,8 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                         if not _gr.allowed:
                             _gate_passed = False
                             score = max(0, score - 2.0)
-                    except Exception:
-                        pass
+                    except Exception as _e9:
+                        logger.debug("[Phase9] PortfolioGate: %s", _e9)
                 if _P9_ENGINES:
                     try:
                         h_col = "High" if "High" in hist.columns else "high"
@@ -4865,8 +4881,8 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                             _TICKER_SECTOR.get(ticker, "unknown"),
                         )
                         _entry_qual = _eqr.to_dict()
-                    except Exception:
-                        pass
+                    except Exception as _e9:
+                        logger.debug("[Phase9] StructureDetector/EntryQuality: %s", _e9)
                     try:
                         _earnings = get_earnings_info(ticker)
                         if _earnings.get("in_blackout"):
@@ -4874,8 +4890,8 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                                 "earnings_blackout"
                             ]
                             score = max(0, score - 1.5)
-                    except Exception:
-                        pass
+                    except Exception as _e9:
+                        logger.debug("[Phase9] EarningsCalendar: %s", _e9)
                     try:
                         _fd = get_fundamentals(ticker)
                         _fundamentals_brief = {
@@ -4887,8 +4903,8 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                                 "has_moat", False
                             ),
                         }
-                    except Exception:
-                        pass
+                    except Exception as _e9:
+                        logger.debug("[Phase9] FundamentalData: %s", _e9)
 
                 recs.append(
                     {
@@ -5442,6 +5458,32 @@ async def ops_status():
                 "mode": "PAPER" if dry_run else "LIVE",
                 "source": "engine + system",
                 "as_of": datetime.now(timezone.utc).isoformat() + "Z",
+            },
+            "phase9_engines": {
+                "loaded": _P9_ENGINES,
+                "breakout_monitor": (
+                    {"active": len(getattr(BreakoutMonitor, "_active", {}))}
+                    if _P9_ENGINES
+                    else {}
+                ),
+                "decision_journal": (
+                    {"entries": len(getattr(get_journal(), "_decisions", []))}
+                    if _P9_ENGINES
+                    else {}
+                ),
+                "components": (
+                    [
+                        "StructureDetector",
+                        "EntryQuality",
+                        "BreakoutMonitor",
+                        "PortfolioGate",
+                        "EarningsCalendar",
+                        "FundamentalData",
+                        "DecisionJournal",
+                    ]
+                    if _P9_ENGINES
+                    else []
+                ),
             },
         }
     )

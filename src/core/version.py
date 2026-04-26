@@ -11,7 +11,7 @@ PRODUCT_FULL_NAME = "CC — Regime-Aware Market Intelligence Platform"
 
 # ── Canonical Version ─────────────────────────────────────────
 # Bump here and ONLY here.  Follows semver: major.minor.patch
-APP_VERSION = "6.1.0"
+APP_VERSION = "9.0.0"
 
 # ── Feature Counts (kept in sync with reality) ───────────────
 STRATEGY_COUNT = 4  # swing, breakout, momentum, mean_reversion
