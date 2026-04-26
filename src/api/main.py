@@ -4805,14 +4805,7 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                 reward = target_price - entry_price
                 rr = round(reward / risk, 1) if risk > 0 else 0
 
-                # Confidence from 4-layer
-                conf = _compute_4layer_confidence(
-                    close, sma20, sma50, sma200, rsi, atr_pct,
-                    vol_ratio, i, volume, trending,
-                )
-                score = round(conf["composite"] / 10, 1)  # 0-10 scale
-
-                # ── Phase 9: Structure + Entry Quality ──
+                # ── Phase 9: Pre-compute engines before confidence ──
                 _structure = {}
                 _entry_qual = {}
                 _earnings = {}
@@ -4839,7 +4832,6 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                         _portfolio_check = _gr.to_dict()
                         if not _gr.allowed:
                             _gate_passed = False
-                            score = max(0, score - 2.0)
                     except Exception as _e9:
                         logger.debug("[Phase9] PortfolioGate: %s", _e9)
                 if _P9_ENGINES:
@@ -4886,11 +4878,6 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                         logger.debug("[Phase9] StructureDetector/EntryQuality: %s", _e9)
                     try:
                         _earnings = get_earnings_info(ticker)
-                        if _earnings.get("in_blackout"):
-                            conf["penalties"] = conf.get("penalties", []) + [
-                                "earnings_blackout"
-                            ]
-                            score = max(0, score - 1.5)
                     except Exception as _e9:
                         logger.debug("[Phase9] EarningsCalendar: %s", _e9)
                     try:
@@ -4906,6 +4893,21 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                         }
                     except Exception as _e9:
                         logger.debug("[Phase9] FundamentalData: %s", _e9)
+
+                # Confidence from 4-layer (now includes Phase 9 penalties)
+                conf = _compute_4layer_confidence(
+                    close, sma20, sma50, sma200, rsi, atr_pct,
+                    vol_ratio, i, volume, trending,
+                    structure_result=_structure,
+                    entry_quality_result=_entry_qual,
+                    earnings_info=_earnings,
+                    fundamentals_info=_fundamentals_brief,
+                    regime_label="UPTREND" if trending else "SIDEWAYS",
+                    ticker_sector=_TICKER_SECTOR.get(ticker, "unknown"),
+                )
+                score = round(conf["composite"] / 10, 1)  # 0-10 scale
+                if not _gate_passed:
+                    score = max(0, score - 2.0)
 
                 recs.append(
                     {
@@ -7068,10 +7070,18 @@ def _compute_4layer_confidence(
     regime_trending,
     days_to_earnings=None,
     data_freshness=1.0,
+    # ── Phase 9 engine results (optional) ──
+    structure_result=None,
+    entry_quality_result=None,
+    earnings_info=None,
+    fundamentals_info=None,
+    regime_label=None,
+    ticker_sector=None,
 ) -> dict:
     """Compute 4-layer confidence: Thesis / Timing / Execution / Data.
 
     Returns dict with each layer 0-100, composite, grade, action.
+    Phase 9 engines feed penalties/bonuses into layer scores.
     """
     import numpy as np
 
@@ -7178,6 +7188,60 @@ def _compute_4layer_confidence(
     else:
         data_factors.append(("Stale data — low trust", -15))
     data_score = max(0, min(100, 50 + sum(f[1] for f in data_factors)))
+
+    # ── Phase 9 Engine Adjustments ──
+    p9_adjustments = []
+
+    # Entry quality: REJECT verdict → execution penalty
+    if entry_quality_result and isinstance(entry_quality_result, dict):
+        eq_verdict = entry_quality_result.get("verdict", "").upper()
+        eq_score_val = entry_quality_result.get("score", 50)
+        if eq_verdict == "REJECT":
+            exec_factors.append(("P9: Entry quality REJECT", -25))
+            exec_score = max(0, exec_score - 25)
+            p9_adjustments.append("entry_quality_reject")
+        elif eq_verdict == "POOR" or eq_score_val < 35:
+            exec_factors.append(("P9: Entry quality poor", -12))
+            exec_score = max(0, exec_score - 12)
+            p9_adjustments.append("entry_quality_poor")
+
+    # Earnings blackout from Phase 9 EarningsCalendar
+    if earnings_info and isinstance(earnings_info, dict):
+        if earnings_info.get("in_blackout"):
+            timing_factors.append(("P9: Earnings blackout period", -20))
+            timing_score = max(0, timing_score - 20)
+            p9_adjustments.append("earnings_blackout_p9")
+
+    # Structure: extended from resistance → timing penalty
+    if structure_result and isinstance(structure_result, dict):
+        if structure_result.get("is_extended"):
+            timing_factors.append(("P9: Price extended from structure", -15))
+            timing_score = max(0, timing_score - 15)
+            p9_adjustments.append("structure_extended")
+        trend_q = structure_result.get("trend_quality", "")
+        if trend_q and str(trend_q).upper() in ("WEAK", "POOR"):
+            thesis_factors.append(("P9: Weak trend quality", -10))
+            thesis_score = max(0, thesis_score - 10)
+            p9_adjustments.append("weak_trend")
+
+    # Fundamentals: low quality → thesis penalty
+    if fundamentals_info and isinstance(fundamentals_info, dict):
+        fq = fundamentals_info.get("quality")
+        if fq is not None and fq < 40:
+            thesis_factors.append((f"P9: Fundamental quality {fq}/100", -15))
+            thesis_score = max(0, thesis_score - 15)
+            p9_adjustments.append("weak_fundamentals")
+
+    # Regime gating: CRISIS/RISK_OFF → suppress non-defensive
+    if regime_label and str(regime_label).upper() in ("CRISIS", "RISK_OFF", "DOWNTREND"):
+        defensive_sectors = {"utilities", "healthcare", "consumer_staples", "XLU", "XLV", "XLP"}
+        is_defensive = ticker_sector and str(ticker_sector).lower() in defensive_sectors
+        if not is_defensive:
+            thesis_factors.append((f"P9: Regime {regime_label} — non-defensive", -15))
+            thesis_score = max(0, thesis_score - 15)
+            timing_factors.append((f"P9: Regime {regime_label} — adverse", -10))
+            timing_score = max(0, timing_score - 10)
+            p9_adjustments.append("adverse_regime")
 
     # ── Composite ──
     composite = round(
@@ -7296,6 +7360,7 @@ def _compute_4layer_confidence(
         "reasons_against": reasons_against[:5],
         "invalidation": invalidation[:4],
         "penalties": penalties,
+        "p9_adjustments": p9_adjustments,
         "calibration": calibration_meta,
     }
 
