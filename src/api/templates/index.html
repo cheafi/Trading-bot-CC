@@ -855,22 +855,96 @@
               </div>
             </template>
           </div>
-          <!-- Performance vs SPY -->
+          <!-- Performance vs SPY — Normalized + Period Breakdowns -->
           <div class="card" style="overflow:hidden">
             <div class="flex items-center justify-between px-3 pt-2 pb-1">
               <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">📈 Performance vs SPY</div>
               <div class="flex gap-1">
-                <button class="btn-s text-[8px] py-0.5 px-2" :class="dos.benchPeriod==='3mo'?'':'opacity-50'" @click="dos.benchPeriod='3mo';renderBenchChart()">3M</button>
                 <button class="btn-s text-[8px] py-0.5 px-2" :class="dos.benchPeriod==='6mo'?'':'opacity-50'" @click="dos.benchPeriod='6mo';renderBenchChart()">6M</button>
                 <button class="btn-s text-[8px] py-0.5 px-2" :class="dos.benchPeriod==='1y'?'':'opacity-50'" @click="dos.benchPeriod='1y';renderBenchChart()">1Y</button>
+                <button class="btn-s text-[8px] py-0.5 px-2" :class="dos.benchPeriod==='2y'?'':'opacity-50'" @click="dos.benchPeriod='2y';renderBenchChart()">2Y</button>
+                <button class="btn-s text-[8px] py-0.5 px-2" :class="dos.benchPeriod==='5y'?'':'opacity-50'" @click="dos.benchPeriod='5y';renderBenchChart()">5Y</button>
               </div>
             </div>
+            <!-- Normalized equity curve chart -->
             <div id="bench-chart" style="height:200px;width:100%"></div>
-            <template x-if="dos.benchStats">
-              <div class="px-3 pb-2 flex gap-4 text-[9px] mono" style="border-top:1px solid var(--bd);padding-top:6px">
-                <span style="color:var(--t3)">Stock: <strong :class="dos.benchStats.stockReturn>=0?'text-green-400':'text-red-400'" x-text="(dos.benchStats.stockReturn>=0?'+':'')+dos.benchStats.stockReturn+'%'"></strong></span>
-                <span style="color:var(--t3)">SPY: <strong :class="dos.benchStats.spyReturn>=0?'text-green-400':'text-red-400'" x-text="(dos.benchStats.spyReturn>=0?'+':'')+dos.benchStats.spyReturn+'%'"></strong></span>
-                <span style="color:var(--t3)">Alpha: <strong :class="dos.benchStats.alpha>=0?'text-green-400':'text-red-400'" x-text="(dos.benchStats.alpha>=0?'+':'')+dos.benchStats.alpha+'%'"></strong></span>
+            <!-- Summary stats strip -->
+            <template x-if="dos.benchSummary">
+              <div class="px-3 py-2" style="border-top:1px solid var(--bd)">
+                <div class="flex flex-wrap gap-x-4 gap-y-1 text-[9px] mono">
+                  <span style="color:var(--t3)">Total: <strong :class="dos.benchSummary.total_return.stock>=0?'text-green-400':'text-red-400'" x-text="(dos.benchSummary.total_return.stock>=0?'+':'')+dos.benchSummary.total_return.stock+'%'"></strong></span>
+                  <span style="color:var(--t3)">SPY: <strong :class="dos.benchSummary.total_return.spy>=0?'text-green-400':'text-red-400'" x-text="(dos.benchSummary.total_return.spy>=0?'+':'')+dos.benchSummary.total_return.spy+'%'"></strong></span>
+                  <span style="color:var(--t3)">α: <strong :class="dos.benchSummary.total_return.alpha>=0?'text-green-400':'text-red-400'" x-text="(dos.benchSummary.total_return.alpha>=0?'+':'')+dos.benchSummary.total_return.alpha+'%'"></strong></span>
+                  <span style="color:var(--t3)">Sharpe: <strong class="text-white" x-text="dos.benchSummary.sharpe.stock"></strong> <span style="color:#484f58">vs</span> <strong class="text-amber-400" x-text="dos.benchSummary.sharpe.spy"></strong></span>
+                  <span style="color:var(--t3)">MaxDD: <strong class="text-red-400" x-text="dos.benchSummary.max_drawdown.stock+'%'"></strong></span>
+                  <span style="color:var(--t3)">β: <strong class="text-white" x-text="dos.benchSummary.beta"></strong></span>
+                  <span style="color:var(--t3)">Win: <strong :class="dos.benchSummary.win_rate_vs_spy>=50?'text-green-400':'text-red-400'" x-text="dos.benchSummary.win_rate_vs_spy+'%'"></strong> <span style="color:#484f58" x-text="'('+dos.benchSummary.win_months+'/'+dos.benchSummary.total_months+'mo)'"></span></span>
+                </div>
+              </div>
+            </template>
+            <!-- Tab toggle: Monthly | Quarterly | Yearly -->
+            <template x-if="dos.benchMonthly">
+              <div style="border-top:1px solid var(--bd)">
+                <div class="flex gap-1 px-3 py-1">
+                  <button class="btn-s text-[8px] py-0.5 px-2" :class="dos.benchTab==='monthly'?'':'opacity-50'" @click="dos.benchTab='monthly'">Monthly</button>
+                  <button class="btn-s text-[8px] py-0.5 px-2" :class="dos.benchTab==='quarterly'?'':'opacity-50'" @click="dos.benchTab='quarterly'">Quarterly</button>
+                  <button class="btn-s text-[8px] py-0.5 px-2" :class="dos.benchTab==='yearly'?'':'opacity-50'" @click="dos.benchTab='yearly'">Yearly</button>
+                </div>
+                <!-- Monthly returns table -->
+                <template x-if="dos.benchTab==='monthly'">
+                  <div class="px-3 pb-2 overflow-x-auto" style="max-height:220px;overflow-y:auto">
+                    <table class="w-full text-[9px] mono" style="border-collapse:collapse">
+                      <thead><tr style="color:var(--t3)"><th class="text-left py-1 px-1">Month</th><th class="text-right py-1 px-1">Stock</th><th class="text-right py-1 px-1">SPY</th><th class="text-right py-1 px-1">Alpha</th></tr></thead>
+                      <tbody>
+                        <template x-for="m in dos.benchMonthly" :key="m.period">
+                          <tr style="border-top:1px solid #21262d">
+                            <td class="py-1 px-1" style="color:var(--t3)" x-text="m.period"></td>
+                            <td class="text-right py-1 px-1" :class="m.stock>=0?'text-green-400':'text-red-400'" x-text="(m.stock>=0?'+':'')+m.stock+'%'"></td>
+                            <td class="text-right py-1 px-1" :class="m.spy>=0?'text-green-400':'text-red-400'" x-text="(m.spy>=0?'+':'')+m.spy+'%'"></td>
+                            <td class="text-right py-1 px-1 font-bold" :class="m.alpha>=0?'text-green-400':'text-red-400'" x-text="(m.alpha>=0?'+':'')+m.alpha+'%'"></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
+                <!-- Quarterly returns table -->
+                <template x-if="dos.benchTab==='quarterly'">
+                  <div class="px-3 pb-2 overflow-x-auto" style="max-height:220px;overflow-y:auto">
+                    <table class="w-full text-[9px] mono" style="border-collapse:collapse">
+                      <thead><tr style="color:var(--t3)"><th class="text-left py-1 px-1">Quarter</th><th class="text-right py-1 px-1">Stock</th><th class="text-right py-1 px-1">SPY</th><th class="text-right py-1 px-1">Alpha</th></tr></thead>
+                      <tbody>
+                        <template x-for="q in dos.benchQuarterly" :key="q.period">
+                          <tr style="border-top:1px solid #21262d">
+                            <td class="py-1 px-1" style="color:var(--t3)" x-text="q.period"></td>
+                            <td class="text-right py-1 px-1" :class="q.stock>=0?'text-green-400':'text-red-400'" x-text="(q.stock>=0?'+':'')+q.stock+'%'"></td>
+                            <td class="text-right py-1 px-1" :class="q.spy>=0?'text-green-400':'text-red-400'" x-text="(q.spy>=0?'+':'')+q.spy+'%'"></td>
+                            <td class="text-right py-1 px-1 font-bold" :class="q.alpha>=0?'text-green-400':'text-red-400'" x-text="(q.alpha>=0?'+':'')+q.alpha+'%'"></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
+                <!-- Yearly returns table -->
+                <template x-if="dos.benchTab==='yearly'">
+                  <div class="px-3 pb-2 overflow-x-auto" style="max-height:220px;overflow-y:auto">
+                    <table class="w-full text-[9px] mono" style="border-collapse:collapse">
+                      <thead><tr style="color:var(--t3)"><th class="text-left py-1 px-1">Year</th><th class="text-right py-1 px-1">Stock</th><th class="text-right py-1 px-1">SPY</th><th class="text-right py-1 px-1">Alpha</th><th class="text-right py-1 px-1">Ann.</th></tr></thead>
+                      <tbody>
+                        <template x-for="y in dos.benchYearly" :key="y.period">
+                          <tr style="border-top:1px solid #21262d">
+                            <td class="py-1 px-1" style="color:var(--t3)" x-text="y.period"></td>
+                            <td class="text-right py-1 px-1" :class="y.stock>=0?'text-green-400':'text-red-400'" x-text="(y.stock>=0?'+':'')+y.stock+'%'"></td>
+                            <td class="text-right py-1 px-1" :class="y.spy>=0?'text-green-400':'text-red-400'" x-text="(y.spy>=0?'+':'')+y.spy+'%'"></td>
+                            <td class="text-right py-1 px-1 font-bold" :class="y.alpha>=0?'text-green-400':'text-red-400'" x-text="(y.alpha>=0?'+':'')+y.alpha+'%'"></td>
+                            <td class="text-right py-1 px-1 text-white">—</td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
               </div>
             </template>
           </div>
@@ -2239,7 +2313,7 @@
       showMore:false,
       live:false,clock:'',regime:{},indices:[],macro:[],sectors:[],asia:[],trust:{},
       sig:{mode:'—',source:'',as_of:'',recs:[],strategy_scores:{},no_trade_reason:null,scan_meta:null},
-      dos:{ticker:'',loading:false,data:null,error:'',showSignals:true,chartPeriod:'6mo',benchPeriod:'6mo',chartSignals:[],benchStats:null},
+      dos:{ticker:'',loading:false,data:null,error:'',showSignals:true,chartPeriod:'6mo',benchPeriod:'1y',chartSignals:[],benchStats:null,benchSummary:null,benchMonthly:null,benchQuarterly:null,benchYearly:null,benchTab:'monthly'},
       opt:{ticker:'',loading:false,data:null},
       brief:{loading:false,data:null},
       bt:{ticker:'AAPL',strategy:'all',period:'5y',loading:false,result:null},
@@ -2372,25 +2446,28 @@
         if(!el||typeof LightweightCharts==='undefined')return;
         el.innerHTML='';
         try{
-          const r=await fetch('/api/live/chart/'+encodeURIComponent(this.dos.ticker)+'?period='+(this.dos.benchPeriod||'6mo')+'&benchmark=true');
+          const r=await fetch('/api/live/perf-vs-spy/'+encodeURIComponent(this.dos.ticker)+'?period='+(this.dos.benchPeriod||'1y'));
           if(!r.ok)return;
           const d=await r.json();
-          if(!d.stock_norm||!d.stock_norm.length||!d.benchmark||!d.benchmark.length)return;
+          if(d.error||!d.equity_stock||!d.equity_stock.length)return;
           const chart=LightweightCharts.createChart(el,{width:el.clientWidth,height:200,layout:{background:{color:'#161b22'},textColor:'#8b949e',fontSize:10},grid:{vertLines:{color:'#21262d'},horzLines:{color:'#21262d'}},crosshair:{mode:0},rightPriceScale:{borderColor:'#21262d'},timeScale:{borderColor:'#21262d',timeVisible:false}});
           // Stock line (green)
           const sl=chart.addLineSeries({color:'#00d4aa',lineWidth:2,priceLineVisible:false,lastValueVisible:true,title:this.dos.ticker});
-          sl.setData(d.stock_norm);
-          // SPY line (amber)
+          sl.setData(d.equity_stock);
+          // SPY line (amber dashed)
           const bl=chart.addLineSeries({color:'#fbbf24',lineWidth:2,priceLineVisible:false,lastValueVisible:true,title:'SPY',lineStyle:2});
-          bl.setData(d.benchmark);
+          bl.setData(d.equity_spy);
           // Base line at 100
           sl.createPriceLine({price:100,color:'#484f58',lineWidth:1,lineStyle:1,axisLabelVisible:false,title:''});
           chart.timeScale().fitContent();
           new ResizeObserver(()=>{chart.applyOptions({width:el.clientWidth})}).observe(el);
-          // Compute stats
-          const stockLast=d.stock_norm[d.stock_norm.length-1].value;
-          const spyLast=d.benchmark[d.benchmark.length-1].value;
-          this.dos.benchStats={stockReturn:Math.round((stockLast-100)*10)/10,spyReturn:Math.round((spyLast-100)*10)/10,alpha:Math.round((stockLast-spyLast)*10)/10};
+          // Store period breakdown data
+          this.dos.benchSummary=d.summary||null;
+          this.dos.benchMonthly=d.monthly||null;
+          this.dos.benchQuarterly=d.quarterly||null;
+          this.dos.benchYearly=d.yearly||null;
+          // Legacy compat
+          if(d.summary){this.dos.benchStats={stockReturn:d.summary.total_return.stock,spyReturn:d.summary.total_return.spy,alpha:d.summary.total_return.alpha}}
         }catch(e){console.warn('Bench chart error:',e)}
       },
       renderBTEquityChart(){
