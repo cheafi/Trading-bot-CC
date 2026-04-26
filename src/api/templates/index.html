@@ -336,6 +336,13 @@
                 <!-- Phase 9 pills -->
                 <div class="flex gap-1 flex-wrap mb-1" x-show="opp.structure||opp.entry_quality||opp.earnings||opp.fundamentals||opp.portfolio_gate">
                   <template x-if="opp.structure&&opp.structure.trend"><span class="pill text-[7px]" :class="opp.structure.trend==='uptrend'?'pg':opp.structure.trend==='downtrend'?'pr':'pa'" x-text="'📊'+opp.structure.trend"></span></template>
+                  <template x-if="opp.structure&&opp.structure.trend_quality"><span class="pill pw text-[7px]" x-text="'🎯 TQ'+Math.round(opp.structure.trend_quality)"></span></template>
+                  <template x-if="opp.structure&&opp.structure.is_extended"><span class="pill pr text-[7px]" x-text="'🚨 Extended '+Math.round((opp.structure.extension_pct||0)*100)+'%'"></span></template>
+                  <template x-if="opp.structure&&opp.structure.is_near_support"><span class="pill pg text-[7px]">🟢 Near Support</span></template>
+                  <template x-if="opp.structure&&opp.structure.is_at_resistance"><span class="pill pr text-[7px]">🟡 At Resistance</span></template>
+                  <template x-if="opp.structure&&opp.structure.volume_confirms"><span class="pill pg text-[7px]">📊 Vol✓</span></template>
+                  <template x-if="opp.structure&&opp.structure.volume_exhaustion"><span class="pill pr text-[7px]">📊 Vol Exhaustion</span></template>
+                  <template x-if="opp.structure&&opp.structure.breakout_quality"><span class="pill text-[7px]" :class="opp.structure.breakout_quality==='proper'?'pg':opp.structure.breakout_quality==='early'?'pa':'pr'" x-text="'🚀 BQ:'+opp.structure.breakout_quality"></span></template>
                   <template x-if="opp.entry_quality&&opp.entry_quality.verdict"><span class="pill text-[7px]" :class="opp.entry_quality.verdict==='PASS'?'pg':opp.entry_quality.verdict==='REJECT'?'pr':'pa'" x-text="'🎯'+opp.entry_quality.verdict"></span></template>
                   <template x-if="opp.fundamentals&&opp.fundamentals.quality"><span class="pill pb text-[7px]" x-text="'💎Q'+opp.fundamentals.quality"></span></template>
                   <template x-if="opp.fundamentals&&opp.fundamentals.moat"><span class="pill pg text-[7px]">🏰Moat</span></template>
@@ -361,6 +368,19 @@
                 <!-- Invalidation -->
                 <template x-if="opp.invalidation">
                   <div class="text-[9px]" style="color:var(--red);line-height:1.3" x-text="'❌ '+opp.invalidation"></div>
+                </template>
+                <!-- ── Why Not Trade — rejection logic block ── -->
+                <template x-if="(opp.reasons_against&&opp.reasons_against.length)||(opp.pre_mortem&&opp.pre_mortem.length)||(opp.why_wait)">
+                  <div style="margin-top:6px;padding:6px 8px;background:rgba(255,92,92,.06);border:1px solid rgba(255,92,92,.15);border-radius:6px">
+                    <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--red)">🛑 Why Not Trade</div>
+                    <template x-for="r in (opp.reasons_against||[]).slice(0,4)">
+                      <div class="text-[8px]" style="color:var(--red);line-height:1.4" x-text="'• '+r"></div>
+                    </template>
+                    <template x-for="r in (opp.pre_mortem||[]).slice(0,2)">
+                      <div class="text-[8px]" style="color:var(--amber);line-height:1.4" x-text="'⚠ '+r"></div>
+                    </template>
+                    <template x-if="opp.why_wait"><div class="text-[8px]" style="color:var(--amber);line-height:1.4" x-text="'⏳ '+opp.why_wait"></div></template>
+                  </div>
                 </template>
                 <!-- Alternative -->
                 <template x-if="opp.alternative">
@@ -620,6 +640,12 @@
                 <!-- Phase 9: Structure · Entry Quality · Fundamentals · Earnings -->
                 <div class="flex gap-1 flex-wrap mt-1">
                   <template x-if="r.structure&&r.structure.trend"><span class="pill text-[7px]" :class="r.structure.trend==='uptrend'?'pg':r.structure.trend==='downtrend'?'pr':'pa'" x-text="'📊 '+r.structure.trend.toUpperCase()"></span></template>
+                  <template x-if="r.structure&&r.structure.trend_quality"><span class="pill pw text-[7px]" x-text="'🎯 TQ'+Math.round(r.structure.trend_quality)"></span></template>
+                  <template x-if="r.structure&&r.structure.is_extended"><span class="pill pr text-[7px]" x-text="'🚨 Extended '+Math.round((r.structure.extension_pct||0)*100)+'%'"></span></template>
+                  <template x-if="r.structure&&r.structure.is_near_support"><span class="pill pg text-[7px]">🟢 Near Support</span></template>
+                  <template x-if="r.structure&&r.structure.is_at_resistance"><span class="pill pr text-[7px]">🟡 At Resistance</span></template>
+                  <template x-if="r.structure&&r.structure.volume_confirms"><span class="pill pg text-[7px]">📊 Vol✓</span></template>
+                  <template x-if="r.structure&&r.structure.volume_exhaustion"><span class="pill pr text-[7px]">📊 Vol Exhaustion</span></template>
                   <template x-if="r.entry_quality&&r.entry_quality.verdict"><span class="pill text-[7px]" :class="r.entry_quality.verdict==='PASS'?'pg':r.entry_quality.verdict==='REJECT'?'pr':'pa'" x-text="'🎯 '+r.entry_quality.verdict"></span></template>
                   <template x-if="r.fundamentals&&r.fundamentals.quality"><span class="pill text-[7px]" :class="r.fundamentals.quality>=70?'pg':r.fundamentals.quality>=50?'pa':'pr'" x-text="'💎Q'+r.fundamentals.quality"></span></template>
                   <template x-if="r.fundamentals&&r.fundamentals.moat"><span class="pill pg text-[7px]">🏰 Moat</span></template>
@@ -652,6 +678,19 @@
                 </template>
                 <template x-if="r.invalidation">
                   <div class="text-[9px]" style="color:var(--red);line-height:1.3" x-text="'❌ '+r.invalidation"></div>
+                </template>
+                <!-- ── Why Not Trade — rejection logic block ── -->
+                <template x-if="(r.reasons_against&&r.reasons_against.length)||(r.pre_mortem&&r.pre_mortem.length)||(r.why_wait)">
+                  <div style="margin-top:6px;padding:6px 8px;background:rgba(255,92,92,.06);border:1px solid rgba(255,92,92,.15);border-radius:6px">
+                    <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--red)">🛑 Why Not Trade</div>
+                    <template x-for="ra in (r.reasons_against||[]).slice(0,4)">
+                      <div class="text-[8px]" style="color:var(--red);line-height:1.4" x-text="'• '+ra"></div>
+                    </template>
+                    <template x-for="pm in (r.pre_mortem||[]).slice(0,2)">
+                      <div class="text-[8px]" style="color:var(--amber);line-height:1.4" x-text="'⚠ '+pm"></div>
+                    </template>
+                    <template x-if="r.why_wait"><div class="text-[8px]" style="color:var(--amber);line-height:1.4" x-text="'⏳ '+r.why_wait"></div></template>
+                  </div>
                 </template>
                 <!-- Why This Not That -->
                 <template x-if="r.runner_up">
