@@ -356,6 +356,12 @@ async def no_trade_list() -> Dict[str, Any]:
             "conflict": r.conflict.summary if r.conflict else "",
             "sector": r.sector.sector_bucket.value,
             "stage": r.sector.sector_stage.value,
+            # Phase 9 rejection context
+            "structure": r.signal.get("structure"),
+            "entry_quality": r.signal.get("entry_quality"),
+            "earnings": r.signal.get("earnings"),
+            "fundamentals": r.signal.get("fundamentals"),
+            "portfolio_gate": r.signal.get("portfolio_gate"),
         }
         for r in results
         if r.decision.action in ("NO_TRADE", "EXIT", "REDUCE")

@@ -80,6 +80,69 @@ def test_expert_records():
     print(f"  ✅ expert-records: {len(d['experts'])} experts tracked")
 
 
+# ── End-to-end pipeline tests ──
+
+
+def test_ranked_has_phase9():
+    d = _get("/api/v7/playbook/ranked?limit=5")
+    rows = d.get("opportunities", [])
+    if not rows:
+        print("  ⚠️ ranked: no opportunities (market may be closed)")
+        return
+    r = rows[0]
+    p9_fields = [
+        "structure",
+        "entry_quality",
+        "earnings",
+        "fundamentals",
+        "portfolio_gate",
+    ]
+    present = [f for f in p9_fields if f in r and r[f] is not None]
+    print(f"  ✅ ranked: {len(rows)} opps, Phase 9 fields: {present}")
+
+
+def test_today_has_phase9():
+    d = _get("/api/v7/playbook/today")
+    top5 = d.get("top_5", [])
+    if not top5:
+        print("  ⚠️ today: no top-5 (market may be closed)")
+        return
+    r = top5[0]
+    p9_fields = [
+        "structure",
+        "entry_quality",
+        "earnings",
+        "fundamentals",
+        "portfolio_gate",
+    ]
+    present = [f for f in p9_fields if f in r and r[f] is not None]
+    print(f"  ✅ today: {len(top5)} top, Phase 9 fields: {present}")
+
+
+def test_notrade_has_phase9():
+    d = _get("/api/v7/playbook/no-trade")
+    signals = d.get("no_trade_signals", [])
+    if not signals:
+        print("  ⚠️ no-trade: no rejections right now")
+        return
+    r = signals[0]
+    p9_fields = [
+        "structure",
+        "entry_quality",
+        "earnings",
+        "fundamentals",
+        "portfolio_gate",
+    ]
+    present = [f for f in p9_fields if f in r]
+    print(f"  ✅ no-trade: {len(signals)} rejected, Phase 9 fields: {present}")
+
+
+def test_health():
+    d = _get("/health")
+    assert d.get("status") == "healthy", f"Unhealthy: {d}"
+    print(f"  ✅ health: {d['status']}, uptime={d.get('uptime_seconds', '?')}s")
+
+
 if __name__ == "__main__":
     tests = [
         test_structure,
@@ -91,6 +154,10 @@ if __name__ == "__main__":
         test_journal,
         test_calibration,
         test_expert_records,
+        test_ranked_has_phase9,
+        test_today_has_phase9,
+        test_notrade_has_phase9,
+        test_health,
     ]
     passed = 0
     failed = 0

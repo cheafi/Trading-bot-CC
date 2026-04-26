@@ -505,6 +505,15 @@
                       <span>⚡ Conflict: </span><span x-text="nt.conflict"></span>
                     </div>
                   </template>
+                  <!-- Phase 9 rejection details -->
+                  <div class="flex gap-1 flex-wrap mt-1" x-show="nt.entry_quality||nt.earnings||nt.fundamentals||nt.portfolio_gate||nt.structure">
+                    <template x-if="nt.entry_quality&&nt.entry_quality.verdict"><span class="pill text-[7px]" :class="nt.entry_quality.verdict==='REJECT'?'pr':'pa'" x-text="'🎯 '+nt.entry_quality.verdict"></span></template>
+                    <template x-if="nt.earnings&&nt.earnings.in_blackout"><span class="pill pr text-[7px]">📅 Earnings Blackout</span></template>
+                    <template x-if="nt.fundamentals&&nt.fundamentals.quality&&nt.fundamentals.quality<40"><span class="pill pr text-[7px]" x-text="'💎 Weak Q'+nt.fundamentals.quality"></span></template>
+                    <template x-if="nt.portfolio_gate&&!nt.portfolio_gate.allowed"><span class="pill pr text-[7px]">⛔ Gate Blocked</span></template>
+                    <template x-if="nt.structure&&nt.structure.trend==='downtrend'"><span class="pill pr text-[7px]">📊 Downtrend</span></template>
+                    <template x-if="nt.structure&&nt.structure.is_extended"><span class="pill pa text-[7px]">📈 Extended</span></template>
+                  </div>
                 </div>
               </div>
             </template>
@@ -1002,11 +1011,19 @@
                 <div class="text-[11px]" style="color:var(--t3);padding:16px;text-align:center">No scanner hits in this category.</div>
               </template>
               <template x-for="h in scannerHub.data.hits||[]">
-                <div class="flex items-center gap-2 py-1" style="border-bottom:1px solid var(--bd)">
-                  <span class="text-[11px] mono font-bold text-white cursor-pointer" @click="openDossier(h.ticker)" x-text="h.ticker||'—'"></span>
-                  <span class="pill pb text-[7px]" x-text="h.scanner||'—'"></span>
-                  <span class="text-[9px]" style="color:var(--t2)" x-text="h.reason||''"></span>
-                  <span class="pill mono text-[8px] ml-auto" :class="(h.severity||'INFO')==='WARNING'?'pa':(h.severity||'INFO')==='CRITICAL'?'pr':'pw'" x-text="h.severity||'INFO'"></span>
+                <div class="py-1.5" style="border-bottom:1px solid var(--bd)">
+                  <div class="flex items-center gap-2">
+                    <span class="text-[11px] mono font-bold text-white cursor-pointer" @click="openDossier(h.ticker)" x-text="h.ticker||'—'"></span>
+                    <span class="pill pb text-[7px]" x-text="h.scanner||'—'"></span>
+                    <span class="text-[9px]" style="color:var(--t2)" x-text="h.reason||''"></span>
+                    <span class="pill mono text-[8px] ml-auto" :class="(h.severity||'INFO')==='WARNING'?'pa':(h.severity||'INFO')==='CRITICAL'?'pr':'pw'" x-text="h.severity||'INFO'"></span>
+                  </div>
+                  <div class="flex gap-1 flex-wrap mt-1" x-show="h.structure||h.entry_quality||h.earnings||h.fundamentals">
+                    <template x-if="h.structure&&h.structure.trend"><span class="text-[7px] px-1 rounded" :class="h.structure.trend==='uptrend'?'bg-green-900 text-green-300':h.structure.trend==='downtrend'?'bg-red-900 text-red-300':'bg-gray-700 text-gray-300'" x-text="h.structure.trend"></span></template>
+                    <template x-if="h.entry_quality&&h.entry_quality.verdict"><span class="text-[7px] px-1 rounded" :class="h.entry_quality.verdict==='PASS'?'bg-green-900 text-green-300':h.entry_quality.verdict==='REJECT'?'bg-red-900 text-red-300':'bg-amber-900 text-amber-300'" x-text="h.entry_quality.verdict"></span></template>
+                    <template x-if="h.fundamentals&&h.fundamentals.quality"><span class="text-[7px] px-1 rounded bg-blue-900 text-blue-300" x-text="'Q'+h.fundamentals.quality"></span></template>
+                    <template x-if="h.earnings&&h.earnings.in_blackout"><span class="text-[7px] px-1 rounded bg-red-900 text-red-300">⚠️ER</span></template>
+                  </div>
                 </div>
               </template>
             </div>
