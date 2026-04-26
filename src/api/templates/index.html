@@ -598,6 +598,32 @@
                     <template x-if="r.risk_reward"><span>R:R <strong class="text-white" x-text="Number(r.risk_reward).toFixed(1)"></strong></span></template>
                   </div>
                 </template>
+                <!-- Phase 9: Structure · Entry Quality · Fundamentals · Earnings -->
+                <div class="flex gap-1 flex-wrap mt-1">
+                  <template x-if="r.structure&&r.structure.trend"><span class="pill text-[7px]" :class="r.structure.trend==='uptrend'?'pg':r.structure.trend==='downtrend'?'pr':'pa'" x-text="'📊 '+r.structure.trend.toUpperCase()"></span></template>
+                  <template x-if="r.entry_quality&&r.entry_quality.verdict"><span class="pill text-[7px]" :class="r.entry_quality.verdict==='PASS'?'pg':r.entry_quality.verdict==='REJECT'?'pr':'pa'" x-text="'🎯 '+r.entry_quality.verdict"></span></template>
+                  <template x-if="r.fundamentals&&r.fundamentals.quality"><span class="pill text-[7px]" :class="r.fundamentals.quality>=70?'pg':r.fundamentals.quality>=50?'pa':'pr'" x-text="'💎Q'+r.fundamentals.quality"></span></template>
+                  <template x-if="r.fundamentals&&r.fundamentals.moat"><span class="pill pg text-[7px]">🏰 Moat</span></template>
+                  <template x-if="r.earnings&&r.earnings.in_blackout"><span class="pill pr text-[7px]">⚠️ Earnings Blackout</span></template>
+                  <template x-if="r.earnings&&r.earnings.days_to_earnings!=null&&r.earnings.days_to_earnings<=7&&!r.earnings.in_blackout"><span class="pill pa text-[7px]" x-text="'📅 ER in '+r.earnings.days_to_earnings+'d'"></span></template>
+                  <template x-if="r.portfolio_gate&&!r.portfolio_gate.allowed"><span class="pill pr text-[7px]">🚫 Gate Blocked</span></template>
+                </div>
+                <!-- Fundamentals strip -->
+                <template x-if="r.fundamentals&&(r.fundamentals.pe||r.fundamentals.roe)">
+                  <div class="flex gap-3 text-[8px] mono mt-1" style="color:var(--t3)">
+                    <template x-if="r.fundamentals.pe"><span>P/E <strong class="text-white" x-text="Number(r.fundamentals.pe).toFixed(1)"></strong></span></template>
+                    <template x-if="r.fundamentals.roe"><span>ROE <strong class="text-white" x-text="Number(r.fundamentals.roe).toFixed(1)+'%'"></strong></span></template>
+                    <template x-if="r.fundamentals.rev_growth!=null"><span>Rev↑ <strong :class="r.fundamentals.rev_growth>=0?'text-green-400':'text-red-400'" x-text="Number(r.fundamentals.rev_growth).toFixed(1)+'%'"></strong></span></template>
+                  </div>
+                </template>
+                <!-- S/R levels -->
+                <template x-if="r.structure&&(r.structure.nearest_support||r.structure.nearest_resistance)">
+                  <div class="flex gap-3 text-[8px] mono mt-1" style="color:var(--t3)">
+                    <template x-if="r.structure.nearest_support"><span>Support <strong class="text-green-400">$<span x-text="Number(r.structure.nearest_support).toFixed(2)"></span></strong></span></template>
+                    <template x-if="r.structure.nearest_resistance"><span>Resist <strong class="text-red-400">$<span x-text="Number(r.structure.nearest_resistance).toFixed(2)"></span></strong></span></template>
+                    <template x-if="r.structure.breakout_quality"><span>BQ: <strong class="text-white" x-text="r.structure.breakout_quality"></strong></span></template>
+                  </div>
+                </template>
                 <!-- Why now / Why not -->
                 <template x-if="r.why_now&&(Array.isArray(r.why_now)?r.why_now.length:r.why_now)">
                   <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'✅ '+(Array.isArray(r.why_now)?r.why_now.join(' · '):r.why_now)"></div>

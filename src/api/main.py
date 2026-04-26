@@ -4801,6 +4801,30 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                 _earnings = {}
                 _fundamentals_brief = {}
                 _portfolio_check = {}
+                _gate_passed = True
+                if _P9_ENGINES:
+                    try:
+                        _pg = PortfolioGate()
+                        _gr = _pg.check(
+                            ticker=ticker,
+                            sector=_TICKER_SECTOR.get(ticker, "unknown"),
+                            atr_risk_pct=float(atr_pct[i]) * 100,
+                            current_positions=[
+                                {
+                                    "ticker": r["ticker"],
+                                    "sector": r.get("sector", "unknown"),
+                                    "size_pct": 5.0,
+                                    "risk_pct": 1.0,
+                                }
+                                for r in recs
+                            ],
+                        )
+                        _portfolio_check = _gr.to_dict()
+                        if not _gr.allowed:
+                            _gate_passed = False
+                            score = max(0, score - 2.0)
+                    except Exception:
+                        pass
                 if _P9_ENGINES:
                     try:
                         h_col = "High" if "High" in hist.columns else "high"
@@ -4936,9 +4960,41 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                         "entry_quality": _entry_qual,
                         "earnings": _earnings,
                         "fundamentals": _fundamentals_brief,
+                        "portfolio_gate": _portfolio_check,
                         "sector": _TICKER_SECTOR.get(ticker, "unknown"),
                     }
                 )
+                # ── Wire Phase 9 feedback engines ──
+                if _P9_ENGINES:
+                    try:
+                        _bm = BreakoutMonitor()
+                        _bm.load()
+                        _bm.register_breakout(
+                            ticker,
+                            entry_price,
+                            stop_price,
+                            strategy=strat_name,
+                        )
+                        _bm.save()
+                    except Exception:
+                        pass
+                    try:
+                        get_journal().record(
+                            ticker=ticker,
+                            decision=conf.get("grade", "C"),
+                            composite=conf["composite"],
+                            experts={},
+                            metadata={
+                                "strategy": strat_name,
+                                "entry": entry_price,
+                                "stop": stop_price,
+                                "target": target_price,
+                                "rr": rr,
+                                "score": score,
+                            },
+                        )
+                    except Exception:
+                        pass
         except Exception as exc:
             logger.debug(f"[Scanner] {ticker} skip: {exc}")
             continue
