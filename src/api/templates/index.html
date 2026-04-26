@@ -1966,6 +1966,19 @@
             <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)"><span>Broker (Alpaca)</span><span :class="ops.components?.broker?'text-green-400':'text-amber-300'" x-text="ops.components?.broker?'Connected':'Paper Only'"></span></div>
           </div>
         </div>
+        <!-- Phase 9 Engine Health -->
+        <template x-if="opsDetail.phase9_engines">
+          <div class="card card-p">
+            <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">🧠 Phase 9 Engines <span class="pill" :class="opsDetail.phase9_engines.loaded?'pg':'pr'" x-text="opsDetail.phase9_engines.loaded?'LOADED':'OFFLINE'"></span></div>
+            <template x-for="eng in (opsDetail.phase9_engines.components||[])">
+              <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)">
+                <span class="text-[11px]" style="color:var(--t2)" x-text="eng"></span>
+                <div class="flex items-center gap-2"><span class="health-dot health-ok"></span><span class="text-[10px] mono text-green-400">Active</span></div>
+              </div>
+            </template>
+            <template x-if="!opsDetail.phase9_engines.loaded"><div class="text-[10px] mt-2" style="color:var(--red)">Phase 9 engines failed to load — check server logs</div></template>
+          </div>
+        </template>
         <!-- Cache Stats -->
         <template x-if="opsDetail.cache_stats&&Object.keys(opsDetail.cache_stats).length>0">
           <div class="card card-p">
@@ -2206,7 +2219,7 @@
         this.fetchOpsDetail();
       },
       async fetchOpsDetail(){
-        try{const r=await fetch('/api/ops/status');if(!r.ok)throw 0;this.opsDetail=await r.json()}catch(e){}
+        try{const r=await fetch('/api/ops/status');if(!r.ok)throw 0;this.opsDetail=await r.json();const e=this.opsDetail.engine||{};this.ops.running=e.running||false;this.ops.cycle_count=e.cycle_count||0;this.ops.signals_today=e.signals_today||0;this.ops.trades_today=e.trades_today||0;this.ops.circuit_breaker=e.circuit_breaker||false;this.ops.circuit_breaker_reason=e.circuit_breaker_reason||'';this.ops.dry_run=e.dry_run!==false;this.ops.components=this.opsDetail.components||this.ops.components}catch(e){}
       },
       sortOpps(){
         const k=this.oppsSort;
