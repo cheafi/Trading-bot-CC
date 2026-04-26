@@ -712,12 +712,12 @@ async def backtest_vs_benchmark(
                 r_vals = returns.loc[
                     returns.index <= next_idx, t
                 ]
-                ok = (  # type: ignore
-                    len(r_vals) > 0
-                    and pd.notna(r_vals.iloc[-1])
-                )
-                if ok:
-                    port_ret += r_vals.iloc[-1]  # type: ignore
+                if (
+                    hasattr(r_vals, "__len__")
+                    and len(r_vals) > 0  # type: ignore[arg-type]
+                    and pd.notna(r_vals.iloc[-1])  # type: ignore
+                ):
+                    port_ret += float(r_vals.iloc[-1])  # type: ignore
                     valid += 1
         if valid > 0:
             port_ret /= valid

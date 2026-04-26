@@ -909,7 +909,7 @@ async def event_context(ticker: str, _: bool = Depends(verify_api_key)):
     Event context: SEC filings, insider transactions,
     macro data, positioning — for timing/conviction/risk.
     """
-    ticker = _sanitise_ticker(ticker)
+    ticker = ticker.upper().strip()
     from src.services.event_data import get_event_data_service
 
     svc = get_event_data_service()
@@ -1046,8 +1046,10 @@ async def api_swing_analysis(ticker: str):
             gains, losses = [], []
             for i in range(1, min(15, len(closes))):
                 delta = closes[-i] - closes[-i-1]
-                if delta > 0: gains.append(delta)
-                else: losses.append(abs(delta))
+                if delta > 0:
+                    gains.append(delta)
+                else:
+                    losses.append(abs(delta))
             avg_gain = sum(gains) / 14 if gains else 0.001
             avg_loss = sum(losses) / 14 if losses else 0.001
             rsi = 100 - (100 / (1 + avg_gain / avg_loss))
@@ -1333,7 +1335,7 @@ async def get_signals(
 
     except Exception as e:
         logger.error(f"Error fetching signals: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/signals/{signal_id}")
@@ -1449,7 +1451,7 @@ async def get_daily_report(
         raise
     except Exception as e:
         logger.error(f"Error fetching daily report: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/reports/market-overview")
@@ -1506,7 +1508,7 @@ async def get_market_overview(_: bool = Depends(verify_api_key)):
 
     except Exception as e:
         logger.error(f"Error fetching market overview: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # ===== Data Endpoints =====
@@ -1762,7 +1764,7 @@ async def scan_patterns(
 
     except Exception as e:
         logger.error(f"Pattern scan error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/scan/sectors")
@@ -1814,7 +1816,7 @@ async def scan_sectors(_: bool = Depends(verify_api_key)):
 
     except Exception as e:
         logger.error(f"Sector scan error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/scan/momentum")
@@ -1875,7 +1877,7 @@ async def scan_momentum(
 
     except Exception as e:
         logger.error(f"Momentum scan error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/market/snapshot")
@@ -1927,7 +1929,7 @@ async def get_market_snapshot(_: bool = Depends(verify_api_key)):
 
     except Exception as e:
         logger.error(f"Market snapshot error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # ===== Research Endpoints =====
@@ -1988,7 +1990,7 @@ async def get_news_brief(
 
     except Exception as e:
         logger.error(f"News brief error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/research/earnings/{ticker}")
@@ -2001,7 +2003,7 @@ async def get_earnings_analysis(ticker: str, _: bool = Depends(verify_api_key)):
     from src.research import EarningsAnalyzer
 
     try:
-        analyzer = EarningsAnalyzer()
+        EarningsAnalyzer()  # validate import
 
         # Use yfinance for basic earnings data when available
         import yfinance as yf
@@ -2026,7 +2028,7 @@ async def get_earnings_analysis(ticker: str, _: bool = Depends(verify_api_key)):
 
     except Exception as e:
         logger.error(f"Earnings analysis error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # ===== Performance Endpoints =====
@@ -2075,7 +2077,7 @@ async def get_performance_stats(
 
     except Exception as e:
         logger.error(f"Performance stats error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/performance/analytics/{strategy}")
@@ -2126,7 +2128,7 @@ async def get_strategy_analytics(strategy: str, _: bool = Depends(verify_api_key
 
     except Exception as e:
         logger.error(f"Strategy analytics error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # (duplicate exception handlers removed — detailed versions at app startup take precedence)
@@ -2159,7 +2161,7 @@ async def get_broker_status(_: bool = Depends(verify_api_key)):
 
     except Exception as e:
         logger.error(f"Broker status error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.post("/broker/switch/{broker_type}")
@@ -2174,10 +2176,11 @@ async def switch_broker(broker_type: str, _: bool = Depends(verify_api_key)):
 
     try:
         broker_enum = BrokerType(broker_type.lower())
-    except ValueError:
+    except ValueError as e:
         raise HTTPException(
-            status_code=400, detail=f"Invalid broker type: {broker_type}"
-        )
+            status_code=400,
+            detail=f"Invalid broker type: {broker_type}",
+        ) from e
 
     try:
         manager = await get_broker_manager()
@@ -2196,7 +2199,7 @@ async def switch_broker(broker_type: str, _: bool = Depends(verify_api_key)):
 
     except Exception as e:
         logger.error(f"Switch broker error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/broker/account")
@@ -2218,8 +2221,11 @@ async def get_broker_account(
         if broker:
             try:
                 broker_type = BrokerType(broker.lower())
-            except ValueError:
-                raise HTTPException(status_code=400, detail=f"Invalid broker: {broker}")
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid broker: {broker}",
+                ) from e
 
         account = await manager.get_account(broker_type)
 
@@ -2236,7 +2242,7 @@ async def get_broker_account(
 
     except Exception as e:
         logger.error(f"Account info error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/broker/positions")
@@ -2283,7 +2289,7 @@ async def get_broker_positions(
 
     except Exception as e:
         logger.error(f"Positions error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.post("/broker/order")
@@ -2349,7 +2355,7 @@ async def place_order(
         raise
     except Exception as e:
         logger.error(f"Place order error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/broker/quote/{ticker}")
@@ -2383,7 +2389,7 @@ async def get_quote(ticker: str, _: bool = Depends(verify_api_key)):
         raise
     except Exception as e:
         logger.error(f"Quote error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # ===== Main Entry Point =====
@@ -3005,7 +3011,7 @@ async def get_regime_state():
         }
     except Exception as e:
         logger.error(f"Regime endpoint error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -5096,7 +5102,7 @@ async def get_recommendations(limit: int = Query(10, ge=1, le=50)):
         )
     except Exception as e:
         logger.error(f"Recommendations endpoint error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/api/leaderboard", tags=["decision-layer"])
@@ -5117,7 +5123,7 @@ async def get_strategy_leaderboard():
         }
     except Exception as e:
         logger.error(f"Leaderboard endpoint error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/api/health", tags=["monitoring"])
