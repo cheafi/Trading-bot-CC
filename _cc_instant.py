@@ -38,6 +38,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         self._handle()
 
+    def do_PUT(self):
+        self._handle()
+
+    def do_DELETE(self):
+        self._handle()
+
     def do_OPTIONS(self):
         self.send_response(200)
         self._cors_headers()
@@ -117,7 +123,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if api_key:
                 req.add_header("X-API-Key", api_key)
 
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            _timeout = 120 if "strategy-factory" in self.path else 30
+            with urllib.request.urlopen(req, timeout=_timeout) as resp:
                 status = resp.status
                 data = resp.read()
                 ct = resp.headers.get("Content-Type", "application/json")
@@ -177,8 +184,8 @@ def _start_backend():
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
         )
-        # Poll until backend is up (max 120s)
-        for _ in range(120):
+        # Poll until backend is up (max 300s)
+        for _ in range(300):
             time.sleep(1)
             try:
                 with urllib.request.urlopen(
@@ -193,7 +200,7 @@ def _start_backend():
                     out = proc.stdout.read().decode() if proc.stdout else ""
                     print(f"Backend process exited: {out[-500:]}", flush=True)
                     return
-        print("⚠ Backend did not become ready in 120s", flush=True)
+        print("⚠ Backend did not become ready in 300s", flush=True)
     except Exception as e:
         print(f"Backend start failed: {e}", flush=True)
         traceback.print_exc()

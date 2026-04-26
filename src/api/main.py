@@ -6270,6 +6270,964 @@ async def live_perf_vs_spy(
     })
 
 
+# ═══════════════════════════════════════════════════════════════
+# STRATEGY FACTORY — AI-assisted automated strategy generation,
+# backtesting, scoring, walk-forward & Monte Carlo validation
+# ═══════════════════════════════════════════════════════════════
+
+# In-memory strategy library
+_strategy_library: list = []
+_factory_running: bool = False
+
+# Strategy templates with parameterizable entry/exit logic
+_STRATEGY_TEMPLATES = [
+    {
+        "id": "volume_momentum_breakout",
+        "name": "Volume Momentum Breakout",
+        "family": "momentum",
+        "desc": "Buy when price breaks above N-day high on elevated volume with RSI confirmation",
+        "params": {
+            "lookback": [10, 20, 30],
+            "vol_mult": [1.3, 1.5, 2.0],
+            "rsi_min": [50, 55, 60],
+        },
+    },
+    {
+        "id": "atr_channel_breakout",
+        "name": "ATR Channel Breakout",
+        "family": "breakout",
+        "desc": "Buy when price exceeds SMA + ATR multiplier, exit on SMA - ATR",
+        "params": {
+            "sma_len": [20, 30, 50],
+            "atr_mult": [1.5, 2.0, 2.5],
+            "atr_len": [14, 20],
+        },
+    },
+    {
+        "id": "macd_ema_hybrid",
+        "name": "MACD EMA Hybrid",
+        "family": "trend",
+        "desc": "MACD bullish crossover above zero line + price above dual EMA filter",
+        "params": {
+            "fast": [8, 12],
+            "slow": [21, 26],
+            "signal": [7, 9],
+            "ema_filter": [50, 100],
+        },
+    },
+    {
+        "id": "triple_ema_momentum",
+        "name": "Triple EMA Momentum",
+        "family": "trend",
+        "desc": "Buy when EMA8 > EMA21 > EMA55 and momentum accelerating",
+        "params": {"fast": [5, 8], "mid": [13, 21], "slow": [34, 55]},
+    },
+    {
+        "id": "rsi_mean_reversion",
+        "name": "RSI Mean Reversion",
+        "family": "mean_reversion",
+        "desc": "Buy oversold RSI bounces near MA support with volume confirmation",
+        "params": {
+            "rsi_len": [7, 14],
+            "rsi_entry": [25, 30, 35],
+            "rsi_exit": [60, 70],
+            "ma_len": [20, 50],
+        },
+    },
+    {
+        "id": "dual_rsi_trend_filter",
+        "name": "Dual RSI Trend Filter",
+        "family": "mean_reversion",
+        "desc": "Short-term RSI oversold + long-term RSI above 50 (trend filter)",
+        "params": {
+            "rsi_fast": [3, 5, 7],
+            "rsi_slow": [14, 21],
+            "rsi_fast_entry": [15, 25],
+            "rsi_slow_min": [45, 50],
+        },
+    },
+    {
+        "id": "bollinger_breakout",
+        "name": "Bollinger Band Breakout",
+        "family": "breakout",
+        "desc": "Buy squeeze release: price breaks upper BB after narrow bandwidth period",
+        "params": {
+            "bb_len": [20, 30],
+            "bb_std": [1.5, 2.0, 2.5],
+            "squeeze_pct": [0.03, 0.05],
+        },
+    },
+    {
+        "id": "stochastic_rsi_reversal",
+        "name": "Stochastic RSI Reversal",
+        "family": "mean_reversion",
+        "desc": "StochRSI cross from oversold zone + price above MA support",
+        "params": {
+            "stoch_len": [14],
+            "rsi_len": [14],
+            "k_smooth": [3, 5],
+            "d_smooth": [3, 5],
+            "entry_level": [20, 30],
+        },
+    },
+    {
+        "id": "macd_crossover",
+        "name": "MACD Crossover",
+        "family": "trend",
+        "desc": "Classic MACD signal line crossover with histogram confirmation",
+        "params": {"fast": [12], "slow": [26], "signal": [9], "hist_min": [0, 0.1]},
+    },
+]
+
+
+def _generate_strategy_code(template: dict, params: dict) -> str:
+    """Generate executable Python signal code for a strategy variant."""
+    tid = template["id"]
+    lines = [
+        "def generate_signals(df):",
+        "    import numpy as np",
+        "    sig = pd.Series(0, index=df.index)",
+        "    close = df['Close'].values",
+        "    volume = df['Volume'].values",
+        "",
+    ]
+
+    if tid == "volume_momentum_breakout":
+        lb, vm, rmin = (
+            params.get("lookback", 20),
+            params.get("vol_mult", 1.5),
+            params.get("rsi_min", 55),
+        )
+        lines += [
+            f"    vol_ma = pd.Series(volume).rolling({lb}).mean().values",
+            f"    high_vol = volume > vol_ma * {vm}",
+            "    rsi = ta.momentum.rsi(df['Close'], window=14).values",
+            f"    hi_n = pd.Series(close).rolling({lb}).max().shift(1).values",
+            f"    for i in range({lb}, len(close)):",
+            f"        if close[i] > hi_n[i] and high_vol[i] and rsi[i] > {rmin}:",
+            "            sig.iloc[i] = 1",
+            "        elif rsi[i] > 75 or close[i] < pd.Series(close).rolling(10).mean().iloc[i]:",
+            "            sig.iloc[i] = -1",
+        ]
+    elif tid == "atr_channel_breakout":
+        sl, am, al = (
+            params.get("sma_len", 20),
+            params.get("atr_mult", 2.0),
+            params.get("atr_len", 14),
+        )
+        lines += [
+            f"    sma = pd.Series(close).rolling({sl}).mean().values",
+            "    tr = np.maximum(df['High'].values-df['Low'].values, np.abs(df['High'].values-np.roll(close,1)))",
+            f"    atr = pd.Series(tr).rolling({al}).mean().values",
+            f"    upper = sma + atr * {am}",
+            f"    lower = sma - atr * {am}",
+            f"    for i in range({max(sl, al)}, len(close)):",
+            "        if close[i] > upper[i]: sig.iloc[i] = 1",
+            "        elif close[i] < lower[i]: sig.iloc[i] = -1",
+        ]
+    elif tid == "macd_ema_hybrid":
+        f, s, sg, ef = (
+            params.get("fast", 12),
+            params.get("slow", 26),
+            params.get("signal", 9),
+            params.get("ema_filter", 50),
+        )
+        lines += [
+            f"    ema_f = pd.Series(close).ewm(span={f}).mean().values",
+            f"    ema_s = pd.Series(close).ewm(span={s}).mean().values",
+            "    macd = ema_f - ema_s",
+            f"    macd_sig = pd.Series(macd).ewm(span={sg}).mean().values",
+            f"    ema_filt = pd.Series(close).ewm(span={ef}).mean().values",
+            f"    for i in range({ef}, len(close)):",
+            "        if macd[i] > macd_sig[i] and macd[i] > 0 and close[i] > ema_filt[i]: sig.iloc[i] = 1",
+            "        elif macd[i] < macd_sig[i]: sig.iloc[i] = -1",
+        ]
+    elif tid == "triple_ema_momentum":
+        f, m, s = params.get("fast", 8), params.get("mid", 21), params.get("slow", 55)
+        lines += [
+            f"    e1 = pd.Series(close).ewm(span={f}).mean().values",
+            f"    e2 = pd.Series(close).ewm(span={m}).mean().values",
+            f"    e3 = pd.Series(close).ewm(span={s}).mean().values",
+            f"    for i in range({s}, len(close)):",
+            "        if e1[i] > e2[i] > e3[i] and e1[i] > e1[i-1]: sig.iloc[i] = 1",
+            "        elif e1[i] < e2[i]: sig.iloc[i] = -1",
+        ]
+    elif tid == "rsi_mean_reversion":
+        rl, re, rx, ml = (
+            params.get("rsi_len", 14),
+            params.get("rsi_entry", 30),
+            params.get("rsi_exit", 70),
+            params.get("ma_len", 20),
+        )
+        lines += [
+            f"    rsi = ta.momentum.rsi(df['Close'], window={rl}).values",
+            f"    ma = pd.Series(close).rolling({ml}).mean().values",
+            "    vol_ma = pd.Series(volume).rolling(20).mean().values",
+            f"    for i in range({max(rl, ml)}, len(close)):",
+            f"        if rsi[i] < {re} and close[i] > ma[i] * 0.97 and volume[i] > vol_ma[i]:",
+            "            sig.iloc[i] = 1",
+            f"        elif rsi[i] > {rx}: sig.iloc[i] = -1",
+        ]
+    elif tid == "dual_rsi_trend_filter":
+        rf, rs, rfe, rsm = (
+            params.get("rsi_fast", 5),
+            params.get("rsi_slow", 14),
+            params.get("rsi_fast_entry", 20),
+            params.get("rsi_slow_min", 50),
+        )
+        lines += [
+            f"    rsi_f = ta.momentum.rsi(df['Close'], window={rf}).values",
+            f"    rsi_s = ta.momentum.rsi(df['Close'], window={rs}).values",
+            f"    for i in range({rs}+5, len(close)):",
+            f"        if rsi_f[i] < {rfe} and rsi_s[i] > {rsm}: sig.iloc[i] = 1",
+            "        elif rsi_f[i] > 80: sig.iloc[i] = -1",
+        ]
+    elif tid == "bollinger_breakout":
+        bl, bs, sq = (
+            params.get("bb_len", 20),
+            params.get("bb_std", 2.0),
+            params.get("squeeze_pct", 0.04),
+        )
+        lines += [
+            f"    sma = pd.Series(close).rolling({bl}).mean().values",
+            f"    std = pd.Series(close).rolling({bl}).std().values",
+            f"    upper = sma + std * {bs}",
+            f"    lower = sma - std * {bs}",
+            "    bw = (upper - lower) / sma",
+            f"    bw_ma = pd.Series(bw).rolling({bl}).mean().values",
+            f"    for i in range({bl}+5, len(close)):",
+            f"        if bw[i-1] < {sq} and close[i] > upper[i]: sig.iloc[i] = 1",
+            "        elif close[i] < sma[i]: sig.iloc[i] = -1",
+        ]
+    elif tid == "stochastic_rsi_reversal":
+        stl, rl, ks, ds, el = (
+            params.get("stoch_len", 14),
+            params.get("rsi_len", 14),
+            params.get("k_smooth", 3),
+            params.get("d_smooth", 3),
+            params.get("entry_level", 20),
+        )
+        lines += [
+            f"    rsi = ta.momentum.rsi(df['Close'], window={rl}).values",
+            "    rsi_s = pd.Series(rsi)",
+            f"    ll = rsi_s.rolling({stl}).min()",
+            f"    hh = rsi_s.rolling({stl}).max()",
+            f"    k = ((rsi_s - ll) / (hh - ll + 1e-10) * 100).rolling({ks}).mean().values",
+            f"    d = pd.Series(k).rolling({ds}).mean().values",
+            "    ma50 = pd.Series(close).rolling(50).mean().values",
+            "    for i in range(55, len(close)):",
+            f"        if k[i] > d[i] and k[i-1] <= d[i-1] and k[i] < {el+20} and close[i] > ma50[i]:",
+            "            sig.iloc[i] = 1",
+            "        elif k[i] > 80 and k[i] < d[i]: sig.iloc[i] = -1",
+        ]
+    elif tid == "macd_crossover":
+        f, s, sg = (
+            params.get("fast", 12),
+            params.get("slow", 26),
+            params.get("signal", 9),
+        )
+        hm = params.get("hist_min", 0)
+        lines += [
+            f"    ema_f = pd.Series(close).ewm(span={f}).mean().values",
+            f"    ema_s = pd.Series(close).ewm(span={s}).mean().values",
+            "    macd = ema_f - ema_s",
+            f"    macd_sig = pd.Series(macd).ewm(span={sg}).mean().values",
+            "    hist = macd - macd_sig",
+            f"    for i in range({s}+{sg}, len(close)):",
+            f"        if macd[i] > macd_sig[i] and macd[i-1] <= macd_sig[i-1] and hist[i] > {hm}:",
+            "            sig.iloc[i] = 1",
+            "        elif macd[i] < macd_sig[i] and macd[i-1] >= macd_sig[i-1]:",
+            "            sig.iloc[i] = -1",
+        ]
+
+    lines.append("    return sig")
+    return "\n".join(lines)
+
+
+def _run_strategy_backtest(close, high, low, volume, signals, dates_idx):
+    """Run a vectorized backtest given signal array. Returns metrics dict."""
+    import numpy as np
+
+    n = len(close)
+    if n < 60:
+        return None
+
+    trades = []
+    position = None
+    atr_arr = np.zeros(n)
+    tr = np.maximum(
+        high - low,
+        np.maximum(np.abs(high - np.roll(close, 1)), np.abs(low - np.roll(close, 1))),
+    )
+    for i in range(14, n):
+        atr_arr[i] = np.mean(tr[max(0, i - 14) : i])
+
+    for i in range(50, n):
+        if position is None and signals[i] == 1:
+            position = {"idx": i, "price": close[i], "high": close[i]}
+        elif position is not None:
+            position["high"] = max(position["high"], close[i])
+            # Exit conditions
+            stop_hit = close[i] < position["price"] * 0.95  # 5% hard stop
+            trail_hit = close[i] < position["high"] * 0.93  # 7% trailing
+            sig_exit = signals[i] == -1
+            time_exit = (i - position["idx"]) > 60  # max 60 bars
+            if stop_hit or trail_hit or sig_exit or time_exit:
+                pnl_pct = (close[i] / position["price"] - 1) * 100
+                trades.append(
+                    {
+                        "entry_idx": position["idx"],
+                        "exit_idx": i,
+                        "entry_price": round(position["price"], 2),
+                        "exit_price": round(close[i], 2),
+                        "pnl_pct": round(pnl_pct, 2),
+                        "bars_held": i - position["idx"],
+                        "exit_reason": (
+                            "stop"
+                            if stop_hit
+                            else (
+                                "trail"
+                                if trail_hit
+                                else "signal" if sig_exit else "time"
+                            )
+                        ),
+                    }
+                )
+                position = None
+
+    # Close remaining
+    if position is not None:
+        pnl_pct = (close[-1] / position["price"] - 1) * 100
+        trades.append(
+            {
+                "entry_idx": position["idx"],
+                "exit_idx": n - 1,
+                "entry_price": round(position["price"], 2),
+                "exit_price": round(close[-1], 2),
+                "pnl_pct": round(pnl_pct, 2),
+                "bars_held": n - 1 - position["idx"],
+                "exit_reason": "end",
+            }
+        )
+
+    if not trades:
+        return None
+
+    returns = [t["pnl_pct"] / 100 for t in trades]
+    wins = [r for r in returns if r > 0]
+    losses = [r for r in returns if r <= 0]
+    gross_profit = sum(wins) if wins else 0
+    gross_loss = abs(sum(losses)) if losses else 0.001
+
+    # Equity curve
+    equity = [100.0]
+    for r in returns:
+        equity.append(equity[-1] * (1 + r))
+
+    # Max drawdown
+    peak = equity[0]
+    max_dd = 0
+    for v in equity:
+        if v > peak:
+            peak = v
+        dd = (v - peak) / peak * 100
+        if dd < max_dd:
+            max_dd = dd
+
+    # Sharpe
+    if len(returns) > 1:
+        avg_r = np.mean(returns)
+        std_r = np.std(returns)
+        sharpe = (
+            round(
+                avg_r
+                / std_r
+                * np.sqrt(252 / max(1, np.mean([t["bars_held"] for t in trades]))),
+                2,
+            )
+            if std_r > 0
+            else 0
+        )
+    else:
+        sharpe = 0
+
+    net_return = round((equity[-1] / 100 - 1) * 100, 2)
+    profit_factor = round(gross_profit / gross_loss, 2) if gross_loss > 0 else 99.0
+
+    return {
+        "trade_count": len(trades),
+        "win_rate": round(len(wins) / len(trades) * 100, 1),
+        "profit_factor": profit_factor,
+        "sharpe": sharpe,
+        "max_drawdown": round(max_dd, 2),
+        "net_return": net_return,
+        "avg_win": round(np.mean(wins) * 100, 2) if wins else 0,
+        "avg_loss": round(np.mean(losses) * 100, 2) if losses else 0,
+        "avg_bars_held": round(np.mean([t["bars_held"] for t in trades]), 1),
+        "trades": trades[-20:],  # last 20 for detail view
+        "equity": equity,
+    }
+
+
+def _walk_forward_test(close, high, low, volume, signals, n_folds=5):
+    """Walk-forward analysis: train/test on rolling windows."""
+    import numpy as np
+
+    n = len(close)
+    fold_size = n // n_folds
+    if fold_size < 60:
+        return None
+
+    results = []
+    for fold in range(1, n_folds):
+        oos_start = fold * fold_size
+        oos_end = min(oos_start + fold_size, n)
+        m = _run_strategy_backtest(
+            close[oos_start:oos_end],
+            high[oos_start:oos_end],
+            low[oos_start:oos_end],
+            volume[oos_start:oos_end],
+            signals[oos_start:oos_end],
+            None,
+        )
+        if m:
+            results.append(
+                {
+                    "fold": fold,
+                    "net_return": m["net_return"],
+                    "sharpe": m["sharpe"],
+                    "profit_factor": m["profit_factor"],
+                    "max_drawdown": m["max_drawdown"],
+                    "trade_count": m["trade_count"],
+                    "win_rate": m["win_rate"],
+                }
+            )
+
+    if not results:
+        return None
+
+    avg_return = round(np.mean([r["net_return"] for r in results]), 2)
+    avg_sharpe = round(np.mean([r["sharpe"] for r in results]), 2)
+    consistency = round(
+        sum(1 for r in results if r["net_return"] > 0) / len(results) * 100, 1
+    )
+
+    return {
+        "folds": results,
+        "avg_return": avg_return,
+        "avg_sharpe": avg_sharpe,
+        "consistency": consistency,
+        "passed": consistency >= 60 and avg_sharpe > 0.3,
+    }
+
+
+def _monte_carlo_test(returns, n_sims=500):
+    """Monte Carlo stress test: shuffle trade order, measure tail risk."""
+    import numpy as np
+
+    if len(returns) < 5:
+        return None
+
+    final_equities = []
+    max_drawdowns = []
+
+    for _ in range(n_sims):
+        shuffled = np.random.permutation(returns)
+        eq = [100.0]
+        for r in shuffled:
+            eq.append(eq[-1] * (1 + r))
+        final_equities.append(eq[-1])
+
+        peak = eq[0]
+        mdd = 0
+        for v in eq:
+            if v > peak:
+                peak = v
+            dd = (v - peak) / peak * 100
+            if dd < mdd:
+                mdd = dd
+        max_drawdowns.append(mdd)
+
+    final_equities.sort()
+    max_drawdowns.sort()
+
+    return {
+        "n_sims": n_sims,
+        "median_return": round((np.median(final_equities) / 100 - 1) * 100, 2),
+        "p5_return": round((final_equities[int(n_sims * 0.05)] / 100 - 1) * 100, 2),
+        "p25_return": round((final_equities[int(n_sims * 0.25)] / 100 - 1) * 100, 2),
+        "p75_return": round((final_equities[int(n_sims * 0.75)] / 100 - 1) * 100, 2),
+        "p95_return": round((final_equities[int(n_sims * 0.95)] / 100 - 1) * 100, 2),
+        "prob_loss": round(sum(1 for e in final_equities if e < 100) / n_sims * 100, 1),
+        "median_max_dd": round(np.median(max_drawdowns), 2),
+        "worst_dd": round(min(max_drawdowns), 2),
+        "prob_ruin": round(sum(1 for e in final_equities if e < 70) / n_sims * 100, 1),
+        "passed": sum(1 for e in final_equities if e < 100) / n_sims < 0.4
+        and min(max_drawdowns) > -50,
+    }
+
+
+# Pass/fail rules
+_PASS_RULES = {
+    "min_profit_factor": 1.3,
+    "min_sharpe": 0.4,
+    "max_drawdown": -25.0,
+    "min_win_rate": 35.0,
+    "min_trades": 10,
+    "min_wf_consistency": 60.0,
+    "max_prob_ruin": 15.0,
+}
+
+
+def _evaluate_strategy(metrics, wf_result, mc_result):
+    """Apply pass/fail rules. Returns (passed, checks)."""
+    checks = []
+
+    def _check(name, passed, detail):
+        checks.append({"name": name, "passed": passed, "detail": detail})
+
+    _check(
+        "Profit Factor ≥ 1.3",
+        metrics["profit_factor"] >= _PASS_RULES["min_profit_factor"],
+        f"{metrics['profit_factor']}",
+    )
+    _check(
+        "Sharpe Ratio ≥ 0.4",
+        metrics["sharpe"] >= _PASS_RULES["min_sharpe"],
+        f"{metrics['sharpe']}",
+    )
+    _check(
+        "Max Drawdown ≥ -25%",
+        metrics["max_drawdown"] >= _PASS_RULES["max_drawdown"],
+        f"{metrics['max_drawdown']}%",
+    )
+    _check(
+        "Win Rate ≥ 35%",
+        metrics["win_rate"] >= _PASS_RULES["min_win_rate"],
+        f"{metrics['win_rate']}%",
+    )
+    _check(
+        "Min 10 Trades",
+        metrics["trade_count"] >= _PASS_RULES["min_trades"],
+        f"{metrics['trade_count']}",
+    )
+    if wf_result:
+        _check(
+            "Walk-Forward ≥ 60%",
+            wf_result["consistency"] >= _PASS_RULES["min_wf_consistency"],
+            f"{wf_result['consistency']}%",
+        )
+    if mc_result:
+        _check(
+            "Monte Carlo Ruin < 15%",
+            mc_result["prob_ruin"] <= _PASS_RULES["max_prob_ruin"],
+            f"{mc_result['prob_ruin']}%",
+        )
+
+    passed = all(c["passed"] for c in checks)
+    return passed, checks
+
+
+@app.post("/api/strategy-factory/generate", tags=["factory"])
+async def strategy_factory_generate(
+    ticker: str = Query("SPY", description="Ticker to test on"),
+    period: str = Query("2y", description="1y/2y/5y"),
+    mode: str = Query("demo", description="demo or full"),
+):
+    """Generate, backtest, score, and rank strategy variants."""
+    global _strategy_library, _factory_running
+    import itertools
+
+    import numpy as np
+    import pandas as pd
+
+    if _factory_running:
+        return {"error": "Factory is already running. Wait for completion."}
+    _factory_running = True
+
+    try:
+        ticker = validate_ticker(ticker)
+        mds = app.state.market_data
+        hist = await mds.get_history(ticker, period=period, interval="1d")
+        if hist is None or hist.empty or len(hist) < 100:
+            _factory_running = False
+            return {"error": "Insufficient data"}
+
+        c_col = "Close" if "Close" in hist.columns else "close"
+        h_col = "High" if "High" in hist.columns else "high"
+        l_col = "Low" if "Low" in hist.columns else "low"
+        v_col = "Volume" if "Volume" in hist.columns else "volume"
+
+        close = hist[c_col].values.astype(float)
+        high = hist[h_col].values.astype(float)
+        low = hist[l_col].values.astype(float)
+        volume = hist[v_col].values.astype(float)
+        dates_idx = hist.index
+        n = len(close)
+
+        results = []
+        templates_to_run = (
+            _STRATEGY_TEMPLATES if mode == "full" else _STRATEGY_TEMPLATES[:5]
+        )
+
+        for tmpl in templates_to_run:
+            # Generate parameter combinations (limited in demo)
+            param_keys = list(tmpl["params"].keys())
+            param_vals = list(tmpl["params"].values())
+            combos = list(itertools.product(*param_vals))
+            if mode == "demo":
+                combos = combos[:3]  # limit in demo
+            else:
+                combos = combos[:8]
+
+            for combo in combos:
+                params = dict(zip(param_keys, combo))
+                variant_name = f"{tmpl['name']} ({', '.join(f'{k}={v}' for k, v in params.items())})"
+
+                try:
+                    # Generate code
+                    code = _generate_strategy_code(tmpl, params)
+
+                    # Generate signals using inline logic (safe, no exec)
+                    signals = np.zeros(n)
+
+                    if tmpl["id"] == "volume_momentum_breakout":
+                        lb = params.get("lookback", 20)
+                        vm = params.get("vol_mult", 1.5)
+                        rmin = params.get("rsi_min", 55)
+                        vol_ma = pd.Series(volume).rolling(lb).mean().values
+                        rsi_delta = pd.Series(close).diff()
+                        gain = rsi_delta.clip(lower=0).rolling(14).mean()
+                        loss = (-rsi_delta.clip(upper=0)).rolling(14).mean()
+                        rs = gain / (loss + 1e-10)
+                        rsi = (100 - 100 / (1 + rs)).values
+                        hi_n = pd.Series(close).rolling(lb).max().shift(1).values
+                        for i in range(lb, n):
+                            if (
+                                not np.isnan(hi_n[i])
+                                and close[i] > hi_n[i]
+                                and volume[i] > vol_ma[i] * vm
+                                and rsi[i] > rmin
+                            ):
+                                signals[i] = 1
+                            elif rsi[i] > 75:
+                                signals[i] = -1
+
+                    elif tmpl["id"] == "atr_channel_breakout":
+                        sl = params.get("sma_len", 20)
+                        am = params.get("atr_mult", 2.0)
+                        al = params.get("atr_len", 14)
+                        sma = pd.Series(close).rolling(sl).mean().values
+                        tr = np.maximum(high - low, np.abs(high - np.roll(close, 1)))
+                        atr = pd.Series(tr).rolling(al).mean().values
+                        for i in range(max(sl, al), n):
+                            if close[i] > sma[i] + atr[i] * am:
+                                signals[i] = 1
+                            elif close[i] < sma[i] - atr[i] * am:
+                                signals[i] = -1
+
+                    elif tmpl["id"] == "macd_ema_hybrid":
+                        f_p, s_p, sg_p, ef = (
+                            params.get("fast", 12),
+                            params.get("slow", 26),
+                            params.get("signal", 9),
+                            params.get("ema_filter", 50),
+                        )
+                        ema_f = pd.Series(close).ewm(span=f_p).mean().values
+                        ema_s = pd.Series(close).ewm(span=s_p).mean().values
+                        macd = ema_f - ema_s
+                        macd_sig = pd.Series(macd).ewm(span=sg_p).mean().values
+                        ema_filt = pd.Series(close).ewm(span=ef).mean().values
+                        for i in range(ef, n):
+                            if (
+                                macd[i] > macd_sig[i]
+                                and macd[i] > 0
+                                and close[i] > ema_filt[i]
+                            ):
+                                signals[i] = 1
+                            elif macd[i] < macd_sig[i]:
+                                signals[i] = -1
+
+                    elif tmpl["id"] == "triple_ema_momentum":
+                        f_p, m_p, s_p = (
+                            params.get("fast", 8),
+                            params.get("mid", 21),
+                            params.get("slow", 55),
+                        )
+                        e1 = pd.Series(close).ewm(span=f_p).mean().values
+                        e2 = pd.Series(close).ewm(span=m_p).mean().values
+                        e3 = pd.Series(close).ewm(span=s_p).mean().values
+                        for i in range(s_p, n):
+                            if e1[i] > e2[i] > e3[i] and e1[i] > e1[i - 1]:
+                                signals[i] = 1
+                            elif e1[i] < e2[i]:
+                                signals[i] = -1
+
+                    elif tmpl["id"] == "rsi_mean_reversion":
+                        rl, re, rx, ml = (
+                            params.get("rsi_len", 14),
+                            params.get("rsi_entry", 30),
+                            params.get("rsi_exit", 70),
+                            params.get("ma_len", 20),
+                        )
+                        rsi_delta = pd.Series(close).diff()
+                        gain = rsi_delta.clip(lower=0).rolling(rl).mean()
+                        loss = (-rsi_delta.clip(upper=0)).rolling(rl).mean()
+                        rsi = (100 - 100 / (1 + gain / (loss + 1e-10))).values
+                        ma = pd.Series(close).rolling(ml).mean().values
+                        vol_ma = pd.Series(volume).rolling(20).mean().values
+                        for i in range(max(rl, ml), n):
+                            if (
+                                rsi[i] < re
+                                and close[i] > ma[i] * 0.97
+                                and volume[i] > vol_ma[i]
+                            ):
+                                signals[i] = 1
+                            elif rsi[i] > rx:
+                                signals[i] = -1
+
+                    elif tmpl["id"] == "dual_rsi_trend_filter":
+                        rf, rs_p, rfe, rsm = (
+                            params.get("rsi_fast", 5),
+                            params.get("rsi_slow", 14),
+                            params.get("rsi_fast_entry", 20),
+                            params.get("rsi_slow_min", 50),
+                        )
+                        delta = pd.Series(close).diff()
+                        g1 = delta.clip(lower=0).rolling(rf).mean()
+                        l1 = (-delta.clip(upper=0)).rolling(rf).mean()
+                        rsi_f = (100 - 100 / (1 + g1 / (l1 + 1e-10))).values
+                        g2 = delta.clip(lower=0).rolling(rs_p).mean()
+                        l2 = (-delta.clip(upper=0)).rolling(rs_p).mean()
+                        rsi_s = (100 - 100 / (1 + g2 / (l2 + 1e-10))).values
+                        for i in range(rs_p + 5, n):
+                            if rsi_f[i] < rfe and rsi_s[i] > rsm:
+                                signals[i] = 1
+                            elif rsi_f[i] > 80:
+                                signals[i] = -1
+
+                    elif tmpl["id"] == "bollinger_breakout":
+                        bl, bs, sq = (
+                            params.get("bb_len", 20),
+                            params.get("bb_std", 2.0),
+                            params.get("squeeze_pct", 0.04),
+                        )
+                        sma = pd.Series(close).rolling(bl).mean().values
+                        std = pd.Series(close).rolling(bl).std().values
+                        upper = sma + std * bs
+                        bw = (upper - (sma - std * bs)) / (sma + 1e-10)
+                        for i in range(bl + 5, n):
+                            if bw[i - 1] < sq and close[i] > upper[i]:
+                                signals[i] = 1
+                            elif close[i] < sma[i]:
+                                signals[i] = -1
+
+                    elif tmpl["id"] == "stochastic_rsi_reversal":
+                        stl, rl, ks, ds, el = (
+                            params.get("stoch_len", 14),
+                            params.get("rsi_len", 14),
+                            params.get("k_smooth", 3),
+                            params.get("d_smooth", 3),
+                            params.get("entry_level", 20),
+                        )
+                        delta = pd.Series(close).diff()
+                        g = delta.clip(lower=0).rolling(rl).mean()
+                        l_val = (-delta.clip(upper=0)).rolling(rl).mean()
+                        rsi = 100 - 100 / (1 + g / (l_val + 1e-10))
+                        ll = rsi.rolling(stl).min()
+                        hh = rsi.rolling(stl).max()
+                        k = (
+                            ((rsi - ll) / (hh - ll + 1e-10) * 100)
+                            .rolling(ks)
+                            .mean()
+                            .values
+                        )
+                        d = pd.Series(k).rolling(ds).mean().values
+                        ma50 = pd.Series(close).rolling(50).mean().values
+                        for i in range(55, n):
+                            if (
+                                not np.isnan(k[i])
+                                and not np.isnan(d[i])
+                                and k[i] > d[i]
+                                and k[i - 1] <= d[i - 1]
+                                and k[i] < el + 20
+                                and close[i] > ma50[i]
+                            ):
+                                signals[i] = 1
+                            elif (
+                                not np.isnan(k[i])
+                                and not np.isnan(d[i])
+                                and k[i] > 80
+                                and k[i] < d[i]
+                            ):
+                                signals[i] = -1
+
+                    elif tmpl["id"] == "macd_crossover":
+                        f_p, s_p, sg_p = (
+                            params.get("fast", 12),
+                            params.get("slow", 26),
+                            params.get("signal", 9),
+                        )
+                        hm = params.get("hist_min", 0)
+                        ema_f = pd.Series(close).ewm(span=f_p).mean().values
+                        ema_s = pd.Series(close).ewm(span=s_p).mean().values
+                        macd = ema_f - ema_s
+                        macd_sig = pd.Series(macd).ewm(span=sg_p).mean().values
+                        hist_arr = macd - macd_sig
+                        for i in range(s_p + sg_p, n):
+                            if (
+                                macd[i] > macd_sig[i]
+                                and macd[i - 1] <= macd_sig[i - 1]
+                                and hist_arr[i] > hm
+                            ):
+                                signals[i] = 1
+                            elif (
+                                macd[i] < macd_sig[i] and macd[i - 1] >= macd_sig[i - 1]
+                            ):
+                                signals[i] = -1
+
+                    # Run backtest
+                    metrics = _run_strategy_backtest(
+                        close, high, low, volume, signals, dates_idx
+                    )
+                    if not metrics or metrics["trade_count"] < 3:
+                        continue
+
+                    # Walk-forward
+                    wf = _walk_forward_test(close, high, low, volume, signals)
+
+                    # Monte Carlo
+                    mc_returns = [t["pnl_pct"] / 100 for t in metrics.get("trades", [])]
+                    all_returns = [
+                        t["pnl_pct"] / 100 for t in metrics.get("trades", [])
+                    ]
+                    if metrics["trade_count"] >= 5:
+                        mc = _monte_carlo_test(all_returns)
+                    else:
+                        mc = None
+
+                    # Evaluate pass/fail
+                    passed, checks = _evaluate_strategy(metrics, wf, mc)
+
+                    # Score (weighted composite)
+                    score = (
+                        min(metrics["profit_factor"], 5) * 15
+                        + min(max(metrics["sharpe"], -1), 3) * 20
+                        + min(metrics["win_rate"], 80) * 0.5
+                        + max(0, metrics["max_drawdown"] + 30) * 1.5
+                        + (wf["consistency"] * 0.3 if wf else 0)
+                        + (10 if mc and mc["passed"] else 0)
+                    )
+
+                    results.append(
+                        {
+                            "id": f"{tmpl['id']}_{hash(str(combo)) % 10000}",
+                            "name": variant_name,
+                            "template": tmpl["name"],
+                            "family": tmpl["family"],
+                            "params": params,
+                            "code": code,
+                            "metrics": {
+                                k: v
+                                for k, v in metrics.items()
+                                if k != "trades" and k != "equity"
+                            },
+                            "walk_forward": wf,
+                            "monte_carlo": mc,
+                            "passed": passed,
+                            "checks": checks,
+                            "score": round(score, 1),
+                            "trades_sample": metrics.get("trades", [])[:10],
+                            "equity_curve": [
+                                round(v, 2)
+                                for v in metrics.get("equity", [])[
+                                    :: max(1, len(metrics.get("equity", [])) // 100)
+                                ]
+                            ],
+                        }
+                    )
+
+                except Exception as e:
+                    logger.debug("Strategy variant error %s: %s", variant_name, e)
+                    continue
+
+        # Sort by score
+        results.sort(key=lambda x: x["score"], reverse=True)
+
+        # Assign ranks
+        for i, r in enumerate(results):
+            r["rank"] = i + 1
+
+        _strategy_library = results
+        _factory_running = False
+
+        return _sanitize_for_json(
+            {
+                "ticker": ticker,
+                "period": period,
+                "mode": mode,
+                "data_points": n,
+                "strategies_generated": len(results),
+                "strategies_passed": sum(1 for r in results if r["passed"]),
+                "strategies_failed": sum(1 for r in results if not r["passed"]),
+                "best_strategy": results[0] if results else None,
+                "ranking": [
+                    {
+                        "rank": r["rank"],
+                        "name": r["name"],
+                        "family": r["family"],
+                        "score": r["score"],
+                        "passed": r["passed"],
+                        "profit_factor": r["metrics"]["profit_factor"],
+                        "sharpe": r["metrics"]["sharpe"],
+                        "max_drawdown": r["metrics"]["max_drawdown"],
+                        "win_rate": r["metrics"]["win_rate"],
+                        "net_return": r["metrics"]["net_return"],
+                        "trade_count": r["metrics"]["trade_count"],
+                    }
+                    for r in results
+                ],
+                "pass_rules": _PASS_RULES,
+            }
+        )
+
+    except Exception as e:
+        _factory_running = False
+        logger.exception("Strategy factory error")
+        return {"error": str(e)}
+
+
+@app.get("/api/strategy-factory/library", tags=["factory"])
+async def strategy_factory_library():
+    """Return all generated strategies from the latest run."""
+    return _sanitize_for_json(
+        {
+            "count": len(_strategy_library),
+            "strategies": _strategy_library,
+        }
+    )
+
+
+@app.get("/api/strategy-factory/detail/{strategy_id}", tags=["factory"])
+async def strategy_factory_detail(strategy_id: str):
+    """Return full detail for a specific strategy variant."""
+    for s in _strategy_library:
+        if s["id"] == strategy_id:
+            return _sanitize_for_json(s)
+    raise HTTPException(404, f"Strategy {strategy_id} not found")
+
+
+@app.post("/api/strategy-factory/deploy/{strategy_id}", tags=["factory"])
+async def strategy_factory_deploy(strategy_id: str):
+    """Mark a strategy as deployed (paper-trade monitoring)."""
+    for s in _strategy_library:
+        if s["id"] == strategy_id:
+            s["deployed"] = True
+            s["deployed_at"] = datetime.now(timezone.utc).isoformat() + "Z"
+            return {"status": "deployed", "strategy": s["name"]}
+    raise HTTPException(404, f"Strategy {strategy_id} not found")
+
+
 # ─────────────────────────────────────────────────────────────
 # Chart OHLCV data for TradingView lightweight-charts
 # ─────────────────────────────────────────────────────────────

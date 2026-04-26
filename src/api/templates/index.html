@@ -1252,6 +1252,205 @@
     </main>
 
     <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- SURFACE: STRATEGY FACTORY                              -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <main x-show="tab==='factory'" class="fade">
+      <div class="trust-strip">
+        <span style="color:var(--blue)">● STRATEGY FACTORY</span>
+        <span x-text="factory.result?factory.result.strategies_generated+' generated, '+factory.result.strategies_passed+' passed':'Ready'"></span>
+      </div>
+      <div class="p-3 space-y-3">
+        <!-- Controls -->
+        <div class="card card-p">
+          <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🏭 Auto-Generate & Test Strategies</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px" class="text-[11px]">
+            <div><label class="text-[9px]" style="color:var(--t3)">Ticker</label><input x-model="factory.ticker" class="w-full rounded px-2 py-1 text-[11px] mono" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)" placeholder="SPY"></div>
+            <div><label class="text-[9px]" style="color:var(--t3)">Period</label><select x-model="factory.period" class="w-full rounded px-2 py-1 text-[11px]" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)"><option value="1y">1 Year</option><option value="2y">2 Years</option><option value="5y">5 Years</option></select></div>
+            <div><label class="text-[9px]" style="color:var(--t3)">Mode</label><select x-model="factory.mode" class="w-full rounded px-2 py-1 text-[11px]" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)"><option value="demo">Demo (fast)</option><option value="full">Full (all templates)</option></select></div>
+          </div>
+          <div class="flex gap-2 mt-3">
+            <button @click="runFactory()" class="text-[10px] font-bold px-4 py-2 rounded" style="background:var(--green);color:#0d1117" :disabled="factory.loading">
+              <span x-show="!factory.loading">🚀 Start Auto Generation</span>
+              <span x-show="factory.loading"><span class="spin"></span> Generating & testing strategies...</span>
+            </button>
+          </div>
+          <div class="text-[8px] mt-2 italic" style="color:var(--t3)">Generates strategy variants → backtests each → walk-forward validation → Monte Carlo stress test → ranks by composite score</div>
+        </div>
+        <!-- Summary strip -->
+        <template x-if="factory.result">
+          <div class="card" style="padding:8px 12px">
+            <div class="flex flex-wrap gap-x-5 gap-y-1 text-[10px] mono">
+              <span style="color:var(--t3)">Generated: <strong class="text-white" x-text="factory.result.strategies_generated"></strong></span>
+              <span style="color:var(--t3)">Passed: <strong class="text-green-400" x-text="factory.result.strategies_passed"></strong></span>
+              <span style="color:var(--t3)">Failed: <strong class="text-red-400" x-text="factory.result.strategies_failed"></strong></span>
+              <span style="color:var(--t3)">Data: <strong class="text-white" x-text="factory.result.data_points+' bars'"></strong></span>
+              <span style="color:var(--t3)">Ticker: <strong class="text-amber-300" x-text="factory.result.ticker"></strong></span>
+            </div>
+          </div>
+        </template>
+        <!-- Best strategy highlight -->
+        <template x-if="factory.result&&factory.result.best_strategy">
+          <div class="card card-p" style="border-left:3px solid var(--green);background:linear-gradient(135deg,rgba(0,212,170,.04),transparent)">
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-[10px] font-bold uppercase" style="color:var(--green)">🏆 Best Strategy</div>
+              <span class="pill text-[8px] font-bold" :class="factory.result.best_strategy.passed?'pg':'pr'" x-text="factory.result.best_strategy.passed?'✅ PASSED':'❌ FAILED'"></span>
+            </div>
+            <div class="text-[12px] font-bold text-white" x-text="factory.result.best_strategy.name"></div>
+            <div class="flex flex-wrap gap-3 mt-2 text-[10px] mono" style="color:var(--t2)">
+              <span>Score <strong class="text-white" x-text="factory.result.best_strategy.score"></strong></span>
+              <span>PF <strong class="text-green-400" x-text="factory.result.best_strategy.metrics.profit_factor"></strong></span>
+              <span>Sharpe <strong class="text-green-400" x-text="factory.result.best_strategy.metrics.sharpe"></strong></span>
+              <span>MaxDD <strong class="text-red-400" x-text="factory.result.best_strategy.metrics.max_drawdown+'%'"></strong></span>
+              <span>Win <strong class="text-white" x-text="factory.result.best_strategy.metrics.win_rate+'%'"></strong></span>
+              <span>Net <strong :class="factory.result.best_strategy.metrics.net_return>=0?'text-green-400':'text-red-400'" x-text="factory.result.best_strategy.metrics.net_return+'%'"></strong></span>
+            </div>
+            <!-- Pass/fail checks -->
+            <div class="flex flex-wrap gap-1 mt-2">
+              <template x-for="c in factory.result.best_strategy.checks||[]">
+                <span class="text-[8px] px-2 py-0.5 rounded" :style="'background:'+(c.passed?'rgba(0,212,170,.1);color:#00d4aa':'rgba(255,92,92,.1);color:#ff5c5c')" x-text="(c.passed?'✅':'❌')+' '+c.name+' ('+c.detail+')'"></span>
+              </template>
+            </div>
+          </div>
+        </template>
+        <!-- Ranking table -->
+        <template x-if="factory.result&&factory.result.ranking&&factory.result.ranking.length">
+          <div class="card" style="overflow:hidden">
+            <div class="px-3 pt-2 pb-1 flex items-center justify-between">
+              <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">📊 Strategy Ranking</div>
+              <div class="text-[8px] mono" style="color:var(--t3)" x-text="factory.result.ranking.length+' strategies'"></div>
+            </div>
+            <div style="overflow-x:auto;max-height:400px;overflow-y:auto">
+              <table class="w-full text-[9px] mono" style="border-collapse:collapse;min-width:700px">
+                <thead><tr style="color:var(--t3);background:var(--s2)">
+                  <th class="text-left py-1.5 px-2">#</th>
+                  <th class="text-left py-1.5 px-2">Strategy</th>
+                  <th class="text-center py-1.5 px-1">Family</th>
+                  <th class="text-center py-1.5 px-1">Score</th>
+                  <th class="text-center py-1.5 px-1">Pass</th>
+                  <th class="text-right py-1.5 px-1">PF</th>
+                  <th class="text-right py-1.5 px-1">Sharpe</th>
+                  <th class="text-right py-1.5 px-1">MaxDD</th>
+                  <th class="text-right py-1.5 px-1">Win%</th>
+                  <th class="text-right py-1.5 px-1">Net%</th>
+                  <th class="text-right py-1.5 px-1">Trades</th>
+                  <th class="text-center py-1.5 px-1">Action</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="s in factory.result.ranking" :key="s.rank">
+                    <tr style="border-top:1px solid #21262d" :style="s.passed?'':'opacity:0.5'">
+                      <td class="py-1.5 px-2 font-bold" style="color:var(--amber)" x-text="'#'+s.rank"></td>
+                      <td class="py-1.5 px-2 text-white" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="s.name"></td>
+                      <td class="text-center py-1.5 px-1"><span class="pill pb text-[7px]" x-text="s.family"></span></td>
+                      <td class="text-center py-1.5 px-1 font-bold" :class="s.score>=80?'text-green-400':s.score>=50?'text-amber-300':'text-red-400'" x-text="s.score"></td>
+                      <td class="text-center py-1.5 px-1" x-text="s.passed?'✅':'❌'"></td>
+                      <td class="text-right py-1.5 px-1" :class="s.profit_factor>=1.5?'text-green-400':'text-white'" x-text="s.profit_factor"></td>
+                      <td class="text-right py-1.5 px-1" :class="s.sharpe>=1?'text-green-400':s.sharpe>=0.5?'text-amber-300':'text-red-400'" x-text="s.sharpe"></td>
+                      <td class="text-right py-1.5 px-1 text-red-400" x-text="s.max_drawdown+'%'"></td>
+                      <td class="text-right py-1.5 px-1" :class="s.win_rate>=50?'text-green-400':'text-white'" x-text="s.win_rate+'%'"></td>
+                      <td class="text-right py-1.5 px-1 font-bold" :class="s.net_return>=0?'text-green-400':'text-red-400'" x-text="(s.net_return>=0?'+':'')+s.net_return+'%'"></td>
+                      <td class="text-right py-1.5 px-1 text-white" x-text="s.trade_count"></td>
+                      <td class="text-center py-1.5 px-1"><button class="btn-s text-[7px] px-2" @click="viewFactoryDetail(s.rank)">Detail</button></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </template>
+        <!-- Detail modal -->
+        <template x-if="factory.showDetail&&factory.detail">
+          <div class="card card-p" style="border:1px solid var(--bd)">
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-[12px] font-bold text-white" x-text="factory.detail.name"></div>
+              <button @click="factory.showDetail=false" class="btn-s text-[8px]">✕ Close</button>
+            </div>
+            <div class="flex gap-2 mb-3">
+              <span class="pill text-[8px]" :class="factory.detail.passed?'pg':'pr'" x-text="factory.detail.passed?'PASSED':'FAILED'"></span>
+              <span class="pill pb text-[8px]" x-text="factory.detail.family"></span>
+              <span class="pill pw text-[8px]" x-text="'Score: '+factory.detail.score"></span>
+            </div>
+            <!-- Metrics grid -->
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center" class="text-[10px] mb-3">
+              <div class="p-2 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)">Profit Factor</div><div class="font-bold" :class="factory.detail.metrics.profit_factor>=1.5?'text-green-400':'text-white'" x-text="factory.detail.metrics.profit_factor"></div></div>
+              <div class="p-2 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)">Sharpe</div><div class="font-bold" :class="factory.detail.metrics.sharpe>=1?'text-green-400':'text-white'" x-text="factory.detail.metrics.sharpe"></div></div>
+              <div class="p-2 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)">Max Drawdown</div><div class="font-bold text-red-400" x-text="factory.detail.metrics.max_drawdown+'%'"></div></div>
+              <div class="p-2 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)">Win Rate</div><div class="font-bold text-white" x-text="factory.detail.metrics.win_rate+'%'"></div></div>
+              <div class="p-2 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)">Net Return</div><div class="font-bold" :class="factory.detail.metrics.net_return>=0?'text-green-400':'text-red-400'" x-text="(factory.detail.metrics.net_return>=0?'+':'')+factory.detail.metrics.net_return+'%'"></div></div>
+              <div class="p-2 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)">Trades</div><div class="font-bold text-white" x-text="factory.detail.metrics.trade_count"></div></div>
+            </div>
+            <!-- Pass/fail checks -->
+            <div class="text-[10px] font-bold mb-1" style="color:var(--t3)">Validation Checks</div>
+            <div class="space-y-1 mb-3">
+              <template x-for="c in factory.detail.checks||[]">
+                <div class="flex items-center gap-2 text-[10px]" :style="'color:'+(c.passed?'var(--green)':'var(--red)')">
+                  <span x-text="c.passed?'✅':'❌'"></span>
+                  <span x-text="c.name"></span>
+                  <span class="mono ml-auto" style="color:var(--t3)" x-text="c.detail"></span>
+                </div>
+              </template>
+            </div>
+            <!-- Walk-Forward -->
+            <template x-if="factory.detail.walk_forward">
+              <div class="mb-3">
+                <div class="text-[10px] font-bold mb-1" style="color:var(--t3)">Walk-Forward Analysis</div>
+                <div class="flex gap-3 text-[9px] mono">
+                  <span style="color:var(--t3)">Avg Return: <strong :class="factory.detail.walk_forward.avg_return>=0?'text-green-400':'text-red-400'" x-text="factory.detail.walk_forward.avg_return+'%'"></strong></span>
+                  <span style="color:var(--t3)">Avg Sharpe: <strong class="text-white" x-text="factory.detail.walk_forward.avg_sharpe"></strong></span>
+                  <span style="color:var(--t3)">Consistency: <strong :class="factory.detail.walk_forward.consistency>=60?'text-green-400':'text-red-400'" x-text="factory.detail.walk_forward.consistency+'%'"></strong></span>
+                  <span class="pill text-[7px]" :class="factory.detail.walk_forward.passed?'pg':'pr'" x-text="factory.detail.walk_forward.passed?'PASS':'FAIL'"></span>
+                </div>
+              </div>
+            </template>
+            <!-- Monte Carlo -->
+            <template x-if="factory.detail.monte_carlo">
+              <div class="mb-3">
+                <div class="text-[10px] font-bold mb-1" style="color:var(--t3)">Monte Carlo Stress Test</div>
+                <div class="flex flex-wrap gap-3 text-[9px] mono">
+                  <span style="color:var(--t3)">Median: <strong :class="factory.detail.monte_carlo.median_return>=0?'text-green-400':'text-red-400'" x-text="factory.detail.monte_carlo.median_return+'%'"></strong></span>
+                  <span style="color:var(--t3)">P5: <strong class="text-red-400" x-text="factory.detail.monte_carlo.p5_return+'%'"></strong></span>
+                  <span style="color:var(--t3)">P95: <strong class="text-green-400" x-text="factory.detail.monte_carlo.p95_return+'%'"></strong></span>
+                  <span style="color:var(--t3)">P(Loss): <strong :class="factory.detail.monte_carlo.prob_loss<40?'text-green-400':'text-red-400'" x-text="factory.detail.monte_carlo.prob_loss+'%'"></strong></span>
+                  <span style="color:var(--t3)">P(Ruin): <strong :class="factory.detail.monte_carlo.prob_ruin<15?'text-green-400':'text-red-400'" x-text="factory.detail.monte_carlo.prob_ruin+'%'"></strong></span>
+                  <span style="color:var(--t3)">Worst DD: <strong class="text-red-400" x-text="factory.detail.monte_carlo.worst_dd+'%'"></strong></span>
+                  <span class="pill text-[7px]" :class="factory.detail.monte_carlo.passed?'pg':'pr'" x-text="factory.detail.monte_carlo.passed?'PASS':'FAIL'"></span>
+                </div>
+              </div>
+            </template>
+            <!-- Generated code -->
+            <div class="text-[10px] font-bold mb-1" style="color:var(--t3)">Generated Signal Code</div>
+            <pre class="text-[9px] mono p-3 rounded overflow-x-auto" style="background:#0d1117;color:#c9d1d9;border:1px solid var(--bd);max-height:200px;overflow-y:auto;white-space:pre-wrap" x-text="factory.detail.code"></pre>
+            <!-- Deploy button -->
+            <template x-if="factory.detail.passed">
+              <button @click="deployFactory(factory.detail.id)" class="btn-s text-[10px] font-bold mt-3" style="background:var(--green);color:#0d1117">🚀 Deploy to Paper Trading</button>
+            </template>
+          </div>
+        </template>
+        <!-- Empty state -->
+        <template x-if="!factory.result&&!factory.loading">
+          <div class="card card-p" style="text-align:center;padding:30px">
+            <div style="font-size:40px">🏭</div>
+            <div class="text-sm font-bold mt-2" style="color:var(--t1)">Strategy Factory</div>
+            <div class="text-[11px] mt-2" style="color:var(--t3);max-width:400px;margin:0 auto;line-height:1.6">
+              Automatically generate, backtest, and validate trading strategies.<br>
+              The factory creates multiple strategy variants, runs walk-forward analysis and Monte Carlo stress tests, then ranks them by composite score.
+            </div>
+            <div class="flex flex-wrap gap-2 justify-center mt-3">
+              <span class="pill pb text-[8px]">Momentum</span>
+              <span class="pill pb text-[8px]">Breakout</span>
+              <span class="pill pb text-[8px]">Mean Reversion</span>
+              <span class="pill pb text-[8px]">Trend Following</span>
+              <span class="pill pb text-[8px]">MACD Hybrid</span>
+              <span class="pill pb text-[8px]">Bollinger</span>
+              <span class="pill pb text-[8px]">Stochastic RSI</span>
+              <span class="pill pb text-[8px]">Triple EMA</span>
+              <span class="pill pb text-[8px]">ATR Channel</span>
+            </div>
+          </div>
+        </template>
+      </div>
+    </main>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
     <!-- SURFACE: PORTFOLIO MANAGEMENT                          -->
     <!-- ═══════════════════════════════════════════════════════ -->
     <main x-show="tab==='portfolio'" class="fade" x-init="$watch('tab',v=>{if(v==='portfolio')fetchPortfolio()})">
@@ -2454,6 +2653,7 @@
         {id:'portfolio',icon:'💼',label:'Portfolio'},
       ],
       moreTabs:[
+        {id:'factory',icon:'🏭',label:'Strategy Factory'},
         {id:'rs',icon:'📈',label:'RS Ranking'},
         {id:'flow',icon:'💧',label:'Flow'},
         {id:'brief',icon:'📋',label:'Brief'},
@@ -2468,6 +2668,7 @@
       sig:{mode:'—',source:'',as_of:'',recs:[],strategy_scores:{},no_trade_reason:null,scan_meta:null},
       dos:{ticker:'',loading:false,data:null,error:'',showSignals:true,chartPeriod:'6mo',benchPeriod:'1y',chartSignals:[],benchStats:null,benchSummary:null,benchMonthly:null,benchQuarterly:null,benchYearly:null,benchTab:'monthly'},
       pf:{loading:false,positions:[],alerts:[],summary:null,showAdd:false,addTicker:'',addShares:0,addEntry:0,addStop:0,addT1r:0,addT2r:0,addNotes:'',editTicker:null},
+      factory:{loading:false,ticker:'SPY',period:'2y',mode:'demo',result:null,detail:null,showDetail:false,sortBy:'score'},
       opt:{ticker:'',loading:false,data:null},
       brief:{loading:false,data:null},
       bt:{ticker:'AAPL',strategy:'all',period:'5y',loading:false,result:null},
@@ -2573,6 +2774,34 @@
         try{
           const r=await fetch('/api/portfolio/position',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticker:this.dos.ticker,shares:parseFloat(shares),entry_price:entry,stop_price:tp.stop,target_1r:tp.target_1r,target_2r:tp.target_2r,notes:'From dossier trade plan'})});
           if(r.ok){alert('✅ '+this.dos.ticker+' added to portfolio! Check Portfolio tab.');this.tab='portfolio';await this.fetchPortfolio()}
+        }catch(e){console.warn(e)}
+      },
+      async runFactory(){
+        this.factory.loading=true;this.factory.result=null;this.factory.showDetail=false;
+        try{
+          const r=await fetch('/api/strategy-factory/generate?ticker='+encodeURIComponent(this.factory.ticker)+'&period='+this.factory.period+'&mode='+this.factory.mode,{method:'POST'});
+          if(!r.ok)throw new Error('Factory failed');
+          this.factory.result=await r.json();
+        }catch(e){console.warn('Factory error:',e);alert('Strategy Factory error: '+e.message)}finally{this.factory.loading=false}
+      },
+      viewFactoryDetail(rank){
+        if(!this.factory.result)return;
+        const all=this.factory.result.best_strategy?[this.factory.result.best_strategy]:[];
+        // Find in library or reconstruct from ranking
+        const lib=this._factoryLib||[];
+        const found=lib.find(s=>s.rank===rank);
+        if(found){this.factory.detail=found;this.factory.showDetail=true;return}
+        // Fetch full library
+        fetch('/api/strategy-factory/library').then(r=>r.json()).then(d=>{
+          this._factoryLib=d.strategies||[];
+          const s=this._factoryLib.find(x=>x.rank===rank);
+          if(s){this.factory.detail=s;this.factory.showDetail=true}
+        }).catch(e=>console.warn(e));
+      },
+      async deployFactory(id){
+        try{
+          const r=await fetch('/api/strategy-factory/deploy/'+id,{method:'POST'});
+          if(r.ok){alert('🚀 Strategy deployed to paper trading monitor!')}
         }catch(e){console.warn(e)}
       },
       async fetchDossier(){
