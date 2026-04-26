@@ -587,6 +587,73 @@ class ErrorResponse(BaseModel):
 startup_time = datetime.now(timezone.utc)
 
 
+# ── Breakout Monitor background loop ──
+_breakout_monitor_task = None
+
+
+async def _breakout_monitor_loop():
+    """Background task: update breakout monitor every 30 minutes during market hours."""
+    import numpy as np
+
+    await asyncio.sleep(60)  # wait for app to fully start
+    bm = BreakoutMonitor() if _P9_ENGINES else None
+    if bm is None:
+        return
+    bm.load()
+    logger.info(
+        "[BreakoutMonitor] Background loop started — %d active", len(bm.get_active())
+    )
+
+    while True:
+        try:
+            await asyncio.sleep(1800)  # 30 minutes
+            if not bm.get_active():
+                continue
+            mds = app.state.market_data
+            for rec in list(bm.get_active()):
+                try:
+                    hist = await mds.get_history(rec.ticker, period="5d", interval="1d")
+                    if hist is None or hist.empty:
+                        continue
+                    c_col = "Close" if "Close" in hist.columns else "close"
+                    v_col = "Volume" if "Volume" in hist.columns else "volume"
+                    cur_close = float(hist[c_col].iloc[-1])
+                    cur_vol = float(hist[v_col].iloc[-1])
+                    avg_vol = (
+                        float(np.mean(hist[v_col].values[-5:]))
+                        if len(hist) >= 5
+                        else cur_vol
+                    )
+                    result = bm.update(rec.ticker, cur_close, cur_vol, avg_vol)
+                    if result and result.status.value in ("failed", "rejected"):
+                        logger.info(
+                            "[BreakoutMonitor] %s → %s: %s",
+                            rec.ticker,
+                            result.status.value,
+                            result.failure_reasons,
+                        )
+                except Exception as e:
+                    logger.debug("[BreakoutMonitor] %s update error: %s", rec.ticker, e)
+            bm.save()
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.warning("[BreakoutMonitor] loop error: %s", e)
+            await asyncio.sleep(300)
+
+
+@app.on_event("startup")
+async def _start_breakout_monitor():
+    global _breakout_monitor_task
+    _breakout_monitor_task = asyncio.create_task(_breakout_monitor_loop())
+
+
+@app.on_event("shutdown")
+async def _stop_breakout_monitor():
+    if _breakout_monitor_task:
+        _breakout_monitor_task.cancel()
+
+
 # ═══════════════════════════════════════════════════════════════════
 # Stale data detection (P3)
 # ═══════════════════════════════════════════════════════════════════
@@ -707,7 +774,7 @@ async def _get_spy_close() -> np.ndarray | None:
     if _SPY_CACHE["close"] is not None and now - _SPY_CACHE["ts"] < 3600:
         return _SPY_CACHE["close"]
     try:
-        mds = MarketDataService()
+        mds = app.state.market_data
         hist = await mds.get_history("SPY", period="1y", interval="1d")
         if hist is not None and not hist.empty:
             c_col = "Close" if "Close" in hist.columns else "close"

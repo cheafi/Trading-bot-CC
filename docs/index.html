@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
   <meta name="theme-color" content="#0d1117"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
-  <title>CC — Market Intelligence Platform</title>
-  <link rel="preload" href="https://cdn.tailwindcss.com" as="script"/>
+  <meta name="description" content="CC — Regime-Aware Market Intelligence Platform. 4-layer confidence, Phase 9 engines, RS ranking, TradingView charts."/>
+  <title>CC — Market Intelligence Platform v9.0</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script defer src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
   <style>
-    :root{--bg:#0d1117;--s1:#161b22;--s2:#1c2333;--bd:#21262d;--bd2:#30363d;--t1:#e6edf3;--t2:#8b949e;--t3:#484f58;--green:#00d4aa;--red:#ff5c5c;--amber:#fbbf24;--blue:#58a6ff;--purple:#bc8cff}
+    :root{--bg:#0d1117;--s1:#161b22;--s2:#1c2333;--bd:#21262d;--t1:#e6edf3;--t2:#8b949e;--t3:#484f58;--green:#00d4aa;--red:#ff5c5c;--amber:#fbbf24;--blue:#58a6ff;--purple:#bc8cff;color-scheme:dark}
     *{font-family:'Inter',sans-serif;box-sizing:border-box;margin:0}
     body{background:var(--bg);color:var(--t1);overflow-x:hidden}
     .mono{font-family:'JetBrains Mono',monospace}
@@ -24,248 +24,175 @@
     .pp{background:rgba(188,140,255,.12);color:var(--purple)}.pw{background:rgba(230,237,243,.08);color:var(--t2)}
     .trust-strip{display:flex;align-items:center;gap:8px;padding:4px 12px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);border-bottom:1px solid var(--bd);background:var(--s2);flex-wrap:wrap}
     .fade{animation:fi .25s ease}@keyframes fi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-    input,select{background:var(--s2);border:1px solid var(--bd);border-radius:6px;padding:8px 10px;color:var(--t1);font-size:12px;width:100%}
-    .btn-p{background:var(--green);color:#000;font-weight:700;border:none;border-radius:6px;padding:8px 16px;font-size:12px;cursor:pointer}
-    .btn-s{background:var(--s2);color:var(--t2);font-weight:600;border:1px solid var(--bd);border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer}
+    .score-bar{height:6px;border-radius:3px;background:var(--s2);overflow:hidden;width:100%}.score-fill{height:100%;border-radius:3px;transition:width .3s}
     .kpi-lbl{font-size:8px;font-weight:600;text-transform:uppercase;color:var(--t3);letter-spacing:.5px;margin-top:2px}
     .kpi-val{font-size:18px;font-weight:800;line-height:1.2}
-    .factor-chip{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;font-family:'JetBrains Mono',monospace;margin:2px}
-    .fc-pos{background:rgba(0,212,170,.12);color:var(--green)}.fc-neg{background:rgba(255,92,92,.12);color:var(--red)}.fc-neu{background:rgba(230,237,243,.08);color:var(--t2)}
-    .tbl{width:100%;border-collapse:collapse;font-size:11px}
-    .tbl th{text-align:left;padding:6px 8px;color:var(--t3);font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--bd);background:var(--s2)}
-    .tbl td{padding:5px 8px;border-bottom:1px solid var(--bd)}
-    .health-dot{width:8px;height:8px;border-radius:50%;display:inline-block}.health-ok{background:var(--green)}.health-err{background:var(--red)}
-    .score-bar{height:6px;border-radius:3px;background:var(--s2);overflow:hidden;width:100%}.score-fill{height:100%;border-radius:3px;transition:width .3s}
-    .vcp-stage{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;font-family:'JetBrains Mono',monospace}
+    .hero-gradient{background:linear-gradient(135deg,rgba(0,212,170,.08),rgba(88,166,255,.08),rgba(188,140,255,.08))}
   </style>
 </head>
-<body x-data="cc()" x-init="init()" style="padding-bottom:56px">
+<body x-data="demo()" x-init="init()" style="padding-bottom:56px">
 
   <!-- HEADER -->
   <header style="background:var(--s1);border-bottom:1px solid var(--bd);padding:10px 14px">
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-2">
         <div style="width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,var(--green),var(--blue));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:#000">CC</div>
-        <div><div class="text-sm font-bold text-white">CC Platform</div><div class="text-[9px] mono" style="color:var(--t3)">Regime-Aware Market Intelligence</div></div>
+        <div><div class="text-sm font-bold text-white">CC Platform <span class="mono text-[10px]" style="color:var(--t3)">v9.0</span></div><div class="text-[9px] mono" style="color:var(--t3)">Regime-Aware Market Intelligence</div></div>
       </div>
       <div class="flex items-center gap-3">
         <div class="text-[10px] mono" style="color:var(--t2)" x-text="clock"></div>
-        <span class="pill pa">SYNTHETIC DEMO</span>
+        <span class="pill pa">SHOWCASE DEMO</span>
       </div>
     </div>
   </header>
+  <div class="trust-strip"><span style="color:var(--amber)">● SHOWCASE</span><span>Static demo of the live CC platform</span><span>Real version: self-hosted with live yfinance data</span></div>
 
-  <!-- SURFACE 1: TODAY -->
-  <main x-show="tab==='today'" class="fade">
-    <div class="trust-strip"><span style="color:var(--amber)">● SYNTHETIC</span><span>Source: demo_snapshot</span><span>As-of: Apr 9 2026</span></div>
+  <!-- OVERVIEW -->
+  <main x-show="tab==='overview'" class="fade">
     <div class="p-3 space-y-3">
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
-        <div class="card card-p" style="text-align:center"><div class="kpi-val text-green-400">72</div><div class="kpi-lbl">AI Score</div></div>
-        <div class="card card-p" style="text-align:center"><div class="kpi-val text-sm text-green-400">RISK ON</div><div class="kpi-lbl">Regime</div></div>
-        <div class="card card-p" style="text-align:center"><div class="kpi-val text-sm text-green-400">UPTREND</div><div class="kpi-lbl">Trend</div></div>
-        <div class="card card-p" style="text-align:center"><div class="kpi-val text-sm text-amber-300">NORMAL</div><div class="kpi-lbl">Volatility</div></div>
-      </div>
-      <div class="card card-p">
-        <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📈 Indices</div>
-        <template x-for="i in indices"><div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)"><span class="text-[11px]" x-text="i.name"></span><div class="flex items-center gap-2"><span class="mono text-[11px] text-white" x-text="'$'+i.price.toFixed(2)"></span><span class="pill" :class="i.chg>=0?'pg':'pr'" x-text="(i.chg>=0?'+':'')+i.chg.toFixed(2)+'%'"></span></div></div></template>
-      </div>
-      <div class="card card-p">
-        <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🌍 Macro</div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;font-size:11px">
-          <template x-for="m in macro"><div><div class="text-[10px]" style="color:var(--t3)" x-text="m.name"></div><div class="font-bold mono text-white" x-text="m.val"></div></div></template>
+      <div class="card card-p hero-gradient">
+        <div class="text-center mb-3">
+          <div class="text-lg font-bold text-white">Decision Intelligence Platform</div>
+          <div class="text-[11px]" style="color:var(--t2)">Not a signal generator. A decision engine that tells you when NOT to trade.</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center">
+          <div class="card card-p"><div class="kpi-val text-green-400">7</div><div class="kpi-lbl">Phase 9 Engines</div></div>
+          <div class="card card-p"><div class="kpi-val text-blue-400">4</div><div class="kpi-lbl">Confidence Layers</div></div>
+          <div class="card card-p"><div class="kpi-val text-purple-400">4</div><div class="kpi-lbl">Strategies</div></div>
+          <div class="card card-p"><div class="kpi-val text-amber-300">8</div><div class="kpi-lbl">Decision Tiers</div></div>
         </div>
       </div>
       <div class="card card-p">
-        <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📊 Sectors</div>
-        <template x-for="s in sectors"><div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)"><span class="text-[11px]" x-text="s.name"></span><span class="mono text-[11px] font-bold" :class="s.chg>=0?'text-green-400':'text-red-400'" x-text="(s.chg>=0?'+':'')+s.chg.toFixed(2)+'%'"></span></div></template>
-      </div>
-    </div>
-  </main>
-
-  <!-- SURFACE 2: SIGNALS -->
-  <main x-show="tab==='signals'" class="fade">
-    <div class="trust-strip"><span style="color:var(--amber)">● SYNTHETIC</span><span>Source: demo_engine</span><span>12 active signals</span></div>
-    <div class="p-3 space-y-3">
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
-        <div class="card card-p" style="text-align:center"><div class="kpi-val text-green-400">24</div><div class="kpi-lbl">Generated</div></div>
-        <div class="card card-p" style="text-align:center"><div class="kpi-val text-amber-300">8</div><div class="kpi-lbl">Rejected</div></div>
-        <div class="card card-p" style="text-align:center"><div class="kpi-val text-blue-400">12</div><div class="kpi-lbl">Active</div></div>
-        <div class="card card-p" style="text-align:center"><div class="kpi-val text-green-400">68%</div><div class="kpi-lbl">Win Rate</div></div>
-      </div>
-      <div class="card" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Ticker</th><th>Dir</th><th>Strategy</th><th>Score</th><th>Entry</th><th>Target</th><th>Stop</th><th>R:R</th></tr></thead><tbody>
-        <template x-for="s in signals"><tr><td class="mono font-bold text-white cursor-pointer" @click="dosTicker=s.ticker;tab='dossier'" x-text="s.ticker"></td><td><span class="pill" :class="s.dir==='LONG'?'pg':'pr'" x-text="s.dir"></span></td><td class="text-[10px]" style="color:var(--t2)" x-text="s.strategy"></td><td class="mono font-bold text-white" x-text="s.score"></td><td class="mono" x-text="'$'+s.entry"></td><td class="mono text-green-400" x-text="'$'+s.target"></td><td class="mono text-red-400" x-text="'$'+s.stop"></td><td class="mono" x-text="s.rr"></td></tr></template>
-      </tbody></table></div>
-    </div>
-  </main>
-
-  <!-- SURFACE 3: DOSSIER -->
-  <main x-show="tab==='dossier'" class="fade">
-    <div class="trust-strip"><span style="color:var(--amber)">● SYNTHETIC</span><span>Source: demo_snapshot</span><span>As-of: Apr 9 2026</span></div>
-    <div class="p-3"><div class="flex gap-2 mb-3"><select x-model="dosTicker" class="flex-1"><option value="NVDA">NVDA — NVIDIA</option><option value="AAPL">AAPL — Apple</option><option value="AMD">AMD — AMD</option></select></div></div>
-    <div class="space-y-2 px-3 fade" style="padding-bottom:16px" x-data="{get d(){return $store.dossier[dosTicker]||$store.dossier.NVDA}}">
-      <div class="card card-p"><div class="flex items-center justify-between mb-1"><div class="text-lg font-bold text-white mono" x-text="d.ticker"></div><span class="pill" :class="d.chg>=0?'pg':'pr'" x-text="(d.chg>=0?'+':'')+d.chg.toFixed(2)+'%'"></span></div><div class="text-2xl font-black mono" :class="d.chg>=0?'text-green-400':'text-red-400'" x-text="'$'+d.price.toFixed(2)"></div></div>
-      <div class="card card-p"><div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📈 Technical State</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;font-size:12px"><div><div class="text-[10px]" style="color:var(--t3)">RSI(14)</div><div class="font-bold mono text-white" x-text="d.rsi"></div></div><div><div class="text-[10px]" style="color:var(--t3)">SMA 20</div><div class="font-bold mono text-white" x-text="'$'+d.sma20"></div></div><div><div class="text-[10px]" style="color:var(--t3)">SMA 50</div><div class="font-bold mono text-white" x-text="'$'+d.sma50"></div></div><div><div class="text-[10px]" style="color:var(--t3)">ATR(14)</div><div class="font-bold mono text-white" x-text="'$'+d.atr"></div></div><div><div class="text-[10px]" style="color:var(--t3)">MACD</div><div class="font-bold mono text-green-400">BULLISH</div></div><div><div class="text-[10px]" style="color:var(--t3)">Vol Ratio</div><div class="font-bold mono text-white" x-text="d.volRatio+'x'"></div></div></div></div>
-      <div class="card card-p"><div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🧬 Factor Chips</div><div class="flex flex-wrap"><template x-for="f in d.factors"><span class="factor-chip" :class="f.s==='positive'?'fc-pos':f.s==='negative'?'fc-neg':'fc-neu'" x-text="f.n+' '+f.v"></span></template></div></div>
-      <div class="card card-p" style="border-left:3px solid var(--green)"><div class="text-[10px] font-bold uppercase mb-1" style="color:var(--green)">🟢 WHY BUY</div><template x-for="w in d.whyBuy"><div class="text-[11px] py-0.5" style="color:var(--t2)" x-text="'• '+w"></div></template></div>
-      <div class="card card-p" style="border-left:3px solid var(--red)"><div class="text-[10px] font-bold uppercase mb-1" style="color:var(--red)">🔴 WHY STOP</div><template x-for="w in d.whyStop"><div class="text-[11px] py-0.5" style="color:var(--t2)" x-text="'• '+w"></div></template></div>
-      <div class="card card-p"><div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📋 Trade Plan (ATR-based)</div><div class="text-[11px] space-y-1" style="color:var(--t2)"><div><strong class="text-white">Entry:</strong> <span class="mono" x-text="'$'+d.plan.entry[0]+' — $'+d.plan.entry[1]"></span></div><div><strong class="text-white">Target 1R:</strong> <span class="mono text-green-400" x-text="'$'+d.plan.t1"></span></div><div><strong class="text-white">Stop:</strong> <span class="mono text-red-400" x-text="'$'+d.plan.stop"></span></div></div></div>
-    </div>
-  </main>
-
-  <!-- SURFACE 4: BRIEF -->
-  <main x-show="tab==='brief'" class="fade">
-    <div class="trust-strip"><span style="color:var(--amber)">● SYNTHETIC</span><span>Source: demo_engine</span></div>
-    <div class="p-3 space-y-3">
-      <div class="card card-p"><div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🌐 Regime</div><p class="text-[12px]" style="color:var(--t2);line-height:1.6">Market is in risk on regime with uptrend trend and normal volatility. Momentum strategies favored.</p><div class="flex gap-2 mt-2"><span class="pill pg">UPTREND</span><span class="pill pw">NORMAL Vol</span><span class="pill pg">✓ Trade OK</span></div></div>
-      <div class="card card-p" style="border-left:3px solid var(--blue)"><div class="text-[10px] font-bold uppercase mb-1" style="color:var(--blue)">⚡ What Changed</div><div class="text-[11px] py-0.5" style="color:var(--t2)">→ Uptrend confirmed — momentum strategies favored</div><div class="text-[11px] py-0.5" style="color:var(--t2)">→ Sector rotation: Technology leading, Utilities lagging</div></div>
-      <div class="card card-p" style="border-left:3px solid var(--green)"><div class="text-[10px] font-bold uppercase mb-1" style="color:var(--green)">✅ ACTIONABLE</div><template x-for="s in signals.slice(0,3)"><div class="flex items-center gap-2 py-1 text-[11px]" style="border-bottom:1px solid var(--bd)"><span class="mono font-bold text-white" x-text="s.ticker"></span><span class="pill" :class="s.dir==='LONG'?'pg':'pr'" style="font-size:8px" x-text="s.dir"></span><span class="mono ml-auto" style="color:var(--t2)" x-text="'Score '+s.score"></span></div></template></div>
-    </div>
-  </main>
-
-  <!-- SURFACE 5: OPTIONS (Futu-inspired) -->
-  <main x-show="tab==='options'" class="fade">
-    <div class="trust-strip"><span style="color:var(--amber)">● SYNTHETIC</span><span>Source: heuristic_model</span><span>Futu-inspired analysis</span></div>
-    <div class="p-3 space-y-3">
-      <div class="card card-p"><div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📊 IV Context · <span class="text-white">AAPL $259.18</span></div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;font-size:11px">
-          <div><div class="text-[10px]" style="color:var(--t3)">IV Rank</div><div class="font-bold mono text-amber-300">42%</div></div>
-          <div><div class="text-[10px]" style="color:var(--t3)">IV Pctl</div><div class="font-bold mono text-white">48%</div></div>
-          <div><div class="text-[10px]" style="color:var(--t3)">Term</div><div class="font-bold mono text-green-400">Contango</div></div>
-          <div><div class="text-[10px]" style="color:var(--t3)">Skew</div><div class="font-bold mono text-white">Put Skew</div></div>
+        <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🧠 Decision Pipeline</div>
+        <div class="text-[11px] mono" style="color:var(--t2);line-height:2">
+          <div>📡 yfinance OHLCV → <span class="pill pg" style="font-size:8px">REAL DATA</span></div>
+          <div style="padding-left:12px">↓ Regime Detection (VIX + Breadth + Credit)</div>
+          <div style="padding-left:12px">↓ 4 Strategy Scan (Momentum · Breakout · Swing · MeanRev)</div>
+          <div style="padding-left:12px">↓ Phase 9 Gates (Structure · EntryQuality · Earnings · Fundamentals · RS)</div>
+          <div style="padding-left:12px">↓ 4-Layer Confidence (Thesis · Timing · Execution · Data)</div>
+          <div style="padding-left:12px">↓ Expert Council (7 members)</div>
+          <div style="padding-left:12px">↓ <span class="pill pg" style="font-size:8px">TRADE</span> <span class="pill pa" style="font-size:8px">WATCH</span> <span class="pill pw" style="font-size:8px">WAIT</span> <span class="pill pr" style="font-size:8px">NO TRADE</span></div>
         </div>
       </div>
-      <div class="card" style="overflow-x:auto"><div class="card-p" style="padding-bottom:6px"><div class="text-[10px] font-bold uppercase" style="color:var(--t3)">🔮 Contract Candidates · Annualized Yield</div></div><table class="tbl"><thead><tr><th>Strike</th><th>DTE</th><th>Type</th><th>Delta</th><th>IV</th><th>OI</th><th>Bid/Ask</th><th>Ann.Yield</th><th>B/E</th></tr></thead><tbody>
-        <template x-for="c in optContracts"><tr><td class="mono font-bold text-white" x-text="'$'+c.strike"></td><td class="mono" x-text="c.dte+'d'"></td><td><span class="pill" :class="c.type==='CALL'?'pg':'pr'" x-text="c.type"></span></td><td class="mono" x-text="c.delta"></td><td class="mono" :class="c.iv>50?'text-red-400':c.iv>30?'text-amber-300':'text-green-400'" x-text="c.iv+'%'"></td><td class="mono" x-text="c.oi.toLocaleString()"></td><td class="mono" :class="c.spread==='TIGHT'?'text-green-400':'text-amber-300'" x-text="c.bid+'/'+c.ask"></td><td class="mono font-bold" :class="c.annYield>20?'text-green-400':c.annYield>10?'text-amber-300':'text-white'" x-text="c.annYield+'%'"></td><td class="mono" x-text="'$'+c.be"></td></tr></template>
-      </tbody></table></div>
-      <div class="card card-p"><div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">💰 Put-Selling Screen (Futu-style)</div>
-        <div class="text-[11px]" style="color:var(--t2);line-height:1.8">
-          <div><strong class="text-white">Strategy:</strong> Cash-secured puts on quality names</div>
-          <div><strong class="text-white">Criteria:</strong> Delta ≤ -0.30, DTE 30-45d, IV Rank > 30%</div>
-          <div><strong class="text-white">Top Pick:</strong> <span class="mono text-green-400">AAPL $246P 30d → 18.2% ann. yield</span></div>
-          <div><strong class="text-white">Capital Req:</strong> <span class="mono">$24,600 per contract</span></div>
-        </div>
-      </div>
-      <div class="card card-p" style="border-color:rgba(255,92,92,.3)"><div class="text-[9px]" style="color:var(--red);line-height:1.5">⚠ Options data is <strong>synthetic</strong>. Verify with broker. Annualized yield assumes premium can be earned repeatedly.</div></div>
-    </div>
-  </main>
-
-  <!-- SURFACE 6: SWING ANALYSIS (NEW — learned from Neal's Swing_Project) -->
-  <main x-show="tab==='swing'" class="fade">
-    <div class="trust-strip"><span style="color:var(--purple)">● SWING</span><span>RS + VCP + Pullback Engine</span><span>Sprint 46 models</span></div>
-    <div class="p-3 space-y-3">
-      <!-- KPI row -->
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
-        <div class="card card-p" style="text-align:center"><div class="kpi-val text-purple-400" x-text="swingCandidates.length"></div><div class="kpi-lbl">Candidates</div></div>
-        <div class="card card-p" style="text-align:center"><div class="kpi-val text-green-400" x-text="swingCandidates.filter(c=>c.vcp).length"></div><div class="kpi-lbl">VCP Detected</div></div>
-        <div class="card card-p" style="text-align:center"><div class="kpi-val text-blue-400" x-text="swingCandidates.filter(c=>c.pullbackReady).length"></div><div class="kpi-lbl">Pullback Ready</div></div>
-        <div class="card card-p" style="text-align:center"><div class="kpi-val text-amber-300" x-text="distDays"></div><div class="kpi-lbl">Dist. Days</div></div>
-      </div>
-      <!-- Candidate table (inspired by Neal's screener) -->
-      <div class="card" style="overflow-x:auto">
-        <div class="card-p" style="padding-bottom:6px"><div class="text-[10px] font-bold uppercase" style="color:var(--t3)">🎯 Ranked Swing Candidates · Score = RS + Technical + Volume</div></div>
-        <table class="tbl"><thead><tr><th>#</th><th>Ticker</th><th>RS Score</th><th>VCP</th><th>Vol Q</th><th>Pullback</th><th>Leadership</th><th>Confidence</th></tr></thead><tbody>
-          <template x-for="(c,i) in swingCandidates"><tr @click="swingSelected=c" style="cursor:pointer" :style="swingSelected?.ticker===c.ticker?'background:rgba(188,140,255,.1)':''">
-            <td class="mono" x-text="i+1"></td>
-            <td class="mono font-bold text-white" x-text="c.ticker"></td>
-            <td><div class="flex items-center gap-2"><span class="mono" x-text="c.rs.toFixed(1)"></span><div class="score-bar" style="width:60px"><div class="score-fill" :style="'width:'+c.rs+'%;background:'+(c.rs>70?'var(--green)':c.rs>40?'var(--amber)':'var(--red)')"></div></div></div></td>
-            <td><span class="pill" :class="c.vcp?'pg':'pw'" x-text="c.vcp?'YES':'—'"></span></td>
-            <td class="mono" :class="c.volQ>1.5?'text-green-400':'text-white'" x-text="c.volQ.toFixed(1)+'x'"></td>
-            <td><span class="pill" :class="c.pullbackReady?'pb':'pw'" x-text="c.pullbackReady?'READY':'—'"></span></td>
-            <td class="mono text-[10px]" x-text="c.leadership"></td>
-            <td><span class="pill" :class="{'pg':c.confidence==='HIGH','pa':c.confidence==='MEDIUM','pr':c.confidence==='LOW'}[c.confidence]||'pw'" x-text="c.confidence"></span></td>
-          </tr></template>
-        </tbody></table>
-      </div>
-      <!-- Selected detail panel (inspired by Neal's details panel) -->
-      <template x-if="swingSelected">
-        <div class="card card-p fade">
-          <div class="flex items-center justify-between mb-3">
-            <div class="text-lg font-bold text-white mono" x-text="swingSelected.ticker"></div>
-            <span class="pill pp" x-text="'RS: '+swingSelected.rs.toFixed(1)"></span>
+      <!-- Sample Card -->
+      <div class="card" style="overflow:hidden">
+        <div class="card-p" style="border-bottom:1px solid var(--bd)"><div class="text-[10px] font-bold uppercase" style="color:var(--t3)">📋 Sample Signal Card (Live Format)</div></div>
+        <div class="card-p">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2"><span class="text-lg font-bold mono text-white">NVDA</span><span class="pill pg">TRADE</span><span class="pill pb">Momentum</span></div>
+            <div class="text-right"><div class="text-xl font-black mono text-green-400">74.2</div><div class="text-[8px] mono" style="color:var(--t3)">COMPOSITE</div></div>
           </div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;font-size:11px">
-            <div><div class="text-[10px]" style="color:var(--t3)">RS vs SPY</div><div class="font-bold mono" :class="swingSelected.rs>60?'text-green-400':'text-white'" x-text="swingSelected.rs.toFixed(1)+'%'"></div></div>
-            <div><div class="text-[10px]" style="color:var(--t3)">VCP Pattern</div><div class="font-bold mono" :class="swingSelected.vcp?'text-green-400':'text-red-400'" x-text="swingSelected.vcp?'Detected':'None'"></div></div>
-            <div><div class="text-[10px]" style="color:var(--t3)">Volume Quality</div><div class="font-bold mono text-white" x-text="swingSelected.volQ.toFixed(2)+'x'"></div></div>
-            <div><div class="text-[10px]" style="color:var(--t3)">Contractions</div><div class="font-bold mono text-white" x-text="swingSelected.contractions"></div></div>
-            <div><div class="text-[10px]" style="color:var(--t3)">Pullback %</div><div class="font-bold mono" :class="swingSelected.pullbackPct<15?'text-green-400':'text-amber-300'" x-text="swingSelected.pullbackPct.toFixed(1)+'%'"></div></div>
-            <div><div class="text-[10px]" style="color:var(--t3)">Days to Earn</div><div class="font-bold mono text-white" x-text="swingSelected.daysToEarnings||'N/A'"></div></div>
+          <div class="space-y-1 mb-3">
+            <template x-for="[l,v,c] in [['Thesis',78,'var(--green)'],['Timing',65,'var(--amber)'],['Execution',82,'var(--green)'],['Data',90,'var(--blue)']]">
+              <div class="flex items-center gap-2"><div class="text-[8px] mono w-14" style="color:var(--t3)" x-text="l"></div><div class="score-bar flex-1"><div class="score-fill" :style="'width:'+v+'%;background:'+c"></div></div><div class="text-[9px] mono font-bold" style="width:24px" x-text="v"></div></div>
+            </template>
           </div>
-          <div class="mt-3 text-[10px]" style="color:var(--t3)"><strong class="text-white">Actionability:</strong> <span x-text="swingSelected.actionNote"></span></div>
+          <div class="flex gap-1 flex-wrap mb-2">
+            <span class="pill pg" style="font-size:8px">⚡RS 118 ↑</span><span class="pill pg" style="font-size:8px">📊 UPTREND</span><span class="pill pg" style="font-size:8px">🎯 PASS</span><span class="pill pg" style="font-size:8px">💎Q78</span><span class="pill pg" style="font-size:8px">🏰 Moat</span>
+          </div>
+          <div class="flex gap-4 text-[9px] mono" style="color:var(--t2)"><span>Entry <strong class="text-white">$135.20</strong></span><span>Target <strong class="text-green-400">$148.70</strong></span><span>Stop <strong class="text-red-400">$128.50</strong></span><span>R:R <strong class="text-white">2.0:1</strong></span></div>
         </div>
-      </template>
-      <div class="card card-p" style="border-color:rgba(188,140,255,.3)"><div class="text-[9px]" style="color:var(--t3);line-height:1.5">Swing analysis uses RS scoring, VCP pattern detection, volume quality, and pullback engine from Sprint 46. Inspired by Mark Minervini's SEPA methodology and Neal's Swing_Project.</div></div>
+      </div>
+      <div class="card card-p">
+        <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🎯 What Makes CC Different</div>
+        <div class="space-y-2 text-[11px]" style="color:var(--t2)">
+          <div class="flex gap-2"><span class="text-green-400">✓</span> <strong class="text-white">Phase 9 gates modify scores</strong> — entry quality REJECT costs -25 execution</div>
+          <div class="flex gap-2"><span class="text-green-400">✓</span> <strong class="text-white">RS ranking vs SPY</strong> — Mansfield RS on every signal</div>
+          <div class="flex gap-2"><span class="text-green-400">✓</span> <strong class="text-white">Regime gating</strong> — CRISIS suppresses non-defensive trades</div>
+          <div class="flex gap-2"><span class="text-green-400">✓</span> <strong class="text-white">TradingView chart</strong> — candlestick + SMA + S/R in dossier</div>
+          <div class="flex gap-2"><span class="text-green-400">✓</span> <strong class="text-white">Honest confidence</strong> — mismatch warnings when layers disagree</div>
+          <div class="flex gap-2"><span class="text-green-400">✓</span> <strong class="text-white">Rejection page</strong> — WHY trades were rejected</div>
+          <div class="flex gap-2"><span class="text-green-400">✓</span> <strong class="text-white">50+ Discord commands</strong> — memos, signals, regime alerts</div>
+        </div>
+      </div>
+      <div class="card card-p">
+        <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📱 Platform Surfaces</div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px">
+          <template x-for="[i,n,d] in surfaces"><div class="card card-p"><div class="text-sm" x-text="i"></div><div class="text-[11px] font-bold text-white" x-text="n"></div><div class="text-[9px]" style="color:var(--t3)" x-text="d"></div></div></template>
+        </div>
+      </div>
     </div>
   </main>
 
-  <!-- SURFACE 7: TRACK RECORD -->
-  <main x-show="tab==='track'" class="fade">
-    <div class="trust-strip"><span style="color:var(--amber)">● BACKTEST</span><span>Source: vectorbt</span><span>Fees: 0 (gross)</span></div>
+  <!-- ARCHITECTURE -->
+  <main x-show="tab==='arch'" class="fade">
     <div class="p-3 space-y-3">
-      <div class="card card-p"><div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🔬 Backtest Summary · AAPL · 1 Year</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;font-size:11px"><div><div style="color:var(--t3)">Buy&Hold</div><div class="font-bold mono text-green-400">+28.4%</div></div><div><div style="color:var(--t3)">Best Strategy</div><div class="font-bold mono text-green-400">+34.2%</div></div><div><div style="color:var(--t3)">Bars</div><div class="font-bold mono text-white">252</div></div></div></div>
-      <template x-for="(s,i) in btResults"><div class="card card-p fade" :style="i===0?'border-color:var(--green)':''"><div class="flex items-center justify-between mb-2"><div class="flex items-center gap-2"><span x-text="i===0?'🥇':i===1?'🥈':'🥉'"></span><span class="text-sm font-bold text-white" x-text="s.name"></span></div><span class="text-[10px] mono" style="color:var(--t3)" x-text="'Score '+s.score"></span></div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;font-size:11px"><div><div style="color:var(--t3)">Trades</div><div class="font-bold mono text-white" x-text="s.trades"></div></div><div><div style="color:var(--t3)">Win</div><div class="font-bold mono" :class="s.win>50?'text-green-400':'text-red-400'" x-text="s.win+'%'"></div></div><div><div style="color:var(--t3)">Return</div><div class="font-bold mono text-green-400" x-text="'+'+s.ret+'%'"></div></div><div><div style="color:var(--t3)">Sharpe</div><div class="font-bold mono text-white" x-text="s.sharpe"></div></div><div><div style="color:var(--t3)">Max DD</div><div class="font-bold mono text-red-400" x-text="s.dd+'%'"></div></div><div><div style="color:var(--t3)">P.Factor</div><div class="font-bold mono text-white" x-text="s.pf"></div></div></div></div></template>
+      <div class="card card-p">
+        <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🏗️ Architecture v9.0</div>
+        <div class="text-[11px] mono" style="color:var(--t2);line-height:1.8">
+          <div>┌─── <strong class="text-white">MACRO</strong> RegimeRouter (VIX·Breadth·Credit·Vol)</div>
+          <div>├─── <strong class="text-white">STOCK</strong> 4 Strategies × 50+ tickers + RS ranking</div>
+          <div>├─── <strong class="text-white">GATES</strong> 7 Phase 9 engines (penalties up to -25)</div>
+          <div>├─── <strong class="text-white">CONFIDENCE</strong> 4-Layer composite (T·Ti·E·D)</div>
+          <div>├─── <strong class="text-white">COUNCIL</strong> 7-member expert consensus</div>
+          <div>├─── <strong class="text-white">DECISION</strong> TRADE·WATCH·WAIT·NO_TRADE·REJECT</div>
+          <div>└─── <strong class="text-white">OUTPUT</strong> Dashboard · Discord · API · Journal</div>
+        </div>
+      </div>
+      <div class="card card-p">
+        <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📊 Phase 9 Penalty Matrix</div>
+        <table style="width:100%;border-collapse:collapse;font-size:10px">
+          <thead><tr style="border-bottom:1px solid var(--bd)"><th style="text-align:left;padding:4px 6px;color:var(--t3);font-size:8px">ENGINE</th><th style="text-align:left;padding:4px 6px;color:var(--t3);font-size:8px">TRIGGER</th><th style="text-align:left;padding:4px 6px;color:var(--t3);font-size:8px">LAYER</th><th style="text-align:right;padding:4px 6px;color:var(--t3);font-size:8px">HIT</th></tr></thead>
+          <tbody style="color:var(--t2)">
+            <template x-for="[e,c,l,p] in penalties"><tr style="border-bottom:1px solid var(--bd)"><td class="mono" style="padding:3px 6px" x-text="e"></td><td style="padding:3px 6px" x-text="c"></td><td style="padding:3px 6px" x-text="l"></td><td class="mono text-red-400" style="padding:3px 6px;text-align:right" x-text="p"></td></tr></template>
+          </tbody>
+        </table>
+      </div>
+      <div class="card card-p">
+        <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📦 Codebase</div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:4px">
+          <template x-for="[l,v] in stats"><div class="flex justify-between py-1 text-[11px]" style="border-bottom:1px solid var(--bd)"><span style="color:var(--t2)" x-text="l"></span><span class="mono font-bold text-white" x-text="v"></span></div></template>
+        </div>
+      </div>
     </div>
   </main>
 
-  <!-- SURFACE 8: OPS -->
-  <main x-show="tab==='ops'" class="fade">
-    <div class="trust-strip"><span style="color:var(--blue)">● SYSTEM</span><span>v2.1.0</span></div>
+  <!-- ENGINES -->
+  <main x-show="tab==='engines'" class="fade">
+    <div class="p-3 space-y-2">
+      <template x-for="e in engines"><div class="card card-p fade"><div class="flex items-center justify-between mb-1"><div class="text-[11px] font-bold text-white" x-text="e.i+' '+e.n"></div><span class="pill pg" style="font-size:8px">LIVE</span></div><div class="text-[10px]" style="color:var(--t2)" x-text="e.d"></div><div class="text-[9px] mono mt-1" style="color:var(--t3)" x-text="e.l+' lines · '+e.f"></div></div></template>
+    </div>
+  </main>
+
+  <!-- RESOURCES -->
+  <main x-show="tab==='links'" class="fade">
     <div class="p-3 space-y-3">
-      <div class="card card-p"><div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">⚙️ Engine State</div><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px"><div class="card card-p" style="text-align:center"><div class="text-[20px]">🟢</div><div class="text-[10px] font-bold text-green-400">RUNNING</div><div class="kpi-lbl">Engine</div></div><div class="card card-p" style="text-align:center"><div class="text-[20px]">✅</div><div class="text-[10px] font-bold text-green-400">CLEAR</div><div class="kpi-lbl">Circuit Breaker</div></div><div class="card card-p" style="text-align:center"><div class="kpi-val mono text-white">142</div><div class="kpi-lbl">Cycles</div></div><div class="card card-p" style="text-align:center"><div class="kpi-val mono text-white">24</div><div class="kpi-lbl">Signals Today</div></div></div></div>
-      <div class="card card-p"><div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🔧 Component Health</div><template x-for="[name,ok] in [['market_data',true],['regime_router',true],['signal_engine',true],['broker',true],['meta_ensemble',true],['trust_metadata',true],['swing_engine',true],['circuit_breaker',true]]"><div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)"><span class="text-[11px]" x-text="name.replace(/_/g,' ')"></span><div class="flex items-center gap-2"><span class="health-dot health-ok"></span><span class="text-[10px] mono text-green-400">OK</span></div></div></template></div>
+      <div class="card card-p"><div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🔗 Resources</div><div class="space-y-2">
+        <a href="https://github.com/cheafi/Trading-bot-CC" style="color:var(--blue);font-size:12px;text-decoration:none;display:block;padding:8px;border-radius:6px;border:1px solid var(--bd)">📦 GitHub Repository</a>
+        <a href="https://github.com/cheafi/Trading-bot-CC/blob/main/docs/ARCHITECTURE.md" style="color:var(--blue);font-size:12px;text-decoration:none;display:block;padding:8px;border-radius:6px;border:1px solid var(--bd)">📐 Architecture Docs</a>
+        <a href="https://github.com/cheafi/Trading-bot-CC/blob/main/CHANGELOG.md" style="color:var(--blue);font-size:12px;text-decoration:none;display:block;padding:8px;border-radius:6px;border:1px solid var(--bd)">📋 Changelog</a>
+        <a href="https://github.com/cheafi/trading-team" style="color:var(--purple);font-size:12px;text-decoration:none;display:block;padding:8px;border-radius:6px;border:1px solid var(--bd)">🏢 Reference Architecture</a>
+      </div></div>
+      <div class="card card-p" style="border-color:rgba(255,92,92,.3)"><div class="text-[10px] font-bold uppercase mb-1" style="color:var(--red)">⚠ Disclaimer</div><div class="text-[9px]" style="color:var(--t3);line-height:1.5">CC is a research tool. NOT financial advice. Past performance ≠ future results.</div></div>
     </div>
   </main>
 
-  <!-- SURFACE 9: CATALOG -->
-  <main x-show="tab==='catalog'" class="fade">
-    <div class="trust-strip"><span style="color:var(--t2)">● REFERENCE</span><span>v2.1.0</span></div>
-    <div class="p-3 space-y-3">
-      <div class="card card-p"><div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📚 Data Coverage</div><table class="tbl"><thead><tr><th>Category</th><th>Provider</th><th>Freshness</th></tr></thead><tbody><tr><td>US Equities</td><td class="mono text-[10px]">yfinance</td><td class="text-green-400">Real-time*</td></tr><tr><td>Options</td><td class="mono text-[10px]">heuristic</td><td class="text-amber-300">Synthetic</td></tr><tr><td>Swing / RS / VCP</td><td class="mono text-[10px]">Sprint 46 engine</td><td class="text-green-400">On request</td></tr><tr><td>Regime</td><td class="mono text-[10px]">HMM + rules</td><td class="text-green-400">60s cache</td></tr><tr><td>Meta-Ensemble</td><td class="mono text-[10px]">Sprint 47</td><td class="text-green-400">Live</td></tr><tr><td>Trust Metadata</td><td class="mono text-[10px]">Sprint 47</td><td class="text-green-400">Live</td></tr><tr><td>Backtest</td><td class="mono text-[10px]">vectorbt</td><td class="text-amber-300">On-demand</td></tr></tbody></table></div>
-      <div class="card card-p"><div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🏗️ Architecture</div><div class="text-[11px] mono" style="color:var(--t2);line-height:1.8"><div>Market Data → Regime Router → Signal Engine</div><div style="padding-left:16px">├── Strategy Ensemble (5 strategies)</div><div style="padding-left:16px">├── Meta-Ensemble (Sprint 47)</div><div style="padding-left:16px">├── Swing Engine (RS + VCP + Pullback)</div><div style="padding-left:16px">├── Trust Metadata Layer</div><div style="padding-left:16px">├── Position Sizer (Kelly + regime)</div><div style="padding-left:16px">└── Circuit Breaker</div><div>→ Dashboard / Discord / API</div></div></div>
-      <div class="card card-p"><div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🔗 Resources</div><div class="space-y-1"><a href="https://github.com/cheafi/Trading-bot-CC" style="color:var(--blue);font-size:11px;text-decoration:none;display:block">📦 GitHub Repository</a><a href="https://github.com/cheafi/Trading-bot-CC/blob/main/docs/ARCHITECTURE.md" style="color:var(--blue);font-size:11px;text-decoration:none;display:block">📐 Architecture</a></div></div>
-      <div class="card card-p" style="border-color:rgba(255,92,92,.3)"><div class="text-[10px] font-bold uppercase mb-1" style="color:var(--red)">⚠ Risk Disclaimer</div><div class="text-[9px]" style="color:var(--t3);line-height:1.5">CC is a research tool. NOT financial advice. Past backtest performance ≠ future results.</div></div>
-    </div>
-  </main>
+  <footer class="px-4 py-2 text-center text-[9px]" style="color:var(--t3);border-top:1px solid var(--bd)">CC v9.0 · Clarity Console · <a href="https://github.com/cheafi/Trading-bot-CC" style="color:var(--blue);text-decoration:none">GitHub</a></footer>
 
-  <footer class="px-4 py-2 text-center text-[9px]" style="color:var(--t3);border-top:1px solid var(--bd)">CC · Clarity Console · regime-aware market intelligence · <a href="https://github.com/cheafi/Trading-bot-CC" style="color:var(--blue);text-decoration:none">GitHub</a></footer>
-
-  <!-- BOTTOM NAV (9 tabs now) -->
   <nav style="position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--bd);padding:6px 0 max(env(safe-area-inset-bottom),6px);z-index:50"><div class="flex justify-around max-w-lg mx-auto">
-    <a href="#" @click.prevent="tab='today'" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='today'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:14px">📊</span>Today</a>
-    <a href="#" @click.prevent="tab='signals'" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='signals'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:14px">🎯</span>Signals</a>
-    <a href="#" @click.prevent="tab='dossier'" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='dossier'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:14px">🔍</span>Dossier</a>
-    <a href="#" @click.prevent="tab='brief'" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='brief'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:14px">📋</span>Brief</a>
-    <a href="#" @click.prevent="tab='options'" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='options'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:14px">🔮</span>Options</a>
-    <a href="#" @click.prevent="tab='swing'" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='swing'?'color:var(--purple)':'color:var(--t3)'"><span style="font-size:14px">🏄</span>Swing</a>
-    <a href="#" @click.prevent="tab='track'" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='track'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:14px">🔬</span>Track</a>
-    <a href="#" @click.prevent="tab='ops'" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='ops'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:14px">⚙️</span>Ops</a>
-    <a href="#" @click.prevent="tab='catalog'" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='catalog'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:14px">ℹ️</span>Info</a>
+    <a href="#" @click.prevent="tab='overview'" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='overview'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:14px">🧠</span>Overview</a>
+    <a href="#" @click.prevent="tab='arch'" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='arch'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:14px">🏗️</span>Arch</a>
+    <a href="#" @click.prevent="tab='engines'" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='engines'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:14px">⚙️</span>Engines</a>
+    <a href="#" @click.prevent="tab='links'" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='links'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:14px">📦</span>Links</a>
   </div></nav>
 
   <script>
-  Alpine.store('dossier',{
-    NVDA:{ticker:'NVDA',price:177.02,chg:-0.21,rsi:58,sma20:172.40,sma50:169.20,atr:5.80,volRatio:1.8,support:168.50,resistance:195.00,low52w:98.50,high52w:196.50,factors:[{n:'RSI',v:'58',s:'neutral'},{n:'MA20',v:'Above',s:'positive'},{n:'MA50',v:'Above',s:'positive'},{n:'MA200',v:'Above',s:'positive'},{n:'Volume',v:'1.8x',s:'positive'},{n:'MACD',v:'BULL',s:'positive'}],whyBuy:['Price above 20/50 MAs — trend aligned','MACD bullish — momentum up','Volume 1.8x avg — institutional'],whyStop:['RSI near overbought','Stop below $168.50','Earnings May 28'],plan:{entry:[173.50,178.00],t1:185.70,t2:194.40,stop:168.30,risk:8.70},analogs:[{w:'5D',n:10,r:2.4,wr:70}]},
-    AAPL:{ticker:'AAPL',price:259.18,chg:1.27,rsi:62,sma20:253.10,sma50:248.20,atr:4.20,volRatio:1.2,support:248.00,resistance:265.00,low52w:195.80,high52w:261.50,factors:[{n:'RSI',v:'62',s:'neutral'},{n:'MA20',v:'Above',s:'positive'},{n:'MA50',v:'Above',s:'positive'},{n:'MACD',v:'BULL',s:'positive'}],whyBuy:['Above 20/50 MAs','MACD bullish','Near ATH — Services +18%'],whyStop:['Above upper BB','Earnings Apr 29','Stop below $248'],plan:{entry:[254.00,261.00],t1:271.78,t2:278.48,stop:252.88,risk:6.30},analogs:[{w:'5D',n:10,r:1.8,wr:65}]},
-    AMD:{ticker:'AMD',price:220.25,chg:1.26,rsi:55,sma20:215.80,sma50:212.00,atr:7.40,volRatio:1.4,support:205.00,resistance:250.00,low52w:138.50,high52w:252.80,factors:[{n:'RSI',v:'55',s:'neutral'},{n:'MA20',v:'Above',s:'positive'},{n:'Volume',v:'1.4x',s:'positive'},{n:'MACD',v:'BULL',s:'positive'}],whyBuy:['Above 20/50 MAs','Volume 1.4x avg','Data center share gains'],whyStop:['84x P/E prices perfection','Stop below $205','Earnings Apr 29'],plan:{entry:[216.00,223.00],t1:231.35,t2:242.45,stop:209.15,risk:11.10},analogs:[{w:'5D',n:10,r:2.1,wr:60}]}
-  });
-  function cc(){return{
-    tab:'today',clock:'',dosTicker:'NVDA',swingSelected:null,distDays:3,
+  function demo(){return{
+    tab:'overview',clock:'',
     init(){this.tick();setInterval(()=>this.tick(),1000)},
     tick(){this.clock=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'})},
-    indices:[{name:'S&P 500 (SPY)',price:559.15,chg:0.22},{name:'Nasdaq 100 (QQQ)',price:488.84,chg:0.35},{name:'Russell 2000 (IWM)',price:201.99,chg:0.18},{name:'Dow Jones (DIA)',price:415.68,chg:0.12}],
-    macro:[{name:'VIX',val:'22.8'},{name:'Gold',val:'$4,693'},{name:'Bonds',val:'$92.40'},{name:'BTC',val:'$82,718'},{name:'ETH',val:'$1,852'},{name:'Oil',val:'$61.50'}],
-    sectors:[{name:'Technology',chg:0.42},{name:'Financials',chg:0.28},{name:'Healthcare',chg:0.15},{name:'Energy',chg:-0.12},{name:'Industrials',chg:0.22},{name:'Consumer Disc',chg:0.08},{name:'Staples',chg:-0.05},{name:'Utilities',chg:-0.18}],
-    signals:[{ticker:'NVDA',dir:'LONG',strategy:'Momentum',score:84,entry:'175.50',target:'195',stop:'165',rr:'2.3:1'},{ticker:'AAPL',dir:'LONG',strategy:'Swing',score:78,entry:'256.80',target:'280',stop:'245',rr:'2.0:1'},{ticker:'AMZN',dir:'LONG',strategy:'Breakout',score:76,entry:'210.50',target:'235',stop:'200',rr:'2.3:1'},{ticker:'AMD',dir:'LONG',strategy:'Momentum',score:76,entry:'218.50',target:'250',stop:'205',rr:'2.3:1'},{ticker:'META',dir:'LONG',strategy:'Momentum',score:74,entry:'575.00',target:'620',stop:'550',rr:'1.8:1'},{ticker:'GOOGL',dir:'LONG',strategy:'Swing',score:72,entry:'295.40',target:'325',stop:'280',rr:'1.9:1'},{ticker:'MSFT',dir:'SHORT',strategy:'Mean Rev',score:64,entry:'370.20',target:'400',stop:'345',rr:'1.2:1'},{ticker:'TSLA',dir:'SHORT',strategy:'Mean Rev',score:62,entry:'360.50',target:'320',stop:'385',rr:'1.7:1'}],
-    optContracts:[{strike:246,dte:30,type:'PUT',delta:'-.30',iv:24,oi:4812,spread:'TIGHT',bid:'3.80',ask:'4.10',annYield:18.2,be:'242.10'},{strike:240,dte:30,type:'PUT',delta:'-.22',iv:22,oi:3890,spread:'TIGHT',bid:'2.40',ask:'2.65',annYield:11.8,be:'237.50'},{strike:253,dte:30,type:'CALL',delta:'.55',iv:25,oi:3245,spread:'TIGHT',bid:'8.20',ask:'8.50',annYield:38.4,be:'261.30'},{strike:259,dte:45,type:'CALL',delta:'.50',iv:26,oi:5108,spread:'TIGHT',bid:'10.50',ask:'10.80',annYield:32.6,be:'269.60'},{strike:265,dte:45,type:'PUT',delta:'-.35',iv:28,oi:2180,spread:'WIDE',bid:'5.10',ask:'5.60',annYield:15.3,be:'259.60'}],
-    swingCandidates:[
-      {ticker:'NVDA',rs:82.5,vcp:true,volQ:1.8,pullbackReady:true,pullbackPct:8.2,leadership:'Leader',confidence:'HIGH',contractions:3,daysToEarnings:49,actionNote:'VCP T3 forming near pivot. RS 82.5 — top decile. Volume dry-up on pullback confirms accumulation.'},
-      {ticker:'AAPL',rs:71.3,vcp:false,volQ:1.2,pullbackReady:true,pullbackPct:5.1,leadership:'Leader',confidence:'MEDIUM',contractions:1,daysToEarnings:20,actionNote:'Strong RS but no VCP. Near ATH — pullback entry available. Earnings proximity adds risk.'},
-      {ticker:'AMZN',rs:68.9,vcp:true,volQ:1.5,pullbackReady:false,pullbackPct:12.4,leadership:'Leader',confidence:'MEDIUM',contractions:2,daysToEarnings:21,actionNote:'VCP T2 detected. Still pulling back — wait for volume contraction to complete.'},
-      {ticker:'AMD',rs:59.2,vcp:false,volQ:1.4,pullbackReady:false,pullbackPct:18.3,leadership:'Emerging',confidence:'LOW',contractions:0,daysToEarnings:20,actionNote:'RS improving but below 60 threshold. Deep pullback — watch for higher low formation.'},
-      {ticker:'META',rs:74.1,vcp:false,volQ:1.1,pullbackReady:true,pullbackPct:6.8,leadership:'Leader',confidence:'MEDIUM',contractions:1,daysToEarnings:35,actionNote:'RS solid at 74. No VCP but constructive base. Pullback to 21-EMA — entry zone.'},
-      {ticker:'GOOGL',rs:55.8,vcp:false,volQ:0.9,pullbackReady:false,pullbackPct:22.1,leadership:'Laggard',confidence:'LOW',contractions:0,daysToEarnings:22,actionNote:'RS below 60 — lagging SPY. Volume thinning. Wait for RS improvement before entry.'}
-    ],
-    btResults:[{name:'Momentum',score:82,trades:18,win:67,ret:34.2,sharpe:1.45,dd:-8.2,pf:2.1},{name:'Swing Trading',score:76,trades:24,win:58,ret:28.6,sharpe:1.22,dd:-10.5,pf:1.8},{name:'Mean Reversion',score:68,trades:32,win:53,ret:22.1,sharpe:0.95,dd:-12.3,pf:1.5}]
+    surfaces:[['📊','Overview','Regime + top opportunities + KPIs'],['🏆','Ranked','3-layer board with 4D confidence'],['🔍','Scanners','VCP · Breakout · Pullback · RS'],['🚫','Rejections','Why trades were rejected'],['📋','Dossier','Chart + technicals + fundamentals'],['💰','Flow','Smart money intelligence'],['⚙️','Ops','Engine health + API catalog'],['🤖','Discord','50+ commands + alerts']],
+    penalties:[['EntryQuality','REJECT','Execution','-25'],['EntryQuality','POOR','Execution','-12'],['Earnings','Blackout','Timing','-20'],['Structure','Extended','Timing','-15'],['Structure','Weak trend','Thesis','-10'],['Fundamentals','Quality<40','Thesis','-15'],['Regime','CRISIS+non-def','Thesis+Timing','-25']],
+    stats:[['API monolith','10,700+ lines'],['Dashboard','2,350+ lines'],['Discord bot','7,540 lines'],['P9 engines','7 modules'],['Strategies','4 families'],['Scanners','8+ types'],['Tests','15+ suites'],['Version','9.0.0']],
+    engines:[
+      {i:'📊',n:'StructureDetector',d:'S/R detection, HH/HL/LH/LL, trend quality, breakout quality, volume exhaustion',l:'498',f:'structure_detector.py'},
+      {i:'🎯',n:'EntryQualityEngine',d:'6 checks → PASS/WATCH/WAIT/REJECT verdict with detailed reasons',l:'300',f:'entry_quality.py'},
+      {i:'🚀',n:'BreakoutMonitor',d:'Post-signal tracking: hold/follow-through/failure detection, 30min background loop',l:'251',f:'breakout_monitor.py'},
+      {i:'⛔',n:'PortfolioGate',d:'Position limits, sector concentration, portfolio heat checks',l:'163',f:'portfolio_gate.py'},
+      {i:'📅',n:'EarningsCalendar',d:'yfinance earnings dates, 3-day blackout enforcement, 6h cache',l:'128',f:'earnings_calendar.py'},
+      {i:'💎',n:'FundamentalData',d:'Quality score, moat, growth, valuation from yfinance.info, 12h cache',l:'233',f:'fundamental_data.py'},
+      {i:'📓',n:'DecisionJournal',d:'Audit trail: decisions, evidence, votes, gate results',l:'214',f:'decision_journal.py'}
+    ]
   }}
   </script>
 </body>
