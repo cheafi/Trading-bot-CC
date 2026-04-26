@@ -1,6 +1,6 @@
 # Signals Reference
 
-> How trading signals are generated, scored, and explained in CC v6.1.
+> How trading signals are generated, scored, and explained in CC v9.0.
 
 ---
 

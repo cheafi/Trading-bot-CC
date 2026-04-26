@@ -2,17 +2,21 @@
 Lightweight CC server - serves dashboard with minimal imports.
 Heavy modules load in background after server starts.
 """
-import os, sys, logging
+import logging
+import os
+import sys
+
 os.chdir(os.path.dirname(os.path.abspath(__file__)) or ".")
 sys.path.insert(0, ".")
 
+from datetime import datetime, timezone
 from pathlib import Path
+
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime, timezone
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("cc-lite")
@@ -33,8 +37,29 @@ _full_app = None
 @app.get("/health")
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "uptime_seconds": (datetime.now(timezone.utc) - _start).total_seconds(),
-            "mode": "full" if _full_app else "lite"}
+    ready = _full_app is not None
+    return {
+        "status": "ok",
+        "version": "9.0.0",
+        "uptime_seconds": (datetime.now(timezone.utc) - _start).total_seconds(),
+        "mode": "full" if ready else "lite",
+        "phase9_engines": {
+            "loaded": ready,
+            "components": (
+                [
+                    "StructureDetector",
+                    "EntryQuality",
+                    "BreakoutMonitor",
+                    "PortfolioGate",
+                    "EarningsCalendar",
+                    "FundamentalData",
+                    "DecisionJournal",
+                ]
+                if ready
+                else []
+            ),
+        },
+    }
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
@@ -51,6 +76,7 @@ def _load_full():
     try:
         logger.info("Background: loading full app...")
         from src.api.main import app as full
+
         # Copy routes, skipping ones we already serve + static mount
         for route in full.routes:
             path = getattr(route, "path", None)

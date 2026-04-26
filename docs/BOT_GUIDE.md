@@ -1,6 +1,6 @@
 # Bot Guide — All 64 Commands
 
-> Complete reference for every slash command in CC v6.1.
+> Complete reference for every slash command in CC v9.0.
 
 ---
 

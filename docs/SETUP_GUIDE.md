@@ -85,7 +85,7 @@ Expected startup output:
 ✅ Strategy Optimizer ready
 ✅ Logged in as CC Bot
 📋 Synced 64 commands to CC
-🚀 CC v6.1.0 online
+🚀 CC v9.0.0 online
 ```
 
 ### Option B — Background Process (macOS/Linux)
