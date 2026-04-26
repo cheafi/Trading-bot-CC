@@ -765,6 +765,53 @@
               <div><div class="text-[10px]" style="color:var(--t3)">BBands</div><div class="font-bold mono text-white" x-text="dos.data.technicals.bbands_lower&&dos.data.technicals.bbands_upper?'$'+dos.data.technicals.bbands_lower+' – $'+dos.data.technicals.bbands_upper:'—'"></div></div>
             </div>
           </div>
+          <!-- Phase 9: Fundamentals -->
+          <template x-if="dos.data._p9&&dos.data._p9.fundamentals&&dos.data._p9.fundamentals.quality_score">
+            <div class="card card-p">
+              <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">💎 Fundamentals</div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;font-size:12px">
+                <div><div class="text-[10px]" style="color:var(--t3)">Quality</div><div class="font-bold mono" :class="dos.data._p9.fundamentals.quality_score>=70?'text-green-400':dos.data._p9.fundamentals.quality_score>=50?'text-amber-300':'text-red-400'" x-text="dos.data._p9.fundamentals.quality_score+'/100'"></div></div>
+                <div><div class="text-[10px]" style="color:var(--t3)">P/E</div><div class="font-bold mono text-white" x-text="dos.data._p9.fundamentals.valuation?.pe_trailing?Number(dos.data._p9.fundamentals.valuation.pe_trailing).toFixed(1):'—'"></div></div>
+                <div><div class="text-[10px]" style="color:var(--t3)">ROE</div><div class="font-bold mono text-white" x-text="dos.data._p9.fundamentals.profitability?.roe?Number(dos.data._p9.fundamentals.profitability.roe).toFixed(1)+'%':'—'"></div></div>
+                <div><div class="text-[10px]" style="color:var(--t3)">Rev Growth</div><div class="font-bold mono" :class="(dos.data._p9.fundamentals.growth?.revenue_growth||0)>=0?'text-green-400':'text-red-400'" x-text="dos.data._p9.fundamentals.growth?.revenue_growth!=null?Number(dos.data._p9.fundamentals.growth.revenue_growth).toFixed(1)+'%':'—'"></div></div>
+                <div><div class="text-[10px]" style="color:var(--t3)">Net Margin</div><div class="font-bold mono text-white" x-text="dos.data._p9.fundamentals.profitability?.net_margin?Number(dos.data._p9.fundamentals.profitability.net_margin).toFixed(1)+'%':'—'"></div></div>
+                <div><div class="text-[10px]" style="color:var(--t3)">Moat</div><div class="font-bold mono" :class="dos.data._p9.fundamentals.moat_indicators?.has_moat?'text-green-400':'text-red-400'" x-text="dos.data._p9.fundamentals.moat_indicators?.has_moat?'Yes ✓':'No'"></div></div>
+                <div><div class="text-[10px]" style="color:var(--t3)">D/E</div><div class="font-bold mono text-white" x-text="dos.data._p9.fundamentals.balance_sheet?.debt_to_equity?Number(dos.data._p9.fundamentals.balance_sheet.debt_to_equity).toFixed(1):'—'"></div></div>
+                <div><div class="text-[10px]" style="color:var(--t3)">Fwd P/E</div><div class="font-bold mono text-white" x-text="dos.data._p9.fundamentals.valuation?.pe_forward?Number(dos.data._p9.fundamentals.valuation.pe_forward).toFixed(1):'—'"></div></div>
+                <div><div class="text-[10px]" style="color:var(--t3)">FCF</div><div class="font-bold mono text-white" x-text="dos.data._p9.fundamentals.balance_sheet?.free_cash_flow?(dos.data._p9.fundamentals.balance_sheet.free_cash_flow/1e9).toFixed(1)+'B':'—'"></div></div>
+              </div>
+            </div>
+          </template>
+          <!-- Phase 9: Earnings Calendar -->
+          <template x-if="dos.data._p9&&dos.data._p9.earnings&&(dos.data._p9.earnings.next_earnings_date||dos.data._p9.earnings.in_blackout)">
+            <div class="card card-p" :style="dos.data._p9.earnings.in_blackout?'border-left:3px solid var(--red)':'border-left:3px solid var(--blue)'">
+              <div class="text-[10px] font-bold uppercase mb-1" :style="dos.data._p9.earnings.in_blackout?'color:var(--red)':'color:var(--blue)'" x-text="dos.data._p9.earnings.in_blackout?'⚠️ EARNINGS BLACKOUT':'📅 Earnings Calendar'"></div>
+              <div class="text-[11px]" style="color:var(--t2)">
+                <template x-if="dos.data._p9.earnings.next_earnings_date"><span x-text="'Next: '+dos.data._p9.earnings.next_earnings_date"></span></template>
+                <template x-if="dos.data._p9.earnings.days_to_earnings!=null"><span x-text="' ('+dos.data._p9.earnings.days_to_earnings+' days)'"></span></template>
+                <template x-if="dos.data._p9.earnings.in_blackout"><div class="text-[10px] mt-1" style="color:var(--red)">⛔ Within 3-day earnings blackout — avoid new positions</div></template>
+              </div>
+            </div>
+          </template>
+          <!-- Phase 9: Chart Structure -->
+          <template x-if="dos.data._p9&&dos.data._p9.structure&&dos.data._p9.structure.trend">
+            <div class="card card-p">
+              <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📊 Chart Structure</div>
+              <div class="flex gap-1 flex-wrap mb-2">
+                <span class="pill text-[8px]" :class="dos.data._p9.structure.trend==='uptrend'?'pg':dos.data._p9.structure.trend==='downtrend'?'pr':'pa'" x-text="dos.data._p9.structure.trend.toUpperCase()"></span>
+                <template x-if="dos.data._p9.structure.breakout_quality"><span class="pill pb text-[8px]" x-text="'BQ: '+dos.data._p9.structure.breakout_quality"></span></template>
+                <template x-if="dos.data._p9.structure.volume_confirms"><span class="pill pg text-[8px]">Vol ✓</span></template>
+                <template x-if="dos.data._p9.structure.volume_exhaustion"><span class="pill pr text-[8px]">Vol Exhaustion</span></template>
+                <template x-if="dos.data._p9.structure.is_extended"><span class="pill pr text-[8px]" x-text="'Extended '+Number(dos.data._p9.structure.extension_pct).toFixed(1)+'%'"></span></template>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;font-size:11px">
+                <div class="text-[10px]"><span style="color:var(--t3)">Support: </span><strong class="text-green-400 mono" x-text="dos.data._p9.structure.nearest_support?'$'+Number(dos.data._p9.structure.nearest_support).toFixed(2):'—'"></strong></div>
+                <div class="text-[10px]"><span style="color:var(--t3)">Resist: </span><strong class="text-red-400 mono" x-text="dos.data._p9.structure.nearest_resistance?'$'+Number(dos.data._p9.structure.nearest_resistance).toFixed(2):'—'"></strong></div>
+                <div class="text-[10px]"><span style="color:var(--t3)">S/R Levels: </span><span class="mono text-white" x-text="(dos.data._p9.structure.support_levels||[]).length+'S / '+(dos.data._p9.structure.resistance_levels||[]).length+'R'"></span></div>
+                <div class="text-[10px]"><span style="color:var(--t3)">Trend Qual: </span><span class="mono text-white" x-text="dos.data._p9.structure.trend_quality+'%'"></span></div>
+              </div>
+            </div>
+          </template>
           <!-- Factor Chips (from backend) -->
           <div class="card card-p">
             <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🧬 Factor Chips · <span class="text-green-400" x-text="(dos.data.factor_summary||{}).positive||0"></span>+ <span class="text-red-400" x-text="(dos.data.factor_summary||{}).negative||0"></span>−</div>
@@ -2096,7 +2143,19 @@
       },
       async fetchDossier(){
         if(!this.dos.ticker)return;this.dos.loading=true;this.dos.data=null;this.dos.error='';
-        try{const r=await fetch('/api/live/dossier/'+encodeURIComponent(this.dos.ticker));if(!r.ok){const e=await r.json();throw new Error(e.detail||'Not found')}this.dos.data=await r.json()}catch(e){this.dos.error=e.message}finally{this.dos.loading=false}
+        try{
+          const r=await fetch('/api/live/dossier/'+encodeURIComponent(this.dos.ticker));
+          if(!r.ok){const e=await r.json();throw new Error(e.detail||'Not found')}
+          this.dos.data=await r.json();
+          // Phase 9 enrichment
+          const t=encodeURIComponent(this.dos.ticker);
+          const [f9fund,f9earn,f9struct]=await Promise.allSettled([
+            fetch('/api/v9/fundamentals/'+t).then(r=>r.ok?r.json():null),
+            fetch('/api/v9/earnings/'+t).then(r=>r.ok?r.json():null),
+            fetch('/api/v9/structure/'+t).then(r=>r.ok?r.json():null),
+          ]);
+          this.dos.data._p9={fundamentals:f9fund.value||null,earnings:f9earn.value||null,structure:f9struct.value||null};
+        }catch(e){this.dos.error=e.message}finally{this.dos.loading=false}
       },
       openDossier(ticker){if(ticker){this.dos.ticker=ticker;this.switchTab('dossier');this.fetchDossier()}},
       async fetchOptions(){

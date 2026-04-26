@@ -4970,31 +4970,28 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                         _bm = BreakoutMonitor()
                         _bm.load()
                         _bm.register_breakout(
-                            ticker,
-                            entry_price,
-                            stop_price,
-                            strategy=strat_name,
+                            ticker=ticker,
+                            breakout_price=entry_price,
+                            pivot_price=stop_price,
                         )
                         _bm.save()
-                    except Exception:
-                        pass
+                    except Exception as _e9:
+                        logger.debug("[Phase9] BreakoutMonitor: %s", _e9)
                     try:
                         get_journal().record(
                             ticker=ticker,
-                            decision=conf.get("grade", "C"),
-                            composite=conf["composite"],
-                            experts={},
-                            metadata={
-                                "strategy": strat_name,
-                                "entry": entry_price,
-                                "stop": stop_price,
-                                "target": target_price,
-                                "rr": rr,
-                                "score": score,
-                            },
+                            decision_tier=conf.get("grade", "C"),
+                            composite_score=conf["composite"] * 100,
+                            should_trade=score >= 7.0,
+                            regime="UPTREND" if trending else "SIDEWAYS",
+                            sector=_TICKER_SECTOR.get(ticker, "unknown"),
+                            entry_price=entry_price,
+                            stop_price=stop_price,
+                            target_price=target_price,
+                            extra={"strategy": strat_name, "rr": rr, "score": score},
                         )
-                    except Exception:
-                        pass
+                    except Exception as _e9:
+                        logger.debug("[Phase9] DecisionJournal: %s", _e9)
         except Exception as exc:
             logger.debug(f"[Scanner] {ticker} skip: {exc}")
             continue
