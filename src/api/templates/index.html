@@ -1131,6 +1131,72 @@
         <span>NOT executed capital</span>
       </div>
       <div class="p-3 space-y-3">
+
+        <!-- ══ Scanner Top Picks vs Benchmark ══ -->
+        <div class="card card-p" style="border-left:3px solid var(--blue)">
+          <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--blue)">📊 RS Leaders vs Benchmark (Historical)</div>
+          <div class="text-[9px] mb-2" style="color:var(--t2);line-height:1.5">Buy top-5 RS leaders monthly (equal weight, rebalance monthly) vs buy-and-hold benchmark. Uses real yfinance data.</div>
+          <div class="flex gap-2 mb-2">
+            <select x-model="benchBT.period" class="flex-1 text-[10px]"><option value="1y">1 Year</option><option value="2y">2 Years</option><option value="5y" selected>5 Years</option></select>
+            <select x-model="benchBT.benchmark" class="flex-1 text-[10px]"><option value="SPY">vs SPY</option><option value="QQQ">vs QQQ</option></select>
+            <button @click="fetchBenchBT()" class="btn-p px-4 text-[10px]" :disabled="benchBT.loading"><span x-show="!benchBT.loading">Run Backtest</span><span x-show="benchBT.loading"><span class="spin"></span></span></button>
+          </div>
+          <!-- Results -->
+          <template x-if="benchBT.data">
+            <div class="space-y-2 fade">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                <div class="card card-p" style="padding:8px;text-align:center;border-color:var(--green)">
+                  <div class="text-[8px] font-bold uppercase" style="color:var(--t3)">RS Top-5 Strategy</div>
+                  <div class="text-[16px] font-bold mono" :class="benchBT.data.strategy.total_return>=0?'text-green-400':'text-red-400'" x-text="(benchBT.data.strategy.total_return>=0?'+':'')+benchBT.data.strategy.total_return+'%'"></div>
+                  <div class="text-[9px] mono" style="color:var(--t2)" x-text="benchBT.data.strategy.annualized+'% ann · Sharpe '+benchBT.data.strategy.sharpe"></div>
+                </div>
+                <div class="card card-p" style="padding:8px;text-align:center">
+                  <div class="text-[8px] font-bold uppercase" style="color:var(--t3)" x-text="benchBT.benchmark+' Buy&Hold'"></div>
+                  <div class="text-[16px] font-bold mono" :class="benchBT.data.benchmark_stats.total_return>=0?'text-green-400':'text-red-400'" x-text="(benchBT.data.benchmark_stats.total_return>=0?'+':'')+benchBT.data.benchmark_stats.total_return+'%'"></div>
+                  <div class="text-[9px] mono" style="color:var(--t2)" x-text="benchBT.data.benchmark_stats.annualized+'% ann · Sharpe '+benchBT.data.benchmark_stats.sharpe"></div>
+                </div>
+              </div>
+              <div class="flex gap-4 justify-center text-[10px]">
+                <span class="font-bold" :class="benchBT.data.alpha_annualized>=0?'text-green-400':'text-red-400'" x-text="'Alpha: '+(benchBT.data.alpha_annualized>=0?'+':'')+benchBT.data.alpha_annualized+'%/yr'"></span>
+                <span style="color:var(--t2)" x-text="'Win rate vs BM: '+benchBT.data.win_rate_vs_benchmark+'%'"></span>
+                <span style="color:var(--t3)" x-text="benchBT.data.months+' months'"></span>
+              </div>
+              <!-- Equity curve (ASCII sparkline) -->
+              <template x-if="benchBT.data.equity_curve">
+                <div class="card card-p" style="padding:8px">
+                  <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--t3)">Equity Curve</div>
+                  <div style="display:flex;align-items:flex-end;gap:1px;height:60px;overflow:hidden">
+                    <template x-for="(v,i) in benchBT.data.equity_curve.strategy">
+                      <div style="flex:1;min-width:2px;border-radius:1px 1px 0 0" :style="'height:'+Math.max(2,((v-0.5)/(Math.max(...benchBT.data.equity_curve.strategy)-0.5))*100)+'%;background:'+(v>=1?'var(--green)':'var(--red)')"></div>
+                    </template>
+                  </div>
+                  <div class="flex justify-between text-[7px] mt-1" style="color:var(--t3)">
+                    <span x-text="benchBT.data.equity_curve.dates[1]||''"></span>
+                    <span class="text-green-400">■ Strategy</span>
+                    <span x-text="benchBT.data.equity_curve.dates[benchBT.data.equity_curve.dates.length-1]||''"></span>
+                  </div>
+                </div>
+              </template>
+              <!-- Recent picks -->
+              <template x-if="benchBT.data.recent_picks&&benchBT.data.recent_picks.length>0">
+                <div class="card card-p" style="padding:8px">
+                  <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--t3)">Recent Monthly Picks</div>
+                  <template x-for="p in benchBT.data.recent_picks">
+                    <div class="flex gap-2 text-[9px] py-0.5" style="border-bottom:1px solid var(--bd)">
+                      <span class="mono" style="color:var(--t3);min-width:70px" x-text="p.date"></span>
+                      <span class="font-bold text-white" x-text="p.picks.join(' · ')"></span>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </template>
+          <template x-if="benchBT.error">
+            <div class="text-[10px] mt-2" style="color:var(--red)" x-text="benchBT.error"></div>
+          </template>
+        </div>
+
+        <!-- ── Individual Stock Stress Test ── -->
         <!-- ── Input form ── -->
         <div class="card card-p">
           <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">🔬 Stress-Test Engine</div>
@@ -1934,6 +2000,7 @@
       opt:{ticker:'',loading:false,data:null},
       brief:{loading:false,data:null},
       bt:{ticker:'AAPL',strategy:'all',period:'5y',loading:false,result:null},
+      benchBT:{period:'5y',benchmark:'SPY',loading:false,data:null,error:''},
       tt:{ticker:'SPY',date:new Date(Date.now()-5*86400000).toISOString().slice(0,10),strategy:'all',loading:false,result:null},
       ops:{running:false,cycle_count:0,signals_today:0,trades_today:0,circuit_breaker:false,circuit_breaker_reason:'',dry_run:true,components:{}},
       opsDetail:{},
@@ -2013,6 +2080,10 @@
       async runBT(){
         if(!this.bt.ticker)return;this.bt.loading=true;this.bt.result=null;
         try{const u='/api/live/backtest?ticker='+encodeURIComponent(this.bt.ticker)+'&strategy='+this.bt.strategy+'&period='+this.bt.period;const r=await fetch(u,{method:'POST'});if(!r.ok){const e=await r.json();throw new Error(e.detail||'Failed')}this.bt.result=await r.json()}catch(e){alert('Error: '+e.message)}finally{this.bt.loading=false}
+      },
+      async fetchBenchBT(){
+        this.benchBT.loading=true;this.benchBT.data=null;this.benchBT.error='';
+        try{const u='/api/v7/playbook/backtest-vs-benchmark?period='+this.benchBT.period+'&benchmark='+this.benchBT.benchmark;const r=await fetch(u);if(!r.ok)throw new Error('Failed');const d=await r.json();if(d.error){this.benchBT.error=d.error}else{this.benchBT.data=d}}catch(e){this.benchBT.error=e.message}finally{this.benchBT.loading=false}
       },
       async fetchTimeTravel(){
         if(!this.tt.ticker||!this.tt.date)return;this.tt.loading=true;this.tt.result=null;

@@ -362,6 +362,185 @@ async def flow_intelligence(
     }
 
 
+# ── Backtest: Scanner Picks vs Benchmark ─────────────────────────────
+
+
+@router.get("/backtest-vs-benchmark")
+async def backtest_vs_benchmark(
+    period: str = Query("5y", description="1y/2y/5y"),
+    benchmark: str = Query("SPY", description="SPY or QQQ"),
+) -> Dict[str, Any]:
+    """Compare hypothetical scanner top-pick returns vs SPY/QQQ.
+
+    Uses RS leadership methodology: buy top-5 RS leaders monthly,
+    equal-weight, rebalance monthly, compare to buy-and-hold benchmark.
+    """
+    try:
+        import pandas as pd
+        import yfinance as yf
+    except ImportError:
+        return {"error": "yfinance/pandas not available"}
+
+    # RS leadership universe (top liquid names)
+    universe = [
+        "NVDA",
+        "AAPL",
+        "MSFT",
+        "AMZN",
+        "META",
+        "GOOGL",
+        "TSLA",
+        "AMD",
+        "AVGO",
+        "CRM",
+        "NFLX",
+        "ADBE",
+        "NOW",
+        "UBER",
+        "PLTR",
+        "PANW",
+        "CRWD",
+        "ANET",
+        "XOM",
+        "CVX",
+        "LLY",
+        "UNH",
+        "JPM",
+        "V",
+    ]
+    tickers = universe + [benchmark]
+
+    try:
+        data = yf.download(
+            tickers,
+            period=period,
+            interval="1mo",
+            auto_adjust=True,
+            progress=False,
+        )
+        if data.empty:
+            return {"error": "No data returned from yfinance"}
+        close = data["Close"].dropna(how="all")
+    except Exception as e:
+        return {"error": f"Data fetch failed: {e}"}
+
+    if close.empty or len(close) < 3:
+        return {"error": "Insufficient data"}
+
+    # Monthly returns
+    returns = close.pct_change().dropna()
+
+    # RS ranking: 3-month rolling return
+    rs_window = 3
+    rolling_ret = close.pct_change(rs_window).dropna()
+
+    # Strategy: each month, buy top-5 RS leaders, equal weight
+    strategy_returns = []
+    benchmark_returns = []
+    months = []
+    picks_history = []
+
+    for i in range(rs_window, len(close) - 1):
+        date_idx = close.index[i]
+        next_idx = close.index[i + 1]
+
+        # RS rank at this month
+        rs_scores = {}
+        for t in universe:
+            if t in rolling_ret.columns:
+                val = rolling_ret.loc[rolling_ret.index <= date_idx, t]
+                if len(val) > 0 and pd.notna(val.iloc[-1]):
+                    rs_scores[t] = val.iloc[-1]
+
+        if len(rs_scores) < 5:
+            continue
+
+        # Top 5 leaders
+        ranked = sorted(rs_scores.items(), key=lambda x: x[1], reverse=True)
+        top5 = [t for t, _ in ranked[:5]]
+
+        # Next month return for top5 (equal weight)
+        port_ret = 0.0
+        valid = 0
+        for t in top5:
+            if t in returns.columns:
+                r_vals = returns.loc[returns.index <= next_idx, t]
+                if len(r_vals) > 0 and pd.notna(r_vals.iloc[-1]):
+                    port_ret += r_vals.iloc[-1]
+                    valid += 1
+        if valid > 0:
+            port_ret /= valid
+
+        # Benchmark return
+        bm_ret = 0.0
+        if benchmark in returns.columns:
+            bm_vals = returns.loc[returns.index <= next_idx, benchmark]
+            if len(bm_vals) > 0 and pd.notna(bm_vals.iloc[-1]):
+                bm_ret = bm_vals.iloc[-1]
+
+        strategy_returns.append(port_ret)
+        benchmark_returns.append(bm_ret)
+        months.append(str(next_idx.date()))
+        picks_history.append(
+            {
+                "date": str(date_idx.date()),
+                "picks": top5,
+            }
+        )
+
+    if not strategy_returns:
+        return {"error": "Not enough data for backtest"}
+
+    # Cumulative returns
+    strat_cum = 1.0
+    bench_cum = 1.0
+    strat_curve = [1.0]
+    bench_curve = [1.0]
+    for sr, br in zip(strategy_returns, benchmark_returns):
+        strat_cum *= 1 + sr
+        bench_cum *= 1 + br
+        strat_curve.append(round(strat_cum, 4))
+        bench_curve.append(round(bench_cum, 4))
+
+    # Stats
+    import statistics
+
+    n = len(strategy_returns)
+    strat_ann = (strat_cum ** (12.0 / n) - 1) if n > 0 else 0
+    bench_ann = (bench_cum ** (12.0 / n) - 1) if n > 0 else 0
+    strat_vol = statistics.stdev(strategy_returns) * (12**0.5) if n > 1 else 0
+    bench_vol = statistics.stdev(benchmark_returns) * (12**0.5) if n > 1 else 0
+    alpha = strat_ann - bench_ann
+    win_months = sum(1 for s, b in zip(strategy_returns, benchmark_returns) if s > b)
+
+    return {
+        "period": period,
+        "benchmark": benchmark,
+        "months": n,
+        "strategy": {
+            "name": "RS Top-5 Leaders (Monthly Rebal)",
+            "total_return": round((strat_cum - 1) * 100, 2),
+            "annualized": round(strat_ann * 100, 2),
+            "volatility": round(strat_vol * 100, 2),
+            "sharpe": round(strat_ann / strat_vol, 2) if strat_vol > 0 else 0,
+        },
+        "benchmark_stats": {
+            "total_return": round((bench_cum - 1) * 100, 2),
+            "annualized": round(bench_ann * 100, 2),
+            "volatility": round(bench_vol * 100, 2),
+            "sharpe": round(bench_ann / bench_vol, 2) if bench_vol > 0 else 0,
+        },
+        "alpha_annualized": round(alpha * 100, 2),
+        "win_rate_vs_benchmark": round(win_months / n * 100, 1) if n > 0 else 0,
+        "equity_curve": {
+            "dates": ["start"] + months,
+            "strategy": strat_curve,
+            "benchmark": bench_curve,
+        },
+        "recent_picks": picks_history[-6:],
+    }
+
+
 def _get_regime_stub() -> Dict[str, Any]:
     """Stub regime — replace with RegimeDetector output."""
     return {
