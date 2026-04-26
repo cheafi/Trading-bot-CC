@@ -140,7 +140,12 @@ def test_notrade_has_phase9():
 def test_health():
     d = _get("/health")
     assert d.get("status") == "healthy", f"Unhealthy: {d}"
-    print(f"  ✅ health: {d['status']}, uptime={d.get('uptime_seconds', '?')}s")
+    p9 = d.get("phase9_engines", {})
+    assert p9.get("loaded") is True, f"Phase 9 not loaded: {p9}"
+    assert len(p9.get("components", [])) == 7, f"Expected 7 engines: {p9}"
+    print(
+        f"  ✅ health: {d['status']}, uptime={d.get('uptime_seconds', '?')}s, P9={len(p9.get('components',[]))} engines"
+    )
 
 
 if __name__ == "__main__":

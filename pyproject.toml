@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "tradingai-bot"
-version = "6.0.0"
+version = "9.0.0"
 description = "CC — Regime-Aware Market Intelligence Platform"
 authors = ["CC Contributors"]
 readme = "README.md"

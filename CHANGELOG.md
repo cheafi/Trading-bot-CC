@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [9.0.0] — 2026-04-26
+
+### Added — Phase 9: Decision Intelligence Engines
+- **StructureDetector** — HH/HL trend classification, S/R level detection, breakout quality scoring
+- **EntryQualityEngine** — pre-trade gatekeeper assessing timing, structure, and risk/reward
+- **BreakoutMonitor** — post-signal tracking of breakout success/failure with persistence
+- **PortfolioGate** — position-level risk control (sector concentration, correlation, max exposure)
+- **EarningsCalendar** — real earnings dates via yfinance with blackout zone enforcement
+- **FundamentalData** — live financials (ROE, P/E, revenue growth, moat detection, quality score)
+- **DecisionJournal** — persistent decision logging with expert accuracy tracking
+- 9 Phase 9 API endpoints under `/api/v9/`
+- Phase 9 engine health card in Ops dashboard tab
+- Health endpoint reports `phase9_engines` status
+- Expert council uses accuracy-weighted consensus scoring
+- Dashboard: Phase 9 pills on overview, ranked, scanner, rejection tabs
+- Dossier page: fundamentals grid, earnings calendar, chart structure cards
+- 13 end-to-end tests covering all Phase 9 engines and pipeline
+
+### Changed
+- Version bumped from 6.1.0 → 9.0.0
+- All silent `except: pass` in scanner wiring replaced with `logger.debug`
+- Ops status now uses `APP_VERSION` (was hardcoded `2.1.0`)
+- Expert council fundamental analyst errors now logged
+
+---
+
 ## [6.0.0] — 2026-04-17
 
 ### Added

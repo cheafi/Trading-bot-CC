@@ -550,6 +550,7 @@ class HealthResponse(BaseModel):
     uptime_seconds: Optional[float] = Field(
         None, description="Service uptime in seconds"
     )
+    phase9_engines: Optional[dict] = Field(None, description="Phase 9 engine status")
 
 
 class SignalListResponse(BaseModel):

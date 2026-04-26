@@ -3,7 +3,7 @@
   <img src="https://img.shields.io/badge/FastAPI-0.104+-009688?logo=fastapi&logoColor=white" />
   <img src="https://img.shields.io/badge/Discord-Primary_Interface-5865F2?logo=discord&logoColor=white" />
   <img src="https://img.shields.io/badge/License-MIT-blue" />
-  <img src="https://img.shields.io/badge/Status-Beta_(v6.0)-orange" />
+  <img src="https://img.shields.io/badge/Status-Beta_(v9.0)-orange" />
 </p>
 
 # CC — Regime-Aware Market Intelligence Platform

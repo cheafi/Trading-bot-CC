@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 # Enums
 # ─────────────────────────────────────────────────────────────────────
 
-MODEL_VERSION = "v6.41"  # bump each sprint
+MODEL_VERSION = "v9.0"  # bump each sprint
 
 
 class TrustBadge(Enum):
