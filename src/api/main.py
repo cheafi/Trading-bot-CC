@@ -695,6 +695,97 @@ def _compute_indicators(close: np.ndarray, volume: np.ndarray) -> dict:
     }
 
 
+# ── Inline RS vs SPY computation ──
+_SPY_CACHE: dict = {"close": None, "ts": 0}
+
+
+async def _get_spy_close() -> np.ndarray | None:
+    """Fetch SPY close array with 1h cache."""
+    import time
+
+    now = time.time()
+    if _SPY_CACHE["close"] is not None and now - _SPY_CACHE["ts"] < 3600:
+        return _SPY_CACHE["close"]
+    try:
+        mds = MarketDataService()
+        hist = await mds.get_history("SPY", period="1y", interval="1d")
+        if hist is not None and not hist.empty:
+            c_col = "Close" if "Close" in hist.columns else "close"
+            spy = hist[c_col].values.astype(float)
+            _SPY_CACHE["close"] = spy
+            _SPY_CACHE["ts"] = now
+            return spy
+    except Exception:
+        pass
+    return None
+
+
+def _compute_rs_vs_benchmark(
+    stock_close: np.ndarray,
+    bench_close: np.ndarray,
+) -> dict:
+    """Compute Mansfield-style RS metrics: composite, percentile-ready, trend.
+
+    RS = (stock % change / benchmark % change) for 1M/3M/6M windows.
+    Returns rs_composite (100=in-line), rs_1m, rs_3m, rs_6m, rs_slope.
+    """
+    n = min(len(stock_close), len(bench_close))
+    if n < 22:
+        return {
+            "rs_composite": 100.0,
+            "rs_1m": 100.0,
+            "rs_3m": 100.0,
+            "rs_6m": 100.0,
+            "rs_slope": 0.0,
+            "rs_status": "NEUTRAL",
+        }
+
+    def _pct(arr, lookback):
+        if n < lookback + 1:
+            return 0.0
+        return (arr[-1] / arr[-1 - lookback] - 1) * 100
+
+    def _rs(s_ret, b_ret):
+        if b_ret == 0:
+            return 100.0 + s_ret * 10
+        return max(0, min(300, (1 + s_ret / 100) / (1 + b_ret / 100) * 100))
+
+    s, b = stock_close[-n:], bench_close[-n:]
+    rs_1m = _rs(_pct(s, 21), _pct(b, 21))
+    rs_3m = _rs(_pct(s, 63), _pct(b, 63)) if n >= 64 else rs_1m
+    rs_6m = _rs(_pct(s, 126), _pct(b, 126)) if n >= 127 else rs_3m
+
+    composite = 0.25 * rs_1m + 0.40 * rs_3m + 0.35 * rs_6m
+
+    # RS slope: compare current 1M RS vs 1M RS from 21 days ago
+    rs_slope = 0.0
+    if n >= 43:
+        old_s_ret = (s[-22] / s[-22 - 21] - 1) * 100 if n >= 44 else 0
+        old_b_ret = (b[-22] / b[-22 - 21] - 1) * 100 if n >= 44 else 0
+        old_rs = _rs(old_s_ret, old_b_ret)
+        rs_slope = round(rs_1m - old_rs, 1)
+
+    if composite >= 120:
+        status = "LEADER"
+    elif composite >= 105:
+        status = "STRONG"
+    elif composite >= 95:
+        status = "NEUTRAL"
+    elif composite >= 80:
+        status = "WEAK"
+    else:
+        status = "LAGGARD"
+
+    return {
+        "rs_composite": round(composite, 1),
+        "rs_1m": round(rs_1m, 1),
+        "rs_3m": round(rs_3m, 1),
+        "rs_6m": round(rs_6m, 1),
+        "rs_slope": rs_slope,
+        "rs_status": status,
+    }
+
+
 # US market holidays (fixed + observed). Not exhaustive but covers majors.
 _US_MARKET_HOLIDAYS_2024_2027 = {
     # 2024
@@ -4701,6 +4792,9 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
             r for r in batch_results if r is not None and not isinstance(r, Exception)
         )
 
+    # Fetch SPY benchmark for RS computation
+    spy_close = await _get_spy_close()
+
     for ticker, hist in all_results:
         try:
             if hist is None or hist.empty or len(hist) < 60:
@@ -4727,6 +4821,20 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
             cur_atr = max(float(atr_pct[i]), 0.005)
 
             trending = bool(close[i] > sma50[i] and sma50[i] > sma200[i])
+
+            # ── RS vs SPY ──
+            rs_info = (
+                _compute_rs_vs_benchmark(close, spy_close)
+                if spy_close is not None
+                else {
+                    "rs_composite": 100.0,
+                    "rs_1m": 100.0,
+                    "rs_3m": 100.0,
+                    "rs_6m": 100.0,
+                    "rs_slope": 0.0,
+                    "rs_status": "NEUTRAL",
+                }
+            )
 
             # ── Check each strategy ──
             _ST = SIGNAL_THRESHOLDS
@@ -4980,6 +5088,7 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                         "earnings": _earnings,
                         "fundamentals": _fundamentals_brief,
                         "portfolio_gate": _portfolio_check,
+                        "rs": rs_info,
                         "sector": _TICKER_SECTOR.get(ticker, "unknown"),
                     }
                 )
@@ -5039,9 +5148,57 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                 cur_atr = max(float(atr_pct_v[ii]), 0.005)
                 trending = bool(close[ii] > sma50[ii] and sma50[ii] > sma200[ii])
 
+                # ── Phase 9: Pre-compute for fallback path ──
+                _fb_structure = {}
+                _fb_entry_qual = {}
+                _fb_earnings = {}
+                _fb_fundamentals = {}
+                if _P9_ENGINES:
+                    try:
+                        h_col = "High" if "High" in hist.columns else "high"
+                        l_col = "Low" if "Low" in hist.columns else "low"
+                        _hi = hist[h_col].values.astype(float)
+                        _lo = hist[l_col].values.astype(float)
+                        _sd = StructureDetector()
+                        _sr = _sd.analyze(close, _hi, _lo, volume)
+                        _fb_structure = _sr.to_dict()
+                    except Exception as _e9:
+                        logger.debug("[Phase9-fb] structure: %s", _e9)
+                    try:
+                        _fb_earnings = get_earnings_info(ticker)
+                    except Exception as _e9:
+                        logger.debug("[Phase9-fb] earnings: %s", _e9)
+                    try:
+                        _fd = get_fundamentals(ticker)
+                        _fb_fundamentals = {
+                            "quality": _fd.get("quality_score"),
+                            "pe": _fd.get("valuation", {}).get("pe_trailing"),
+                            "roe": _fd.get("profitability", {}).get("roe"),
+                            "rev_growth": _fd.get("growth", {}).get("revenue_growth"),
+                            "moat": _fd.get("moat_indicators", {}).get(
+                                "has_moat", False
+                            ),
+                        }
+                    except Exception as _e9:
+                        logger.debug("[Phase9-fb] fundamentals: %s", _e9)
+
                 conf = _compute_4layer_confidence(
-                    close, sma20, sma50, sma200, rsi_v, atr_pct_v,
-                    vol_ratio_v, ii, volume, trending,
+                    close,
+                    sma20,
+                    sma50,
+                    sma200,
+                    rsi_v,
+                    atr_pct_v,
+                    vol_ratio_v,
+                    ii,
+                    volume,
+                    trending,
+                    structure_result=_fb_structure,
+                    entry_quality_result=_fb_entry_qual,
+                    earnings_info=_fb_earnings,
+                    fundamentals_info=_fb_fundamentals,
+                    regime_label="UPTREND" if trending else "SIDEWAYS",
+                    ticker_sector=_TICKER_SECTOR.get(ticker, "unknown"),
                 )
                 score = round(conf["composite"] / 10, 1)
                 entry_price = round(float(close[ii]), 2)
@@ -5107,46 +5264,21 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                             "invalidation": f"Close below ${stop_price}",
                             "pre_mortem": "No strategy triggered — watch only",
                             "why_wait": "Wait for a defined entry setup before committing capital",
-                            # Phase 9 fields (fallback)
-                            "structure": {},
-                            "entry_quality": {},
-                            "earnings": {},
-                            "fundamentals": {},
+                            # Phase 9 fields (from pre-computed results)
+                            "structure": _fb_structure,
+                            "entry_quality": _fb_entry_qual,
+                            "earnings": _fb_earnings,
+                            "fundamentals": _fb_fundamentals,
                             "portfolio_gate": {},
+                            "rs": (
+                                _compute_rs_vs_benchmark(close, spy_close)
+                                if spy_close is not None
+                                else {"rs_composite": 100.0, "rs_status": "NEUTRAL"}
+                            ),
                             "sector": _TICKER_SECTOR.get(ticker, "unknown"),
                         },
                     )
                 )
-                # Phase 9 enrichment for fallback
-                if _P9_ENGINES:
-                    _fb_rec = _fallback[-1][1]
-                    try:
-                        h_col = "High" if "High" in hist.columns else "high"
-                        l_col = "Low" if "Low" in hist.columns else "low"
-                        _hi = hist[h_col].values.astype(float)
-                        _lo = hist[l_col].values.astype(float)
-                        _sd = StructureDetector()
-                        _sr = _sd.analyze(close, _hi, _lo, volume)
-                        _fb_rec["structure"] = _sr.to_dict()
-                    except Exception as _e9:
-                        logger.debug("[Phase9-fb] structure: %s", _e9)
-                    try:
-                        _fb_rec["earnings"] = get_earnings_info(ticker)
-                    except Exception as _e9:
-                        logger.debug("[Phase9-fb] earnings: %s", _e9)
-                    try:
-                        _fd = get_fundamentals(ticker)
-                        _fb_rec["fundamentals"] = {
-                            "quality": _fd.get("quality_score"),
-                            "pe": _fd.get("valuation", {}).get("pe_trailing"),
-                            "roe": _fd.get("profitability", {}).get("roe"),
-                            "rev_growth": _fd.get("growth", {}).get("revenue_growth"),
-                            "moat": _fd.get("moat_indicators", {}).get(
-                                "has_moat", False
-                            ),
-                        }
-                    except Exception as _e9:
-                        logger.debug("[Phase9-fb] fundamentals: %s", _e9)
             except Exception as _e_fb:
                 logger.debug("[Scanner-fb] %s skip: %s", ticker, _e_fb)
                 continue

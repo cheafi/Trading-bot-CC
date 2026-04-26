@@ -344,7 +344,8 @@
                   <template x-if="opp.conviction_rank"><span class="pill pg" x-text="'💎 C#'+opp.conviction_rank"></span></template>
                 </div>
                 <!-- Phase 9 pills -->
-                <div class="flex gap-1 flex-wrap mb-1" x-show="opp.structure||opp.entry_quality||opp.earnings||opp.fundamentals||opp.portfolio_gate">
+                <div class="flex gap-1 flex-wrap mb-1" x-show="opp.structure||opp.entry_quality||opp.earnings||opp.fundamentals||opp.portfolio_gate||opp.rs">
+                  <template x-if="opp.rs&&opp.rs.rs_composite"><span class="pill text-[7px]" :class="opp.rs.rs_status==='LEADER'?'pg':opp.rs.rs_status==='STRONG'?'pg':opp.rs.rs_status==='WEAK'?'pa':opp.rs.rs_status==='LAGGARD'?'pr':'pw'" x-text="'⚡RS '+Math.round(opp.rs.rs_composite)+(opp.rs.rs_slope>0?' ↑':opp.rs.rs_slope<0?' ↓':'')"></span></template>
                   <template x-if="opp.structure&&opp.structure.trend"><span class="pill text-[7px]" :class="opp.structure.trend==='uptrend'?'pg':opp.structure.trend==='downtrend'?'pr':'pa'" x-text="'📊'+opp.structure.trend"></span></template>
                   <template x-if="opp.structure&&opp.structure.trend_quality"><span class="pill pw text-[7px]" x-text="'🎯 TQ'+Math.round(opp.structure.trend_quality)"></span></template>
                   <template x-if="opp.structure&&opp.structure.is_extended"><span class="pill pr text-[7px]" x-text="'🚨 Extended '+Math.round((opp.structure.extension_pct||0)*100)+'%'"></span></template>
@@ -654,8 +655,9 @@
                     <template x-if="r.risk_reward"><span>R:R <strong class="text-white" x-text="Number(r.risk_reward).toFixed(1)"></strong></span></template>
                   </div>
                 </template>
-                <!-- Phase 9: Structure · Entry Quality · Fundamentals · Earnings -->
+                <!-- Phase 9: Structure · Entry Quality · Fundamentals · Earnings · RS -->
                 <div class="flex gap-1 flex-wrap mt-1">
+                  <template x-if="r.rs&&r.rs.rs_composite"><span class="pill text-[7px]" :class="r.rs.rs_status==='LEADER'?'pg':r.rs.rs_status==='STRONG'?'pg':r.rs.rs_status==='WEAK'?'pa':r.rs.rs_status==='LAGGARD'?'pr':'pw'" x-text="'⚡RS '+Math.round(r.rs.rs_composite)+(r.rs.rs_slope>0?' ↑':r.rs.rs_slope<0?' ↓':'')"></span></template>
                   <template x-if="r.structure&&r.structure.trend"><span class="pill text-[7px]" :class="r.structure.trend==='uptrend'?'pg':r.structure.trend==='downtrend'?'pr':'pa'" x-text="'📊 '+r.structure.trend.toUpperCase()"></span></template>
                   <template x-if="r.structure&&r.structure.trend_quality"><span class="pill pw text-[7px]" x-text="'🎯 TQ'+Math.round(r.structure.trend_quality)"></span></template>
                   <template x-if="r.structure&&r.structure.is_extended"><span class="pill pr text-[7px]" x-text="'🚨 Extended '+Math.round((r.structure.extension_pct||0)*100)+'%'"></span></template>
