@@ -301,6 +301,8 @@
                 <div class="flex items-center gap-2 mb-1">
                   <span class="text-[11px] font-bold mono" style="color:var(--amber);min-width:20px" x-text="'#'+(idx+1)"></span>
                   <span class="text-[13px] font-extrabold mono text-white" x-text="opp.ticker"></span>
+                  <!-- Mini sparkline -->
+                  <template x-if="opp._spark"><svg :width="opp._spark.length*3" height="18" style="flex-shrink:0"><polyline :points="opp._spark.map((v,j)=>j*3+','+(18-v)).join(' ')" fill="none" :stroke="opp._spark[opp._spark.length-1]>=opp._spark[0]?'#00d4aa':'#ff5c5c'" stroke-width="1.5"/></svg></template>
                   <template x-if="opp.sector"><span class="pill pp text-[7px]" x-text="opp.sector"></span></template>
                   <template x-if="opp.theme"><span class="pill pw text-[7px]" x-text="opp.theme"></span></template>
                   <template x-if="opp.grade"><span class="pill mono text-[8px]" :class="opp.grade==='A'?'pg':opp.grade==='B'?'pa':'pr'" x-text="'Grade '+opp.grade"></span></template>
@@ -616,6 +618,8 @@
                 <div class="flex items-center gap-2 mb-1">
                   <span class="text-[10px] font-bold mono" style="color:var(--amber);min-width:20px" x-text="'#'+(idx+1)"></span>
                   <span class="text-[13px] font-extrabold mono text-white" x-text="r.ticker||'—'"></span>
+                  <!-- Mini sparkline -->
+                  <template x-if="r._spark"><svg :width="r._spark.length*3" height="18" style="flex-shrink:0"><polyline :points="r._spark.map((v,j)=>j*3+','+(18-v)).join(' ')" fill="none" :stroke="r._spark[r._spark.length-1]>=r._spark[0]?'#00d4aa':'#ff5c5c'" stroke-width="1.5"/></svg></template>
                   <template x-if="r.sector_type"><span class="pill pp text-[7px]" x-text="r.sector_type"></span></template>
                   <template x-if="r.grade"><span class="pill mono text-[8px]" :class="r.grade==='A'?'pg':r.grade==='B'?'pa':'pr'" x-text="'Grade '+r.grade"></span></template>
                   <span class="pill text-[8px] font-bold ml-auto" :class="r.action==='TRADE'||r.action==='BUY'?'pg':r.action==='NO_TRADE'||r.action==='AVOID'?'pr':'pa'" x-text="r.action||'—'"></span>
@@ -1636,6 +1640,15 @@
               </div>
             </div>
 
+            <!-- ── Price Chart Around Target Date ── -->
+            <div class="card" style="overflow:hidden">
+              <div class="flex items-center justify-between px-3 pt-2 pb-1">
+                <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">📊 Price Action Around Target</div>
+                <div class="flex gap-2 text-[8px]" style="color:var(--t3)"><span><span style="color:#00d4aa">▲</span> Entry</span> <span style="color:rgba(88,166,255,.3)">■ After</span></div>
+              </div>
+              <div id="tt-chart" style="height:200px;width:100%"></div>
+            </div>
+
             <!-- ── 4-Layer Confidence ── -->
             <template x-if="tt.result.confidence">
               <div class="card card-p">
@@ -2436,6 +2449,56 @@
           new ResizeObserver(()=>{chart.applyOptions({width:el.clientWidth})}).observe(el);
         }catch(e){console.warn('Bench BT chart error:',e)}
       },
+      async loadSparklines(items){
+        // Load sparkline data for an array of {ticker} objects, sets _spark property
+        const tickers=[...new Set(items.filter(o=>o.ticker).map(o=>o.ticker))].slice(0,15);
+        const results=await Promise.allSettled(tickers.map(t=>fetch('/api/live/spark/'+encodeURIComponent(t)+'?days=20').then(r=>r.ok?r.json():null)));
+        const map={};
+        results.forEach((r,i)=>{if(r.status==='fulfilled'&&r.value&&r.value.prices&&r.value.prices.length>=3)map[tickers[i]]=r.value.prices});
+        items.forEach(o=>{if(o.ticker&&map[o.ticker]){
+          const p=map[o.ticker];
+          const mn=Math.min(...p),mx=Math.max(...p);
+          const rng=mx-mn||1;
+          o._spark=p.map(v=>Math.round((v-mn)/rng*16)+1);
+        }});
+      },
+      async renderTTChart(){
+        if(!this.tt.result||!this.tt.result.ticker)return;
+        const el=document.getElementById('tt-chart');
+        if(!el||typeof LightweightCharts==='undefined')return;
+        el.innerHTML='';
+        try{
+          // Fetch 1y chart data centered around the target date
+          const r=await fetch('/api/live/chart/'+encodeURIComponent(this.tt.result.ticker)+'?period=1y');
+          if(!r.ok)return;
+          const d=await r.json();
+          if(!d.candles||!d.candles.length)return;
+          const chart=LightweightCharts.createChart(el,{width:el.clientWidth,height:200,layout:{background:{color:'#161b22'},textColor:'#8b949e',fontSize:10},grid:{vertLines:{color:'#21262d'},horzLines:{color:'#21262d'}},crosshair:{mode:0},rightPriceScale:{borderColor:'#21262d'},timeScale:{borderColor:'#21262d',timeVisible:false}});
+          const cs=chart.addCandlestickSeries({upColor:'#00d4aa',downColor:'#ff5c5c',borderUpColor:'#00d4aa',borderDownColor:'#ff5c5c',wickUpColor:'#00d4aa',wickDownColor:'#ff5c5c'});
+          cs.setData(d.candles);
+          // Mark the entry date
+          const targetDate=this.tt.result.target_date;
+          if(targetDate){
+            const parts=targetDate.split('-');
+            if(parts.length===3){
+              const targetTs=Date.UTC(+parts[0],+parts[1]-1,+parts[2])/1000;
+              // Find nearest candle
+              let nearestIdx=0,minDiff=Infinity;
+              d.candles.forEach((c,i)=>{const df=Math.abs(c.time-targetTs);if(df<minDiff){minDiff=df;nearestIdx=i}});
+              const entryCandle=d.candles[nearestIdx];
+              if(entryCandle){
+                cs.setMarkers([{time:entryCandle.time,position:'belowBar',color:'#00d4aa',shape:'arrowUp',text:'ENTRY $'+this.tt.result.price}]);
+                cs.createPriceLine({price:this.tt.result.price,color:'#58a6ff',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'Entry'});
+              }
+            }
+          }
+          // SMA overlays
+          if(d.sma20&&d.sma20.length){const s20=chart.addLineSeries({color:'#58a6ff',lineWidth:1,priceLineVisible:false,lastValueVisible:false});s20.setData(d.sma20)}
+          if(d.sma50&&d.sma50.length){const s50=chart.addLineSeries({color:'#fbbf24',lineWidth:1,priceLineVisible:false,lastValueVisible:false});s50.setData(d.sma50)}
+          chart.timeScale().fitContent();
+          new ResizeObserver(()=>{chart.applyOptions({width:el.clientWidth})}).observe(el);
+        }catch(e){console.warn('TT chart error:',e)}
+      },
       openDossier(ticker){if(ticker){this.dos.ticker=ticker;this.switchTab('dossier');this.fetchDossier()}},
       async fetchOptions(){
         if(!this.opt.ticker)return;this.opt.loading=true;this.opt.data=null;
@@ -2451,7 +2514,7 @@
       },
       async fetchTimeTravel(){
         if(!this.tt.ticker||!this.tt.date)return;this.tt.loading=true;this.tt.result=null;
-        try{const u='/api/live/time-travel?ticker='+encodeURIComponent(this.tt.ticker)+'&target_date='+this.tt.date+'&strategy='+(this.tt.strategy||'all');const r=await fetch(u,{method:'POST'});if(!r.ok){const e=await r.json();throw new Error(e.detail||'Failed')}this.tt.result=await r.json()}catch(e){alert('Time Travel Error: '+e.message)}finally{this.tt.loading=false}
+        try{const u='/api/live/time-travel?ticker='+encodeURIComponent(this.tt.ticker)+'&target_date='+this.tt.date+'&strategy='+(this.tt.strategy||'all');const r=await fetch(u,{method:'POST'});if(!r.ok){const e=await r.json();throw new Error(e.detail||'Failed')}this.tt.result=await r.json();this.$nextTick(()=>this.renderTTChart())}catch(e){alert('Time Travel Error: '+e.message)}finally{this.tt.loading=false}
       },
       async fetchHealth(){
         try{const r=await fetch('/api/health');if(!r.ok)throw 0;const d=await r.json();this.ops.components=d.components||{};const m=d.metrics||{};this.ops.running=m.running||false;this.ops.cycle_count=m.cycle_count||0;this.ops.signals_today=m.signals_today||0;this.ops.trades_today=m.trades_today||0;this.ops.circuit_breaker=m.circuit_breaker_triggered||false;this.ops.circuit_breaker_reason=m.circuit_breaker_reason||'';this.ops.dry_run=m.dry_run!==false}catch(e){}
@@ -2465,14 +2528,14 @@
         this.opps.sort((a,b)=>k==='ticker'?(a.ticker||'').localeCompare(b.ticker||''):(Number(b[k])||0)-(Number(a[k])||0));
       },
       async fetchToday7(){
-        try{const r=await fetch('/api/v7/today');if(!r.ok)throw 0;const d=await r.json();this.today7.regime=d.market_regime||null;this.today7.top_ranked=d.top_5||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.avoid_list=(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'⚠',reason:a}:a);this.today7.tradeability=(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{}}catch(e){console.warn('v7/today fetch failed',e)}
+        try{const r=await fetch('/api/v7/today');if(!r.ok)throw 0;const d=await r.json();this.today7.regime=d.market_regime||null;this.today7.top_ranked=d.top_5||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.avoid_list=(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'⚠',reason:a}:a);this.today7.tradeability=(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{};if(this.today7.top_ranked.length)this.loadSparklines(this.today7.top_ranked)}catch(e){console.warn('v7/today fetch failed',e)}
       },
       async fetchOpps(){
         try{const r=await fetch('/api/v7/opportunities');if(!r.ok)throw 0;const d=await r.json();this.opps=d.opportunities||[];this.sortOpps()}catch(e){console.warn('v7/opportunities fetch failed',e)}
       },
       async fetchRanked(){
         this.rankedOpps.loading=true;
-        try{let u='/api/v7/playbook/ranked?limit=30';if(this.rankedOpps.actionFilter)u+='&action='+this.rankedOpps.actionFilter;if(this.rankedOpps.sectorFilter)u+='&sector='+this.rankedOpps.sectorFilter;const r=await fetch(u);if(!r.ok)throw 0;const d=await r.json();this.rankedOpps.rows=d.opportunities||[]}catch(e){console.warn('ranked fetch failed',e)}finally{this.rankedOpps.loading=false}
+        try{let u='/api/v7/playbook/ranked?limit=30';if(this.rankedOpps.actionFilter)u+='&action='+this.rankedOpps.actionFilter;if(this.rankedOpps.sectorFilter)u+='&sector='+this.rankedOpps.sectorFilter;const r=await fetch(u);if(!r.ok)throw 0;const d=await r.json();this.rankedOpps.rows=d.opportunities||[];if(this.rankedOpps.rows.length)this.loadSparklines(this.rankedOpps.rows)}catch(e){console.warn('ranked fetch failed',e)}finally{this.rankedOpps.loading=false}
       },
       async fetchScanners(cat){
         this.scannerHub.loading=true;this.scannerHub.category=cat||null;

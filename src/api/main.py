@@ -6073,6 +6073,28 @@ async def live_quote(ticker: str):
 
 
 # ─────────────────────────────────────────────────────────────
+# Mini sparkline data (last N closes for inline charts)
+# ─────────────────────────────────────────────────────────────
+@app.get("/api/live/spark/{ticker}", tags=["live"])
+async def live_spark(ticker: str, days: int = Query(20, ge=5, le=60)):
+    """Return last N closing prices for inline sparkline rendering."""
+    ticker = validate_ticker(ticker)
+    mds = app.state.market_data
+    hist = await mds.get_history(ticker, period="3mo", interval="1d")
+    if hist is None or hist.empty:
+        return {"ticker": ticker, "prices": [], "change_pct": 0}
+    c_col = "Close" if "Close" in hist.columns else "close"
+    closes = hist[c_col].values.astype(float)[-days:]
+    prices = [round(float(v), 2) for v in closes if not np.isnan(v)]
+    change = (
+        round((prices[-1] / prices[0] - 1) * 100, 2)
+        if len(prices) >= 2 and prices[0] > 0
+        else 0
+    )
+    return {"ticker": ticker, "prices": prices, "change_pct": change}
+
+
+# ─────────────────────────────────────────────────────────────
 # Chart OHLCV data for TradingView lightweight-charts
 # ─────────────────────────────────────────────────────────────
 @app.get("/api/live/chart/{ticker}", tags=["live"])
