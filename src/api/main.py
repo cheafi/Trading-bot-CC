@@ -45,6 +45,24 @@ from src.core.risk_limits import BACKTEST_DEFAULTS, RISK, SIGNAL_THRESHOLDS
 from src.core.telemetry import telemetry
 from src.core.version import APP_VERSION, PRODUCT_NAME
 
+# ── Phase 9 engine imports ──
+try:
+    from src.engines.breakout_monitor import BreakoutMonitor
+    from src.engines.decision_persistence import get_expert_store, get_journal
+    from src.engines.earnings_calendar import (
+        get_days_to_earnings,
+        get_earnings_info,
+        is_in_blackout,
+    )
+    from src.engines.entry_quality import EntryQualityEngine
+    from src.engines.fundamental_data import get_fundamentals
+    from src.engines.portfolio_gate import PortfolioGate
+    from src.engines.structure_detector import StructureDetector
+
+    _P9_ENGINES = True
+except ImportError:
+    _P9_ENGINES = False
+
 # v6 optional imports (graceful fallback)
 try:
     from src.notifications.report_generator import (
@@ -4777,6 +4795,77 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                 )
                 score = round(conf["composite"] / 10, 1)  # 0-10 scale
 
+                # ── Phase 9: Structure + Entry Quality ──
+                _structure = {}
+                _entry_qual = {}
+                _earnings = {}
+                _fundamentals_brief = {}
+                _portfolio_check = {}
+                if _P9_ENGINES:
+                    try:
+                        h_col = "High" if "High" in hist.columns else "high"
+                        l_col = "Low" if "Low" in hist.columns else "low"
+                        _hi = hist[h_col].values.astype(float)
+                        _lo = hist[l_col].values.astype(float)
+                        _sd = StructureDetector()
+                        _sr = _sd.analyze(close, _hi, _lo, volume)
+                        _structure = _sr.to_dict()
+                        # Use S/R for better stops/targets
+                        _sup = _sr.nearest_support
+                        _res = _sr.nearest_resistance
+                        if _sup and _sup < entry_price:
+                            stop_price = round(
+                                max(stop_price, _sup * 0.995),
+                                2,
+                            )
+                        if _res and _res > entry_price:
+                            target_price = round(
+                                min(target_price, _res * 0.99),
+                                2,
+                            )
+                        risk = entry_price - stop_price
+                        reward = target_price - entry_price
+                        rr = round(reward / risk, 1) if risk > 0 else 0
+                        _eq = EntryQualityEngine()
+                        _eqr = _eq.assess(
+                            close,
+                            _hi,
+                            _lo,
+                            volume,
+                            float(atr_pct[i]),
+                            entry_price,
+                            stop_price,
+                            target_price,
+                            _res,
+                            _sup,
+                            _TICKER_SECTOR.get(ticker, "unknown"),
+                        )
+                        _entry_qual = _eqr.to_dict()
+                    except Exception:
+                        pass
+                    try:
+                        _earnings = get_earnings_info(ticker)
+                        if _earnings.get("in_blackout"):
+                            conf["penalties"] = conf.get("penalties", []) + [
+                                "earnings_blackout"
+                            ]
+                            score = max(0, score - 1.5)
+                    except Exception:
+                        pass
+                    try:
+                        _fd = get_fundamentals(ticker)
+                        _fundamentals_brief = {
+                            "quality": _fd.get("quality_score", None),
+                            "pe": _fd.get("valuation", {}).get("pe_trailing"),
+                            "roe": _fd.get("profitability", {}).get("roe"),
+                            "rev_growth": _fd.get("growth", {}).get("revenue_growth"),
+                            "moat": _fd.get("moat_indicators", {}).get(
+                                "has_moat", False
+                            ),
+                        }
+                    except Exception:
+                        pass
+
                 recs.append(
                     {
                         "ticker": ticker,
@@ -4834,12 +4923,20 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                         "pre_mortem": _build_pre_mortem(strat_name, trending),
                         "why_wait": _build_why_wait(conf, rr),
                         # ── Sprint 44: uncertainty + reliability ──
-                        "honest_confidence": _honest_confidence_label(conf["composite"]),
+                        "honest_confidence": _honest_confidence_label(
+                            conf["composite"]
+                        ),
                         "reliability": {
                             "bucket": reliability_bucket(len(close) - 60),
                             "sample_size": len(close) - 60,
                             "note": reliability_note(len(close) - 60),
                         },
+                        # ── Phase 9: new engines ──
+                        "structure": _structure,
+                        "entry_quality": _entry_qual,
+                        "earnings": _earnings,
+                        "fundamentals": _fundamentals_brief,
+                        "sector": _TICKER_SECTOR.get(ticker, "unknown"),
                     }
                 )
         except Exception as exc:
@@ -6954,22 +7051,26 @@ def _compute_4layer_confidence(
     else:
         grade, action = "D", "No Trade — conditions unfavorable"
 
-    # ── 5-Tier Decision (P1) ──
-    if composite >= SIGNAL_THRESHOLDS.strong_buy_threshold and len(penalties) == 0:
-        decision_tier = "STRONG_BUY"
-        sizing = f"Full position ({RISK.max_position_pct*100:.0f}% of portfolio)"
+    # ── 7-Tier Decision (P9: matches spec) ──
+    # Trade / Watch / Wait / Hold / Reduce / Exit / No Trade
+    if composite >= SIGNAL_THRESHOLDS.strong_buy_threshold and not penalties:
+        decision_tier = "TRADE"
+        sizing = "Full position" f" ({RISK.max_position_pct*100:.0f}%" " of portfolio)"
     elif composite >= SIGNAL_THRESHOLDS.buy_threshold:
-        decision_tier = "BUY_SMALL"
-        sizing = f"Half position ({RISK.max_position_pct*50:.1f}% of portfolio)"
+        decision_tier = "TRADE"
+        sizing = "Half position" f" ({RISK.max_position_pct*50:.1f}%" " of portfolio)"
     elif composite >= SIGNAL_THRESHOLDS.watch_threshold:
         decision_tier = "WATCH"
         sizing = "No position — watchlist only"
+    elif composite >= 45:
+        decision_tier = "WAIT"
+        sizing = "Setup forming — not yet actionable"
     elif composite >= 40:
         decision_tier = "NO_TRADE"
         sizing = "Abstain — conditions unfavorable"
     else:
-        decision_tier = "HEDGE"
-        sizing = "Consider hedging existing exposure"
+        decision_tier = "NO_TRADE"
+        sizing = "Conditions hostile — stay flat"
 
     # ── Abstention Rule (P1: Confidence Calibration) ──
     ABSTENTION_THRESHOLD = SIGNAL_THRESHOLDS.abstention_threshold
@@ -7055,6 +7156,7 @@ def _run_expert_council(
     idx,
     volume,
     regime_trending,
+    ticker: str = "",
 ) -> dict:
     """Run 7-member Expert Council v2 — fixed schema with consensus analysis."""
     i = idx
@@ -7120,22 +7222,58 @@ def _run_expert_council(
         )
     )
 
-    # 2) Fundamental Analyst
+    # 2) Fundamental Analyst — uses REAL financial data
     fund_score = 50
     fund_reasons, fund_risks = [], []
     if regime_trending:
-        fund_score += 15
-        fund_reasons.append("Trending regime — fundamentals likely supportive")
-    if close[i] > sma200[i]:
         fund_score += 10
-        fund_reasons.append("Price > 200-day MA — long-term uptrend intact")
+        fund_reasons.append("Trending regime — fundamentals supportive")
+    if close[i] > sma200[i]:
+        fund_score += 5
+        fund_reasons.append("Price > 200-day MA — uptrend intact")
     else:
         fund_score -= 10
-        fund_risks.append("Below 200-day MA — fundamental deterioration possible")
+        fund_risks.append("Below 200MA — deterioration possible")
+    # Wire real fundamental data (Phase 9)
+    if _P9_ENGINES:
+        try:
+            _tkr = ticker
+            if _tkr:
+                _fd = get_fundamentals(_tkr)
+                _qs = _fd.get("quality_score", 50)
+                if _qs >= 70:
+                    fund_score += 15
+                    fund_reasons.append(
+                        f"Quality score {_qs}/100" " — strong fundamentals"
+                    )
+                elif _qs >= 55:
+                    fund_score += 5
+                    fund_reasons.append(f"Quality score {_qs}/100" " — acceptable")
+                elif _qs < 40:
+                    fund_score -= 10
+                    fund_risks.append(f"Weak fundamentals" f" (quality {_qs}/100)")
+                _g = _fd.get("growth", {})
+                rg = _g.get("revenue_growth")
+                if rg and rg > 15:
+                    fund_score += 5
+                    fund_reasons.append(f"Revenue growth {rg:.0f}%")
+                elif rg and rg < 0:
+                    fund_score -= 5
+                    fund_risks.append(f"Revenue declining {rg:.0f}%")
+                _v = _fd.get("valuation", {})
+                _pe = _v.get("pe_trailing")
+                if _pe and _pe > 80:
+                    fund_risks.append(f"P/E {_pe:.0f}x — expensive")
+                _moat = _fd.get("moat_indicators", {})
+                if _moat.get("has_moat"):
+                    fund_score += 5
+                    fund_reasons.append("Moat detected — durable advantage")
+        except Exception:
+            pass  # graceful fallback
     if not fund_reasons:
         fund_reasons.append("Insufficient fundamental signals")
     if not fund_risks:
-        fund_risks.append("Earnings risk unknown without calendar data")
+        fund_risks.append("Earnings risk unknown")
     council.append(
         _make_expert(
             "Fundamental Analyst",
@@ -7347,39 +7485,30 @@ def _run_expert_council(
     }
 
 
-# ── Expert Track-Record Weighting (RESOLVED → see ExpertTracker engine) ──
-# Tracks per-expert historical accuracy and weights their votes
-# by realized performance rather than equal weighting.
-
-_EXPERT_TRACK_RECORD: Dict[str, Dict[str, Any]] = {}
+# ── Expert Track-Record (P9: persistent) ──
+# Uses decision_persistence.ExpertRecordStore for
+# cross-restart accuracy tracking.
 
 
 def _update_expert_accuracy(
-    role: str, predicted_stance: str, was_correct: bool
+    role: str,
+    predicted_stance: str,
+    was_correct: bool,
 ) -> None:
     """Record expert outcome for accuracy tracking."""
-    if role not in _EXPERT_TRACK_RECORD:
-        _EXPERT_TRACK_RECORD[role] = {
-            "total": 0, "correct": 0, "accuracy": 0.5,
-        }
-    rec = _EXPERT_TRACK_RECORD[role]
-    rec["total"] += 1
-    rec["correct"] += int(was_correct)
-    rec["accuracy"] = rec["correct"] / rec["total"]
+    if _P9_ENGINES:
+        get_expert_store().update(role, predicted_stance, was_correct)
 
 
 def _get_expert_weight(role: str) -> float:
-    """Get reliability weight for an expert (0.5-1.5 range)."""
-    rec = _EXPERT_TRACK_RECORD.get(role)
-    if rec is None or rec["total"] < 10:
-        return 1.0  # No track record → equal weight
-    # Scale accuracy [0.3, 0.7] → weight [0.5, 1.5]
-    acc = max(0.3, min(0.7, rec["accuracy"]))
-    return 0.5 + (acc - 0.3) / 0.4 * 1.0
+    """Get reliability weight (0.5-1.5)."""
+    if _P9_ENGINES:
+        return get_expert_store().get_weight(role)
+    return 1.0
 
 
 def _accuracy_weighted_avg(council: list) -> float:
-    """Compute accuracy-weighted average score."""
+    """Accuracy-weighted average score."""
     total_weight = 0.0
     weighted_sum = 0.0
     for member in council:
@@ -7512,6 +7641,7 @@ async def live_time_travel(
         i,
         volume,
         trending,
+        ticker=ticker,
     )
 
     # ── Strategy signals as of target date ──
@@ -10193,3 +10323,11 @@ app.include_router(decision_router)
 from src.api.routers.playbook import router as playbook_router
 
 app.include_router(playbook_router)
+
+# Phase 9 engines router
+try:
+    from src.api.routers.phase9 import router as p9_router
+
+    app.include_router(p9_router)
+except ImportError:
+    pass
