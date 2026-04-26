@@ -27,6 +27,30 @@ class HoldingInput(BaseModel):
     avg_cost: float = 0
 
 
+class PositionAddRequest(BaseModel):
+    """Add a single position (from BUY confirmation flow)."""
+
+    ticker: str
+    shares: float = 0
+    entry_price: float = 0
+    stop_price: float = 0
+    target_1r: float = 0
+    target_2r: float = 0
+    notes: str = ""
+
+
+class PositionUpdateRequest(BaseModel):
+    """Update an existing position."""
+
+    ticker: str
+    shares: float | None = None
+    entry_price: float | None = None
+    stop_price: float | None = None
+    target_1r: float | None = None
+    target_2r: float | None = None
+    notes: str | None = None
+
+
 class PortfolioImportRequest(BaseModel):
     holdings: List[HoldingInput]
     source: str = "manual"
@@ -139,7 +163,219 @@ async def portfolio_from_futu():
         raise HTTPException(500, f"Futu fetch failed: {exc}") from exc
 
 
-@router.post("/api/portfolio/advise", tags=["portfolio"])
+# ── Position management (add/update/remove/monitor) ──────────────────
+
+
+@router.post("/api/portfolio/position", tags=["portfolio"])
+async def add_position(req: PositionAddRequest, request: Request):
+    """Add a single position (e.g., from BUY confirmation flow)."""
+    global _user_portfolio
+    t = req.ticker.upper().strip()
+    now = datetime.now(timezone.utc).isoformat() + "Z"
+
+    # Fetch current price
+    price = None
+    try:
+        mds = request.app.state.market_data
+        hist = await mds.get_history(t, period="5d", interval="1d")
+        if hist is not None and not hist.empty:
+            c_col = "Close" if "Close" in hist.columns else "close"
+            price = float(hist[c_col].iloc[-1])
+    except Exception:
+        pass
+
+    entry = req.entry_price or price or 0
+    risk = entry - req.stop_price if req.stop_price else entry * 0.05
+    pos = {
+        "ticker": t,
+        "shares": req.shares,
+        "avg_cost": entry,
+        "entry_price": entry,
+        "current_price": price,
+        "stop_price": req.stop_price or round(entry - risk, 2),
+        "target_1r": req.target_1r or round(entry + risk * 2, 2),
+        "target_2r": req.target_2r or round(entry + risk * 3, 2),
+        "market_value": round(price * req.shares, 2) if price else None,
+        "unrealized_pnl": round((price - entry) * req.shares, 2) if price else None,
+        "pnl_pct": round((price / entry - 1) * 100, 2) if price and entry else None,
+        "r_multiple": round((price - entry) / risk, 2) if price and risk else None,
+        "status": "OPEN",
+        "added_at": now,
+        "notes": req.notes,
+    }
+
+    # Replace if ticker exists, else append
+    holdings = _user_portfolio.get("holdings", [])
+    holdings = [h for h in holdings if h.get("ticker") != t]
+    holdings.append(pos)
+    _user_portfolio = {
+        "holdings": holdings,
+        "source": _user_portfolio.get("source", "manual"),
+        "updated_at": now,
+        "count": len(holdings),
+    }
+    return {"status": "added", "position": pos}
+
+
+@router.put("/api/portfolio/position", tags=["portfolio"])
+async def update_position(req: PositionUpdateRequest):
+    """Update stop/target/shares for an existing position."""
+    global _user_portfolio
+    t = req.ticker.upper().strip()
+    holdings = _user_portfolio.get("holdings", [])
+    found = None
+    for h in holdings:
+        if h.get("ticker") == t:
+            found = h
+            break
+    if not found:
+        raise HTTPException(404, f"Position {t} not found in portfolio")
+
+    if req.shares is not None:
+        found["shares"] = req.shares
+    if req.entry_price is not None:
+        found["entry_price"] = req.entry_price
+        found["avg_cost"] = req.entry_price
+    if req.stop_price is not None:
+        found["stop_price"] = req.stop_price
+    if req.target_1r is not None:
+        found["target_1r"] = req.target_1r
+    if req.target_2r is not None:
+        found["target_2r"] = req.target_2r
+    if req.notes is not None:
+        found["notes"] = req.notes
+    _user_portfolio["updated_at"] = datetime.now(timezone.utc).isoformat() + "Z"
+    return {"status": "updated", "position": found}
+
+
+@router.delete("/api/portfolio/position/{ticker}", tags=["portfolio"])
+async def remove_position(ticker: str):
+    """Remove a position from portfolio."""
+    global _user_portfolio
+    t = ticker.upper().strip()
+    holdings = _user_portfolio.get("holdings", [])
+    before = len(holdings)
+    holdings = [h for h in holdings if h.get("ticker") != t]
+    if len(holdings) == before:
+        raise HTTPException(404, f"Position {t} not found")
+    _user_portfolio["holdings"] = holdings
+    _user_portfolio["count"] = len(holdings)
+    _user_portfolio["updated_at"] = datetime.now(timezone.utc).isoformat() + "Z"
+    return {"status": "removed", "ticker": t}
+
+
+@router.get("/api/portfolio/monitor", tags=["portfolio"])
+async def portfolio_monitor(request: Request):
+    """Monitor all positions: live price, PnL, R-multiple, stop/target alerts."""
+    holdings = _user_portfolio.get("holdings", [])
+    if not holdings:
+        return {"positions": [], "alerts": []}
+
+    mds = request.app.state.market_data
+    alerts = []
+    enriched = []
+
+    for h in holdings:
+        t = h.get("ticker", "")
+        entry = h.get("entry_price") or h.get("avg_cost") or 0
+        stop = h.get("stop_price", 0)
+        t1r = h.get("target_1r", 0)
+        t2r = h.get("target_2r", 0)
+        shares = h.get("shares", 0)
+
+        # Fetch current price
+        price = h.get("current_price")
+        change_pct = 0
+        try:
+            hist = await mds.get_history(t, period="5d", interval="1d")
+            if hist is not None and not hist.empty:
+                c_col = "Close" if "Close" in hist.columns else "close"
+                price = float(hist[c_col].iloc[-1])
+                prev = float(hist[c_col].iloc[-2]) if len(hist) >= 2 else price
+                change_pct = round((price / prev - 1) * 100, 2) if prev else 0
+        except Exception:
+            pass
+
+        risk = entry - stop if stop and entry else entry * 0.05
+        r_multiple = (
+            round((price - entry) / risk, 2) if price and risk and risk != 0 else 0
+        )
+        pnl = round((price - entry) * shares, 2) if price and entry else 0
+        pnl_pct = round((price / entry - 1) * 100, 2) if price and entry else 0
+
+        pos = {
+            **h,
+            "current_price": price,
+            "change_pct": change_pct,
+            "unrealized_pnl": pnl,
+            "pnl_pct": pnl_pct,
+            "r_multiple": r_multiple,
+            "market_value": round(price * shares, 2) if price else None,
+        }
+        enriched.append(pos)
+
+        # Generate alerts
+        if price and stop and price <= stop:
+            alerts.append(
+                {
+                    "ticker": t,
+                    "type": "STOP_HIT",
+                    "severity": "critical",
+                    "msg": f"🛑 {t} hit stop ${stop:.2f} (now ${price:.2f})",
+                }
+            )
+        if price and t1r and price >= t1r and r_multiple < 2.5:
+            alerts.append(
+                {
+                    "ticker": t,
+                    "type": "TARGET_1R",
+                    "severity": "success",
+                    "msg": f"🎯 {t} reached 1R target ${t1r:.2f} (+{pnl_pct:.1f}%)",
+                }
+            )
+        if price and t2r and price >= t2r:
+            alerts.append(
+                {
+                    "ticker": t,
+                    "type": "TARGET_2R",
+                    "severity": "success",
+                    "msg": f"🚀 {t} reached 2R target ${t2r:.2f} (+{pnl_pct:.1f}%)",
+                }
+            )
+        if abs(change_pct) >= 5:
+            alerts.append(
+                {
+                    "ticker": t,
+                    "type": "BIG_MOVE",
+                    "severity": "warning",
+                    "msg": f"⚡ {t} moved {change_pct:+.1f}% today",
+                }
+            )
+
+    # Summary
+    total_value = sum(p.get("market_value") or 0 for p in enriched)
+    total_pnl = sum(p.get("unrealized_pnl") or 0 for p in enriched)
+    total_cost = sum(
+        (p.get("entry_price") or p.get("avg_cost") or 0) * p.get("shares", 0)
+        for p in enriched
+    )
+
+    return {
+        "positions": enriched,
+        "alerts": alerts,
+        "summary": {
+            "total_positions": len(enriched),
+            "total_value": round(total_value, 2),
+            "total_cost": round(total_cost, 2),
+            "total_pnl": round(total_pnl, 2),
+            "total_pnl_pct": (
+                round((total_value / total_cost - 1) * 100, 2) if total_cost else 0
+            ),
+        },
+        "updated_at": datetime.now(timezone.utc).isoformat() + "Z",
+    }
+
+
 async def portfolio_advise(request: Request):
     """Analyse imported portfolio — expert committee + conformal prediction."""
     holdings = _user_portfolio.get("holdings", [])
@@ -414,9 +650,8 @@ async def delta_scoreboard(request: Request):
     material, noise = _delta_tracker.classify_changes(delta)
 
     # Derive MarketRegime from fetched data
-    from src.core.models import (
-        MarketRegime, VolatilityRegime, TrendRegime, RiskRegime,
-    )
+    from src.core.models import MarketRegime, RiskRegime, TrendRegime, VolatilityRegime
+
     vix_val = vix_data["close"]
     if vix_val > 30:
         vol_r = VolatilityRegime.CRISIS

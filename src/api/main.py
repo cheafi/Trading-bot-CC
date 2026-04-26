@@ -6572,9 +6572,32 @@ async def live_dossier(ticker: str):
             high_52w = float(highs.max())
             low_52w = float(lows.min())
 
-            # Support / Resistance (simple: 20-day low/high)
-            support = float(lows.iloc[-20:].min())
-            resistance = float(highs.iloc[-20:].max())
+            # Support / Resistance — swing pivots (not naive 20-day low/high)
+            # Find swing lows (local minima) and swing highs (local maxima)
+            _lookback = min(120, len(lows))
+            _lows_arr = lows.iloc[-_lookback:].values.astype(float)
+            _highs_arr = highs.iloc[-_lookback:].values.astype(float)
+            _close_arr = close.iloc[-_lookback:].values.astype(float)
+
+            swing_supports = []
+            swing_resistances = []
+            for i in range(2, len(_lows_arr) - 2):
+                if _lows_arr[i] <= min(_lows_arr[i-1], _lows_arr[i-2], _lows_arr[i+1], _lows_arr[i+2]):
+                    swing_supports.append(float(_lows_arr[i]))
+                if _highs_arr[i] >= max(_highs_arr[i-1], _highs_arr[i-2], _highs_arr[i+1], _highs_arr[i+2]):
+                    swing_resistances.append(float(_highs_arr[i]))
+
+            # Nearest support = highest swing low BELOW current price
+            support_candidates = [s for s in swing_supports if s < price * 0.995]
+            support = max(support_candidates) if support_candidates else float(lows.iloc[-20:].min())
+
+            # Nearest resistance = lowest swing high ABOVE current price
+            resistance_candidates = [r for r in swing_resistances if r > price * 1.005]
+            resistance = min(resistance_candidates) if resistance_candidates else float(highs.iloc[-20:].max())
+
+            # Distance % from price
+            support_dist_pct = round((price - support) / price * 100, 2) if support and price else 0
+            resistance_dist_pct = round((resistance - price) / price * 100, 2) if resistance and price else 0
 
             # Bollinger Bands
             bb_sma = close.rolling(20).mean()
@@ -6650,36 +6673,50 @@ async def live_dossier(ticker: str):
     pos_count = sum(1 for f in factors if f["signal"] == "positive")
     neg_count = sum(1 for f in factors if f["signal"] == "negative")
 
-    # ── WHY BUY / WHY STOP ──
+    # ── WHY BUY / RISK FACTORS ──
     why_buy = []
     why_stop = []
     if rsi < SIGNAL_THRESHOLDS.rsi_near_oversold:
-        why_buy.append("RSI oversold — mean reversion potential")
+        why_buy.append(f"RSI {rsi:.0f} — oversold territory, mean reversion potential")
     if above_sma20 and above_sma50:
-        why_buy.append("Price above both 20- and 50-day MAs — trend aligned")
+        why_buy.append("Trend aligned — price above both 20 & 50-day moving averages")
+    elif above_sma20:
+        why_buy.append("Short-term uptrend — price above 20-day MA")
     if macd_signal == "BULLISH":
-        why_buy.append("MACD bullish crossover — momentum shifting up")
+        why_buy.append("MACD bullish crossover — momentum shifting upward")
     if vol_ratio > SIGNAL_THRESHOLDS.volume_strong_surge:
         why_buy.append(
-            f"Volume {vol_ratio:.1f}x above average — institutional interest"
+            f"Volume surge {vol_ratio:.1f}x average — institutional accumulation signal"
         )
     if price < bbands_lower:
-        why_buy.append("Price below lower Bollinger Band — potential bounce zone")
+        why_buy.append(f"Below lower Bollinger Band (${bbands_lower:.2f}) — potential bounce zone")
+    if above_sma200:
+        why_buy.append("Above 200-day MA — long-term uptrend intact")
     if not why_buy:
-        why_buy.append("No strong bullish catalyst detected — monitor for setup")
+        why_buy.append("No strong bullish catalyst — monitoring for setup development")
 
     if rsi > SIGNAL_THRESHOLDS.rsi_overbought:
-        why_stop.append("RSI overbought — pullback risk elevated")
+        why_stop.append(f"⚠️ RSI {rsi:.0f} (overbought >70) — pullback risk elevated, consider waiting for RSI to cool")
     if not above_sma50:
-        why_stop.append("Below 50-day MA — intermediate-term trend is bearish")
+        why_stop.append(f"⚠️ Below 50-day MA (${sma50:.2f}) — intermediate trend bearish, buying against the trend")
+    if not above_sma200 and sma200:
+        why_stop.append(f"⚠️ Below 200-day MA (${sma200:.2f}) — long-term trend is down")
     if macd_signal == "BEARISH":
-        why_stop.append("MACD bearish crossover — momentum fading")
+        why_stop.append("⚠️ MACD bearish — momentum fading, new entries carry higher risk")
     if price > bbands_upper:
         why_stop.append(
-            "Price above upper Bollinger Band — extended beyond normal range"
+            f"⚠️ Above upper Bollinger Band (${bbands_upper:.2f}) — extended {round((price/bbands_upper-1)*100,1)}% beyond normal range"
         )
-    why_stop.append(f"Stop below support at ${support:.2f} would invalidate thesis")
-    why_stop.append("Event risk: earnings / ex-div / macro may override technicals")
+    # Support distance context
+    if support and price:
+        _s_dist = round((price - support) / price * 100, 1)
+        if _s_dist > 10:
+            why_stop.append(f"🛑 Nearest support ${support:.2f} is {_s_dist}% below — wide stop needed, poor risk/reward")
+        elif _s_dist > 5:
+            why_stop.append(f"⚠️ Support at ${support:.2f} ({_s_dist}% below) — moderate risk distance")
+        else:
+            why_stop.append(f"✅ Support nearby at ${support:.2f} ({_s_dist}% below) — tight stop possible")
+    why_stop.append("📅 Check earnings calendar — earnings/ex-div/macro events may override technicals")
 
     # ── Historical analogs (simplified: similar RSI + trend setups) ──
     analogs = []
@@ -6780,7 +6817,9 @@ async def live_dossier(ticker: str):
                 "bbands_upper": round(bbands_upper, 2),
                 "bbands_lower": round(bbands_lower, 2),
                 "support": round(support, 2),
+                "support_dist_pct": support_dist_pct if 'support_dist_pct' in dir() else 0,
                 "resistance": round(resistance, 2),
+                "resistance_dist_pct": resistance_dist_pct if 'resistance_dist_pct' in dir() else 0,
                 "high_52w": round(high_52w, 2),
                 "low_52w": round(low_52w, 2),
             },

@@ -959,8 +959,8 @@
               <div><div class="text-[10px]" style="color:var(--t3)">ATR(14)</div><div class="font-bold mono text-white" x-text="dos.data.technicals.atr?'$'+dos.data.technicals.atr:'—'"></div></div>
               <div><div class="text-[10px]" style="color:var(--t3)">MACD</div><div class="font-bold mono" :class="dos.data.technicals.macd_signal==='BULLISH'?'text-green-400':'text-red-400'" x-text="dos.data.technicals.macd_signal||'—'"></div></div>
               <div><div class="text-[10px]" style="color:var(--t3)">Vol Ratio</div><div class="font-bold mono" :class="(dos.data.technicals.volume_ratio||1)>1.5?'text-green-400':'text-white'" x-text="(dos.data.technicals.volume_ratio||1).toFixed(1)+'x'"></div></div>
-              <div><div class="text-[10px]" style="color:var(--t3)">Support</div><div class="font-bold mono text-white" x-text="dos.data.technicals.support?'$'+dos.data.technicals.support:'—'"></div></div>
-              <div><div class="text-[10px]" style="color:var(--t3)">Resistance</div><div class="font-bold mono text-white" x-text="dos.data.technicals.resistance?'$'+dos.data.technicals.resistance:'—'"></div></div>
+              <div><div class="text-[10px]" style="color:var(--t3)">Support</div><div class="font-bold mono text-green-400" x-text="dos.data.technicals.support?'$'+dos.data.technicals.support:'—'"></div><div class="text-[8px] mono" style="color:var(--t3)" x-text="dos.data.technicals.support_dist_pct?dos.data.technicals.support_dist_pct+'% below':''" ></div></div>
+              <div><div class="text-[10px]" style="color:var(--t3)">Resistance</div><div class="font-bold mono text-red-400" x-text="dos.data.technicals.resistance?'$'+dos.data.technicals.resistance:'—'"></div><div class="text-[8px] mono" style="color:var(--t3)" x-text="dos.data.technicals.resistance_dist_pct?dos.data.technicals.resistance_dist_pct+'% above':''" ></div></div>
               <div><div class="text-[10px]" style="color:var(--t3)">52W High</div><div class="font-bold mono text-white" x-text="dos.data.technicals.high_52w?'$'+dos.data.technicals.high_52w:'—'"></div></div>
               <div><div class="text-[10px]" style="color:var(--t3)">52W Low</div><div class="font-bold mono text-white" x-text="dos.data.technicals.low_52w?'$'+dos.data.technicals.low_52w:'—'"></div></div>
               <div><div class="text-[10px]" style="color:var(--t3)">BBands</div><div class="font-bold mono text-white" x-text="dos.data.technicals.bbands_lower&&dos.data.technicals.bbands_upper?'$'+dos.data.technicals.bbands_lower+' – $'+dos.data.technicals.bbands_upper:'—'"></div></div>
@@ -1022,15 +1022,21 @@
               </template>
             </div>
           </div>
-          <!-- WHY BUY -->
+          <!-- WHY BUY — with BUY confirmation button -->
           <div class="card card-p" style="border-left:3px solid var(--green)">
-            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--green)">🟢 WHY BUY</div>
-            <template x-for="w in dos.data.why_buy||[]"><div class="text-[11px] py-0.5" style="color:var(--t2)" x-text="'• '+w"></div></template>
+            <div class="flex items-center justify-between mb-1">
+              <div class="text-[10px] font-bold uppercase" style="color:var(--green)">🟢 BULLISH FACTORS</div>
+              <span class="pill pg text-[8px] font-bold" x-text="(dos.data.why_buy||[]).length+' signals'"></span>
+            </div>
+            <template x-for="w in dos.data.why_buy||[]"><div class="text-[11px] py-0.5" style="color:var(--t1)" x-text="'• '+w"></div></template>
           </div>
-          <!-- WHY STOP -->
+          <!-- RISK FACTORS (was WHY STOP) -->
           <div class="card card-p" style="border-left:3px solid var(--red)">
-            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--red)">🔴 WHY STOP</div>
-            <template x-for="w in dos.data.why_stop||[]"><div class="text-[11px] py-0.5" style="color:var(--t2)" x-text="'• '+w"></div></template>
+            <div class="flex items-center justify-between mb-1">
+              <div class="text-[10px] font-bold uppercase" style="color:var(--red)">🔴 RISK FACTORS</div>
+              <span class="pill pr text-[8px] font-bold" x-text="(dos.data.why_stop||[]).length+' risks'"></span>
+            </div>
+            <template x-for="w in dos.data.why_stop||[]"><div class="text-[11px] py-0.5" style="color:var(--t2);line-height:1.5" x-text="'• '+w"></div></template>
           </div>
           <!-- Confidence Breakdown (from pipeline) -->
           <template x-if="dos.data.confidence||dos.data.signal?.confidence">
@@ -1087,18 +1093,40 @@
               <div class="text-[11px]" style="color:var(--t1);line-height:1.7;white-space:pre-wrap" x-text="dos.data.ai_analysis"></div>
             </div>
           </template>
-          <!-- Trade Plan (from backend, ATR-based) -->
-          <div class="card card-p">
-            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📋 Trade Plan <span class="text-[8px] font-normal" x-text="'('+(dos.data.trade_plan&&dos.data.trade_plan.note||'')+')'"></span></div>
-            <div class="text-[11px] space-y-1" style="color:var(--t2)">
-              <div><strong class="text-white">Entry Zone:</strong> <span class="mono" x-text="dos.data.trade_plan?'$'+dos.data.trade_plan.entry_zone[0]+' — $'+dos.data.trade_plan.entry_zone[1]:'—'"></span></div>
-              <div><strong class="text-white">Target 1R:</strong> <span class="mono text-green-400" x-text="dos.data.trade_plan?'$'+dos.data.trade_plan.target_1r:'—'"></span></div>
-              <div><strong class="text-white">Target 2R:</strong> <span class="mono text-green-400" x-text="dos.data.trade_plan?'$'+dos.data.trade_plan.target_2r:'—'"></span></div>
-              <div><strong class="text-white">Stop:</strong> <span class="mono text-red-400" x-text="dos.data.trade_plan?'$'+dos.data.trade_plan.stop:'—'"></span></div>
-              <div><strong class="text-white">Risk/Share:</strong> <span class="mono" x-text="dos.data.trade_plan?'$'+dos.data.trade_plan.risk_per_share:'—'"></span> · <strong class="text-white">R:R:</strong> <span class="mono" x-text="dos.data.trade_plan?dos.data.trade_plan.rr_ratio:'—'"></span></div>
-              <div><strong class="text-white">Invalidation:</strong> <span class="text-red-300 text-[10px]" x-text="dos.data.trade_plan?dos.data.trade_plan.invalidation:'—'"></span></div>
+          <!-- Trade Plan (from backend, ATR-based) + BUY button -->
+          <div class="card card-p" style="border:1px solid var(--bd)">
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">📋 Trade Plan <span class="text-[8px] font-normal" x-text="'('+(dos.data.trade_plan&&dos.data.trade_plan.note||'')+')'"></span></div>
+              <button class="text-[9px] font-bold px-3 py-1 rounded" style="background:var(--green);color:#0d1117" @click="confirmBuy()">✅ FOLLOW THIS TRADE</button>
             </div>
-            <div class="text-[9px] mt-2 italic" style="color:var(--t3)">⚠ Plan based on current technicals. Real entry/target/stop require engine signal confirmation.</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px" class="text-[11px]">
+              <div class="p-2 rounded" style="background:rgba(0,212,170,.06);border:1px solid rgba(0,212,170,.15)">
+                <div class="text-[9px] font-bold mb-1" style="color:var(--t3)">ENTRY ZONE</div>
+                <div class="mono font-bold text-white" x-text="dos.data.trade_plan?'$'+dos.data.trade_plan.entry_zone[0]+' — $'+dos.data.trade_plan.entry_zone[1]:'—'"></div>
+              </div>
+              <div class="p-2 rounded" style="background:rgba(255,92,92,.06);border:1px solid rgba(255,92,92,.15)">
+                <div class="text-[9px] font-bold mb-1" style="color:var(--t3)">STOP LOSS</div>
+                <div class="mono font-bold text-red-400" x-text="dos.data.trade_plan?'$'+dos.data.trade_plan.stop:'—'"></div>
+                <div class="text-[8px] mono" style="color:var(--t3)" x-text="dos.data.trade_plan?'Risk $'+dos.data.trade_plan.risk_per_share+'/share':''"></div>
+              </div>
+              <div class="p-2 rounded" style="background:rgba(0,212,170,.06);border:1px solid rgba(0,212,170,.15)">
+                <div class="text-[9px] font-bold mb-1" style="color:var(--t3)">TARGET 1R</div>
+                <div class="mono font-bold text-green-400" x-text="dos.data.trade_plan?'$'+dos.data.trade_plan.target_1r:'—'"></div>
+              </div>
+              <div class="p-2 rounded" style="background:rgba(0,212,170,.06);border:1px solid rgba(0,212,170,.15)">
+                <div class="text-[9px] font-bold mb-1" style="color:var(--t3)">TARGET 2R</div>
+                <div class="mono font-bold text-green-400" x-text="dos.data.trade_plan?'$'+dos.data.trade_plan.target_2r:'—'"></div>
+              </div>
+            </div>
+            <div class="flex items-center justify-between mt-2 pt-2" style="border-top:1px solid var(--bd)">
+              <span class="text-[10px]" style="color:var(--t3)">R:R <strong class="text-white" x-text="dos.data.trade_plan?dos.data.trade_plan.rr_ratio:'—'"></strong></span>
+              <span class="text-[10px] text-red-300" x-text="dos.data.trade_plan?'Invalidation: '+dos.data.trade_plan.invalidation:''"></span>
+            </div>
+            <!-- Support/Resistance with distance % -->
+            <div class="flex gap-4 mt-2 pt-2 text-[10px] mono" style="border-top:1px solid var(--bd);color:var(--t3)">
+              <span>Support <strong class="text-green-400" x-text="dos.data.technicals?'$'+dos.data.technicals.support:'—'"></strong> <span class="text-[8px]" x-text="dos.data.technicals&&dos.data.technicals.support_dist_pct?'('+dos.data.technicals.support_dist_pct+'% below)':''"></span></span>
+              <span>Resistance <strong class="text-red-400" x-text="dos.data.technicals?'$'+dos.data.technicals.resistance:'—'"></strong> <span class="text-[8px]" x-text="dos.data.technicals&&dos.data.technicals.resistance_dist_pct?'('+dos.data.technicals.resistance_dist_pct+'% above)':''"></span></span>
+            </div>
           </div>
           <!-- Historical Analogs -->
           <template x-if="(dos.data.analogs||[]).length>0">
@@ -1218,6 +1246,130 @@
             <div class="text-[12px] font-bold text-white mt-2">Scanner Hub</div>
             <div class="text-[10px] mt-1" style="color:var(--t2)">Decision-intent scanners: Leaders, Pullbacks, Breakouts, Flow, and No-Trade.</div>
             <button @click="fetchScanners()" class="btn-p mt-3 text-[10px]">Run Scanners</button>
+          </div>
+        </template>
+      </div>
+    </main>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- SURFACE: PORTFOLIO MANAGEMENT                          -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <main x-show="tab==='portfolio'" class="fade" x-init="$watch('tab',v=>{if(v==='portfolio')fetchPortfolio()})">
+      <div class="trust-strip">
+        <span style="color:var(--blue)">● PORTFOLIO</span>
+        <span x-text="pf.summary?pf.summary.total_positions+' positions':'No positions'"></span>
+        <span x-text="pf.summary?'Value $'+pf.summary.total_value.toLocaleString():''"></span>
+      </div>
+      <div class="p-3 space-y-3">
+        <!-- Header + Add button -->
+        <div class="flex justify-between items-center">
+          <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">💼 My Portfolio</div>
+          <div class="flex gap-2">
+            <button @click="fetchPortfolio()" class="btn-s text-[10px]" :disabled="pf.loading">🔄</button>
+            <button @click="pf.showAdd=!pf.showAdd" class="btn-s text-[10px]" style="background:var(--green);color:#0d1117;font-weight:700">+ Add Position</button>
+          </div>
+        </div>
+        <!-- Add Position Form -->
+        <template x-if="pf.showAdd">
+          <div class="card card-p" style="border:1px solid var(--green)">
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--green)">Add Position</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div><label class="text-[9px]" style="color:var(--t3)">Ticker</label><input x-model="pf.addTicker" class="w-full rounded px-2 py-1 text-[11px] mono" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)" placeholder="AAPL"></div>
+              <div><label class="text-[9px]" style="color:var(--t3)">Shares</label><input x-model.number="pf.addShares" type="number" class="w-full rounded px-2 py-1 text-[11px] mono" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)" placeholder="100"></div>
+              <div><label class="text-[9px]" style="color:var(--t3)">Entry Price</label><input x-model.number="pf.addEntry" type="number" step="0.01" class="w-full rounded px-2 py-1 text-[11px] mono" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)" placeholder="150.00"></div>
+              <div><label class="text-[9px]" style="color:var(--t3)">Stop Price</label><input x-model.number="pf.addStop" type="number" step="0.01" class="w-full rounded px-2 py-1 text-[11px] mono" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)" placeholder="145.00"></div>
+              <div><label class="text-[9px]" style="color:var(--t3)">Target 1R</label><input x-model.number="pf.addT1r" type="number" step="0.01" class="w-full rounded px-2 py-1 text-[11px] mono" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)" placeholder="160.00"></div>
+              <div><label class="text-[9px]" style="color:var(--t3)">Target 2R</label><input x-model.number="pf.addT2r" type="number" step="0.01" class="w-full rounded px-2 py-1 text-[11px] mono" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)" placeholder="165.00"></div>
+            </div>
+            <div class="mt-2"><label class="text-[9px]" style="color:var(--t3)">Notes</label><input x-model="pf.addNotes" class="w-full rounded px-2 py-1 text-[11px]" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)" placeholder="e.g., breakout setup"></div>
+            <div class="flex gap-2 mt-3">
+              <button @click="addPosition()" class="btn-s text-[10px] font-bold" style="background:var(--green);color:#0d1117">✅ Add to Portfolio</button>
+              <button @click="pf.showAdd=false" class="btn-s text-[10px]">Cancel</button>
+            </div>
+          </div>
+        </template>
+        <!-- Alerts -->
+        <template x-if="pf.alerts&&pf.alerts.length">
+          <div class="space-y-1">
+            <template x-for="a in pf.alerts" :key="a.ticker+a.type">
+              <div class="card card-p text-[11px] font-bold" :style="'border-left:3px solid var(--'+(a.severity==='critical'?'red':a.severity==='success'?'green':'amber')+')'">
+                <span x-text="a.msg"></span>
+              </div>
+            </template>
+          </div>
+        </template>
+        <!-- Summary strip -->
+        <template x-if="pf.summary&&pf.summary.total_positions>0">
+          <div class="card" style="padding:8px 12px">
+            <div class="flex flex-wrap gap-x-5 gap-y-1 text-[10px] mono">
+              <span style="color:var(--t3)">Positions: <strong class="text-white" x-text="pf.summary.total_positions"></strong></span>
+              <span style="color:var(--t3)">Value: <strong class="text-white" x-text="'$'+pf.summary.total_value.toLocaleString()"></strong></span>
+              <span style="color:var(--t3)">Cost: <strong class="text-white" x-text="'$'+pf.summary.total_cost.toLocaleString()"></strong></span>
+              <span style="color:var(--t3)">P&L: <strong :class="pf.summary.total_pnl>=0?'text-green-400':'text-red-400'" x-text="(pf.summary.total_pnl>=0?'+':'')+pf.summary.total_pnl.toLocaleString()+' ('+pf.summary.total_pnl_pct+'%)'"></strong></span>
+            </div>
+          </div>
+        </template>
+        <!-- Position cards -->
+        <template x-if="pf.positions.length===0&&!pf.loading">
+          <div class="card card-p" style="text-align:center;padding:30px">
+            <div style="font-size:32px">💼</div>
+            <div class="text-sm font-bold mt-2" style="color:var(--t1)">No Positions Yet</div>
+            <div class="text-[11px] mt-1" style="color:var(--t3)">Click "+ Add Position" or use the "Follow This Trade" button on any dossier to start tracking.</div>
+          </div>
+        </template>
+        <template x-for="pos in pf.positions" :key="pos.ticker">
+          <div class="card" style="overflow:hidden">
+            <div :style="'height:3px;background:var(--'+((pos.pnl_pct||0)>=0?'green':'red')+')'"></div>
+            <div style="padding:10px 12px">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-[14px] font-extrabold mono text-white" x-text="pos.ticker"></span>
+                  <span class="pill text-[8px] font-bold" :class="(pos.pnl_pct||0)>=0?'pg':'pr'" x-text="(pos.pnl_pct>=0?'+':'')+pos.pnl_pct+'%'"></span>
+                  <template x-if="pos.r_multiple!=null">
+                    <span class="pill text-[8px] mono font-bold" :class="pos.r_multiple>=2?'pg':pos.r_multiple>=1?'pa':pos.r_multiple<0?'pr':'pw'" x-text="pos.r_multiple+'R'"></span>
+                  </template>
+                </div>
+                <div class="flex gap-1">
+                  <button @click="openDossier(pos.ticker)" class="btn-s text-[8px]">📊</button>
+                  <button @click="removePosition(pos.ticker)" class="btn-s text-[8px]" style="color:var(--red)">✕</button>
+                </div>
+              </div>
+              <!-- Price info -->
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;text-align:center" class="text-[10px] mono">
+                <div class="p-1 rounded" style="background:var(--s2)">
+                  <div class="text-[8px]" style="color:var(--t3)">ENTRY</div>
+                  <div class="text-white font-bold" x-text="'$'+(pos.entry_price||pos.avg_cost||0).toFixed(2)"></div>
+                </div>
+                <div class="p-1 rounded" style="background:var(--s2)">
+                  <div class="text-[8px]" style="color:var(--t3)">NOW</div>
+                  <div class="font-bold" :class="(pos.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="'$'+(pos.current_price||0).toFixed(2)"></div>
+                  <div class="text-[8px]" :class="(pos.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="(pos.change_pct>=0?'+':'')+pos.change_pct+'% today'"></div>
+                </div>
+                <div class="p-1 rounded" style="background:var(--s2)">
+                  <div class="text-[8px]" style="color:var(--t3)">P&L</div>
+                  <div class="font-bold" :class="(pos.unrealized_pnl||0)>=0?'text-green-400':'text-red-400'" x-text="(pos.unrealized_pnl>=0?'+':'')+pos.unrealized_pnl"></div>
+                </div>
+              </div>
+              <!-- Stop / Target levels -->
+              <div class="flex gap-2 mt-2 text-[9px] mono" style="color:var(--t3)">
+                <span>Stop <strong class="text-red-400" x-text="pos.stop_price?'$'+Number(pos.stop_price).toFixed(2):'—'"></strong></span>
+                <span>1R <strong class="text-green-400" x-text="pos.target_1r?'$'+Number(pos.target_1r).toFixed(2):'—'"></strong></span>
+                <span>2R <strong class="text-green-400" x-text="pos.target_2r?'$'+Number(pos.target_2r).toFixed(2):'—'"></strong></span>
+                <span x-text="pos.shares?pos.shares+' shares':''"></span>
+              </div>
+              <!-- R-multiple progress bar -->
+              <template x-if="pos.r_multiple!=null&&pos.stop_price">
+                <div class="mt-2">
+                  <div class="flex justify-between text-[8px] mono mb-1" style="color:var(--t3)">
+                    <span>Stop</span><span>Entry</span><span>1R</span><span>2R</span>
+                  </div>
+                  <div style="height:6px;background:var(--s2);border-radius:3px;overflow:hidden;position:relative">
+                    <div style="height:100%;border-radius:3px;transition:width .5s" :style="'width:'+Math.min(100,Math.max(0,(pos.r_multiple+1)/4*100))+'%;background:var(--'+(pos.r_multiple>=2?'green':pos.r_multiple>=0?'amber':'red')+')'"></div>
+                  </div>
+                </div>
+              </template>
+              <template x-if="pos.notes"><div class="text-[9px] mt-1 italic" style="color:var(--t3)" x-text="'📝 '+pos.notes"></div></template>
+            </div>
           </div>
         </template>
       </div>
@@ -2299,6 +2451,7 @@
         {id:'scanners',icon:'🔬',label:'Scanners'},
         {id:'notrade',icon:'🚫',label:'Rejections'},
         {id:'dossier',icon:'🔍',label:'Dossier'},
+        {id:'portfolio',icon:'💼',label:'Portfolio'},
       ],
       moreTabs:[
         {id:'rs',icon:'📈',label:'RS Ranking'},
@@ -2314,6 +2467,7 @@
       live:false,clock:'',regime:{},indices:[],macro:[],sectors:[],asia:[],trust:{},
       sig:{mode:'—',source:'',as_of:'',recs:[],strategy_scores:{},no_trade_reason:null,scan_meta:null},
       dos:{ticker:'',loading:false,data:null,error:'',showSignals:true,chartPeriod:'6mo',benchPeriod:'1y',chartSignals:[],benchStats:null,benchSummary:null,benchMonthly:null,benchQuarterly:null,benchYearly:null,benchTab:'monthly'},
+      pf:{loading:false,positions:[],alerts:[],summary:null,showAdd:false,addTicker:'',addShares:0,addEntry:0,addStop:0,addT1r:0,addT2r:0,addNotes:'',editTicker:null},
       opt:{ticker:'',loading:false,data:null},
       brief:{loading:false,data:null},
       bt:{ticker:'AAPL',strategy:'all',period:'5y',loading:false,result:null},
@@ -2384,6 +2538,42 @@
       async fetchBrief(){
         this.brief.loading=true;
         try{const r=await fetch('/api/live/brief');if(!r.ok)throw 0;this.brief.data=await r.json()}catch(e){this.brief.data=null}finally{this.brief.loading=false}
+      },
+      async fetchPortfolio(){
+        this.pf.loading=true;
+        try{
+          const r=await fetch('/api/portfolio/monitor');
+          if(!r.ok)throw 0;
+          const d=await r.json();
+          this.pf.positions=d.positions||[];
+          this.pf.alerts=d.alerts||[];
+          this.pf.summary=d.summary||null;
+        }catch(e){console.warn('Portfolio fetch error:',e)}finally{this.pf.loading=false}
+      },
+      async addPosition(){
+        if(!this.pf.addTicker)return;
+        try{
+          const r=await fetch('/api/portfolio/position',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticker:this.pf.addTicker,shares:this.pf.addShares||0,entry_price:this.pf.addEntry||0,stop_price:this.pf.addStop||0,target_1r:this.pf.addT1r||0,target_2r:this.pf.addT2r||0,notes:this.pf.addNotes||''})});
+          if(!r.ok)throw 0;
+          this.pf.showAdd=false;this.pf.addTicker='';this.pf.addShares=0;this.pf.addEntry=0;this.pf.addStop=0;this.pf.addT1r=0;this.pf.addT2r=0;this.pf.addNotes='';
+          await this.fetchPortfolio();
+        }catch(e){console.warn('Add position error:',e)}
+      },
+      async removePosition(ticker){
+        if(!confirm('Remove '+ticker+' from portfolio?'))return;
+        try{await fetch('/api/portfolio/position/'+ticker,{method:'DELETE'});await this.fetchPortfolio()}catch(e){console.warn(e)}
+      },
+      async confirmBuy(){
+        if(!this.dos.data||!this.dos.ticker)return;
+        const tp=this.dos.data.trade_plan;
+        if(!tp)return;
+        const entry=this.dos.data.price||tp.entry_zone[0];
+        const shares=prompt('How many shares to track for '+this.dos.ticker+'?','100');
+        if(!shares)return;
+        try{
+          const r=await fetch('/api/portfolio/position',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticker:this.dos.ticker,shares:parseFloat(shares),entry_price:entry,stop_price:tp.stop,target_1r:tp.target_1r,target_2r:tp.target_2r,notes:'From dossier trade plan'})});
+          if(r.ok){alert('✅ '+this.dos.ticker+' added to portfolio! Check Portfolio tab.');this.tab='portfolio';await this.fetchPortfolio()}
+        }catch(e){console.warn(e)}
       },
       async fetchDossier(){
         if(!this.dos.ticker)return;this.dos.loading=true;this.dos.data=null;this.dos.error='';
