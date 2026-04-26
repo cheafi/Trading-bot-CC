@@ -62,8 +62,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path in ("/health", "/api/health"):
             data = json.dumps({
                 "status": "ok",
+                "version": "9.0.0",
                 "uptime_seconds": round(time.time() - _start, 1),
                 "mode": "full" if _backend_ready else "loading",
+                "phase9_engines": {
+                    "loaded": _backend_ready,
+                    "components": ["StructureDetector", "EntryQuality", "BreakoutMonitor",
+                                   "PortfolioGate", "EarningsCalendar", "FundamentalData",
+                                   "DecisionJournal"] if _backend_ready else [],
+                },
             })
             self.send_response(200)
             self.send_header("Content-Type", "application/json")

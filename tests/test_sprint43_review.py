@@ -22,7 +22,7 @@ class TestTruthSync:
             APP_VERSION, PRODUCT_NAME, STRATEGY_COUNT,
             DISCORD_COMMAND_COUNT, DOCKER_SERVICE_COUNT,
         )
-        assert APP_VERSION == "6.1.0"
+        assert APP_VERSION == "9.0.0"
         assert PRODUCT_NAME == "CC"
         assert STRATEGY_COUNT == 4
         assert DISCORD_COMMAND_COUNT == 64

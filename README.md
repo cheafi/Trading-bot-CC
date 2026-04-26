@@ -57,6 +57,14 @@ CC is a **financial intelligence and monitoring platform** that:
 | Options research | ⚠️ Synthetic only | No live options chain — demo/learning only |
 | AI/LLM narratives | ⚠️ Experimental | May hallucinate — always verify |
 | Backtesting | ⚙️ Beta | Walk-forward + Monte Carlo, needs more robustness testing |
+| **Phase 9 Engines** | | |
+| Structure Detector | ✅ Functional | HH/HL trend classification, S/R levels, breakout quality |
+| Entry Quality Gate | ✅ Functional | Pre-trade timing, structure, and R:R assessment |
+| Breakout Monitor | ✅ Functional | Post-signal tracking with persistence |
+| Portfolio Gate | ✅ Functional | Sector concentration, correlation, max exposure |
+| Earnings Calendar | ✅ Functional | Real earnings dates via yfinance, blackout zones |
+| Fundamental Data | ✅ Functional | Live ROE, P/E, moat detection, quality scoring |
+| Decision Journal | ✅ Functional | Persistent decision logging + expert accuracy |
 
 ---
 
