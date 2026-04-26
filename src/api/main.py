@@ -6006,6 +6006,48 @@ async def live_quote(ticker: str):
 
 
 # ─────────────────────────────────────────────────────────────
+# Chart OHLCV data for TradingView lightweight-charts
+# ─────────────────────────────────────────────────────────────
+@app.get("/api/live/chart/{ticker}", tags=["live"])
+async def live_chart_data(
+    ticker: str,
+    period: str = Query("6mo", description="1mo/3mo/6mo/1y"),
+):
+    """Return OHLCV candle data for lightweight-charts rendering."""
+    ticker = validate_ticker(ticker)
+    mds = app.state.market_data
+    hist = await mds.get_history(ticker, period=period, interval="1d")
+    if hist is None or hist.empty:
+        return {"candles": [], "sma20": [], "sma50": []}
+    c_col = "Close" if "Close" in hist.columns else "close"
+    o_col = "Open" if "Open" in hist.columns else "open"
+    h_col = "High" if "High" in hist.columns else "high"
+    l_col = "Low" if "Low" in hist.columns else "low"
+    v_col = "Volume" if "Volume" in hist.columns else "volume"
+    candles = []
+    for idx_dt, row in hist.iterrows():
+        ts = int(idx_dt.timestamp()) if hasattr(idx_dt, "timestamp") else 0
+        candles.append({
+            "time": ts,
+            "open": round(float(row[o_col]), 2),
+            "high": round(float(row[h_col]), 2),
+            "low": round(float(row[l_col]), 2),
+            "close": round(float(row[c_col]), 2),
+            "volume": int(row[v_col]) if not np.isnan(row[v_col]) else 0,
+        })
+    # SMA overlays
+    close_arr = hist[c_col].values.astype(float)
+    sma20_data = []
+    sma50_data = []
+    for j in range(len(candles)):
+        t = candles[j]["time"]
+        if j >= 19:
+            sma20_data.append({"time": t, "value": round(float(np.mean(close_arr[j - 19 : j + 1])), 2)})
+        if j >= 49:
+            sma50_data.append({"time": t, "value": round(float(np.mean(close_arr[j - 49 : j + 1])), 2)})
+    return {"candles": candles, "sma20": sma20_data, "sma50": sma50_data}
+
+
 # Symbol Dossier — deep single-stock research
 # ─────────────────────────────────────────────────────────────
 @app.get("/api/live/dossier/{ticker}", tags=["live"])

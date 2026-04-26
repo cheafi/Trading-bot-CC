@@ -7,6 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <title>CC · Clarity Console</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -823,6 +824,18 @@
             <div class="text-2xl font-black mono" :class="(dos.data.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="'$'+(dos.data.price||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})"></div>
             <div class="text-[10px] mono mt-1" style="color:var(--t3)" x-text="'Prev $'+(dos.data.prev_close||0)+' · Vol '+(dos.data.volume||0).toLocaleString()"></div>
             <div class="text-[9px] mt-1" style="color:var(--t3)" x-text="'Regime: '+(dos.data.regime?dos.data.regime.label||'—':'—')+' · '+(dos.data.regime&&dos.data.regime.should_trade?'Trading OK':'⚠ No Trade')"></div>
+          </div>
+          <!-- TradingView Chart -->
+          <div class="card" style="overflow:hidden">
+            <div class="flex items-center justify-between px-3 pt-2">
+              <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">📊 Price Chart</div>
+              <div class="flex gap-1">
+                <button class="btn-s text-[8px] py-0.5 px-2" :class="dos.chartPeriod==='3mo'?'':'opacity-50'" @click="dos.chartPeriod='3mo';renderDossierChart()">3M</button>
+                <button class="btn-s text-[8px] py-0.5 px-2" :class="dos.chartPeriod==='6mo'?'':'opacity-50'" @click="dos.chartPeriod='6mo';renderDossierChart()">6M</button>
+                <button class="btn-s text-[8px] py-0.5 px-2" :class="dos.chartPeriod==='1y'?'':'opacity-50'" @click="dos.chartPeriod='1y';renderDossierChart()">1Y</button>
+              </div>
+            </div>
+            <div id="dossier-chart" style="height:260px;width:100%"></div>
           </div>
           <!-- Technical State -->
           <div class="card card-p">
@@ -2253,7 +2266,36 @@
             fetch('/api/v9/structure/'+t).then(r=>r.ok?r.json():null),
           ]);
           this.dos.data._p9={fundamentals:f9fund.value||null,earnings:f9earn.value||null,structure:f9struct.value||null};
+          // Render chart
+          this.dos.chartPeriod=this.dos.chartPeriod||'6mo';
+          this.$nextTick(()=>this.renderDossierChart());
         }catch(e){this.dos.error=e.message}finally{this.dos.loading=false}
+      },
+      async renderDossierChart(){
+        if(!this.dos.data||!this.dos.ticker)return;
+        const el=document.getElementById('dossier-chart');
+        if(!el||typeof LightweightCharts==='undefined')return;
+        el.innerHTML='';
+        try{
+          const r=await fetch('/api/live/chart/'+encodeURIComponent(this.dos.ticker)+'?period='+(this.dos.chartPeriod||'6mo'));
+          if(!r.ok)return;
+          const d=await r.json();
+          if(!d.candles||!d.candles.length)return;
+          const chart=LightweightCharts.createChart(el,{width:el.clientWidth,height:260,layout:{background:{color:'#161b22'},textColor:'#8b949e',fontSize:10},grid:{vertLines:{color:'#21262d'},horzLines:{color:'#21262d'}},crosshair:{mode:0},rightPriceScale:{borderColor:'#21262d'},timeScale:{borderColor:'#21262d',timeVisible:false}});
+          const cs=chart.addCandlestickSeries({upColor:'#00d4aa',downColor:'#ff5c5c',borderUpColor:'#00d4aa',borderDownColor:'#ff5c5c',wickUpColor:'#00d4aa',wickDownColor:'#ff5c5c'});
+          cs.setData(d.candles);
+          if(d.sma20&&d.sma20.length){const s20=chart.addLineSeries({color:'#58a6ff',lineWidth:1,priceLineVisible:false,lastValueVisible:false});s20.setData(d.sma20)}
+          if(d.sma50&&d.sma50.length){const s50=chart.addLineSeries({color:'#fbbf24',lineWidth:1,priceLineVisible:false,lastValueVisible:false});s50.setData(d.sma50)}
+          // S/R lines from structure
+          const st=this.dos.data._p9&&this.dos.data._p9.structure;
+          if(st){
+            if(st.nearest_support){cs.createPriceLine({price:st.nearest_support,color:'#00d4aa',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'S'})}
+            if(st.nearest_resistance){cs.createPriceLine({price:st.nearest_resistance,color:'#ff5c5c',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'R'})}
+          }
+          chart.timeScale().fitContent();
+          new ResizeObserver(()=>{chart.applyOptions({width:el.clientWidth})}).observe(el);
+          this._dossierChart=chart;
+        }catch(e){console.warn('Chart error:',e)}
       },
       openDossier(ticker){if(ticker){this.dos.ticker=ticker;this.switchTab('dossier');this.fetchDossier()}},
       async fetchOptions(){
