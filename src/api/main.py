@@ -5032,45 +5032,104 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                 reward = target_price - entry_price
                 rr = round(reward / risk, 1) if risk > 0 else 0
 
-                _fallback.append((ticker, {
-                    "ticker": ticker,
-                    "symbol": ticker,
-                    "score": score,
-                    "confidence": conf["composite"],
-                    "grade": conf["grade"],
-                    "direction": "LONG",
-                    "strategy": "watch",
-                    "entry_price": entry_price,
-                    "target_price": target_price,
-                    "stop_price": stop_price,
-                    "risk_reward": rr,
-                    "regime": "UPTREND" if trending else "SIDEWAYS",
-                    "rsi": round(float(rsi_v[ii]), 1),
-                    "vol_ratio": round(float(vol_ratio_v[ii]), 2),
-                    "atr_pct": round(float(atr_pct_v[ii]) * 100, 2),
-                    "calibrated_confidence": _enrich_calibration(conf, "momentum"),
-                    "action_state": _compute_action_state(conf, rr, trending),
-                    "trust_strip": {
-                        "mode": "WATCH",
-                        "source": "yfinance",
-                        "freshness": "delayed_15m",
-                        "sample_size": None,
-                        "assumptions": "no entry criteria met — ranked by technical strength",
-                        "feature_stage": "BETA",
-                    },
-                    "reasons_for": _build_reasons_for(
-                        close, sma20, sma50, sma200, rsi_v, vol_ratio_v,
-                        ii, "momentum", trending,
-                    ),
-                    "reasons_against": _build_reasons_against(
-                        close, sma20, sma50, sma200, rsi_v, vol_ratio_v,
-                        atr_pct_v, ii, "momentum",
-                    ),
-                    "invalidation": f"Close below ${stop_price}",
-                    "pre_mortem": "No strategy triggered — watch only",
-                    "why_wait": "Wait for a defined entry setup before committing capital",
-                }))
-            except Exception:
+                _fallback.append(
+                    (
+                        ticker,
+                        {
+                            "ticker": ticker,
+                            "symbol": ticker,
+                            "score": score,
+                            "confidence": conf["composite"],
+                            "grade": conf["grade"],
+                            "direction": "LONG",
+                            "strategy": "watch",
+                            "entry_price": entry_price,
+                            "target_price": target_price,
+                            "stop_price": stop_price,
+                            "risk_reward": rr,
+                            "regime": "UPTREND" if trending else "SIDEWAYS",
+                            "rsi": round(float(rsi_v[ii]), 1),
+                            "vol_ratio": round(float(vol_ratio_v[ii]), 2),
+                            "atr_pct": round(float(atr_pct_v[ii]) * 100, 2),
+                            "calibrated_confidence": _enrich_calibration(
+                                conf, "momentum"
+                            ),
+                            "action_state": _compute_action_state(conf, rr, trending),
+                            "trust_strip": {
+                                "mode": "WATCH",
+                                "source": "yfinance",
+                                "freshness": "delayed_15m",
+                                "sample_size": None,
+                                "assumptions": "no entry criteria met — ranked by technical strength",
+                                "feature_stage": "BETA",
+                            },
+                            "reasons_for": _build_reasons_for(
+                                close,
+                                sma20,
+                                sma50,
+                                sma200,
+                                rsi_v,
+                                vol_ratio_v,
+                                ii,
+                                "momentum",
+                                trending,
+                            ),
+                            "reasons_against": _build_reasons_against(
+                                close,
+                                sma20,
+                                sma50,
+                                sma200,
+                                rsi_v,
+                                vol_ratio_v,
+                                atr_pct_v,
+                                ii,
+                                "momentum",
+                            ),
+                            "invalidation": f"Close below ${stop_price}",
+                            "pre_mortem": "No strategy triggered — watch only",
+                            "why_wait": "Wait for a defined entry setup before committing capital",
+                            # Phase 9 fields (fallback)
+                            "structure": {},
+                            "entry_quality": {},
+                            "earnings": {},
+                            "fundamentals": {},
+                            "portfolio_gate": {},
+                            "sector": _TICKER_SECTOR.get(ticker, "unknown"),
+                        },
+                    )
+                )
+                # Phase 9 enrichment for fallback
+                if _P9_ENGINES:
+                    _fb_rec = _fallback[-1][1]
+                    try:
+                        h_col = "High" if "High" in hist.columns else "high"
+                        l_col = "Low" if "Low" in hist.columns else "low"
+                        _hi = hist[h_col].values.astype(float)
+                        _lo = hist[l_col].values.astype(float)
+                        _sd = StructureDetector()
+                        _sr = _sd.analyze(close, _hi, _lo, volume)
+                        _fb_rec["structure"] = _sr.to_dict()
+                    except Exception as _e9:
+                        logger.debug("[Phase9-fb] structure: %s", _e9)
+                    try:
+                        _fb_rec["earnings"] = get_earnings_info(ticker)
+                    except Exception as _e9:
+                        logger.debug("[Phase9-fb] earnings: %s", _e9)
+                    try:
+                        _fd = get_fundamentals(ticker)
+                        _fb_rec["fundamentals"] = {
+                            "quality": _fd.get("quality_score"),
+                            "pe": _fd.get("valuation", {}).get("pe_trailing"),
+                            "roe": _fd.get("profitability", {}).get("roe"),
+                            "rev_growth": _fd.get("growth", {}).get("revenue_growth"),
+                            "moat": _fd.get("moat_indicators", {}).get(
+                                "has_moat", False
+                            ),
+                        }
+                    except Exception as _e9:
+                        logger.debug("[Phase9-fb] fundamentals: %s", _e9)
+            except Exception as _e_fb:
+                logger.debug("[Scanner-fb] %s skip: %s", ticker, _e_fb)
                 continue
         _fallback.sort(key=lambda x: x[1]["score"], reverse=True)
         recs = [r for _, r in _fallback[:limit]]
