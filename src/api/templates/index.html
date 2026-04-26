@@ -325,6 +325,16 @@
                     </div>
                   </div>
                 </template>
+                <!-- Honest confidence mismatch warnings -->
+                <template x-if="(opp.thesis_conf||0)>=0.65&&(opp.timing_conf||0)<0.45">
+                  <div class="text-[8px] px-2 py-1" style="background:rgba(251,191,36,.08);border-radius:4px;color:var(--amber);margin-bottom:4px">⚠️ Strong thesis, weak timing — consider waiting for better entry</div>
+                </template>
+                <template x-if="(opp.timing_conf||0)>=0.65&&(opp.thesis_conf||0)<0.45">
+                  <div class="text-[8px] px-2 py-1" style="background:rgba(255,92,92,.08);border-radius:4px;color:var(--red);margin-bottom:4px">⚠️ Good timing but weak thesis — low conviction, size down</div>
+                </template>
+                <template x-if="(opp.exec_conf||0)<0.4&&(opp.thesis_conf||0)>=0.6&&(opp.timing_conf||0)>=0.5">
+                  <div class="text-[8px] px-2 py-1" style="background:rgba(251,191,36,.08);border-radius:4px;color:var(--amber);margin-bottom:4px">⚠️ Good setup but execution risk high — use limit orders, reduce size</div>
+                </template>
                 <!-- Row 3: Conflict + Stage + Leader -->
                 <div class="flex gap-2 flex-wrap text-[8px]" style="margin-bottom:4px">
                   <template x-if="opp.conflict_level"><span class="pill" :class="opp.conflict_level==='LOW'?'pg':opp.conflict_level==='MEDIUM'?'pa':'pr'" x-text="'⚡ '+opp.conflict_level+' conflict'"></span></template>
@@ -617,6 +627,13 @@
                     </div>
                   </template>
                 </div>
+                <!-- Honest confidence mismatch warnings -->
+                <template x-if="(r.thesis_conf||0)>=0.65&&(r.timing_conf||0)<0.45">
+                  <div class="text-[8px] px-2 py-1" style="background:rgba(251,191,36,.08);border-radius:4px;color:var(--amber);margin-bottom:2px">⚠️ Strong thesis, weak timing — wait for pullback</div>
+                </template>
+                <template x-if="(r.timing_conf||0)>=0.65&&(r.thesis_conf||0)<0.45">
+                  <div class="text-[8px] px-2 py-1" style="background:rgba(255,92,92,.08);border-radius:4px;color:var(--red);margin-bottom:2px">⚠️ Good timing, weak thesis — low conviction</div>
+                </template>
                 <!-- Meta row -->
                 <div class="flex gap-2 flex-wrap text-[8px]" style="color:var(--t3)">
                   <template x-if="r.stage"><span x-text="'📊 '+r.stage"></span></template>
@@ -996,8 +1013,8 @@
         <!-- Category Tabs -->
         <div class="flex gap-2 mb-3 flex-wrap">
           <button class="pill text-[9px]" :class="!scannerHub.category?'pg':'pw'" @click="fetchScanners()">All</button>
-          <template x-for="cat in ['PATTERN','FLOW','SECTOR','RISK','VALIDATION']">
-            <button class="pill text-[9px]" :class="scannerHub.category===cat?'pg':'pw'" @click="fetchScanners(cat)" x-text="cat"></button>
+          <template x-for="cat in ['LEADERS','PULLBACKS','BREAKOUTS','FLOW','NO_TRADE']">
+            <button class="pill text-[9px]" :class="scannerHub.category===cat?'pg':'pw'" @click="fetchScanners(cat)" x-text="cat.replace(/_/g,' ')"></button>
           </template>
         </div>
         <!-- Loading -->
@@ -1011,7 +1028,7 @@
               <div class="card" style="overflow:hidden">
                 <div style="padding:8px 12px;background:var(--s2);border-bottom:1px solid var(--bd)">
                   <div class="flex items-center gap-2">
-                    <span class="text-[10px]" x-text="catName==='PATTERN'?'📐':catName==='FLOW'?'💧':catName==='SECTOR'?'🏭':catName==='RISK'?'⚠️':'✅'"></span>
+                    <span class="text-[10px]" x-text="catName==='LEADERS'?'👑':catName==='PULLBACKS'?'🎯':catName==='BREAKOUTS'?'🚀':catName==='FLOW'?'💧':'🛑'"></span>
                     <span class="text-[10px] font-bold uppercase text-white" x-text="catName"></span>
                     <span class="pill pw text-[8px] ml-auto" x-text="Object.keys(scanners||{}).length+' scanners'"></span>
                   </div>
@@ -1073,7 +1090,7 @@
           <div class="card card-p" style="text-align:center;padding:30px">
             <div style="font-size:28px">🔬</div>
             <div class="text-[12px] font-bold text-white mt-2">Scanner Hub</div>
-            <div class="text-[10px] mt-1" style="color:var(--t2)">20+ scanners across Pattern, Flow, Sector, Risk, and Validation categories.</div>
+            <div class="text-[10px] mt-1" style="color:var(--t2)">Decision-intent scanners: Leaders, Pullbacks, Breakouts, Flow, and No-Trade.</div>
             <button @click="fetchScanners()" class="btn-p mt-3 text-[10px]">Run Scanners</button>
           </div>
         </template>

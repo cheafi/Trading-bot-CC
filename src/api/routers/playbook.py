@@ -253,7 +253,7 @@ async def ranked_opportunities(
 async def scanner_hub(
     category: str = Query(
         None,
-        description="PATTERN/FLOW/SECTOR/RISK/VALIDATION",
+        description="LEADERS/PULLBACKS/BREAKOUTS/FLOW/NO_TRADE (or legacy: PATTERN/SECTOR/RISK/VALIDATION)",
     ),
 ) -> Dict[str, Any]:
     """Scanner matrix results grouped by category."""
@@ -264,11 +264,34 @@ async def scanner_hub(
     if category:
         from src.engines.scanner_matrix import ScannerCategory
 
+        # Map decision-intent categories to underlying scanner categories
+        _INTENT_MAP = {
+            "LEADERS": ["SECTOR", "PATTERN"],
+            "PULLBACKS": ["PATTERN"],
+            "BREAKOUTS": ["PATTERN", "FLOW"],
+            "NO_TRADE": ["RISK", "VALIDATION"],
+        }
+        cat_upper = category.upper()
+        mapped = _INTENT_MAP.get(cat_upper)
+        if mapped:
+            all_hits: list = []
+            for sub_cat in mapped:
+                try:
+                    c = ScannerCategory(sub_cat)
+                    all_hits.extend(scanner.scan_category(c, signals, regime))
+                except ValueError:
+                    pass
+            return {
+                "category": cat_upper,
+                "hits": [h.to_dict() for h in all_hits],
+                "count": len(all_hits),
+            }
+
         try:
-            cat = ScannerCategory(category.upper())
+            cat = ScannerCategory(cat_upper)
             hits = scanner.scan_category(cat, signals, regime)
             return {
-                "category": category.upper(),
+                "category": cat_upper,
                 "hits": [h.to_dict() for h in hits],
                 "count": len(hits),
             }

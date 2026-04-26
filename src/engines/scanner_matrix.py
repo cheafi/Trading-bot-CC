@@ -32,6 +32,11 @@ class ScannerCategory(str, Enum):
     SECTOR = "SECTOR"
     RISK = "RISK"
     VALIDATION = "VALIDATION"
+    # Decision-intent categories (map to underlying)
+    LEADERS = "LEADERS"
+    PULLBACKS = "PULLBACKS"
+    BREAKOUTS = "BREAKOUTS"
+    NO_TRADE = "NO_TRADE"
 
 
 class ScannerPriority(str, Enum):
