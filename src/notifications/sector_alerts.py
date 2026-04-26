@@ -182,7 +182,10 @@ class SectorAlert:
             fields.append(
                 {
                     "name": "🔴 Contradictions",
-                    "value": "\n".join(f"• {c}" for c in self.key_contradiction[:3]),
+                    "value": "\n".join(
+                        f"• {c}"
+                        for c in self.key_contradiction[:3]
+                    ),
                     "inline": False,
                 }
             )
@@ -202,7 +205,9 @@ class SectorAlert:
             "fields": fields,
             "footer": {
                 "text": (
-                    f"Conflict: {self.conflict_level} | " f"Data: {self.data_freshness}"
+                    f"Conflict: {self.conflict_level}"
+                    f" | Data: "
+                    f"{self.data_freshness}"
                 ),
             },
         }
@@ -284,7 +289,10 @@ class SectorAlertBuilder:
         """Build alerts for all pipeline results."""
         return [self.build(r) for r in results]
 
-    def filter_actionable(self, alerts: List[SectorAlert]) -> List[SectorAlert]:
+    def filter_actionable(
+        self,
+        alerts: List[SectorAlert],
+    ) -> List[SectorAlert]:
         """Filter to only actionable alerts worth sending."""
         return [
             a

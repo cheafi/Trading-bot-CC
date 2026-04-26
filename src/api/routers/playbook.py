@@ -120,7 +120,9 @@ async def today_playbook() -> Dict[str, Any]:
                     f" ({round(r.confidence.final, 2)}"
                     f" vs {round(nxt.confidence.final, 2)})"
                     + (
-                        ", better sector fit (" + r.sector.sector_bucket.value + ")"
+                        ", better sector fit ("
+                        + r.sector.sector_bucket.value
+                        + ")"
                         if r.sector.sector_bucket != nxt.sector.sector_bucket
                         else ""
                     )
@@ -199,8 +201,14 @@ async def ranked_opportunities(
             "stop_price": r.signal.get("stop_price"),
             "risk_reward": r.signal.get("risk_reward"),
             "why_now": (r.explanation.why_now if r.explanation else None),
-            "why_not": (r.explanation.why_not_stronger if r.explanation else None),
-            "invalidation": (r.explanation.invalidation if r.explanation else None),
+            "why_not": (
+                r.explanation.why_not_stronger
+                if r.explanation else None
+            ),
+            "invalidation": (
+                r.explanation.invalidation
+                if r.explanation else None
+            ),
         }
         if r.ranking:
             row["discovery_rank"] = r.ranking.discovery_rank
@@ -471,9 +479,18 @@ async def _build_benchmark() -> Dict[str, Any]:
         if len(c) < 4:
             return {}
         r1w = float((c.iloc[-1] / c.iloc[-2] - 1) * 100)
-        r1m = float((c.iloc[-1] / c.iloc[-4] - 1) * 100) if len(c) >= 5 else 0.0
-        r3m = float((c.iloc[-1] / c.iloc[-12] - 1) * 100) if len(c) >= 13 else 0.0
-        r6m = float((c.iloc[-1] / c.iloc[0] - 1) * 100) if len(c) >= 20 else 0.0
+        r1m = (
+            float((c.iloc[-1] / c.iloc[-4] - 1) * 100)
+            if len(c) >= 5 else 0.0
+        )
+        r3m = (
+            float((c.iloc[-1] / c.iloc[-12] - 1) * 100)
+            if len(c) >= 13 else 0.0
+        )
+        r6m = (
+            float((c.iloc[-1] / c.iloc[0] - 1) * 100)
+            if len(c) >= 20 else 0.0
+        )
         return {
             "return_1w": r1w,
             "return_1m": r1m,
@@ -646,9 +663,9 @@ async def backtest_vs_benchmark(
             auto_adjust=True,
             progress=False,
         )
-        if data.empty:
+        if data is None or data.empty:  # type: ignore[union-attr]
             return {"error": "No data returned from yfinance"}
-        close = data["Close"].dropna(how="all")
+        close = data["Close"].dropna(how="all")  # type: ignore[index]
     except Exception as e:
         return {"error": f"Data fetch failed: {e}"}
 
@@ -675,10 +692,10 @@ async def backtest_vs_benchmark(
         # RS rank at this month
         rs_scores = {}
         for t in universe:
-            if t in rolling_ret.columns:
+            if t in rolling_ret.columns:  # type: ignore
                 val = rolling_ret.loc[rolling_ret.index <= date_idx, t]
-                if len(val) > 0 and pd.notna(val.iloc[-1]):
-                    rs_scores[t] = val.iloc[-1]
+                if len(val) > 0 and pd.notna(val.iloc[-1]):  # type: ignore
+                    rs_scores[t] = val.iloc[-1]  # type: ignore
 
         if len(rs_scores) < 5:
             continue
@@ -691,20 +708,26 @@ async def backtest_vs_benchmark(
         port_ret = 0.0
         valid = 0
         for t in top5:
-            if t in returns.columns:
-                r_vals = returns.loc[returns.index <= next_idx, t]
-                if len(r_vals) > 0 and pd.notna(r_vals.iloc[-1]):
-                    port_ret += r_vals.iloc[-1]
+            if t in returns.columns:  # type: ignore
+                r_vals = returns.loc[
+                    returns.index <= next_idx, t
+                ]
+                ok = (  # type: ignore
+                    len(r_vals) > 0
+                    and pd.notna(r_vals.iloc[-1])
+                )
+                if ok:
+                    port_ret += r_vals.iloc[-1]  # type: ignore
                     valid += 1
         if valid > 0:
             port_ret /= valid
 
         # Benchmark return
         bm_ret = 0.0
-        if benchmark in returns.columns:
+        if benchmark in returns.columns:  # type: ignore
             bm_vals = returns.loc[returns.index <= next_idx, benchmark]
-            if len(bm_vals) > 0 and pd.notna(bm_vals.iloc[-1]):
-                bm_ret = bm_vals.iloc[-1]
+            if len(bm_vals) > 0 and pd.notna(bm_vals.iloc[-1]):  # type: ignore
+                bm_ret = bm_vals.iloc[-1]  # type: ignore
 
         strategy_returns.append(port_ret)
         benchmark_returns.append(bm_ret)
@@ -762,13 +785,19 @@ async def backtest_vs_benchmark(
             "total_return": round((strat_cum - 1) * 100, 2),
             "annualized": round(strat_ann * 100, 2),
             "volatility": round(strat_vol * 100, 2),
-            "sharpe": (round(strat_ann / strat_vol, 2) if strat_vol > 0 else 0),
+            "sharpe": (
+                round(strat_ann / strat_vol, 2)
+                if strat_vol > 0 else 0
+            ),
         },
         "benchmark_stats": {
             "total_return": round((bench_cum - 1) * 100, 2),
             "annualized": round(bench_ann * 100, 2),
             "volatility": round(bench_vol * 100, 2),
-            "sharpe": (round(bench_ann / bench_vol, 2) if bench_vol > 0 else 0),
+            "sharpe": (
+                round(bench_ann / bench_vol, 2)
+                if bench_vol > 0 else 0
+            ),
         },
         "alpha_annualized": round(alpha * 100, 2),
         "win_rate_vs_benchmark": win_rate,

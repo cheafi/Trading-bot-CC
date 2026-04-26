@@ -192,7 +192,11 @@ async def today_summary(request: Request):
         0,
         min(
             100,
-            int(confidence * 100) if isinstance(confidence, (int, float)) else 50,
+            int(confidence * 100)
+            if isinstance(
+                confidence, (int, float)
+            )
+            else 50,
         ),
     )
 
@@ -250,7 +254,11 @@ async def today_summary(request: Request):
         market_pulse = {
             "indices": idx_data,
             "sector_leaders": sec_data[:3],
-            "sector_laggards": (sec_data[-3:][::-1] if len(sec_data) > 3 else []),
+            "sector_laggards": (
+                sec_data[-3:][::-1]
+                if len(sec_data) > 3
+                else []
+            ),
         }
     except Exception as exc:
         logger.debug("Market pulse unavailable: %s", exc)
@@ -317,7 +325,11 @@ async def today_summary(request: Request):
                 ),
                 "action": pr.decision.action,
                 "action_reason": pr.decision.rationale,
-                "why_now": ([pr.explanation.why_now] if pr.explanation.why_now else []),
+                "why_now": (
+                    [pr.explanation.why_now]
+                    if pr.explanation.why_now
+                    else []
+                ),
                 "entry_price": sig.get("entry_price", 0),
                 "target_price": sig.get("target_price", 0),
                 "stop_price": sig.get("stop_price", 0),
@@ -602,7 +614,11 @@ async def ranked_opportunities(
                 "stop_price": sig.get("stop_price", 0),
                 "action": pr.decision.action,
                 "action_reason": pr.decision.rationale,
-                "why_now": ([pr.explanation.why_now] if pr.explanation.why_now else []),
+                "why_now": (
+                    [pr.explanation.why_now]
+                    if pr.explanation.why_now
+                    else []
+                ),
                 "position_hint": _position_hint(sig, should_trade),
                 "confidence_breakdown": pr.confidence.to_dict(),
                 "decision": pr.decision.to_dict(),

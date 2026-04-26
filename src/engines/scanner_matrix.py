@@ -108,7 +108,10 @@ class VCPScanner(BaseScanner):
                         ticker=sig.get("ticker", ""),
                         score=score,
                         headline=f"VCP ({cc} contractions)",
-                        detail=(f"Base depth" f" {sig.get('base_depth_pct', 0):.0f}%"),
+                        detail=(
+                            f"Base depth"
+                            f" {sig.get('base_depth_pct', 0):.0f}%"
+                        ),
                         priority=(
                             ScannerPriority.HIGH
                             if score >= 7
@@ -281,7 +284,9 @@ class AbnormalVolumeScanner(BaseScanner):
                         score=min(10, 5 + vol),
                         headline=f"Abnormal volume {vol:.1f}x",
                         priority=(
-                            ScannerPriority.HIGH if vol > 3 else ScannerPriority.NORMAL
+                            ScannerPriority.HIGH
+                            if vol > 3
+                            else ScannerPriority.NORMAL
                         ),
                         metadata={"vol_ratio": vol},
                     )
@@ -638,7 +643,9 @@ class ScannerMatrix:
         regime: Dict[str, Any],
     ) -> Dict[str, List[ScannerHit]]:
         """Run all scanners, return grouped by category."""
-        results: Dict[str, List[ScannerHit]] = {c.value: [] for c in ScannerCategory}
+        results: Dict[str, List[ScannerHit]] = {
+            c.value: [] for c in ScannerCategory
+        }
         for scanner in self.scanners:
             try:
                 hits = scanner.scan(signals, regime)
@@ -685,7 +692,10 @@ class ScannerMatrix:
         return {
             category: {
                 "count": len(hits),
-                "urgent": sum(1 for h in hits if h.priority == ScannerPriority.URGENT),
+                "urgent": sum(
+                    1 for h in hits
+                    if h.priority == ScannerPriority.URGENT
+                ),
                 "warnings": sum(1 for h in hits if h.is_warning),
                 "top_hits": [
                     h.to_dict()

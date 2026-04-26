@@ -161,7 +161,10 @@ class EvidenceConflictEngine:
         # Extended
         dist_ma = sig.get("distance_from_50ma_pct", 0)
         if dist_ma > 15:
-            report.bearish_evidence.append(f"Extended {dist_ma:.0f}%" " above 50MA")
+            report.bearish_evidence.append(
+                f"Extended {dist_ma:.0f}%"
+                " above 50MA"
+            )
 
         # Crowded
         if sector.crowding_risk > 0.6:
