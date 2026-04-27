@@ -4,9 +4,10 @@ CC Instant Server — starts in <1 second, loads full API in background.
 
 Architecture:
   1. stdlib http.server binds port 8000 instantly → dashboard works
-  2. Background thread imports full FastAPI app + starts uvicorn on :8001
+  2. Background thread imports FastAPI app + starts uvicorn on :8001 IN-PROCESS
   3. Once :8001 is ready, all API requests proxy there transparently
-  4. Dashboard (/) is always served locally for speed
+  4. Dashboard (/) and /health are always served locally for speed
+  5. No subprocess — single Python process, no double-import overhead
 """
 import http.server
 import json
@@ -15,7 +16,6 @@ import socketserver
 import subprocess
 import threading
 import time
-import traceback
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -173,12 +173,21 @@ class ReusableTCPServer(socketserver.ThreadingTCPServer):
     daemon_threads = True
 
 
-def _start_backend():
-    """Start full API as a subprocess on BACKEND_PORT."""
+def _kill_port(port):
+    subprocess.run(
+        f"kill -9 $(lsof -ti:{port}) 2>/dev/null",
+        shell=True,
+        capture_output=True,
+    )
+
+
+def _run_backend():
+    """Start uvicorn as subprocess, poll until ready (never give up)."""
     global _backend_ready
-    time.sleep(1)
     try:
-        print("Starting full API as subprocess...", flush=True)
+        print("[backend] launching uvicorn subprocess...", flush=True)
+        t0 = time.time()
+        log = open("/tmp/cc_backend.log", "w")
         proc = subprocess.Popen(
             [
                 os.path.join("venv", "bin", "python3"),
@@ -189,50 +198,60 @@ def _start_backend():
                 "127.0.0.1",
                 "--port",
                 str(BACKEND_PORT),
+                "--timeout-keep-alive",
+                "5",
+                "--limit-concurrency",
+                "20",
                 "--log-level",
                 "warning",
             ],
             cwd=os.path.dirname(os.path.abspath(__file__)),
-            stdout=subprocess.PIPE,
+            stdout=log,
             stderr=subprocess.STDOUT,
         )
-        # Poll until backend is up (max 300s)
-        for _ in range(300):
-            time.sleep(1)
+        # Poll forever until ready (import can take 3-5 min)
+        waited = 0
+        while True:
+            time.sleep(2)
+            waited += 2
+            if proc.poll() is not None:
+                try:
+                    out = open("/tmp/cc_backend.log").read()[-500:]
+                except Exception:
+                    out = ""
+                print(f"[backend] crashed after {waited}s: {out}", flush=True)
+                time.sleep(5)
+                # Restart
+                return _run_backend()
             try:
                 with urllib.request.urlopen(
                     f"http://127.0.0.1:{BACKEND_PORT}/health", timeout=2
                 ) as r:
                     if r.status == 200:
                         _backend_ready = True
-                        print("✅ Full API ready on internal port.", flush=True)
+                        elapsed = time.time() - t0
+                        print(f"[backend] READY in {elapsed:.0f}s", flush=True)
                         return
             except Exception:
-                if proc.poll() is not None:
-                    out = proc.stdout.read().decode() if proc.stdout else ""
-                    print(f"Backend process exited: {out[-500:]}", flush=True)
-                    return
-        print("⚠ Backend did not become ready in 300s", flush=True)
+                pass
+            if waited % 60 == 0:
+                print(f"[backend] still importing... {waited}s", flush=True)
     except Exception as e:
-        print(f"Backend start failed: {e}", flush=True)
-        traceback.print_exc()
+        print(f"[backend] FATAL: {e}", flush=True)
 
 
 # Kill anything on our ports
-subprocess.run(
-    f"kill $(lsof -ti:{PORT}) 2>/dev/null;"
-    f"kill $(lsof -ti:{BACKEND_PORT}) 2>/dev/null",
-    shell=True, capture_output=True,
-)
+_kill_port(PORT)
+_kill_port(BACKEND_PORT)
 time.sleep(0.5)
 
-# Start backend in background
-threading.Thread(target=_start_backend, daemon=True).start()
+# Start backend in background thread (in-process, no subprocess)
+threading.Thread(target=_run_backend, daemon=True).start()
 
 # Start instant frontend
 server = ReusableTCPServer(("0.0.0.0", PORT), Handler)
-print(f"✅ CC Dashboard ready at http://localhost:{PORT}", flush=True)
-print(f"   API loading in background (→ :{BACKEND_PORT})...", flush=True)
+print(f"CC Dashboard ready at http://localhost:{PORT}", flush=True)
+print("   API importing in background...", flush=True)
 try:
     server.serve_forever()
 except KeyboardInterrupt:
