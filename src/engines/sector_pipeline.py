@@ -25,12 +25,11 @@ from src.engines.evidence_conflict import (
 from src.engines.explainer import Explanation, ExplanationEngine
 from src.engines.fit_scorer import FitScorer, FitScores
 from src.engines.multi_ranker import MultiLayerRanker, MultiRank
+from src.engines.portfolio_gate import PortfolioGate
+from src.engines.regime_sector_gate import is_regime_blocked
 from src.engines.scanner_matrix import ScannerMatrix
 from src.engines.sector_classifier import SectorClassifier, SectorContext
-from src.engines.sector_logic_packs import (
-    SectorAdjustment,
-    get_sector_adjustment,
-)
+from src.engines.sector_logic_packs import SectorAdjustment, get_sector_adjustment
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +108,7 @@ class SectorPipeline:
         self.alt_engine = BetterAlternativeEngine()
         self.ranker = MultiLayerRanker()
         self.scanner = ScannerMatrix()
+        self.portfolio_gate = PortfolioGate()
 
     def process(
         self,
@@ -151,6 +151,30 @@ class SectorPipeline:
 
         # 6. Decision
         decision = self.mapper.decide(fit, conf, sector, regime)
+
+        # 6b. Regime-sector gate: auto-downgrade incompatible combos
+        if decision.action == "TRADE" and is_regime_blocked(
+            regime, sector.sector_bucket
+        ):
+            decision.action = "WATCH"
+            trend = regime.get("trend", "unknown")
+            decision.rationale += (
+                f" (regime gate: {trend} incompatible"
+                f" with {sector.sector_bucket.value})"
+            )
+
+        # 6c. Portfolio gate: check position limits
+        positions = signal.get("_current_positions", [])
+        if decision.action == "TRADE" and positions:
+            gate = self.portfolio_gate.check(
+                ticker=ticker,
+                sector=sector.sector_bucket.value,
+                atr_risk_pct=signal.get("atr_pct", 1.0),
+                current_positions=positions,
+            )
+            if not gate.allowed:
+                decision.action = "WATCH"
+                decision.rationale += f" (portfolio gate: {gate.reasons[0]})"
 
         # 7. Explain
         explanation = self.explainer.explain(

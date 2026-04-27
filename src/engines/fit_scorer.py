@@ -129,7 +129,7 @@ class FitScorer:
     ) -> FitScores:
         fs = FitScores()
         fs.setup_quality = self._score_setup(signal)
-        fs.sector_fit = self._score_sector(signal, sector)
+        fs.sector_fit = self._score_sector(signal, sector, regime)
         fs.regime_fit = self._score_regime(signal, regime)
         fs.stage_fit = self._score_stage(signal, sector)
         fs.leader_fit = self._score_leader(signal, sector)
@@ -161,17 +161,64 @@ class FitScorer:
     # ── Component scorers ────────────────────────────────────────
 
     def _score_setup(self, sig: Dict) -> float:
-        """Pattern quality: VCP contraction, breakout clarity, etc."""
-        base = sig.get("score", 5.0)
+        """Pattern quality from StructureDetector output."""
+        # Use real structure data if available
+        trend = sig.get("trend_structure", "")
+        trend_quality = sig.get("trend_quality", 0.0)
+        breakout = sig.get("breakout_quality")
+        vol_confirms = sig.get("volume_confirms", False)
+        vol_exhaustion = sig.get("volume_exhaustion", False)
+        is_near_support = sig.get("is_near_support", False)
+        contraction_count = sig.get("contraction_count", 0)
         rr = sig.get("risk_reward", 1.0)
-        # Bonus for good R:R
-        if rr >= 3.0:
-            base = min(10, base + 1.0)
-        elif rr < 1.5:
-            base = max(0, base - 1.0)
-        return base
 
-    def _score_sector(self, sig: Dict, sector: SectorContext) -> float:
+        if not trend:
+            # Fallback: no structure data available
+            base = sig.get("score", 5.0)
+            if rr >= 3.0:
+                base = min(10, base + 1.0)
+            elif rr < 1.5:
+                base = max(0, base - 1.0)
+            return base
+
+        # Structure-based scoring
+        score = 5.0
+
+        # Trend quality (0-100) → 0-2 bonus
+        score += (trend_quality / 100) * 2.0
+
+        # Breakout quality
+        _BQ = {"genuine": 2.5, "weak": 0.5, "fake": -2.0, "exhaustion": -1.5}
+        if breakout:
+            score += _BQ.get(breakout, 0)
+
+        # Volume confirmation
+        if vol_confirms:
+            score += 1.0
+        if vol_exhaustion:
+            score -= 1.5
+
+        # Near support = good entry zone
+        if is_near_support:
+            score += 1.0
+
+        # VCP contractions (tight base)
+        if contraction_count >= 3:
+            score += 1.5
+        elif contraction_count >= 2:
+            score += 0.8
+
+        # R:R bonus/penalty
+        if rr >= 3.0:
+            score += 1.0
+        elif rr < 1.5:
+            score -= 1.0
+
+        return max(0, min(10, score))
+
+    def _score_sector(
+        self, sig: Dict, sector: SectorContext, regime: Dict | None = None
+    ) -> float:
         """How well does this signal fit its sector context?"""
         if sector.sector_bucket == SectorBucket.UNKNOWN:
             return 5.0  # neutral
@@ -186,6 +233,12 @@ class FitScorer:
         # Crowding penalty for growth/hype
         if sector.sector_bucket in (SectorBucket.HIGH_GROWTH, SectorBucket.THEME_HYPE):
             score -= sector.crowding_risk * 3.0
+
+        # Regime-sector compatibility modifier
+        if regime:
+            from src.engines.regime_sector_gate import get_regime_sector_modifier
+
+            score += get_regime_sector_modifier(regime, sector.sector_bucket)
 
         return max(0, min(10, score))
 

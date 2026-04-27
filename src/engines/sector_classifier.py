@@ -18,11 +18,14 @@ Output schema per ticker:
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+_CACHE_TTL_SECONDS = 86400  # 24 hours
 
 
 # ── Enums ────────────────────────────────────────────────────────────
@@ -247,7 +250,9 @@ class SectorClassifier:
     """Classify tickers into sector buckets with metadata."""
 
     def __init__(self):
-        self._cache: Dict[str, SectorContext] = {}
+        self._cache: Dict[str, Tuple[SectorContext, float]] = (
+            {}
+        )  # ticker → (ctx, timestamp)
 
     def classify(
         self,
@@ -256,7 +261,10 @@ class SectorClassifier:
     ) -> SectorContext:
         """Classify a ticker. Uses static map + signal hints."""
         if ticker in self._cache:
-            return self._cache[ticker]
+            ctx, ts = self._cache[ticker]
+            if time.time() - ts < _CACHE_TTL_SECONDS:
+                return ctx
+            # Expired — re-classify
 
         ctx = SectorContext(ticker=ticker)
 
@@ -274,7 +282,7 @@ class SectorClassifier:
         if signal:
             ctx = self._enrich_from_signal(ctx, signal)
 
-        self._cache[ticker] = ctx
+        self._cache[ticker] = (ctx, time.time())
         return ctx
 
     def classify_batch(
@@ -333,8 +341,7 @@ class SectorClassifier:
         ctx: SectorContext,
         signal: Dict[str, Any],
     ) -> SectorContext:
-        """Add leader/stage/RS from signal technicals."""
-        score = signal.get("score", 0)
+        """Add leader/stage/RS from signal technicals + structure."""
         rs = signal.get("rs_rank", 50)
         vol_ratio = signal.get("vol_ratio", 1.0)
         rsi = signal.get("rsi", 50)
@@ -347,15 +354,44 @@ class SectorClassifier:
         else:
             ctx.leader_status = LeaderStatus.LAGGARD
 
-        # Sector stage from volume + momentum
-        if vol_ratio > 3.0 and rsi > 70:
-            ctx.sector_stage = SectorStage.CLIMAX
-        elif vol_ratio > 1.5 and rsi > 55:
-            ctx.sector_stage = SectorStage.ACCELERATION
-        elif vol_ratio < 0.7 and rsi < 40:
-            ctx.sector_stage = SectorStage.DISTRIBUTION
+        # ── Sector stage: use StructureDetector output if available ──
+        trend = signal.get("trend_structure", "")
+        is_extended = signal.get("is_extended", False)
+        vol_exhaustion = signal.get("volume_exhaustion", False)
+        dist_from_50ma = signal.get("distance_from_50ma_pct", 0.0)
+        base_depth = signal.get("base_depth_pct", 0.0)
+
+        if trend:
+            # Structure-based stage detection (real chart thinking)
+            if trend in ("strong_downtrend", "downtrend"):
+                # LH/LL forming = distribution
+                ctx.sector_stage = SectorStage.DISTRIBUTION
+            elif is_extended and vol_exhaustion:
+                # Extended + volume exhaustion = climax
+                ctx.sector_stage = SectorStage.CLIMAX
+            elif is_extended and dist_from_50ma > 15:
+                # Extended >15% above 50MA = climax
+                ctx.sector_stage = SectorStage.CLIMAX
+            elif trend in ("strong_uptrend", "uptrend") and vol_ratio > 1.2:
+                # HH/HL with volume = acceleration
+                ctx.sector_stage = SectorStage.ACCELERATION
+            elif base_depth > 15 and dist_from_50ma < 3:
+                # Near lows, base forming = launch
+                ctx.sector_stage = SectorStage.LAUNCH
+            elif trend == "range":
+                ctx.sector_stage = SectorStage.LAUNCH
+            else:
+                ctx.sector_stage = SectorStage.ACCELERATION
         else:
-            ctx.sector_stage = SectorStage.LAUNCH
+            # Fallback: old heuristic (when no structure data)
+            if vol_ratio > 3.0 and rsi > 70:
+                ctx.sector_stage = SectorStage.CLIMAX
+            elif vol_ratio > 1.5 and rsi > 55:
+                ctx.sector_stage = SectorStage.ACCELERATION
+            elif vol_ratio < 0.7 and rsi < 40:
+                ctx.sector_stage = SectorStage.DISTRIBUTION
+            else:
+                ctx.sector_stage = SectorStage.LAUNCH
 
         # Crowding risk
         if vol_ratio > 3.0 and rsi > 75:
@@ -367,6 +403,10 @@ class SectorClassifier:
         ctx.relative_strength = min(1.0, max(-1.0, (rs - 50) / 50))
 
         return ctx
+
+    def clear_cache(self):
+        """Clear the classification cache."""
+        self._cache.clear()
 
     def get_sector_summary(
         self,
