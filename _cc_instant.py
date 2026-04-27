@@ -33,25 +33,36 @@ class Handler(http.server.BaseHTTPRequestHandler):
     """Serves dashboard instantly; proxies API calls to backend once ready."""
 
     def do_GET(self):
-        self._handle()
+        self._safe_handle()
 
     def do_POST(self):
-        self._handle()
+        self._safe_handle()
 
     def do_PUT(self):
-        self._handle()
+        self._safe_handle()
 
     def do_DELETE(self):
-        self._handle()
+        self._safe_handle()
 
     def do_OPTIONS(self):
-        self.send_response(200)
-        self._cors_headers()
-        self.end_headers()
+        try:
+            self.send_response(200)
+            self._cors_headers()
+            self.end_headers()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def _safe_handle(self):
+        try:
+            self._handle()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def _cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header(
+            "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
+        )
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-API-Key")
 
     def _handle(self):
@@ -157,8 +168,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass  # quiet
 
 
-class ReusableTCPServer(socketserver.TCPServer):
+class ReusableTCPServer(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
+    daemon_threads = True
 
 
 def _start_backend():
