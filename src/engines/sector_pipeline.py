@@ -17,6 +17,7 @@ from typing import Any, Dict, List
 
 from src.engines.confidence_engine import ConfidenceBreakdown, ConfidenceEngine
 from src.engines.correlation_risk import CorrelationRiskEngine
+from src.engines.cross_asset_monitor import CrossAssetMonitor
 from src.engines.decision_mapper import Decision, DecisionMapper
 from src.engines.drawdown_breaker import DrawdownCircuitBreaker
 from src.engines.evidence_conflict import (
@@ -113,6 +114,7 @@ class SectorPipeline:
         self.portfolio_gate = PortfolioGate()
         self.correlation_engine = CorrelationRiskEngine()
         self.circuit_breaker = DrawdownCircuitBreaker()
+        self.cross_asset = CrossAssetMonitor()
 
     def process(
         self,
@@ -200,6 +202,23 @@ class SectorPipeline:
                 decision.rationale += (
                     f" (drawdown {cb.drawdown_pct:.1f}%:"
                     f" size → {cb.size_multiplier:.0%})"
+                )
+
+        # 6e. Cross-asset stress adjustment
+        ca_data = regime.get("cross_asset", {})
+        if ca_data:
+            report = self.cross_asset.analyse(
+                vix=ca_data.get("vix", 20),
+                spy_change_pct=ca_data.get("spy_change", 0),
+                tlt_change_pct=ca_data.get("tlt_change", 0),
+                breadth_pct=ca_data.get("breadth", 50),
+            )
+            if report.sizing_adjustment < 1.0:
+                decision.position_size_pct = round(
+                    decision.position_size_pct * report.sizing_adjustment, 1
+                )
+                decision.rationale += (
+                    f" (cross-asset stress:" f" {report.stress_level})"
                 )
 
         # 7. Explain

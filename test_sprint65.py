@@ -266,6 +266,51 @@ def test_pipeline_circuit_breaker_reduced():
         assert "drawdown" in result.decision.rationale.lower()
 
 
+# ── Cross-Asset Monitor Wiring ──
+
+def test_cross_asset_monitor_standalone():
+    """CrossAssetMonitor returns stress report."""
+    from src.engines.cross_asset_monitor import CrossAssetMonitor
+    mon = CrossAssetMonitor()
+    report = mon.analyse(vix=35, spy_change_pct=-2.0, tlt_change_pct=-1.0)
+    assert report.stress_score > 0
+    assert report.stress_level in ("calm", "elevated", "high", "crisis")
+
+
+def test_pipeline_cross_asset_stress():
+    """Pipeline applies cross-asset sizing when stress data provided."""
+    from src.engines.sector_pipeline import SectorPipeline
+    pipeline = SectorPipeline()
+    signal = {
+        "ticker": "STRESS",
+        "rsi": 50,
+        "volume_ratio": 2.0,
+        "rs_rank": 80,
+        "sector": "Technology",
+    }
+    regime = {
+        "trend": "UPTREND",
+        "risk_score": 20,
+        "cross_asset": {"vix": 40, "spy_change": -2.0, "breadth": 30},
+    }
+    result = pipeline.process(signal, regime)
+    # High VIX + low breadth → stress note in rationale
+    if result.decision.action == "TRADE":
+        assert "cross-asset" in result.decision.rationale.lower()
+
+
+def test_position_manager_to_dict():
+    """PositionAction.to_dict() includes key fields."""
+    from src.engines.position_manager import PositionAction
+    a = PositionAction(
+        ticker="AAPL", action="REDUCE", reason="1R hit",
+        reduce_pct=33.0, current_pnl_pct=5.2, days_held=10,
+    )
+    d = a.to_dict()
+    assert d["ticker"] == "AAPL"
+    assert d["reduce_pct"] == 33.0
+
+
 if __name__ == "__main__":
     import pytest
     pytest.main([__file__, "-v"])
