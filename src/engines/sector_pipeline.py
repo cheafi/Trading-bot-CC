@@ -16,6 +16,7 @@ import logging
 from typing import Any, Dict, List
 
 from src.engines.confidence_engine import ConfidenceBreakdown, ConfidenceEngine
+from src.engines.correlation_risk import CorrelationRiskEngine
 from src.engines.decision_mapper import Decision, DecisionMapper
 from src.engines.evidence_conflict import (
     BetterAlternativeEngine,
@@ -109,6 +110,7 @@ class SectorPipeline:
         self.ranker = MultiLayerRanker()
         self.scanner = ScannerMatrix()
         self.portfolio_gate = PortfolioGate()
+        self.correlation_engine = CorrelationRiskEngine()
 
     def process(
         self,
@@ -211,6 +213,21 @@ class SectorPipeline:
 
         # Sort by final score descending
         results.sort(key=lambda r: r.fit.final_score, reverse=True)
+
+        # Correlation check: flag correlated TRADE pairs
+        trade_tickers = [
+            r.signal.get("ticker", "") for r in results if r.decision.action == "TRADE"
+        ]
+        if len(trade_tickers) >= 2:
+            corr_flags = self.correlation_engine.estimate_correlation_flags(
+                trade_tickers
+            )
+            if corr_flags:
+                flagged = {f.ticker_b for f in corr_flags}
+                for r in results:
+                    t = r.signal.get("ticker", "")
+                    if t in flagged and r.decision.action == "TRADE":
+                        r.decision.rationale += " (⚠ correlated with another TRADE)"
 
         # Better alternatives (needs full batch)
         for result in results:
