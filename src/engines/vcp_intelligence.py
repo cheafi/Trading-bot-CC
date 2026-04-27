@@ -195,7 +195,8 @@ class VCPIntelligence:
 
         # Layer 4: Action
         result.action = self._determine_action(
-            signal, sector, result.detection, result.quality, result.context
+            signal, sector, result.detection, result.quality, result.context,
+            regime=regime,
         )
 
         return result
@@ -446,6 +447,7 @@ class VCPIntelligence:
         detection: VCPDetection,
         quality: VCPQuality,
         context: VCPContextScore,
+        regime: Dict[str, Any] | None = None,
     ) -> VCPAction:
         """Final VCP decision."""
         a = VCPAction()
@@ -500,6 +502,13 @@ class VCPIntelligence:
         else:
             a.action = "WAIT"
             a.size_guidance = "PILOT"
+
+        # Regime override — adverse macro caps action at WATCH
+        regime_trend = regime.get("trend", "") if isinstance(regime, dict) else ""
+        if regime_trend in ("RISK_OFF", "DOWNTREND", "CRISIS") and a.action == "TRADE":
+            a.action = "WATCH"
+            a.size_guidance = "PILOT"
+            a.why_not = f"Regime {regime_trend} — wait for improved conditions"
 
         # Laggard override
         lag = sector.leader_status == LeaderStatus.LAGGARD

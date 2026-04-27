@@ -18,7 +18,9 @@ Tests:
 def test_flow_scanners_use_computed_fields():
     """Flow scanners should trigger on volume+RS+trend, not boolean flags."""
     from src.engines.scanner_matrix import (
-        OptionsFlowScanner, InsiderScanner, InstitutionalScanner,
+        InsiderScanner,
+        InstitutionalScanner,
+        OptionsFlowScanner,
     )
 
     # Signal with computed fields (no boolean flags)
@@ -76,6 +78,7 @@ def test_rs_ranker():
 def test_rs_ranker_from_closes():
     """RSRanker.rank_from_closes with raw price arrays."""
     import numpy as np
+
     from src.engines.rs_ranker import RSRanker
 
     ranker = RSRanker()
@@ -242,7 +245,9 @@ def test_discord_embed_has_regime_and_timestamp():
 def test_alert_deduplication():
     """Same ticker+action should not re-alert same day."""
     from src.notifications.sector_alerts import (
-        SectorAlert, AlertType, SectorAlertBuilder,
+        AlertType,
+        SectorAlert,
+        SectorAlertBuilder,
     )
 
     builder = SectorAlertBuilder()

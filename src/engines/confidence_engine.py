@@ -113,16 +113,20 @@ class ConfidenceEngine:
 
     def _data_confidence(self, sig: Dict) -> float:
         """How reliable is the data behind this signal?"""
-        freshness = sig.get("data_freshness", "live")
+        freshness = sig.get("data_freshness", "")
         vol_ratio = sig.get("vol_ratio", 1.0)
 
-        base = 0.7
-        if freshness == "live":
+        # Missing freshness → penalize (was defaulting to "live")
+        if not freshness:
+            base = 0.4
+        elif freshness == "live":
             base = 0.9
         elif freshness == "delayed":
             base = 0.6
         elif freshness in ("stale", "synthetic"):
             base = 0.3
+        else:
+            base = 0.5
 
         # Volume confirms data quality
         if vol_ratio > 1.0:

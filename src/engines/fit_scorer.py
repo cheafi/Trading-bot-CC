@@ -173,8 +173,8 @@ class FitScorer:
         rr = sig.get("risk_reward", 1.0)
 
         if not trend:
-            # Fallback: no structure data available
-            base = sig.get("score", 5.0)
+            # Fallback: no structure data — penalize instead of neutral
+            base = max(0, sig.get("score", 3.0) - 1.5)
             if rr >= 3.0:
                 base = min(10, base + 1.0)
             elif rr < 1.5:

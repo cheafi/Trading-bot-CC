@@ -7,6 +7,7 @@ trust strip, feature staging.
 """
 import os
 import sys
+
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -19,9 +20,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 class TestTruthSync:
     def test_version_source_of_truth(self):
         from src.core.version import (
-            APP_VERSION, PRODUCT_NAME, STRATEGY_COUNT,
-            DISCORD_COMMAND_COUNT, DOCKER_SERVICE_COUNT,
+            APP_VERSION,
+            DISCORD_COMMAND_COUNT,
+            DOCKER_SERVICE_COUNT,
+            PRODUCT_NAME,
+            STRATEGY_COUNT,
         )
+
         assert APP_VERSION == "9.0.0"
         assert PRODUCT_NAME == "CC"
         assert STRATEGY_COUNT == 4
@@ -105,13 +110,14 @@ class TestEnrichmentHelpers:
     def _import_helpers(self):
         """Import the enrichment helpers from main.py."""
         from src.api.main import (
-            _enrich_calibration,
-            _compute_action_state,
-            _build_reasons_for,
-            _build_reasons_against,
             _build_pre_mortem,
+            _build_reasons_against,
+            _build_reasons_for,
             _build_why_wait,
+            _compute_action_state,
+            _enrich_calibration,
         )
+
         return (
             _enrich_calibration, _compute_action_state,
             _build_reasons_for, _build_reasons_against,

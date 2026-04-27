@@ -223,15 +223,13 @@ class FlowIntelligenceEngine:
             # Simple money flow: up days on high volume = accumulation
             up_vol = sum(
                 v
-                for c, v in zip(close_5d[1:], volume_5d[1:])
-                if c > close_5d[close_5d.index(c) - 1]
-                if close_5d.index(c) > 0
+                for i, (c, v) in enumerate(zip(close_5d[1:], volume_5d[1:]))
+                if c > close_5d[i]
             )
             down_vol = sum(
                 v
-                for c, v in zip(close_5d[1:], volume_5d[1:])
-                if c <= close_5d[close_5d.index(c) - 1]
-                if close_5d.index(c) > 0
+                for i, (c, v) in enumerate(zip(close_5d[1:], volume_5d[1:]))
+                if c <= close_5d[i]
             )
             total_vol = up_vol + down_vol
             if total_vol > 0:

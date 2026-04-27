@@ -45,9 +45,15 @@ class Decision:
     risk_level: str = "HIGH"  # LOW / MEDIUM / HIGH / EXTREME
     position_size_pct: float = 0.0  # % of portfolio
     size_rationale: str = ""
+    # Entry/exit instructions (Priority 4 from review)
+    entry_trigger: str = ""    # e.g. "Buy above $152.30 on 1.5x avg volume"
+    stop_price: float = 0.0   # Computed from structure, not passed in
+    stop_rationale: str = ""   # e.g. "Below swing low at $145.20"
+    target_price: float = 0.0
+    risk_reward: float = 0.0   # Computed entry→stop / entry→target
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d = {
             "action": self.action,
             "rationale": self.rationale,
             "score": round(self.score, 1),
@@ -58,6 +64,16 @@ class Decision:
             "position_size_pct": round(self.position_size_pct, 1),
             "size_rationale": self.size_rationale,
         }
+        if self.entry_trigger:
+            d["entry_trigger"] = self.entry_trigger
+        if self.stop_price > 0:
+            d["stop_price"] = round(self.stop_price, 2)
+            d["stop_rationale"] = self.stop_rationale
+        if self.target_price > 0:
+            d["target_price"] = round(self.target_price, 2)
+        if self.risk_reward > 0:
+            d["risk_reward"] = round(self.risk_reward, 2)
+        return d
 
 
 class DecisionMapper:
@@ -107,7 +123,12 @@ class DecisionMapper:
             return d
 
         # Score+confidence matrix
-        if score >= 8.0 and conf >= 0.65:
+        # Minimum confidence floor — very low confidence = NO_TRADE
+        if conf < 0.35:
+            d.action = Action.NO_TRADE
+            d.rationale = f"Confidence too low ({conf:.0%}) — insufficient conviction"
+            d.risk_level = "HIGH"
+        elif score >= 8.0 and conf >= 0.65:
             d.action = Action.TRADE
             d.rationale = "High-conviction setup — actionable"
             d.risk_level = "LOW"
@@ -142,15 +163,62 @@ class DecisionMapper:
 
         # Position sizing (only for TRADE)
         if d.action == Action.TRADE:
+            atr = fit.raw.get("atr_pct", 0) if hasattr(fit, "raw") else 0
             d.position_size_pct, d.size_rationale = self._size(
-                conf, d.risk_level, score
+                conf, d.risk_level, score, atr_pct=atr
             )
+
+        # Entry trigger + stop/target from structure (Priority 4)
+        if d.action in (Action.TRADE, Action.WATCH):
+            sig = fit.raw if hasattr(fit, "raw") else {}
+            self._set_entry_exit(d, sig)
 
         return d
 
     @staticmethod
-    def _size(conf: float, risk_level: str, score: float) -> tuple[float, str]:
-        """Compute position size as % of portfolio."""
+    def _set_entry_exit(d: "Decision", sig: dict) -> None:
+        """Populate entry trigger, stop, target from signal data."""
+        resistance = sig.get("nearest_resistance", sig.get("resistance", 0))
+        support = sig.get("nearest_support", sig.get("support", 0))
+        price = sig.get("price", sig.get("close", 0))
+        avg_vol = sig.get("avg_volume", 0)
+
+        # Entry trigger: buy above resistance with volume
+        if resistance > 0 and price > 0:
+            d.entry_trigger = (
+                f"Buy above ${resistance:.2f}"
+                + (f" on ≥{int(avg_vol * 1.5):,} vol"
+                   if avg_vol > 0 else " with volume confirmation")
+            )
+        elif price > 0:
+            d.entry_trigger = f"Buy near ${price:.2f} with volume confirmation"
+
+        # Stop from structure (swing low / support)
+        if support > 0:
+            d.stop_price = round(support * 0.99, 2)  # 1% below support
+            d.stop_rationale = f"Below support at ${support:.2f}"
+        elif price > 0:
+            atr_pct = sig.get("atr_pct", 2.0)
+            d.stop_price = round(price * (1 - atr_pct / 100 * 2), 2)
+            d.stop_rationale = f"2x ATR ({atr_pct:.1f}%) below entry"
+
+        # Target: 2:1 R:R minimum or resistance
+        if d.stop_price > 0 and price > 0:
+            risk = price - d.stop_price
+            if risk > 0:
+                d.target_price = round(price + risk * 2.5, 2)
+                d.risk_reward = round(2.5, 2)
+            elif resistance > price:
+                d.target_price = resistance
+                r = (resistance - price)
+                d.risk_reward = round(r / abs(risk), 2) if risk != 0 else 0
+
+    @staticmethod
+    def _size(
+        conf: float, risk_level: str, score: float,
+        atr_pct: float = 0.0,
+    ) -> tuple[float, str]:
+        """Compute position size as % of portfolio, ATR-normalized."""
         # Base: 2% for medium, scale by confidence
         base = {"LOW": 3.0, "MEDIUM": 2.0, "HIGH": 1.0, "EXTREME": 0.5}
         size = base.get(risk_level, 2.0)
@@ -162,6 +230,13 @@ class DecisionMapper:
         if score >= 8.5:
             size *= 1.2
 
+        # ATR normalization: high-vol stocks get smaller positions
+        # Target ~2% dollar risk → if ATR is 4%, halve the position
+        if atr_pct > 0:
+            atr_factor = 2.0 / atr_pct  # normalize to 2% ATR baseline
+            atr_factor = max(0.3, min(2.0, atr_factor))  # clamp
+            size *= atr_factor
+
         size = round(max(0.5, min(5.0, size)), 1)
         parts = []
         if risk_level == "LOW":
@@ -170,5 +245,7 @@ class DecisionMapper:
             parts.append(f"high conf {conf:.0%}")
         if score >= 8.5:
             parts.append("A+ score")
+        if atr_pct > 0:
+            parts.append(f"ATR {atr_pct:.1f}%")
         rationale = ", ".join(parts) if parts else "standard"
         return size, rationale

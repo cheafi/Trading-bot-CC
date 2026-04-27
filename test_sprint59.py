@@ -13,9 +13,9 @@ Tests:
 """
 
 import time
+
 import numpy as np
 import pandas as pd
-
 
 # ── A1: SignalEnricher ──────────────────────────────────────────
 
@@ -101,9 +101,7 @@ def test_structure_detector_wired_into_enricher():
 
 def test_sector_classifier_uses_structure_for_stage():
     """Stage detection should use trend_structure, not just RSI+vol."""
-    from src.engines.sector_classifier import (
-        SectorClassifier, SectorStage,
-    )
+    from src.engines.sector_classifier import SectorClassifier, SectorStage
 
     clf = SectorClassifier()
 
@@ -151,8 +149,8 @@ def test_sector_classifier_uses_structure_for_stage():
 
 def test_sector_classifier_cache_ttl():
     """Cache should expire after TTL."""
-    from src.engines.sector_classifier import SectorClassifier
     import src.engines.sector_classifier as sc_mod
+    from src.engines.sector_classifier import SectorClassifier
 
     clf = SectorClassifier()
     old_ttl = sc_mod._CACHE_TTL_SECONDS

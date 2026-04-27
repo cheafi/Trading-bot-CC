@@ -228,7 +228,7 @@ class StructureDetector:
         n = self.swing_lookback
         swings = []
         for i in range(n, len(high) - n):
-            if high[i] == max(high[i - n : i + n + 1]):
+            if high[i] >= max(high[i - n : i + n + 1]) - 1e-6:
                 swings.append(
                     SwingPoint(
                         index=i,
@@ -249,7 +249,7 @@ class StructureDetector:
         n = self.swing_lookback
         swings = []
         for i in range(n, len(low) - n):
-            if low[i] == min(low[i - n : i + n + 1]):
+            if low[i] <= min(low[i - n : i + n + 1]) + 1e-6:
                 swings.append(
                     SwingPoint(
                         index=i,

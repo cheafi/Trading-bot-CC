@@ -307,8 +307,10 @@ class AbnormalVolumeScanner(BaseScanner):
         return hits
 
 
-class OptionsFlowScanner(BaseScanner):
-    name = "options_flow"
+class VolumeSurgeScanner(BaseScanner):
+    """Detects volume surges into tight ranges (heuristic proxy, NOT real options flow)."""
+
+    name = "volume_surge"
     category = ScannerCategory.FLOW
 
     def scan(self, signals, regime) -> List[ScannerHit]:
@@ -330,14 +332,20 @@ class OptionsFlowScanner(BaseScanner):
                         headline=f"Unusual activity: {vol:.1f}x vol, tight BB ({bb:.1f})",
                         detail="Volume surge into tight range = potential breakout setup",
                         priority=ScannerPriority.HIGH,
-                        metadata={"vol_ratio": vol, "bb_width": bb},
+                        metadata={
+                            "vol_ratio": vol,
+                            "bb_width": bb,
+                            "data_source": "heuristic_proxy",
+                        },
                     )
                 )
         return hits
 
 
-class InsiderScanner(BaseScanner):
-    name = "insider_activity"
+class QuietAccumulationScanner(BaseScanner):
+    """Detects quiet accumulation patterns (heuristic proxy, NOT real insider data)."""
+
+    name = "quiet_accumulation"
     category = ScannerCategory.FLOW
 
     def scan(self, signals, regime) -> List[ScannerHit]:
@@ -375,8 +383,10 @@ class InsiderScanner(BaseScanner):
         return hits
 
 
-class InstitutionalScanner(BaseScanner):
-    name = "institutional_flow"
+class HighVolumeLeaderScanner(BaseScanner):
+    """Detects high-volume RS leaders (heuristic proxy, NOT real 13F data)."""
+
+    name = "high_volume_leader"
     category = ScannerCategory.FLOW
 
     def scan(self, signals, regime) -> List[ScannerHit]:
@@ -707,6 +717,11 @@ class EdgeDecayScanner(BaseScanner):
 
 # ═════════════════════════════════════════════════════════════════════
 # SCANNER REGISTRY
+# Backward-compat aliases (old misleading names → honest names)
+OptionsFlowScanner = VolumeSurgeScanner
+InsiderScanner = QuietAccumulationScanner
+InstitutionalScanner = HighVolumeLeaderScanner
+
 # ═════════════════════════════════════════════════════════════════════
 
 
@@ -725,9 +740,9 @@ class ScannerMatrix:
             BreakdownScanner(),
             # Flow
             AbnormalVolumeScanner(),
-            OptionsFlowScanner(),
-            InsiderScanner(),
-            InstitutionalScanner(),
+            VolumeSurgeScanner(),
+            QuietAccumulationScanner(),
+            HighVolumeLeaderScanner(),
             # Sector
             SectorRotationScanner(),
             LeaderLaggardScanner(),

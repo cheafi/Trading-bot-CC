@@ -12265,3 +12265,11 @@ try:
     app.include_router(p9_router)
 except ImportError:
     pass
+
+# Sprint 62 — Fund builder, morning brief, stock-vs-SPY
+try:
+    from src.api.routers.fund import router as fund_router
+
+    app.include_router(fund_router)
+except ImportError:
+    pass
