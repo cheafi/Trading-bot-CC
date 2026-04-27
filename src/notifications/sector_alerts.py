@@ -240,16 +240,29 @@ class SectorAlert:
 class SectorAlertBuilder:
     """Build sector-aware Discord alerts from pipeline results."""
 
-    def __init__(self):
-        # Dedup: track (ticker, action, date) to avoid re-alerting
+    def __init__(self, persistent_dedup: bool = True):
+        # In-memory fallback dedup
         self._sent_today: Set[str] = set()
         self._sent_date: str = ""
+        # Persistent dedup via DecisionTracker (SQLite)
+        self._tracker = None
+        if persistent_dedup:
+            try:
+                from src.engines.decision_tracker import DecisionTracker
+                self._tracker = DecisionTracker()
+            except Exception:
+                logger.warning("DecisionTracker unavailable, using in-memory dedup")
 
     def _dedup_key(self, ticker: str, action: str) -> str:
         return f"{ticker}:{action}:{datetime.utcnow().strftime('%Y-%m-%d')}"
 
     def _check_dedup(self, ticker: str, action: str) -> bool:
         """Returns True if this alert was already sent today."""
+        # Try persistent dedup first
+        if self._tracker:
+            return self._tracker.check_dedup(ticker, action)
+
+        # Fallback: in-memory
         today = datetime.utcnow().strftime("%Y-%m-%d")
         if today != self._sent_date:
             self._sent_today.clear()

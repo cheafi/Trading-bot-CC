@@ -26,6 +26,13 @@ from src.engines.sector_classifier import (
     SectorStage,
 )
 
+try:
+    import numpy as np
+    from src.engines.structure_detector import StructureDetector
+    _HAS_STRUCTURE = True
+except ImportError:
+    _HAS_STRUCTURE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -204,9 +211,14 @@ class VCPIntelligence:
     # ── Layer 1: Detection ───────────────────────────────────────
 
     def _detect(self, sig: Dict[str, Any]) -> VCPDetection:
-        """Detect VCP pattern from signal data."""
+        """Detect VCP pattern from signal data or raw OHLCV."""
         d = VCPDetection()
 
+        # ── Try OHLCV-based detection via StructureDetector ──
+        if _HAS_STRUCTURE and "closes" in sig:
+            return self._detect_from_ohlcv(sig, d)
+
+        # ── Fallback: pre-computed signal fields ──
         strategy = sig.get("strategy", "").lower()
         pattern = sig.get("pattern", "").lower()
 
@@ -240,6 +252,97 @@ class VCPIntelligence:
             d.ma_alignment = "WEAK"
         else:
             d.ma_alignment = "MIXED"
+
+        return d
+
+    def _detect_from_ohlcv(
+        self, sig: Dict[str, Any], d: VCPDetection
+    ) -> VCPDetection:
+        """
+        Algorithmic VCP detection from raw OHLCV data.
+        Uses StructureDetector to find swing points and measure
+        contraction sequences — NOT label-dependent.
+        """
+        closes = np.array(sig["closes"], dtype=float)
+        highs = np.array(sig.get("highs", sig["closes"]), dtype=float)
+        lows = np.array(sig.get("lows", sig["closes"]), dtype=float)
+        volumes = np.array(sig.get("volumes", [1e6] * len(closes)),
+                           dtype=float)
+
+        if len(closes) < 30:
+            return d
+
+        detector = StructureDetector(swing_lookback=3)
+        report = detector.analyze(closes, highs, lows, volumes)
+
+        # Find contraction sequence from swing highs
+        swing_highs = [s.price for s in report.swing_highs[-6:]]
+        swing_lows = [s.price for s in report.swing_lows[-6:]]
+
+        if len(swing_highs) < 2 or len(swing_lows) < 2:
+            return d
+
+        # Measure contraction ranges (high-low pairs)
+        n = min(len(swing_highs), len(swing_lows))
+        ranges = []
+        for i in range(n):
+            r = swing_highs[i] - swing_lows[i]
+            if r > 0:
+                ranges.append(r)
+
+        if len(ranges) < 2:
+            return d
+
+        # VCP = contracting ranges (each smaller than previous)
+        contracting = 0
+        for i in range(1, len(ranges)):
+            if ranges[i] < ranges[i - 1] * 1.05:  # 5% tolerance
+                contracting += 1
+
+        # Need at least 2 contractions for VCP
+        if contracting >= 1:
+            d.is_vcp = True
+            d.contraction_count = contracting + 1
+            d.contractions = [round(r, 2) for r in ranges]
+
+            # Base depth: max range / price
+            price = closes[-1]
+            d.base_depth_pct = max(ranges) / price * 100 if price > 0 else 0
+
+            # Distance from highs
+            high_52 = max(highs[-min(252, len(highs)):])
+            d.distance_from_highs_pct = (
+                (high_52 - price) / high_52 * 100 if high_52 > 0 else 0
+            )
+
+            # Days in base (from first swing high to now)
+            if report.swing_highs:
+                first_idx = report.swing_highs[0].index
+                d.days_in_base = len(closes) - first_idx
+
+            # MA alignment
+            if len(closes) >= 50:
+                ma50 = np.mean(closes[-50:])
+                ma200 = np.mean(closes[-200:]) if len(closes) >= 200 else 0
+                d.price_above_50ma = price > ma50
+                d.price_above_200ma = price > ma200 > 0
+                if d.price_above_50ma and d.price_above_200ma and ma50 > ma200:
+                    d.ma_alignment = "STRONG"
+                elif d.price_above_50ma:
+                    d.ma_alignment = "WEAK"
+                else:
+                    d.ma_alignment = "MIXED"
+
+            # Inject structure data back into signal for downstream
+            sig["trend_structure"] = report.trend
+            sig["trend_quality"] = report.trend_quality
+            sig["breakout_quality"] = report.breakout_quality
+            sig["volume_confirms"] = report.volume_confirms
+            sig["volume_exhaustion"] = report.volume_exhaustion
+            if report.nearest_support:
+                sig["nearest_support"] = report.nearest_support
+            if report.nearest_resistance:
+                sig["nearest_resistance"] = report.nearest_resistance
 
         return d
 
