@@ -130,7 +130,10 @@
     <!-- ══════ ERROR / LOADING BANNER ══════ -->
     <div x-show="apiError" x-cloak :style="apiError.startsWith('⏳')?'background:#422006;border:1px solid #f59e0b;border-radius:8px;margin:6px 12px;padding:8px 12px;display:flex;align-items:center;justify-content:space-between':'background:#7f1d1d;border:1px solid #ef4444;border-radius:8px;margin:6px 12px;padding:8px 12px;display:flex;align-items:center;justify-content:space-between'">
       <span :style="apiError.startsWith('⏳')?'color:#fde68a;font-size:11px':'color:#fca5a5;font-size:11px'" x-text="'⚠ '+apiError"></span>
-      <button @click="fetchMkt()" :style="apiError.startsWith('⏳')?'background:#f59e0b;color:#000;font-size:10px;padding:2px 10px;border:0;border-radius:4px;cursor:pointer':'background:#ef4444;color:#fff;font-size:10px;padding:2px 10px;border:0;border-radius:4px;cursor:pointer'">Retry now</button>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span x-show="apiError.startsWith('⏳')" style="color:#fde68a;font-size:9px;opacity:.7" x-text="'Uptime: '+(healthData?.uptime_seconds?Math.round(healthData.uptime_seconds)+'s':'—')"></span>
+        <button @click="fetchMkt()" :style="apiError.startsWith('⏳')?'background:#f59e0b;color:#000;font-size:10px;padding:2px 10px;border:0;border-radius:4px;cursor:pointer':'background:#ef4444;color:#fff;font-size:10px;padding:2px 10px;border:0;border-radius:4px;cursor:pointer'">Retry now</button>
+      </div>
     </div>
 
     <!-- ══════ TAB BAR ══════ -->
@@ -2689,6 +2692,7 @@
       _failCount:0,
       _retryTimer:null,
       apiError:'',
+      healthData:null,
       ac:{query:'',results:[],show:false,target:'',selIdx:-1,timer:null},
 
       init(){
@@ -2729,7 +2733,7 @@
         else if(e.key==='Escape'){this.ac.show=false}
       },
       async fetchMkt(){
-        try{const r=await fetch('/api/live/market');if(r.status===503){const b=await r.json().catch(()=>({}));this.apiError='⏳ '+(b.error||'API is loading, please wait…');this.live=false;this._schedRetry(3000);return}if(!r.ok)throw 0;const d=await r.json();this.regime=d.regime||{};this.indices=d.indices||[];this.macro=d.macro||[];this.sectors=d.sectors||[];this.asia=d.asia||[];this.trust=d.trust||{};this.live=true;this._failCount=0;this.apiError='';this._clearRetry()}catch(e){this._failCount=(this._failCount||0)+1;this.live=false;const delay=Math.min(3000*this._failCount,15000);this.apiError='⏳ Connecting to server… retry in '+Math.round(delay/1000)+'s';this._schedRetry(delay)}
+        try{const r=await fetch('/api/live/market');if(r.status===503){const b=await r.json().catch(()=>({}));this.apiError='⏳ '+(b.error||'API is loading… first cold start takes 1-5 min');this.live=false;this.fetchHealth();this._schedRetry(3000);return}if(!r.ok)throw 0;const d=await r.json();this.regime=d.regime||{};this.indices=d.indices||[];this.macro=d.macro||[];this.sectors=d.sectors||[];this.asia=d.asia||[];this.trust=d.trust||{};this.live=true;this._failCount=0;this.apiError='';this._clearRetry()}catch(e){this._failCount=(this._failCount||0)+1;this.live=false;const delay=Math.min(3000*this._failCount,15000);const eta=this.healthData?.mode==='loading'?'  (first load takes 1-5 min)':'';this.apiError='⏳ Connecting to server… retry in '+Math.round(delay/1000)+'s'+eta;this.fetchHealth();this._schedRetry(delay)}
       },
       _schedRetry(ms){if(this._retryTimer)clearTimeout(this._retryTimer);this._retryTimer=setTimeout(()=>this.fetchMkt(),ms)},
       _clearRetry(){if(this._retryTimer){clearTimeout(this._retryTimer);this._retryTimer=null}},
@@ -3013,7 +3017,7 @@
         try{const u='/api/live/time-travel?ticker='+encodeURIComponent(this.tt.ticker)+'&target_date='+this.tt.date+'&strategy='+(this.tt.strategy||'all');const r=await fetch(u,{method:'POST'});if(!r.ok){const e=await r.json();throw new Error(e.detail||'Failed')}this.tt.result=await r.json();this.$nextTick(()=>this.renderTTChart())}catch(e){alert('Time Travel Error: '+e.message)}finally{this.tt.loading=false}
       },
       async fetchHealth(){
-        try{const r=await fetch('/api/health');if(!r.ok)throw 0;const d=await r.json();this.ops.components=d.components||{};const m=d.metrics||{};this.ops.running=m.running||false;this.ops.cycle_count=m.cycle_count||0;this.ops.signals_today=m.signals_today||0;this.ops.trades_today=m.trades_today||0;this.ops.circuit_breaker=m.circuit_breaker_triggered||false;this.ops.circuit_breaker_reason=m.circuit_breaker_reason||'';this.ops.dry_run=m.dry_run!==false}catch(e){}
+        try{const r=await fetch('/api/health');if(!r.ok)throw 0;const d=await r.json();this.healthData=d;this.ops.components=d.components||{};const m=d.metrics||{};this.ops.running=m.running||false;this.ops.cycle_count=m.cycle_count||0;this.ops.signals_today=m.signals_today||0;this.ops.trades_today=m.trades_today||0;this.ops.circuit_breaker=m.circuit_breaker_triggered||false;this.ops.circuit_breaker_reason=m.circuit_breaker_reason||'';this.ops.dry_run=m.dry_run!==false}catch(e){}
         this.fetchOpsDetail();
       },
       async fetchOpsDetail(){
