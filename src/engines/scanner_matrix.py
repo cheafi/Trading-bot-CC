@@ -135,11 +135,18 @@ class BreakoutScanner(BaseScanner):
     def scan(self, signals, regime) -> List[ScannerHit]:
         hits = []
         for sig in signals:
+            bq = sig.get("breakout_quality")
             strategy = sig.get("strategy", "").lower()
-            if "breakout" in strategy or sig.get("is_breakout", False):
+            if bq or "breakout" in strategy:
                 vol = sig.get("vol_ratio", 1.0)
-                score = min(10, sig.get("score", 5))
-                if vol > 1.5:
+                quality = bq or "unknown"
+                score = {
+                    "genuine": 8.5,
+                    "weak": 5.5,
+                    "fake": 2.0,
+                    "exhaustion": 3.0,
+                }.get(quality, 5.0)
+                if vol > 1.5 and quality != "fake":
                     score = min(10, score + 1.0)
                 hits.append(
                     ScannerHit(
@@ -147,12 +154,13 @@ class BreakoutScanner(BaseScanner):
                         category=self.category,
                         ticker=sig.get("ticker", ""),
                         score=score,
-                        headline=f"Breakout (vol {vol:.1f}x)",
+                        headline=f"Breakout ({quality}, vol {vol:.1f}x)",
                         priority=(
                             ScannerPriority.HIGH
-                            if vol > 2.0
+                            if quality == "genuine"
                             else ScannerPriority.NORMAL
                         ),
+                        metadata={"breakout_quality": quality},
                     )
                 )
         return hits
@@ -306,17 +314,23 @@ class OptionsFlowScanner(BaseScanner):
     def scan(self, signals, regime) -> List[ScannerHit]:
         hits = []
         for sig in signals:
-            opt_bull = sig.get("options_bullish", False)
-            unusual = sig.get("unusual_options", False)
-            if opt_bull or unusual:
+            # Detect unusual activity from computed fields:
+            # High volume + near resistance + uptrend = smart money positioning
+            vol = sig.get("vol_ratio", 1.0)
+            at_res = sig.get("is_at_resistance", False)
+            trend = sig.get("trend_structure", "")
+            bb = sig.get("bb_width", 10)
+            if vol >= 2.5 and trend in ("strong_uptrend", "uptrend") and bb < 5:
                 hits.append(
                     ScannerHit(
                         scanner_name=self.name,
                         category=self.category,
                         ticker=sig.get("ticker", ""),
                         score=7.0,
-                        headline="Unusual options activity",
+                        headline=f"Unusual activity: {vol:.1f}x vol, tight BB ({bb:.1f})",
+                        detail="Volume surge into tight range = potential breakout setup",
                         priority=ScannerPriority.HIGH,
+                        metadata={"vol_ratio": vol, "bb_width": bb},
                     )
                 )
         return hits
@@ -329,16 +343,33 @@ class InsiderScanner(BaseScanner):
     def scan(self, signals, regime) -> List[ScannerHit]:
         hits = []
         for sig in signals:
-            if sig.get("insider_buy", False):
+            # Detect accumulation pattern: rising price on below-avg volume
+            # (quiet accumulation) or strong uptrend + near support
+            vol = sig.get("vol_ratio", 1.0)
+            trend = sig.get("trend_structure", "")
+            near_support = sig.get("is_near_support", False)
+            rs = sig.get("rs_rank", 50)
+            if trend in ("strong_uptrend", "uptrend") and vol < 0.8 and rs >= 70:
                 hits.append(
                     ScannerHit(
                         scanner_name=self.name,
                         category=self.category,
                         ticker=sig.get("ticker", ""),
-                        score=7.5,
-                        headline="Insider buying",
-                        detail=sig.get("insider_detail", ""),
+                        score=7.0,
+                        headline="Quiet accumulation (low vol, strong RS)",
+                        detail=f"RS rank {rs}, vol ratio {vol:.1f}x",
                         priority=ScannerPriority.HIGH,
+                    )
+                )
+            elif near_support and trend in ("strong_uptrend", "uptrend"):
+                hits.append(
+                    ScannerHit(
+                        scanner_name=self.name,
+                        category=self.category,
+                        ticker=sig.get("ticker", ""),
+                        score=6.5,
+                        headline="Pullback to support in uptrend",
+                        priority=ScannerPriority.NORMAL,
                     )
                 )
         return hits
@@ -351,15 +382,22 @@ class InstitutionalScanner(BaseScanner):
     def scan(self, signals, regime) -> List[ScannerHit]:
         hits = []
         for sig in signals:
-            if sig.get("institutional_buy", False):
+            # Detect institutional-grade accumulation:
+            # High volume + uptrend + leader RS = big money buying
+            vol = sig.get("vol_ratio", 1.0)
+            rs = sig.get("rs_rank", 50)
+            trend = sig.get("trend_structure", "")
+            vol_confirms = sig.get("volume_confirms", False)
+            if vol >= 2.0 and rs >= 80 and vol_confirms:
                 hits.append(
                     ScannerHit(
                         scanner_name=self.name,
                         category=self.category,
                         ticker=sig.get("ticker", ""),
                         score=8.0,
-                        headline="Institutional accumulation",
+                        headline=f"Institutional accumulation ({vol:.1f}x vol, RS {rs})",
                         priority=ScannerPriority.HIGH,
+                        metadata={"vol_ratio": vol, "rs_rank": rs},
                     )
                 )
         return hits
@@ -591,8 +629,33 @@ class SimilarPatternScanner(BaseScanner):
     category = ScannerCategory.VALIDATION
 
     def scan(self, signals, regime) -> List[ScannerHit]:
-        # Placeholder — would query historical pattern DB
-        return []
+        """Find signals with similar structure patterns for cross-validation."""
+        hits = []
+        # Group signals by trend_structure + breakout_quality
+        pattern_groups: Dict[str, List[Dict]] = {}
+        for sig in signals:
+            trend = sig.get("trend_structure", "unknown")
+            bq = sig.get("breakout_quality", "none")
+            key = f"{trend}_{bq}"
+            pattern_groups.setdefault(key, []).append(sig)
+
+        # Flag groups with 3+ similar patterns (cluster validation)
+        for key, group in pattern_groups.items():
+            if len(group) >= 3:
+                tickers = [s.get("ticker", "?") for s in group[:5]]
+                for sig in group:
+                    hits.append(
+                        ScannerHit(
+                            scanner_name=self.name,
+                            category=self.category,
+                            ticker=sig.get("ticker", ""),
+                            score=6.5,
+                            headline=f"Pattern cluster: {len(group)} similar setups",
+                            detail=f"Same pattern as: {', '.join(t for t in tickers if t != sig.get('ticker'))}",
+                            metadata={"pattern_key": key, "cluster_size": len(group)},
+                        )
+                    )
+        return hits
 
 
 class EdgeDecayScanner(BaseScanner):
@@ -600,8 +663,46 @@ class EdgeDecayScanner(BaseScanner):
     category = ScannerCategory.VALIDATION
 
     def scan(self, signals, regime) -> List[ScannerHit]:
-        # Placeholder — would check rolling performance
-        return []
+        """Detect signals showing edge decay patterns."""
+        hits = []
+        for sig in signals:
+            # Edge decay indicators:
+            # - Volume exhaustion (climax volume after extended move)
+            # - Fake breakout quality
+            # - High extension + high RSI + crowding
+            vol_exhaust = sig.get("volume_exhaustion", False)
+            bq = sig.get("breakout_quality", "")
+            is_extended = sig.get("is_extended", False)
+            rsi = sig.get("rsi", 50)
+            trap_risk = sig.get("liquidity_trap_risk", 0.0)
+
+            warnings = []
+            if vol_exhaust:
+                warnings.append("volume exhaustion")
+            if bq == "fake":
+                warnings.append("fake breakout")
+            if bq == "exhaustion":
+                warnings.append("exhaustion breakout")
+            if is_extended and rsi > 75:
+                warnings.append(f"extended (RSI {rsi:.0f})")
+            if trap_risk > 0.5:
+                warnings.append(f"liquidity trap risk {trap_risk:.0%}")
+
+            if len(warnings) >= 2:
+                hits.append(
+                    ScannerHit(
+                        scanner_name=self.name,
+                        category=self.category,
+                        ticker=sig.get("ticker", ""),
+                        score=3.0,
+                        headline="Edge decay warning",
+                        detail="; ".join(warnings),
+                        is_warning=True,
+                        priority=ScannerPriority.HIGH,
+                        metadata={"decay_signals": warnings},
+                    )
+                )
+        return hits
 
 
 # ═════════════════════════════════════════════════════════════════════

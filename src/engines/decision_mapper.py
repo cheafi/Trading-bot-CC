@@ -43,6 +43,8 @@ class Decision:
     confidence: float = 0.0
     confidence_label: str = "LOW"
     risk_level: str = "HIGH"  # LOW / MEDIUM / HIGH / EXTREME
+    position_size_pct: float = 0.0  # % of portfolio
+    size_rationale: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -53,6 +55,8 @@ class Decision:
             "confidence": round(self.confidence, 2),
             "confidence_label": self.confidence_label,
             "risk_level": self.risk_level,
+            "position_size_pct": round(self.position_size_pct, 1),
+            "size_rationale": self.size_rationale,
         }
 
 
@@ -136,4 +140,35 @@ class DecisionMapper:
             d.rationale += " (downgraded: laggard, not leader)"
             d.risk_level = "MEDIUM"
 
+        # Position sizing (only for TRADE)
+        if d.action == Action.TRADE:
+            d.position_size_pct, d.size_rationale = self._size(
+                conf, d.risk_level, score
+            )
+
         return d
+
+    @staticmethod
+    def _size(conf: float, risk_level: str, score: float) -> tuple[float, str]:
+        """Compute position size as % of portfolio."""
+        # Base: 2% for medium, scale by confidence
+        base = {"LOW": 3.0, "MEDIUM": 2.0, "HIGH": 1.0, "EXTREME": 0.5}
+        size = base.get(risk_level, 2.0)
+
+        # Scale by confidence (0.5-1.0 → 0.5x-1.5x)
+        size *= 0.5 + conf
+
+        # Score bonus
+        if score >= 8.5:
+            size *= 1.2
+
+        size = round(max(0.5, min(5.0, size)), 1)
+        parts = []
+        if risk_level == "LOW":
+            parts.append("low risk")
+        if conf >= 0.7:
+            parts.append(f"high conf {conf:.0%}")
+        if score >= 8.5:
+            parts.append("A+ score")
+        rationale = ", ".join(parts) if parts else "standard"
+        return size, rationale

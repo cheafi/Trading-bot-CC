@@ -30,8 +30,9 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set
 
 from src.engines.sector_classifier import SectorBucket
 
@@ -90,6 +91,15 @@ class SectorAlert:
     entry_zone: str = ""
     invalidation: str = ""
     take_profit: str = ""
+    position_size_pct: float = 0.0
+    size_rationale: str = ""
+
+    # Regime context
+    regime_label: str = ""
+    regime_vix: float = 0.0
+
+    # Timestamp
+    detected_at: str = ""
 
     # Explanation
     why_now: str = ""
@@ -142,6 +152,13 @@ class SectorAlert:
                 "inline": True,
             },
             {
+                "name": "🌍 Regime",
+                "value": (
+                    f"{self.regime_label or '—'}\n" f"VIX: {self.regime_vix:.0f}"
+                ),
+                "inline": True,
+            },
+            {
                 "name": "📊 Confidence",
                 "value": (
                     f"Thesis: {self.thesis_conf:.0%}\n"
@@ -155,10 +172,17 @@ class SectorAlert:
             {
                 "name": "🎯 Setup",
                 "value": (
-                    f"Strategy: {self.strategy}\n"
-                    f"Entry: {self.entry_zone}\n"
-                    f"Invalidation: {self.invalidation}\n"
-                    f"Risk: {self.risk_level}"
+                    (
+                        f"Strategy: {self.strategy}\n"
+                        f"Entry: {self.entry_zone or '—'}\n"
+                        f"Stop: {self.invalidation or '—'}\n"
+                        f"Target: {self.take_profit or '—'}\n"
+                        f"Risk: {self.risk_level}\n"
+                        f"Size: {self.position_size_pct:.1f}%"
+                        f" ({self.size_rationale})"
+                    )
+                    if self.position_size_pct > 0
+                    else (f"Strategy: {self.strategy}\n" f"Risk: {self.risk_level}")
                 ),
                 "inline": True,
             },
@@ -206,8 +230,8 @@ class SectorAlert:
             "footer": {
                 "text": (
                     f"Conflict: {self.conflict_level}"
-                    f" | Data: "
-                    f"{self.data_freshness}"
+                    f" | Data: {self.data_freshness}"
+                    f" | {self.detected_at or 'now'}"
                 ),
             },
         }
@@ -216,7 +240,27 @@ class SectorAlert:
 class SectorAlertBuilder:
     """Build sector-aware Discord alerts from pipeline results."""
 
-    def build(self, pipeline_result) -> SectorAlert:
+    def __init__(self):
+        # Dedup: track (ticker, action, date) to avoid re-alerting
+        self._sent_today: Set[str] = set()
+        self._sent_date: str = ""
+
+    def _dedup_key(self, ticker: str, action: str) -> str:
+        return f"{ticker}:{action}:{datetime.utcnow().strftime('%Y-%m-%d')}"
+
+    def _check_dedup(self, ticker: str, action: str) -> bool:
+        """Returns True if this alert was already sent today."""
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        if today != self._sent_date:
+            self._sent_today.clear()
+            self._sent_date = today
+        key = self._dedup_key(ticker, action)
+        if key in self._sent_today:
+            return True
+        self._sent_today.add(key)
+        return False
+
+    def build(self, pipeline_result, regime=None) -> SectorAlert:
         """Build alert from a PipelineResult."""
         r = pipeline_result
         sig = r.signal
@@ -271,6 +315,16 @@ class SectorAlertBuilder:
         alert.entry_zone = sig.get("entry_zone", "")
         alert.invalidation = r.explanation.invalidation
         alert.take_profit = sig.get("take_profit", "")
+        alert.position_size_pct = r.decision.position_size_pct
+        alert.size_rationale = r.decision.size_rationale
+
+        # Regime context
+        if regime:
+            alert.regime_label = regime.get("trend", "")
+            alert.regime_vix = regime.get("vix", 0)
+
+        # Timestamp
+        alert.detected_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
         # Explanation
         alert.why_now = r.explanation.why_now
@@ -285,23 +339,26 @@ class SectorAlertBuilder:
 
         return alert
 
-    def build_batch(self, results) -> List[SectorAlert]:
+    def build_batch(self, results, regime=None) -> List[SectorAlert]:
         """Build alerts for all pipeline results."""
-        return [self.build(r) for r in results]
+        return [self.build(r, regime) for r in results]
 
     def filter_actionable(
         self,
         alerts: List[SectorAlert],
+        dedup: bool = True,
     ) -> List[SectorAlert]:
         """Filter to only actionable alerts worth sending."""
-        return [
-            a
-            for a in alerts
-            if a.alert_type
-            in (
+        out = []
+        for a in alerts:
+            if a.alert_type not in (
                 AlertType.URGENT,
                 AlertType.ACTIONABLE,
                 AlertType.NO_TRADE,
                 AlertType.MACRO_WARNING,
-            )
-        ]
+            ):
+                continue
+            if dedup and self._check_dedup(a.ticker, a.action):
+                continue
+            out.append(a)
+        return out
