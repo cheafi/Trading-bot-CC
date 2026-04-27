@@ -18,6 +18,7 @@ from typing import Any, Dict, List
 from src.engines.confidence_engine import ConfidenceBreakdown, ConfidenceEngine
 from src.engines.correlation_risk import CorrelationRiskEngine
 from src.engines.decision_mapper import Decision, DecisionMapper
+from src.engines.drawdown_breaker import DrawdownCircuitBreaker
 from src.engines.evidence_conflict import (
     BetterAlternativeEngine,
     ConflictReport,
@@ -111,6 +112,7 @@ class SectorPipeline:
         self.scanner = ScannerMatrix()
         self.portfolio_gate = PortfolioGate()
         self.correlation_engine = CorrelationRiskEngine()
+        self.circuit_breaker = DrawdownCircuitBreaker()
 
     def process(
         self,
@@ -177,6 +179,28 @@ class SectorPipeline:
             if not gate.allowed:
                 decision.action = "WATCH"
                 decision.rationale += f" (portfolio gate: {gate.reasons[0]})"
+
+        # 6d. Circuit breaker: check drawdown and adjust sizing
+        portfolio_value = signal.get("_portfolio_value", 0)
+        portfolio_peak = signal.get("_portfolio_peak", 0)
+        if portfolio_value > 0 and portfolio_peak > 0:
+            cb = self.circuit_breaker.check(
+                portfolio_value, portfolio_peak
+            )
+            if cb.level == "HALT":
+                decision.action = "NO_TRADE"
+                decision.rationale += (
+                    f" (circuit breaker: HALT at"
+                    f" {cb.drawdown_pct:.1f}% drawdown)"
+                )
+            elif cb.size_multiplier < 1.0:
+                decision.position_size_pct = round(
+                    decision.position_size_pct * cb.size_multiplier, 1
+                )
+                decision.rationale += (
+                    f" (drawdown {cb.drawdown_pct:.1f}%:"
+                    f" size → {cb.size_multiplier:.0%})"
+                )
 
         # 7. Explain
         explanation = self.explainer.explain(

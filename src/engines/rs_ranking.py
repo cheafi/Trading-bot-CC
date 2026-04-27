@@ -184,7 +184,7 @@ class RSRankingEngine:
 
         def rs_score(stock_ret: float, bench_ret: float) -> float:
             if bench_ret == 0:
-                return 100.0 + stock_ret * 10
+                return max(0, min(300, (1 + stock_ret / 100) * 100))
             return max(0, min(300, (1 + stock_ret / 100) / (1 + bench_ret / 100) * 100))
 
         rs_1w = rs_score(stock.get("return_1w", 0), bench.get("return_1w", 0))

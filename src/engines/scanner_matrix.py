@@ -240,7 +240,10 @@ class MeanReversionScanner(BaseScanner):
         hits = []
         for sig in signals:
             rsi = sig.get("rsi", 50)
-            if rsi < 30:
+            is_breakdown = sig.get("is_breakdown", False)
+            # Only fire RSI 25-30 zone; below 25 is BreakdownScanner territory
+            # Skip if already flagged as breakdown
+            if 25 <= rsi < 30 and not is_breakdown:
                 hits.append(
                     ScannerHit(
                         scanner_name=self.name,
