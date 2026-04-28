@@ -12266,10 +12266,18 @@ try:
 except ImportError:
     pass
 
-# Sprint 62 — Fund builder, morning brief, stock-vs-SPY
+# Sprint 62 — Fund builder, stock-vs-SPY
 try:
     from src.api.routers.fund import router as fund_router
 
     app.include_router(fund_router)
+except ImportError:
+    pass
+
+# Sprint 64/71 — Morning brief (regime, diff, strategies)
+try:
+    from src.api.routers.brief import router as brief_router
+
+    app.include_router(brief_router)
 except ImportError:
     pass

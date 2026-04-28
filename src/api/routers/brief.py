@@ -18,20 +18,16 @@ async def morning_brief():
     """
     Morning brief: regime, top setups, portfolio heat, risk.
     """
-    from src.engines.macro_regime_engine import MacroRegimeEngine
+    from src.services.regime_service import RegimeService
 
-    engine = MacroRegimeEngine()
-
-    # Generate synthetic regime from defaults if no live data
-    spy = [500 + i * 0.1 for i in range(60)]
-    result = engine.compute(spy)
+    regime = RegimeService.get()
 
     return {
-        "regime": result.to_dict(),
+        "regime": regime,
         "top_setups": [],
         "portfolio_heat": {"positions": 0, "max": 10},
-        "risk_watch": result.signals[:3] if result.signals else [],
-        "note": "Wire live data for real-time brief",
+        "risk_watch": regime.get("signals", [])[:3],
+        "synthetic": regime.get("synthetic", False),
     }
 
 

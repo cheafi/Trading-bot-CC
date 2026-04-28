@@ -11,62 +11,17 @@ New endpoints:
 """
 
 from __future__ import annotations
+
+import json
+import os
+
 from fastapi import APIRouter, Query
-from typing import Optional
-import json, os, time
-from datetime import datetime
 
 router = APIRouter(prefix="/api", tags=["brief", "fund"])
 
-# ── Morning Brief ──
-
-@router.get("/brief")
-async def morning_brief():
-    """
-    Daily morning brief: current regime, top setups, portfolio heat, risks.
-    The single most useful daily workflow endpoint.
-    """
-    from src.engines.macro_regime_engine import MacroRegimeEngine
-
-    brief = {
-        "date": datetime.now().strftime("%Y-%m-%d"),
-        "generated_at": datetime.now().isoformat(),
-    }
-
-    # Try to load latest brief data
-    data_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-        "data",
-    )
-    brief_files = sorted(
-        [f for f in os.listdir(data_dir) if f.startswith("brief-")],
-        reverse=True,
-    ) if os.path.isdir(data_dir) else []
-
-    if brief_files:
-        try:
-            with open(os.path.join(data_dir, brief_files[0])) as f:
-                latest = json.load(f)
-            brief["latest_brief"] = latest
-            brief["brief_date"] = brief_files[0].replace("brief-", "").replace(".json", "")
-        except Exception:
-            pass
-
-    # Regime (demo with synthetic data if no real data)
-    engine = MacroRegimeEngine()
-    # In production, these would come from a data service
-    brief["regime"] = {
-        "note": "Wire MacroRegimeEngine to live SPY/QQQ/VIX data for real regime",
-        "engine": "MacroRegimeEngine available",
-    }
-
-    brief["top_actions"] = [
-        "1. Check regime before any new positions",
-        "2. Review top-ranked signals in /api/recommendations",
-        "3. Check portfolio heat vs limits",
-    ]
-
-    return brief
+# ── Morning Brief (moved to src/api/routers/brief.py) ──
+# The /api/brief endpoint is served by the brief router.
+# See src/api/routers/brief.py for the real implementation.
 
 
 # ── Stock vs SPY ──

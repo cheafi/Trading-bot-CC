@@ -71,6 +71,7 @@ class RegimeService:
         regime["should_trade"] = result.risk_score < 75
         regime["vix"] = result.vix_level
         regime["source"] = "regime_service"
+        regime["synthetic"] = getattr(cls, "_is_synthetic", False)
         return regime
 
     @classmethod
@@ -96,8 +97,12 @@ class RegimeService:
                             results[t] = hist["closes"]
                         elif hist and isinstance(hist, list):
                             results[t] = [bar.get("close", 0) for bar in hist]
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug(
+                            "MDS fetch %s failed: %s",
+                            t,
+                            exc,
+                        )
                 return results
 
             try:
@@ -128,8 +133,12 @@ class RegimeService:
                         )
                         if data is not None and len(data) > 0:
                             closes[t] = data["Close"].tolist()
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug(
+                            "yfinance fetch %s failed: %s",
+                            t,
+                            exc,
+                        )
             except ImportError:
                 logger.warning("yfinance not installed")
 
@@ -137,6 +146,9 @@ class RegimeService:
         if not closes.get("SPY"):
             logger.warning("No market data — using synthetic")
             closes = cls._synthetic_closes()
+            cls._is_synthetic = True
+        else:
+            cls._is_synthetic = False
 
         return closes
 
@@ -167,4 +179,5 @@ class RegimeService:
             "should_trade": True,
             "vix": 18.0,
             "source": "default",
+            "synthetic": True,
         }
