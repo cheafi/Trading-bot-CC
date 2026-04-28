@@ -93,6 +93,7 @@ class SectorAlert:
     take_profit: str = ""
     position_size_pct: float = 0.0
     size_rationale: str = ""
+    risk_reward: float = 0.0
 
     # Regime context
     regime_label: str = ""
@@ -177,6 +178,7 @@ class SectorAlert:
                         f"Entry: {self.entry_zone or '—'}\n"
                         f"Stop: {self.invalidation or '—'}\n"
                         f"Target: {self.take_profit or '—'}\n"
+                        f"R:R: {self.risk_reward:.1f}:1\n"
                         f"Risk: {self.risk_level}\n"
                         f"Size: {self.position_size_pct:.1f}%"
                         f" ({self.size_rationale})"
@@ -330,6 +332,7 @@ class SectorAlertBuilder:
         alert.take_profit = sig.get("take_profit", "")
         alert.position_size_pct = r.decision.position_size_pct
         alert.size_rationale = r.decision.size_rationale
+        alert.risk_reward = getattr(r.decision, "risk_reward", 0.0)
 
         # Regime context
         if regime:

@@ -168,14 +168,14 @@ class MultiLayerRanker:
         c += conf.final * 25
         # Score quality (0-20)
         c += fit.final_score * 2.0
-        # Leader bonus (0-15)
+        # Leader bonus (0-12)
         if r.sector.leader_status.value == "LEADER":
-            c += 15
+            c += 12
         elif r.sector.leader_status.value == "EARLY_FOLLOWER":
-            c += 8
-        # Action bonus (0-10)
+            c += 6
+        # Action bonus (0-18) — TRADE must outweigh LEADER status
         if decision.action == "TRADE":
-            c += 10
+            c += 18
         elif decision.action == "WATCH":
             c += 3
 

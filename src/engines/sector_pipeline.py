@@ -171,6 +171,11 @@ class SectorPipeline:
 
         # 6c. Portfolio gate: check position limits
         positions = signal.get("_current_positions", [])
+        if decision.action == "TRADE" and not positions:
+            logger.debug(
+                "Portfolio gate skipped: no _current_positions for %s",
+                ticker,
+            )
         if decision.action == "TRADE" and positions:
             gate = self.portfolio_gate.check(
                 ticker=ticker,
