@@ -40,22 +40,42 @@ class RegimeMonitorCog(commands.Cog, name="Regime Monitor"):
         await interaction.response.defer()
 
         regime_state = "unknown"
-        probability = 0.0
         playbook = ""
+        risk_score = 50.0
+        signals_list: list[str] = []
 
         try:
-            engine = getattr(self.bot, "_signal_engine", None)
-            if engine:
-                market_state = engine.get_market_state()
-                if market_state:
-                    regime_state = market_state.get(
-                        "regime_label", "unknown"
-                    )
-                playbook_obj = engine.get_playbook()
-                if playbook_obj:
-                    playbook = getattr(
-                        playbook_obj, "summary", ""
-                    ) or ""
+            from src.services.regime_service import (
+                RegimeService,
+            )
+            regime = RegimeService.get()
+            # Map MacroRegimeEngine trends to cog labels
+            _TREND_MAP = {
+                "RISK_ON": "bull_trending",
+                "UPTREND": "bull_trending",
+                "SIDEWAYS": "neutral_consolidation",
+                "TRANSITIONAL": "sideways",
+                "RISK_OFF": "bear_trending",
+                "DOWNTREND": "bear_trending",
+                "CRISIS": "crisis",
+            }
+            raw_trend = regime.get("trend", "SIDEWAYS")
+            regime_state = _TREND_MAP.get(
+                raw_trend, "sideways"
+            )
+            risk_score = regime.get("risk_score", 50)
+            signals_list = regime.get("signals", [])
+            # Build playbook from regime
+            if risk_score < 30:
+                playbook = (
+                    "Full allocation. Momentum + breakout."
+                )
+            elif risk_score < 60:
+                playbook = "Standard allocation. Selective."
+            else:
+                playbook = (
+                    "Reduced exposure. Capital preservation."
+                )
         except Exception as e:
             logger.warning(f"Could not fetch regime: {e}")
 
@@ -133,6 +153,21 @@ class RegimeMonitorCog(commands.Cog, name="Regime Monitor"):
                 value=playbook[:1024],
                 inline=False,
             )
+
+        if signals_list:
+            embed.add_field(
+                name="📡 Signals",
+                value="\n".join(
+                    f"• {s}" for s in signals_list[:5]
+                ),
+                inline=False,
+            )
+
+        embed.add_field(
+            name="⚡ Risk Score",
+            value=f"{risk_score:.0f}/100",
+            inline=True,
+        )
 
         # Strategy guidance per regime
         strategy_guidance = {

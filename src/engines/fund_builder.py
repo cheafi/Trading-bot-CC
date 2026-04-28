@@ -170,6 +170,41 @@ class FundBuilder:
         self.spy_entry_price: float = 0.0  # SPY price at fund inception
         self.created_at: str = datetime.now().strftime("%Y-%m-%d")
 
+    # ── Pre-built model portfolios ──
+
+    @classmethod
+    def trend_leader(
+        cls, capital: float = 100000.0,
+    ) -> "FundBuilder":
+        """Pre-built: Trend/Leader portfolio."""
+        fund = cls("Trend Leader", capital)
+        fund.add_strategy("MOMENTUM", 0.45)
+        fund.add_strategy("BREAKOUT", 0.30)
+        fund.add_strategy("VCP", 0.25)
+        return fund
+
+    @classmethod
+    def pullback_swing(
+        cls, capital: float = 100000.0,
+    ) -> "FundBuilder":
+        """Pre-built: Pullback/Swing portfolio."""
+        fund = cls("Pullback Swing", capital)
+        fund.add_strategy("MEAN_REVERT", 0.40)
+        fund.add_strategy("VCP", 0.35)
+        fund.add_strategy("DEFENSIVE", 0.25)
+        return fund
+
+    @classmethod
+    def tactical_event(
+        cls, capital: float = 100000.0,
+    ) -> "FundBuilder":
+        """Pre-built: Tactical/Event portfolio."""
+        fund = cls("Tactical Event", capital)
+        fund.add_strategy("BREAKOUT", 0.40)
+        fund.add_strategy("MOMENTUM", 0.35)
+        fund.add_strategy("MEAN_REVERT", 0.25)
+        return fund
+
     # ── Strategy management ──
 
     def add_strategy(self, name: str, weight: float = 0.0) -> None:
