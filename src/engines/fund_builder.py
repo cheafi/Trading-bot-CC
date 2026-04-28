@@ -92,6 +92,7 @@ class FundPosition:
     stop_price: float = 0.0
     target_price: float = 0.0
     notes: str = ""
+    sector: str = ""
 
     @property
     def cost_basis(self) -> float:
@@ -207,23 +208,51 @@ class FundBuilder:
         entry_date: str = "",
         stop_price: float = 0.0,
         target_price: float = 0.0,
+        sector: str = "",
     ) -> FundPosition:
-        """Add a position to the fund."""
+        """Add a position to the fund.
+
+        Raises ValueError if insufficient cash or sector
+        concentration exceeds 30%.
+        """
         cost = entry_price * shares
         if cost > self.cash:
             raise ValueError(
-                f"Insufficient cash: need ${cost:.0f}, have ${self.cash:.0f}"
+                f"Insufficient cash: need ${cost:.0f}," f" have ${self.cash:.0f}"
             )
+
+        # Sector concentration check
+        if sector:
+            sector_exposure = sum(
+                p.entry_price * p.shares
+                for p in self.positions
+                if getattr(p, "sector", "") == sector
+            )
+            total_invested = (
+                sum(p.entry_price * p.shares for p in self.positions) + cost
+            )
+            if total_invested > 0:
+                concentration = (sector_exposure + cost) / total_invested
+                if concentration > 0.30:
+                    import logging
+
+                    logging.getLogger(__name__).warning(
+                        "Sector concentration warning: %s at" " %.0f%% (>30%%)",
+                        sector,
+                        concentration * 100,
+                    )
 
         pos = FundPosition(
             ticker=ticker,
             entry_price=entry_price,
             shares=shares,
             strategy=strategy,
-            entry_date=entry_date or datetime.now().strftime("%Y-%m-%d"),
+            entry_date=(entry_date or datetime.now().strftime("%Y-%m-%d")),
             stop_price=stop_price,
             target_price=target_price,
         )
+        if sector:
+            pos.sector = sector
         self.positions.append(pos)
         self.cash -= cost
         return pos
@@ -263,6 +292,47 @@ class FundBuilder:
             for pos in self.positions
         )
         return self.cash + invested
+
+    def auto_performance_report(
+        self,
+        spy_entry: float = 0.0,
+    ) -> dict:
+        """Performance report with auto-fetched prices."""
+        tickers = [p.ticker for p in self.positions]
+        if not tickers:
+            return self.performance_report({}, spy_entry=spy_entry)
+
+        prices: dict[str, float] = {}
+        spy_current = 0.0
+
+        # Try yfinance (sync, simple)
+        try:
+            import yfinance as yf
+
+            for t in tickers + ["SPY"]:
+                try:
+                    data = yf.Ticker(t)
+                    info = data.fast_info
+                    prices[t] = float(
+                        getattr(info, "last_price", 0)
+                        or getattr(info, "previous_close", 0)
+                    )
+                except Exception:
+                    pass
+            spy_current = prices.pop("SPY", 0.0)
+        except ImportError:
+            pass
+
+        # Fallback: use entry prices
+        for p in self.positions:
+            if p.ticker not in prices:
+                prices[p.ticker] = p.entry_price
+
+        return self.performance_report(
+            prices,
+            spy_current=spy_current,
+            spy_entry=spy_entry,
+        )
 
     def performance_report(
         self,

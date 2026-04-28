@@ -286,7 +286,45 @@ class StockVsSPY:
 
     Usage:
         comparison = StockVsSPY.compare(stock_closes, spy_closes, ticker="NVDA")
+        # Or auto-fetch:
+        comparison = StockVsSPY.compare_ticker("NVDA")
     """
+
+    @staticmethod
+    def compare_ticker(
+        ticker: str,
+        period: str = "6mo",
+    ) -> dict:
+        """Auto-fetch and compare a ticker vs SPY."""
+        try:
+            import yfinance as yf
+
+            stock_data = yf.download(
+                ticker,
+                period=period,
+                interval="1d",
+                progress=False,
+            )
+            spy_data = yf.download(
+                "SPY",
+                period=period,
+                interval="1d",
+                progress=False,
+            )
+            if stock_data is None or len(stock_data) < 5:
+                return {"ticker": ticker, "error": "No data"}
+            if spy_data is None or len(spy_data) < 5:
+                return {"ticker": ticker, "error": "No SPY data"}
+            stock_closes = stock_data["Close"].tolist()
+            spy_closes = spy_data["Close"].tolist()
+            return StockVsSPY.compare(stock_closes, spy_closes, ticker=ticker)
+        except ImportError:
+            return {
+                "ticker": ticker,
+                "error": "yfinance not installed",
+            }
+        except Exception as e:
+            return {"ticker": ticker, "error": str(e)}
 
     @staticmethod
     def compare(
