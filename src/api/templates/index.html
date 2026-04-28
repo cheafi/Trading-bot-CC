@@ -25,7 +25,7 @@
       .pb{background:rgba(88,166,255,.12);color:var(--blue)}
       .pp{background:rgba(188,140,255,.12);color:var(--purple)}
       .pw{background:rgba(230,237,243,.08);color:var(--t2)}
-      .tab-bar{display:flex;gap:2px;padding:6px 12px;background:var(--s1);border-bottom:1px solid var(--bd);overflow-x:auto;scrollbar-width:none}
+      .tab-bar{display:flex;gap:2px;padding:6px 12px;background:var(--s1);border-bottom:1px solid var(--bd);overflow:visible;scrollbar-width:none;flex-wrap:wrap}
       .tab-bar::-webkit-scrollbar{display:none}
       .tab-btn{padding:6px 12px;border-radius:6px;font-size:10px;font-weight:600;color:var(--t2);background:none;border:none;cursor:pointer;white-space:nowrap;transition:.15s}
       .tab-btn.on{background:var(--s2);color:var(--t1);box-shadow:0 0 0 1px var(--bd2)}
@@ -141,7 +141,7 @@
       <template x-for="t in tabs"><button class="tab-btn" :class="tab===t.id?'on':''" @click="showMore=false;switchTab(t.id)" x-text="t.icon+' '+t.label"></button></template>
       <div style="position:relative;margin-left:auto">
         <button class="tab-btn" :class="moreTabs.some(t=>t.id===tab)?'on':''" @click="showMore=!showMore" x-text="moreTabs.some(t=>t.id===tab)?moreTabs.find(t=>t.id===tab).icon+' '+moreTabs.find(t=>t.id===tab).label:'⋯ More'"></button>
-        <div x-show="showMore" @click.outside="showMore=false" style="position:absolute;right:0;top:100%;z-index:50;background:var(--s1);border:1px solid var(--bd2);border-radius:8px;padding:4px;min-width:160px;box-shadow:0 8px 24px rgba(0,0,0,.5)">
+        <div x-show="showMore" @click.outside="showMore=false" style="position:absolute;right:0;top:100%;z-index:999;background:var(--s1);border:1px solid var(--bd2);border-radius:8px;padding:4px;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.5)">
           <template x-for="t in moreTabs"><button style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;color:var(--t2);font-size:11px;font-weight:600;cursor:pointer;border-radius:6px" @mouseenter="$el.style.background='var(--s2)'" @mouseleave="$el.style.background='none'" :style="tab===t.id?'color:var(--t1);background:var(--s2)':''" @click="showMore=false;switchTab(t.id)" x-text="t.icon+' '+t.label"></button></template>
         </div>
       </div>
