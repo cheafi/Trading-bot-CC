@@ -4415,6 +4415,101 @@ class DiscordInteractiveBot:
                 logger.error(f"daily_update error: {exc}")
                 await interaction.followup.send(f"❌ Error fetching market data: {exc}")
 
+        @bot.tree.command(name="brief",
+                          description="☀️ On-demand morning brief — regime, setups, circuit breaker status")
+        @app_commands.checks.cooldown(1, 30, key=lambda i: i.user.id)
+        async def cmd_brief(interaction: discord.Interaction):
+            """On-demand morning brief with regime, top setups, and risk status."""
+            await interaction.response.defer()
+            try:
+                now = datetime.now(timezone.utc)
+
+                # Fetch core market data
+                spy_data = await _fetch_stock("SPY")
+                qqq_data = await _fetch_stock("QQQ")
+                vix_data = await _fetch_stock("^VIX")
+                iwm_data = await _fetch_stock("IWM")
+                tlt_data = await _fetch_stock("TLT")
+
+                vix = vix_data.get("price", 0)
+                spy_pct = spy_data.get("change_pct", 0)
+                qqq_pct = qqq_data.get("change_pct", 0)
+                iwm_pct = iwm_data.get("change_pct", 0)
+
+                # Regime assessment
+                risk = "RISK_OFF" if (vix > 25 or spy_pct < -1.5) else (
+                    "RISK_ON" if (vix < 18 and spy_pct > 0.3) else "NEUTRAL")
+                regime_icons = {"RISK_ON": "🟢 RISK ON",
+                                "NEUTRAL": "🟡 NEUTRAL",
+                                "RISK_OFF": "🔴 RISK OFF"}
+                regime_label = regime_icons.get(risk, "🟡 NEUTRAL")
+
+                # Cross-asset stress
+                try:
+                    from src.engines.cross_asset_monitor import CrossAssetMonitor
+                    ca = CrossAssetMonitor()
+                    report = ca.analyse(
+                        vix=vix,
+                        spy_change_pct=spy_pct,
+                        tlt_change_pct=tlt_data.get("change_pct", 0),
+                    )
+                    stress_label = f"{report.stress_level.upper()} ({report.stress_score:.0f}/100)"
+                except Exception:
+                    stress_label = "N/A"
+
+                # Circuit breaker
+                try:
+                    from src.engines.drawdown_breaker import DrawdownCircuitBreaker
+                    cb = DrawdownCircuitBreaker()
+                    # Use SPY as proxy for portfolio drawdown from 52w high
+                    cb_result = cb.check(spy_data.get("price", 0),
+                                         spy_data.get("price", 0) * 1.05)
+                    cb_label = f"{cb_result.level} (size: {cb_result.size_multiplier:.0%})"
+                except Exception:
+                    cb_label = "NORMAL"
+
+                # Playbook
+                if risk == "RISK_ON":
+                    playbook = "Momentum · Breakout · VCP"
+                elif risk == "NEUTRAL":
+                    playbook = "Swing · Mean-Reversion · Selective"
+                else:
+                    playbook = "Cash · Defensive · Hedge"
+
+                # Build embed
+                e = discord.Embed(
+                    title=f"☀️ Morning Brief — {now.strftime('%d %b %Y %H:%M UTC')}",
+                    color=0x00FF88 if risk == "RISK_ON" else 0xFF4444 if risk == "RISK_OFF" else 0xFFAA00,
+                    timestamp=now,
+                )
+                e.add_field(
+                    name="📊 Regime",
+                    value=f"{regime_label}\nVIX: **{vix:.1f}**",
+                    inline=True,
+                )
+                e.add_field(
+                    name="📈 Markets",
+                    value=(f"SPY {spy_pct:+.2f}% · QQQ {qqq_pct:+.2f}%\n"
+                           f"IWM {iwm_pct:+.2f}%"),
+                    inline=True,
+                )
+                e.add_field(
+                    name="🛡️ Risk",
+                    value=f"Stress: {stress_label}\nBreaker: {cb_label}",
+                    inline=True,
+                )
+                e.add_field(
+                    name="📋 Today's Playbook",
+                    value=playbook,
+                    inline=False,
+                )
+                e.set_footer(text="On-demand brief • /daily_update for full intel")
+                await interaction.followup.send(embed=e)
+                await _audit(f"☀️ {interaction.user} → /brief ({risk})")
+            except Exception as exc:
+                logger.error(f"brief error: {exc}")
+                await interaction.followup.send(f"❌ Error: {exc}")
+
         @bot.tree.command(name="movers", description="Top gainers and losers today")
         @app_commands.checks.cooldown(1, 15, key=lambda i: i.user.id)
         async def cmd_movers(interaction: discord.Interaction):

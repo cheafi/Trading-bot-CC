@@ -6,8 +6,7 @@ Runs portfolio through predefined stress scenarios (2008 GFC, COVID crash,
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 __all__ = [
     "ScenarioEngine",
@@ -176,9 +175,29 @@ _TICKER_SECTOR_MAP: dict[str, list[str]] = {
 
 
 def _get_shock_for_ticker(ticker: str, shocks: dict[str, float]) -> float:
-    """Estimate shock for a specific ticker based on sector mapping."""
-    categories = _TICKER_SECTOR_MAP.get(ticker, ["equity"])
-    # Use the worst (most negative) applicable shock
+    """Estimate shock for a specific ticker based on sector mapping.
+    Falls back to SectorClassifier for unlisted tickers."""
+    categories = _TICKER_SECTOR_MAP.get(ticker, None)
+    if categories is None:
+        # Dynamic lookup via SectorClassifier
+        try:
+            from src.engines.sector_classifier import SectorClassifier
+
+            ctx = SectorClassifier().classify(ticker, {})
+            bucket = ctx.sector_bucket.value.lower()
+            _BUCKET_TO_CATS = {
+                "growth_tech": ["equity", "tech", "growth"],
+                "financials": ["equity", "financials"],
+                "energy_materials": ["equity", "energy", "commodities"],
+                "healthcare": ["equity"],
+                "consumer": ["equity"],
+                "industrials": ["equity"],
+                "utilities_reits": ["equity"],
+                "crypto_speculative": ["equity", "momentum"],
+            }
+            categories = _BUCKET_TO_CATS.get(bucket, ["equity"])
+        except Exception:
+            categories = ["equity"]
     applicable = [shocks.get(cat, 0) for cat in categories]
     return min(applicable) if applicable else shocks.get("equity", -0.10)
 
