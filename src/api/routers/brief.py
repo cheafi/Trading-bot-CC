@@ -17,15 +17,34 @@ router = APIRouter(prefix="/api/brief", tags=["brief"])
 async def morning_brief():
     """
     Morning brief: regime, top setups, portfolio heat, risk.
+    Loads the latest data/brief-*.json for real actionable signals.
     """
+    import json, glob, os
     from src.services.regime_service import RegimeService
 
     regime = RegimeService.get()
 
+    # Load latest brief file for real setups
+    brief_data = {}
+    try:
+        brief_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data")
+        files = sorted(glob.glob(os.path.join(brief_dir, "brief-*.json")))
+        if files:
+            with open(files[-1]) as f:
+                brief_data = json.load(f)
+    except Exception:
+        pass
+
+    actionable = brief_data.get("actionable", [])
+    watch = brief_data.get("watch", [])
+    top_setups = actionable[:5] if actionable else watch[:3]
+
     return {
         "regime": regime,
-        "top_setups": [],
-        "portfolio_heat": {"positions": 0, "max": 10},
+        "date": brief_data.get("date"),
+        "headline": brief_data.get("headline", "No brief available"),
+        "top_setups": top_setups,
+        "portfolio_heat": {"positions": len(brief_data.get("holdings_with_signals", [])), "max": 10},
         "risk_watch": regime.get("signals", [])[:3],
         "synthetic": regime.get("synthetic", False),
     }
@@ -73,6 +92,57 @@ async def available_strategies():
     """List available fund strategies."""
     from src.engines.fund_builder import STRATEGY_PROFILES
     return {"strategies": STRATEGY_PROFILES}
+
+
+@router.get("/changelog")
+async def changelog():
+    """Recent changes since last deployment."""
+    import json
+    import os
+    import subprocess
+
+    entries = []
+
+    # Try git first (works locally, not in Docker)
+    for cwd in [
+        "/app",
+        os.path.dirname(
+            os.path.dirname(
+                os.path.dirname(os.path.dirname(__file__))
+            )
+        ),
+    ]:
+        try:
+            out = subprocess.check_output(
+                ["git", "log", "--oneline", "-20"],
+                cwd=cwd,
+                text=True,
+                timeout=5,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+            for line in out.splitlines():
+                parts = line.split(" ", 1)
+                if len(parts) == 2:
+                    entries.append({
+                        "hash": parts[0],
+                        "message": parts[1],
+                    })
+            if entries:
+                break
+        except Exception:
+            pass
+
+    # Fallback: baked changelog.json (Docker)
+    if not entries:
+        for p in ["/app/changelog.json", "changelog.json"]:
+            if os.path.isfile(p):
+                try:
+                    with open(p) as f:
+                        entries = json.load(f)
+                    break
+                except Exception:
+                    pass
+    return {"entries": entries, "count": len(entries)}
 
 
 @router.get("/circuit-breaker")
