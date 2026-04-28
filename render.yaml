@@ -6,14 +6,8 @@ services:
     name: cc-dashboard
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements/api.txt
-    startCommand: >-
-      uvicorn src.api.main:app
-      --host 0.0.0.0
-      --port $PORT
-      --workers 2
-      --timeout-keep-alive 30
-      --limit-concurrency 100
+    buildCommand: pip install --upgrade pip && pip install fastapi "uvicorn[standard]" jinja2 yfinance requests aiohttp httpx python-multipart
+    startCommand: uvicorn src.api.main:app --host 0.0.0.0 --port $PORT --workers 1 --timeout-keep-alive 30
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.9"
@@ -22,56 +16,8 @@ services:
       - key: LOG_LEVEL
         value: INFO
       - key: API_SECRET
-        sync: false  # must be set manually in Render dashboard
+        sync: false  # set manually in Render dashboard
       - key: CORS_ORIGINS
         value: "https://cc-dashboard.onrender.com"
-      - key: DATABASE_URL
-        fromDatabase:
-          name: cc-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: cc-redis
-          property: connectionString
     healthCheckPath: /health
     autoDeploy: true
-
-  # ── Discord Bot (background worker) ─────────────────────
-  - type: worker
-    name: cc-discord-bot
-    runtime: python
-    plan: free
-    buildCommand: pip install -r requirements/api.txt
-    startCommand: python run_discord_bot.py
-    envVars:
-      - key: PYTHON_VERSION
-        value: "3.11.9"
-      - key: TRADING_ENV
-        value: paper
-      - key: DISCORD_BOT_TOKEN
-        sync: false  # must be set manually
-      - key: DATABASE_URL
-        fromDatabase:
-          name: cc-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: cc-redis
-          property: connectionString
-    autoDeploy: true
-
-  # ── Redis ───────────────────────────────────────────────
-  - type: redis
-    name: cc-redis
-    plan: free
-    maxmemoryPolicy: allkeys-lru
-    ipAllowList: []  # only internal
-
-databases:
-  # ── PostgreSQL ──────────────────────────────────────────
-  - name: cc-db
-    plan: free
-    databaseName: cc_trading
-    ipAllowList: []  # only internal
