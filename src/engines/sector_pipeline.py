@@ -155,8 +155,8 @@ class SectorPipeline:
             min(1.0, conf.final + adjustment.confidence_modifier),
         )
 
-        # 6. Decision
-        decision = self.mapper.decide(fit, conf, sector, regime)
+        # 6. Decision (with signal for entry/stop/target + ATR sizing)
+        decision = self.mapper.decide_with_signal(fit, conf, sector, regime, signal)
 
         # 6b. Regime-sector gate: auto-downgrade incompatible combos
         if decision.action == "TRADE" and is_regime_blocked(
@@ -240,9 +240,21 @@ class SectorPipeline:
     def process_batch(
         self,
         signals: List[Dict[str, Any]],
-        regime: Dict[str, Any],
+        regime: Dict[str, Any] | None = None,
     ) -> List[PipelineResult]:
         """Process all signals through the pipeline."""
+        # Auto-fetch regime if not provided
+        if not regime or not regime.get("trend"):
+            try:
+                from src.services.regime_service import RegimeService
+
+                regime = RegimeService.get()
+            except Exception:
+                regime = regime or {
+                    "trend": "SIDEWAYS",
+                    "risk_score": 50,
+                }
+
         results = []
         for sig in signals:
             try:
@@ -288,6 +300,18 @@ class SectorPipeline:
             ticker = result.signal.get("ticker", "")
             if ticker in ranks:
                 result.ranking = ranks[ticker]
+
+        # Peer rank within sector bucket
+        from collections import defaultdict
+
+        bucket_groups: dict = defaultdict(list)
+        for r in results:
+            bucket = r.sector.sector_bucket.value
+            bucket_groups[bucket].append(r)
+        for bucket, group in bucket_groups.items():
+            group.sort(key=lambda x: x.fit.final_score, reverse=True)
+            for idx, r in enumerate(group, 1):
+                r.signal["peer_rank"] = f"{idx} of {len(group)} in {bucket}"
 
         return results
 
