@@ -19,5 +19,5 @@ services:
         sync: false  # set manually in Render dashboard
       - key: CORS_ORIGINS
         value: "https://cc-dashboard.onrender.com"
-    healthCheckPath: /health
+    healthCheckPath: /health/live
     autoDeploy: true
