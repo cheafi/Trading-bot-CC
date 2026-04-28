@@ -2,267 +2,348 @@
 TradingAI Bot - Core Configuration
 Loads settings from environment variables with validation.
 
-Features:
-- Type-safe configuration with Pydantic
-- Environment variable loading with defaults
-- Computed properties for derived values
-- Validation for critical settings
+Zero-dependency version — no pydantic import overhead.
 """
-from functools import lru_cache
-from typing import Optional, List, Literal
-from pydantic_settings import BaseSettings
-from pydantic import Field, computed_field, field_validator, model_validator
+
 import logging
+import os
+from functools import lru_cache
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
 
-class Settings(BaseSettings):
+_dotenv_loaded = False
+
+
+def _env_load_dotenv():
+    global _dotenv_loaded
+    if _dotenv_loaded:
+        return
+    _dotenv_loaded = True
+    env_file = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+        ".env",
+    )
+    if os.path.isfile(env_file):
+        try:
+            with open(env_file) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    k, v = line.split("=", 1)
+                    k, v = k.strip(), v.strip().strip("'\"")
+                    if k and k not in os.environ:
+                        os.environ[k] = v
+        except Exception:
+            pass
+
+
+def _env(key: str, default=None):
+    """Read an environment variable (also checks .env on first call)."""
+    _env_load_dotenv()
+    return os.environ.get(key, default)
+
+
+def _env_int(key: str, default: int = 0) -> int:
+    v = _env(key)
+    if v is None:
+        return default
+    try:
+        return int(v)
+    except (ValueError, TypeError):
+        return default
+
+
+def _env_float(key: str, default: float = 0.0) -> float:
+    v = _env(key)
+    if v is None:
+        return default
+    try:
+        return float(v)
+    except (ValueError, TypeError):
+        return default
+
+
+def _env_bool(key: str, default: bool = False) -> bool:
+    v = _env(key)
+    if v is None:
+        return default
+    return v.lower() in ("1", "true", "yes", "on")
+
+
+def _env_list(key: str) -> List[str]:
+    v = _env(key, "")
+    if not v:
+        return []
+    return [x.strip() for x in v.split(",") if x.strip()]
+
+
+class Settings:
     """Application settings loaded from environment variables."""
-    
-    # Service identification
-    service_name: str = Field(default="tradingai", alias="SERVICE_NAME")
-    environment: Literal["development", "staging", "production"] = Field(
-        default="development", alias="ENVIRONMENT"
-    )
-    log_level: str = Field(default="INFO", alias="LOG_LEVEL")
-    
-    # Database - individual components
-    postgres_user: str = Field(default="tradingai", alias="POSTGRES_USER")
-    postgres_password: str = Field(default="", alias="POSTGRES_PASSWORD")
-    postgres_db: str = Field(default="tradingai", alias="POSTGRES_DB")
-    postgres_host: str = Field(default="postgres", alias="POSTGRES_HOST")
-    postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
-    
-    # Redis
-    redis_password: str = Field(default="", alias="REDIS_PASSWORD")
-    redis_host: str = Field(default="redis", alias="REDIS_HOST")
-    redis_port: int = Field(default=6379, alias="REDIS_PORT")
-    
-    # Market Data APIs
-    polygon_api_key: Optional[str] = Field(default=None, alias="POLYGON_API_KEY")
-    alpaca_api_key: Optional[str] = Field(default=None, alias="ALPACA_API_KEY")
-    alpaca_secret_key: Optional[str] = Field(default=None, alias="ALPACA_SECRET_KEY")
-    alpaca_endpoint: str = Field(
-        default="https://paper-api.alpaca.markets/v2", 
-        alias="ALPACA_ENDPOINT"
-    )
-    alpaca_paper: bool = Field(default=True, alias="ALPACA_PAPER")
-    
-    # News APIs
-    newsapi_key: Optional[str] = Field(default=None, alias="NEWSAPI_KEY")
-    benzinga_api_key: Optional[str] = Field(default=None, alias="BENZINGA_API_KEY")
-    finnhub_api_key: Optional[str] = Field(default=None, alias="FINNHUB_API_KEY")
-    
-    # Social APIs
-    x_bearer_token: Optional[str] = Field(default=None, alias="X_BEARER_TOKEN")
-    reddit_client_id: Optional[str] = Field(default=None, alias="REDDIT_CLIENT_ID")
-    reddit_client_secret: Optional[str] = Field(default=None, alias="REDDIT_CLIENT_SECRET")
-    reddit_user_agent: str = Field(default="TradingAI Bot/1.0", alias="REDDIT_USER_AGENT")
-    
-    # OpenAI (standard) - optional fallback
-    openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
-    openai_model: str = Field(default="gpt-5.2", alias="OPENAI_MODEL")
-    openai_model_mini: str = Field(default="gpt-5.2-mini", alias="OPENAI_MODEL_MINI")
-    
-    # Azure OpenAI (preferred)
-    azure_tenant_id: Optional[str] = Field(default=None, alias="AZURE_TENANT_ID")
-    azure_client_id: Optional[str] = Field(default=None, alias="AZURE_CLIENT_ID")
-    azure_client_secret: Optional[str] = Field(default=None, alias="AZURE_CLIENT_SECRET")
-    azure_openai_endpoint: Optional[str] = Field(default=None, alias="AZURE_OPENAI_ENDPOINT")
-    azure_openai_api_key: Optional[str] = Field(default=None, alias="AZURE_OPENAI_API_KEY")
-    azure_openai_deployment: str = Field(default="gpt-5.2", alias="AZURE_OPENAI_DEPLOYMENT")
-    azure_openai_api_version: str = Field(default="2026-01-15-preview", alias="AZURE_OPENAI_API_VERSION")
-    
-    # Discord Notifications (optional)
-    discord_webhook_url: Optional[str] = Field(default=None, alias="DISCORD_WEBHOOK_URL")
-    discord_bot_token: Optional[str] = Field(default=None, alias="DISCORD_BOT_TOKEN")
-    discord_channel_name: str = Field(default="Trading CC", alias="DISCORD_CHANNEL_NAME")
-    
-    # MetaTrader 5 (Forex/CFD/Crypto)
-    mt5_login: Optional[int] = Field(default=None, alias="MT5_LOGIN")
-    mt5_password: Optional[str] = Field(default=None, alias="MT5_PASSWORD")
-    mt5_server: Optional[str] = Field(default=None, alias="MT5_SERVER")
-    mt5_path: Optional[str] = Field(default=None, alias="MT5_PATH")
-    
-    # Futu Broker (富途)
-    futu_host: str = Field(default="127.0.0.1", alias="FUTU_HOST")
-    futu_port: int = Field(default=11111, alias="FUTU_PORT")
-    futu_trade_password: Optional[str] = Field(default=None, alias="FUTU_TRADE_PASSWORD")
-    futu_unlock_pin: Optional[str] = Field(default=None, alias="FUTU_UNLOCK_PIN")
-    futu_rsa_file: Optional[str] = Field(default=None, alias="FUTU_RSA_FILE")
-    
-    # Interactive Brokers
-    ib_host: str = Field(default="127.0.0.1", alias="IB_HOST")
-    ib_port: int = Field(default=7497, alias="IB_PORT")  # 7497 for TWS, 4001 for Gateway
-    ib_client_id: int = Field(default=1, alias="IB_CLIENT_ID")
-    ib_account: Optional[str] = Field(default=None, alias="IB_ACCOUNT")
-    
-    # Twilio / WhatsApp (optional)
-    twilio_account_sid: Optional[str] = Field(default=None, alias="TWILIO_ACCOUNT_SID")
-    twilio_auth_token: Optional[str] = Field(default=None, alias="TWILIO_AUTH_TOKEN")
-    twilio_whatsapp_from: Optional[str] = Field(default=None, alias="TWILIO_WHATSAPP_FROM")
-    whatsapp_to: Optional[str] = Field(default=None, alias="WHATSAPP_TO")
-    
-    # S3 Storage (Massive / S3-compatible)
-    s3_access_key_id: Optional[str] = Field(default=None, alias="S3_ACCESS_KEY_ID")
-    s3_secret_access_key: Optional[str] = Field(default=None, alias="S3_SECRET_ACCESS_KEY")
-    s3_endpoint: Optional[str] = Field(default=None, alias="S3_ENDPOINT")
-    s3_bucket: Optional[str] = Field(default=None, alias="S3_BUCKET")
-    
-    # API Security
-    api_secret_key: Optional[str] = Field(default=None, alias="API_SECRET_KEY")
-    
-    # Monitoring
-    grafana_user: str = Field(default="admin", alias="GRAFANA_USER")
-    grafana_password: str = Field(default="admin", alias="GRAFANA_PASSWORD")
-    
-    @computed_field
+
+    def __init__(self):
+        _env_load_dotenv()
+
+        # Service identification
+        self.service_name = _env("SERVICE_NAME", "tradingai")
+        self.environment = _env("ENVIRONMENT", "development")
+        self.log_level = _env("LOG_LEVEL", "INFO")
+
+        # Database
+        self.postgres_user = _env("POSTGRES_USER", "tradingai")
+        self.postgres_password = _env("POSTGRES_PASSWORD", "")
+        self.postgres_db = _env("POSTGRES_DB", "tradingai")
+        self.postgres_host = _env("POSTGRES_HOST", "postgres")
+        self.postgres_port = _env_int("POSTGRES_PORT", 5432)
+
+        # Redis
+        self.redis_password = _env("REDIS_PASSWORD", "")
+        self.redis_host = _env("REDIS_HOST", "redis")
+        self.redis_port = _env_int("REDIS_PORT", 6379)
+
+        # Market Data APIs
+        self.polygon_api_key = _env("POLYGON_API_KEY")
+        self.alpaca_api_key = _env("ALPACA_API_KEY")
+        self.alpaca_secret_key = _env("ALPACA_SECRET_KEY")
+        self.alpaca_endpoint = _env(
+            "ALPACA_ENDPOINT",
+            "https://paper-api.alpaca.markets/v2",
+        )
+        self.alpaca_paper = _env_bool("ALPACA_PAPER", True)
+
+        # News APIs
+        self.newsapi_key = _env("NEWSAPI_KEY")
+        self.benzinga_api_key = _env("BENZINGA_API_KEY")
+        self.finnhub_api_key = _env("FINNHUB_API_KEY")
+
+        # Social APIs
+        self.x_bearer_token = _env("X_BEARER_TOKEN")
+        self.reddit_client_id = _env("REDDIT_CLIENT_ID")
+        self.reddit_client_secret = _env("REDDIT_CLIENT_SECRET")
+        self.reddit_user_agent = _env(
+            "REDDIT_USER_AGENT", "TradingAI Bot/1.0"
+        )
+
+        # OpenAI
+        self.openai_api_key = _env("OPENAI_API_KEY")
+        self.openai_model = _env("OPENAI_MODEL", "gpt-5.2")
+        self.openai_model_mini = _env("OPENAI_MODEL_MINI", "gpt-5.2-mini")
+
+        # Azure OpenAI
+        self.azure_tenant_id = _env("AZURE_TENANT_ID")
+        self.azure_client_id = _env("AZURE_CLIENT_ID")
+        self.azure_client_secret = _env("AZURE_CLIENT_SECRET")
+        self.azure_openai_endpoint = _env("AZURE_OPENAI_ENDPOINT")
+        self.azure_openai_api_key = _env("AZURE_OPENAI_API_KEY")
+        self.azure_openai_deployment = _env(
+            "AZURE_OPENAI_DEPLOYMENT", "gpt-5.2"
+        )
+        self.azure_openai_api_version = _env(
+            "AZURE_OPENAI_API_VERSION", "2026-01-15-preview"
+        )
+
+        # Discord
+        self.discord_webhook_url = _env("DISCORD_WEBHOOK_URL")
+        self.discord_bot_token = _env("DISCORD_BOT_TOKEN")
+        self.discord_channel_name = _env(
+            "DISCORD_CHANNEL_NAME", "Trading CC"
+        )
+
+        # MetaTrader 5
+        self.mt5_login: Optional[int] = (
+            _env_int("MT5_LOGIN", 0) or None
+        )
+        self.mt5_password = _env("MT5_PASSWORD")
+        self.mt5_server = _env("MT5_SERVER")
+        self.mt5_path = _env("MT5_PATH")
+
+        # Futu Broker
+        self.futu_host = _env("FUTU_HOST", "127.0.0.1")
+        self.futu_port = _env_int("FUTU_PORT", 11111)
+        self.futu_trade_password = _env("FUTU_TRADE_PASSWORD")
+        self.futu_unlock_pin = _env("FUTU_UNLOCK_PIN")
+        self.futu_rsa_file = _env("FUTU_RSA_FILE")
+
+        # Interactive Brokers
+        self.ib_host = _env("IB_HOST", "127.0.0.1")
+        self.ib_port = _env_int("IB_PORT", 7497)
+        self.ib_client_id = _env_int("IB_CLIENT_ID", 1)
+        self.ib_account = _env("IB_ACCOUNT")
+
+        # Twilio / WhatsApp
+        self.twilio_account_sid = _env("TWILIO_ACCOUNT_SID")
+        self.twilio_auth_token = _env("TWILIO_AUTH_TOKEN")
+        self.twilio_whatsapp_from = _env("TWILIO_WHATSAPP_FROM")
+        self.whatsapp_to = _env("WHATSAPP_TO")
+
+        # S3 Storage
+        self.s3_access_key_id = _env("S3_ACCESS_KEY_ID")
+        self.s3_secret_access_key = _env("S3_SECRET_ACCESS_KEY")
+        self.s3_endpoint = _env("S3_ENDPOINT")
+        self.s3_bucket = _env("S3_BUCKET")
+
+        # API Security
+        self.api_secret_key = _env("API_SECRET_KEY")
+
+        # Monitoring
+        self.grafana_user = _env("GRAFANA_USER", "admin")
+        self.grafana_password = _env("GRAFANA_PASSWORD", "admin")
+
     @property
     def database_url(self) -> str:
-        """Construct database URL from components."""
         return (
-            f"postgresql://{self.postgres_user}:{self.postgres_password}"
-            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+            f"postgresql://{self.postgres_user}:"
+            f"{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}"
+            f"/{self.postgres_db}"
         )
-    
-    @computed_field
+
     @property
     def async_database_url(self) -> str:
-        """Construct async database URL."""
         return (
-            f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
-            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+            f"postgresql+asyncpg://{self.postgres_user}:"
+            f"{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}"
+            f"/{self.postgres_db}"
         )
-    
-    @computed_field
+
     @property
     def redis_url(self) -> str:
-        """Construct Redis URL."""
-        return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/0"
-    
+        return (
+            f"redis://:{self.redis_password}"
+            f"@{self.redis_host}:{self.redis_port}/0"
+        )
+
     @property
     def use_azure_openai(self) -> bool:
-        """Check if Azure OpenAI should be used."""
-        return bool(self.azure_openai_endpoint and self.azure_client_id)
-    
+        return bool(
+            self.azure_openai_endpoint and self.azure_client_id
+        )
+
     @property
     def has_discord(self) -> bool:
-        """Check if Discord webhook is configured."""
         return bool(self.discord_webhook_url)
 
     @property
     def has_whatsapp(self) -> bool:
-        """Check if Twilio WhatsApp is configured."""
         return bool(
             self.twilio_account_sid
             and self.twilio_auth_token
             and self.twilio_whatsapp_from
             and self.whatsapp_to
         )
-    
+
     @property
     def has_s3(self) -> bool:
-        """Check if S3 storage is configured."""
         return bool(self.s3_endpoint and self.s3_access_key_id)
-    
+
     @property
     def has_mt5(self) -> bool:
-        """Check if MetaTrader 5 is configured."""
         return bool(self.mt5_login and self.mt5_password)
-    
+
     @property
     def has_discord_bot(self) -> bool:
-        """Check if Discord bot (interactive) is configured."""
         return bool(self.discord_bot_token)
-    
+
     @property
     def has_futu(self) -> bool:
-        """Check if Futu is configured."""
         return bool(self.futu_trade_password)
-    
+
     @property
     def has_ib(self) -> bool:
-        """Check if Interactive Brokers is configured."""
         return bool(self.ib_host and self.ib_port)
-    
-    model_config = {
-        "env_file": ".env",
-        "env_file_encoding": "utf-8",
-        "extra": "ignore",
-        "populate_by_name": True,
-    }
 
 
-class TradingConfig(BaseSettings):
+class TradingConfig:
     """Trading-specific configuration."""
-    
-    # Universe
-    universe_source: str = Field(default="sp500", alias="UNIVERSE_SOURCE")
-    custom_watchlist: List[str] = Field(default_factory=list, alias="CUSTOM_WATCHLIST")
-    
-    # Risk parameters
-    max_position_pct: float = Field(default=0.05, alias="MAX_POSITION_PCT")
-    max_sector_pct: float = Field(default=0.25, alias="MAX_SECTOR_PCT")
-    max_correlation: float = Field(default=0.70, alias="MAX_CORRELATION")
-    max_portfolio_var: float = Field(default=0.025, alias="MAX_PORTFOLIO_VAR")
-    max_drawdown_pct: float = Field(default=0.10, alias="MAX_DRAWDOWN_PCT")
-    risk_per_trade: float = Field(default=0.01, alias="RISK_PER_TRADE")
-    
-    # Signal filters
-    min_confidence: int = Field(default=50, alias="MIN_CONFIDENCE")
-    max_vix_for_trading: float = Field(default=40.0, alias="MAX_VIX_FOR_TRADING")
 
-    # Regime router thresholds
-    regime_vix_crisis: float = Field(default=35.0, alias="REGIME_VIX_CRISIS")
-    regime_no_trade_entropy: float = Field(default=1.35, alias="REGIME_NO_TRADE_ENTROPY")
-    regime_min_confidence: float = Field(default=0.40, alias="REGIME_MIN_CONFIDENCE")
+    def __init__(self):
+        _env_load_dotenv()
 
-    # Ensembler thresholds
-    ensemble_min_score: float = Field(default=0.35, alias="ENSEMBLE_MIN_SCORE")
+        self.universe_source = _env("UNIVERSE_SOURCE", "sp500")
+        self.custom_watchlist = _env_list("CUSTOM_WATCHLIST")
 
-    # Expression engine
-    options_enabled: bool = Field(default=False, alias="OPTIONS_ENABLED")
-    max_option_allocation: float = Field(default=0.20, alias="MAX_OPTION_ALLOCATION")
-    min_option_oi: int = Field(default=500, alias="MIN_OPTION_OI")
+        # Risk parameters
+        self.max_position_pct = _env_float("MAX_POSITION_PCT", 0.05)
+        self.max_sector_pct = _env_float("MAX_SECTOR_PCT", 0.25)
+        self.max_correlation = _env_float("MAX_CORRELATION", 0.70)
+        self.max_portfolio_var = _env_float("MAX_PORTFOLIO_VAR", 0.025)
+        self.max_drawdown_pct = _env_float("MAX_DRAWDOWN_PCT", 0.10)
+        self.risk_per_trade = _env_float("RISK_PER_TRADE", 0.01)
 
-    # Strategy leaderboard
-    strategy_cooldown_score: float = Field(default=0.20, alias="STRATEGY_COOLDOWN_SCORE")
-    strategy_reduced_score: float = Field(default=0.35, alias="STRATEGY_REDUCED_SCORE")
-    strategy_retire_days: int = Field(default=90, alias="STRATEGY_RETIRE_DAYS")
+        # Signal filters
+        self.min_confidence = _env_int("MIN_CONFIDENCE", 50)
+        self.max_vix_for_trading = _env_float(
+            "MAX_VIX_FOR_TRADING", 40.0
+        )
 
-    # Circuit breaker
-    max_daily_loss_pct: float = Field(default=3.0, alias="MAX_DAILY_LOSS_PCT")
-    max_consecutive_losses: int = Field(default=5, alias="MAX_CONSECUTIVE_LOSSES")
-    circuit_breaker_cooldown_min: int = Field(default=60, alias="CIRCUIT_BREAKER_COOLDOWN_MIN")
-    max_open_positions: int = Field(default=15, alias="MAX_OPEN_POSITIONS")
+        # Regime router thresholds
+        self.regime_vix_crisis = _env_float("REGIME_VIX_CRISIS", 35.0)
+        self.regime_no_trade_entropy = _env_float(
+            "REGIME_NO_TRADE_ENTROPY", 1.35
+        )
+        self.regime_min_confidence = _env_float(
+            "REGIME_MIN_CONFIDENCE", 0.40
+        )
 
-    # Position management
-    stop_loss_pct: float = Field(default=0.03, alias="STOP_LOSS_PCT")
-    trailing_stop_pct: float = Field(default=0.02, alias="TRAILING_STOP_PCT")
-    max_hold_days: int = Field(default=30, alias="MAX_HOLD_DAYS")
+        # Ensembler thresholds
+        self.ensemble_min_score = _env_float(
+            "ENSEMBLE_MIN_SCORE", 0.35
+        )
 
-    # Sprint 31: signal dedup / anti-flip
-    signal_cooldown_hours: int = Field(
-        default=4, alias="SIGNAL_COOLDOWN_HOURS",
-    )
-    anti_flip_hours: int = Field(
-        default=6, alias="ANTI_FLIP_HOURS",
-    )
-    max_correlated_held: int = Field(
-        default=3, alias="MAX_CORRELATED_HELD",
-    )
-    
-    # Scheduling (Eastern Time)
-    premarket_report_time: str = Field(default="06:30", alias="PREMARKET_REPORT_TIME")
-    postmarket_report_time: str = Field(default="16:30", alias="POSTMARKET_REPORT_TIME")
-    
-    model_config = {
-        "env_file": ".env",
-        "env_file_encoding": "utf-8",
-        "extra": "ignore",
-        "populate_by_name": True,
-    }
+        # Expression engine
+        self.options_enabled = _env_bool("OPTIONS_ENABLED", False)
+        self.max_option_allocation = _env_float(
+            "MAX_OPTION_ALLOCATION", 0.20
+        )
+        self.min_option_oi = _env_int("MIN_OPTION_OI", 500)
+
+        # Strategy leaderboard
+        self.strategy_cooldown_score = _env_float(
+            "STRATEGY_COOLDOWN_SCORE", 0.20
+        )
+        self.strategy_reduced_score = _env_float(
+            "STRATEGY_REDUCED_SCORE", 0.35
+        )
+        self.strategy_retire_days = _env_int(
+            "STRATEGY_RETIRE_DAYS", 90
+        )
+
+        # Circuit breaker
+        self.max_daily_loss_pct = _env_float(
+            "MAX_DAILY_LOSS_PCT", 3.0
+        )
+        self.max_consecutive_losses = _env_int(
+            "MAX_CONSECUTIVE_LOSSES", 5
+        )
+        self.circuit_breaker_cooldown_min = _env_int(
+            "CIRCUIT_BREAKER_COOLDOWN_MIN", 60
+        )
+        self.max_open_positions = _env_int("MAX_OPEN_POSITIONS", 15)
+
+        # Position management
+        self.stop_loss_pct = _env_float("STOP_LOSS_PCT", 0.03)
+        self.trailing_stop_pct = _env_float("TRAILING_STOP_PCT", 0.02)
+        self.max_hold_days = _env_int("MAX_HOLD_DAYS", 30)
+
+        # Signal dedup / anti-flip
+        self.signal_cooldown_hours = _env_int(
+            "SIGNAL_COOLDOWN_HOURS", 4
+        )
+        self.anti_flip_hours = _env_int("ANTI_FLIP_HOURS", 6)
+        self.max_correlated_held = _env_int(
+            "MAX_CORRELATED_HELD", 3
+        )
+
+        # Scheduling (Eastern Time)
+        self.premarket_report_time = _env(
+            "PREMARKET_REPORT_TIME", "06:30"
+        )
+        self.postmarket_report_time = _env(
+            "POSTMARKET_REPORT_TIME", "16:30"
+        )
 
 
 @lru_cache()
@@ -277,5 +358,21 @@ def get_trading_config() -> TradingConfig:
     return TradingConfig()
 
 
-# Global settings instance for convenience
-settings = get_settings()
+class _LazySettings:
+    """Proxy that delays Settings() until first attribute access."""
+
+    _instance = None
+
+    def _load(self):
+        if self._instance is None:
+            self._instance = get_settings()
+        return self._instance
+
+    def __getattr__(self, name):
+        return getattr(self._load(), name)
+
+    def __repr__(self):
+        return repr(self._load())
+
+
+settings = _LazySettings()

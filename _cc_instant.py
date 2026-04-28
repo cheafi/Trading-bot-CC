@@ -187,10 +187,15 @@ def _run_backend():
     try:
         print("[backend] launching uvicorn subprocess...", flush=True)
         t0 = time.time()
+        # Use venv python if available, else system python
+        _python = os.path.join("venv", "bin", "python3")
+        if not os.path.isfile(_python):
+            import sys
+            _python = sys.executable
         log = open("/tmp/cc_backend.log", "w")
         proc = subprocess.Popen(
             [
-                os.path.join("venv", "bin", "python3"),
+                _python,
                 "-m",
                 "uvicorn",
                 "src.api.main:app",

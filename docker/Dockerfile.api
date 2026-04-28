@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 
@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Install Python dependencies (cached layer)
 COPY requirements/base.txt requirements/api.txt ./requirements/
 RUN pip install --no-cache-dir -r requirements/api.txt
 
@@ -17,9 +17,13 @@ RUN pip install --no-cache-dir -r requirements/api.txt
 COPY src/ ./src/
 COPY config/ ./config/
 COPY data/ ./data/
+COPY _cc_instant.py ./
 
 # Create logs directory
 RUN mkdir -p /app/logs
+
+# Pre-compile bytecode for fast startup
+RUN python -m compileall -q src/
 
 # Set Python path
 ENV PYTHONPATH=/app
@@ -32,5 +36,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Run FastAPI with uvicorn
-CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run with _cc_instant for instant dashboard + background API
+CMD ["python", "_cc_instant.py"]

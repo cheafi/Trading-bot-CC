@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+.git/
+.env
+*.egg-info/
+archive/
+Roo-Code/
+node_modules/
+.pytest_cache/
+.mypy_cache/
+*.log
