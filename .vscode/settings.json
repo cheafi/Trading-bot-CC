@@ -1,0 +1,32 @@
+{
+  // ── Git auto-sync ────────────────────────────────────────────────────────
+  // Automatically fetch from GitHub every 3 minutes so the Source Control
+  // panel always shows whether you're ahead/behind remote.
+  "git.autofetch": true,
+  "git.autofetchPeriod": 180,
+
+  // Push the current branch directly without asking which remote/branch.
+  "git.confirmSync": false,
+
+  // Commit all staged + unstaged changes in one go when no files are staged.
+  "git.enableSmartCommit": true,
+
+  // Merge (not rebase) when pulling — safer for a team environment.
+  "git.rebaseWhenSync": false,
+
+  // Show the number of pending changes in the status bar.
+  "git.showPushSuccessNotification": true,
+
+  // ── Python ───────────────────────────────────────────────────────────────
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "[python]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "ms-python.black-formatter"
+  },
+
+  // ── Editor ───────────────────────────────────────────────────────────────
+  "editor.formatOnSave": true,
+  "editor.rulers": [100],
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true
+}
