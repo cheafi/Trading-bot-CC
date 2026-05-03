@@ -1,6 +1,6 @@
 # Roadmap
 
-> Current version: **7.0.0** · Updated: 2026-04-25
+> Current version: **9.0.1** · Updated: 2026-05-03
 >
 > This roadmap reflects planned improvements. Timelines are estimates, not
 > commitments. Priorities may shift based on user feedback and contributor

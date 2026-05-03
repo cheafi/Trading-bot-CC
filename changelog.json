@@ -1,5 +1,15 @@
 [
   {
+    "hash": "bddb122",
+    "date": "2026-04-29",
+    "message": "fix: render healthCheckPath to /health/live"
+  },
+  {
+    "hash": "54e8a41",
+    "date": "2026-04-28",
+    "message": "sprint74: performance tracker table — % return vs SPY + sector ETF, auto-loads on Track Record tab"
+  },
+  {
     "hash": "1c08724",
     "message": "perf: Docker for instant startup, remove pydantic from config, lazy core imports"
   },
