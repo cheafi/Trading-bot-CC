@@ -1,27 +1,47 @@
-version: '3.8'
-
-# Dev-only compose — API only, no postgres/redis required
-# Usage: docker compose -f docker-compose.dev.yml up --build
+# ── CC Dev Compose ─────────────────────────────────────────────────────────
+# Requires: Docker Desktop Business (BuildKit cache mounts, resource controls)
+# Usage:    docker compose -f docker-compose.dev.yml up --build
+# Rebuild:  docker compose -f docker-compose.dev.yml build (uses pip cache)
 # Dashboard: http://localhost:8000
+
+x-build-args: &build-args
+  DOCKER_BUILDKIT: "1"
 
 services:
   api:
     build:
       context: .
       dockerfile: docker/Dockerfile.api
+      # BuildKit: inline cache speeds up CI/CD and subsequent local builds
+      cache_from:
+        - type=local,src=/tmp/.buildx-cache
+      cache_to:
+        - type=local,dest=/tmp/.buildx-cache-new,mode=max
     container_name: cc_api_dev
     restart: unless-stopped
     ports:
       - "8000:8000"
       - "8001:8001"
     volumes:
+      # Live-reload: src/ changes reflect immediately (no rebuild needed)
+      - ./src:/app/src:ro
       - ./data:/app/data
       - ./config:/app/config:ro
+      - ./changelog.json:/app/changelog.json:ro
     environment:
       - PYTHONUNBUFFERED=1
       - CC_ENV=development
       - LOG_LEVEL=INFO
       - API_SECRET_KEY=dev-secret-local
+    # Resource limits: prevent runaway yfinance calls from hogging the host
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 15s

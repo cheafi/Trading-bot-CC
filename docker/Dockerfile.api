@@ -1,32 +1,50 @@
 # ── CC Clarity Console — API Dockerfile ─────────────────────────────────────
-# Slim Python 3.11 image (pydantic .so pre-compiled = no Gatekeeper hang)
-# Build: docker compose -f docker-compose.dev.yml up --build
-# Runtime: uvicorn via _cc_instant.py on port 8000
+# BuildKit multi-stage: deps layer cached separately from code layer
+# → rebuild on code change takes ~5s (no pip reinstall)
+# → ARM64 native on Apple M-chip (no Rosetta overhead)
+# syntax=docker/dockerfile:1.7
 
-FROM python:3.11-slim
+# ── Stage 1: dependency builder ──────────────────────────────────────────────
+FROM python:3.11-slim AS deps
 
-# Install curl for healthcheck, git for version info
-RUN apt-get update && apt-get install -y --no-install-recommends curl git && \
+WORKDIR /deps
+
+# BuildKit cache mount: pip cache persists across builds (Docker Business)
+# → subsequent builds skip re-downloading packages entirely
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip
+
+COPY requirements/base.txt requirements/base.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --prefix=/install -r requirements/base.txt
+
+# ── Stage 2: runtime image ───────────────────────────────────────────────────
+FROM python:3.11-slim AS runtime
+
+# Install curl only (healthcheck) — no build tools in final image
+RUN apt-get update && apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
+
+# Copy only installed packages from builder (no pip, no compiler)
+COPY --from=deps /install /usr/local
 
 WORKDIR /app
 
-# Copy requirements first (layer cache)
-COPY requirements/ requirements/
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements/base.txt
+# Non-root user (Docker Business security best practice)
+RUN groupadd -r cc && useradd -r -g cc -d /app cc
 
-# Copy application code
-COPY src/ src/
-COPY config/ config/
-COPY changelog.json ./
-COPY _cc_instant.py ./
-COPY run_dashboard.py ./
+# Copy application code (invalidates only when code changes, not deps)
+COPY --chown=cc:cc src/ src/
+COPY --chown=cc:cc config/ config/
+COPY --chown=cc:cc changelog.json ./
+COPY --chown=cc:cc _cc_instant.py ./
+COPY --chown=cc:cc run_dashboard.py ./
 
-# Create data dir for SQLite + brief JSONs
-RUN mkdir -p data/artifacts data/portfolios
+# Writable data dir for SQLite + brief JSONs
+RUN mkdir -p data/artifacts data/portfolios && chown -R cc:cc data/
 
-# Expose dashboard port
+USER cc
+
 EXPOSE 8000
 
 # Health probe
