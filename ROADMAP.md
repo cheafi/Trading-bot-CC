@@ -127,6 +127,11 @@ Inspired by multi-agent trading research workflows (researcher / macro / risk / 
 - [x] **ARCH-health**: Extract 8 health/status/metrics routes → `src/api/routers/health.py`; `health_ready` uses `request.app.state` cleanly
 - [x] **ARCH-count**: `main.py` inline routes: 118 (Sprint 80) → 113 (Sprint 81) → 99 (Sprint 82); −19 this sprint
 
+### ✅ Sprint 84 — Swing Service Extraction + MetaLabeler Signal Threshold Wiring
+
+- [x] **ARCH-swing**: Extracted 6 swing helper functions from `main.py` → `src/services/swing_analysis.py` (pure Python, no FastAPI deps); 6 inline routes → `src/api/routers/swing.py`; `main.py` inline route count 99→93
+- [x] **SIGNAL-1**: `MetaLabeler._DEFAULTS` wired to `SIGNAL_THRESHOLDS` — `strong_buy_threshold` raised 0.75→0.85 (bars higher for STRONG_BUY label, more conservative); `abstention_threshold` and `watch_threshold` unchanged at 0.45/0.55
+
 ### ✅ Sprint 83 — Test Coverage + Git Health
 
 - [x] **TEST**: `test_sprint83.py` — 8 tests covering Sprint 81+82: module imports, `RegimeService.aget()` coroutine contract, router prefix/route-count assertions (market_intel 5, broker 6, health 8), `TradingConfig` ↔ `RISK` alignment, cache speed — 8/8 pass
