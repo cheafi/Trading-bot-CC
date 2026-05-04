@@ -112,6 +112,14 @@ Inspired by multi-agent trading research workflows (researcher / macro / risk / 
 - [ ] Add execution-quality feedback loop (slippage + fill quality into critic agent)
 - [ ] Add offline replay harness for agent consensus drift tests
 
+### ✅ Sprint 78 — ROI Analysis + AI Self-Run Fund Lab
+
+- [x] Self-run fund endpoint (`/api/v7/fund-lab/self-run`) using updated market data
+- [x] Three tactical sleeves: `FUND_ALPHA`, `FUND_PENDA`, `FUND_CAT`
+- [x] ROI analytics vs index: total return, annualized return, Sharpe, volatility, max drawdown, annualized alpha
+- [x] Track Record UI panel for AI fund-vs-index comparison with configurable period/benchmark
+- [x] Dynamic pick generation from momentum ranking (top-N per sleeve)
+
 ---
 
 ## 🔮 Future Exploration

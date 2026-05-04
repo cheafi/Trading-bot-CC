@@ -12627,3 +12627,11 @@ try:
     app.include_router(agents_router)
 except Exception:
     logger.exception("[Router] Failed to load agents router")
+
+# Sprint 78 — Self-run fund lab (FUND_ALPHA / FUND_PENDA / FUND_CAT)
+try:
+    from src.api.routers.fund_lab import router as fund_lab_router
+
+    app.include_router(fund_lab_router)
+except Exception:
+    logger.exception("[Router] Failed to load fund_lab router")
