@@ -14,12 +14,9 @@ from datetime import datetime, timezone
 
 import discord
 from discord import app_commands
-from discord.ext import commands, tasks
+from discord.ext import commands
 
-from src.notifications._embeds import (
-    RegimeEmbed,
-    EmbedColors,
-)
+from src.notifications._embeds import EmbedColors
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +42,8 @@ class RegimeMonitorCog(commands.Cog, name="Regime Monitor"):
         signals_list: list[str] = []
 
         try:
-            from src.services.regime_service import (
-                RegimeService,
-            )
+            from src.services.regime_service import RegimeService
+
             regime = RegimeService.get()
             # Map MacroRegimeEngine trends to cog labels
             _TREND_MAP = {

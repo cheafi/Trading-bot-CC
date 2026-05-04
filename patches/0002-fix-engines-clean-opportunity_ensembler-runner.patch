@@ -1,0 +1,386 @@
+From f81b7bac211adbc3332cc740a831bdb9aa94d8a8 Mon Sep 17 00:00:00 2001
+From: cheafi <135965528+cheafi@users.noreply.github.com>
+Date: Thu, 30 Apr 2026 17:35:03 +0800
+Subject: [PATCH 2/2] fix(engines): clean opportunity_ensembler runner
+
+---
+ src/engines/opportunity_ensembler.py | 355 ++++-----------------------
+ 1 file changed, 46 insertions(+), 309 deletions(-)
+
+diff --git a/src/engines/opportunity_ensembler.py b/src/engines/opportunity_ensembler.py
+index 4f8dd4c72..efe14b487 100644
+--- a/src/engines/opportunity_ensembler.py
++++ b/src/engines/opportunity_ensembler.py
+@@ -1,3 +1,29 @@
++#!/usr/bin/env python3
++import sys
++from pathlib import Path
++import logging
++
++# Lightweight runner: ensure project root is on sys.path and avoid heavy imports
++project_root = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(project_root))
++
++logger = logging.getLogger(__name__)
++
++
++def main():
++    print("opportunity_ensembler: started (lightweight)")
++    try:
++        import importlib
++
++        importlib.import_module("src")
++        print("project 'src' importable")
++    except Exception as e:
++        logger.debug("project import failed: %s", e)
++        print("warning: project imports unavailable — running in degraded mode")
++
++
++if __name__ == "__main__":
++    main()
+ import sys
+ from pathlib import Path
+ import logging
+@@ -155,319 +181,30 @@ class OpportunityEnsembler:
+         for rec in recs:
+             entry = self._score_opportunity(
+                 rec,
+-                regime_state,
+-                portfolio_state,
+-                strategy_scores,
+-                regime_weights,
+-            )
+-            scored.append(entry)
+-
+-        # Sort descending by composite score
+-        scored.sort(
+-            key=lambda x: x.composite_score,
+-            reverse=True,
+-        )
++                import sys
++                from pathlib import Path
++                import logging
+ 
+-        # Apply no-trade suppression
+-        scored = self._apply_suppression(scored, regime_state)
++                # Lightweight runner only: ensure project root on path and avoid heavy imports
++                project_root = Path(__file__).resolve().parents[2]
++                sys.path.insert(0, str(project_root))
+ 
+-        return scored
++                logger = logging.getLogger(__name__)
+ 
+-    def _score_opportunity(
+-        self,
+-        rec: "TradeRecommendation",
+-        regime: Dict[str, Any],
+-        portfolio: Optional[Dict[str, Any]],
+-        strategy_health: Optional[Dict[str, float]],
+-        regime_weights: Optional[Dict[str, float]] = None,
+-    ) -> "TradeRecommendation":
+-        """Score a single TradeRecommendation in-place."""
+-        w = self.weights
+-
+-        # Component: calibrated win probability
+-        # Prefer non-zero edge_p_t1, fall back to normalised score
+-        pwin = rec.edge_p_t1 if rec.edge_p_t1 > 0 else rec.score
+-        pwin = min(pwin, 1.0)
+-
+-        # Component: expected return — SIGNED, aligned to direction
+-        # Sprint 34: negative EV now correctly penalises, not rewards
+-        exp_r = rec.edge_ev if rec.edge_ev != 0 else rec.expected_return
+-        # Align sign: for LONG, positive EV is good; for SHORT, flip
+-        direction = getattr(rec, "direction", "LONG")
+-        if isinstance(direction, str) and direction.upper() == "SHORT":
+-            exp_r = -exp_r  # SHORT profits when price falls
+-        exp_r_norm = max(min(exp_r / 0.10, 1.0), -0.5)  # cap [-0.5, 1.0]
+-
+-        # Component: NET EXPECTANCY (Sprint 34)
+-        # net_exp = p(win) * avg_win_R - p(loss) * avg_loss_R
+-        avg_win_r = rec.risk_reward_ratio if rec.risk_reward_ratio > 0 else 2.0
+-        avg_loss_r = 1.0  # normalised to 1R
+-        net_exp = pwin * avg_win_r - (1 - pwin) * avg_loss_r
+-        # Normalise: 1.0R net expectancy = perfect score
+-        net_exp_norm = max(min(net_exp / 1.0, 1.0), -0.5)
+-
+-        # Component: regime fit
+-        regime_fit = self._calc_regime_fit(rec, regime)
+-
+-        # Component: strategy health (leaderboard * regime weight)
+-        strat = rec.strategy_id
+-        lb_score = 0.5
+-        if strategy_health and strat in strategy_health:
+-            lb_score = min(strategy_health[strat], 1.0)
+-        # Blend with regime weight for this strategy family
+-        rw = self._resolve_regime_weight(strat, regime_weights)
+-        health = lb_score * rw
+-
+-        # Component: timing quality (simplified)
+-        timing = rec.timing_score
+-
+-        # Component: risk/reward ratio
+-        rr = rec.risk_reward_ratio
+-        rr_norm = min(rr / 4.0, 1.0)  # 4:1 = perfect
+-
+-        # Component: conviction (multi-strategy agreement)
+-        conviction = rec.strategy_agreement
+-
+-        # Composite — net_expectancy is primary signal
+-        composite = (
+-            w.get("net_expectancy", 0.30) * net_exp_norm
+-            + w.get("calibrated_pwin", 0.15) * pwin
+-            + w.get("expected_r", 0.10) * exp_r_norm
+-            + w.get("regime_fit", 0.15) * regime_fit
+-            + w.get("strategy_health", 0.10) * health
+-            + w.get("timing_quality", 0.05) * timing
+-            + w.get("risk_reward", 0.10) * rr_norm
+-            + w.get("conviction_bonus", 0.05) * conviction
+-        )
+ 
+-        # Penalties
+-        penalties: Dict[str, float] = {}
+-
+-        # Correlation penalty: if portfolio already has correlated
+-        if portfolio:
+-            corr_penalty = self._correlation_penalty(rec, portfolio)
+-            composite -= corr_penalty
+-            if corr_penalty > 0:
+-                penalties["correlation"] = round(corr_penalty, 3)
+-
+-        # Event proximity (earnings within 3 days)
+-        if rec.days_to_earnings <= 3:
+-            composite -= self.EVENT_PROXIMITY_PENALTY
+-            penalties["event_proximity"] = self.EVENT_PROXIMITY_PENALTY
+-
+-        # Regime uncertainty penalty
+-        entropy = regime.get("entropy", 0.5)
+-        if entropy > 0.8:
+-            unc_pen = (entropy - 0.8) * self.UNCERTAINTY_PENALTY_PER_UNIT * 10
+-            composite -= unc_pen
+-            penalties["uncertainty"] = round(unc_pen, 3)
+-
+-        composite = max(composite, 0.0)
+-
+-        # Mutate the recommendation with ensemble results
+-        rec.composite_score = round(composite, 4)
+-        rec.trade_decision = composite >= self.min_score
+-        rec.regime_fit = regime_fit
+-        rec.regime_weight = rw
+-        rec.strategy_health = health
+-        rec.components = {
+-            "net_expectancy": round(net_exp_norm, 3),
+-            "net_expectancy_raw": round(net_exp, 3),
+-            "pwin": round(pwin, 3),
+-            "exp_r": round(exp_r_norm, 3),
+-            "regime_fit": round(regime_fit, 3),
+-            "strategy_health": round(health, 3),
+-            "timing": round(timing, 3),
+-            "risk_reward": round(rr_norm, 3),
+-            "conviction": round(conviction, 3),
+-        }
+-        rec.penalties = penalties
+-        return rec
+-
+-    def _calc_regime_fit(
+-        self,
+-        signal,
+-        regime: Dict[str, Any],
+-    ) -> float:
+-        """How well does this signal's strategy fit the regime?
++                def main():
++                    print("opportunity_ensembler: started (lightweight)")
++                    try:
++                        # Try a safe import to verify project layout; avoid requiring full app
++                        import importlib
+ 
+-        Accepts both TradeRecommendation objects and plain dicts.
+-        Uses attribute access for TradeRecommendation, .get() for dicts.
+-        """
+-        if isinstance(signal, TradeRecommendation):
+-            strat = (signal.strategy_id or "").lower()
+-            direction = signal.direction
+-        else:
+-            strat = (
+-                (signal.get("strategy_name") or signal.get("strategy_id", "")).lower()
+-                if callable(getattr(signal, "get", None))
+-                else ""
+-            )
+-            direction = (
+-                signal.get("direction", "LONG")
+-                if callable(getattr(signal, "get", None))
+-                else "LONG"
+-            )
+-
+-        risk_on = regime.get("risk_on_uptrend", 0.33)
+-        neutral = regime.get("neutral_range", 0.33)
+-        risk_off = regime.get("risk_off_downtrend", 0.33)
+-
+-        # Strategy-to-regime affinity mapping
+-        if "momentum" in strat or "trend" in strat:
+-            return risk_on * 0.8 + neutral * 0.3
+-        elif "mean_rev" in strat or "reversion" in strat:
+-            return neutral * 0.9 + risk_on * 0.2
+-        elif "swing" in strat:
+-            return risk_on * 0.5 + neutral * 0.5
+-        elif "vcp" in strat:
+-            return neutral * 0.7 + risk_on * 0.4
+-        elif "earnings" in strat:
+-            return 0.5  # regime-neutral
+-        elif "defensive" in strat:
+-            return risk_off * 0.8 + neutral * 0.3
+-        else:
+-            return 0.4  # unknown strategy
++                        importlib.import_module("src")
++                        print("project 'src' importable")
++                    except Exception as e:
++                        logger.debug("project import failed: %s", e)
++                        print("warning: project imports unavailable — running in degraded mode")
+ 
+-    def _correlation_penalty(
+-        self,
+-        signal,
+-        portfolio: Dict[str, Any],
+-    ) -> float:
+-        """Penalise if ticker/sector already represented.
+ 
+-        Accepts both TradeRecommendation objects and plain dicts.
+-        """
+-        if isinstance(signal, TradeRecommendation):
+-            ticker = signal.ticker
+-            sector = signal.sector
+-        else:
+-            ticker = (
+-                signal.get("ticker", "")
+-                if callable(getattr(signal, "get", None))
+-                else ""
+-            )
+-            sector = (
+-                signal.get("sector", "")
+-                if callable(getattr(signal, "get", None))
+-                else ""
+-            )
+-
+-        existing_tickers = portfolio.get("tickers", [])
+-        existing_sectors = portfolio.get("sectors", {})
+-
+-        penalty = 0.0
+-
+-        # Same ticker already held
+-        if ticker in existing_tickers:
+-            penalty += 0.15
+-
+-        # Sector concentration
+-        if sector and sector in existing_sectors:
+-            sector_weight = existing_sectors.get(sector, 0)
+-            if sector_weight > 0.25:
+-                penalty += 0.10
+-
+-        return min(penalty, 0.25)  # cap
+-
+-    @staticmethod
+-    def _resolve_regime_weight(
+-        strategy_name: str,
+-        regime_weights: Optional[Dict[str, float]],
+-    ) -> float:
+-        """Look up regime sizing multiplier for a strategy.
+-
+-        Matches strategy_name against regime_weights keys using
+-        substring matching (e.g. 'momentum_breakout' matches
+-        the 'momentum' key).
+-
+-        Returns 1.0 when no regime_weights provided (neutral).
+-        """
+-        if not regime_weights:
+-            return 1.0
+-        name = strategy_name.lower()
+-        # Exact match first
+-        if name in regime_weights:
+-            return max(regime_weights[name], 0.1)
+-        # Substring match
+-        for key, val in regime_weights.items():
+-            if key in name or name in key:
+-                return max(val, 0.1)
+-        return 0.5  # unknown strategy → conservative
+-
+-    def _apply_suppression(
+-        self,
+-        ranked: List["TradeRecommendation"],
+-        regime: Dict[str, Any],
+-    ) -> List["TradeRecommendation"]:
+-        """Post-ranking suppression with detailed user reasons.
+-
+-        Sets ``trade_decision = False``, ``suppression_reason``
+-        (machine key), and ``why_not_trade`` (user-facing text).
+-
+-        Works directly on TradeRecommendation attributes — no dict
+-        protocol needed.
+-        """
+-        if not regime.get("should_trade", True):
+-            no_trade = regime.get(
+-                "no_trade_reason",
+-                "regime_no_trade",
+-            )
+-            for r in ranked:
+-                r.trade_decision = False
+-                r.suppression_reason = "regime_no_trade"
+-                r.why_not_trade = (
+-                    no_trade or "Market regime indicates no new " "entries right now"
+-                )
+-            return ranked
+-
+-        for r in ranked:
+-            reasons: List[str] = []
+-            cs = r.composite_score
+-
+-            if cs < self.min_score:
+-                reasons.append(
+-                    f"Composite score {cs:.3f} below " f"minimum {self.min_score}",
+-                )
+-                r.suppression_reason = "weak_top_signal"
+-
+-            # Low confidence
+-            pwin = r.components.get("pwin", 0) if r.components else 0
+-            if pwin < 0.35:
+-                reasons.append(
+-                    f"Win probability too low ({pwin:.0%})",
+-                )
+-
+-            # Poor risk/reward
+-            rr = r.components.get("risk_reward", 0) if r.components else 0
+-            if rr < 0.15:
+-                reasons.append("Risk/reward ratio insufficient")
+-
+-            # Event risk
+-            dte = r.days_to_earnings
+-            if dte <= 2:
+-                reasons.append(
+-                    f"Earnings in {dte}d \u2014 event risk " f"too close",
+-                )
+-
+-            # Regime uncertainty
+-            ent = regime.get("entropy", 0)
+-            if ent > 0.9:
+-                reasons.append(
+-                    f"Regime uncertainty elevated " f"(entropy {ent:.2f})",
+-                )
+-
+-            # Correlation penalty
+-            corr_pen = r.penalties.get("correlation", 0) if r.penalties else 0
+-            if corr_pen > 0.10:
+-                reasons.append(
+-                    "Too correlated with current portfolio",
+-                )
+-
+-            if reasons:
+-                r.trade_decision = False
+-                if not r.suppression_reason:
+-                    r.suppression_reason = "multi_factor_reject"
+-                r.why_not_trade = "; ".join(reasons)
+-
+-        return ranked
++                if __name__ == "__main__":
++                    main()
++        """Score a single TradeRecommendation in-place."""
+-- 
+2.39.5 (Apple Git-154)
+

@@ -1597,8 +1597,11 @@ class AutoTradingEngine:
         End-of-day processing:
         1. Run LLM failure analysis on losing trades
         2. Retrain ML model if enough new data
-        3. Refresh strategy leaderboard
-        4. Send EOD report
+        3. Benchmark portfolio attribution
+        4. Rejection analysis
+        5. Self-learning rule tuning
+        6. Performance summary
+        7. Send EOD report
         """
         logger.info("🌙 Running end-of-day cycle...")
 
@@ -1620,12 +1623,133 @@ class AutoTradingEngine:
         except Exception as e:
             logger.warning("EOD model retrain error: %s", e)
 
-        # 3. Leaderboard now updated on each closed trade
-        # in _record_learning_outcome() — Sprint 34
-        # (was: loop over _trades_today entries, which have
-        #  no realized PnL — only entry snapshots)
+        # 3. Benchmark portfolio attribution
+        try:
+            from src.engines.benchmark_portfolio import BenchmarkPortfolioEngine, PositionSnapshot
+            bp_engine = BenchmarkPortfolioEngine()
+            # Build position snapshots from today's trades
+            positions = []
+            for t in self._trades_today:
+                positions.append(PositionSnapshot(
+                    ticker=t.get("ticker", ""),
+                    weight=t.get("position_size_pct", 0.05),
+                    return_pct=t.get("pnl_pct", 0),
+                    sector=t.get("sector", "Unknown"),
+                ))
+            # Fetch real benchmark (SPY) return for the day
+            benchmark_return = 0.0
+            try:
+                import yfinance as yf
+                spy = yf.Ticker("SPY")
+                hist = spy.history(period="2d")
+                if len(hist) >= 2:
+                    prev_close = hist["Close"].iloc[-2]
+                    last_close = hist["Close"].iloc[-1]
+                    benchmark_return = ((last_close / prev_close) - 1) * 100
+            except Exception as bm_err:
+                logger.debug("Benchmark fetch failed, using 0.0: %s", bm_err)
 
-        # 4. Performance summary
+            if positions:
+                attribution = bp_engine.compute_attribution(
+                    positions=positions,
+                    benchmark_return=benchmark_return,
+                )
+                logger.info(
+                    "EOD benchmark attribution: portfolio=%.2f%%, benchmark=%.2f%%, active=%.2f%%, beta=%.2f",
+                    attribution.portfolio_return,
+                    benchmark_return,
+                    attribution.active_return,
+                    attribution.beta,
+                )
+        except Exception as e:
+            logger.warning("EOD benchmark attribution error: %s", e)
+
+        # 4. Rejection analysis
+        try:
+            from src.engines.rejection_analysis import RejectionAnalysisEngine
+            rejection_engine = RejectionAnalysisEngine()
+            # Feed today's rejected signals — check both GPT-rejected
+            # signals and ensembler-suppressed recommendations.
+            seen_tickers: set = set()
+            for sig in self._signals_today:
+                is_rejected = (
+                    getattr(sig, "approval_status", "") == "rejected"
+                )
+                if is_rejected:
+                    from src.engines.rejection_analysis import RejectionRecord
+                    rejection_engine.record_rejection(RejectionRecord(
+                        ticker=sig.ticker,
+                        strategy=sig.strategy_id or "unknown",
+                        direction=sig.direction.value if hasattr(sig.direction, 'value') else str(sig.direction),
+                        confidence=sig.confidence,
+                        rejection_reasons=[sig.why_not_trade] if sig.why_not_trade else ["rejected"],
+                        regime_at_rejection=self._cached_regime.get("regime", ""),
+                    ))
+                    seen_tickers.add(sig.ticker)
+
+            # Also capture ensembler-suppressed recommendations
+            for rec_dict in self._cached_recommendations:
+                if not rec_dict.get("trade_decision", True):
+                    ticker = rec_dict.get("ticker", "")
+                    if ticker and ticker not in seen_tickers:
+                        from src.engines.rejection_analysis import RejectionRecord
+                        rejection_engine.record_rejection(RejectionRecord(
+                            ticker=ticker,
+                            strategy=rec_dict.get("strategy_id", "unknown"),
+                            direction=rec_dict.get("direction", "LONG"),
+                            confidence=rec_dict.get("score", 0) * 100,
+                            rejection_reasons=[rec_dict.get("why_not_trade", "")] if rec_dict.get("why_not_trade") else [rec_dict.get("suppression_reason", "suppressed")],
+                            regime_at_rejection=self._cached_regime.get("regime", ""),
+                        ))
+                        seen_tickers.add(ticker)
+
+            analysis = rejection_engine.analyze()
+            if analysis.total_rejections > 0:
+                logger.info(
+                    "EOD rejection analysis: %d rejections, FN rate=%.0f%%, recommendations=%d",
+                    analysis.total_rejections,
+                    analysis.false_negative_rate,
+                    len(analysis.rule_recommendations),
+                )
+        except Exception as e:
+            logger.warning("EOD rejection analysis error: %s", e)
+
+        # 5. Self-learning rule tuning
+        try:
+            from src.engines.self_learning import SelfLearningEngine
+            sl_engine = SelfLearningEngine()
+            # Feed today's closed trades
+            outcomes = []
+            for t in self._trades_today:
+                outcomes.append({
+                    "ticker": t.get("ticker", ""),
+                    "pnl_pct": t.get("pnl_pct", 0),
+                    "exit_reason": t.get("exit_reason", ""),
+                    "composite_score": t.get("composite_score", 0),
+                    "strategy": t.get("strategy_name", ""),
+                })
+            if outcomes:
+                from src.core.config import get_trading_config
+                tc = get_trading_config()
+                current_rules = {
+                    "ensemble_min_score": tc.ensemble_min_score,
+                    "signal_cooldown_hours": tc.signal_cooldown_hours,
+                    "anti_flip_hours": tc.anti_flip_hours,
+                    "max_position_pct": tc.max_position_pct,
+                    "stop_loss_pct": tc.stop_loss_pct,
+                    "trailing_stop_pct": tc.trailing_stop_pct,
+                }
+                recommendations = sl_engine.analyze_and_recommend(outcomes, current_rules)
+                if recommendations:
+                    applied = sl_engine.apply_adjustments(recommendations)
+                    logger.info(
+                        "EOD self-learning: %d adjustments applied",
+                        len(applied),
+                    )
+        except Exception as e:
+            logger.warning("EOD self-learning error: %s", e)
+
+        # 6. Performance summary
         try:
             summary = self.learning_loop.get_performance_summary()
             logger.info(
@@ -1637,7 +1761,7 @@ class AutoTradingEngine:
         except Exception as e:
             logger.warning("EOD summary error: %s", e)
 
-        # 5. Send EOD report
+        # 7. Send EOD report
         try:
             await self._send_eod_report()
         except Exception as e:

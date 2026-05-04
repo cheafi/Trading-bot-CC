@@ -183,9 +183,17 @@ class RSRankingEngine:
         """Compute RS scores for a single stock."""
 
         def rs_score(stock_ret: float, bench_ret: float) -> float:
+            # When bench is flat, use stock return relative to 100 baseline
+            # (1 + 0%) * 100 = 100, so stock at +5% = 105, -5% = 95
             if bench_ret == 0:
                 return max(0, min(300, (1 + stock_ret / 100) * 100))
-            return max(0, min(300, (1 + stock_ret / 100) / (1 + bench_ret / 100) * 100))
+            # Normal case: ratio of cumulative returns
+            bench_factor = 1 + bench_ret / 100
+            if bench_factor <= 0:
+                return 100.0  # degenerate case
+            return max(
+                0, min(300, (1 + stock_ret / 100) / bench_factor * 100)
+            )
 
         rs_1w = rs_score(stock.get("return_1w", 0), bench.get("return_1w", 0))
         rs_1m = rs_score(stock.get("return_1m", 0), bench.get("return_1m", 0))
@@ -289,3 +297,197 @@ class RSRankingEngine:
     def get_breakdowns(self, entries: List[RSEntry]) -> List[RSEntry]:
         """Stocks with RS breaking down (losing strength)."""
         return [e for e in entries if e.trend == RSTrend.BREAKING_DOWN]
+
+    def rank_vs_sector_etf(
+        self,
+        universe: List[Dict[str, Any]],
+        sector_etf_returns: Dict[str, Dict[str, float]],
+    ) -> List[RSEntry]:
+        """Rank each stock vs its sector ETF benchmark.
+
+        Parameters
+        ----------
+        universe : list of stock dicts (same format as rank())
+        sector_etf_returns : dict mapping sector name → ETF return dict
+            e.g. {"Technology": {"return_1w": 1.2, "return_1m": 3.5, ...}}
+
+        Returns
+        -------
+        List of RSEntry with RS computed vs sector ETF instead of SPY.
+        """
+        entries: List[RSEntry] = []
+        for stock in universe:
+            sector = stock.get("sector", "")
+            bench = sector_etf_returns.get(sector, {
+                "return_1w": 0, "return_1m": 0,
+                "return_3m": 0, "return_6m": 0,
+            })
+            entry = self._compute_rs(stock, bench)
+            entries.append(entry)
+
+        entries.sort(key=lambda e: e.rs_composite, reverse=True)
+        n = len(entries)
+        for i, entry in enumerate(entries):
+            entry.rs_percentile = int(((n - i - 1) / max(n - 1, 1)) * 99)
+        for entry in entries:
+            entry.status = self._classify_status(entry)
+            entry.trend = self._classify_trend(entry)
+        return entries
+
+    def rank_vs_peers(
+        self,
+        universe: List[Dict[str, Any]],
+        benchmark: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, List[RSEntry]]:
+        """Rank each stock vs its sector peers only.
+
+        Returns a dict mapping sector → sorted RSEntry list within that sector.
+        Each entry's rs_percentile is relative to its sector peers, not the
+        full universe.
+        """
+        if not benchmark:
+            benchmark = {
+                "return_1w": 0, "return_1m": 0,
+                "return_3m": 0, "return_6m": 0,
+            }
+
+        # Group by sector
+        by_sector: Dict[str, List[Dict[str, Any]]] = {}
+        for stock in universe:
+            sec = stock.get("sector", "Other")
+            by_sector.setdefault(sec, []).append(stock)
+
+        result: Dict[str, List[RSEntry]] = {}
+        for sector_name, stocks in by_sector.items():
+            # Use sector median as benchmark for peer comparison
+            if len(stocks) >= 3:
+                peer_bench = {
+                    tf: sorted(
+                        s.get(f"return_{tf}", 0) for s in stocks
+                    )[len(stocks) // 2]
+                    for tf in ("1w", "1m", "3m", "6m")
+                }
+                peer_bench = {
+                    f"return_{k}": v for k, v in peer_bench.items()
+                }
+            else:
+                peer_bench = benchmark
+
+            entries: List[RSEntry] = []
+            for stock in stocks:
+                entry = self._compute_rs(stock, peer_bench)
+                entries.append(entry)
+
+            entries.sort(key=lambda e: e.rs_composite, reverse=True)
+            n = len(entries)
+            for i, entry in enumerate(entries):
+                entry.rs_percentile = int(
+                    ((n - i - 1) / max(n - 1, 1)) * 99
+                )
+            for entry in entries:
+                entry.status = self._classify_status(entry)
+                entry.trend = self._classify_trend(entry)
+
+            result[sector_name] = entries
+
+        return result
+
+    def three_layer_rs(
+        self,
+        universe: List[Dict[str, Any]],
+        spy_benchmark: Optional[Dict[str, Any]] = None,
+        sector_etf_returns: Optional[Dict[str, Dict[str, float]]] = None,
+    ) -> List[Dict[str, Any]]:
+        """3-layer RS view: vs SPY → vs sector ETF → vs peers.
+
+        Returns list of dicts with rs_vs_spy, rs_vs_sector, rs_vs_peers
+        for each ticker.
+        """
+        if not spy_benchmark:
+            spy_benchmark = {
+                "return_1w": 0, "return_1m": 0,
+                "return_3m": 0, "return_6m": 0,
+            }
+
+        # Layer 1: vs SPY
+        spy_entries = {
+            e.ticker: e for e in self.rank(universe, spy_benchmark)
+        }
+
+        # Layer 2: vs sector ETF (if provided)
+        etf_entries: Dict[str, RSEntry] = {}
+        if sector_etf_returns:
+            for e in self.rank_vs_sector_etf(universe, sector_etf_returns):
+                etf_entries[e.ticker] = e
+
+        # Layer 3: vs peers
+        peer_map: Dict[str, RSEntry] = {}
+        for sector_entries in self.rank_vs_peers(universe, spy_benchmark).values():
+            for e in sector_entries:
+                peer_map[e.ticker] = e
+
+        result = []
+        for stock in universe:
+            ticker = stock.get("ticker", "")
+            spy_e = spy_entries.get(ticker)
+            etf_e = etf_entries.get(ticker)
+            peer_e = peer_map.get(ticker)
+
+            result.append({
+                "ticker": ticker,
+                "sector": stock.get("sector", ""),
+                "rs_vs_spy": spy_e.rs_composite if spy_e else 100.0,
+                "rs_vs_spy_percentile": (
+                    spy_e.rs_percentile if spy_e else 50
+                ),
+                "rs_vs_spy_status": (
+                    spy_e.status.value if spy_e else "NEUTRAL"
+                ),
+                "rs_vs_sector_etf": (
+                    etf_e.rs_composite if etf_e else None
+                ),
+                "rs_vs_sector_etf_percentile": (
+                    etf_e.rs_percentile if etf_e else None
+                ),
+                "rs_vs_peers": (
+                    peer_e.rs_composite if peer_e else 100.0
+                ),
+                "rs_vs_peers_percentile": (
+                    peer_e.rs_percentile if peer_e else 50
+                ),
+                "rs_vs_peers_status": (
+                    peer_e.status.value if peer_e else "NEUTRAL"
+                ),
+                "three_layer_verdict": self._three_layer_verdict(
+                    spy_e, etf_e, peer_e
+                ),
+            })
+
+        return result
+
+    @staticmethod
+    def _three_layer_verdict(
+        spy_e: Optional[RSEntry],
+        etf_e: Optional[RSEntry],
+        peer_e: Optional[RSEntry],
+    ) -> str:
+        """Summarize 3-layer RS into a single verdict."""
+        scores = []
+        if spy_e:
+            scores.append(spy_e.rs_percentile)
+        if etf_e:
+            scores.append(etf_e.rs_percentile)
+        if peer_e:
+            scores.append(peer_e.rs_percentile)
+        if not scores:
+            return "NEUTRAL"
+        avg = sum(scores) / len(scores)
+        if avg >= 75:
+            return "STRONG_LEADER"
+        elif avg >= 55:
+            return "LEADER"
+        elif avg >= 40:
+            return "NEUTRAL"
+        elif avg >= 20:
+            return "WEAK"
+        return "LAGGARD"

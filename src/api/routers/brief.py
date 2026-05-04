@@ -8,7 +8,7 @@ Morning Brief Router — Sprint 64
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 router = APIRouter(prefix="/api/brief", tags=["brief"])
 
@@ -28,15 +28,9 @@ async def morning_brief():
     regime = RegimeService.get()
 
     # Load latest brief file for real setups
-    brief_data = {}
-    try:
-        brief_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data")
-        files = sorted(glob.glob(os.path.join(brief_dir, "brief-*.json")))
-        if files:
-            with open(files[-1]) as f:
-                brief_data = json.load(f)
-    except Exception:
-        pass
+    from src.services.brief_data_service import load_brief
+
+    brief_data = load_brief()
 
     actionable = brief_data.get("actionable", [])
     watch = brief_data.get("watch", [])
@@ -61,14 +55,15 @@ async def decision_diff():
         tracker = DecisionTracker()
         diffs = tracker.get_diffs()
         tracker.close()
+        from collections import Counter
+
+        counts = Counter(d["change"] for d in diffs)
         return {
             "diffs": diffs,
             "count": len(diffs),
-            "upgrades": sum(1 for d in diffs if d["change"] == "UPGRADE"),
-            "downgrades": sum(
-                1 for d in diffs if d["change"] == "DOWNGRADE"
-            ),
-            "new": sum(1 for d in diffs if d["change"] == "NEW"),
+            "upgrades": counts.get("UPGRADE", 0),
+            "downgrades": counts.get("DOWNGRADE", 0),
+            "new": counts.get("NEW", 0),
         }
     except Exception as e:
         return {"error": str(e), "diffs": []}
@@ -153,13 +148,16 @@ async def circuit_breaker_status():
     """Check drawdown circuit breaker status."""
     from src.engines.drawdown_breaker import DrawdownCircuitBreaker
     breaker = DrawdownCircuitBreaker()
-    # Default: check with sample values
+    # TODO: wire to real portfolio state when available
     result = breaker.check(100000, 100000, 100000)
-    return result.to_dict()
+    return {
+        **result.to_dict(),
+        "⚠_note": "Using placeholder portfolio values — wire to real state",
+    }
 
 
 @router.get("/performance-tracker")
-async def performance_tracker():
+async def performance_tracker(request: Request):
     """
     Week opportunities tracker: all tickers seen in brief files,
     showing % change from first-seen date to today vs SPY (index)
@@ -170,10 +168,9 @@ async def performance_tracker():
     import os
     from datetime import datetime
 
-    try:
-        import yfinance as yf
-    except ImportError:
-        return {"rows": [], "error": "yfinance not available"}
+    svc = getattr(getattr(request, "app", None) and request.app.state, "market_data", None)
+    if svc is None:
+        return {"rows": [], "error": "market_data service not initialised"}
 
     brief_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data")
     files = sorted(glob.glob(os.path.join(brief_dir, "brief-*.json")))
@@ -238,11 +235,19 @@ async def performance_tracker():
     start = min(dates)
     # Download price data for all tickers + SPY
     needed = list(set(tickers_list + list(set(sector_etf.values())) + ["SPY"]))
-    try:
-        raw = yf.download(needed, start=start, progress=False, auto_adjust=True)
-        closes = raw["Close"] if "Close" in raw else raw
-    except Exception as e:
-        return {"rows": [], "error": f"yfinance error: {e}"}
+    import asyncio as _asyncio
+    # Fetch all symbols concurrently through the cached MarketDataService
+    _tasks = {sym: svc.get_history(sym, period="2y", interval="1d") for sym in needed}
+    _results = await _asyncio.gather(*_tasks.values(), return_exceptions=True)
+    _frames: dict = {}
+    for sym, res in zip(_tasks.keys(), _results):
+        if isinstance(res, Exception) or res is None or res.empty:
+            continue
+        _frames[sym] = res["Close"].dropna().rename(sym)
+    if not _frames:
+        return {"rows": [], "error": "Could not fetch price data"}
+    import pandas as _pd
+    closes = _pd.concat(_frames.values(), axis=1)
 
     today_str = datetime.now().strftime("%Y-%m-%d")
     rows = []
@@ -253,9 +258,9 @@ async def performance_tracker():
         etf = sector_etf.get(t, default_sector)
         try:
             # Get entry price (first available close on or after first_seen)
-            col_t = t if t in closes.columns else None
+            col_t   = t   if t   in closes.columns else None
             col_spy = "SPY" if "SPY" in closes.columns else None
-            col_etf = etf if etf in closes.columns else None
+            col_etf = etf  if etf  in closes.columns else None
             if col_t is None:
                 continue
 
@@ -313,5 +318,5 @@ async def performance_tracker():
         "rows": rows,
         "count": len(rows),
         "as_of": today_str,
-        "synthetic": False,
+        "synthetic": False,  # performance-tracker uses MarketDataService (real data)
     }

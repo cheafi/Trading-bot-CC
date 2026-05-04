@@ -51,7 +51,7 @@ Every response activates **six smart teams** simultaneously. Surface inter-team 
 | Risk unit | 1R; all targets as R-multiples (2R, 3R …) |
 | Default position size | 1% risk/trade (fixed fractional) or Kelly-fraction |
 | Regime states | BULL / BEAR / SIDEWAYS / CHOPPY — gate every signal |
-| VIX thresholds | <20 normal · 20–30 elevated · >30 risk-off (reduce size) |
+| VIX thresholds | <14 RISK_ON · 14–20 normal · 20–28 elevated · 28–35 high · >35 crisis NO TRADE — see `src/core/risk_limits.VIXThresholds` |
 | Sector RS windows | 63-day (tactical) and 252-day (structural) vs SPY |
 | Bar preference | Daily for swing · Weekly for trend context |
 | Stop discipline | Hard stop at 1R; trail only after +1R in profit |
@@ -66,7 +66,10 @@ Every response activates **six smart teams** simultaneously. Surface inter-team 
 - New API routes → `src/api/routers/` → register in `src/api/main.py`
 - Dashboard components → `src/api/templates/index.html` (Alpine.js)
 - New engines → `src/engines/` · Services → `src/services/`
-- **Never** call yfinance directly in a router — use `RegimeService.get()` (singleton, 4h cache)
+- **Never** call `yfinance` directly in a router — wrap with `asyncio.to_thread` and use `RegimeService.get()` (singleton, 4h cache) for regime data
+- **All auth dependencies** must be imported from `src/api/deps.py` (`verify_api_key`, `optional_api_key`, `sanitize_for_json`) — never duplicate in routers
+- **Stateful engines** (`engine`, `expert_council`, `regime_cache`, etc.) are accessed via `request.app.state.*` — never import `app` from `main.py` in a router
+- **Risk thresholds** live in `src/core/risk_limits.py` (`RISK`, `VIX`, `UNIVERSE_GATES`, `SIGNAL_THRESHOLDS`) — no magic numbers elsewhere
 - Raise real exceptions in trading logic — never swallow silently
 - Log every signal generation, regime change, and trade decision
 - No hardcoded fake/stub data in endpoints — return `"—"` or empty list instead
@@ -117,9 +120,112 @@ Rate every code review across six axes (A–F):
 |------|---------|
 | `src/api/templates/index.html` | Full dashboard (~3100 lines, Alpine.js) |
 | `src/api/routers/brief.py` | Morning brief + changelog endpoints |
+| `src/api/deps.py` | FastAPI Depends callables — `verify_api_key`, `sanitize_for_json` (canonical) |
 | `src/services/regime_service.py` | RegimeService singleton (4h cache) |
+| `src/services/brief_data_service.py` | BriefDataService — load/find/invalidate brief JSON |
+| `src/services/indicators.py` | `compute_indicators()` shim — shared across routers |
+| `src/core/risk_limits.py` | Risk constants — `RISK`, `VIX`, `UNIVERSE_GATES`, `SIGNAL_THRESHOLDS` |
 | `src/engines/multi_ranker.py` | Signal ranking — TRADE=18, LEADER=12, WATCH=6 |
+| `src/engines/regime_router.py` | RegimeRouter — VIX/breadth/entropy regime classification |
+| `src/scheduler/main.py` | TradingScheduler — premarket/intraday/EOD APScheduler jobs |
 | `src/core/config.py` | Pure Python config (no pydantic) |
 | `_cc_instant.py` | Server launcher (venv auto-detect) |
 | `data/brief-*.json` | Daily brief data files |
 | `changelog.json` | Baked changelog for Docker builds |
+| `src/api/routers/tasks.py` | Task REST API (CRUD) |
+| `src/services/task_service.py` | SQLite task persistence |
+
+---
+
+<!-- OMG-START -->
+# oh-my-githubcopilot (OMG) — Multi-Agent Orchestration
+
+OMG is active in this workspace. Coordinate specialized agents, tools, and skills for structured planning, implementation, review and verification.
+
+## Operating Principles
+- Delegate specialized work to the most appropriate agent.
+- Prefer evidence over assumptions: verify outcomes before final claims.
+- Choose the lightest-weight path that preserves quality.
+- Consult official docs before implementing with SDKs/frameworks/APIs.
+
+## Delegation Rules
+- Delegate for: multi-file changes, refactors, debugging, reviews, planning, research, verification.
+- Work directly for: trivial ops, small clarifications, single commands.
+- Route code to `@executor`. Uncertain SDK usage → `@document-specialist`.
+- Route debugging to `@debugger`. Architecture analysis to `@architect`.
+- For trading-domain code: apply Team ALPHA/RISK/TECH context above before delegating.
+
+## Agent Catalog
+
+| Agent | Specialty | Access |
+|-------|-----------|--------|
+| @omg-coordinator | Workflow orchestration | Full |
+| @executor | Code implementation | Full |
+| @architect | Architecture analysis | READ-ONLY |
+| @planner | Work plan creation | Plans only |
+| @analyst | Requirements analysis | READ-ONLY |
+| @debugger | Root cause analysis | Full |
+| @verifier | Evidence-based completion | Test runner |
+| @code-reviewer | Code quality | READ-ONLY |
+| @security-reviewer | OWASP vulnerabilities | READ-ONLY |
+| @critic | Plan/code gate review | READ-ONLY |
+| @test-engineer | TDD workflows | Full |
+| @designer | UI/UX design | Full |
+| @writer | Technical documentation | Full |
+| @qa-tester | CLI + E2E testing | Full |
+| @scientist | Data analysis | Terminal only |
+| @tracer | Causal tracing | Full |
+| @git-master | Atomic commits | Git only |
+| @code-simplifier | Code clarity | Full |
+| @explore | Codebase search | READ-ONLY |
+| @document-specialist | External docs research | READ-ONLY |
+
+**Language Reviewers (Tier 2):** @python-reviewer, @typescript-reviewer, @database-reviewer, @rust-reviewer, @go-reviewer, @java-reviewer, @csharp-reviewer, @swift-reviewer
+
+## Skills (Slash Commands)
+
+| Skill | Trigger |
+|-------|---------|
+| `/omg-autopilot` | "build me", "create me", "autopilot" |
+| `/ralph` | "ralph", "prd loop" |
+| `/ultrawork` | "ulw", "parallel", "ultrawork" |
+| `/plan` | "plan this", "let's plan" |
+| `/ralplan` | "ralplan", "consensus plan" |
+| `/team` | "team", "multi-agent" |
+| `/deep-interview` | "deep interview", "clarify requirements" |
+| `/verify` | "verify this", "prove it works" |
+| `/review` | "review this", "code review" |
+| `/ultraqa` | "ultraqa", "fix all tests" |
+| `/security-scan` | "security scan", "audit deps" |
+| `/tdd` | "tdd", "test driven" |
+| `/trace` | "trace this", "root cause" |
+| `/remember` | "remember this" |
+| `/status` | "status", "what's running" |
+| `/cancel` | "cancel", "stop", "abort" |
+
+## Completion Rules
+- NEVER stop while tasks remain incomplete.
+- Before claiming completion, verify all acceptance criteria with evidence.
+- If `omg_check_completion` is available, call it before stopping.
+
+## Commit Protocol (OMG format)
+```
+type(scope): subject
+
+body (optional)
+
+Constraint: <active constraint>
+Rejected: <alternative> | <reason>
+Confidence: high | medium | low
+Scope-risk: narrow | moderate | broad
+```
+Sprint prefix still applies: `sprint##: what changed`
+
+## State & MCP Tools
+State stored in `.omg/` — use MCP tools when server is active:
+- `omg_write_state` / `omg_read_state` — workflow state
+- `omg_create_prd` / `omg_update_story` / `omg_verify_story` — PRD tracking
+- `omg_check_completion` — verify done before stopping
+- `omg_checkpoint` / `omg_restore_checkpoint` — session persistence
+- `omg_write_memory` / `omg_read_memory` / `omg_search_memory` — project knowledge
+<!-- OMG-END -->

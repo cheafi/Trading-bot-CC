@@ -4,7 +4,6 @@ drawdown circuit breaker, brief router
 """
 import os
 import sys
-import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -14,11 +13,12 @@ class TestVCPFromOHLCV(unittest.TestCase):
     """VCP detection should work from raw OHLCV data."""
 
     def test_detect_vcp_from_closes(self):
-        import numpy as np
-        from src.engines.vcp_intelligence import VCPIntelligence
         from src.engines.sector_classifier import (
-            SectorContext, SectorBucket, LeaderStatus,
+            LeaderStatus,
+            SectorBucket,
+            SectorContext,
         )
+        from src.engines.vcp_intelligence import VCPIntelligence
 
         # Build synthetic VCP: trending up, then contracting
         # 3 contractions getting tighter
@@ -70,10 +70,12 @@ class TestVCPFromOHLCV(unittest.TestCase):
 
     def test_no_vcp_in_downtrend(self):
         """Downtrending prices should NOT be detected as VCP."""
-        from src.engines.vcp_intelligence import VCPIntelligence
         from src.engines.sector_classifier import (
-            SectorContext, SectorBucket, LeaderStatus,
+            LeaderStatus,
+            SectorBucket,
+            SectorContext,
         )
+        from src.engines.vcp_intelligence import VCPIntelligence
 
         # Straight downtrend — no contraction pattern
         prices = [100 - i * 0.5 for i in range(50)]
@@ -105,6 +107,7 @@ class TestPersistentDedupInAlerts(unittest.TestCase):
 
     def test_dedup_survives_rebuild(self):
         import uuid
+
         from src.notifications.sector_alerts import SectorAlertBuilder
 
         # Use unique ticker to avoid collisions with previous runs
@@ -191,11 +194,12 @@ class TestVCPStructureIntegration(unittest.TestCase):
     """VCP should inject structure data back into signal."""
 
     def test_structure_data_injected(self):
-        import numpy as np
-        from src.engines.vcp_intelligence import VCPIntelligence
         from src.engines.sector_classifier import (
-            SectorContext, SectorBucket, LeaderStatus,
+            LeaderStatus,
+            SectorBucket,
+            SectorContext,
         )
+        from src.engines.vcp_intelligence import VCPIntelligence
 
         # VCP-like pattern
         prices = list(range(80, 100)) + [100, 97, 94, 97, 99,

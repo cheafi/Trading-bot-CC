@@ -181,3 +181,39 @@ class RegimeService:
             "source": "default",
             "synthetic": True,
         }
+
+
+# ── P3: request-scoped regime accessor ───────────────────────────────────────
+# Routers import this instead of ``from src.api.main import _get_regime``.
+# Reads the 60-second cache that ``_init_shared_services`` wires onto app.state.
+
+import time as _time  # noqa: E402  (placed after class to keep class at top)
+
+_REGIME_CACHE_TTL = 60  # mirrors main.py
+
+
+async def get_regime(request):  # type: ignore[type-arg]
+    """Return cached RegimeState from app.state, refreshing every 60 s.
+
+    Works with any FastAPI ``Request`` object.  No import from main.py needed.
+    """
+    now = _time.monotonic()
+    cache = getattr(request.app.state, "regime_cache", None)
+    cache_ts = getattr(request.app.state, "regime_cache_ts", 0.0)
+
+    if cache is not None and (now - cache_ts) < _REGIME_CACHE_TTL:
+        return cache
+
+    try:
+        mkt = await request.app.state.market_data.get_market_state()
+        state = request.app.state.regime_router.classify(mkt)
+        request.app.state.regime_cache = state
+        request.app.state.regime_cache_ts = now
+        logger.debug("[RegimeService] refreshed: %s", getattr(state, "regime", "?"))
+        return state
+    except Exception as exc:
+        logger.warning("[RegimeService] error: %s", exc)
+        if cache is not None:
+            return cache
+        from src.engines.regime_router import RegimeState  # noqa: PLC0415
+        return RegimeState()

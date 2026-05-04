@@ -16,9 +16,8 @@ system degrades gracefully if < MIN_SAMPLES trades are recorded.
 from __future__ import annotations
 
 import logging
-import math
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +33,13 @@ COMPONENT_NAMES = [
     "conviction_bonus",
 ]
 
-MIN_SAMPLES = 30        # don't learn until we have 30+ trades
+MIN_SAMPLES = 100       # need 100+ trades before weights are meaningful (8 features)
 RETRAIN_INTERVAL = 10   # re-learn every N new trades
 RIDGE_ALPHA = 1.0       # L2 regularisation
 MIN_WEIGHT = 0.02       # floor so no component gets zeroed
+MIN_STRATEGY_SAMPLES = 10  # min trades per strategy before keep/discard decision
+DISCARD_WIN_RATE = 0.35    # strategies below this win rate are flagged for discard
+DISCARD_R_MULTIPLE = 0.0   # strategies with avg R < 0 are flagged for discard
 
 
 @dataclass
@@ -48,6 +50,29 @@ class TrainingSample:
     r_multiple: float = 0.0
     regime_label: str = ""
     strategy_id: str = ""
+
+
+@dataclass
+class StrategyVerdict:
+    """Keep/discard verdict for a strategy."""
+    strategy_id: str
+    n_trades: int
+    win_rate: float
+    avg_r: float
+    avg_pnl: float
+    verdict: str  # KEEP | WATCH | DISCARD
+    reason: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "strategy_id": self.strategy_id,
+            "n_trades": self.n_trades,
+            "win_rate": round(self.win_rate, 3),
+            "avg_r": round(self.avg_r, 3),
+            "avg_pnl": round(self.avg_pnl, 2),
+            "verdict": self.verdict,
+            "reason": self.reason,
+        }
 
 
 @dataclass
@@ -281,3 +306,63 @@ class MetaEnsemble:
     @property
     def sample_count(self) -> int:
         return len(self._samples)
+
+    # ── Strategy Keep/Discard ─────────────────────────────────
+
+    def evaluate_strategies(self) -> List[StrategyVerdict]:
+        """Evaluate each strategy's performance and return keep/discard verdicts.
+
+        Only evaluates strategies with >= MIN_STRATEGY_SAMPLES trades.
+        Uses win rate and avg R-multiple as primary signals.
+        """
+        from collections import defaultdict
+        by_strategy: Dict[str, List[TrainingSample]] = defaultdict(list)
+        for s in self._samples:
+            if s.strategy_id:
+                by_strategy[s.strategy_id].append(s)
+
+        verdicts: List[StrategyVerdict] = []
+        for strat_id, samples in by_strategy.items():
+            n = len(samples)
+            if n < MIN_STRATEGY_SAMPLES:
+                continue  # not enough data to judge
+
+            wins = sum(1 for s in samples if s.pnl_pct > 0)
+            win_rate = wins / n
+            avg_r = sum(s.r_multiple for s in samples) / n
+            avg_pnl = sum(s.pnl_pct for s in samples) / n
+
+            if win_rate < DISCARD_WIN_RATE and avg_r < DISCARD_R_MULTIPLE:
+                verdict = "DISCARD"
+                reason = (
+                    f"Win rate {win_rate:.0%} < {DISCARD_WIN_RATE:.0%} "
+                    f"and avg R {avg_r:.2f} < 0 over {n} trades"
+                )
+            elif win_rate < DISCARD_WIN_RATE or avg_r < 0.2:
+                verdict = "WATCH"
+                reason = (
+                    f"Win rate {win_rate:.0%} or avg R {avg_r:.2f} below threshold "
+                    f"over {n} trades — monitor closely"
+                )
+            else:
+                verdict = "KEEP"
+                reason = (
+                    f"Win rate {win_rate:.0%}, avg R {avg_r:.2f} over {n} trades"
+                )
+
+            verdicts.append(StrategyVerdict(
+                strategy_id=strat_id,
+                n_trades=n,
+                win_rate=win_rate,
+                avg_r=avg_r,
+                avg_pnl=avg_pnl,
+                verdict=verdict,
+                reason=reason,
+            ))
+
+        verdicts.sort(key=lambda v: v.avg_r, reverse=True)
+        return verdicts
+
+    def get_discard_list(self) -> List[str]:
+        """Return strategy IDs that should be discarded."""
+        return [v.strategy_id for v in self.evaluate_strategies() if v.verdict == "DISCARD"]

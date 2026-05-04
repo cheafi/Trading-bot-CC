@@ -192,6 +192,11 @@ class StrategyPortfolioLab:
             w = np.clip(raw / raw.sum(), 0, 1)
             w = w / w.sum()
         except np.linalg.LinAlgError:
+            logger.warning(
+                "max_sharpe: covariance matrix singular for strategies=%s "
+                "— falling back to equal weights",
+                strategies,
+            )
             w = np.ones(n) / n
 
         return self._build_result("max_sharpe", w, R, ann, strategies)
@@ -321,3 +326,228 @@ class StrategyPortfolioLab:
                 for i, s in enumerate(strategies)
             },
         }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Continuous Model Portfolio Engine
+# ─────────────────────────────────────────────────────────────────────────────
+
+_SPY_BENCHMARK = "SPY"
+
+SLEEVE_NAMES = ["momentum", "breakout", "swing"]
+
+
+@dataclass
+class PortfolioTrade:
+    """A single closed trade in a model portfolio."""
+    ticker: str
+    strategy: str
+    entry_price: float
+    exit_price: float
+    pnl_pct: float
+    r_multiple: float
+    regime: str = ""
+    closed_at: str = ""
+
+    @property
+    def won(self) -> bool:
+        return self.pnl_pct > 0
+
+    def to_dict(self) -> Dict:
+        return {
+            "ticker": self.ticker,
+            "strategy": self.strategy,
+            "pnl_pct": round(self.pnl_pct, 2),
+            "r_multiple": round(self.r_multiple, 2),
+            "regime": self.regime,
+            "closed_at": self.closed_at,
+            "won": self.won,
+        }
+
+
+@dataclass
+class SleeveStats:
+    """Live stats for one model portfolio sleeve."""
+    name: str
+    trades: List[PortfolioTrade] = field(default_factory=list)
+
+    @property
+    def n(self) -> int:
+        return len(self.trades)
+
+    @property
+    def win_rate(self) -> float:
+        if not self.trades:
+            return 0.0
+        return sum(1 for t in self.trades if t.won) / len(self.trades)
+
+    @property
+    def avg_pnl(self) -> float:
+        if not self.trades:
+            return 0.0
+        return sum(t.pnl_pct for t in self.trades) / len(self.trades)
+
+    @property
+    def avg_r(self) -> float:
+        if not self.trades:
+            return 0.0
+        return sum(t.r_multiple for t in self.trades) / len(self.trades)
+
+    @property
+    def total_return(self) -> float:
+        """Compounded total return."""
+        r = 1.0
+        for t in self.trades:
+            r *= (1 + t.pnl_pct / 100)
+        return round((r - 1) * 100, 2)
+
+    @property
+    def max_drawdown(self) -> float:
+        if not self.trades:
+            return 0.0
+        equity = [100.0]
+        for t in self.trades:
+            equity.append(equity[-1] * (1 + t.pnl_pct / 100))
+        peak = equity[0]
+        dd = 0.0
+        for v in equity:
+            if v > peak:
+                peak = v
+            dd = max(dd, (peak - v) / peak * 100)
+        return round(-dd, 2)
+
+    @property
+    def sharpe(self) -> float:
+        if len(self.trades) < 3:
+            return 0.0
+        rets = [t.pnl_pct for t in self.trades]
+        mean = sum(rets) / len(rets)
+        std = (sum((r - mean) ** 2 for r in rets) / len(rets)) ** 0.5
+        if std == 0:
+            return 0.0
+        return round(mean / std * (len(rets) ** 0.5), 2)
+
+    def to_dict(self) -> Dict:
+        return {
+            "name": self.name,
+            "n_trades": self.n,
+            "win_rate": round(self.win_rate, 3),
+            "avg_pnl_pct": round(self.avg_pnl, 2),
+            "avg_r": round(self.avg_r, 2),
+            "total_return_pct": self.total_return,
+            "max_drawdown_pct": self.max_drawdown,
+            "sharpe": self.sharpe,
+            "recent_trades": [t.to_dict() for t in self.trades[-5:]],
+        }
+
+
+class ModelPortfolioEngine:
+    """Runs 3 named model portfolios continuously and compares vs SPY.
+
+    Portfolios: momentum | breakout | swing
+    Each sleeve tracks its own closed trades, computes rolling stats,
+    and explains why it is winning or losing vs SPY.
+
+    Usage::
+
+        engine = ModelPortfolioEngine()
+        engine.record_trade("momentum", ticker="NVDA", ...)
+        summary = engine.summary(spy_return_pct=12.5)
+    """
+
+    def __init__(self) -> None:
+        self._sleeves: Dict[str, SleeveStats] = {
+            name: SleeveStats(name=name) for name in SLEEVE_NAMES
+        }
+
+    def record_trade(
+        self,
+        sleeve: str,
+        ticker: str,
+        entry_price: float,
+        exit_price: float,
+        r_multiple: float = 0.0,
+        regime: str = "",
+        closed_at: str = "",
+    ) -> None:
+        """Record a closed trade into the appropriate sleeve."""
+        if sleeve not in self._sleeves:
+            logger.warning("Unknown sleeve '%s' — skipping", sleeve)
+            return
+        if entry_price <= 0:
+            return
+        pnl_pct = (exit_price - entry_price) / entry_price * 100
+        trade = PortfolioTrade(
+            ticker=ticker,
+            strategy=sleeve,
+            entry_price=entry_price,
+            exit_price=exit_price,
+            pnl_pct=pnl_pct,
+            r_multiple=r_multiple,
+            regime=regime,
+            closed_at=closed_at or datetime.now(timezone.utc).isoformat(),
+        )
+        self._sleeves[sleeve].trades.append(trade)
+
+    def summary(self, spy_return_pct: float = 0.0) -> Dict:
+        """Return full summary of all sleeves vs SPY benchmark."""
+        sleeve_summaries = {}
+        best_sleeve = None
+        best_return = None
+
+        for name, sleeve in self._sleeves.items():
+            stats = sleeve.to_dict()
+            total = sleeve.total_return
+            alpha = round(total - spy_return_pct, 2)
+            stats["alpha_vs_spy"] = alpha
+            stats["spy_return_pct"] = round(spy_return_pct, 2)
+            stats["vs_spy"] = (
+                "BEATING" if alpha > 0
+                else ("MATCHING" if abs(alpha) < 1.0 else "LAGGING")
+            )
+            stats["explanation"] = self._explain(sleeve, spy_return_pct)
+            sleeve_summaries[name] = stats
+
+            if best_return is None or total > best_return:
+                best_return = total
+                best_sleeve = name
+
+        return {
+            "sleeves": sleeve_summaries,
+            "best_sleeve": best_sleeve,
+            "spy_return_pct": round(spy_return_pct, 2),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def get_sleeve(self, name: str) -> Optional[SleeveStats]:
+        return self._sleeves.get(name)
+
+    @staticmethod
+    def _explain(sleeve: SleeveStats, spy_return: float) -> str:
+        """Plain-English explanation of why sleeve is winning/losing."""
+        if sleeve.n == 0:
+            return "No trades recorded yet."
+        alpha = sleeve.total_return - spy_return
+        if alpha > 5:
+            return (
+                f"Outperforming SPY by {alpha:.1f}pp. "
+                f"Win rate {sleeve.win_rate:.0%}, avg R {sleeve.avg_r:.2f}. "
+                f"Strategy is working in current regime."
+            )
+        elif alpha > 0:
+            return (
+                f"Slightly ahead of SPY (+{alpha:.1f}pp). "
+                f"Win rate {sleeve.win_rate:.0%}. Maintain discipline."
+            )
+        elif alpha > -5:
+            return (
+                f"Slightly behind SPY ({alpha:.1f}pp). "
+                f"Win rate {sleeve.win_rate:.0%}, avg R {sleeve.avg_r:.2f}. "
+                f"Review recent losers for regime mismatch."
+            )
+        else:
+            return (
+                f"Underperforming SPY by {abs(alpha):.1f}pp. "
+                f"Win rate {sleeve.win_rate:.0%}, avg R {sleeve.avg_r:.2f}. "
+                f"Consider reducing size or pausing this sleeve."
+            )

@@ -61,12 +61,16 @@ class ContextAssembler:
             tasks["news_by_ticker"] = self._get_news(tickers)
 
         results: Dict[str, Any] = {}
-        for key, coro in tasks.items():
-            try:
-                results[key] = await coro
-            except Exception as e:
-                logger.warning("Context %s failed: %s", key, e)
+        # Run all context fetches in parallel (was sequential)
+        keys = list(tasks.keys())
+        coros = list(tasks.values())
+        outcomes = await asyncio.gather(*coros, return_exceptions=True)
+        for key, outcome in zip(keys, outcomes):
+            if isinstance(outcome, Exception):
+                logger.warning("Context %s failed: %s", key, outcome)
                 results[key] = {}
+            else:
+                results[key] = outcome
 
         # Ensure all keys exist
         results.setdefault("market_state", {})

@@ -1,159 +1,141 @@
-# Contributing to CC
+<div align="center">
+<sub>
 
-Thank you for your interest in contributing! This guide will help you get
-started quickly and understand how the project is organized.
+<b>English</b> • [Català](locales/ca/CONTRIBUTING.md) • [Deutsch](locales/de/CONTRIBUTING.md) • [Español](locales/es/CONTRIBUTING.md) • [Français](locales/fr/CONTRIBUTING.md) • [हिंदी](locales/hi/CONTRIBUTING.md) • [Bahasa Indonesia](locales/id/CONTRIBUTING.md) • [Italiano](locales/it/CONTRIBUTING.md) • [日本語](locales/ja/CONTRIBUTING.md)
 
----
+</sub>
+<sub>
 
-## Quick Start for Contributors
+[한국어](locales/ko/CONTRIBUTING.md) • [Nederlands](locales/nl/CONTRIBUTING.md) • [Polski](locales/pl/CONTRIBUTING.md) • [Português (BR)](locales/pt-BR/CONTRIBUTING.md) • [Русский](locales/ru/CONTRIBUTING.md) • [Türkçe](locales/tr/CONTRIBUTING.md) • [Tiếng Việt](locales/vi/CONTRIBUTING.md) • [简体中文](locales/zh-CN/CONTRIBUTING.md) • [繁體中文](locales/zh-TW/CONTRIBUTING.md)
 
-```bash
-# 1. Fork and clone
-git clone https://github.com/<your-username>/TradingAI_Bot.git
-cd TradingAI_Bot
+</sub>
+</div>
 
-# 2. Set up environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -e ".[dev]"
+# Contributing to Roo Code
 
-# 3. Copy environment template
-cp .env.example .env
-# Fill in at minimum: DISCORD_BOT_TOKEN
+Roo Code is a community-driven project, and we deeply value every contribution. To streamline collaboration, we operate on an [Issue-First](#issue-first-approach) basis, meaning all [Pull Requests (PRs)](#submitting-a-pull-request) must first be linked to a GitHub Issue. Please review this guide carefully.
 
-# 4. Run tests
-pytest tests/ -v
+## Table of Contents
 
-# 5. Run linters
-black --check .
-ruff check .
+- [Before You Contribute](#before-you-contribute)
+- [Finding & Planning Your Contribution](#finding--planning-your-contribution)
+- [Development & Submission Process](#development--submission-process)
+- [Legal](#legal)
+
+## Before You Contribute
+
+### 1. Code of Conduct
+
+All contributors must adhere to our [Code of Conduct](./CODE_OF_CONDUCT.md).
+
+### 2. Project Roadmap
+
+Our roadmap guides the project's direction. Align your contributions with these key goals:
+
+### Reliability First
+
+- Ensure diff editing and command execution are consistently reliable.
+- Reduce friction points that deter regular usage.
+- Guarantee smooth operation across all locales and platforms.
+- Expand robust support for a wide variety of AI providers and models.
+
+### Enhanced User Experience
+
+- Streamline the UI/UX for clarity and intuitiveness.
+- Continuously improve the workflow to meet the high expectations developers have for daily-use tools.
+
+### Leading on Agent Performance
+
+- Establish comprehensive evaluation benchmarks (evals) to measure real-world productivity.
+- Make it easy for everyone to easily run and interpret these evals.
+- Ship improvements that demonstrate clear increases in eval scores.
+
+Mention alignment with these areas in your PRs.
+
+### 3. Join the Roo Code Community
+
+- **Primary:** Join our [Discord](https://discord.gg/roocode) and DM **Hannes Rudolph (`hrudolph`)**.
+- **Alternative:** Experienced contributors can engage directly via [GitHub Projects](https://github.com/orgs/RooCodeInc/projects/1).
+
+## Finding & Planning Your Contribution
+
+### Types of Contributions
+
+- **Bug Fixes:** Addressing code issues.
+- **New Features:** Adding functionality.
+- **Documentation:** Improving guides and clarity.
+
+### Issue-First Approach
+
+All contributions start with a GitHub Issue using our skinny templates.
+
+- **Check existing issues**: Search [GitHub Issues](https://github.com/RooCodeInc/Roo-Code/issues).
+- **Create an issue** using:
+    - **Enhancements:** "Enhancement Request" template (plain language focused on user benefit).
+    - **Bugs:** "Bug Report" template (minimal repro + expected vs actual + version).
+- **Want to work on it?** Comment "Claiming" on the issue and DM **Hannes Rudolph (`hrudolph`)** on [Discord](https://discord.gg/roocode) to get assigned. Assignment will be confirmed in the thread.
+- **PRs must link to the issue.** Unlinked PRs may be closed.
+
+### Deciding What to Work On
+
+- Check the [GitHub Project](https://github.com/orgs/RooCodeInc/projects/1) for "Issue [Unassigned]" issues.
+- For docs, visit [Roo Code Docs](https://github.com/RooCodeInc/Roo-Code-Docs).
+
+### Reporting Bugs
+
+- Check for existing reports first.
+- Create a new bug using the ["Bug Report" template](https://github.com/RooCodeInc/Roo-Code/issues/new/choose) with:
+    - Clear, numbered reproduction steps
+    - Expected vs actual result
+    - Roo Code version (required); API provider/model if relevant
+- **Security issues**: Report privately via [security advisories](https://github.com/RooCodeInc/Roo-Code/security/advisories/new).
+
+## Development & Submission Process
+
+### Development Setup
+
+1. **Fork & Clone:**
+
+```
+git clone https://github.com/YOUR_USERNAME/Roo-Code.git
 ```
 
----
-
-## Project Structure
+2. **Install Dependencies:**
 
 ```
-src/
-├── algo/          # Trading strategies (VCP, momentum, mean reversion, etc.)
-├── api/           # FastAPI REST endpoints
-├── backtest/      # Backtesting engine
-├── brokers/       # Broker integrations (Paper, Alpaca, Futu, IBKR, MT5)
-├── core/          # Shared models, config, utilities
-├── engines/       # AutoTradingEngine, signal engine, strategy optimizer
-├── ingestors/     # Market data and news ingestion
-├── ml/            # ML models (regime classification, quality gate)
-├── notifications/ # Discord bot (primary), formatters, embeds, tasks
-├── performance/   # Performance tracking and attribution
-├── research/      # Research artifact generation
-├── scanners/      # Market scanners and screeners
-├── scheduler/     # Background task scheduling
-├── services/      # Shared services (market data, context assembly)
-└── strategies/    # Strategy configuration and registry
+pnpm install
 ```
 
----
+3. **Debugging:** Open with VS Code (`F5`).
 
-## Development Workflow
+### Writing Code Guidelines
 
-### Branching
+- One focused PR per feature or fix.
+- Follow ESLint and TypeScript best practices.
+- Write clear, descriptive commits referencing issues (e.g., `Fixes #123`).
+- Provide thorough testing (`npm test`).
+- Rebase onto the latest `main` branch before submission.
 
-- `main` — stable release branch
-- `develop` — integration branch for upcoming release
-- Feature branches: `feat/your-feature`
-- Bug fixes: `fix/issue-description`
+### Submitting a Pull Request
 
-### Commit Messages
+- Begin as a **Draft PR** if seeking early feedback.
+- Clearly describe your changes following the Pull Request Template.
+- Link the issue in the PR description/title (e.g., "Fixes #123").
+- Provide screenshots/videos for UI changes.
+- Indicate if documentation updates are necessary.
 
-Use clear, descriptive commit messages:
+### Pull Request Policy
 
-```
-feat: add sector rotation scanner
-fix: correct RSI divergence detection edge case
-docs: update Discord alert format examples
-refactor: extract signal scoring into dedicated module
-test: add VCP strategy validation tests
-```
+- Must reference an assigned GitHub Issue. To get assigned: comment "Claiming" on the issue and DM **Hannes Rudolph (`hrudolph`)** on [Discord](https://discord.gg/roocode). Assignment will be confirmed in the thread.
+- Unlinked PRs may be closed.
+- PRs should pass CI tests, align with the roadmap, and have clear documentation.
 
-### Pull Requests
+### Review Process
 
-1. Create a feature branch from `develop`.
-2. Make your changes with tests.
-3. Ensure `pytest`, `black`, and `ruff` pass locally.
-4. Open a PR against `develop` with a clear description.
-5. Link any related issues.
+- **Daily Triage:** Quick checks by maintainers.
+- **Weekly In-depth Review:** Comprehensive assessment.
+- **Iterate promptly** based on feedback.
 
----
+## Legal
 
-## Code Standards
-
-- **Python 3.11+** required.
-- **Black** for formatting (default config).
-- **Ruff** for linting.
-- **Type hints** on all public functions.
-- **Pydantic v2** for data models.
-- **Docstrings** on modules, classes, and public methods.
-
-### Testing
-
-- All new features should include tests.
-- Tests go in `tests/` with `test_` prefix.
-- Use `pytest` fixtures for shared setup.
-- Mock external APIs (broker, market data, LLM) in tests.
-
----
-
-## Areas Where Help Is Needed
-
-| Area | Difficulty | Description |
-|------|-----------|-------------|
-| Strategy implementations | Medium | Add or improve VCP, swing, breakout strategies |
-| Backtesting validation | Medium | Improve walk-forward and out-of-sample testing |
-| Discord UX | Easy–Medium | Improve embed formatting, alert clarity |
-| Documentation | Easy | Improve setup guides, strategy explanations |
-| Broker integrations | Hard | Improve Futu, IBKR, Alpaca reliability |
-| Test coverage | Easy–Medium | Add unit tests for under-tested modules |
-| Multi-language | Easy | Improve Traditional Chinese translations |
-
----
-
-## Important Guidelines
-
-### Financial Responsibility
-
-- **Never** frame outputs as financial advice in code, docs, or Discord messages.
-- Always include appropriate disclaimers.
-- Use words like "signal", "research", "informational" — not "recommendation" or "guaranteed".
-- If adding a new signal or strategy, document its limitations honestly.
-
-### Security
-
-- Never commit API keys, tokens, or passwords.
-- Read [SECURITY.md](SECURITY.md) before handling credentials.
-- Use least-privilege access for all integrations.
-
-### Discord Bot Changes
-
-- Test bot commands locally before submitting.
-- Ensure embeds stay within Discord's limits (4096 chars description, 25 fields).
-- Consider both English and Traditional Chinese users.
-
----
-
-## Getting Help
-
-- Open a GitHub Issue for bugs or feature discussions.
-- Tag issues with appropriate labels (`bug`, `enhancement`, `good first issue`).
-- Be respectful and constructive in all interactions.
-
----
-
-## Code of Conduct
-
-Be professional, respectful, and constructive. We welcome contributors of all
-backgrounds and experience levels. Harassment, discrimination, or disrespectful
-behavior will not be tolerated.
-
----
-
-Thank you for helping make CC better! 🚀
+By contributing, you agree your contributions will be licensed under the Apache 2.0 License, consistent with Roo Code's licensing.

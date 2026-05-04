@@ -11,11 +11,13 @@ Learns from every trade (wins AND losses) to continuously improve:
 Architecture:
   Trade Outcomes DB → Feature Extraction → Model Training → Prediction
                     → LLM Failure Analysis → Strategy Tuning
+
+Model serialization: uses joblib with versioned filenames to avoid
+pickle security issues and sklearn version incompatibilities.
 """
 import asyncio
 import json
 import logging
-import pickle
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -32,6 +34,9 @@ trading_config = get_trading_config()
 
 MODEL_DIR = Path("models")
 MODEL_DIR.mkdir(exist_ok=True)
+
+# Model version — bump when changing feature set or model architecture
+_MODEL_VERSION = "v2"
 
 
 # ---------------------------------------------------------------------------
@@ -127,29 +132,60 @@ class TradeOutcomePredictor:
     def __init__(self):
         self.model = None
         self.scaler = None
-        self._model_path = MODEL_DIR / "trade_outcome_model.pkl"
+        self._model_path = MODEL_DIR / f"trade_outcome_model_{_MODEL_VERSION}.joblib"
+        self._legacy_path = MODEL_DIR / "trade_outcome_model.pkl"
         self._history: List[Dict[str, Any]] = []
         self._min_samples = 30  # minimum trades before training
         self._load_model()
 
     def _load_model(self):
+        """Load model from versioned joblib file, with pickle fallback."""
+        # Try joblib first (preferred)
         if self._model_path.exists():
             try:
-                with open(self._model_path, "rb") as f:
+                import joblib
+                saved = joblib.load(self._model_path)
+                self.model = saved.get("model")
+                self.scaler = saved.get("scaler")
+                version = saved.get("version", "unknown")
+                logger.info("Loaded trade outcome model (version=%s)", version)
+                return
+            except ImportError:
+                logger.warning("joblib not installed — falling back to pickle")
+            except Exception as e:
+                logger.warning("Could not load joblib model: %s", e)
+
+        # Fallback: legacy pickle file (one-time migration)
+        if self._legacy_path.exists():
+            try:
+                import pickle
+                with open(self._legacy_path, "rb") as f:
                     saved = pickle.load(f)
                 self.model = saved.get("model")
                 self.scaler = saved.get("scaler")
-                logger.info("Loaded trade outcome model")
+                logger.info("Loaded legacy pickle model — will re-save as joblib")
+                self._save_model()  # migrate to joblib
+                return
             except Exception as e:
-                logger.warning(f"Could not load model: {e}")
+                logger.warning("Could not load legacy model: %s", e)
 
     def _save_model(self):
+        """Save model using joblib with version metadata."""
         try:
-            with open(self._model_path, "wb") as f:
-                pickle.dump({"model": self.model, "scaler": self.scaler}, f)
-            logger.info("Saved trade outcome model")
+            import joblib
+            payload = {
+                "model": self.model,
+                "scaler": self.scaler,
+                "version": _MODEL_VERSION,
+                "saved_at": datetime.now(timezone.utc).isoformat(),
+                "feature_cols": self.FEATURE_COLS,
+            }
+            joblib.dump(payload, self._model_path)
+            logger.info("Saved trade outcome model (version=%s)", _MODEL_VERSION)
+        except ImportError:
+            logger.error("joblib not installed: pip install joblib")
         except Exception as e:
-            logger.error(f"Could not save model: {e}")
+            logger.error("Could not save model: %s", e)
 
     def add_outcome(self, record: TradeOutcomeRecord):
         """Add a trade outcome for learning."""

@@ -386,7 +386,9 @@ async def portfolio_advise(request: Request):
     mds = request.app.state.market_data
 
     # Lazy imports to avoid circular deps
-    from src.api.main import _compute_indicators
+    from src.services.indicators import (
+        compute_indicators as _compute_indicators,
+    )  # noqa: PLC0415
     from src.engines.conformal_predictor import ConformalPredictor
     from src.engines.expert_committee import ExpertCommittee
 

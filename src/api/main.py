@@ -14,6 +14,7 @@ import asyncio
 import logging
 import math
 import os
+from contextlib import asynccontextmanager
 import re
 import time
 from collections import defaultdict
@@ -44,6 +45,19 @@ from src.core.models import (
 from src.core.risk_limits import BACKTEST_DEFAULTS, RISK, SIGNAL_THRESHOLDS
 from src.core.telemetry import telemetry
 from src.core.version import APP_VERSION, PRODUCT_NAME
+
+# ── Extracted services (back-compat shims) ──
+from src.services.indicators import (
+    compute_indicators as _compute_indicators,
+    compute_rs_vs_benchmark as _compute_rs_vs_benchmark,
+    rolling_mean as _rolling_mean,
+)
+from src.services.calendar_service import (
+    is_us_market_holiday as _is_us_market_holiday,
+    us_market_holidays as _compute_us_market_holidays,
+    is_us_market_open,
+    next_trading_day,
+)
 
 # ── Phase 9 engine imports ──
 try:
@@ -271,7 +285,64 @@ def _init_shared_services():
     # Engine singleton (dry_run) — lazy to avoid heavy import at startup
     app.state.engine = None
     app.state.engine_init_done = False
+
+    # ── P2: Stateful engine singletons — lazy, state persists across requests ──
+    app.state.expert_council = None
+    app.state.expert_council_init = False
+    app.state.learning_loop = None
+    app.state.learning_loop_init = False
+    app.state.meta_ensemble = None
+    app.state.meta_ensemble_init = False
+
+    # ── P3/P4: Scanner service wired after SCAN_WATCHLIST is defined ──
+    app.state.scanner_service = None  # set below after ScannerService is importable
+    app.state.scan_signals = None     # set to _scan_live_signals shim below
+    app.state.scan_watchlist = []     # set below after _SCAN_WATCHLIST is defined
+    app.state.live_indices = []       # set below
+    app.state.live_sectors = []       # set below
     logger.info("[Singleton] shared services registered on app.state")
+
+
+def _get_expert_council():
+    """Lazy-init ExpertCouncil singleton — state persists across requests."""
+    if not app.state.expert_council_init:
+        try:
+            from src.engines.expert_council import ExpertCouncil
+            app.state.expert_council = ExpertCouncil()
+            logger.info("[Singleton] ExpertCouncil created")
+        except Exception as exc:
+            logger.warning("[Singleton] ExpertCouncil init failed: %s", exc)
+            app.state.expert_council = None
+        app.state.expert_council_init = True
+    return app.state.expert_council
+
+
+def _get_learning_loop():
+    """Lazy-init LearningLoopPipeline singleton."""
+    if not app.state.learning_loop_init:
+        try:
+            from src.engines.learning_loop import LearningLoopPipeline
+            app.state.learning_loop = LearningLoopPipeline()
+            logger.info("[Singleton] LearningLoopPipeline created")
+        except Exception as exc:
+            logger.warning("[Singleton] LearningLoopPipeline init failed: %s", exc)
+            app.state.learning_loop = None
+        app.state.learning_loop_init = True
+    return app.state.learning_loop
+
+
+def _get_meta_ensemble():
+    """Lazy-init MetaEnsemble singleton."""
+    if not app.state.meta_ensemble_init:
+        try:
+            from src.engines.meta_ensemble import MetaEnsemble
+            app.state.meta_ensemble = MetaEnsemble()
+            logger.info("[Singleton] MetaEnsemble created")
+        except Exception as exc:
+            logger.warning("[Singleton] MetaEnsemble init failed: %s", exc)
+            app.state.meta_ensemble = None
+        app.state.meta_ensemble_init = True
+    return app.state.meta_ensemble
 
 
 def _get_engine():
@@ -505,37 +576,8 @@ def validate_ticker(ticker: str) -> str:
 
 # ===== Authentication =====
 
-
-async def verify_api_key(x_api_key: str = Header(None, alias="X-API-Key")):
-    """Verify API key from header.
-
-    Security hardening: in production, a missing API_SECRET_KEY
-    means ALL authenticated endpoints are locked. In development,
-    we allow open access for local testing.
-    """
-    if not settings.api_secret_key:
-        # Secure default: reject in production, allow in dev
-        if settings.environment == "production":
-            raise HTTPException(
-                status_code=503,
-                detail="API key not configured. Set API_SECRET_KEY.",
-            )
-        return True  # dev/staging: open access
-
-    if not x_api_key or x_api_key != settings.api_secret_key:
-        raise HTTPException(status_code=401, detail="Invalid or missing API key")
-    return True
-
-
-async def optional_api_key(x_api_key: str = Header(None, alias="X-API-Key")):
-    """Optional API key verification."""
-    if settings.api_secret_key and x_api_key != settings.api_secret_key:
-        return None
-    return x_api_key
-
-
-# ===== Response Models =====
-
+# Canonical definitions live in src/api/deps.py; re-export here for backward compat.
+from src.api.deps import verify_api_key, optional_api_key  # noqa: E402, F401
 
 class HealthResponse(BaseModel):
     """Health check response model."""
@@ -642,16 +684,21 @@ async def _breakout_monitor_loop():
             await asyncio.sleep(300)
 
 
-@app.on_event("startup")
-async def _start_breakout_monitor():
+@asynccontextmanager
+async def _lifespan(app):  # noqa: ARG001
     global _breakout_monitor_task
     _breakout_monitor_task = asyncio.create_task(_breakout_monitor_loop())
-
-
-@app.on_event("shutdown")
-async def _stop_breakout_monitor():
+    yield
     if _breakout_monitor_task:
         _breakout_monitor_task.cancel()
+        try:
+            await _breakout_monitor_task
+        except asyncio.CancelledError:
+            pass
+
+
+# Wire lifespan (defined after dependencies to avoid NameError at import)
+app.router.lifespan_context = _lifespan
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -853,53 +900,134 @@ def _compute_rs_vs_benchmark(
     }
 
 
-# US market holidays (fixed + observed). Not exhaustive but covers majors.
-_US_MARKET_HOLIDAYS_2024_2027 = {
-    # 2024
-    (2024, 1, 1),
-    (2024, 1, 15),
-    (2024, 2, 19),
-    (2024, 3, 29),
-    (2024, 5, 27),
-    (2024, 6, 19),
-    (2024, 7, 4),
-    (2024, 9, 2),
-    (2024, 11, 28),
-    (2024, 12, 25),
-    # 2025
-    (2025, 1, 1),
-    (2025, 1, 20),
-    (2025, 2, 17),
-    (2025, 4, 18),
-    (2025, 5, 26),
-    (2025, 6, 19),
-    (2025, 7, 4),
-    (2025, 9, 1),
-    (2025, 11, 27),
-    (2025, 12, 25),
-    # 2026
-    (2026, 1, 1),
-    (2026, 1, 19),
-    (2026, 2, 16),
-    (2026, 4, 3),
-    (2026, 5, 25),
-    (2026, 6, 19),
-    (2026, 7, 3),
-    (2026, 9, 7),
-    (2026, 11, 26),
-    (2026, 12, 25),
-    # 2027
-    (2027, 1, 1),
-    (2027, 1, 18),
-    (2027, 2, 15),
-    (2027, 3, 26),
-    (2027, 5, 31),
-    (2027, 6, 18),
-    (2027, 7, 5),
-    (2027, 9, 6),
-    (2027, 11, 25),
-    (2027, 12, 24),
-}
+# US market holidays — dynamically computed for any year.
+# Uses the standard rules for NYSE/NASDAQ holidays:
+#   - New Year's Day (Jan 1, observed)
+#   - MLK Jr Day (3rd Monday in Jan)
+#   - Presidents Day (3rd Monday in Feb)
+#   - Good Friday (2 days before Easter)
+#   - Memorial Day (last Monday in May)
+#   - Juneteenth (Jun 19, observed)
+#   - Independence Day (Jul 4, observed)
+#   - Labor Day (1st Monday in Sep)
+#   - Thanksgiving (4th Thursday in Nov)
+#   - Christmas (Dec 25, observed)
+
+def _nth_weekday(year: int, month: int, weekday: int, n: int) -> int:
+    """Return day of month for the nth occurrence of weekday in month.
+    weekday: 0=Mon, 6=Sun. n: 1-based."""
+    from datetime import date as _date
+    first = _date(year, month, 1)
+    # Days until first occurrence of weekday
+    days_ahead = weekday - first.weekday()
+    if days_ahead < 0:
+        days_ahead += 7
+    first_occurrence = 1 + days_ahead
+    return first_occurrence + (n - 1) * 7
+
+
+def _last_weekday(year: int, month: int, weekday: int) -> int:
+    """Return day of month for the last occurrence of weekday in month."""
+    from datetime import date as _date
+    import calendar
+    last_day = calendar.monthrange(year, month)[1]
+    last = _date(year, month, last_day)
+    days_behind = last.weekday() - weekday
+    if days_behind < 0:
+        days_behind += 7
+    return last_day - days_behind
+
+
+def _easter_sunday(year: int) -> tuple:
+    """Compute Easter Sunday using the anonymous Gregorian algorithm."""
+    a = year % 19
+    b, c = divmod(year, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    day = ((h + l - 7 * m + 114) % 31) + 1
+    return (year, month, day)
+
+
+def _observed(d: tuple) -> tuple:
+    """If holiday falls on Saturday, use Friday; Sunday → Monday."""
+    from datetime import date as _date, timedelta
+    dt = _date(d[0], d[1], d[2])
+    if dt.weekday() == 5:  # Saturday
+        dt -= timedelta(days=1)
+    elif dt.weekday() == 6:  # Sunday
+        dt += timedelta(days=1)
+    return (dt.year, dt.month, dt.day)
+
+
+def _compute_us_market_holidays(year: int) -> set:
+    """Compute US market holidays for a given year."""
+    from datetime import date as _date, timedelta
+    holidays = set()
+
+    # New Year's Day
+    holidays.add(_observed((year, 1, 1)))
+
+    # MLK Jr Day — 3rd Monday in January
+    holidays.add((year, 1, _nth_weekday(year, 1, 0, 3)))
+
+    # Presidents Day — 3rd Monday in February
+    holidays.add((year, 2, _nth_weekday(year, 2, 0, 3)))
+
+    # Good Friday — 2 days before Easter Sunday
+    ey, em, ed = _easter_sunday(year)
+    good_friday = _date(ey, em, ed) - timedelta(days=2)
+    holidays.add((good_friday.year, good_friday.month, good_friday.day))
+
+    # Memorial Day — last Monday in May
+    holidays.add((year, 5, _last_weekday(year, 5, 0)))
+
+    # Juneteenth
+    holidays.add(_observed((year, 6, 19)))
+
+    # Independence Day
+    holidays.add(_observed((year, 7, 4)))
+
+    # Labor Day — 1st Monday in September
+    holidays.add((year, 9, _nth_weekday(year, 9, 0, 1)))
+
+    # Thanksgiving — 4th Thursday in November
+    holidays.add((year, 11, _nth_weekday(year, 11, 3, 4)))
+
+    # Christmas
+    holidays.add(_observed((year, 12, 25)))
+
+    return holidays
+
+
+def _get_us_market_holidays() -> set:
+    """Get US market holidays for current year ±1 for safety."""
+    from datetime import date as _date
+    current_year = _date.today().year
+    all_holidays = set()
+    for y in range(current_year - 1, current_year + 2):
+        all_holidays.update(_compute_us_market_holidays(y))
+    return all_holidays
+
+
+# Lazily computed on first access
+_US_MARKET_HOLIDAYS: Optional[set] = None
+
+
+def _is_us_market_holiday(dt=None) -> bool:
+    """Check if a date is a US market holiday."""
+    global _US_MARKET_HOLIDAYS
+    if _US_MARKET_HOLIDAYS is None:
+        _US_MARKET_HOLIDAYS = _get_us_market_holidays()
+    if dt is None:
+        from datetime import date as _date
+        dt = _date.today()
+    return (dt.year, dt.month, dt.day) in _US_MARKET_HOLIDAYS
 
 
 # ===== Health Endpoints =====
@@ -1163,8 +1291,10 @@ async def api_rs_strength(ticker: str):
     ticker = ticker.upper()
     try:
         import yfinance as yf
-        stock = yf.download(ticker, period="6mo", progress=False)
-        spy = yf.download("SPY", period="6mo", progress=False)
+        stock, spy = await asyncio.gather(
+            asyncio.to_thread(yf.download, ticker, period="6mo", progress=False),
+            asyncio.to_thread(yf.download, "SPY", period="6mo", progress=False),
+        )
         if stock.empty or spy.empty:
             return {"ticker": ticker, "error": "no data"}
         stock_closes = stock["Close"].dropna().tolist()
@@ -1185,7 +1315,7 @@ async def api_vcp_scan(ticker: str):
     ticker = ticker.upper()
     try:
         import yfinance as yf
-        df = yf.download(ticker, period="1y", progress=False)
+        df = await asyncio.to_thread(yf.download, ticker, period="1y", progress=False)
         if df.empty:
             return {"ticker": ticker, "error": "no data"}
         highs = df["High"].dropna().values.flatten().tolist()
@@ -1206,8 +1336,10 @@ async def api_swing_analysis(ticker: str):
     ticker = ticker.upper()
     try:
         import yfinance as yf
-        df = yf.download(ticker, period="1y", progress=False)
-        spy_df = yf.download("SPY", period="1y", progress=False)
+        df, spy_df = await asyncio.gather(
+            asyncio.to_thread(yf.download, ticker, period="1y", progress=False),
+            asyncio.to_thread(yf.download, "SPY", period="1y", progress=False),
+        )
         if df.empty:
             return {"ticker": ticker, "error": "no data"}
 
@@ -1300,7 +1432,7 @@ async def api_distribution_days():
     """IBD-style distribution day count for SPY (last 25 trading days)."""
     try:
         import yfinance as yf
-        spy = yf.download("SPY", period="3mo", progress=False)
+        spy = await asyncio.to_thread(yf.download, "SPY", period="3mo", progress=False)
         if spy.empty:
             return {"error": "no SPY data"}
         spy_data = []
@@ -1490,18 +1622,43 @@ async def get_signals(
             conditions.append("direction = :direction")
             params["direction"] = direction.upper()
 
-        where_clause = " AND ".join(conditions)
-
-        sql = f"""
-            SELECT * FROM signals
-            WHERE {where_clause}
-            ORDER BY confidence DESC
-            LIMIT :limit
-        """
-        params["limit"] = limit
+        # Build query using SQLAlchemy select() — avoids f-string interpolation
+        # of user-supplied values into SQL (SQL injection prevention).
+        # All filter values go through bound parameters only.
+        from sqlalchemy import Column, Float, Integer, MetaData, String, Table, select
+        meta = MetaData()
+        signals_table = Table(
+            "signals", meta,
+            Column("id", String),
+            Column("ticker", String),
+            Column("direction", String),
+            Column("strategy", String),
+            Column("entry_price", Float),
+            Column("take_profit", Float),
+            Column("stop_loss", Float),
+            Column("confidence", Float),
+            Column("generated_at", String),
+        )
+        stmt = select(signals_table).where(
+            signals_table.c.confidence >= params["min_confidence"]
+        )
+        if date:
+            from sqlalchemy import func
+            stmt = stmt.where(func.date(signals_table.c.generated_at) == params["date"])
+        else:
+            from sqlalchemy import func, cast
+            from sqlalchemy.sql.expression import literal
+            stmt = stmt.where(
+                func.date(signals_table.c.generated_at) == func.current_date()
+            )
+        if ticker:
+            stmt = stmt.where(signals_table.c.ticker == params["ticker"])
+        if direction:
+            stmt = stmt.where(signals_table.c.direction == params["direction"])
+        stmt = stmt.order_by(signals_table.c.confidence.desc()).limit(limit)
 
         async with AsyncSessionLocal() as session:
-            result = await session.execute(text(sql), params)
+            result = await session.execute(stmt)
             rows = result.fetchall()
 
         signals = []
@@ -1880,8 +2037,8 @@ def _is_market_open() -> bool:
     if now.weekday() >= 5:
         return False
 
-    # Check US market holidays
-    if (now.year, now.month, now.day) in _US_MARKET_HOLIDAYS_2024_2027:
+    # Check US market holidays (dynamic computation)
+    if _is_us_market_holiday(now.date()):
         return False
 
     # Check time
@@ -2200,9 +2357,11 @@ async def get_earnings_analysis(ticker: str, _: bool = Depends(verify_api_key)):
 
         # Use yfinance for basic earnings data when available
         import yfinance as yf
-        t = yf.Ticker(ticker.upper())
-        cal = t.calendar or {}
-        info = t.info or {}
+        def _fetch_earnings():
+            t = yf.Ticker(ticker.upper())
+            return t.calendar or {}, t.info or {}
+
+        cal, info = await asyncio.to_thread(_fetch_earnings)
         eps_trail = info.get("trailingEps")
         eps_fwd = info.get("forwardEps")
         rev = info.get("totalRevenue")
@@ -3903,6 +4062,7 @@ _SCAN_WATCHLIST = [
 ]
 # Deduplicate while preserving order
 _SCAN_WATCHLIST = list(dict.fromkeys(_SCAN_WATCHLIST))
+app.state.scan_watchlist = _SCAN_WATCHLIST  # P3: expose for routers without import
 
 # ── Sector clustering for correlation guard (P3) ──
 # Prevents hidden concentration: max N signals from the same sector cluster.
@@ -4635,27 +4795,28 @@ async def _days_to_earnings(ticker: str, mds) -> int | None:
     """
     try:
         import yfinance as yf
-        t = yf.Ticker(ticker)
-        cal = t.calendar
+
+        def _fetch_cal():
+            t = yf.Ticker(ticker)
+            return t.calendar, getattr(t, "earnings_dates", None)
+
+        cal, ed = await asyncio.to_thread(_fetch_cal)
         if cal is not None and not cal.empty:
             from datetime import datetime, timezone
             now = datetime.now(timezone.utc)
-            # Calendar may be a DataFrame with 'Earnings Date' column
-            if hasattr(cal, 'iloc'):
+            if hasattr(cal, "iloc"):
                 for col in cal.columns:
                     val = cal[col].iloc[0]
-                    if hasattr(val, 'date'):
+                    if hasattr(val, "date"):
                         delta = (val - now).days
                         if delta >= 0:
                             return delta
-        # Try .earnings_dates attribute
-        ed = getattr(t, 'earnings_dates', None)
         if ed is not None and not ed.empty:
             from datetime import datetime, timezone
             now = datetime.now(timezone.utc)
             for dt in ed.index:
-                if hasattr(dt, 'tz_localize'):
-                    dt = dt.tz_localize('UTC')
+                if hasattr(dt, "tz_localize"):
+                    dt = dt.tz_localize("UTC")
                 delta = (dt - now).days
                 if delta >= 0:
                     return int(delta)
@@ -5392,6 +5553,10 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
     return recs[:limit], scores
 
 
+# ── P3: wire scan_signals onto app.state so routers never import from main ──
+app.state.scan_signals = _scan_live_signals
+
+
 @app.get("/api/recommendations", tags=["decision-layer"])
 async def get_recommendations(limit: int = Query(10, ge=1, le=50)):
     """Get ranked trade recommendations.
@@ -5751,6 +5916,9 @@ _LIVE_SECTORS = [
     ("XLC", "Communication"),
     ("XLB", "Materials"),
 ]
+# P3: expose for routers
+app.state.live_indices = _LIVE_INDICES
+app.state.live_sectors = _LIVE_SECTORS
 _LIVE_ASIA = [
     ("^N225", "Nikkei 225"),
     ("^HSI", "Hang Seng"),
@@ -8957,14 +9125,44 @@ def _compute_4layer_confidence(
             timing_score = max(0, timing_score - 10)
             p9_adjustments.append("adverse_regime")
 
-    # ── Composite ──
-    composite = round(
+    # ── Historical Analog: fetch similar cases and win rate ──
+    try:
+        from src.engines.historical_analog import analog_summary, find_similar_cases
+
+        # Use strategy if available, else fallback
+        strategy = None
+        if structure_result and isinstance(structure_result, dict):
+            strategy = structure_result.get("strategy")
+        if not strategy:
+            strategy = "momentum"  # fallback default
+        regime_label_str = str(regime_label) if regime_label else ""
+        cases = find_similar_cases(
+            strategy=strategy,
+            regime=regime_label_str,
+            grade=str(grade) if "grade" in locals() else "",
+            direction="LONG",
+        )
+        analog = analog_summary(cases)
+        win_rate = analog.get("win_rate", 0)
+        analog_count = analog.get("count", 0)
+    except Exception as _analog_exc:
+        analog = {"count": 0, "win_rate": 0, "message": "Analog lookup failed"}
+        win_rate = 0
+        analog_count = 0
+
+    # ── Composite (blend with historical win rate if enough analogs) ──
+    base_composite = (
         0.35 * thesis_score
         + 0.30 * timing_score
         + 0.20 * exec_score
-        + 0.15 * data_score,
-        1,
+        + 0.15 * data_score
     )
+    composite = base_composite
+    analog_weight = 0.20 if analog_count >= 5 else 0.10 if analog_count >= 2 else 0.0
+    if analog_weight > 0:
+        composite = (1 - analog_weight) * base_composite + analog_weight * win_rate
+    composite = round(composite, 1)
+
     # Penalties
     penalties = []
     if days_to_earnings is not None and days_to_earnings <= 2:
@@ -9076,6 +9274,9 @@ def _compute_4layer_confidence(
         "penalties": penalties,
         "p9_adjustments": p9_adjustments,
         "calibration": calibration_meta,
+        "historical_analog": analog,
+        "historical_win_rate": win_rate,
+        "historical_analog_count": analog_count,
     }
 
 
@@ -12266,6 +12467,14 @@ try:
 except ImportError:
     pass
 
+# Sprint 71 — Institutional surfaces (benchmark, relative value, data quality, rejections)
+try:
+    from src.api.routers.institutional import router as institutional_router
+
+    app.include_router(institutional_router)
+except ImportError:
+    pass
+
 # Sprint 62 — Fund builder, stock-vs-SPY
 try:
     from src.api.routers.fund import router as fund_router
@@ -12281,3 +12490,51 @@ try:
     app.include_router(brief_router)
 except ImportError:
     pass
+
+# Intelligence engines — benchmark attribution, comparison, rejection analysis, self-learning
+try:
+    from src.api.routers.intelligence import router as intelligence_router
+
+    app.include_router(intelligence_router)
+except ImportError:
+    pass
+
+# Task management CRUD API
+try:
+    from src.api.routers.tasks import router as tasks_router
+
+    app.include_router(tasks_router)
+except Exception:
+    logger.exception("[Router] Failed to load tasks router")
+
+# Sprint 72 — Watchlist Decision Board + Command-K search
+try:
+    from src.api.routers.watchlist import router as watchlist_router
+
+    app.include_router(watchlist_router)
+except Exception:
+    logger.exception("[Router] Failed to load watchlist router")
+
+# Sprint 72 — Symbol Dossier (full decision card per ticker)
+try:
+    from src.api.routers.dossier import router as dossier_router
+
+    app.include_router(dossier_router)
+except Exception:
+    logger.exception("[Router] Failed to load dossier router")
+
+# Sprint 72 — RS Hub (RS leaderboard, lifecycle, sectors, matrix)
+try:
+    from src.api.routers.rs_hub import router as rs_hub_router
+
+    app.include_router(rs_hub_router)
+except Exception:
+    logger.exception("[Router] Failed to load rs_hub router")
+
+# Sprint 73 — Decision Pipeline + Portfolio Brain + Peer Comparison
+try:
+    from src.api.routers.decision_pipeline import router as decision_pipeline_router
+
+    app.include_router(decision_pipeline_router)
+except Exception:
+    logger.exception("[Router] Failed to load decision_pipeline router")

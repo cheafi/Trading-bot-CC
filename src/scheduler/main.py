@@ -38,10 +38,10 @@ class TradingScheduler:
     - After hours (4:30 PM ET): EOD processing
     - Overnight: Historical data backfill
     """
-    
+
     def __init__(self):
         self.scheduler = AsyncIOScheduler(timezone=pytz.timezone('US/Eastern'))
-        
+
         # Initialize components
         self.market_ingestor = MarketDataIngestor()
         self.news_ingestor = NewsIngestor()
@@ -51,15 +51,15 @@ class TradingScheduler:
         self.gpt_validator = GPTSignalValidator()
         self.gpt_summarizer = GPTSummarizer()
         self.notifier = MultiChannelNotifier()
-        
+
         # Job tracking
         self._job_history: list = []
-    
+
     def setup_jobs(self):
         """Configure all scheduled jobs."""
-        
+
         # ===== Pre-Market Jobs (6:00 AM - 9:30 AM ET) =====
-        
+
         # 6:00 AM - Overnight news ingestion
         self.scheduler.add_job(
             self._job_overnight_news,
@@ -68,7 +68,7 @@ class TradingScheduler:
             name='Overnight News Ingestion',
             replace_existing=True
         )
-        
+
         # 6:15 AM - Social sentiment check
         self.scheduler.add_job(
             self._job_social_sentiment,
@@ -77,7 +77,7 @@ class TradingScheduler:
             name='Pre-market Social Sentiment',
             replace_existing=True
         )
-        
+
         # 6:30 AM - Generate daily report
         self.scheduler.add_job(
             self._job_daily_report,
@@ -86,7 +86,7 @@ class TradingScheduler:
             name='Daily Market Report',
             replace_existing=True
         )
-        
+
         # 9:25 AM - Pre-market signal generation
         self.scheduler.add_job(
             self._job_premarket_signals,
@@ -95,9 +95,9 @@ class TradingScheduler:
             name='Pre-market Signal Generation',
             replace_existing=True
         )
-        
+
         # ===== Market Hours Jobs (9:30 AM - 4:00 PM ET) =====
-        
+
         # Every 5 minutes during market hours - Price data ingestion
         self.scheduler.add_job(
             self._job_market_data,
@@ -109,7 +109,7 @@ class TradingScheduler:
             name='Intraday Price Data',
             replace_existing=True
         )
-        
+
         # Every 15 minutes - News update
         self.scheduler.add_job(
             self._job_news_update,
@@ -121,7 +121,7 @@ class TradingScheduler:
             name='Intraday News Update',
             replace_existing=True
         )
-        
+
         # Every 30 minutes - Signal refresh
         self.scheduler.add_job(
             self._job_signal_refresh,
@@ -133,9 +133,9 @@ class TradingScheduler:
             name='Intraday Signal Refresh',
             replace_existing=True
         )
-        
+
         # ===== After Hours Jobs =====
-        
+
         # 4:30 PM - EOD processing
         self.scheduler.add_job(
             self._job_eod_processing,
@@ -144,7 +144,7 @@ class TradingScheduler:
             name='End of Day Processing',
             replace_existing=True
         )
-        
+
         # 8:00 PM - Historical data backfill
         self.scheduler.add_job(
             self._job_historical_backfill,
@@ -153,9 +153,9 @@ class TradingScheduler:
             name='Historical Data Backfill',
             replace_existing=True
         )
-        
+
         # ===== Maintenance Jobs =====
-        
+
         # Every hour - Health check
         self.scheduler.add_job(
             self._job_health_check,
@@ -164,7 +164,7 @@ class TradingScheduler:
             name='System Health Check',
             replace_existing=True
         )
-        
+
         # Every Sunday 2 AM - Database maintenance
         self.scheduler.add_job(
             self._job_db_maintenance,
@@ -173,22 +173,22 @@ class TradingScheduler:
             name='Database Maintenance',
             replace_existing=True
         )
-        
+
         logger.info("All jobs scheduled successfully")
-    
+
     def start(self):
         """Start the scheduler."""
         self.setup_jobs()
         self.scheduler.start()
         logger.info("Scheduler started")
-    
+
     def stop(self):
         """Stop the scheduler gracefully."""
         self.scheduler.shutdown(wait=True)
         logger.info("Scheduler stopped")
-    
+
     # ===== Job Implementations =====
-    
+
     async def _job_overnight_news(self):
         """Fetch overnight news articles."""
         logger.info("Starting overnight news ingestion")
@@ -197,7 +197,7 @@ class TradingScheduler:
             self._log_job_result('overnight_news', result)
         except Exception as e:
             logger.error(f"Overnight news job failed: {e}")
-    
+
     async def _job_social_sentiment(self):
         """Fetch and analyze social media sentiment."""
         logger.info("Starting social sentiment analysis")
@@ -207,14 +207,29 @@ class TradingScheduler:
             self._log_job_result('social_sentiment', result)
         except Exception as e:
             logger.error(f"Social sentiment job failed: {e}")
-    
+
     async def _job_daily_report(self):
         """Generate daily market report."""
         logger.info("Generating daily market report")
         try:
-            # Gather market data and news
-            # TODO: Implement full report generation with actual data
-            
+            # ── Generate brief JSON (data/brief-YYYY-MM-DD.json) ────────────
+            try:
+                import asyncio
+                from data.generate_brief import build_brief, save_brief  # noqa: PLC0415
+
+                brief = await asyncio.to_thread(build_brief)
+                if brief:
+                    save_brief(brief)
+                    logger.info("Brief JSON written for %s", brief.get("date"))
+                    from src.services.brief_data_service import (
+                        BriefDataService,
+                    )  # noqa: PLC0415
+
+                    BriefDataService.invalidate_cache()
+            except Exception as exc:
+                logger.warning("Brief generation failed (non-fatal): %s", exc)
+            # ── Build summary report ─────────────────────────────────────────
+
             report = {
                 'overview': {
                     'spy_change': '+0.5%',
@@ -226,12 +241,12 @@ class TradingScheduler:
                 'signals': [],
                 'news_summary': 'Market overview pending implementation'
             }
-            
+
             # Send report via notification channels
             if self.notifier.is_configured:
                 await self.notifier.send_daily_report(report)
                 logger.info("Daily report sent via notification channels")
-            
+
         except Exception as e:
             logger.error(f"Daily report job failed: {e}")
             # Alert on critical failures
@@ -241,29 +256,64 @@ class TradingScheduler:
                     f"Error generating daily report: {str(e)}",
                     level="ERROR"
                 )
-    
+
     async def _job_premarket_signals(self):
-        """Generate pre-market trading signals."""
+        """Generate pre-market trading signals via BriefDataService pipeline."""
         logger.info("Generating pre-market signals")
         try:
-            # Run signal generation
-            # TODO: Implement with actual data pipeline
+            from src.services.brief_data_service import (
+                BriefDataService,
+                all_brief_tickers,
+            )  # noqa: PLC0415
+            from src.services.regime_service import RegimeService  # noqa: PLC0415
+
+            # 1. Warm regime cache
+            regime = await asyncio.to_thread(RegimeService.get)
+            if not regime.get("should_trade", True):
+                logger.warning(
+                    "Regime blocks trading (should_trade=False) — skipping signal generation. "
+                    "regime=%s",
+                    regime.get("trend", "unknown"),
+                )
+                return
+
+            # 2. Load today's brief signals
+            brief = BriefDataService.load()
+            if not brief:
+                logger.warning(
+                    "No brief data available — cannot generate pre-market signals"
+                )
+                return
+
+            tickers = all_brief_tickers()[:30]  # cap at 30 for pre-market run
             signals = []
-            
-            # Send signals if any
+            for ticker in tickers:
+                from src.services.brief_data_service import find_signal  # noqa: PLC0415
+
+                sig = find_signal(ticker)
+                if sig:
+                    signals.append(sig)
+
+            logger.info(
+                "Pre-market signals: %d found from %d tickers",
+                len(signals),
+                len(tickers),
+            )
+
+            # 3. Send via notification channels
             if signals and self.notifier.is_configured:
                 await self.notifier.send_signals_batch(signals)
-                logger.info(f"Sent {len(signals)} signals via notification channels")
-            
+                logger.info("Sent %d signals via notification channels", len(signals))
+
         except Exception as e:
-            logger.error(f"Pre-market signals job failed: {e}")
+            logger.error("Pre-market signals job failed: %s", e)
             if self.notifier.is_configured:
                 await self.notifier.send_alert(
                     "Signal Generation Failed",
-                    f"Error generating pre-market signals: {str(e)}",
-                    level="ERROR"
+                    f"Error generating pre-market signals: {e}",
+                    level="ERROR",
                 )
-    
+
     async def _job_market_data(self):
         """Fetch intraday market data."""
         logger.info("Fetching intraday market data")
@@ -271,12 +321,12 @@ class TradingScheduler:
             # Only run on weekdays during market hours
             if not self._is_market_hours():
                 return
-            
+
             result = await self.market_ingestor.run(interval='5min')
             self._log_job_result('market_data', result)
         except Exception as e:
             logger.error(f"Market data job failed: {e}")
-    
+
     async def _job_news_update(self):
         """Fetch news updates during market hours."""
         logger.info("Fetching news updates")
@@ -285,30 +335,88 @@ class TradingScheduler:
             self._log_job_result('news_update', result)
         except Exception as e:
             logger.error(f"News update job failed: {e}")
-    
+
     async def _job_signal_refresh(self):
-        """Refresh trading signals during market hours."""
+        """Refresh trading signals and regime cache during market hours."""
         logger.info("Refreshing trading signals")
         try:
-            # TODO: Implement signal refresh
-            pass
+            if not self._is_market_hours():
+                return
+
+            # Re-warm regime cache (RegimeService.get() is idempotent; cache TTL = 4h)
+            from src.services.regime_service import RegimeService  # noqa: PLC0415
+
+            regime = await asyncio.to_thread(RegimeService.get)
+            logger.info(
+                "Signal refresh — regime: %s should_trade=%s vix=%.1f",
+                regime.get("trend", "?"),
+                regime.get("should_trade"),
+                regime.get("vix", 0.0),
+            )
+
+            # Invalidate brief data cache so next request picks up latest file
+            from src.services.brief_data_service import (
+                BriefDataService,
+            )  # noqa: PLC0415
+
+            BriefDataService.invalidate_cache()
+
         except Exception as e:
-            logger.error(f"Signal refresh job failed: {e}")
-    
+            logger.error("Signal refresh job failed: %s", e)
+
     async def _job_eod_processing(self):
-        """End of day processing."""
+        """End of day processing: build brief, review portfolio, send Discord summary."""
         logger.info("Starting EOD processing")
         try:
-            # Fetch daily EOD data
+            # 1. Build and save today's brief JSON
+            try:
+                from data.generate_brief import build_brief, save_brief  # noqa: PLC0415
+
+                brief = await asyncio.to_thread(build_brief)
+                if brief:
+                    save_brief(brief)
+                    from src.services.brief_data_service import (
+                        BriefDataService,
+                    )  # noqa: PLC0415
+
+                    BriefDataService.invalidate_cache()
+                    logger.info("EOD brief saved: %s", brief.get("date"))
+            except Exception as exc:
+                logger.warning("EOD brief generation failed (non-fatal): %s", exc)
+
+            # 2. Ingest EOD market data
             result = await self.market_ingestor.run(interval='day')
             self._log_job_result('eod_data', result)
-            
-            # Calculate EOD features
-            # TODO: Implement feature calculation
-            
+
+            # 3. Portfolio review
+            try:
+                from src.algo.portfolio_brain import PortfolioBrain  # noqa: PLC0415
+
+                brain = PortfolioBrain()
+                review = await asyncio.to_thread(brain.review_all)
+                logger.info(
+                    "EOD portfolio review: %s positions reviewed", len(review or [])
+                )
+            except Exception as exc:
+                logger.warning("EOD portfolio review failed (non-fatal): %s", exc)
+
+            # 4. Send EOD summary notification
+            if self.notifier.is_configured:
+                from src.services.regime_service import RegimeService  # noqa: PLC0415
+
+                regime = await asyncio.to_thread(RegimeService.get)
+                summary = {
+                    "type": "eod_summary",
+                    "date": datetime.utcnow().strftime("%Y-%m-%d"),
+                    "regime": regime.get("trend", "unknown"),
+                    "should_trade": regime.get("should_trade", True),
+                    "vix": regime.get("vix", 0.0),
+                }
+                await self.notifier.send_daily_report(summary)
+
         except Exception as e:
-            logger.error(f"EOD processing failed: {e}")
-    
+            logger.error("EOD processing failed: %s", e)
+
     async def _job_historical_backfill(self):
         """Backfill any missing historical data."""
         logger.info("Starting historical backfill")
@@ -317,7 +425,7 @@ class TradingScheduler:
             pass
         except Exception as e:
             logger.error(f"Historical backfill failed: {e}")
-    
+
     async def _job_health_check(self):
         """Run system health check."""
         logger.info("Running health check")
@@ -328,7 +436,7 @@ class TradingScheduler:
                 'jobs_count': len(self.scheduler.get_jobs()),
                 'status': 'healthy'
             }
-            
+
             # Check database connection
             from src.core.database import check_database_health
             try:
@@ -337,58 +445,58 @@ class TradingScheduler:
             except Exception as e:
                 health['database'] = {'status': 'error', 'error': str(e)}
                 health['status'] = 'degraded'
-            
+
             logger.info(f"Health check: {health}")
-            
+
         except Exception as e:
             logger.error(f"Health check failed: {e}")
-    
+
     async def _job_db_maintenance(self):
         """Database maintenance tasks."""
         logger.info("Starting database maintenance")
         try:
             from src.core.database import AsyncSessionLocal
             from sqlalchemy import text
-            
+
             async with AsyncSessionLocal() as session:
                 # Refresh materialized views
                 await session.execute(text("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_daily_returns"))
-                
+
                 # Clean up old data (keep 2 years)
                 await session.execute(text("""
                     DELETE FROM ohlcv 
                     WHERE timestamp < NOW() - INTERVAL '2 years'
                     AND interval = '1min'
                 """))
-                
+
                 # Vacuum analyze
                 await session.execute(text("VACUUM ANALYZE"))
-                
+
                 await session.commit()
-            
+
             logger.info("Database maintenance completed")
-            
+
         except Exception as e:
             logger.error(f"Database maintenance failed: {e}")
-    
+
     # ===== Helper Methods =====
-    
+
     def _is_market_hours(self) -> bool:
         """Check if currently within US market hours."""
         et = pytz.timezone('US/Eastern')
         now = datetime.now(et)
-        
+
         # Check weekday
         if now.weekday() >= 5:  # Saturday or Sunday
             return False
-        
+
         # Check time (9:30 AM - 4:00 PM ET)
         market_open = time(9, 30)
         market_close = time(16, 0)
-        
+
         current_time = now.time()
         return market_open <= current_time <= market_close
-    
+
     def _log_job_result(self, job_name: str, result: Dict[str, Any]):
         """Log job result and maintain history."""
         self._job_history.append({
@@ -396,11 +504,11 @@ class TradingScheduler:
             'timestamp': datetime.utcnow().isoformat(),
             'result': result
         })
-        
+
         # Keep only last 1000 results
         if len(self._job_history) > 1000:
             self._job_history = self._job_history[-1000:]
-        
+
         status = result.get('status', 'unknown')
         records = result.get('records_stored', 0)
         logger.info(f"Job {job_name} completed: status={status}, records={records}")

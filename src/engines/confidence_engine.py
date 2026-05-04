@@ -36,6 +36,8 @@ class ConfidenceBreakdown:
     penalty_reasons: List[str] = field(default_factory=list)
     final: float = 0.5
     label: str = "MODERATE"  # LOW / MODERATE / HIGH / VERY_HIGH
+    historical_win_rate: float = 0.0
+    historical_analog_count: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -62,7 +64,11 @@ class ConfidenceEngine:
     ) -> ConfidenceBreakdown:
         cb = ConfidenceBreakdown()
 
-        cb.thesis = self._thesis_confidence(signal, sector, fit)
+        historical_win_rate = signal.get("historical_win_rate", 0.0)
+        historical_analog_count = signal.get("historical_analog_count", 0)
+        cb.thesis = self._thesis_confidence(
+            signal, sector, fit, historical_win_rate, historical_analog_count
+        )
         cb.timing = self._timing_confidence(signal, sector, fit)
         cb.execution = self._execution_confidence(signal, fit)
         cb.data = self._data_confidence(signal)
@@ -77,9 +83,14 @@ class ConfidenceEngine:
         return cb
 
     def _thesis_confidence(
-        self, sig: Dict, sector: SectorContext, fit: FitScores
+        self,
+        sig: Dict,
+        sector: SectorContext,
+        fit: FitScores,
+        historical_win_rate: float = 0.0,
+        historical_analog_count: int = 0,
     ) -> float:
-        """Is the underlying thesis (setup + sector + leader) sound?"""
+        """Is the underlying thesis (setup + sector + leader) sound? Optionally boost for strong historical win rate."""
         # Combine setup quality, sector fit, leader fit
         raw = (
             fit.setup_quality * 0.4 + fit.sector_fit * 0.3 + fit.leader_fit * 0.3
@@ -90,6 +101,11 @@ class ConfidenceEngine:
             and sector.sector_stage == SectorStage.ACCELERATION
         ):
             raw = min(1.0, raw + 0.1)
+        # Boost for strong historical win rate (only if enough analogs)
+        if historical_analog_count >= 10 and historical_win_rate >= 70.0:
+            raw = min(1.0, raw + 0.12)
+        elif historical_analog_count >= 10 and historical_win_rate >= 60.0:
+            raw = min(1.0, raw + 0.07)
         return max(0, min(1.0, raw))
 
     def _timing_confidence(

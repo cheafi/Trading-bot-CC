@@ -17,15 +17,20 @@ from typing import Any, Dict, List
 logger = logging.getLogger(__name__)
 
 _TRADES_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "..", "data",
+    os.path.dirname(__file__),
+    "..",
+    "..",
+    "data",
     "closed_trades.jsonl",
 )
 
 
 def load_closed_trades(
-    path: str = _TRADES_PATH,
+    path: str = "",
 ) -> List[Dict[str, Any]]:
     """Load closed trades from JSONL file."""
+    if not path:
+        path = _TRADES_PATH  # read at call-time so test monkey-patches work
     trades: List[Dict[str, Any]] = []
     try:
         with open(path, "r") as f:
@@ -94,25 +99,21 @@ def find_similar_cases(
         if t_dir == direction:
             score += 1
 
-        scored.append({
-            "ticker": trade.get("ticker", ""),
-            "strategy": t_strat,
-            "pnl_pct": round(
-                trade.get("pnl_pct", 0), 2
-            ),
-            "r_multiple": round(
-                trade.get("r_multiple", 0), 2
-            ),
-            "regime": t_regime,
-            "grade": t_grade,
-            "hold_days": trade.get("hold_days", 0),
-            "similarity_score": score,
-        })
+        scored.append(
+            {
+                "ticker": trade.get("ticker", ""),
+                "strategy": t_strat,
+                "pnl_pct": round(trade.get("pnl_pct", 0), 2),
+                "r_multiple": round(trade.get("r_multiple", 0), 2),
+                "regime": t_regime,
+                "grade": t_grade,
+                "hold_days": trade.get("hold_days", 0),
+                "similarity_score": score,
+            }
+        )
 
     # Sort by similarity desc, then by recency
-    scored.sort(
-        key=lambda x: x["similarity_score"], reverse=True
-    )
+    scored.sort(key=lambda x: x["similarity_score"], reverse=True)
     return scored[:max_results]
 
 
@@ -136,10 +137,7 @@ def analog_summary(
         "count": len(cases),
         "avg_pnl": round(avg_pnl, 2),
         "win_rate": round(win_rate, 1),
-        "avg_r": round(
-            sum(c["r_multiple"] for c in cases)
-            / len(cases), 2
-        ),
+        "avg_r": round(sum(c["r_multiple"] for c in cases) / len(cases), 2),
         "message": (
             f"{len(cases)} similar trades: "
             f"{win_rate:.0f}% win rate, "
@@ -149,7 +147,16 @@ def analog_summary(
 
 
 _GRADE_ORDER = [
-    "F", "D", "C", "C+", "B-", "B", "B+", "A-", "A", "A+",
+    "F",
+    "D",
+    "C",
+    "C+",
+    "B-",
+    "B",
+    "B+",
+    "A-",
+    "A",
+    "A+",
 ]
 
 

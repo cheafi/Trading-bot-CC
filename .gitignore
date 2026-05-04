@@ -1,49 +1,121 @@
-# ── Python ────────────────────────────────────────────
-__pycache__/
-*.py[cod]
-*$py.class
-*.pyc
-*.so
-*.egg-info/
-.Python
+.pnpm-store
+dist
+out
+out-*
+node_modules
+package-lock.json
+coverage/
+mock/
 
-# ── Environment & Secrets ─────────────────────────────
-.env
-*.env.local
-.venv/
-venv/
-env/
-ENV/
-
-# ── IDE ───────────────────────────────────────────────
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# ── Testing ───────────────────────────────────────────
-.coverage
-.pytest_cache/
-htmlcov/
-
-# ── Build ─────────────────────────────────────────────
-build/
-dist/
-
-# ── Runtime data & models ────────────────────────────
-data/
-logs/
-*.log
-models/
-reports/
-notebooks/
-
-# ── Jupyter ───────────────────────────────────────────
-.ipynb_checkpoints/
-
-# ── macOS ─────────────────────────────────────────────
 .DS_Store
 
-# ── Sprint patch files (development only) ─────────────
-_sprint*_patch.py
-Roo-Code
+# Build outputs
+build/
+.next/
+.nuxt/
+.cache/
+.parcel-cache/
+.webpack/
+.rollup.cache/
+*.tsbuildinfo
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+*.egg
+*.dist-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Data / models (large files)
+data/artifacts/
+data/tasks.db
+data/tasks.db-*
+models/
+*.pkl
+*.joblib
+*.h5
+*.parquet
+*.csv
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# IDEs
+.idea
+
+# Builds
+bin/
+*.vsix
+
+# Local prompts and rules
+/local-prompts
+AGENTS.local.md
+
+# Test environment
+.test_env
+.vscode-test/
+
+# Docs
+docs/_site/
+
+# Dotenv
+.env
+.env.*
+!.env.*.sample
+
+# Logging
+logs
+*.log
+
+# Vite development
+.vite-port
+
+# OMG workflow state (local session data — not for commit)
+.omg/state/
+.omg/plans/
+.omg/project-memory.json
+
+# Turborepo
+.turbo
+**/.turbo/
+tmp/
+.tmp/
+*.tmp
+
+# IntelliJ and Qodo plugin folders
+.idea/
+.qodo/
+.vercel
+.roo/mcp.json
+
+# Qdrant
+qdrant_storage/
+
+# Architect plans
+plans/
+
+roo-cli-*.tar.gz*
+Roo-Code/
+
+# OS and editor
+*.swp
+*.swo
+*~
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/mcp.json

@@ -20,25 +20,27 @@ Usage:
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+
+from dataclasses import dataclass
+from typing import Any, Dict, List
 
 
 @dataclass
 class PositionAction:
     """Action to take on an open position."""
+
     ticker: str = ""
     action: str = "HOLD"  # HOLD / REDUCE / EXIT / TRAIL_STOP
     reason: str = ""
     urgency: str = "LOW"  # LOW / MEDIUM / HIGH / URGENT
     # Sizing guidance
-    reduce_pct: float = 0.0    # % of position to reduce
-    new_stop: float = 0.0      # Updated stop price
+    reduce_pct: float = 0.0  # % of position to reduce
+    new_stop: float = 0.0  # Updated stop price
     # Context
     current_pnl_pct: float = 0.0
     rs_rank: float = 0.0
     days_held: int = 0
-    r_multiple: float = 0.0    # Current P&L in R multiples
+    r_multiple: float = 0.0  # Current P&L in R multiples
 
     def to_dict(self) -> dict:
         d = {
@@ -61,6 +63,7 @@ class PositionAction:
 @dataclass
 class OpenPosition:
     """An open position to evaluate."""
+
     ticker: str
     entry_price: float
     current_price: float
@@ -69,8 +72,8 @@ class OpenPosition:
     shares: int = 0
     entry_date: str = ""
     days_held: int = 0
-    highest_price: float = 0.0   # High water mark since entry
-    atr_pct: float = 2.0         # Current ATR as % of price
+    highest_price: float = 0.0  # High water mark since entry
+    atr_pct: float = 2.0  # Current ATR as % of price
     rs_rank: float = 50.0
     trend_structure: str = ""
     volume_confirms: bool = False
@@ -82,11 +85,11 @@ class PositionManager:
     """
 
     # Configuration
-    TRAIL_ATR_MULTIPLE = 2.0     # Trail stop at 2x ATR
-    PARTIAL_1R_PCT = 33.0        # Take 33% at 1R
-    PARTIAL_2R_PCT = 33.0        # Take 33% at 2R
-    RS_REDUCE_THRESHOLD = 40     # RS below 40 → reduce
-    TIME_STOP_DAYS = 20          # No progress after 20 days → review
+    TRAIL_ATR_MULTIPLE = 2.0  # Trail stop at 2x ATR
+    PARTIAL_1R_PCT = 33.0  # Take 33% at 1R
+    PARTIAL_2R_PCT = 33.0  # Take 33% at 2R
+    RS_REDUCE_THRESHOLD = 40  # RS below 40 → reduce
+    TIME_STOP_DAYS = 20  # No progress after 20 days → review
     STRUCTURE_EXIT_TRENDS = ("strong_downtrend", "downtrend")
 
     def evaluate(
@@ -108,9 +111,7 @@ class PositionManager:
         actions.sort(key=lambda a: _ORDER.get(a.action, 9))
         return actions
 
-    def _evaluate_single(
-        self, pos: OpenPosition, regime: dict
-    ) -> PositionAction:
+    def _evaluate_single(self, pos: OpenPosition, regime: dict) -> PositionAction:
         """Evaluate a single position."""
         action = PositionAction(ticker=pos.ticker)
         action.days_held = pos.days_held
@@ -119,16 +120,13 @@ class PositionManager:
         # P&L
         if pos.entry_price > 0:
             action.current_pnl_pct = (
-                (pos.current_price - pos.entry_price)
-                / pos.entry_price * 100
+                (pos.current_price - pos.entry_price) / pos.entry_price * 100
             )
 
         # R-multiple (if stop is set)
         risk = pos.entry_price - pos.stop_price if pos.stop_price > 0 else 0
         if risk > 0:
-            action.r_multiple = (
-                (pos.current_price - pos.entry_price) / risk
-            )
+            action.r_multiple = (pos.current_price - pos.entry_price) / risk
 
         reasons = []
 
@@ -157,8 +155,7 @@ class PositionManager:
         if regime_trend == "CRISIS" and action.current_pnl_pct < 0:
             action.action = "EXIT"
             action.reason = (
-                f"CRISIS regime + underwater "
-                f"({action.current_pnl_pct:+.1f}%)"
+                f"CRISIS regime + underwater " f"({action.current_pnl_pct:+.1f}%)"
             )
             action.urgency = "HIGH"
             return action
@@ -189,8 +186,7 @@ class PositionManager:
                 action.action = "REDUCE"
                 action.reduce_pct = 50.0
             reasons.append(
-                f"RS rank {pos.rs_rank:.0f} below "
-                f"{self.RS_REDUCE_THRESHOLD}"
+                f"RS rank {pos.rs_rank:.0f} below " f"{self.RS_REDUCE_THRESHOLD}"
             )
             action.urgency = "MEDIUM"
 
@@ -204,13 +200,11 @@ class PositionManager:
                 if action.action == "HOLD":
                     action.action = "TRAIL_STOP"
                 reasons.append(
-                    f"Trail stop → ${trail_stop:.2f} "
-                    f"(from ${pos.stop_price:.2f})"
+                    f"Trail stop → ${trail_stop:.2f} " f"(from ${pos.stop_price:.2f})"
                 )
 
         # ── Check 8: Time stop ──
-        if (pos.days_held >= self.TIME_STOP_DAYS
-                and action.current_pnl_pct < 2.0):
+        if pos.days_held >= self.TIME_STOP_DAYS and action.current_pnl_pct < 2.0:
             if action.action == "HOLD":
                 action.action = "REDUCE"
                 action.reduce_pct = 50.0
@@ -235,11 +229,6 @@ class PositionManager:
             "hold": sum(1 for a in actions if a.action == "HOLD"),
             "reduce": sum(1 for a in actions if a.action == "REDUCE"),
             "exit": sum(1 for a in actions if a.action == "EXIT"),
-            "trail_stop": sum(
-                1 for a in actions if a.action == "TRAIL_STOP"
-            ),
-            "urgent": [
-                a.to_dict() for a in actions
-                if a.urgency in ("URGENT", "HIGH")
-            ],
+            "trail_stop": sum(1 for a in actions if a.action == "TRAIL_STOP"),
+            "urgent": [a.to_dict() for a in actions if a.urgency in ("URGENT", "HIGH")],
         }
