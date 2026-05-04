@@ -163,15 +163,37 @@ class DecisionMapper:
 
         # Position sizing (only for TRADE)
         if d.action == Action.TRADE:
-            atr = fit.raw.get("atr_pct", 0) if hasattr(fit, "raw") else 0
+            # atr_pct is passed via signal dict in _set_entry_exit; use 0 as fallback
             d.position_size_pct, d.size_rationale = self._size(
-                conf, d.risk_level, score, atr_pct=atr
+                conf, d.risk_level, score, atr_pct=0.0
             )
 
-        # Entry trigger + stop/target from structure (Priority 4)
+        return d
+
+    def decide_with_signal(
+        self,
+        fit: FitScores,
+        confidence: ConfidenceBreakdown,
+        sector: SectorContext,
+        regime: Dict[str, Any],
+        signal: Dict[str, Any],
+    ) -> Decision:
+        """
+        Full decision including entry/stop/target from signal data.
+        Called by SectorPipeline which has the signal dict available.
+        """
+        d = self.decide(fit, confidence, sector, regime)
+
+        # ATR-normalized sizing now that we have the signal
+        if d.action == Action.TRADE:
+            atr_pct = signal.get("atr_pct", 0.0)
+            d.position_size_pct, d.size_rationale = self._size(
+                confidence.final, d.risk_level, fit.final_score, atr_pct=atr_pct
+            )
+
+        # Entry trigger + stop/target from signal structure data
         if d.action in (Action.TRADE, Action.WATCH):
-            sig = fit.raw if hasattr(fit, "raw") else {}
-            self._set_entry_exit(d, sig)
+            self._set_entry_exit(d, signal)
 
         return d
 

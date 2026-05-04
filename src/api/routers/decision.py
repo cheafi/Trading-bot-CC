@@ -14,9 +14,63 @@ from typing import Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from src.services.regime_service import get_regime as _fetch_regime
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["decision-product"])
+
+# ════════════════════════════════════════════════════════════════════
+# P2: Module-level engine singletons — instantiated ONCE, persist across requests
+# ════════════════════════════════════════════════════════════════════
+
+_council_instance = None
+_rs_engine_instance = None
+_learning_loop_instance = None
+_meta_instance = None
+
+
+def _council(request=None):
+    """Return ExpertCouncil — prefers app.state singleton over module-level."""
+    global _council_instance
+    # Prefer the app-level singleton (survives HMR, accumulates state)
+    if request is not None:
+        council = getattr(
+            getattr(request, "app", None) and request.app.state, "expert_council", None
+        )
+        if council is not None:
+            return council
+    if _council_instance is None:
+        from src.engines.expert_council import ExpertCouncil
+        _council_instance = ExpertCouncil()
+    return _council_instance
+
+
+def _rs_engine():
+    """RSRankingEngine singleton."""
+    global _rs_engine_instance
+    if _rs_engine_instance is None:
+        from src.engines.rs_ranking import RSRankingEngine
+        _rs_engine_instance = RSRankingEngine()
+    return _rs_engine_instance
+
+
+def _learning_loop():
+    """LearningLoopPipeline singleton."""
+    global _learning_loop_instance
+    if _learning_loop_instance is None:
+        from src.engines.learning_loop import LearningLoopPipeline
+        _learning_loop_instance = LearningLoopPipeline()
+    return _learning_loop_instance
+
+
+def _meta():
+    """MetaEnsemble singleton."""
+    global _meta_instance
+    if _meta_instance is None:
+        from src.engines.meta_ensemble import MetaEnsemble
+        _meta_instance = MetaEnsemble()
+    return _meta_instance
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -157,10 +211,8 @@ async def today_summary(request: Request):
     This is the first thing a trader should see — answers:
     "Should I trade today? What are the best opportunities? What to avoid?"
     """
-    from src.api.main import _get_regime, _scan_live_signals
-
     # 1. Market Regime
-    regime_state = await _get_regime()
+    regime_state = await _fetch_regime(request)
     regime_label = getattr(regime_state, "regime", "NEUTRAL")
     should_trade = getattr(regime_state, "should_trade", True)
     confidence = getattr(regime_state, "confidence", 0.5)
@@ -209,7 +261,8 @@ async def today_summary(request: Request):
     # 2. Market pulse — fetch indices/sectors from live endpoint
     market_pulse = {}
     try:
-        from src.api.main import _LIVE_INDICES, _LIVE_SECTORS
+        _LIVE_INDICES = request.app.state.live_indices
+        _LIVE_SECTORS = request.app.state.live_sectors
 
         mds = request.app.state.market_data
         # Quick lookup from cache if available
@@ -264,14 +317,12 @@ async def today_summary(request: Request):
         logger.debug("Market pulse unavailable: %s", exc)
 
     # 3. Scan signals
-    scanned, scores = await _scan_live_signals(limit=50)
+    scanned, scores = await request.app.state.scan_signals(limit=50)
 
     # 4. Filter funnel
     universe = len(getattr(request.app.state, "_scan_watchlist", []))
     if universe == 0:
-        from src.api.main import _SCAN_WATCHLIST
-
-        universe = len(_SCAN_WATCHLIST)
+        universe = len(getattr(request.app.state, "scan_watchlist", []))
 
     triggered = len(scanned)
     high_score = len([s for s in scanned if s.get("score", 0) >= 6.0])
@@ -288,9 +339,7 @@ async def today_summary(request: Request):
 
     # 5. Top 5 ranked — sector-adaptive pipeline
     # 5. Top 5 ranked — Expert Council pipeline
-    from src.engines.expert_council import ExpertCouncil
-
-    council = ExpertCouncil()
+    council = _council(request)
     regime_ctx = {
         "regime": trend_label,
         "volatility": vol_label,
@@ -550,12 +599,10 @@ async def ranked_opportunities(
 
     Each row answers: What? Why? Why now? Why not? What to do? When to bail?
     """
-    from src.api.main import _get_regime, _scan_live_signals
-
-    regime_state = await _get_regime()
+    regime_state = await _fetch_regime(request)
     should_trade = getattr(regime_state, "should_trade", True)
 
-    scanned, _ = await _scan_live_signals(limit=100)
+    scanned, _ = await request.app.state.scan_signals(limit=100)
 
     # Filter
     if setup_filter:
@@ -564,9 +611,7 @@ async def ranked_opportunities(
         scanned = [s for s in scanned if s.get("score", 0) >= min_score]
 
     # Enrich via ExpertCouncil pipeline
-    from src.engines.expert_council import ExpertCouncil
-
-    council = ExpertCouncil()
+    council = _council(request)
     regime_label = getattr(regime_state, "trend_regime", "sideways")
     trend_map = {
         "uptrend": "UPTREND",
@@ -666,12 +711,10 @@ async def filter_funnel(request: Request):
 
     Shows how 5000+ tickers get narrowed to the actionable few.
     """
-    from src.api.main import _SCAN_WATCHLIST, _scan_live_signals
-
-    scanned, _ = await _scan_live_signals(limit=100)
+    scanned, _ = await request.app.state.scan_signals(limit=100)
 
     # Build funnel stages
-    universe = len(_SCAN_WATCHLIST)
+    universe = len(getattr(request.app.state, "scan_watchlist", []))
     triggered = len(scanned)
     above_6 = len([s for s in scanned if s.get("score", 0) >= 6.0])
     above_7 = len([s for s in scanned if s.get("score", 0) >= 7.0])
@@ -753,17 +796,13 @@ async def signal_card(ticker: str, request: Request):
     - When does this setup fail?
     - Position size hint?
     """
-    from src.api.main import (
-        _compute_4layer_confidence,
-        _compute_indicators,
-        _get_regime,
-    )
+    from src.services.confidence import compute_4layer_confidence as _compute_4layer_confidence
+    from src.services.indicators import compute_indicators as _compute_indicators
     from src.engines.conformal_predictor import ConformalPredictor
-    from src.engines.expert_council import ExpertCouncil
 
     ticker = ticker.upper().strip()
     mds = request.app.state.market_data
-    regime_state = await _get_regime()
+    regime_state = await _fetch_regime(request)
     should_trade = getattr(regime_state, "should_trade", True)
 
     try:
@@ -804,7 +843,7 @@ async def signal_card(ticker: str, request: Request):
         )
 
         # Expert Council (sector-adaptive)
-        council = ExpertCouncil()
+        council = _council(request)
         regime_ctx = {
             "regime": "UPTREND" if trending else "SIDEWAYS",
             "volatility": "NORMAL",
@@ -899,6 +938,9 @@ async def signal_card(ticker: str, request: Request):
             "regime_allows_trading": should_trade,
             "ai_analysis": await _get_ai_signal_analysis(signal),
             "generated_at": (datetime.now(timezone.utc).isoformat() + "Z"),
+            "historical_win_rate": conf.get("historical_win_rate", 0),
+            "historical_analog": conf.get("historical_analog", {}),
+            "historical_analog_count": conf.get("historical_analog_count", 0),
         }
 
     except HTTPException:
@@ -913,11 +955,9 @@ async def signal_card(ticker: str, request: Request):
 
 
 @router.get("/api/v7/regime")
-async def regime_summary():
+async def regime_summary(request: Request):
     """Full regime classification with cross-asset context."""
-    from src.api.main import _get_regime
-
-    regime_state = await _get_regime()
+    regime_state = await _fetch_regime(request)
     trend_map = {
         "uptrend": "UPTREND", "downtrend": "DOWNTREND",
         "sideways": "SIDEWAYS",
@@ -1005,13 +1045,238 @@ async def cross_asset_report():
 @router.get("/api/v7/learning")
 async def learning_summary():
     """Learning loop summary: win rates, regime performance."""
-    from src.engines.learning_loop import LearningLoopPipeline
-
-    loop = LearningLoopPipeline()
+    loop = _learning_loop()
     return {
         "summary": loop.summary(),
         "recent_trades": loop.get_trade_log(limit=20),
         "generated_at": (
             datetime.now(timezone.utc).isoformat() + "Z"
         ),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════
+# /api/v8/portfolios — 3 Model Portfolios vs SPY
+# ══════════════════════════════════════════════════════════════════════
+
+# Module-level singleton so portfolio state persists across requests
+_model_portfolio_engine = None
+
+
+def _get_portfolio_engine():
+    global _model_portfolio_engine
+    if _model_portfolio_engine is None:
+        from src.services.strategy_portfolio_lab import ModelPortfolioEngine
+
+        _model_portfolio_engine = ModelPortfolioEngine()
+    return _model_portfolio_engine
+
+
+@router.get("/api/v8/portfolios")
+async def model_portfolios(request: Request):
+    """3 model portfolios (momentum / breakout / swing) vs SPY.
+
+    Returns live stats for each sleeve:
+      - win rate, avg R, total return, Sharpe, max drawdown
+      - alpha vs SPY
+      - plain-English explanation of why each sleeve is winning/losing
+      - strategy keep/discard verdicts from MetaEnsemble
+    """
+    engine = _get_portfolio_engine()
+
+    # Fetch SPY return for benchmark comparison
+    spy_return = 0.0
+    try:
+        mds = request.app.state.market_data
+        hist = await mds.get_history("SPY", period="1y", interval="1d")
+        if hist is not None and len(hist) >= 2:
+            c = "Close" if "Close" in hist.columns else "close"
+            spy_return = round(
+                (float(hist[c].iloc[-1]) / float(hist[c].iloc[0]) - 1) * 100, 2
+            )
+    except Exception as exc:
+        logger.debug("SPY return unavailable: %s", exc)
+
+    summary = engine.summary(spy_return_pct=spy_return)
+
+    # Strategy keep/discard verdicts from MetaEnsemble
+    strategy_verdicts = []
+    try:
+        meta = _meta()
+        if meta is not None:
+            verdicts = meta.evaluate_strategies()
+            strategy_verdicts = [v.to_dict() for v in verdicts]
+    except Exception as exc:
+        logger.debug("MetaEnsemble verdicts unavailable: %s", exc)
+
+    # Factor combo golden rules (from closed trades)
+    golden_rules = []
+    try:
+        from src.engines.strategy_optimizer import FactorComboTester
+
+        trades = []
+        loop = _learning_loop()
+        if loop is not None:
+            trades = loop.get_trade_log(limit=500)
+        if len(trades) >= 30:
+            tester = FactorComboTester()
+            rules = tester.get_golden_rules(trades, min_oos_sharpe=0.5)
+            golden_rules = [r.to_dict() for r in rules[:10]]
+    except Exception as exc:
+        logger.debug("Golden rules unavailable: %s", exc)
+
+    return {
+        **summary,
+        "strategy_verdicts": strategy_verdicts,
+        "golden_rules": golden_rules,
+        "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
+    }
+
+
+@router.post("/api/v8/portfolios/{sleeve}/trade")
+async def record_portfolio_trade(
+    sleeve: str,
+    ticker: str = Query(..., description="Ticker symbol"),
+    entry_price: float = Query(..., description="Entry price"),
+    exit_price: float = Query(..., description="Exit price"),
+    r_multiple: float = Query(0.0, description="R-multiple achieved"),
+    regime: str = Query("", description="Regime at entry"),
+):
+    """Record a closed trade into a model portfolio sleeve.
+
+    sleeve must be one of: momentum | breakout | swing
+    """
+    from src.services.strategy_portfolio_lab import SLEEVE_NAMES
+
+    if sleeve not in SLEEVE_NAMES:
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            400,
+            f"Unknown sleeve '{sleeve}'. Valid: {SLEEVE_NAMES}",
+        )
+
+    engine = _get_portfolio_engine()
+    engine.record_trade(
+        sleeve=sleeve,
+        ticker=ticker.upper(),
+        entry_price=entry_price,
+        exit_price=exit_price,
+        r_multiple=r_multiple,
+        regime=regime,
+        closed_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+    sleeve_stats = engine.get_sleeve(sleeve)
+    return {
+        "recorded": True,
+        "sleeve": sleeve,
+        "ticker": ticker.upper(),
+        "pnl_pct": (
+            round((exit_price - entry_price) / entry_price * 100, 2)
+            if entry_price > 0
+            else 0
+        ),
+        "sleeve_stats": sleeve_stats.to_dict() if sleeve_stats else {},
+        "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════
+# /api/v8/rs — 3-Layer Relative Strength
+# ══════════════════════════════════════════════════════════════════════
+
+
+@router.get("/api/v8/rs")
+async def three_layer_rs(
+    request: Request,
+    sector: str = Query(None, description="Filter by sector"),
+):
+    """3-layer RS: stock vs SPY → vs sector ETF → vs peers.
+
+    Returns ranked list with rs_vs_spy, rs_vs_sector_etf, rs_vs_peers
+    and a three_layer_verdict for each ticker.
+    """
+    scanned, _ = await request.app.state.scan_signals(limit=100)
+
+    # Build universe from scanned signals
+    universe = []
+    for sig in scanned:
+        universe.append(
+            {
+                "ticker": sig.get("ticker", ""),
+                "sector": sig.get("sector", ""),
+                "market_cap": sig.get("market_cap", ""),
+                "price": sig.get("entry_price", 0),
+                "change_pct": sig.get("change_pct", 0),
+                "return_1w": sig.get("return_1w", 0),
+                "return_1m": sig.get("return_1m", 0),
+                "return_3m": sig.get("return_3m", 0),
+                "return_6m": sig.get("return_6m", 0),
+            }
+        )
+
+    if sector:
+        universe = [
+            u for u in universe if u.get("sector", "").lower() == sector.lower()
+        ]
+
+    # Sector ETF map (standard SPDR ETFs)
+    sector_etf_map = {
+        "Technology": "XLK",
+        "Financials": "XLF",
+        "Healthcare": "XLV",
+        "Energy": "XLE",
+        "Consumer Discretionary": "XLY",
+        "Consumer Staples": "XLP",
+        "Industrials": "XLI",
+        "Materials": "XLB",
+        "Utilities": "XLU",
+        "Real Estate": "XLRE",
+        "Communication Services": "XLC",
+    }
+
+    # Fetch sector ETF returns
+    sector_etf_returns = {}
+    try:
+        mds = request.app.state.market_data
+        for sec_name, etf in sector_etf_map.items():
+            try:
+                hist = await mds.get_history(etf, period="6mo", interval="1d")
+                if hist is not None and len(hist) >= 20:
+                    c = "Close" if "Close" in hist.columns else "close"
+                    prices = hist[c].values.astype(float)
+                    n = len(prices)
+                    sector_etf_returns[sec_name] = {
+                        "return_1w": round(
+                            (prices[-1] / prices[max(n - 5, 0)] - 1) * 100, 2
+                        ),
+                        "return_1m": round(
+                            (prices[-1] / prices[max(n - 21, 0)] - 1) * 100, 2
+                        ),
+                        "return_3m": round(
+                            (prices[-1] / prices[max(n - 63, 0)] - 1) * 100, 2
+                        ),
+                        "return_6m": round((prices[-1] / prices[0] - 1) * 100, 2),
+                    }
+            except Exception:
+                pass
+    except Exception as exc:
+        logger.debug("Sector ETF data unavailable: %s", exc)
+
+    engine = _rs_engine()
+    results = engine.three_layer_rs(
+        universe=universe,
+        sector_etf_returns=sector_etf_returns or None,
+    )
+
+    # Sort by rs_vs_spy descending
+    results.sort(key=lambda x: x.get("rs_vs_spy", 0), reverse=True)
+
+    return {
+        "count": len(results),
+        "sector_filter": sector,
+        "results": results,
+        "sector_etfs_loaded": list(sector_etf_returns.keys()),
+        "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
     }

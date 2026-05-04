@@ -2,8 +2,9 @@
 Sprint 62 Tests — MacroRegimeEngine, FundBuilder, StockVsSPY,
 Scanner renames, Bug fixes
 """
+import os
+import sys
 import unittest
-import sys, os
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -64,6 +65,7 @@ class TestStockVsSPY(unittest.TestCase):
 
     def test_outperforming_stock(self):
         from src.engines.macro_regime_engine import StockVsSPY
+
         # Stock up 20%, SPY up 5%
         stock = [100 + i * 0.4 for i in range(60)]  # 100→124
         spy = [500 + i * 0.5 for i in range(60)]    # 500→530
@@ -200,20 +202,22 @@ class TestScannerRenames(unittest.TestCase):
 
     def test_new_names_exist(self):
         from src.engines.scanner_matrix import (
-            VolumeSurgeScanner,
-            QuietAccumulationScanner,
             HighVolumeLeaderScanner,
+            QuietAccumulationScanner,
+            VolumeSurgeScanner,
         )
+
         self.assertEqual(VolumeSurgeScanner().name, "volume_surge")
         self.assertEqual(QuietAccumulationScanner().name, "quiet_accumulation")
         self.assertEqual(HighVolumeLeaderScanner().name, "high_volume_leader")
 
     def test_backward_compat_aliases(self):
         from src.engines.scanner_matrix import (
-            OptionsFlowScanner,
             InsiderScanner,
             InstitutionalScanner,
+            OptionsFlowScanner,
         )
+
         # Aliases should point to renamed classes
         self.assertEqual(OptionsFlowScanner().name, "volume_surge")
         self.assertEqual(InsiderScanner().name, "quiet_accumulation")
@@ -250,8 +254,14 @@ class TestBugFixes(unittest.TestCase):
     def test_confidence_missing_freshness_penalized(self):
         """Missing data_freshness should NOT default to 'live' (0.9)."""
         from src.engines.confidence_engine import ConfidenceEngine
-        from src.engines.sector_classifier import SectorContext, SectorBucket, SectorStage, LeaderStatus
         from src.engines.fit_scorer import FitScores
+        from src.engines.sector_classifier import (
+            LeaderStatus,
+            SectorBucket,
+            SectorContext,
+            SectorStage,
+        )
+
         engine = ConfidenceEngine()
         sig = {"ticker": "TEST"}  # No data_freshness
         sector = SectorContext(
@@ -285,10 +295,16 @@ class TestBugFixes(unittest.TestCase):
 
     def test_confidence_floor_blocks_trade(self):
         """Very low confidence should force NO_TRADE."""
-        from src.engines.decision_mapper import DecisionMapper, Action
-        from src.engines.sector_classifier import SectorContext, SectorBucket, SectorStage, LeaderStatus
-        from src.engines.fit_scorer import FitScores
         from src.engines.confidence_engine import ConfidenceBreakdown
+        from src.engines.decision_mapper import Action, DecisionMapper
+        from src.engines.fit_scorer import FitScores
+        from src.engines.sector_classifier import (
+            LeaderStatus,
+            SectorBucket,
+            SectorContext,
+            SectorStage,
+        )
+
         mapper = DecisionMapper()
         sector = SectorContext(
             ticker="TEST",
@@ -320,10 +336,12 @@ class TestVCPRegimeCheck(unittest.TestCase):
     """VCP action should be capped at WATCH in adverse regimes."""
 
     def test_vcp_trade_downgraded_in_crisis(self):
-        from src.engines.vcp_intelligence import VCPIntelligence
         from src.engines.sector_classifier import (
-            SectorContext, SectorBucket, LeaderStatus,
+            LeaderStatus,
+            SectorBucket,
+            SectorContext,
         )
+        from src.engines.vcp_intelligence import VCPIntelligence
 
         sector = SectorContext(
             ticker="TEST",
@@ -359,6 +377,7 @@ class TestFloatEqualityFix(unittest.TestCase):
 
     def test_swing_high_near_equal(self):
         import numpy as np
+
         from src.engines.structure_detector import StructureDetector
 
         det = StructureDetector(swing_lookback=2)
@@ -396,11 +415,13 @@ class TestEntryTrigger(unittest.TestCase):
     """Decision should have entry/stop/target instructions."""
 
     def test_trade_has_entry_trigger(self):
-        from src.engines.decision_mapper import DecisionMapper, Action
-        from src.engines.fit_scorer import FitScores
         from src.engines.confidence_engine import ConfidenceBreakdown
+        from src.engines.decision_mapper import Action, DecisionMapper
+        from src.engines.fit_scorer import FitScores
         from src.engines.sector_classifier import (
-            SectorContext, SectorBucket, LeaderStatus,
+            LeaderStatus,
+            SectorBucket,
+            SectorContext,
         )
 
         mapper = DecisionMapper()

@@ -88,11 +88,19 @@ class RegimeRouter:
              entropy (uncertainty), and a should_trade flag.
     """
 
-    # Thresholds for soft classification
-    VIX_LOW = 14.0
-    VIX_MID = 20.0
-    VIX_HIGH = 28.0
-    VIX_CRISIS = 35.0
+    # Thresholds loaded from risk_limits (env-var overrideable); hardcoded fallback for safety
+    try:
+        from src.core.risk_limits import VIX as _VIX  # noqa: PLC0415
+
+        VIX_LOW: float = _VIX.low
+        VIX_MID: float = _VIX.mid
+        VIX_HIGH: float = _VIX.high
+        VIX_CRISIS: float = _VIX.crisis
+    except Exception:
+        VIX_LOW = 14.0
+        VIX_MID = 20.0
+        VIX_HIGH = 28.0
+        VIX_CRISIS = 35.0
 
     BREADTH_BULL = 0.65
     BREADTH_BEAR = 0.35

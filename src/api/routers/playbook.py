@@ -14,6 +14,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import statistics
 from typing import Any, Dict, List
@@ -28,18 +29,18 @@ router = APIRouter(prefix="/api/v7/playbook", tags=["playbook"])
 
 
 async def _real_regime() -> Dict[str, Any]:
-    """Get real regime from the engine (cached 60s in main)."""
+    """Get real regime — uses RegimeService (no import from main.py)."""
     try:
-        from src.api.main import _get_regime
+        from src.services.regime_service import RegimeService  # noqa: PLC0415
 
-        state = await _get_regime()
+        state_dict = await asyncio.to_thread(RegimeService.get)
         return {
-            "should_trade": getattr(state, "should_trade", True),
-            "trend": getattr(state, "trend_regime", "sideways"),
-            "vix": getattr(state, "vix", 18.0),
-            "macro_trend": getattr(state, "trend_regime", "neutral"),
-            "macro_event_nearby": False,
-            "confidence": getattr(state, "confidence", 0.5),
+            "should_trade": state_dict.get("should_trade", True),
+            "trend": state_dict.get("trend", "sideways"),
+            "vix": state_dict.get("vix", 18.0),
+            "macro_trend": state_dict.get("macro_trend", "neutral"),
+            "macro_event_nearby": state_dict.get("macro_event_nearby", False),
+            "confidence": state_dict.get("confidence", 0.5),
         }
     except Exception as e:
         logger.warning("Regime fallback: %s", e)
@@ -53,11 +54,14 @@ async def _real_regime() -> Dict[str, Any]:
 
 
 async def _real_signals() -> List[Dict[str, Any]]:
-    """Get real signals from live scanner (cached 5min in main)."""
+    """Get real signals — uses BriefDataService (no import from main.py)."""
     try:
-        from src.api.main import _scan_live_signals
+        from src.services.brief_data_service import load_brief  # noqa: PLC0415
 
-        recs, _ = await _scan_live_signals(limit=50)
+        brief = await asyncio.to_thread(load_brief)
+        recs = []
+        for section in ("actionable", "watch", "review"):
+            recs.extend(brief.get(section, []))
         return recs
     except Exception as e:
         logger.warning("Signals fallback: %s", e)
@@ -456,10 +460,13 @@ _SECTOR_MAP = {
 
 async def _build_rs_universe() -> List[Dict[str, Any]]:
     """Build RS universe from real yfinance data."""
+    import asyncio
+
     try:
         import yfinance as yf
 
-        data = yf.download(
+        data = await asyncio.to_thread(
+            yf.download,
             _RS_UNIVERSE + ["SPY"],
             period="6mo",
             interval="1wk",
@@ -504,10 +511,13 @@ async def _build_rs_universe() -> List[Dict[str, Any]]:
 
 async def _build_benchmark() -> Dict[str, Any]:
     """Build benchmark returns from SPY."""
+    import asyncio
+
     try:
         import yfinance as yf
 
-        data = yf.download(
+        data = await asyncio.to_thread(
+            yf.download,
             "SPY",
             period="6mo",
             interval="1wk",
@@ -545,10 +555,13 @@ async def _build_benchmark() -> Dict[str, Any]:
 
 async def _build_flow_universe() -> List[Dict[str, Any]]:
     """Build flow universe from real yfinance data."""
+    import asyncio
+
     try:
         import yfinance as yf
 
-        data = yf.download(
+        data = await asyncio.to_thread(
+            yf.download,
             _RS_UNIVERSE,
             period="3mo",
             interval="1d",
@@ -661,6 +674,8 @@ async def backtest_vs_benchmark(
     Uses RS leadership methodology: buy top-5 RS leaders monthly,
     equal-weight, rebalance monthly, compare to buy-and-hold benchmark.
     """
+    import asyncio
+
     try:
         import pandas as pd
         import yfinance as yf
@@ -697,7 +712,8 @@ async def backtest_vs_benchmark(
     tickers = universe + [benchmark]
 
     try:
-        data = yf.download(
+        data = await asyncio.to_thread(
+            yf.download,
             tickers,
             period=period,
             interval="1mo",
@@ -854,13 +870,13 @@ async def backtest_vs_benchmark(
 def _get_signal_for_ticker(
     ticker: str,
 ) -> Dict[str, Any] | None:
-    """Look up a ticker from cached scanner signals."""
+    """Look up a ticker from brief data (no import from main.py)."""
     try:
-        from src.api.main import _scan_cache
+        from src.services.brief_data_service import find_signal  # noqa: PLC0415
 
-        for rec in _scan_cache.get("recs", []):
-            if rec.get("ticker", "").upper() == ticker.upper():
-                return rec
+        sig, _ = find_signal(ticker)
+        if sig:
+            return sig
     except Exception:
         pass
     return {"ticker": ticker, "score": 5, "strategy": "scan"}

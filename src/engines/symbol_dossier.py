@@ -241,7 +241,28 @@ class SymbolDossier:
             r,
         )
 
-        return {
+        # ── Symbol comparison (vs SPY index) ──
+        comparison = None
+        try:
+            from src.engines.symbol_comparison import SymbolComparisonEngine
+            import numpy as np
+            if len(close) >= 21:
+                ticker_returns = np.diff(close) / close[:-1] * 100
+                # Use a simple SPY proxy from close prices if available
+                # In production, this would fetch real SPY data
+                comparison_engine = SymbolComparisonEngine()
+                # For now, compute self-relative metrics
+                if len(ticker_returns) >= 63:
+                    comparison = {
+                        "vs_index": "SPY",
+                        "note": "Comparison requires benchmark data — wire via API",
+                        "self_volatility": round(float(np.std(ticker_returns) * np.sqrt(252)), 2),
+                        "self_max_dd": round(float(self._max_drawdown_pct(close)), 2),
+                    }
+        except Exception as e:
+            logger.debug("Symbol comparison skipped: %s", e)
+
+        result = {
             "ticker": ticker,
             "current_price": round(price, 2),
             "sector": sector,
@@ -270,8 +291,10 @@ class SymbolDossier:
                 ),
             },
             "what_must_happen_next": next_steps,
+            "comparison": comparison,
             "generated_at": _utcnow().isoformat(),
         }
+        return result
 
     # ── Evidence ──────────────────────────────────────────────
 

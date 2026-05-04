@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +25,12 @@ router = APIRouter(prefix="/api/v9", tags=["phase-9"])
 
 
 @router.get("/structure/{ticker}")
-async def get_structure(ticker: str):
+async def get_structure(ticker: str, request: Request):
     """Chart structure analysis: HH/HL, S/R, breakout quality."""
-    from src.api.main import app
     from src.engines.structure_detector import StructureDetector
 
     ticker = ticker.upper().strip()
-    mds = app.state.market_data
+    mds = request.app.state.market_data
     try:
         hist = await mds.get_history(ticker, period="1y", interval="1d")
     except Exception as e:
@@ -55,19 +54,22 @@ async def get_structure(ticker: str):
 
 @router.get("/entry-quality/{ticker}")
 async def get_entry_quality(
-    ticker: str,
+    request: Request,
+    ticker: str = "",
     strategy: str = Query(
         "breakout",
         description="momentum/breakout/swing",
     ),
 ):
     """Entry quality assessment for a ticker."""
-    from src.api.main import _TICKER_SECTOR, _compute_indicators, app
-    from src.engines.entry_quality import EntryQualityEngine
-    from src.engines.structure_detector import StructureDetector
+    from src.engines.entry_quality import EntryQualityEngine  # noqa: PLC0415
+    from src.engines.structure_detector import StructureDetector  # noqa: PLC0415
+    from src.services.indicators import compute_indicators  # noqa: PLC0415
 
     ticker = ticker.upper().strip()
-    mds = app.state.market_data
+    # Sector lookup: use app.state.scan_watchlist sector map if available
+    ticker_sector_map: dict = getattr(request.app.state, "ticker_sector", {})
+    mds = request.app.state.market_data
     try:
         hist = await mds.get_history(ticker, period="1y", interval="1d")
     except Exception as e:
@@ -82,7 +84,7 @@ async def get_entry_quality(
     v = hist["Volume"].values.astype(float)
     i = len(c) - 1
 
-    _ind = _compute_indicators(c, v)
+    _ind = compute_indicators(c, v)
     atr_pct = float(_ind["atr_pct"][i])
     entry = round(float(c[i]), 2)
     stop = round(entry * (1 - atr_pct * 2), 2)
@@ -104,7 +106,7 @@ async def get_entry_quality(
         target,
         sr.nearest_resistance,
         sr.nearest_support,
-        _TICKER_SECTOR.get(ticker, "unknown"),
+        ticker_sector_map.get(ticker, "unknown"),
     )
     return {
         "ticker": ticker,

@@ -266,6 +266,138 @@ class DiscordInteractiveBot:
 
     # ── Signal formatting ─────────────────────────────────────────────
 
+    def format_decision_embed(self, decision: Any) -> Dict[str, Any]:
+        """
+        Build a Discord embed from a DecisionObject or dict.
+        Decision-first layout: action → confidence → levels → why → risk.
+        """
+        # Accept both DecisionObject and plain dict
+        if hasattr(decision, "to_dict"):
+            d = decision.to_dict()
+        elif isinstance(decision, dict):
+            d = decision
+        else:
+            return {}
+
+        ticker = d.get("ticker", "???")
+        action = d.get("action", "WAIT")
+        final_conf = d.get("final_confidence", 50)
+        macro = d.get("macro_regime", "UNKNOWN")
+        rs_state = d.get("rs_state", "NEUTRAL")
+        leadership = d.get("leadership", "")
+        conviction = d.get("conviction_tier", "WAIT")
+        sector = d.get("sector", "—")
+        sector_stage = d.get("sector_stage", "—")
+
+        # Colour by action
+        color = {
+            "TRADE": COLOR_BUY,
+            "WATCH": COLOR_GOLD,
+            "WAIT": COLOR_DARK,
+            "NO_TRADE": COLOR_SELL,
+            "REJECT": COLOR_SELL,
+        }.get(action, COLOR_DARK)
+
+        # Action icon
+        action_icon = {
+            "TRADE": "🟢",
+            "WATCH": "🟡",
+            "WAIT": "⏸",
+            "NO_TRADE": "🛑",
+            "REJECT": "❌",
+        }.get(action, "⬜")
+
+        # Confidence bar (10 blocks)
+        conf_filled = max(0, min(10, round(final_conf / 10)))
+        conf_bar = "█" * conf_filled + "░" * (10 - conf_filled)
+        synthetic_warn = "  ⚠ SYNTHETIC" if d.get("synthetic") else ""
+
+        title = f"{action_icon} {ticker}  ·  {action}  ·  {conviction}"
+        description = (
+            f"`{conf_bar}` **{final_conf}%**{synthetic_warn}\n"
+            f"Macro: **{macro}**  ·  RS: **{rs_state}**  ·  {leadership}"
+        )
+
+        embed = DiscordEmbed(title=title, description=description, color=color)
+
+        # ── Confidence breakdown ──
+        thesis = d.get("thesis_confidence", 50)
+        timing = d.get("timing_confidence", 50)
+        execution = d.get("execution_confidence", 50)
+        data_conf = d.get("data_confidence", 50)
+        conf_detail = (
+            f"Thesis: **{thesis}%**  Timing: **{timing}%**\n"
+            f"Exec: **{execution}%**  Data: **{data_conf}%**"
+        )
+        embed.add_field("📊 Confidence Split", conf_detail, inline=False)
+
+        # ── Levels ──
+        entry = d.get("entry_zone", "—")
+        stop = d.get("invalidation", "—")
+        rr = d.get("rr_ratio")
+        if entry and entry != "—":
+            level_str = f"Entry: `{entry}`  Stop: `{stop}`"
+            if rr:
+                level_str += f"  R:R **{rr}R**"
+            embed.add_field("🎯 Levels", level_str, inline=False)
+
+        # ── Sector context ──
+        embed.add_field(
+            "🏭 Sector",
+            f"{sector}  ·  {d.get('sector_type', '—')}  ·  Stage: **{sector_stage}**",
+            inline=False,
+        )
+
+        # ── Why Now ──
+        why_now = d.get("why_now", "")
+        if why_now and why_now != "—":
+            embed.add_field("⏱ Why Now", why_now[:300], inline=False)
+
+        # ── Why Not Stronger ──
+        why_not = d.get("why_not_stronger", "")
+        if why_not and why_not != "—":
+            embed.add_field("🤔 Why Not Stronger", why_not[:250], inline=False)
+
+        # ── Contradictions ──
+        contras = d.get("contradictions", [])
+        if contras:
+            contra_text = "\n".join(f"⚡ {c}" for c in contras[:3])
+            embed.add_field("⚠ Contradictions", contra_text, inline=False)
+
+        # ── Portfolio fit ──
+        pf = d.get("portfolio_fit", "—")
+        pf_reason = d.get("portfolio_gate_reason", "")
+        pf_icon = {"ALLOWED": "✅", "ALLOWED_SMALL": "🟡", "BLOCKED": "🛑"}.get(pf, "⬜")
+        embed.add_field(
+            "💼 Portfolio Fit",
+            f"{pf_icon} **{pf}**" + (f"  —  {pf_reason}" if pf_reason else ""),
+            inline=False,
+        )
+
+        # ── Peers ──
+        peers = d.get("peer_comparison", [])
+        stronger = d.get("stronger_peer", "")
+        weaker = d.get("weaker_peer", "")
+        if peers:
+            peer_str = "  ".join(
+                f"**{p}**↑" if p == stronger else f"{p}↓" if p == weaker else p
+                for p in peers[:5]
+            )
+            embed.add_field("👥 Sector Peers", peer_str, inline=False)
+
+        embed.set_footer(f"CC Decision Engine · {d.get('generated_at', '')[:16]}")
+        return embed.to_dict()
+
+    async def send_decision_alert(self, decision: Any, channel_webhook: str = "") -> bool:
+        """Send a structured decision alert to Discord."""
+        embed = self.format_decision_embed(decision)
+        if not embed:
+            return False
+        webhook = channel_webhook or os.environ.get("DISCORD_WEBHOOK_URL", "")
+        if not webhook:
+            return False
+        return await self.send_webhook(embeds=[embed])
+
     def format_signal_embed(self, signal: Any) -> Dict[str, Any]:
         """Build a Discord embed dict for a signal — v6 with report generator."""
         # ── v6: use report generator if available ──

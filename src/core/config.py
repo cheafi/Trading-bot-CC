@@ -352,10 +352,70 @@ def get_settings() -> Settings:
     return Settings()
 
 
+# ── Self-learning override file ──────────────────────────────────
+import json as _json
+from pathlib import Path as _Path
+
+_OVERRIDES_PATH = _Path("models/trading_config_overrides.json")
+
+
+def _load_overrides() -> dict:
+    """Load self-learning overrides from JSON file."""
+    if _OVERRIDES_PATH.exists():
+        try:
+            with open(_OVERRIDES_PATH) as f:
+                return _json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def save_trading_config_override(key: str, value) -> None:
+    """Persist a single parameter override from self-learning.
+
+    Called by SelfLearningEngine.apply_adjustments() so that
+    adjustments survive restarts and take effect on next config load.
+    """
+    overrides = _load_overrides()
+    overrides[key] = value
+    _OVERRIDES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(_OVERRIDES_PATH, "w") as f:
+        _json.dump(overrides, f, indent=2)
+    # Invalidate the cached TradingConfig so next access picks up the override
+    try:
+        get_trading_config.cache_clear()
+    except AttributeError:
+        pass  # lru_cache may not have cache_clear in some Python versions
+
+
+class _TradingConfigWithOverrides:
+    """Proxy that applies self-learning overrides on top of base TradingConfig."""
+
+    def __init__(self, base, overrides: dict):
+        self._base = base
+        self._overrides = overrides
+
+    def __getattr__(self, name: str):
+        if name.startswith("_"):
+            return getattr(self._base, name)
+        if name in self._overrides:
+            return self._overrides[name]
+        return getattr(self._base, name)
+
+
 @lru_cache()
-def get_trading_config() -> TradingConfig:
-    """Get cached trading config instance."""
-    return TradingConfig()
+def get_trading_config():
+    """Get trading config with self-learning overrides applied.
+
+    Overrides are stored in models/trading_config_overrides.json
+    and written by SelfLearningEngine. They take precedence over
+    environment variables.
+    """
+    base = TradingConfig()
+    overrides = _load_overrides()
+    if overrides:
+        return _TradingConfigWithOverrides(base, overrides)
+    return base
 
 
 class _LazySettings:

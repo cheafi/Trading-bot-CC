@@ -22,7 +22,6 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 import asyncio
 
-from pydantic import BaseModel, Field, ValidationError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from src.core.config import get_settings

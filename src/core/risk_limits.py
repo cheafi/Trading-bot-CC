@@ -44,7 +44,7 @@ class PortfolioRiskLimits:
         default_factory=lambda: _env_float("RISK_MAX_POSITION_PCT", 0.05)
     )  # 5% max single-name weight
     max_positions: int = field(
-        default_factory=lambda: _env_int("RISK_MAX_POSITIONS", 15)
+        default_factory=lambda: _env_int("RISK_MAX_POSITIONS", 10)
     )
     max_sector_pct: float = field(
         default_factory=lambda: _env_float("RISK_MAX_SECTOR_PCT", 0.30)
@@ -159,9 +159,85 @@ class BacktestDefaults:
 
 
 # ═══════════════════════════════════════════════════════════════
+# Universe Quality Gates
+# ═══════════════════════════════════════════════════════════════
+
+
+@dataclass(frozen=True)
+class UniverseFilterGates:
+    """
+    Hard quality gates applied before any strategy runs.
+    Canonical source for UniverseFilter.DEFAULT_GATES in signal_engine.py.
+    Override via env vars or direct construction.
+    """
+
+    min_price: float = field(
+        default_factory=lambda: _env_float("UNIVERSE_MIN_PRICE", 5.0)
+    )  # No penny stocks
+    min_dollar_vol_20d: float = field(
+        default_factory=lambda: _env_float("UNIVERSE_MIN_DOLLAR_VOL", 5_000_000)
+    )  # $5M daily dollar volume
+    min_avg_volume_20d: int = field(
+        default_factory=lambda: _env_int("UNIVERSE_MIN_AVG_VOL", 200_000)
+    )  # 200K shares/day
+    max_spread_pct: float = field(
+        default_factory=lambda: _env_float("UNIVERSE_MAX_SPREAD_PCT", 1.0)
+    )  # (high-low)/close proxy < 1%
+    min_market_cap: float = field(
+        default_factory=lambda: _env_float("UNIVERSE_MIN_MARKET_CAP", 500_000_000)
+    )  # $500M market cap
+    min_history_days: int = field(
+        default_factory=lambda: _env_int("UNIVERSE_MIN_HISTORY_DAYS", 60)
+    )
+    earnings_blackout_days: int = field(
+        default_factory=lambda: _env_int("UNIVERSE_EARNINGS_BLACKOUT_DAYS", 2)
+    )
+
+    def as_dict(self) -> dict:
+        """Return as dict compatible with UniverseFilter(overrides=...)."""
+        return {
+            "min_price": self.min_price,
+            "min_dollar_vol_20d": self.min_dollar_vol_20d,
+            "min_avg_volume_20d": self.min_avg_volume_20d,
+            "max_spread_pct": self.max_spread_pct,
+            "min_market_cap": self.min_market_cap,
+            "min_history_days": self.min_history_days,
+            "earnings_blackout_days": self.earnings_blackout_days,
+        }
+
+
+# ═══════════════════════════════════════════════════════════════
+# VIX Regime Thresholds
+# ═══════════════════════════════════════════════════════════════
+
+
+@dataclass(frozen=True)
+class VIXThresholds:
+    """
+    VIX-based regime thresholds — canonical source for regime_router.py constants.
+    Override via env vars for paper-trading / stress-testing.
+    """
+
+    low: float = field(
+        default_factory=lambda: _env_float("VIX_LOW", 14.0)
+    )  # Below this → calm / RISK_ON
+    mid: float = field(
+        default_factory=lambda: _env_float("VIX_MID", 20.0)
+    )  # Transition zone
+    high: float = field(
+        default_factory=lambda: _env_float("VIX_HIGH", 28.0)
+    )  # Elevated → reduce size
+    crisis: float = field(
+        default_factory=lambda: _env_float("VIX_CRISIS", 35.0)
+    )  # Crisis → NO TRADE (overrides all signals)
+
+
+# ═══════════════════════════════════════════════════════════════
 # Singleton instances
 # ═══════════════════════════════════════════════════════════════
 
 RISK = PortfolioRiskLimits()
 SIGNAL_THRESHOLDS = SignalThresholds()
 BACKTEST_DEFAULTS = BacktestDefaults()
+UNIVERSE_GATES = UniverseFilterGates()
+VIX = VIXThresholds()

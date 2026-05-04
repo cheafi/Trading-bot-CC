@@ -28,10 +28,17 @@ from src.engines.sector_classifier import (
 
 try:
     import numpy as np
+
     from src.engines.structure_detector import StructureDetector
     _HAS_STRUCTURE = True
 except ImportError:
     _HAS_STRUCTURE = False
+
+try:
+    from src.engines.historical_analog import find_similar_cases, analog_summary
+    _HAS_ANALOG = True
+except ImportError:
+    _HAS_ANALOG = False
 
 logger = logging.getLogger(__name__)
 
@@ -613,6 +620,13 @@ class VCPIntelligence:
             a.size_guidance = "PILOT"
             a.why_not = f"Regime {regime_trend} — wait for improved conditions"
 
+        # Numeric regime_fit cap: weak regime fit also caps at WATCH
+        if context.regime_fit < 4 and a.action == "TRADE":
+            a.action = "WATCH"
+            a.size_guidance = "PILOT"
+            if not a.why_not or a.why_not == "Clean setup":
+                a.why_not = f"Regime fit too low ({context.regime_fit:.1f}/10) — wait for better conditions"
+
         # Laggard override
         lag = sector.leader_status == LeaderStatus.LAGGARD
         if lag and a.action == "TRADE":
@@ -667,5 +681,20 @@ class VCPIntelligence:
             a.invalidation = "Break below last contraction low"
         else:
             a.invalidation = "Break below base support"
+
+        # Historical analogs
+        if _HAS_ANALOG:
+            try:
+                strategy = sig.get("strategy", "vcp")
+                regime_trend = regime.get("trend", "") if isinstance(regime, dict) else ""
+                cases = find_similar_cases(
+                    strategy=strategy,
+                    regime=regime_trend,
+                    grade=a.grade,
+                    direction=sig.get("direction", "LONG"),
+                )
+                a.similar_cases = cases
+            except Exception as e:
+                logger.debug("Analog lookup failed: %s", e)
 
         return a

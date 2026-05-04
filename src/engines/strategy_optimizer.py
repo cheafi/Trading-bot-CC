@@ -19,7 +19,8 @@ import logging
 import math
 import random
 from collections import defaultdict
-from datetime import datetime, timezone, timedelta
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -1106,3 +1107,262 @@ _optimizer = StrategyOptimizer()
 def get_optimizer() -> StrategyOptimizer:
     """Return the global StrategyOptimizer singleton."""
     return _optimizer
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Factor Combo Tester — walk-forward + overfit rejection
+# ─────────────────────────────────────────────────────────────────────────────
+
+_MIN_COMBO_SAMPLES = 30     # hard gate: reject combos with fewer trades
+_OOS_SHARPE_RATIO = 0.5     # reject if OOS Sharpe < IS Sharpe * this ratio
+_IS_SPLIT = 0.6             # 60% in-sample, 40% out-of-sample
+
+
+@dataclass
+class ComboResult:
+    """Result for one factor combination."""
+    factors: Dict[str, Any]
+    n_trades: int
+    is_sharpe: float
+    oos_sharpe: float
+    hit_rate: float
+    avg_r: float
+    max_drawdown: float
+    verdict: str        # STABLE | OVERFIT | INSUFFICIENT_DATA
+    reason: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "factors": self.factors,
+            "n_trades": self.n_trades,
+            "is_sharpe": round(self.is_sharpe, 3),
+            "oos_sharpe": round(self.oos_sharpe, 3),
+            "hit_rate": round(self.hit_rate, 3),
+            "avg_r": round(self.avg_r, 3),
+            "max_drawdown": round(self.max_drawdown, 2),
+            "verdict": self.verdict,
+            "reason": self.reason,
+        }
+
+
+class FactorComboTester:
+    """Tests multi-factor combinations with walk-forward validation.
+
+    Workflow:
+      1. Receive a list of trades, each with factor values attached.
+      2. Generate factor combinations from a defined factor set.
+      3. For each combo, filter trades that match the combo conditions.
+      4. Gate on N >= MIN_COMBO_SAMPLES.
+      5. Split IS/OOS (60/40 chronological).
+      6. Compute Sharpe, hit rate, avg R, drawdown on each split.
+      7. Reject if OOS Sharpe < IS Sharpe * OOS_SHARPE_RATIO (overfit).
+      8. Return stable combos sorted by OOS Sharpe.
+
+    Trade record format (dict)::
+
+        {
+            "pnl_pct": float,
+            "r_multiple": float,
+            "regime": str,          # e.g. "UPTREND"
+            "setup_grade": str,     # e.g. "A", "B+"
+            "vol_ratio": float,     # e.g. 1.8
+            "rs_percentile": int,   # 0-99
+        }
+    """
+
+    def test(
+        self,
+        trades: List[Dict[str, Any]],
+        factor_grid: Optional[Dict[str, List[Any]]] = None,
+    ) -> List[ComboResult]:
+        """Run all factor combinations and return stable ones.
+
+        Parameters
+        ----------
+        trades : list of dicts
+            Each dict must have pnl_pct, r_multiple, and factor fields.
+        factor_grid : dict, optional
+            Maps factor_name → list of threshold values to test.
+            Defaults to a sensible built-in grid.
+
+        Returns
+        -------
+        List of ComboResult sorted by OOS Sharpe descending.
+        """
+        if not trades:
+            return []
+
+        if factor_grid is None:
+            factor_grid = {
+                "regime": ["UPTREND"],
+                "setup_grade": ["A+", "A", "B+"],
+                "vol_ratio_min": [1.2, 1.5, 2.0],
+                "rs_percentile_min": [60, 70, 80],
+            }
+
+        # Generate all single-factor and two-factor combos
+        combos = self._generate_combos(factor_grid)
+        results: List[ComboResult] = []
+
+        for combo in combos:
+            matched = self._filter_trades(trades, combo)
+            n = len(matched)
+
+            if n < _MIN_COMBO_SAMPLES:
+                results.append(ComboResult(
+                    factors=combo,
+                    n_trades=n,
+                    is_sharpe=0.0,
+                    oos_sharpe=0.0,
+                    hit_rate=0.0,
+                    avg_r=0.0,
+                    max_drawdown=0.0,
+                    verdict="INSUFFICIENT_DATA",
+                    reason=f"Only {n} trades — need {_MIN_COMBO_SAMPLES}+",
+                ))
+                continue
+
+            # Chronological IS/OOS split
+            split = int(len(matched) * _IS_SPLIT)
+            is_trades = matched[:split]
+            oos_trades = matched[split:]
+
+            is_stats = self._compute_stats(is_trades)
+            oos_stats = self._compute_stats(oos_trades)
+
+            # Overfit check
+            if (
+                is_stats["sharpe"] > 0
+                and oos_stats["sharpe"] < is_stats["sharpe"] * _OOS_SHARPE_RATIO
+            ):
+                verdict = "OVERFIT"
+                reason = (
+                    f"OOS Sharpe {oos_stats['sharpe']:.2f} < "
+                    f"{_OOS_SHARPE_RATIO:.0%} of IS Sharpe "
+                    f"{is_stats['sharpe']:.2f}"
+                )
+            elif oos_stats["sharpe"] <= 0:
+                verdict = "OVERFIT"
+                reason = f"OOS Sharpe {oos_stats['sharpe']:.2f} ≤ 0"
+            else:
+                verdict = "STABLE"
+                reason = (
+                    f"IS Sharpe {is_stats['sharpe']:.2f}, "
+                    f"OOS Sharpe {oos_stats['sharpe']:.2f}, "
+                    f"n={n}"
+                )
+
+            results.append(ComboResult(
+                factors=combo,
+                n_trades=n,
+                is_sharpe=is_stats["sharpe"],
+                oos_sharpe=oos_stats["sharpe"],
+                hit_rate=oos_stats["hit_rate"],
+                avg_r=oos_stats["avg_r"],
+                max_drawdown=oos_stats["max_drawdown"],
+                verdict=verdict,
+                reason=reason,
+            ))
+
+        # Sort stable combos by OOS Sharpe desc
+        stable = [r for r in results if r.verdict == "STABLE"]
+        stable.sort(key=lambda r: r.oos_sharpe, reverse=True)
+        overfit = [r for r in results if r.verdict == "OVERFIT"]
+        insufficient = [r for r in results if r.verdict == "INSUFFICIENT_DATA"]
+
+        return stable + overfit + insufficient
+
+    def get_golden_rules(
+        self,
+        trades: List[Dict[str, Any]],
+        factor_grid: Optional[Dict[str, List[Any]]] = None,
+        min_oos_sharpe: float = 0.5,
+    ) -> List[ComboResult]:
+        """Return only stable combos with OOS Sharpe >= threshold."""
+        all_results = self.test(trades, factor_grid)
+        return [
+            r for r in all_results
+            if r.verdict == "STABLE" and r.oos_sharpe >= min_oos_sharpe
+        ]
+
+    # ── Helpers ───────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _generate_combos(
+        factor_grid: Dict[str, List[Any]],
+    ) -> List[Dict[str, Any]]:
+        """Generate single-factor combos (two-factor would be O(n²))."""
+        combos: List[Dict[str, Any]] = []
+        for factor, values in factor_grid.items():
+            for val in values:
+                combos.append({factor: val})
+        return combos
+
+    @staticmethod
+    def _filter_trades(
+        trades: List[Dict[str, Any]],
+        combo: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """Filter trades matching all conditions in combo."""
+        matched = []
+        for t in trades:
+            ok = True
+            for factor, threshold in combo.items():
+                if factor == "regime":
+                    if t.get("regime", "") != threshold:
+                        ok = False
+                        break
+                elif factor == "setup_grade":
+                    if t.get("setup_grade", "") not in (
+                        threshold if isinstance(threshold, list) else [threshold]
+                    ):
+                        ok = False
+                        break
+                elif factor.endswith("_min"):
+                    field = factor[:-4]  # strip "_min"
+                    if t.get(field, 0) < threshold:
+                        ok = False
+                        break
+                elif factor.endswith("_max"):
+                    field = factor[:-4]
+                    if t.get(field, 999) > threshold:
+                        ok = False
+                        break
+            if ok:
+                matched.append(t)
+        return matched
+
+    @staticmethod
+    def _compute_stats(trades: List[Dict[str, Any]]) -> Dict[str, float]:
+        """Compute Sharpe, hit rate, avg R, max drawdown for a trade list."""
+        if not trades:
+            return {"sharpe": 0.0, "hit_rate": 0.0, "avg_r": 0.0, "max_drawdown": 0.0}
+
+        pnls = [t.get("pnl_pct", 0.0) for t in trades]
+        rs = [t.get("r_multiple", 0.0) for t in trades]
+        n = len(pnls)
+
+        mean = sum(pnls) / n
+        std = (sum((p - mean) ** 2 for p in pnls) / n) ** 0.5
+        sharpe = (mean / std * (n ** 0.5)) if std > 0 else 0.0
+
+        hit_rate = sum(1 for p in pnls if p > 0) / n
+        avg_r = sum(rs) / n
+
+        # Max drawdown
+        equity = [100.0]
+        for p in pnls:
+            equity.append(equity[-1] * (1 + p / 100))
+        peak = equity[0]
+        dd = 0.0
+        for v in equity:
+            if v > peak:
+                peak = v
+            dd = max(dd, (peak - v) / peak * 100)
+
+        return {
+            "sharpe": round(sharpe, 3),
+            "hit_rate": round(hit_rate, 3),
+            "avg_r": round(avg_r, 3),
+            "max_drawdown": round(-dd, 2),
+        }

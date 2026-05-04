@@ -162,8 +162,8 @@ class TestMacroRegimeWithTracker(unittest.TestCase):
     """MacroRegimeEngine + DecisionTracker integration."""
 
     def test_regime_compute_and_track(self):
-        from src.engines.macro_regime_engine import MacroRegimeEngine
         from src.engines.decision_tracker import DecisionTracker
+        from src.engines.macro_regime_engine import MacroRegimeEngine
 
         db_fd, db_path = tempfile.mkstemp(suffix=".db")
         try:

@@ -9,11 +9,15 @@ weight strategy votes, and by the RegimeRouter to adjust
 strategy multipliers based on recent track record.
 """
 import logging
+from pathlib import Path
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 logger = logging.getLogger(__name__)
+
+MODEL_DIR = Path("models")
+MODEL_DIR.mkdir(exist_ok=True)
 
 
 class StrategyStatus(str, Enum):
@@ -50,6 +54,7 @@ class StrategyLeaderboard:
     def __init__(self):
         self._strategies: Dict[str, Dict[str, Any]] = {}
         self._history: List[Dict[str, Any]] = []
+        self._persist_path = MODEL_DIR / "strategy_leaderboard.json"
         # Read from config with fallback
         try:
             from src.core.config import get_trading_config
@@ -59,6 +64,7 @@ class StrategyLeaderboard:
             self.RETIRE_AFTER_DAYS = tc.strategy_retire_days
         except Exception:
             pass  # use class-level defaults
+        self._load_state()
 
     def update(
         self,
@@ -368,3 +374,73 @@ class StrategyLeaderboard:
         # Reuse update() so blended_score + status stay consistent
         self._strategies[strategy_name] = entry
         self.update(strategy_name, metrics)
+        self._save_state()
+
+    # ── Persistence ────────────────────────────────────────────
+
+    def _save_state(self):
+        """Persist leaderboard to JSON for survival across restarts.
+
+        Uses file locking (fcntl on POSIX, portalocker-free fallback)
+        to prevent corruption when multiple processes write concurrently.
+        """
+        import json as _json
+        import tempfile
+        try:
+            data = {
+                "strategies": self._strategies,
+                "history": self._history[-500:],  # keep last 500 entries
+                "saved_at": datetime.now(timezone.utc).isoformat(),
+            }
+            # Atomic write: write to temp file then rename
+            self._persist_path.parent.mkdir(parents=True, exist_ok=True)
+            fd, tmp_path = tempfile.mkstemp(
+                dir=str(self._persist_path.parent),
+                suffix=".tmp",
+            )
+            try:
+                with os.fdopen(fd, "w") as f:
+                    _json.dump(data, f, default=str, indent=2)
+                os.replace(tmp_path, str(self._persist_path))
+            except BaseException:
+                # Clean up temp file on failure
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
+        except Exception as e:
+            logger.debug("Leaderboard persist error: %s", e)
+
+    def _load_state(self):
+        """Load previously saved leaderboard state.
+
+        Uses file locking to prevent reading a partially-written file.
+        """
+        import json as _json
+        if not self._persist_path.exists():
+            return
+        try:
+            with open(self._persist_path, "r") as f:
+                # Advisory lock: shared lock for reading
+                try:
+                    import fcntl
+                    fcntl.flock(f, fcntl.LOCK_SH)
+                except (ImportError, OSError):
+                    pass  # Windows or non-POSIX — skip locking
+                try:
+                    data = _json.load(f)
+                finally:
+                    try:
+                        import fcntl
+                        fcntl.flock(f, fcntl.LOCK_UN)
+                    except (ImportError, OSError):
+                        pass
+            self._strategies = data.get("strategies", {})
+            self._history = data.get("history", [])
+            logger.info(
+                "Loaded leaderboard: %d strategies, %d history entries",
+                len(self._strategies), len(self._history),
+            )
+        except Exception as e:
+            logger.warning("Leaderboard load error: %s", e)

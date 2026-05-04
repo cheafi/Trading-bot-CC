@@ -44,10 +44,14 @@ _portfolio_risk_budget = PortfolioRiskBudget()
 _professional_kpi = ProfessionalKPI()
 
 
+from src.api.deps import (
+    verify_api_key as _verify_api_key_dep,
+    sanitize_for_json as _sanitize_for_json,
+)
+
 def _get_verify_api_key():
-    """Import verify_api_key lazily to avoid circular imports."""
-    from src.api.main import verify_api_key
-    return verify_api_key
+    """Return the shared verify_api_key dependency."""
+    return _verify_api_key_dep
 
 
 @router.get("/api/v6/signal-decay", tags=["analytics"],
@@ -154,7 +158,6 @@ async def api_model_version():
     }
 
 
-
 # ══════════════════════════════════════════════════════════════════════
 # Sprint 50 — Position Sizing, Concentration Risk, Trade Gate, Decision Journal
 # ══════════════════════════════════════════════════════════════════════
@@ -259,7 +262,6 @@ async def decision_journal_record(
         setup_grade=setup_grade,
     )
     return {"recorded": True, "entry_id": entry.entry_id}
-
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -383,7 +385,6 @@ async def watchlist_remove_endpoint(
     return {"removed": removed, "ticker": ticker}
 
 
-
 # ══════════════════════════════════════════════════════════════════════
 # Sprint 52 — Expert Tracker, Regime Filter, Cross-Asset, Calibration
 # ══════════════════════════════════════════════════════════════════════
@@ -472,7 +473,6 @@ async def confidence_calibration_endpoint(
     }
 
 
-
 # ══════════════════════════════════════════════════════════════════════
 # Sprint 53 — Portfolio Risk Budget, Professional KPI
 # ══════════════════════════════════════════════════════════════════════
@@ -491,7 +491,7 @@ async def portfolio_risk_budget_endpoint(
         positions=positions, equity=equity
     )
     from src.api.main import _sanitize_for_json
-    from src.api.main import _sanitize_for_json
+
     return _sanitize_for_json(exposure.to_dict())
 
 
@@ -501,8 +501,6 @@ async def professional_kpi_endpoint(
 ):
     """Professional trading KPI dashboard — institutional-grade metrics."""
     snapshot = _professional_kpi.compute()
-    from src.api.main import _sanitize_for_json
-    from src.api.main import _sanitize_for_json
     return _sanitize_for_json(snapshot.to_dict())
 
 
@@ -527,3 +525,71 @@ async def professional_kpi_record_cycle(
     _professional_kpi.record_cycle(traded=traded)
     return {"recorded": True, "kpi": _professional_kpi.compute().to_dict()}
 
+
+# ── Sprint 70 — compare, gaps, analogs ───────────────────────────
+
+
+@router.get("/api/v6/compare/{ticker}", tags=["v6-intel"],
+         summary="Stock vs SPY relative strength comparison")
+async def compare_ticker(ticker: str):
+    """Compare a stock's performance vs SPY."""
+    from src.engines.macro_regime_engine import StockVsSPY
+    result = StockVsSPY.compare_ticker(ticker.upper())
+    return _sanitize_for_json(result)
+
+
+@router.get("/api/v6/gaps/{ticker}", tags=["v6-intel"],
+         summary="Gap analysis from recent OHLCV data")
+async def gap_analysis(ticker: str):
+    """Detect gaps for a ticker using yfinance OHLCV."""
+    import asyncio
+
+    try:
+        import yfinance as yf
+        from src.engines.gap_detector import GapDetector
+        df = await asyncio.to_thread(
+            yf.download, ticker.upper(), period="3mo", progress=False
+        )
+        if df.empty:
+            return {"ticker": ticker.upper(), "gaps": [], "error": "no data"}
+        detector = GapDetector()
+        # Build bar dicts expected by GapDetector.detect(bars)
+        opens = df["Open"].dropna().values.flatten().tolist()
+        highs = df["High"].dropna().values.flatten().tolist()
+        lows = df["Low"].dropna().values.flatten().tolist()
+        closes = df["Close"].dropna().values.flatten().tolist()
+        bars = [
+            {"open": o, "high": h, "low": l, "close": c}
+            for o, h, l, c in zip(opens, highs, lows, closes)
+        ]
+        report = detector.detect(bars, ticker=ticker.upper())
+        return {
+            "ticker": ticker.upper(),
+            "gaps": [g.to_dict() for g in report.gaps],
+            "tendency": report.to_dict(),
+            "count": len(report.gaps),
+        }
+    except Exception as e:
+        return {"ticker": ticker.upper(), "gaps": [], "error": str(e)}
+
+
+@router.get("/api/v6/analogs/{ticker}", tags=["v6-intel"],
+         summary="Historical analog matches from closed trades")
+async def historical_analogs(
+    ticker: str,
+    strategy: str = Query("", description="Filter by strategy"),
+    regime: str = Query("", description="Filter by regime"),
+):
+    """Find similar past trades for a ticker/strategy."""
+    from src.engines.historical_analog import find_similar_cases, analog_summary
+    cases = find_similar_cases(
+        strategy=strategy or "vcp",
+        regime=regime,
+        grade="",
+        direction="LONG",
+    )
+    # Filter by ticker if any matches
+    ticker_cases = [c for c in cases if c["ticker"].upper() == ticker.upper()]
+    all_cases = ticker_cases if ticker_cases else cases
+    summary = analog_summary(all_cases)
+    return {"ticker": ticker.upper(), "cases": all_cases, "summary": summary}

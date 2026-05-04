@@ -7,8 +7,8 @@ Sprint 65 Tests
 - Circuit breaker wired into pipeline
 """
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -79,7 +79,8 @@ def test_mean_reversion_fires_rsi_27():
 
 def test_position_manager_hold():
     """Healthy position → HOLD."""
-    from src.engines.position_manager import PositionManager, OpenPosition
+    from src.engines.position_manager import OpenPosition, PositionManager
+
     mgr = PositionManager()
     pos = OpenPosition(
         ticker="AAPL", entry_price=150, current_price=153,
@@ -92,7 +93,8 @@ def test_position_manager_hold():
 
 def test_position_manager_stop_hit():
     """Price below stop → EXIT URGENT."""
-    from src.engines.position_manager import PositionManager, OpenPosition
+    from src.engines.position_manager import OpenPosition, PositionManager
+
     mgr = PositionManager()
     pos = OpenPosition(
         ticker="TSLA", entry_price=200, current_price=140,
@@ -105,7 +107,8 @@ def test_position_manager_stop_hit():
 
 def test_position_manager_1r_reduce():
     """1R profit reached → REDUCE 33%."""
-    from src.engines.position_manager import PositionManager, OpenPosition
+    from src.engines.position_manager import OpenPosition, PositionManager
+
     mgr = PositionManager()
     pos = OpenPosition(
         ticker="NVDA", entry_price=100, current_price=107,
@@ -119,7 +122,8 @@ def test_position_manager_1r_reduce():
 
 def test_position_manager_structure_break():
     """Downtrend structure → EXIT HIGH."""
-    from src.engines.position_manager import PositionManager, OpenPosition
+    from src.engines.position_manager import OpenPosition, PositionManager
+
     mgr = PositionManager()
     pos = OpenPosition(
         ticker="META", entry_price=400, current_price=380,
@@ -132,7 +136,8 @@ def test_position_manager_structure_break():
 
 def test_position_manager_rs_deterioration():
     """RS rank below threshold → REDUCE."""
-    from src.engines.position_manager import PositionManager, OpenPosition
+    from src.engines.position_manager import OpenPosition, PositionManager
+
     mgr = PositionManager()
     pos = OpenPosition(
         ticker="XOM", entry_price=100, current_price=101,
@@ -145,7 +150,8 @@ def test_position_manager_rs_deterioration():
 
 def test_position_manager_trailing_stop():
     """High water mark → trail stop up."""
-    from src.engines.position_manager import PositionManager, OpenPosition
+    from src.engines.position_manager import OpenPosition, PositionManager
+
     mgr = PositionManager()
     pos = OpenPosition(
         ticker="AMZN", entry_price=150, current_price=170,
@@ -159,7 +165,8 @@ def test_position_manager_trailing_stop():
 
 def test_position_manager_time_stop():
     """20+ days held with minimal gain → REDUCE."""
-    from src.engines.position_manager import PositionManager, OpenPosition
+    from src.engines.position_manager import OpenPosition, PositionManager
+
     mgr = PositionManager()
     pos = OpenPosition(
         ticker="WMT", entry_price=100, current_price=101,
@@ -172,7 +179,8 @@ def test_position_manager_time_stop():
 
 def test_position_manager_crisis_exit():
     """CRISIS regime + underwater → EXIT."""
-    from src.engines.position_manager import PositionManager, OpenPosition
+    from src.engines.position_manager import OpenPosition, PositionManager
+
     mgr = PositionManager()
     pos = OpenPosition(
         ticker="SQ", entry_price=100, current_price=90,
@@ -184,7 +192,8 @@ def test_position_manager_crisis_exit():
 
 def test_position_manager_sort_order():
     """EXIT before REDUCE before HOLD."""
-    from src.engines.position_manager import PositionManager, OpenPosition
+    from src.engines.position_manager import OpenPosition, PositionManager
+
     mgr = PositionManager()
     positions = [
         OpenPosition(
@@ -208,9 +217,8 @@ def test_position_manager_sort_order():
 
 def test_position_manager_summary():
     """Summary counts actions correctly."""
-    from src.engines.position_manager import (
-        PositionManager, OpenPosition, PositionAction,
-    )
+    from src.engines.position_manager import PositionAction, PositionManager
+
     mgr = PositionManager()
     actions = [
         PositionAction(ticker="A", action="HOLD"),

@@ -46,16 +46,21 @@ class UniverseFilter:
     These run BEFORE any strategy, saving compute and preventing bad signals.
     """
 
-    # Configurable thresholds (override via config dict)
-    DEFAULT_GATES = {
-        "min_price":           5.0,        # No penny stocks
-        "min_dollar_vol_20d":  5_000_000,  # $5M daily dollar volume minimum
-        "min_avg_volume_20d":  200_000,    # 200K shares/day minimum
-        "max_spread_pct":      1.0,        # Proxy: (high-low)/close < 1%
-        "min_market_cap":      500_000_000, # $500M minimum market cap
-        "min_history_days":    60,          # Need 60 days of clean data
-        "earnings_blackout_days": 2,        # Skip 2 days before earnings
-    }
+    # Configurable thresholds — canonical values live in src/core/risk_limits.UNIVERSE_GATES
+    try:
+        from src.core.risk_limits import UNIVERSE_GATES as _UG  # noqa: PLC0415
+
+        DEFAULT_GATES = _UG.as_dict()
+    except Exception:
+        DEFAULT_GATES = {
+            "min_price": 5.0,
+            "min_dollar_vol_20d": 5_000_000,
+            "min_avg_volume_20d": 200_000,
+            "max_spread_pct": 1.0,
+            "min_market_cap": 500_000_000,
+            "min_history_days": 60,
+            "earnings_blackout_days": 2,
+        }
 
     def __init__(self, overrides: Optional[Dict] = None):
         self.gates = {**self.DEFAULT_GATES, **(overrides or {})}
@@ -1101,6 +1106,135 @@ class SignalEngine:
                 sig.feature_snapshot["calibrated_win_rate"] = (
                     round(cal_wr, 4)
                 )
+
+        # ── 5b. 4D Confidence Engine (per signal) ─────────────
+        # Uses real SectorClassifier + FitScorer data instead of
+        # hardcoded placeholders.
+        try:
+            from src.engines.confidence_engine import ConfidenceEngine
+            from src.engines.fit_scorer import FitScorer
+            from src.engines.sector_classifier import SectorClassifier
+
+            conf_engine = ConfidenceEngine()
+            sector_classifier = SectorClassifier()
+            fit_scorer = FitScorer()
+
+            regime_dict = {
+                "risk_regime": regime.risk.value.lower(),
+                "trend_regime": regime.trend.value.lower(),
+                "volatility_regime": regime.volatility.value.lower(),
+                "should_trade": regime.risk.value.lower() != "crisis",
+                "trend": regime.trend.value.upper(),
+                "vix": getattr(regime, "vix", 18),
+            }
+
+            for sig in raw_signals:
+                try:
+                    feat_row = self._get_feature_row(sig.ticker, features)
+
+                    # Real SectorContext from SectorClassifier
+                    signal_for_sector = {
+                        "ticker": sig.ticker,
+                        "strategy": sig.strategy_id or "",
+                        "sector": getattr(sig, "sector", ""),
+                        "rs_rank": feat_row.get("rs_rank", 50),
+                        "vol_ratio": feat_row.get("relative_volume", 1.0),
+                        "rsi": feat_row.get("rsi_14", 50),
+                        "trend_structure": feat_row.get("trend_structure", ""),
+                        "is_extended": feat_row.get("is_extended", False),
+                        "volume_exhaustion": feat_row.get("volume_exhaustion", False),
+                        "distance_from_50ma_pct": feat_row.get("distance_from_50ma_pct", 0.0),
+                        "base_depth_pct": feat_row.get("base_depth_pct", 0.0),
+                    }
+                    sector_ctx = sector_classifier.classify(sig.ticker, signal_for_sector)
+
+                    # Real FitScores from FitScorer
+                    signal_for_fit = {
+                        "ticker": sig.ticker,
+                        "score": sig.confidence / 10.0,
+                        "risk_reward": feat_row.get("risk_reward", 1.5),
+                        "atr_pct": feat_row.get("atr_pct", 2.0),
+                        "vol_ratio": feat_row.get("relative_volume", 1.0),
+                        "rsi": feat_row.get("rsi_14", 50),
+                        "trend_structure": feat_row.get("trend_structure", ""),
+                        "trend_quality": feat_row.get("trend_quality", 50),
+                        "breakout_quality": feat_row.get("breakout_quality"),
+                        "volume_confirms": feat_row.get("volume_confirms", False),
+                        "volume_exhaustion": feat_row.get("volume_exhaustion", False),
+                        "is_near_support": feat_row.get("is_near_support", False),
+                        "contraction_count": feat_row.get("contraction_count", 0),
+                        "_timing": feat_row.get("timing", "ON_TIME"),
+                    }
+                    fit = fit_scorer.score(signal_for_fit, sector_ctx, regime_dict)
+
+                    signal_dict = {
+                        "historical_win_rate": 0.0,
+                        "historical_analog_count": 0,
+                        "atr_pct": feat_row.get("atr_pct", 2.0),
+                        "data_freshness": "live",
+                        "vol_ratio": feat_row.get("relative_volume", 1.0),
+                    }
+                    cb = conf_engine.compute(signal_dict, sector_ctx, fit, regime_dict)
+                    sig.feature_snapshot = sig.feature_snapshot or {}
+                    sig.feature_snapshot["confidence_4d"] = cb.to_dict()
+                except Exception as e:
+                    self.logger.debug(
+                        f"4D confidence error for {sig.ticker}: {e}"
+                    )
+        except ImportError:
+            self.logger.debug("ConfidenceEngine not available — skipping 4D confidence")
+
+        # ── 5c. Flow Intelligence (per signal) ─────────────────
+        # Uses real OHLCV columns from the features DataFrame instead
+        # of approximated values.
+        try:
+            from src.engines.flow_intelligence import FlowIntelligenceEngine
+
+            flow_engine = FlowIntelligenceEngine()
+            for sig in raw_signals:
+                try:
+                    feat_row = self._get_feature_row(sig.ticker, features)
+                    # Use real OHLCV from features when available
+                    close = feat_row.get("close", 0)
+                    volume = feat_row.get("volume", 0)
+                    avg_vol_20 = feat_row.get("volume_sma_20", volume)
+                    high = feat_row.get("high", close)
+                    low = feat_row.get("low", close)
+                    open_price = feat_row.get("open", close)
+
+                    # Compute prev_close from return_1d if available
+                    ret_1d = feat_row.get("return_1d", 0)
+                    prev_close = close / (1 + ret_1d) if ret_1d != 0 else close
+
+                    flow_data = {
+                        "ticker": sig.ticker,
+                        "volume": volume,
+                        "avg_volume_20": avg_vol_20,
+                        "close": close,
+                        "open": open_price,
+                        "high": high,
+                        "low": low,
+                        "prev_close": prev_close,
+                        "change_pct": ret_1d * 100,
+                        "atr": feat_row.get("atr_14", feat_row.get("atr", 1)),
+                        "rsi": feat_row.get("rsi_14", feat_row.get("rsi", 50)),
+                        # 5-day history for accumulation/distribution layer
+                        "volume_5d": [
+                            feat_row.get(f"volume_{d}d", volume) for d in range(5, 0, -1)
+                        ],
+                        "close_5d": [
+                            feat_row.get(f"close_{d}d", close) for d in range(5, 0, -1)
+                        ],
+                    }
+                    profile = flow_engine.analyze(flow_data)
+                    sig.feature_snapshot = sig.feature_snapshot or {}
+                    sig.feature_snapshot["flow_intelligence"] = profile.to_dict()
+                except Exception as e:
+                    self.logger.debug(
+                        f"Flow intelligence error for {sig.ticker}: {e}"
+                    )
+        except ImportError:
+            self.logger.debug("FlowIntelligenceEngine not available — skipping flow analysis")
 
         # ── 6. Dedup + conflict resolution ─────────────────────
         deduped_signals, resolutions = (

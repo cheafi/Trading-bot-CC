@@ -128,6 +128,58 @@ class VCPScanner(BaseScanner):
         return hits
 
 
+class GapScanner(BaseScanner):
+    """Detect price gaps from OHLCV data using GapDetector."""
+    name = "gap"
+    category = ScannerCategory.PATTERN
+
+    def scan(self, signals, regime) -> List[ScannerHit]:
+        hits = []
+        try:
+            from src.engines.gap_detector import GapDetector
+        except ImportError:
+            return hits
+        detector = GapDetector()
+        for sig in signals:
+            opens = sig.get("opens")
+            closes = sig.get("closes")
+            if not opens or not closes or len(opens) < 5:
+                continue
+            highs = sig.get("highs", closes)
+            lows = sig.get("lows", closes)
+            # Build bar dicts expected by GapDetector.detect(bars)
+            bars = [
+                {"open": o, "high": h, "low": l, "close": c}
+                for o, h, l, c in zip(opens, highs, lows, closes)
+            ]
+            report = detector.detect(bars, ticker=sig.get("ticker", ""))
+            gaps = report.gaps if report else []
+            if not gaps:
+                continue
+            latest = gaps[-1]
+            score = {"BREAKAWAY": 8.0, "EXHAUSTION": 3.0, "COMMON": 5.0}.get(
+                latest.gap_type, 5.0
+            )
+            hits.append(
+                ScannerHit(
+                    scanner_name=self.name,
+                    category=self.category,
+                    ticker=sig.get("ticker", ""),
+                    score=score,
+                    headline=f"{latest.gap_type} gap {latest.gap_pct:+.1f}%",
+                    detail=f"Bar {latest.bar_index}, filled={latest.filled}",
+                    priority=(
+                        ScannerPriority.HIGH
+                        if latest.gap_type == "BREAKAWAY"
+                        else ScannerPriority.NORMAL
+                    ),
+                    is_warning=latest.gap_type == "EXHAUSTION",
+                    metadata={"gap_type": latest.gap_type, "gap_pct": latest.gap_pct},
+                )
+            )
+        return hits
+
+
 class BreakoutScanner(BaseScanner):
     name = "breakout"
     category = ScannerCategory.PATTERN
@@ -395,11 +447,8 @@ class HighVolumeLeaderScanner(BaseScanner):
     def scan(self, signals, regime) -> List[ScannerHit]:
         hits = []
         for sig in signals:
-            # Detect institutional-grade accumulation:
-            # High volume + uptrend + leader RS = big money buying
             vol = sig.get("vol_ratio", 1.0)
             rs = sig.get("rs_rank", 50)
-            trend = sig.get("trend_structure", "")
             vol_confirms = sig.get("volume_confirms", False)
             if vol >= 2.0 and rs >= 80 and vol_confirms:
                 hits.append(
@@ -408,9 +457,15 @@ class HighVolumeLeaderScanner(BaseScanner):
                         category=self.category,
                         ticker=sig.get("ticker", ""),
                         score=8.0,
-                        headline=f"Institutional accumulation ({vol:.1f}x vol, RS {rs})",
+                        headline=(
+                            f"High-vol leader: {vol:.1f}x vol, RS {rs}"
+                        ),
                         priority=ScannerPriority.HIGH,
-                        metadata={"vol_ratio": vol, "rs_rank": rs},
+                        metadata={
+                            "vol_ratio": vol,
+                            "rs_rank": rs,
+                            "data_source": "heuristic_proxy",
+                        },
                     )
                 )
         return hits
@@ -735,6 +790,7 @@ class ScannerMatrix:
         self.scanners: List[BaseScanner] = [
             # Pattern
             VCPScanner(),
+            GapScanner(),
             BreakoutScanner(),
             PullbackScanner(),
             SqueezeScanner(),

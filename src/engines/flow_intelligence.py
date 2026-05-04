@@ -273,8 +273,6 @@ class FlowIntelligenceEngine:
 
         # Layer 4: Options Activity Proxy
         # High IV + high volume + narrow price = options hedging
-        obv_slope = data.get("obv_slope", 0)
-        rsi = data.get("rsi", 50)
         if vol_ratio >= 2.0 and abs(data.get("change_pct", 0)) < 1.0:
             opt_score = min(70, vol_ratio * 12)
             signals.append(
