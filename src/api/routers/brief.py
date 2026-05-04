@@ -165,12 +165,13 @@ async def circuit_breaker_status():
         peak_value=peak,
         period_start_value=period_start,
     )
+    open_positions = len(getattr(engine, "_positions", {}))
     return {
         **result.to_dict(),
         "portfolio": {
             "current_equity": round(current, 2),
             "peak_equity": round(peak, 2),
-            "open_positions": snap.position_count,
+            "open_positions": open_positions,
             "gross_exposure_pct": round(snap.gross_exposure_pct, 1),
         },
     }
