@@ -743,6 +743,16 @@ async def _startup_prewarm():
     except Exception as exc:
         logger.warning("[Prewarm] Regime warm failed (non-fatal): %s", exc)
 
+    # Finally: call live_market() to populate the full overview cache so the
+    # first user request returns data immediately instead of hitting the 503 path.
+    try:
+        global _prewarm_done
+        _prewarm_done = True  # allow live_market() to proceed past 503 guard
+        await live_market()
+        logger.info("[Prewarm] Overview cache populated — dashboard ready")
+    except Exception as exc:
+        logger.warning("[Prewarm] Overview cache fill failed (non-fatal): %s", exc)
+
 
 @asynccontextmanager
 async def _lifespan(app):  # noqa: ARG001
@@ -5980,13 +5990,13 @@ _LIVE_SECTORS = [
 app.state.live_indices = _LIVE_INDICES
 app.state.live_sectors = _LIVE_SECTORS
 _LIVE_ASIA = [
-    ("^N225", "Nikkei 225"),
-    ("^HSI", "Hang Seng"),
-    ("000001.SS", "Shanghai"),
-    ("^KS11", "KOSPI"),
-    ("^TWII", "TAIEX"),
-    ("^AXJO", "ASX 200"),
-    ("^BSESN", "BSE Sensex"),
+    ("EWJ", "Japan (EWJ)"),
+    ("EWH", "Hong Kong (EWH)"),
+    ("MCHI", "China (MCHI)"),
+    ("EWY", "Korea (EWY)"),
+    ("EWT", "Taiwan (EWT)"),
+    ("EWA", "Australia (EWA)"),
+    ("INDA", "India (INDA)"),
 ]
 
 
@@ -5995,6 +6005,7 @@ _market_cache: dict = {}  # {symbol: {"data": {...}, "ts": float}}
 _MARKET_CACHE_TTL = 120  # seconds — cache quotes for 2 minutes
 _market_overview_cache: dict = {"data": None, "ts": 0.0}
 _OVERVIEW_CACHE_TTL = 90  # full market overview cached for 90s
+_prewarm_done: bool = False  # set True when startup prewarm completes
 
 
 async def _mds_quote(symbol: str) -> dict:
@@ -6101,9 +6112,10 @@ async def live_market():
     ):
         return _market_overview_cache["data"]
 
-    # If cache is cold and prewarm hasn't finished yet, return 503 immediately
-    # so the dashboard shows "⏳ loading" instead of blocking 3-5s on the user.
-    if not _market_overview_cache["data"]:
+    # If prewarm hasn't finished yet, return 503 immediately so the dashboard
+    # shows "⏳ warming up" instead of blocking. Once prewarm sets _prewarm_done,
+    # this guard is bypassed and live_market proceeds with the warm cache.
+    if not _prewarm_done and not _market_overview_cache["data"]:
         from fastapi.responses import JSONResponse as _JR
         return _JR(
             status_code=503,
