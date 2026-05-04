@@ -1,0 +1,23 @@
+# Render.com Blueprint — deploy from GitHub
+# https://render.com/docs/blueprint-spec
+services:
+  # ── API / Dashboard ─────────────────────────────────────
+  - type: web
+    name: cc-dashboard
+    runtime: python
+    plan: free
+    buildCommand: pip install --upgrade pip && pip install -r requirements/base.txt -r requirements/api.txt
+    startCommand: uvicorn src.api.main:app --host 0.0.0.0 --port $PORT --workers 1 --timeout-keep-alive 30
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: TRADING_ENV
+        value: paper
+      - key: LOG_LEVEL
+        value: INFO
+      - key: API_SECRET
+        sync: false  # set manually in Render dashboard
+      - key: CORS_ORIGINS
+        value: "https://cc-dashboard.onrender.com"
+    healthCheckPath: /health/live
+    autoDeploy: true

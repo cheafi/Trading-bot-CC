@@ -19,7 +19,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install fastapi "uvicorn[standard]" jinja2 yfinance requests aiohttp httpx python-multipart
+          pip install -r requirements/base.txt -r requirements/api.txt
 
       - name: Smoke test imports
         run: |
