@@ -91,3 +91,58 @@ src/node_modules
 !packages/vscode-shim/
 !packages/cloud/
 !locales/
+
+# ── Python / Trading-bot specific ─────────────────────────────────────────
+# These were missing and caused large build contexts, slowing docker build
+# and making layer diffs (docker commit) expensive.
+
+# Virtual environments — never needed in image (deps installed via pip)
+venv/
+.venv/
+env/
+.env/
+
+# Python bytecode — regenerated at runtime, bloats build context
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyc
+
+# Test files — not needed in production image
+test_*.py
+tests/
+*_test.py
+
+# Data directory — mounted as volume in dev, not baked into image
+# (see docker-compose.dev.yml volumes: ./data:/app/data)
+data/
+
+# Backup / scratch directories
+backup_untracked/
+plans/
+docs/
+
+# Jupyter / notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# Coverage / profiling
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# macOS artifacts
+.DS_Store
+
+# Log files
+*.log
+logs/
+
+# Secrets / local env overrides
+.env.local
+.env.*.local
+secrets/

@@ -757,6 +757,13 @@ async def _startup_prewarm():
 @asynccontextmanager
 async def _lifespan(app):  # noqa: ARG001
     global _breakout_monitor_task
+    # Probe Docker Model Runner (non-blocking — resolves within 5s)
+    try:
+        from src.services.ai_service import get_ai_service as _get_ai
+
+        await _get_ai().probe_local_llm()
+    except Exception:
+        pass
     # Start both background tasks immediately on boot
     _prewarm_task = asyncio.create_task(_startup_prewarm())
     _breakout_monitor_task = asyncio.create_task(_breakout_monitor_loop())
@@ -2402,7 +2409,7 @@ async def get_ml_status():
 
 @app.get("/api/ai/status", tags=["ai"])
 async def get_ai_status():
-    """AI service health and usage stats."""
+    """AI service health and usage stats (includes Docker Model Runner)."""
     try:
         from src.services.ai_service import get_ai_service
 
@@ -2413,6 +2420,24 @@ async def get_ai_status():
         }
     except Exception as exc:
         return {"status": "error", "error": str(exc)}
+
+
+@app.post("/api/ai/probe-local", tags=["ai"])
+async def probe_local_llm():
+    """Re-probe Docker Model Runner (call after models finish downloading)."""
+    try:
+        from src.services.ai_service import get_ai_service
+
+        ai = get_ai_service()
+        ok = await ai.probe_local_llm()
+        return {
+            "local_llm_available": ok,
+            "url": ai.stats["providers"]["local_llm_url"],
+            "fast_model": ai.stats["providers"]["local_model_fast"],
+            "heavy_model": ai.stats["providers"]["local_model_heavy"],
+        }
+    except Exception as exc:
+        return {"local_llm_available": False, "error": str(exc)}
 
 
 # ═══════════════════════════════════════════════════════════════════

@@ -21,6 +21,12 @@ from fastapi import APIRouter, Request
 
 from src.services.regime_service import get_regime
 
+# NOTE: market-intel routes are intentionally unauthenticated.
+# All data is read-only reference data (regime label, VIX, SPY breadth) derived
+# from public market prices — no portfolio state or user data is exposed.
+# If the deployment requires auth on all endpoints, add:
+#   dependencies=[Depends(verify_api_key)]
+# to the APIRouter constructor below.
 router = APIRouter(prefix="/api/market-intel", tags=["market-intel"])
 
 

@@ -33,6 +33,12 @@ services:
       - CC_ENV=development
       - LOG_LEVEL=INFO
       - API_SECRET_KEY=dev-secret-local
+      # Docker Model Runner — local LLM (ai/gemma3n, ai/llama3.3)
+      # model-runner.docker.internal resolves inside Docker Desktop containers
+      - RUNNING_IN_DOCKER=1
+      - LOCAL_LLM_ENABLED=auto
+      - LOCAL_MODEL_FAST=ai/gemma3n:latest
+      - LOCAL_MODEL_HEAVY=ai/llama3.3:latest
     # Resource limits: prevent runaway yfinance calls from hogging the host
     deploy:
       resources:

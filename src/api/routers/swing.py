@@ -39,8 +39,12 @@ async def api_rs_strength(ticker: str):
         import yfinance as yf
 
         stock, spy = await asyncio.gather(
-            asyncio.to_thread(yf.download, ticker, period="6mo", progress=False),
-            asyncio.to_thread(yf.download, "SPY", period="6mo", progress=False),
+            asyncio.to_thread(
+                yf.download, ticker, period="6mo", progress=False, auto_adjust=True
+            ),
+            asyncio.to_thread(
+                yf.download, "SPY", period="6mo", progress=False, auto_adjust=True
+            ),
         )
         if stock.empty or spy.empty:
             return {"ticker": ticker, "error": "no data"}
@@ -61,7 +65,9 @@ async def api_vcp_scan(ticker: str):
     try:
         import yfinance as yf
 
-        df = await asyncio.to_thread(yf.download, ticker, period="1y", progress=False)
+        df = await asyncio.to_thread(
+            yf.download, ticker, period="1y", progress=False, auto_adjust=True
+        )
         if df.empty:
             return {"ticker": ticker, "error": "no data"}
 
@@ -87,8 +93,12 @@ async def api_swing_analysis(ticker: str):
         import yfinance as yf
 
         df, spy_df = await asyncio.gather(
-            asyncio.to_thread(yf.download, ticker, period="1y", progress=False),
-            asyncio.to_thread(yf.download, "SPY", period="1y", progress=False),
+            asyncio.to_thread(
+                yf.download, ticker, period="1y", progress=False, auto_adjust=True
+            ),
+            asyncio.to_thread(
+                yf.download, "SPY", period="1y", progress=False, auto_adjust=True
+            ),
         )
         if df.empty:
             return {"ticker": ticker, "error": "no data"}
@@ -188,7 +198,9 @@ async def api_distribution_days():
     try:
         import yfinance as yf
 
-        spy = await asyncio.to_thread(yf.download, "SPY", period="3mo", progress=False)
+        spy = await asyncio.to_thread(
+            yf.download, "SPY", period="3mo", progress=False, auto_adjust=True
+        )
         if spy.empty:
             return {"error": "no SPY data"}
 
