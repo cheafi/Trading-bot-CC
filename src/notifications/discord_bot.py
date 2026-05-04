@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import socket
 import traceback
 from datetime import datetime, timezone
@@ -47,6 +48,9 @@ import aiohttp
 from src.core.config import get_settings
 from src.notifications._embeds import SignalEmbed
 
+# Configurable API base URL — override with API_BASE_URL env var when using the
+# _cc_instant.py proxy which runs uvicorn on :8001 instead of :8000.
+_API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000").rstrip("/")
 
 def _get_lan_ip() -> str:
     """Auto-detect this machine's LAN IP so phone/Discord links work."""
@@ -7513,7 +7517,6 @@ class DiscordInteractiveBot:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-
 class SwingCommandsMixin:
     """Sprint 47: Swing analysis Discord commands (mixed into bot)."""
     pass
@@ -7652,7 +7655,10 @@ def _register_analytics_commands(bot_instance):
         try:
             import aiohttp
             async with aiohttp.ClientSession() as s:
-                async with s.get("http://localhost:8000/api/v6/meta-ensemble", timeout=aiohttp.ClientTimeout(total=10)) as r:
+                async with s.get(
+                    f"{_API_BASE_URL}/api/v6/meta-ensemble",
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as r:
                     data = await r.json()
             n = data.get("n_samples", 0)
             trained = data.get("is_trained", False)
@@ -7675,7 +7681,10 @@ def _register_analytics_commands(bot_instance):
         try:
             import aiohttp
             async with aiohttp.ClientSession() as s:
-                async with s.get(f"http://localhost:8000/api/v6/trust-card/{ticker.upper()}", timeout=aiohttp.ClientTimeout(total=10)) as r:
+                async with s.get(
+                    f"{_API_BASE_URL}/api/v6/trust-card/{ticker.upper()}",
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as r:
                     data = await r.json()
             badge = data.get("badge", "unknown")
             badge_emoji = {"PAPER": "\U0001f4c4", "VERIFIED": "\u2705", "LIVE": "\U0001f7e2"}.get(badge, "\u2753")
@@ -7696,7 +7705,10 @@ def _register_analytics_commands(bot_instance):
         try:
             import aiohttp
             async with aiohttp.ClientSession() as s:
-                async with s.get("http://localhost:8000/api/v6/model-version", timeout=aiohttp.ClientTimeout(total=10)) as r:
+                async with s.get(
+                    f"{_API_BASE_URL}/api/v6/model-version",
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as r:
                     data = await r.json()
             ver = data.get("model_version", "?")
             msg = f"**Model Version:** `{ver}`"

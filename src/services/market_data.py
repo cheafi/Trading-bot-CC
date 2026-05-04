@@ -283,17 +283,31 @@ class MarketDataService:
         One-shot helper: fetch VIX, SPY return, breadth concurrently.
         Returns dict ready for RegimeRouter.classify().
         """
-        vix, spy_ret, breadth = await asyncio.gather(
+        vix, spy_ret, breadth, spy_hist = await asyncio.gather(
             self.get_vix(),
             self.get_spy_return(20),
             self.get_market_breadth(),
+            self.get_history("SPY", period="1mo", interval="1d"),
         )
+        # Compute 20-day annualised realised vol from SPY daily log-returns (live, no look-ahead)
+        realized_vol = 0.15  # fallback when data unavailable
+        try:
+            import numpy as _np
+            if spy_hist is not None and not spy_hist.empty:
+                c_col = "Close" if "Close" in spy_hist.columns else "close"
+                closes = spy_hist[c_col].dropna().values.astype(float)
+                if len(closes) >= 5:
+                    log_rets = _np.diff(_np.log(closes))[-20:]
+                    if len(log_rets) > 1:
+                        realized_vol = round(float(_np.std(log_rets) * (252 ** 0.5)), 4)
+        except Exception:
+            pass
         return {
             "vix": vix,
             "spy_return_20d": spy_ret,
             "breadth_pct": breadth,
             "hy_spread": 0.0,
-            "realized_vol_20d": 0.15,
+            "realized_vol_20d": realized_vol,
             "vix_term_slope": 0.0,
         }
 

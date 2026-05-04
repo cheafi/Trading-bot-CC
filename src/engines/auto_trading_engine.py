@@ -37,6 +37,7 @@ from src.core.trust_metadata import (
     TrustBadge,
     TrustMetadata,
 )
+from src.core.risk_limits import RISK
 from src.engines.context_assembler import ContextAssembler
 from src.engines.opportunity_ensembler import OpportunityEnsembler
 from src.engines.portfolio_risk_budget import PortfolioRiskBudget
@@ -91,7 +92,7 @@ class RiskCircuitBreaker:
         max_drawdown_pct: float = 10.0,
         max_consecutive_losses: int = 5,
         cooldown_minutes: int = 60,
-        max_open_positions: int = 15,
+        max_open_positions: int = RISK.max_positions,
     ):
         # Configurable thresholds
         self.max_daily_loss_pct = max_daily_loss_pct
@@ -146,9 +147,12 @@ class RiskCircuitBreaker:
             else:
                 self.consecutive_losses = 0
 
-        # Check daily loss
-        if self.daily_pnl < -self.max_daily_loss_pct:
-            self._trigger(f"Daily loss {self.daily_pnl:.1f}% exceeds limit")
+        # Check daily loss — normalize dollar P&L to % before comparing to max_daily_loss_pct
+        daily_pnl_pct = (
+            (self.daily_pnl / self.peak_equity * 100) if self.peak_equity > 0 else 0.0
+        )
+        if daily_pnl_pct < -self.max_daily_loss_pct:
+            self._trigger(f"Daily loss {daily_pnl_pct:.1f}% exceeds limit")
             return False
 
         # Check drawdown

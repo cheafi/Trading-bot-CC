@@ -51,6 +51,7 @@
 ## ✅ Completed (v7.1) — Dashboard & Discord Workflow
 
 ### Dashboard Rebuild — Decision-Oriented UI
+
 - [x] Today / Playbook page — regime, sector playbook, top 5, avoid list, event risk
 - [x] Scanner Hub — all scanners grouped with quick filters, "new today", "high risk"
 - [x] Ranked Opportunities page — 3-column ranking (Discovery/Action/Conviction)
@@ -60,6 +61,7 @@
 - [x] Ops / Health page — jobs, freshness, alert sends, broker mode
 
 ### Discord Workflow Upgrade
+
 - [x] New channels: #today-playbook, #growth-ai, #cyclical-macro, #defensive-rotation, #theme-speculation, #no-trade-alerts
 - [x] New commands: /today, /top, /scan vcp, /why, /why-not, /sector, /compare, /review
 - [x] Alert taxonomy enforcement: URGENT/ACTIONABLE/WATCHLIST/NO_TRADE/MACRO_WARNING
@@ -108,9 +110,17 @@ Inspired by multi-agent trading research workflows (researcher / macro / risk / 
 - [x] Agent orchestrator service (`agent_orchestrator_service.py`) composing ExpertCouncil + regime + risk policy
 - [x] Add dashboard panel for agent debate trace and dissent reasons (`index.html` Command tab right rail)
 - [x] Add decision journal persistence for agent outputs (with outcome linkage) (`/api/v7/agents/run?...persist=true` + `/api/v7/agents/journal`)
-- [ ] Add per-agent reliability tracking by regime (IC/IR style)
-- [ ] Add execution-quality feedback loop (slippage + fill quality into critic agent)
+- [x] Add per-agent reliability tracking by regime (IC/IR style)
+- [x] Add execution-quality feedback loop (slippage + fill quality into critic agent)
 - [ ] Add offline replay harness for agent consensus drift tests
+
+### ✅ Sprint 79 — Agent Reliability + Execution Feedback
+
+- [x] New reliability endpoint (`/api/v7/agents/reliability`) with IC/IR-style scoring and regime breakdown
+- [x] Agent status now includes reliability sample count + top agents snapshot
+- [x] Execution-quality estimator added to orchestrator (expected slippage bps + fill quality score)
+- [x] Critic feedback loop now reacts to execution friction and can downgrade weak TRADE setups
+- [x] Command tab adds agent reliability panel for live operator monitoring
 
 ### ✅ Sprint 78 — ROI Analysis + AI Self-Run Fund Lab
 
@@ -152,6 +162,7 @@ These ideas need more research before committing:
 ## Contributing to the Roadmap
 
 Have a suggestion? Open a GitHub Issue with the `enhancement` label and explain:
+
 - What problem it solves
 - Who benefits
 - Why it matters now vs. later

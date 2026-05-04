@@ -277,16 +277,39 @@ async def market_intel_endpoint(
 ):
     """Multi-dimensional market intelligence for a ticker."""
     try:
-        from src.api.main import live_quote
-        from src.api.main import live_quote
-        q_resp = await live_quote(ticker)
-        q = q_resp.get("quote", {})
-        price = q.get("price", 0)
-        rsi = q.get("rsi", 50)
-        vol_ratio = q.get("volume_ratio", 1.0)
-        above_sma20 = q.get("above_sma20", False)
-        above_sma50 = q.get("above_sma50", False)
-        change_pct = q.get("change_pct", 0)
+        import numpy as _np
+
+        mds = request.app.state.market_data
+        q_raw = await mds.get_quote(ticker)
+        price = float(q_raw.get("price", 0)) if q_raw else 0.0
+        change_pct = float(q_raw.get("change_pct", 0)) if q_raw else 0.0
+        rsi, vol_ratio, above_sma20, above_sma50 = 50.0, 1.0, False, False
+        try:
+            hist = await mds.get_history(ticker, period="3mo", interval="1d")
+            if hist is not None and len(hist) >= 20:
+                c_col = "Close" if "Close" in hist.columns else "close"
+                v_col = "Volume" if "Volume" in hist.columns else "volume"
+                closes = hist[c_col].values.astype(float)
+                volumes = hist[v_col].values.astype(float)
+                sma20 = float(_np.mean(closes[-20:]))
+                sma50 = float(_np.mean(closes[-50:])) if len(closes) >= 50 else sma20
+                above_sma20 = price > sma20
+                above_sma50 = price > sma50
+                if len(closes) >= 15:
+                    deltas = _np.diff(closes)
+                    gains = _np.where(deltas > 0, deltas, 0.0)
+                    losses = _np.where(deltas < 0, -deltas, 0.0)
+                    avg_g = float(_np.mean(gains[-14:])) if len(gains) >= 14 else 1e-10
+                    avg_l = (
+                        float(_np.mean(losses[-14:])) if len(losses) >= 14 else 1e-10
+                    )
+                    rsi = float(100 - 100 / (1 + avg_g / max(avg_l, 1e-10)))
+                if len(volumes) >= 20:
+                    vol_ratio = float(
+                        volumes[-1] / max(float(_np.mean(volumes[-20:])), 1)
+                    )
+        except Exception:
+            pass
         sb = request.app.state.scoreboard
         regime = sb.regime_label if hasattr(sb, "regime_label") else "UNKNOWN"
         report = _market_intel.analyse(
@@ -487,11 +510,7 @@ async def portfolio_risk_budget_endpoint(
     # Build exposure from current positions (or empty if none)
     positions = getattr(request.app.state, "positions", [])
     equity = getattr(request.app.state, "account_value", 100_000)
-    exposure = _portfolio_risk_budget.build_exposure(
-        positions=positions, equity=equity
-    )
-    from src.api.main import _sanitize_for_json
-
+    exposure = _portfolio_risk_budget.build_exposure(positions=positions, equity=equity)
     return _sanitize_for_json(exposure.to_dict())
 
 

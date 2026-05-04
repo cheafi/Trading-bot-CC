@@ -23,6 +23,7 @@ Soft gates (warn but allow with reduced size):
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from src.core.risk_limits import RISK
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -66,7 +67,7 @@ class TradeGate:
 
     def __init__(
         self,
-        max_open_positions: int = 20,
+        max_open_positions: int = RISK.max_positions,
         max_drawdown_pct: float = 0.15,
         max_portfolio_heat: float = 0.06,
         vix_hard_block: float = 45.0,

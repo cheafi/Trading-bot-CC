@@ -97,6 +97,19 @@ async def agent_journal(
     }
 
 
+@router.get("/reliability")
+async def agent_reliability(
+    request: Request,
+    lookback: int = Query(default=600, ge=50, le=5000),
+    min_samples: int = Query(default=5, ge=1, le=50),
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Per-agent reliability by regime (IC/IR style) from persisted journal."""
+    svc = _service_from_state(request)
+    result = await asyncio.to_thread(svc.reliability_report, lookback, min_samples)
+    return sanitize_for_json(result)
+
+
 @router.get("/status")
 async def agent_status(
     request: Request,
@@ -104,10 +117,13 @@ async def agent_status(
 ) -> Dict[str, Any]:
     """Health/status of the agent orchestrator surface."""
     svc = _service_from_state(request)
+    reliability = await asyncio.to_thread(svc.reliability_report, 400, 5)
     return {
         "status": "ok",
         "mode": "deterministic-multi-agent",
         "pipeline": ["research", "macro", "risk", "execution", "critic"],
-        "version": "sprint77",
+        "version": "sprint79",
         "service_loaded": bool(svc),
+        "reliability_samples": reliability.get("resolved_samples", 0),
+        "top_agents": reliability.get("top_agents", []),
     }

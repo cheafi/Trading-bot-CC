@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from src.core.risk_limits import RISK
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -110,7 +111,7 @@ _DEFAULTS = {
     "max_gross_exposure_pct": 90.0,
     "max_sector_weight_pct": 25.0,
     "max_correlation_to_book": 0.85,
-    "max_open_positions": 15,
+    "max_open_positions": RISK.max_positions,
     "max_consecutive_losses": 5,
     "daily_loss_limit_pct": 3.0,
     "min_reliability_samples": 20,

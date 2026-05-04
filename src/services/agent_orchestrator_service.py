@@ -13,12 +13,14 @@ risk limits so output remains auditable and reproducible.
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from src.core.risk_limits import VIX
 from src.engines.decision_persistence import get_journal
 from src.engines.expert_council import ExpertCouncil
+from src.research_lab.slippage import estimate_slippage
 from src.services.brief_data_service import all_brief_tickers, find_signal, load_brief
 from src.services.regime_service import RegimeService
 
@@ -80,6 +82,166 @@ class AgentOrchestratorService:
     def _min_rr_for_tier(tier: str) -> float:
         return 3.0 if tier == "TRADE" else 2.0
 
+    @staticmethod
+    def _clamp(v: float, lo: float, hi: float) -> float:
+        return max(lo, min(hi, v))
+
+    @staticmethod
+    def _numeric_stance(action: str) -> float:
+        a = str(action or "").upper()
+        if a in ("TRADE", "WATCH", "HOLD"):
+            return 1.0
+        if a in ("NO_TRADE", "REJECT", "EXIT", "REDUCE"):
+            return -1.0
+        return 0.0
+
+    def _estimate_execution_quality(
+        self,
+        signal: Dict[str, Any],
+        regime: Dict[str, Any],
+        rr: float,
+    ) -> Dict[str, Any]:
+        """Estimate execution friction for critic feedback loop."""
+        price = float(signal.get("entry_price") or signal.get("entry") or 100.0)
+        stop = float(signal.get("stop_loss") or signal.get("stop") or 0.0)
+        avg_volume = float(
+            signal.get("avg_volume")
+            or signal.get("average_volume")
+            or signal.get("volume")
+            or 1_000_000
+        )
+        vix_now = float(regime.get("vix", 18.0) or 18.0)
+
+        # Spread proxy (bps) from price/liquidity/volatility regime
+        if price < 5:
+            spread_bps = 70.0
+        elif price < 20:
+            spread_bps = 35.0
+        else:
+            spread_bps = 15.0
+
+        if avg_volume < 500_000:
+            spread_bps += 25.0
+        elif avg_volume < 2_000_000:
+            spread_bps += 10.0
+
+        if vix_now >= 28:
+            spread_bps += 15.0
+        elif vix_now >= 20:
+            spread_bps += 8.0
+
+        risk_per_share = abs(price - stop) if stop > 0 else price * 0.02
+        risk_per_share = max(risk_per_share, 0.01)
+        # 1% risk on a 100k reference book => 1,000 USD risk budget
+        size_shares = max(1, int(1000.0 / risk_per_share))
+
+        # estimate_slippage expects avg_spread_pct in percentage points.
+        avg_spread_pct = max(0.01, (spread_bps * 2.0) / 100.0)
+        slip = estimate_slippage(
+            price=max(price, 0.01),
+            size_shares=size_shares,
+            avg_daily_volume=max(1, int(avg_volume)),
+            avg_spread_pct=avg_spread_pct,
+        )
+
+        one_way_bps = float(slip.total_cost_bps)
+        round_trip_bps = float(slip.round_trip_bps)
+
+        # Fill quality score: lower costs + acceptable R:R => higher score.
+        fill_score = 100.0 - one_way_bps * 1.15
+        if rr < 2.0:
+            fill_score -= 12.0
+        fill_score = self._clamp(fill_score, 0.0, 100.0)
+
+        if fill_score >= 70:
+            fill_quality = "HIGH"
+        elif fill_score >= 50:
+            fill_quality = "MEDIUM"
+        else:
+            fill_quality = "LOW"
+
+        return {
+            "expected_slippage_bps": round(one_way_bps, 2),
+            "round_trip_cost_bps": round(round_trip_bps, 2),
+            "spread_proxy_bps": round(spread_bps, 1),
+            "fill_quality": fill_quality,
+            "fill_score": round(fill_score, 1),
+            "estimated_shares": size_shares,
+        }
+
+    @staticmethod
+    def _realized_outcome_signal(entry: Dict[str, Any]) -> Optional[float]:
+        outcome = str(entry.get("outcome") or "").lower()
+        ret = entry.get("actual_return_pct")
+        if ret is not None:
+            try:
+                rv = float(ret)
+                if rv > 0:
+                    return 1.0
+                if rv < 0:
+                    return -1.0
+                return 0.0
+            except Exception:
+                pass
+        if outcome in ("win", "target_hit"):
+            return 1.0
+        if outcome in ("loss", "stopped_out"):
+            return -1.0
+        if outcome in ("scratch", "flat"):
+            return 0.0
+        return None
+
+    def _agent_prediction_signal(self, entry: Dict[str, Any], agent: str) -> float:
+        agents_obj = entry.get("agents")
+        agents: Dict[str, Any] = agents_obj if isinstance(agents_obj, dict) else {}
+        node_obj = agents.get(agent)
+        node: Dict[str, Any] = node_obj if isinstance(node_obj, dict) else {}
+
+        if "stance" in node:
+            try:
+                return self._clamp(float(node.get("stance") or 0.0), -1.0, 1.0)
+            except Exception:
+                pass
+
+        # Backward-compatible fallback for old rows without per-agent stance.
+        action = str(entry.get("final_action") or entry.get("decision_tier") or "")
+        regime_gate = str(entry.get("regime_gate") or "").upper()
+        rr = float(entry.get("rr_multiple") or 0.0)
+
+        if agent == "macro":
+            return 1.0 if regime_gate == "PASS" else -1.0
+        if agent == "risk":
+            return 1.0 if action in ("TRADE", "WATCH") else -1.0
+        if agent == "execution":
+            return 1.0 if rr >= 2.0 else -1.0
+        if agent == "critic":
+            council_obj = entry.get("council")
+            council = council_obj if isinstance(council_obj, dict) else {}
+            agreement = float(council.get("agreement_ratio") or 0.0)
+            return 1.0 if agreement >= 0.6 else -1.0
+        return self._numeric_stance(action)
+
+    def _series_metrics(self, values: List[float]) -> Dict[str, Any]:
+        n = len(values)
+        if n == 0:
+            return {
+                "samples": 0,
+                "ic": None,
+                "ir": None,
+                "hit_rate": None,
+            }
+        mean_v = sum(values) / n
+        var = sum((x - mean_v) ** 2 for x in values) / n
+        std = math.sqrt(var)
+        ir = (mean_v / std) if std > 1e-9 else None
+        hit_rate = len([x for x in values if x > 0]) / n
+        return {
+            "samples": n,
+            "ic": round(mean_v, 4),
+            "ir": round(ir, 4) if ir is not None else None,
+            "hit_rate": round(hit_rate, 4),
+        }
+
     def run_ticker(
         self,
         ticker: str,
@@ -96,6 +258,7 @@ class AgentOrchestratorService:
         action = str(enriched.get("action", "WATCH"))
         rr = float(signal.get("risk_reward") or 0.0)
         conviction_tier = self._conviction_tier(action)
+        action_stance = self._numeric_stance(action)
 
         # Regime gate (hard): should_trade + VIX crisis guard
         vix_now = float(regime.get("vix", 0.0) or 0.0)
@@ -120,6 +283,16 @@ class AgentOrchestratorService:
             conviction_tier = "WATCH"
             notes.append("Regime gate blocked (risk-off or crisis VIX)")
 
+        execution_quality = self._estimate_execution_quality(signal, regime, rr)
+        if execution_quality["fill_quality"] == "LOW":
+            notes.append(
+                f"Execution quality low ({execution_quality['expected_slippage_bps']:.1f} bps one-way)"
+            )
+            if action == "TRADE":
+                action = "WATCH"
+                conviction_tier = "LEADER"
+                notes.append("Downgraded TRADE to WATCH due to execution friction")
+
         explanation = (
             enriched.get("explanation", {})
             if isinstance(enriched.get("explanation"), dict)
@@ -130,27 +303,45 @@ class AgentOrchestratorService:
             "research": {
                 "thesis": explanation.get("why_now", "No clear thesis."),
                 "counterpoint": explanation.get("why_not_stronger", ""),
+                "stance": action_stance,
+                "confidence": round(self._clamp(rr / 3.0, 0.2, 0.95), 3),
             },
             "macro": {
                 "regime": regime.get("regime", "UNKNOWN"),
                 "vix": vix_now,
                 "regime_gate": regime_gate,
+                "stance": 1.0 if regime_gate == "PASS" else -1.0,
+                "confidence": round(self._clamp(1.0 - (vix_now / 45.0), 0.1, 0.95), 3),
             },
             "risk": {
                 "dominant_risk": council_result.verdict.dominant_risk,
                 "risk_level": enriched.get("risk_level", "MEDIUM"),
                 "invalidation": explanation.get("invalidation", ""),
+                "stance": 1.0 if action in ("TRADE", "WATCH", "HOLD") else -1.0,
+                "confidence": round(
+                    self._clamp(council_result.verdict.agreement_ratio, 0.2, 0.95), 3
+                ),
             },
             "execution": {
                 "entry": signal.get("entry") or signal.get("entry_price") or "—",
                 "stop": signal.get("stop") or signal.get("stop_loss") or "—",
                 "target": signal.get("target") or signal.get("take_profit") or "—",
                 "rr_multiple": rr,
+                "expected_slippage_bps": execution_quality["expected_slippage_bps"],
+                "fill_quality": execution_quality["fill_quality"],
+                "fill_score": execution_quality["fill_score"],
+                "stance": 1.0 if execution_quality["fill_score"] >= 50 else -1.0,
+                "confidence": round(execution_quality["fill_score"] / 100.0, 3),
             },
             "critic": {
                 "agreement_ratio": council_result.verdict.agreement_ratio,
                 "dissent_count": len(council_result.verdict.dissenting_views),
                 "notes": notes,
+                "execution_quality": execution_quality,
+                "stance": 1.0 if len(notes) == 0 else -1.0,
+                "confidence": round(
+                    self._clamp(council_result.verdict.agreement_ratio, 0.2, 0.95), 3
+                ),
             },
         }
 
@@ -184,6 +375,7 @@ class AgentOrchestratorService:
                         "final_action": action,
                         "regime_gate": regime_gate,
                         "rr_multiple": rr,
+                        "execution_quality": execution_quality,
                         "agents": agents,
                         "council": {
                             "agreement_ratio": council_result.verdict.agreement_ratio,
@@ -240,6 +432,77 @@ class AgentOrchestratorService:
         if not tickers:
             return {"count": 0, "results": [], "message": "No brief tickers available"}
         return self.run_batch(tickers, limit=limit, persist=persist)
+
+    def reliability_report(
+        self,
+        lookback: int = 600,
+        min_samples: int = 5,
+    ) -> Dict[str, Any]:
+        """
+        Per-agent reliability by regime using IC/IR style statistics.
+
+        IC here is mean directional edge (+1 correct, -1 wrong).
+        IR is mean edge divided by edge volatility.
+        """
+        rows = get_journal().get_recent(limit=max(50, lookback))
+        rows = [
+            r
+            for r in rows
+            if str(r.get("agent_mode") or "") == "deterministic-multi-agent"
+        ]
+
+        resolved = []
+        for r in rows:
+            realized = self._realized_outcome_signal(r)
+            if realized is None:
+                continue
+            resolved.append((r, realized))
+
+        agent_names = ["research", "macro", "risk", "execution", "critic"]
+        agent_report: Dict[str, Any] = {}
+
+        for agent in agent_names:
+            edge_all: List[float] = []
+            by_regime: Dict[str, List[float]] = {}
+
+            for row, realized in resolved:
+                pred = self._agent_prediction_signal(row, agent)
+                if pred == 0.0:
+                    continue
+                edge = pred * realized
+                edge_all.append(edge)
+                regime = str(row.get("regime") or "unknown").upper()
+                by_regime.setdefault(regime, []).append(edge)
+
+            regime_metrics: Dict[str, Any] = {}
+            for regime, values in sorted(by_regime.items()):
+                if len(values) < min_samples:
+                    continue
+                regime_metrics[regime] = self._series_metrics(values)
+
+            summary = self._series_metrics(edge_all)
+            summary["regimes"] = regime_metrics
+            summary["coverage"] = (
+                round((summary["samples"] / len(resolved)), 4) if resolved else 0.0
+            )
+            agent_report[agent] = summary
+
+        ranked = [
+            {"agent": a, **m}
+            for a, m in agent_report.items()
+            if m.get("samples", 0) > 0 and m.get("ic") is not None
+        ]
+        ranked.sort(
+            key=lambda x: (x.get("ic", -999), x.get("samples", 0)), reverse=True
+        )
+
+        return {
+            "mode": "deterministic-multi-agent",
+            "lookback": lookback,
+            "resolved_samples": len(resolved),
+            "agents": agent_report,
+            "top_agents": ranked[:3],
+        }
 
 
 _agent_orchestrator: Optional[AgentOrchestratorService] = None

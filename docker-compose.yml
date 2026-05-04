@@ -1,0 +1,479 @@
+version: '3.8'
+
+# TradingAI Bot - Docker Compose Configuration
+# Production-ready setup with all services
+
+services:
+  # =============================================================================
+  # DATABASE LAYER
+  # =============================================================================
+  
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    container_name: tradingai_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tradingai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+      POSTGRES_DB: ${POSTGRES_DB:-tradingai}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init/postgres:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tradingai}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tradingai_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: tradingai_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD required}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tradingai_network
+
+  # =============================================================================
+  # DATA INGESTION SERVICES
+  # =============================================================================
+
+  market_data_ingestor:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ingestor
+    container_name: tradingai_market_data
+    restart: unless-stopped
+    environment:
+      - SERVICE_NAME=market_data_ingestor
+      - POLYGON_API_KEY=${POLYGON_API_KEY:-}
+      - ALPACA_API_KEY=${ALPACA_API_KEY:-}
+      - ALPACA_SECRET_KEY=${ALPACA_SECRET_KEY:-}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src:ro
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+    networks:
+      - tradingai_network
+
+  news_ingestor:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ingestor
+    container_name: tradingai_news
+    restart: unless-stopped
+    environment:
+      - SERVICE_NAME=news_ingestor
+      - NEWSAPI_KEY=${NEWSAPI_KEY:-}
+      - BENZINGA_API_KEY=${BENZINGA_API_KEY:-}
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY:-}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      # Azure OpenAI
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2025-04-01-preview}
+      # Fallback to standard OpenAI
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src:ro
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+    networks:
+      - tradingai_network
+
+  social_ingestor:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ingestor
+    container_name: tradingai_social
+    restart: unless-stopped
+    environment:
+      - SERVICE_NAME=social_ingestor
+      - X_BEARER_TOKEN=${X_BEARER_TOKEN:-}
+      - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID:-}
+      - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET:-}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      # Azure OpenAI
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2025-04-01-preview}
+      # Fallback to standard OpenAI
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src:ro
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+    networks:
+      - tradingai_network
+
+  # =============================================================================
+  # PROCESSING LAYER
+  # =============================================================================
+
+  feature_engine:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.engine
+    container_name: tradingai_features
+    restart: unless-stopped
+    environment:
+      - SERVICE_NAME=feature_engine
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src:ro
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+    networks:
+      - tradingai_network
+
+  signal_engine:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.engine
+    container_name: tradingai_signals
+    restart: unless-stopped
+    environment:
+      - SERVICE_NAME=signal_engine
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      # Azure OpenAI
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2025-04-01-preview}
+      # Fallback to standard OpenAI
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      feature_engine:
+        condition: service_started
+    volumes:
+      - ./src:/app/src:ro
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+    networks:
+      - tradingai_network
+
+  # =============================================================================
+  # SCHEDULER (Airflow-lite or APScheduler)
+  # =============================================================================
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.scheduler
+    container_name: tradingai_scheduler
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      # Azure OpenAI
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2025-04-01-preview}
+      # Fallback to standard OpenAI
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # Deprecated: Slack/Email (kept for compatibility)
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
+      - EMAIL_SMTP_HOST=${EMAIL_SMTP_HOST:-}
+      - EMAIL_SMTP_PORT=${EMAIL_SMTP_PORT:-587}
+      - EMAIL_FROM=${EMAIL_FROM:-}
+      - EMAIL_PASSWORD=${EMAIL_PASSWORD:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - TZ=America/New_York
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src:ro
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - ./reports:/app/reports
+    networks:
+      - tradingai_network
+
+  # =============================================================================
+  # API LAYER
+  # =============================================================================
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: tradingai_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - API_SECRET_KEY=${API_SECRET_KEY:?API_SECRET_KEY required}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src:ro
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - tradingai_network
+
+  # =============================================================================
+  # DISCORD BOT (Interactive Trading Assistant)
+  # =============================================================================
+
+  discord_bot:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.discord
+    container_name: tradingai_discord
+    restart: unless-stopped
+    command: ["python", "-m", "src.notifications.discord_bot"]
+    environment:
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+      - DISCORD_CHANNEL_NAME=${DISCORD_CHANNEL_NAME:-Trading CC}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - ALPACA_API_KEY=${ALPACA_API_KEY:-}
+      - ALPACA_SECRET_KEY=${ALPACA_SECRET_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - TZ=America/New_York
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src:ro
+      - ./logs:/app/logs
+    networks:
+      - tradingai_network
+
+  # =============================================================================
+  # AUTO TRADING ENGINE (24/7 Autonomous Execution)
+  # =============================================================================
+
+  auto_trader:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.engine
+    container_name: tradingai_auto_trader
+    restart: unless-stopped
+    command: ["python", "-m", "src.engines.main"]
+    environment:
+      - SERVICE_NAME=auto_trading_engine
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - ALPACA_API_KEY=${ALPACA_API_KEY:-}
+      - ALPACA_SECRET_KEY=${ALPACA_SECRET_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2025-04-01-preview}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FORMAT=json
+      - DRY_RUN=${DRY_RUN:-false}
+      - CYCLE_INTERVAL=${CYCLE_INTERVAL:-60}
+      - TZ=America/New_York
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      signal_engine:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,time; assert time.time()-os.path.getmtime('/tmp/engine_heartbeat')<120"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    volumes:
+      - ./src:/app/src:ro
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - ./models:/app/models
+    networks:
+      - tradingai_network
+
+  # =============================================================================
+  # MONITORING STACK
+  # =============================================================================
+
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: tradingai_prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    networks:
+      - tradingai_network
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: tradingai_grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:?Set GRAFANA_USER in .env}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?Set GRAFANA_PASSWORD in .env}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - tradingai_network
+
+  # =============================================================================
+  # DEVELOPMENT TOOLS (optional)
+  # =============================================================================
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: tradingai_pgadmin
+    restart: unless-stopped
+    profiles:
+      - dev
+    ports:
+      - "5050:80"
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL:?Set PGADMIN_EMAIL in .env}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD:?Set PGADMIN_PASSWORD in .env}
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - tradingai_network
+
+  jupyter:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.jupyter
+    container_name: tradingai_jupyter
+    restart: unless-stopped
+    profiles:
+      - dev
+    ports:
+      - "8888:8888"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN:?Set JUPYTER_TOKEN in .env}
+    volumes:
+      - ./notebooks:/home/jovyan/notebooks
+      - ./src:/home/jovyan/src:ro
+      - ./data:/home/jovyan/data
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - tradingai_network
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+
+networks:
+  tradingai_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
