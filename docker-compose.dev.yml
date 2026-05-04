@@ -1,0 +1,30 @@
+version: '3.8'
+
+# Dev-only compose — API only, no postgres/redis required
+# Usage: docker compose -f docker-compose.dev.yml up --build
+# Dashboard: http://localhost:8000
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: cc_api_dev
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+      - CC_ENV=development
+      - LOG_LEVEL=INFO
+      - API_SECRET_KEY=dev-secret-local
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
