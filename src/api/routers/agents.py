@@ -36,11 +36,12 @@ def _service_from_state(request: Request):
 async def run_agent_for_ticker(
     request: Request,
     ticker: str,
+    persist: bool = Query(default=True, description="Persist run to decision journal"),
     _: bool = Depends(verify_api_key),
 ):
     """Run multi-agent deliberation for one ticker."""
     svc = _service_from_state(request)
-    result = await asyncio.to_thread(svc.run_ticker, ticker)
+    result = await asyncio.to_thread(svc.run_ticker, ticker, None, persist)
     return sanitize_for_json(result)
 
 
@@ -51,6 +52,9 @@ async def run_agent_batch(
         default="AAPL,MSFT,NVDA", description="Comma-separated tickers"
     ),
     limit: int = Query(default=10, ge=1, le=30),
+    persist: bool = Query(
+        default=False, description="Persist batch results to decision journal"
+    ),
     _: bool = Depends(verify_api_key),
 ):
     """Run multi-agent deliberation for a batch of tickers."""
@@ -58,7 +62,7 @@ async def run_agent_batch(
     ticker_list: List[str] = [
         t.strip().upper() for t in tickers.split(",") if t.strip()
     ]
-    result = await asyncio.to_thread(svc.run_batch, ticker_list, limit)
+    result = await asyncio.to_thread(svc.run_batch, ticker_list, limit, persist)
     return sanitize_for_json(result)
 
 
@@ -66,12 +70,31 @@ async def run_agent_batch(
 async def run_agent_today(
     request: Request,
     limit: int = Query(default=10, ge=1, le=30),
+    persist: bool = Query(
+        default=False, description="Persist today batch to decision journal"
+    ),
     _: bool = Depends(verify_api_key),
 ):
     """Run multi-agent deliberation for today's brief universe."""
     svc = _service_from_state(request)
-    result = await asyncio.to_thread(svc.run_today, limit)
+    result = await asyncio.to_thread(svc.run_today, limit, persist)
     return sanitize_for_json(result)
+
+
+@router.get("/journal")
+async def agent_journal(
+    limit: int = Query(default=20, ge=1, le=200),
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Recent persisted agent runs from decision journal."""
+    from src.engines.decision_persistence import get_journal
+
+    rows = get_journal().get_recent(limit=limit)
+    agent_rows = [r for r in rows if r.get("agent_mode") == "deterministic-multi-agent"]
+    return {
+        "count": len(agent_rows),
+        "entries": agent_rows[-limit:],
+    }
 
 
 @router.get("/status")
@@ -80,10 +103,11 @@ async def agent_status(
     _: bool = Depends(verify_api_key),
 ) -> Dict[str, Any]:
     """Health/status of the agent orchestrator surface."""
-    _ = _service_from_state(request)
+    svc = _service_from_state(request)
     return {
         "status": "ok",
         "mode": "deterministic-multi-agent",
         "pipeline": ["research", "macro", "risk", "execution", "critic"],
         "version": "sprint77",
+        "service_loaded": bool(svc),
     }
