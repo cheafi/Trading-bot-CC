@@ -127,6 +127,11 @@ Inspired by multi-agent trading research workflows (researcher / macro / risk / 
 - [x] **ARCH-health**: Extract 8 health/status/metrics routes → `src/api/routers/health.py`; `health_ready` uses `request.app.state` cleanly
 - [x] **ARCH-count**: `main.py` inline routes: 118 (Sprint 80) → 113 (Sprint 81) → 99 (Sprint 82); −19 this sprint
 
+### ✅ Sprint 83 — Test Coverage + Git Health
+
+- [x] **TEST**: `test_sprint83.py` — 8 tests covering Sprint 81+82: module imports, `RegimeService.aget()` coroutine contract, router prefix/route-count assertions (market_intel 5, broker 6, health 8), `TradingConfig` ↔ `RISK` alignment, cache speed — 8/8 pass
+- [x] **GIT-HEALTH**: Purged 100+ bad remote refs (Roo Code artifact) via `git remote prune origin`; removed space-named log files from `.git/logs/refs/`; set `gc.auto=0` to prevent background repack failures — commits now run silently
+
 ### ✅ Sprint 80 — Safety Hardening + Architecture Correctness
 
 - [x] **RISK-1**: Fix `RiskCircuitBreaker.daily_pnl` unit mismatch — normalize to `%` via `(daily_pnl / peak_equity * 100)` before comparing to `max_daily_loss_pct` (was silently comparing raw dollars to 3.0% float)
