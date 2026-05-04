@@ -12619,3 +12619,11 @@ try:
     app.include_router(decision_pipeline_router)
 except Exception:
     logger.exception("[Router] Failed to load decision_pipeline router")
+
+# Sprint 77 — Agentic deliberation surfaces (research/macro/risk/execution/critic)
+try:
+    from src.api.routers.agents import router as agents_router
+
+    app.include_router(agents_router)
+except Exception:
+    logger.exception("[Router] Failed to load agents router")
