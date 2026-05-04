@@ -684,11 +684,74 @@ async def _breakout_monitor_loop():
             await asyncio.sleep(300)
 
 
+async def _startup_prewarm():
+    """Pre-warm market data cache at startup so first user request is instant.
+
+    Fetches all symbols used by /api/live/market in parallel, then warms
+    the regime cache. Runs concurrently — server is ready before this finishes,
+    but the cache will be hot within ~3s of boot.
+    """
+    await asyncio.sleep(0.5)  # let uvicorn finish binding the port first
+
+    # Collect all symbols used by /api/live/market (defined later in file)
+    _prewarm_symbols = [
+        "SPY",
+        "QQQ",
+        "IWM",
+        "DIA",  # indices
+        "^VIX",
+        "GLD",
+        "TLT",
+        "BTC-USD",  # macro
+        "ETH-USD",
+        "USO",
+        "XLK",
+        "XLF",
+        "XLV",
+        "XLE",
+        "XLI",  # sectors
+        "XLY",
+        "XLP",
+        "XLU",
+        "XLRE",
+        "XLC",
+        "XLB",
+        "^N225",
+        "^HSI",
+        "^KS11",  # asia (skip slow ones)
+    ]
+
+    mds = app.state.market_data
+    t0 = __import__("time").time()
+    logger.info("[Prewarm] Fetching %d symbols in parallel…", len(_prewarm_symbols))
+
+    # Parallel fetch — all symbols at once
+    await asyncio.gather(
+        *[mds.get_quote(sym) for sym in _prewarm_symbols],
+        return_exceptions=True,
+    )
+    elapsed = __import__("time").time() - t0
+    logger.info("[Prewarm] Market data cache ready in %.1fs", elapsed)
+
+    # Also warm regime cache so first tab load skips the yfinance round-trip
+    try:
+        mkt = await mds.get_market_state()
+        state = app.state.regime_router.classify(mkt)
+        app.state.regime_cache = state
+        app.state.regime_cache_ts = __import__("time").monotonic()
+        logger.info("[Prewarm] Regime cache warm: %s", getattr(state, "regime", "?"))
+    except Exception as exc:
+        logger.warning("[Prewarm] Regime warm failed (non-fatal): %s", exc)
+
+
 @asynccontextmanager
 async def _lifespan(app):  # noqa: ARG001
     global _breakout_monitor_task
+    # Start both background tasks immediately on boot
+    _prewarm_task = asyncio.create_task(_startup_prewarm())
     _breakout_monitor_task = asyncio.create_task(_breakout_monitor_loop())
     yield
+    _prewarm_task.cancel()
     if _breakout_monitor_task:
         _breakout_monitor_task.cancel()
         try:
@@ -1111,7 +1174,7 @@ async def health_ready():
     """
     from src.core.database import check_database_health
 
-    checks = {"database": False, "cache": False, "data_freshness": False}
+    checks = {"database": False, "market_data": False, "data_freshness": False}
 
     # Check database
     try:
@@ -1120,16 +1183,13 @@ async def health_ready():
     except Exception:
         checks["database"] = False
 
-    # Check Redis/cache
+    # Check market data service (ping via a lightweight quote)
     try:
-        import redis.asyncio as redis
-
-        r = redis.from_url(f"redis://{settings.redis_host}:{settings.redis_port}")
-        await r.ping()
-        checks["cache"] = True
-        await r.close()
+        mds = app.state.market_data
+        q = await mds.get_quote("SPY")
+        checks["market_data"] = q is not None and q.get("price", 0) > 0
     except Exception:
-        checks["cache"] = False
+        checks["market_data"] = False
 
     # Check data freshness (real telemetry)
     try:
@@ -6040,6 +6100,15 @@ async def live_market():
         and (now - _market_overview_cache["ts"]) < _OVERVIEW_CACHE_TTL
     ):
         return _market_overview_cache["data"]
+
+    # If cache is cold and prewarm hasn't finished yet, return 503 immediately
+    # so the dashboard shows "⏳ loading" instead of blocking 3-5s on the user.
+    if not _market_overview_cache["data"]:
+        from fastapi.responses import JSONResponse as _JR
+        return _JR(
+            status_code=503,
+            content={"error": "API warming up — first load takes ~5s", "mode": "loading"},
+        )
 
     try:
         # Fetch all tickers in truly parallel threads
@@ -12464,40 +12533,40 @@ try:
     from src.api.routers.phase9 import router as p9_router
 
     app.include_router(p9_router)
-except ImportError:
-    pass
+except Exception:
+    logger.warning("[Router] phase9 not loaded", exc_info=True)
 
 # Sprint 71 — Institutional surfaces (benchmark, relative value, data quality, rejections)
 try:
     from src.api.routers.institutional import router as institutional_router
 
     app.include_router(institutional_router)
-except ImportError:
-    pass
+except Exception:
+    logger.warning("[Router] institutional not loaded", exc_info=True)
 
 # Sprint 62 — Fund builder, stock-vs-SPY
 try:
     from src.api.routers.fund import router as fund_router
 
     app.include_router(fund_router)
-except ImportError:
-    pass
+except Exception:
+    logger.warning("[Router] fund not loaded", exc_info=True)
 
 # Sprint 64/71 — Morning brief (regime, diff, strategies)
 try:
     from src.api.routers.brief import router as brief_router
 
     app.include_router(brief_router)
-except ImportError:
-    pass
+except Exception:
+    logger.warning("[Router] brief not loaded", exc_info=True)
 
 # Intelligence engines — benchmark attribution, comparison, rejection analysis, self-learning
 try:
     from src.api.routers.intelligence import router as intelligence_router
 
     app.include_router(intelligence_router)
-except ImportError:
-    pass
+except Exception:
+    logger.warning("[Router] intelligence not loaded", exc_info=True)
 
 # Task management CRUD API
 try:
