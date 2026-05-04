@@ -106,8 +106,8 @@ Inspired by multi-agent trading research workflows (researcher / macro / risk / 
 
 - [x] New agent API surface (`/api/v7/agents/run`, `/batch`, `/today`, `/status`)
 - [x] Agent orchestrator service (`agent_orchestrator_service.py`) composing ExpertCouncil + regime + risk policy
-- [ ] Add dashboard panel for agent debate trace and dissent reasons
-- [ ] Add decision journal persistence for agent outputs (with outcome linkage)
+- [x] Add dashboard panel for agent debate trace and dissent reasons (`index.html` Command tab right rail)
+- [x] Add decision journal persistence for agent outputs (with outcome linkage) (`/api/v7/agents/run?...persist=true` + `/api/v7/agents/journal`)
 - [ ] Add per-agent reliability tracking by regime (IC/IR style)
 - [ ] Add execution-quality feedback loop (slippage + fill quality into critic agent)
 - [ ] Add offline replay harness for agent consensus drift tests
