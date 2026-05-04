@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, List
 
@@ -34,18 +35,25 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════════════════════
 
 
-class NamedExpert:
-    """Base class for domain-specific experts."""
+class NamedExpert(ABC):
+    """Abstract base class for domain-specific named experts.
+
+    Subclasses MUST implement ``vote()``.  Any attempt to instantiate
+    a subclass that omits ``vote()`` raises ``TypeError`` at construction
+    time — not at call time — thanks to the ``@abstractmethod`` decorator.
+    """
 
     name: str = "Base"
 
+    @abstractmethod
     def vote(
         self,
         signal: Dict[str, Any],
         sector: SectorContext,
         regime: Dict[str, Any],
     ) -> ExpertVote:
-        raise NotImplementedError
+        """Produce an expert vote for the given signal/sector/regime context."""
+        ...
 
 
 # ═══════════════════════════════════════════════════════════════
