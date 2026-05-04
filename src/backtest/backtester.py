@@ -271,10 +271,29 @@ class Backtester:
                 (price_data.index.get_level_values('date') < test_end)
             ]
             
-            # Optimize on train
-            strategy = strategy_class()
-            # TODO: Implement optimization
-            
+            # Optimize on train data via simple grid search over strategy params
+            best_strategy = strategy_class()
+            best_sharpe = float("-inf")
+            param_grid = getattr(strategy_class, "PARAM_GRID", None)
+            if param_grid:
+                import itertools
+                keys = list(param_grid.keys())
+                for combo in itertools.product(*param_grid.values()):
+                    params = dict(zip(keys, combo))
+                    try:
+                        candidate = strategy_class(**params)
+                        from src.engines import FeatureEngine as _FE
+                        _feats = _FE().calculate_features(train_data)
+                        _sigs = candidate.generate_signals(_feats)
+                        _res = self.backtest(_sigs, train_data)
+                        sharpe = _res.get("sharpe_ratio", float("-inf"))
+                        if sharpe > best_sharpe:
+                            best_sharpe = sharpe
+                            best_strategy = candidate
+                    except Exception:
+                        pass
+            strategy = best_strategy
+
             # Generate signals on test
             from src.engines import FeatureEngine
             feature_engine = FeatureEngine()

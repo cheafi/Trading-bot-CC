@@ -158,6 +158,14 @@ class SECEdgarProvider(EventDataProvider):
 
     BASE_URL = "https://data.sec.gov"
     SEARCH_URL = "https://efts.sec.gov/LATEST/search-index"
+    # Required by SEC rate-limit policy: 10 req/s, must identify client
+    _HEADERS = {
+        "User-Agent": "TradingAI-Bot research@example.com",
+        "Accept-Encoding": "gzip, deflate",
+        "Host": "data.sec.gov",
+    }
+    # ticker → CIK cache (populated lazily)
+    _cik_cache: Dict[str, str] = {}
 
     def name(self) -> str:
         return "sec_edgar"
@@ -165,25 +173,142 @@ class SECEdgarProvider(EventDataProvider):
     def is_available(self) -> bool:
         return True  # No API key needed
 
+    # ── helpers ──────────────────────────────────────────────────
+
+    async def _get_cik(self, ticker: str) -> Optional[str]:
+        """Resolve ticker → zero-padded 10-digit CIK via EDGAR company search."""
+        if ticker in self._cik_cache:
+            return self._cik_cache[ticker]
+        import asyncio, urllib.request, json as _json
+        url = f"https://efts.sec.gov/LATEST/search-index?q=%22{ticker}%22&dateRange=custom&startdt=2020-01-01&forms=10-K"
+        # Use simpler company-tickers.json mapping first (fast, no rate limit)
+        try:
+            tickers_url = "https://www.sec.gov/files/company_tickers.json"
+            req = urllib.request.Request(tickers_url, headers={"User-Agent": self._HEADERS["User-Agent"]})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            for entry in data.values():
+                if entry.get("ticker", "").upper() == ticker.upper():
+                    cik = str(entry["cik_str"]).zfill(10)
+                    self._cik_cache[ticker] = cik
+                    return cik
+        except Exception as e:
+            logger.warning("SEC CIK lookup failed for %s: %s", ticker, e)
+        return None
+
+    async def _fetch_json(self, url: str, host_header: Optional[str] = None) -> Optional[Dict]:
+        """Fetch JSON from SEC with proper headers and timeout."""
+        import urllib.request, json as _json
+        headers = dict(self._HEADERS)
+        if host_header:
+            headers["Host"] = host_header
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return _json.loads(resp.read())
+        except Exception as e:
+            logger.warning("SEC HTTP fetch failed (%s): %s", url, e)
+            return None
+
+    # ── public API ───────────────────────────────────────────────
+
     async def get_recent_filings(
         self, ticker: str, form_types: Optional[List[str]] = None, limit: int = 10
     ) -> List[SECFiling]:
-        """Fetch recent filings for a ticker."""
-        # TODO: implement HTTP call to data.sec.gov
-        logger.info(f"SEC EDGAR: fetching filings for {ticker}")
-        return []
+        """Fetch recent filings for a ticker via data.sec.gov/submissions/."""
+        logger.info("SEC EDGAR: fetching filings for %s", ticker)
+        cik = await self._get_cik(ticker)
+        if not cik:
+            return []
+        data = await self._fetch_json(
+            f"{self.BASE_URL}/submissions/CIK{cik}.json",
+            host_header="data.sec.gov",
+        )
+        if not data:
+            return []
+        recent = data.get("filings", {}).get("recent", {})
+        forms = recent.get("form", [])
+        dates = recent.get("filingDate", [])
+        accessions = recent.get("accessionNumber", [])
+        docs = recent.get("primaryDocument", [])
+        company_name = data.get("name", ticker)
+        results: List[SECFiling] = []
+        for i, form in enumerate(forms):
+            if form_types and form not in form_types:
+                continue
+            acc = accessions[i] if i < len(accessions) else ""
+            acc_path = acc.replace("-", "")
+            url = f"https://www.sec.gov/Archives/edgar/full-index/{acc_path}/{docs[i]}" if i < len(docs) else ""
+            results.append(SECFiling(
+                cik=cik,
+                company_name=company_name,
+                form_type=form,
+                filing_date=dates[i] if i < len(dates) else "",
+                accession_number=acc,
+                primary_document=docs[i] if i < len(docs) else "",
+                url=url,
+            ))
+            if len(results) >= limit:
+                break
+        return results
 
     async def get_insider_transactions(
         self, ticker: str, days_back: int = 90
     ) -> List[InsiderTransaction]:
-        """Fetch insider transactions."""
-        logger.info(f"SEC EDGAR: fetching insider txns for {ticker}")
-        return []
+        """Fetch Form 4 insider transactions via EDGAR full-text search."""
+        logger.info("SEC EDGAR: fetching insider txns for %s", ticker)
+        import urllib.parse
+        from datetime import datetime, timedelta
+        start = (datetime.utcnow() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+        q = urllib.parse.quote(ticker)
+        url = (
+            f"https://efts.sec.gov/LATEST/search-index?q=%22{q}%22"
+            f"&dateRange=custom&startdt={start}&forms=4"
+            f"&_source=file_date,period_of_report,entity_name,file_num"
+        )
+        data = await self._fetch_json(url, host_header="efts.sec.gov")
+        if not data:
+            return []
+        results: List[InsiderTransaction] = []
+        for hit in data.get("hits", {}).get("hits", []):
+            src = hit.get("_source", {})
+            # Parse minimal fields available in search index
+            results.append(InsiderTransaction(
+                issuer_name=src.get("entity_name", ticker),
+                transaction_date=src.get("period_of_report", src.get("file_date", "")),
+                transaction_type="?",   # full XML parse needed for exact type
+                owner_name=src.get("display_names", ["?"])[0] if src.get("display_names") else "?",
+            ))
+        return results
 
     async def get_13f_holdings(self, cik: str) -> List[Dict[str, Any]]:
-        """Fetch 13F institutional holdings."""
-        logger.info(f"SEC EDGAR: fetching 13F for CIK {cik}")
-        return []
+        """Fetch 13F institutional holdings via data.sec.gov/submissions/."""
+        logger.info("SEC EDGAR: fetching 13F for CIK %s", cik)
+        padded = str(cik).zfill(10)
+        data = await self._fetch_json(
+            f"{self.BASE_URL}/submissions/CIK{padded}.json",
+            host_header="data.sec.gov",
+        )
+        if not data:
+            return []
+        recent = data.get("filings", {}).get("recent", {})
+        forms = recent.get("form", [])
+        dates = recent.get("filingDate", [])
+        accessions = recent.get("accessionNumber", [])
+        holdings = []
+        for i, form in enumerate(forms):
+            if form != "13F-HR":
+                continue
+            holdings.append({
+                "form": form,
+                "filing_date": dates[i] if i < len(dates) else "",
+                "accession": accessions[i] if i < len(accessions) else "",
+                "cik": padded,
+                "company": data.get("name", ""),
+            })
+            if len(holdings) >= 5:   # last 5 13F filings
+                break
+        return holdings
 
 
 class FREDProvider(EventDataProvider):

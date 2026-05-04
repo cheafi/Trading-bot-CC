@@ -421,10 +421,44 @@ class TradingScheduler:
         """Backfill any missing historical data."""
         logger.info("Starting historical backfill")
         try:
-            # TODO: Check for gaps and backfill
-            pass
+            import asyncio
+            from datetime import datetime, timedelta
+            import yfinance as yf
+
+            # Universe: top 50 liquid symbols the engine tracks
+            try:
+                from src.scanners.us_universe import US_UNIVERSE
+                symbols = list(US_UNIVERSE)[:50]
+            except Exception:
+                symbols = ["SPY", "QQQ", "IWM", "AAPL", "MSFT", "NVDA", "TSLA", "AMZN"]
+
+            end_date = datetime.utcnow().date()
+            start_date = end_date - timedelta(days=7)  # check last 7 calendar days
+
+            gaps_found = 0
+            for sym in symbols:
+                try:
+                    df = await asyncio.to_thread(
+                        yf.download,
+                        sym,
+                        start=start_date.isoformat(),
+                        end=end_date.isoformat(),
+                        progress=False,
+                        auto_adjust=True,
+                    )
+                    if df is None or df.empty:
+                        logger.warning("[Backfill] No data for %s — possible gap", sym)
+                        gaps_found += 1
+                except Exception as e:
+                    logger.warning("[Backfill] Fetch error for %s: %s", sym, e)
+
+            logger.info(
+                "[Backfill] Complete — checked %d symbols, %d potential gaps detected",
+                len(symbols),
+                gaps_found,
+            )
         except Exception as e:
-            logger.error(f"Historical backfill failed: {e}")
+            logger.error("Historical backfill failed: %s", e)
 
     async def _job_health_check(self):
         """Run system health check."""

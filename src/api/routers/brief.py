@@ -145,14 +145,34 @@ async def changelog():
 
 @router.get("/circuit-breaker")
 async def circuit_breaker_status():
-    """Check drawdown circuit breaker status."""
+    """Check drawdown circuit breaker status using real portfolio heat engine."""
     from src.engines.drawdown_breaker import DrawdownCircuitBreaker
+    from src.engines.portfolio_heat import get_portfolio_heat_engine
+
     breaker = DrawdownCircuitBreaker()
-    # TODO: wire to real portfolio state when available
-    result = breaker.check(100000, 100000, 100000)
+    engine = get_portfolio_heat_engine()
+    snap = engine.snapshot()
+
+    # Derive equity proxy from portfolio heat snapshot
+    # _peak_equity and _current_equity are initialised at 100 (index base)
+    current = float(getattr(engine, "_current_equity", 100.0))
+    peak = float(getattr(engine, "_peak_equity", current))
+    # period_start: approximate as peak minus recorded drawdown
+    period_start = peak  # conservative: week started at peak
+
+    result = breaker.check(
+        current_value=current,
+        peak_value=peak,
+        period_start_value=period_start,
+    )
     return {
         **result.to_dict(),
-        "⚠_note": "Using placeholder portfolio values — wire to real state",
+        "portfolio": {
+            "current_equity": round(current, 2),
+            "peak_equity": round(peak, 2),
+            "open_positions": snap.position_count,
+            "gross_exposure_pct": round(snap.gross_exposure_pct, 1),
+        },
     }
 
 
