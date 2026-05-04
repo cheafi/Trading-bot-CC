@@ -120,6 +120,13 @@ Inspired by multi-agent trading research workflows (researcher / macro / risk / 
 - [x] **RISK-3**: Extract `/api/market-intel/*` (5 routes, ~150 lines) from `main.py` monolith → `src/api/routers/market_intel.py`; uses `get_regime(request)` instead of `_get_regime()` private coupling
 - [x] **DATA-2**: Synthetic data warning banner added to Command tab (mirrors Today tab); `⚠ SYNTHETIC` shown when `today7.regime.synthetic` is truthy
 
+### ✅ Sprint 82 — Config Consolidation + Monolith Reduction Continues
+
+- [x] **CONFIG-1**: `TradingConfig.max_open_positions` default 15 → 10 (aligned with `RISK.max_positions`); `max_drawdown_pct` 0.10 → 0.15 (aligned with `RISK.max_drawdown_pct`) — single source of truth
+- [x] **ARCH-broker**: Extract 6 `/broker/*` routes → `src/api/routers/broker.py`
+- [x] **ARCH-health**: Extract 8 health/status/metrics routes → `src/api/routers/health.py`; `health_ready` uses `request.app.state` cleanly
+- [x] **ARCH-count**: `main.py` inline routes: 118 (Sprint 80) → 113 (Sprint 81) → 99 (Sprint 82); −19 this sprint
+
 ### ✅ Sprint 80 — Safety Hardening + Architecture Correctness
 
 - [x] **RISK-1**: Fix `RiskCircuitBreaker.daily_pnl` unit mismatch — normalize to `%` via `(daily_pnl / peak_equity * 100)` before comparing to `max_daily_loss_pct` (was silently comparing raw dollars to 3.0% float)

@@ -270,7 +270,8 @@ class TradingConfig:
         self.max_sector_pct = _env_float("MAX_SECTOR_PCT", 0.25)
         self.max_correlation = _env_float("MAX_CORRELATION", 0.70)
         self.max_portfolio_var = _env_float("MAX_PORTFOLIO_VAR", 0.025)
-        self.max_drawdown_pct = _env_float("MAX_DRAWDOWN_PCT", 0.10)
+        # Sprint 82 CONFIG: aligned with RISK.max_drawdown_pct (was 0.10)
+        self.max_drawdown_pct = _env_float("MAX_DRAWDOWN_PCT", 0.15)
         self.risk_per_trade = _env_float("RISK_PER_TRADE", 0.01)
 
         # Signal filters
@@ -321,7 +322,8 @@ class TradingConfig:
         self.circuit_breaker_cooldown_min = _env_int(
             "CIRCUIT_BREAKER_COOLDOWN_MIN", 60
         )
-        self.max_open_positions = _env_int("MAX_OPEN_POSITIONS", 15)
+        # Sprint 82 CONFIG: aligned with RISK.max_positions (was 15)
+        self.max_open_positions = _env_int("MAX_OPEN_POSITIONS", 10)
 
         # Position management
         self.stop_loss_pct = _env_float("STOP_LOSS_PCT", 0.03)
