@@ -114,6 +114,12 @@ Inspired by multi-agent trading research workflows (researcher / macro / risk / 
 - [x] Add execution-quality feedback loop (slippage + fill quality into critic agent)
 - [x] Add offline replay harness for agent consensus drift tests
 
+### ✅ Sprint 81 — Async Safety + Monolith Reduction + Data Transparency
+
+- [x] **RISK-2**: Add `RegimeService.aget()` via `asyncio.to_thread` — async routers (`brief.py`, `watchlist.py`) no longer block the FastAPI event loop on yfinance fetches
+- [x] **RISK-3**: Extract `/api/market-intel/*` (5 routes, ~150 lines) from `main.py` monolith → `src/api/routers/market_intel.py`; uses `get_regime(request)` instead of `_get_regime()` private coupling
+- [x] **DATA-2**: Synthetic data warning banner added to Command tab (mirrors Today tab); `⚠ SYNTHETIC` shown when `today7.regime.synthetic` is truthy
+
 ### ✅ Sprint 80 — Safety Hardening + Architecture Correctness
 
 - [x] **RISK-1**: Fix `RiskCircuitBreaker.daily_pnl` unit mismatch — normalize to `%` via `(daily_pnl / peak_equity * 100)` before comparing to `max_daily_loss_pct` (was silently comparing raw dollars to 3.0% float)
