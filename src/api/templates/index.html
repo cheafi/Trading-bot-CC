@@ -108,6 +108,15 @@
       .cc-right-text{font-size:11px;color:var(--t1);line-height:1.6}
       .cc-contra{display:flex;align-items:flex-start;gap:6px;padding:4px 0;font-size:10px;color:var(--amber);line-height:1.5}
       .cc-peer-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:4px;background:var(--s2);border:1px solid var(--bd);font-size:10px;font-weight:600;margin:2px;cursor:pointer}
+      /* ── Guide / Onboarding ── */
+      .guide-hero{background:linear-gradient(135deg,rgba(0,212,170,.08),rgba(88,166,255,.08));border:1px solid rgba(0,212,170,.2);border-radius:12px;padding:24px;margin-bottom:16px}
+      .guide-step{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--bd)}
+      .guide-step:last-child{border-bottom:none}
+      .guide-num{flex-shrink:0;width:32px;height:32px;border-radius:50%;background:var(--green);color:#000;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center}
+      .guide-badge{display:inline-block;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;letter-spacing:.4px;margin:2px}
+      .def-row{display:grid;grid-template-columns:140px 1fr;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px;align-items:start}
+      .def-row:last-child{border-bottom:none}
+      .def-key{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--green)}
     </style>
   </head>
 
@@ -1639,6 +1648,258 @@
         </div>
       </template>
       <div x-show="dos.error" class="mx-3 card card-p" style="border-color:var(--red)"><div class="text-red-400 text-sm" x-text="dos.error"></div></div>
+    </main>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- SURFACE: GUIDE / ONBOARDING                            -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <main x-show="tab==='guide'" class="fade" style="padding:14px;max-width:860px;margin:0 auto">
+
+      <!-- Hero -->
+      <div class="guide-hero">
+        <div style="font-size:28px;margin-bottom:8px">📊</div>
+        <div style="font-size:20px;font-weight:800;color:var(--t1);margin-bottom:6px">CC · Clarity Console</div>
+        <div style="font-size:13px;color:var(--t2);line-height:1.7;max-width:640px">
+          A regime-aware, decision-grade algorithmic trading dashboard. Every signal is gated by market regime, VIX, correlation guards, and conviction scoring — so you only act when conditions are right.
+        </div>
+        <button @click="localStorage.setItem('cc_guide_seen','1');switchTab('today')" class="btn-p mt-4" style="font-size:13px;padding:10px 24px">
+          🚀 Go to Dashboard
+        </button>
+        <button @click="localStorage.removeItem('cc_guide_seen')" style="background:none;border:none;color:var(--t3);font-size:11px;cursor:pointer;margin-left:12px">Reset first-visit</button>
+      </div>
+
+      <!-- ── SECTION 1: HOW TO USE — STEP BY STEP ── -->
+      <div class="card" style="margin-bottom:16px;overflow:visible">
+        <div style="padding:12px 16px;background:var(--s2);border-bottom:1px solid var(--bd)">
+          <span style="font-size:13px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px">⚡ How To Use — Step by Step</span>
+        </div>
+        <div style="padding:16px">
+
+          <div class="guide-step">
+            <div class="guide-num">1</div>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:4px">Check the Regime → <span style="color:var(--green)">Overview tab</span></div>
+              <div style="font-size:12px;color:var(--t2);line-height:1.7">
+                Every morning, open the <strong style="color:var(--t1)">🎯 Overview</strong> tab. Look at the <strong style="color:var(--t1)">Regime</strong> badge (BULL / BEAR / SIDEWAYS / CHOPPY) and the <strong style="color:var(--t1)">Tradeability</strong> status.
+                <br><br>
+                <span class="guide-badge pg">STRONG_TRADE</span> <span class="guide-badge" style="background:rgba(0,212,170,.08);color:var(--green)">TRADE</span> → Full sizing allowed.<br>
+                <span class="guide-badge pa">SELECTIVE</span> → Reduce size 25–50%, only A+ setups.<br>
+                <span class="guide-badge pa">WAIT</span> → No new positions. Manage existing.<br>
+                <span class="guide-badge pr">NO_TRADE</span> → Sit out entirely. Protect capital.
+              </div>
+            </div>
+          </div>
+
+          <div class="guide-step">
+            <div class="guide-num">2</div>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:4px">Check VIX &amp; Breadth</div>
+              <div style="font-size:12px;color:var(--t2);line-height:1.7">
+                Still on Overview, look at VIX and Market Breadth indicators.
+                <br><br>
+                <strong style="color:var(--green)">VIX &lt; 14</strong> = Risk-On — full exposure allowed.<br>
+                <strong style="color:var(--amber)">VIX 20–28</strong> = Elevated — scale down.<br>
+                <strong style="color:var(--red)">VIX &gt; 35</strong> = Crisis — <strong>NO TRADE</strong> regardless of signals.<br><br>
+                Breadth &gt; 55% (stocks above 50-day MA) = healthy internals. Below 40% = defensive.
+              </div>
+            </div>
+          </div>
+
+          <div class="guide-step">
+            <div class="guide-num">3</div>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:4px">Review Ranked Signals → <span style="color:var(--blue)">Ranked tab</span></div>
+              <div style="font-size:12px;color:var(--t2);line-height:1.7">
+                Open <strong style="color:var(--t1)">📊 Ranked</strong>. Signals are scored 0–10 and tiered:
+                <br><br>
+                <span class="guide-badge pg">TRADE</span> Score ≥ 8 · Conviction weight 18 · Enter now.<br>
+                <span class="guide-badge pb">LEADER</span> Score ≥ 7 · Weight 12 · Core position, proven RS.<br>
+                <span class="guide-badge pa">WATCH</span> Score ≥ 6 · Weight 6 · On deck, not yet ready.<br>
+                <span class="guide-badge pr">NO-TRADE</span> Failed one or more gates · Do not enter.
+                <br><br>
+                Only act on <span class="guide-badge pg">TRADE</span> conviction. Minimum R:R of <strong style="color:var(--t1)">3:1</strong> required.
+              </div>
+            </div>
+          </div>
+
+          <div class="guide-step">
+            <div class="guide-num">4</div>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:4px">Open the Dossier → Deep-dive any ticker</div>
+              <div style="font-size:12px;color:var(--t2);line-height:1.7">
+                Click any ticker in Ranked or Scanners to open its <strong style="color:var(--t1)">🔍 Dossier</strong>.
+                Check: Entry price · Stop loss (1R) · Target (2R–3R) · Factor breakdown · Sector RS · Peers.
+                <br><br>
+                <strong style="color:var(--amber)">Rule:</strong> Never size in without a defined stop. Hard stop at <strong>1R</strong>. Trail only after +1R in profit.
+              </div>
+            </div>
+          </div>
+
+          <div class="guide-step">
+            <div class="guide-num">5</div>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:4px">Run Scanners for fresh setups → <span style="color:var(--purple)">Scanners tab</span></div>
+              <div style="font-size:12px;color:var(--t2);line-height:1.7">
+                Open <strong style="color:var(--t1)">🔬 Scanners</strong> to find categorised setups:
+                <strong>Leaders</strong> (breakout-ready RS stocks), <strong>Pullbacks</strong> (dip-to-support),
+                <strong>Breakouts</strong> (VCP/tight-base patterns), <strong>Flow</strong> (unusual options activity).
+                <br><br>
+                Scanners gate on regime — in NO_TRADE regime they return zero hits by design.
+              </div>
+            </div>
+          </div>
+
+          <div class="guide-step">
+            <div class="guide-num">6</div>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:4px">Check RS Leaderboard → <span style="color:var(--blue)">RS tab</span></div>
+              <div style="font-size:12px;color:var(--t2);line-height:1.7">
+                Open <strong style="color:var(--t1)">📈 RS</strong>. Filter by Sector or Market Cap.
+                Focus on stocks with <strong style="color:var(--green)">RS ≥ 110</strong> (outperforming SPY by 10%+) and
+                <strong>CONFIRMED_LEADER</strong> state. Avoid anything with RS &lt; 90 or trending down.
+                <br><br>
+                RS Breakout list = stocks that just crossed into RS leadership — highest-probability setups.
+              </div>
+            </div>
+          </div>
+
+          <div class="guide-step">
+            <div class="guide-num">7</div>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:4px">Portfolio gate — max 10 open positions</div>
+              <div style="font-size:12px;color:var(--t2);line-height:1.7">
+                Hard cap: <strong style="color:var(--amber)">10 open positions maximum</strong>. Do not exceed regardless of signal quality.
+                No two positions with correlation &gt; 0.7. Check the <strong style="color:var(--t1)">💼 Portfolio</strong> tab before adding a new position.
+                Default size: <strong>1% risk per trade</strong> (fixed fractional). Kelly fraction is shown in Dossier for reference.
+              </div>
+            </div>
+          </div>
+
+          <div class="guide-step">
+            <div class="guide-num">8</div>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:4px">Read the Morning Brief → <span style="color:var(--amber)">Brief tab</span></div>
+              <div style="font-size:12px;color:var(--t2);line-height:1.7">
+                Open <strong style="color:var(--t1)">📋 Brief</strong> each morning before market open.
+                It summarises: overnight macro, top 3 ranked setups, regime assessment, sector rotation, and what to watch.
+                It is generated pre-market and cached — no live calls during open.
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ── SECTION 2: SIGNAL & STRATEGY DEFINITIONS ── -->
+      <div class="card" style="margin-bottom:16px;overflow:visible">
+        <div style="padding:12px 16px;background:var(--s2);border-bottom:1px solid var(--bd)">
+          <span style="font-size:13px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px">📖 Key Signal &amp; Strategy Definitions</span>
+        </div>
+        <div style="padding:16px">
+
+          <!-- Conviction Tiers -->
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);margin-bottom:8px">Conviction Tiers</div>
+          <div class="def-row"><span class="def-key">TRADE (18)</span><span style="color:var(--t2);line-height:1.6">Highest conviction. Score ≥ 8/10. All gates passed: regime, VIX, RS, volume, structure. Minimum 3:1 R:R. Enter at market open or on intraday pullback. Full 1R sizing.</span></div>
+          <div class="def-row"><span class="def-key">LEADER (12)</span><span style="color:var(--t2);line-height:1.6">Score ≥ 7/10. Confirmed RS leadership. Core position, proven trend. Can hold longer (swing to trend). Add on pullbacks to 50-day MA only.</span></div>
+          <div class="def-row"><span class="def-key">WATCH (6)</span><span style="color:var(--t2);line-height:1.6">Score ≥ 6/10. Setup developing but not yet triggered. Place on watchlist. Minimum 2:1 R:R if entered. Alert on breakout.</span></div>
+          <div style="height:16px"></div>
+
+          <!-- Signal Scores -->
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);margin-bottom:8px">Score Components (each 0–10)</div>
+          <div class="def-row"><span class="def-key">Trend Score</span><span style="color:var(--t2);line-height:1.6">Is price above key moving averages (21, 50, 200-day)? Is the MA sequence aligned (21 &gt; 50 &gt; 200)? Higher = cleaner uptrend.</span></div>
+          <div class="def-row"><span class="def-key">RS Score</span><span style="color:var(--t2);line-height:1.6">Relative Strength vs SPY over 63-day (tactical) and 252-day (structural) windows. Score ≥ 110 = CONFIRMED_LEADER. Scored both absolute and trend-direction.</span></div>
+          <div class="def-row"><span class="def-key">Volume Score</span><span style="color:var(--t2);line-height:1.6">Is volume on up-days above average? Are distribution days (high-volume down days) low (&lt; 4 in 25 sessions)? Institutional accumulation vs distribution ratio.</span></div>
+          <div class="def-row"><span class="def-key">Structure Score</span><span style="color:var(--t2);line-height:1.6">Chart base quality: VCP (Volatility Contraction Pattern), flat base, cup-with-handle. Lower depth + tighter contraction = higher score. Pivot point clarity.</span></div>
+          <div class="def-row"><span class="def-key">Fundamental Score</span><span style="color:var(--t2);line-height:1.6">EPS growth acceleration, revenue growth, ROE, margins. From earnings data. Not available for all tickers — shows '—' if no data.</span></div>
+          <div class="def-row"><span class="def-key">Composite Score</span><span style="color:var(--t2);line-height:1.6">Weighted average of all sub-scores. This measures <strong style="color:var(--amber)">indicator alignment</strong>, NOT probability of profit. High composite ≠ guaranteed win.</span></div>
+          <div style="height:16px"></div>
+
+          <!-- Risk Terms -->
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);margin-bottom:8px">Risk Terms</div>
+          <div class="def-row"><span class="def-key">1R</span><span style="color:var(--t2);line-height:1.6">One Risk Unit = the distance from entry to hard stop, expressed as % of capital. Example: 1% risk/trade, 5% stop = 0.2% position size per 1% capital risk. All targets stated as R-multiples (2R, 3R).</span></div>
+          <div class="def-row"><span class="def-key">Hard Stop</span><span style="color:var(--t2);line-height:1.6">Non-negotiable exit below entry. Placed at structural support (last pivot low or ATR-based). Always set before entry. Never widen after entering.</span></div>
+          <div class="def-row"><span class="def-key">Trail Stop</span><span style="color:var(--t2);line-height:1.6">Only activated after position reaches +1R profit. Trail to lock in gains. Move to breakeven at +1R, trail to +1R after +2R.</span></div>
+          <div class="def-row"><span class="def-key">R:R</span><span style="color:var(--t2);line-height:1.6">Risk-Reward Ratio. Minimum 2:1 for WATCH, 3:1 for TRADE. Calculated: (Target − Entry) / (Entry − Stop). Do not enter if R:R is below minimum.</span></div>
+          <div class="def-row"><span class="def-key">Kelly Fraction</span><span style="color:var(--t2);line-height:1.6">Optimal position size derived from win rate and R:R (Kelly formula). Used as reference, capped at 25% of full Kelly to prevent over-sizing. Shown in Dossier.</span></div>
+          <div style="height:16px"></div>
+
+          <!-- Pattern Definitions -->
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);margin-bottom:8px">Chart Pattern Definitions</div>
+          <div class="def-row"><span class="def-key">VCP</span><span style="color:var(--t2);line-height:1.6">Volatility Contraction Pattern (Minervini). A series of progressively tighter price contractions on declining volume, ending in a pivot breakout. Ideal: 3 contractions, each 50% smaller, on 40%+ volume decline.</span></div>
+          <div class="def-row"><span class="def-key">Flat Base</span><span style="color:var(--t2);line-height:1.6">5+ weeks of tight sideways action (&lt; 15% depth) on below-average volume after a prior uptrend of ≥ 20%. Buy pivot = top of the base.</span></div>
+          <div class="def-row"><span class="def-key">Pullback Entry</span><span style="color:var(--t2);line-height:1.6">Price retraces 8–20% to a moving average or prior support after a breakout. Volume dries up on the pullback (low-volume). Entry on first day of recovery with volume.</span></div>
+          <div class="def-row"><span class="def-key">Distribution Day</span><span style="color:var(--t2);line-height:1.6">A down day (or reversal) on volume above the 50-day average volume. ≥ 4 distribution days in 25 sessions = market under distribution. High DD count = reduce exposure.</span></div>
+          <div style="height:16px"></div>
+
+          <!-- Regime Definitions -->
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);margin-bottom:8px">Regime States</div>
+          <div class="def-row"><span class="def-key">BULL</span><span style="color:var(--t2);line-height:1.6">SPY above 50-day &amp; 200-day MA. Breadth &gt; 55%. VIX &lt; 20. Strong RS divergence between sectors. Full sizing, longer holds, buy breakouts.</span></div>
+          <div class="def-row"><span class="def-key">SIDEWAYS</span><span style="color:var(--t2);line-height:1.6">SPY range-bound between key MAs. Breadth 40–55%. Mixed signals. Reduce hold time, tighten stops, favour mean-reversion over momentum.</span></div>
+          <div class="def-row"><span class="def-key">CHOPPY</span><span style="color:var(--t2);line-height:1.6">High short-term volatility, no directional edge. Signals have low IC. Drastically reduce sizing (25–50%). Only trade highest-conviction setups. Widen stops.</span></div>
+          <div class="def-row"><span class="def-key">BEAR</span><span style="color:var(--t2);line-height:1.6">SPY below 200-day MA. Breadth &lt; 40%. No new long positions. Hedge or raise cash. Short only if regime confirms. Regime overrides all signals.</span></div>
+          <div style="height:16px"></div>
+
+          <!-- VIX Thresholds -->
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);margin-bottom:8px">VIX Thresholds</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+            <span class="guide-badge pg">VIX &lt; 14 — RISK_ON</span>
+            <span class="guide-badge" style="background:rgba(0,212,170,.06);color:var(--green)">14–20 Normal</span>
+            <span class="guide-badge pa">20–28 Elevated</span>
+            <span class="guide-badge" style="background:rgba(251,191,36,.12);color:var(--amber)">28–35 High Risk</span>
+            <span class="guide-badge pr">VIX &gt; 35 — NO TRADE</span>
+          </div>
+          <div style="font-size:12px;color:var(--t2);line-height:1.7">
+            VIX is the S&amp;P 500 30-day implied volatility index. It directly gates position sizing. At VIX &gt; 35 the circuit breaker triggers and all new entries are blocked regardless of signal score.
+          </div>
+          <div style="height:16px"></div>
+
+          <!-- RS Definitions -->
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);margin-bottom:8px">RS (Relative Strength) States</div>
+          <div class="def-row"><span class="def-key">CONFIRMED_LEADER</span><span style="color:var(--t2);line-height:1.6">RS composite ≥ 110 on both 63-day and 252-day windows. Stock is consistently outperforming SPY. Highest quality. Can hold through minor market weakness.</span></div>
+          <div class="def-row"><span class="def-key">EMERGING</span><span style="color:var(--t2);line-height:1.6">RS composite 95–110. Relative strength improving. Watch for breakout confirmation. Not yet a leader but momentum building.</span></div>
+          <div class="def-row"><span class="def-key">FADING</span><span style="color:var(--t2);line-height:1.6">RS was strong but declining. 63-day RS has rolled over below 95. Exit existing position or tighten stop significantly.</span></div>
+          <div class="def-row"><span class="def-key">BROKEN</span><span style="color:var(--t2);line-height:1.6">RS below 90. Stock is underperforming SPY. Do not enter. If already long, exit on next strength.</span></div>
+
+        </div>
+      </div>
+
+      <!-- ── SECTION 3: TAB QUICK REFERENCE ── -->
+      <div class="card" style="margin-bottom:16px;overflow:visible">
+        <div style="padding:12px 16px;background:var(--s2);border-bottom:1px solid var(--bd)">
+          <span style="font-size:13px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px">🗺 Tab Quick Reference</span>
+        </div>
+        <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <template x-for="tab_def in [
+            {icon:'🎯',id:'today',label:'Overview',desc:'Regime + VIX + Breadth + Top signals funnel. Start here every morning.'},
+            {icon:'📊',id:'signals',label:'Ranked',desc:'All signals ranked by composite score. Filter by conviction tier. Click to deep-dive.'},
+            {icon:'🔬',id:'scanners',label:'Scanners',desc:'Category scanners: Leaders, Pullbacks, Breakouts, Flow. Regime-gated.'},
+            {icon:'🚫',id:'notrade',label:'Rejections',desc:'Every rejected signal with reason. Learn why good-looking setups were blocked.'},
+            {icon:'🔍',id:'dossier',label:'Dossier',desc:'Deep-dive any ticker: entry, stop, targets, factors, RS, peers, thesis.'},
+            {icon:'💼',id:'portfolio',label:'Portfolio',desc:'Open positions, P&amp;L, correlation matrix, portfolio-level risk view.'},
+            {icon:'📈',id:'rs',label:'RS',desc:'RS leaderboard ranked vs SPY. Sector RS overview. RS Breakouts + Breakdowns.'},
+            {icon:'💧',id:'flow',label:'Flow',desc:'Unusual options flow, dark pool prints, smart-money positioning signals.'},
+            {icon:'📋',id:'brief',label:'Brief',desc:'Pre-market morning brief: macro, top setups, regime, sector rotation summary.'},
+            {icon:'⚙️',id:'ops',label:'Ops',desc:'System health, API status, scheduler jobs, changelog. For debugging.'},
+            {icon:'🖥',id:'command',label:'Command',desc:'Terminal command centre: full decision output, agent journal, reliability stats.'},
+            {icon:'📖',id:'guide',label:'Guide',desc:'This page. Return here any time for definitions and usage guidance.'}
+          ]">
+            <div class="card card-p" style="padding:10px 12px;cursor:pointer" @click="switchTab(tab_def.id)">
+              <div style="font-size:14px;margin-bottom:4px" x-text="tab_def.icon+' '+tab_def.label"></div>
+              <div style="font-size:11px;color:var(--t2);line-height:1.5" x-html="tab_def.desc"></div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Bottom CTA -->
+      <div style="text-align:center;padding:24px 0 8px">
+        <button @click="localStorage.setItem('cc_guide_seen','1');switchTab('today')" class="btn-p" style="font-size:14px;padding:12px 32px">
+          🚀 Start Trading
+        </button>
+        <div style="font-size:11px;color:var(--t3);margin-top:10px">This guide is always accessible from the ⋯ More menu → 📖 Guide</div>
+      </div>
+
     </main>
 
     <!-- ═══════════════════════════════════════════════════════ -->
@@ -3271,6 +3532,7 @@
         {id:'command',icon:'🖥',label:'Command'},
       ],
       moreTabs:[
+        {id:'guide',icon:'📖',label:'Guide'},
         {id:'factory',icon:'🏭',label:'Strategy Factory'},
         {id:'options',icon:'🔮',label:'Options'},
         {id:'track',icon:'📈',label:'Track Record'},
@@ -3336,12 +3598,13 @@
         this.fetchRejects();
         this.fetchFlow();
         this.fetchScanners();
+        if(!localStorage.getItem('cc_guide_seen')){this.tab='guide'}
       },
       tick(){this.clock=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'})},
       toggleStar(ticker){this.ccStarred[ticker]=!this.ccStarred[ticker];localStorage.setItem('ccStarred',JSON.stringify(this.ccStarred))},
       toggleLove(ticker){this.ccLoved[ticker]=!this.ccLoved[ticker];localStorage.setItem('ccLoved',JSON.stringify(this.ccLoved))},
       toggleWatchlist(ticker){this.ccWatchlist[ticker]=!this.ccWatchlist[ticker];localStorage.setItem('ccWatchlist',JSON.stringify(this.ccWatchlist))},
-      switchTab(t){this.tab=t;if(t==='today'){this.fetchToday7();this.fetchMkt()}if(t==='signals'){this.fetchSignals();this.fetchRanked()}if(t==='ops'){this.fetchHealth();this.fetchChangelog()}if(t==='brief')this.fetchBrief();if(t==='catalog'){this.fetchEndpoints();this.fetchOpsDetail()}if(t==='scanners')this.fetchScanners();if(t==='notrade')this.fetchNoTrade();if(t==='rs')this.fetchRS();if(t==='flow')this.fetchFlow();if(t==='track'){if(this.perfTracker.rows.length===0)this.fetchPerfTracker();if(!this.fundLab.data)this.fetchFundLab()}if(t==='timetravel'&&!this.tt.date){const d=new Date();d.setDate(d.getDate()-5);this.tt.date=d.toISOString().slice(0,10)}if(t==='command'){this.fetchCommand();this.fetchAgentJournal();this.fetchAgentReliability()}},
+      switchTab(t){this.tab=t;if(t==='guide'){}if(t==='today'){this.fetchToday7();this.fetchMkt()}if(t==='signals'){this.fetchSignals();this.fetchRanked()}if(t==='ops'){this.fetchHealth();this.fetchChangelog()}if(t==='brief')this.fetchBrief();if(t==='catalog'){this.fetchEndpoints();this.fetchOpsDetail()}if(t==='scanners')this.fetchScanners();if(t==='notrade')this.fetchNoTrade();if(t==='rs')this.fetchRS();if(t==='flow')this.fetchFlow();if(t==='track'){if(this.perfTracker.rows.length===0)this.fetchPerfTracker();if(!this.fundLab.data)this.fetchFundLab()}if(t==='timetravel'&&!this.tt.date){const d=new Date();d.setDate(d.getDate()-5);this.tt.date=d.toISOString().slice(0,10)}if(t==='command'){this.fetchCommand();this.fetchAgentJournal();this.fetchAgentReliability()}},
 
       async fetchCommand(){
         if(this.cmd.loading)return;
