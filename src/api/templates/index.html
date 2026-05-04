@@ -222,6 +222,16 @@
         <button @click="fetchCommand()" style="margin-left:auto;padding:3px 10px;border-radius:4px;background:var(--s2);border:1px solid var(--bd);color:var(--t2);font-size:10px;cursor:pointer" :disabled="cmd.loading" x-text="cmd.loading?'Loading…':'↻ Refresh'"></button>
       </div>
 
+      <!-- ── Synthetic Data Warning (Command tab) ── -->
+      <template x-if="today7.regime && today7.regime.synthetic">
+        <div style="padding:4px 12px">
+          <div style="background:#78350f;border:1px solid #d97706;border-radius:8px;padding:7px 14px;display:flex;align-items:center;gap:8px">
+            <span style="font-size:13px">⚠️</span>
+            <span style="color:#fbbf24;font-size:11px;font-weight:600">⚠ SYNTHETIC — Regime data is synthetic. Real market data unavailable. Signals may be unreliable.</span>
+          </div>
+        </div>
+      </template>
+
       <!-- ── 3-COLUMN BODY ── -->
       <div class="cc-body">
 
