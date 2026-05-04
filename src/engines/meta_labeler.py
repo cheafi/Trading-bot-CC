@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from src.core.risk_limits import RISK
+from src.core.risk_limits import RISK, SIGNAL_THRESHOLDS
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -104,9 +104,9 @@ class SignalContext:
 
 # ─── Meta-Labeler ─────────────────────────────────────────────────
 
-# Configurable thresholds
+# Configurable thresholds — sourced from SIGNAL_THRESHOLDS (sprint84)
 _DEFAULTS = {
-    "min_calibrated_prob": 0.45,
+    "min_calibrated_prob": SIGNAL_THRESHOLDS.abstention_threshold / 100.0,  # 0.45
     "min_regime_fit": 0.3,
     "max_gross_exposure_pct": 90.0,
     "max_sector_weight_pct": 25.0,
@@ -119,8 +119,8 @@ _DEFAULTS = {
     "fomc_blackout_days": 1,
     "spread_kill_bps": 100.0,
     "min_adv": 100_000,
-    "strong_buy_threshold": 0.75,
-    "buy_small_threshold": 0.55,
+    "strong_buy_threshold": SIGNAL_THRESHOLDS.strong_buy_threshold / 100.0,  # 0.85
+    "buy_small_threshold": SIGNAL_THRESHOLDS.watch_threshold / 100.0,  # 0.55
 }
 
 
