@@ -76,71 +76,31 @@ class RegimeService:
 
     @classmethod
     def _fetch_closes(cls) -> Dict[str, list]:
-        """Fetch 60-day closes for benchmarks."""
+        """Fetch 60-day closes for benchmarks via yfinance (sync, thread-safe)."""
+
         tickers = ["SPY", "QQQ", "^VIX", "IWM", "HYG"]
         closes: Dict[str, list] = {}
 
-        # Try MarketDataService first (async → sync bridge)
+        # Direct yfinance fetch (synchronous — RegimeService.get() is always called sync).
         try:
-            import asyncio
+            import yfinance as yf
 
-            from src.services.market_data import get_market_data_service
-
-            mds = get_market_data_service()
-
-            async def _fetch_all():
-                results = {}
-                for t in tickers:
-                    try:
-                        hist = await mds.get_history(t, period="3mo", interval="1d")
-                        if hist and "closes" in hist:
-                            results[t] = hist["closes"]
-                        elif hist and isinstance(hist, list):
-                            results[t] = [bar.get("close", 0) for bar in hist]
-                    except Exception as exc:
-                        logger.debug(
-                            "MDS fetch %s failed: %s",
-                            t,
-                            exc,
-                        )
-                return results
-
-            try:
-                loop = asyncio.get_running_loop()
-                # Already in async context — can't nest
-                import concurrent.futures
-
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    closes = pool.submit(asyncio.run, _fetch_all()).result(timeout=30)
-            except RuntimeError:
-                closes = asyncio.run(_fetch_all())
-
-        except Exception as e:
-            logger.debug("MarketDataService failed: %s", e)
-
-        # Fallback to yfinance
-        if not closes.get("SPY"):
-            try:
-                import yfinance as yf
-
-                for t in tickers:
-                    try:
-                        data = yf.download(
-                            t,
-                            period="3mo",
-                            interval="1d",
-                            progress=False,
-                        )
-                        if data is not None and len(data) > 0:
-                            closes[t] = data["Close"].tolist()
-                    except Exception as exc:
-                        logger.debug(
-                            "yfinance fetch %s failed: %s",
-                            t,
-                            exc,
-                        )
-            except ImportError:
-                logger.warning("yfinance not installed")
+            for t in tickers:
+                try:
+                    data = yf.download(
+                        t,
+                        period="3mo",
+                        interval="1d",
+                        progress=False,
+                        auto_adjust=True,
+                    )
+                    if data is not None and len(data) > 0:
+                        c_col = "Close" if "Close" in data.columns else "close"
+                        closes[t] = data[c_col].dropna().tolist()
+                except Exception as exc:
+                    logger.debug("yfinance fetch %s failed: %s", t, exc)
+        except ImportError:
+            logger.warning("yfinance not installed")
 
         # Final fallback: synthetic
         if not closes.get("SPY"):
