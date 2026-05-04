@@ -102,7 +102,7 @@
 
 ---
 
-## 🚧 In Progress (v7.2) — Agentic Deliberation Layer
+## ✅ Completed (v7.2) — Agentic Deliberation Layer
 
 Inspired by multi-agent trading research workflows (researcher / macro / risk / execution / critic), implemented with deterministic in-house engines and risk gates.
 
@@ -112,7 +112,17 @@ Inspired by multi-agent trading research workflows (researcher / macro / risk / 
 - [x] Add decision journal persistence for agent outputs (with outcome linkage) (`/api/v7/agents/run?...persist=true` + `/api/v7/agents/journal`)
 - [x] Add per-agent reliability tracking by regime (IC/IR style)
 - [x] Add execution-quality feedback loop (slippage + fill quality into critic agent)
-- [ ] Add offline replay harness for agent consensus drift tests
+- [x] Add offline replay harness for agent consensus drift tests
+
+### ✅ Sprint 80 — Safety Hardening + Architecture Correctness
+
+- [x] **RISK-1**: Fix `RiskCircuitBreaker.daily_pnl` unit mismatch — normalize to `%` via `(daily_pnl / peak_equity * 100)` before comparing to `max_daily_loss_pct` (was silently comparing raw dollars to 3.0% float)
+- [x] **RISK-4**: Canonicalize `max_open_positions` → `RISK.max_positions` (=10) across `RiskCircuitBreaker` (was 15), `TradeGate` (was 20), `MetaLabeler` (was 15) — single source of truth
+- [x] **DATA-1**: Compute `realized_vol_20d` live from SPY 20-day annualised log-return std — removes hardcoded `0.15` stub in `MarketDataService.get_market_state()`
+- [x] **ARCH-1**: Remove circular imports from `intel.py` (`from src.api.main import live_quote` + `_sanitize_for_json`) — replaced with inline `app.state.market_data` fetch and module-top `deps.py` alias
+- [x] **ARCH-2**: Fix Discord bot hardcoded `localhost:8000` — now reads `API_BASE_URL` env var (set to `:8001` when using `_cc_instant.py` proxy)
+- [x] **UI-1**: Remove duplicate Alpine `cc()` function from `index.html` — star/love/watchlist state and toggle methods merged into single canonical `cc()` definition
+- [x] **UI-2**: Reorder dashboard tabs — Today is now the default first tab; Command moved to end of visible tab bar
 
 ### ✅ Sprint 79 — Agent Reliability + Execution Feedback
 
