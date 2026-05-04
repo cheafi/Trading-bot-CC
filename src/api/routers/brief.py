@@ -25,7 +25,7 @@ async def morning_brief():
 
     from src.services.regime_service import RegimeService
 
-    regime = RegimeService.get()
+    regime = await RegimeService.aget()
 
     # Load latest brief file for real setups
     from src.services.brief_data_service import load_brief

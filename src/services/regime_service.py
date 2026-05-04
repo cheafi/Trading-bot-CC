@@ -11,6 +11,7 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import Any, Dict
@@ -45,6 +46,18 @@ class RegimeService:
             if cls._cache:
                 return cls._cache
             return cls._default_regime()
+
+    @classmethod
+    async def aget(cls) -> Dict[str, Any]:
+        """
+        Async-safe regime getter.  Runs the blocking _fetch_and_compute()
+        in a thread so the FastAPI event loop is never stalled.
+        Returns cached value immediately when still fresh.
+        """
+        now = time.time()
+        if cls._cache and (now - cls._cache_time) < cls.CACHE_TTL:
+            return cls._cache
+        return await asyncio.to_thread(cls.get)
 
     @classmethod
     def invalidate(cls) -> None:

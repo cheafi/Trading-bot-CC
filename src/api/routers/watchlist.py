@@ -127,17 +127,15 @@ def _load_brief_data() -> Dict:
 async def watchlist_board(
     limit: int = Query(default=50, ge=1, le=200),
     action: Optional[str] = Query(default=None, description="Filter: TRADE, WATCH, WAIT, NO_TRADE"),
-):
+):  # noqa: C901
     """
     Full decision board — all scan tickers ranked by conviction.
     Returns action tier, conviction, RS, regime gate, catalyst for each.
     """
     from src.services.regime_service import RegimeService
 
-    regime = RegimeService.get()
+    regime = await RegimeService.aget()
     brief_data = _load_brief_data()
-
-    # Collect all tickers from brief sections
     seen = set()
     cards: List[Dict[str, Any]] = []
 
@@ -184,7 +182,7 @@ async def watchlist_search(
     """
     from src.services.regime_service import RegimeService
 
-    regime = RegimeService.get()
+    regime = await RegimeService.aget()
     brief_data = _load_brief_data()
 
     q = q.strip().upper()
@@ -236,7 +234,7 @@ async def watchlist_ticker(ticker: str):
     if cached:
         return cached
 
-    regime = RegimeService.get()
+    regime = await RegimeService.aget()
     brief_data = _load_brief_data()
     card = _build_decision_card(ticker, brief_data, regime)
     _store_card(ticker, card)
