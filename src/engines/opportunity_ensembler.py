@@ -28,6 +28,7 @@ Scoring formula — net expectancy first:
 
 Design: pure scoring, no I/O, no broker calls.
 """
+
 from __future__ import annotations
 
 import logging
@@ -45,33 +46,69 @@ logger = logging.getLogger(__name__)
 # net_expectancy is primary: a positive-EV trade is worth taking
 # even in a sub-optimal regime; a negative-EV trade is never worth it.
 DEFAULT_WEIGHTS: Dict[str, float] = {
-    "net_expectancy": 0.35,   # Kelly/Mercer: only edge that matters
-    "momentum":       0.15,   # MACD + Heikin-Ashi confirmation
-    "timing":         0.15,   # BB position + Dual Thrust proximity
-    "regime_fit":     0.20,   # regime × strategy affinity
-    "rs_rank":        0.10,   # Mansfield RS vs benchmark
-    "health":         0.05,   # leaderboard Bayesian win rate
+    "net_expectancy": 0.35,  # Kelly/Mercer: only edge that matters
+    "momentum": 0.15,  # MACD + Heikin-Ashi confirmation
+    "timing": 0.15,  # BB position + Dual Thrust proximity
+    "regime_fit": 0.20,  # regime × strategy affinity
+    "rs_rank": 0.10,  # Mansfield RS vs benchmark
+    "health": 0.05,  # leaderboard Bayesian win rate
 }
 
 # Suppression thresholds
-MIN_COMPOSITE_SCORE  = 0.32   # below this → no trade
-MIN_RISK_REWARD      = 2.0    # R:R gate for TRADE conviction
-MIN_WIN_PROBABILITY  = 0.40   # below this → low-edge discard
-MAX_REGIME_ENTROPY   = 0.90   # high entropy → regime uncertainty → no trade
+MIN_COMPOSITE_SCORE = 0.32  # below this → no trade
+MIN_RISK_REWARD = 2.0  # R:R gate for TRADE conviction
+MIN_WIN_PROBABILITY = 0.40  # below this → low-edge discard
+MAX_REGIME_ENTROPY = 0.90  # high entropy → regime uncertainty → no trade
 
 # Strategy → regime affinity map
 # (strategy_family: {regime_component: affinity_score 0-1})
 STRATEGY_REGIME_AFFINITY: Dict[str, Dict[str, float]] = {
-    "momentum":    {"risk_on_uptrend": 0.90, "neutral_range": 0.35, "risk_off_downtrend": 0.05},
-    "breakout":    {"risk_on_uptrend": 0.85, "neutral_range": 0.40, "risk_off_downtrend": 0.10},
-    "vcp":         {"risk_on_uptrend": 0.80, "neutral_range": 0.50, "risk_off_downtrend": 0.10},
-    "swing":       {"risk_on_uptrend": 0.60, "neutral_range": 0.70, "risk_off_downtrend": 0.20},
-    "mean_rev":    {"risk_on_uptrend": 0.30, "neutral_range": 0.85, "risk_off_downtrend": 0.45},
-    "pair":        {"risk_on_uptrend": 0.50, "neutral_range": 0.90, "risk_off_downtrend": 0.60},
-    "defensive":   {"risk_on_uptrend": 0.15, "neutral_range": 0.50, "risk_off_downtrend": 0.90},
-    "earnings":    {"risk_on_uptrend": 0.55, "neutral_range": 0.55, "risk_off_downtrend": 0.20},
-    "london_bkout":{"risk_on_uptrend": 0.65, "neutral_range": 0.60, "risk_off_downtrend": 0.15},
-    "dual_thrust": {"risk_on_uptrend": 0.70, "neutral_range": 0.65, "risk_off_downtrend": 0.10},
+    "momentum": {
+        "risk_on_uptrend": 0.90,
+        "neutral_range": 0.35,
+        "risk_off_downtrend": 0.05,
+    },
+    "breakout": {
+        "risk_on_uptrend": 0.85,
+        "neutral_range": 0.40,
+        "risk_off_downtrend": 0.10,
+    },
+    "vcp": {"risk_on_uptrend": 0.80, "neutral_range": 0.50, "risk_off_downtrend": 0.10},
+    "swing": {
+        "risk_on_uptrend": 0.60,
+        "neutral_range": 0.70,
+        "risk_off_downtrend": 0.20,
+    },
+    "mean_rev": {
+        "risk_on_uptrend": 0.30,
+        "neutral_range": 0.85,
+        "risk_off_downtrend": 0.45,
+    },
+    "pair": {
+        "risk_on_uptrend": 0.50,
+        "neutral_range": 0.90,
+        "risk_off_downtrend": 0.60,
+    },
+    "defensive": {
+        "risk_on_uptrend": 0.15,
+        "neutral_range": 0.50,
+        "risk_off_downtrend": 0.90,
+    },
+    "earnings": {
+        "risk_on_uptrend": 0.55,
+        "neutral_range": 0.55,
+        "risk_off_downtrend": 0.20,
+    },
+    "london_bkout": {
+        "risk_on_uptrend": 0.65,
+        "neutral_range": 0.60,
+        "risk_off_downtrend": 0.15,
+    },
+    "dual_thrust": {
+        "risk_on_uptrend": 0.70,
+        "neutral_range": 0.65,
+        "risk_off_downtrend": 0.10,
+    },
 }
 
 
@@ -94,15 +131,25 @@ class OpportunityEnsembler:
         min_rr: float = MIN_RISK_REWARD,
         min_pwin: float = MIN_WIN_PROBABILITY,
     ):
-        self.weights  = weights or DEFAULT_WEIGHTS.copy()
+        self.weights = weights or DEFAULT_WEIGHTS.copy()
         self.min_score = min_score
-        self.min_rr    = min_rr
-        self.min_pwin  = min_pwin
+        self.min_rr = min_rr
+        self.min_pwin = min_pwin
         self._validate_weights()
         logger.debug(
             "OpportunityEnsembler init: min_score=%.2f, min_rr=%.1f, min_pwin=%.2f",
-            min_score, min_rr, min_pwin,
+            min_score,
+            min_rr,
+            min_pwin,
         )
+
+    def set_weights(self, new_weights: Dict[str, float]) -> None:
+        """Hot-swap component weights (e.g. from MetaEnsemble ridge regression)."""
+        merged = DEFAULT_WEIGHTS.copy()
+        merged.update(new_weights)
+        self.weights = merged
+        self._validate_weights()
+        logger.info("OpportunityEnsembler: weights updated → %s", self.weights)
 
     # ── Main API ──────────────────────────────────────────────────
 
@@ -125,9 +172,20 @@ class OpportunityEnsembler:
         if not recommendations:
             return []
 
-        scored = [
-            self._score_one(rec, regime, strategy_health or {})
+        # Sprint 90: block GPT-rejected signals before scoring
+        eligible = [
+            rec
             for rec in recommendations
+            if getattr(rec, "approval_status", "") != "rejected"
+        ]
+        if len(eligible) < len(recommendations):
+            logger.info(
+                "OpportunityEnsembler: suppressed %d GPT-rejected signals",
+                len(recommendations) - len(eligible),
+            )
+
+        scored = [
+            self._score_one(rec, regime, strategy_health or {}) for rec in eligible
         ]
         scored = self._apply_suppression(scored, regime)
         scored.sort(
@@ -137,7 +195,8 @@ class OpportunityEnsembler:
         n_trade = sum(1 for r in scored if r.trade_decision)
         logger.info(
             "OpportunityEnsembler: ranked %d, tradeable %d",
-            len(scored), n_trade,
+            len(scored),
+            n_trade,
         )
         return scored
 
@@ -166,9 +225,9 @@ class OpportunityEnsembler:
         # net_exp = p(win) * avg_win_R − p(loss) * avg_loss_R
         # Positive net_exp = positive edge = worth taking.
         pwin = self._get_pwin(rec)
-        avg_win_r  = max(rec.risk_reward_ratio, 1.0)   # normalise: 1R stop
+        avg_win_r = max(rec.risk_reward_ratio, 1.0)  # normalise: 1R stop
         avg_loss_r = 1.0
-        net_exp    = pwin * avg_win_r - (1.0 - pwin) * avg_loss_r
+        net_exp = pwin * avg_win_r - (1.0 - pwin) * avg_loss_r
         # Normalise to 0–1 using a 5R scale (net_exp=5R → score=1.0)
         # net_exp can range from about -1 (worst) to +5 (excellent)
         # score = (net_exp + 1) / 6  → -1R=0.0, 0R=0.167, 5R=1.0
@@ -199,28 +258,28 @@ class OpportunityEnsembler:
         # ── Composite ──
         composite = (
             w["net_expectancy"] * net_exp_norm
-            + w["momentum"]     * momentum
-            + w["timing"]       * timing
-            + w["regime_fit"]   * regime_fit
-            + w["rs_rank"]      * rs_rank
-            + w["health"]       * health
+            + w["momentum"] * momentum
+            + w["timing"] * timing
+            + w["regime_fit"] * regime_fit
+            + w["rs_rank"] * rs_rank
+            + w["health"] * health
         )
         composite = round(max(0.0, min(1.0, composite)), 4)
 
         # Populate
         rec.composite_score = composite
-        rec.trade_decision  = True   # suppression pass follows
+        rec.trade_decision = True  # suppression pass follows
         rec.suppression_reason = ""
         rec.components = {
-            "net_expectancy":  round(net_exp_norm, 3),
-            "net_exp_raw_R":   round(net_exp, 3),
-            "pwin":            round(pwin, 3),
-            "rr":              round(avg_win_r, 2),
-            "momentum":        round(momentum, 3),
-            "timing":          round(timing, 3),
-            "regime_fit":      round(regime_fit, 3),
-            "rs_rank":         round(rs_rank, 3),
-            "health":          round(health, 3),
+            "net_expectancy": round(net_exp_norm, 3),
+            "net_exp_raw_R": round(net_exp, 3),
+            "pwin": round(pwin, 3),
+            "rr": round(avg_win_r, 2),
+            "momentum": round(momentum, 3),
+            "timing": round(timing, 3),
+            "regime_fit": round(regime_fit, 3),
+            "rs_rank": round(rs_rank, 3),
+            "health": round(health, 3),
         }
         return rec
 
@@ -298,7 +357,7 @@ class OpportunityEnsembler:
         direction = (rec.direction or "LONG").upper()
         meta = rec.metadata or {}
 
-        bb_pct_b   = meta.get("bb_pct_b", 0.5)
+        bb_pct_b = meta.get("bb_pct_b", 0.5)
         bb_contracted = meta.get("bb_contracted", False)
         dual_thrust_break = meta.get("dual_thrust_upper_break", False)  # for LONG
         bb_pct_b = float(bb_pct_b)
@@ -320,9 +379,9 @@ class OpportunityEnsembler:
 
         bonus = 0.0
         if bb_contracted:
-            bonus += 0.15   # coiled spring — breakout expected
+            bonus += 0.15  # coiled spring — breakout expected
         if dual_thrust_break:
-            bonus += 0.10   # confirmed Dual Thrust breakout
+            bonus += 0.10  # confirmed Dual Thrust breakout
 
         return min(1.0, base + bonus)
 
@@ -338,8 +397,8 @@ class OpportunityEnsembler:
              mean reversion works best in sideways (neutral_range).
         """
         strat = (rec.strategy_id or "").lower()
-        risk_on  = float(regime.get("risk_on_uptrend", 0.33))
-        neutral  = float(regime.get("neutral_range", 0.33))
+        risk_on = float(regime.get("risk_on_uptrend", 0.33))
+        neutral = float(regime.get("neutral_range", 0.33))
         risk_off = float(regime.get("risk_off_downtrend", 0.33))
 
         # Find matching strategy family
@@ -351,8 +410,8 @@ class OpportunityEnsembler:
             return 0.40
 
         fit = (
-            affinity.get("risk_on_uptrend", 0.5)    * risk_on
-            + affinity.get("neutral_range", 0.5)    * neutral
+            affinity.get("risk_on_uptrend", 0.5) * risk_on
+            + affinity.get("neutral_range", 0.5) * neutral
             + affinity.get("risk_off_downtrend", 0.5) * risk_off
         )
         return round(max(0.0, min(1.0, fit)), 3)
@@ -375,10 +434,10 @@ class OpportunityEnsembler:
         rs_composite = float(meta.get("rs_composite", 100.0))
 
         status_map = {
-            "LEADER":  1.00,
-            "STRONG":  0.75,
+            "LEADER": 1.00,
+            "STRONG": 0.75,
             "NEUTRAL": 0.50,
-            "WEAK":    0.25,
+            "WEAK": 0.25,
             "LAGGARD": 0.10,
         }
         if rs_status in status_map:
@@ -395,49 +454,67 @@ class OpportunityEnsembler:
         regime: Dict[str, Any],
     ) -> List["TradeRecommendation"]:
         """Apply suppression gates. Sets trade_decision=False when failing."""
-        should_trade  = regime.get("should_trade", True)
-        no_trade_rsn  = regime.get("no_trade_reason", "")
-        entropy       = float(regime.get("entropy", 0.0))
+        should_trade = regime.get("should_trade", True)
+        no_trade_rsn = regime.get("no_trade_reason", "")
+        entropy = float(regime.get("entropy", 0.0))
 
         for rec in recs:
             # Gate 1: regime-level no-trade (VIX crisis, choppy, etc.)
             if not should_trade:
-                self._suppress(rec, "regime_no_trade",
-                    f"Regime gate: {no_trade_rsn or 'should_trade=False'}")
+                self._suppress(
+                    rec,
+                    "regime_no_trade",
+                    f"Regime gate: {no_trade_rsn or 'should_trade=False'}",
+                )
                 continue
 
             # Gate 2: regime uncertainty too high (entropy > threshold)
             if entropy > MAX_REGIME_ENTROPY:
-                self._suppress(rec, "high_entropy",
-                    f"Regime entropy {entropy:.2f} > {MAX_REGIME_ENTROPY:.2f} — regime unclear")
+                self._suppress(
+                    rec,
+                    "high_entropy",
+                    f"Regime entropy {entropy:.2f} > {MAX_REGIME_ENTROPY:.2f} — regime unclear",
+                )
                 continue
 
             # Gate 3: net expectancy gate — no negative-EV trades
             pwin = rec.components.get("pwin", 0.5) if rec.components else 0.5
-            rr   = rec.components.get("rr", 1.5)   if rec.components else 1.5
+            rr = rec.components.get("rr", 1.5) if rec.components else 1.5
             net_exp = pwin * rr - (1.0 - pwin)
             if net_exp <= 0:
-                self._suppress(rec, "negative_expectancy",
-                    f"Net expectancy {net_exp:.3f}R ≤ 0 — no edge")
+                self._suppress(
+                    rec,
+                    "negative_expectancy",
+                    f"Net expectancy {net_exp:.3f}R ≤ 0 — no edge",
+                )
                 continue
 
             # Gate 4: composite score below minimum
             if rec.composite_score < self.min_score:
-                self._suppress(rec, "below_min_score",
-                    f"Composite {rec.composite_score:.3f} < {self.min_score:.3f}")
+                self._suppress(
+                    rec,
+                    "below_min_score",
+                    f"Composite {rec.composite_score:.3f} < {self.min_score:.3f}",
+                )
                 continue
 
             # Gate 5: win probability too low
             if pwin < self.min_pwin:
-                self._suppress(rec, "low_pwin",
-                    f"Win probability {pwin:.1%} < {self.min_pwin:.1%} minimum")
+                self._suppress(
+                    rec,
+                    "low_pwin",
+                    f"Win probability {pwin:.1%} < {self.min_pwin:.1%} minimum",
+                )
                 continue
 
             # Gate 6: R:R gate for TRADE conviction
             action = getattr(rec, "action_state", "WATCH") or "WATCH"
             if action == "TRADE" and rec.risk_reward_ratio < self.min_rr:
-                self._suppress(rec, "rr_too_low",
-                    f"R:R {rec.risk_reward_ratio:.1f} < {self.min_rr:.1f} for TRADE")
+                self._suppress(
+                    rec,
+                    "rr_too_low",
+                    f"R:R {rec.risk_reward_ratio:.1f} < {self.min_rr:.1f} for TRADE",
+                )
                 continue
 
             # All gates passed
@@ -451,9 +528,9 @@ class OpportunityEnsembler:
         reason: str,
         why: str,
     ) -> None:
-        rec.trade_decision     = False
+        rec.trade_decision = False
         rec.suppression_reason = reason
-        rec.why_not_trade      = why
+        rec.why_not_trade = why
 
     # ── Utilities ─────────────────────────────────────────────────
 
@@ -473,7 +550,7 @@ class OpportunityEnsembler:
             return "vcp"
         if any(k in s for k in ("earning", "catalyst")):
             return "earnings"
-        return "swing"   # default family
+        return "swing"  # default family
 
     def _validate_weights(self):
         total = sum(self.weights.values())

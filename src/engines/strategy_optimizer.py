@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 # ─── helpers ────────────────────────────────────────────────────────────────
 
+
 def _sharpe(returns: List[float], rf: float = 0.0) -> float:
     """Annualised Sharpe from a list of per-trade return %."""
     if len(returns) < 3:
@@ -39,7 +40,9 @@ def _sharpe(returns: List[float], rf: float = 0.0) -> float:
     std = arr.std()
     if std == 0:
         return 0.0
-    return float((arr.mean() - rf) / std * math.sqrt(len(arr)))
+    # sqrt(252) for annualization — not sqrt(N_trades) which inflates
+    # Sharpe for strategies with many trades
+    return float((arr.mean() - rf) / std * math.sqrt(252))
 
 
 def _max_drawdown(equity: List[float]) -> float:
@@ -122,7 +125,10 @@ def _regime_from_data(hist: pd.DataFrame) -> Dict[str, Any]:
 
 # ─── per-strategy backsimulation ────────────────────────────────────────────
 
-def _backtest_swing(hist: pd.DataFrame, params: Dict, skip_n: int = 0) -> Dict[str, Any]:
+
+def _backtest_swing(
+    hist: pd.DataFrame, params: Dict, skip_n: int = 0
+) -> Dict[str, Any]:
     """
     Walk-forward swing backtest on price history.
     Entries: price crosses back above EMA20 after pullback.
@@ -132,13 +138,22 @@ def _backtest_swing(hist: pd.DataFrame, params: Dict, skip_n: int = 0) -> Dict[s
     Used by walk-forward to provide indicator warm-up context without leaking
     training-period trades into the OOS metric.
     """
-    close = hist["Close"].dropna() if "Close" in hist.columns else hist["close"].dropna()
+    close = (
+        hist["Close"].dropna() if "Close" in hist.columns else hist["close"].dropna()
+    )
     high = hist["High"].dropna() if "High" in hist.columns else hist["high"].dropna()
     low = hist["Low"].dropna() if "Low" in hist.columns else hist["low"].dropna()
 
     if len(close) < 60:
-        return {"trades": 0, "win_rate": 0, "sharpe": 0, "pf": 0, "max_dd": 0,
-                "avg_hold": 0, "returns": []}
+        return {
+            "trades": 0,
+            "win_rate": 0,
+            "sharpe": 0,
+            "pf": 0,
+            "max_dd": 0,
+            "avg_hold": 0,
+            "returns": [],
+        }
 
     ema20 = close.ewm(span=20, adjust=False).mean()
     sma50 = close.rolling(50).mean()
@@ -204,8 +219,12 @@ def _backtest_swing(hist: pd.DataFrame, params: Dict, skip_n: int = 0) -> Dict[s
                 pb_count = 0
 
             # Entry: cross back above EMA20 after min pullback days, trend intact
-            if (pb_count >= min_pb_days and prev < ema <= price
-                    and price > sma and not np.isnan(atr)):
+            if (
+                pb_count >= min_pb_days
+                and prev < ema <= price
+                and price > sma
+                and not np.isnan(atr)
+            ):
                 entry = price * 1.001  # 0.1% slippage
                 stop_price = entry - stop_mult * atr
                 risk = entry - stop_price
@@ -215,8 +234,15 @@ def _backtest_swing(hist: pd.DataFrame, params: Dict, skip_n: int = 0) -> Dict[s
                 hold = 0
 
     if not returns:
-        return {"trades": 0, "win_rate": 0, "sharpe": 0, "pf": 0, "max_dd": 0,
-                "avg_hold": 0, "returns": []}
+        return {
+            "trades": 0,
+            "win_rate": 0,
+            "sharpe": 0,
+            "pf": 0,
+            "max_dd": 0,
+            "avg_hold": 0,
+            "returns": [],
+        }
 
     wins = [r for r in returns if r > 0]
     return {
@@ -231,19 +257,32 @@ def _backtest_swing(hist: pd.DataFrame, params: Dict, skip_n: int = 0) -> Dict[s
     }
 
 
-def _backtest_breakout(hist: pd.DataFrame, params: Dict, skip_n: int = 0) -> Dict[str, Any]:
+def _backtest_breakout(
+    hist: pd.DataFrame, params: Dict, skip_n: int = 0
+) -> Dict[str, Any]:
     """
     Breakout backtest: buy when price breaks 20-day high with above-avg vol.
     skip_n: see _backtest_swing docstring.
     """
-    close = hist["Close"].dropna() if "Close" in hist.columns else hist["close"].dropna()
+    close = (
+        hist["Close"].dropna() if "Close" in hist.columns else hist["close"].dropna()
+    )
     high = hist["High"].dropna() if "High" in hist.columns else hist["high"].dropna()
     low = hist["Low"].dropna() if "Low" in hist.columns else hist["low"].dropna()
-    vol = hist["Volume"].dropna() if "Volume" in hist.columns else hist["volume"].dropna()
+    vol = (
+        hist["Volume"].dropna() if "Volume" in hist.columns else hist["volume"].dropna()
+    )
 
     if len(close) < 40:
-        return {"trades": 0, "win_rate": 0, "sharpe": 0, "pf": 0, "max_dd": 0,
-                "avg_hold": 0, "returns": []}
+        return {
+            "trades": 0,
+            "win_rate": 0,
+            "sharpe": 0,
+            "pf": 0,
+            "max_dd": 0,
+            "avg_hold": 0,
+            "returns": [],
+        }
 
     lookback = params.get("lookback", 20)
     vol_mult = params.get("vol_mult", 1.5)
@@ -261,8 +300,8 @@ def _backtest_breakout(hist: pd.DataFrame, params: Dict, skip_n: int = 0) -> Dic
     for i in range(lookback + 5, len(close)):
         price = close.iloc[i]
         prev = close.iloc[i - 1]
-        resistance = high.iloc[i - lookback:i].max()
-        base_low = low.iloc[i - lookback:i].min()
+        resistance = high.iloc[i - lookback : i].max()
+        base_low = low.iloc[i - lookback : i].min()
         cur_vol = vol.iloc[i]
         avg_v = avg_vol.iloc[i]
         atr = (high.iloc[i] - low.iloc[i]) * 0.5 + abs(price - prev) * 0.5
@@ -292,8 +331,7 @@ def _backtest_breakout(hist: pd.DataFrame, params: Dict, skip_n: int = 0) -> Dic
                         hold_days.append(hold)
                     in_trade = False
         else:
-            if (prev < resistance and price > resistance
-                    and cur_vol > vol_mult * avg_v):
+            if prev < resistance and price > resistance and cur_vol > vol_mult * avg_v:
                 entry = price * 1.001
                 stop_price = max(base_low, entry - stop_mult * atr)
                 risk = entry - stop_price
@@ -303,8 +341,15 @@ def _backtest_breakout(hist: pd.DataFrame, params: Dict, skip_n: int = 0) -> Dic
                 hold = 0
 
     if not returns:
-        return {"trades": 0, "win_rate": 0, "sharpe": 0, "pf": 0, "max_dd": 0,
-                "avg_hold": 0, "returns": []}
+        return {
+            "trades": 0,
+            "win_rate": 0,
+            "sharpe": 0,
+            "pf": 0,
+            "max_dd": 0,
+            "avg_hold": 0,
+            "returns": [],
+        }
 
     wins = [r for r in returns if r > 0]
     return {
@@ -319,15 +364,26 @@ def _backtest_breakout(hist: pd.DataFrame, params: Dict, skip_n: int = 0) -> Dic
     }
 
 
-def _backtest_mean_reversion(hist: pd.DataFrame, params: Dict, skip_n: int = 0) -> Dict[str, Any]:
+def _backtest_mean_reversion(
+    hist: pd.DataFrame, params: Dict, skip_n: int = 0
+) -> Dict[str, Any]:
     """
     Mean reversion backtest: buy RSI < threshold, sell at RSI > exit or +N%.
     skip_n: see _backtest_swing docstring.
     """
-    close = hist["Close"].dropna() if "Close" in hist.columns else hist["close"].dropna()
+    close = (
+        hist["Close"].dropna() if "Close" in hist.columns else hist["close"].dropna()
+    )
     if len(close) < 30:
-        return {"trades": 0, "win_rate": 0, "sharpe": 0, "pf": 0, "max_dd": 0,
-                "avg_hold": 0, "returns": []}
+        return {
+            "trades": 0,
+            "win_rate": 0,
+            "sharpe": 0,
+            "pf": 0,
+            "max_dd": 0,
+            "avg_hold": 0,
+            "returns": [],
+        }
 
     rsi_entry = params.get("rsi_entry", 30)
     rsi_exit = params.get("rsi_exit", 55)
@@ -385,8 +441,15 @@ def _backtest_mean_reversion(hist: pd.DataFrame, params: Dict, skip_n: int = 0) 
                 hold = 0
 
     if not returns:
-        return {"trades": 0, "win_rate": 0, "sharpe": 0, "pf": 0, "max_dd": 0,
-                "avg_hold": 0, "returns": []}
+        return {
+            "trades": 0,
+            "win_rate": 0,
+            "sharpe": 0,
+            "pf": 0,
+            "max_dd": 0,
+            "avg_hold": 0,
+            "returns": [],
+        }
 
     wins = [r for r in returns if r > 0]
     return {
@@ -401,16 +464,29 @@ def _backtest_mean_reversion(hist: pd.DataFrame, params: Dict, skip_n: int = 0) 
     }
 
 
-def _backtest_momentum(hist: pd.DataFrame, params: Dict, skip_n: int = 0) -> Dict[str, Any]:
+def _backtest_momentum(
+    hist: pd.DataFrame, params: Dict, skip_n: int = 0
+) -> Dict[str, Any]:
     """
     Momentum backtest: enter on big surge day, trail stop, hold momentum.
     skip_n: see _backtest_swing docstring.
     """
-    close = hist["Close"].dropna() if "Close" in hist.columns else hist["close"].dropna()
-    vol = hist["Volume"].dropna() if "Volume" in hist.columns else hist["volume"].dropna()
+    close = (
+        hist["Close"].dropna() if "Close" in hist.columns else hist["close"].dropna()
+    )
+    vol = (
+        hist["Volume"].dropna() if "Volume" in hist.columns else hist["volume"].dropna()
+    )
     if len(close) < 25:
-        return {"trades": 0, "win_rate": 0, "sharpe": 0, "pf": 0, "max_dd": 0,
-                "avg_hold": 0, "returns": []}
+        return {
+            "trades": 0,
+            "win_rate": 0,
+            "sharpe": 0,
+            "pf": 0,
+            "max_dd": 0,
+            "avg_hold": 0,
+            "returns": [],
+        }
 
     min_move = params.get("min_move_pct", 3.0) / 100
     vol_mult = params.get("vol_mult", 1.5)
@@ -471,8 +547,15 @@ def _backtest_momentum(hist: pd.DataFrame, params: Dict, skip_n: int = 0) -> Dic
                 hold = 0
 
     if not returns:
-        return {"trades": 0, "win_rate": 0, "sharpe": 0, "pf": 0, "max_dd": 0,
-                "avg_hold": 0, "returns": []}
+        return {
+            "trades": 0,
+            "win_rate": 0,
+            "sharpe": 0,
+            "pf": 0,
+            "max_dd": 0,
+            "avg_hold": 0,
+            "returns": [],
+        }
 
     wins = [r for r in returns if r > 0]
     return {
@@ -513,7 +596,12 @@ STRATEGY_REGISTRY: Dict[str, Dict] = {
     },
     "MEAN_REVERSION": {
         "fn": _backtest_mean_reversion,
-        "default_params": {"rsi_entry": 30, "rsi_exit": 55, "stop_pct": 0.04, "target_pct": 0.05},
+        "default_params": {
+            "rsi_entry": 30,
+            "rsi_exit": 55,
+            "stop_pct": 0.04,
+            "target_pct": 0.05,
+        },
         "param_grid": {
             "rsi_entry": [25, 30, 35],
             "rsi_exit": [50, 55, 60],
@@ -524,7 +612,12 @@ STRATEGY_REGISTRY: Dict[str, Dict] = {
     },
     "MOMENTUM": {
         "fn": _backtest_momentum,
-        "default_params": {"min_move_pct": 3.0, "vol_mult": 1.5, "stop_atr": 1.5, "rr": 2.0},
+        "default_params": {
+            "min_move_pct": 3.0,
+            "vol_mult": 1.5,
+            "stop_atr": 1.5,
+            "rr": 2.0,
+        },
         "param_grid": {
             "min_move_pct": [2.0, 3.0, 4.0],
             "vol_mult": [1.3, 1.5, 2.0],
@@ -537,6 +630,7 @@ STRATEGY_REGISTRY: Dict[str, Dict] = {
 
 
 # ─── Composite scoring ──────────────────────────────────────────────────────
+
 
 def _score_result(r: Dict, regime: str, strategy_name: str) -> float:
     """
@@ -562,8 +656,14 @@ def _score_result(r: Dict, regime: str, strategy_name: str) -> float:
     net_exp = r["win_rate"] * avg_win - (1 - r["win_rate"]) * avg_loss
     exp_score = max(0.0, min(net_exp / 0.03, 1.0))  # 3% net = perfect
 
-    raw = (sharpe_score * 30 + exp_score * 25 + pf * 20 +
-           dd_penalty * 15 + wr_score * 5 + trade_score * 5)
+    raw = (
+        sharpe_score * 30
+        + exp_score * 25
+        + pf * 20
+        + dd_penalty * 15
+        + wr_score * 5
+        + trade_score * 5
+    )
 
     # Regime bonus: +10 if strategy naturally fits this regime
     if regime in STRATEGY_REGISTRY.get(strategy_name, {}).get("regime_fit", []):
@@ -574,6 +674,7 @@ def _score_result(r: Dict, regime: str, strategy_name: str) -> float:
 
 # ─── Main optimizer class ────────────────────────────────────────────────────
 
+
 class StrategyOptimizer:
     """
     Runs backtest + parameter-sweep + cross-check + regime-match for any ticker.
@@ -582,7 +683,9 @@ class StrategyOptimizer:
 
     def __init__(self):
         # In-memory accuracy tracking: {strategy: {"hits": N, "misses": N}}
-        self._accuracy: Dict[str, Dict[str, int]] = defaultdict(lambda: {"hits": 0, "misses": 0})
+        self._accuracy: Dict[str, Dict[str, int]] = defaultdict(
+            lambda: {"hits": 0, "misses": 0}
+        )
         # Score correction factors derived from live accuracy
         self._score_adjustments: Dict[str, float] = {}
         # Historical regime→best_strategy cache
@@ -622,31 +725,31 @@ class StrategyOptimizer:
             try:
                 r = cfg["fn"](dev_data.copy(), cfg["default_params"])
                 adj = self._score_adjustments.get(name, 1.0)
-                r["score"] = round(
-                    _score_result(r, regime, name) * adj, 1
-                )
+                r["score"] = round(_score_result(r, regime, name) * adj, 1)
                 r["strategy"] = name
                 r["params"] = cfg["default_params"]
                 results[name] = r
             except Exception as exc:
                 logger.warning(f"Strategy {name} failed: {exc}")
                 results[name] = {
-                    "trades": 0, "score": 0, "strategy": name,
-                    "returns": [], "win_rate": 0, "sharpe": 0,
-                    "pf": 0, "max_dd": 0, "avg_hold": 0,
+                    "trades": 0,
+                    "score": 0,
+                    "strategy": name,
+                    "returns": [],
+                    "win_rate": 0,
+                    "sharpe": 0,
+                    "pf": 0,
+                    "max_dd": 0,
+                    "avg_hold": 0,
                 }
 
         # 2. Walk-forward on DEV data for top strategies
-        ranked = sorted(
-            results.values(), key=lambda x: x["score"], reverse=True
-        )
+        ranked = sorted(results.values(), key=lambda x: x["score"], reverse=True)
         top3 = ranked[:3]
         wf_results = {}
         for r in top3:
             try:
-                wf = self._walk_forward(
-                    dev_data.copy(), r["strategy"]
-                )
+                wf = self._walk_forward(dev_data.copy(), r["strategy"])
                 wf_results[r["strategy"]] = wf
             except Exception:
                 pass
@@ -666,9 +769,7 @@ class StrategyOptimizer:
 
         # 4. Param sweep on DEV data only (not full history)
         best_strat = ranked[0]["strategy"] if ranked else "SWING"
-        best_params, sweep_score = self._param_sweep(
-            dev_data.copy(), best_strat
-        )
+        best_params, sweep_score = self._param_sweep(dev_data.copy(), best_strat)
 
         # 5. Validation check on middle segment
         val_result = {}
@@ -680,11 +781,8 @@ class StrategyOptimizer:
                     "trades": vr["trades"],
                     "sharpe": vr["sharpe"],
                     "win_rate": vr["win_rate"],
-                    "score": _score_result(
-                        vr, regime, best_strat
-                    ),
-                    "stable": vr["sharpe"] > 0
-                    and vr["win_rate"] > 0.35,
+                    "score": _score_result(vr, regime, best_strat),
+                    "stable": vr["sharpe"] > 0 and vr["win_rate"] > 0.35,
                 }
         except Exception:
             pass
@@ -699,9 +797,7 @@ class StrategyOptimizer:
                     "trades": hr["trades"],
                     "sharpe": hr["sharpe"],
                     "win_rate": hr["win_rate"],
-                    "score": _score_result(
-                        hr, regime, best_strat
-                    ),
+                    "score": _score_result(hr, regime, best_strat),
                 }
         except Exception:
             pass
@@ -709,12 +805,8 @@ class StrategyOptimizer:
         # 7. Cross-check, correction, regime recommendation, MC
         conflict = self._cross_check(results)
         correction_notes = self._correction_notes()
-        regime_recommendation = self._regime_recommendation(
-            regime, results
-        )
-        mc = self._monte_carlo(
-            results.get(best_strat, {}).get("returns", [])
-        )
+        regime_recommendation = self._regime_recommendation(regime, results)
+        mc = self._monte_carlo(results.get(best_strat, {}).get("returns", []))
 
         return {
             "ticker": ticker,
@@ -725,8 +817,7 @@ class StrategyOptimizer:
             "best_strategy": best_strat,
             "best_params": best_params,
             "sweep_improvement": round(
-                sweep_score
-                - results.get(best_strat, {}).get("score", 0),
+                sweep_score - results.get(best_strat, {}).get("score", 0),
                 1,
             ),
             "walk_forward": wf_results,
@@ -753,8 +844,13 @@ class StrategyOptimizer:
                 r = cfg["fn"](hist.copy(), cfg["default_params"])
                 score = _score_result(r, regime, name)
                 adj = self._score_adjustments.get(name, 1.0)
-                scored.append({"strategy": name, "score": round(score * adj, 1),
-                               "regime_fit": regime in cfg["regime_fit"]})
+                scored.append(
+                    {
+                        "strategy": name,
+                        "score": round(score * adj, 1),
+                        "regime_fit": regime in cfg["regime_fit"],
+                    }
+                )
             except Exception:
                 scored.append({"strategy": name, "score": 0, "regime_fit": False})
         scored.sort(key=lambda x: x["score"], reverse=True)
@@ -763,11 +859,11 @@ class StrategyOptimizer:
     # ── self-correction constants ─────────────────────────────────────────────
     # Require enough observations before making any adjustment, then use a
     # slow EMA + shrinkage-toward-neutral to prevent oscillation.
-    _MIN_SAMPLES   = 20      # no adjustment until we have this many outcomes
-    _EMA_ALPHA     = 0.15    # low alpha ≈ half-life ~4 observations
-    _SHRINK_RATE   = 0.12    # pull 12% toward 1.0 on every update (L2-like)
-    _FACTOR_MIN    = 0.75    # tighter bounds than original (was 0.6)
-    _FACTOR_MAX    = 1.25    # tighter bounds than original (was 1.4)
+    _MIN_SAMPLES = 20  # no adjustment until we have this many outcomes
+    _EMA_ALPHA = 0.15  # low alpha ≈ half-life ~4 observations
+    _SHRINK_RATE = 0.12  # pull 12% toward 1.0 on every update (L2-like)
+    _FACTOR_MIN = 0.75  # tighter bounds than original (was 0.6)
+    _FACTOR_MAX = 1.25  # tighter bounds than original (was 1.4)
 
     def record_signal_outcome(self, strategy: str, was_correct: bool):
         """
@@ -782,7 +878,7 @@ class StrategyOptimizer:
         else:
             self._accuracy[strategy]["misses"] += 1
 
-        acc   = self._accuracy[strategy]
+        acc = self._accuracy[strategy]
         total = acc["hits"] + acc["misses"]
 
         if total < self._MIN_SAMPLES:
@@ -794,7 +890,7 @@ class StrategyOptimizer:
         raw = self._FACTOR_MIN + live_wr * (self._FACTOR_MAX - self._FACTOR_MIN)
 
         # EMA-smooth: blend toward raw target slowly
-        prev     = self._score_adjustments.get(strategy, 1.0)
+        prev = self._score_adjustments.get(strategy, 1.0)
         smoothed = self._EMA_ALPHA * raw + (1.0 - self._EMA_ALPHA) * prev
 
         # Shrinkage toward 1.0 — regularises the estimate when evidence is weak
@@ -804,7 +900,11 @@ class StrategyOptimizer:
         self._score_adjustments[strategy] = final
         logger.info(
             "Self-corrected %s: n=%d, live_wr=%.2f, prev=%.3f → %.3f",
-            strategy, total, live_wr, prev, final,
+            strategy,
+            total,
+            live_wr,
+            prev,
+            final,
         )
 
     def get_accuracy_summary(self) -> Dict[str, Dict]:
@@ -824,8 +924,7 @@ class StrategyOptimizer:
     # ── internal helpers ──────────────────────────────────────────────────
 
     def _walk_forward(
-        self, hist: pd.DataFrame, strategy_name: str,
-        n_folds: int = 4
+        self, hist: pd.DataFrame, strategy_name: str, n_folds: int = 4
     ) -> Dict[str, Any]:
         """
         Expanding-window walk-forward validation.
@@ -847,17 +946,17 @@ class StrategyOptimizer:
         oos_results = []
 
         for fold in range(n_folds - 1):
-            train_end   = (fold + 2) * fold_size
-            test_start  = train_end
-            test_end    = min(train_end + fold_size, len(hist))
+            train_end = (fold + 2) * fold_size
+            test_start = train_end
+            test_end = min(train_end + fold_size, len(hist))
 
             # Training data: clean slice, no test period visible
             train_data = hist.iloc[:train_end].copy()
 
             # Test data: prepend context bars so indicators are warm
             context_start = max(0, test_start - CONTEXT_BARS)
-            test_data     = hist.iloc[context_start:test_end].copy()
-            skip_n        = test_start - context_start  # warm-up bars to skip
+            test_data = hist.iloc[context_start:test_end].copy()
+            skip_n = test_start - context_start  # warm-up bars to skip
 
             # Skip fold if there are fewer than 10 genuine test bars
             if (test_end - test_start) < 10:
@@ -869,7 +968,9 @@ class StrategyOptimizer:
             best_s = -999
             sample_keys = list(grid.keys())[:2]  # limit to 2 params for speed
             for v0 in grid[sample_keys[0]][:3]:
-                for v1 in (grid[sample_keys[1]][:3] if len(sample_keys) > 1 else [None]):
+                for v1 in (
+                    grid[sample_keys[1]][:3] if len(sample_keys) > 1 else [None]
+                ):
                     p = dict(cfg["default_params"])
                     p[sample_keys[0]] = v0
                     if v1 is not None:
@@ -886,14 +987,16 @@ class StrategyOptimizer:
             # Test on OOS — only count trades entered in the test window
             try:
                 oos_r = cfg["fn"](test_data, best_p, skip_n=skip_n)
-                oos_results.append({
-                    "fold": fold,
-                    "trades": oos_r["trades"],
-                    "win_rate": oos_r["win_rate"],
-                    "sharpe": oos_r["sharpe"],
-                    "max_dd": oos_r["max_dd"],
-                    "score": _score_result(oos_r, "NEUTRAL", strategy_name),
-                })
+                oos_results.append(
+                    {
+                        "fold": fold,
+                        "trades": oos_r["trades"],
+                        "win_rate": oos_r["win_rate"],
+                        "sharpe": oos_r["sharpe"],
+                        "max_dd": oos_r["max_dd"],
+                        "score": _score_result(oos_r, "NEUTRAL", strategy_name),
+                    }
+                )
             except Exception:
                 pass
 
@@ -966,7 +1069,10 @@ class StrategyOptimizer:
         """
         scored = [(name, r["score"]) for name, r in results.items() if r["trades"] >= 3]
         if not scored:
-            return {"verdict": "INSUFFICIENT_DATA", "explanation": "Too few trades to cross-check."}
+            return {
+                "verdict": "INSUFFICIENT_DATA",
+                "explanation": "Too few trades to cross-check.",
+            }
 
         good = [n for n, s in scored if s >= 55]
         bad = [n for n, s in scored if s < 35]
@@ -1004,19 +1110,23 @@ class StrategyOptimizer:
             "weak_strategies": bad,
         }
 
-    def _regime_recommendation(self, regime: str, results: Dict[str, Dict]) -> Dict[str, Any]:
+    def _regime_recommendation(
+        self, regime: str, results: Dict[str, Dict]
+    ) -> Dict[str, Any]:
         """
         Given current regime + backtest results, recommend the best strategy.
         """
         candidates = []
         for name, r in results.items():
             fit = regime in STRATEGY_REGISTRY.get(name, {}).get("regime_fit", [])
-            candidates.append({
-                "strategy": name,
-                "score": r.get("score", 0),
-                "regime_fit": fit,
-                "trades": r.get("trades", 0),
-            })
+            candidates.append(
+                {
+                    "strategy": name,
+                    "score": r.get("score", 0),
+                    "regime_fit": fit,
+                    "trades": r.get("trades", 0),
+                }
+            )
 
         # Sort: regime-fit first, then by score
         candidates.sort(key=lambda x: (x["regime_fit"], x["score"]), reverse=True)
@@ -1033,7 +1143,9 @@ class StrategyOptimizer:
             "LOW_VOL_RANGING": "Tight, low-vol range — mean reversion edges, small size",
             "LOW_VOL_DOWNTREND": "Quiet slide lower — reduce exposure, wait",
         }
-        regime_expl = regime_explanations.get(regime, "Regime unclear — use smallest size")
+        regime_expl = regime_explanations.get(
+            regime, "Regime unclear — use smallest size"
+        )
 
         return {
             "regime": regime,
@@ -1073,10 +1185,10 @@ class StrategyOptimizer:
         """
         if len(returns) < 10:
             return {}
-        pnls    = np.array(returns)
-        n_orig  = len(pnls)
+        pnls = np.array(returns)
+        n_orig = len(pnls)
         # Block size: floor(sqrt(n_trades)), clamped to [2, 10]
-        block_size      = max(2, min(10, int(math.sqrt(n_orig))))
+        block_size = max(2, min(10, int(math.sqrt(n_orig))))
         n_blocks_needed = math.ceil(n_orig / block_size)
 
         finals: List[float] = []
@@ -1085,17 +1197,17 @@ class StrategyOptimizer:
             for _b in range(n_blocks_needed):
                 start = random.randint(0, n_orig - block_size)
                 sampled.extend(pnls[start : start + block_size])
-            seq = np.array(sampled[:n_orig])   # trim to original length
+            seq = np.array(sampled[:n_orig])  # trim to original length
             finals.append(float(np.prod(1.0 + seq)))
 
         finals_arr = np.array(finals)
         return {
-            "n":              n,
-            "method":         "block_bootstrap",
-            "block_size":     block_size,
-            "median_final":   round(float(np.median(finals_arr)), 3),
-            "p5_final":       round(float(np.percentile(finals_arr, 5)), 3),
-            "p95_final":      round(float(np.percentile(finals_arr, 95)), 3),
+            "n": n,
+            "method": "block_bootstrap",
+            "block_size": block_size,
+            "median_final": round(float(np.median(finals_arr)), 3),
+            "p5_final": round(float(np.percentile(finals_arr, 5)), 3),
+            "p95_final": round(float(np.percentile(finals_arr, 95)), 3),
             "pct_profitable": round(float((finals_arr > 1.0).mean() * 100), 1),
         }
 
@@ -1113,14 +1225,15 @@ def get_optimizer() -> StrategyOptimizer:
 # Factor Combo Tester — walk-forward + overfit rejection
 # ─────────────────────────────────────────────────────────────────────────────
 
-_MIN_COMBO_SAMPLES = 30     # hard gate: reject combos with fewer trades
-_OOS_SHARPE_RATIO = 0.5     # reject if OOS Sharpe < IS Sharpe * this ratio
-_IS_SPLIT = 0.6             # 60% in-sample, 40% out-of-sample
+_MIN_COMBO_SAMPLES = 30  # hard gate: reject combos with fewer trades
+_OOS_SHARPE_RATIO = 0.5  # reject if OOS Sharpe < IS Sharpe * this ratio
+_IS_SPLIT = 0.6  # 60% in-sample, 40% out-of-sample
 
 
 @dataclass
 class ComboResult:
     """Result for one factor combination."""
+
     factors: Dict[str, Any]
     n_trades: int
     is_sharpe: float
@@ -1128,7 +1241,7 @@ class ComboResult:
     hit_rate: float
     avg_r: float
     max_drawdown: float
-    verdict: str        # STABLE | OVERFIT | INSUFFICIENT_DATA
+    verdict: str  # STABLE | OVERFIT | INSUFFICIENT_DATA
     reason: str
 
     def to_dict(self) -> Dict[str, Any]:
@@ -1209,17 +1322,19 @@ class FactorComboTester:
             n = len(matched)
 
             if n < _MIN_COMBO_SAMPLES:
-                results.append(ComboResult(
-                    factors=combo,
-                    n_trades=n,
-                    is_sharpe=0.0,
-                    oos_sharpe=0.0,
-                    hit_rate=0.0,
-                    avg_r=0.0,
-                    max_drawdown=0.0,
-                    verdict="INSUFFICIENT_DATA",
-                    reason=f"Only {n} trades — need {_MIN_COMBO_SAMPLES}+",
-                ))
+                results.append(
+                    ComboResult(
+                        factors=combo,
+                        n_trades=n,
+                        is_sharpe=0.0,
+                        oos_sharpe=0.0,
+                        hit_rate=0.0,
+                        avg_r=0.0,
+                        max_drawdown=0.0,
+                        verdict="INSUFFICIENT_DATA",
+                        reason=f"Only {n} trades — need {_MIN_COMBO_SAMPLES}+",
+                    )
+                )
                 continue
 
             # Chronological IS/OOS split
@@ -1252,17 +1367,19 @@ class FactorComboTester:
                     f"n={n}"
                 )
 
-            results.append(ComboResult(
-                factors=combo,
-                n_trades=n,
-                is_sharpe=is_stats["sharpe"],
-                oos_sharpe=oos_stats["sharpe"],
-                hit_rate=oos_stats["hit_rate"],
-                avg_r=oos_stats["avg_r"],
-                max_drawdown=oos_stats["max_drawdown"],
-                verdict=verdict,
-                reason=reason,
-            ))
+            results.append(
+                ComboResult(
+                    factors=combo,
+                    n_trades=n,
+                    is_sharpe=is_stats["sharpe"],
+                    oos_sharpe=oos_stats["sharpe"],
+                    hit_rate=oos_stats["hit_rate"],
+                    avg_r=oos_stats["avg_r"],
+                    max_drawdown=oos_stats["max_drawdown"],
+                    verdict=verdict,
+                    reason=reason,
+                )
+            )
 
         # Sort stable combos by OOS Sharpe desc
         stable = [r for r in results if r.verdict == "STABLE"]
@@ -1281,7 +1398,8 @@ class FactorComboTester:
         """Return only stable combos with OOS Sharpe >= threshold."""
         all_results = self.test(trades, factor_grid)
         return [
-            r for r in all_results
+            r
+            for r in all_results
             if r.verdict == "STABLE" and r.oos_sharpe >= min_oos_sharpe
         ]
 
@@ -1344,7 +1462,7 @@ class FactorComboTester:
 
         mean = sum(pnls) / n
         std = (sum((p - mean) ** 2 for p in pnls) / n) ** 0.5
-        sharpe = (mean / std * (n ** 0.5)) if std > 0 else 0.0
+        sharpe = (mean / std * (n**0.5)) if std > 0 else 0.0
 
         hit_rate = sum(1 for p in pnls if p > 0) / n
         avg_r = sum(rs) / n

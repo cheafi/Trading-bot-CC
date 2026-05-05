@@ -2728,7 +2728,7 @@
                     </div>
                     <div style="background:var(--s2);border-radius:4px;padding:5px">
                       <div style="font-size:8px;color:var(--t3)">Alpha vs <span x-text="fundMonitor.data.benchmark"></span></div>
-                      <div class="mono" style="font-size:11px" :class="(f.metrics?.alpha_annualized||0)>=0?'text-green-400':'text-red-400'" x-text="((f.metrics?.alpha_annualized||0)>=0?'+':'')+(f.metrics?.alpha_annualized||0)+'%'"></div>
+                      <div class="mono" style="font-size:11px" :class="(f.metrics?.excess_return||0)>=0?'text-green-400':'text-red-400'" x-text="((f.metrics?.excess_return||0)>=0?'+':'')+(f.metrics?.excess_return||0)+'%'"></div>
                     </div>
                     <div style="background:var(--s2);border-radius:4px;padding:5px">
                       <div style="font-size:8px;color:var(--t3)">Sharpe</div>
@@ -2789,7 +2789,7 @@
                     </div>
                     <div style="background:var(--s2);border-radius:4px;padding:6px;text-align:center">
                       <div style="font-size:8px;color:var(--t3)">Alpha</div>
-                      <div class="mono font-bold" style="font-size:12px" :class="(f.metrics?.alpha_annualized||0)>=0?'text-green-400':'text-red-400'" x-text="((f.metrics?.alpha_annualized||0)>=0?'+':'')+(f.metrics?.alpha_annualized||0)+'%'"></div>
+                      <div class="mono font-bold" style="font-size:12px" :class="(f.metrics?.excess_return||0)>=0?'text-green-400':'text-red-400'" x-text="((f.metrics?.excess_return||0)>=0?'+':'')+(f.metrics?.excess_return||0)+'%'"></div>
                     </div>
                   </div>
 
@@ -2918,7 +2918,7 @@
                 </div>
               </div>
               <div class="flex gap-4 justify-center text-[10px]">
-                <span class="font-bold" :class="benchBT.data.alpha_annualized>=0?'text-green-400':'text-red-400'" x-text="'Alpha: '+(benchBT.data.alpha_annualized>=0?'+':'')+benchBT.data.alpha_annualized+'%/yr'"></span>
+                <span class="font-bold" :class="benchBT.data.excess_return>=0?'text-green-400':'text-red-400'" x-text="'Alpha: '+(benchBT.data.excess_return>=0?'+':'')+benchBT.data.excess_return+'%/yr'"></span>
                 <span style="color:var(--t2)" x-text="'Win rate vs BM: '+benchBT.data.win_rate_vs_benchmark+'%'"></span>
                 <span style="color:var(--t3)" x-text="benchBT.data.months+' months'"></span>
               </div>

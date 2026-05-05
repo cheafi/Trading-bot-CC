@@ -1086,6 +1086,16 @@ class AutoTradingEngine:
                     strategy_name=rec.strategy_id,
                 ),
             )
+            # Sprint 90: apply MetaLabel size_multiplier (0.5=BUY_SMALL, 1.0=STRONG_BUY)
+            _size_mult = getattr(rec, "size_multiplier", 1.0) or 1.0
+            if _size_mult != 1.0:
+                qty = max(1, int(qty * _size_mult))
+                logger.info(
+                    "%s: size_multiplier=%.1f → qty adjusted to %d",
+                    rec.ticker,
+                    _size_mult,
+                    qty,
+                )
             rec.position_size_shares = qty
 
             result = await manager.place_order(
@@ -1350,6 +1360,42 @@ class AutoTradingEngine:
                 hold_hours=_hold,
                 **_snapshot,
             )
+
+            # Sprint 90: populate would_have_recovered for stop-loss tuning
+            # Check if price recovered above entry within 5 bars after stop-out
+            _is_stop_exit = any(
+                kw in reason.lower() for kw in ("stop", "sl_hit", "trailing")
+            )
+            if _is_stop_exit:
+                try:
+                    import yfinance as yf
+
+                    _post = yf.download(
+                        closed_pos.ticker,
+                        period="10d",
+                        progress=False,
+                        auto_adjust=True,
+                    )
+                    if _post is not None and len(_post) >= 2:
+                        _highs = _post["High"].values[-5:]
+                        _recovered = any(
+                            float(h) >= closed_pos.entry_price for h in _highs
+                        )
+                        record.would_have_recovered = _recovered
+                        if _recovered:
+                            logger.info(
+                                "%s: stop-out at %.2f but price recovered above entry %.2f within 5 bars",
+                                closed_pos.ticker,
+                                closed_pos.exit_price,
+                                closed_pos.entry_price,
+                            )
+                except Exception as e:
+                    logger.debug(
+                        "would_have_recovered check failed for %s: %s",
+                        closed_pos.ticker,
+                        e,
+                    )
+
             self.learning_loop.record_outcome(record)
             logger.info(
                 "Recorded learning outcome: %s %s %.2f%%",
@@ -1627,23 +1673,50 @@ class AutoTradingEngine:
         except Exception as e:
             logger.warning("EOD model retrain error: %s", e)
 
+        # 2.5 Sprint 90: hot-swap MetaEnsemble learned weights into ensembler
+        try:
+            from src.engines.meta_ensemble import MetaEnsemble
+
+            me = MetaEnsemble()
+            learned = me.get_learned_weights()
+            if learned:
+                self.ensembler.set_weights(learned)
+                logger.info(
+                    "EOD: MetaEnsemble weights applied to ensembler (%d components)",
+                    len(learned),
+                )
+            else:
+                logger.debug(
+                    "EOD: MetaEnsemble weights not ready (need %d samples)",
+                    me._min_samples,
+                )
+        except Exception as e:
+            logger.warning("EOD MetaEnsemble weight update error: %s", e)
+
         # 3. Benchmark portfolio attribution
         try:
-            from src.engines.benchmark_portfolio import BenchmarkPortfolioEngine, PositionSnapshot
+            from src.engines.benchmark_portfolio import (
+                BenchmarkPortfolioEngine,
+                PositionSnapshot,
+            )
+
             bp_engine = BenchmarkPortfolioEngine()
             # Build position snapshots from today's trades
             positions = []
             for t in self._trades_today:
-                positions.append(PositionSnapshot(
-                    ticker=t.get("ticker", ""),
-                    weight=t.get("position_size_pct", 0.05),
-                    return_pct=t.get("pnl_pct", 0),
-                    sector=t.get("sector", "Unknown"),
-                ))
+                positions.append(
+                    PositionSnapshot(
+                        ticker=t.get("ticker", ""),
+                        weight=t.get("position_size_pct", 0.05),
+                        return_pct=t.get("pnl_pct", 0),
+                        sector=t.get("sector", "Unknown"),
+                    )
+                )
             # Fetch real benchmark (SPY) return for the day
             benchmark_return = 0.0
             try:
                 import yfinance as yf
+
                 spy = yf.Ticker("SPY")
                 hist = spy.history(period="2d")
                 if len(hist) >= 2:
@@ -1671,24 +1744,34 @@ class AutoTradingEngine:
         # 4. Rejection analysis
         try:
             from src.engines.rejection_analysis import RejectionAnalysisEngine
+
             rejection_engine = RejectionAnalysisEngine()
             # Feed today's rejected signals — check both GPT-rejected
             # signals and ensembler-suppressed recommendations.
             seen_tickers: set = set()
             for sig in self._signals_today:
-                is_rejected = (
-                    getattr(sig, "approval_status", "") == "rejected"
-                )
+                is_rejected = getattr(sig, "approval_status", "") == "rejected"
                 if is_rejected:
                     from src.engines.rejection_analysis import RejectionRecord
-                    rejection_engine.record_rejection(RejectionRecord(
-                        ticker=sig.ticker,
-                        strategy=sig.strategy_id or "unknown",
-                        direction=sig.direction.value if hasattr(sig.direction, 'value') else str(sig.direction),
-                        confidence=sig.confidence,
-                        rejection_reasons=[sig.why_not_trade] if sig.why_not_trade else ["rejected"],
-                        regime_at_rejection=self._cached_regime.get("regime", ""),
-                    ))
+
+                    rejection_engine.record_rejection(
+                        RejectionRecord(
+                            ticker=sig.ticker,
+                            strategy=sig.strategy_id or "unknown",
+                            direction=(
+                                sig.direction.value
+                                if hasattr(sig.direction, "value")
+                                else str(sig.direction)
+                            ),
+                            confidence=sig.confidence,
+                            rejection_reasons=(
+                                [sig.why_not_trade]
+                                if sig.why_not_trade
+                                else ["rejected"]
+                            ),
+                            regime_at_rejection=self._cached_regime.get("regime", ""),
+                        )
+                    )
                     seen_tickers.add(sig.ticker)
 
             # Also capture ensembler-suppressed recommendations
@@ -1697,14 +1780,25 @@ class AutoTradingEngine:
                     ticker = rec_dict.get("ticker", "")
                     if ticker and ticker not in seen_tickers:
                         from src.engines.rejection_analysis import RejectionRecord
-                        rejection_engine.record_rejection(RejectionRecord(
-                            ticker=ticker,
-                            strategy=rec_dict.get("strategy_id", "unknown"),
-                            direction=rec_dict.get("direction", "LONG"),
-                            confidence=rec_dict.get("score", 0) * 100,
-                            rejection_reasons=[rec_dict.get("why_not_trade", "")] if rec_dict.get("why_not_trade") else [rec_dict.get("suppression_reason", "suppressed")],
-                            regime_at_rejection=self._cached_regime.get("regime", ""),
-                        ))
+
+                        rejection_engine.record_rejection(
+                            RejectionRecord(
+                                ticker=ticker,
+                                strategy=rec_dict.get("strategy_id", "unknown"),
+                                direction=rec_dict.get("direction", "LONG"),
+                                confidence=rec_dict.get("score", 0) * 100,
+                                rejection_reasons=(
+                                    [rec_dict.get("why_not_trade", "")]
+                                    if rec_dict.get("why_not_trade")
+                                    else [
+                                        rec_dict.get("suppression_reason", "suppressed")
+                                    ]
+                                ),
+                                regime_at_rejection=self._cached_regime.get(
+                                    "regime", ""
+                                ),
+                            )
+                        )
                         seen_tickers.add(ticker)
 
             analysis = rejection_engine.analyze()
@@ -1721,19 +1815,23 @@ class AutoTradingEngine:
         # 5. Self-learning rule tuning
         try:
             from src.engines.self_learning import SelfLearningEngine
+
             sl_engine = SelfLearningEngine()
             # Feed today's closed trades
             outcomes = []
             for t in self._trades_today:
-                outcomes.append({
-                    "ticker": t.get("ticker", ""),
-                    "pnl_pct": t.get("pnl_pct", 0),
-                    "exit_reason": t.get("exit_reason", ""),
-                    "composite_score": t.get("composite_score", 0),
-                    "strategy": t.get("strategy_name", ""),
-                })
+                outcomes.append(
+                    {
+                        "ticker": t.get("ticker", ""),
+                        "pnl_pct": t.get("pnl_pct", 0),
+                        "exit_reason": t.get("exit_reason", ""),
+                        "composite_score": t.get("composite_score", 0),
+                        "strategy": t.get("strategy_name", ""),
+                    }
+                )
             if outcomes:
                 from src.core.config import get_trading_config
+
                 tc = get_trading_config()
                 current_rules = {
                     "ensemble_min_score": tc.ensemble_min_score,
@@ -1743,7 +1841,9 @@ class AutoTradingEngine:
                     "stop_loss_pct": tc.stop_loss_pct,
                     "trailing_stop_pct": tc.trailing_stop_pct,
                 }
-                recommendations = sl_engine.analyze_and_recommend(outcomes, current_rules)
+                recommendations = sl_engine.analyze_and_recommend(
+                    outcomes, current_rules
+                )
                 if recommendations:
                     applied = sl_engine.apply_adjustments(recommendations)
                     logger.info(

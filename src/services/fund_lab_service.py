@@ -130,19 +130,23 @@ class FundLabService:
         if not picks:
             return {"name": name, "thesis": spec["thesis"], "picks": []}
 
-        w = 1.0 / len(picks)
+        # Score-proportional weighting (uses computed momentum edge)
+        scores = np.array([sc for (_, sc, _, _) in picks], dtype=float)
+        # Shift to positive range so all weights > 0, then normalise
+        shifted = scores - scores.min() + 1e-6
+        w_arr = shifted / shifted.sum()
         return {
             "name": name,
             "thesis": spec["thesis"],
             "picks": [
                 {
                     "ticker": t,
-                    "weight": round(w, 4),
+                    "weight": round(float(w_arr[j]), 4),
                     "momentum_3m": round(r3 * 100, 2),
                     "volatility": round(v * 100, 2),
                     "score": round(sc, 4),
                 }
-                for (t, sc, r3, v) in picks
+                for j, (t, sc, r3, v) in enumerate(picks)
             ],
         }
 
@@ -152,10 +156,13 @@ class FundLabService:
         if not picks:
             return pd.Series(dtype=float)
 
+        # Parallel history fetches (5 picks × 1 call each, in parallel)
+        raw = await asyncio.gather(
+            *[self._history(mds, p["ticker"], period) for p in picks]
+        )
         series = []
         weights = []
-        for p in picks:
-            s = await self._history(mds, p["ticker"], period)
+        for s, p in zip(raw, picks):
             if s.empty:
                 continue
             series.append(s)
@@ -217,7 +224,9 @@ class FundLabService:
 
         total_p = float(eq_p.iloc[-1] - 1.0)
         total_b = float(eq_b.iloc[-1] - 1.0)
-        years = max(n / 252.0, 1 / 252.0)
+        years = max(
+            n / 252.0, 0.1
+        )  # floor ~25 trading days to avoid astronomical annualization
         ann_p = float((1 + total_p) ** (1 / years) - 1)
         ann_b = float((1 + total_b) ** (1 / years) - 1)
 
@@ -233,16 +242,23 @@ class FundLabService:
             "volatility": round(vol * 100, 2),
             "sharpe": round(sharpe, 2),
             "max_drawdown": round(float(dd) * 100, 2),
-            "alpha_annualized": round((ann_p - ann_b) * 100, 2),
+            "excess_return": round(
+                (ann_p - ann_b) * 100, 2
+            ),  # not Jensen's alpha (no beta adj)
             "roi_vs_benchmark": round((total_p - total_b) * 100, 2),
         }
 
     async def run(
         self, mds: Any, period: str = "1y", benchmark: str = "SPY", top_n: int = 5
     ) -> Dict[str, Any]:
-        sleeves = {}
-        for fund_name in self.FUND_UNIVERSES:
-            sleeves[fund_name] = await self._build_sleeve(mds, fund_name, period, top_n)
+        # Parallel sleeve builds (3× faster than sequential)
+        sleeve_list = await asyncio.gather(
+            *[
+                self._build_sleeve(mds, name, period, top_n)
+                for name in self.FUND_UNIVERSES
+            ]
+        )
+        sleeves = {s["name"]: s for s in sleeve_list}
 
         bm_prices = await self._history(mds, benchmark.upper(), period)
         bm_rets = (
@@ -251,9 +267,17 @@ class FundLabService:
             else pd.Series(dtype=float)
         )
 
+        # Parallel portfolio returns (3 sleeves in parallel)
+        sleeve_items = list(sleeves.items())
+        port_rets_list = await asyncio.gather(
+            *[
+                self._portfolio_returns(mds, sleeve.get("picks", []), period)
+                for _, sleeve in sleeve_items
+            ]
+        )
+
         results: List[Dict[str, Any]] = []
-        for fund_name, sleeve in sleeves.items():
-            p_rets = await self._portfolio_returns(mds, sleeve.get("picks", []), period)
+        for (fund_name, sleeve), p_rets in zip(sleeve_items, port_rets_list):
             metrics = self._metrics(p_rets, bm_rets)
             results.append(
                 SleeveResult(
@@ -264,17 +288,20 @@ class FundLabService:
                 ).to_dict()
             )
 
-        # sort by annualized alpha desc
+        # sort by excess return desc
         results.sort(
-            key=lambda x: x.get("metrics", {}).get("alpha_annualized", 0.0),
+            key=lambda x: x.get("metrics", {}).get("excess_return", 0.0),
             reverse=True,
         )
 
+        # "Best Performer" instead of "Winner" — avoids misleading label when all alpha < 0
+        best = results[0]["name"] if results else None
         return {
             "period": period,
             "benchmark": benchmark.upper(),
             "funds": results,
-            "winner": results[0]["name"] if results else None,
+            "best_performer": best,
+            "winner": best,  # backward compat
         }
 
 

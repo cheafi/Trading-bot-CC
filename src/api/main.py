@@ -296,10 +296,10 @@ def _init_shared_services():
 
     # ── P3/P4: Scanner service wired after SCAN_WATCHLIST is defined ──
     app.state.scanner_service = None  # set below after ScannerService is importable
-    app.state.scan_signals = None     # set to _scan_live_signals shim below
-    app.state.scan_watchlist = []     # set below after _SCAN_WATCHLIST is defined
-    app.state.live_indices = []       # set below
-    app.state.live_sectors = []       # set below
+    app.state.scan_signals = None  # set to _scan_live_signals shim below
+    app.state.scan_watchlist = []  # set below after _SCAN_WATCHLIST is defined
+    app.state.live_indices = []  # set below
+    app.state.live_sectors = []  # set below
     logger.info("[Singleton] shared services registered on app.state")
 
 
@@ -308,6 +308,7 @@ def _get_expert_council():
     if not app.state.expert_council_init:
         try:
             from src.engines.expert_council import ExpertCouncil
+
             app.state.expert_council = ExpertCouncil()
             logger.info("[Singleton] ExpertCouncil created")
         except Exception as exc:
@@ -322,6 +323,7 @@ def _get_learning_loop():
     if not app.state.learning_loop_init:
         try:
             from src.engines.learning_loop import LearningLoopPipeline
+
             app.state.learning_loop = LearningLoopPipeline()
             logger.info("[Singleton] LearningLoopPipeline created")
         except Exception as exc:
@@ -336,6 +338,7 @@ def _get_meta_ensemble():
     if not app.state.meta_ensemble_init:
         try:
             from src.engines.meta_ensemble import MetaEnsemble
+
             app.state.meta_ensemble = MetaEnsemble()
             logger.info("[Singleton] MetaEnsemble created")
         except Exception as exc:
@@ -578,6 +581,7 @@ def validate_ticker(ticker: str) -> str:
 
 # Canonical definitions live in src/api/deps.py; re-export here for backward compat.
 from src.api.deps import verify_api_key, optional_api_key  # noqa: E402, F401
+
 
 class HealthResponse(BaseModel):
     """Health check response model."""
@@ -993,10 +997,12 @@ def _compute_rs_vs_benchmark(
 #   - Thanksgiving (4th Thursday in Nov)
 #   - Christmas (Dec 25, observed)
 
+
 def _nth_weekday(year: int, month: int, weekday: int, n: int) -> int:
     """Return day of month for the nth occurrence of weekday in month.
     weekday: 0=Mon, 6=Sun. n: 1-based."""
     from datetime import date as _date
+
     first = _date(year, month, 1)
     # Days until first occurrence of weekday
     days_ahead = weekday - first.weekday()
@@ -1010,6 +1016,7 @@ def _last_weekday(year: int, month: int, weekday: int) -> int:
     """Return day of month for the last occurrence of weekday in month."""
     from datetime import date as _date
     import calendar
+
     last_day = calendar.monthrange(year, month)[1]
     last = _date(year, month, last_day)
     days_behind = last.weekday() - weekday
@@ -1037,6 +1044,7 @@ def _easter_sunday(year: int) -> tuple:
 def _observed(d: tuple) -> tuple:
     """If holiday falls on Saturday, use Friday; Sunday → Monday."""
     from datetime import date as _date, timedelta
+
     dt = _date(d[0], d[1], d[2])
     if dt.weekday() == 5:  # Saturday
         dt -= timedelta(days=1)
@@ -1048,6 +1056,7 @@ def _observed(d: tuple) -> tuple:
 def _compute_us_market_holidays(year: int) -> set:
     """Compute US market holidays for a given year."""
     from datetime import date as _date, timedelta
+
     holidays = set()
 
     # New Year's Day
@@ -1088,6 +1097,7 @@ def _compute_us_market_holidays(year: int) -> set:
 def _get_us_market_holidays() -> set:
     """Get US market holidays for current year ±1 for safety."""
     from datetime import date as _date
+
     current_year = _date.today().year
     all_holidays = set()
     for y in range(current_year - 1, current_year + 2):
@@ -1106,6 +1116,7 @@ def _is_us_market_holiday(dt=None) -> bool:
         _US_MARKET_HOLIDAYS = _get_us_market_holidays()
     if dt is None:
         from datetime import date as _date
+
         dt = _date.today()
     return (dt.year, dt.month, dt.day) in _US_MARKET_HOLIDAYS
 
@@ -1227,6 +1238,7 @@ async def version_info():
 async def shadow_report():
     """Return shadow-mode evaluation: hit-rate by bucket, drift flags."""
     from src.engines.shadow_tracker import shadow_tracker
+
     return shadow_tracker.shadow_report()
 
 
@@ -1238,6 +1250,7 @@ async def shadow_report():
 async def symbol_dossier(ticker: str):
     """Build verdict, evidence, scenarios, event calendar for a ticker."""
     from src.engines.symbol_dossier import SymbolDossier
+
     dossier = SymbolDossier()
     return dossier.build(ticker.upper())
 
@@ -1250,6 +1263,7 @@ async def symbol_dossier(ticker: str):
 async def circuit_breaker_state():
     """Return current circuit-breaker state and last reconciliation ts."""
     from src.engines.portfolio_heat import PortfolioHeatEngine
+
     engine = PortfolioHeatEngine()
     snap = engine.snapshot()
     return {
@@ -1268,6 +1282,7 @@ async def circuit_breaker_state():
 async def pnl_by_regime():
     """Return PnL statistics grouped by regime label."""
     from src.engines.shadow_tracker import shadow_tracker
+
     report = shadow_tracker.shadow_report()
     return {
         "regime_pnl": report.get("by_regime", {}),
@@ -1283,6 +1298,7 @@ async def pnl_by_regime():
 async def exposure_dashboard():
     """Full portfolio exposure snapshot for PM views."""
     from src.engines.portfolio_heat import PortfolioHeatEngine
+
     engine = PortfolioHeatEngine()
     snap = engine.snapshot()
     return snap.to_dict()
@@ -1388,9 +1404,11 @@ async def get_signals(
         # of user-supplied values into SQL (SQL injection prevention).
         # All filter values go through bound parameters only.
         from sqlalchemy import Column, Float, Integer, MetaData, String, Table, select
+
         meta = MetaData()
         signals_table = Table(
-            "signals", meta,
+            "signals",
+            meta,
             Column("id", String),
             Column("ticker", String),
             Column("direction", String),
@@ -1406,10 +1424,12 @@ async def get_signals(
         )
         if date:
             from sqlalchemy import func
+
             stmt = stmt.where(func.date(signals_table.c.generated_at) == params["date"])
         else:
             from sqlalchemy import func, cast
             from sqlalchemy.sql.expression import literal
+
             stmt = stmt.where(
                 func.date(signals_table.c.generated_at) == func.current_date()
             )
@@ -1492,14 +1512,12 @@ async def get_signals_for_ticker(
 
     async with AsyncSessionLocal() as session:
         result = await session.execute(
-            text(
-                """
+            text("""
                 SELECT * FROM signals 
                 WHERE ticker = :ticker
                 AND generated_at > NOW() - INTERVAL ':days days'
                 ORDER BY generated_at DESC
-            """
-            ),
+            """),
             {"ticker": ticker.upper(), "days": days},
         )
         rows = result.fetchall()
@@ -1640,16 +1658,14 @@ async def get_ohlcv_data(
 
     async with AsyncSessionLocal() as session:
         result = await session.execute(
-            text(
-                """
+            text("""
                 SELECT timestamp, open, high, low, close, volume
                 FROM ohlcv
                 WHERE ticker = :ticker
                 AND interval = :interval
                 AND timestamp > NOW() - INTERVAL ':days days'
                 ORDER BY timestamp ASC
-            """
-            ),
+            """),
             {"ticker": ticker.upper(), "interval": interval, "days": days},
         )
         rows = result.fetchall()
@@ -1695,14 +1711,12 @@ async def get_features(
 
     async with AsyncSessionLocal() as session:
         result = await session.execute(
-            text(
-                f"""
+            text(f"""
                 SELECT * FROM features
                 WHERE {where}
                 ORDER BY calculated_at DESC
                 LIMIT 1
-            """
-            ),
+            """),
             params,
         )
         row = result.fetchone()
@@ -1743,15 +1757,13 @@ async def get_news(
 
     async with AsyncSessionLocal() as session:
         result = await session.execute(
-            text(
-                f"""
+            text(f"""
                 SELECT id, title, source, published_at, sentiment_label, tickers
                 FROM news_articles
                 WHERE {where}
                 ORDER BY published_at DESC
                 LIMIT :limit
-            """
-            ),
+            """),
             params,
         )
         rows = result.fetchall()
@@ -2119,6 +2131,7 @@ async def get_earnings_analysis(ticker: str, _: bool = Depends(verify_api_key)):
 
         # Use yfinance for basic earnings data when available
         import yfinance as yf
+
         def _fetch_earnings():
             t = yf.Ticker(ticker.upper())
             return t.calendar or {}, t.info or {}
@@ -3059,11 +3072,7 @@ async def search_tickers(q: str = Query("", description="Search query")):
         return {"results": [], "count": 0}
     matches = []
     for t in _TICKER_DB:
-        if (
-            t["s"].upper().startswith(q)
-            or q in t["n"].upper()
-            or q in t.get("z", "")
-        ):
+        if t["s"].upper().startswith(q) or q in t["n"].upper() or q in t.get("z", ""):
             matches.append(t)
         if len(matches) >= 12:
             break
@@ -3996,6 +4005,7 @@ _SCAN_BATCH_SIZE = 25  # parallel batch size for scanning
 
 # ── Swing_Project helpers extracted → src/services/swing_analysis.py (Sprint 84) ────
 
+
 def _honest_confidence_label(composite: float) -> dict:
     """Return honest labeling for confidence scores.
 
@@ -4004,20 +4014,28 @@ def _honest_confidence_label(composite: float) -> dict:
     """
     if composite >= 85:
         alignment = "Strong indicator alignment"
-        honest_note = ("Indicators are well-aligned. This does NOT guarantee profit. "
-                       "No backtest validates this specific threshold.")
+        honest_note = (
+            "Indicators are well-aligned. This does NOT guarantee profit. "
+            "No backtest validates this specific threshold."
+        )
     elif composite >= 70:
         alignment = "Good indicator alignment"
-        honest_note = ("Most indicators agree. This is a technical alignment score, "
-                       "not a win probability. Historical hit rate unknown.")
+        honest_note = (
+            "Most indicators agree. This is a technical alignment score, "
+            "not a win probability. Historical hit rate unknown."
+        )
     elif composite >= 55:
         alignment = "Moderate indicator alignment"
-        honest_note = ("Mixed signals. Some indicators support, others neutral. "
-                       "This is NOT a 55% win probability.")
+        honest_note = (
+            "Mixed signals. Some indicators support, others neutral. "
+            "This is NOT a 55% win probability."
+        )
     else:
         alignment = "Weak indicator alignment"
-        honest_note = ("Indicators are poorly aligned. Low-quality setup. "
-                       "Consider waiting for better conditions.")
+        honest_note = (
+            "Indicators are poorly aligned. Low-quality setup. "
+            "Consider waiting for better conditions."
+        )
 
     return {
         "composite": composite,
@@ -4045,6 +4063,7 @@ async def _days_to_earnings(ticker: str, mds) -> int | None:
         cal, ed = await asyncio.to_thread(_fetch_cal)
         if cal is not None and not cal.empty:
             from datetime import datetime, timezone
+
             now = datetime.now(timezone.utc)
             if hasattr(cal, "iloc"):
                 for col in cal.columns:
@@ -4055,6 +4074,7 @@ async def _days_to_earnings(ticker: str, mds) -> int | None:
                             return delta
         if ed is not None and not ed.empty:
             from datetime import datetime, timezone
+
             now = datetime.now(timezone.utc)
             for dt in ed.index:
                 if hasattr(dt, "tz_localize"):
@@ -4376,7 +4396,9 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                 strat_wins[strat_name] += 1
 
                 params = strat_params[strat_name]
-                entry_price = round(float(close[i]), 2)
+                # Enter at next bar's close to avoid look-ahead bias
+                entry_idx = min(i + 1, len(close) - 1)
+                entry_price = round(float(close[entry_idx]), 2)
                 stop_price = round(entry_price * (1 - params["stop"]), 2)
                 target_price = round(entry_price * (1 + params["target"]), 2)
                 risk = entry_price - stop_price
@@ -4474,8 +4496,16 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
 
                 # Confidence from 4-layer (now includes Phase 9 penalties)
                 conf = _compute_4layer_confidence(
-                    close, sma20, sma50, sma200, rsi, atr_pct,
-                    vol_ratio, i, volume, trending,
+                    close,
+                    sma20,
+                    sma50,
+                    sma200,
+                    rsi,
+                    atr_pct,
+                    vol_ratio,
+                    i,
+                    volume,
+                    trending,
                     structure_result=_structure,
                     entry_quality_result=_entry_qual,
                     earnings_info=_earnings,
@@ -4754,7 +4784,9 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                 continue
         _fallback.sort(key=lambda x: x[1]["score"], reverse=True)
         recs = [r for _, r in _fallback[:limit]]
-        logger.info(f"[Scanner] no strategy triggered — returning top {len(recs)} by strength")
+        logger.info(
+            f"[Scanner] no strategy triggered — returning top {len(recs)} by strength"
+        )
 
     # Sort by score desc
     recs.sort(key=lambda r: r["score"], reverse=True)
@@ -4773,7 +4805,9 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
             sector_counts[sector] = cur + 1
             filtered_recs.append(rec)
         else:
-            rec["demoted_reason"] = f"Sector cap ({sector}: {_MAX_SIGNALS_PER_SECTOR} max)"
+            rec["demoted_reason"] = (
+                f"Sector cap ({sector}: {_MAX_SIGNALS_PER_SECTOR} max)"
+            )
             demoted.append(rec)
     recs = filtered_recs  # demoted signals dropped from active list
 
@@ -5289,9 +5323,13 @@ async def live_market():
     # this guard is bypassed and live_market proceeds with the warm cache.
     if not _prewarm_done and not _market_overview_cache["data"]:
         from fastapi.responses import JSONResponse as _JR
+
         return _JR(
             status_code=503,
-            content={"error": "API warming up — first load takes ~5s", "mode": "loading"},
+            content={
+                "error": "API warming up — first load takes ~5s",
+                "mode": "loading",
+            },
         )
 
     try:
@@ -5573,7 +5611,11 @@ async def live_perf_vs_spy(
 
     # ── Period return helper ──
     def _period_return(vals):
-        return round((vals[-1] / vals[0] - 1) * 100, 2) if len(vals) >= 2 and vals[0] > 0 else 0.0
+        return (
+            round((vals[-1] / vals[0] - 1) * 100, 2)
+            if len(vals) >= 2 and vals[0] > 0
+            else 0.0
+        )
 
     # ── Monthly returns ──
     monthly = []
@@ -5587,12 +5629,14 @@ async def live_perf_vs_spy(
         if dt in b_mo_ret.index:
             sr = round(float(s_mo_ret[dt]), 2)
             br = round(float(b_mo_ret[dt]), 2)
-            monthly.append({
-                "period": dt.strftime("%Y-%m"),
-                "stock": sr,
-                "spy": br,
-                "alpha": round(sr - br, 2),
-            })
+            monthly.append(
+                {
+                    "period": dt.strftime("%Y-%m"),
+                    "stock": sr,
+                    "spy": br,
+                    "alpha": round(sr - br, 2),
+                }
+            )
 
     # ── Quarterly returns ──
     quarterly = []
@@ -5605,12 +5649,14 @@ async def live_perf_vs_spy(
             sr = round(float(s_q_ret[dt]), 2)
             br = round(float(b_q_ret[dt]), 2)
             q_label = f"{dt.year} Q{(dt.month - 1) // 3 + 1}"
-            quarterly.append({
-                "period": q_label,
-                "stock": sr,
-                "spy": br,
-                "alpha": round(sr - br, 2),
-            })
+            quarterly.append(
+                {
+                    "period": q_label,
+                    "stock": sr,
+                    "spy": br,
+                    "alpha": round(sr - br, 2),
+                }
+            )
 
     # ── Yearly returns ──
     yearly = []
@@ -5622,23 +5668,49 @@ async def live_perf_vs_spy(
         if dt in b_y_ret.index:
             sr = round(float(s_y_ret[dt]), 2)
             br = round(float(b_y_ret[dt]), 2)
-            yearly.append({
-                "period": str(dt.year),
-                "stock": sr,
-                "spy": br,
-                "alpha": round(sr - br, 2),
-            })
+            yearly.append(
+                {
+                    "period": str(dt.year),
+                    "stock": sr,
+                    "spy": br,
+                    "alpha": round(sr - br, 2),
+                }
+            )
 
     # ── Summary stats ──
     total_stock = _period_return(s_vals)
     total_spy = _period_return(b_vals)
     n_years = len(s_daily) / 252.0 if len(s_daily) > 0 else 1.0
-    ann_stock = round(((s_vals[-1] / s_vals[0]) ** (1 / n_years) - 1) * 100, 2) if n_years > 0 and s_vals[0] > 0 else 0.0
-    ann_spy = round(((b_vals[-1] / b_vals[0]) ** (1 / n_years) - 1) * 100, 2) if n_years > 0 and b_vals[0] > 0 else 0.0
-    s_vol = round(float(np.std(s_daily) * np.sqrt(252) * 100), 2) if len(s_daily) > 10 else 0.0
-    b_vol = round(float(np.std(b_daily) * np.sqrt(252) * 100), 2) if len(b_daily) > 10 else 0.0
-    s_sharpe = round(float(np.mean(s_daily) / np.std(s_daily) * np.sqrt(252)), 2) if len(s_daily) > 10 and np.std(s_daily) > 0 else 0.0
-    b_sharpe = round(float(np.mean(b_daily) / np.std(b_daily) * np.sqrt(252)), 2) if len(b_daily) > 10 and np.std(b_daily) > 0 else 0.0
+    ann_stock = (
+        round(((s_vals[-1] / s_vals[0]) ** (1 / n_years) - 1) * 100, 2)
+        if n_years > 0 and s_vals[0] > 0
+        else 0.0
+    )
+    ann_spy = (
+        round(((b_vals[-1] / b_vals[0]) ** (1 / n_years) - 1) * 100, 2)
+        if n_years > 0 and b_vals[0] > 0
+        else 0.0
+    )
+    s_vol = (
+        round(float(np.std(s_daily) * np.sqrt(252) * 100), 2)
+        if len(s_daily) > 10
+        else 0.0
+    )
+    b_vol = (
+        round(float(np.std(b_daily) * np.sqrt(252) * 100), 2)
+        if len(b_daily) > 10
+        else 0.0
+    )
+    s_sharpe = (
+        round(float(np.mean(s_daily) / np.std(s_daily) * np.sqrt(252)), 2)
+        if len(s_daily) > 10 and np.std(s_daily) > 0
+        else 0.0
+    )
+    b_sharpe = (
+        round(float(np.mean(b_daily) / np.std(b_daily) * np.sqrt(252)), 2)
+        if len(b_daily) > 10 and np.std(b_daily) > 0
+        else 0.0
+    )
 
     # Max drawdown
     def _max_dd(vals):
@@ -5667,28 +5739,40 @@ async def live_perf_vs_spy(
         corr = np.corrcoef(s_daily[:min_len], b_daily[:min_len])
         correlation = round(float(corr[0][1]), 2)
 
-    return _sanitize_for_json({
-        "ticker": ticker,
-        "period": period,
-        "equity_stock": equity_stock,
-        "equity_spy": equity_spy,
-        "summary": {
-            "total_return": {"stock": total_stock, "spy": total_spy, "alpha": round(total_stock - total_spy, 2)},
-            "annualized": {"stock": ann_stock, "spy": ann_spy, "alpha": round(ann_stock - ann_spy, 2)},
-            "volatility": {"stock": s_vol, "spy": b_vol},
-            "sharpe": {"stock": s_sharpe, "spy": b_sharpe},
-            "max_drawdown": {"stock": _max_dd(s_vals), "spy": _max_dd(b_vals)},
-            "beta": beta,
-            "correlation": correlation,
-            "win_months": win_months,
-            "total_months": total_months,
-            "win_rate_vs_spy": round(win_months / total_months * 100, 1) if total_months > 0 else 0,
-        },
-        "monthly": monthly[-24:],  # last 24 months
-        "quarterly": quarterly[-12:],
-        "yearly": yearly,
-        "days": len(common),
-    })
+    return _sanitize_for_json(
+        {
+            "ticker": ticker,
+            "period": period,
+            "equity_stock": equity_stock,
+            "equity_spy": equity_spy,
+            "summary": {
+                "total_return": {
+                    "stock": total_stock,
+                    "spy": total_spy,
+                    "alpha": round(total_stock - total_spy, 2),
+                },
+                "annualized": {
+                    "stock": ann_stock,
+                    "spy": ann_spy,
+                    "alpha": round(ann_stock - ann_spy, 2),
+                },
+                "volatility": {"stock": s_vol, "spy": b_vol},
+                "sharpe": {"stock": s_sharpe, "spy": b_sharpe},
+                "max_drawdown": {"stock": _max_dd(s_vals), "spy": _max_dd(b_vals)},
+                "beta": beta,
+                "correlation": correlation,
+                "win_months": win_months,
+                "total_months": total_months,
+                "win_rate_vs_spy": (
+                    round(win_months / total_months * 100, 1) if total_months > 0 else 0
+                ),
+            },
+            "monthly": monthly[-24:],  # last 24 months
+            "quarterly": quarterly[-12:],
+            "yearly": yearly,
+            "days": len(common),
+        }
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -6673,14 +6757,16 @@ async def live_chart_data(
     candles = []
     for idx_dt, row in hist.iterrows():
         ts = int(idx_dt.timestamp()) if hasattr(idx_dt, "timestamp") else 0
-        candles.append({
-            "time": ts,
-            "open": round(float(row[o_col]), 2),
-            "high": round(float(row[h_col]), 2),
-            "low": round(float(row[l_col]), 2),
-            "close": round(float(row[c_col]), 2),
-            "volume": int(row[v_col]) if not np.isnan(row[v_col]) else 0,
-        })
+        candles.append(
+            {
+                "time": ts,
+                "open": round(float(row[o_col]), 2),
+                "high": round(float(row[h_col]), 2),
+                "low": round(float(row[l_col]), 2),
+                "close": round(float(row[c_col]), 2),
+                "volume": int(row[v_col]) if not np.isnan(row[v_col]) else 0,
+            }
+        )
     # SMA overlays
     close_arr = hist[c_col].values.astype(float)
     high_arr = hist[h_col].values.astype(float)
@@ -6961,22 +7047,46 @@ async def live_dossier(ticker: str):
             swing_supports = []
             swing_resistances = []
             for i in range(2, len(_lows_arr) - 2):
-                if _lows_arr[i] <= min(_lows_arr[i-1], _lows_arr[i-2], _lows_arr[i+1], _lows_arr[i+2]):
+                if _lows_arr[i] <= min(
+                    _lows_arr[i - 1],
+                    _lows_arr[i - 2],
+                    _lows_arr[i + 1],
+                    _lows_arr[i + 2],
+                ):
                     swing_supports.append(float(_lows_arr[i]))
-                if _highs_arr[i] >= max(_highs_arr[i-1], _highs_arr[i-2], _highs_arr[i+1], _highs_arr[i+2]):
+                if _highs_arr[i] >= max(
+                    _highs_arr[i - 1],
+                    _highs_arr[i - 2],
+                    _highs_arr[i + 1],
+                    _highs_arr[i + 2],
+                ):
                     swing_resistances.append(float(_highs_arr[i]))
 
             # Nearest support = highest swing low BELOW current price
             support_candidates = [s for s in swing_supports if s < price * 0.995]
-            support = max(support_candidates) if support_candidates else float(lows.iloc[-20:].min())
+            support = (
+                max(support_candidates)
+                if support_candidates
+                else float(lows.iloc[-20:].min())
+            )
 
             # Nearest resistance = lowest swing high ABOVE current price
             resistance_candidates = [r for r in swing_resistances if r > price * 1.005]
-            resistance = min(resistance_candidates) if resistance_candidates else float(highs.iloc[-20:].max())
+            resistance = (
+                min(resistance_candidates)
+                if resistance_candidates
+                else float(highs.iloc[-20:].max())
+            )
 
             # Distance % from price
-            support_dist_pct = round((price - support) / price * 100, 2) if support and price else 0
-            resistance_dist_pct = round((resistance - price) / price * 100, 2) if resistance and price else 0
+            support_dist_pct = (
+                round((price - support) / price * 100, 2) if support and price else 0
+            )
+            resistance_dist_pct = (
+                round((resistance - price) / price * 100, 2)
+                if resistance and price
+                else 0
+            )
 
             # Bollinger Bands
             bb_sma = close.rolling(20).mean()
@@ -7068,20 +7178,30 @@ async def live_dossier(ticker: str):
             f"Volume surge {vol_ratio:.1f}x average — institutional accumulation signal"
         )
     if price < bbands_lower:
-        why_buy.append(f"Below lower Bollinger Band (${bbands_lower:.2f}) — potential bounce zone")
+        why_buy.append(
+            f"Below lower Bollinger Band (${bbands_lower:.2f}) — potential bounce zone"
+        )
     if above_sma200:
         why_buy.append("Above 200-day MA — long-term uptrend intact")
     if not why_buy:
         why_buy.append("No strong bullish catalyst — monitoring for setup development")
 
     if rsi > SIGNAL_THRESHOLDS.rsi_overbought:
-        why_stop.append(f"⚠️ RSI {rsi:.0f} (overbought >70) — pullback risk elevated, consider waiting for RSI to cool")
+        why_stop.append(
+            f"⚠️ RSI {rsi:.0f} (overbought >70) — pullback risk elevated, consider waiting for RSI to cool"
+        )
     if not above_sma50:
-        why_stop.append(f"⚠️ Below 50-day MA (${sma50:.2f}) — intermediate trend bearish, buying against the trend")
+        why_stop.append(
+            f"⚠️ Below 50-day MA (${sma50:.2f}) — intermediate trend bearish, buying against the trend"
+        )
     if not above_sma200 and sma200:
-        why_stop.append(f"⚠️ Below 200-day MA (${sma200:.2f}) — long-term trend is down")
+        why_stop.append(
+            f"⚠️ Below 200-day MA (${sma200:.2f}) — long-term trend is down"
+        )
     if macd_signal == "BEARISH":
-        why_stop.append("⚠️ MACD bearish — momentum fading, new entries carry higher risk")
+        why_stop.append(
+            "⚠️ MACD bearish — momentum fading, new entries carry higher risk"
+        )
     if price > bbands_upper:
         why_stop.append(
             f"⚠️ Above upper Bollinger Band (${bbands_upper:.2f}) — extended {round((price/bbands_upper-1)*100,1)}% beyond normal range"
@@ -7090,12 +7210,20 @@ async def live_dossier(ticker: str):
     if support and price:
         _s_dist = round((price - support) / price * 100, 1)
         if _s_dist > 10:
-            why_stop.append(f"🛑 Nearest support ${support:.2f} is {_s_dist}% below — wide stop needed, poor risk/reward")
+            why_stop.append(
+                f"🛑 Nearest support ${support:.2f} is {_s_dist}% below — wide stop needed, poor risk/reward"
+            )
         elif _s_dist > 5:
-            why_stop.append(f"⚠️ Support at ${support:.2f} ({_s_dist}% below) — moderate risk distance")
+            why_stop.append(
+                f"⚠️ Support at ${support:.2f} ({_s_dist}% below) — moderate risk distance"
+            )
         else:
-            why_stop.append(f"✅ Support nearby at ${support:.2f} ({_s_dist}% below) — tight stop possible")
-    why_stop.append("📅 Check earnings calendar — earnings/ex-div/macro events may override technicals")
+            why_stop.append(
+                f"✅ Support nearby at ${support:.2f} ({_s_dist}% below) — tight stop possible"
+            )
+    why_stop.append(
+        "📅 Check earnings calendar — earnings/ex-div/macro events may override technicals"
+    )
 
     # ── Historical analogs (simplified: similar RSI + trend setups) ──
     analogs = []
@@ -7196,9 +7324,13 @@ async def live_dossier(ticker: str):
                 "bbands_upper": round(bbands_upper, 2),
                 "bbands_lower": round(bbands_lower, 2),
                 "support": round(support, 2),
-                "support_dist_pct": support_dist_pct if 'support_dist_pct' in dir() else 0,
+                "support_dist_pct": (
+                    support_dist_pct if "support_dist_pct" in dir() else 0
+                ),
                 "resistance": round(resistance, 2),
-                "resistance_dist_pct": resistance_dist_pct if 'resistance_dist_pct' in dir() else 0,
+                "resistance_dist_pct": (
+                    resistance_dist_pct if "resistance_dist_pct" in dir() else 0
+                ),
                 "high_52w": round(high_52w, 2),
                 "low_52w": round(low_52w, 2),
             },
@@ -7570,15 +7702,17 @@ async def live_backtest(
                 if dd_start is not None and peak > 0:
                     dd_pct = (close_arr[i - 1] - peak) / peak * 100
                     if dd_pct < -10:
-                        events.append({
-                            "name": f"Drawdown {dd_pct:.0f}%",
-                            "start": str(dates[dd_start].date()),
-                            "end": str(dates[i - 1].date()),
-                            "start_idx": dd_start,
-                            "end_idx": i - 1,
-                            "type": "crash",
-                            "return_pct": round(dd_pct, 2),
-                        })
+                        events.append(
+                            {
+                                "name": f"Drawdown {dd_pct:.0f}%",
+                                "start": str(dates[dd_start].date()),
+                                "end": str(dates[i - 1].date()),
+                                "start_idx": dd_start,
+                                "end_idx": i - 1,
+                                "type": "crash",
+                                "return_pct": round(dd_pct, 2),
+                            }
+                        )
                     dd_start = None
                 peak = close_arr[i]
             elif dd_start is None and (close_arr[i] - peak) / peak < -0.05:
@@ -7587,15 +7721,17 @@ async def live_backtest(
         if dd_start is not None and peak > 0:
             dd_pct = (close_arr[-1] - peak) / peak * 100
             if dd_pct < -10:
-                events.append({
-                    "name": f"Drawdown {dd_pct:.0f}%",
-                    "start": str(dates[dd_start].date()),
-                    "end": str(dates[-1].date()),
-                    "start_idx": dd_start,
-                    "end_idx": n - 1,
-                    "type": "crash",
-                    "return_pct": round(dd_pct, 2),
-                })
+                events.append(
+                    {
+                        "name": f"Drawdown {dd_pct:.0f}%",
+                        "start": str(dates[dd_start].date()),
+                        "end": str(dates[-1].date()),
+                        "start_idx": dd_start,
+                        "end_idx": n - 1,
+                        "type": "crash",
+                        "return_pct": round(dd_pct, 2),
+                    }
+                )
 
         # 2) Find sustained rallies (>20% gain over 60+ days from trough)
         trough = close_arr[0]
@@ -7604,17 +7740,23 @@ async def live_backtest(
             if close_arr[i] < trough:
                 trough = close_arr[i]
                 rally_start = i
-            elif trough > 0 and (close_arr[i] - trough) / trough > 0.20 and i - rally_start >= 60:
+            elif (
+                trough > 0
+                and (close_arr[i] - trough) / trough > 0.20
+                and i - rally_start >= 60
+            ):
                 gain = (close_arr[i] - trough) / trough * 100
-                events.append({
-                    "name": f"Rally +{gain:.0f}%",
-                    "start": str(dates[rally_start].date()),
-                    "end": str(dates[i].date()),
-                    "start_idx": rally_start,
-                    "end_idx": i,
-                    "type": "rally",
-                    "return_pct": round(gain, 2),
-                })
+                events.append(
+                    {
+                        "name": f"Rally +{gain:.0f}%",
+                        "start": str(dates[rally_start].date()),
+                        "end": str(dates[i].date()),
+                        "start_idx": rally_start,
+                        "end_idx": i,
+                        "type": "rally",
+                        "return_pct": round(gain, 2),
+                    }
+                )
                 trough = close_arr[i]
                 rally_start = i
 
@@ -7622,10 +7764,12 @@ async def live_backtest(
         daily_ret = np.diff(close_arr) / close_arr[:-1]
         vol_window = 20
         if len(daily_ret) >= vol_window:
-            rolling_vol = np.array([
-                np.std(daily_ret[max(0, j - vol_window):j]) * np.sqrt(252) * 100
-                for j in range(vol_window, len(daily_ret))
-            ])
+            rolling_vol = np.array(
+                [
+                    np.std(daily_ret[max(0, j - vol_window) : j]) * np.sqrt(252) * 100
+                    for j in range(vol_window, len(daily_ret))
+                ]
+            )
             in_high_vol = False
             hv_start = 0
             for j in range(len(rolling_vol)):
@@ -7635,16 +7779,22 @@ async def live_backtest(
                     hv_start = idx
                 elif rolling_vol[j] <= 30 and in_high_vol:
                     if idx - hv_start >= 10:
-                        period_ret = (close_arr[idx] - close_arr[hv_start]) / close_arr[hv_start] * 100
-                        events.append({
-                            "name": "High Vol Regime",
-                            "start": str(dates[hv_start].date()),
-                            "end": str(dates[idx].date()),
-                            "start_idx": hv_start,
-                            "end_idx": idx,
-                            "type": "high_vol",
-                            "return_pct": round(period_ret, 2),
-                        })
+                        period_ret = (
+                            (close_arr[idx] - close_arr[hv_start])
+                            / close_arr[hv_start]
+                            * 100
+                        )
+                        events.append(
+                            {
+                                "name": "High Vol Regime",
+                                "start": str(dates[hv_start].date()),
+                                "end": str(dates[idx].date()),
+                                "start_idx": hv_start,
+                                "end_idx": idx,
+                                "type": "high_vol",
+                                "return_pct": round(period_ret, 2),
+                            }
+                        )
                     in_high_vol = False
 
         # 4) Label known calendar events if they fall within the data range
@@ -7666,15 +7816,17 @@ async def live_backtest(
                         eret = (sel[-1] - sel[0]) / sel[0] * 100
                         sidx = int(np.argmax(mask))
                         eidx = sidx + len(sel) - 1
-                        events.append({
-                            "name": ename,
-                            "start": estart,
-                            "end": eend,
-                            "start_idx": sidx,
-                            "end_idx": eidx,
-                            "type": "named",
-                            "return_pct": round(eret, 2),
-                        })
+                        events.append(
+                            {
+                                "name": ename,
+                                "start": estart,
+                                "end": eend,
+                                "start_idx": sidx,
+                                "end_idx": eidx,
+                                "type": "named",
+                                "return_pct": round(eret, 2),
+                            }
+                        )
                 except Exception:
                     pass
 
@@ -7697,7 +7849,9 @@ async def live_backtest(
 
         # ── Multi-position tracking ──
         MAX_POS = 3
-        positions: list = []  # [{idx, price, trailing_high, stop_pct, target_pct, max_hold}]
+        positions: list = (
+            []
+        )  # [{idx, price, trailing_high, stop_pct, target_pct, max_hold}]
         trades: list = []
 
         # ── Execution Cost Model (P1: Backtest Realism) ──
@@ -7817,7 +7971,7 @@ async def live_backtest(
                     else SIGNAL_THRESHOLDS.max_hold_momentum_normal
                 )
             elif strat_id == "breakout":
-                hi20 = np.max(close[max(0, i - 20):i])
+                hi20 = np.max(close[max(0, i - 20) : i])
                 enter = (
                     close[i] > hi20
                     and vol_ratio[i] > SIGNAL_THRESHOLDS.volume_surge_threshold
@@ -7892,13 +8046,15 @@ async def live_backtest(
         losers = total_trades - winners
         win_rate = (winners / total_trades * 100) if total_trades else 0
         avg_win = float(np.mean([r for r in returns if r > 0]) * 100) if winners else 0
-        avg_loss_val = float(np.mean([r for r in returns if r <= 0]) * 100) if losers else 0
+        avg_loss_val = (
+            float(np.mean([r for r in returns if r <= 0]) * 100) if losers else 0
+        )
         total_costs = sum(t.get("costs_pct", 0) for t in trades)
 
         # Compounded return (equity curve) — net of costs
         equity = 1.0
         for r in returns:
-            equity *= (1 + r)
+            equity *= 1 + r
         compounded_return = (equity - 1) * 100
         # Gross compounded (for comparison)
         equity_gross = 1.0
@@ -7910,7 +8066,9 @@ async def live_backtest(
         # Sharpe
         if returns and np.std(returns) > 0:
             avg_hold = float(np.mean([t["hold_days"] for t in trades]))
-            sharpe = float(np.mean(returns) / np.std(returns) * np.sqrt(252 / max(1, avg_hold)))
+            sharpe = float(
+                np.mean(returns) / np.std(returns) * np.sqrt(252 / max(1, avg_hold))
+            )
         else:
             sharpe = 0
 
@@ -7918,7 +8076,7 @@ async def live_backtest(
         eq_curve = []
         eq = 1.0
         for r in returns:
-            eq *= (1 + r)
+            eq *= 1 + r
             eq_curve.append(eq)
         eq_arr = np.array(eq_curve) if eq_curve else np.array([1])
         peak = np.maximum.accumulate(eq_arr)
@@ -7935,7 +8093,7 @@ async def live_backtest(
         rolling_sharpe = []
         window = min(20, max(5, total_trades // 5))
         for k in range(window, total_trades):
-            chunk = returns[k - window:k]
+            chunk = returns[k - window : k]
             if np.std(chunk) > 0:
                 rs_val = float(np.mean(chunk) / np.std(chunk) * np.sqrt(12))
             else:
@@ -7960,9 +8118,11 @@ async def live_backtest(
             yearly[yr]["return_pct"] += t["pnl_pct"]
         for yr in yearly:
             yearly[yr]["return_pct"] = round(yearly[yr]["return_pct"], 2)
-            yearly[yr]["win_rate"] = round(
-                yearly[yr]["winners"] / yearly[yr]["trades"] * 100, 1
-            ) if yearly[yr]["trades"] > 0 else 0
+            yearly[yr]["win_rate"] = (
+                round(yearly[yr]["winners"] / yearly[yr]["trades"] * 100, 1)
+                if yearly[yr]["trades"] > 0
+                else 0
+            )
 
         return {
             "strategy": strat_id,
@@ -8004,7 +8164,12 @@ async def live_backtest(
         try:
             results[sid] = await asyncio.to_thread(_run_strategy, sid)
         except Exception as e:
-            results[sid] = {"strategy": sid, "error": str(e), "total_trades": 0, "score": 0}
+            results[sid] = {
+                "strategy": sid,
+                "error": str(e),
+                "total_trades": 0,
+                "score": 0,
+            }
 
     ranked = sorted(results.values(), key=lambda x: x.get("score", 0), reverse=True)
     best = ranked[0]["strategy"] if ranked else "none"
@@ -8017,23 +8182,26 @@ async def live_backtest(
     best_trades = ranked[0].get("all_trades", []) if ranked else []
     for ev in events:
         ev_trades = [
-            t for t in best_trades
+            t
+            for t in best_trades
             if t["entry_idx"] >= ev["start_idx"] and t["entry_idx"] <= ev["end_idx"]
         ]
         ev_win = sum(1 for t in ev_trades if t["pnl_pct"] > 0)
         ev_ret = sum(t["pnl_pct"] for t in ev_trades)
-        event_performance.append({
-            "name": ev["name"],
-            "type": ev["type"],
-            "start": ev["start"],
-            "end": ev["end"],
-            "market_return": ev["return_pct"],
-            "strategy_trades": len(ev_trades),
-            "strategy_winners": ev_win,
-            "strategy_return": round(ev_ret, 2),
-            "win_rate": round(ev_win / len(ev_trades) * 100, 1) if ev_trades else 0,
-            "alpha": round(ev_ret - ev["return_pct"], 2),
-        })
+        event_performance.append(
+            {
+                "name": ev["name"],
+                "type": ev["type"],
+                "start": ev["start"],
+                "end": ev["end"],
+                "market_return": ev["return_pct"],
+                "strategy_trades": len(ev_trades),
+                "strategy_winners": ev_win,
+                "strategy_return": round(ev_ret, 2),
+                "win_rate": round(ev_win / len(ev_trades) * 100, 1) if ev_trades else 0,
+                "alpha": round(ev_ret - ev["return_pct"], 2),
+            }
+        )
 
     # ── Buy-and-hold benchmark ──
     bh_return = ((close[-1] - close[0]) / close[0]) * 100
@@ -8042,7 +8210,13 @@ async def live_backtest(
     daily_returns = np.diff(close) / close[:-1]
     bh_curve = list(np.cumprod(1 + daily_returns))
     sample_step = max(1, len(bh_curve) // 100)
-    bh_sampled = [{"day": i * sample_step, "equity": round(bh_curve[min(i * sample_step, len(bh_curve) - 1)], 4)} for i in range(min(100, len(bh_curve)))]
+    bh_sampled = [
+        {
+            "day": i * sample_step,
+            "equity": round(bh_curve[min(i * sample_step, len(bh_curve) - 1)], 4),
+        }
+        for i in range(min(100, len(bh_curve)))
+    ]
 
     # ── Strategy vs Buy-Hold equity curves (time-series for charting) ──
     # Buy-hold normalized to 100
@@ -8150,7 +8324,9 @@ async def live_backtest(
                 streak_ret += t["pnl_pct"]
             else:
                 if streak >= 3:
-                    worst_streaks.append({"losses": streak, "total_pct": round(streak_ret, 2)})
+                    worst_streaks.append(
+                        {"losses": streak, "total_pct": round(streak_ret, 2)}
+                    )
                 streak = 0
                 streak_ret = 0
         if streak >= 3:
@@ -8368,8 +8544,19 @@ def _compute_4layer_confidence(
             p9_adjustments.append("weak_fundamentals")
 
     # Regime gating: CRISIS/RISK_OFF → suppress non-defensive
-    if regime_label and str(regime_label).upper() in ("CRISIS", "RISK_OFF", "DOWNTREND"):
-        defensive_sectors = {"utilities", "healthcare", "consumer_staples", "XLU", "XLV", "XLP"}
+    if regime_label and str(regime_label).upper() in (
+        "CRISIS",
+        "RISK_OFF",
+        "DOWNTREND",
+    ):
+        defensive_sectors = {
+            "utilities",
+            "healthcare",
+            "consumer_staples",
+            "XLU",
+            "XLV",
+            "XLP",
+        }
         is_defensive = ticker_sector and str(ticker_sector).lower() in defensive_sectors
         if not is_defensive:
             thesis_factors.append((f"P9: Regime {regime_label} — non-defensive", -15))
@@ -8855,9 +9042,7 @@ def _run_expert_council(
         "members": council,
         "summary": {
             "avg_score": round(avg_score, 1),
-            "weighted_avg_score": round(
-                _accuracy_weighted_avg(council), 1
-            ),
+            "weighted_avg_score": round(_accuracy_weighted_avg(council), 1),
             "bullish": bullish_count,
             "bearish": bearish_count,
             "neutral": neutral_count,
@@ -9563,48 +9748,46 @@ async def regime_screener_data():
 
         # ── Expert Committee enrichment (Sprint 49) ──
         from src.engines.expert_committee import ExpertCommittee as _ECfb
+
         _ec_fb = _ECfb()
         for c in raw_candidates:
             try:
                 _rsi = c.get("rsi", 50)
                 _vr = c.get("volume_ratio", 1.0)
-                _trending = (
-                    c.get("direction") == "LONG" and _rsi > 40
-                )
-                _entry = c.get('entry', 0)
-                _stop = c.get('stop', 0)
-                _atr_p = (
-                    abs(_entry - _stop) / _entry / 2
-                    if _entry > 0 else 0.02
-                )
-                _rlbl = regime_label or 'SIDEWAYS'
+                _trending = c.get("direction") == "LONG" and _rsi > 40
+                _entry = c.get("entry", 0)
+                _stop = c.get("stop", 0)
+                _atr_p = abs(_entry - _stop) / _entry / 2 if _entry > 0 else 0.02
+                _rlbl = regime_label or "SIDEWAYS"
                 votes = _ec_fb.collect_votes(
-                    regime=_rlbl, rsi=_rsi,
+                    regime=_rlbl,
+                    rsi=_rsi,
                     vol_ratio=_vr,
                     trending=_trending,
-                    rr_ratio=c.get('rr', 1.5),
+                    rr_ratio=c.get("rr", 1.5),
                     atr_pct=_atr_p,
                     vix=sb.risk_on_score / 3.5,
                 )
                 vd = _ec_fb.deliberate(
-                    votes, regime=_rlbl,
+                    votes,
+                    regime=_rlbl,
                 ).to_dict()
-                c['committee'] = {
+                c["committee"] = {
                     "direction": vd.get("direction"),
                     "conviction": round(
-                        vd.get("composite_conviction", 0), 1,
+                        vd.get("composite_conviction", 0),
+                        1,
                     ),
                     "agreement": round(
-                        vd.get("agreement_ratio", 0), 2,
+                        vd.get("agreement_ratio", 0),
+                        2,
                     ),
                     "dominant_risk": vd.get("dominant_risk"),
                     "summary": vd.get("verdict_summary"),
-                    "dissent_count": len(
-                        vd.get("dissenting_views", [])
-                    ),
+                    "dissent_count": len(vd.get("dissenting_views", [])),
                 }
             except Exception:
-                c['committee'] = None
+                c["committee"] = None
 
         candidates = sorted(
             raw_candidates,
@@ -9635,22 +9818,24 @@ async def regime_screener_data():
         "universe_size": len(real_recs) if real_recs else 18,
         "candidate_count": len(candidates),
         "actionable_count": len(
-            [c for c in candidates
-             if c.get("direction") not in ("FLAT", "ABSTAIN")
-             and c.get("setup_grade", "D") in ("A", "B")]
+            [
+                c
+                for c in candidates
+                if c.get("direction") not in ("FLAT", "ABSTAIN")
+                and c.get("setup_grade", "D") in ("A", "B")
+            ]
         ),
         "selectivity": {
             "total_scanned": len(real_recs) if real_recs else 18,
             "passed_filters": len(candidates),
-            "extended_count": len(
-                [c for c in candidates if c.get("rsi", 0) > 80]
-            ),
+            "extended_count": len([c for c in candidates if c.get("rsi", 0) > 80]),
         },
         "warnings": [
-            w for w in [
-                ("Running on fallback scoring"
-                 if not real_recs else None),
-            ] if w is not None
+            w
+            for w in [
+                ("Running on fallback scoring" if not real_recs else None),
+            ]
+            if w is not None
         ],
         "trust": {
             "mode": "PAPER" if engine else "SYNTHETIC",
@@ -11393,8 +11578,7 @@ async def expert_committee_verdict(ticker: str):
         _ind = _compute_indicators(close, volume)
         i = len(close) - 1
         trending = bool(
-            close[i] > _ind["sma50"][i]
-            and _ind["sma50"][i] > _ind["sma200"][i]
+            close[i] > _ind["sma50"][i] and _ind["sma50"][i] > _ind["sma200"][i]
         )
 
         rsi = float(_ind["rsi"][i])
@@ -11450,7 +11634,9 @@ async def fred_series(series_id: str, limit: int = Query(10, ge=1, le=100)):
     """Get specific FRED series observations."""
     meta = FRED_SERIES.get(series_id)
     if not meta:
-        raise HTTPException(404, f"Unknown series: {series_id}. Available: {list(FRED_SERIES.keys())}")
+        raise HTTPException(
+            404, f"Unknown series: {series_id}. Available: {list(FRED_SERIES.keys())}"
+        )
     obs = await _fred_client.fetch_series(series_id, limit=limit)
     return {
         "series_id": series_id,
@@ -11474,7 +11660,9 @@ async def edgar_filings(
     """Get recent SEC filings for a ticker."""
     form_types = [form_type] if form_type else None
     filings = await _edgar_client.get_recent_filings(
-        ticker.upper(), form_types=form_types, limit=limit,
+        ticker.upper(),
+        form_types=form_types,
+        limit=limit,
     )
     return {
         "ticker": ticker.upper(),
@@ -11540,6 +11728,7 @@ async def ticker_uncertainty(ticker: str):
         raise
     except Exception as exc:
         raise HTTPException(500, f"Uncertainty error: {exc}") from exc
+
 
 if __name__ == "__main__":
     start()
