@@ -185,8 +185,13 @@ class SECEdgarProvider(EventDataProvider):
         try:
             tickers_url = "https://www.sec.gov/files/company_tickers.json"
             req = urllib.request.Request(tickers_url, headers={"User-Agent": self._HEADERS["User-Agent"]})
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = _json.loads(resp.read())
+
+            def _fetch_cik_map() -> bytes:
+                with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+                    return resp.read()
+
+            raw = await asyncio.to_thread(_fetch_cik_map)
+            data = _json.loads(raw)
             for entry in data.values():
                 if entry.get("ticker", "").upper() == ticker.upper():
                     cik = str(entry["cik_str"]).zfill(10)
@@ -198,14 +203,19 @@ class SECEdgarProvider(EventDataProvider):
 
     async def _fetch_json(self, url: str, host_header: Optional[str] = None) -> Optional[Dict]:
         """Fetch JSON from SEC with proper headers and timeout."""
-        import urllib.request, json as _json
+        import asyncio, urllib.request, json as _json
         headers = dict(self._HEADERS)
         if host_header:
             headers["Host"] = host_header
         try:
             req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                return _json.loads(resp.read())
+
+            def _do_fetch() -> bytes:
+                with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
+                    return resp.read()
+
+            raw = await asyncio.to_thread(_do_fetch)
+            return _json.loads(raw)
         except Exception as e:
             logger.warning("SEC HTTP fetch failed (%s): %s", url, e)
             return None

@@ -258,6 +258,12 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.api
+      # BuildKit layer cache — reuses unchanged dep/runtime layers on rebuild
+      # Use `docker buildx build --cache-to type=registry,...` in CI for remote cache
+      cache_from:
+        - type=local,src=/tmp/.buildx-cache
+      cache_to:
+        - type=local,dest=/tmp/.buildx-cache-new,mode=max
     container_name: tradingai_api
     restart: unless-stopped
     ports:

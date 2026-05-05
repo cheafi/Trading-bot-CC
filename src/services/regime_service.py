@@ -25,6 +25,7 @@ class RegimeService:
     _cache: Dict[str, Any] = {}
     _cache_time: float = 0
     CACHE_TTL = 4 * 3600  # 4 hours
+    _refresh_lock: asyncio.Lock = asyncio.Lock()  # prevents duplicate concurrent fetches
 
     @classmethod
     def get(cls) -> Dict[str, Any]:
@@ -53,11 +54,18 @@ class RegimeService:
         Async-safe regime getter.  Runs the blocking _fetch_and_compute()
         in a thread so the FastAPI event loop is never stalled.
         Returns cached value immediately when still fresh.
+        Lock prevents duplicate concurrent fetches when multiple requests
+        hit a stale cache simultaneously (thundering-herd guard).
         """
         now = time.time()
         if cls._cache and (now - cls._cache_time) < cls.CACHE_TTL:
             return cls._cache
-        return await asyncio.to_thread(cls.get)
+        async with cls._refresh_lock:
+            # Re-check inside the lock — another waiter may have already refreshed
+            now = time.time()
+            if cls._cache and (now - cls._cache_time) < cls.CACHE_TTL:
+                return cls._cache
+            return await asyncio.to_thread(cls.get)
 
     @classmethod
     def invalidate(cls) -> None:
