@@ -2663,6 +2663,162 @@
     </main>
 
     <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- SURFACE: 3 ACTIVE FUNDS — 24/7 MONITOR (sprint89)     -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <main x-show="tab==='funds'" class="fade">
+      <div class="p-3 space-y-3">
+
+        <!-- Header bar -->
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-[13px] font-bold" style="color:var(--t1)">🏦 3 Active Funds — Live Monitor</div>
+            <div class="text-[10px]" style="color:var(--t3)">Auto-refreshes every 5 min · <span x-text="fundMonitor.lastRefresh?'Last updated: '+fundMonitor.lastRefresh:'Loading…'"></span></div>
+          </div>
+          <div class="flex items-center gap-2">
+            <select x-model="fundMonitor.benchmark" @change="fetchFunds()" class="text-[10px]" style="padding:4px 8px;border-radius:4px;background:var(--s2);border:1px solid var(--bd);color:var(--t2)">
+              <option value="SPY">vs SPY</option>
+              <option value="QQQ">vs QQQ</option>
+              <option value="IWM">vs IWM</option>
+            </select>
+            <button @click="fetchFunds()" :disabled="fundMonitor.loading" class="btn-p text-[10px] px-3" style="padding:5px 12px">
+              <span x-show="!fundMonitor.loading">↻ Refresh</span>
+              <span x-show="fundMonitor.loading"><span class="spin"></span></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Error banner -->
+        <template x-if="fundMonitor.error">
+          <div class="card card-p" style="border-left:3px solid var(--red);color:var(--red);font-size:11px" x-text="fundMonitor.error"></div>
+        </template>
+
+        <!-- Loading skeleton -->
+        <template x-if="fundMonitor.loading && !fundMonitor.data">
+          <div class="card card-p" style="text-align:center;padding:40px;color:var(--t3);font-size:11px"><span class="spin"></span> Building fund portfolios from live market data…</div>
+        </template>
+
+        <!-- 3-Fund overview grid -->
+        <template x-if="fundMonitor.data && fundMonitor.data.funds">
+          <div>
+            <!-- Fund cards row -->
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px">
+              <template x-for="f in fundMonitor.data.funds" :key="f.name">
+                <div class="card card-p" :style="'cursor:pointer;border-left:3px solid '+(fundMonitor.activeFund===f.name?fundColor(f.name):'var(--bd)')+';transition:.15s'" @click="fundMonitor.activeFund=f.name">
+
+                  <!-- Fund header -->
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-1.5">
+                      <span x-text="fundIcon(f.name)" style="font-size:14px"></span>
+                      <div>
+                        <div class="text-[11px] font-bold" :style="'color:'+(fundMonitor.activeFund===f.name?fundColor(f.name):'var(--t1)')" x-text="f.name"></div>
+                        <div class="text-[9px]" style="color:var(--t3)" x-text="f.thesis"></div>
+                      </div>
+                    </div>
+                    <!-- Winner badge -->
+                    <template x-if="fundMonitor.data.winner===f.name">
+                      <span class="pill pg" style="font-size:8px">★ BEST</span>
+                    </template>
+                  </div>
+
+                  <!-- Key metrics 2×2 -->
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px">
+                    <div style="background:var(--s2);border-radius:4px;padding:5px">
+                      <div style="font-size:8px;color:var(--t3)">1Y Return</div>
+                      <div class="mono" style="font-size:11px" :class="(f.metrics?.total_return||0)>=0?'text-green-400':'text-red-400'" x-text="((f.metrics?.total_return||0)>=0?'+':'')+(f.metrics?.total_return||0)+'%'"></div>
+                    </div>
+                    <div style="background:var(--s2);border-radius:4px;padding:5px">
+                      <div style="font-size:8px;color:var(--t3)">Alpha vs <span x-text="fundMonitor.data.benchmark"></span></div>
+                      <div class="mono" style="font-size:11px" :class="(f.metrics?.alpha_annualized||0)>=0?'text-green-400':'text-red-400'" x-text="((f.metrics?.alpha_annualized||0)>=0?'+':'')+(f.metrics?.alpha_annualized||0)+'%'"></div>
+                    </div>
+                    <div style="background:var(--s2);border-radius:4px;padding:5px">
+                      <div style="font-size:8px;color:var(--t3)">Sharpe</div>
+                      <div class="mono" style="font-size:11px" :class="(f.metrics?.sharpe||0)>=1?'text-green-400':((f.metrics?.sharpe||0)>=0.5?'text-amber-300':'text-red-400')" x-text="f.metrics?.sharpe||0"></div>
+                    </div>
+                    <div style="background:var(--s2);border-radius:4px;padding:5px">
+                      <div style="font-size:8px;color:var(--t3)">Max DD</div>
+                      <div class="mono text-red-400" style="font-size:11px" x-text="(f.metrics?.max_drawdown||0)+'%'"></div>
+                    </div>
+                  </div>
+
+                  <!-- Top picks strip -->
+                  <div style="font-size:9px;color:var(--t3)">Holdings: <span class="mono" style="color:var(--t2)" x-text="(f.picks||[]).slice(0,5).map(p=>p.ticker).join(' · ')"></span></div>
+                </div>
+              </template>
+            </div>
+
+            <!-- Benchmark line -->
+            <div class="text-[9px]" style="color:var(--t3);text-align:right;margin-bottom:8px">
+              Benchmark: <span class="mono" x-text="fundMonitor.data.benchmark"></span> ·
+              Cached: <span x-text="fundMonitor.data.cached?'Yes ('+fundMonitor.data.cache_age_s+'s ago)':'Fresh'"></span>
+            </div>
+
+            <!-- Detail panel for active fund -->
+            <template x-if="fundMonitor.activeFund">
+              <template x-for="f in fundMonitor.data.funds.filter(x=>x.name===fundMonitor.activeFund)" :key="f.name">
+                <div class="card card-p fade" :style="'border-left:3px solid '+fundColor(f.name)">
+
+                  <div class="flex items-center gap-2 mb-3">
+                    <span x-text="fundIcon(f.name)" style="font-size:16px"></span>
+                    <div>
+                      <div class="font-bold" style="font-size:13px;color:var(--t1)" x-text="f.name"></div>
+                      <div style="font-size:10px;color:var(--t3)" x-text="f.thesis"></div>
+                    </div>
+                  </div>
+
+                  <!-- Full metrics row -->
+                  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:12px">
+                    <div style="background:var(--s2);border-radius:4px;padding:6px;text-align:center">
+                      <div style="font-size:8px;color:var(--t3)">Total Return</div>
+                      <div class="mono font-bold" style="font-size:12px" :class="(f.metrics?.total_return||0)>=0?'text-green-400':'text-red-400'" x-text="((f.metrics?.total_return||0)>=0?'+':'')+(f.metrics?.total_return||0)+'%'"></div>
+                    </div>
+                    <div style="background:var(--s2);border-radius:4px;padding:6px;text-align:center">
+                      <div style="font-size:8px;color:var(--t3)">Annualized</div>
+                      <div class="mono font-bold" style="font-size:12px;color:var(--t1)" x-text="(f.metrics?.annualized||0)+'%'"></div>
+                    </div>
+                    <div style="background:var(--s2);border-radius:4px;padding:6px;text-align:center">
+                      <div style="font-size:8px;color:var(--t3)">Sharpe</div>
+                      <div class="mono font-bold" style="font-size:12px" :class="(f.metrics?.sharpe||0)>=1?'text-green-400':((f.metrics?.sharpe||0)>=0.5?'text-amber-300':'text-red-400')" x-text="f.metrics?.sharpe||0"></div>
+                    </div>
+                    <div style="background:var(--s2);border-radius:4px;padding:6px;text-align:center">
+                      <div style="font-size:8px;color:var(--t3)">Volatility</div>
+                      <div class="mono font-bold text-amber-300" style="font-size:12px" x-text="(f.metrics?.volatility||0)+'%'"></div>
+                    </div>
+                    <div style="background:var(--s2);border-radius:4px;padding:6px;text-align:center">
+                      <div style="font-size:8px;color:var(--t3)">Max DD</div>
+                      <div class="mono font-bold text-red-400" style="font-size:12px" x-text="(f.metrics?.max_drawdown||0)+'%'"></div>
+                    </div>
+                    <div style="background:var(--s2);border-radius:4px;padding:6px;text-align:center">
+                      <div style="font-size:8px;color:var(--t3)">Alpha</div>
+                      <div class="mono font-bold" style="font-size:12px" :class="(f.metrics?.alpha_annualized||0)>=0?'text-green-400':'text-red-400'" x-text="((f.metrics?.alpha_annualized||0)>=0?'+':'')+(f.metrics?.alpha_annualized||0)+'%'"></div>
+                    </div>
+                  </div>
+
+                  <!-- Holdings table -->
+                  <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">Holdings (equal-weight)</div>
+                  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">
+                    <template x-for="p in (f.picks||[])" :key="p.ticker">
+                      <div style="background:var(--s2);border-radius:4px;padding:6px">
+                        <div class="mono font-bold" style="font-size:11px;color:var(--t1)" x-text="p.ticker"></div>
+                        <div style="font-size:8px;color:var(--t3)">Weight</div>
+                        <div class="mono" style="font-size:10px;color:var(--t2)" x-text="(p.weight*100).toFixed(0)+'%'"></div>
+                        <div style="font-size:8px;color:var(--t3);margin-top:3px">3m Mom</div>
+                        <div class="mono" style="font-size:10px" :class="(p.momentum_3m||0)>=0?'text-green-400':'text-red-400'" x-text="((p.momentum_3m||0)>=0?'+':'')+(p.momentum_3m||0)+'%'"></div>
+                        <div style="font-size:8px;color:var(--t3);margin-top:2px">Vol</div>
+                        <div class="mono text-amber-300" style="font-size:10px" x-text="(p.volatility||0)+'%'"></div>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </template>
+
+          </div>
+        </template>
+
+      </div>
+    </main>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
     <!-- SURFACE 6: TRACK RECORD + 5Y STRESS TEST              -->
     <!-- ═══════════════════════════════════════════════════════ -->
     <main x-show="tab==='track'" class="fade">
@@ -3683,6 +3839,7 @@
       tabs:[
         {id:'today',icon:'🎯',label:'Overview'},
         {id:'signals',icon:'📊',label:'Ranked'},
+        {id:'funds',icon:'🏦',label:'Funds'},
         {id:'scanners',icon:'🔬',label:'Scanners'},
         {id:'notrade',icon:'🚫',label:'Rejections'},
         {id:'dossier',icon:'🔍',label:'Dossier'},
@@ -3713,6 +3870,7 @@
       benchBT:{period:'5y',benchmark:'SPY',loading:false,data:null,error:''},
       perfTracker:{loading:false,rows:[],count:0,as_of:'',error:'',sort:'pct_chg'},
       fundLab:{loading:false,period:'1y',benchmark:'SPY',topN:5,data:null,error:''},
+      fundMonitor:{loading:false,data:null,error:'',lastRefresh:null,autoRefreshTimer:null,benchmark:'SPY',activeFund:null},
       tt:{ticker:'SPY',date:new Date(Date.now()-5*86400000).toISOString().slice(0,10),strategy:'all',loading:false,result:null},
       ops:{running:false,cycle_count:0,signals_today:0,trades_today:0,circuit_breaker:false,circuit_breaker_reason:'',dry_run:true,components:{}},
       opsDetail:{},
@@ -3766,7 +3924,7 @@
       toggleStar(ticker){this.ccStarred[ticker]=!this.ccStarred[ticker];localStorage.setItem('ccStarred',JSON.stringify(this.ccStarred))},
       toggleLove(ticker){this.ccLoved[ticker]=!this.ccLoved[ticker];localStorage.setItem('ccLoved',JSON.stringify(this.ccLoved))},
       toggleWatchlist(ticker){this.ccWatchlist[ticker]=!this.ccWatchlist[ticker];localStorage.setItem('ccWatchlist',JSON.stringify(this.ccWatchlist))},
-      switchTab(t){this.tab=t;if(t==='guide'){}if(t==='today'){this.fetchToday7();this.fetchMkt()}if(t==='signals'){this.fetchSignals();this.fetchRanked()}if(t==='ops'){this.fetchHealth();this.fetchChangelog()}if(t==='brief')this.fetchBrief();if(t==='catalog'){this.fetchEndpoints();this.fetchOpsDetail()}if(t==='scanners')this.fetchScanners();if(t==='notrade')this.fetchNoTrade();if(t==='rs')this.fetchRS();if(t==='flow')this.fetchFlow();if(t==='track'){if(this.perfTracker.rows.length===0)this.fetchPerfTracker();if(!this.fundLab.data)this.fetchFundLab()}if(t==='timetravel'&&!this.tt.date){const d=new Date();d.setDate(d.getDate()-5);this.tt.date=d.toISOString().slice(0,10)}if(t==='command'){this.fetchCommand();this.fetchAgentJournal();this.fetchAgentReliability()}},
+      switchTab(t){this.tab=t;if(t==='guide'){}if(t==='funds'){this.startFundMonitor()}if(t==='today'){this.fetchToday7();this.fetchMkt()}if(t==='signals'){this.fetchSignals();this.fetchRanked()}if(t==='ops'){this.fetchHealth();this.fetchChangelog()}if(t==='brief')this.fetchBrief();if(t==='catalog'){this.fetchEndpoints();this.fetchOpsDetail()}if(t==='scanners')this.fetchScanners();if(t==='notrade')this.fetchNoTrade();if(t==='rs')this.fetchRS();if(t==='flow')this.fetchFlow();if(t==='track'){if(this.perfTracker.rows.length===0)this.fetchPerfTracker();if(!this.fundLab.data)this.fetchFundLab()}if(t==='timetravel'&&!this.tt.date){const d=new Date();d.setDate(d.getDate()-5);this.tt.date=d.toISOString().slice(0,10)}if(t==='command'){this.fetchCommand();this.fetchAgentJournal();this.fetchAgentReliability()}},
 
       async fetchCommand(){
         if(this.cmd.loading)return;
@@ -4170,6 +4328,28 @@
         }catch(e){this.fundLab.error=e.message;this.fundLab.data=null}
         finally{this.fundLab.loading=false}
       },
+      // ── 24/7 Fund Monitor (sprint89) ──────────────────────────────────────
+      startFundMonitor(){
+        // stop any existing timer first
+        if(this.fundMonitor.autoRefreshTimer){clearInterval(this.fundMonitor.autoRefreshTimer);this.fundMonitor.autoRefreshTimer=null}
+        this.fetchFunds();
+        // auto-refresh every 5 minutes
+        this.fundMonitor.autoRefreshTimer=setInterval(()=>{if(this.tab==='funds')this.fetchFunds();else{clearInterval(this.fundMonitor.autoRefreshTimer);this.fundMonitor.autoRefreshTimer=null}},300000);
+      },
+      async fetchFunds(){
+        this.fundMonitor.loading=true;this.fundMonitor.error='';
+        try{
+          const u='/api/v7/fund-lab/live?benchmark='+encodeURIComponent(this.fundMonitor.benchmark);
+          const r=await fetch(u);
+          if(!r.ok)throw new Error('API '+r.status);
+          const d=await r.json();
+          if(d.error){this.fundMonitor.error=d.error}
+          else{this.fundMonitor.data=d;this.fundMonitor.lastRefresh=new Date().toLocaleTimeString();if(!this.fundMonitor.activeFund&&d.funds&&d.funds.length)this.fundMonitor.activeFund=d.funds[0].name}
+        }catch(e){this.fundMonitor.error='Failed: '+e.message}
+        finally{this.fundMonitor.loading=false}
+      },
+      fundColor(name){return name==='FUND_ALPHA'?'var(--green)':name==='FUND_PENDA'?'var(--blue)':'var(--orange)'},
+      fundIcon(name){return name==='FUND_ALPHA'?'\ud83d\ude80':name==='FUND_PENDA'?'\ud83d\udee1':'\u2699\ufe0f'},
       async fetchTimeTravel(){
         if(!this.tt.ticker||!this.tt.date)return;this.tt.loading=true;this.tt.result=null;
         try{const u='/api/live/time-travel?ticker='+encodeURIComponent(this.tt.ticker)+'&target_date='+this.tt.date+'&strategy='+(this.tt.strategy||'all');const r=await fetch(u,{method:'POST'});if(!r.ok){const e=await r.json();throw new Error(e.detail||'Failed')}this.tt.result=await r.json();this.$nextTick(()=>this.renderTTChart())}catch(e){alert('Time Travel Error: '+e.message)}finally{this.tt.loading=false}

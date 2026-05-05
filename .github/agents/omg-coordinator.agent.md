@@ -5,7 +5,7 @@ description: >
   Use when: coordinating multi-agent workflows, managing complex tasks,
   omg-autopilot execution, ralph loops, team coordination, workflow orchestration.
 model: claude-opus-4-7
-tools: [readFile, read, editFiles, edit, search, codebase, problems, runInTerminal, shell, findTestFiles, testFailures, usages, fetch]
+tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'agent', 'todo']
 agents: [architect, executor, planner, analyst, debugger, verifier, code-reviewer, security-reviewer, test-engineer, designer, writer, qa-tester, scientist, tracer, git-master, code-simplifier, critic, document-specialist, explore]
 user-invocable: false
 ---
