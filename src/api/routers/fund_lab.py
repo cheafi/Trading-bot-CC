@@ -20,10 +20,10 @@ from src.services.fund_lab_service import get_fund_lab_service
 
 router = APIRouter(prefix="/api/v7/fund-lab", tags=["fund-lab"])
 
-# ── 24/7 live cache — refreshed at most every 5 min ──────────────────────────
+# ── 24/7 live cache — refreshed at most every 30 min ────────────────────────
 _live_cache: Optional[Dict[str, Any]] = None
 _live_cache_time: float = 0.0
-_LIVE_TTL: float = 300.0  # 5 minutes
+_LIVE_TTL: float = 1800.0  # 30 minutes — reduces yfinance load 6×
 _live_lock = asyncio.Lock()
 
 
@@ -64,14 +64,45 @@ async def fund_lab_live(
         if mds is None:
             return {"error": "market_data service not initialised", "funds": []}
 
+        # Resolve current regime for fund gating (BULL/BEAR/SIDEWAYS)
+        regime = "unknown"
+        try:
+            regime_svc = getattr(request.app.state, "regime_service", None)
+            if regime_svc is not None:
+                r = await regime_svc.get()
+                regime = (r or {}).get("trend", "unknown")
+        except Exception:
+            pass
+
         service = get_fund_lab_service()
         result = await service.run(
-            mds, period="1y", benchmark=benchmark.upper(), top_n=5
+            mds, period="1y", benchmark=benchmark.upper(), top_n=5, regime=regime
         )
         payload = sanitize_for_json(result)
         payload["as_of"] = int(time.time())
         _live_cache = payload
         _live_cache_time = time.time()
+
+        # Persist holdings + performance to SQLite (non-blocking best-effort)
+        try:
+            from src.services.fund_persistence import (
+                upsert_holdings,
+                upsert_performance,
+            )
+
+            bm = payload.get("benchmark", "SPY")
+            for fund in payload.get("funds", []):
+                fid = fund.get("name", "")
+                if fid:
+                    upsert_holdings(fid, fund.get("picks", []))
+                    upsert_performance(fid, fund.get("metrics", {}), benchmark=bm)
+        except Exception as _pe:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "fund persistence write failed: %s", _pe
+            )
+
         return {**payload, "cached": False, "cache_age_s": 0}
 
 

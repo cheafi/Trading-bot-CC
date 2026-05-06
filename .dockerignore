@@ -92,9 +92,17 @@ src/node_modules
 !packages/cloud/
 !locales/
 
+# ── Heavy monorepo dirs NOT needed by Dockerfile.api ──────────────────────
+packages/
+locales/
+patches/
+releases/
+schemas/
+scripts/
+models/
+webview-ui/
+
 # ── Python / Trading-bot specific ─────────────────────────────────────────
-# These were missing and caused large build contexts, slowing docker build
-# and making layer diffs (docker commit) expensive.
 
 # Virtual environments — never needed in image (deps installed via pip)
 venv/

@@ -55,6 +55,19 @@ class FundLabService:
                 "NFLX",
                 "GOOGL",
             ],
+            # Aggressive: concentrated, momentum-heavy, low vol tolerance
+            "style": {
+                "top_n": 5,
+                "momentum_weight": 0.80,
+                "vol_penalty": 0.05,
+                "quality_weight": 0.10,
+                "regime_gates": ["BULL", "bull_trending"],
+                "vix_gate": 28,
+                "max_cash_pct": 0.10,
+                "stop_r": 1.0,
+                "target_r": 3.0,
+                "turnover_tolerance": "high",
+            },
         },
         "FUND_PENDA": {
             "thesis": "Defensive alpha preservation (low-beta + quality)",
@@ -70,6 +83,27 @@ class FundLabService:
                 "ABBV",
                 "SO",
             ],
+            # Balanced-defensive: diversified, vol-penalised, all-regime
+            "style": {
+                "top_n": 7,
+                "momentum_weight": 0.40,
+                "vol_penalty": 0.30,
+                "quality_weight": 0.35,
+                "regime_gates": [
+                    "BULL",
+                    "BEAR",
+                    "SIDEWAYS",
+                    "CHOPPY",
+                    "bull_trending",
+                    "bear_trending",
+                    "sideways",
+                ],
+                "vix_gate": 35,
+                "max_cash_pct": 0.30,
+                "stop_r": 0.75,
+                "target_r": 2.0,
+                "turnover_tolerance": "low",
+            },
         },
         "FUND_CAT": {
             "thesis": "Cyclical / tactical allocation by relative strength",
@@ -85,6 +119,19 @@ class FundLabService:
                 "GLD",
                 "TLT",
             ],
+            # Tactical: sector rotation, goes to cash in BEAR/high-VIX
+            "style": {
+                "top_n": 6,
+                "momentum_weight": 0.55,
+                "vol_penalty": 0.20,
+                "quality_weight": 0.15,
+                "regime_gates": ["BULL", "SIDEWAYS", "bull_trending", "sideways"],
+                "vix_gate": 28,
+                "max_cash_pct": 0.50,
+                "stop_r": 1.0,
+                "target_r": 2.5,
+                "turnover_tolerance": "medium",
+            },
         },
     }
 
@@ -104,7 +151,13 @@ class FundLabService:
         return s
 
     async def _momentum_score(
-        self, mds: Any, ticker: str, period: str
+        self,
+        mds: Any,
+        ticker: str,
+        period: str,
+        momentum_weight: float = 0.65,
+        vol_penalty: float = 0.15,
+        quality_weight: float = 0.0,
     ) -> Tuple[str, float, float, float]:
         s = await self._history(mds, ticker, period)
         if s.empty or len(s) < 40:
@@ -114,19 +167,68 @@ class FundLabService:
         ret_1m = float(s.iloc[-1] / s.iloc[-22] - 1.0) if len(s) > 22 else 0.0
         ret_3m = float(s.iloc[-1] / s.iloc[-63] - 1.0) if len(s) > 63 else ret_1m
         vol = float(s.pct_change().dropna().std() * np.sqrt(252)) if len(s) > 2 else 0.0
-        # reward trend, penalize extreme vol
-        score = ret_3m * 0.65 + ret_1m * 0.35 - vol * 0.15
+
+        # Quality proxy: inverse vol (stability) — used by FUND_PENDA style
+        quality = (1.0 / max(vol, 0.01)) * 0.05 if quality_weight > 0 else 0.0
+
+        one_m_wt = 1.0 - momentum_weight
+        score = (
+            ret_3m * momentum_weight
+            + ret_1m * one_m_wt
+            - vol * vol_penalty
+            + quality * quality_weight
+        )
         return ticker, score, ret_3m, vol
 
     async def _build_sleeve(
-        self, mds: Any, name: str, period: str, top_n: int = 5
+        self,
+        mds: Any,
+        name: str,
+        period: str,
+        top_n: int = 5,
+        regime: str = "unknown",
     ) -> Dict[str, Any]:
         spec = self.FUND_UNIVERSES[name]
-        tasks = [self._momentum_score(mds, t, period) for t in spec["candidates"]]
+        style = spec.get("style", {})
+
+        # Regime gate: funds with restricted regime_gates go to cash outside their window
+        # "unknown" bypasses gating — we only restrict when regime is positively known
+        regime_gates = style.get("regime_gates", [])
+        if (
+            regime_gates
+            and regime not in ("unknown", "")
+            and regime not in regime_gates
+        ):
+            return {
+                "name": name,
+                "thesis": spec["thesis"],
+                "picks": [],
+                "regime_gated": True,
+                "regime": regime,
+                "cash_pct": round(style.get("max_cash_pct", 1.0) * 100, 1),
+            }
+
+        # Style weights from config
+        mom_w = style.get("momentum_weight", 0.65)
+        vol_p = style.get("vol_penalty", 0.15)
+        qual_w = style.get("quality_weight", 0.0)
+        effective_top_n = style.get("top_n", top_n)
+
+        tasks = [
+            self._momentum_score(
+                mds,
+                t,
+                period,
+                momentum_weight=mom_w,
+                vol_penalty=vol_p,
+                quality_weight=qual_w,
+            )
+            for t in spec["candidates"]
+        ]
         rows = await asyncio.gather(*tasks)
         rows = [r for r in rows if math.isfinite(r[1])]
         rows.sort(key=lambda x: x[1], reverse=True)
-        picks = rows[: max(1, min(top_n, len(rows)))]
+        picks = rows[: max(1, min(effective_top_n, len(rows)))]
         if not picks:
             return {"name": name, "thesis": spec["thesis"], "picks": []}
 
@@ -138,6 +240,12 @@ class FundLabService:
         return {
             "name": name,
             "thesis": spec["thesis"],
+            "style": {
+                "stop_r": style.get("stop_r", 1.0),
+                "target_r": style.get("target_r", 2.5),
+                "turnover": style.get("turnover_tolerance", "medium"),
+                "max_cash_pct": style.get("max_cash_pct", 0.2),
+            },
             "picks": [
                 {
                     "ticker": t,
@@ -249,12 +357,17 @@ class FundLabService:
         }
 
     async def run(
-        self, mds: Any, period: str = "1y", benchmark: str = "SPY", top_n: int = 5
+        self,
+        mds: Any,
+        period: str = "1y",
+        benchmark: str = "SPY",
+        top_n: int = 5,
+        regime: str = "unknown",
     ) -> Dict[str, Any]:
         # Parallel sleeve builds (3× faster than sequential)
         sleeve_list = await asyncio.gather(
             *[
-                self._build_sleeve(mds, name, period, top_n)
+                self._build_sleeve(mds, name, period, top_n, regime=regime)
                 for name in self.FUND_UNIVERSES
             ]
         )
@@ -279,14 +392,17 @@ class FundLabService:
         results: List[Dict[str, Any]] = []
         for (fund_name, sleeve), p_rets in zip(sleeve_items, port_rets_list):
             metrics = self._metrics(p_rets, bm_rets)
-            results.append(
-                SleeveResult(
-                    name=fund_name,
-                    thesis=sleeve.get("thesis", ""),
-                    picks=sleeve.get("picks", []),
-                    metrics=metrics,
-                ).to_dict()
-            )
+            entry = SleeveResult(
+                name=fund_name,
+                thesis=sleeve.get("thesis", ""),
+                picks=sleeve.get("picks", []),
+                metrics=metrics,
+            ).to_dict()
+            # Propagate regime gate info so dashboard can show why cash
+            if sleeve.get("regime_gated"):
+                entry["regime_gated"] = True
+                entry["regime"] = sleeve.get("regime", "unknown")
+            results.append(entry)
 
         # sort by excess return desc
         results.sort(

@@ -103,12 +103,22 @@ class RiskCircuitBreaker:
 
         # Runtime state
         self.daily_pnl: float = 0.0
-        self.peak_equity: float = 0.0
         self.consecutive_losses: int = 0
         self.triggered: bool = False
         self.trigger_reason: str = ""
         self.trigger_time: Optional[datetime] = None
         self.today: date = date.today()
+        # Restore cross-session peak_equity so drawdown tracking survives restarts
+        _stored_peak: float = 0.0
+        try:
+            from src.services.fund_persistence import load_engine_state
+
+            _stored_peak = float(
+                load_engine_state("circuit_breaker_peak_equity") or 0.0
+            )
+        except Exception:
+            pass
+        self.peak_equity: float = _stored_peak
 
     def reset_daily(self):
         self.daily_pnl = 0.0
@@ -125,9 +135,15 @@ class RiskCircuitBreaker:
         if date.today() != self.today:
             self.reset_daily()
 
-        # Update peak equity
+        # Update peak equity — persist to SQLite so restarts don't lose history
         if equity > self.peak_equity:
             self.peak_equity = equity
+            try:
+                from src.services.fund_persistence import save_engine_state
+
+                save_engine_state("circuit_breaker_peak_equity", self.peak_equity)
+            except Exception:
+                pass  # non-fatal — in-memory value still correct
 
         # Check cooldown
         if self.triggered and self.trigger_time:

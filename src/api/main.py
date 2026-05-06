@@ -11846,6 +11846,14 @@ try:
 except Exception:
     logger.exception("[Router] Failed to load fund_lab router")
 
+# Sprint 94 — Fund portfolio REST API (holdings / trades / performance / compare)
+try:
+    from src.api.routers.fund_portfolio import router as fund_portfolio_router
+
+    app.include_router(fund_portfolio_router)
+except Exception:
+    logger.exception("[Router] Failed to load fund_portfolio router")
+
 # Sprint 81 RISK-3 — Market intel extracted router
 try:
     from src.api.routers.market_intel import router as market_intel_router

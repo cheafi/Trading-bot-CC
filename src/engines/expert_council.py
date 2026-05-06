@@ -133,6 +133,42 @@ class FundamentalExpert(NamedExpert):
         rr = signal.get("risk_reward", 0)
         score = signal.get("score", 0)
 
+        # ── Real fundamental data (populated by dossier / p9 pipeline) ───────
+        fundamentals = signal.get("fundamentals") or {}
+
+        def _f(v, default=None):
+            try:
+                return float(v) if v is not None else default
+            except (TypeError, ValueError):
+                return default
+
+        pe = _f(fundamentals.get("pe_ratio") or fundamentals.get("trailingPE"))
+        fpe = _f(fundamentals.get("forward_pe") or fundamentals.get("forwardPE"))
+        margin = _f(
+            fundamentals.get("profit_margin") or fundamentals.get("profitMargins")
+        )
+        roe_v = _f(fundamentals.get("roe") or fundamentals.get("returnOnEquity"))
+        de = _f(fundamentals.get("debt_equity") or fundamentals.get("debtToEquity"))
+
+        # Composite quality score 0–1 from real data; 0.5 neutral when missing
+        quality_score = 0.5
+        _factors = []
+        if pe is not None and 0 < pe < 500:
+            _factors.append(max(0.0, min(1.0, (50 - pe) / 50)))  # PE<25 = good
+        if fpe is not None and 0 < fpe < 500:
+            _factors.append(max(0.0, min(1.0, (40 - fpe) / 40)))
+        if margin is not None:
+            _factors.append(max(0.0, min(1.0, margin / 0.15)))  # >15% = strong
+        if roe_v is not None:
+            _factors.append(max(0.0, min(1.0, roe_v / 0.15)))  # >15% = strong
+        if de is not None and de >= 0:
+            _factors.append(max(0.0, min(1.0, 1.0 - de / 200)))  # low D/E good
+        if _factors:
+            quality_score = sum(_factors) / len(_factors)
+
+        has_real_data = bool(_factors)
+        # ── Sector-specific logic uses quality_score ──────────────────────────
+
         # Sector-specific valuation heuristics
         if bucket == SectorBucket.HIGH_GROWTH:
             # Growth stocks: R:R and momentum matter more
@@ -146,6 +182,18 @@ class FundamentalExpert(NamedExpert):
                     "Multiple compression",
                     "STRONG",
                 )
+            # Growth without strong R:R — check quality_score
+            if quality_score >= 0.6 and rr >= 2.0:
+                data_note = " (real P/E+margin data)" if has_real_data else ""
+                return ExpertVote(
+                    self.name,
+                    "BUY_SMALL",
+                    55,
+                    f"Growth quality acceptable{data_note} — moderate position",
+                    0.5,
+                    "Multiple compression",
+                    "MODERATE",
+                )
             return ExpertVote(
                 self.name,
                 "ABSTAIN",
@@ -157,13 +205,15 @@ class FundamentalExpert(NamedExpert):
             )
 
         elif bucket == SectorBucket.DEFENSIVE:
-            # Defensive: stability, dividend safety
-            if score >= 6.0:
+            # Defensive: stability + quality score
+            qual_threshold = 0.55 if has_real_data else 0.0
+            if score >= 6.0 and quality_score >= qual_threshold:
+                data_note = f" (quality={quality_score:.2f})" if has_real_data else ""
                 return ExpertVote(
                     self.name,
                     "LONG",
                     65,
-                    "Defensive quality — stable earnings profile",
+                    f"Defensive quality — stable earnings profile{data_note}",
                     0.7,
                     "Yield competition from bonds",
                     "STRONG",
@@ -179,9 +229,10 @@ class FundamentalExpert(NamedExpert):
             )
 
         elif bucket == SectorBucket.CYCLICAL:
-            # Cyclical: macro-dependent
+            # Cyclical: macro-dependent + check leverage (D/E)
             should_trade = regime.get("should_trade", True)
-            if should_trade and rr >= 2.0:
+            high_leverage = de is not None and de > 150
+            if should_trade and rr >= 2.0 and not high_leverage:
                 return ExpertVote(
                     self.name,
                     "LONG",
@@ -191,11 +242,12 @@ class FundamentalExpert(NamedExpert):
                     "Commodity price reversal",
                     "MODERATE",
                 )
+            reason = "high leverage" if high_leverage else "macro headwinds or weak R:R"
             return ExpertVote(
                 self.name,
                 "FLAT",
                 45,
-                "Cyclical — macro headwinds or weak R:R",
+                f"Cyclical — {reason}",
                 0.5,
                 "Demand slowdown",
                 "CAUTIOUS",

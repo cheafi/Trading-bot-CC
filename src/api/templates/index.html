@@ -2672,7 +2672,7 @@
         <div class="flex items-center justify-between">
           <div>
             <div class="text-[13px] font-bold" style="color:var(--t1)">🏦 3 Active Funds — Live Monitor</div>
-            <div class="text-[10px]" style="color:var(--t3)">Auto-refreshes every 5 min · <span x-text="fundMonitor.lastRefresh?'Last updated: '+fundMonitor.lastRefresh:'Loading…'"></span></div>
+            <div class="text-[10px]" style="color:var(--t3)">Auto-refreshes every 30 min · <span x-text="fundMonitor.lastRefresh?'Last updated: '+fundMonitor.lastRefresh:'Loading…'"></span></div>
           </div>
           <div class="flex items-center gap-2">
             <select x-model="fundMonitor.benchmark" @change="fetchFunds()" class="text-[10px]" style="padding:4px 8px;border-radius:4px;background:var(--s2);border:1px solid var(--bd);color:var(--t2)">
@@ -4333,8 +4333,8 @@
         // stop any existing timer first
         if(this.fundMonitor.autoRefreshTimer){clearInterval(this.fundMonitor.autoRefreshTimer);this.fundMonitor.autoRefreshTimer=null}
         this.fetchFunds();
-        // auto-refresh every 5 minutes
-        this.fundMonitor.autoRefreshTimer=setInterval(()=>{if(this.tab==='funds')this.fetchFunds();else{clearInterval(this.fundMonitor.autoRefreshTimer);this.fundMonitor.autoRefreshTimer=null}},300000);
+        // auto-refresh every 30 minutes (matches /fund-lab/live cache TTL)
+        this.fundMonitor.autoRefreshTimer=setInterval(()=>{if(this.tab==='funds')this.fetchFunds();else{clearInterval(this.fundMonitor.autoRefreshTimer);this.fundMonitor.autoRefreshTimer=null}},1800000);
       },
       async fetchFunds(){
         this.fundMonitor.loading=true;this.fundMonitor.error='';
