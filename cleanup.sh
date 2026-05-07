@@ -1,41 +1,135 @@
 #!/usr/bin/env bash
 # cleanup.sh — TradingAI Bot project cleanup
-# Safe to run from project root. Removes caches, logs, build artefacts.
-# Does NOT touch .git history or user data (models/*.json, data/brief-*.json).
+# Modes:
+#   ./cleanup.sh inventory  # non-destructive repo/Git/doc inventory
+#   ./cleanup.sh dry-run    # show removable cache/temp artefacts
+#   ./cleanup.sh            # apply safe cleanup (same as "apply")
+# Does NOT touch Git history or user data (models/*.json, data/brief-*.json).
 set -euo pipefail
 
-echo "🧹 TradingAI Bot — Project Cleanup"
-echo "===================================="
-echo "Before: $(du -sh . 2>/dev/null | cut -f1)"
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MODE="${1:-apply}"
 
-echo ""
-echo "→ Removing Python bytecode caches..."
-find . -type d -name "__pycache__" -not -path "./.git/*" -exec rm -rf {} + 2>/dev/null || true
-find . -name "*.pyc" -o -name "*.pyo" | grep -v ".git" | xargs rm -f 2>/dev/null || true
-find . -name "*.egg-info" -type d -not -path "./.git/*" -exec rm -rf {} + 2>/dev/null || true
+print_header() {
+  echo "🧹 TradingAI Bot — Project Cleanup"
+  echo "===================================="
+  echo "Mode: $MODE"
+  echo "Root: $ROOT_DIR"
+}
 
-echo "→ Removing log and temp files..."
-find . -name "*.log" -not -path "./.git/*" -delete 2>/dev/null || true
-find . -name "*.tmp" -o -name "*.bak" -o -name "*.swp" -o -name "*.swo" \
-  | grep -v ".git" | xargs rm -f 2>/dev/null || true
+usage() {
+  cat <<'EOF'
+Usage:
+  ./cleanup.sh inventory   # show repo/Git/doc cleanup opportunities
+  ./cleanup.sh dry-run     # list safe-to-delete junk files and caches
+  ./cleanup.sh apply       # remove safe caches/logs/temp artefacts
+  ./cleanup.sh             # same as apply
+EOF
+}
 
-echo "→ Removing pytest / coverage artefacts..."
-rm -rf .pytest_cache .coverage htmlcov/ .mypy_cache/ .ruff_cache/ 2>/dev/null || true
+report_sizes() {
+  echo "Before/Current: $(du -sh "$ROOT_DIR" 2>/dev/null | cut -f1)"
+  echo ".git:          $(du -sh "$ROOT_DIR/.git" 2>/dev/null | cut -f1)"
+}
 
-echo "→ Removing JS/TS build artefacts..."
-find . -type d \( -name ".turbo" -o -name ".next" \) \
-  -not -path "./.git/*" -exec rm -rf {} + 2>/dev/null || true
-# Note: dist/ intentionally excluded — may contain needed build outputs
+list_candidates() {
+  find "$ROOT_DIR" \( -path "$ROOT_DIR/.git" -o -path "$ROOT_DIR/venv" \) -prune -o \
+    \( -type f \( \
+      -name "*.log" -o \
+      -name "*.tmp" -o \
+      -name "*.temp" -o \
+      -name "*.bak" -o \
+      -name "*.swp" -o \
+      -name "*.swo" -o \
+      -name ".DS_Store" -o \
+      -name "Thumbs.db" -o \
+      -name "*.pyc" -o \
+      -name "*.pyo" -o \
+      -name "*.tsbuildinfo" \
+    \) -print \) -o \
+    \( -type d \( \
+      -name "__pycache__" -o \
+      -name ".pytest_cache" -o \
+      -name ".mypy_cache" -o \
+      -name ".ruff_cache" -o \
+      -name ".turbo" -o \
+      -name ".cache" -o \
+      -name ".next" -o \
+      -name ".parcel-cache" -o \
+      -name "htmlcov" -o \
+      -name "coverage" \
+    \) -print \)
+}
 
-echo "→ Compacting git objects..."
-git gc --prune=now --quiet
-git remote prune origin --dry-run 2>/dev/null || true
+run_inventory() {
+  print_header
+  report_sizes
+  echo ""
+  echo "Top 10 largest top-level folders:"
+  pushd "$ROOT_DIR" >/dev/null
+  du -hd 1 . 2>/dev/null | sort -hr | head -10
+  echo ""
+  echo "Git object store health:"
+  git count-objects -vH
+  echo ""
+  echo "Largest blobs in Git history (top 10):"
+  git rev-list --objects --all \
+    | git cat-file --batch-check='%(objecttype) %(objectname) %(objectsize) %(rest)' \
+    | awk '$1=="blob"{print $3"\t"$4}' \
+    | sort -nr \
+    | head -10
+  echo ""
+  if [ -d docs ]; then
+    echo "Docs untouched for 180+ days (top 20):"
+    find docs -type f \( -name "*.md" -o -name "*.html" \) -mtime +180 | sort | head -20
+  fi
+  popd >/dev/null
+}
 
-echo ""
-echo "After:  $(du -sh . 2>/dev/null | cut -f1)"
-echo ".git:   $(du -sh .git 2>/dev/null | cut -f1)"
-echo ""
-echo "✅ Cleanup complete"
-echo ""
-echo "Top 10 largest folders:"
-du -d 3 -h . 2>/dev/null | sort -rh | head -11 | tail -10
+run_dry() {
+  print_header
+  report_sizes
+  echo ""
+  echo "Safe cleanup candidates:"
+  list_candidates | sed "s#^$ROOT_DIR/##" | sort
+}
+
+run_apply() {
+  print_header
+  report_sizes
+  echo ""
+  echo "→ Removing safe caches, logs, and temp artefacts..."
+  list_candidates | while IFS= read -r path; do
+    [ -z "$path" ] && continue
+    rm -rf "$path"
+    echo "removed ${path#$ROOT_DIR/}"
+  done
+  pushd "$ROOT_DIR" >/dev/null
+  echo "→ Compacting git objects..."
+  git gc --prune=now --quiet
+  popd >/dev/null
+  echo ""
+  echo "After: $(du -sh "$ROOT_DIR" 2>/dev/null | cut -f1)"
+  echo ".git:  $(du -sh "$ROOT_DIR/.git" 2>/dev/null | cut -f1)"
+  echo "✅ Cleanup complete"
+}
+
+case "$MODE" in
+  inventory)
+    run_inventory
+    ;;
+  dry-run)
+    run_dry
+    ;;
+  apply)
+    run_apply
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    echo "Unknown mode: $MODE" >&2
+    usage
+    exit 1
+    ;;
+esac

@@ -1,4 +1,4 @@
-.PHONY: help dev prod test lint docker clean install
+.PHONY: help dev prod test lint docker clean install cleanup-inventory cleanup-dry-run git-maintenance
 
 # Default target
 help:
@@ -60,6 +60,18 @@ format:
 # ── Clean ────────────────────────────────────────────────────────────
 clean:
 	bash cleanup.sh
+
+cleanup-inventory:
+	bash cleanup.sh inventory
+
+cleanup-dry-run:
+	bash cleanup.sh dry-run
+
+git-maintenance:
+	git count-objects -vH
+	git gc --prune=now
+	git repack -Ad
+	git commit-graph write --reachable --changed-paths
 
 # ── Docker ───────────────────────────────────────────────────────────
 docker-build:
