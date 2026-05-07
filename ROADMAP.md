@@ -261,6 +261,12 @@ These ideas need more research before committing:
 - [x] **Dashboard cards** — 🎰 Thompson Sizing card + 📉 Feature IC Decay card in Ops panel
 - [x] **Sprint 103 CI tests** — 15 tests, 15/15 passing
 
+### ✅ Sprint 109 — Unified Sizing Advisor (v10.0.0)
+- [x] **`SizingAdvisor`** (`src/engines/sizing_advisor.py`) — combines `PositionSizer` (Kelly/fixed-risk base), `ThompsonSizingEngine` (RL multiplier), `apply_decay_penalty` (staleness adj ×0.5–×1.0), portfolio heat gate; full `AdvisedSize` dataclass with `audit_trail`
+- [x] **REST router** (`src/api/routers/sizing.py`) — `GET /api/v7/size/advise`, `POST /api/v7/size/advise/batch` (max 20), `GET /api/v7/size/params`; registered in `main.py`
+- [x] **Dashboard suggested-size pill** — 📐 inline 1R size estimate in ranked-signal meta row when entry+stop available
+- [x] **Sprint 109 CI tests** — 20 tests, 20/20 passing (135 total across sprints 100–109)
+
 ### ✅ Sprint 108 — Signal Confidence Decay Penalty (v9.9.0)
 - [x] **`apply_decay_penalty()`** — exponential half-life decay per setup grade (A+=48h … D=4h); penalty capped at 20pts; infers age from `data_freshness_minutes` if `age_hours` not passed
 - [x] **`get_stale_signals()`** — filter helper returns signals older than threshold (default 8h), sorted desc by age; used by REST layer

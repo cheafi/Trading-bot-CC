@@ -11939,3 +11939,11 @@ try:
     app.include_router(notify_router)
 except Exception:
     logger.exception("[Router] Failed to load notify router")
+
+# Sprint 109 — Unified Sizing Advisor (Kelly + Thompson + decay + heat)
+try:
+    from src.api.routers.sizing import router as sizing_router
+
+    app.include_router(sizing_router)
+except Exception:
+    logger.exception("[Router] Failed to load sizing router")
