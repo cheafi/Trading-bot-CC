@@ -1,22 +1,28 @@
 """
-Self-Learn Router — Sprint 96 / 98
-====================================
+Self-Learn Router — Sprint 96 / 98 / 103
+==========================================
 Exposes the SelfLearningEngine, regime-conditioned params, fund
-weight auto-tuner, Brier calibration tracker, and A/B shadow harness.
+weight auto-tuner, Brier calibration tracker, A/B shadow harness,
+Thompson RL sizing engine, and feature IC decay detector.
 
 Routes:
-  GET  /api/v7/self-learn/status           — engine state + recent audit log
-  GET  /api/v7/self-learn/regime-params    — per-regime parameter table
-  GET  /api/v7/self-learn/fund-weights     — current fund sleeve allocations
-  GET  /api/v7/self-learn/calibration      — Brier score + drift alert      (Sprint 98)
-  GET  /api/v7/self-learn/ab-status        — A/B shadow harness state        (Sprint 98)
-  POST /api/v7/self-learn/trigger          — run one analysis+adjust cycle
-  POST /api/v7/self-learn/fund-tune        — update fund weights from latest metrics
-  POST /api/v7/self-learn/regime-tune      — auto-tune per-regime params     (Sprint 98)
-  POST /api/v7/self-learn/ab-propose       — propose a challenger param       (Sprint 98)
-  POST /api/v7/self-learn/ab-evaluate      — evaluate A/B promotion           (Sprint 98)
-  POST /api/v7/self-learn/disable          — kill switch
-  POST /api/v7/self-learn/enable           — re-enable
+  GET  /api/v7/self-learn/status              — engine state + recent audit log
+  GET  /api/v7/self-learn/regime-params       — per-regime parameter table
+  GET  /api/v7/self-learn/fund-weights        — current fund sleeve allocations
+  GET  /api/v7/self-learn/calibration         — Brier score + drift alert      (Sprint 98)
+  GET  /api/v7/self-learn/calibration/by-strategy — per-strategy Brier         (Sprint 102)
+  GET  /api/v7/self-learn/ab-status           — A/B shadow harness state        (Sprint 98)
+  GET  /api/v7/self-learn/thompson            — all Thompson arms               (Sprint 103)
+  GET  /api/v7/self-learn/feature-ic          — feature IC decay status         (Sprint 103)
+  POST /api/v7/self-learn/trigger             — run one analysis+adjust cycle
+  POST /api/v7/self-learn/fund-tune           — update fund weights from latest metrics
+  POST /api/v7/self-learn/regime-tune         — auto-tune per-regime params     (Sprint 98)
+  POST /api/v7/self-learn/ab-propose          — propose a challenger param       (Sprint 98)
+  POST /api/v7/self-learn/ab-evaluate         — evaluate A/B promotion           (Sprint 98)
+  POST /api/v7/self-learn/thompson/update     — record trade outcome → update arm (Sprint 103)
+  POST /api/v7/self-learn/feature-ic/record   — record feature values + outcome  (Sprint 103)
+  POST /api/v7/self-learn/disable             — kill switch
+  POST /api/v7/self-learn/enable              — re-enable
 """
 
 from __future__ import annotations
@@ -281,11 +287,13 @@ async def calibration_by_strategy(
 ) -> Dict[str, Any]:
     """Per-strategy Brier score decomposition."""
     status = get_calibration_status()
-    return sanitize_for_json({
-        "by_strategy": status.get("by_strategy", {}),
-        "overall_brier": status.get("brier_score"),
-        "overall_window": status.get("window", 0),
-    })
+    return sanitize_for_json(
+        {
+            "by_strategy": status.get("by_strategy", {}),
+            "overall_brier": status.get("brier_score"),
+            "overall_window": status.get("window", 0),
+        }
+    )
 
 
 # ── A/B shadow harness (Sprint 98) ───────────────────────────────────────────
@@ -318,4 +326,102 @@ async def ab_evaluate(
 ) -> Dict[str, Any]:
     """Evaluate A/B promotion eligibility for a tracked param."""
     result = evaluate_ab_promotion(param)
+    return sanitize_for_json(result)
+
+
+# ── Thompson RL Sizing (Sprint 103) ──────────────────────────────────────────
+
+
+@router.get("/thompson")
+async def thompson_arms(
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """All Thompson sampling arms (strategy×regime Beta distributions)."""
+    from src.engines.thompson_sizing import get_thompson_engine  # noqa: PLC0415
+
+    eng = get_thompson_engine()
+    arms = eng.get_all_arms()
+    best = eng.recommend_best_arm()
+    return sanitize_for_json(
+        {
+            "arms": arms,
+            "total_arms": len(arms),
+            "best_arm": best,
+        }
+    )
+
+
+@router.post("/thompson/update")
+async def thompson_update(
+    strategy: str,
+    regime: str,
+    win: bool,
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Record trade outcome and update Thompson arm for (strategy, regime)."""
+    from src.engines.thompson_sizing import get_thompson_engine  # noqa: PLC0415
+
+    arm = get_thompson_engine().update(strategy, regime, win)
+    return sanitize_for_json({"status": "updated", "arm": arm.to_dict()})
+
+
+@router.get("/thompson/sample")
+async def thompson_sample(
+    strategy: str,
+    regime: str,
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Sample a sizing multiplier from the Thompson arm for (strategy, regime)."""
+    from src.engines.thompson_sizing import get_thompson_engine  # noqa: PLC0415
+
+    eng = get_thompson_engine()
+    multiplier = eng.sample(strategy, regime)
+    arm = eng.get_arm(strategy, regime)
+    return sanitize_for_json(
+        {
+            "strategy": strategy.upper(),
+            "regime": regime.upper(),
+            "multiplier": round(multiplier, 4),
+            "arm": arm.to_dict() if arm else None,
+        }
+    )
+
+
+# ── Feature IC Decay (Sprint 103) ─────────────────────────────────────────────
+
+
+@router.get("/feature-ic")
+async def feature_ic_status(
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Feature IC scores, peaks, decay and alerts."""
+    from src.engines.feature_ic import get_feature_ic_status  # noqa: PLC0415
+
+    return sanitize_for_json(get_feature_ic_status())
+
+
+@router.post("/feature-ic/record")
+async def record_feature_ic(
+    win: bool,
+    final_confidence: float = 0.0,
+    rs_composite: float = 0.0,
+    mtf_confluence_score: float = 0.0,
+    thesis_confidence: float = 0.0,
+    timing_confidence: float = 0.0,
+    vix: float = 0.0,
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Record feature values + outcome for IC tracking."""
+    from src.engines.feature_ic import record_feature_outcomes  # noqa: PLC0415
+
+    feats = {
+        "final_confidence": final_confidence or None,
+        "rs_composite": rs_composite or None,
+        "mtf_confluence_score": mtf_confluence_score or None,
+        "thesis_confidence": thesis_confidence or None,
+        "timing_confidence": timing_confidence or None,
+        "vix": vix or None,
+    }
+    feats = {k: v for k, v in feats.items() if v is not None}
+    result = record_feature_outcomes(feats, win)
     return sanitize_for_json(result)
