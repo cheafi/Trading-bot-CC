@@ -130,9 +130,7 @@ async def today_playbook() -> Dict[str, Any]:
                     f" ({round(r.confidence.final, 2)}"
                     f" vs {round(nxt.confidence.final, 2)})"
                     + (
-                        ", better sector fit ("
-                        + r.sector.sector_bucket.value
-                        + ")"
+                        ", better sector fit (" + r.sector.sector_bucket.value + ")"
                         if r.sector.sector_bucket != nxt.sector.sector_bucket
                         else ""
                     )
@@ -211,14 +209,8 @@ async def ranked_opportunities(
             "stop_price": r.signal.get("stop_price"),
             "risk_reward": r.signal.get("risk_reward"),
             "why_now": (r.explanation.why_now if r.explanation else None),
-            "why_not": (
-                r.explanation.why_not_stronger
-                if r.explanation else None
-            ),
-            "invalidation": (
-                r.explanation.invalidation
-                if r.explanation else None
-            ),
+            "why_not": (r.explanation.why_not_stronger if r.explanation else None),
+            "invalidation": (r.explanation.invalidation if r.explanation else None),
             # Phase 9 pass-through
             "structure": r.signal.get("structure"),
             "entry_quality": r.signal.get("entry_quality"),
@@ -335,6 +327,8 @@ async def vcp_analysis(ticker: str) -> Dict[str, Any]:
 @router.get("/dossier/{ticker}")
 async def symbol_dossier(ticker: str) -> Dict[str, Any]:
     """Complete decision dossier for a single symbol."""
+    from src.engines.decision_object import DecisionObject  # noqa: PLC0415
+
     pipeline = _get_pipeline()
     vcp = _get_vcp()
     regime = await _real_regime()
@@ -346,6 +340,9 @@ async def symbol_dossier(ticker: str) -> Dict[str, Any]:
     # Full pipeline
     result = pipeline.process(signal, regime)
 
+    # Build canonical DecisionObject from pipeline result
+    decision_obj = DecisionObject.from_pipeline_result(result, regime)
+
     # VCP analysis (if applicable)
     vcp_result = vcp.analyze(signal, result.sector, regime)
 
@@ -356,7 +353,7 @@ async def symbol_dossier(ticker: str) -> Dict[str, Any]:
 
     return {
         "ticker": ticker,
-        "signal": result.to_dict(),
+        "signal": decision_obj.to_dict(),
         "vcp": vcp_result.to_dict() if vcp_result.detection.is_vcp else None,
         "warnings": ticker_warnings,
     }
@@ -530,18 +527,9 @@ async def _build_benchmark() -> Dict[str, Any]:
         if len(c) < 4:
             return {}
         r1w = float((c.iloc[-1] / c.iloc[-2] - 1) * 100)
-        r1m = (
-            float((c.iloc[-1] / c.iloc[-4] - 1) * 100)
-            if len(c) >= 5 else 0.0
-        )
-        r3m = (
-            float((c.iloc[-1] / c.iloc[-12] - 1) * 100)
-            if len(c) >= 13 else 0.0
-        )
-        r6m = (
-            float((c.iloc[-1] / c.iloc[0] - 1) * 100)
-            if len(c) >= 20 else 0.0
-        )
+        r1m = float((c.iloc[-1] / c.iloc[-4] - 1) * 100) if len(c) >= 5 else 0.0
+        r3m = float((c.iloc[-1] / c.iloc[-12] - 1) * 100) if len(c) >= 13 else 0.0
+        r6m = float((c.iloc[-1] / c.iloc[0] - 1) * 100) if len(c) >= 20 else 0.0
         return {
             "return_1w": r1w,
             "return_1m": r1m,
@@ -766,9 +754,7 @@ async def backtest_vs_benchmark(
         valid = 0
         for t in top5:
             if t in returns.columns:  # type: ignore
-                r_vals = returns.loc[
-                    returns.index <= next_idx, t
-                ]
+                r_vals = returns.loc[returns.index <= next_idx, t]
                 if (
                     hasattr(r_vals, "__len__")
                     and len(r_vals) > 0  # type: ignore[arg-type]
@@ -842,19 +828,13 @@ async def backtest_vs_benchmark(
             "total_return": round((strat_cum - 1) * 100, 2),
             "annualized": round(strat_ann * 100, 2),
             "volatility": round(strat_vol * 100, 2),
-            "sharpe": (
-                round(strat_ann / strat_vol, 2)
-                if strat_vol > 0 else 0
-            ),
+            "sharpe": (round(strat_ann / strat_vol, 2) if strat_vol > 0 else 0),
         },
         "benchmark_stats": {
             "total_return": round((bench_cum - 1) * 100, 2),
             "annualized": round(bench_ann * 100, 2),
             "volatility": round(bench_vol * 100, 2),
-            "sharpe": (
-                round(bench_ann / bench_vol, 2)
-                if bench_vol > 0 else 0
-            ),
+            "sharpe": (round(bench_ann / bench_vol, 2) if bench_vol > 0 else 0),
         },
         "alpha_annualized": round(alpha * 100, 2),
         "win_rate_vs_benchmark": win_rate,

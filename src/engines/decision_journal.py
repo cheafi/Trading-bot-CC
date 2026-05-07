@@ -24,7 +24,7 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 
 @dataclass
@@ -71,6 +71,45 @@ class JournalEntry:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+    @classmethod
+    def from_decision_object(cls, obj: Any, price: float = 0.0) -> "JournalEntry":
+        """Create a JournalEntry from a DecisionObject (forward-looking fields only)."""
+        import uuid
+
+        return cls(
+            entry_id=f"DJ-{uuid.uuid4().hex[:8].upper()}",
+            timestamp=obj.generated_at or "",
+            ticker=obj.ticker,
+            decision=obj.action,
+            price=price,
+            regime=obj.macro_regime,
+            score=float(obj.final_confidence) / 100.0,
+            confidence=float(obj.final_confidence) / 100.0,
+            setup_grade=obj.conviction_tier,
+            evidence_for=[obj.why_now] if obj.why_now and obj.why_now != "—" else [],
+            evidence_against=(
+                [obj.why_not_stronger]
+                if obj.why_not_stronger and obj.why_not_stronger != "—"
+                else []
+            ),
+            gate_allowed=obj.portfolio_fit in ("ALLOWED", "ALLOWED_SMALL"),
+            gate_blocks=(
+                [obj.portfolio_gate_reason] if obj.portfolio_gate_reason else []
+            ),
+            notes=[f"trust:{obj.trust_level}", f"source:{obj.signal_source}"],
+            factors={
+                "thesis_confidence": obj.thesis_confidence,
+                "timing_confidence": obj.timing_confidence,
+                "execution_confidence": obj.execution_confidence,
+                "data_confidence": obj.data_confidence,
+                "rs_state": obj.rs_state,
+                "mtf_confluence_score": obj.mtf_confluence_score,
+                "execution_cost_bps": obj.execution_cost_bps,
+                "trust_level": obj.trust_level,
+                "signal_source": obj.signal_source,
+            },
+        )
 
 
 class DecisionJournal:

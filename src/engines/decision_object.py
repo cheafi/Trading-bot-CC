@@ -89,6 +89,15 @@ class DecisionObject:
     # ── Data Quality ──
     synthetic: bool = False
 
+    # ── Provenance & Enrichment ──
+    signal_source: str = "brief"  # "brief"|"scanner"|"expert_council"|"manual"
+    trust_level: str = "UNVERIFIED"  # "LIVE"|"CACHED"|"SYNTHETIC"|"UNVERIFIED"
+    data_freshness_minutes: int = -1
+    benchmark_compare: str = "—"  # e.g. "SPY +2.1% vs ticker +4.3% (63d)"
+    mtf_confluence_score: Optional[float] = None
+    execution_cost_bps: Optional[float] = None
+    calibrated_confidence: Optional[float] = None
+
     def compute_final_confidence(self) -> int:
         """Weighted confidence: thesis heaviest, data as penalty."""
         self.final_confidence = int(
@@ -165,6 +174,14 @@ class DecisionObject:
             "portfolio_gate_reason": self.portfolio_gate_reason,
             # Meta
             "synthetic": self.synthetic,
+            # Provenance & Enrichment
+            "signal_source": self.signal_source,
+            "trust_level": self.trust_level,
+            "data_freshness_minutes": self.data_freshness_minutes,
+            "benchmark_compare": self.benchmark_compare,
+            "mtf_confluence_score": self.mtf_confluence_score,
+            "execution_cost_bps": self.execution_cost_bps,
+            "calibrated_confidence": self.calibrated_confidence,
         }
 
     @classmethod
@@ -173,6 +190,87 @@ class DecisionObject:
         for k, v in d.items():
             if hasattr(obj, k):
                 setattr(obj, k, v)
+        return obj
+
+    @classmethod
+    def from_pipeline_result(
+        cls, r: Any, regime: Optional[Dict[str, Any]] = None
+    ) -> "DecisionObject":
+        """
+        Build a DecisionObject from a SectorPipeline PipelineResult.
+        This is the canonical adapter — replaces manual r.signal.get() dict assembly.
+        """
+        sig = r.signal if hasattr(r, "signal") else {}
+        conf = r.confidence if hasattr(r, "confidence") else None
+        dec = r.decision if hasattr(r, "decision") else None
+        sec = r.sector if hasattr(r, "sector") else None
+        expl = r.explanation if hasattr(r, "explanation") else None
+        fit = r.fit if hasattr(r, "fit") else None
+        ranking = r.ranking if hasattr(r, "ranking") else None
+
+        regime = regime or {}
+        is_synthetic = sig.get("synthetic", False) or regime.get("synthetic", False)
+        trust = "SYNTHETIC" if is_synthetic else "LIVE"
+
+        obj = cls(
+            ticker=sig.get("ticker", ""),
+            date=sig.get("date", ""),
+            generated_at=datetime.now(timezone.utc).isoformat() + "Z",
+            macro_regime=(
+                "RISK_ON"
+                if regime.get("trend", "") in ("BULL", "UPTREND")
+                else "RISK_OFF" if regime.get("vix", 0) > 28 else "NEUTRAL"
+            ),
+            vix_regime=(
+                "RISK_OFF"
+                if regime.get("vix", 0) > 28
+                else "ELEVATED" if regime.get("vix", 0) > 20 else "NORMAL"
+            ),
+            sector=sec.sector_bucket.value if sec else "—",
+            sector_type=sec.sector_bucket.value if sec else "—",
+            sector_stage=sec.sector_stage.value if sec else "—",
+            strategy_style=sig.get("strategy", "—"),
+            setup_type=sig.get("setup", sig.get("strategy", "—")),
+            thesis_confidence=int(conf.thesis * 100) if conf else 50,
+            timing_confidence=int(conf.timing * 100) if conf else 50,
+            execution_confidence=int(conf.execution * 100) if conf else 50,
+            data_confidence=int(conf.data * 100) if conf else 50,
+            final_confidence=int(conf.final * 100) if conf else 50,
+            action=dec.action if dec else "WAIT",
+            conviction_tier=(
+                "TRADE"
+                if fit and fit.final_score >= 8
+                else (
+                    "LEADER"
+                    if fit and fit.final_score >= 6
+                    else "WATCH" if fit and fit.final_score >= 3 else "WAIT"
+                )
+            ),
+            entry_zone=str(sig.get("entry", "—")),
+            invalidation=str(sig.get("stop", "—")),
+            stop=sig.get("stop"),
+            target=sig.get("target"),
+            rr_ratio=sig.get("risk_reward"),
+            why_now=expl.why_now if expl else "—",
+            why_not_stronger=expl.why_not_stronger if expl else "—",
+            note=sig.get("note", sig.get("thesis", "—")),
+            synthetic=is_synthetic,
+            signal_source="scanner" if sig.get("scanner_hit") else "brief",
+            trust_level=trust,
+            data_freshness_minutes=sig.get("data_freshness_minutes", -1),
+            mtf_confluence_score=sig.get("mtf_confluence_score"),
+            execution_cost_bps=sig.get("execution_cost_bps"),
+            calibrated_confidence=sig.get("calibrated_confidence"),
+        )
+        # Set leadership from leader_status if present
+        if sec and hasattr(sec, "leader_status"):
+            obj.leadership = sec.leader_status.value
+        # Set RS composite if present on signal
+        if sig.get("rs_composite"):
+            obj.rs_composite = sig["rs_composite"]
+        # Ranking
+        if ranking:
+            obj.rs_rank = getattr(ranking, "discovery_rank", 0) or 0
         return obj
 
 
@@ -244,6 +342,7 @@ class DecisionPipeline:
             d.vix_regime = vix_regime
             d.synthetic = regime.get("synthetic", False)
             d.date = regime.get("date", "")
+            d.trust_level = "SYNTHETIC" if d.synthetic else "LIVE"
         except Exception as e:
             logger.debug("[Pipeline] macro_node: %s", e)
 
@@ -343,6 +442,7 @@ class DecisionPipeline:
             signal, section = find_signal(d.ticker)
 
             if signal:
+                d.signal_source = "brief"
                 d.setup_type = signal.get("setup", signal.get("strategy", "—"))
                 d.note = signal.get("note", signal.get("thesis", "—"))
                 score = signal.get("score", 0)
