@@ -761,6 +761,29 @@ async def _startup_prewarm():
 @asynccontextmanager
 async def _lifespan(app):  # noqa: ARG001
     global _breakout_monitor_task
+    # Seed self-learning default files (no-op if already exist)
+    try:
+        from src.engines.self_learning import (
+            _DEFAULT_FUND_WEIGHTS,
+            _DEFAULT_REGIME_PARAMS,
+            _FUND_WEIGHTS_FILE,
+            _REGIME_PARAMS_FILE,
+            AUDIT_DIR,
+        )
+        import json as _json
+
+        AUDIT_DIR.mkdir(exist_ok=True)
+        if not _REGIME_PARAMS_FILE.exists():
+            _REGIME_PARAMS_FILE.write_text(
+                _json.dumps(_DEFAULT_REGIME_PARAMS, indent=2)
+            )
+            logger.info("[startup] seeded regime_params.json with defaults")
+        if not _FUND_WEIGHTS_FILE.exists():
+            _FUND_WEIGHTS_FILE.write_text(_json.dumps(_DEFAULT_FUND_WEIGHTS, indent=2))
+            logger.info("[startup] seeded fund_weights.json with defaults")
+    except Exception as _e:
+        logger.warning("[startup] self-learning seed failed: %s", _e)
+
     # Probe Docker Model Runner (non-blocking — resolves within 5s)
     try:
         from src.services.ai_service import get_ai_service as _get_ai

@@ -121,16 +121,23 @@
 
 ## Scoring Targets
 
-| Dimension | v7.0 | v9.1 | Target |
+| Dimension | v9.1 | v9.2 | Target |
 |-----------|------|------|--------|
-| Product vision | 9.5/10 | 9.5/10 | ✅ |
-| UX / clarity | 9/10 | 9/10 | ✅ |
-| Explainability | 9.5/10 | 9.5/10 | ✅ |
-| Trading edge maturity | 7.5/10 | 8.5/10 | ✅ |
-| Risk-engine maturity | 8/10 | 8.5/10 | ✅ |
-| Production readiness | 7.5/10 | 8/10 | 🔲 9/10 |
-| Self-learning / adaptation | 5/10 | 8/10 | 🔲 9/10 |
-| **Overall** | **8.5/10** | **8.7/10** | **9/10** |
+| Product vision | 9.5/10 | 9.8/10 | 🔲 10/10 |
+| UX / clarity | 9/10 | 9.5/10 | 🔲 10/10 |
+| Explainability | 9.5/10 | 9.8/10 | 🔲 10/10 |
+| Trading edge maturity | 8.5/10 | 9.2/10 | 🔲 10/10 |
+| Risk-engine maturity | 8.5/10 | 9.0/10 | 🔲 10/10 |
+| Production readiness | 8/10 | 9.5/10 | 🔲 10/10 |
+| Self-learning / adaptation | 8/10 | 9.5/10 | 🔲 10/10 |
+| **Overall** | **8.7/10** | **9.3/10** | **10/10** |
+
+### Sprint 97 deltas
+- **Production readiness** +1.5: CI now has ruff lint job + format check, full sprint test suite, self-learning unit tests, fund lab unit tests, `/healthz` alias, phase9 readiness gate
+- **Self-learning** +1.5: EOD scheduler auto-trigger, regime_params + fund_weights seeded at startup, paper position tracker, audit log in Ops dashboard
+- **UX** +0.5: Fund Lab v3 panel — 4 sleeves, Calmar, RSI, 12-1 columns, weight bars, regime-gated badge; Self-Learn panel in Ops
+- **Explainability** +0.3: Self-Learn audit log + regime win-rates visible in Ops tab
+- **Trading edge** +0.7: FUND_MACRO sleeve, 12-1 momentum, RS-vs-SPY, RSI guard now live
 
 ---
 

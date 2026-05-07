@@ -1,13 +1,12 @@
 """
-Health & Observability Router — Sprint 82
-==========================================
-Extracted from main.py (was 8 inline @app.get routes, lines ~1109-1256).
-
+Health & Observability Router — Sprint 97 (upgraded from Sprint 82)
+====================================================================
 Endpoints:
     GET /health              — basic health (no auth)
+    GET /healthz             — k8s-standard liveness alias → /health/live
     GET /health/detailed     — DB health (auth)
     GET /health/live         — Kubernetes liveness probe
-    GET /health/ready        — Kubernetes readiness probe
+    GET /health/ready        — Kubernetes readiness probe (engines + DB + data)
     GET /status/data         — data freshness (auth)
     GET /status/jobs         — scheduler job status (auth)
     GET /status/signals      — signal generation stats (auth)
@@ -31,19 +30,25 @@ router = APIRouter(tags=["health"])
 
 # ── Shared response model ────────────────────────────────────────────────────
 
+
 class HealthResponse(BaseModel):
     """Health check response model."""
 
-    status: str = Field(..., description="Service status: healthy, degraded, or unhealthy")
+    status: str = Field(
+        ..., description="Service status: healthy, degraded, or unhealthy"
+    )
     timestamp: str = Field(..., description="ISO timestamp of health check")
     version: str = Field(..., description="API version")
     database: Optional[str] = Field(None, description="Database connection status")
     redis: Optional[str] = Field(None, description="Redis connection status")
-    uptime_seconds: Optional[float] = Field(None, description="Service uptime in seconds")
+    uptime_seconds: Optional[float] = Field(
+        None, description="Service uptime in seconds"
+    )
     phase9_engines: Optional[dict] = Field(None, description="Phase 9 engine status")
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
+
 
 @router.get("/health", response_model=HealthResponse, summary="Basic health check")
 async def health_check():
@@ -87,14 +92,28 @@ async def detailed_health_check(_: bool = Depends(verify_api_key)):
 @router.get("/health/live", summary="Kubernetes liveness probe")
 async def health_live():
     """Simple liveness check - is the process alive?"""
-    return {"status": "alive", "timestamp": datetime.now(timezone.utc).isoformat()}
+    return {
+        "alive": True,
+        "status": "alive",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/healthz", summary="k8s-standard liveness alias", include_in_schema=False)
+async def healthz():
+    """Alias for /health/live — standard Kubernetes /healthz path."""
+    return {
+        "alive": True,
+        "status": "alive",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @router.get("/health/ready", summary="Kubernetes readiness probe")
 async def health_ready(request: Request):
     """
-    Readiness check - can the service handle traffic?
-    Checks DB and data freshness.
+    Readiness check — gate on DB, market data, data freshness, and Phase 9 engines.
+    Returns 200 only when all critical checks pass.
     """
     from src.core.database import check_database_health
 
@@ -102,6 +121,7 @@ async def health_ready(request: Request):
         "database": False,
         "market_data": False,
         "data_freshness": False,
+        "phase9_engines": False,
     }
 
     try:
@@ -121,8 +141,15 @@ async def health_ready(request: Request):
     except Exception:
         pass
 
+    try:
+        p9 = getattr(request.app.state, "phase9", None)
+        checks["phase9_engines"] = p9 is not None and getattr(p9, "loaded", False)
+    except Exception:
+        pass
+
+    ready = all(checks.values())
     return {
-        "ready": all(checks.values()),
+        "ready": ready,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "checks": checks,
     }

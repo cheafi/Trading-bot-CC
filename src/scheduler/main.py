@@ -2,6 +2,7 @@
 TradingAI Bot - Scheduler Service
 Manages scheduled jobs for data ingestion, signal generation, and reporting.
 """
+
 import asyncio
 from datetime import datetime, time
 from typing import Any, Dict, Optional
@@ -21,8 +22,7 @@ settings = get_settings()
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 class TradingScheduler:
     """
     Scheduler for all trading bot jobs.
-    
+
     Schedule:
     - Pre-market (6:30 AM ET): Generate daily report, check news
     - Market open (9:30 AM ET): Start signal generation
@@ -40,7 +40,7 @@ class TradingScheduler:
     """
 
     def __init__(self):
-        self.scheduler = AsyncIOScheduler(timezone=pytz.timezone('US/Eastern'))
+        self.scheduler = AsyncIOScheduler(timezone=pytz.timezone("US/Eastern"))
 
         # Initialize components
         self.market_ingestor = MarketDataIngestor()
@@ -64,36 +64,36 @@ class TradingScheduler:
         self.scheduler.add_job(
             self._job_overnight_news,
             CronTrigger(hour=6, minute=0),
-            id='overnight_news',
-            name='Overnight News Ingestion',
-            replace_existing=True
+            id="overnight_news",
+            name="Overnight News Ingestion",
+            replace_existing=True,
         )
 
         # 6:15 AM - Social sentiment check
         self.scheduler.add_job(
             self._job_social_sentiment,
             CronTrigger(hour=6, minute=15),
-            id='premarket_social',
-            name='Pre-market Social Sentiment',
-            replace_existing=True
+            id="premarket_social",
+            name="Pre-market Social Sentiment",
+            replace_existing=True,
         )
 
         # 6:30 AM - Generate daily report
         self.scheduler.add_job(
             self._job_daily_report,
             CronTrigger(hour=6, minute=30),
-            id='daily_report',
-            name='Daily Market Report',
-            replace_existing=True
+            id="daily_report",
+            name="Daily Market Report",
+            replace_existing=True,
         )
 
         # 9:25 AM - Pre-market signal generation
         self.scheduler.add_job(
             self._job_premarket_signals,
             CronTrigger(hour=9, minute=25),
-            id='premarket_signals',
-            name='Pre-market Signal Generation',
-            replace_existing=True
+            id="premarket_signals",
+            name="Pre-market Signal Generation",
+            replace_existing=True,
         )
 
         # ===== Market Hours Jobs (9:30 AM - 4:00 PM ET) =====
@@ -101,37 +101,28 @@ class TradingScheduler:
         # Every 5 minutes during market hours - Price data ingestion
         self.scheduler.add_job(
             self._job_market_data,
-            CronTrigger(
-                hour='9-15', minute='*/5',
-                day_of_week='mon-fri'
-            ),
-            id='intraday_data',
-            name='Intraday Price Data',
-            replace_existing=True
+            CronTrigger(hour="9-15", minute="*/5", day_of_week="mon-fri"),
+            id="intraday_data",
+            name="Intraday Price Data",
+            replace_existing=True,
         )
 
         # Every 15 minutes - News update
         self.scheduler.add_job(
             self._job_news_update,
-            CronTrigger(
-                hour='9-16', minute='*/15',
-                day_of_week='mon-fri'
-            ),
-            id='intraday_news',
-            name='Intraday News Update',
-            replace_existing=True
+            CronTrigger(hour="9-16", minute="*/15", day_of_week="mon-fri"),
+            id="intraday_news",
+            name="Intraday News Update",
+            replace_existing=True,
         )
 
         # Every 30 minutes - Signal refresh
         self.scheduler.add_job(
             self._job_signal_refresh,
-            CronTrigger(
-                hour='10-15', minute='0,30',
-                day_of_week='mon-fri'
-            ),
-            id='intraday_signals',
-            name='Intraday Signal Refresh',
-            replace_existing=True
+            CronTrigger(hour="10-15", minute="0,30", day_of_week="mon-fri"),
+            id="intraday_signals",
+            name="Intraday Signal Refresh",
+            replace_existing=True,
         )
 
         # ===== After Hours Jobs =====
@@ -140,18 +131,18 @@ class TradingScheduler:
         self.scheduler.add_job(
             self._job_eod_processing,
             CronTrigger(hour=16, minute=30),
-            id='eod_processing',
-            name='End of Day Processing',
-            replace_existing=True
+            id="eod_processing",
+            name="End of Day Processing",
+            replace_existing=True,
         )
 
         # 8:00 PM - Historical data backfill
         self.scheduler.add_job(
             self._job_historical_backfill,
             CronTrigger(hour=20, minute=0),
-            id='historical_backfill',
-            name='Historical Data Backfill',
-            replace_existing=True
+            id="historical_backfill",
+            name="Historical Data Backfill",
+            replace_existing=True,
         )
 
         # ===== Maintenance Jobs =====
@@ -160,18 +151,18 @@ class TradingScheduler:
         self.scheduler.add_job(
             self._job_health_check,
             IntervalTrigger(hours=1),
-            id='health_check',
-            name='System Health Check',
-            replace_existing=True
+            id="health_check",
+            name="System Health Check",
+            replace_existing=True,
         )
 
         # Every Sunday 2 AM - Database maintenance
         self.scheduler.add_job(
             self._job_db_maintenance,
-            CronTrigger(day_of_week='sun', hour=2),
-            id='db_maintenance',
-            name='Database Maintenance',
-            replace_existing=True
+            CronTrigger(day_of_week="sun", hour=2),
+            id="db_maintenance",
+            name="Database Maintenance",
+            replace_existing=True,
         )
 
         logger.info("All jobs scheduled successfully")
@@ -194,7 +185,7 @@ class TradingScheduler:
         logger.info("Starting overnight news ingestion")
         try:
             result = await self.news_ingestor.run(hours_back=12)
-            self._log_job_result('overnight_news', result)
+            self._log_job_result("overnight_news", result)
         except Exception as e:
             logger.error(f"Overnight news job failed: {e}")
 
@@ -204,7 +195,7 @@ class TradingScheduler:
         try:
             # Get trending tickers from recent data
             result = await self.social_ingestor.run(hours_back=24)
-            self._log_job_result('social_sentiment', result)
+            self._log_job_result("social_sentiment", result)
         except Exception as e:
             logger.error(f"Social sentiment job failed: {e}")
 
@@ -231,15 +222,15 @@ class TradingScheduler:
             # ── Build summary report ─────────────────────────────────────────
 
             report = {
-                'overview': {
-                    'spy_change': '+0.5%',
-                    'qqq_change': '+0.8%',
-                    'iwm_change': '-0.2%',
-                    'vix': 18.5,
-                    'regime': 'Normal Volatility'
+                "overview": {
+                    "spy_change": "+0.5%",
+                    "qqq_change": "+0.8%",
+                    "iwm_change": "-0.2%",
+                    "vix": 18.5,
+                    "regime": "Normal Volatility",
                 },
-                'signals': [],
-                'news_summary': 'Market overview pending implementation'
+                "signals": [],
+                "news_summary": "Market overview pending implementation",
             }
 
             # Send report via notification channels
@@ -254,7 +245,7 @@ class TradingScheduler:
                 await self.notifier.send_alert(
                     "Daily Report Failed",
                     f"Error generating daily report: {str(e)}",
-                    level="ERROR"
+                    level="ERROR",
                 )
 
     async def _job_premarket_signals(self):
@@ -322,8 +313,8 @@ class TradingScheduler:
             if not self._is_market_hours():
                 return
 
-            result = await self.market_ingestor.run(interval='5min')
-            self._log_job_result('market_data', result)
+            result = await self.market_ingestor.run(interval="5min")
+            self._log_job_result("market_data", result)
         except Exception as e:
             logger.error(f"Market data job failed: {e}")
 
@@ -332,7 +323,7 @@ class TradingScheduler:
         logger.info("Fetching news updates")
         try:
             result = await self.news_ingestor.run(hours_back=1)
-            self._log_job_result('news_update', result)
+            self._log_job_result("news_update", result)
         except Exception as e:
             logger.error(f"News update job failed: {e}")
 
@@ -385,8 +376,8 @@ class TradingScheduler:
                 logger.warning("EOD brief generation failed (non-fatal): %s", exc)
 
             # 2. Ingest EOD market data
-            result = await self.market_ingestor.run(interval='day')
-            self._log_job_result('eod_data', result)
+            result = await self.market_ingestor.run(interval="day")
+            self._log_job_result("eod_data", result)
 
             # 3. Portfolio review
             try:
@@ -414,6 +405,41 @@ class TradingScheduler:
                 }
                 await self.notifier.send_daily_report(summary)
 
+            # 5. Self-learning cycle — reset, analyse, apply, tune fund weights
+            try:
+                from src.engines.self_learning import (  # noqa: PLC0415
+                    SelfLearningEngine,
+                    pull_closed_trades_from_learning_loop,
+                    tune_fund_weights,
+                )
+                from src.core.config import get_trading_config  # noqa: PLC0415
+
+                engine = SelfLearningEngine()
+                engine.reset_cycle()
+                trades = pull_closed_trades_from_learning_loop()
+                if trades:
+                    cfg = get_trading_config()
+                    current_rules = {
+                        "stop_loss_pct": getattr(cfg, "stop_loss_pct", 0.03),
+                        "ensemble_min_score": getattr(cfg, "ensemble_min_score", 0.35),
+                        "signal_cooldown_hours": float(
+                            getattr(cfg, "signal_cooldown_hours", 4)
+                        ),
+                        "max_position_pct": getattr(cfg, "max_position_pct", 0.05),
+                        "trailing_stop_pct": getattr(cfg, "trailing_stop_pct", 0.02),
+                    }
+                    recs = engine.analyze_and_recommend(trades, current_rules)
+                    applied = engine.apply_adjustments(recs)
+                    logger.info(
+                        "EOD self-learning: %d trades analysed, %d adjustments applied",
+                        len(trades),
+                        len(applied),
+                    )
+                else:
+                    logger.info("EOD self-learning: no closed trades yet — skipped")
+            except Exception as _sle:
+                logger.warning("EOD self-learning cycle failed (non-fatal): %s", _sle)
+
         except Exception as e:
             logger.error("EOD processing failed: %s", e)
 
@@ -428,6 +454,7 @@ class TradingScheduler:
             # Universe: top 50 liquid symbols the engine tracks
             try:
                 from src.scanners.us_universe import US_UNIVERSE
+
                 symbols = list(US_UNIVERSE)[:50]
             except Exception:
                 symbols = ["SPY", "QQQ", "IWM", "AAPL", "MSFT", "NVDA", "TSLA", "AMZN"]
@@ -465,20 +492,21 @@ class TradingScheduler:
         logger.info("Running health check")
         try:
             health = {
-                'timestamp': datetime.utcnow().isoformat(),
-                'scheduler_running': self.scheduler.running,
-                'jobs_count': len(self.scheduler.get_jobs()),
-                'status': 'healthy'
+                "timestamp": datetime.utcnow().isoformat(),
+                "scheduler_running": self.scheduler.running,
+                "jobs_count": len(self.scheduler.get_jobs()),
+                "status": "healthy",
             }
 
             # Check database connection
             from src.core.database import check_database_health
+
             try:
                 db_health = await check_database_health()
-                health['database'] = db_health
+                health["database"] = db_health
             except Exception as e:
-                health['database'] = {'status': 'error', 'error': str(e)}
-                health['status'] = 'degraded'
+                health["database"] = {"status": "error", "error": str(e)}
+                health["status"] = "degraded"
 
             logger.info(f"Health check: {health}")
 
@@ -494,7 +522,9 @@ class TradingScheduler:
 
             async with AsyncSessionLocal() as session:
                 # Refresh materialized views
-                await session.execute(text("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_daily_returns"))
+                await session.execute(
+                    text("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_daily_returns")
+                )
 
                 # Clean up old data (keep 2 years)
                 await session.execute(text("""
@@ -517,7 +547,7 @@ class TradingScheduler:
 
     def _is_market_hours(self) -> bool:
         """Check if currently within US market hours."""
-        et = pytz.timezone('US/Eastern')
+        et = pytz.timezone("US/Eastern")
         now = datetime.now(et)
 
         # Check weekday
@@ -533,32 +563,34 @@ class TradingScheduler:
 
     def _log_job_result(self, job_name: str, result: Dict[str, Any]):
         """Log job result and maintain history."""
-        self._job_history.append({
-            'job': job_name,
-            'timestamp': datetime.utcnow().isoformat(),
-            'result': result
-        })
+        self._job_history.append(
+            {
+                "job": job_name,
+                "timestamp": datetime.utcnow().isoformat(),
+                "result": result,
+            }
+        )
 
         # Keep only last 1000 results
         if len(self._job_history) > 1000:
             self._job_history = self._job_history[-1000:]
 
-        status = result.get('status', 'unknown')
-        records = result.get('records_stored', 0)
+        status = result.get("status", "unknown")
+        records = result.get("records_stored", 0)
         logger.info(f"Job {job_name} completed: status={status}, records={records}")
 
 
 async def main():
     """Main entry point for scheduler service."""
     scheduler = TradingScheduler()
-    
+
     try:
         scheduler.start()
-        
+
         # Keep running
         while True:
             await asyncio.sleep(60)
-            
+
     except KeyboardInterrupt:
         logger.info("Received shutdown signal")
     finally:

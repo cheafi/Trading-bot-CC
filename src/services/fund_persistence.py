@@ -1,13 +1,12 @@
 """
-Fund Persistence — Sprint 92
-=============================
+Fund Persistence — Sprint 97 (upgraded from Sprint 92)
+=======================================================
 SQLite store for:
-  - fund_holdings   : current snapshot per fund per day
-  - fund_trades     : trade log (buy/sell/rebalance)
-  - fund_performance: daily NAV metrics
-  - engine_state    : CalibrationEngine _stats + peak_equity (key/value JSON)
-
-Pattern mirrors decision_tracker.py — WAL SQLite, _get_db(), _init_tables().
+  - fund_holdings      : current snapshot per fund per day
+  - fund_trades        : trade log (buy/sell/rebalance)
+  - fund_performance   : daily NAV metrics (Sharpe, Calmar, drawdown)
+  - fund_paper_positions: live paper-position tracker (entry date, stop, target, unrealised P&L)
+  - engine_state       : CalibrationEngine _stats + peak_equity (key/value JSON)
 """
 
 from __future__ import annotations
@@ -88,6 +87,27 @@ def _init_tables(conn: sqlite3.Connection) -> None:
             value_json  TEXT NOT NULL,
             updated_at  TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS fund_paper_positions (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            fund_id         TEXT NOT NULL,
+            ticker          TEXT NOT NULL,
+            entry_price     REAL NOT NULL,
+            entry_date      TEXT NOT NULL,
+            weight          REAL,
+            stop_price      REAL,
+            target_price    REAL,
+            last_price      REAL,
+            unrealised_pct  REAL,
+            status          TEXT NOT NULL DEFAULT 'open',
+            closed_date     TEXT,
+            realised_pct    REAL,
+            regime_at_entry TEXT,
+            updated_at      TEXT NOT NULL,
+            UNIQUE(fund_id, ticker, entry_date)
+        );
+        CREATE INDEX IF NOT EXISTS idx_fpp_fund_status
+            ON fund_paper_positions(fund_id, status);
         """)
     conn.commit()
 
@@ -281,5 +301,151 @@ def get_performance_history(
         ORDER BY date_key DESC LIMIT ?
         """,
         (fund_id, days),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ── Paper position tracker ────────────────────────────────────────────────────
+
+
+def open_paper_position(
+    fund_id: str,
+    ticker: str,
+    entry_price: float,
+    weight: float = 0.0,
+    stop_r: float = 1.0,
+    target_r: float = 2.5,
+    regime: str = "unknown",
+    db_path: str | None = None,
+) -> None:
+    """
+    Record a new paper position entry for a fund sleeve pick.
+
+    stop_price  = entry_price * (1 - stop_r * 0.01)   — 1R = 1% default
+    target_price = entry_price * (1 + target_r * 0.01) — R-multiple target
+    """
+    conn = _get_db(db_path)
+    now = datetime.now(timezone.utc).isoformat()
+    entry_date = now[:10]
+    stop_price = round(entry_price * (1 - stop_r * 0.01), 4)
+    target_price = round(entry_price * (1 + target_r * 0.01), 4)
+    try:
+        conn.execute(
+            """
+            INSERT INTO fund_paper_positions
+                (fund_id, ticker, entry_price, entry_date, weight,
+                 stop_price, target_price, last_price, unrealised_pct,
+                 status, regime_at_entry, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0.0, 'open', ?, ?)
+            ON CONFLICT(fund_id, ticker, entry_date) DO UPDATE SET
+                weight      = excluded.weight,
+                stop_price  = excluded.stop_price,
+                target_price = excluded.target_price,
+                updated_at  = excluded.updated_at
+            """,
+            (
+                fund_id,
+                ticker,
+                entry_price,
+                entry_date,
+                weight,
+                stop_price,
+                target_price,
+                entry_price,
+                regime,
+                now,
+            ),
+        )
+        conn.commit()
+    except Exception as e:
+        logger.warning("open_paper_position error %s/%s: %s", fund_id, ticker, e)
+
+
+def update_paper_position_price(
+    fund_id: str,
+    ticker: str,
+    last_price: float,
+    db_path: str | None = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Update the last price + unrealised P&L for all open positions of ticker in fund.
+    Auto-closes if last_price hits stop or target.
+    Returns the updated row dict, or None if not found.
+    """
+    conn = _get_db(db_path)
+    now = datetime.now(timezone.utc).isoformat()
+    rows = conn.execute(
+        "SELECT * FROM fund_paper_positions WHERE fund_id=? AND ticker=? AND status='open'",
+        (fund_id, ticker),
+    ).fetchall()
+    if not rows:
+        return None
+
+    result = None
+    for row in rows:
+        entry_price = row["entry_price"]
+        unrealised_pct = (
+            round((last_price / entry_price - 1) * 100, 2) if entry_price else 0.0
+        )
+        stop = row["stop_price"] or 0
+        target = row["target_price"] or float("inf")
+
+        if last_price <= stop:
+            status = "stopped"
+        elif last_price >= target:
+            status = "target_hit"
+        else:
+            status = "open"
+
+        conn.execute(
+            """
+            UPDATE fund_paper_positions
+            SET last_price=?, unrealised_pct=?, status=?,
+                closed_date=?, realised_pct=?, updated_at=?
+            WHERE id=?
+            """,
+            (
+                last_price,
+                unrealised_pct,
+                status,
+                now[:10] if status != "open" else None,
+                unrealised_pct if status != "open" else None,
+                now,
+                row["id"],
+            ),
+        )
+        result = dict(row)
+        result.update(
+            {
+                "last_price": last_price,
+                "unrealised_pct": unrealised_pct,
+                "status": status,
+            }
+        )
+
+    conn.commit()
+    return result
+
+
+def get_open_paper_positions(
+    fund_id: str, db_path: str | None = None
+) -> List[Dict[str, Any]]:
+    """Return all open paper positions for a fund sleeve."""
+    conn = _get_db(db_path)
+    rows = conn.execute(
+        "SELECT * FROM fund_paper_positions WHERE fund_id=? AND status='open' ORDER BY entry_date DESC",
+        (fund_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_all_paper_positions(
+    fund_id: str, limit: int = 100, db_path: str | None = None
+) -> List[Dict[str, Any]]:
+    """Return all paper positions (open + closed) for a fund, newest first."""
+    conn = _get_db(db_path)
+    rows = conn.execute(
+        "SELECT * FROM fund_paper_positions WHERE fund_id=? ORDER BY entry_date DESC LIMIT ?",
+        (fund_id, limit),
     ).fetchall()
     return [dict(r) for r in rows]
