@@ -4027,6 +4027,40 @@
                 <template x-if="!selfLearn.ab || !selfLearn.ab.active || !selfLearn.ab.active.length">
                   <div class="text-[8px]" style="color:var(--t3)">No active shadow challengers.</div>
                 </template>
+                <!-- Experiment Ledger (Sprint 111) -->
+                <template x-if="selfLearn.ledger && selfLearn.ledger.entries && selfLearn.ledger.entries.length">
+                  <details class="mt-2">
+                    <summary class="text-[8px] cursor-pointer select-none" style="color:var(--t3)">📋 Experiment History (<span x-text="selfLearn.ledger.total"></span>)</summary>
+                    <div class="mt-1 overflow-x-auto">
+                      <table class="w-full text-[7px]" style="border-collapse:collapse">
+                        <thead>
+                          <tr style="color:var(--t3);border-bottom:1px solid var(--bd)">
+                            <th class="text-left pr-1">Param</th>
+                            <th class="text-right pr-1">Baseline</th>
+                            <th class="text-right pr-1">Challenger</th>
+                            <th class="text-right pr-1">Win%</th>
+                            <th class="text-right pr-1">Trades</th>
+                            <th class="text-left pr-1">Status</th>
+                            <th class="text-left">Date</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <template x-for="(e,i) in selfLearn.ledger.entries" :key="i">
+                            <tr style="border-bottom:1px solid var(--bd)" class="hover:bg-white/5">
+                              <td class="mono pr-1 text-white" x-text="e.param||'—'"></td>
+                              <td class="mono pr-1 text-right" style="color:var(--t3)" x-text="e.baseline_value!=null?Number(e.baseline_value).toFixed(3):'—'"></td>
+                              <td class="mono pr-1 text-right text-amber-300" x-text="e.challenger_value!=null?Number(e.challenger_value).toFixed(3):'—'"></td>
+                              <td class="mono pr-1 text-right" :class="e.shadow_win_rate>=0.52?'text-green-400':e.shadow_win_rate!=null?'text-red-400':'text-gray-400'" x-text="e.shadow_win_rate!=null?(e.shadow_win_rate*100).toFixed(0)+'%':'—'"></td>
+                              <td class="mono pr-1 text-right" style="color:var(--t3)" x-text="e.shadow_trades||0"></td>
+                              <td class="pr-1" :class="e.status==='promoted'?'text-green-400':e.status==='discarded'?'text-red-400':'text-amber-300'" x-text="e.status||'—'"></td>
+                              <td style="color:var(--t3)" x-text="e.decided_at?(e.decided_at||'').slice(0,10):e.date?(e.date||'').slice(0,10):'—'"></td>
+                            </tr>
+                          </template>
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+                </template>
               </div>
             </div>
           </template>
@@ -4351,7 +4385,7 @@
       opps:[],oppsSort:'score',
       apiEndpoints:[],
       changelog:[],
-      selfLearn:{status:null,triggering:false,lastResult:'',calibration:null,calibBuckets:null,ab:null},
+      selfLearn:{status:null,triggering:false,lastResult:'',calibration:null,calibBuckets:null,ab:null,ledger:null},
       exec:{metrics:null},
       risk:{summary:null},
       rl:{thompson:null,featureIC:null},
@@ -4913,6 +4947,10 @@
           if(!r.ok)throw new Error('status '+r.status);
           this.selfLearn.ab=await r.json();
         }catch(e){console.warn('ab-status fetch failed',e)}
+        try{
+          const rl=await fetch('/api/v7/self-learn/experiment-ledger?limit=50',{headers:{'X-API-Key':window._apiKey||'dev-secret-local'}});
+          if(rl.ok)this.selfLearn.ledger=await rl.json();
+        }catch(e){console.warn('experiment-ledger fetch failed',e)}
       },
       async evaluateAB(param){
         try{

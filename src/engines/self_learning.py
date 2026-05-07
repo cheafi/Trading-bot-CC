@@ -1057,6 +1057,59 @@ def _save_brier_data(data: Dict[str, Any]) -> None:
 _AB_FILE = AUDIT_DIR / "ab_shadow.json"
 _AB_MIN_DAYS = 3  # minimum days before promoting shadow params
 
+# ── Sprint 111: Experiment Ledger ─────────────────────────────────────────────
+_LEDGER_FILE = AUDIT_DIR / "experiment_ledger.json"
+_LEDGER_MAX = 200  # rolling cap — oldest entries dropped when exceeded
+
+
+def _append_ledger(entry: Dict[str, Any]) -> None:
+    """Append one experiment record to the ledger (non-fatal)."""
+    try:
+        data: List[Dict[str, Any]] = (
+            json.loads(_LEDGER_FILE.read_text()) if _LEDGER_FILE.exists() else []
+        )
+    except Exception:
+        data = []
+    data.append(entry)
+    data = data[-_LEDGER_MAX:]  # rolling window
+    try:
+        AUDIT_DIR.mkdir(exist_ok=True)
+        _LEDGER_FILE.write_text(json.dumps(data, indent=2, default=str))
+    except Exception as exc:
+        logger.debug("Ledger write error: %s", exc)
+
+
+def get_experiment_ledger(
+    status: str = "",
+    param: str = "",
+    limit: int = 50,
+) -> List[Dict[str, Any]]:
+    """Return experiment ledger entries, newest first.
+
+    Sprint 111: append-only audit trail of every A/B shadow proposal and its outcome.
+
+    Args:
+        status: filter by status ("shadow" / "promoted" / "discarded").
+        param:  filter by parameter name.
+        limit:  max entries to return (default 50).
+    """
+    try:
+        data: List[Dict[str, Any]] = (
+            json.loads(_LEDGER_FILE.read_text()) if _LEDGER_FILE.exists() else []
+        )
+    except Exception:
+        data = []
+    if status:
+        data = [e for e in data if e.get("status") == status]
+    if param:
+        data = [e for e in data if e.get("param") == param]
+    # Deduplicate: keep last entry per experiment_id (latest status wins)
+    seen: Dict[str, Dict[str, Any]] = {}
+    for e in data:
+        seen[e.get("experiment_id", id(e))] = e
+    deduped = list(seen.values())
+    return list(reversed(deduped))[:limit]
+
 
 def propose_ab_shadow(
     param: str,
@@ -1069,6 +1122,8 @@ def propose_ab_shadow(
     The challenger is paper-tracked for _AB_MIN_DAYS days before
     being eligible for promotion to live params.
 
+    Sprint 111: writes an experiment ledger entry on proposal.
+
     Returns the current A/B state dict.
     """
     data = _load_ab_data()
@@ -1076,6 +1131,10 @@ def propose_ab_shadow(
     rule = TUNABLE_RULES.get(param, {})
     champion = data.get("champion", {}).get(
         param, rule.get("default", challenger_value)
+    )
+    # Stable experiment_id from param + compact timestamp
+    experiment_id = (
+        f"ab_{param}_{now[:16].replace(':', '').replace('-', '').replace('T', 'T')}"
     )
 
     data.setdefault("challenger", {})[param] = {
@@ -1087,8 +1146,32 @@ def propose_ab_shadow(
         "shadow_wins": 0,
         "shadow_trades": 0,
         "status": "shadow",
+        "experiment_id": experiment_id,
     }
     _save_ab_data(data)
+    # Ledger entry — Sprint 111
+    _append_ledger(
+        {
+            "experiment_id": experiment_id,
+            "date": now,
+            "source": "ab_shadow",
+            "param": param,
+            "baseline_value": champion,
+            "challenger_value": challenger_value,
+            "reason_proposed": reason,
+            "shadow_trades": 0,
+            "shadow_wins": 0,
+            "shadow_win_rate": None,
+            "baseline_win_rate_proxy": 0.50,
+            "win_rate_delta": None,
+            "brier_delta": None,
+            "benchmark_delta": None,
+            "risk_delta": None,
+            "status": "shadow",
+            "decided_at": None,
+            "reason_decided": None,
+        }
+    )
     logger.info(
         "A/B shadow: proposed %s=%.4f (champion=%.4f) — %s",
         param,
@@ -1130,6 +1213,8 @@ def evaluate_ab_promotion(param: str) -> Dict[str, Any]:
       - days_tracked >= _AB_MIN_DAYS
       - challenger win_rate >= champion proxy win_rate (assumed 0.50)
 
+    Sprint 111: appends outcome record to experiment ledger.
+
     Returns {"promoted": bool, "reason": str, "new_value": float|None}
     """
     data = _load_ab_data()
@@ -1165,13 +1250,58 @@ def evaluate_ab_promotion(param: str) -> Dict[str, Any]:
             win_rate,
             trades,
         )
+        _append_ledger(
+            {
+                "experiment_id": challenger.get("experiment_id", f"ab_{param}"),
+                "date": challenger.get("proposed_at"),
+                "source": "ab_shadow",
+                "param": param,
+                "baseline_value": challenger.get("champion_value"),
+                "challenger_value": challenger["value"],
+                "reason_proposed": challenger.get("reason", ""),
+                "shadow_trades": trades,
+                "shadow_wins": wins,
+                "shadow_win_rate": round(win_rate, 4),
+                "baseline_win_rate_proxy": 0.50,
+                "win_rate_delta": round(win_rate - 0.50, 4),
+                "brier_delta": None,
+                "benchmark_delta": None,
+                "risk_delta": None,
+                "status": "promoted",
+                "decided_at": challenger["promoted_at"],
+                "reason_decided": f"win_rate={win_rate:.0%} >= 52% over {days} days",
+            }
+        )
         return {
             "promoted": True,
             "reason": f"win_rate={win_rate:.0%} >= 52% over {days} days",
             "new_value": challenger["value"],
         }
 
-    # Not ready — keep shadowing
+    # Not ready — keep shadowing or discard
+    now = datetime.now(timezone.utc).isoformat()
+    _append_ledger(
+        {
+            "experiment_id": challenger.get("experiment_id", f"ab_{param}"),
+            "date": challenger.get("proposed_at"),
+            "source": "ab_shadow",
+            "param": param,
+            "baseline_value": challenger.get("champion_value"),
+            "challenger_value": challenger.get("value"),
+            "reason_proposed": challenger.get("reason", ""),
+            "shadow_trades": trades,
+            "shadow_wins": wins,
+            "shadow_win_rate": round(win_rate, 4) if trades > 0 else None,
+            "baseline_win_rate_proxy": 0.50,
+            "win_rate_delta": round(win_rate - 0.50, 4) if trades > 0 else None,
+            "brier_delta": None,
+            "benchmark_delta": None,
+            "risk_delta": None,
+            "status": "discarded",
+            "decided_at": now,
+            "reason_decided": f"win_rate={win_rate:.0%} < 52% (n={trades})",
+        }
+    )
     return {"promoted": False, "reason": f"win_rate={win_rate:.0%} < 52% (n={trades})"}
 
 

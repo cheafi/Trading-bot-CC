@@ -40,6 +40,7 @@ from src.engines.self_learning import (
     get_ab_status,
     get_calibration_buckets,
     get_calibration_status,
+    get_experiment_ledger,
     get_params_for_regime,
     load_fund_weights,
     load_regime_params,
@@ -452,3 +453,30 @@ async def record_feature_ic(
     feats = {k: v for k, v in feats.items() if v is not None}
     result = record_feature_outcomes(feats, win)
     return sanitize_for_json(result)
+
+
+# ── Experiment Ledger (Sprint 111) ─────────────────────────────────────────────────
+
+
+@router.get("/experiment-ledger")
+async def experiment_ledger(
+    status: str = "",
+    param: str = "",
+    limit: int = 50,
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Experiment Ledger: every A/B shadow proposal and its outcome (newest first).
+
+    Query params:
+      - status: filter by status (shadow / promoted / discarded)
+      - param:  filter by parameter name
+      - limit:  max entries (default 50)
+    """
+    entries = get_experiment_ledger(status=status, param=param, limit=limit)
+    return sanitize_for_json(
+        {
+            "entries": entries,
+            "total": len(entries),
+            "filters": {"status": status or None, "param": param or None},
+        }
+    )
