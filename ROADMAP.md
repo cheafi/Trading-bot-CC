@@ -261,6 +261,14 @@ These ideas need more research before committing:
 - [x] **Dashboard cards** — 🎰 Thompson Sizing card + 📉 Feature IC Decay card in Ops panel
 - [x] **Sprint 103 CI tests** — 15 tests, 15/15 passing
 
+### ✅ Sprint 106 — AlertService v2 (v9.7.0)
+- [x] **AlertService** (`src/services/alert_service.py`) — 6 typed event dispatchers: `on_ic_decay_alert`, `on_thompson_arm_degrade`, `on_fund_rebalance`, `on_regime_change`, `on_drawdown_breach`, `on_circuit_breaker`; persist last 50 events to `models/alert_log.json`; Discord push via `DiscordInteractiveBot` (non-fatal if unconfigured)
+- [x] **EOD scheduler step 8** — `check_and_push_ic_decay()` + `check_and_push_thompson_degrade()` wired after step 7 (Thompson+IC); non-fatal
+- [x] **FUND_MACRO rebalance alert** — `_build_sleeve()` calls `on_fund_rebalance()` when regime tilt changes candidates; tracks previous state in `models/fund_tilt_state.json`
+- [x] **Notify REST router** (`src/api/routers/notify.py`) — `GET /api/v7/notify/log`, `POST /api/v7/notify/test`, `GET /api/v7/notify/status`; registered in `src/api/main.py`
+- [x] **Dashboard Notification Events card** in Ops tab — last 20 events with severity badge, Discord configured indicator, `fetchNotifyLog()` wired into `switchTab ops`
+- [x] **Sprint 106 CI tests** — 17 tests, 17/17 passing (86 total across sprints 100–106)
+
 ### Self-Learning v4 — COMPLETE ✅
 - [x] Multi-signal Brier decomposition (per strategy type)
 - [x] Reinforcement learning sizing loop (Thompson sampling)

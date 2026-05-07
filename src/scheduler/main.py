@@ -511,6 +511,19 @@ class TradingScheduler:
             except Exception as _th:
                 logger.warning("EOD Thompson+IC failed (non-fatal): %s", _th)
 
+            # 8. AlertService: check IC decay + Thompson arm degrade, push Discord (Sprint 106)
+            try:
+                from src.services.alert_service import (  # noqa: PLC0415
+                    check_and_push_ic_decay,
+                    check_and_push_thompson_degrade,
+                )
+
+                check_and_push_ic_decay()
+                check_and_push_thompson_degrade()
+                logger.info("EOD AlertService: decay/degrade checks complete")
+            except Exception as _ale:
+                logger.warning("EOD AlertService check failed (non-fatal): %s", _ale)
+
         except Exception as e:
             logger.error("EOD processing failed: %s", e)
 

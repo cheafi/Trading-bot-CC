@@ -4047,6 +4047,32 @@
 
         <!-- ORIGINAL What's New (Changelog) continued -->
         <div class="card card-p" x-show="false"><!-- spacer --></div>
+
+        <!-- Notification Events (Sprint 106) -->
+        <div class="card card-p">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">🔔 Notification Events</div>
+            <div class="flex items-center gap-2">
+              <span class="text-[9px]" :style="notifyLog.discord_configured?'color:var(--green)':'color:var(--t3)'" x-text="notifyLog.discord_configured?'Discord ✓':'Discord unconfigured'"></span>
+              <button @click="fetchNotifyLog()" class="btn-s text-[9px]">Refresh</button>
+            </div>
+          </div>
+          <template x-if="!notifyLog.events || notifyLog.events.length===0">
+            <div class="text-[9px]" style="color:var(--t3)">No alert events yet.</div>
+          </template>
+          <div style="max-height:200px;overflow-y:auto">
+            <template x-for="(ev,i) in (notifyLog.events||[])" :key="ev.ts+i">
+              <div class="flex items-start gap-2 py-1" style="border-bottom:1px solid var(--bd)">
+                <span class="mono text-[8px] shrink-0 mt-px" style="color:var(--t3)" x-text="(ev.ts||'').slice(11,19)+' UTC'"></span>
+                <span class="pill text-[8px] shrink-0"
+                  :style="ev.severity==='critical'?'background:rgba(255,68,68,.15);color:#ff4444':ev.severity==='warning'?'background:rgba(255,140,0,.15);color:#ff8c00':'background:rgba(88,101,242,.15);color:#5865f2'"
+                  x-text="ev.severity||'info'"></span>
+                <span class="text-[9px]" style="color:var(--t2)" x-text="ev.title||ev.event_type||'—'"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+
         <div class="card card-p">
           <div class="flex items-center justify-between mb-3">
             <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">📋 What's New</div>
@@ -4206,6 +4232,7 @@
       exec:{metrics:null},
       risk:{summary:null},
       rl:{thompson:null,featureIC:null},
+      notifyLog:{events:[],discord_configured:false,loading:false},
       scannerHub:{loading:false,data:null,category:null},
       rankedOpps:{loading:false,rows:[],actionFilter:'',sectorFilter:''},
       rsData:{rankings:[],sector_rs:[],breakouts:[],breakdowns:[]},
@@ -4252,7 +4279,7 @@
       toggleStar(ticker){this.ccStarred[ticker]=!this.ccStarred[ticker];localStorage.setItem('ccStarred',JSON.stringify(this.ccStarred))},
       toggleLove(ticker){this.ccLoved[ticker]=!this.ccLoved[ticker];localStorage.setItem('ccLoved',JSON.stringify(this.ccLoved))},
       toggleWatchlist(ticker){this.ccWatchlist[ticker]=!this.ccWatchlist[ticker];localStorage.setItem('ccWatchlist',JSON.stringify(this.ccWatchlist))},
-      switchTab(t){this.tab=t;if(t==='guide'){}if(t==='funds'){this.startFundMonitor()}if(t==='today'){this.fetchToday7();this.fetchMkt()}if(t==='signals'){this.fetchSignals();this.fetchRanked()}if(t==='ops'){this.fetchHealth();this.fetchChangelog();this.fetchSelfLearnStatus();this.fetchCalibration();this.fetchABStatus();this.fetchExecMetrics();this.fetchRiskSummary();this.fetchThompson();this.fetchFeatureIC()}if(t==='brief')this.fetchBrief();if(t==='catalog'){this.fetchEndpoints();this.fetchOpsDetail()}if(t==='scanners')this.fetchScanners();if(t==='notrade')this.fetchNoTrade();if(t==='rs')this.fetchRS();if(t==='flow')this.fetchFlow();if(t==='track'){if(this.perfTracker.rows.length===0)this.fetchPerfTracker();if(!this.fundLab.data)this.fetchFundLab()}if(t==='timetravel'&&!this.tt.date){const d=new Date();d.setDate(d.getDate()-5);this.tt.date=d.toISOString().slice(0,10)}if(t==='command'){this.fetchCommand();this.fetchAgentJournal();this.fetchAgentReliability()}},
+      switchTab(t){this.tab=t;if(t==='guide'){}if(t==='funds'){this.startFundMonitor()}if(t==='today'){this.fetchToday7();this.fetchMkt()}if(t==='signals'){this.fetchSignals();this.fetchRanked()}if(t==='ops'){this.fetchHealth();this.fetchChangelog();this.fetchSelfLearnStatus();this.fetchCalibration();this.fetchABStatus();this.fetchExecMetrics();this.fetchRiskSummary();this.fetchThompson();this.fetchFeatureIC();this.fetchNotifyLog()}if(t==='brief')this.fetchBrief();if(t==='catalog'){this.fetchEndpoints();this.fetchOpsDetail()}if(t==='scanners')this.fetchScanners();if(t==='notrade')this.fetchNoTrade();if(t==='rs')this.fetchRS();if(t==='flow')this.fetchFlow();if(t==='track'){if(this.perfTracker.rows.length===0)this.fetchPerfTracker();if(!this.fundLab.data)this.fetchFundLab()}if(t==='timetravel'&&!this.tt.date){const d=new Date();d.setDate(d.getDate()-5);this.tt.date=d.toISOString().slice(0,10)}if(t==='command'){this.fetchCommand();this.fetchAgentJournal();this.fetchAgentReliability()}},
 
       async fetchCommand(){
         if(this.cmd.loading)return;
@@ -4794,6 +4821,17 @@
           if(!r.ok)throw new Error('status '+r.status);
           this.rl.featureIC=await r.json();
         }catch(e){console.warn('feature-ic fetch failed',e)}
+      },
+      async fetchNotifyLog(){
+        try{
+          const [logR,statusR]=await Promise.all([
+            fetch('/api/v7/notify/log?limit=20',{headers:{'X-API-Key':window._apiKey||'dev-secret-local'}}),
+            fetch('/api/v7/notify/status',{headers:{'X-API-Key':window._apiKey||'dev-secret-local'}}),
+          ]);
+          const logD=logR.ok?await logR.json():{count:0,events:[]};
+          const statusD=statusR.ok?await statusR.json():{};
+          this.notifyLog={events:logD.events||[],discord_configured:statusD.discord_configured||false,loading:false};
+        }catch(e){console.warn('notify-log fetch failed',e)}
       },
     }}
     </script>

@@ -11932,3 +11932,10 @@ try:
     app.include_router(risk_guard_router)
 except Exception:
     logger.exception("[Router] Failed to load risk_guard router")
+# Sprint 106 — AlertService notification log + test endpoint
+try:
+    from src.api.routers.notify import router as notify_router
+
+    app.include_router(notify_router)
+except Exception:
+    logger.exception("[Router] Failed to load notify router")

@@ -49,16 +49,24 @@ class FundLabService:
         "FUND_ALPHA": {
             "thesis": "High-conviction growth + momentum leaders",
             "candidates": [
-                "NVDA", "MSFT", "META", "AMZN", "AVGO",
-                "TSLA", "AAPL", "AMD", "NFLX", "GOOGL",
+                "NVDA",
+                "MSFT",
+                "META",
+                "AMZN",
+                "AVGO",
+                "TSLA",
+                "AAPL",
+                "AMD",
+                "NFLX",
+                "GOOGL",
             ],
             "style": {
                 "top_n": 5,
                 "momentum_weight": 0.60,
-                "rs_weight": 0.15,         # RS vs SPY
+                "rs_weight": 0.15,  # RS vs SPY
                 "vol_penalty": 0.05,
                 "quality_weight": 0.10,
-                "rsi_overbought": 75,       # skip names with RSI > 75
+                "rsi_overbought": 75,  # skip names with RSI > 75
                 "regime_gates": ["BULL", "bull_trending"],
                 "vix_gate": 28,
                 "max_cash_pct": 0.10,
@@ -70,8 +78,16 @@ class FundLabService:
         "FUND_PENDA": {
             "thesis": "Defensive alpha preservation (low-beta + quality)",
             "candidates": [
-                "XLV", "XLP", "XLU", "JNJ", "PG",
-                "KO", "PEP", "MRK", "ABBV", "SO",
+                "XLV",
+                "XLP",
+                "XLU",
+                "JNJ",
+                "PG",
+                "KO",
+                "PEP",
+                "MRK",
+                "ABBV",
+                "SO",
             ],
             "style": {
                 "top_n": 7,
@@ -81,8 +97,13 @@ class FundLabService:
                 "quality_weight": 0.35,
                 "rsi_overbought": 80,
                 "regime_gates": [
-                    "BULL", "BEAR", "SIDEWAYS", "CHOPPY",
-                    "bull_trending", "bear_trending", "sideways",
+                    "BULL",
+                    "BEAR",
+                    "SIDEWAYS",
+                    "CHOPPY",
+                    "bull_trending",
+                    "bear_trending",
+                    "sideways",
                 ],
                 "vix_gate": 35,
                 "max_cash_pct": 0.30,
@@ -94,8 +115,16 @@ class FundLabService:
         "FUND_CAT": {
             "thesis": "Cyclical / tactical allocation by relative strength",
             "candidates": [
-                "XLE", "XLF", "XLI", "IWM", "SMH",
-                "EEM", "INDA", "EWJ", "GLD", "TLT",
+                "XLE",
+                "XLF",
+                "XLI",
+                "IWM",
+                "SMH",
+                "EEM",
+                "INDA",
+                "EWJ",
+                "GLD",
+                "TLT",
             ],
             "style": {
                 "top_n": 6,
@@ -115,21 +144,34 @@ class FundLabService:
         "FUND_MACRO": {
             "thesis": "Macro hedges + safe-haven rotation (all-regime diversifier)",
             "candidates": [
-                "TLT", "GLD", "IEF", "HYG", "VNQ",
-                "USO", "EMB", "BIL", "TIPS", "UUP",
+                "TLT",
+                "GLD",
+                "IEF",
+                "HYG",
+                "VNQ",
+                "USO",
+                "EMB",
+                "BIL",
+                "TIPS",
+                "UUP",
             ],
             "style": {
                 "top_n": 5,
                 "momentum_weight": 0.30,
-                "rs_weight": 0.20,          # RS relative to regime matters more here
+                "rs_weight": 0.20,  # RS relative to regime matters more here
                 "vol_penalty": 0.25,
                 "quality_weight": 0.20,
                 "rsi_overbought": 80,
-                "regime_gates": [           # open to all regimes
-                    "BULL", "BEAR", "SIDEWAYS", "CHOPPY",
-                    "bull_trending", "bear_trending", "sideways",
+                "regime_gates": [  # open to all regimes
+                    "BULL",
+                    "BEAR",
+                    "SIDEWAYS",
+                    "CHOPPY",
+                    "bull_trending",
+                    "bear_trending",
+                    "sideways",
                 ],
-                "vix_gate": 50,             # only gate at crisis level
+                "vix_gate": 50,  # only gate at crisis level
                 "max_cash_pct": 0.40,
                 "stop_r": 0.75,
                 "target_r": 1.5,
@@ -273,6 +315,33 @@ class FundLabService:
                 # Reduce volatility: bills + short-duration
                 candidates = ["BIL", "TIPS", "IEF", "TLT", "UUP"]
             # SIDEWAYS: use full default universe (no tilt)
+
+            # Sprint 106: push Discord alert when tilt candidates change
+            _tilt_state_path = "models/fund_tilt_state.json"
+            try:
+                import json as _json
+                from pathlib import Path as _Path
+
+                _state_file = _Path(_tilt_state_path)
+                _prev_state: dict = (
+                    _json.loads(_state_file.read_text()) if _state_file.exists() else {}
+                )
+                _prev_candidates = _prev_state.get(name, list(spec["candidates"]))
+                if set(_prev_candidates) != set(candidates):
+                    from src.services.alert_service import (
+                        on_fund_rebalance,
+                    )  # noqa: PLC0415
+
+                    on_fund_rebalance(name, regime, _prev_candidates, candidates)
+                _prev_state[name] = candidates
+                _state_file.parent.mkdir(parents=True, exist_ok=True)
+                _state_file.write_text(_json.dumps(_prev_state, indent=2))
+            except Exception as _tilt_exc:
+                import logging as _logging
+
+                _logging.getLogger("fund_lab_service").warning(
+                    "fund_tilt_state update failed (non-fatal): %s", _tilt_exc
+                )
         mom_w = style.get("momentum_weight", 0.60)
         rs_w = style.get("rs_weight", 0.10)
         vol_p = style.get("vol_penalty", 0.15)
@@ -282,7 +351,9 @@ class FundLabService:
 
         tasks = [
             self._momentum_score(
-                mds, t, period,
+                mds,
+                t,
+                period,
                 spy_series=spy_series,
                 momentum_weight=mom_w,
                 rs_weight=rs_w,
@@ -418,8 +489,14 @@ class FundLabService:
 
         # Recovery days: trading days from the trough to the first new-high afterward
         trough_idx = int(dd_series.argmin())
-        peak_after = eq_p.iloc[trough_idx:][eq_p.iloc[trough_idx:] >= running_max.iloc[trough_idx]]
-        recovery_days: int | None = int(peak_after.index.get_loc(peak_after.index[0])) if not peak_after.empty else None
+        peak_after = eq_p.iloc[trough_idx:][
+            eq_p.iloc[trough_idx:] >= running_max.iloc[trough_idx]
+        ]
+        recovery_days: int | None = (
+            int(peak_after.index.get_loc(peak_after.index[0]))
+            if not peak_after.empty
+            else None
+        )
 
         # Equity curve normalised to base=100, last 20 bars
         eq_norm = (eq_p / eq_p.iloc[0] * 100.0).round(2)
