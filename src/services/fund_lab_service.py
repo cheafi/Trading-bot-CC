@@ -397,28 +397,36 @@ class FundLabService:
 
     async def _portfolio_returns(
         self, mds: Any, picks: List[Dict[str, Any]], period: str
-    ) -> pd.Series:
-        if not picks:
-            return pd.Series(dtype=float)
+    ) -> tuple[pd.Series, Dict[str, pd.Series]]:
+        """Return (aggregate_portfolio_returns, {ticker: individual_returns}).
 
-        # Parallel history fetches (5 picks × 1 call each, in parallel)
+        The per-pick dict is consumed by _attribution() for contribution analysis.
+        Sprint 107: changed return type from pd.Series to tuple.
+        """
+        _empty: tuple[pd.Series, Dict[str, pd.Series]] = (pd.Series(dtype=float), {})
+        if not picks:
+            return _empty
+
+        # Parallel history fetches
         raw = await asyncio.gather(
             *[self._history(mds, p["ticker"], period) for p in picks]
         )
-        series = []
-        weights = []
+        series: List[pd.Series] = []
+        weights: List[float] = []
+        tickers: List[str] = []
         for s, p in zip(raw, picks):
             if s.empty:
                 continue
             series.append(s)
             weights.append(float(p.get("weight", 0.0)))
+            tickers.append(p["ticker"])
 
         if not series:
-            return pd.Series(dtype=float)
+            return _empty
 
         df = pd.concat(series, axis=1, join="inner").dropna()
         if df.empty:
-            return pd.Series(dtype=float)
+            return _empty
 
         w = np.array(weights[: df.shape[1]], dtype=float)
         if w.sum() <= 0:
@@ -427,11 +435,16 @@ class FundLabService:
 
         rets = df.pct_change().dropna()
         if rets.empty:
-            return pd.Series(dtype=float)
+            return _empty
+
+        # Per-pick return series keyed by ticker
+        per_pick: Dict[str, pd.Series] = {
+            tickers[i]: rets.iloc[:, i] for i in range(min(len(tickers), rets.shape[1]))
+        }
 
         p_rets = rets.mul(w, axis=1).sum(axis=1)
         p_rets.name = "portfolio"
-        return p_rets
+        return p_rets, per_pick
 
     @staticmethod
     def _metrics(port_rets: pd.Series, bm_rets: pd.Series) -> Dict[str, Any]:
@@ -518,6 +531,165 @@ class FundLabService:
             "equity_curve_20": equity_curve_20,
         }
 
+    @staticmethod
+    def _attribution(
+        picks: List[Dict[str, Any]],
+        per_pick_rets: Dict[str, pd.Series],
+        bm_rets: pd.Series,
+    ) -> Dict[str, Any]:
+        """Single-period Brinson-style attribution for one fund sleeve.
+
+        Returns top contributors, top detractors, sector breakdown, cash drag,
+        drawdown source, and a recent-win/loss split — all derived from data
+        already fetched during scoring.  No extra I/O.
+
+        Sprint 107.
+        """
+        if not picks or not per_pick_rets:
+            return {"attribution_available": False}
+
+        # ── sector map (static dict, no I/O) ─────────────────────────────────
+        try:
+            from src.engines.sector_classifier import _SECTOR_MAP  # noqa: PLC0415
+        except Exception:
+            _SECTOR_MAP = {}
+
+        # Supplement with common ETF sectors not in equity map
+        _ETF_SECTORS: Dict[str, str] = {
+            "TLT": "Bonds/Long",
+            "IEF": "Bonds/Intermediate",
+            "BIL": "T-Bills",
+            "TIPS": "Inflation-Linked",
+            "GLD": "Gold",
+            "USO": "Energy/Commodities",
+            "EMB": "EM Debt",
+            "HYG": "High Yield",
+            "UUP": "USD",
+            "VNQ": "REITs",
+            "SPY": "Broad Market",
+            "QQQ": "Tech/Nasdaq",
+            "XLV": "Health Care",
+            "XLP": "Staples",
+            "XLU": "Utilities",
+            "XLE": "Energy",
+            "XLF": "Financials",
+            "XLI": "Industrials",
+            "SMH": "Semiconductors",
+            "IWM": "Small Cap",
+            "EEM": "Emerging Markets",
+            "INDA": "India",
+            "EWJ": "Japan",
+        }
+
+        def _sector(ticker: str) -> str:
+            t = ticker.upper()
+            if t in _ETF_SECTORS:
+                return _ETF_SECTORS[t]
+            entry = _SECTOR_MAP.get(t)
+            if entry:
+                return entry[1]  # subsector string e.g. "AI/Semiconductors"
+            return "Other"
+
+        bm_total = float((1 + bm_rets).prod() - 1) if not bm_rets.empty else 0.0
+
+        contributions: List[Dict[str, Any]] = []
+        total_weight = 0.0
+        for pick in picks:
+            t = pick["ticker"]
+            w = float(pick.get("weight", 0.0))
+            total_weight += w
+            s = per_pick_rets.get(t)
+            if s is None or s.empty:
+                pick_total = 0.0
+                dd_val = 0.0
+            else:
+                pick_total = float((1 + s).prod() - 1)
+                eq = (1 + s).cumprod()
+                dd_val = float((eq / eq.cummax() - 1).min())
+
+            contribution = w * (pick_total - bm_total)
+            contributions.append(
+                {
+                    "ticker": t,
+                    "weight_pct": round(w * 100, 1),
+                    "pick_return_pct": round(pick_total * 100, 2),
+                    "contribution_pct": round(contribution * 100, 2),
+                    "max_drawdown_pct": round(dd_val * 100, 2),
+                    "sector": _sector(t),
+                }
+            )
+
+        contributions.sort(key=lambda x: x["contribution_pct"], reverse=True)
+        contributors = [c for c in contributions if c["contribution_pct"] >= 0][:3]
+        detractors = sorted(
+            [c for c in contributions if c["contribution_pct"] < 0],
+            key=lambda x: x["contribution_pct"],
+        )[:3]
+
+        # Sector aggregation
+        sector_map: Dict[str, float] = {}
+        for c in contributions:
+            sec = c["sector"]
+            sector_map[sec] = round(sector_map.get(sec, 0.0) + c["contribution_pct"], 2)
+
+        # Cash drag: uninvested weight earns 0, opportunity cost vs benchmark
+        cash_weight = max(0.0, 1.0 - total_weight)
+        cash_drag = round(-cash_weight * bm_total * 100, 2)
+
+        # Drawdown source: pick with worst single-period max drawdown
+        dd_source = min(contributions, key=lambda x: x["max_drawdown_pct"])
+
+        # Recent performance: last 20 bars
+        recent_wins: List[str] = []
+        recent_losses: List[str] = []
+        for pick in picks:
+            t = pick["ticker"]
+            s = per_pick_rets.get(t)
+            if s is None or len(s) < 5:
+                continue
+            recent_ret = float((1 + s.iloc[-20:]).prod() - 1)
+            if recent_ret >= 0:
+                recent_wins.append(t)
+            else:
+                recent_losses.append(t)
+
+        # Top factor: which score component has highest rank correlation with contribution
+        contribs_by_ticker = {c["ticker"]: c["contribution_pct"] for c in contributions}
+        factor_scores = {
+            "momentum_12_1": [p.get("momentum_12_1", 0) for p in picks],
+            "score": [p.get("score", 0) for p in picks],
+        }
+        contrib_vals = [contribs_by_ticker.get(p["ticker"], 0) for p in picks]
+        best_factor = "score"
+        best_corr = -999.0
+        if len(contrib_vals) >= 3:
+            try:
+                from src.engines.feature_ic import _pearson  # noqa: PLC0415
+
+                for fname, fvals in factor_scores.items():
+                    corr = _pearson(fvals, contrib_vals)
+                    if corr is not None and corr > best_corr:
+                        best_corr = corr
+                        best_factor = fname
+            except Exception:
+                pass
+
+        return {
+            "attribution_available": True,
+            "note": "Single-period attribution — assumes static weights",
+            "contributors": contributors,
+            "detractors": detractors,
+            "sector_contribution": sector_map,
+            "cash_drag_pct": cash_drag,
+            "cash_weight_pct": round(cash_weight * 100, 1),
+            "drawdown_source": dd_source["ticker"],
+            "drawdown_source_dd_pct": dd_source["max_drawdown_pct"],
+            "recent_wins": recent_wins,
+            "recent_losses": recent_losses,
+            "top_factor": best_factor,
+            "all_contributions": contributions,
+        }
+
     async def run(
         self,
         mds: Any,
@@ -546,7 +718,7 @@ class FundLabService:
         )
         sleeves = {s["name"]: s for s in sleeve_list}
 
-        # Parallel portfolio returns (3 sleeves in parallel)
+        # Parallel portfolio returns — each returns (agg_series, per_pick_dict)
         sleeve_items = list(sleeves.items())
         port_rets_list = await asyncio.gather(
             *[
@@ -556,7 +728,8 @@ class FundLabService:
         )
 
         results: List[Dict[str, Any]] = []
-        for (fund_name, sleeve), p_rets in zip(sleeve_items, port_rets_list):
+        for (fund_name, sleeve), port_tuple in zip(sleeve_items, port_rets_list):
+            p_rets, per_pick_rets = port_tuple
             metrics = self._metrics(p_rets, bm_rets)
             entry = SleeveResult(
                 name=fund_name,
@@ -564,6 +737,10 @@ class FundLabService:
                 picks=sleeve.get("picks", []),
                 metrics=metrics,
             ).to_dict()
+            # Sprint 107: attach attribution to every sleeve
+            entry["attribution"] = self._attribution(
+                sleeve.get("picks", []), per_pick_rets, bm_rets
+            )
             # Propagate regime gate info so dashboard can show why cash
             if sleeve.get("regime_gated"):
                 entry["regime_gated"] = True

@@ -261,6 +261,14 @@ These ideas need more research before committing:
 - [x] **Dashboard cards** — 🎰 Thompson Sizing card + 📉 Feature IC Decay card in Ops panel
 - [x] **Sprint 103 CI tests** — 15 tests, 15/15 passing
 
+### ✅ Sprint 107 — Fund Attribution Engine (v9.8.0)
+- [x] **`_portfolio_returns()` refactored** — returns `(agg_series, per_pick_dict[ticker→series])` instead of bare `pd.Series`; no backward-compat break (only called in `run()`)
+- [x] **`FundLabService._attribution()`** static method — single-period Brinson-style: `contribution = w × (r_pick − r_bm)`; outputs contributors, detractors, sector breakdown, cash drag, drawdown source, recent wins/losses, top-factor correlation
+- [x] **ETF sector supplement** — 23 common ETF tickers (TLT, GLD, BIL, USO, EMB, HYG, UUP, VNQ, etc.) mapped to named sectors without extra I/O
+- [x] **`run()` wired** — `entry["attribution"]` attached to every sleeve result; flows through all existing `/api/v7/fund-lab/` endpoints automatically
+- [x] **Dashboard attribution collapsible** — `<details>` per fund card in Fund Lab panel: contributors table, detractors table, sector contribution list, cash drag / drawdown source / top-factor mini-grid, recent wins/losses row
+- [x] **Sprint 107 CI tests** — 15 tests, 15/15 passing (101 total across sprints 100–107)
+
 ### ✅ Sprint 106 — AlertService v2 (v9.7.0)
 - [x] **AlertService** (`src/services/alert_service.py`) — 6 typed event dispatchers: `on_ic_decay_alert`, `on_thompson_arm_degrade`, `on_fund_rebalance`, `on_regime_change`, `on_drawdown_breach`, `on_circuit_breaker`; persist last 50 events to `models/alert_log.json`; Discord push via `DiscordInteractiveBot` (non-fatal if unconfigured)
 - [x] **EOD scheduler step 8** — `check_and_push_ic_decay()` + `check_and_push_thompson_degrade()` wired after step 7 (Thompson+IC); non-fatal

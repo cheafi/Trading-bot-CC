@@ -3053,6 +3053,88 @@
                       </div>
                     </template>
                   </div>
+
+                  <!-- Sprint 107: Attribution collapsible -->
+                  <template x-if="f.attribution && f.attribution.attribution_available">
+                    <details class="mt-3" style="border-top:1px solid var(--bd);padding-top:6px">
+                      <summary class="text-[9px] cursor-pointer select-none" style="color:var(--t3);list-style:none">
+                        📊 Attribution
+                        <span class="mono text-[8px] ml-1"
+                          :style="(f.attribution.contributors||[]).length>0?'color:var(--green)':'color:var(--t3)'"
+                          x-text="(f.attribution.contributors||[]).length+' contrib · '+(f.attribution.detractors||[]).length+' detract'">
+                        </span>
+                      </summary>
+                      <div class="mt-2 space-y-2">
+                        <!-- Contributors & Detractors side-by-side -->
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                          <div>
+                            <div class="text-[8px] mb-1" style="color:var(--t3)">✅ Contributors</div>
+                            <template x-if="!(f.attribution.contributors||[]).length">
+                              <div class="text-[8px]" style="color:var(--t3)">—</div>
+                            </template>
+                            <template x-for="c in (f.attribution.contributors||[])" :key="c.ticker">
+                              <div class="flex justify-between text-[8px] py-0.5">
+                                <span class="mono font-bold" style="color:var(--t1)" x-text="c.ticker"></span>
+                                <span class="mono text-green-400" x-text="'+'+c.contribution_pct+'%'"></span>
+                                <span class="text-[7px]" style="color:var(--t3)" x-text="c.sector"></span>
+                              </div>
+                            </template>
+                          </div>
+                          <div>
+                            <div class="text-[8px] mb-1" style="color:var(--t3)">❌ Detractors</div>
+                            <template x-if="!(f.attribution.detractors||[]).length">
+                              <div class="text-[8px]" style="color:var(--t3)">—</div>
+                            </template>
+                            <template x-for="d in (f.attribution.detractors||[])" :key="d.ticker">
+                              <div class="flex justify-between text-[8px] py-0.5">
+                                <span class="mono font-bold" style="color:var(--t1)" x-text="d.ticker"></span>
+                                <span class="mono text-red-400" x-text="d.contribution_pct+'%'"></span>
+                                <span class="text-[7px]" style="color:var(--t3)" x-text="d.sector"></span>
+                              </div>
+                            </template>
+                          </div>
+                        </div>
+                        <!-- Sector breakdown -->
+                        <div x-show="Object.keys(f.attribution.sector_contribution||{}).length">
+                          <div class="text-[8px] mb-1" style="color:var(--t3)">Sector breakdown</div>
+                          <template x-for="[sec,val] in Object.entries(f.attribution.sector_contribution||{})" :key="sec">
+                            <div class="flex justify-between text-[8px] py-0.5">
+                              <span style="color:var(--t2)" x-text="sec"></span>
+                              <span class="mono" :class="val>=0?'text-green-400':'text-red-400'" x-text="(val>=0?'+':'')+val+'%'"></span>
+                            </div>
+                          </template>
+                        </div>
+                        <!-- Cash drag, drawdown source, top factor -->
+                        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px">
+                          <div class="p-1 rounded" style="background:var(--s2)">
+                            <div class="text-[7px]" style="color:var(--t3)">Cash drag</div>
+                            <div class="mono text-[9px]" :class="(f.attribution.cash_drag_pct||0)<=0?'text-amber-300':'text-green-400'" x-text="(f.attribution.cash_drag_pct||0)+'%'"></div>
+                            <div class="text-[7px]" style="color:var(--t3)" x-text="(f.attribution.cash_weight_pct||0)+'% cash'"></div>
+                          </div>
+                          <div class="p-1 rounded" style="background:var(--s2)">
+                            <div class="text-[7px]" style="color:var(--t3)">DD source</div>
+                            <div class="mono text-[9px] text-red-400" x-text="f.attribution.drawdown_source||'—'"></div>
+                            <div class="text-[7px]" style="color:var(--t3)" x-text="(f.attribution.drawdown_source_dd_pct||0)+'%'"></div>
+                          </div>
+                          <div class="p-1 rounded" style="background:var(--s2)">
+                            <div class="text-[7px]" style="color:var(--t3)">Top factor</div>
+                            <div class="mono text-[9px] text-white" x-text="(f.attribution.top_factor||'—').replace('_12_1','').replace('_',' ')"></div>
+                          </div>
+                        </div>
+                        <!-- Recent wins / losses -->
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px" x-show="(f.attribution.recent_wins||[]).length||(f.attribution.recent_losses||[]).length">
+                          <div>
+                            <div class="text-[7px] mb-0.5" style="color:var(--t3)">Recent wins</div>
+                            <div class="text-[8px] text-green-400 mono" x-text="(f.attribution.recent_wins||[]).join(', ')||'—'"></div>
+                          </div>
+                          <div>
+                            <div class="text-[7px] mb-0.5" style="color:var(--t3)">Recent losses</div>
+                            <div class="text-[8px] text-red-400 mono" x-text="(f.attribution.recent_losses||[]).join(', ')||'—'"></div>
+                          </div>
+                        </div>
+                      </div>
+                    </details>
+                  </template>
                 </div>
               </template>
             </div>
