@@ -2,24 +2,29 @@
 # BuildKit multi-stage: deps layer cached separately from code layer
 # → rebuild on code change takes ~5s (no pip reinstall)
 # → ARM64 native on Apple M-chip (no Rosetta overhead)
+# Sprint 99: models/ dir for regime_params/brier/ab_shadow; /healthz liveness probe
 # syntax=docker/dockerfile:1.7
 
 # ── Stage 1: dependency builder ──────────────────────────────────────────────
-FROM python:3.11-slim AS deps
+FROM python:3.11-slim-bookworm AS deps
 
 WORKDIR /deps
 
-# BuildKit cache mount: pip cache persists across builds (Docker Business)
-# → subsequent builds skip re-downloading packages entirely
+# BuildKit cache mount: pip cache persists across builds
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --upgrade pip
+    pip install --upgrade pip setuptools wheel
 
 COPY requirements/base.txt requirements/base.txt
+# Also install api-only extras if present
+COPY requirements/ requirements/
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --prefix=/install -r requirements/base.txt
+    pip install --prefix=/install -r requirements/base.txt && \
+    if [ -f requirements/api.txt ]; then \
+        pip install --prefix=/install -r requirements/api.txt; \
+    fi
 
 # ── Stage 2: runtime image ───────────────────────────────────────────────────
-FROM python:3.11-slim AS runtime
+FROM python:3.11-slim-bookworm AS runtime
 
 # Install curl only (healthcheck) — no build tools in final image
 RUN apt-get update && apt-get install -y --no-install-recommends curl && \
@@ -30,7 +35,7 @@ COPY --from=deps /install /usr/local
 
 WORKDIR /app
 
-# Non-root user (Docker Business security best practice)
+# Non-root user — security best practice
 RUN groupadd -r cc && useradd -r -g cc -d /app cc
 
 # Copy application code (invalidates only when code changes, not deps)
@@ -40,15 +45,20 @@ COPY --chown=cc:cc changelog.json ./
 COPY --chown=cc:cc _cc_instant.py ./
 COPY --chown=cc:cc run_dashboard.py ./
 
-# Writable data dir for SQLite + brief JSONs
-RUN mkdir -p data/artifacts data/portfolios && chown -R cc:cc data/
+# Writable runtime directories:
+#   data/         — SQLite DBs, brief JSONs, execution fills
+#   models/       — regime_params.json, brier_scores.json, ab_shadow.json,
+#                   self_learning_audit.json, fund_weights.json
+#   data/artifacts, data/portfolios — report artefacts
+RUN mkdir -p data/artifacts data/portfolios models && \
+    chown -R cc:cc data/ models/
 
 USER cc
 
 EXPOSE 8000
 
-# Health probe
+# Liveness probe (Sprint 97: /healthz alias)
 HEALTHCHECK --interval=15s --timeout=5s --start-period=45s --retries=4 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:8000/healthz || exit 1
 
 CMD ["python", "_cc_instant.py"]

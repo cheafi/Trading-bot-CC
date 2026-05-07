@@ -311,6 +311,55 @@ class TelemetryTracker:
                 lines.append(
                     f'tradingai_job_failures_total{{job="{name}"}} {job.failure_count}'
                 )
+
+            # Sprint 98/99 — Brier calibration, A/B shadow, execution fills
+            try:
+                from src.engines.self_learning import (
+                    get_calibration_status,
+                    get_ab_status,
+                )
+
+                cal = get_calibration_status()
+                ab = get_ab_status()
+                brier = cal.get("brier_score") or 0.0
+                drift = cal.get("drift") or 0.0
+                n_challengers = len(ab.get("active", []))
+                lines += [
+                    "",
+                    "# HELP tradingai_brier_score Rolling Brier calibration score",
+                    "# TYPE tradingai_brier_score gauge",
+                    f"tradingai_brier_score {brier:.4f}",
+                    "",
+                    "# HELP tradingai_calibration_drift Brier score drift from baseline",
+                    "# TYPE tradingai_calibration_drift gauge",
+                    f"tradingai_calibration_drift {drift:.4f}",
+                    "",
+                    "# HELP tradingai_ab_challengers Active A/B shadow challengers",
+                    "# TYPE tradingai_ab_challengers gauge",
+                    f"tradingai_ab_challengers {n_challengers}",
+                ]
+            except Exception:
+                pass
+
+            try:
+                import sqlite3
+                from pathlib import Path as _Path
+
+                db = _Path("data") / "fund_portfolio.db"
+                if db.exists():
+                    with sqlite3.connect(str(db)) as _conn:
+                        fill_count = _conn.execute(
+                            "SELECT COUNT(*) FROM execution_fills WHERE timestamp >= datetime('now','-30 days')"
+                        ).fetchone()[0]
+                    lines += [
+                        "",
+                        "# HELP tradingai_execution_fills_30d Execution fills in last 30 days",
+                        "# TYPE tradingai_execution_fills_30d gauge",
+                        f"tradingai_execution_fills_30d {fill_count}",
+                    ]
+            except Exception:
+                pass
+
             return "\n".join(lines)
 
 

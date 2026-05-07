@@ -11916,3 +11916,11 @@ try:
     app.include_router(self_learn_router)
 except Exception:
     logger.exception("[Router] Failed to load self_learn router")
+
+# Sprint 99 — Execution cost, Kelly sizing, MTF confluence
+try:
+    from src.api.routers.execution import router as execution_router
+
+    app.include_router(execution_router)
+except Exception:
+    logger.exception("[Router] Failed to load execution router")

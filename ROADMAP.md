@@ -224,11 +224,20 @@ These ideas need more research before committing:
 - [x] EOD scheduler step 6: `tune_regime_params()` from closed trades
 - [x] Dashboard: Calibration Drift card + A/B Shadow card in Self-Learn Ops panel
 
-### Self-Learning v4 (Sprint 99+)
+### ✅ Sprint 99 — Execution Intelligence (v9.4.0)
+- [x] **ExecutionCostEngine** (`src/engines/execution_cost.py`) — TWAP/VWAP slippage model, commission ($0.005/share, min $1), market impact, fill quality tracker persisted to SQLite `execution_fills`
+- [x] **MTFConfluenceGate** (`src/engines/mtf_confluence.py`) — daily + weekly trend/RSI/MACD/regime alignment gate; `confluence_score` [0–1], ≥0.60 = approved; fail-open on missing data
+- [x] **Execution REST router** (`src/api/routers/execution.py`) — `/metrics`, `/estimate`, `/record-fill`, `/fills`, `/size-kelly`, `/mtf-confluence` (6 endpoints)
+- [x] **Prometheus metrics enriched** — `tradingai_brier_score`, `tradingai_calibration_drift`, `tradingai_ab_challengers`, `tradingai_execution_fills_30d` added to `/metrics`
+- [x] **Docker Dockerfile.api hardened** — `python:3.11-slim-bookworm` base, `models/` dir created (regime_params/brier/ab_shadow), `/healthz` probe, api.txt extras install
+- [x] **Execution Quality card** in Ops dashboard — avg/median/p95 slippage (bps), % favourable fills, by-strategy breakdown, total commission
+
+### Self-Learning v4 (Sprint 100+)
 - [ ] Multi-signal Brier decomposition (per strategy type)
 - [ ] Reinforcement learning sizing loop (Thompson sampling)
 - [ ] Automatic feature importance decay detection
 - [ ] A/B harness auto-proposal from regime-tune output
+- [ ] MTF confluence gate wired into signal generation pipeline (pre-filter)
 
 ---
 
