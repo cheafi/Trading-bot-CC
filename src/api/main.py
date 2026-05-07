@@ -11924,3 +11924,11 @@ try:
     app.include_router(execution_router)
 except Exception:
     logger.exception("[Router] Failed to load execution router")
+
+# Sprint 100 — Live risk guards (correlation, VaR, concentration)
+try:
+    from src.api.routers.risk_guard import router as risk_guard_router
+
+    app.include_router(risk_guard_router)
+except Exception:
+    logger.exception("[Router] Failed to load risk_guard router")

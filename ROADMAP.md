@@ -232,7 +232,13 @@ These ideas need more research before committing:
 - [x] **Docker Dockerfile.api hardened** — `python:3.11-slim-bookworm` base, `models/` dir created (regime_params/brier/ab_shadow), `/healthz` probe, api.txt extras install
 - [x] **Execution Quality card** in Ops dashboard — avg/median/p95 slippage (bps), % favourable fills, by-strategy breakdown, total commission
 
-### Self-Learning v4 (Sprint 100+)
+### ✅ Sprint 100 — Risk Intelligence (v9.5.0)
+- [x] **MTF wired into MultiLayerRanker** — `_action()` ±10 pts, `_conviction()` ±8 pts based on `mtf_confluence_score` in signal dict
+- [x] **Risk Guard router** (`src/api/routers/risk_guard.py`) — 4 endpoints: `/correlation-guard` (live Pearson corr vs open positions), `/var-gate` (1-day 95% parametric VaR), `/concentration` (HHI + sector + grade), `/summary`
+- [x] **Portfolio Risk card** in Ops dashboard — all-gates badge, positions count, 1d VaR, HHI grade
+- [x] **Sprint 100 CI tests** — 13 tests: execution cost, MTF RSI/MACD, ranker MTF wiring, Pearson/VaR helpers, risk router prefix, Kelly formula
+
+### Self-Learning v4 (Sprint 101+)
 - [ ] Multi-signal Brier decomposition (per strategy type)
 - [ ] Reinforcement learning sizing loop (Thompson sampling)
 - [ ] Automatic feature importance decay detection

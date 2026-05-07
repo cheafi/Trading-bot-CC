@@ -145,6 +145,12 @@ class MultiLayerRanker:
         # Confidence bonus (0-15)
         a += conf.final * 15
 
+        # MTF confluence bonus/penalty (Sprint 99) — stored in signal dict
+        mtf_score = r.signal.get("mtf_confluence_score")
+        if mtf_score is not None:
+            # +10 if fully aligned (1.0), −10 if fully opposed (0.0)
+            a += (mtf_score - 0.5) * 20
+
         # Penalties
         if fit.evidence_conflicts:
             a -= len(fit.evidence_conflicts) * 5
@@ -178,6 +184,14 @@ class MultiLayerRanker:
             c += 18
         elif decision.action == "WATCH":
             c += 3
+
+        # MTF confluence boost (Sprint 99): +8 if score >= 0.75, −8 if < 0.35
+        mtf_score = r.signal.get("mtf_confluence_score")
+        if mtf_score is not None:
+            if mtf_score >= 0.75:
+                c += 8
+            elif mtf_score < 0.35:
+                c -= 8
 
         # Conflict penalty
         if fit.evidence_conflicts:
