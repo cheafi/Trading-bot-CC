@@ -1269,6 +1269,187 @@ def get_auto_schedule_status() -> Dict[str, Any]:
         return {"run_at": None, "total_proposed": 0, "proposed": [], "skipped": []}
 
 
+# ── Sprint 113: Closed-Trade Auto-Feedback Pipeline ─────────────────────────
+
+_FEEDBACK_STATS_FILE = AUDIT_DIR / "feedback_stats.json"
+
+# Feature keys extracted from closed-trade dicts for Feature IC
+_FEEDBACK_IC_KEYS = (
+    "final_confidence",
+    "rs_composite",
+    "mtf_confluence_score",
+    "thesis_confidence",
+    "timing_confidence",
+    "vix",
+)
+
+
+def process_closed_trade(trade: Dict[str, Any]) -> Dict[str, Any]:
+    """Unified 4-channel feedback for one closed trade.
+
+    Sprint 113: replaces the fragmented per-channel loops in EOD step 7.
+
+    Channels updated (all non-fatal):
+      1. **Brier** — ``record_prediction_outcome()`` using ``final_confidence``
+         or ``confidence``; forwards ``forward_return_pct``, ``mae_pct``, ``regime``.
+      2. **A/B shadow** — ``record_ab_outcome()`` for every active challenger
+         param found in the trade dict.
+      3. **Thompson RL** — ``ThompsonSizingEngine.update(strategy, regime, win)``.
+      4. **Feature IC** — ``record_feature_outcomes(feats, actual_win)``.
+
+    Args:
+        trade: closed-trade dict. Expected keys (all optional):
+            ``strategy``, ``regime``, ``pnl_pct``, ``outcome`` ("win"/"loss"),
+            ``final_confidence`` / ``confidence``, ``forward_return_pct``,
+            ``mae_pct``, ``used_challenger_params`` (dict {param: bool}),
+            feature keys (``final_confidence``, ``rs_composite``, …).
+
+    Returns:
+        ``{"brier": {...}|None, "ab_updated": [str], "thompson": bool,
+           "feature_ic": bool, "channels_updated": int}``
+    """
+    result: Dict[str, Any] = {
+        "brier": None,
+        "ab_updated": [],
+        "thompson": False,
+        "feature_ic": False,
+        "channels_updated": 0,
+    }
+    win = (
+        trade.get("outcome", "").lower() == "win"
+        or float(trade.get("pnl_pct", 0.0)) > 0
+    )
+    strategy = trade.get("strategy", "UNKNOWN")
+    regime = trade.get("regime", "SIDEWAYS")
+    pnl_pct = float(trade.get("pnl_pct", 0.0))
+
+    # ── Channel 1: Brier calibration ──────────────────────────────────────
+    try:
+        confidence = float(
+            trade.get("final_confidence") or trade.get("confidence") or 0.6
+        )
+        brier_result = record_prediction_outcome(
+            confidence=confidence,
+            actual_win=win,
+            strategy=strategy,
+            forward_return_pct=float(trade.get("forward_return_pct", 0.0)),
+            mae_pct=float(trade.get("mae_pct", 0.0)),
+            regime=regime,
+        )
+        result["brier"] = brier_result
+        result["channels_updated"] += 1
+    except Exception as exc:
+        logger.debug("process_closed_trade brier error: %s", exc)
+
+    # ── Channel 2: A/B shadow outcomes ───────────────────────────────────
+    try:
+        ab_data = _load_ab_data()
+        active_params = [
+            p
+            for p, v in ab_data.get("challenger", {}).items()
+            if v.get("status") == "shadow"
+        ]
+        used_challenger_map: Dict[str, bool] = trade.get("used_challenger_params") or {}
+        for param in active_params:
+            used = bool(used_challenger_map.get(param, True))  # assume challenger used
+            record_ab_outcome(param, used_challenger=used, pnl_pct=pnl_pct)
+            result["ab_updated"].append(param)
+        if active_params:
+            result["channels_updated"] += 1
+    except Exception as exc:
+        logger.debug("process_closed_trade ab error: %s", exc)
+
+    # ── Channel 3: Thompson RL sizing ────────────────────────────────────
+    try:
+        from src.engines.thompson_sizing import get_thompson_engine  # noqa: PLC0415
+
+        get_thompson_engine().update(strategy, regime, win)
+        result["thompson"] = True
+        result["channels_updated"] += 1
+    except Exception as exc:
+        logger.debug("process_closed_trade thompson error: %s", exc)
+
+    # ── Channel 4: Feature IC ────────────────────────────────────────────
+    try:
+        from src.engines.feature_ic import record_feature_outcomes  # noqa: PLC0415
+
+        feats = {k: trade[k] for k in _FEEDBACK_IC_KEYS if trade.get(k) is not None}
+        if feats:
+            record_feature_outcomes(feats, actual_win=win)
+            result["feature_ic"] = True
+            result["channels_updated"] += 1
+    except Exception as exc:
+        logger.debug("process_closed_trade feature_ic error: %s", exc)
+
+    # ── Persist running totals ────────────────────────────────────────────
+    try:
+        stats = get_feedback_stats()
+        stats["total_processed"] = stats.get("total_processed", 0) + 1
+        stats["last_processed_at"] = datetime.now(timezone.utc).isoformat()
+        stats["brier_alerts"] = stats.get("brier_alerts", 0) + (
+            1 if result["brier"] and result["brier"].get("alert") else 0
+        )
+        stats["ab_params_active"] = len(result["ab_updated"])
+        AUDIT_DIR.mkdir(exist_ok=True)
+        _FEEDBACK_STATS_FILE.write_text(json.dumps(stats, indent=2, default=str))
+    except Exception as exc:
+        logger.debug("process_closed_trade stats save error: %s", exc)
+
+    return result
+
+
+def process_closed_trades_batch(
+    trades: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Run ``process_closed_trade()`` for a list of trades.
+
+    Sprint 113: used by the EOD scheduler step 7 replacement.
+
+    Returns aggregate summary.
+    """
+    total = len(trades)
+    channels_sum: Dict[str, int] = {"brier": 0, "thompson": 0, "feature_ic": 0, "ab": 0}
+    for trade in trades:
+        r = process_closed_trade(trade)
+        if r.get("brier"):
+            channels_sum["brier"] += 1
+        if r.get("thompson"):
+            channels_sum["thompson"] += 1
+        if r.get("feature_ic"):
+            channels_sum["feature_ic"] += 1
+        channels_sum["ab"] += len(r.get("ab_updated", []))
+
+    logger.info(
+        "process_closed_trades_batch: %d trades → brier=%d thompson=%d ic=%d ab_updates=%d",
+        total,
+        channels_sum["brier"],
+        channels_sum["thompson"],
+        channels_sum["feature_ic"],
+        channels_sum["ab"],
+    )
+    return {"total": total, "channels": channels_sum}
+
+
+def get_feedback_stats() -> Dict[str, Any]:
+    """Return running feedback pipeline statistics (Sprint 113)."""
+    if not _FEEDBACK_STATS_FILE.exists():
+        return {
+            "total_processed": 0,
+            "last_processed_at": None,
+            "brier_alerts": 0,
+            "ab_params_active": 0,
+        }
+    try:
+        return json.loads(_FEEDBACK_STATS_FILE.read_text())
+    except Exception:
+        return {
+            "total_processed": 0,
+            "last_processed_at": None,
+            "brier_alerts": 0,
+            "ab_params_active": 0,
+        }
+
+
 def propose_ab_shadow(
     param: str,
     challenger_value: float,

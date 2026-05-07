@@ -43,9 +43,11 @@ from src.engines.self_learning import (
     get_calibration_buckets,
     get_calibration_status,
     get_experiment_ledger,
+    get_feedback_stats,
     get_params_for_regime,
     load_fund_weights,
     load_regime_params,
+    process_closed_trade,
     propose_ab_shadow,
     pull_closed_trades_from_learning_loop,
     record_prediction_outcome,
@@ -508,3 +510,35 @@ async def auto_schedule_status_endpoint(
 ) -> Dict[str, Any]:
     """Return the last auto-schedule run summary (Sprint 112)."""
     return sanitize_for_json(get_auto_schedule_status())
+
+
+# ── Closed-Trade Auto-Feedback Pipeline (Sprint 113) ───────────────────────────────
+
+
+@router.post("/feedback/process-closed-trade")
+async def feedback_process_trade(
+    trade: Dict[str, Any],
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Process one closed trade through all 4 feedback channels (Sprint 113).
+
+    Channels: Brier calibration, A/B shadow outcomes, Thompson RL, Feature IC.
+    """
+    result = process_closed_trade(trade)
+    return sanitize_for_json(result)
+
+
+@router.get("/feedback/stats")
+async def feedback_stats(
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Feedback pipeline running statistics (Sprint 113)."""
+    stats = get_feedback_stats()
+    ab = get_ab_status()
+    return sanitize_for_json(
+        {
+            **stats,
+            "active_shadow_params": ab.get("active", []),
+            "active_shadow_count": len(ab.get("active", [])),
+        }
+    )

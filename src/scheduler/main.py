@@ -481,54 +481,31 @@ class TradingScheduler:
             except Exception as _ase:
                 logger.warning("EOD auto-schedule failed (non-fatal): %s", _ase)
 
-            # 7. Thompson RL sizing + Feature IC update from closed trades (Sprint 103)
+            # 7. Closed-Trade Auto-Feedback Pipeline (Sprint 113) — unified 4-channel
+            # feedback: Brier + A/B shadow + Thompson RL + Feature IC per trade.
+            # Replaces the fragmented per-channel loop from Sprint 103.
             try:
-                from src.engines.thompson_sizing import (
-                    get_thompson_engine,
-                )  # noqa: PLC0415
-                from src.engines.feature_ic import (
-                    record_feature_outcomes,
-                )  # noqa: PLC0415
-                from src.engines.self_learning import (
+                from src.engines.self_learning import (  # noqa: PLC0415
+                    process_closed_trades_batch,
                     pull_closed_trades_from_learning_loop as _pull2,
-                )  # noqa: PLC0415
+                )
 
                 _eod_trades = _pull2()
                 if _eod_trades:
-                    t_eng = get_thompson_engine()
-                    updated_arms = 0
-                    for trade in _eod_trades:
-                        strategy = trade.get("strategy", "UNKNOWN")
-                        regime = trade.get("regime", "SIDEWAYS")
-                        win = trade.get("outcome", "").lower() == "win"
-                        t_eng.update(strategy, regime, win)
-                        updated_arms += 1
-
-                        # Feature IC
-                        feats = {
-                            k: trade.get(k)
-                            for k in (
-                                "final_confidence",
-                                "rs_composite",
-                                "mtf_confluence_score",
-                                "thesis_confidence",
-                                "timing_confidence",
-                                "vix",
-                            )
-                            if trade.get(k) is not None
-                        }
-                        if feats:
-                            record_feature_outcomes(feats, actual_win=win)
-
+                    _fb_result = process_closed_trades_batch(_eod_trades)
                     logger.info(
-                        "EOD Thompson+IC: updated %d arms from %d trades",
-                        updated_arms,
-                        len(_eod_trades),
+                        "EOD feedback pipeline: %d trades processed — "
+                        "brier=%d thompson=%d ic=%d ab_updates=%d",
+                        _fb_result["total"],
+                        _fb_result["channels"]["brier"],
+                        _fb_result["channels"]["thompson"],
+                        _fb_result["channels"]["feature_ic"],
+                        _fb_result["channels"]["ab"],
                     )
                 else:
-                    logger.info("EOD Thompson+IC: no closed trades yet — skipped")
-            except Exception as _th:
-                logger.warning("EOD Thompson+IC failed (non-fatal): %s", _th)
+                    logger.info("EOD feedback pipeline: no closed trades — skipped")
+            except Exception as _fb:
+                logger.warning("EOD feedback pipeline failed (non-fatal): %s", _fb)
 
             # 8. AlertService: check IC decay + Thompson arm degrade, push Discord (Sprint 106)
             try:
