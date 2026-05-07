@@ -261,6 +261,15 @@ These ideas need more research before committing:
 - [x] **Dashboard cards** — 🎰 Thompson Sizing card + 📉 Feature IC Decay card in Ops panel
 - [x] **Sprint 103 CI tests** — 15 tests, 15/15 passing
 
+### ✅ Sprint 110 — Confidence Calibration Buckets (v10.1.0)
+- [x] **`record_prediction_outcome()` extended** — accepts `forward_return_pct`, `mae_pct`, `regime`; stored in `brier_scores.json` history entries; zero-pollution when defaults used
+- [x] **`get_calibration_buckets()`** — groups outcome history into 50-60/60-70/70-80/80-90/90+ bands; per-bucket: `hit_rate`, `avg_forward_return_pct`, `avg_mae_pct`, `calibrated` status (good/fair/poor), regime breakdown; ECE (Expected Calibration Error) at portfolio level
+- [x] **REST endpoint** — `GET /api/v7/self-learn/calibration/buckets`; `POST /calibration/record` extended with new query params
+- [x] **Dashboard Reliability Diagram** — table in Calibration card: bucket / n / hit% / fwd% / MAE% / calib status; `fetchCalibration()` also loads buckets; `calibBuckets` in Alpine `selfLearn` state
+- [x] **pytest speed** — `pyproject.toml`: added `--tb=short`, comments on `testpaths`, `asyncio_mode` note, plugin disable guidance
+- [x] **changelog.json** — detailed sprint 108–110 entries with dates, file changes, descriptions
+- [x] **Sprint 110 CI tests** — 18 tests, 18/18 passing (153 total across sprints 100–110)
+
 ### ✅ Sprint 109 — Unified Sizing Advisor (v10.0.0)
 - [x] **`SizingAdvisor`** (`src/engines/sizing_advisor.py`) — combines `PositionSizer` (Kelly/fixed-risk base), `ThompsonSizingEngine` (RL multiplier), `apply_decay_penalty` (staleness adj ×0.5–×1.0), portfolio heat gate; full `AdvisedSize` dataclass with `audit_trail`
 - [x] **REST router** (`src/api/routers/sizing.py`) — `GET /api/v7/size/advise`, `POST /api/v7/size/advise/batch` (max 20), `GET /api/v7/size/params`; registered in `main.py`

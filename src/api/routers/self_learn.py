@@ -38,6 +38,7 @@ from src.engines.self_learning import (
     analyze_regime_performance,
     evaluate_ab_promotion,
     get_ab_status,
+    get_calibration_buckets,
     get_calibration_status,
     get_params_for_regime,
     load_fund_weights,
@@ -274,10 +275,23 @@ async def record_outcome(
     confidence: float,
     win: bool,
     strategy: str = "",
+    forward_return_pct: float = 0.0,
+    mae_pct: float = 0.0,
+    regime: str = "",
     _: bool = Depends(verify_api_key),
 ) -> Dict[str, Any]:
-    """Record one (confidence, outcome) pair and update Brier score."""
-    result = record_prediction_outcome(confidence, win, strategy=strategy)
+    """Record one (confidence, outcome) pair and update Brier score.
+
+    Sprint 110: also accepts forward_return_pct, mae_pct, regime for bucket calibration.
+    """
+    result = record_prediction_outcome(
+        confidence,
+        win,
+        strategy=strategy,
+        forward_return_pct=forward_return_pct,
+        mae_pct=mae_pct,
+        regime=regime,
+    )
     return sanitize_for_json(result)
 
 
@@ -294,6 +308,19 @@ async def calibration_by_strategy(
             "overall_window": status.get("window", 0),
         }
     )
+
+
+@router.get("/calibration/buckets")
+async def calibration_buckets(
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Sprint 110: Confidence bucket calibration report.
+
+    Groups outcome history into 50-60 / 60-70 / 70-80 / 80-90 / 90+
+    confidence bands and reports hit_rate, avg_forward_return, avg_MAE,
+    and regime breakdown per bucket.
+    """
+    return sanitize_for_json(get_calibration_buckets())
 
 
 # ── A/B shadow harness (Sprint 98) ───────────────────────────────────────────

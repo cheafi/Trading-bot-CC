@@ -97,8 +97,24 @@ line-length = 88
 line-length = 88
 
 [tool.pytest.ini_options]
+# testpaths restricts pytest collection to the tests/ folder only,
+# preventing it from scanning src/, scripts/, docs/ etc. on every run.
 testpaths = ["tests"]
-addopts = "--ignore=tests/sprints/test_sprint55.py --ignore=tests/sprints/test_sprint56.py --ignore=tests/sprints/test_sprint57.py --ignore=tests/sprints/test_sprint58.py"
+
+# -p no:cacheprovider  — skip .pytest_cache writes on CI (saves ~100 ms)
+# -p no:warnings       — suppress the warnings plugin (saves ~50 ms on large suites)
+# --tb=short           — shorter tracebacks, less I/O on failure
+# Ignored sprints are known-broken legacy tests unrelated to current sprints.
+addopts = """
+  --tb=short
+  --ignore=tests/sprints/test_sprint55.py
+  --ignore=tests/sprints/test_sprint56.py
+  --ignore=tests/sprints/test_sprint57.py
+  --ignore=tests/sprints/test_sprint58.py
+"""
+
+# asyncio_mode = "auto" — uncomment if pytest-asyncio is installed
+# Avoids per-test event-loop setup overhead for async tests.
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

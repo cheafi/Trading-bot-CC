@@ -3971,6 +3971,33 @@
                         </div>
                       </div>
                     </template>
+                    <!-- Sprint 110: Confidence Bucket Reliability Table -->
+                    <template x-if="selfLearn.calibBuckets && selfLearn.calibBuckets.buckets">
+                      <div class="mt-2">
+                        <div class="flex items-center justify-between mb-1">
+                          <span class="text-[7px] font-bold" style="color:var(--t3)">Reliability Diagram</span>
+                          <span class="text-[7px]" style="color:var(--t3)" x-text="'n='+selfLearn.calibBuckets.total_records+(selfLearn.calibBuckets.ece!=null?' · ECE='+selfLearn.calibBuckets.ece.toFixed(3):'')"></span>
+                        </div>
+                        <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1.5fr;gap:1px 3px;margin-bottom:2px">
+                          <span class="text-[6px]" style="color:var(--t3)">Bucket</span>
+                          <span class="text-[6px]" style="color:var(--t3)">n</span>
+                          <span class="text-[6px]" style="color:var(--t3)">Hit%</span>
+                          <span class="text-[6px]" style="color:var(--t3)">Fwd%</span>
+                          <span class="text-[6px]" style="color:var(--t3)">MAE%</span>
+                          <span class="text-[6px]" style="color:var(--t3)">Calib</span>
+                        </div>
+                        <template x-for="b in selfLearn.calibBuckets.buckets" :key="b.bucket">
+                          <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1.5fr;gap:1px 3px;padding:1px 0;border-top:1px solid var(--s3)">
+                            <span class="text-[7px] mono" style="color:var(--t2)" x-text="b.bucket+'%'"></span>
+                            <span class="text-[7px] mono" style="color:var(--t2)" x-text="b.n||'—'"></span>
+                            <span class="text-[7px] mono" :class="b.hit_rate!=null?(b.hit_rate>=b.midpoint_conf?'text-green-400':'text-red-400'):'text-gray-500'" x-text="b.hit_rate!=null?(b.hit_rate*100).toFixed(0)+'%':'—'"></span>
+                            <span class="text-[7px] mono" :class="b.avg_forward_return_pct!=null?(b.avg_forward_return_pct>=0?'text-green-400':'text-red-400'):'text-gray-500'" x-text="b.avg_forward_return_pct!=null?(b.avg_forward_return_pct>=0?'+':'')+b.avg_forward_return_pct.toFixed(2):'—'"></span>
+                            <span class="text-[7px] mono text-amber-400" x-text="b.avg_mae_pct!=null?b.avg_mae_pct.toFixed(2)+'%':'—'"></span>
+                            <span class="text-[7px] font-bold" :class="b.calibrated==='good'?'text-green-400':b.calibrated==='fair'?'text-amber-400':b.calibrated==='poor'?'text-red-400':'text-gray-500'" x-text="b.calibrated||'need n≥5'"></span>
+                          </div>
+                        </template>
+                      </div>
+                    </template>
                   </div>
                 </template>
                 <template x-if="!selfLearn.calibration">
@@ -4324,7 +4351,7 @@
       opps:[],oppsSort:'score',
       apiEndpoints:[],
       changelog:[],
-      selfLearn:{status:null,triggering:false,lastResult:'',calibration:null,ab:null},
+      selfLearn:{status:null,triggering:false,lastResult:'',calibration:null,calibBuckets:null,ab:null},
       exec:{metrics:null},
       risk:{summary:null},
       rl:{thompson:null,featureIC:null},
@@ -4874,6 +4901,11 @@
           if(!r.ok)throw new Error('status '+r.status);
           this.selfLearn.calibration=await r.json();
         }catch(e){console.warn('calibration fetch failed',e)}
+        // Sprint 110: bucket reliability table
+        try{
+          const rb=await fetch('/api/v7/self-learn/calibration/buckets',{headers:{'X-API-Key':window._apiKey||'dev-secret-local'}});
+          if(rb.ok)this.selfLearn.calibBuckets=await rb.json();
+        }catch(e){console.warn('calibration buckets fetch failed',e)}
       },
       async fetchABStatus(){
         try{

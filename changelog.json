@@ -1,5 +1,116 @@
 [
   {
+    "hash": "pending",
+    "date": "2026-05-07T12:45:00+08:00",
+    "version": "v10.1.0",
+    "sprint": 110,
+    "title": "Confidence Calibration Buckets",
+    "summary": "Makes confidence measurable via bucket-level reliability diagrams with hit rate, forward return, and MAE.",
+    "changes": [
+      {
+        "type": "feat",
+        "file": "src/engines/self_learning.py",
+        "description": "Extended record_prediction_outcome() to accept forward_return_pct, mae_pct, regime. Stored in brier_scores.json history entries. Zero-pollution when defaults are 0/empty."
+      },
+      {
+        "type": "feat",
+        "file": "src/engines/self_learning.py",
+        "description": "Added get_calibration_buckets() grouping 50-60/60-70/70-80/80-90/90+ bands. Per bucket: hit_rate, avg_forward_return_pct, avg_mae_pct, calibrated (good/fair/poor), regime breakdown. ECE computed at portfolio level."
+      },
+      {
+        "type": "feat",
+        "file": "src/api/routers/self_learn.py",
+        "description": "GET /api/v7/self-learn/calibration/buckets. POST /calibration/record extended with forward_return_pct, mae_pct, regime query params."
+      },
+      {
+        "type": "feat",
+        "file": "src/api/templates/index.html",
+        "description": "Reliability Diagram table in Calibration card: bucket/n/hit%/fwd%/MAE%/calib. fetchCalibration() also fetches /calibration/buckets. calibBuckets added to Alpine selfLearn state."
+      },
+      {
+        "type": "perf",
+        "file": "pyproject.toml",
+        "description": "Added --tb=short to pytest addopts. Added asyncio_mode=auto. Added comments explaining testpaths=['tests'] prevents scanning src/scripts/docs on every run."
+      },
+      {
+        "type": "test",
+        "file": "tests/sprints/test_sprint110.py",
+        "description": "18 tests covering: extended record signature, fwd/mae/regime storage, no-pollution on zero defaults, backward compat with old entries, bucket grouping, hit_rate, avg_fwd_return, avg_mae, empty bucket, calibrated good/poor, regime breakdown, ECE, total_records, REST endpoints."
+      }
+    ],
+    "test_count": 18,
+    "cumulative_tests": 153
+  },
+  {
+    "hash": "48290e8",
+    "date": "2026-05-07T12:17:24+08:00",
+    "version": "v10.0.0",
+    "sprint": 109,
+    "title": "Unified Sizing Advisor",
+    "summary": "Single-call position sizing combining Kelly base x Thompson RL multiplier x staleness decay x portfolio heat gate.",
+    "changes": [
+      {
+        "type": "feat",
+        "file": "src/engines/sizing_advisor.py",
+        "description": "New SizingAdvisor + AdvisedSize dataclass. Pipeline: fixed-risk/half-Kelly base, Thompson Beta RL [0.25x-2.0x], exponential decay adj [0.5x-1.0x], heat throttle [0-1x], max_position_pct cap, max-risk hard cap. Full audit_trail per call."
+      },
+      {
+        "type": "feat",
+        "file": "src/api/routers/sizing.py",
+        "description": "New router in main.py. GET /api/v7/size/advise, POST /api/v7/size/advise/batch (max 20), GET /api/v7/size/params."
+      },
+      {
+        "type": "feat",
+        "file": "src/api/templates/index.html",
+        "description": "Suggested-size pill (1R base %) in ranked-signal meta row when entry+stop available. Inline Alpine arithmetic, no extra API call."
+      },
+      {
+        "type": "test",
+        "file": "tests/sprints/test_sprint109.py",
+        "description": "20 tests: fixed-risk arithmetic, half-Kelly, decay adj, heat throttle, score guard, zero-stop guard, position cap, risk cap, to_dict, REST endpoints."
+      }
+    ],
+    "test_count": 20,
+    "cumulative_tests": 135
+  },
+  {
+    "hash": "0464c15",
+    "date": "2026-05-07T12:09:06+08:00",
+    "version": "v9.9.0",
+    "sprint": 108,
+    "title": "Signal Confidence Decay Penalty",
+    "summary": "Signals lose ranking score proportional to age via exponential half-life decay per setup grade.",
+    "changes": [
+      {
+        "type": "feat",
+        "file": "src/engines/signal_decay.py",
+        "description": "DECAY_SCHEDULE: A+=48h A=36h B+=24h B=18h C+=12h C=8h D=4h. apply_decay_penalty() uses 1-exp(-ln2/hl*age), cap at 20pts. get_stale_signals() filter+sort descending by age."
+      },
+      {
+        "type": "feat",
+        "file": "src/engines/multi_ranker.py",
+        "description": "rank_batch() applies decay penalty to action_score + conviction_score (up to -10pts each). DEBUG log when decay_frac > 0.25."
+      },
+      {
+        "type": "feat",
+        "file": "src/api/routers/intel.py",
+        "description": "GET /api/v7/decay/stale?threshold_hours=8. GET /api/v7/decay/penalty?age_hours=&score=&grade= preview calculator."
+      },
+      {
+        "type": "feat",
+        "file": "src/api/templates/index.html",
+        "description": "Staleness badge in ranked-signal meta row: amber >4h, red >8h. Alpine x-if, zero cost for fresh signals."
+      },
+      {
+        "type": "test",
+        "file": "tests/sprints/test_sprint108.py",
+        "description": "14 tests: DECAY_SCHEDULE constants, penalty at 0h/half-life/2x, max cap, grade fallback, stale filter, sort, REST endpoints, ranker mock integration."
+      }
+    ],
+    "test_count": 14,
+    "cumulative_tests": 115
+  },
+  {
     "hash": "1c08724",
     "message": "perf: Docker for instant startup, remove pydantic from config, lazy core imports"
   },

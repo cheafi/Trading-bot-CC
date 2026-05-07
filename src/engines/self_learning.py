@@ -781,7 +781,9 @@ def tune_regime_params(
                         propose_ab_shadow(param, new_val)
                         logger.info(
                             "[AB-AutoPropose] param=%s old=%.4f new=%.4f (>5%% shift)",
-                            param, old_val, new_val,
+                            param,
+                            old_val,
+                            new_val,
                         )
         except Exception as e:
             logger.debug("A/B auto-propose error (non-fatal): %s", e)
@@ -800,6 +802,9 @@ def record_prediction_outcome(
     confidence: float,
     actual_win: bool,
     strategy: str = "",
+    forward_return_pct: float = 0.0,
+    mae_pct: float = 0.0,
+    regime: str = "",
 ) -> Dict[str, Any]:
     """
     Record one (confidence, outcome) pair and compute rolling Brier score.
@@ -807,13 +812,22 @@ def record_prediction_outcome(
     Brier score = mean((forecast_prob - actual_outcome)²)
     Lower is better (0 = perfect, 0.25 = random).
 
-    Optionally supply ``strategy`` (e.g. "PULLBACK_TREND") to track
-    per-strategy decomposition under ``data["by_strategy"]``.
+    Sprint 110 additions:
+    - ``forward_return_pct`` — actual forward return (positive = profit)
+    - ``mae_pct`` — maximum adverse excursion as positive pct
+    - ``regime`` — regime label at time of trade (BULL/BEAR/etc.)
+    - Stored in ``data["history"]`` entries for bucket analysis
 
     Returns {"brier_score": float, "window": int, "drift": float, "alert": bool}
     """
     data = _load_brier_data()
-    entry = {"conf": round(confidence, 4), "win": int(actual_win)}
+    entry: Dict[str, Any] = {"conf": round(confidence, 4), "win": int(actual_win)}
+    if forward_return_pct != 0.0:
+        entry["fwd_ret"] = round(forward_return_pct, 4)
+    if mae_pct != 0.0:
+        entry["mae"] = round(mae_pct, 4)
+    if regime:
+        entry["regime"] = regime.upper().strip()
     data["history"].append(entry)
     # Keep only last _BRIER_WINDOW entries
     data["history"] = data["history"][-_BRIER_WINDOW:]
@@ -904,6 +918,118 @@ def get_calibration_status() -> Dict[str, Any]:
             else "drift_detected"
         ),
         "by_strategy": by_strategy,
+    }
+
+
+# Sprint 110 — Confidence calibration bucket report
+_CONF_BUCKETS = [
+    ("50-60", 0.50, 0.60),
+    ("60-70", 0.60, 0.70),
+    ("70-80", 0.70, 0.80),
+    ("80-90", 0.80, 0.90),
+    ("90+", 0.90, 1.01),
+]
+
+
+def get_calibration_buckets() -> Dict[str, Any]:
+    """
+    Sprint 110: Group calibration history into confidence buckets and compute
+    per-bucket hit_rate, avg_forward_return, avg_mae, and regime breakdown.
+
+    Returns dict with:
+      - ``buckets``: list of bucket dicts ordered 50-60 … 90+
+      - ``total_records``: total trades with confidence data
+      - ``calibration_quality``: overall ECE (Expected Calibration Error)
+    """
+    data = _load_brier_data()
+    history = data.get("history", [])
+
+    bucket_stats: Dict[str, Any] = {}
+    for label, lo, hi in _CONF_BUCKETS:
+        bucket_stats[label] = {
+            "label": label,
+            "lo": lo,
+            "hi": hi,
+            "n": 0,
+            "wins": 0,
+            "sum_fwd_ret": 0.0,
+            "sum_mae": 0.0,
+            "n_fwd": 0,
+            "n_mae": 0,
+            "regimes": {},
+        }
+
+    for e in history:
+        conf = e.get("conf", 0.0)
+        win = int(e.get("win", 0))
+        fwd = e.get("fwd_ret")
+        mae = e.get("mae")
+        regime = e.get("regime", "UNKNOWN")
+
+        for label, lo, hi in _CONF_BUCKETS:
+            if lo <= conf < hi:
+                b = bucket_stats[label]
+                b["n"] += 1
+                b["wins"] += win
+                if fwd is not None:
+                    b["sum_fwd_ret"] += fwd
+                    b["n_fwd"] += 1
+                if mae is not None:
+                    b["sum_mae"] += mae
+                    b["n_mae"] += 1
+                # Regime breakdown
+                r_key = regime or "UNKNOWN"
+                rb = b["regimes"].setdefault(r_key, {"n": 0, "wins": 0})
+                rb["n"] += 1
+                rb["wins"] += win
+                break
+
+    buckets_out = []
+    ece_sum = 0.0
+    ece_n = 0
+    for label, lo, hi in _CONF_BUCKETS:
+        b = bucket_stats[label]
+        n = b["n"]
+        midpoint = (lo + hi) / 2 if hi < 1.01 else 0.95
+        hit_rate = round(b["wins"] / n, 4) if n > 0 else None
+        avg_fwd = round(b["sum_fwd_ret"] / b["n_fwd"], 4) if b["n_fwd"] > 0 else None
+        avg_mae = round(b["sum_mae"] / b["n_mae"], 4) if b["n_mae"] > 0 else None
+
+        # Calibration status: is hit_rate close to midpoint conf?
+        calibrated = None
+        if hit_rate is not None and n >= 5:
+            gap = abs(hit_rate - midpoint)
+            calibrated = "good" if gap < 0.08 else ("fair" if gap < 0.15 else "poor")
+            ece_sum += gap * n
+            ece_n += n
+
+        # Regime hit-rates
+        regime_summary = {}
+        for r_key, rb in b["regimes"].items():
+            regime_summary[r_key] = {
+                "n": rb["n"],
+                "hit_rate": round(rb["wins"] / rb["n"], 3) if rb["n"] > 0 else None,
+            }
+
+        buckets_out.append(
+            {
+                "bucket": label,
+                "n": n,
+                "midpoint_conf": round(midpoint, 2),
+                "hit_rate": hit_rate,
+                "avg_forward_return_pct": avg_fwd,
+                "avg_mae_pct": avg_mae,
+                "calibrated": calibrated,
+                "regime_breakdown": regime_summary,
+            }
+        )
+
+    ece = round(ece_sum / ece_n, 4) if ece_n > 0 else None
+    return {
+        "buckets": buckets_out,
+        "total_records": len(history),
+        "ece": ece,
+        "note": "ECE = Expected Calibration Error (lower=better). Buckets need n≥5 for calibration judgement.",
     }
 
 
