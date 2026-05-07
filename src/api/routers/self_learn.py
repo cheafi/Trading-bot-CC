@@ -267,11 +267,25 @@ async def calibration_status(
 async def record_outcome(
     confidence: float,
     win: bool,
+    strategy: str = "",
     _: bool = Depends(verify_api_key),
 ) -> Dict[str, Any]:
     """Record one (confidence, outcome) pair and update Brier score."""
-    result = record_prediction_outcome(confidence, win)
+    result = record_prediction_outcome(confidence, win, strategy=strategy)
     return sanitize_for_json(result)
+
+
+@router.get("/calibration/by-strategy")
+async def calibration_by_strategy(
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Per-strategy Brier score decomposition."""
+    status = get_calibration_status()
+    return sanitize_for_json({
+        "by_strategy": status.get("by_strategy", {}),
+        "overall_brier": status.get("brier_score"),
+        "overall_window": status.get("window", 0),
+    })
 
 
 # ── A/B shadow harness (Sprint 98) ───────────────────────────────────────────

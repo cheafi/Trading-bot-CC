@@ -53,14 +53,44 @@ class MultiRank:
 class MultiLayerRanker:
     """Compute 3-layer rankings for pipeline results."""
 
+    # Hard floor: signals with explicit MTF score below this are pre-filtered
+    MTF_FLOOR = 0.35
+
+    def pre_filter(self, results: List[Any]) -> tuple[List[Any], List[str]]:
+        """
+        MTF pre-filter: remove signals where mtf_confluence_score is explicitly
+        provided AND below MTF_FLOOR.  Returns (passing, filtered_tickers).
+        Signals without an mtf_confluence_score (None) are not filtered.
+        """
+        passing = []
+        filtered: List[str] = []
+        for r in results:
+            score = r.signal.get("mtf_confluence_score")
+            if score is not None and score < self.MTF_FLOOR:
+                ticker = r.signal.get("ticker", "?")
+                filtered.append(ticker)
+                logger.info(
+                    "[MTF-PreFilter] %s dropped — confluence %.2f < floor %.2f",
+                    ticker, score, self.MTF_FLOOR,
+                )
+            else:
+                passing.append(r)
+        return passing, filtered
+
     def rank_batch(self, results: List[Any]) -> Dict[str, MultiRank]:
         """Rank all pipeline results on 3 dimensions.
+
+        Applies MTF pre-filter first: signals with explicit mtf_confluence_score
+        below MTF_FLOOR are dropped before ranking.
 
         Args:
             results: List of PipelineResult objects
         Returns:
             ticker → MultiRank mapping
         """
+        results, filtered = self.pre_filter(results)
+        if filtered:
+            logger.info("[MTF-PreFilter] dropped %d signal(s): %s", len(filtered), filtered)
         ranks: Dict[str, MultiRank] = {}
 
         for r in results:

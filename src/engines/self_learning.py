@@ -771,6 +771,21 @@ def tune_regime_params(
         save_regime_params(current_all)
         logger.info("Regime params auto-tuned for: %s", list(changes.keys()))
 
+        # Auto-propose A/B shadow for params that shifted > 5% of their old value
+        try:
+            for regime_changes in changes.values():
+                for param, chg in regime_changes.items():
+                    old_val = chg.get("old", 0)
+                    new_val = chg.get("new", 0)
+                    if old_val and abs(new_val - old_val) / abs(old_val) > 0.05:
+                        propose_ab_shadow(param, new_val)
+                        logger.info(
+                            "[AB-AutoPropose] param=%s old=%.4f new=%.4f (>5%% shift)",
+                            param, old_val, new_val,
+                        )
+        except Exception as e:
+            logger.debug("A/B auto-propose error (non-fatal): %s", e)
+
     return changes
 
 
@@ -784,12 +799,16 @@ _BRIER_WINDOW = 50  # rolling window of predictions
 def record_prediction_outcome(
     confidence: float,
     actual_win: bool,
+    strategy: str = "",
 ) -> Dict[str, Any]:
     """
     Record one (confidence, outcome) pair and compute rolling Brier score.
 
     Brier score = mean((forecast_prob - actual_outcome)²)
     Lower is better (0 = perfect, 0.25 = random).
+
+    Optionally supply ``strategy`` (e.g. "PULLBACK_TREND") to track
+    per-strategy decomposition under ``data["by_strategy"]``.
 
     Returns {"brier_score": float, "window": int, "drift": float, "alert": bool}
     """
@@ -798,6 +817,14 @@ def record_prediction_outcome(
     data["history"].append(entry)
     # Keep only last _BRIER_WINDOW entries
     data["history"] = data["history"][-_BRIER_WINDOW:]
+
+    # ── Per-strategy tracking ──
+    if strategy:
+        bucket = strategy.upper().strip()
+        by_strat = data.setdefault("by_strategy", {})
+        strat_hist = by_strat.setdefault(bucket, [])
+        strat_hist.append(entry)
+        by_strat[bucket] = strat_hist[-_BRIER_WINDOW:]
 
     history = data["history"]
     n = len(history)
@@ -843,7 +870,7 @@ def record_prediction_outcome(
 
 
 def get_calibration_status() -> Dict[str, Any]:
-    """Return current Brier score status and drift alert state."""
+    """Return current Brier score status, drift alert, and per-strategy breakdown."""
     data = _load_brier_data()
     history = data.get("history", [])
     n = len(history)
@@ -854,6 +881,17 @@ def get_calibration_status() -> Dict[str, Any]:
         if (brier is not None and baseline is not None)
         else 0.0
     )
+
+    # Per-strategy decomposition
+    by_strategy: Dict[str, Any] = {}
+    for strat, hist in data.get("by_strategy", {}).items():
+        m = len(hist)
+        if m < 3:
+            by_strategy[strat] = {"brier_score": None, "window": m}
+            continue
+        s_brier = round(sum((e["conf"] - e["win"]) ** 2 for e in hist) / m, 4)
+        by_strategy[strat] = {"brier_score": s_brier, "window": m}
+
     return {
         "brier_score": brier,
         "baseline_brier": baseline,
@@ -865,6 +903,7 @@ def get_calibration_status() -> Dict[str, Any]:
             if (brier is None or drift <= _BRIER_DRIFT_THRESHOLD)
             else "drift_detected"
         ),
+        "by_strategy": by_strategy,
     }
 
 
