@@ -1,4 +1,5 @@
 """Sprint 49-53 intelligence endpoints — extracted from main.py."""
+
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
@@ -49,13 +50,15 @@ from src.api.deps import (
     sanitize_for_json as _sanitize_for_json,
 )
 
+
 def _get_verify_api_key():
     """Return the shared verify_api_key dependency."""
     return _verify_api_key_dep
 
 
-@router.get("/api/v6/signal-decay", tags=["analytics"],
-         summary="Signal freshness tracking")
+@router.get(
+    "/api/v6/signal-decay", tags=["analytics"], summary="Signal freshness tracking"
+)
 async def signal_decay_summary():
     return _signal_decay.summary()
 
@@ -65,8 +68,70 @@ async def signal_decay_active():
     return {"signals": _signal_decay.active_signals()}
 
 
-@router.post("/api/v6/learning-loop/record", tags=["analytics"],
-          summary="Record closed trade for learning")
+@router.get(
+    "/api/v7/decay/stale",
+    tags=["analytics"],
+    summary="Signals older than threshold_hours with decay penalty applied (Sprint 108)",
+)
+async def stale_signals(
+    threshold_hours: float = Query(default=8.0, ge=0.5, le=168.0),
+) -> Dict[str, Any]:
+    """Return active tracked signals whose age exceeds *threshold_hours*.
+    Each result includes ``age_hours`` and ``decay_pct`` fields.
+    """
+    from src.engines.signal_decay import (
+        get_stale_signals,
+        STALE_THRESHOLD_HOURS,
+    )  # noqa: PLC0415
+
+    active = _signal_decay.active_signals()
+    stale = get_stale_signals(active, threshold_hours=threshold_hours)
+    return {
+        "threshold_hours": threshold_hours,
+        "stale_count": len(stale),
+        "total_active": len(active),
+        "signals": stale,
+    }
+
+
+@router.get(
+    "/api/v7/decay/penalty",
+    tags=["analytics"],
+    summary="Preview decay penalty for a given age + grade (Sprint 108)",
+)
+async def decay_penalty_preview(
+    age_hours: float = Query(default=4.0, ge=0.0),
+    score: float = Query(default=75.0, ge=0.0, le=100.0),
+    grade: str = Query(default="B"),
+) -> Dict[str, Any]:
+    """Preview how much score is lost for a signal of given age, score, and grade."""
+    from src.engines.signal_decay import (
+        apply_decay_penalty,
+        DECAY_SCHEDULE,
+    )  # noqa: PLC0415
+
+    signal = {
+        "score": score,
+        "setup_grade": grade,
+        "data_freshness_minutes": age_hours * 60,
+    }
+    penalised, decay_frac = apply_decay_penalty(signal, age_hours=age_hours)
+    return {
+        "original_score": score,
+        "penalised_score": penalised,
+        "decay_pct": round(decay_frac * 100, 1),
+        "penalty_pts": round(score - penalised, 2),
+        "age_hours": age_hours,
+        "grade": grade,
+        "half_life_hours": DECAY_SCHEDULE.get(grade, 16.0),
+    }
+
+
+@router.post(
+    "/api/v6/learning-loop/record",
+    tags=["analytics"],
+    summary="Record closed trade for learning",
+)
 async def learning_loop_record(request: Request):
     body = await request.json()
     result = _learning_loop.record_closed_trade(
@@ -84,8 +149,9 @@ async def learning_loop_record(request: Request):
     return result
 
 
-@router.get("/api/v6/learning-loop", tags=["analytics"],
-         summary="Learning loop summary")
+@router.get(
+    "/api/v6/learning-loop", tags=["analytics"], summary="Learning loop summary"
+)
 async def learning_loop_summary():
     return _learning_loop.summary()
 
@@ -121,8 +187,11 @@ async def api_meta_ensemble_record(request: Request):
     regime = body.get("regime", "unknown")
     strategy = body.get("strategy", "unknown")
     _meta_ensemble.record_outcome(
-        components=components, pnl_pct=pnl_pct,
-        r_multiple=r_multiple, regime_label=regime, strategy_id=strategy,
+        components=components,
+        pnl_pct=pnl_pct,
+        r_multiple=r_multiple,
+        regime_label=regime,
+        strategy_id=strategy,
     )
     return {
         "recorded": True,
@@ -313,9 +382,13 @@ async def market_intel_endpoint(
         sb = request.app.state.scoreboard
         regime = sb.regime_label if hasattr(sb, "regime_label") else "UNKNOWN"
         report = _market_intel.analyse(
-            ticker=ticker, price=price, rsi=rsi,
-            volume_ratio=vol_ratio, above_sma20=above_sma20,
-            above_sma50=above_sma50, regime=regime,
+            ticker=ticker,
+            price=price,
+            rsi=rsi,
+            volume_ratio=vol_ratio,
+            above_sma20=above_sma20,
+            above_sma50=above_sma50,
+            regime=regime,
             change_pct=change_pct,
         )
         return {
@@ -391,9 +464,13 @@ async def watchlist_add_endpoint(
 ):
     """Add a ticker to the intelligent watchlist."""
     item = _watchlist_intel.add(
-        ticker=ticker, score=score, direction=direction,
-        setup_grade=setup_grade, why_now=why_now,
-        regime=regime, price=price,
+        ticker=ticker,
+        score=score,
+        direction=direction,
+        setup_grade=setup_grade,
+        why_now=why_now,
+        regime=regime,
+        price=price,
     )
     return {"added": True, "ticker": ticker, "urgency": item.urgency}
 
@@ -452,8 +529,11 @@ async def regime_filter_endpoint(
 ):
     """Evaluate whether a signal passes regime-adjusted quality filters."""
     result = _regime_filter.evaluate(
-        score=score, setup_grade=setup_grade,
-        regime=regime, direction=direction, rsi=rsi,
+        score=score,
+        setup_grade=setup_grade,
+        regime=regime,
+        direction=direction,
+        rsi=rsi,
     )
     return result.to_dict()
 
@@ -471,7 +551,8 @@ async def cross_asset_endpoint(
 ):
     """Cross-asset stress analysis and divergence detection."""
     report = _cross_asset_monitor.analyse(
-        vix=vix, spy_change_pct=spy_change_pct,
+        vix=vix,
+        spy_change_pct=spy_change_pct,
         tlt_change_pct=tlt_change_pct,
         gld_change_pct=gld_change_pct,
         iwm_change_pct=iwm_change_pct,
@@ -531,7 +612,9 @@ async def professional_kpi_record_trade(
     _: bool = Depends(_get_verify_api_key()),
 ):
     """Record a trade outcome for KPI tracking."""
-    _professional_kpi.record_trade(pnl_pct=pnl_pct, r_multiple=r_multiple, hold_hours=hold_hours)
+    _professional_kpi.record_trade(
+        pnl_pct=pnl_pct, r_multiple=r_multiple, hold_hours=hold_hours
+    )
     return {"recorded": True, "kpi": _professional_kpi.compute().to_dict()}
 
 
@@ -548,17 +631,24 @@ async def professional_kpi_record_cycle(
 # ── Sprint 70 — compare, gaps, analogs ───────────────────────────
 
 
-@router.get("/api/v6/compare/{ticker}", tags=["v6-intel"],
-         summary="Stock vs SPY relative strength comparison")
+@router.get(
+    "/api/v6/compare/{ticker}",
+    tags=["v6-intel"],
+    summary="Stock vs SPY relative strength comparison",
+)
 async def compare_ticker(ticker: str):
     """Compare a stock's performance vs SPY."""
     from src.engines.macro_regime_engine import StockVsSPY
+
     result = StockVsSPY.compare_ticker(ticker.upper())
     return _sanitize_for_json(result)
 
 
-@router.get("/api/v6/gaps/{ticker}", tags=["v6-intel"],
-         summary="Gap analysis from recent OHLCV data")
+@router.get(
+    "/api/v6/gaps/{ticker}",
+    tags=["v6-intel"],
+    summary="Gap analysis from recent OHLCV data",
+)
 async def gap_analysis(ticker: str):
     """Detect gaps for a ticker using yfinance OHLCV."""
     import asyncio
@@ -566,6 +656,7 @@ async def gap_analysis(ticker: str):
     try:
         import yfinance as yf
         from src.engines.gap_detector import GapDetector
+
         df = await asyncio.to_thread(
             yf.download, ticker.upper(), period="3mo", progress=False
         )
@@ -592,8 +683,11 @@ async def gap_analysis(ticker: str):
         return {"ticker": ticker.upper(), "gaps": [], "error": str(e)}
 
 
-@router.get("/api/v6/analogs/{ticker}", tags=["v6-intel"],
-         summary="Historical analog matches from closed trades")
+@router.get(
+    "/api/v6/analogs/{ticker}",
+    tags=["v6-intel"],
+    summary="Historical analog matches from closed trades",
+)
 async def historical_analogs(
     ticker: str,
     strategy: str = Query("", description="Filter by strategy"),
@@ -601,6 +695,7 @@ async def historical_analogs(
 ):
     """Find similar past trades for a ticker/strategy."""
     from src.engines.historical_analog import find_similar_cases, analog_summary
+
     cases = find_similar_cases(
         strategy=strategy or "vcp",
         regime=regime,

@@ -261,6 +261,14 @@ These ideas need more research before committing:
 - [x] **Dashboard cards** — 🎰 Thompson Sizing card + 📉 Feature IC Decay card in Ops panel
 - [x] **Sprint 103 CI tests** — 15 tests, 15/15 passing
 
+### ✅ Sprint 108 — Signal Confidence Decay Penalty (v9.9.0)
+- [x] **`apply_decay_penalty()`** — exponential half-life decay per setup grade (A+=48h … D=4h); penalty capped at 20pts; infers age from `data_freshness_minutes` if `age_hours` not passed
+- [x] **`get_stale_signals()`** — filter helper returns signals older than threshold (default 8h), sorted desc by age; used by REST layer
+- [x] **`MultiLayerRanker.rank_batch()` wired** — stale signals lose up to -10pts on both action + conviction scores; logs at DEBUG when `decay_frac > 0.25`
+- [x] **REST endpoints** — `GET /api/v7/decay/stale?threshold_hours=8` + `GET /api/v7/decay/penalty?age_hours=&score=&grade=` preview calculator
+- [x] **Dashboard staleness badge** — amber ⏰ pill >4h, red pill >8h in ranked-signal meta row; zero-cost Alpine `x-if` bindings
+- [x] **Sprint 108 CI tests** — 14 tests, 14/14 passing (115 total across sprints 100–108)
+
 ### ✅ Sprint 107 — Fund Attribution Engine (v9.8.0)
 - [x] **`_portfolio_returns()` refactored** — returns `(agg_series, per_pick_dict[ticker→series])` instead of bare `pd.Series`; no backward-compat break (only called in `run()`)
 - [x] **`FundLabService._attribution()`** static method — single-period Brinson-style: `contribution = w × (r_pick − r_bm)`; outputs contributors, detractors, sector breakdown, cash drag, drawdown source, recent wins/losses, top-factor correlation

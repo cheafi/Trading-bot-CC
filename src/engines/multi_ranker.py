@@ -71,7 +71,9 @@ class MultiLayerRanker:
                 filtered.append(ticker)
                 logger.info(
                     "[MTF-PreFilter] %s dropped — confluence %.2f < floor %.2f",
-                    ticker, score, self.MTF_FLOOR,
+                    ticker,
+                    score,
+                    self.MTF_FLOOR,
                 )
             else:
                 passing.append(r)
@@ -82,15 +84,26 @@ class MultiLayerRanker:
 
         Applies MTF pre-filter first: signals with explicit mtf_confluence_score
         below MTF_FLOOR are dropped before ranking.
+        Sprint 108: applies staleness decay penalty to action_score and
+        conviction_score based on signal age (data_freshness_minutes).
 
         Args:
             results: List of PipelineResult objects
         Returns:
             ticker → MultiRank mapping
         """
+        try:
+            from src.engines.signal_decay import apply_decay_penalty  # noqa: PLC0415
+
+            _decay_available = True
+        except Exception:
+            _decay_available = False
+
         results, filtered = self.pre_filter(results)
         if filtered:
-            logger.info("[MTF-PreFilter] dropped %d signal(s): %s", len(filtered), filtered)
+            logger.info(
+                "[MTF-PreFilter] dropped %d signal(s): %s", len(filtered), filtered
+            )
         ranks: Dict[str, MultiRank] = {}
 
         for r in results:
@@ -99,6 +112,23 @@ class MultiLayerRanker:
             mr.discovery_score = self._discovery(r)
             mr.action_score = self._action(r)
             mr.conviction_score = self._conviction(r)
+
+            # Sprint 108: stale-signal penalty on action + conviction
+            if _decay_available:
+                _, decay_frac = apply_decay_penalty(r.signal)
+                if decay_frac > 0:
+                    penalty = decay_frac * 10  # up to -10 pts on action/conviction
+                    mr.action_score = max(0.0, mr.action_score - penalty)
+                    mr.conviction_score = max(0.0, mr.conviction_score - penalty)
+                    if decay_frac > 0.25:
+                        logger.debug(
+                            "[DecayPenalty] %s: decay=%.1f%% action=%.1f conv=%.1f",
+                            ticker,
+                            decay_frac * 100,
+                            mr.action_score,
+                            mr.conviction_score,
+                        )
+
             ranks[ticker] = mr
 
         # Assign ordinal ranks
