@@ -21,6 +21,7 @@ usage() {
   cat <<'EOF'
 Usage:
   ./cleanup.sh inventory   # show repo/Git/doc cleanup opportunities
+  ./cleanup.sh analyze     # run dead-code analysis (knip, vulture)
   ./cleanup.sh dry-run     # list safe-to-delete junk files and caches
   ./cleanup.sh apply       # remove safe caches/logs/temp artefacts
   ./cleanup.sh             # same as apply
@@ -67,7 +68,7 @@ run_inventory() {
   echo ""
   echo "Top 10 largest top-level folders:"
   pushd "$ROOT_DIR" >/dev/null
-  du -hd 1 . 2>/dev/null | sort -hr | head -10
+  du -hd 1 . 2>/dev/null | sort -hr | head -10 || true || true
   echo ""
   echo "Git object store health:"
   git count-objects -vH
@@ -77,11 +78,11 @@ run_inventory() {
     | git cat-file --batch-check='%(objecttype) %(objectname) %(objectsize) %(rest)' \
     | awk '$1=="blob"{print $3"\t"$4}' \
     | sort -nr \
-    | head -10
+    | head -10 || true || true
   echo ""
   if [ -d docs ]; then
     echo "Docs untouched for 180+ days (top 20):"
-    find docs -type f \( -name "*.md" -o -name "*.html" \) -mtime +180 | sort | head -20
+    find docs -type f \( -name "*.md" -o -name "*.html" \) -mtime +180 | sort | head -20 || true || true
   fi
   popd >/dev/null
 }
@@ -114,9 +115,31 @@ run_apply() {
   echo "✅ Cleanup complete"
 }
 
+run_analyze() {
+  print_header
+  echo "→ Running JS/TS dead-code analysis (knip)..."
+  if command -v npx >/dev/null 2>&1; then
+    npx knip || true
+  else
+    echo "npx not found. Skipping knip."
+  fi
+  echo ""
+  echo "→ Running Python dead-code analysis (vulture)..."
+  if [ -f "$ROOT_DIR/venv/bin/vulture" ]; then
+    "$ROOT_DIR/venv/bin/vulture" "$ROOT_DIR/src" "$ROOT_DIR/tests" --min-confidence 80 || true
+  elif command -v vulture >/dev/null 2>&1; then
+    vulture "$ROOT_DIR/src" "$ROOT_DIR/tests" --min-confidence 80 || true
+  else
+    echo "vulture not found. Please install it: pip install vulture"
+  fi
+}
+
 case "$MODE" in
   inventory)
     run_inventory
+    ;;
+  analyze)
+    run_analyze
     ;;
   dry-run)
     run_dry
