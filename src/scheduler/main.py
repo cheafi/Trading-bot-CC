@@ -462,6 +462,25 @@ class TradingScheduler:
             except Exception as _rte:
                 logger.warning("EOD regime-tune failed (non-fatal): %s", _rte)
 
+            # 6b. Auto-Experiment Scheduler (Sprint 112) — propose A/B challengers
+            # for any regime whose win-rate is outside [0.45, 0.60]
+            try:
+                from src.engines.self_learning import (  # noqa: PLC0415
+                    auto_schedule_experiments,
+                    pull_closed_trades_from_learning_loop as _pull_auto,
+                )
+
+                _auto_trades = _pull_auto()
+                if _auto_trades:
+                    _sched_result = auto_schedule_experiments(_auto_trades)
+                    logger.info(
+                        "EOD auto-schedule: proposed=%d skipped=%d",
+                        _sched_result.get("total_proposed", 0),
+                        len(_sched_result.get("skipped", [])),
+                    )
+            except Exception as _ase:
+                logger.warning("EOD auto-schedule failed (non-fatal): %s", _ase)
+
             # 7. Thompson RL sizing + Feature IC update from closed trades (Sprint 103)
             try:
                 from src.engines.thompson_sizing import (

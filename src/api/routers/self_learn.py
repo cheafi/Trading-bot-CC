@@ -36,8 +36,10 @@ from src.api.deps import sanitize_for_json, verify_api_key
 from src.engines.self_learning import (
     SelfLearningEngine,
     analyze_regime_performance,
+    auto_schedule_experiments,
     evaluate_ab_promotion,
     get_ab_status,
+    get_auto_schedule_status,
     get_calibration_buckets,
     get_calibration_status,
     get_experiment_ledger,
@@ -480,3 +482,29 @@ async def experiment_ledger(
             "filters": {"status": status or None, "param": param or None},
         }
     )
+
+
+# ── Auto-Experiment Scheduler (Sprint 112) ───────────────────────────────────
+
+
+@router.post("/auto-schedule-experiments")
+async def trigger_auto_schedule(
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Trigger the auto-experiment scheduler on demand.
+
+    Analyses closed trade outcomes, proposes A/B challengers for
+    regimes with win-rate outside [0.45, 0.60] (max 3 per call).
+    Sprint 112.
+    """
+    trades = pull_closed_trades_from_learning_loop()
+    result = auto_schedule_experiments(trades)
+    return sanitize_for_json(result)
+
+
+@router.get("/auto-schedule-experiments/status")
+async def auto_schedule_status_endpoint(
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Return the last auto-schedule run summary (Sprint 112)."""
+    return sanitize_for_json(get_auto_schedule_status())

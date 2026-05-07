@@ -1111,6 +1111,164 @@ def get_experiment_ledger(
     return list(reversed(deduped))[:limit]
 
 
+# ── Sprint 112: Auto-Experiment Scheduler ────────────────────────────────────
+
+_AUTO_SCHEDULE_STATE_FILE = AUDIT_DIR / "auto_schedule_state.json"
+_AUTO_SCHEDULE_MAX_PER_RUN = 3  # max new challengers proposed per EOD run
+_AUTO_SCHEDULE_MIN_SAMPLE = 10  # minimum trades in regime before scheduling
+
+
+def auto_schedule_experiments(
+    trade_outcomes: List[Dict[str, Any]],
+    max_per_run: int = _AUTO_SCHEDULE_MAX_PER_RUN,
+    min_sample: int = _AUTO_SCHEDULE_MIN_SAMPLE,
+) -> Dict[str, Any]:
+    """Systematically propose A/B challengers for regimes with out-of-band win-rates.
+
+    Sprint 112 — closes the autonomous self-improvement loop:
+      1. Calls ``analyze_regime_performance()`` to get per-regime stats.
+      2. For every regime where ``win_rate < 0.45`` or ``win_rate > 0.60`` AND
+         sample >= min_sample, computes a nudge for each tunable param.
+      3. Skips params that already have an active shadow challenger.
+      4. Calls ``propose_ab_shadow()`` (max ``max_per_run`` proposals per call).
+      5. Persists last-run summary to ``_AUTO_SCHEDULE_STATE_FILE``.
+
+    Returns::
+
+        {
+          "proposed": [{"param": str, "challenger": float, "regime": str,
+                        "win_rate": float, "reason": str}, ...],
+          "skipped":  [{"param": str, "reason": str}, ...],
+          "total_proposed": int,
+          "run_at": str (ISO timestamp),
+        }
+    """
+    perf = analyze_regime_performance(trade_outcomes)
+    ab_data = _load_ab_data()
+    active_shadows = {
+        p
+        for p, v in ab_data.get("challenger", {}).items()
+        if v.get("status") == "shadow"
+    }
+
+    proposed: List[Dict[str, Any]] = []
+    skipped: List[Dict[str, Any]] = []
+
+    # Sort regimes by distance from 50% win_rate so worst offenders first
+    regime_order = sorted(
+        perf.items(),
+        key=lambda kv: abs(kv[1].get("win_rate", 0.5) - 0.5),
+        reverse=True,
+    )
+
+    for regime, stats in regime_order:
+        if len(proposed) >= max_per_run:
+            break
+
+        sample = stats.get("sample", 0)
+        win_rate = stats.get("win_rate", 0.5)
+
+        if sample < min_sample:
+            skipped.append(
+                {
+                    "regime": regime,
+                    "reason": f"sample={sample} < min_sample={min_sample}",
+                }
+            )
+            continue
+
+        if 0.45 <= win_rate <= 0.60:
+            # In-range — no experiment needed
+            continue
+
+        # Decide direction: low win_rate → tighten; high → relax
+        direction_key = "low_wr" if win_rate < 0.45 else "high_wr"
+        current_params = load_regime_params().get(
+            regime, dict(_DEFAULT_REGIME_PARAMS.get("SIDEWAYS", {}))
+        )
+
+        for param, directions in _REGIME_PARAM_DIRECTION.items():
+            if len(proposed) >= max_per_run:
+                break
+
+            if param in active_shadows:
+                skipped.append(
+                    {
+                        "param": param,
+                        "regime": regime,
+                        "reason": "already in active shadow",
+                    }
+                )
+                continue
+
+            rule = TUNABLE_RULES.get(param, {})
+            old_val = current_params.get(param, rule.get("default", 0.0))
+            step = rule.get("step", 0.005)
+            direction = directions[direction_key]
+            nudge = step * max(1, round(abs(win_rate - 0.50) / step))
+            new_val = old_val + nudge if direction == "raise" else old_val - nudge
+            new_val = round(
+                max(rule.get("min", 0.0), min(rule.get("max", 1.0), new_val)), 4
+            )
+
+            if new_val == old_val:
+                skipped.append(
+                    {
+                        "param": param,
+                        "regime": regime,
+                        "reason": "nudge would not change value",
+                    }
+                )
+                continue
+
+            reason = (
+                f"auto-schedule: regime={regime} win_rate={win_rate:.0%} "
+                f"(n={sample}) → {direction} {param}"
+            )
+            propose_ab_shadow(param, new_val, reason=reason)
+            proposed.append(
+                {
+                    "param": param,
+                    "challenger_value": new_val,
+                    "baseline_value": old_val,
+                    "regime": regime,
+                    "win_rate": win_rate,
+                    "reason": reason,
+                }
+            )
+
+    run_at = datetime.now(timezone.utc).isoformat()
+    summary = {
+        "proposed": proposed,
+        "skipped": skipped,
+        "total_proposed": len(proposed),
+        "run_at": run_at,
+    }
+    # Persist last-run state
+    try:
+        AUDIT_DIR.mkdir(exist_ok=True)
+        _AUTO_SCHEDULE_STATE_FILE.write_text(json.dumps(summary, indent=2, default=str))
+    except Exception as exc:
+        logger.debug("auto_schedule state save error: %s", exc)
+
+    logger.info(
+        "auto_schedule_experiments: proposed=%d skipped=%d",
+        len(proposed),
+        len(skipped),
+    )
+    return summary
+
+
+def get_auto_schedule_status() -> Dict[str, Any]:
+    """Return the last auto-schedule run summary (Sprint 112)."""
+    if not _AUTO_SCHEDULE_STATE_FILE.exists():
+        return {"run_at": None, "total_proposed": 0, "proposed": [], "skipped": []}
+    try:
+        return json.loads(_AUTO_SCHEDULE_STATE_FILE.read_text())
+    except Exception:
+        return {"run_at": None, "total_proposed": 0, "proposed": [], "skipped": []}
+
+
 def propose_ab_shadow(
     param: str,
     challenger_value: float,

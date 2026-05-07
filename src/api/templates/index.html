@@ -4009,8 +4009,16 @@
               <div class="mt-2 p-2 rounded" style="background:var(--s2)">
                 <div class="flex items-center justify-between mb-1.5">
                   <div class="text-[9px] font-bold uppercase" style="color:var(--t3)">🔬 A/B Shadow</div>
-                  <button @click="fetchABStatus()" class="btn-s text-[8px]">Refresh</button>
+                  <div class="flex gap-1">
+                    <button @click="autoScheduleExperiments()" class="btn-s text-[8px] bg-indigo-900/40 hover:bg-indigo-700/60" title="Auto-schedule A/B challengers for out-of-band regimes">⚡ Auto-Schedule</button>
+                    <button @click="fetchABStatus()" class="btn-s text-[8px]">Refresh</button>
+                  </div>
                 </div>
+                <template x-if="selfLearn.lastAutoSchedule">
+                  <div class="text-[7px] mb-1.5 px-1 py-0.5 rounded" style="background:var(--s3);color:var(--t3)">
+                    Last auto-schedule: <span class="text-indigo-300 mono" x-text="selfLearn.lastAutoSchedule.total_proposed"></span> proposed · <span x-text="(selfLearn.lastAutoSchedule.run_at||'').slice(0,16).replace('T',' ')"></span>
+                  </div>
+                </template>
                 <template x-if="selfLearn.ab && selfLearn.ab.active && selfLearn.ab.active.length">
                   <div>
                     <div class="text-[8px] mb-1" style="color:var(--t3)">Active challengers: <span class="text-amber-300" x-text="selfLearn.ab.active.join(', ')"></span></div>
@@ -4385,7 +4393,7 @@
       opps:[],oppsSort:'score',
       apiEndpoints:[],
       changelog:[],
-      selfLearn:{status:null,triggering:false,lastResult:'',calibration:null,calibBuckets:null,ab:null,ledger:null},
+      selfLearn:{status:null,triggering:false,lastResult:'',calibration:null,calibBuckets:null,ab:null,ledger:null,lastAutoSchedule:null},
       exec:{metrics:null},
       risk:{summary:null},
       rl:{thompson:null,featureIC:null},
@@ -4951,6 +4959,10 @@
           const rl=await fetch('/api/v7/self-learn/experiment-ledger?limit=50',{headers:{'X-API-Key':window._apiKey||'dev-secret-local'}});
           if(rl.ok)this.selfLearn.ledger=await rl.json();
         }catch(e){console.warn('experiment-ledger fetch failed',e)}
+        try{
+          const rs=await fetch('/api/v7/self-learn/auto-schedule-experiments/status',{headers:{'X-API-Key':window._apiKey||'dev-secret-local'}});
+          if(rs.ok){const sd=await rs.json();if(sd.run_at)this.selfLearn.lastAutoSchedule=sd;}
+        }catch(e){console.warn('auto-schedule status fetch failed',e)}
       },
       async evaluateAB(param){
         try{
@@ -4959,6 +4971,16 @@
           alert(`A/B ${param}: promoted=${d.promoted} — ${d.reason}`);
           await this.fetchABStatus();
         }catch(e){console.warn('ab-evaluate failed',e)}
+      },
+      async autoScheduleExperiments(){
+        try{
+          const r=await fetch('/api/v7/self-learn/auto-schedule-experiments',{method:'POST',headers:{'X-API-Key':window._apiKey||'dev-secret-local'}});
+          if(!r.ok)throw new Error('status '+r.status);
+          const d=await r.json();
+          this.selfLearn.lastAutoSchedule=d;
+          await this.fetchABStatus();
+          alert(`Auto-schedule: ${d.total_proposed} experiment(s) proposed.`);
+        }catch(e){console.warn('auto-schedule failed',e);alert('Auto-schedule failed: '+e.message)}
       },
       async fetchExecMetrics(){
         try{
