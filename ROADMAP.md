@@ -206,27 +206,29 @@ These ideas need more research before committing:
 
 ## 🔜 Next Up (Sprint 97+)
 
-### Fund Lab v3
-- [ ] Live P&L tracking per sleeve (paper positions with entry dates)
-- [ ] Drawdown watermark + recovery tracker on dashboard
-- [ ] FUND_MACRO regime-conditional tilt (risk-on vs risk-off)
-- [ ] Per-pick stop/target levels shown in fund dashboard panel
+### ✅ Sprint 97 — Production Readiness (v9.2.0)
+- [x] GitHub Actions CI: ruff lint + full pytest suite on every push
+- [x] `/healthz` Kubernetes alias + phase9 readiness gate
+- [x] Startup file-seeding: `regime_params.json` + `fund_weights.json`
+- [x] EOD scheduler: step 5 = self-learning cycle (analyze + apply + fund-tune)
+- [x] Paper position tracker (`fund_paper_positions` SQLite table)
+- [x] Fund Lab v3 dashboard panel (4 sleeves, Calmar, RSI, 12-1, weight bars)
+- [x] Self-Learn Ops panel (engine state, regime win-rates, fund weights, audit log)
 
-### Self-Learning v3
-- [ ] Per-regime parameter auto-adjustment (tune regime_params.json from outcomes)
-- [ ] A/B test harness: shadow new params for N days before promoting
-- [ ] Confidence calibration drift alert when Brier score degrades > 5%
-- [ ] Scheduler integration: auto-trigger learning cycle at EOD
+### ✅ Sprint 98 — Adaptive Intelligence (v9.3.0)
+- [x] Per-regime parameter auto-adjustment (`tune_regime_params()` — nightly win-rate nudge)
+- [x] Brier score calibration tracker (`record_prediction_outcome`, `get_calibration_status`)
+- [x] Calibration drift alert: warn if Brier score degrades > 5% from baseline
+- [x] A/B shadow harness (`propose_ab_shadow`, `record_ab_outcome`, `evaluate_ab_promotion`)
+- [x] REST endpoints: `/regime-tune`, `/calibration`, `/calibration/record`, `/ab-status`, `/ab-propose`, `/ab-evaluate`
+- [x] EOD scheduler step 6: `tune_regime_params()` from closed trades
+- [x] Dashboard: Calibration Drift card + A/B Shadow card in Self-Learn Ops panel
 
-### Dashboard
-- [ ] Fund Lab panel: show all 4 sleeves with Calmar, RSI, 12-1 momentum columns
-- [ ] Self-Learn panel in Ops tab: audit log, regime params table, fund weight bars
-- [ ] Regime heatmap upgrade: per-regime win-rate overlay from learning engine
-
-### Infrastructure
-- [ ] GitHub Actions CI: ruff + pytest on every push
-- [ ] Docker multi-stage build: builder → slim runtime image (<300 MB)
-- [ ] Scheduled Docker rebuild on dependency update (Dependabot + workflow)
+### Self-Learning v4 (Sprint 99+)
+- [ ] Multi-signal Brier decomposition (per strategy type)
+- [ ] Reinforcement learning sizing loop (Thompson sampling)
+- [ ] Automatic feature importance decay detection
+- [ ] A/B harness auto-proposal from regime-tune output
 
 ---
 

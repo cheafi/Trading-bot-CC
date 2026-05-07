@@ -1,17 +1,22 @@
 """
-Self-Learn Router — Sprint 96
-==============================
-Exposes the SelfLearningEngine, regime-conditioned params, and fund
-weight auto-tuner over REST.
+Self-Learn Router — Sprint 96 / 98
+====================================
+Exposes the SelfLearningEngine, regime-conditioned params, fund
+weight auto-tuner, Brier calibration tracker, and A/B shadow harness.
 
 Routes:
-  GET  /api/v7/self-learn/status          — engine state + recent audit log
-  GET  /api/v7/self-learn/regime-params   — per-regime parameter table
-  GET  /api/v7/self-learn/fund-weights    — current fund sleeve allocations
-  POST /api/v7/self-learn/trigger         — run one analysis+adjust cycle
-  POST /api/v7/self-learn/fund-tune       — update fund weights from latest metrics
-  POST /api/v7/self-learn/disable         — kill switch
-  POST /api/v7/self-learn/enable          — re-enable
+  GET  /api/v7/self-learn/status           — engine state + recent audit log
+  GET  /api/v7/self-learn/regime-params    — per-regime parameter table
+  GET  /api/v7/self-learn/fund-weights     — current fund sleeve allocations
+  GET  /api/v7/self-learn/calibration      — Brier score + drift alert      (Sprint 98)
+  GET  /api/v7/self-learn/ab-status        — A/B shadow harness state        (Sprint 98)
+  POST /api/v7/self-learn/trigger          — run one analysis+adjust cycle
+  POST /api/v7/self-learn/fund-tune        — update fund weights from latest metrics
+  POST /api/v7/self-learn/regime-tune      — auto-tune per-regime params     (Sprint 98)
+  POST /api/v7/self-learn/ab-propose       — propose a challenger param       (Sprint 98)
+  POST /api/v7/self-learn/ab-evaluate      — evaluate A/B promotion           (Sprint 98)
+  POST /api/v7/self-learn/disable          — kill switch
+  POST /api/v7/self-learn/enable           — re-enable
 """
 
 from __future__ import annotations
@@ -25,11 +30,17 @@ from src.api.deps import sanitize_for_json, verify_api_key
 from src.engines.self_learning import (
     SelfLearningEngine,
     analyze_regime_performance,
+    evaluate_ab_promotion,
+    get_ab_status,
+    get_calibration_status,
     get_params_for_regime,
     load_fund_weights,
     load_regime_params,
+    propose_ab_shadow,
     pull_closed_trades_from_learning_loop,
+    record_prediction_outcome,
     tune_fund_weights,
+    tune_regime_params,
 )
 
 logger = logging.getLogger(__name__)
@@ -219,3 +230,78 @@ async def enable_learning(_: bool = Depends(verify_api_key)) -> Dict[str, Any]:
     """Re-enable auto-tuning."""
     _get_engine().enable()
     return {"status": "enabled"}
+
+
+# ── Regime-param auto-tune  (Sprint 98) ──────────────────────────────────────
+
+
+@router.post("/regime-tune")
+async def regime_tune(
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """
+    Auto-adjust per-regime params based on closed-trade win-rates.
+    Requires ≥15 trades per regime before making changes.
+    """
+    trades = pull_closed_trades_from_learning_loop()
+    if not trades:
+        return {"status": "skipped", "reason": "no closed trades", "changes": {}}
+    changes = tune_regime_params(trades)
+    return sanitize_for_json(
+        {"status": "ok", "trades_analysed": len(trades), "changes": changes}
+    )
+
+
+# ── Calibration drift (Sprint 98) ────────────────────────────────────────────
+
+
+@router.get("/calibration")
+async def calibration_status(
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Brier score + calibration drift alert."""
+    return sanitize_for_json(get_calibration_status())
+
+
+@router.post("/calibration/record")
+async def record_outcome(
+    confidence: float,
+    win: bool,
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Record one (confidence, outcome) pair and update Brier score."""
+    result = record_prediction_outcome(confidence, win)
+    return sanitize_for_json(result)
+
+
+# ── A/B shadow harness (Sprint 98) ───────────────────────────────────────────
+
+
+@router.get("/ab-status")
+async def ab_status(
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Current A/B shadow harness state for all tracked params."""
+    return sanitize_for_json(get_ab_status())
+
+
+@router.post("/ab-propose")
+async def ab_propose(
+    param: str,
+    challenger_value: float,
+    reason: str = "",
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Propose a challenger param value for shadow testing."""
+    result = propose_ab_shadow(param, challenger_value, reason)
+    return sanitize_for_json({"status": "proposed", "challenger": result})
+
+
+@router.post("/ab-evaluate")
+async def ab_evaluate(
+    param: str,
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Evaluate A/B promotion eligibility for a tracked param."""
+    result = evaluate_ab_promotion(param)
+    return sanitize_for_json(result)

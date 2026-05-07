@@ -684,3 +684,358 @@ def pull_closed_trades_from_learning_loop() -> List[Dict[str, Any]]:
     except Exception as e:
         logger.debug("Could not pull trades from LearningLoopPipeline: %s", e)
         return []
+
+
+# ── Per-regime parameter auto-adjuster ──────────────────────────────────────
+
+# How aggressively to tighten/loosen params based on win-rate deviation from 50%
+_REGIME_TUNE_LEARNING_RATE = 0.08  # 8% nudge per cycle
+_REGIME_MIN_SAMPLE = 15  # minimum trades per regime before tuning
+
+# Which params to auto-tune per regime and in which direction
+_REGIME_PARAM_DIRECTION: Dict[str, Dict[str, str]] = {
+    # When win-rate is LOW → tighten (raise threshold, lower size, raise stop)
+    # When win-rate is HIGH → relax (lower threshold, raise size)
+    "ensemble_min_score": {"low_wr": "raise", "high_wr": "lower"},
+    "max_position_pct": {"low_wr": "lower", "high_wr": "raise"},
+    "stop_loss_pct": {"low_wr": "lower", "high_wr": "raise"},
+}
+
+
+def tune_regime_params(
+    trade_outcomes: List[Dict[str, Any]],
+    learning_rate: float = _REGIME_TUNE_LEARNING_RATE,
+    min_sample: int = _REGIME_MIN_SAMPLE,
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Auto-adjust per-regime parameters based on observed win-rates.
+
+    Logic per regime:
+      - win_rate < 0.45 → tighten (raise score threshold, lower position size, tighten stop)
+      - win_rate > 0.60 → relax  (lower score threshold, raise position size)
+      - 0.45–0.60      → no change
+
+    Returns a dict of {regime: {param: {"old": x, "new": y, "reason": "..."}}}
+    """
+    perf = analyze_regime_performance(trade_outcomes)
+    current_all = load_regime_params()
+    changes: Dict[str, Dict[str, Any]] = {}
+
+    for regime, stats in perf.items():
+        sample = stats.get("sample", 0)
+        if sample < min_sample:
+            continue
+
+        win_rate = stats.get("win_rate", 0.5)
+        current = current_all.get(
+            regime, dict(_DEFAULT_REGIME_PARAMS.get("SIDEWAYS", {}))
+        )
+        regime_changes: Dict[str, Any] = {}
+
+        for param, directions in _REGIME_PARAM_DIRECTION.items():
+            rule = TUNABLE_RULES.get(param, {})
+            old_val = current.get(param, rule.get("default", 0.0))
+            step = rule.get("step", 0.005)
+
+            if win_rate < 0.45:
+                # tighten
+                direction = directions["low_wr"]
+            elif win_rate > 0.60:
+                # relax
+                direction = directions["high_wr"]
+            else:
+                continue  # no change needed
+
+            nudge = step * max(1, round(abs(win_rate - 0.50) / step))
+            nudge = min(
+                nudge, old_val * learning_rate
+            )  # cap at learning_rate% of current
+
+            new_val = old_val + nudge if direction == "raise" else old_val - nudge
+            new_val = max(rule.get("min", 0.0), min(rule.get("max", 1.0), new_val))
+            new_val = round(new_val, 4)
+
+            if new_val != old_val:
+                regime_changes[param] = {
+                    "old": old_val,
+                    "new": new_val,
+                    "reason": f"win_rate={win_rate:.0%} (n={sample}) → {direction} {param}",
+                }
+                current[param] = new_val
+
+        if regime_changes:
+            current_all[regime] = current
+            changes[regime] = regime_changes
+
+    if changes:
+        save_regime_params(current_all)
+        logger.info("Regime params auto-tuned for: %s", list(changes.keys()))
+
+    return changes
+
+
+# ── Brier score calibration tracker ─────────────────────────────────────────
+
+_BRIER_FILE = AUDIT_DIR / "brier_scores.json"
+_BRIER_DRIFT_THRESHOLD = 0.05  # alert if Brier score degrades by >5%
+_BRIER_WINDOW = 50  # rolling window of predictions
+
+
+def record_prediction_outcome(
+    confidence: float,
+    actual_win: bool,
+) -> Dict[str, Any]:
+    """
+    Record one (confidence, outcome) pair and compute rolling Brier score.
+
+    Brier score = mean((forecast_prob - actual_outcome)²)
+    Lower is better (0 = perfect, 0.25 = random).
+
+    Returns {"brier_score": float, "window": int, "drift": float, "alert": bool}
+    """
+    data = _load_brier_data()
+    entry = {"conf": round(confidence, 4), "win": int(actual_win)}
+    data["history"].append(entry)
+    # Keep only last _BRIER_WINDOW entries
+    data["history"] = data["history"][-_BRIER_WINDOW:]
+
+    history = data["history"]
+    n = len(history)
+    if n < 5:
+        _save_brier_data(data)
+        return {"brier_score": None, "window": n, "drift": 0.0, "alert": False}
+
+    brier = sum((e["conf"] - e["win"]) ** 2 for e in history) / n
+    brier = round(brier, 4)
+
+    # Detect drift: compare current score vs baseline (first half of window)
+    baseline = data.get("baseline_brier")
+    drift = 0.0
+    alert = False
+    if baseline is None and n >= _BRIER_WINDOW:
+        # Establish baseline once we have a full window
+        data["baseline_brier"] = brier
+        baseline = brier
+    elif baseline is not None:
+        drift = round(brier - baseline, 4)
+        alert = drift > _BRIER_DRIFT_THRESHOLD
+
+    data["latest_brier"] = brier
+    data["latest_n"] = n
+    _save_brier_data(data)
+
+    if alert:
+        logger.warning(
+            "CALIBRATION DRIFT: Brier score %.4f vs baseline %.4f (drift +%.4f > %.4f threshold)",
+            brier,
+            baseline,
+            drift,
+            _BRIER_DRIFT_THRESHOLD,
+        )
+
+    return {
+        "brier_score": brier,
+        "baseline": baseline,
+        "window": n,
+        "drift": drift,
+        "alert": alert,
+    }
+
+
+def get_calibration_status() -> Dict[str, Any]:
+    """Return current Brier score status and drift alert state."""
+    data = _load_brier_data()
+    history = data.get("history", [])
+    n = len(history)
+    brier = data.get("latest_brier")
+    baseline = data.get("baseline_brier")
+    drift = (
+        round((brier - baseline), 4)
+        if (brier is not None and baseline is not None)
+        else 0.0
+    )
+    return {
+        "brier_score": brier,
+        "baseline_brier": baseline,
+        "drift": drift,
+        "alert": drift > _BRIER_DRIFT_THRESHOLD if brier is not None else False,
+        "window": n,
+        "status": (
+            "ok"
+            if (brier is None or drift <= _BRIER_DRIFT_THRESHOLD)
+            else "drift_detected"
+        ),
+    }
+
+
+def _load_brier_data() -> Dict[str, Any]:
+    if not _BRIER_FILE.exists():
+        return {"history": [], "baseline_brier": None, "latest_brier": None}
+    try:
+        with open(_BRIER_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {"history": [], "baseline_brier": None, "latest_brier": None}
+
+
+def _save_brier_data(data: Dict[str, Any]) -> None:
+    try:
+        AUDIT_DIR.mkdir(exist_ok=True)
+        with open(_BRIER_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        logger.debug("Brier data save error: %s", e)
+
+
+# ── A/B shadow parameter harness ─────────────────────────────────────────────
+
+_AB_FILE = AUDIT_DIR / "ab_shadow.json"
+_AB_MIN_DAYS = 3  # minimum days before promoting shadow params
+
+
+def propose_ab_shadow(
+    param: str,
+    challenger_value: float,
+    reason: str = "",
+) -> Dict[str, Any]:
+    """
+    Propose a challenger parameter value for A/B shadow testing.
+
+    The challenger is paper-tracked for _AB_MIN_DAYS days before
+    being eligible for promotion to live params.
+
+    Returns the current A/B state dict.
+    """
+    data = _load_ab_data()
+    now = datetime.now(timezone.utc).isoformat()
+    rule = TUNABLE_RULES.get(param, {})
+    champion = data.get("champion", {}).get(
+        param, rule.get("default", challenger_value)
+    )
+
+    data.setdefault("challenger", {})[param] = {
+        "value": challenger_value,
+        "champion_value": champion,
+        "reason": reason,
+        "proposed_at": now,
+        "days_tracked": 0,
+        "shadow_wins": 0,
+        "shadow_trades": 0,
+        "status": "shadow",
+    }
+    _save_ab_data(data)
+    logger.info(
+        "A/B shadow: proposed %s=%.4f (champion=%.4f) — %s",
+        param,
+        challenger_value,
+        champion,
+        reason,
+    )
+    return data["challenger"][param]
+
+
+def record_ab_outcome(
+    param: str,
+    used_challenger: bool,
+    pnl_pct: float,
+) -> None:
+    """Record one trade outcome for the A/B shadow harness."""
+    data = _load_ab_data()
+    challenger = data.get("challenger", {}).get(param)
+    if challenger is None or challenger.get("status") != "shadow":
+        return
+
+    challenger["shadow_trades"] = challenger.get("shadow_trades", 0) + 1
+    if pnl_pct > 0 and used_challenger:
+        challenger["shadow_wins"] = challenger.get("shadow_wins", 0) + 1
+
+    # Advance day counter (simplified: count every 10 trades as ~1 day)
+    if challenger["shadow_trades"] % 10 == 0:
+        challenger["days_tracked"] = challenger.get("days_tracked", 0) + 1
+
+    data["challenger"][param] = challenger
+    _save_ab_data(data)
+
+
+def evaluate_ab_promotion(param: str) -> Dict[str, Any]:
+    """
+    Evaluate whether to promote the challenger to champion.
+
+    Promotes if:
+      - days_tracked >= _AB_MIN_DAYS
+      - challenger win_rate >= champion proxy win_rate (assumed 0.50)
+
+    Returns {"promoted": bool, "reason": str, "new_value": float|None}
+    """
+    data = _load_ab_data()
+    challenger = data.get("challenger", {}).get(param)
+    if challenger is None:
+        return {"promoted": False, "reason": "no challenger"}
+
+    days = challenger.get("days_tracked", 0)
+    trades = challenger.get("shadow_trades", 0)
+    wins = challenger.get("shadow_wins", 0)
+    win_rate = wins / trades if trades > 0 else 0.0
+
+    if days < _AB_MIN_DAYS:
+        return {"promoted": False, "reason": f"only {days}/{_AB_MIN_DAYS} days tracked"}
+
+    if win_rate >= 0.52:
+        # Promote: write challenger value to regime_params champion
+        challenger["status"] = "promoted"
+        challenger["promoted_at"] = datetime.now(timezone.utc).isoformat()
+        data.setdefault("champion", {})[param] = challenger["value"]
+        data["challenger"][param] = challenger
+        _save_ab_data(data)
+        # Also persist to regime params (default / all regimes)
+        all_params = load_regime_params()
+        for regime_key in all_params:
+            if param in all_params[regime_key]:
+                all_params[regime_key][param] = challenger["value"]
+        save_regime_params(all_params)
+        logger.info(
+            "A/B PROMOTED: %s=%.4f (win_rate=%.0%%, n=%d)",
+            param,
+            challenger["value"],
+            win_rate,
+            trades,
+        )
+        return {
+            "promoted": True,
+            "reason": f"win_rate={win_rate:.0%} >= 52% over {days} days",
+            "new_value": challenger["value"],
+        }
+
+    # Not ready — keep shadowing
+    return {"promoted": False, "reason": f"win_rate={win_rate:.0%} < 52% (n={trades})"}
+
+
+def get_ab_status() -> Dict[str, Any]:
+    """Return current A/B shadow state for all tracked params."""
+    data = _load_ab_data()
+    challengers = data.get("challenger", {})
+    champions = data.get("champion", {})
+    return {
+        "challengers": challengers,
+        "champions": champions,
+        "active": [p for p, v in challengers.items() if v.get("status") == "shadow"],
+    }
+
+
+def _load_ab_data() -> Dict[str, Any]:
+    if not _AB_FILE.exists():
+        return {"challenger": {}, "champion": {}}
+    try:
+        with open(_AB_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {"challenger": {}, "champion": {}}
+
+
+def _save_ab_data(data: Dict[str, Any]) -> None:
+    try:
+        AUDIT_DIR.mkdir(exist_ok=True)
+        with open(_AB_FILE, "w") as f:
+            json.dump(data, f, indent=2, default=str)
+    except Exception as e:
+        logger.debug("A/B data save error: %s", e)

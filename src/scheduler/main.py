@@ -440,6 +440,28 @@ class TradingScheduler:
             except Exception as _sle:
                 logger.warning("EOD self-learning cycle failed (non-fatal): %s", _sle)
 
+            # 6. Per-regime parameter auto-tune (Sprint 98)
+            try:
+                from src.engines.self_learning import (  # noqa: PLC0415
+                    pull_closed_trades_from_learning_loop as _pull,
+                    tune_regime_params,
+                )
+
+                _trades = _pull()
+                if _trades:
+                    regime_changes = tune_regime_params(_trades)
+                    if regime_changes:
+                        logger.info(
+                            "EOD regime-tune: params updated for %s",
+                            list(regime_changes.keys()),
+                        )
+                    else:
+                        logger.info(
+                            "EOD regime-tune: no changes needed (insufficient data or win-rates in range)"
+                        )
+            except Exception as _rte:
+                logger.warning("EOD regime-tune failed (non-fatal): %s", _rte)
+
         except Exception as e:
             logger.error("EOD processing failed: %s", e)
 
