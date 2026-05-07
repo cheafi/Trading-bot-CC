@@ -261,6 +261,22 @@ These ideas need more research before committing:
 - [x] **Dashboard cards** — 🎰 Thompson Sizing card + 📉 Feature IC Decay card in Ops panel
 - [x] **Sprint 103 CI tests** — 15 tests, 15/15 passing
 
+### ✅ Sprint 112 — Auto-Experiment Scheduler (v10.3.0)
+- [x] **`auto_schedule_experiments()`** (`src/engines/self_learning.py`) — scans `analyze_regime_performance()` output; for any regime with `win_rate < 0.45` or `> 0.60` and `sample >= 10`, computes nudge per tunable param and calls `propose_ab_shadow()`; sorted worst-first; skips params already in active shadow; capped at `max_per_run=3`; persists last-run summary to `auto_schedule_state.json`
+- [x] **`get_auto_schedule_status()`** — reads persisted last-run state; returns empty struct when no state file
+- [x] **EOD scheduler step 6b** (`src/scheduler/main.py`) — `auto_schedule_experiments()` called non-fatally after `tune_regime_params()` in `_job_eod_processing()`
+- [x] **REST endpoints** — `POST /api/v7/self-learn/auto-schedule-experiments` (on-demand trigger) + `GET /api/v7/self-learn/auto-schedule-experiments/status` (last run summary)
+- [x] **Dashboard** — ⚡ Auto-Schedule button + last-run badge in A/B Shadow card; `autoScheduleExperiments()` JS function; `fetchABStatus()` also loads auto-schedule status; `selfLearn.lastAutoSchedule` Alpine state
+- [x] **Sprint 112 CI tests** — 12 tests, 12/12 passing (177 total across sprints 100–112)
+
+### ✅ Sprint 111 — Experiment Ledger (v10.2.0)
+- [x] **`_append_ledger()` / `get_experiment_ledger()`** (`src/engines/self_learning.py`) — append-only JSON audit trail of every A/B proposal and outcome; rolling cap of 200 entries; dedup by `experiment_id` (latest status wins); filter by `status` / `param` / `limit`; non-fatal writes
+- [x] **`propose_ab_shadow()` wired** — writes `status=shadow` ledger entry on proposal; `experiment_id` stored in challenger dict for traceability
+- [x] **`evaluate_ab_promotion()` wired** — writes `status=promoted` or `status=discarded` ledger entry with `shadow_win_rate`, `win_rate_delta`, `decided_at`, and `reason_decided`
+- [x] **REST endpoint** — `GET /api/v7/self-learn/experiment-ledger?status=&param=&limit=50`
+- [x] **Dashboard** — collapsible 📋 Experiment History table in A/B Shadow card (param / baseline / challenger / win% / trades / status / date); `selfLearn.ledger` Alpine state; `fetchABStatus()` also fetches ledger
+- [x] **Sprint 111 CI tests** — 12 tests, 12/12 passing (165 total across sprints 100–111)
+
 ### ✅ Sprint 110 — Confidence Calibration Buckets (v10.1.0)
 - [x] **`record_prediction_outcome()` extended** — accepts `forward_return_pct`, `mae_pct`, `regime`; stored in `brier_scores.json` history entries; zero-pollution when defaults used
 - [x] **`get_calibration_buckets()`** — groups outcome history into 50-60/60-70/70-80/80-90/90+ bands; per-bucket: `hit_rate`, `avg_forward_return_pct`, `avg_mae_pct`, `calibrated` status (good/fair/poor), regime breakdown; ECE (Expected Calibration Error) at portfolio level
