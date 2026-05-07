@@ -11947,3 +11947,11 @@ try:
     app.include_router(sizing_router)
 except Exception:
     logger.exception("[Router] Failed to load sizing router")
+
+# Sprint 114 — Opportunity Scanner (Neal-style dual-engine screener)
+try:
+    from src.api.routers.opportunity_scanner import router as opp_scanner_router
+
+    app.include_router(opp_scanner_router)
+except Exception:
+    logger.exception("[Router] Failed to load opportunity_scanner router")

@@ -18,7 +18,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -124,14 +123,18 @@ def test_to_dict_includes_new_fields():
 def test_trust_level_live():
     from src.engines.decision_object import DecisionObject
 
-    obj = DecisionObject.from_pipeline_result(_make_mock_result(synthetic=False), _make_regime(False))
+    obj = DecisionObject.from_pipeline_result(
+        _make_mock_result(synthetic=False), _make_regime(False)
+    )
     assert obj.trust_level == "LIVE"
 
 
 def test_trust_level_synthetic():
     from src.engines.decision_object import DecisionObject
 
-    obj = DecisionObject.from_pipeline_result(_make_mock_result(synthetic=True), _make_regime(True))
+    obj = DecisionObject.from_pipeline_result(
+        _make_mock_result(synthetic=True), _make_regime(True)
+    )
     assert obj.trust_level == "SYNTHETIC"
 
 
@@ -191,7 +194,11 @@ def test_journal_gate_blocked():
     from src.engines.decision_object import DecisionObject
     from src.engines.decision_journal import JournalEntry
 
-    obj = DecisionObject(ticker="BADTICK", portfolio_fit="BLOCKED", portfolio_gate_reason="Macro risk-off")
+    obj = DecisionObject(
+        ticker="BADTICK",
+        portfolio_fit="BLOCKED",
+        portfolio_gate_reason="Macro risk-off",
+    )
     entry = JournalEntry.from_decision_object(obj, price=0.0)
     assert entry.gate_allowed is False
     assert "Macro risk-off" in entry.gate_blocks

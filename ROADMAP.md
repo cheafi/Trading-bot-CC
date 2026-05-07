@@ -254,6 +254,7 @@ These ideas need more research before committing:
 - [x] **Sprint 102 CI tests** — 12 tests, 12/12 passing
 
 ### ✅ Sprint 103 — Self-Learning v4 Phase 2 (v9.6.0)
+
 - [x] **ThompsonSizingEngine** (`src/engines/thompson_sizing.py`) — Beta(α,β) per `(strategy,regime)` arm; `sample()` → sizing multiplier [0.25–2.0×]; `update(win)` nudges α/β; persist to `models/thompson_arms.json`
 - [x] **FeatureICDecayDetector** (`src/engines/feature_ic.py`) — rolling Pearson IC per feature; decay alert when IC drops >0.10 from peak; persist to `models/feature_ic.json`
 - [x] **5 new REST endpoints** — `/thompson`, `/thompson/sample`, `/thompson/update`, `/feature-ic`, `/feature-ic/record`
@@ -262,6 +263,7 @@ These ideas need more research before committing:
 - [x] **Sprint 103 CI tests** — 15 tests, 15/15 passing
 
 ### ✅ Sprint 113 — Closed-Trade Auto-Feedback Pipeline (v10.4.0)
+
 - [x] **`process_closed_trade(trade)`** (`src/engines/self_learning.py`) — unified 4-channel feedback: (1) Brier `record_prediction_outcome()`, (2) A/B shadow `record_ab_outcome()` for every active challenger, (3) Thompson RL `update()`, (4) Feature IC `record_feature_outcomes()`; win detection from `pnl_pct > 0` or `outcome="win"`; all channels non-fatal
 - [x] **`process_closed_trades_batch(trades)`** — batch wrapper; returns aggregate channel counts; used by EOD step 7
 - [x] **`get_feedback_stats()`** — reads `feedback_stats.json`; returns `total_processed`, `last_processed_at`, `brier_alerts`, `ab_params_active`
@@ -270,7 +272,16 @@ These ideas need more research before committing:
 - [x] **Dashboard 🔄 Feedback Pipeline card** — trades processed count, Brier alert count, active shadow params count, last-run date; auto-loaded on Ops tab
 - [x] **Sprint 113 CI tests** — 12 tests, 12/12 passing (189 total across sprints 100–113)
 
+### ✅ Sprint 114 — Neal-Style Opportunity Scanner (v10.5.0)
+
+- [x] **Dual-engine opportunity scanner** (`src/engines/opportunity_scanner.py`) — Neal-style Bull/Weak engines with robust median/MAD + sigmoid normalisation; Bull = RS + Trend + Breakout + Compression + Volume + Stage, Weak = Trend + Liquidity + Reversal + Extension + Capitulation; returns ranked `OpportunityCandidate` objects with 2×ATR stop-loss / activation and tag stack (`🏆`, `⚡`, `👀`)
+- [x] **Opportunity Scanner REST router** (`src/api/routers/opportunity_scanner.py`) — `GET /api/v7/opportunity-scanner`, `GET /status`, `POST /invalidate`; 4-hour cache with disk persistence and cache keys scoped by regime/top-N/min filters
+- [x] **Dashboard Opportunity tab** (`src/api/templates/index.html`) — new `🎯 Oppty` surface with filter funnel, engine banner, regime/top-N/tag controls, ranked table, expandable detail rows, and on-demand fetch wiring in `switchTab()` / `fetchOppScanner()`
+- [x] **Router registration** (`src/api/main.py`) — Opportunity Scanner router mounted under `/api/v7`
+- [x] **Sprint 114 targeted tests added** (`tests/sprints/test_sprint114.py`) — 12 tests covering score helpers, dataclass serialization, scanner execution with mocked market data, API routes, and cache-key separation by filter set
+
 ### ✅ Sprint 112 — Auto-Experiment Scheduler (v10.3.0)
+
 - [x] **`auto_schedule_experiments()`** (`src/engines/self_learning.py`) — scans `analyze_regime_performance()` output; for any regime with `win_rate < 0.45` or `> 0.60` and `sample >= 10`, computes nudge per tunable param and calls `propose_ab_shadow()`; sorted worst-first; skips params already in active shadow; capped at `max_per_run=3`; persists last-run summary to `auto_schedule_state.json`
 - [x] **`get_auto_schedule_status()`** — reads persisted last-run state; returns empty struct when no state file
 - [x] **EOD scheduler step 6b** (`src/scheduler/main.py`) — `auto_schedule_experiments()` called non-fatally after `tune_regime_params()` in `_job_eod_processing()`
@@ -279,6 +290,7 @@ These ideas need more research before committing:
 - [x] **Sprint 112 CI tests** — 12 tests, 12/12 passing (177 total across sprints 100–112)
 
 ### ✅ Sprint 111 — Experiment Ledger (v10.2.0)
+
 - [x] **`_append_ledger()` / `get_experiment_ledger()`** (`src/engines/self_learning.py`) — append-only JSON audit trail of every A/B proposal and outcome; rolling cap of 200 entries; dedup by `experiment_id` (latest status wins); filter by `status` / `param` / `limit`; non-fatal writes
 - [x] **`propose_ab_shadow()` wired** — writes `status=shadow` ledger entry on proposal; `experiment_id` stored in challenger dict for traceability
 - [x] **`evaluate_ab_promotion()` wired** — writes `status=promoted` or `status=discarded` ledger entry with `shadow_win_rate`, `win_rate_delta`, `decided_at`, and `reason_decided`
@@ -287,6 +299,7 @@ These ideas need more research before committing:
 - [x] **Sprint 111 CI tests** — 12 tests, 12/12 passing (165 total across sprints 100–111)
 
 ### ✅ Sprint 110 — Confidence Calibration Buckets (v10.1.0)
+
 - [x] **`record_prediction_outcome()` extended** — accepts `forward_return_pct`, `mae_pct`, `regime`; stored in `brier_scores.json` history entries; zero-pollution when defaults used
 - [x] **`get_calibration_buckets()`** — groups outcome history into 50-60/60-70/70-80/80-90/90+ bands; per-bucket: `hit_rate`, `avg_forward_return_pct`, `avg_mae_pct`, `calibrated` status (good/fair/poor), regime breakdown; ECE (Expected Calibration Error) at portfolio level
 - [x] **REST endpoint** — `GET /api/v7/self-learn/calibration/buckets`; `POST /calibration/record` extended with new query params
@@ -296,12 +309,14 @@ These ideas need more research before committing:
 - [x] **Sprint 110 CI tests** — 18 tests, 18/18 passing (153 total across sprints 100–110)
 
 ### ✅ Sprint 109 — Unified Sizing Advisor (v10.0.0)
+
 - [x] **`SizingAdvisor`** (`src/engines/sizing_advisor.py`) — combines `PositionSizer` (Kelly/fixed-risk base), `ThompsonSizingEngine` (RL multiplier), `apply_decay_penalty` (staleness adj ×0.5–×1.0), portfolio heat gate; full `AdvisedSize` dataclass with `audit_trail`
 - [x] **REST router** (`src/api/routers/sizing.py`) — `GET /api/v7/size/advise`, `POST /api/v7/size/advise/batch` (max 20), `GET /api/v7/size/params`; registered in `main.py`
 - [x] **Dashboard suggested-size pill** — 📐 inline 1R size estimate in ranked-signal meta row when entry+stop available
 - [x] **Sprint 109 CI tests** — 20 tests, 20/20 passing (135 total across sprints 100–109)
 
 ### ✅ Sprint 108 — Signal Confidence Decay Penalty (v9.9.0)
+
 - [x] **`apply_decay_penalty()`** — exponential half-life decay per setup grade (A+=48h … D=4h); penalty capped at 20pts; infers age from `data_freshness_minutes` if `age_hours` not passed
 - [x] **`get_stale_signals()`** — filter helper returns signals older than threshold (default 8h), sorted desc by age; used by REST layer
 - [x] **`MultiLayerRanker.rank_batch()` wired** — stale signals lose up to -10pts on both action + conviction scores; logs at DEBUG when `decay_frac > 0.25`
@@ -310,6 +325,7 @@ These ideas need more research before committing:
 - [x] **Sprint 108 CI tests** — 14 tests, 14/14 passing (115 total across sprints 100–108)
 
 ### ✅ Sprint 107 — Fund Attribution Engine (v9.8.0)
+
 - [x] **`_portfolio_returns()` refactored** — returns `(agg_series, per_pick_dict[ticker→series])` instead of bare `pd.Series`; no backward-compat break (only called in `run()`)
 - [x] **`FundLabService._attribution()`** static method — single-period Brinson-style: `contribution = w × (r_pick − r_bm)`; outputs contributors, detractors, sector breakdown, cash drag, drawdown source, recent wins/losses, top-factor correlation
 - [x] **ETF sector supplement** — 23 common ETF tickers (TLT, GLD, BIL, USO, EMB, HYG, UUP, VNQ, etc.) mapped to named sectors without extra I/O
@@ -318,6 +334,7 @@ These ideas need more research before committing:
 - [x] **Sprint 107 CI tests** — 15 tests, 15/15 passing (101 total across sprints 100–107)
 
 ### ✅ Sprint 106 — AlertService v2 (v9.7.0)
+
 - [x] **AlertService** (`src/services/alert_service.py`) — 6 typed event dispatchers: `on_ic_decay_alert`, `on_thompson_arm_degrade`, `on_fund_rebalance`, `on_regime_change`, `on_drawdown_breach`, `on_circuit_breaker`; persist last 50 events to `models/alert_log.json`; Discord push via `DiscordInteractiveBot` (non-fatal if unconfigured)
 - [x] **EOD scheduler step 8** — `check_and_push_ic_decay()` + `check_and_push_thompson_degrade()` wired after step 7 (Thompson+IC); non-fatal
 - [x] **FUND_MACRO rebalance alert** — `_build_sleeve()` calls `on_fund_rebalance()` when regime tilt changes candidates; tracks previous state in `models/fund_tilt_state.json`
@@ -326,6 +343,7 @@ These ideas need more research before committing:
 - [x] **Sprint 106 CI tests** — 17 tests, 17/17 passing (86 total across sprints 100–106)
 
 ### Self-Learning v4 — COMPLETE ✅
+
 - [x] Multi-signal Brier decomposition (per strategy type)
 - [x] Reinforcement learning sizing loop (Thompson sampling)
 - [x] Automatic feature importance decay detection

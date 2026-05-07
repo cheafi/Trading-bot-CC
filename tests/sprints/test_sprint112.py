@@ -23,7 +23,6 @@ from typing import List, Dict, Any
 
 import pytest
 
-
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 
@@ -33,18 +32,38 @@ def _patch_auto(tmp_path: Path, monkeypatch):
 
     monkeypatch.setattr(sl, "_LEDGER_FILE", tmp_path / "experiment_ledger.json")
     monkeypatch.setattr(sl, "_AB_FILE", tmp_path / "ab_shadow.json")
-    monkeypatch.setattr(sl, "_AUTO_SCHEDULE_STATE_FILE", tmp_path / "auto_schedule_state.json")
+    monkeypatch.setattr(
+        sl, "_AUTO_SCHEDULE_STATE_FILE", tmp_path / "auto_schedule_state.json"
+    )
     monkeypatch.setattr(sl, "_REGIME_PARAMS_FILE", tmp_path / "regime_params.json")
     monkeypatch.setattr(sl, "AUDIT_DIR", tmp_path)
-    monkeypatch.setattr(sl, "load_regime_params", lambda: {
-        "BULL": {"ensemble_min_score": 0.33, "stop_loss_pct": 0.03, "max_position_pct": 0.06},
-        "BEAR": {"ensemble_min_score": 0.42, "stop_loss_pct": 0.025, "max_position_pct": 0.035},
-        "SIDEWAYS": {"ensemble_min_score": 0.38, "stop_loss_pct": 0.03, "max_position_pct": 0.05},
-    })
+    monkeypatch.setattr(
+        sl,
+        "load_regime_params",
+        lambda: {
+            "BULL": {
+                "ensemble_min_score": 0.33,
+                "stop_loss_pct": 0.03,
+                "max_position_pct": 0.06,
+            },
+            "BEAR": {
+                "ensemble_min_score": 0.42,
+                "stop_loss_pct": 0.025,
+                "max_position_pct": 0.035,
+            },
+            "SIDEWAYS": {
+                "ensemble_min_score": 0.38,
+                "stop_loss_pct": 0.03,
+                "max_position_pct": 0.05,
+            },
+        },
+    )
     monkeypatch.setattr(sl, "save_regime_params", lambda x: None)
 
 
-def _outcomes_with_win_rate(regime: str, n: int, win_rate: float) -> List[Dict[str, Any]]:
+def _outcomes_with_win_rate(
+    regime: str, n: int, win_rate: float
+) -> List[Dict[str, Any]]:
     wins = int(n * win_rate)
     trades = [{"regime": regime, "pnl_pct": 1.0} for _ in range(wins)]
     trades += [{"regime": regime, "pnl_pct": -1.0} for _ in range(n - wins)]
@@ -99,19 +118,25 @@ def test_auto_schedule_skips_active_shadow(tmp_path, monkeypatch):
 
     # Pre-seed ab_shadow with ensemble_min_score already active
     ab_file = tmp_path / "ab_shadow.json"
-    ab_file.write_text(json.dumps({
-        "challenger": {
-            "ensemble_min_score": {"value": 0.35, "status": "shadow"},
-            "max_position_pct": {"value": 0.05, "status": "shadow"},
-            "stop_loss_pct": {"value": 0.025, "status": "shadow"},
-        },
-        "champion": {},
-    }))
+    ab_file.write_text(
+        json.dumps(
+            {
+                "challenger": {
+                    "ensemble_min_score": {"value": 0.35, "status": "shadow"},
+                    "max_position_pct": {"value": 0.05, "status": "shadow"},
+                    "stop_loss_pct": {"value": 0.025, "status": "shadow"},
+                },
+                "champion": {},
+            }
+        )
+    )
 
     trades = _outcomes_with_win_rate("BULL", 20, 0.30)
     result = auto_schedule_experiments(trades)
     assert result["total_proposed"] == 0
-    assert any("already in active shadow" in s.get("reason", "") for s in result["skipped"])
+    assert any(
+        "already in active shadow" in s.get("reason", "") for s in result["skipped"]
+    )
 
 
 # ── 5. max_per_run cap ────────────────────────────────────────────────────────
@@ -122,9 +147,9 @@ def test_auto_schedule_respects_max_per_run(tmp_path, monkeypatch):
     from src.engines.self_learning import auto_schedule_experiments
 
     trades = (
-        _outcomes_with_win_rate("BULL", 20, 0.30) +
-        _outcomes_with_win_rate("BEAR", 20, 0.75) +
-        _outcomes_with_win_rate("SIDEWAYS", 20, 0.20)
+        _outcomes_with_win_rate("BULL", 20, 0.30)
+        + _outcomes_with_win_rate("BEAR", 20, 0.75)
+        + _outcomes_with_win_rate("SIDEWAYS", 20, 0.20)
     )
     result = auto_schedule_experiments(trades, max_per_run=2)
     assert result["total_proposed"] <= 2
@@ -150,9 +175,8 @@ def test_auto_schedule_worst_first(tmp_path, monkeypatch):
     from src.engines.self_learning import auto_schedule_experiments
 
     # SIDEWAYS at 0.20 (far from 0.50) should be proposed before BULL at 0.43
-    trades = (
-        _outcomes_with_win_rate("SIDEWAYS", 20, 0.20) +
-        _outcomes_with_win_rate("BULL", 20, 0.43)
+    trades = _outcomes_with_win_rate("SIDEWAYS", 20, 0.20) + _outcomes_with_win_rate(
+        "BULL", 20, 0.43
     )
     result = auto_schedule_experiments(trades, max_per_run=1)
     assert result["total_proposed"] == 1
@@ -192,7 +216,10 @@ def test_get_auto_schedule_status_empty(tmp_path, monkeypatch):
 
 def test_get_auto_schedule_status_reads_state(tmp_path, monkeypatch):
     _patch_auto(tmp_path, monkeypatch)
-    from src.engines.self_learning import auto_schedule_experiments, get_auto_schedule_status
+    from src.engines.self_learning import (
+        auto_schedule_experiments,
+        get_auto_schedule_status,
+    )
 
     trades = _outcomes_with_win_rate("BEAR", 20, 0.75)
     auto_schedule_experiments(trades)
@@ -206,9 +233,13 @@ def test_get_auto_schedule_status_reads_state(tmp_path, monkeypatch):
 def test_rest_auto_schedule_post_200(tmp_path, monkeypatch):
     _patch_auto(tmp_path, monkeypatch)
     import src.engines.self_learning as sl
+
     monkeypatch.setenv("API_KEY", "test-key-112")
-    monkeypatch.setattr(sl, "pull_closed_trades_from_learning_loop",
-                        lambda: _outcomes_with_win_rate("BULL", 20, 0.30))
+    monkeypatch.setattr(
+        sl,
+        "pull_closed_trades_from_learning_loop",
+        lambda: _outcomes_with_win_rate("BULL", 20, 0.30),
+    )
 
     from fastapi import FastAPI
     from fastapi.testclient import TestClient

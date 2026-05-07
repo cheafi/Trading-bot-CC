@@ -22,7 +22,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -120,7 +119,9 @@ def test_strategy_brier_arithmetic(tmp_path):
     for _ in range(5):
         sl.record_prediction_outcome(1.0, True, strategy="PERFECT")
     status = sl.get_calibration_status()
-    assert status["by_strategy"]["PERFECT"]["brier_score"] == pytest.approx(0.0, abs=1e-4)
+    assert status["by_strategy"]["PERFECT"]["brier_score"] == pytest.approx(
+        0.0, abs=1e-4
+    )
 
 
 # ── 6. MTF pre-filter drops signals below floor ──────────────────────────────
@@ -197,26 +198,28 @@ def test_ab_auto_propose_on_large_shift(tmp_path):
     sl._AB_FILE = ab_file
 
     # Build a trade outcome set that triggers large shift (win_rate <0.45 on BULL)
-    trades = [
-        {"regime": "BULL", "outcome": "loss", "score": 5.0}
-        for _ in range(10)
-    ]
+    trades = [{"regime": "BULL", "outcome": "loss", "score": 5.0} for _ in range(10)]
 
     proposed_params = []
 
     original_propose = sl.propose_ab_shadow
+
     def mock_propose(param, value, reason=""):
         proposed_params.append(param)
         return {"param": param, "challenger_value": value}
 
     with patch.object(sl, "propose_ab_shadow", side_effect=mock_propose):
-        with patch.object(sl, "load_regime_params", return_value={
-            "BULL": {
-                "ensemble_min_score": 5.0,
-                "stop_loss_pct": 0.08,
-                "max_position_pct": 0.02,
-            }
-        }):
+        with patch.object(
+            sl,
+            "load_regime_params",
+            return_value={
+                "BULL": {
+                    "ensemble_min_score": 5.0,
+                    "stop_loss_pct": 0.08,
+                    "max_position_pct": 0.02,
+                }
+            },
+        ):
             with patch.object(sl, "save_regime_params"):
                 changes = sl.tune_regime_params(trades, min_sample=5)
 

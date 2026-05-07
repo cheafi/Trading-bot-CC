@@ -977,6 +977,174 @@
     </main>
 
     <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- SURFACE: OPPORTUNITY SCANNER (Sprint 114)              -->
+    <!-- Neal-style dual-engine ranked screener                 -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <main x-show="tab==='opportunity'" class="fade">
+      <div class="trust-strip">
+        <span style="color:var(--amber)">● OPPORTUNITY SCANNER</span>
+        <span x-text="oppScanner.data?oppScanner.data.candidates_ranked+' ranked / '+oppScanner.data.candidates_raw+' raw':'—'"></span>
+        <span x-text="oppScanner.data?'Engine: '+oppScanner.data.engine.toUpperCase()+' | Regime: '+oppScanner.data.regime:'Dual-engine screener'"></span>
+      </div>
+      <div style="padding:8px 12px">
+
+        <!-- Controls row -->
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+          <div class="flex items-center gap-1">
+            <span class="text-[9px]" style="color:var(--t3)">Regime:</span>
+            <select x-model="oppScanner.regime" class="text-[9px] rounded px-1 py-0.5" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)" @change="fetchOppScanner(false)">
+              <option>BULL</option><option>BEAR</option><option>SIDEWAYS</option><option>CHOPPY</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-1">
+            <span class="text-[9px]" style="color:var(--t3)">Top N:</span>
+            <select x-model.number="oppScanner.topN" class="text-[9px] rounded px-1 py-0.5" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)">
+              <option :value="25">25</option><option :value="50">50</option><option :value="100">100</option><option :value="150">150</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-1">
+            <span class="text-[9px]" style="color:var(--t3)">Tag:</span>
+            <select x-model="oppScanner.tagFilter" class="text-[9px] rounded px-1 py-0.5" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)">
+              <option value="">All</option><option value="leader">🏆 Leader</option><option value="actionable">⚡ Actionable</option><option value="watch">👀 Watch</option>
+            </select>
+          </div>
+          <button @click="fetchOppScanner(false)" class="btn-p text-[9px]" :disabled="oppScanner.loading" x-text="oppScanner.loading?'Scanning…':'▶ Run Scanner'"></button>
+          <button @click="fetchOppScanner(true)" class="btn-s text-[9px]" title="Force refresh (bypass cache)">↺ Refresh</button>
+          <template x-if="oppScanner.data">
+            <span class="text-[8px] mono" style="color:var(--t3)" x-text="oppScanner.data.cached?'📦 cached':'🔴 live'"></span>
+          </template>
+        </div>
+
+        <!-- Filter Funnel -->
+        <template x-if="oppScanner.data">
+          <div class="grid grid-cols-2 gap-2 mb-3">
+            <div class="card card-p" style="border-left:3px solid var(--amber)">
+              <div class="text-[9px] font-bold mb-1.5" style="color:var(--amber)">🔽 Filter Funnel</div>
+              <div class="space-y-0.5">
+                <div class="flex justify-between text-[8px]"><span style="color:var(--t3)">Initial Universe</span><span class="mono text-white" x-text="oppScanner.data.filter_funnel.initial_universe"></span></div>
+                <div class="flex justify-between text-[8px]"><span style="color:var(--t3)">Passed Initial Filters</span><span class="mono text-white" x-text="oppScanner.data.filter_funnel.passed_initial_filters"></span></div>
+                <div class="flex justify-between text-[8px]"><span style="color:var(--t3)">Passed RS Filter</span><span class="mono text-green-400" x-text="oppScanner.data.filter_funnel.passed_rs_filter"></span></div>
+                <div class="flex justify-between text-[8px]"><span style="color:var(--t3)">Passed Pattern Filter</span><span class="mono text-blue-400" x-text="oppScanner.data.filter_funnel.passed_pattern_filter"></span></div>
+                <div class="flex justify-between text-[8px] font-bold"><span style="color:var(--t3)">Final Candidates</span><span class="mono text-amber-300" x-text="oppScanner.data.filter_funnel.final_candidates"></span></div>
+              </div>
+            </div>
+            <div class="card card-p">
+              <div class="text-[9px] font-bold mb-1.5" style="color:var(--t3)">⚡ Active Engine</div>
+              <div class="flex gap-2 mb-1">
+                <div class="px-2 py-1 rounded text-[8px] font-bold" :class="oppScanner.data.engine==='bull'?'bg-green-900 text-green-300':''" style="border:1px solid var(--bd)">BULL</div>
+                <div class="px-2 py-1 rounded text-[8px] font-bold" :class="oppScanner.data.engine==='weak'?'bg-red-900 text-red-300':''" style="border:1px solid var(--bd)">WEAK</div>
+              </div>
+              <template x-if="oppScanner.data.engine==='bull'">
+                <div class="text-[7px]" style="color:var(--t3)">Leadership = 0.60×RS + 0.40×Trend<br>Actionability = 0.40×Breakout + 0.25×Compression + 0.20×Volume + 0.15×Stage<br>Score = 100 × (0.55×Act + 0.45×Lead)</div>
+              </template>
+              <template x-if="oppScanner.data.engine==='weak'">
+                <div class="text-[7px]" style="color:var(--t3)">Leadership = 0.70×Trend + 0.30×Liquidity<br>Actionability = 0.45×Reversal + 0.35×Extension + 0.20×Capitulation<br>Score = 100 × (0.60×Act + 0.40×Lead)</div>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- Loading -->
+        <template x-if="oppScanner.loading">
+          <div class="card card-p text-center py-8">
+            <div class="text-[11px]" style="color:var(--t3)">⏳ Scanning universe… this may take 30–60 seconds on first run.</div>
+          </div>
+        </template>
+
+        <!-- Ranked table -->
+        <template x-if="!oppScanner.loading && oppScanner.data && oppScanner.data.candidates && oppScanner.data.candidates.length">
+          <div class="card" style="padding:0;overflow:hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-[8px]" style="border-collapse:collapse">
+                <thead>
+                  <tr style="background:var(--s2);color:var(--t3);border-bottom:1px solid var(--bd)">
+                    <th class="text-right px-2 py-1.5 w-8">#</th>
+                    <th class="text-left px-2 py-1.5">Symbol</th>
+                    <th class="text-center px-1 py-1.5">Engine</th>
+                    <th class="text-right px-2 py-1.5">Score</th>
+                    <th class="text-center px-1 py-1.5">Tags</th>
+                    <th class="text-right px-2 py-1.5">Close</th>
+                    <th class="text-right px-2 py-1.5">SL (2×ATR)</th>
+                    <th class="text-right px-2 py-1.5">Activ (2×ATR)</th>
+                    <th class="text-right px-2 py-1.5">RSI</th>
+                    <th class="text-right px-2 py-1.5">Vol×</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="c in oppScanner.data.candidates.filter(c=>{
+                    if(!oppScanner.tagFilter) return true;
+                    if(oppScanner.tagFilter==='leader') return c.is_leader;
+                    if(oppScanner.tagFilter==='actionable') return c.is_actionable;
+                    if(oppScanner.tagFilter==='watch') return c.is_watch;
+                    return true;
+                  })" :key="c.ticker">
+                    <tr @click="oppScanner.selected=oppScanner.selected===c.ticker?null:c.ticker"
+                        class="cursor-pointer hover:bg-white/5"
+                        :class="oppScanner.selected===c.ticker?'bg-white/10':''"
+                        style="border-bottom:1px solid var(--bd)">
+                      <td class="mono text-right px-2 py-1" style="color:var(--t3)" x-text="c.rank"></td>
+                      <td class="px-2 py-1 font-bold text-white" x-text="c.ticker"></td>
+                      <td class="text-center px-1 py-1">
+                        <span class="pill text-[7px]" :class="c.engine==='bull'?'text-green-400 border-green-800':'text-red-400 border-red-800'" style="border:1px solid;padding:1px 4px;border-radius:3px" x-text="c.engine"></span>
+                      </td>
+                      <td class="mono text-right px-2 py-1 font-bold" :class="c.score>=75?'text-green-400':c.score>=60?'text-amber-300':'text-white'" x-text="c.score.toFixed(2)"></td>
+                      <td class="text-center px-1 py-1" x-text="c.tags.join(' ')"></td>
+                      <td class="mono text-right px-2 py-1 text-white" x-text="'$'+c.close.toFixed(2)"></td>
+                      <td class="mono text-right px-2 py-1 text-red-400" x-text="'$'+c.stop_loss.toFixed(2)"></td>
+                      <td class="mono text-right px-2 py-1 text-green-400" x-text="'$'+c.activation.toFixed(2)"></td>
+                      <td class="mono text-right px-2 py-1" :class="c.rsi14>70?'text-red-400':c.rsi14<35?'text-blue-400':'text-white'" x-text="c.rsi14.toFixed(0)"></td>
+                      <td class="mono text-right px-2 py-1" :class="c.volume_ratio>1.5?'text-amber-300':''" style="color:var(--t3)" x-text="c.volume_ratio.toFixed(1)+'×'"></td>
+                    </tr>
+                    <!-- Expanded detail row -->
+                    <template x-if="oppScanner.selected===c.ticker">
+                      <tr style="background:var(--s2)">
+                        <td colspan="10" class="px-3 py-2">
+                          <div class="grid grid-cols-4 gap-2">
+                            <div><div class="text-[7px]" style="color:var(--t3)">Leadership</div><div class="mono text-[10px] font-bold text-white" x-text="c.leadership_score.toFixed(1)"></div></div>
+                            <div><div class="text-[7px]" style="color:var(--t3)">Actionability</div><div class="mono text-[10px] font-bold text-amber-300" x-text="c.actionability_score.toFixed(1)"></div></div>
+                            <div><div class="text-[7px]" style="color:var(--t3)">ATR14</div><div class="mono text-[9px] text-white" x-text="'$'+c.atr14.toFixed(2)"></div></div>
+                            <div><div class="text-[7px]" style="color:var(--t3)">RS Score</div><div class="mono text-[9px]" :class="c.rs_score>=0?'text-green-400':'text-red-400'" x-text="(c.rs_score*100).toFixed(1)+'%'"></div></div>
+                            <div><div class="text-[7px]" style="color:var(--t3)">Above 50 SMA</div><div class="text-[9px]" :class="c.above_50sma?'text-green-400':'text-red-400'" x-text="c.above_50sma?'✓':'✗'"></div></div>
+                            <div><div class="text-[7px]" style="color:var(--t3)">Above 200 SMA</div><div class="text-[9px]" :class="c.above_200sma?'text-green-400':'text-red-400'" x-text="c.above_200sma?'✓':'✗'"></div></div>
+                            <div><div class="text-[7px]" style="color:var(--t3)">Stop Risk</div><div class="mono text-[9px] text-red-400" x-text="c.close>0?((c.close-c.stop_loss)/c.close*100).toFixed(1)+'%':'—'"></div></div>
+                            <div><div class="text-[7px]" style="color:var(--t3)">R:R (SL→Activ)</div><div class="mono text-[9px] text-green-400" x-text="(c.activation-c.close)>0&&(c.close-c.stop_loss)>0?((c.activation-c.close)/(c.close-c.stop_loss)).toFixed(1)+'R':'—'"></div></div>
+                          </div>
+                        </td>
+                      </tr>
+                    </template>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </template>
+
+        <!-- Empty state -->
+        <template x-if="!oppScanner.loading && (!oppScanner.data || !oppScanner.data.candidates || !oppScanner.data.candidates.length)">
+          <div class="card card-p text-center py-6">
+            <div class="text-[13px] mb-1">🎯</div>
+            <div class="text-[11px] font-bold text-white mb-1">Opportunity Scanner</div>
+            <div class="text-[9px]" style="color:var(--t3)">Neal-style dual-engine screener · 500+ tickers · ranked by Leadership + Actionability</div>
+            <button @click="fetchOppScanner(false)" class="btn-p mt-3 text-[10px]">▶ Run Scanner</button>
+          </div>
+        </template>
+
+        <!-- Tag legend -->
+        <template x-if="oppScanner.data">
+          <div class="card card-p mt-2">
+            <div class="text-[9px] font-bold mb-1" style="color:var(--t3)">Tag Definitions</div>
+            <div class="grid grid-cols-3 gap-1 text-[8px]">
+              <div><span class="text-amber-300">🏆 Leader</span><span style="color:var(--t3)"> — leadership_score ≥ 90</span></div>
+              <div><span class="text-green-400">⚡ Actionable</span><span style="color:var(--t3)"> — actionability_score ≥ 58</span></div>
+              <div><span class="text-blue-400">👀 Watch</span><span style="color:var(--t3)"> — actionability_score 50–58</span></div>
+            </div>
+          </div>
+        </template>
+
+      </div>
+    </main>
+
     <!-- SURFACE: REJECTIONS / NO-TRADE                         -->
     <!-- ═══════════════════════════════════════════════════════ -->
     <main x-show="tab==='notrade'" class="fade">
@@ -4379,6 +4547,7 @@
         <a href="#" @click.prevent="switchTab('today')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='today'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🎯</span>Overview</a>
         <a href="#" @click.prevent="switchTab('signals')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='signals'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📊</span>Ranked</a>
         <a href="#" @click.prevent="switchTab('scanners')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='scanners'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🔬</span>Scan</a>
+        <a href="#" @click.prevent="switchTab('opportunity')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='opportunity'?'color:var(--amber)':'color:var(--t3)'"><span style="font-size:16px">🎯</span>Oppty</a>
         <a href="#" @click.prevent="switchTab('notrade')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='notrade'?'color:var(--red)':'color:var(--t3)'"><span style="font-size:16px">🚫</span>Reject</a>
         <a href="#" @click.prevent="switchTab('dossier')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='dossier'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🔍</span>Dossier</a>
         <a href="#" @click.prevent="switchTab('ops')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='ops'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">⚙️</span>Ops</a>
@@ -4437,6 +4606,7 @@
       rl:{thompson:null,featureIC:null},
       notifyLog:{events:[],discord_configured:false,loading:false},
       scannerHub:{loading:false,data:null,category:null},
+      oppScanner:{loading:false,data:null,regime:'BULL',topN:50,selected:null,tagFilter:''},
       rankedOpps:{loading:false,rows:[],actionFilter:'',sectorFilter:''},
       rsData:{rankings:[],sector_rs:[],breakouts:[],breakdowns:[]},
       rsFilter:{sector:'',cap:''},
@@ -4482,7 +4652,7 @@
       toggleStar(ticker){this.ccStarred[ticker]=!this.ccStarred[ticker];localStorage.setItem('ccStarred',JSON.stringify(this.ccStarred))},
       toggleLove(ticker){this.ccLoved[ticker]=!this.ccLoved[ticker];localStorage.setItem('ccLoved',JSON.stringify(this.ccLoved))},
       toggleWatchlist(ticker){this.ccWatchlist[ticker]=!this.ccWatchlist[ticker];localStorage.setItem('ccWatchlist',JSON.stringify(this.ccWatchlist))},
-      switchTab(t){this.tab=t;if(t==='guide'){}if(t==='funds'){this.startFundMonitor()}if(t==='today'){this.fetchToday7();this.fetchMkt()}if(t==='signals'){this.fetchSignals();this.fetchRanked()}if(t==='ops'){this.fetchHealth();this.fetchChangelog();this.fetchSelfLearnStatus();this.fetchCalibration();this.fetchABStatus();this.fetchExecMetrics();this.fetchRiskSummary();this.fetchThompson();this.fetchFeatureIC();this.fetchNotifyLog();this.fetchFeedbackStats()}if(t==='brief')this.fetchBrief();if(t==='catalog'){this.fetchEndpoints();this.fetchOpsDetail()}if(t==='scanners')this.fetchScanners();if(t==='notrade')this.fetchNoTrade();if(t==='rs')this.fetchRS();if(t==='flow')this.fetchFlow();if(t==='track'){if(this.perfTracker.rows.length===0)this.fetchPerfTracker();if(!this.fundLab.data)this.fetchFundLab()}if(t==='timetravel'&&!this.tt.date){const d=new Date();d.setDate(d.getDate()-5);this.tt.date=d.toISOString().slice(0,10)}if(t==='command'){this.fetchCommand();this.fetchAgentJournal();this.fetchAgentReliability()}},
+      switchTab(t){this.tab=t;if(t==='guide'){}if(t==='funds'){this.startFundMonitor()}if(t==='today'){this.fetchToday7();this.fetchMkt()}if(t==='signals'){this.fetchSignals();this.fetchRanked()}if(t==='ops'){this.fetchHealth();this.fetchChangelog();this.fetchSelfLearnStatus();this.fetchCalibration();this.fetchABStatus();this.fetchExecMetrics();this.fetchRiskSummary();this.fetchThompson();this.fetchFeatureIC();this.fetchNotifyLog();this.fetchFeedbackStats()}if(t==='brief')this.fetchBrief();if(t==='catalog'){this.fetchEndpoints();this.fetchOpsDetail()}if(t==='scanners')this.fetchScanners();if(t==='opportunity'){if(!this.oppScanner.data)this.fetchOppScanner(false)};if(t==='notrade')this.fetchNoTrade();if(t==='rs')this.fetchRS();if(t==='flow')this.fetchFlow();if(t==='track'){if(this.perfTracker.rows.length===0)this.fetchPerfTracker();if(!this.fundLab.data)this.fetchFundLab()}if(t==='timetravel'&&!this.tt.date){const d=new Date();d.setDate(d.getDate()-5);this.tt.date=d.toISOString().slice(0,10)}if(t==='command'){this.fetchCommand();this.fetchAgentJournal();this.fetchAgentReliability()}},
 
       async fetchCommand(){
         if(this.cmd.loading)return;
@@ -5064,6 +5234,17 @@
           const r=await fetch('/api/v7/self-learn/feedback/stats',{headers:{'X-API-Key':window._apiKey||'dev-secret-local'}});
           if(r.ok)this.selfLearn.feedback=await r.json();
         }catch(e){console.warn('feedback-stats fetch failed',e)}
+      },
+      async fetchOppScanner(forceRefresh){
+        this.oppScanner.loading=true;
+        try{
+          const params=new URLSearchParams({regime:this.oppScanner.regime,top_n:this.oppScanner.topN,force_refresh:forceRefresh?'true':'false'});
+          const r=await fetch('/api/v7/opportunity-scanner?'+params,{headers:{'X-API-Key':window._apiKey||'dev-secret-local'}});
+          if(!r.ok)throw new Error('status '+r.status);
+          this.oppScanner.data=await r.json();
+          this.oppScanner.selected=null;
+        }catch(e){console.warn('opportunity scanner failed',e);this.oppScanner.data=null}
+        finally{this.oppScanner.loading=false}
       },
     }}
     </script>
