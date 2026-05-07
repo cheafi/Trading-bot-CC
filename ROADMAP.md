@@ -1,6 +1,6 @@
 # Roadmap
 
-> Current version: **7.2.0-dev** · Updated: 2026-05-04
+> Current version: **9.1.0** · Updated: 2026-05-07
 >
 > This roadmap reflects planned improvements. Timelines are estimates, not
 > commitments. Priorities may shift based on user feedback and contributor
@@ -163,6 +163,34 @@ Inspired by multi-agent trading research workflows (researcher / macro / risk / 
 - [x] Track Record UI panel for AI fund-vs-index comparison with configurable period/benchmark
 - [x] Dynamic pick generation from momentum ranking (top-N per sleeve)
 
+### ✅ Sprint 96 — Fund Lab v2 + Self-Learning v2
+
+#### Fund Lab v2 (`src/services/fund_lab_service.py`)
+- [x] **12-1 momentum factor** — skips last 21 trading days to correct short-term reversal bias (Jegadeesh-Titman style)
+- [x] **RS vs SPY scoring** — relative-strength outperformance vs benchmark added as a composited weight per sleeve
+- [x] **RSI overbought guard** — FUND_ALPHA skips candidates with RSI > 75; prevents buying exhausted runs
+- [x] **FUND_MACRO sleeve** — 4th sleeve: TLT / GLD / IEF / HYG / VNQ / USO / EMB / BIL / TIPS / UUP — macro hedges + safe-haven rotation, all-regime, higher RS weight
+- [x] **Calmar ratio** — added to every sleeve's metrics (annualised return / max drawdown)
+- [x] **SPY pre-fetch** — benchmark series fetched once, reused across all 4 sleeves (eliminates redundant yfinance calls)
+
+#### Self-Learning v2 (`src/engines/self_learning.py`)
+- [x] **Regime-conditioned parameters** — BULL / BEAR / SIDEWAYS / CHOPPY each maintain own `ensemble_min_score`, `stop_loss_pct`, `max_position_pct` stored in `models/regime_params.json`
+- [x] **Fund weight auto-tuner** — `tune_fund_weights()` nudges sleeve allocations proportional to rolling Sharpe; 10–50% per-fund bounds; persists to `models/fund_weights.json`
+- [x] **Regime performance analyser** — `analyze_regime_performance()` computes win-rate, avg P&L, avg win/loss per regime from closed trades
+- [x] **Learning loop connector** — `pull_closed_trades_from_learning_loop()` bridges LearningLoopPipeline → SelfLearningEngine
+
+#### Self-Learn REST API (`src/api/routers/self_learn.py`)
+- [x] `GET /api/v7/self-learn/status` — engine state, regime performance, fund weights, recent audit log
+- [x] `GET /api/v7/self-learn/regime-params` — active parameter set for a given regime
+- [x] `GET /api/v7/self-learn/fund-weights` — current Sharpe-tuned sleeve allocations
+- [x] `POST /api/v7/self-learn/trigger` — run full analysis + adjust cycle on closed trades
+- [x] `POST /api/v7/self-learn/fund-tune` — auto-tune sleeve weights from latest fund metrics
+- [x] `POST /api/v7/self-learn/disable` / `enable` — kill switch
+
+#### Git Hygiene
+- [x] **History rewrite** — stripped `releases/*.png` + `src/assets/docs/demo.gif` from all 229 commits via `git-filter-repo`; `.git/` shrunk 512 MB → **12 MB**
+- [x] Force-pushed clean history to `origin/main`
+
 ---
 
 ## 🔮 Future Exploration
@@ -175,6 +203,30 @@ These ideas need more research before committing:
 - [x] Community signal sharing and voting (Discord channel workflow)
 - [x] Mobile-friendly dashboard (responsive CSS)
 - [x] Webhook-based conditional alert engine (`sector_alerts.py` alert taxonomy + routing)
+
+## 🔜 Next Up (Sprint 97+)
+
+### Fund Lab v3
+- [ ] Live P&L tracking per sleeve (paper positions with entry dates)
+- [ ] Drawdown watermark + recovery tracker on dashboard
+- [ ] FUND_MACRO regime-conditional tilt (risk-on vs risk-off)
+- [ ] Per-pick stop/target levels shown in fund dashboard panel
+
+### Self-Learning v3
+- [ ] Per-regime parameter auto-adjustment (tune regime_params.json from outcomes)
+- [ ] A/B test harness: shadow new params for N days before promoting
+- [ ] Confidence calibration drift alert when Brier score degrades > 5%
+- [ ] Scheduler integration: auto-trigger learning cycle at EOD
+
+### Dashboard
+- [ ] Fund Lab panel: show all 4 sleeves with Calmar, RSI, 12-1 momentum columns
+- [ ] Self-Learn panel in Ops tab: audit log, regime params table, fund weight bars
+- [ ] Regime heatmap upgrade: per-regime win-rate overlay from learning engine
+
+### Infrastructure
+- [ ] GitHub Actions CI: ruff + pytest on every push
+- [ ] Docker multi-stage build: builder → slim runtime image (<300 MB)
+- [ ] Scheduled Docker rebuild on dependency update (Dependabot + workflow)
 
 ---
 

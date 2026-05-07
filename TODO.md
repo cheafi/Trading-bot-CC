@@ -1,6 +1,16 @@
 # CC — Roadmap & Technical Debt Tracker
 
 > Ordered by priority. P0 = must ship in ≤ 2 weeks. P1 = highest ROI within 1 month. P2 = differentiators.
+> Last updated: **2026-05-07** · Current version: **9.1.0**
+
+---
+
+## ✅ Sprint 96 — Fund Lab v2 + Self-Learning v2 (2026-05-07)
+
+- [x] **Fund Lab v2** — 12-1 momentum, RS-vs-SPY, RSI overbought guard, FUND_MACRO (4th sleeve), Calmar ratio, SPY pre-fetch
+- [x] **Self-Learning v2** — regime-conditioned params (BULL/BEAR/SIDEWAYS/CHOPPY), fund weight auto-tuner (Sharpe-proportional), regime performance analyser, learning loop connector
+- [x] **Self-Learn REST API** — `/api/v7/self-learn/` with status / regime-params / fund-weights / trigger / fund-tune / disable / enable
+- [x] **Git history rewrite** — `git-filter-repo` stripped 128 MB blobs; `.git/` 512 MB → 12 MB; force-pushed
 
 ---
 
@@ -111,12 +121,39 @@
 
 ## Scoring Targets
 
-| Dimension | v6.0 | v7.0 | Target |
+| Dimension | v7.0 | v9.1 | Target |
 |-----------|------|------|--------|
-| Product vision | 9/10 | 9.5/10 | ✅ |
-| UX / clarity | 8.5/10 | 9/10 | ✅ |
-| Explainability | 8.5/10 | 9.5/10 | ✅ |
-| Trading edge maturity | 5.5/10 | 7.5/10 | ✅ |
-| Risk-engine maturity | 6.5/10 | 8/10 | ✅ |
-| Production readiness | 6/10 | 7.5/10 | ✅ |
-| **Overall** | **7.6/10** | **8.5/10** | **✅** |
+| Product vision | 9.5/10 | 9.5/10 | ✅ |
+| UX / clarity | 9/10 | 9/10 | ✅ |
+| Explainability | 9.5/10 | 9.5/10 | ✅ |
+| Trading edge maturity | 7.5/10 | 8.5/10 | ✅ |
+| Risk-engine maturity | 8/10 | 8.5/10 | ✅ |
+| Production readiness | 7.5/10 | 8/10 | 🔲 9/10 |
+| Self-learning / adaptation | 5/10 | 8/10 | 🔲 9/10 |
+| **Overall** | **8.5/10** | **8.7/10** | **9/10** |
+
+---
+
+## P0 — Sprint 97 (next ≤ 2 weeks)
+
+### Fund Lab v3
+- [ ] Live paper-position tracker per sleeve (entry date, current P&L, stop/target levels)
+- [ ] Drawdown watermark + recovery days on fund dashboard panel
+- [ ] FUND_MACRO regime tilt: shift weight to TLT/GLD in BEAR, USO/EEM in BULL
+- [ ] Per-pick RSI and 12-1 momentum columns visible in dashboard
+
+### Self-Learning v3
+- [ ] Per-regime parameter auto-adjustment cycle (tune `regime_params.json` from outcomes nightly)
+- [ ] A/B shadow test harness: paper-run new params N days before promoting to live
+- [ ] Confidence calibration drift alert when Brier score degrades > 5%
+- [ ] Scheduler integration: `reset_cycle()` + `trigger` at EOD via APScheduler job
+
+### Dashboard
+- [ ] Fund Lab panel upgrade: all 4 sleeves + Calmar, RSI, 12-1 columns + fund weight bars
+- [ ] Self-Learn panel in Ops tab: audit log table, regime params, fund weight allocation
+- [ ] Regime heatmap overlay: win-rate from `analyze_regime_performance()` per cell
+
+### Infrastructure
+- [ ] GitHub Actions CI: ruff lint + pytest on every push to `main`
+- [ ] Docker multi-stage build: builder → slim runtime (<300 MB image)
+- [ ] Health check: `/healthz` returns 200 only when all Phase 9 engines loaded
