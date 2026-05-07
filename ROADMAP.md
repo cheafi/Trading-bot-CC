@@ -261,6 +261,15 @@ These ideas need more research before committing:
 - [x] **Dashboard cards** — 🎰 Thompson Sizing card + 📉 Feature IC Decay card in Ops panel
 - [x] **Sprint 103 CI tests** — 15 tests, 15/15 passing
 
+### ✅ Sprint 113 — Closed-Trade Auto-Feedback Pipeline (v10.4.0)
+- [x] **`process_closed_trade(trade)`** (`src/engines/self_learning.py`) — unified 4-channel feedback: (1) Brier `record_prediction_outcome()`, (2) A/B shadow `record_ab_outcome()` for every active challenger, (3) Thompson RL `update()`, (4) Feature IC `record_feature_outcomes()`; win detection from `pnl_pct > 0` or `outcome="win"`; all channels non-fatal
+- [x] **`process_closed_trades_batch(trades)`** — batch wrapper; returns aggregate channel counts; used by EOD step 7
+- [x] **`get_feedback_stats()`** — reads `feedback_stats.json`; returns `total_processed`, `last_processed_at`, `brier_alerts`, `ab_params_active`
+- [x] **EOD scheduler step 7 replaced** (`src/scheduler/main.py`) — fragmented per-channel loop → `process_closed_trades_batch()`; same 4 channels, unified logging
+- [x] **REST endpoints** — `POST /api/v7/self-learn/feedback/process-closed-trade` + `GET /api/v7/self-learn/feedback/stats` (includes active shadow params list)
+- [x] **Dashboard 🔄 Feedback Pipeline card** — trades processed count, Brier alert count, active shadow params count, last-run date; auto-loaded on Ops tab
+- [x] **Sprint 113 CI tests** — 12 tests, 12/12 passing (189 total across sprints 100–113)
+
 ### ✅ Sprint 112 — Auto-Experiment Scheduler (v10.3.0)
 - [x] **`auto_schedule_experiments()`** (`src/engines/self_learning.py`) — scans `analyze_regime_performance()` output; for any regime with `win_rate < 0.45` or `> 0.60` and `sample >= 10`, computes nudge per tunable param and calls `propose_ab_shadow()`; sorted worst-first; skips params already in active shadow; capped at `max_per_run=3`; persists last-run summary to `auto_schedule_state.json`
 - [x] **`get_auto_schedule_status()`** — reads persisted last-run state; returns empty struct when no state file
