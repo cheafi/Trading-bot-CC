@@ -1,6 +1,6 @@
 """
-Controlled Self-Learning Engine.
-
+Controlled Self-Learning Engine — Sprint 96 (upgraded from Sprint 49)
+======================================================================
 Implements safe, bounded self-learning for portfolio and rule tuning:
 
   1. Parameter sensitivity analysis — which rules have most impact
@@ -8,10 +8,14 @@ Implements safe, bounded self-learning for portfolio and rule tuning:
   3. Guardrails — max adjustment per cycle, no extreme values
   4. Audit trail — every adjustment logged with before/after
   5. Kill switch — disable auto-tuning at any time
+  6. Regime-conditioned params — separate parameter sets per regime
+  7. Fund weight auto-tuner — adjusts sleeve allocations by rolling Sharpe
+  8. Learning loop integration — pull closed trades from LearningLoopPipeline
 
 Design principle: the system learns from outcomes but never
 drifts beyond human-defined bounds. Every adjustment is reversible.
 """
+
 from __future__ import annotations
 
 import json
@@ -30,6 +34,7 @@ AUDIT_DIR.mkdir(exist_ok=True)
 @dataclass
 class RuleAdjustment:
     """A single rule parameter adjustment."""
+
     rule_name: str
     parameter: str
     old_value: float
@@ -57,6 +62,7 @@ class RuleAdjustment:
 @dataclass
 class LearningState:
     """Current state of the self-learning system."""
+
     enabled: bool = True
     total_adjustments: int = 0
     adjustments_this_cycle: int = 0
@@ -165,7 +171,8 @@ class SelfLearningEngine:
         if len(trade_outcomes) < self.state.min_sample_size:
             logger.info(
                 "Self-learning: %d trades < %d minimum — no adjustments",
-                len(trade_outcomes), self.state.min_sample_size,
+                len(trade_outcomes),
+                self.state.min_sample_size,
             )
             return []
 
@@ -187,7 +194,9 @@ class SelfLearningEngine:
             recommendations.append(sizing_adjustment)
 
         # Analyze ensemble threshold
-        threshold_adjustment = self._analyze_ensemble_threshold(trade_outcomes, current_rules)
+        threshold_adjustment = self._analyze_ensemble_threshold(
+            trade_outcomes, current_rules
+        )
         if threshold_adjustment:
             recommendations.append(threshold_adjustment)
 
@@ -195,7 +204,7 @@ class SelfLearningEngine:
         recommendations = self._apply_guardrails(recommendations)
 
         # Limit per cycle
-        recommendations = recommendations[:self.state.max_adjustments_per_cycle]
+        recommendations = recommendations[: self.state.max_adjustments_per_cycle]
 
         return recommendations
 
@@ -220,14 +229,18 @@ class SelfLearningEngine:
             except Exception as exc:
                 logger.warning(
                     "Self-learning: failed to persist %s override: %s",
-                    adj.parameter, exc,
+                    adj.parameter,
+                    exc,
                 )
 
             logger.info(
                 "Self-learning: %s.%s %s → %s (reason: %s, sample=%d)",
-                adj.rule_name, adj.parameter,
-                adj.old_value, adj.new_value,
-                adj.reason, adj.sample_size,
+                adj.rule_name,
+                adj.parameter,
+                adj.old_value,
+                adj.new_value,
+                adj.reason,
+                adj.sample_size,
             )
         self._save_audit()
         return applied
@@ -254,7 +267,8 @@ class SelfLearningEngine:
     ) -> Optional[RuleAdjustment]:
         """Check if stops are too tight (many stop-outs that recover)."""
         stop_exits = [
-            o for o in outcomes
+            o
+            for o in outcomes
             if o.get("exit_reason") in ("stop_hit", "trailing_stop", "sl_hit")
         ]
         if len(stop_exits) < 10:
@@ -263,8 +277,7 @@ class SelfLearningEngine:
         # Check if stopped-out trades would have recovered
         # (MAE analysis: if price went back above stop within 5 days)
         premature_stops = sum(
-            1 for o in stop_exits
-            if o.get("would_have_recovered", False)
+            1 for o in stop_exits if o.get("would_have_recovered", False)
         )
         premature_pct = premature_stops / len(stop_exits) * 100
 
@@ -292,16 +305,12 @@ class SelfLearningEngine:
         """Check if cooldown is too long (missing good re-entries)."""
         # Look for patterns where same ticker was re-signaled
         # but blocked by cooldown, then moved significantly
-        cooldown_blocks = [
-            o for o in outcomes
-            if o.get("blocked_by_cooldown", False)
-        ]
+        cooldown_blocks = [o for o in outcomes if o.get("blocked_by_cooldown", False)]
         if len(cooldown_blocks) < 5:
             return None
 
         missed_moves = sum(
-            1 for o in cooldown_blocks
-            if abs(o.get("missed_return_pct", 0)) > 3.0
+            1 for o in cooldown_blocks if abs(o.get("missed_return_pct", 0)) > 3.0
         )
         if missed_moves > len(cooldown_blocks) * 0.5:
             current = rules.get("signal_cooldown_hours", 4)
@@ -366,16 +375,15 @@ class SelfLearningEngine:
         # Check win rate of trades near the threshold
         threshold = rules.get("ensemble_min_score", 0.35)
         near_threshold = [
-            o for o in outcomes
-            if abs(o.get("composite_score", 0.5) - threshold) < 0.1
+            o for o in outcomes if abs(o.get("composite_score", 0.5) - threshold) < 0.1
         ]
 
         if len(near_threshold) < 10:
             return None
 
-        win_rate = sum(
-            1 for o in near_threshold if o.get("pnl_pct", 0) > 0
-        ) / len(near_threshold)
+        win_rate = sum(1 for o in near_threshold if o.get("pnl_pct", 0) > 0) / len(
+            near_threshold
+        )
 
         if win_rate > 0.65:
             # Threshold too high — lower it to capture more winners
@@ -434,7 +442,9 @@ class SelfLearningEngine:
                     adj.new_value = old * (1 - max_pct)
 
             # Hard bounds
-            adj.new_value = max(rule.get("min", 0), min(rule.get("max", 1), adj.new_value))
+            adj.new_value = max(
+                rule.get("min", 0), min(rule.get("max", 1), adj.new_value)
+            )
 
             if adj.new_value != adj.old_value:
                 approved.append(adj)
@@ -460,7 +470,217 @@ class SelfLearningEngine:
         try:
             with open(self._audit_path, "r") as f:
                 data = json.load(f)
-            self.state.total_adjustments = data.get("state", {}).get("total_adjustments", 0)
+            self.state.total_adjustments = data.get("state", {}).get(
+                "total_adjustments", 0
+            )
             self.state.audit_log = data.get("audit_log", [])
         except Exception as e:
             logger.debug("Self-learning audit load error: %s", e)
+
+
+# ── Regime-conditioned parameter store ──────────────────────────────────────
+
+_DEFAULT_REGIME_PARAMS: Dict[str, Dict[str, float]] = {
+    "BULL": {
+        "ensemble_min_score": 0.33,
+        "stop_loss_pct": 0.03,
+        "max_position_pct": 0.06,
+        "signal_cooldown_hours": 3.0,
+    },
+    "BEAR": {
+        "ensemble_min_score": 0.42,
+        "stop_loss_pct": 0.025,
+        "max_position_pct": 0.035,
+        "signal_cooldown_hours": 6.0,
+    },
+    "SIDEWAYS": {
+        "ensemble_min_score": 0.38,
+        "stop_loss_pct": 0.03,
+        "max_position_pct": 0.05,
+        "signal_cooldown_hours": 4.0,
+    },
+    "CHOPPY": {
+        "ensemble_min_score": 0.45,
+        "stop_loss_pct": 0.02,
+        "max_position_pct": 0.025,
+        "signal_cooldown_hours": 8.0,
+    },
+}
+
+_REGIME_PARAMS_FILE = AUDIT_DIR / "regime_params.json"
+
+
+def load_regime_params() -> Dict[str, Dict[str, float]]:
+    """Load regime-conditioned parameters from disk, falling back to defaults."""
+    if not _REGIME_PARAMS_FILE.exists():
+        return dict(_DEFAULT_REGIME_PARAMS)
+    try:
+        with open(_REGIME_PARAMS_FILE, "r") as f:
+            stored = json.load(f)
+        # Merge stored over defaults so new regimes always have values
+        merged = dict(_DEFAULT_REGIME_PARAMS)
+        for regime, params in stored.items():
+            merged[regime] = {**merged.get(regime, {}), **params}
+        return merged
+    except Exception as e:
+        logger.debug("Regime params load error: %s", e)
+        return dict(_DEFAULT_REGIME_PARAMS)
+
+
+def save_regime_params(params: Dict[str, Dict[str, float]]) -> None:
+    try:
+        with open(_REGIME_PARAMS_FILE, "w") as f:
+            json.dump(params, f, indent=2)
+    except Exception as e:
+        logger.debug("Regime params save error: %s", e)
+
+
+def get_params_for_regime(regime: str) -> Dict[str, float]:
+    """Return the best known parameter set for the given regime."""
+    all_params = load_regime_params()
+    normalised = regime.upper().replace("_TRENDING", "").replace("BULL", "BULL")
+    # Fuzzy match: bull_trending → BULL, bear_trending → BEAR
+    for key in all_params:
+        if normalised.startswith(key):
+            return all_params[key]
+    return all_params.get("SIDEWAYS", {})
+
+
+# ── Fund weight auto-tuner ───────────────────────────────────────────────────
+
+_FUND_WEIGHTS_FILE = AUDIT_DIR / "fund_weights.json"
+
+# Default equal-weight allocation across the 4 sleeves
+_DEFAULT_FUND_WEIGHTS: Dict[str, float] = {
+    "FUND_ALPHA": 0.25,
+    "FUND_PENDA": 0.25,
+    "FUND_CAT": 0.25,
+    "FUND_MACRO": 0.25,
+}
+
+# Bounds: no single fund can dominate or be zeroed out
+_FUND_WEIGHT_MIN = 0.10
+_FUND_WEIGHT_MAX = 0.50
+
+
+def load_fund_weights() -> Dict[str, float]:
+    if not _FUND_WEIGHTS_FILE.exists():
+        return dict(_DEFAULT_FUND_WEIGHTS)
+    try:
+        with open(_FUND_WEIGHTS_FILE, "r") as f:
+            w = json.load(f)
+        # Normalise so weights sum to 1.0
+        total = sum(w.values())
+        if total <= 0:
+            return dict(_DEFAULT_FUND_WEIGHTS)
+        return {k: round(v / total, 4) for k, v in w.items()}
+    except Exception:
+        return dict(_DEFAULT_FUND_WEIGHTS)
+
+
+def tune_fund_weights(
+    fund_metrics: List[Dict[str, Any]],
+    learning_rate: float = 0.10,
+) -> Dict[str, float]:
+    """
+    Adjust fund sleeve allocation weights proportional to rolling Sharpe.
+
+    fund_metrics: list of dicts with keys "name" and "metrics.sharpe"
+    learning_rate: fraction of current weight to shift (0.10 = 10% nudge)
+
+    Returns new normalised weights (saved to disk).
+    """
+    current = load_fund_weights()
+
+    sharpes: Dict[str, float] = {}
+    for fm in fund_metrics:
+        name = fm.get("name", "")
+        sharpe = float(fm.get("metrics", {}).get("sharpe", 0.0))
+        if name and name in current:
+            sharpes[name] = max(sharpe, 0.0)  # floor at 0 to avoid punishing all
+
+    if not sharpes or sum(sharpes.values()) == 0:
+        return current  # no signal, keep as-is
+
+    # Proportional target weights from Sharpe
+    total_sharpe = sum(sharpes.values())
+    target: Dict[str, float] = {k: sharpes.get(k, 0.0) / total_sharpe for k in current}
+
+    # Blend: new = current + learning_rate * (target - current)
+    new_weights: Dict[str, float] = {}
+    for k in current:
+        nudged = current[k] + learning_rate * (target.get(k, current[k]) - current[k])
+        new_weights[k] = max(_FUND_WEIGHT_MIN, min(_FUND_WEIGHT_MAX, nudged))
+
+    # Re-normalise
+    total = sum(new_weights.values())
+    normalised = {k: round(v / total, 4) for k, v in new_weights.items()}
+
+    save_fund_weights(normalised)
+    logger.info("Fund weights auto-tuned: %s", normalised)
+    return normalised
+
+
+def save_fund_weights(weights: Dict[str, float]) -> None:
+    try:
+        with open(_FUND_WEIGHTS_FILE, "w") as f:
+            json.dump(weights, f, indent=2)
+    except Exception as e:
+        logger.debug("Fund weights save error: %s", e)
+
+
+# ── Regime performance analyser ─────────────────────────────────────────────
+
+
+def analyze_regime_performance(
+    trade_outcomes: List[Dict[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Aggregate win-rate and expectancy per regime from closed trade outcomes.
+
+    Returns:
+        {
+          "BULL": {"win_rate": 0.62, "avg_pnl": 1.8, "sample": 45},
+          "BEAR": {...},
+          ...
+        }
+    """
+    by_regime: Dict[str, List[float]] = {}
+    for t in trade_outcomes:
+        regime = (t.get("regime") or "UNKNOWN").upper()
+        regime = regime.replace("_TRENDING", "").split("_")[0]
+        pnl = float(t.get("pnl_pct", 0.0))
+        by_regime.setdefault(regime, []).append(pnl)
+
+    result: Dict[str, Dict[str, Any]] = {}
+    for regime, pnls in by_regime.items():
+        wins = sum(1 for p in pnls if p > 0)
+        result[regime] = {
+            "win_rate": round(wins / len(pnls), 3) if pnls else 0.0,
+            "avg_pnl": round(sum(pnls) / len(pnls), 2) if pnls else 0.0,
+            "avg_win": round(sum(p for p in pnls if p > 0) / max(wins, 1), 2),
+            "avg_loss": round(
+                sum(abs(p) for p in pnls if p <= 0) / max(len(pnls) - wins, 1), 2
+            ),
+            "sample": len(pnls),
+        }
+    return result
+
+
+# ── Learning loop integration helper ────────────────────────────────────────
+
+
+def pull_closed_trades_from_learning_loop() -> List[Dict[str, Any]]:
+    """
+    Pull closed trades from LearningLoopPipeline for use in SelfLearningEngine.
+
+    Returns list of trade dicts compatible with analyze_and_recommend().
+    """
+    try:
+        from src.engines.learning_loop import LearningLoopPipeline
+
+        pipeline = LearningLoopPipeline()
+        return [t.to_dict() for t in pipeline._closed_trades]
+    except Exception as e:
+        logger.debug("Could not pull trades from LearningLoopPipeline: %s", e)
+        return []

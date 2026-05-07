@@ -11885,3 +11885,11 @@ try:
     app.include_router(swing_router)
 except Exception:
     logger.exception("[Router] Failed to load swing router")
+
+# Sprint 96 — Self-learning engine REST API
+try:
+    from src.api.routers.self_learn import router as self_learn_router
+
+    app.include_router(self_learn_router)
+except Exception:
+    logger.exception("[Router] Failed to load self_learn router")
