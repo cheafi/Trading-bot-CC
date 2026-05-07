@@ -3008,6 +3008,39 @@
                     <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)">Vol</div><div class="mono text-[10px] text-amber-300" x-text="(f.metrics?.volatility||0)+'%'"></div></div>
                     <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)">Max DD</div><div class="mono text-[10px] text-red-400" x-text="(f.metrics?.max_drawdown||0)+'%'"></div></div>
                   </div>
+                  <!-- Sprint 105: Watermark DD bar + recovery days + equity sparkline -->
+                  <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:5px;margin-top:5px" x-show="f.metrics?.watermark_drawdown!==undefined">
+                    <!-- Watermark drawdown -->
+                    <div class="p-1.5 rounded" style="background:var(--s2)">
+                      <div class="text-[8px]" style="color:var(--t3)">Wmark DD</div>
+                      <div class="mono text-[10px]" :class="(f.metrics?.watermark_drawdown||0)<-5?'text-red-400':'text-amber-300'" x-text="(f.metrics?.watermark_drawdown||0)+'%'"></div>
+                      <div class="mt-1 h-1 rounded" style="background:var(--s3)">
+                        <div class="h-1 rounded" :style="'width:'+Math.min(100,Math.abs(f.metrics?.watermark_drawdown||0))+'%;background:'+(((f.metrics?.watermark_drawdown||0)<-10)?'var(--red)':'var(--orange)')"></div>
+                      </div>
+                    </div>
+                    <!-- Recovery days -->
+                    <div class="p-1.5 rounded" style="background:var(--s2)">
+                      <div class="text-[8px]" style="color:var(--t3)">Rcvry days</div>
+                      <div class="mono text-[10px] text-white" x-text="f.metrics?.recovery_days!=null?f.metrics.recovery_days+'d':'—'"></div>
+                      <div class="text-[7px]" style="color:var(--t3)" x-text="f.metrics?.underwater_days?('↓'+f.metrics.underwater_days+'d uw'):'at peak'"></div>
+                    </div>
+                    <!-- Equity curve mini-sparkline (SVG polyline) -->
+                    <div class="p-1.5 rounded" style="background:var(--s2)">
+                      <div class="text-[8px] mb-1" style="color:var(--t3)">Equity curve</div>
+                      <template x-if="f.metrics?.equity_curve_20 && f.metrics.equity_curve_20.length>1">
+                        <svg width="100%" height="22" viewBox="0 0 80 22" preserveAspectRatio="none" style="display:block">
+                          <polyline
+                            :points="f.metrics.equity_curve_20.map((v,i)=>((i/(f.metrics.equity_curve_20.length-1))*80).toFixed(1)+','+(22-(((v-Math.min(...f.metrics.equity_curve_20))/(Math.max(...f.metrics.equity_curve_20)-Math.min(...f.metrics.equity_curve_20)||1))*20)).toFixed(1)).join(' ')"
+                            fill="none" stroke-width="1.5"
+                            :stroke="(f.metrics.equity_curve_20[f.metrics.equity_curve_20.length-1]||0)>=(f.metrics.equity_curve_20[0]||0)?'var(--green)':'var(--red)'"
+                          />
+                        </svg>
+                      </template>
+                      <template x-if="!f.metrics?.equity_curve_20 || f.metrics.equity_curve_20.length<=1">
+                        <div class="text-[8px]" style="color:var(--t3)">no data</div>
+                      </template>
+                    </div>
+                  </div>
                   <!-- Picks with 12-1 momentum, RSI, weight -->
                   <div class="mt-2 space-y-1">
                     <template x-for="p in (f.picks||[])" :key="p.ticker">

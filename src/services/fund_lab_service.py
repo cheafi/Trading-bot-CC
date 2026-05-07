@@ -136,21 +136,6 @@ class FundLabService:
                 "turnover_tolerance": "low",
             },
         },
-            ],
-            # Tactical: sector rotation, goes to cash in BEAR/high-VIX
-            "style": {
-                "top_n": 6,
-                "momentum_weight": 0.55,
-                "vol_penalty": 0.20,
-                "quality_weight": 0.15,
-                "regime_gates": ["BULL", "SIDEWAYS", "bull_trending", "sideways"],
-                "vix_gate": 28,
-                "max_cash_pct": 0.50,
-                "stop_r": 1.0,
-                "target_r": 2.5,
-                "turnover_tolerance": "medium",
-            },
-        },
     }
 
     async def _history(self, mds: Any, ticker: str, period: str) -> pd.Series:
@@ -272,6 +257,22 @@ class FundLabService:
                 "cash_pct": round(style.get("max_cash_pct", 1.0) * 100, 1),
             }
 
+        # ── FUND_MACRO regime tilt (Sprint 105) ──
+        # Override candidate list based on macro regime to concentrate on
+        # the assets most likely to outperform in the current environment.
+        candidates = list(spec["candidates"])
+        if name == "FUND_MACRO" and regime not in ("unknown", ""):
+            regime_upper = regime.upper()
+            if "BEAR" in regime_upper:
+                # Flight-to-safety: bonds + gold dominate
+                candidates = ["TLT", "GLD", "IEF", "BIL", "TIPS"]
+            elif "BULL" in regime_upper:
+                # Risk-on macro: commodities + EM debt
+                candidates = ["USO", "GLD", "EMB", "HYG", "UUP"]
+            elif "CHOPPY" in regime_upper:
+                # Reduce volatility: bills + short-duration
+                candidates = ["BIL", "TIPS", "IEF", "TLT", "UUP"]
+            # SIDEWAYS: use full default universe (no tilt)
         mom_w = style.get("momentum_weight", 0.60)
         rs_w = style.get("rs_weight", 0.10)
         vol_p = style.get("vol_penalty", 0.15)
@@ -289,7 +290,7 @@ class FundLabService:
                 quality_weight=qual_w,
                 rsi_overbought=rsi_ob,
             )
-            for t in spec["candidates"]
+            for t in candidates  # regime-tilted candidates (FUND_MACRO) or default
         ]
         rows = await asyncio.gather(*tasks)
         rows = [r for r in rows if math.isfinite(r[1])]
@@ -407,8 +408,22 @@ class FundLabService:
         sharpe = float((p.mean() / p.std()) * np.sqrt(252)) if p.std() > 0 else 0.0
 
         running_max = eq_p.cummax()
-        dd = float((eq_p / running_max - 1.0).min())
+        dd_series = eq_p / running_max - 1.0
+        dd = float(dd_series.min())
         calmar = round(ann_p / abs(dd), 2) if dd != 0 else 0.0
+
+        # Sprint 105: watermark drawdown, recovery days, underwater days, equity curve
+        watermark_dd = round(float(dd_series.iloc[-1]) * 100, 2)
+        underwater_days = int((dd_series < 0).sum())
+
+        # Recovery days: trading days from the trough to the first new-high afterward
+        trough_idx = int(dd_series.argmin())
+        peak_after = eq_p.iloc[trough_idx:][eq_p.iloc[trough_idx:] >= running_max.iloc[trough_idx]]
+        recovery_days: int | None = int(peak_after.index.get_loc(peak_after.index[0])) if not peak_after.empty else None
+
+        # Equity curve normalised to base=100, last 20 bars
+        eq_norm = (eq_p / eq_p.iloc[0] * 100.0).round(2)
+        equity_curve_20 = eq_norm.iloc[-20:].tolist()
 
         return {
             "total_return": round(total_p * 100, 2),
@@ -419,6 +434,11 @@ class FundLabService:
             "max_drawdown": round(dd * 100, 2),
             "excess_return": round((ann_p - ann_b) * 100, 2),
             "roi_vs_benchmark": round((total_p - total_b) * 100, 2),
+            # Sprint 105 fields
+            "watermark_drawdown": watermark_dd,
+            "recovery_days": recovery_days,
+            "underwater_days": underwater_days,
+            "equity_curve_20": equity_curve_20,
         }
 
     async def run(
