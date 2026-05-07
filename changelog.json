@@ -1,0 +1,82 @@
+[
+  {
+    "hash": "1c08724",
+    "message": "perf: Docker for instant startup, remove pydantic from config, lazy core imports"
+  },
+  {
+    "hash": "78e31c2",
+    "message": "fix: wire brief to RegimeService, remove fund.py duplicate, synthetic flag, log fetch errors"
+  },
+  {
+    "hash": "1f7388d",
+    "message": "fix: TRADE conviction > LEADER, R:R in alert embed, portfolio gate warning"
+  },
+  {
+    "hash": "e35fa99",
+    "message": "feat: Sprint 69 \u2014 model portfolios, historical analog matcher, RegimeMonitorCog uses RegimeService"
+  },
+  {
+    "hash": "b470177",
+    "message": "feat: Sprint 68 \u2014 FundBuilder auto-fetch prices + sector concentration check, StockVsSPY.compare_ticker auto-fetch"
+  },
+  {
+    "hash": "afb3f63",
+    "message": "feat: Sprint 67 \u2014 RegimeService singleton, auto-fetch regime in pipeline, peer_rank in batch output"
+  },
+  {
+    "hash": "3c23fef",
+    "message": "feat: Sprint 66 \u2014 GapDetector, /brief Discord command, ScenarioEngine dynamic sectors, 11 tests"
+  },
+  {
+    "hash": "e36dc09",
+    "message": "feat: wire CrossAssetMonitor into pipeline for stress-based sizing adjustment"
+  },
+  {
+    "hash": "14ea313",
+    "message": "feat: Sprint 65 \u2014 PositionManager (HOLD/REDUCE/EXIT), RS score fix, scanner RSI overlap fix, circuit breaker wired into pipeline"
+  },
+  {
+    "hash": "15d673a",
+    "message": "feat: Sprint 64 - VCP from OHLCV, drawdown circuit breaker, persistent dedup, brief router"
+  },
+  {
+    "hash": "a116edc",
+    "message": "feat: Sprint 63 - correlation check, persistent dedup, regime alerts, decision diff"
+  },
+  {
+    "hash": "812aa36",
+    "message": "chore: ignore embedded Roo-Code repo"
+  },
+  {
+    "hash": "04892b4",
+    "message": "feat: Sprint 62 - MacroRegimeEngine, FundBuilder vs SPY, scanner renames, bug fixes"
+  },
+  {
+    "hash": "79a1949",
+    "message": "feat: Phase E validation - confidence calibration, pipeline backtester, slippage fix"
+  },
+  {
+    "hash": "90cb2fb",
+    "message": "feat: Phase C+D scanner reality, position sizing, Discord embeds, alert dedup"
+  },
+  {
+    "hash": "6fa2602",
+    "message": "feat: Phase A+B data bridge + pipeline integrity - SignalEnricher, regime gate, PortfolioGate wired"
+  },
+  {
+    "hash": "1b2a097",
+    "message": "ux: show expected loading time (1-5 min) + uptime in loading banner"
+  },
+  {
+    "hash": "b9759b6",
+    "message": "fix: proxy backend never gives up + auto-restart on crash/freeze"
+  },
+  {
+    "hash": "c184067",
+    "message": "fix: proxy BrokenPipeError crash + CORS PUT/DELETE methods"
+  },
+  {
+    "hash": "0c63df3",
+    "message": "feat: Strategy Factory \u2014 AI-assisted auto strategy generation & validation"
+  }
+]

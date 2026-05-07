@@ -119,3 +119,5 @@ Roo-Code/
 !.vscode/launch.json
 !.vscode/extensions.json
 !.vscode/mcp.json
+data/fund_state.db
+.git_corrupted_backup/

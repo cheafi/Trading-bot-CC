@@ -15,6 +15,7 @@ Architecture:
 Model serialization: uses joblib with versioned filenames to avoid
 pickle security issues and sklearn version incompatibilities.
 """
+
 import asyncio
 import json
 import logging
@@ -42,6 +43,7 @@ _MODEL_VERSION = "v2"
 # ---------------------------------------------------------------------------
 # Trade outcome record
 # ---------------------------------------------------------------------------
+
 
 class TradeOutcomeRecord:
     """Complete record of a trade for learning."""
@@ -102,8 +104,11 @@ class TradeOutcomeRecord:
         }
         if feature_snapshot:
             self.data.update(
-                {f"feat_{k}": v for k, v in feature_snapshot.items()
-                 if isinstance(v, (int, float))}
+                {
+                    f"feat_{k}": v
+                    for k, v in feature_snapshot.items()
+                    if isinstance(v, (int, float))
+                }
             )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -114,19 +119,29 @@ class TradeOutcomeRecord:
 # ML Trade Outcome Predictor
 # ---------------------------------------------------------------------------
 
+
 class TradeOutcomePredictor:
     """
     Gradient-boosted model that predicts trade success probability.
-    
+
     Features → P(win), Expected P&L, Optimal position size
-    
+
     Trains on historical trade outcomes and continuously improves
     as more data accumulates.
     """
 
     FEATURE_COLS = [
-        "confidence", "vix_at_entry", "rsi_at_entry", "adx_at_entry",
-        "relative_volume", "distance_from_sma50",
+        "confidence",
+        "vix_at_entry",
+        "rsi_at_entry",
+        "adx_at_entry",
+        "relative_volume",
+        "distance_from_sma50",
+        # Sprint 91: richer context features
+        "composite_score",
+        "regime_label",
+        "strategy_id",
+        "sector",
     ]
 
     def __init__(self):
@@ -144,6 +159,7 @@ class TradeOutcomePredictor:
         if self._model_path.exists():
             try:
                 import joblib
+
                 saved = joblib.load(self._model_path)
                 self.model = saved.get("model")
                 self.scaler = saved.get("scaler")
@@ -159,6 +175,7 @@ class TradeOutcomePredictor:
         if self._legacy_path.exists():
             try:
                 import pickle
+
                 with open(self._legacy_path, "rb") as f:
                     saved = pickle.load(f)
                 self.model = saved.get("model")
@@ -173,6 +190,7 @@ class TradeOutcomePredictor:
         """Save model using joblib with version metadata."""
         try:
             import joblib
+
             payload = {
                 "model": self.model,
                 "scaler": self.scaler,
@@ -264,16 +282,16 @@ class TradeOutcomePredictor:
                 "feature_importances": importances,
                 "win_rate_actual": float(y.mean()),
             }
-            logger.info(f"Model trained: accuracy={metrics['cv_accuracy']:.3f} brier={metrics['cv_brier']:.3f}")
+            logger.info(
+                f"Model trained: accuracy={metrics['cv_accuracy']:.3f} brier={metrics['cv_brier']:.3f}"
+            )
             return metrics
 
         except ImportError:
             logger.error("scikit-learn not installed: pip install scikit-learn")
             return {"status": "error", "message": "scikit-learn not installed"}
 
-    def predict_win_probability(
-        self, features: Dict[str, Any]
-    ) -> Optional[float]:
+    def predict_win_probability(self, features: Dict[str, Any]) -> Optional[float]:
         """Predict probability of trade success."""
         if self.model is None or self.scaler is None:
             return None
@@ -318,9 +336,7 @@ class TradeOutcomePredictor:
             return {"status": "insufficient_data"}
 
         df = pd.DataFrame(self._history)
-        available = [
-            c for c in self.FEATURE_COLS if c in df.columns
-        ]
+        available = [c for c in self.FEATURE_COLS if c in df.columns]
         X = df[available].fillna(0).values
 
         results: Dict[str, Any] = {"status": "trained"}
@@ -337,8 +353,10 @@ class TradeOutcomePredictor:
             if "r_multiple" in df.columns:
                 y_r = df["r_multiple"].fillna(0).values
                 model_r = GradientBoostingRegressor(
-                    n_estimators=150, max_depth=3,
-                    learning_rate=0.05, random_state=42,
+                    n_estimators=150,
+                    max_depth=3,
+                    learning_rate=0.05,
+                    random_state=42,
                 )
                 model_r.fit(X_scaled, y_r)
                 self._reg_r_model = model_r
@@ -349,8 +367,10 @@ class TradeOutcomePredictor:
             if "mae_pct" in df.columns:
                 y_mae = df["mae_pct"].fillna(0).values
                 model_mae = GradientBoostingRegressor(
-                    n_estimators=150, max_depth=3,
-                    learning_rate=0.05, random_state=42,
+                    n_estimators=150,
+                    max_depth=3,
+                    learning_rate=0.05,
+                    random_state=42,
                 )
                 model_mae.fit(X_scaled, y_mae)
                 self._reg_mae_model = model_mae
@@ -360,8 +380,10 @@ class TradeOutcomePredictor:
             if "hold_hours" in df.columns:
                 y_hold = df["hold_hours"].fillna(0).values
                 model_hold = GradientBoostingRegressor(
-                    n_estimators=100, max_depth=3,
-                    learning_rate=0.05, random_state=42,
+                    n_estimators=100,
+                    max_depth=3,
+                    learning_rate=0.05,
+                    random_state=42,
                 )
                 model_hold.fit(X_scaled, y_hold)
                 self._reg_hold_model = model_hold
@@ -373,42 +395,39 @@ class TradeOutcomePredictor:
         return results
 
     def predict_r_multiple(
-        self, features: Dict[str, Any],
+        self,
+        features: Dict[str, Any],
     ) -> Optional[float]:
         """Predict expected R-multiple for a trade setup."""
         model = getattr(self, "_reg_r_model", None)
         scaler = getattr(self, "_reg_scaler", None)
         if model is None or scaler is None:
             return None
-        X = np.array(
-            [[features.get(c, 0) for c in self.FEATURE_COLS]]
-        )
+        X = np.array([[features.get(c, 0) for c in self.FEATURE_COLS]])
         return float(model.predict(scaler.transform(X))[0])
 
     def predict_mae(
-        self, features: Dict[str, Any],
+        self,
+        features: Dict[str, Any],
     ) -> Optional[float]:
         """Predict expected MAE (max adverse excursion %)."""
         model = getattr(self, "_reg_mae_model", None)
         scaler = getattr(self, "_reg_scaler", None)
         if model is None or scaler is None:
             return None
-        X = np.array(
-            [[features.get(c, 0) for c in self.FEATURE_COLS]]
-        )
+        X = np.array([[features.get(c, 0) for c in self.FEATURE_COLS]])
         return float(model.predict(scaler.transform(X))[0])
 
     def predict_hold_days(
-        self, features: Dict[str, Any],
+        self,
+        features: Dict[str, Any],
     ) -> Optional[float]:
         """Predict expected holding period in hours."""
         model = getattr(self, "_reg_hold_model", None)
         scaler = getattr(self, "_reg_scaler", None)
         if model is None or scaler is None:
             return None
-        X = np.array(
-            [[features.get(c, 0) for c in self.FEATURE_COLS]]
-        )
+        X = np.array([[features.get(c, 0) for c in self.FEATURE_COLS]])
         return float(model.predict(scaler.transform(X))[0])
 
 
@@ -416,10 +435,11 @@ class TradeOutcomePredictor:
 # LLM Failure Analyst
 # ---------------------------------------------------------------------------
 
+
 class LLMFailureAnalyst:
     """
     Uses LLM to analyze losing trades and extract actionable patterns.
-    
+
     - Groups losses by strategy, market regime, sector
     - Identifies common failure modes
     - Suggests parameter adjustments
@@ -460,6 +480,7 @@ Respond in JSON format:
         if settings.openai_api_key:
             try:
                 from openai import AsyncOpenAI
+
                 self._client = AsyncOpenAI(api_key=settings.openai_api_key)
                 return self._client
             except ImportError:
@@ -468,6 +489,7 @@ Respond in JSON format:
         if settings.azure_openai_endpoint:
             try:
                 from openai import AsyncAzureOpenAI
+
                 self._client = AsyncAzureOpenAI(
                     azure_endpoint=settings.azure_openai_endpoint,
                     api_key=settings.azure_openai_api_key,
@@ -515,7 +537,9 @@ Respond in JSON format:
 
             content = response.choices[0].message.content
             analysis = json.loads(content)
-            logger.info(f"LLM failure analysis complete: {len(analysis.get('recommendations', []))} recommendations")
+            logger.info(
+                f"LLM failure analysis complete: {len(analysis.get('recommendations', []))} recommendations"
+            )
             return analysis
 
         except Exception as e:
@@ -527,10 +551,11 @@ Respond in JSON format:
 # Integrated Learning Loop
 # ---------------------------------------------------------------------------
 
+
 class TradeLearningLoop:
     """
     Complete learning loop that ties everything together.
-    
+
     Flow:
     1. Record trade outcomes
     2. When enough data: train predictor
@@ -573,19 +598,15 @@ class TradeLearningLoop:
             "win_probability": round(win_prob, 3),
             "recommended_position_pct": round(position_size * 100, 2),
             "signal_grade": (
-                "A" if win_prob > 0.7
-                else "B" if win_prob > 0.55
-                else "C" if win_prob > 0.4
-                else "D"
+                "A"
+                if win_prob > 0.7
+                else "B" if win_prob > 0.55 else "C" if win_prob > 0.4 else "D"
             ),
         }
 
     async def run_failure_analysis(self) -> Optional[Dict[str, Any]]:
         """Run LLM analysis on recent losing trades."""
-        losers = [
-            o.to_dict() for o in self._outcomes
-            if not o.data["is_winner"]
-        ]
+        losers = [o.to_dict() for o in self._outcomes if not o.data["is_winner"]]
         if len(losers) < 5:
             return None
 
@@ -597,7 +618,8 @@ class TradeLearningLoop:
     # ── Sprint 29: calibration tracking ───────────────────
 
     def get_calibration_stats(
-        self, n_bins: int = 5,
+        self,
+        n_bins: int = 5,
     ) -> Dict[str, Any]:
         """Compare predicted win probabilities to actual outcomes.
 
@@ -611,10 +633,7 @@ class TradeLearningLoop:
         preds: List[Tuple[float, bool]] = []
         for o in self._outcomes:
             d = o.to_dict()
-            features = {
-                c: d.get(c, 0)
-                for c in self.predictor.FEATURE_COLS
-            }
+            features = {c: d.get(c, 0) for c in self.predictor.FEATURE_COLS}
             prob = self.predictor.predict_win_probability(features)
             if prob is not None:
                 preds.append((prob, d["is_winner"]))
@@ -631,23 +650,22 @@ class TradeLearningLoop:
         bin_size = max(1, len(preds) // n_bins)
         bins: List[Dict[str, Any]] = []
         for i in range(0, len(preds), bin_size):
-            chunk = preds[i:i + bin_size]
+            chunk = preds[i : i + bin_size]
             if not chunk:
                 continue
             mean_pred = sum(p for p, _ in chunk) / len(chunk)
-            actual_wr = sum(
-                1 for _, w in chunk if w
-            ) / len(chunk)
-            bins.append({
-                "predicted": round(mean_pred, 3),
-                "actual": round(actual_wr, 3),
-                "count": len(chunk),
-            })
+            actual_wr = sum(1 for _, w in chunk if w) / len(chunk)
+            bins.append(
+                {
+                    "predicted": round(mean_pred, 3),
+                    "actual": round(actual_wr, 3),
+                    "count": len(chunk),
+                }
+            )
 
         # Brier-style calibration error
         cal_error = sum(
-            abs(b["predicted"] - b["actual"]) * b["count"]
-            for b in bins
+            abs(b["predicted"] - b["actual"]) * b["count"] for b in bins
         ) / len(preds)
 
         return {
@@ -660,6 +678,7 @@ class TradeLearningLoop:
     def _persist_outcomes(self):
         """Save trade outcomes to JSON for persistence across restarts."""
         import json
+
         path = MODEL_DIR / "trade_outcomes.json"
         try:
             data = [o.to_dict() for o in self._outcomes]
@@ -672,6 +691,7 @@ class TradeLearningLoop:
     def _load_persisted_outcomes(self):
         """Load previously saved trade outcomes."""
         import json
+
         path = MODEL_DIR / "trade_outcomes.json"
         if not path.exists():
             return
@@ -699,7 +719,8 @@ class TradeLearningLoop:
                     adx_at_entry=d.get("adx_at_entry", 0.0),
                     relative_volume=d.get("relative_volume", 0.0),
                     distance_from_sma50=d.get(
-                        "distance_from_sma50", 0.0,
+                        "distance_from_sma50",
+                        0.0,
                     ),
                     exit_reason=d.get("exit_reason", ""),
                     hold_hours=d.get("hold_hours", 0.0),
@@ -741,7 +762,9 @@ class TradeLearningLoop:
             "total_pnl": round(sum(pnls), 2),
             "best_trade": round(max(pnls), 2),
             "worst_trade": round(min(pnls), 2),
-            "sharpe_approx": round(np.mean(pnls) / np.std(pnls), 2) if np.std(pnls) > 0 else 0,
+            "sharpe_approx": (
+                round(np.mean(pnls) / np.std(pnls), 2) if np.std(pnls) > 0 else 0
+            ),
             "model_trained": self.predictor.model is not None,
             "last_analysis": self._last_analysis is not None,
             "strategy_breakdown": strategy_stats,

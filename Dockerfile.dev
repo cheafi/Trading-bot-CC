@@ -1,0 +1,27 @@
+FROM python:3.13-slim
+
+# Avoid Gatekeeper / macOS .so scan issues — Linux container = instant imports
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+# Install system deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ curl git && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Python deps (base + api layers)
+COPY requirements/base.txt requirements/base.txt
+COPY requirements/api.txt requirements/api.txt
+RUN pip install -r requirements/base.txt -r requirements/api.txt
+
+# Copy source
+COPY . .
+
+# Run via _cc_instant.py proxy (port 8000 front → 8001 uvicorn back)
+EXPOSE 8000 8001
+
+CMD ["python", "_cc_instant.py"]

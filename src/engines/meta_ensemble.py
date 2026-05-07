@@ -13,6 +13,7 @@ Pipeline:
 The fallback is always the hand-tuned DEFAULT_WEIGHTS so the
 system degrades gracefully if < MIN_SAMPLES trades are recorded.
 """
+
 from __future__ import annotations
 
 import logging
@@ -33,18 +34,19 @@ COMPONENT_NAMES = [
     "conviction_bonus",
 ]
 
-MIN_SAMPLES = 100       # need 100+ trades before weights are meaningful (8 features)
-RETRAIN_INTERVAL = 10   # re-learn every N new trades
-RIDGE_ALPHA = 1.0       # L2 regularisation
-MIN_WEIGHT = 0.02       # floor so no component gets zeroed
+MIN_SAMPLES = 300  # need 300+ trades before weights are meaningful (8 features)
+RETRAIN_INTERVAL = 10  # re-learn every N new trades
+RIDGE_ALPHA = 1.0  # L2 regularisation
+MIN_WEIGHT = 0.02  # floor so no component gets zeroed
 MIN_STRATEGY_SAMPLES = 10  # min trades per strategy before keep/discard decision
-DISCARD_WIN_RATE = 0.35    # strategies below this win rate are flagged for discard
-DISCARD_R_MULTIPLE = 0.0   # strategies with avg R < 0 are flagged for discard
+DISCARD_WIN_RATE = 0.35  # strategies below this win rate are flagged for discard
+DISCARD_R_MULTIPLE = 0.0  # strategies with avg R < 0 are flagged for discard
 
 
 @dataclass
 class TrainingSample:
     """One (component_vector, outcome) pair."""
+
     components: Dict[str, float]
     pnl_pct: float
     r_multiple: float = 0.0
@@ -55,6 +57,7 @@ class TrainingSample:
 @dataclass
 class StrategyVerdict:
     """Keep/discard verdict for a strategy."""
+
     strategy_id: str
     n_trades: int
     win_rate: float
@@ -78,6 +81,7 @@ class StrategyVerdict:
 @dataclass
 class MetaEnsembleState:
     """Serialisable snapshot of the learned model."""
+
     weights: Dict[str, float] = field(default_factory=dict)
     n_samples: int = 0
     r_squared: float = 0.0
@@ -93,8 +97,7 @@ class MetaEnsembleState:
             "r_squared": round(self.r_squared, 4),
             "last_retrained_at": self.last_retrained_at,
             "coefficient_importances": {
-                k: round(v, 4)
-                for k, v in self.coefficient_importances.items()
+                k: round(v, 4) for k, v in self.coefficient_importances.items()
             },
         }
 
@@ -138,13 +141,15 @@ class MetaEnsemble:
         strategy_id: str = "",
     ):
         """Record a closed-trade outcome with its component scores."""
-        self._samples.append(TrainingSample(
-            components=components,
-            pnl_pct=pnl_pct,
-            r_multiple=r_multiple,
-            regime_label=regime_label,
-            strategy_id=strategy_id,
-        ))
+        self._samples.append(
+            TrainingSample(
+                components=components,
+                pnl_pct=pnl_pct,
+                r_multiple=r_multiple,
+                regime_label=regime_label,
+                strategy_id=strategy_id,
+            )
+        )
         self._trades_since_retrain += 1
 
         if (
@@ -158,6 +163,7 @@ class MetaEnsemble:
     def _train(self):
         """Train ridge regression: components → PnL."""
         from datetime import datetime, timezone
+
         n = len(self._samples)
         if n < self._min_samples:
             return
@@ -166,10 +172,7 @@ class MetaEnsemble:
         X: List[List[float]] = []
         y: List[float] = []
         for s in self._samples:
-            row = [
-                s.components.get(name, 0.0)
-                for name in COMPONENT_NAMES
-            ]
+            row = [s.components.get(name, 0.0) for name in COMPONENT_NAMES]
             X.append(row)
             y.append(s.pnl_pct)
 
@@ -186,46 +189,36 @@ class MetaEnsemble:
         y_mean = sum(y) / len(y)
         ss_tot = sum((yi - y_mean) ** 2 for yi in y)
         y_pred = [
-            sum(X[i][j] * coefficients[j] for j in range(k))
-            for i in range(len(X))
+            sum(X[i][j] * coefficients[j] for j in range(k)) for i in range(len(X))
         ]
-        ss_res = sum(
-            (y[i] - y_pred[i]) ** 2 for i in range(len(y))
-        )
+        ss_res = sum((y[i] - y_pred[i]) ** 2 for i in range(len(y)))
         r_sq = 1 - ss_res / ss_tot if ss_tot > 0 else 0
 
         # Convert coefficients to weights (absolute value, normalised)
         abs_coefs = [abs(c) for c in coefficients]
         total = sum(abs_coefs) or 1.0
         raw_weights = {
-            COMPONENT_NAMES[i]: max(
-                MIN_WEIGHT, abs_coefs[i] / total
-            )
-            for i in range(k)
+            COMPONENT_NAMES[i]: max(MIN_WEIGHT, abs_coefs[i] / total) for i in range(k)
         }
         # Re-normalise after flooring
         w_total = sum(raw_weights.values())
-        weights = {
-            name: round(w / w_total, 4)
-            for name, w in raw_weights.items()
-        }
+        weights = {name: round(w / w_total, 4) for name, w in raw_weights.items()}
 
         self._state = MetaEnsembleState(
             weights=weights,
             n_samples=n,
             r_squared=r_sq,
-            last_retrained_at=datetime.now(
-                timezone.utc
-            ).isoformat(),
+            last_retrained_at=datetime.now(timezone.utc).isoformat(),
             coefficient_importances={
-                COMPONENT_NAMES[i]: coefficients[i]
-                for i in range(k)
+                COMPONENT_NAMES[i]: coefficients[i] for i in range(k)
             },
         )
         self._trades_since_retrain = 0
         logger.info(
             "Meta-ensemble retrained: n=%d, R²=%.3f, weights=%s",
-            n, r_sq, weights,
+            n,
+            r_sq,
+            weights,
         )
 
     def _ridge_solve(
@@ -316,6 +309,7 @@ class MetaEnsemble:
         Uses win rate and avg R-multiple as primary signals.
         """
         from collections import defaultdict
+
         by_strategy: Dict[str, List[TrainingSample]] = defaultdict(list)
         for s in self._samples:
             if s.strategy_id:
@@ -346,23 +340,25 @@ class MetaEnsemble:
                 )
             else:
                 verdict = "KEEP"
-                reason = (
-                    f"Win rate {win_rate:.0%}, avg R {avg_r:.2f} over {n} trades"
-                )
+                reason = f"Win rate {win_rate:.0%}, avg R {avg_r:.2f} over {n} trades"
 
-            verdicts.append(StrategyVerdict(
-                strategy_id=strat_id,
-                n_trades=n,
-                win_rate=win_rate,
-                avg_r=avg_r,
-                avg_pnl=avg_pnl,
-                verdict=verdict,
-                reason=reason,
-            ))
+            verdicts.append(
+                StrategyVerdict(
+                    strategy_id=strat_id,
+                    n_trades=n,
+                    win_rate=win_rate,
+                    avg_r=avg_r,
+                    avg_pnl=avg_pnl,
+                    verdict=verdict,
+                    reason=reason,
+                )
+            )
 
         verdicts.sort(key=lambda v: v.avg_r, reverse=True)
         return verdicts
 
     def get_discard_list(self) -> List[str]:
         """Return strategy IDs that should be discarded."""
-        return [v.strategy_id for v in self.evaluate_strategies() if v.verdict == "DISCARD"]
+        return [
+            v.strategy_id for v in self.evaluate_strategies() if v.verdict == "DISCARD"
+        ]

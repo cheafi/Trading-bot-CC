@@ -21,6 +21,7 @@ from src.core.risk_limits import RISK, SIGNAL_THRESHOLDS
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
+from src.engines.confidence_calibrator import ConfidenceCalibrator
 
 logger = logging.getLogger(__name__)
 
@@ -135,8 +136,15 @@ class MetaLabeler:
 
     def __init__(self, **overrides: float):
         self.cfg = {**_DEFAULTS, **overrides}
+        self._calibrator = ConfidenceCalibrator()
+
+    def record_outcome(self, predicted_confidence: float, was_correct: bool) -> None:
+        """Feed a closed-trade outcome back into the calibrator."""
+        self._calibrator.record(predicted_confidence, was_correct)
 
     def evaluate(self, ctx: SignalContext) -> MetaLabel:
+        # Apply calibration — remap raw confidence to empirically-grounded probability
+        ctx.calibrated_probability = self._calibrator.calibrate(ctx.confidence)
         """Run all checks and produce a meta-label."""
         now = datetime.now(timezone.utc).isoformat()
         label = MetaLabel(ticker=ctx.ticker, evaluated_at=now)
