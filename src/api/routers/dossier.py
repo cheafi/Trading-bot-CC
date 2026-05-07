@@ -32,22 +32,49 @@ _CACHE_TTL = 300  # 5 minutes
 
 # Sector ETF map
 _SECTOR_ETF: Dict[str, str] = {
-    "NVDA": "SMH", "AMD": "SMH", "INTC": "SMH", "TSM": "SMH", "AVGO": "SMH",
-    "AAPL": "XLK", "MSFT": "XLK", "GOOGL": "XLK", "META": "XLK", "CRM": "XLK",
-    "AMZN": "XLY", "TSLA": "XLY",
-    "JPM": "XLF", "BAC": "XLF", "GS": "XLF", "MS": "XLF",
-    "JNJ": "XLV", "UNH": "XLV", "PFE": "XLV", "ABBV": "XLV",
-    "XOM": "XLE", "CVX": "XLE", "COP": "XLE",
-    "LIN": "XLB", "APD": "XLB",
-    "NEE": "XLU", "DUK": "XLU",
-    "PLD": "XLRE", "AMT": "XLRE",
-    "CAT": "XLI", "BA": "XLI", "GE": "XLI", "HON": "XLI",
-    "PG": "XLP", "KO": "XLP", "PEP": "XLP", "WMT": "XLP",
+    "NVDA": "SMH",
+    "AMD": "SMH",
+    "INTC": "SMH",
+    "TSM": "SMH",
+    "AVGO": "SMH",
+    "AAPL": "XLK",
+    "MSFT": "XLK",
+    "GOOGL": "XLK",
+    "META": "XLK",
+    "CRM": "XLK",
+    "AMZN": "XLY",
+    "TSLA": "XLY",
+    "JPM": "XLF",
+    "BAC": "XLF",
+    "GS": "XLF",
+    "MS": "XLF",
+    "JNJ": "XLV",
+    "UNH": "XLV",
+    "PFE": "XLV",
+    "ABBV": "XLV",
+    "XOM": "XLE",
+    "CVX": "XLE",
+    "COP": "XLE",
+    "LIN": "XLB",
+    "APD": "XLB",
+    "NEE": "XLU",
+    "DUK": "XLU",
+    "PLD": "XLRE",
+    "AMT": "XLRE",
+    "CAT": "XLI",
+    "BA": "XLI",
+    "GE": "XLI",
+    "HON": "XLI",
+    "PG": "XLP",
+    "KO": "XLP",
+    "PEP": "XLP",
+    "WMT": "XLP",
 }
 
 
 def _load_brief_data() -> Dict:
     from src.services.brief_data_service import load_brief
+
     return load_brief()
 
 
@@ -98,9 +125,9 @@ def _build_dossier(ticker: str) -> Dict[str, Any]:
 
     thesis_score = min(score * 5, 100) if score else 0
     timing_score = (
-        70 if (rsi and 45 <= rsi <= 70) else
-        50 if (rsi and rsi < 45) else
-        30 if (rsi and rsi > 75) else 50
+        70
+        if (rsi and 45 <= rsi <= 70)
+        else 50 if (rsi and rsi < 45) else 30 if (rsi and rsi > 75) else 50
     )
     execution_score = 80 if (volume_ok and above_ma) else 50 if above_ma else 30
     data_score = 40 if regime.get("synthetic") else 85
@@ -146,7 +173,9 @@ def _build_dossier(ticker: str) -> Dict[str, Any]:
             "timing": timing_score,
             "execution": execution_score,
             "data": data_score,
-            "overall": round((thesis_score + timing_score + execution_score + data_score) / 4),
+            "overall": round(
+                (thesis_score + timing_score + execution_score + data_score) / 4
+            ),
         },
         # Indicators
         "indicators": {
@@ -204,3 +233,166 @@ async def symbol_dossier(ticker: str):
     dossier = _build_dossier(ticker)
     _DOSSIER_CACHE[ticker] = (time.time(), dossier)
     return dossier
+
+
+# ── Trade Advice Engine (Sprint 115) ──────────────────────────────────────
+
+
+def _compute_trade_advice(
+    ticker: str,
+    buy_price: float,
+    current_price: float,
+    dossier: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Given a user's buy price, the current price, and the full dossier context,
+    produce a concrete trade suggestion: BUY MORE / HOLD / TRIM / SELL / EXIT.
+    """
+    pnl_pct = ((current_price - buy_price) / buy_price) * 100 if buy_price > 0 else 0
+    pnl_dollar = current_price - buy_price
+
+    # Extract context
+    regime = dossier.get("regime", {})
+    decision = dossier.get("decision", {})
+    confidence = dossier.get("confidence", {})
+    risk = dossier.get("risk", {})
+    indicators = dossier.get("indicators", {})
+
+    conviction = decision.get("conviction_tier", "WAIT")
+    gate = decision.get("regime_gate", "ALLOWED")
+    rsi = indicators.get("rsi")
+    rs_spy = indicators.get("rs_vs_spy")
+    overall_conf = confidence.get("overall", 50)
+
+    stop = risk.get("stop")
+    target = risk.get("target")
+    entry = risk.get("entry")
+
+    # ── Compute R-multiple if stop is known ──
+    risk_per_share = abs(buy_price - stop) if stop and stop < buy_price else None
+    r_multiple = (
+        (pnl_dollar / risk_per_share) if risk_per_share and risk_per_share > 0 else None
+    )
+
+    # ── Decision logic ──
+    action = "HOLD"
+    reasons = []
+    warnings = []
+
+    # EXIT conditions (highest priority)
+    if gate == "BLOCKED":
+        action = "EXIT"
+        reasons.append("Regime gate BLOCKED — no new longs, consider exiting")
+    elif stop and current_price <= stop:
+        action = "EXIT"
+        reasons.append(f"Price ${current_price:.2f} hit stop ${stop:.2f} — hard exit")
+    elif pnl_pct <= -8:
+        action = "EXIT"
+        reasons.append(f"Loss of {pnl_pct:.1f}% exceeds max tolerance — cut loss")
+    elif rsi and rsi > 80 and pnl_pct > 15:
+        action = "SELL"
+        reasons.append(f"RSI {rsi:.0f} overbought + {pnl_pct:.1f}% gain — take profit")
+
+    # TRIM conditions
+    elif r_multiple and r_multiple >= 3:
+        action = "TRIM"
+        reasons.append(f"At {r_multiple:.1f}R — lock partial profit (sell 1/3)")
+    elif pnl_pct > 20 and rsi and rsi > 70:
+        action = "TRIM"
+        reasons.append(f"+{pnl_pct:.1f}% with RSI {rsi:.0f} — trim 25-50%")
+
+    # BUY MORE conditions
+    elif conviction in ("TRADE", "LEADER") and gate == "ALLOWED":
+        if pnl_pct > 0 and pnl_pct < 5 and overall_conf >= 65:
+            action = "BUY MORE"
+            reasons.append(
+                f"Conviction {conviction}, early profit, confidence {overall_conf}% — add to winner"
+            )
+        elif pnl_pct < 0 and pnl_pct > -3 and overall_conf >= 70 and (rsi and rsi < 40):
+            action = "BUY MORE"
+            reasons.append(
+                f"Pullback {pnl_pct:.1f}% into support, RSI {rsi:.0f} oversold — scale in"
+            )
+        else:
+            action = "HOLD"
+            reasons.append(f"Conviction {conviction}, gate clear — maintain position")
+    else:
+        action = "HOLD"
+        reasons.append(f"Conviction {conviction} — no immediate action needed")
+
+    # ── Warnings ──
+    if regime.get("synthetic"):
+        warnings.append("⚠ SYNTHETIC regime data — lower confidence")
+    if overall_conf < 50:
+        warnings.append(
+            f"Low overall confidence ({overall_conf}%) — size conservatively"
+        )
+    if rs_spy and rs_spy < 0:
+        warnings.append(f"Underperforming SPY (RS {rs_spy:.1f}) — watch closely")
+
+    # ── Target prices ──
+    sell_target = (
+        target
+        if target
+        else (buy_price * 1.15 if pnl_pct < 15 else current_price * 1.05)
+    )
+    stop_price = stop if stop else buy_price * 0.93
+
+    return {
+        "ticker": ticker,
+        "buy_price": round(buy_price, 2),
+        "current_price": round(current_price, 2),
+        "pnl_pct": round(pnl_pct, 2),
+        "pnl_dollar": round(pnl_dollar, 2),
+        "r_multiple": round(r_multiple, 2) if r_multiple else None,
+        "action": action,
+        "reasons": reasons,
+        "warnings": warnings,
+        "suggestion": {
+            "target_price": round(sell_target, 2) if sell_target else None,
+            "stop_price": round(stop_price, 2) if stop_price else None,
+            "conviction": conviction,
+            "regime_gate": gate,
+            "confidence": overall_conf,
+        },
+        "comment": " | ".join(reasons + warnings) if warnings else " | ".join(reasons),
+    }
+
+
+@router.get("/{ticker}/trade-advice")
+async def trade_advice(ticker: str, buy_price: float):
+    """
+    Given a user's buy price, return trade suggestion for the position.
+    Uses current market price from yfinance and dossier context.
+    """
+    import asyncio
+    import yfinance as yf
+
+    ticker = ticker.strip().upper()
+    if not ticker:
+        raise HTTPException(status_code=400, detail="Ticker required")
+    if buy_price <= 0:
+        raise HTTPException(status_code=400, detail="buy_price must be positive")
+
+    # Get current price
+    def _get_price():
+        t = yf.Ticker(ticker)
+        info = t.fast_info
+        return getattr(info, "last_price", None) or getattr(
+            info, "previous_close", None
+        )
+
+    current_price = await asyncio.to_thread(_get_price)
+    if not current_price:
+        raise HTTPException(status_code=404, detail=f"Cannot fetch price for {ticker}")
+
+    # Get dossier context
+    cached = _DOSSIER_CACHE.get(ticker)
+    if cached and (time.time() - cached[0]) < _CACHE_TTL:
+        dossier = cached[1]
+    else:
+        dossier = _build_dossier(ticker)
+        _DOSSIER_CACHE[ticker] = (time.time(), dossier)
+
+    advice = _compute_trade_advice(ticker, buy_price, current_price, dossier)
+    return advice

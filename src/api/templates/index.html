@@ -1805,6 +1805,64 @@
               <span>Resistance <strong class="text-red-400" x-text="dos.data.technicals?'$'+dos.data.technicals.resistance:'—'"></strong> <span class="text-[8px]" x-text="dos.data.technicals&&dos.data.technicals.resistance_dist_pct?'('+dos.data.technicals.resistance_dist_pct+'% above)':''"></span></span>
             </div>
           </div>
+          <!-- ── My Position: Trade Advisor (Sprint 115) ── -->
+          <div class="card card-p" style="border:1px solid var(--bd)">
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">💰 My Position — Trade Advisor</div>
+            <div class="flex gap-2 items-end mb-3">
+              <div style="flex:1">
+                <label class="text-[9px] font-bold uppercase" style="color:var(--t3)">My Buy Price</label>
+                <input type="number" step="0.01" x-model="dos.buyPrice" placeholder="e.g. 150.00" class="w-full mt-1 px-2 py-1.5 rounded text-[12px] mono" style="background:var(--s2);border:1px solid var(--bd);color:var(--t1);outline:none" @keydown.enter="fetchTradeAdvice()">
+              </div>
+              <button class="btn-p text-[10px] px-4 py-1.5" @click="fetchTradeAdvice()" :disabled="dos.adviceLoading||!dos.buyPrice" style="white-space:nowrap">
+                <span x-show="!dos.adviceLoading">🎯 Get Advice</span>
+                <span x-show="dos.adviceLoading">⏳ Loading…</span>
+              </button>
+            </div>
+            <!-- Advice result -->
+            <template x-if="dos.advice">
+              <div>
+                <!-- P&L + Action header -->
+                <div class="flex items-center justify-between p-3 rounded mb-2" :style="dos.advice.action==='EXIT'||dos.advice.action==='SELL'?'background:rgba(255,92,92,.1);border:1px solid rgba(255,92,92,.3)':dos.advice.action==='BUY MORE'?'background:rgba(0,212,170,.1);border:1px solid rgba(0,212,170,.3)':dos.advice.action==='TRIM'?'background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3)':'background:var(--s2);border:1px solid var(--bd)'">
+                  <div>
+                    <div class="text-[9px] font-bold uppercase" style="color:var(--t3)">ACTION</div>
+                    <div class="text-[18px] font-black" :class="dos.advice.action==='EXIT'||dos.advice.action==='SELL'?'text-red-400':dos.advice.action==='BUY MORE'?'text-green-400':dos.advice.action==='TRIM'?'text-amber-400':'text-white'" x-text="dos.advice.action"></div>
+                  </div>
+                  <div style="text-align:right">
+                    <div class="text-[9px] font-bold uppercase" style="color:var(--t3)">P&L</div>
+                    <div class="text-[16px] font-bold mono" :class="dos.advice.pnl_pct>=0?'text-green-400':'text-red-400'" x-text="(dos.advice.pnl_pct>=0?'+':'')+dos.advice.pnl_pct+'%'"></div>
+                    <div class="text-[10px] mono" style="color:var(--t3)" x-text="'$'+dos.advice.buy_price+' → $'+dos.advice.current_price+' ('+(dos.advice.pnl_dollar>=0?'+':'')+dos.advice.pnl_dollar+')'"></div>
+                  </div>
+                </div>
+                <!-- R-multiple if available -->
+                <template x-if="dos.advice.r_multiple!==null">
+                  <div class="text-[11px] mb-2 mono" style="color:var(--t2)">R-multiple: <strong :class="dos.advice.r_multiple>=0?'text-green-400':'text-red-400'" x-text="(dos.advice.r_multiple>=0?'+':'')+dos.advice.r_multiple+'R'"></strong></div>
+                </template>
+                <!-- Detail grid -->
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px" class="text-[10px] mb-2">
+                  <div class="p-2 rounded" style="background:var(--s2)">
+                    <div class="text-[8px] font-bold" style="color:var(--t3)">TARGET</div>
+                    <div class="mono font-bold text-green-400" x-text="dos.advice.suggestion.target_price?'$'+dos.advice.suggestion.target_price:'—'"></div>
+                  </div>
+                  <div class="p-2 rounded" style="background:var(--s2)">
+                    <div class="text-[8px] font-bold" style="color:var(--t3)">STOP</div>
+                    <div class="mono font-bold text-red-400" x-text="dos.advice.suggestion.stop_price?'$'+dos.advice.suggestion.stop_price:'—'"></div>
+                  </div>
+                  <div class="p-2 rounded" style="background:var(--s2)">
+                    <div class="text-[8px] font-bold" style="color:var(--t3)">CONFIDENCE</div>
+                    <div class="mono font-bold text-white" x-text="dos.advice.suggestion.confidence+'%'"></div>
+                  </div>
+                </div>
+                <!-- Reasons -->
+                <template x-for="r in dos.advice.reasons">
+                  <div class="text-[10px] mb-1" style="color:var(--t2)">→ <span x-text="r"></span></div>
+                </template>
+                <!-- Warnings -->
+                <template x-for="w in dos.advice.warnings">
+                  <div class="text-[10px] mb-1 text-amber-400">⚠ <span x-text="w"></span></div>
+                </template>
+              </div>
+            </template>
+          </div>
           <!-- Historical Analogs -->
           <template x-if="(dos.data.analogs||[]).length>0">
             <div class="card card-p">
@@ -4583,7 +4641,7 @@
       showMore:false,
       live:false,clock:'',regime:{},indices:[],macro:[],sectors:[],asia:[],trust:{},
       sig:{mode:'—',source:'',as_of:'',recs:[],strategy_scores:{},no_trade_reason:null,scan_meta:null},
-      dos:{ticker:'',loading:false,data:null,error:'',showSignals:true,chartPeriod:'6mo',benchPeriod:'1y',chartSignals:[],benchStats:null,benchSummary:null,benchMonthly:null,benchQuarterly:null,benchYearly:null,benchTab:'monthly'},
+      dos:{ticker:'',loading:false,data:null,error:'',showSignals:true,chartPeriod:'6mo',benchPeriod:'1y',chartSignals:[],benchStats:null,benchSummary:null,benchMonthly:null,benchQuarterly:null,benchYearly:null,benchTab:'monthly',buyPrice:'',advice:null,adviceLoading:false},
       pf:{loading:false,positions:[],alerts:[],summary:null,showAdd:false,addTicker:'',addShares:0,addEntry:0,addStop:0,addT1r:0,addT2r:0,addNotes:'',editTicker:null},
       factory:{loading:false,ticker:'SPY',period:'2y',mode:'demo',result:null,detail:null,showDetail:false,sortBy:'score'},
       opt:{ticker:'',loading:false,data:null},
@@ -4807,6 +4865,16 @@
           const r=await fetch('/api/portfolio/position',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticker:this.dos.ticker,shares:parseFloat(shares),entry_price:entry,stop_price:tp.stop,target_1r:tp.target_1r,target_2r:tp.target_2r,notes:'From dossier trade plan'})});
           if(r.ok){alert('✅ '+this.dos.ticker+' added to portfolio! Check Portfolio tab.');this.tab='portfolio';await this.fetchPortfolio()}
         }catch(e){console.warn(e)}
+      },
+      async fetchTradeAdvice(){
+        if(!this.dos.ticker||!this.dos.buyPrice)return;
+        this.dos.adviceLoading=true;this.dos.advice=null;
+        try{
+          const r=await fetch('/api/dossier/'+encodeURIComponent(this.dos.ticker)+'/trade-advice?buy_price='+this.dos.buyPrice);
+          if(r.ok)this.dos.advice=await r.json();
+          else this.dos.advice={action:'ERROR',reasons:['Failed to get advice'],warnings:[],comment:'API error'};
+        }catch(e){console.warn('Trade advice error:',e);this.dos.advice={action:'ERROR',reasons:[e.message],warnings:[],comment:'Network error'}}
+        finally{this.dos.adviceLoading=false}
       },
       async runFactory(){
         this.factory.loading=true;this.factory.result=null;this.factory.showDetail=false;
