@@ -238,12 +238,35 @@ These ideas need more research before committing:
 - [x] **Portfolio Risk card** in Ops dashboard — all-gates badge, positions count, 1d VaR, HHI grade
 - [x] **Sprint 100 CI tests** — 13 tests: execution cost, MTF RSI/MACD, ranker MTF wiring, Pearson/VaR helpers, risk router prefix, Kelly formula
 
-### Self-Learning v4 (Sprint 101+)
-- [ ] Multi-signal Brier decomposition (per strategy type)
-- [ ] Reinforcement learning sizing loop (Thompson sampling)
-- [ ] Automatic feature importance decay detection
-- [ ] A/B harness auto-proposal from regime-tune output
-- [ ] MTF confluence gate wired into signal generation pipeline (pre-filter)
+### ✅ Sprint 101 — Canonical Decision Schema (v9.5.1)
+- [x] **7 new DecisionObject fields** — `signal_source`, `trust_level`, `data_freshness_minutes`, `benchmark_compare`, `mtf_confluence_score`, `execution_cost_bps`, `calibrated_confidence`
+- [x] **`from_pipeline_result()` classmethod** — canonical adapter from SectorPipeline PipelineResult
+- [x] **`JournalEntry.from_decision_object()` factory** — maps DecisionObject → JournalEntry with enrichment fields
+- [x] **`/dossier/{ticker}` adapter** — now returns `DecisionObject.to_dict()` instead of raw signal dict
+- [x] **Sprint 101 CI tests** — 10 tests, 10/10 passing
+
+### ✅ Sprint 102 — Self-Learning v4 Phase 1 (v9.5.2)
+- [x] **Per-strategy Brier decomposition** — `record_prediction_outcome(strategy=)` tracks per-strategy IC window
+- [x] **A/B auto-proposal from regime-tune** — `tune_regime_params()` auto-calls `propose_ab_shadow()` when param shifts >5%
+- [x] **MTF pre-filter in MultiLayerRanker** — `pre_filter()` drops signals with explicit `mtf_confluence_score < 0.35`
+- [x] **`/calibration/by-strategy` endpoint** — per-strategy Brier table
+- [x] **Dashboard Calibration card** — per-strategy Brier rows
+- [x] **Sprint 102 CI tests** — 12 tests, 12/12 passing
+
+### ✅ Sprint 103 — Self-Learning v4 Phase 2 (v9.6.0)
+- [x] **ThompsonSizingEngine** (`src/engines/thompson_sizing.py`) — Beta(α,β) per `(strategy,regime)` arm; `sample()` → sizing multiplier [0.25–2.0×]; `update(win)` nudges α/β; persist to `models/thompson_arms.json`
+- [x] **FeatureICDecayDetector** (`src/engines/feature_ic.py`) — rolling Pearson IC per feature; decay alert when IC drops >0.10 from peak; persist to `models/feature_ic.json`
+- [x] **5 new REST endpoints** — `/thompson`, `/thompson/sample`, `/thompson/update`, `/feature-ic`, `/feature-ic/record`
+- [x] **EOD scheduler step 7** — Thompson arm updates + feature IC recording wired from closed trades
+- [x] **Dashboard cards** — 🎰 Thompson Sizing card + 📉 Feature IC Decay card in Ops panel
+- [x] **Sprint 103 CI tests** — 15 tests, 15/15 passing
+
+### Self-Learning v4 — COMPLETE ✅
+- [x] Multi-signal Brier decomposition (per strategy type)
+- [x] Reinforcement learning sizing loop (Thompson sampling)
+- [x] Automatic feature importance decay detection
+- [x] A/B harness auto-proposal from regime-tune output
+- [x] MTF confluence gate wired into signal generation pipeline (pre-filter)
 
 ---
 

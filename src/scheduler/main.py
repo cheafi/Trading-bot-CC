@@ -462,6 +462,55 @@ class TradingScheduler:
             except Exception as _rte:
                 logger.warning("EOD regime-tune failed (non-fatal): %s", _rte)
 
+            # 7. Thompson RL sizing + Feature IC update from closed trades (Sprint 103)
+            try:
+                from src.engines.thompson_sizing import (
+                    get_thompson_engine,
+                )  # noqa: PLC0415
+                from src.engines.feature_ic import (
+                    record_feature_outcomes,
+                )  # noqa: PLC0415
+                from src.engines.self_learning import (
+                    pull_closed_trades_from_learning_loop as _pull2,
+                )  # noqa: PLC0415
+
+                _eod_trades = _pull2()
+                if _eod_trades:
+                    t_eng = get_thompson_engine()
+                    updated_arms = 0
+                    for trade in _eod_trades:
+                        strategy = trade.get("strategy", "UNKNOWN")
+                        regime = trade.get("regime", "SIDEWAYS")
+                        win = trade.get("outcome", "").lower() == "win"
+                        t_eng.update(strategy, regime, win)
+                        updated_arms += 1
+
+                        # Feature IC
+                        feats = {
+                            k: trade.get(k)
+                            for k in (
+                                "final_confidence",
+                                "rs_composite",
+                                "mtf_confluence_score",
+                                "thesis_confidence",
+                                "timing_confidence",
+                                "vix",
+                            )
+                            if trade.get(k) is not None
+                        }
+                        if feats:
+                            record_feature_outcomes(feats, actual_win=win)
+
+                    logger.info(
+                        "EOD Thompson+IC: updated %d arms from %d trades",
+                        updated_arms,
+                        len(_eod_trades),
+                    )
+                else:
+                    logger.info("EOD Thompson+IC: no closed trades yet — skipped")
+            except Exception as _th:
+                logger.warning("EOD Thompson+IC failed (non-fatal): %s", _th)
+
         except Exception as e:
             logger.error("EOD processing failed: %s", e)
 

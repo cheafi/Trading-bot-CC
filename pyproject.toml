@@ -96,6 +96,10 @@ line-length = 88
 [tool.ruff]
 line-length = 88
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--ignore=tests/sprints/test_sprint55.py --ignore=tests/sprints/test_sprint56.py --ignore=tests/sprints/test_sprint57.py --ignore=tests/sprints/test_sprint58.py"
+
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"

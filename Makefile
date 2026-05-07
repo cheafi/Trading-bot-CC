@@ -2,14 +2,14 @@
 
 # Default target
 help:
-	@echo "CC — Regime-Aware Market Intelligence Platform (v6.1)"
+	@echo "CC — Regime-Aware Market Intelligence Platform (v9.6)"
 	@echo "Usage:"
 	@echo "  make dev     # Local development (venv + services)"
 	@echo "  make prod    # Production Docker"
-	@echo "  make test    # Run pytest + coverage"
+	@echo "  make test    # Run pytest (sprints 100-103)"
 	@echo "  make lint    # Black + ruff + mypy"
 	@echo "  make install # pip install -e .[dev]"
-	@echo "  make clean   # Clean artifacts"
+	@echo "  make clean   # Remove caches, logs, build artefacts"
 
 # ── Development ──────────────────────────────────────────────────────
 dev: install
@@ -59,11 +59,7 @@ format:
 
 # ── Clean ────────────────────────────────────────────────────────────
 clean:
-	rm -rf .coverage htmlcov/ dist/ *.egg-info/
-	docker compose down -v
-	poetry cache clear --all pypi
-	find . -name '__pycache__' -exec rm -rf {} +
-	find . -name '*.pyc' -delete
+	bash cleanup.sh
 
 # ── Docker ───────────────────────────────────────────────────────────
 docker-build:

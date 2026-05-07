@@ -121,3 +121,14 @@ Roo-Code/
 !.vscode/mcp.json
 data/fund_state.db
 .git_corrupted_backup/
+
+# Sprint 103+ model state (auto-generated, not for version control)
+models/thompson_arms.json
+models/feature_ic.json
+
+# Cleanup artefacts
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
