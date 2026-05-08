@@ -42,6 +42,7 @@ def _council(request=None):
             return council
     if _council_instance is None:
         from src.engines.expert_council import ExpertCouncil
+
         _council_instance = ExpertCouncil()
     return _council_instance
 
@@ -51,6 +52,7 @@ def _rs_engine():
     global _rs_engine_instance
     if _rs_engine_instance is None:
         from src.engines.rs_ranking import RSRankingEngine
+
         _rs_engine_instance = RSRankingEngine()
     return _rs_engine_instance
 
@@ -60,6 +62,7 @@ def _learning_loop():
     global _learning_loop_instance
     if _learning_loop_instance is None:
         from src.engines.learning_loop import LearningLoopPipeline
+
         _learning_loop_instance = LearningLoopPipeline()
     return _learning_loop_instance
 
@@ -69,6 +72,7 @@ def _meta():
     global _meta_instance
     if _meta_instance is None:
         from src.engines.meta_ensemble import MetaEnsemble
+
         _meta_instance = MetaEnsemble()
     return _meta_instance
 
@@ -244,11 +248,7 @@ async def today_summary(request: Request):
         0,
         min(
             100,
-            int(confidence * 100)
-            if isinstance(
-                confidence, (int, float)
-            )
-            else 50,
+            int(confidence * 100) if isinstance(confidence, (int, float)) else 50,
         ),
     )
 
@@ -265,10 +265,11 @@ async def today_summary(request: Request):
         _LIVE_SECTORS = request.app.state.live_sectors
 
         mds = request.app.state.market_data
-        # Quick lookup from cache if available
+        # Quick lookup from cache if available — fetch all in parallel
         idx_data = []
         sec_data = []
-        for sym, name in _LIVE_INDICES:
+
+        async def _fetch_idx(sym, name):
             try:
                 hist = await mds.get_history(sym, period="5d", interval="1d")
                 if hist is not None and len(hist) >= 2:
@@ -276,17 +277,17 @@ async def today_summary(request: Request):
                     cur = float(hist[c].iloc[-1])
                     prev = float(hist[c].iloc[-2])
                     chg = round((cur / prev - 1) * 100, 2)
-                    idx_data.append(
-                        {
-                            "symbol": sym,
-                            "name": name,
-                            "price": round(cur, 2),
-                            "change_pct": chg,
-                        }
-                    )
+                    return {
+                        "symbol": sym,
+                        "name": name,
+                        "price": round(cur, 2),
+                        "change_pct": chg,
+                    }
             except Exception:
                 pass
-        for sym, name in _LIVE_SECTORS[:6]:
+            return None
+
+        async def _fetch_sec(sym, name):
             try:
                 hist = await mds.get_history(sym, period="5d", interval="1d")
                 if hist is not None and len(hist) >= 2:
@@ -294,24 +295,25 @@ async def today_summary(request: Request):
                     cur = float(hist[c].iloc[-1])
                     prev = float(hist[c].iloc[-2])
                     chg = round((cur / prev - 1) * 100, 2)
-                    sec_data.append(
-                        {
-                            "symbol": sym,
-                            "name": name,
-                            "change_pct": chg,
-                        }
-                    )
+                    return {"symbol": sym, "name": name, "change_pct": chg}
             except Exception:
                 pass
-        sec_data.sort(key=lambda x: x["change_pct"], reverse=True)
+            return None
+
+        import asyncio as _aio
+
+        idx_results, sec_results = await _aio.gather(
+            _aio.gather(*[_fetch_idx(sym, name) for sym, name in _LIVE_INDICES]),
+            _aio.gather(*[_fetch_sec(sym, name) for sym, name in _LIVE_SECTORS[:6]]),
+        )
+        idx_data = [r for r in idx_results if r]
+        sec_data = sorted(
+            [r for r in sec_results if r], key=lambda x: x["change_pct"], reverse=True
+        )
         market_pulse = {
             "indices": idx_data,
             "sector_leaders": sec_data[:3],
-            "sector_laggards": (
-                sec_data[-3:][::-1]
-                if len(sec_data) > 3
-                else []
-            ),
+            "sector_laggards": (sec_data[-3:][::-1] if len(sec_data) > 3 else []),
         }
     except Exception as exc:
         logger.debug("Market pulse unavailable: %s", exc)
@@ -374,11 +376,7 @@ async def today_summary(request: Request):
                 ),
                 "action": pr.decision.action,
                 "action_reason": pr.decision.rationale,
-                "why_now": (
-                    [pr.explanation.why_now]
-                    if pr.explanation.why_now
-                    else []
-                ),
+                "why_now": ([pr.explanation.why_now] if pr.explanation.why_now else []),
                 "entry_price": sig.get("entry_price", 0),
                 "target_price": sig.get("target_price", 0),
                 "stop_price": sig.get("stop_price", 0),
@@ -659,11 +657,7 @@ async def ranked_opportunities(
                 "stop_price": sig.get("stop_price", 0),
                 "action": pr.decision.action,
                 "action_reason": pr.decision.rationale,
-                "why_now": (
-                    [pr.explanation.why_now]
-                    if pr.explanation.why_now
-                    else []
-                ),
+                "why_now": ([pr.explanation.why_now] if pr.explanation.why_now else []),
                 "position_hint": _position_hint(sig, should_trade),
                 "confidence_breakdown": pr.confidence.to_dict(),
                 "decision": pr.decision.to_dict(),
@@ -796,7 +790,9 @@ async def signal_card(ticker: str, request: Request):
     - When does this setup fail?
     - Position size hint?
     """
-    from src.services.confidence import compute_4layer_confidence as _compute_4layer_confidence
+    from src.services.confidence import (
+        compute_4layer_confidence as _compute_4layer_confidence,
+    )
     from src.services.indicators import compute_indicators as _compute_indicators
     from src.engines.conformal_predictor import ConformalPredictor
 
@@ -959,12 +955,15 @@ async def regime_summary(request: Request):
     """Full regime classification with cross-asset context."""
     regime_state = await _fetch_regime(request)
     trend_map = {
-        "uptrend": "UPTREND", "downtrend": "DOWNTREND",
+        "uptrend": "UPTREND",
+        "downtrend": "DOWNTREND",
         "sideways": "SIDEWAYS",
     }
     vol_map = {
-        "low_vol": "LOW", "normal_vol": "NORMAL",
-        "elevated_vol": "ELEVATED", "high_vol": "HIGH",
+        "low_vol": "LOW",
+        "normal_vol": "NORMAL",
+        "elevated_vol": "ELEVATED",
+        "high_vol": "HIGH",
         "crisis_vol": "CRISIS",
     }
 
@@ -986,6 +985,7 @@ async def regime_summary(request: Request):
     cross_asset = {}
     try:
         from src.engines.context_assembler import ContextAssembler
+
         ca = ContextAssembler()
         ctx = await ca.assemble()
         cross_asset = ctx.get("cross_asset", {})
@@ -1001,9 +1001,7 @@ async def regime_summary(request: Request):
         "confidence": round(confidence, 2),
         "should_trade": should_trade,
         "cross_asset": cross_asset,
-        "generated_at": (
-            datetime.now(timezone.utc).isoformat() + "Z"
-        ),
+        "generated_at": (datetime.now(timezone.utc).isoformat() + "Z"),
     }
 
 
@@ -1031,9 +1029,7 @@ async def cross_asset_report():
             "data_source": market.get("data_source"),
         },
         "stress_report": report,
-        "generated_at": (
-            datetime.now(timezone.utc).isoformat() + "Z"
-        ),
+        "generated_at": (datetime.now(timezone.utc).isoformat() + "Z"),
     }
 
 
@@ -1049,9 +1045,7 @@ async def learning_summary():
     return {
         "summary": loop.summary(),
         "recent_trades": loop.get_trade_log(limit=20),
-        "generated_at": (
-            datetime.now(timezone.utc).isoformat() + "Z"
-        ),
+        "generated_at": (datetime.now(timezone.utc).isoformat() + "Z"),
     }
 
 

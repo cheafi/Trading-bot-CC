@@ -91,6 +91,8 @@ def _conviction_tier(score: float) -> str:
     """Map brief score (0-10) to conviction tier."""
     if score >= 8:
         return "TRADE"
+    elif score >= 7:
+        return "TRADE_CANDIDATE"
     elif score >= 6:
         return "LEADER"
     elif score >= 3:
@@ -302,7 +304,7 @@ def _compute_trade_advice(
         reasons.append(f"+{pnl_pct:.1f}% with RSI {rsi:.0f} — trim 25-50%")
 
     # BUY MORE conditions
-    elif conviction in ("TRADE", "LEADER") and gate == "ALLOWED":
+    elif conviction in ("TRADE", "TRADE_CANDIDATE", "LEADER") and gate == "ALLOWED":
         if pnl_pct > 0 and pnl_pct < 5 and overall_conf >= 65:
             action = "BUY MORE"
             reasons.append(

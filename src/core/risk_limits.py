@@ -129,7 +129,7 @@ class SignalThresholds:
     max_hold_swing_normal: int = 15
 
     # ── Confidence ──
-    abstention_threshold: float = 45.0  # composite < this → NO TRADE
+    abstention_threshold: float = 35.0  # composite < this → NO TRADE
     strong_buy_threshold: float = 85.0
     buy_threshold: float = 70.0
     watch_threshold: float = 55.0

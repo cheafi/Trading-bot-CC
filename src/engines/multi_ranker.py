@@ -54,7 +54,7 @@ class MultiLayerRanker:
     """Compute 3-layer rankings for pipeline results."""
 
     # Hard floor: signals with explicit MTF score below this are pre-filtered
-    MTF_FLOOR = 0.35
+    MTF_FLOOR = 0.25
 
     def pre_filter(self, results: List[Any]) -> tuple[List[Any], List[str]]:
         """
@@ -245,12 +245,12 @@ class MultiLayerRanker:
         elif decision.action == "WATCH":
             c += 3
 
-        # MTF confluence boost (Sprint 99): +8 if score >= 0.75, −8 if < 0.35
+        # MTF confluence boost (Sprint 99): +8 if score >= 0.75, −8 if < 0.25
         mtf_score = r.signal.get("mtf_confluence_score")
         if mtf_score is not None:
             if mtf_score >= 0.75:
                 c += 8
-            elif mtf_score < 0.35:
+            elif mtf_score < 0.25:
                 c -= 8
 
         # Conflict penalty

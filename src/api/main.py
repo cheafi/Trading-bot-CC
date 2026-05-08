@@ -11877,6 +11877,14 @@ try:
 except Exception:
     logger.exception("[Router] Failed to load fund_portfolio router")
 
+# Sprint 115 P0 — Trade Review (recent trades + win/loss review)
+try:
+    from src.api.routers.trade_review import router as trade_review_router
+
+    app.include_router(trade_review_router)
+except Exception:
+    logger.exception("[Router] Failed to load trade_review router")
+
 # Sprint 81 RISK-3 — Market intel extracted router
 try:
     from src.api.routers.market_intel import router as market_intel_router
