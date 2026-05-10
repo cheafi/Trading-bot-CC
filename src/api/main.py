@@ -11885,6 +11885,14 @@ try:
 except Exception:
     logger.exception("[Router] Failed to load trade_review router")
 
+# Sprint 116 — Confidence Calibration Proof
+try:
+    from src.api.routers.calibration_proof import router as calibration_proof_router
+
+    app.include_router(calibration_proof_router)
+except Exception:
+    logger.exception("[Router] Failed to load calibration_proof router")
+
 # Sprint 81 RISK-3 — Market intel extracted router
 try:
     from src.api.routers.market_intel import router as market_intel_router
@@ -11963,3 +11971,42 @@ try:
     app.include_router(opp_scanner_router)
 except Exception:
     logger.exception("[Router] Failed to load opportunity_scanner router")
+
+# Sprint 117 — IBKR paper/live trading integration
+try:
+    from src.api.routers.ibkr import router as ibkr_router
+
+    app.include_router(ibkr_router)
+except Exception:
+    logger.exception("[Router] Failed to load ibkr router")
+
+# Sprint 99 — Model Funds + Trade Intelligence
+try:
+    from src.api.routers.model_funds import router as model_funds_router
+
+    app.include_router(model_funds_router)
+except Exception:
+    logger.exception("[Router] Failed to load model_funds router")
+
+try:
+    from src.api.routers.trade_intelligence import router as trade_intel_router
+
+    app.include_router(trade_intel_router)
+except Exception:
+    logger.exception("[Router] Failed to load trade_intelligence router")
+
+# Sprint 99 — Model Funds (Leader Momentum / Balanced Multi-Factor / Tactical/Defensive)
+try:
+    from src.api.routers.model_funds import router as model_funds_router
+
+    app.include_router(model_funds_router)
+except Exception:
+    logger.exception("[Router] Failed to load model_funds router")
+
+# Sprint 99 — Trade Intelligence (confidence validation + historical trade analysis)
+try:
+    from src.api.routers.trade_intelligence import router as trade_intel_router
+
+    app.include_router(trade_intel_router)
+except Exception:
+    logger.exception("[Router] Failed to load trade_intelligence router")
