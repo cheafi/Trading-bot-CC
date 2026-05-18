@@ -22,6 +22,37 @@
 | **Deploy** | Docker Compose (11 services) or standalone |
 | **Language** | Python 3.11 · discord.py · scikit-learn · pandas · numpy |
 
+## Deploy
+
+The repo now includes both GitHub Actions CI and a Render blueprint.
+
+### GitHub Actions
+
+- Workflow file: `.github/workflows/ci.yml`
+- Python version: `3.11`
+- Checks run on every push to `main` and every pull request:
+       - API import smoke check
+       - `tests.test_sprint2_fixes.TestRegimeWeights`
+       - `test_signal_with_forced_conditions.py`
+       - `test_system.py`
+
+### Render
+
+- Blueprint file: `render.yaml`
+- Runtime: Docker via `docker/Dockerfile.api`
+- Health check: `/health/live`
+- The API now binds to `PORT`, so it is compatible with Render's runtime contract.
+
+Minimum Render secrets to configure if you want full integrations:
+
+- `API_SECRET_KEY`
+- `POSTGRES_HOST`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
+- `REDIS_HOST`
+- `ALPACA_API_KEY`, `ALPACA_SECRET_KEY`
+- `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`
+- `DISCORD_WEBHOOK_URL`
+- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+
 ---
 
 ## System Architecture

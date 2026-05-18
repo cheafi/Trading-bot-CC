@@ -30,6 +30,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _port() -> int:
+    """Resolve the bind port for local and hosted environments."""
+    return int(os.getenv("PORT", "8000"))
+
+
+def _reload_enabled() -> bool:
+    """Disable reload in hosted environments unless explicitly requested."""
+    return os.getenv("UVICORN_RELOAD", "true").lower() in {"1", "true", "yes"}
+
+
 def signal_handler(sig, frame):
     """Handle shutdown signals gracefully."""
     logger.info(f"Received signal {sig}, shutting down...")
@@ -45,9 +55,10 @@ if __name__ == "__main__":
     print("🚀 TradingAI Pro Dashboard")
     print("=" * 60)
     print()
-    print("📊 Dashboard: http://localhost:8000")
-    print("📚 API Docs:  http://localhost:8000/docs")
-    print("📖 ReDoc:     http://localhost:8000/redoc")
+    port = _port()
+    print(f"📊 Dashboard: http://localhost:{port}")
+    print(f"📚 API Docs:  http://localhost:{port}/docs")
+    print(f"📖 ReDoc:     http://localhost:{port}/redoc")
     print("📝 Logging to: dashboard.log")
     print()
     print("Press Ctrl+C to stop")
@@ -57,8 +68,8 @@ if __name__ == "__main__":
         uvicorn.run(
             "src.api.main:app",
             host="0.0.0.0",
-            port=8000,
-            reload=True,
+            port=port,
+            reload=_reload_enabled(),
             log_level="info",
             access_log=True,
             timeout_keep_alive=30,
