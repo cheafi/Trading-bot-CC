@@ -19,26 +19,26 @@ logger = logging.getLogger(__name__)
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
-    
+
     # Service identification
     service_name: str = Field(default="tradingai", alias="SERVICE_NAME")
     environment: Literal["development", "staging", "production"] = Field(
         default="development", alias="ENVIRONMENT"
     )
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
-    
+
     # Database - individual components
     postgres_user: str = Field(default="tradingai", alias="POSTGRES_USER")
     postgres_password: str = Field(default="", alias="POSTGRES_PASSWORD")
     postgres_db: str = Field(default="tradingai", alias="POSTGRES_DB")
     postgres_host: str = Field(default="postgres", alias="POSTGRES_HOST")
     postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
-    
+
     # Redis
     redis_password: str = Field(default="", alias="REDIS_PASSWORD")
     redis_host: str = Field(default="redis", alias="REDIS_HOST")
     redis_port: int = Field(default=6379, alias="REDIS_PORT")
-    
+
     # Market Data APIs
     polygon_api_key: Optional[str] = Field(default=None, alias="POLYGON_API_KEY")
     alpaca_api_key: Optional[str] = Field(default=None, alias="ALPACA_API_KEY")
@@ -48,23 +48,23 @@ class Settings(BaseSettings):
         alias="ALPACA_ENDPOINT"
     )
     alpaca_paper: bool = Field(default=True, alias="ALPACA_PAPER")
-    
+
     # News APIs
     newsapi_key: Optional[str] = Field(default=None, alias="NEWSAPI_KEY")
     benzinga_api_key: Optional[str] = Field(default=None, alias="BENZINGA_API_KEY")
     finnhub_api_key: Optional[str] = Field(default=None, alias="FINNHUB_API_KEY")
-    
+
     # Social APIs
     x_bearer_token: Optional[str] = Field(default=None, alias="X_BEARER_TOKEN")
     reddit_client_id: Optional[str] = Field(default=None, alias="REDDIT_CLIENT_ID")
     reddit_client_secret: Optional[str] = Field(default=None, alias="REDDIT_CLIENT_SECRET")
     reddit_user_agent: str = Field(default="TradingAI Bot/1.0", alias="REDDIT_USER_AGENT")
-    
+
     # OpenAI (standard) - optional fallback
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-5.2", alias="OPENAI_MODEL")
     openai_model_mini: str = Field(default="gpt-5.2-mini", alias="OPENAI_MODEL_MINI")
-    
+
     # Azure OpenAI (preferred)
     azure_tenant_id: Optional[str] = Field(default=None, alias="AZURE_TENANT_ID")
     azure_client_id: Optional[str] = Field(default=None, alias="AZURE_CLIENT_ID")
@@ -73,50 +73,54 @@ class Settings(BaseSettings):
     azure_openai_api_key: Optional[str] = Field(default=None, alias="AZURE_OPENAI_API_KEY")
     azure_openai_deployment: str = Field(default="gpt-5.2", alias="AZURE_OPENAI_DEPLOYMENT")
     azure_openai_api_version: str = Field(default="2026-01-15-preview", alias="AZURE_OPENAI_API_VERSION")
-    
+
     # Discord Notifications (optional)
     discord_webhook_url: Optional[str] = Field(default=None, alias="DISCORD_WEBHOOK_URL")
     discord_bot_token: Optional[str] = Field(default=None, alias="DISCORD_BOT_TOKEN")
     discord_channel_name: str = Field(default="Trading CC", alias="DISCORD_CHANNEL_NAME")
-    
+
+    # Telegram Notifications (legacy compatibility)
+    telegram_bot_token: Optional[str] = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
+    telegram_chat_id: Optional[str] = Field(default=None, alias="TELEGRAM_CHAT_ID")
+
     # MetaTrader 5 (Forex/CFD/Crypto)
     mt5_login: Optional[int] = Field(default=None, alias="MT5_LOGIN")
     mt5_password: Optional[str] = Field(default=None, alias="MT5_PASSWORD")
     mt5_server: Optional[str] = Field(default=None, alias="MT5_SERVER")
     mt5_path: Optional[str] = Field(default=None, alias="MT5_PATH")
-    
+
     # Futu Broker (富途)
     futu_host: str = Field(default="127.0.0.1", alias="FUTU_HOST")
     futu_port: int = Field(default=11111, alias="FUTU_PORT")
     futu_trade_password: Optional[str] = Field(default=None, alias="FUTU_TRADE_PASSWORD")
     futu_unlock_pin: Optional[str] = Field(default=None, alias="FUTU_UNLOCK_PIN")
     futu_rsa_file: Optional[str] = Field(default=None, alias="FUTU_RSA_FILE")
-    
+
     # Interactive Brokers
     ib_host: str = Field(default="127.0.0.1", alias="IB_HOST")
     ib_port: int = Field(default=7497, alias="IB_PORT")  # 7497 for TWS, 4001 for Gateway
     ib_client_id: int = Field(default=1, alias="IB_CLIENT_ID")
     ib_account: Optional[str] = Field(default=None, alias="IB_ACCOUNT")
-    
+
     # Twilio / WhatsApp (optional)
     twilio_account_sid: Optional[str] = Field(default=None, alias="TWILIO_ACCOUNT_SID")
     twilio_auth_token: Optional[str] = Field(default=None, alias="TWILIO_AUTH_TOKEN")
     twilio_whatsapp_from: Optional[str] = Field(default=None, alias="TWILIO_WHATSAPP_FROM")
     whatsapp_to: Optional[str] = Field(default=None, alias="WHATSAPP_TO")
-    
+
     # S3 Storage (Massive / S3-compatible)
     s3_access_key_id: Optional[str] = Field(default=None, alias="S3_ACCESS_KEY_ID")
     s3_secret_access_key: Optional[str] = Field(default=None, alias="S3_SECRET_ACCESS_KEY")
     s3_endpoint: Optional[str] = Field(default=None, alias="S3_ENDPOINT")
     s3_bucket: Optional[str] = Field(default=None, alias="S3_BUCKET")
-    
+
     # API Security
     api_secret_key: Optional[str] = Field(default=None, alias="API_SECRET_KEY")
-    
+
     # Monitoring
     grafana_user: str = Field(default="admin", alias="GRAFANA_USER")
     grafana_password: str = Field(default="admin", alias="GRAFANA_PASSWORD")
-    
+
     @computed_field
     @property
     def database_url(self) -> str:
@@ -125,7 +129,7 @@ class Settings(BaseSettings):
             f"postgresql://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
-    
+
     @computed_field
     @property
     def async_database_url(self) -> str:
@@ -134,22 +138,27 @@ class Settings(BaseSettings):
             f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
-    
+
     @computed_field
     @property
     def redis_url(self) -> str:
         """Construct Redis URL."""
         return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/0"
-    
+
     @property
     def use_azure_openai(self) -> bool:
         """Check if Azure OpenAI should be used."""
         return bool(self.azure_openai_endpoint and self.azure_client_id)
-    
+
     @property
     def has_discord(self) -> bool:
         """Check if Discord webhook is configured."""
         return bool(self.discord_webhook_url)
+
+    @property
+    def has_telegram(self) -> bool:
+        """Check if Telegram notifications are configured."""
+        return bool(self.telegram_bot_token and self.telegram_chat_id)
 
     @property
     def has_whatsapp(self) -> bool:
@@ -160,32 +169,32 @@ class Settings(BaseSettings):
             and self.twilio_whatsapp_from
             and self.whatsapp_to
         )
-    
+
     @property
     def has_s3(self) -> bool:
         """Check if S3 storage is configured."""
         return bool(self.s3_endpoint and self.s3_access_key_id)
-    
+
     @property
     def has_mt5(self) -> bool:
         """Check if MetaTrader 5 is configured."""
         return bool(self.mt5_login and self.mt5_password)
-    
+
     @property
     def has_discord_bot(self) -> bool:
         """Check if Discord bot (interactive) is configured."""
         return bool(self.discord_bot_token)
-    
+
     @property
     def has_futu(self) -> bool:
         """Check if Futu is configured."""
         return bool(self.futu_trade_password)
-    
+
     @property
     def has_ib(self) -> bool:
         """Check if Interactive Brokers is configured."""
         return bool(self.ib_host and self.ib_port)
-    
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

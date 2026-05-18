@@ -5,6 +5,7 @@ import logging
 from typing import Any, Dict, List
 
 from src.notifications.discord import DiscordNotifier
+from src.notifications.telegram import TelegramNotifier
 from src.notifications.whatsapp import WhatsAppNotifier
 
 
@@ -14,12 +15,14 @@ class MultiChannelNotifier:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         self.discord = DiscordNotifier()
+        self.telegram = TelegramNotifier()
         self.whatsapp = WhatsAppNotifier()
 
     @property
     def channels_status(self) -> Dict[str, bool]:
         return {
             "discord": self.discord.is_configured,
+            "telegram": self.telegram.is_configured,
             "whatsapp": self.whatsapp.is_configured,
         }
 
@@ -31,11 +34,14 @@ class MultiChannelNotifier:
     async def send_message(self, message: str) -> Dict[str, bool]:
         results = {
             "discord": False,
+            "telegram": False,
             "whatsapp": False,
         }
 
         if self.discord.is_configured:
             results["discord"] = await self.discord.send_message(message)
+        if self.telegram.is_configured:
+            results["telegram"] = await self.telegram.send_message(message)
         if self.whatsapp.is_configured:
             results["whatsapp"] = await self.whatsapp.send_message(message)
 
@@ -44,11 +50,14 @@ class MultiChannelNotifier:
     async def send_signal(self, signal: Any) -> Dict[str, bool]:
         results = {
             "discord": False,
+            "telegram": False,
             "whatsapp": False,
         }
 
         if self.discord.is_configured:
             results["discord"] = await self.discord.send_signal(signal)
+        if self.telegram.is_configured:
+            results["telegram"] = await self.telegram.send_signal(signal)
         if self.whatsapp.is_configured:
             results["whatsapp"] = await self.whatsapp.send_signal(signal)
 
@@ -57,11 +66,14 @@ class MultiChannelNotifier:
     async def send_signals_batch(self, signals: List[Any]) -> Dict[str, int]:
         sent = {
             "discord": 0,
+            "telegram": 0,
             "whatsapp": 0,
         }
 
         if self.discord.is_configured:
             sent["discord"] = await self.discord.send_signals_batch(signals)
+        if self.telegram.is_configured:
+            sent["telegram"] = await self.telegram.send_signals_batch(signals)
         if self.whatsapp.is_configured:
             sent["whatsapp"] = await self.whatsapp.send_signals_batch(signals)
 

@@ -26,6 +26,46 @@ class TestRegimeWeights(unittest.TestCase):
         for k in set(n) & set(r):
             self.assertLess(r[k], n[k])
 
+    def test_bridge_preserves_reduced_risk_strategies(self):
+        from src.engines.signal_engine import RegimeDetector
+        from src.engines.regime_router import RegimeState
+
+        det = RegimeDetector()
+        rs = RegimeState(
+            risk_regime="neutral",
+            trend_regime="sideways",
+            volatility_regime="normal_vol",
+            should_trade=False,
+            size_scalar=0.6,
+            confidence=0.38,
+            no_trade_reason="low confidence",
+        )
+
+        regime = det._regime_state_to_market(rs, {})
+
+        self.assertTrue(regime.active_strategies)
+        self.assertTrue(regime.should_trade)
+        self.assertLess(regime.strategy_weights["mean_reversion"], 0.85)
+
+    def test_bridge_keeps_crisis_as_no_trade(self):
+        from src.engines.signal_engine import RegimeDetector
+        from src.engines.regime_router import RegimeState
+
+        det = RegimeDetector()
+        rs = RegimeState(
+            risk_regime="risk_off",
+            trend_regime="downtrend",
+            volatility_regime="crisis_vol",
+            should_trade=False,
+            size_scalar=0.0,
+            no_trade_reason="crisis",
+        )
+
+        regime = det._regime_state_to_market(rs, {})
+
+        self.assertEqual(regime.active_strategies, [])
+        self.assertFalse(regime.should_trade)
+
 
 class TestFeaturePipelineV2(unittest.TestCase):
 
