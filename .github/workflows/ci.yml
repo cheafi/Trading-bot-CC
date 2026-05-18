@@ -48,3 +48,42 @@ jobs:
 
       - name: Run system smoke test
         run: python test_system.py
+
+      - name: Build API image
+        run: docker build -f docker/Dockerfile.api -t tradingai-api-ci .
+
+      - name: Smoke test API container
+        run: |
+          docker run -d --name tradingai-api-ci-smoke \
+            -p 10002:8000 \
+            -e PORT=8000 \
+            -e UVICORN_RELOAD=false \
+            tradingai-api-ci
+          python - <<'PY'
+          import json
+          import time
+          import urllib.request
+
+          url = "http://127.0.0.1:10002/health/live"
+          last_error = None
+          for _ in range(30):
+              try:
+                  with urllib.request.urlopen(url, timeout=5) as response:
+                      payload = json.loads(response.read().decode())
+                  if payload.get("status") == "alive":
+                      print(payload)
+                      break
+              except Exception as exc:
+                  last_error = exc
+                  time.sleep(1)
+          else:
+              raise SystemExit(f"container health check failed: {last_error}")
+          PY
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker logs tradingai-api-ci-smoke || true
+
+      - name: Clean up API container
+        if: always()
+        run: docker rm -f tradingai-api-ci-smoke || true

@@ -35,6 +35,8 @@ The repo now includes both GitHub Actions CI and a Render blueprint.
        - `tests.test_sprint2_fixes.TestRegimeWeights`
        - `test_signal_with_forced_conditions.py`
        - `test_system.py`
+       - Docker build of `docker/Dockerfile.api`
+       - Container health smoke test against `/health/live`
 
 ### Render
 
@@ -52,6 +54,9 @@ Minimum Render secrets to configure if you want full integrations:
 - `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`
 - `DISCORD_WEBHOOK_URL`
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+
+For a quick starting point, use `.env.example` as the source of truth for local,
+GitHub Actions, and Render variable names.
 
 ---
 
