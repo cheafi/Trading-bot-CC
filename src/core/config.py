@@ -9,6 +9,7 @@ Features:
 - Validation for critical settings
 """
 from functools import lru_cache
+from urllib.parse import urlparse
 from typing import Optional, List, Literal
 from pydantic_settings import BaseSettings
 from pydantic import Field, computed_field, field_validator, model_validator
@@ -33,11 +34,13 @@ class Settings(BaseSettings):
     postgres_db: str = Field(default="tradingai", alias="POSTGRES_DB")
     postgres_host: str = Field(default="postgres", alias="POSTGRES_HOST")
     postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
+    database_url_override: Optional[str] = Field(default=None, alias="DATABASE_URL")
 
     # Redis
     redis_password: str = Field(default="", alias="REDIS_PASSWORD")
     redis_host: str = Field(default="redis", alias="REDIS_HOST")
     redis_port: int = Field(default=6379, alias="REDIS_PORT")
+    redis_url_override: Optional[str] = Field(default=None, alias="REDIS_URL")
 
     # Market Data APIs
     polygon_api_key: Optional[str] = Field(default=None, alias="POLYGON_API_KEY")
@@ -121,10 +124,32 @@ class Settings(BaseSettings):
     grafana_user: str = Field(default="admin", alias="GRAFANA_USER")
     grafana_password: str = Field(default="admin", alias="GRAFANA_PASSWORD")
 
+    @staticmethod
+    def _sync_db_url(url: str) -> str:
+        """Normalize database URLs to the sync SQLAlchemy form."""
+        return url.replace("postgresql+asyncpg://", "postgresql://", 1)
+
+    @staticmethod
+    def _async_db_url(url: str) -> str:
+        """Normalize database URLs to the async SQLAlchemy form."""
+        if url.startswith("postgresql+asyncpg://"):
+            return url
+        if url.startswith("postgresql://"):
+            return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return url
+
+    @staticmethod
+    def _maybe_parse_password(url: str) -> str:
+        """Extract a password from a URL when one is present."""
+        parsed = urlparse(url)
+        return parsed.password or ""
+
     @computed_field
     @property
     def database_url(self) -> str:
         """Construct database URL from components."""
+        if self.database_url_override:
+            return self._sync_db_url(self.database_url_override)
         return (
             f"postgresql://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
@@ -134,6 +159,8 @@ class Settings(BaseSettings):
     @property
     def async_database_url(self) -> str:
         """Construct async database URL."""
+        if self.database_url_override:
+            return self._async_db_url(self.database_url_override)
         return (
             f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
@@ -143,6 +170,8 @@ class Settings(BaseSettings):
     @property
     def redis_url(self) -> str:
         """Construct Redis URL."""
+        if self.redis_url_override:
+            return self.redis_url_override
         return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/0"
 
     @property
@@ -201,6 +230,31 @@ class Settings(BaseSettings):
         "extra": "ignore",
         "populate_by_name": True,
     }
+
+    @model_validator(mode="after")
+    def apply_url_overrides(self):
+        """Allow legacy DATABASE_URL and REDIS_URL env vars to drive settings."""
+        if self.database_url_override:
+            parsed = urlparse(self._sync_db_url(self.database_url_override))
+            if parsed.username:
+                self.postgres_user = parsed.username
+            self.postgres_password = self._maybe_parse_password(self.database_url_override)
+            if parsed.hostname:
+                self.postgres_host = parsed.hostname
+            if parsed.port:
+                self.postgres_port = parsed.port
+            if parsed.path and parsed.path != "/":
+                self.postgres_db = parsed.path.lstrip("/")
+
+        if self.redis_url_override:
+            parsed = urlparse(self.redis_url_override)
+            if parsed.hostname:
+                self.redis_host = parsed.hostname
+            if parsed.port:
+                self.redis_port = parsed.port
+            self.redis_password = self._maybe_parse_password(self.redis_url_override)
+
+        return self
 
 
 class TradingConfig(BaseSettings):

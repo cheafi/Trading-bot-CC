@@ -1,5 +1,3 @@
-version: '3.8'
-
 # TradingAI Bot - Docker Compose Configuration
 # Production-ready setup with all services
 

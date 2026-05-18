@@ -1,7 +1,9 @@
 """Sprint 2 regression tests."""
+import os
 import unittest
 import numpy as np
 import pandas as pd
+from unittest.mock import patch
 
 
 class TestRegimeWeights(unittest.TestCase):
@@ -102,6 +104,34 @@ class TestTopCountFix(unittest.TestCase):
     def test_top_count_defined(self):
         src = open("src/notifications/discord_bot.py").read()
         self.assertGreaterEqual(src.count("top_count = min("), 3)
+
+
+class TestConfigUrlOverrides(unittest.TestCase):
+
+    @patch.dict(
+        os.environ,
+        {
+            "DATABASE_URL": "postgresql://u:p@dbhost:5439/appdb",
+            "REDIS_URL": "redis://:pw@redisbox:6390/0",
+        },
+        clear=False,
+    )
+    def test_legacy_url_overrides_are_honored(self):
+        from src.core.config import Settings
+
+        settings = Settings()
+
+        self.assertEqual(settings.database_url, "postgresql://u:p@dbhost:5439/appdb")
+        self.assertEqual(
+            settings.async_database_url,
+            "postgresql+asyncpg://u:p@dbhost:5439/appdb",
+        )
+        self.assertEqual(settings.redis_url, "redis://:pw@redisbox:6390/0")
+        self.assertEqual(settings.postgres_host, "dbhost")
+        self.assertEqual(settings.postgres_port, 5439)
+        self.assertEqual(settings.postgres_db, "appdb")
+        self.assertEqual(settings.redis_host, "redisbox")
+        self.assertEqual(settings.redis_port, 6390)
 
 
 if __name__ == "__main__":
