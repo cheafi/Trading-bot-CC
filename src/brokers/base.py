@@ -69,6 +69,10 @@ class OrderRequest:
     time_in_force: str = "day"  # day, gtc, ioc, fok
     market: Market = Market.US
     extended_hours: bool = False
+    # Idempotency key — broker must reject duplicate submits with the same
+    # client_order_id. Prevents double-fills on disconnect/retry. Auto-filled
+    # by BrokerManager.place_order() if not supplied.
+    client_order_id: Optional[str] = None
 
 
 @dataclass

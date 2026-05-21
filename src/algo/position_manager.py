@@ -474,18 +474,33 @@ class PositionManager:
         candidate_prices = price_data.get(candidate_ticker)
         if candidate_prices is None or len(candidate_prices) < 20:
             return 0
+        # Compute correlation on RETURNS, not price levels. Prices are
+        # non-stationary — two stocks both drifting up will show spurious
+        # near-1.0 Pearson correlation even when their daily moves are
+        # uncorrelated. Returns-based correlation is what risk teams use.
+        # Window expanded to 60 trading days (~3 months) for a more stable
+        # estimate than the previous 20-day rolling window.
+        try:
+            cand_ret = candidate_prices.tail(63).pct_change().dropna()
+        except (ValueError, TypeError, AttributeError):
+            return 0
+        if len(cand_ret) < 20:
+            return 0
         count = 0
         for held_ticker in self.positions:
             held_prices = price_data.get(held_ticker)
             if held_prices is None or len(held_prices) < 20:
                 continue
             try:
-                corr = candidate_prices.tail(20).corr(
-                    held_prices.tail(20),
-                )
-                if corr >= threshold:
+                held_ret = held_prices.tail(63).pct_change().dropna()
+                # Align indices defensively
+                aligned = cand_ret.align(held_ret, join="inner")
+                if len(aligned[0]) < 20:
+                    continue
+                corr = aligned[0].corr(aligned[1])
+                if corr is not None and corr >= threshold:
                     count += 1
-            except (ValueError, TypeError):
+            except (ValueError, TypeError, AttributeError):
                 continue
         return count
 

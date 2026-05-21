@@ -104,6 +104,67 @@ class RiskCircuitBreaker:
         self.daily_pnl = 0.0
         self.today = date.today()
 
+    # ── Persistence (Redis) ─────────────────────────────────────────────
+    # SOD equity, daily P&L and peak equity must survive process restarts so
+    # the daily-loss kill switch is not silently reset by a redeploy mid-day.
+
+    REDIS_KEY = "circuit_breaker:state:v1"
+
+    async def persist(self, redis_client) -> None:
+        """Persist current state to Redis (caller passes redis.asyncio client)."""
+        import json
+
+        try:
+            payload = {
+                "today": self.today.isoformat(),
+                "daily_pnl": self.daily_pnl,
+                "peak_equity": self.peak_equity,
+                "sod_equity": getattr(self, "_sod_equity", 0.0),
+                "consecutive_losses": self.consecutive_losses,
+                "triggered": self.triggered,
+                "trigger_reason": self.trigger_reason,
+                "trigger_time": (
+                    self.trigger_time.isoformat() if self.trigger_time else None
+                ),
+            }
+            # Expire after 36h so a stale state from a long outage doesn't
+            # silently haunt the next session.
+            await redis_client.setex(self.REDIS_KEY, 36 * 3600, json.dumps(payload))
+        except Exception as e:
+            logger.warning(f"CB persist failed: {e}")
+
+    async def restore(self, redis_client) -> bool:
+        """Restore state from Redis. Returns True if state was found."""
+        import json
+
+        try:
+            raw = await redis_client.get(self.REDIS_KEY)
+            if not raw:
+                return False
+            data = json.loads(raw)
+            saved_today = date.fromisoformat(data["today"])
+            # Only restore daily counters if it's still the same trading day
+            if saved_today == date.today():
+                self.daily_pnl = float(data.get("daily_pnl", 0.0))
+                self._sod_equity = float(data.get("sod_equity", 0.0))
+                self.consecutive_losses = int(data.get("consecutive_losses", 0))
+                self.triggered = bool(data.get("triggered", False))
+                self.trigger_reason = data.get("trigger_reason", "")
+                tt = data.get("trigger_time")
+                self.trigger_time = datetime.fromisoformat(tt) if tt else None
+                self.today = saved_today
+            # Peak equity always restored (multi-day drawdown anchor)
+            self.peak_equity = float(data.get("peak_equity", self.peak_equity))
+            logger.info(
+                f"CB state restored: sod=${self._sod_equity:,.0f} "
+                f"daily_pnl=${self.daily_pnl:,.0f} "
+                f"triggered={self.triggered}"
+            )
+            return True
+        except Exception as e:
+            logger.warning(f"CB restore failed: {e}")
+            return False
+
     def update(
         self,
         equity: float,

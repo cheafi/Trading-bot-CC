@@ -54,7 +54,7 @@ class BrokerManager:
     - Real-time quote aggregation
     - Order routing
     """
-    
+
     def __init__(self):
         self._brokers: Dict[BrokerType, BaseBroker] = {}
         self._active_broker: BrokerType = BrokerType.PAPER
@@ -63,24 +63,77 @@ class BrokerManager:
             'on_position_change': [],
             'on_price_alert': [],
         }
-    
+        # Idempotency cache: client_order_id -> (timestamp, OrderResult)
+        # Prevents double-fills on disconnect/retry storms. 5-minute TTL.
+        self._idempotency_cache: Dict[str, tuple] = {}
+        self._idempotency_ttl_seconds: int = 300
+
+    # ── Idempotency helpers ─────────────────────────────────────────────
+    @staticmethod
+    def _gen_client_order_id(
+        ticker: str,
+        side: OrderSide,
+        quantity: int,
+        order_type: OrderType,
+    ) -> str:
+        """Generate a deterministic-ish client order id with timestamp.
+
+        Includes a UTC timestamp truncated to the second so two clearly
+        separate intents from the caller will still produce distinct IDs,
+        but a retry inside the same second of the same (ticker, side, qty,
+        type) tuple will collide and be deduped by the idempotency cache.
+        """
+        import uuid
+
+        ts = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
+        # Short uuid suffix protects against legit two-orders-same-second
+        suffix = uuid.uuid4().hex[:8]
+        return f"{ticker}-{side.value}-{quantity}-{order_type.value}-{ts}-{suffix}"
+
+    def _idempotency_lookup(self, key: Optional[str]) -> Optional[OrderResult]:
+        if not key:
+            return None
+        entry = self._idempotency_cache.get(key)
+        if not entry:
+            return None
+        ts, result = entry
+        age = (datetime.utcnow() - ts).total_seconds()
+        if age > self._idempotency_ttl_seconds:
+            self._idempotency_cache.pop(key, None)
+            return None
+        return result
+
+    def _idempotency_store(self, key: Optional[str], result: OrderResult) -> None:
+        if not key:
+            return
+        # Opportunistic GC of expired entries
+        now = datetime.utcnow()
+        expired = [
+            k
+            for k, (ts, _) in self._idempotency_cache.items()
+            if (now - ts).total_seconds() > self._idempotency_ttl_seconds
+        ]
+        for k in expired:
+            self._idempotency_cache.pop(k, None)
+        self._idempotency_cache[key] = (now, result)
+
     @property
     def active_broker(self) -> Optional[BaseBroker]:
         """Get the active broker instance."""
         return self._brokers.get(self._active_broker)
-    
+
     @property
     def active_broker_type(self) -> BrokerType:
         """Get the active broker type."""
         return self._active_broker
-    
+
     async def initialize(self):
         """Initialize all available brokers."""
         # Always initialize paper trading
         paper = PaperBroker()
         await paper.connect()
         self._brokers[BrokerType.PAPER] = paper
-        
+
         # Initialize Futu if configured
         if settings.has_futu:
             try:
@@ -90,7 +143,7 @@ class BrokerManager:
                     logger.info("Futu broker connected")
             except Exception as e:
                 logger.warning(f"Futu broker not available: {e}")
-        
+
         # Initialize IB if configured
         if settings.has_ib:
             try:
@@ -100,7 +153,7 @@ class BrokerManager:
                     logger.info("Interactive Brokers connected")
             except Exception as e:
                 logger.warning(f"IB broker not available: {e}")
-        
+
         # Initialize MetaTrader 5 if configured
         if settings.has_mt5:
             try:
@@ -110,9 +163,9 @@ class BrokerManager:
                     logger.info("MetaTrader 5 broker connected")
             except Exception as e:
                 logger.warning(f"MetaTrader 5 broker not available: {e}")
-        
+
         logger.info(f"Broker manager initialized with {len(self._brokers)} brokers")
-    
+
     async def shutdown(self):
         """Disconnect all brokers."""
         for broker_type, broker in self._brokers.items():
@@ -121,7 +174,7 @@ class BrokerManager:
                 logger.info(f"Disconnected from {broker_type.value}")
             except Exception as e:
                 logger.error(f"Error disconnecting from {broker_type.value}: {e}")
-    
+
     def set_active_broker(self, broker_type: BrokerType) -> bool:
         """
         Set the active broker for trading.
@@ -139,7 +192,7 @@ class BrokerManager:
         else:
             logger.warning(f"Broker {broker_type.value} not available")
             return False
-    
+
     def get_available_brokers(self) -> List[Dict]:
         """Get list of available brokers with status."""
         return [
@@ -151,9 +204,9 @@ class BrokerManager:
             }
             for bt, broker in self._brokers.items()
         ]
-    
+
     # === Trading Operations ===
-    
+
     async def get_quote(self, ticker: str, market: Market = Market.US) -> Optional[Quote]:
         """Get quote using the best available source."""
         # Try active broker first
@@ -161,24 +214,25 @@ class BrokerManager:
             quote = await self.active_broker.get_quote(ticker, market)
             if quote:
                 return quote
-        
+
         # Fallback to paper broker (uses Alpaca data)
         paper = self._brokers.get(BrokerType.PAPER)
         if paper:
             return await paper.get_quote(ticker, market)
-        
+
         return None
-    
+
     async def place_order(
         self,
         ticker: str,
         side: OrderSide,
         quantity: int,
-        order_type: OrderType = OrderType.MARKET, 
+        order_type: OrderType = OrderType.MARKET,
         limit_price: Optional[float] = None,
         stop_price: Optional[float] = None,
         market: Market = Market.US,
-        broker: Optional[BrokerType] = None
+        broker: Optional[BrokerType] = None,
+        client_order_id: Optional[str] = None,
     ) -> OrderResult:
         """
         Place an order through the specified or active broker.
@@ -197,13 +251,13 @@ class BrokerManager:
             OrderResult with execution details
         """
         target_broker = self._brokers.get(broker) if broker else self.active_broker
-        
+
         if not target_broker:
             raise BrokerError(
                 message="No broker available for order",
                 broker=str(broker or self._active_broker),
             )
-        
+
         order = OrderRequest(
             ticker=ticker,
             side=side,
@@ -211,11 +265,26 @@ class BrokerManager:
             order_type=order_type,
             limit_price=limit_price,
             stop_price=stop_price,
-            market=market
+            market=market,
+            client_order_id=client_order_id
+            or self._gen_client_order_id(ticker, side, quantity, order_type),
         )
-        
+
+        # Idempotency guard — if we've seen this client_order_id within the
+        # dedupe window, return the cached result instead of re-submitting.
+        cached = self._idempotency_lookup(order.client_order_id)
+        if cached is not None:
+            logger.warning(
+                f"Idempotent replay: client_order_id={order.client_order_id} "
+                f"already submitted, returning cached result"
+            )
+            return cached
+
         result = await target_broker.place_order(order)
-        
+
+        # Cache result against client_order_id for dedupe
+        self._idempotency_store(order.client_order_id, result)
+
         # Notify callbacks
         if result.success:
             for callback in self._callbacks['on_order_fill']:
@@ -223,63 +292,63 @@ class BrokerManager:
                     await callback(result, order)
                 except Exception as e:
                     logger.error(f"Callback error: {e}")
-        
+
         return result
-    
+
     async def cancel_order(self, order_id: str, broker: Optional[BrokerType] = None) -> bool:
         """Cancel an order."""
         target_broker = self._brokers.get(broker) if broker else self.active_broker
-        
+
         if not target_broker:
             return False
-        
+
         return await target_broker.cancel_order(order_id)
-    
+
     # === Portfolio Operations ===
-    
+
     async def get_account(self, broker: Optional[BrokerType] = None) -> AccountInfo:
         """Get account info from specified or active broker."""
         target_broker = self._brokers.get(broker) if broker else self.active_broker
-        
+
         if not target_broker:
             return AccountInfo(account_id="", cash=0)
-        
+
         return await target_broker.get_account()
-    
+
     async def get_positions(self, broker: Optional[BrokerType] = None) -> List[Position]:
         """Get positions from specified or active broker."""
         target_broker = self._brokers.get(broker) if broker else self.active_broker
-        
+
         if not target_broker:
             return []
-        
+
         return await target_broker.get_positions()
-    
+
     async def get_all_positions(self) -> Dict[BrokerType, List[Position]]:
         """Get positions from all connected brokers."""
         all_positions = {}
-        
+
         for broker_type, broker in self._brokers.items():
             if broker.is_connected:
                 positions = await broker.get_positions()
                 all_positions[broker_type] = positions
-        
+
         return all_positions
-    
+
     async def get_aggregated_portfolio(self) -> Dict:
         """Get aggregated portfolio across all brokers."""
         total_value = 0.0
         total_pnl = 0.0
         all_positions = []
-        
+
         for broker_type, broker in self._brokers.items():
             if broker.is_connected:
                 account = await broker.get_account()
                 positions = await broker.get_positions()
-                
+
                 total_value += account.portfolio_value
                 total_pnl += account.unrealized_pnl
-                
+
                 for pos in positions:
                     all_positions.append({
                         'broker': broker_type.value,
@@ -291,24 +360,24 @@ class BrokerManager:
                         'pnl': pos.unrealized_pnl,
                         'pnl_pct': pos.unrealized_pnl_pct
                     })
-        
+
         return {
             'total_value': total_value,
             'total_pnl': total_pnl,
             'positions': all_positions,
             'brokers_connected': len([b for b in self._brokers.values() if b.is_connected])
         }
-    
+
     # === Callbacks ===
-    
+
     def on_order_fill(self, callback: callable):
         """Register callback for order fills."""
         self._callbacks['on_order_fill'].append(callback)
-    
+
     def on_position_change(self, callback: callable):
         """Register callback for position changes."""
         self._callbacks['on_position_change'].append(callback)
-    
+
     def on_price_alert(self, callback: callable):
         """Register callback for price alerts."""
         self._callbacks['on_price_alert'].append(callback)

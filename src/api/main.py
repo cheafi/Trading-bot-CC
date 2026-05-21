@@ -116,6 +116,11 @@ class RateLimiter:
 
 rate_limiter = RateLimiter(requests_per_minute=120)
 
+# Tighter limit for capital-moving endpoints. 20/min/client is generous for
+# legitimate algo trading but blocks runaway loops or compromised credentials
+# from blasting orders. Pro-trading risk control.
+order_rate_limiter = RateLimiter(requests_per_minute=20)
+
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Rate limiting middleware."""
@@ -1748,7 +1753,8 @@ async def place_order(
     order_type: str = "market",
     limit_price: Optional[float] = None,
     stop_price: Optional[float] = None,
-    _: bool = Depends(verify_api_key)
+    request: Request = None,
+    _: bool = Depends(verify_api_key),
 ):
     """
     Place a trading order through the active broker.
@@ -1763,20 +1769,29 @@ async def place_order(
     """
     from src.brokers.broker_manager import get_broker_manager
     from src.brokers.base import OrderSide, OrderType
-    
+
+    # Per-endpoint stricter rate limit \u2014 capital-moving operation
+    client_id = (request.headers.get("x-api-key") if request else None) or (
+        request.client.host if request and request.client else "unknown"
+    )
+    if not await order_rate_limiter.is_allowed(client_id):
+        raise HTTPException(
+            status_code=429, detail="Order rate limit exceeded (20/min). Slow down."
+        )
+
     try:
         # Validate side
         try:
             order_side = OrderSide(side.lower())
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid side: {side}")
-        
+
         # Validate order type
         try:
             order_type_enum = OrderType(order_type.lower())
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid order type: {order_type}")
-        
+
         manager = await get_broker_manager()
         result = await manager.place_order(
             ticker=ticker.upper(),
@@ -1786,7 +1801,7 @@ async def place_order(
             limit_price=limit_price,
             stop_price=stop_price
         )
-        
+
         return {
             "success": result.success,
             "order_id": result.order_id,
@@ -1796,7 +1811,7 @@ async def place_order(
             "message": result.message,
             "timestamp": datetime.utcnow().isoformat()
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -2191,8 +2206,6 @@ async def get_signal_card(ticker: str):
     }
 
 
-
-
 # ===== Sprint 6: Decision-Layer API Endpoints =====
 
 @app.get("/api/regime", tags=["decision-layer"])
@@ -2280,7 +2293,6 @@ async def get_strategy_leaderboard():
     except Exception as e:
         logger.error(f"Leaderboard endpoint error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 
 @app.get("/api/health", tags=["monitoring"])
@@ -2669,4 +2681,3 @@ async def live_backtest(
 
 if __name__ == "__main__":
     start()
-
