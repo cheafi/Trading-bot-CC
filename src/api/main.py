@@ -497,10 +497,10 @@ async def health_ready():
     # Check Redis/cache
     try:
         import redis.asyncio as redis
-        r = redis.from_url(f"redis://{settings.redis_host}:{settings.redis_port}")
+        r = redis.from_url(settings.redis_url)
         await r.ping()
         checks["cache"] = True
-        await r.close()
+        await r.aclose()
     except Exception:
         checks["cache"] = False
     
