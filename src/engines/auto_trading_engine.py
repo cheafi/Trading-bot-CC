@@ -114,6 +114,12 @@ class RiskCircuitBreaker:
         # Reset daily if new day
         if date.today() != self.today:
             self.reset_daily()
+            # Snapshot start-of-day equity so daily loss is anchored correctly
+            self._sod_equity = equity if equity > 0 else getattr(self, "_sod_equity", equity)
+
+        # Initialize start-of-day equity on first call
+        if not getattr(self, "_sod_equity", 0):
+            self._sod_equity = equity if equity > 0 else 0.0
 
         # Update peak equity
         if equity > self.peak_equity:
@@ -129,7 +135,7 @@ class RiskCircuitBreaker:
                 self.trigger_reason = ""
                 logger.info("Circuit breaker cooldown expired, resuming trading")
 
-        # Update trade P&L
+        # Update trade P&L (in dollars)
         if trade_pnl is not None:
             self.daily_pnl += trade_pnl
             if trade_pnl < 0:
@@ -137,10 +143,16 @@ class RiskCircuitBreaker:
             else:
                 self.consecutive_losses = 0
 
-        # Check daily loss
-        if self.daily_pnl < -self.max_daily_loss_pct:
-            self._trigger(f"Daily loss {self.daily_pnl:.1f}% exceeds limit")
-            return False
+        # Check daily loss — convert dollars to % of start-of-day equity
+        sod = getattr(self, "_sod_equity", 0) or self.peak_equity or equity
+        if sod > 0:
+            daily_pnl_pct = (self.daily_pnl / sod) * 100
+            if daily_pnl_pct < -self.max_daily_loss_pct:
+                self._trigger(
+                    f"Daily loss {daily_pnl_pct:.2f}% (${self.daily_pnl:,.0f}) "
+                    f"exceeds {self.max_daily_loss_pct:.1f}% limit"
+                )
+                return False
 
         # Check drawdown
         if self.peak_equity > 0:

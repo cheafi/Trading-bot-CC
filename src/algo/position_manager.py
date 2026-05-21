@@ -310,13 +310,39 @@ class PositionManager:
     
     # ========== Position Sizing ==========
     
+    @staticmethod
+    def vix_risk_scalar(vix: Optional[float]) -> float:
+        """
+        Volatility-aware risk multiplier (2026 PM standard).
+
+        Scale risk-per-trade by VIX regime so the bot doesn't lever into
+        a regime shift. Returns a multiplier applied to base risk %:
+          VIX < 13  -> 1.20  (calm, can lean in moderately)
+          13-18     -> 1.00  (normal)
+          18-25     -> 0.75  (elevated)
+          25-35     -> 0.50  (stressed)
+          > 35      -> 0.25  (panic — quarter size)
+        """
+        if vix is None or vix <= 0:
+            return 1.0
+        if vix < 13:
+            return 1.20
+        if vix < 18:
+            return 1.00
+        if vix < 25:
+            return 0.75
+        if vix < 35:
+            return 0.50
+        return 0.25
+
     def calculate_position_size(
         self,
         ticker: str,
         entry_price: float,
         stop_loss_price: float,
         atr: Optional[float] = None,
-        sector: str = ""
+        sector: str = "",
+        vix: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Calculate optimal position size based on risk.
@@ -357,7 +383,18 @@ class PositionManager:
         if self.consecutive_losses >= self.params.scale_down_after_losses:
             risk_pct *= self.params.scale_factor
             self.logger.info(f"Scaling down risk to {risk_pct}% after {self.consecutive_losses} consecutive losses")
-        
+
+        # Volatility-aware scaling (2026 PM standard) — reduce size in high-VIX regimes
+        vix_mult = self.vix_risk_scalar(vix)
+        if vix_mult != 1.0:
+            risk_pct *= vix_mult
+            self.logger.info(
+                f"VIX={vix} -> risk scalar {vix_mult:.2f} -> risk_pct={risk_pct:.3f}%"
+            )
+
+        # Hard cap: never exceed max_risk_per_trade_pct regardless of inputs
+        risk_pct = min(risk_pct, self.params.max_risk_per_trade_pct)
+
         # Calculate risk amount
         risk_amount = self.current_equity * (risk_pct / 100)
         

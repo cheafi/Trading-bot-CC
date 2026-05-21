@@ -58,7 +58,14 @@ class UniverseFilter:
         "min_market_cap":      500_000_000, # $500M minimum market cap
         "min_history_days":    60,          # Need 60 days of clean data
         "earnings_blackout_days": 2,        # Skip 2 days before earnings
+        # 2026 macro-event blackout: FOMC, CPI, NFP, PPI etc. dominate single-day moves.
+        # Pass macro_events=[{event_type:'fomc'|'cpi'|'nfp'|..., event_date:date}] to filter().
+        "macro_blackout_day_of":  True,    # Hard blackout on the event day itself
+        "macro_blackout_hours_before": 4,  # Hours before US event to halt new entries
     }
+
+    # Macro events that historically produce >1% S&P moves on release
+    HIGH_IMPACT_MACRO = {"fomc", "cpi", "core_cpi", "nfp", "ppi", "jackson_hole", "fed_minutes"}
 
     def __init__(self, overrides: Optional[Dict] = None):
         self.gates = {**self.DEFAULT_GATES, **(overrides or {})}
@@ -71,6 +78,7 @@ class UniverseFilter:
         features: pd.DataFrame,
         calendar_events: Optional[List[Dict]] = None,
         corporate_actions: Optional[List[Dict]] = None,
+        macro_events: Optional[List[Dict]] = None,
     ) -> Tuple[List[str], Dict[str, str]]:
         """
         Filter universe to tradeable names only.
@@ -80,6 +88,53 @@ class UniverseFilter:
         """
         rejections: Dict[str, str] = {}
         clean: List[str] = []
+
+        # ── Macro-event blackout (hard gate on entire universe) ──────────
+        # If a high-impact US macro print is today (or within N hours), refuse
+        # ALL new entries. Pro PMs never put on fresh risk into FOMC/CPI.
+        if macro_events and self.gates.get("macro_blackout_day_of", True):
+            today = date.today()
+            window_hours = float(self.gates.get("macro_blackout_hours_before", 4))
+            now_utc = datetime.now(timezone.utc)
+            for ev in macro_events:
+                ev_type = str(ev.get("event_type", "")).lower()
+                if ev_type not in self.HIGH_IMPACT_MACRO:
+                    continue
+                ev_date = ev.get("event_date")
+                if isinstance(ev_date, str):
+                    try:
+                        ev_date = date.fromisoformat(ev_date)
+                    except ValueError:
+                        continue
+                ev_time = ev.get("event_time_utc")  # optional datetime
+                if ev_date == today:
+                    if ev_time and isinstance(ev_time, datetime):
+                        delta_h = (ev_time - now_utc).total_seconds() / 3600
+                        if -1.0 <= delta_h <= window_hours:
+                            for t in universe:
+                                rejections[t] = f"macro_blackout:{ev_type}"
+                            self.logger.warning(
+                                f"Macro blackout active for {ev_type} "
+                                f"in {delta_h:.1f}h — refusing all entries"
+                            )
+                            self._rejection_log = [
+                                {"ticker": t, "reason": r}
+                                for t, r in rejections.items()
+                            ]
+                            return [], rejections
+                    else:
+                        # No time given — be conservative, blackout the full day
+                        for t in universe:
+                            rejections[t] = f"macro_blackout:{ev_type}"
+                        self.logger.warning(
+                            f"Macro blackout active for {ev_type} today — "
+                            f"refusing all entries"
+                        )
+                        self._rejection_log = [
+                            {"ticker": t, "reason": r}
+                            for t, r in rejections.items()
+                        ]
+                        return [], rejections
 
         # Build earnings-blackout set
         blackout_tickers = set()
