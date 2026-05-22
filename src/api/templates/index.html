@@ -85,8 +85,12 @@
                 <div class="text-[10px] text-gray-500 mt-1">regime · score <span x-text="regime.score||0"></span></div>
             </div>
         </div>
-        <!-- equity curve -->
-        <div class="mb-2" x-html="sparkSvg(portfolio.equity_curve, 320, 50)"></div>
+        <!-- portfolio vs benchmark curve -->
+        <div class="mb-1 flex items-center justify-between text-[10px] m">
+            <span><span class="g">●</span> Portfolio</span>
+            <span x-show="(portfolio.benchmark_curve||[]).length"><span style="color:#0ea5e9">●</span> SPY B&H</span>
+        </div>
+        <div class="mb-2" x-html="dualSparkSvg(portfolio.equity_curve, portfolio.benchmark_curve, 320, 56)"></div>
         <!-- KPI strip -->
         <div class="grid grid-cols-4 gap-2 text-center text-xs">
             <div><div class="text-gray-500 text-[10px]">Day P&L</div><div class="font-bold" :class="(portfolio.kpis?.daily_pnl||0)>=0?'g':'r'" x-text="(portfolio.kpis?.daily_pnl||0>=0?'+':'')+'$'+fmt(portfolio.kpis?.daily_pnl||0)"></div></div>
@@ -94,6 +98,67 @@
             <div><div class="text-gray-500 text-[10px]">Open</div><div class="font-bold w" x-text="portfolio.kpis?.open_positions||0"></div></div>
             <div><div class="text-gray-500 text-[10px]">Trades</div><div class="font-bold w" x-text="portfolio.kpis?.total_trades||0"></div></div>
         </div>
+    </div>
+
+    <!-- Runtime / IB strip -->
+    <div class="card p-3">
+        <div class="grid grid-cols-2 gap-2 text-[11px]">
+            <div class="flex items-center justify-between">
+                <span class="m">Engine</span>
+                <span class="pill" :class="health.engine?.running?'pill-g':'pill-r'" x-text="health.engine?.running?'RUN':'STOP'"></span>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="m">Mode</span>
+                <span class="font-bold w" x-text="health.broker?.mode||(health.engine?.dry_run?'PAPER':'LIVE')"></span>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="m">Broker</span>
+                <span class="pill" :class="(portfolio.broker?.connected||health.broker?.connected)?'pill-g':'pill-y'">
+                    <span x-text="(portfolio.broker?.name||health.broker?.name||'paper').toUpperCase()"></span>
+                </span>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="m">Sync</span>
+                <span class="w" x-text="fmtSync(portfolio.broker?.last_sync||health.broker?.last_sync)"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active fund sleeves -->
+    <div class="card p-4" x-show="(portfolio.active_sleeves||[]).length">
+        <div class="flex items-center justify-between mb-2">
+            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">🏛️ Active Sleeves</div>
+            <button @click="tab='strategies'" class="text-[11px] g">all →</button>
+        </div>
+        <div class="space-y-2">
+            <template x-for="sl in (portfolio.active_sleeves||[]).slice(0,4)">
+                <div class="p-2.5 rounded-lg flex items-center justify-between" style="background:#1a2030">
+                    <div>
+                        <div class="text-sm font-bold w" x-text="sl.name"></div>
+                        <div class="text-[10px] m" x-text="sl.stance+' · '+sl.trades+' trades'"></div>
+                    </div>
+                    <div class="text-right text-[11px]">
+                        <div class="font-bold g" x-text="'score '+sl.score"></div>
+                        <div class="m" x-text="'DD '+sl.max_dd+'%'"></div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Allocation snapshot -->
+    <div class="card p-4" x-show="(portfolio.allocation?.holdings||[]).length">
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">⚖️ Allocation</div>
+        <template x-for="h in (portfolio.allocation?.holdings||[]).slice(0,6)">
+            <div class="mb-2">
+                <div class="flex justify-between text-[11px] mb-0.5">
+                    <span class="font-bold w" x-text="h.ticker"></span>
+                    <span class="m"><span x-text="h.actual_pct+'%'"></span> / tgt <span x-text="h.target_pct+'%'"></span></span>
+                </div>
+                <div class="bar"><div class="bar-f" :style="'width:'+Math.min(100,h.actual_pct*4)+'%'"></div></div>
+            </div>
+        </template>
+        <div class="text-[10px] m mt-1" x-text="'Cash '+((portfolio.allocation?.cash_pct)||0).toFixed(1)+'% · Gross '+((portfolio.allocation?.gross_pct)||0).toFixed(1)+'%'"></div>
     </div>
 
     <!-- Alerts -->
@@ -134,22 +199,62 @@
         </div>
     </div>
 
-    <!-- Markets snapshot -->
-    <div class="card p-4">
-        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">🌐 Markets</div>
-        <div class="grid grid-cols-2 gap-2 text-xs">
-            <template x-for="it in (market.indices||[]).slice(0,4)">
-                <div class="flex justify-between p-2 rounded bg-white/5">
-                    <span class="m" x-text="it.symbol"></span>
-                    <span :class="(it.change_pct||0)>=0?'g':'r'" x-text="((it.change_pct||0)>=0?'+':'')+(it.change_pct||0).toFixed(2)+'%'"></span>
+    <!-- US Indices — rich 2-col cards -->
+    <div>
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">🇺🇸 US Indices</div>
+        <div class="grid grid-cols-2 gap-2">
+            <template x-for="it in (market.indices||[])">
+                <div class="card p-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] m" x-text="it.name||it.symbol"></span>
+                        <span class="text-[9px] m" x-text="it.symbol"></span>
+                    </div>
+                    <div class="text-base font-bold w" x-text="'$'+(it.price||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})"></div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-bold" :class="(it.change_pct||0)>=0?'g':'r'" x-text="((it.change_pct||0)>=0?'+':'')+(it.change_pct||0).toFixed(2)+'%'"></span>
+                        <span class="text-[10px] m" x-text="'52w '+(it.low_52w||0).toFixed(0)+'-'+(it.high_52w||0).toFixed(0)"></span>
+                    </div>
                 </div>
             </template>
         </div>
-        <div class="grid grid-cols-4 gap-1.5 mt-2">
-            <template x-for="it in (market.macro||[]).slice(0,4)">
-                <div class="text-center p-1.5 rounded bg-white/5">
-                    <div class="text-[10px] m" x-text="it.symbol"></div>
-                    <div class="text-[11px] font-bold" :class="(it.change_pct||0)>=0?'g':'r'" x-text="((it.change_pct||0)>=0?'+':'')+(it.change_pct||0).toFixed(1)+'%'"></div>
+    </div>
+
+    <!-- Macro & Crypto -->
+    <div>
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">🌍 Macro & Crypto</div>
+        <div class="flex gap-2 overflow-x-auto no-scroll pb-1">
+            <template x-for="it in (market.macro||[])">
+                <div class="card p-2.5 min-w-[110px] flex-shrink-0">
+                    <div class="text-[10px] m truncate" x-text="(it.name||it.symbol).replace('^','')"></div>
+                    <div class="text-sm font-bold w" x-text="(it.price||0)>=1000?'$'+(it.price||0).toLocaleString(undefined,{maximumFractionDigits:0}):'$'+(it.price||0).toFixed(2)"></div>
+                    <div class="text-xs font-bold" :class="(it.change_pct||0)>=0?'g':'r'" x-text="((it.change_pct||0)>=0?'+':'')+(it.change_pct||0).toFixed(2)+'%'"></div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Sectors grid -->
+    <div>
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">🏭 Sector Heatmap</div>
+        <div class="grid grid-cols-3 gap-1.5">
+            <template x-for="it in (market.sectors||[])">
+                <div class="card p-2 text-center" :style="'background:'+((it.change_pct||0)>=0?'rgba(0,212,170,'+Math.min(0.25,Math.abs(it.change_pct||0)/15)+')':'rgba(255,92,92,'+Math.min(0.25,Math.abs(it.change_pct||0)/15)+')')">
+                    <div class="text-[9px] m truncate" x-text="(it.name||it.symbol).replace(/ETF$/,'').trim()"></div>
+                    <div class="text-xs font-bold" :class="(it.change_pct||0)>=0?'g':'r'" x-text="((it.change_pct||0)>=0?'+':'')+(it.change_pct||0).toFixed(2)+'%'"></div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Asia row -->
+    <div>
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">🌏 Asia</div>
+        <div class="flex gap-2 overflow-x-auto no-scroll pb-1">
+            <template x-for="it in (market.asia||[])">
+                <div class="card p-2 min-w-[100px] flex-shrink-0 text-center">
+                    <div class="text-[10px] m truncate" x-text="(it.name||it.symbol).replace('^','')"></div>
+                    <div class="text-[11px] w" x-text="(it.price||0).toLocaleString(undefined,{maximumFractionDigits:2})"></div>
+                    <div class="text-xs font-bold" :class="(it.change_pct||0)>=0?'g':'r'" x-text="((it.change_pct||0)>=0?'+':'')+(it.change_pct||0).toFixed(2)+'%'"></div>
                 </div>
             </template>
         </div>
@@ -172,6 +277,20 @@
 
 <!-- ══════════════════════════ PORTFOLIO ══════════════════════════ -->
 <main x-show="tab==='portfolio'" class="px-4 py-4 space-y-4 fade-in">
+    <!-- Live market context band -->
+    <div class="card p-3">
+        <div class="flex items-center justify-between mb-1">
+            <div class="text-[10px] m uppercase tracking-wider">Market Context · LIVE</div>
+            <span class="pill" :class="regime.label==='RISK_ON'?'pill-g':regime.label==='RISK_OFF'?'pill-r':'pill-y'" x-text="regime.label||'…'"></span>
+        </div>
+        <div class="grid grid-cols-4 gap-2 text-center text-xs">
+            <div><div class="text-[10px] m">SPY</div><div class="font-bold" :class="spy()>=0?'g':'r'" x-text="(spy()>=0?'+':'')+spy().toFixed(2)+'%'"></div></div>
+            <div><div class="text-[10px] m">VIX</div><div class="font-bold w" x-text="vix().toFixed(2)"></div></div>
+            <div><div class="text-[10px] m">BTC</div><div class="font-bold" :class="btc()>=0?'g':'r'" x-text="(btc()>=0?'+':'')+btc().toFixed(2)+'%'"></div></div>
+            <div><div class="text-[10px] m">Gold</div><div class="font-bold" :class="gold()>=0?'g':'r'" x-text="(gold()>=0?'+':'')+gold().toFixed(2)+'%'"></div></div>
+        </div>
+    </div>
+
     <!-- broker pill + account -->
     <div class="card p-4">
         <div class="flex items-center justify-between mb-3">
@@ -203,7 +322,28 @@
                 <span class="m">now</span> <span class="font-bold" :class="(portfolio.kpis?.total_return_pct||0)>=0?'g':'r'" x-text="'$'+fmt(portfolio.kpis?.equity||0)"></span>
             </div>
         </div>
-        <div x-html="sparkSvg(portfolio.equity_curve, 340, 110)"></div>
+        <div x-html="dualSparkSvg(portfolio.equity_curve, portfolio.benchmark_curve, 340, 110)"></div>
+    </div>
+
+    <!-- Target vs actual allocation -->
+    <div class="card p-4" x-show="(portfolio.allocation?.holdings||[]).length">
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">⚖️ Target vs Actual</div>
+        <div class="overflow-x-auto">
+            <table>
+                <thead><tr><th>Ticker</th><th>Strategy</th><th>Actual</th><th>Target</th><th>Drift</th></tr></thead>
+                <tbody>
+                    <template x-for="h in (portfolio.allocation?.holdings||[])">
+                        <tr class="row-hi">
+                            <td class="font-bold w" x-text="h.ticker"></td>
+                            <td class="m text-[10px]" x-text="h.strategy"></td>
+                            <td x-text="h.actual_pct+'%'"></td>
+                            <td x-text="h.target_pct+'%'"></td>
+                            <td :class="Math.abs(h.drift_pct)>1?'y':'m'" x-text="(h.drift_pct>=0?'+':'')+h.drift_pct+'%'"></td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <!-- positions table -->
@@ -267,7 +407,7 @@
             </div>
         </div>
         <template x-if="(strategies.strategies||[]).length===0">
-            <div class="text-xs m py-6 text-center">No strategy metrics yet. Leaderboard populates as the engine logs closed trades.</div>
+            <div class="text-xs m py-3 text-center">No closed-trade metrics yet — leaderboard fills once cycles produce wins/losses.</div>
         </template>
         <div class="space-y-2">
             <template x-for="(s, i) in (strategies.strategies||[])">
@@ -291,19 +431,39 @@
             </template>
         </div>
     </div>
+
+    <!-- Static strategy roster — always visible -->
+    <div class="card p-4">
+        <div class="flex items-center justify-between mb-2">
+            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">📘 Strategy Roster</div>
+            <span class="pill pill-m" x-text="(roster.strategies||[]).length+' available'"></span>
+        </div>
+        <div class="space-y-2">
+            <template x-for="r in (roster.strategies||[])">
+                <div class="p-2.5 rounded-lg" style="background:#1a2030">
+                    <div class="flex items-center justify-between mb-0.5">
+                        <span class="text-sm font-bold w" x-text="r.name"></span>
+                        <span class="pill pill-b text-[10px]" x-text="r.best_regime"></span>
+                    </div>
+                    <div class="text-[11px] m" x-text="r.description"></div>
+                    <button @click="bt.ticker='AAPL';bt.strategy=r.id;tab='backtest';runBacktest()" class="text-[10px] g mt-1">🔬 backtest →</button>
+                </div>
+            </template>
+        </div>
+    </div>
 </main>
 
 <!-- ══════════════════════════ SIGNALS ══════════════════════════ -->
 <main x-show="tab==='signals'" class="px-4 py-4 space-y-4 fade-in">
     <div class="card p-4">
         <div class="flex items-center justify-between mb-3">
-            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">⚡ Live Signals</div>
+            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">⚡ Engine Signals</div>
             <span class="pill pill-b" x-text="(dash.topSignals||[]).length+' active'"></span>
         </div>
         <template x-if="(dash.topSignals||[]).length===0">
-            <div class="text-xs m py-6 text-center">No active signals. The ensembler is scoring opportunities…</div>
+            <div class="text-xs m py-4 text-center">No engine signals this cycle — showing live tape below.</div>
         </template>
-        <div class="overflow-x-auto">
+        <div class="overflow-x-auto" x-show="(dash.topSignals||[]).length">
             <table>
                 <thead><tr><th>Side</th><th>Ticker</th><th>Strategy</th><th>Score</th><th>Conf</th><th></th></tr></thead>
                 <tbody>
@@ -321,6 +481,32 @@
             </table>
         </div>
     </div>
+
+    <!-- LIVE TAPE: real movers from yfinance -->
+    <div class="card p-4">
+        <div class="flex items-center justify-between mb-2">
+            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">📡 Live Tape — Top Movers</div>
+            <span class="pill pill-g">LIVE</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table>
+                <thead><tr><th>Symbol</th><th>Type</th><th>Price</th><th>%Δ</th><th>52w Pos</th><th></th></tr></thead>
+                <tbody>
+                    <template x-for="it in liveMovers()">
+                        <tr class="row-hi">
+                            <td class="font-bold w" x-text="it.symbol"></td>
+                            <td class="m text-[10px]" x-text="it.group"></td>
+                            <td x-text="(it.price||0)>=1000?'$'+(it.price||0).toLocaleString(undefined,{maximumFractionDigits:0}):'$'+(it.price||0).toFixed(2)"></td>
+                            <td class="font-bold" :class="(it.change_pct||0)>=0?'g':'r'" x-text="((it.change_pct||0)>=0?'+':'')+(it.change_pct||0).toFixed(2)+'%'"></td>
+                            <td class="text-[10px] m" x-text="pct52w(it)"></td>
+                            <td><button @click="qt.ticker=it.symbol;tab='quote';fetchQuote()" class="text-[11px] g">→</button></td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <div class="card p-4">
         <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">📊 Today</div>
         <div class="grid grid-cols-3 gap-2 text-center text-xs">
@@ -352,7 +538,11 @@
                 <span x-text="(health.broker?.name||'paper').toUpperCase()"></span>
             </span>
         </div>
-        <div class="text-[11px] m mt-2">IB linkage requires <code>IB_ACCOUNT</code> + <code>IB_PORT</code> env. Currently using paper simulator in dry-run.</div>
+        <div class="grid grid-cols-2 gap-2 text-xs mt-2">
+            <div><span class="m">Mode</span> <span class="w" x-text="health.broker?.mode||'PAPER'"></span></div>
+            <div><span class="m">Last sync</span> <span class="w" x-text="fmtSync(health.broker?.last_sync)"></span></div>
+        </div>
+        <div class="text-[11px] m mt-2">IB linkage: set <code>IB_ACCOUNT</code> + <code>IB_PORT</code>. Paper simulator used when disconnected.</div>
     </div>
 
     <div class="card p-4">
@@ -362,6 +552,28 @@
             <div><span class="m">VIX</span> <span class="w" x-text="(health.data?.vix||0).toFixed(2)"></span></div>
             <div><span class="m">SPY 20d</span> <span class="w" x-text="((health.data?.spy_20d||0)>=0?'+':'')+(health.data?.spy_20d||0).toFixed(2)+'%'"></span></div>
             <div><span class="m">Breadth</span> <span class="w" x-text="(health.data?.breadth_pct||0).toFixed(0)+'%'"></span></div>
+        </div>
+    </div>
+
+    <!-- Rich regime telemetry (live engine context) -->
+    <div class="card p-4" x-show="dash.regime">
+        <div class="flex items-center justify-between mb-2">
+            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">🧭 Regime Telemetry</div>
+            <span class="pill" :class="(dash.regime?.should_trade)?'pill-g':'pill-r'" x-text="(dash.regime?.should_trade)?'TRADE':'NO-TRADE'"></span>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+            <div><span class="m">Risk</span> <span class="w" x-text="dash.regime?.risk_regime||'—'"></span></div>
+            <div><span class="m">Trend</span> <span class="w" x-text="dash.regime?.trend_regime||'—'"></span></div>
+            <div><span class="m">Vol</span> <span class="w" x-text="dash.regime?.volatility_regime||'—'"></span></div>
+            <div><span class="m">Confidence</span> <span class="w" x-text="((dash.regime?.confidence||0)*100).toFixed(0)+'%'"></span></div>
+            <div><span class="m">RiskOn/Up</span> <span class="g" x-text="((dash.regime?.risk_on_uptrend||0)*100).toFixed(0)+'%'"></span></div>
+            <div><span class="m">RiskOff/Dn</span> <span class="r" x-text="((dash.regime?.risk_off_downtrend||0)*100).toFixed(0)+'%'"></span></div>
+            <div><span class="m">Realized Vol</span> <span class="w" x-text="((dash.regime?.realized_vol_20d||0)*100).toFixed(1)+'%'"></span></div>
+            <div><span class="m">MOVE Index</span> <span class="w" x-text="(dash.regime?.move_index||0).toFixed(0)"></span></div>
+            <div><span class="m">VIX Term</span> <span class="w" x-text="(dash.regime?.vix_term_slope||0).toFixed(2)"></span></div>
+            <div><span class="m">Credit Z</span> <span class="w" x-text="(dash.regime?.credit_spread_z||0).toFixed(2)"></span></div>
+            <div><span class="m">Entropy</span> <span class="w" x-text="(dash.regime?.entropy||0).toFixed(2)"></span></div>
+            <div><span class="m">Size Scalar</span> <span class="g" x-text="((dash.regime?.size_scalar||0)*100).toFixed(0)+'%'"></span></div>
         </div>
     </div>
 
@@ -424,38 +636,78 @@
 
     <template x-if="bt.result">
         <div class="space-y-3 fade-in">
+            <!-- Result dashboard: summary → curve → metrics -->
             <div class="card p-4">
                 <div class="flex items-center justify-between mb-2">
-                    <div class="text-sm font-bold w" x-text="'📊 '+bt.result.ticker+' — '+bt.result.period"></div>
-                    <span class="pill pill-g" x-text="bt.result.best_strategy?.replace('_',' ')"></span>
+                    <div>
+                        <div class="text-sm font-bold w" x-text="'📊 '+bt.result.ticker+' — '+bt.result.period"></div>
+                        <div class="text-[10px] m" x-text="bt.result.date_range||''"></div>
+                    </div>
+                    <span class="pill pill-g" x-text="(bt.result.best_strategy||'').replace('_',' ')"></span>
                 </div>
-                <div class="grid grid-cols-3 gap-3 text-center text-xs">
+                <div class="flex gap-3 text-[10px] m mb-2">
+                    <span><span class="g">●</span> Best strategy</span>
+                    <span><span style="color:#0ea5e9">●</span> Buy & hold</span>
+                </div>
+                <div x-html="dualSparkSvg(btTopCurve(), bt.result.benchmark_curve, 340, 90)"></div>
+                <div class="grid grid-cols-4 gap-2 text-center text-xs mt-3">
                     <div><div class="m">Buy&Hold</div><div class="font-bold" :class="(bt.result.benchmark_return||0)>=0?'g':'r'" x-text="((bt.result.benchmark_return||0)>=0?'+':'')+(bt.result.benchmark_return||0)+'%'"></div></div>
-                    <div><div class="m">Best Return</div><div class="font-bold g" x-text="bt.result.strategies?.[0]?.total_return+'%'||'—'"></div></div>
+                    <div><div class="m">Best Return</div><div class="font-bold g" x-text="((bt.result.strategies?.[0]?.total_return||0)>=0?'+':'')+(bt.result.strategies?.[0]?.total_return||0)+'%'"></div></div>
+                    <div><div class="m">Alpha Δ</div><div class="font-bold" :class="btAlpha()>=0?'g':'r'" x-text="(btAlpha()>=0?'+':'')+btAlpha().toFixed(2)+'%'"></div></div>
                     <div><div class="m">Bars</div><div class="font-bold w" x-text="bt.result.bars||0"></div></div>
                 </div>
             </div>
+
+            <!-- Selected run detail (best strategy) -->
+            <div class="card p-4" x-show="bt.result.strategies?.[0]">
+                <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">📌 Selected Run</div>
+                <div class="text-sm font-bold w mb-1" x-text="btStrategyLabel(bt.result.strategies[0])"></div>
+                <div class="text-[11px] m mb-2" x-text="btRuleSummary(bt.result.strategies[0].strategy)"></div>
+                <div class="grid grid-cols-4 gap-2 text-center text-[11px]">
+                    <div><div class="m">Sharpe</div><div class="font-bold w" x-text="bt.result.strategies[0].sharpe"></div></div>
+                    <div><div class="m">Sortino</div><div class="font-bold w" x-text="bt.result.strategies[0].sortino||'—'"></div></div>
+                    <div><div class="m">Vol</div><div class="font-bold w" x-text="(bt.result.strategies[0].volatility||0)+'%'"></div></div>
+                    <div><div class="m">Hold</div><div class="font-bold w" x-text="(bt.result.strategies[0].avg_hold_days||0)+'d'"></div></div>
+                </div>
+            </div>
+
             <template x-for="(s, i) in (bt.result.strategies||[])">
                 <div class="card p-3 fade-in" :class="i===0&&'border-green-500/40'">
                     <div class="flex items-center justify-between mb-2">
                         <div class="flex items-center gap-2">
                             <span class="text-base" x-text="i===0?'🥇':i===1?'🥈':i===2?'🥉':'#'+(i+1)"></span>
-                            <span class="text-sm font-bold w" x-text="(s.strategy||'').replace('_',' ').replace(/\b\w/g,l=>l.toUpperCase())"></span>
+                            <span class="text-sm font-bold w" x-text="btStrategyLabel(s)"></span>
                         </div>
                         <span class="text-xs m" x-text="'Score '+s.score"></span>
                     </div>
-                    <div class="grid grid-cols-3 gap-2 text-xs text-center">
+                    <div x-show="s.equity_curve?.length" class="mb-2" x-html="dualSparkSvg(s.equity_curve, bt.result.benchmark_curve, 300, 40)"></div>
+                    <div class="grid grid-cols-4 gap-2 text-xs text-center">
                         <div><div class="m">Trades</div><div class="font-bold w" x-text="s.total_trades||0"></div></div>
                         <div><div class="m">Win</div><div class="font-bold" :class="(s.win_rate||0)>50?'g':'r'" x-text="(s.win_rate||0)+'%'"></div></div>
                         <div><div class="m">Return</div><div class="font-bold" :class="(s.total_return||0)>=0?'g':'r'" x-text="((s.total_return||0)>=0?'+':'')+(s.total_return||0)+'%'"></div></div>
+                        <div><div class="m">vs B&H</div><div class="font-bold" :class="(s.total_return||0)-(bt.result.benchmark_return||0)>=0?'g':'r'" x-text="(((s.total_return||0)-(bt.result.benchmark_return||0))>=0?'+':'')+((s.total_return||0)-(bt.result.benchmark_return||0)).toFixed(2)+'%'"></div></div>
                         <div><div class="m">Sharpe</div><div class="font-bold w" x-text="s.sharpe||0"></div></div>
                         <div><div class="m">Max DD</div><div class="font-bold r" x-text="(s.max_drawdown||0)+'%'"></div></div>
                         <div><div class="m">P.Factor</div><div class="font-bold w" x-text="s.profit_factor||0"></div></div>
+                        <div><div class="m">Sortino</div><div class="font-bold w" x-text="s.sortino||'—'"></div></div>
                     </div>
                 </div>
             </template>
         </div>
     </template>
+
+    <!-- Previous runs -->
+    <div class="card p-4" x-show="(bt.history||[]).length">
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">🗂️ Recent Runs</div>
+        <template x-for="h in (bt.history||[]).slice(0,8)">
+            <div class="flex items-center justify-between py-1.5 border-b border-gray-800/40 last:border-0 text-xs row-hi cursor-pointer"
+                 @click="loadBtHistory(h)">
+                <span class="w font-bold" x-text="h.ticker+' · '+h.best"></span>
+                <span class="m" x-text="h.period"></span>
+                <span class="g" x-text="h.return+'%'"></span>
+            </div>
+        </template>
+    </div>
 </main>
 
 <!-- ══════════════════════════ QUOTE / DOSSIER ══════════════════════════ -->
@@ -546,10 +798,11 @@ function desk() {
         regime: {},
         market: {indices:[], macro:[], sectors:[], asia:[]},
         dash: {topSignals:[], stats:{}},
-        portfolio: {kpis:{}, broker:{}, positions:[], equity_curve:[], pro_kpis:{}},
+        portfolio: {kpis:{}, broker:{}, positions:[], equity_curve:[], benchmark_curve:[], allocation:{}, active_sleeves:[], pro_kpis:{}},
         strategies: {counts:{}, strategies:[]},
+        roster: {strategies:[]},
         health: {engine:{}, broker:{}, data:{}, circuit_breaker:{}, alerts:[]},
-        bt: {ticker:'AAPL', strategy:'all', startDate:'', endDate:'', period:'1y', loading:false, result:null},
+        bt: {ticker:'AAPL', strategy:'all', startDate:'', endDate:'', period:'1y', loading:false, result:null, history:[]},
         qt: {ticker:'', loading:false, data:null, error:''},
         cmdCats: [
             {icon:'⚡', name:'Signals & Scans', cmds:[['/signals','Latest signals'],['/scan vcp','Scan setups'],['/momentum','Momentum picks']]},
@@ -560,6 +813,7 @@ function desk() {
         ],
         init() {
             this.updateClock(); setInterval(()=>this.updateClock(),1000);
+            try { this.bt.history = JSON.parse(localStorage.getItem('bt_history')||'[]'); } catch(e) { this.bt.history=[]; }
             this.refreshAll(); setInterval(()=>this.refreshAll(),30000);
         },
         updateClock() {
@@ -567,12 +821,13 @@ function desk() {
         },
         async refreshAll() {
             try {
-                const [m, d, p, s, h] = await Promise.all([
+                const [m, d, p, s, h, rs] = await Promise.all([
                     fetch('/api/live/market').then(r=>r.json()).catch(()=>({})),
                     fetch('/api/dashboard').then(r=>r.json()).catch(()=>({})),
                     fetch('/api/desk/portfolio').then(r=>r.json()).catch(()=>({})),
                     fetch('/api/desk/strategies').then(r=>r.json()).catch(()=>({})),
                     fetch('/api/desk/monitor').then(r=>r.json()).catch(()=>({})),
+                    fetch('/api/live/strategies').then(r=>r.json()).catch(()=>({strategies:[]})),
                 ]);
                 this.market = m || this.market;
                 this.regime = (m && m.regime) || (d && d.regime) || {};
@@ -580,6 +835,7 @@ function desk() {
                 this.portfolio = p || this.portfolio;
                 this.strategies = s || this.strategies;
                 this.health = h || this.health;
+                this.roster = rs || this.roster;
                 this.live = true;
             } catch(e) { console.error('refresh:',e); this.live=false; }
         },
@@ -593,8 +849,48 @@ function desk() {
                 const r=await fetch(url,{method:'POST'});
                 if(!r.ok){const e=await r.json();throw new Error(e.detail||'Failed');}
                 this.bt.result=await r.json();
+                const top = this.bt.result.strategies?.[0];
+                const entry = {
+                    ticker: this.bt.result.ticker,
+                    period: this.bt.result.period,
+                    best: (this.bt.result.best_strategy||'').replace('_',' '),
+                    return: top?.total_return||0,
+                    ts: Date.now(),
+                    payload: this.bt.result,
+                };
+                this.bt.history = [entry, ...this.bt.history.filter(h=>!(h.ticker===entry.ticker&&h.period===entry.period))].slice(0,12);
+                try { localStorage.setItem('bt_history', JSON.stringify(this.bt.history)); } catch(e) {}
             } catch(e) { alert('Error: '+e.message); }
             finally { this.bt.loading=false; }
+        },
+        loadBtHistory(h) {
+            if (h.payload) { this.bt.result = h.payload; this.bt.ticker = h.ticker; }
+        },
+        btTopCurve() {
+            return this.bt.result?.strategies?.[0]?.equity_curve || [];
+        },
+        btAlpha() {
+            const top = this.bt.result?.strategies?.[0]?.total_return||0;
+            return top - (this.bt.result?.benchmark_return||0);
+        },
+        btStrategyLabel(s) {
+            return (s.strategy||'').replace('_',' ').replace(/\b\w/g,l=>l.toUpperCase());
+        },
+        btRuleSummary(id) {
+            const rules = {
+                swing: 'RSI oversold + reclaim SMA20 above SMA50; 5% stop / 10% target.',
+                breakout: '20-day high breakout + volume surge; trend filter SMA20.',
+                momentum: 'Price > SMA20 > SMA50, RSI 50–75, volume confirmation.',
+                mean_reversion: 'RSI < 30, price below SMA20; tighter 4% stop / 6% target.',
+            };
+            return rules[id] || 'Vectorized rule backtest on daily bars.';
+        },
+        fmtSync(iso) {
+            if (!iso) return '—';
+            try {
+                const d = new Date(iso);
+                return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+            } catch(e) { return '—'; }
         },
         async fetchQuote() {
             if(!this.qt.ticker) return;
@@ -612,26 +908,82 @@ function desk() {
             if (Math.abs(n)>=1e3) return (n/1e3).toFixed(1)+'k';
             return n.toFixed(2);
         },
-        sparkSvg(series, w, h, smallPad) {
-            const pts = (series||[]).map(p => typeof p==='number'?p:(p.equity ?? p.value ?? 0));
-            if (!pts.length) return '<div class="text-[10px] m text-center py-4">no curve data yet</div>';
-            const pad = smallPad?2:4;
+        // Live market accessors
+        _findMkt(sym) {
+            const all = [...(this.market.indices||[]), ...(this.market.macro||[]), ...(this.market.sectors||[]), ...(this.market.asia||[])];
+            return all.find(x => x.symbol===sym) || {};
+        },
+        spy() { return this._findMkt('SPY').change_pct || 0; },
+        vix() { return this._findMkt('^VIX').price || 0; },
+        btc() { return this._findMkt('BTC-USD').change_pct || 0; },
+        gold() { return this._findMkt('GLD').change_pct || 0; },
+        pct52w(it) {
+            const lo = it.low_52w||0, hi = it.high_52w||0, p = it.price||0;
+            if (!lo || !hi || hi===lo) return '—';
+            return (((p-lo)/(hi-lo))*100).toFixed(0)+'%';
+        },
+        liveMovers() {
+            const tag = (arr, group) => (arr||[]).map(x => ({...x, group}));
+            const all = [
+                ...tag(this.market.indices, 'index'),
+                ...tag(this.market.sectors, 'sector'),
+                ...tag(this.market.macro, 'macro'),
+                ...tag(this.market.asia, 'asia'),
+            ];
+            return all
+                .filter(x => Number.isFinite(x.change_pct))
+                .sort((a,b) => Math.abs(b.change_pct||0) - Math.abs(a.change_pct||0))
+                .slice(0, 15);
+        },
+        _seriesPts(series) {
+            return (series||[]).map(p => typeof p==='number'?p:(p.equity ?? p.value ?? 0));
+        },
+        _pathFromPts(pts, w, h, pad, color) {
+            if (!pts.length) return '';
             const min = Math.min(...pts), max = Math.max(...pts);
             const rng = (max-min) || 1;
             const sx = (w-pad*2)/Math.max(pts.length-1,1);
-            const path = pts.map((v,i)=>{
+            const coords = pts.map((v,i)=>{
                 const x = pad + i*sx;
                 const y = pad + (h-pad*2)*(1 - (v-min)/rng);
-                return (i===0?'M':'L')+x.toFixed(1)+','+y.toFixed(1);
-            }).join(' ');
+                return [x,y];
+            });
+            const path = coords.map((c,i)=>(i===0?'M':'L')+c[0].toFixed(1)+','+c[1].toFixed(1)).join(' ');
             const last = pts[pts.length-1], first = pts[0];
-            const color = last>=first ? '#00d4aa' : '#ff5c5c';
+            const stroke = color || (last>=first ? '#00d4aa' : '#ff5c5c');
             const fill = last>=first ? 'rgba(0,212,170,0.10)' : 'rgba(255,92,92,0.10)';
-            const areaPath = path + ' L'+(pad+(pts.length-1)*sx).toFixed(1)+','+(h-pad)+' L'+pad+','+(h-pad)+' Z';
-            return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-                <path d="${areaPath}" fill="${fill}" stroke="none"/>
-                <path d="${path}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/>
-            </svg>`;
+            const areaPath = path + ' L'+coords[coords.length-1][0].toFixed(1)+','+(h-pad)+' L'+pad+','+(h-pad)+' Z';
+            return `<path d="${areaPath}" fill="${fill}" stroke="none"/><path d="${path}" fill="none" stroke="${stroke}" stroke-width="1.5" stroke-linejoin="round"/>`;
+        },
+        sparkSvg(series, w, h, smallPad) {
+            const pts = this._seriesPts(series);
+            if (!pts.length) return '<div class="text-[10px] m text-center py-4">no curve data yet</div>';
+            const pad = smallPad?2:4;
+            const inner = this._pathFromPts(pts, w, h, pad);
+            return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${inner}</svg>`;
+        },
+        dualSparkSvg(primary, overlay, w, h) {
+            const ptsA = this._seriesPts(primary);
+            const ptsB = this._seriesPts(overlay);
+            if (!ptsA.length && !ptsB.length) return '<div class="text-[10px] m text-center py-4">no curve data yet</div>';
+            const pad = 4;
+            const combined = ptsA.length ? ptsA : ptsB;
+            const min = Math.min(...combined, ...(ptsB.length?ptsB:[]));
+            const max = Math.max(...combined, ...(ptsB.length?ptsB:[]));
+            const rng = (max-min) || 1;
+            const mkPath = (pts, color, dash) => {
+                if (!pts.length) return '';
+                const sx = (w-pad*2)/Math.max(pts.length-1,1);
+                const d = pts.map((v,i)=>{
+                    const x = pad + i*sx;
+                    const y = pad + (h-pad*2)*(1 - (v-min)/rng);
+                    return (i===0?'M':'L')+x.toFixed(1)+','+y.toFixed(1);
+                }).join(' ');
+                return `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.5" ${dash?'stroke-dasharray="4 3"':''}/>`;
+            };
+            let svg = mkPath(ptsA, '#00d4aa', false);
+            if (ptsB.length) svg += mkPath(ptsB, '#0ea5e9', true);
+            return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${svg}</svg>`;
         },
     }
 }

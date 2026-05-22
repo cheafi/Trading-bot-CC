@@ -354,6 +354,109 @@ def _equity_curve_from_engine(eng) -> list:
     return series
 
 
+def _downsample_series(values: list, max_pts: int = 80) -> list:
+    """Downsample a numeric series for lightweight sparklines."""
+    if not values:
+        return []
+    step = max(1, len(values) // max_pts)
+    out = []
+    for i in range(0, len(values), step):
+        out.append(round(float(values[i]), 2))
+    if out[-1] != round(float(values[-1]), 2):
+        out.append(round(float(values[-1]), 2))
+    return out
+
+
+def _benchmark_curve_scaled(close_values, start_equity: float, max_pts: int = 80) -> list:
+    """Buy-and-hold benchmark curve normalized to portfolio start equity."""
+    import numpy as np
+
+    close = np.asarray(close_values, dtype=float)
+    if close.size < 2 or start_equity <= 0:
+        return []
+    base = close[0]
+    scaled = (close / base) * start_equity
+    sampled = _downsample_series(scaled.tolist(), max_pts)
+    return [{"i": i, "equity": v} for i, v in enumerate(sampled)]
+
+
+def _strategy_equity_curve(
+    close_values,
+    entries: list,
+    exits: list,
+    start_equity: float = 100.0,
+    max_pts: int = 80,
+) -> list:
+    """Bar-index equity curve from entry/exit pairs (normalized capital)."""
+    import numpy as np
+
+    n = len(close_values)
+    if n < 2:
+        return []
+    cap = float(start_equity)
+    series = [{"i": 0, "equity": round(cap, 2)}]
+    ei = 0
+    position = None
+    for i in range(1, n):
+        if position is None and ei < len(entries) and entries[ei][0] == i:
+            position = {"price": entries[ei][1]}
+            ei += 1
+        if position is not None:
+            cap *= close_values[i] / close_values[i - 1] if close_values[i - 1] else 1.0
+        if position is not None and any(ex[0] == i for ex in exits):
+            position = None
+        if i % max(1, n // max_pts) == 0 or i == n - 1:
+            series.append({"i": i, "equity": round(cap, 2)})
+    return series
+
+
+def _allocation_from_engine(eng, pm, equity: float) -> dict:
+    """Target vs actual weights + risk-budget exposure snapshot."""
+    holdings = []
+    exposure_dict: dict = {}
+    if not eng or not pm or equity <= 0:
+        return {"holdings": holdings, "exposure": exposure_dict, "cash_pct": 100.0}
+
+    try:
+        exposure = eng.risk_budget.build_exposure(list(pm.positions.values()))
+        exposure_dict = exposure.to_dict()
+    except Exception:  # noqa: BLE001
+        exposure_dict = {}
+
+    n = max(len(pm.positions), 1)
+    per_name_cap = float(
+        getattr(eng.risk_budget, "limits", {}).get("max_single_position", 0.05)
+        if eng else 0.05,
+    )
+    equal_target = min(per_name_cap * 100, 100.0 / n)
+
+    invested = 0.0
+    for tkr, pos in pm.positions.items():
+        qty = float(getattr(pos, "shares", 0) or 0)
+        cur = float(getattr(pos, "current_price", 0) or 0)
+        actual = (qty * cur) / equity * 100
+        invested += actual
+        holdings.append({
+            "ticker": tkr,
+            "strategy": getattr(pos, "strategy", "—"),
+            "actual_pct": round(actual, 2),
+            "target_pct": round(equal_target, 2),
+            "drift_pct": round(actual - equal_target, 2),
+        })
+    holdings.sort(key=lambda x: x["actual_pct"], reverse=True)
+    return {
+        "holdings": holdings,
+        "exposure": exposure_dict,
+        "cash_pct": round(max(0.0, 100.0 - invested), 2),
+        "gross_pct": round(
+            float(exposure_dict.get("gross_exposure", invested / 100) or 0) * 100
+            if exposure_dict.get("gross_exposure", 0) <= 1.5
+            else float(exposure_dict.get("gross_exposure", invested)),
+            2,
+        ),
+    }
+
+
 @app.get("/api/desk/portfolio", tags=["desk"])
 async def desk_portfolio():
     """Active fund snapshot: account, positions, equity curve, KPIs."""
@@ -405,13 +508,58 @@ async def desk_portfolio():
         broker_name = "paper"
 
     curve = _equity_curve_from_engine(eng)
-    start_eq = curve[0]["equity"] if curve else 0
-    end_eq = curve[-1]["equity"] if curve else 0
+    start_eq = curve[0]["equity"] if curve else float(
+        getattr(pm.params, "account_size", 100_000.0) if pm else 100_000.0,
+    )
+    end_eq = curve[-1]["equity"] if curve else start_eq
     total_return_pct = ((end_eq / start_eq - 1) * 100) if start_eq else 0
+
+    benchmark_curve: list = []
+    try:
+        import yfinance as yf
+
+        spy_hist = await asyncio.to_thread(
+            lambda: yf.Ticker("SPY").history(period="6mo"),
+        )
+        if spy_hist is not None and not spy_hist.empty:
+            benchmark_curve = _benchmark_curve_scaled(
+                spy_hist["Close"].values, start_eq,
+            )
+    except Exception:  # noqa: BLE001
+        benchmark_curve = []
+
+    allocation = _allocation_from_engine(eng, pm, end_eq or start_eq)
+
+    # Active sleeves = promoted strategies currently managing risk budget
+    active_sleeves: list = []
+    if eng and getattr(eng, "leaderboard", None):
+        for entry in eng.leaderboard.get_rankings()[:6]:
+            status = entry.get("status", "active")
+            if hasattr(status, "value"):
+                status = status.value
+            if status not in ("active", "reduced"):
+                continue
+            metrics = entry.get("metrics", {}) or {}
+            active_sleeves.append({
+                "name": entry.get("name"),
+                "status": status,
+                "stance": "reduced size" if status == "reduced" else "active",
+                "score": round(float(entry.get("blended_score", 0) or 0), 2),
+                "win_rate": round(float(metrics.get("win_rate", 0) or 0) * 100, 1),
+                "sharpe": round(float(metrics.get("oos_sharpe", 0) or 0), 2),
+                "max_dd": round(float(metrics.get("max_drawdown", 0) or 0) * 100, 1),
+                "trades": entry.get("trade_count", 0),
+                "last_updated": entry.get("last_updated"),
+            })
 
     return {
         "timestamp": datetime.utcnow().isoformat(),
-        "broker": {"name": broker_name, "account": broker_account},
+        "broker": {
+            "name": broker_name,
+            "account": broker_account,
+            "connected": broker_account is not None,
+            "last_sync": datetime.utcnow().isoformat(),
+        },
         "kpis": {
             "equity": end_eq,
             "start_equity": start_eq,
@@ -424,6 +572,9 @@ async def desk_portfolio():
         },
         "positions": positions,
         "equity_curve": curve,
+        "benchmark_curve": benchmark_curve,
+        "allocation": allocation,
+        "active_sleeves": active_sleeves,
         "pro_kpis": state.get("pro_kpis", {}),
         "regime": state.get("regime", {}),
     }
@@ -482,7 +633,12 @@ async def desk_monitor():
     cb = state.get("circuit_breaker", {}) or {}
     nt = state.get("no_trade_card") or {}
 
-    broker_block = {"connected": False, "name": "paper"}
+    broker_block = {
+        "connected": False,
+        "name": "paper",
+        "last_sync": None,
+        "mode": "PAPER" if state.get("dry_run", True) else "LIVE",
+    }
     try:
         from src.brokers.broker_manager import get_broker_manager
         mgr = await get_broker_manager()
@@ -490,6 +646,8 @@ async def desk_monitor():
         broker_block = {
             "connected": True,
             "name": bt.value if bt else "paper",
+            "last_sync": datetime.utcnow().isoformat(),
+            "mode": "PAPER" if state.get("dry_run", True) else "LIVE",
         }
     except Exception:  # noqa: BLE001
         pass
@@ -2915,6 +3073,14 @@ async def live_backtest(
         gross_loss = abs(sum(r for r in returns if r <= 0))
         profit_factor = gross_profit / gross_loss if gross_loss > 0 else 99
 
+        equity_curve = _strategy_equity_curve(close, entries, exits, 100.0)
+        sortino = 0.0
+        neg = [r for r in returns if r < 0]
+        if neg and np.std(neg) > 0:
+            sortino = np.mean(returns) / np.std(neg) * np.sqrt(
+                252 / max(1, np.mean([t["hold_days"] for t in trades]) if trades else 1),
+            )
+
         return {
             "strategy": strat_id,
             "total_trades": total_trades,
@@ -2924,9 +3090,15 @@ async def live_backtest(
             "avg_win": round(avg_win, 2),
             "avg_loss": round(avg_loss, 2),
             "sharpe": round(sharpe, 2),
+            "sortino": round(sortino, 2),
             "max_drawdown": round(max_dd, 2),
             "profit_factor": round(profit_factor, 2),
+            "volatility": round(float(np.std(returns)) * np.sqrt(252) * 100, 2) if returns else 0,
+            "avg_hold_days": round(
+                float(np.mean([t["hold_days"] for t in trades])) if trades else 0, 1,
+            ),
             "trades": trades[-20:],  # Last 20 trades
+            "equity_curve": equity_curve,
             "score": round(sharpe * 20 + win_rate * 0.5 + total_return * 0.3, 1),
         }
 
@@ -2945,6 +3117,7 @@ async def live_backtest(
 
     # Buy-and-hold benchmark
     bh_return = ((close[-1] - close[0]) / close[0]) * 100
+    benchmark_curve = _benchmark_curve_scaled(close, 100.0)
 
     return {
         "ticker": ticker,
@@ -2952,6 +3125,7 @@ async def live_backtest(
         "bars": len(close),
         "date_range": f"{dates_idx[0].date()} → {dates_idx[-1].date()}",
         "benchmark_return": round(bh_return, 2),
+        "benchmark_curve": benchmark_curve,
         "best_strategy": best,
         "strategies": ranked,
         "timestamp": datetime.utcnow().isoformat(),
