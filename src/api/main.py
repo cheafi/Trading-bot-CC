@@ -12314,6 +12314,14 @@ try:
 except Exception:
     logger.exception("[Router] Failed to load trade_intelligence router")
 
+# Leader / Holdings Tracking — verified vs inferred disclosure layer
+try:
+    from src.api.routers.leaders import router as leaders_router
+
+    app.include_router(leaders_router)
+except Exception:
+    logger.exception("[Router] Failed to load leaders router")
+
 # Sprint 99 — Model Funds (Leader Momentum / Balanced Multi-Factor / Tactical/Defensive)
 try:
     from src.api.routers.model_funds import router as model_funds_router

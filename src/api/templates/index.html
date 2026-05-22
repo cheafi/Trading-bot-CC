@@ -651,6 +651,32 @@
         </div>
       </div>
 
+      <!-- ── Leader tracking dashboard cards ── -->
+      <div style="padding:8px 12px" x-show="leadersDash.top_leader_moves?.length">
+        <div class="text-[9px] font-bold uppercase mb-2" style="color:var(--t3)">👤 Leader Intelligence</div>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="card card-p">
+            <div class="text-[9px] font-bold mb-1" style="color:var(--t3)">Top Moves</div>
+            <template x-for="m in (leadersDash.top_leader_moves||[]).slice(0,4)">
+              <div class="text-[10px] py-0.5 flex justify-between">
+                <span><span class="mono font-bold" x-text="m.ticker"></span> <span style="color:var(--t3)" x-text="m.action"></span></span>
+                <span class="pill pw text-[8px]" x-text="m.source_quality_label?.slice(0,8)||''"></span>
+              </div>
+            </template>
+            <button @click="switchTab('leaders')" class="text-[9px] mt-1" style="color:var(--blue)">Open Leaders →</button>
+          </div>
+          <div class="card card-p">
+            <div class="text-[9px] font-bold mb-1" style="color:var(--t3)">Consensus Accumulation</div>
+            <template x-for="c in (leadersDash.consensus_accumulation||[]).slice(0,4)">
+              <div class="text-[10px] py-0.5 flex justify-between">
+                <span class="mono font-bold" x-text="c.ticker"></span>
+                <span style="color:var(--green)" x-text="'score '+c.consensus_score"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+
       <!-- ── Engine portfolio / sleeves (desk decision layer) ── -->
       <div style="padding:8px 12px" x-show="desk.portfolio">
         <div class="card card-p">
@@ -1628,6 +1654,180 @@
             </div>
           </template>
         </div>
+      </div>
+    </main>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- LEADER / HOLDINGS TRACKING                             -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <main x-show="tab==='leaders'" class="fade" x-init="$watch('tab',v=>{if(v==='leaders')fetchLeadersHub()})">
+      <div class="trust-strip">
+        <span style="color:var(--amber)">● LEADER TRACKING</span>
+        <span>Verified ≠ Inferred — always check source badge</span>
+        <span x-text="leadersHub.loading?'Loading…':(leadersHub.leaders?.length||0)+' entities'"></span>
+      </div>
+      <div class="p-3 space-y-3">
+        <!-- Sub-nav -->
+        <div class="flex gap-2 flex-wrap">
+          <button @click="leadersView='hub'" class="btn-s text-[10px]" :style="leadersView==='hub'&&'border-color:var(--green);color:var(--green)'">Hub</button>
+          <button @click="leadersView='consensus';fetchLeadersConsensus()" class="btn-s text-[10px]" :style="leadersView==='consensus'&&'border-color:var(--green);color:var(--green)'">Consensus</button>
+          <button @click="leadersView='flow';fetchLeadersFlow()" class="btn-s text-[10px]" :style="leadersView==='flow'&&'border-color:var(--green);color:var(--green)'">Flow Confirm</button>
+          <button @click="leadersView='baskets';fetchLeadersBaskets()" class="btn-s text-[10px]" :style="leadersView==='baskets'&&'border-color:var(--green);color:var(--green)'">Shadow Baskets</button>
+          <button @click="leadersView='alerts';fetchLeadersAlerts()" class="btn-s text-[10px]" :style="leadersView==='alerts'&&'border-color:var(--green);color:var(--green)'">Alerts</button>
+        </div>
+
+        <!-- HUB -->
+        <template x-if="leadersView==='hub'">
+          <div class="space-y-3">
+            <div class="flex gap-2 flex-wrap">
+              <select x-model="leadersFilter.category" @change="fetchLeadersHub()" class="text-[10px] flex-1">
+                <option value="">All categories</option>
+                <option value="verified_filer">Verified filers</option>
+                <option value="public_figure">Public figures</option>
+                <option value="fund_manager">Fund managers</option>
+                <option value="influencer">Influencers</option>
+                <option value="etf">ETF</option>
+              </select>
+              <select x-model="leadersFilter.quality" @change="fetchLeadersHub()" class="text-[10px] flex-1">
+                <option value="">All quality</option>
+                <option value="verified">Verified</option>
+                <option value="delayed">Delayed</option>
+                <option value="derived">Derived</option>
+                <option value="inferred">Inferred</option>
+                <option value="speculative">Speculative</option>
+              </select>
+              <input x-model="leadersFilter.search" @keydown.enter="fetchLeadersHub()" placeholder="Search…" class="text-[10px] flex-1">
+            </div>
+            <template x-if="leadersDetail">
+              <div class="card card-p border-l-4" style="border-left-color:var(--green)">
+                <button @click="leadersDetail=null" class="text-[10px] mb-2" style="color:var(--t3)">← Back to list</button>
+                <div class="flex justify-between items-start mb-2">
+                  <div>
+                    <div class="text-sm font-bold" x-text="leadersDetail.name"></div>
+                    <div class="text-[10px]" style="color:var(--t3)" x-text="leadersDetail.entity_type"></div>
+                  </div>
+                  <span class="pill" :class="leaderQualityClass(leadersDetail.source_quality)" x-text="leadersDetail.source_quality_label"></span>
+                </div>
+                <div class="text-[10px] mb-2" style="color:var(--t2)" x-text="leadersDetail.description"></div>
+                <div class="grid grid-cols-4 gap-2 text-center text-[10px] mb-3">
+                  <div><div style="color:var(--t3)">Holdings</div><div class="font-bold mono" x-text="leadersDetail.metrics?.active_holdings||0"></div></div>
+                  <div><div style="color:var(--t3)">Adds</div><div class="font-bold mono text-green-400" x-text="leadersDetail.metrics?.adds_30d||0"></div></div>
+                  <div><div style="color:var(--t3)">Reduces</div><div class="font-bold mono text-red-400" x-text="leadersDetail.metrics?.reductions_30d||0"></div></div>
+                  <div><div style="color:var(--t3)">Delay</div><div class="font-bold mono" x-text="(leadersDetail.disclosure_delay_days||0)+'d'"></div></div>
+                </div>
+                <div class="card card-p mb-2" style="background:var(--s2)">
+                  <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">Decision Box</div>
+                  <div class="text-[10px] space-y-0.5">
+                    <div x-text="'Verifiable: '+(leadersDetail.decision?.verifiable?'Yes':'No')"></div>
+                    <div x-text="'Delayed: '+(leadersDetail.decision?.delayed_disclosure?'Yes':'No')"></div>
+                    <div x-text="'Recommendation: '+(leadersDetail.decision?.recommendation||'—')"></div>
+                    <template x-for="w in (leadersDetail.decision?.warnings||[])">
+                      <div class="text-amber-300" x-text="'⚠ '+w"></div>
+                    </template>
+                  </div>
+                </div>
+                <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">Holdings</div>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-[10px]">
+                    <thead><tr style="color:var(--t3)"><th>Ticker</th><th>Action</th><th>Size</th><th>Source</th><th>Date</th><th>Action</th></tr></thead>
+                    <tbody>
+                      <template x-for="h in (leadersDetail.holdings||[])">
+                        <tr>
+                          <td class="mono font-bold" x-text="h.ticker"></td>
+                          <td x-text="h.action_label"></td>
+                          <td x-text="h.size_bucket||'—'"></td>
+                          <td><span class="pill text-[8px]" :class="leaderQualityClass(h.source_quality)" x-text="h.source_quality"></span></td>
+                          <td x-text="h.disclosure_date||'—'"></td>
+                          <td x-text="h.actionability||'—'"></td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="text-[9px] font-bold uppercase mt-3 mb-1" style="color:var(--t3)">Timeline</div>
+                <template x-for="ev in (leadersDetail.timeline||[])">
+                  <div class="text-[10px] py-1 border-b border-gray-800/40">
+                    <span class="mono" style="color:var(--t3)" x-text="ev.event_date"></span>
+                    <span class="font-bold ml-1" x-text="ev.event_type"></span>
+                    <span x-text="' · '+ev.summary"></span>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <template x-if="!leadersDetail">
+              <template x-for="L in (leadersHub.leaders||[])" :key="L.id">
+                <div class="card card-p cursor-pointer row-hi" @click="openLeaderDetail(L.id)">
+                  <div class="flex justify-between items-start">
+                    <div>
+                      <div class="text-sm font-bold" x-text="L.name"></div>
+                      <div class="text-[10px]" style="color:var(--t3)" x-text="L.focus_area"></div>
+                    </div>
+                    <span class="pill text-[9px]" :class="leaderQualityClass(L.source_quality)" x-text="L.source_quality_label"></span>
+                  </div>
+                  <div class="flex gap-3 mt-1 text-[10px]" style="color:var(--t3)">
+                    <span x-text="(L.metrics?.active_holdings||0)+' holdings'"></span>
+                    <span x-text="'+'+(L.metrics?.adds_30d||0)+' / -'+(L.metrics?.reductions_30d||0)"></span>
+                    <span x-text="L.recent_tickers?.join(', ')"></span>
+                  </div>
+                </div>
+              </template>
+            </template>
+          </div>
+        </template>
+
+        <!-- CONSENSUS -->
+        <template x-if="leadersView==='consensus'">
+          <div class="space-y-2">
+            <label class="text-[10px] flex items-center gap-2"><input type="checkbox" x-model="leadersConsensusVerified" @change="fetchLeadersConsensus()"> Verified sources only</label>
+            <template x-for="c in (leadersConsensus.items||[])" :key="c.ticker">
+              <div class="card card-p flex justify-between items-center cursor-pointer" @click="openConsensusTicker(c.ticker)">
+                <div>
+                  <span class="mono font-bold" x-text="c.ticker"></span>
+                  <span class="text-[10px] ml-2" style="color:var(--t3)" x-text="c.mention_count+' mentions'"></span>
+                </div>
+                <div class="text-right text-[10px]">
+                  <div class="font-bold text-green-400" x-text="'consensus '+c.consensus_score"></div>
+                  <div style="color:var(--t3)" x-text="'flow '+(c.flow_confirmation_score||0)"></div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- FLOW -->
+        <template x-if="leadersView==='flow'">
+          <div class="text-[9px] mb-2 p-2 rounded" style="background:rgba(251,191,36,.1);color:var(--amber)">⚠ Flow scores are heuristic — not exchange-confirmed OI/IV feeds.</div>
+          <template x-for="f in (leadersFlow.items||[])" :key="f.ticker">
+            <div class="card card-p flex justify-between">
+              <span class="mono font-bold" x-text="f.ticker"></span>
+              <span class="font-bold" :class="(f.final_confirmation_score||0)>=60?'text-green-400':'text-amber-300'" x-text="f.final_confirmation_score+' confirm'"></span>
+            </div>
+          </template>
+        </template>
+
+        <!-- BASKETS -->
+        <template x-if="leadersView==='baskets'">
+          <template x-for="b in (leadersBaskets.baskets||[])" :key="b.id">
+            <div class="card card-p">
+              <div class="font-bold text-sm" x-text="b.name"></div>
+              <div class="text-[10px]" style="color:var(--t3)" x-text="b.methodology"></div>
+              <div class="mt-2 flex flex-wrap gap-1">
+                <template x-for="m in (b.members||[])">
+                  <span class="pill pw text-[9px]" x-text="m.ticker+' '+Math.round((m.weight||0)*100)+'%'"></span>
+                </template>
+              </div>
+            </div>
+          </template>
+        </template>
+
+        <!-- ALERTS -->
+        <template x-if="leadersView==='alerts'">
+          <template x-for="a in (leadersAlerts.alerts||[])" :key="a.id">
+            <div class="card card-p text-[10px]" :style="'border-left:3px solid '+(a.severity==='critical'?'var(--red)':a.severity==='warn'?'var(--amber)':'var(--blue)')">
+              <span x-text="a.message"></span>
+            </div>
+          </template>
+        </template>
       </div>
     </main>
 
@@ -5777,6 +5977,7 @@ Regime gate:  FUND_ALPHA only in BULL, FUND_PENDA in all regimes
         {id:'scanners',icon:'🔬',label:'Scanners'},
         {id:'rs',icon:'📈',label:'RS'},
         {id:'flow',icon:'💧',label:'Flow'},
+        {id:'leaders',icon:'👤',label:'Leaders'},
         {id:'brief',icon:'📋',label:'Brief'},
         {id:'trade_intel',icon:'🧠',label:'Trade Intel'},
         {id:'funds',icon:'🏦',label:'Fund Lab'},
@@ -5804,6 +6005,16 @@ Regime gate:  FUND_ALPHA only in BULL, FUND_PENDA in all regimes
       fundMonitor:{loading:false,data:null,error:'',lastRefresh:null,autoRefreshTimer:null,benchmark:'SPY',activeFund:null},
       pmStrip:{funds:[],lastFetch:0},
       desk:{portfolio:null,monitor:null,strategies:null},
+      leadersDash:{},
+      leadersView:'hub',
+      leadersHub:{loading:false,leaders:[]},
+      leadersFilter:{category:'',quality:'',search:''},
+      leadersDetail:null,
+      leadersConsensus:{items:[]},
+      leadersConsensusVerified:false,
+      leadersFlow:{items:[]},
+      leadersBaskets:{baskets:[]},
+      leadersAlerts:{alerts:[]},
       modelFunds:{loading:false,data:null,error:'',benchmark:'SPY',activeFund:null,lastRefresh:null},
       tradeIntel:{loading:false,data:null,error:'',confData:null,mistakesData:null},
       tradeJournal:{loading:false,recent:null,review:null,error:'',calibration:null},
@@ -5860,15 +6071,16 @@ Regime gate:  FUND_ALPHA only in BULL, FUND_PENDA in all regimes
         this.fetchHealth();setInterval(()=>this.fetchHealth(),120000);
         this.fetchNoTrade();
         // Lazy-load PM strip after 3s so it doesn't block above-the-fold render
-        setTimeout(()=>{this.fetchPMStrip();this.fetchDesk();},3000);
+        setTimeout(()=>{this.fetchPMStrip();this.fetchDesk();this.fetchLeadersDashboard();},3000);
         setInterval(()=>this.fetchDesk(),120000);
+        setInterval(()=>this.fetchLeadersDashboard(),300000);
         if(!localStorage.getItem('cc_guide_seen')){this.tab='guide'}
       },
       tick(){this.clock=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'})},
       toggleStar(ticker){this.ccStarred[ticker]=!this.ccStarred[ticker];localStorage.setItem('ccStarred',JSON.stringify(this.ccStarred))},
       toggleLove(ticker){this.ccLoved[ticker]=!this.ccLoved[ticker];localStorage.setItem('ccLoved',JSON.stringify(this.ccLoved))},
       toggleWatchlist(ticker){this.ccWatchlist[ticker]=!this.ccWatchlist[ticker];localStorage.setItem('ccWatchlist',JSON.stringify(this.ccWatchlist))},
-      switchTab(t){this.tab=t;if(t==='guide'){}if(t==='funds'){this.startFundMonitor()}if(t==='model_funds'){this.fetchModelFunds()}if(t==='trade_intel'){this.fetchTradeIntel()}if(t==='today'){this.fetchToday7();this.fetchMkt()}if(t==='signals'){this.fetchSignals();this.fetchRanked()}if(t==='ops'){this.fetchHealth();this.fetchChangelog();this.fetchSelfLearnStatus();this.fetchCalibration();this.fetchABStatus();this.fetchExecMetrics();this.fetchRiskSummary();this.fetchThompson();this.fetchFeatureIC();this.fetchNotifyLog();this.fetchFeedbackStats()}if(t==='brief')this.fetchBrief();if(t==='scanners')this.fetchScanners();if(t==='opportunity'){if(!this.oppScanner.data)this.fetchOppScanner(false)};if(t==='notrade')this.fetchNoTrade();if(t==='rs')this.fetchRS();if(t==='flow')this.fetchFlow();if(t==='track'){if(this.perfTracker.rows.length===0)this.fetchPerfTracker();if(!this.fundLab.data)this.fetchFundLab();this.fetchTradeReview()}if(t==='trade_journal'){this.fetchTradeReview()}if(t==='timetravel'&&!this.tt.date){const d=new Date();d.setDate(d.getDate()-5);this.tt.date=d.toISOString().slice(0,10)}if(t==='command'){this.fetchCommand();this.fetchAgentJournal();this.fetchAgentReliability()}if(t==='ibkr'){fetch('/api/ibkr/status').then(r=>r.json()).then(d=>{this.ibkr.connected=d.connected;this.ibkr.mode=d.mode||'paper'}).catch(()=>{})}},
+      switchTab(t){this.tab=t;if(t==='guide'){}if(t==='funds'){this.startFundMonitor()}if(t==='model_funds'){this.fetchModelFunds()}if(t==='trade_intel'){this.fetchTradeIntel()}if(t==='today'){this.fetchToday7();this.fetchMkt();this.fetchLeadersDashboard()}if(t==='signals'){this.fetchSignals();this.fetchRanked()}if(t==='leaders'){this.fetchLeadersHub()}if(t==='ops'){this.fetchHealth();this.fetchChangelog();this.fetchSelfLearnStatus();this.fetchCalibration();this.fetchABStatus();this.fetchExecMetrics();this.fetchRiskSummary();this.fetchThompson();this.fetchFeatureIC();this.fetchNotifyLog();this.fetchFeedbackStats()}if(t==='brief')this.fetchBrief();if(t==='scanners')this.fetchScanners();if(t==='opportunity'){if(!this.oppScanner.data)this.fetchOppScanner(false)};if(t==='notrade')this.fetchNoTrade();if(t==='rs')this.fetchRS();if(t==='flow')this.fetchFlow();if(t==='track'){if(this.perfTracker.rows.length===0)this.fetchPerfTracker();if(!this.fundLab.data)this.fetchFundLab();this.fetchTradeReview()}if(t==='trade_journal'){this.fetchTradeReview()}if(t==='timetravel'&&!this.tt.date){const d=new Date();d.setDate(d.getDate()-5);this.tt.date=d.toISOString().slice(0,10)}if(t==='command'){this.fetchCommand();this.fetchAgentJournal();this.fetchAgentReliability()}if(t==='ibkr'){fetch('/api/ibkr/status').then(r=>r.json()).then(d=>{this.ibkr.connected=d.connected;this.ibkr.mode=d.mode||'paper'}).catch(()=>{})}},
 
 
       async fetchTradeReview(){
@@ -6438,6 +6650,64 @@ Regime gate:  FUND_ALPHA only in BULL, FUND_PENDA in all regimes
           return '<path d="'+d+'" fill="none" stroke="'+color+'" stroke-width="1.5"'+(dash?' stroke-dasharray="4 3"':'')+'/>';
         };
         return '<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'">'+mkPath(ptsA,'#00d4aa',false)+mkPath(ptsB,'#58a6ff',true)+'</svg>';
+      },
+
+      leaderQualityClass(q){
+        return ({verified:'pg',delayed:'pa',derived:'pb',inferred:'pp',speculative:'pr'})[q]||'pw';
+      },
+      async fetchLeadersDashboard(){
+        try{
+          const r=await fetch('/api/leaders/dashboard');
+          if(r.ok)this.leadersDash=await r.json();
+        }catch(e){console.warn('leaders dash',e)}
+      },
+      async fetchLeadersHub(){
+        this.leadersHub.loading=true;
+        try{
+          let u='/api/leaders?';
+          if(this.leadersFilter.category)u+='category='+encodeURIComponent(this.leadersFilter.category)+'&';
+          if(this.leadersFilter.quality)u+='source_quality='+encodeURIComponent(this.leadersFilter.quality)+'&';
+          if(this.leadersFilter.search)u+='search='+encodeURIComponent(this.leadersFilter.search)+'&';
+          const r=await fetch(u);
+          if(r.ok){const d=await r.json();this.leadersHub.leaders=d.leaders||[];}
+        }catch(e){console.warn('leaders hub',e)}finally{this.leadersHub.loading=false}
+      },
+      async openLeaderDetail(id){
+        try{
+          const r=await fetch('/api/leaders/'+encodeURIComponent(id));
+          if(r.ok)this.leadersDetail=await r.json();
+        }catch(e){console.warn('leader detail',e)}
+      },
+      async fetchLeadersConsensus(){
+        try{
+          const u='/api/consensus?min_overlap=2&verified_only='+(this.leadersConsensusVerified?'true':'false');
+          const r=await fetch(u);
+          if(r.ok)this.leadersConsensus=await r.json();
+        }catch(e){console.warn('consensus',e)}
+      },
+      async openConsensusTicker(t){
+        try{
+          const r=await fetch('/api/consensus/ticker/'+encodeURIComponent(t));
+          if(r.ok){const d=await r.json();alert(t+': consensus '+JSON.stringify(d.consensus||{},null,0).slice(0,200));}
+        }catch(e){}
+      },
+      async fetchLeadersFlow(){
+        try{
+          const r=await fetch('/api/flow/tracked');
+          if(r.ok)this.leadersFlow=await r.json();
+        }catch(e){console.warn('flow',e)}
+      },
+      async fetchLeadersBaskets(){
+        try{
+          const r=await fetch('/api/baskets');
+          if(r.ok)this.leadersBaskets=await r.json();
+        }catch(e){console.warn('baskets',e)}
+      },
+      async fetchLeadersAlerts(){
+        try{
+          const r=await fetch('/api/alerts/leaders?unseen_only=false');
+          if(r.ok)this.leadersAlerts=await r.json();
+        }catch(e){console.warn('alerts',e)}
       },
 
       // ── PM Strip (model funds mini-cards, refreshed lazily) ────────────────
