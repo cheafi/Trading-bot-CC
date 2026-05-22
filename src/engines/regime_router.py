@@ -52,6 +52,7 @@ class RegimeState:
     breadth_pct: float = 0.50
     credit_spread_z: float = 0.0
     realized_vol_20d: float = 0.15
+    move_index: float = 90.0  # MOVE = bond-mkt VIX. <80 calm, >120 stress
     timestamp: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
@@ -145,6 +146,10 @@ class RegimeRouter:
         hy_spread = market_data.get("hy_spread", 0.0)
         realized_vol = market_data.get("realized_vol_20d", 0.15)
         vix_term_slope = market_data.get("vix_term_slope", 0.0)
+        # MOVE index = ICE BofA implied vol on 1m Treasury options.
+        # Historically <80 calm, 80–120 normal, >120 rates stress
+        # (often leads equity vol). Treat elevated MOVE as risk-off pressure.
+        move_index = float(market_data.get("move_index", 90.0) or 90.0)
 
         # ── Compute soft scores for each regime bucket ────────────
         # Risk-on uptrend signals
@@ -166,6 +171,8 @@ class RegimeRouter:
         risk_off_score += self._sigmoid(-spy_ret * 100, k=0.5)  # negative return
         risk_off_score += self._sigmoid((0.5 - breadth) * 5, k=0.8)  # breadth < 50%
         risk_off_score += self._sigmoid(hy_spread - 1.0, k=0.5)  # wide HY spread
+        # MOVE > 110 pushes risk-off (rates vol leads equity vol)
+        risk_off_score += self._sigmoid((move_index - 110.0) / 20.0, k=1.0)
 
         # Normalise to probabilities via softmax
         scores = np.array([
@@ -290,6 +297,7 @@ class RegimeRouter:
             breadth_pct=breadth,
             credit_spread_z=hy_spread,
             realized_vol_20d=realized_vol,
+            move_index=move_index,
             timestamp=datetime.now(timezone.utc).isoformat(),
         )
 

@@ -92,14 +92,18 @@ class PortfolioRiskBudget:
     """
 
     DEFAULT_LIMITS = {
-        "max_single_position": 0.05,     # 5 %
-        "max_sector_weight": 0.30,       # 30 %
-        "max_high_beta_weight": 0.25,    # 25 %
-        "max_earnings_48h_weight": 0.10, # 10 %
-        "max_correlated_bucket": 3,      # max names
-        "max_gross_risk_off": 0.50,      # 50 %
+        "max_single_position": 0.05,  # 5 %
+        "max_sector_weight": 0.30,  # 30 %
+        "max_high_beta_weight": 0.25,  # 25 %
+        "max_earnings_48h_weight": 0.10,  # 10 %
+        "max_correlated_bucket": 3,  # max names
+        "max_gross_risk_off": 0.50,  # 50 %
         "max_positions": 15,
-        "portfolio_beta_limit": 1.50,    # vs SPY
+        "portfolio_beta_limit": 1.50,  # vs SPY
+        # Gap-risk overnight cap when VIX is elevated. When realized
+        # vix >= vix_high_threshold, gross book is capped here.
+        "max_gross_high_vix": 0.60,  # 60 %
+        "vix_high_threshold": 25.0,
     }
 
     def __init__(
@@ -119,6 +123,7 @@ class PortfolioRiskBudget:
         beta: float = 1.0,
         days_to_earnings: int = 999,
         correlation_bucket: str = "",
+        vix: float = 18.0,
     ) -> Dict[str, Any]:
         """
         Check if adding *ticker* at *position_weight* would
@@ -235,6 +240,28 @@ class PortfolioRiskBudget:
                     scalars.append(0.0)
                 else:
                     scalars.append(headroom / position_weight)
+
+        # ── 6b. Overnight gross cap when VIX is elevated ────
+        # Gap risk: avoid carrying full book into a high-vol overnight.
+        # When VIX >= vix_high_threshold, cap gross at max_gross_high_vix.
+        vix_thr = float(lim.get("vix_high_threshold", 25.0))
+        max_gross_hv = float(lim.get("max_gross_high_vix", 0.60))
+        if vix >= vix_thr:
+            new_gross_hv = exposure.gross_exposure + position_weight
+            if new_gross_hv > max_gross_hv:
+                headroom = max(0.0, max_gross_hv - exposure.gross_exposure)
+                if headroom <= 0:
+                    violations.append(
+                        f"Gross {exposure.gross_exposure:.0%} with VIX "
+                        f"{vix:.1f}>={vix_thr:.0f} (cap {max_gross_hv:.0%})",
+                    )
+                    scalars.append(0.0)
+                else:
+                    scalars.append(headroom / position_weight)
+                    violations.append(
+                        f"VIX {vix:.1f} → trimming to fit "
+                        f"{max_gross_hv:.0%} overnight cap",
+                    )
 
         # ── 7. Max positions ────────────────────────────────
         if exposure.open_positions >= lim["max_positions"]:

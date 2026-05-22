@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 import json
 import logging
+import os
 import pandas as pd
 import numpy as np
 import logging
@@ -392,6 +393,21 @@ class PositionManager:
                 f"VIX={vix} -> risk scalar {vix_mult:.2f} -> risk_pct={risk_pct:.3f}%"
             )
 
+        # Sprint 44: fractional-Kelly scaler from realized edge.
+        # Once we have a meaningful sample (>=20 closed trades), scale base risk
+        # by quarter-Kelly. Kelly < 0 (negative edge) suppresses sizing to a
+        # minimum probe; Kelly > 1 is clipped. Disable with KELLY_SIZING=false.
+        if os.getenv("KELLY_SIZING", "true").lower() in {"1", "true", "yes"}:
+            try:
+                kelly_mult = self._kelly_multiplier()
+                if kelly_mult is not None:
+                    risk_pct *= kelly_mult
+                    self.logger.info(
+                        f"Kelly multiplier={kelly_mult:.2f} -> risk_pct={risk_pct:.3f}%"
+                    )
+            except Exception as exc:  # noqa: BLE001
+                self.logger.debug(f"Kelly sizing skipped: {exc}")
+
         # Hard cap: never exceed max_risk_per_trade_pct regardless of inputs
         risk_pct = min(risk_pct, self.params.max_risk_per_trade_pct)
 
@@ -542,7 +558,54 @@ class PositionManager:
         """
         stop_loss_price = entry_price - (atr * atr_multiplier)
         return self.calculate_position_size(ticker, entry_price, stop_loss_price, atr, sector)
-    
+
+    # ========== Kelly Sizing (Sprint 44) ==========
+
+    def _kelly_multiplier(
+        self,
+        min_trades: int = 20,
+        fraction: float = 0.25,
+        floor: float = 0.25,
+        ceiling: float = 1.50,
+    ) -> Optional[float]:
+        """Return a Kelly-derived scalar to apply to base risk_pct.
+
+        Uses realized closed-trade stats. We compute fractional (quarter) Kelly
+        on win-rate + payoff ratio, then express it as a *multiplier* relative
+        to the baseline 1% risk so the existing risk_pct path (with VIX, loss
+        streak, hard caps) still bounds the result.
+
+        - Negative Kelly clamps to ``floor`` (small probe size) — never zero,
+          so we can keep learning.
+        - Positive Kelly is clipped to ``ceiling`` so a lucky 5-trade streak
+          can't blow the book up.
+        """
+        if len(self.closed_positions) < min_trades:
+            return None
+
+        wins = [p for p in self.closed_positions if p.realized_pnl > 0]
+        losses = [p for p in self.closed_positions if p.realized_pnl <= 0]
+        if not wins or not losses:
+            return None
+
+        win_rate = (len(wins) / len(self.closed_positions)) * 100.0
+        avg_win = sum(p.realized_pnl for p in wins) / len(wins)
+        avg_loss = abs(sum(p.realized_pnl for p in losses) / len(losses))
+
+        kelly_pct_of_equity = calculate_kelly_fraction(
+            win_rate=win_rate,
+            avg_win=avg_win,
+            avg_loss=avg_loss,
+            fraction=fraction,
+        )
+        baseline = max(self.params.risk_per_trade_pct, 0.01) / 100.0
+        if baseline <= 0:
+            return None
+        mult = kelly_pct_of_equity / baseline
+        if mult <= 0:
+            return floor
+        return max(floor, min(mult, ceiling))
+
     # ========== Position Management ==========
     
     def can_open_position(self, ticker: str, sector: str = "") -> Tuple[bool, str]:

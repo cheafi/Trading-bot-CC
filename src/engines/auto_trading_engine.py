@@ -363,7 +363,6 @@ class AutoTradingEngine:
             str, Any
         ] = {}  # ticker→close Series cache
 
-
     async def _boot(self) -> bool:
         """
         Pre-flight validation before entering the main loop.
@@ -540,6 +539,10 @@ class AutoTradingEngine:
         # Regime classification and trade gate
         mkt_state = self._context.get("market_state", {})
         self._regime_state = self.regime_router.classify(mkt_state)
+        # Sprint 44: classify() returns a RegimeState dataclass; the rest of
+        # the cycle treats it as a dict (.get/.items), so normalize here.
+        if hasattr(self._regime_state, "to_dict"):
+            self._regime_state = self._regime_state.to_dict()
 
         # Persist regime snapshot to DB
         try:
@@ -1449,7 +1452,6 @@ class AutoTradingEngine:
         except Exception as e:
             logger.warning("Learning loop record error: %s", e)
 
-
     # ------------------------------------------------------------------
     # Sprint 25: trade-execution notifications
     # ------------------------------------------------------------------
@@ -1669,8 +1671,6 @@ class AutoTradingEngine:
         except Exception as e:
             logger.error("EOD report error: %s", e)
 
-
-
     async def _with_retry(self, coro_func, *args, retries=3, delay=1.0, **kwargs):
         """Retry an async callable with exponential backoff."""
         last_exc = None
@@ -1750,7 +1750,6 @@ class AutoTradingEngine:
             await notifier.send_message(status)
         except Exception as e:
             logger.error(f"Status update error: {e}")
-
 
     def get_cached_state(self) -> Dict[str, Any]:
         """Return cached engine state for API / dashboard.
@@ -2182,6 +2181,7 @@ class AutoTradingEngine:
             if not isinstance(_beta, (int, float)):
                 _beta = 1.0
             _dte = getattr(signal, "days_to_earnings", None)
+            _vix_now = float(self._regime_state.get("vix", 18.0) or 18.0)
             budget = self.risk_budget.check_budget(
                 ticker=_ticker,
                 sector=_sector,
@@ -2190,6 +2190,7 @@ class AutoTradingEngine:
                 regime_risk=_risk_regime,
                 beta=_beta,
                 days_to_earnings=_dte,
+                vix=_vix_now,
             )
             budget_mult = budget.get("size_scalar", 1.0)
             if not budget.get("allowed", True):

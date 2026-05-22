@@ -285,51 +285,36 @@ class BacktestEngine:
         near_earnings: bool = False,
     ) -> float:
         """
-        Liquidity-aware slippage:
-          slippage_bps = base + k_vol*(1/rel_vol) + k_spread*atr_pct
-        Capped at slippage_cap_bps.  Extra bps added near earnings.
-        Returns slippage as a fraction (e.g. 0.0010 for 10 bps).
+        Liquidity-aware slippage. Delegates to the shared estimator in
+        ``src.core.slippage`` so the live order router uses identical
+        math (paper-vs-live parity). Returns slippage as a fraction.
         """
         if not self.config.use_dynamic_slippage:
             return self.config.slippage_rate
 
+        from src.core.slippage import (
+            SlippageConfig, estimate_slippage_bps, slippage_bps_to_fraction,
+        )
         cfg = self.config
-        bps = cfg.slippage_base_bps
-
+        slip_cfg = SlippageConfig(
+            base_bps=cfg.slippage_base_bps,
+            k_volume=cfg.slippage_k_volume,
+            k_spread=cfg.slippage_k_spread,
+            cap_bps=cfg.slippage_cap_bps,
+            earnings_gap_extra_bps=cfg.earnings_gap_extra_bps,
+        )
         df = price_data.get(symbol)
+        bars = None
         if df is not None and date in df.index:
             idx = df.index.get_loc(date)
             if idx >= 20:
-                lookback = df.iloc[idx - 20 : idx + 1]
-
-                # Relative volume (today vs 20d avg)
-                avg_vol = lookback['volume'].iloc[:-1].mean()
-                today_vol = lookback['volume'].iloc[-1]
-                rel_vol = today_vol / avg_vol if avg_vol > 0 else 1.0
-                bps += cfg.slippage_k_volume * (1.0 / max(rel_vol, 0.1))
-
-                # ATR% as spread proxy
-                highs = lookback['high']
-                lows = lookback['low']
-                closes = lookback['close']
-                tr = pd.concat([
-                    highs - lows,
-                    (highs - closes.shift()).abs(),
-                    (lows - closes.shift()).abs(),
-                ], axis=1).max(axis=1)
-                atr = tr.iloc[-14:].mean()
-                atr_pct = (atr / price) * 100 if price > 0 else 0
-                bps += cfg.slippage_k_spread * atr_pct
-
-        # Earnings gap risk
-        if near_earnings:
-            bps += cfg.earnings_gap_extra_bps
-
-        # Cap
-        bps = min(bps, cfg.slippage_cap_bps)
-
+                bars = df.iloc[idx - 20: idx + 1]
+        bps = estimate_slippage_bps(
+            price=price, bars=bars,
+            near_earnings=near_earnings, config=slip_cfg,
+        )
         self.slippage_audit.append(bps)
-        return bps / 10000.0  # convert bps → fraction
+        return slippage_bps_to_fraction(bps)
     
     def run(
         self,

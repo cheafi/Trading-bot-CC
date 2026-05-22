@@ -15,6 +15,6 @@ nbformat==5.9.2
 papermill==2.5.0
 
 # Performance analysis
-quantstats==0.0.62
-empyrical==0.5.5
-pyfolio-reloaded==0.9.5
+quantstats>=0.0.62
+empyrical-reloaded>=0.5.9
+pyfolio-reloaded>=0.9.5

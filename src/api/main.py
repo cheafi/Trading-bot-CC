@@ -248,6 +248,32 @@ async def get_dashboard_data():
     recs = state.get("recommendations", [])
     equity = state.get("equity", 0)
 
+    # Sprint 44: if engine hasn't completed its first cycle yet, fall back to
+    # live yfinance snapshot so the dashboard is never blank. This is the same
+    # data /api/live/market serves but flattened into the dashboard schema.
+    if not mkt:
+        try:
+            live = await live_market()  # type: ignore[name-defined]
+            spy = next(
+                (i for i in live.get("indices", []) if i.get("symbol") == "SPY"),
+                {},
+            )
+            vix = next(
+                (m for m in live.get("macro", []) if m.get("symbol") == "^VIX"),
+                {},
+            )
+            mkt = {
+                "vix": vix.get("price", 0),
+                "spy_return_20d": spy.get("change_pct", 0),
+                "breadth_pct": 0,
+                "realized_vol_20d": 0,
+                "data_source": "yfinance_live",
+            }
+            if not state.get("regime"):
+                state["regime"] = live.get("regime", {})
+        except Exception:  # noqa: BLE001
+            pass
+
     # Build top signals from live recommendations
     top_signals = []
     buy_count = 0
@@ -298,6 +324,211 @@ async def get_dashboard_data():
         "signalsToday": state.get("signals_today", 0),
         "tradesToday": state.get("trades_today", 0),
         "leaderboard": state.get("leaderboard", {}),
+    }
+
+
+# ───────────────────────────────────────────────────────────────────
+# Desk aggregator endpoints (Sprint 45) — institutional dashboard
+# ───────────────────────────────────────────────────────────────────
+
+def _get_engine():
+    return getattr(app, "_engine_instance", None)
+
+
+def _equity_curve_from_engine(eng) -> list:
+    """Synthesize an equity curve from engine.position_mgr closed trades.
+
+    No timestamps stored on closed trades → return index-based series
+    (trade #, cumulative equity). Adequate for sparklines.
+    """
+    if not eng or not hasattr(eng, "position_mgr"):
+        return []
+    pm = eng.position_mgr
+    start = float(getattr(pm.params, "account_size", 100_000.0))
+    closed = getattr(pm, "closed_positions", []) or []
+    series = [{"i": 0, "equity": round(start, 2)}]
+    eq = start
+    for i, t in enumerate(closed, start=1):
+        eq += float(getattr(t, "realized_pnl", 0.0) or 0.0)
+        series.append({"i": i, "equity": round(eq, 2)})
+    return series
+
+
+@app.get("/api/desk/portfolio", tags=["desk"])
+async def desk_portfolio():
+    """Active fund snapshot: account, positions, equity curve, KPIs."""
+    eng = _get_engine()
+    state = eng.get_cached_state() if eng else {}
+    pm = getattr(eng, "position_mgr", None) if eng else None
+
+    # Open positions from in-memory position manager
+    positions = []
+    if pm:
+        for tkr, pos in list(pm.positions.items()):
+            qty = float(getattr(pos, "shares", 0) or 0)
+            entry = float(getattr(pos, "entry_price", 0) or 0)
+            cur = float(getattr(pos, "current_price", entry) or entry)
+            stop = float(getattr(pos, "stop_loss", 0) or 0)
+            target = float(getattr(pos, "target_price", 0) or 0)
+            unr = (cur - entry) * qty
+            unr_pct = ((cur / entry - 1) * 100) if entry else 0.0
+            positions.append({
+                "ticker": tkr,
+                "shares": qty,
+                "entry": round(entry, 2),
+                "current": round(cur, 2),
+                "stop": round(stop, 2),
+                "target": round(target, 2),
+                "unrealized_pnl": round(unr, 2),
+                "unrealized_pct": round(unr_pct, 2),
+                "strategy": getattr(pos, "strategy", "—"),
+            })
+
+    # Broker account (best-effort, may be None in dry-run)
+    broker_account = None
+    broker_name = None
+    try:
+        from src.brokers.broker_manager import get_broker_manager
+        mgr = await get_broker_manager()
+        acct = await mgr.get_account()
+        broker_account = {
+            "cash": round(acct.cash, 2),
+            "buying_power": round(acct.buying_power, 2),
+            "portfolio_value": round(acct.portfolio_value, 2),
+            "unrealized_pnl": round(acct.unrealized_pnl, 2),
+            "realized_pnl_today": round(acct.realized_pnl_today, 2),
+            "currency": acct.currency,
+        }
+        broker_name = getattr(mgr, "active_broker_type", None)
+        broker_name = broker_name.value if broker_name else "paper"
+    except Exception:  # noqa: BLE001
+        broker_name = "paper"
+
+    curve = _equity_curve_from_engine(eng)
+    start_eq = curve[0]["equity"] if curve else 0
+    end_eq = curve[-1]["equity"] if curve else 0
+    total_return_pct = ((end_eq / start_eq - 1) * 100) if start_eq else 0
+
+    return {
+        "timestamp": datetime.utcnow().isoformat(),
+        "broker": {"name": broker_name, "account": broker_account},
+        "kpis": {
+            "equity": end_eq,
+            "start_equity": start_eq,
+            "total_return_pct": round(total_return_pct, 2),
+            "open_positions": state.get("open_positions", len(positions)),
+            "total_trades": state.get("total_trades", 0),
+            "win_rate": round(state.get("win_rate", 0), 1),
+            "daily_pnl": state.get("circuit_breaker", {}).get("daily_pnl", 0),
+            "dry_run": state.get("dry_run", True),
+        },
+        "positions": positions,
+        "equity_curve": curve,
+        "pro_kpis": state.get("pro_kpis", {}),
+        "regime": state.get("regime", {}),
+    }
+
+
+@app.get("/api/desk/strategies", tags=["desk"])
+async def desk_strategies():
+    """Strategy leaderboard with lifecycle status + recent PnL sparklines."""
+    eng = _get_engine()
+    out: list = []
+    if eng and getattr(eng, "leaderboard", None):
+        lb = eng.leaderboard
+        for entry in lb.get_rankings():
+            metrics = entry.get("metrics", {}) or {}
+            pnl_hist = entry.get("pnl_history", []) or metrics.get("pnl_history", []) or []
+            status = entry.get("status", "active")
+            if hasattr(status, "value"):
+                status = status.value
+            out.append({
+                "name": entry.get("name"),
+                "status": status,
+                "score": entry.get("blended_score", 0),
+                "trades": entry.get("trade_count", 0),
+                "win_rate": round(float(metrics.get("win_rate", 0) or 0) * 100, 1),
+                "expectancy": round(float(metrics.get("expectancy", 0) or 0), 3),
+                "sharpe": round(float(metrics.get("oos_sharpe", 0) or 0), 2),
+                "max_dd": round(float(metrics.get("max_drawdown", 0) or 0) * 100, 1),
+                "profit_factor": round(float(metrics.get("profit_factor", 0) or 0), 2),
+                "pnl_sparkline": [round(float(x), 2) for x in pnl_hist[-30:]],
+                "last_updated": entry.get("last_updated"),
+            })
+    # Status counts
+    counts = {"active": 0, "reduced": 0, "cooldown": 0, "retired": 0}
+    for s in out:
+        counts[s["status"]] = counts.get(s["status"], 0) + 1
+    return {
+        "timestamp": datetime.utcnow().isoformat(),
+        "counts": counts,
+        "strategies": out,
+    }
+
+
+@app.get("/api/desk/monitor", tags=["desk"])
+async def desk_monitor():
+    """Operational health: engine, broker, data freshness, alerts."""
+    eng = _get_engine()
+    state = eng.get_cached_state() if eng else {}
+    engine_block = {
+        "running": eng is not None,
+        "dry_run": state.get("dry_run", True),
+        "cycle_count": state.get("cycle_count", 0),
+        "cycle_interval_s": getattr(eng, "cycle_interval_seconds", None) if eng else None,
+        "signals_today": state.get("signals_today", 0),
+        "trades_today": state.get("trades_today", 0),
+    }
+    cb = state.get("circuit_breaker", {}) or {}
+    nt = state.get("no_trade_card") or {}
+
+    broker_block = {"connected": False, "name": "paper"}
+    try:
+        from src.brokers.broker_manager import get_broker_manager
+        mgr = await get_broker_manager()
+        bt = getattr(mgr, "active_broker_type", None)
+        broker_block = {
+            "connected": True,
+            "name": bt.value if bt else "paper",
+        }
+    except Exception:  # noqa: BLE001
+        pass
+
+    mkt = state.get("market_state", {}) or {}
+    data_block = {
+        "source": mkt.get("data_source", "unknown"),
+        "vix": mkt.get("vix"),
+        "spy_20d": mkt.get("spy_return_20d"),
+        "breadth_pct": mkt.get("breadth_pct"),
+    }
+
+    alerts = []
+    if cb.get("triggered"):
+        alerts.append({
+            "level": "critical",
+            "msg": f"Circuit breaker: {cb.get('reason', 'unknown')}",
+        })
+    if cb.get("consecutive_losses", 0) >= 3:
+        alerts.append({
+            "level": "warn",
+            "msg": f"{cb['consecutive_losses']} consecutive losses",
+        })
+    if nt.get("active") or nt.get("decision") == "NO_TRADE":
+        alerts.append({
+            "level": "info",
+            "msg": f"NO-TRADE: {nt.get('reason', 'risk gates')}",
+        })
+    if not engine_block["running"]:
+        alerts.append({"level": "critical", "msg": "Engine not running"})
+
+    return {
+        "timestamp": datetime.utcnow().isoformat(),
+        "engine": engine_block,
+        "broker": broker_block,
+        "data": data_block,
+        "circuit_breaker": cb,
+        "no_trade_card": nt,
+        "alerts": alerts,
     }
 
 
@@ -411,6 +642,54 @@ class ErrorResponse(BaseModel):
 
 # Track startup time for uptime calculation
 startup_time = datetime.utcnow()
+
+
+# ===== Background engine bootstrap (Sprint 44) =====
+# When the dashboard is launched standalone (no separate engine process), the
+# /api/dashboard endpoint historically returned all-zeros because nothing wrote
+# to app._engine_instance. We boot a dry-run engine on startup so cached state
+# (regime, KPIs, leaderboard, recommendations) is populated. Disable by setting
+# DASHBOARD_AUTOSTART_ENGINE=false to keep the process lightweight.
+
+@app.on_event("startup")
+async def _bootstrap_engine() -> None:
+    if os.getenv("DASHBOARD_AUTOSTART_ENGINE", "true").lower() not in {
+        "1", "true", "yes"
+    }:
+        logger.info("Engine autostart disabled via DASHBOARD_AUTOSTART_ENGINE")
+        return
+    try:
+        from src.engines.auto_trading_engine import AutoTradingEngine
+        interval = float(os.getenv("DASHBOARD_ENGINE_INTERVAL", "120"))
+        engine = AutoTradingEngine(
+            cycle_interval_seconds=interval,
+            dry_run=True,
+        )
+        app._engine_instance = engine
+        app._engine_task = asyncio.create_task(engine.run())
+        logger.info(
+            "AutoTradingEngine attached to dashboard (dry-run, %.0fs cycle)",
+            interval,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Engine autostart failed: %s", exc, exc_info=True)
+
+
+@app.on_event("shutdown")
+async def _shutdown_engine() -> None:
+    engine = getattr(app, "_engine_instance", None)
+    task = getattr(app, "_engine_task", None)
+    if engine is not None:
+        try:
+            await engine.stop()
+        except Exception:  # noqa: BLE001
+            pass
+    if task is not None:
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+            pass
 
 
 # ===== Health Endpoints =====
