@@ -379,6 +379,325 @@ def _sanitize_for_json(obj):
     return obj
 
 
+# ───────────────────────────────────────────────────────────────────
+# Desk aggregator endpoints — institutional decision layers (Sprint 45)
+# Powers /api/desk/* for runtime strip, curves, allocation, monitor.
+# ───────────────────────────────────────────────────────────────────
+
+
+def _equity_curve_from_engine(eng) -> list:
+    """Synthesize equity curve from position_mgr closed trades (index-based)."""
+    if not eng or not hasattr(eng, "position_mgr"):
+        return []
+    pm = eng.position_mgr
+    start = float(getattr(pm.params, "account_size", 100_000.0))
+    closed = getattr(pm, "closed_positions", []) or []
+    series = [{"i": 0, "equity": round(start, 2)}]
+    eq = start
+    for i, t in enumerate(closed, start=1):
+        eq += float(getattr(t, "realized_pnl", 0.0) or 0.0)
+        series.append({"i": i, "equity": round(eq, 2)})
+    return series
+
+
+def _downsample_series(values: list, max_pts: int = 80) -> list:
+    if not values:
+        return []
+    step = max(1, len(values) // max_pts)
+    out = []
+    for i in range(0, len(values), step):
+        out.append(round(float(values[i]), 2))
+    if out[-1] != round(float(values[-1]), 2):
+        out.append(round(float(values[-1]), 2))
+    return out
+
+
+def _benchmark_curve_scaled(close_values, start_equity: float, max_pts: int = 80) -> list:
+    import numpy as np
+
+    close = np.asarray(close_values, dtype=float)
+    if close.size < 2 or start_equity <= 0:
+        return []
+    base = close[0]
+    scaled = (close / base) * start_equity
+    sampled = _downsample_series(scaled.tolist(), max_pts)
+    return [{"i": i, "equity": v} for i, v in enumerate(sampled)]
+
+
+def _allocation_from_engine(eng, pm, equity: float) -> dict:
+    holdings = []
+    exposure_dict: dict = {}
+    if not eng or not pm or equity <= 0:
+        return {"holdings": holdings, "exposure": exposure_dict, "cash_pct": 100.0}
+
+    try:
+        exposure = eng.risk_budget.build_exposure(list(pm.positions.values()))
+        exposure_dict = exposure.to_dict()
+    except Exception:  # noqa: BLE001
+        exposure_dict = {}
+
+    n = max(len(pm.positions), 1)
+    per_name_cap = float(eng.risk_budget.limits.get("max_single_position", 0.05))
+    equal_target = min(per_name_cap * 100, 100.0 / n)
+
+    invested = 0.0
+    for tkr, pos in pm.positions.items():
+        qty = float(getattr(pos, "shares", 0) or 0)
+        cur = float(getattr(pos, "current_price", 0) or 0)
+        actual = (qty * cur) / equity * 100
+        invested += actual
+        holdings.append({
+            "ticker": tkr,
+            "strategy": getattr(pos, "strategy", "—"),
+            "actual_pct": round(actual, 2),
+            "target_pct": round(equal_target, 2),
+            "drift_pct": round(actual - equal_target, 2),
+        })
+    holdings.sort(key=lambda x: x["actual_pct"], reverse=True)
+    gross_raw = float(exposure_dict.get("gross_exposure", invested / 100) or 0)
+    gross_pct = round(gross_raw * 100 if gross_raw <= 1.5 else gross_raw, 2)
+    return {
+        "holdings": holdings,
+        "exposure": exposure_dict,
+        "cash_pct": round(max(0.0, 100.0 - invested), 2),
+        "gross_pct": gross_pct,
+    }
+
+
+@app.get("/api/desk/portfolio", tags=["desk"])
+async def desk_portfolio():
+    """Active fund snapshot: account, positions, equity curve, KPIs."""
+    eng = _get_engine()
+    state = eng.get_cached_state() if eng else {}
+    pm = getattr(eng, "position_mgr", None) if eng else None
+
+    positions = []
+    if pm:
+        for tkr, pos in list(pm.positions.items()):
+            qty = float(getattr(pos, "shares", 0) or 0)
+            entry = float(getattr(pos, "entry_price", 0) or 0)
+            cur = float(getattr(pos, "current_price", entry) or entry)
+            stop = float(getattr(pos, "stop_loss", 0) or 0)
+            target = float(getattr(pos, "target_price", 0) or 0)
+            unr = (cur - entry) * qty
+            unr_pct = ((cur / entry - 1) * 100) if entry else 0.0
+            positions.append({
+                "ticker": tkr,
+                "shares": qty,
+                "entry": round(entry, 2),
+                "current": round(cur, 2),
+                "stop": round(stop, 2),
+                "target": round(target, 2),
+                "unrealized_pnl": round(unr, 2),
+                "unrealized_pct": round(unr_pct, 2),
+                "strategy": getattr(pos, "strategy", "—"),
+            })
+
+    broker_account = None
+    broker_name = "paper"
+    try:
+        from src.brokers.broker_manager import get_broker_manager
+
+        mgr = await get_broker_manager()
+        acct = await mgr.get_account()
+        broker_account = {
+            "cash": round(acct.cash, 2),
+            "buying_power": round(acct.buying_power, 2),
+            "portfolio_value": round(acct.portfolio_value, 2),
+            "unrealized_pnl": round(acct.unrealized_pnl, 2),
+            "realized_pnl_today": round(acct.realized_pnl_today, 2),
+            "currency": acct.currency,
+        }
+        bt = getattr(mgr, "active_broker_type", None)
+        broker_name = bt.value if bt else "paper"
+    except Exception:  # noqa: BLE001
+        pass
+
+    curve = _equity_curve_from_engine(eng)
+    start_eq = curve[0]["equity"] if curve else float(
+        getattr(pm.params, "account_size", 100_000.0) if pm else 100_000.0,
+    )
+    end_eq = curve[-1]["equity"] if curve else start_eq
+    total_return_pct = ((end_eq / start_eq - 1) * 100) if start_eq else 0
+
+    benchmark_curve: list = []
+    try:
+        import yfinance as yf
+
+        spy_hist = await asyncio.to_thread(
+            lambda: yf.Ticker("SPY").history(period="6mo"),
+        )
+        if spy_hist is not None and not spy_hist.empty:
+            benchmark_curve = _benchmark_curve_scaled(
+                spy_hist["Close"].values, start_eq,
+            )
+    except Exception:  # noqa: BLE001
+        benchmark_curve = []
+
+    allocation = _allocation_from_engine(eng, pm, end_eq or start_eq)
+
+    active_sleeves: list = []
+    if eng and getattr(eng, "leaderboard", None):
+        for entry in eng.leaderboard.get_rankings()[:6]:
+            status = entry.get("status", "active")
+            if hasattr(status, "value"):
+                status = status.value
+            if status not in ("active", "reduced"):
+                continue
+            metrics = entry.get("metrics", {}) or {}
+            active_sleeves.append({
+                "name": entry.get("name"),
+                "status": status,
+                "stance": "reduced size" if status == "reduced" else "active",
+                "score": round(float(entry.get("blended_score", 0) or 0), 2),
+                "win_rate": round(float(metrics.get("win_rate", 0) or 0) * 100, 1),
+                "sharpe": round(float(metrics.get("oos_sharpe", 0) or 0), 2),
+                "max_dd": round(float(metrics.get("max_drawdown", 0) or 0) * 100, 1),
+                "trades": entry.get("trade_count", 0),
+                "last_updated": entry.get("last_updated"),
+            })
+
+    return _sanitize_for_json({
+        "timestamp": datetime.utcnow().isoformat(),
+        "broker": {
+            "name": broker_name,
+            "account": broker_account,
+            "connected": broker_account is not None,
+            "last_sync": datetime.utcnow().isoformat(),
+        },
+        "kpis": {
+            "equity": end_eq,
+            "start_equity": start_eq,
+            "total_return_pct": round(total_return_pct, 2),
+            "open_positions": state.get("open_positions", len(positions)),
+            "total_trades": state.get("total_trades", 0),
+            "win_rate": round(state.get("win_rate", 0), 1),
+            "daily_pnl": state.get("circuit_breaker", {}).get("daily_pnl", 0),
+            "dry_run": state.get("dry_run", True),
+        },
+        "positions": positions,
+        "equity_curve": curve,
+        "benchmark_curve": benchmark_curve,
+        "allocation": allocation,
+        "active_sleeves": active_sleeves,
+        "pro_kpis": state.get("pro_kpis", {}),
+        "regime": state.get("regime", {}),
+    })
+
+
+@app.get("/api/desk/strategies", tags=["desk"])
+async def desk_strategies():
+    """Strategy leaderboard with lifecycle status + PnL sparklines."""
+    eng = _get_engine()
+    out: list = []
+    if eng and getattr(eng, "leaderboard", None):
+        for entry in eng.leaderboard.get_rankings():
+            metrics = entry.get("metrics", {}) or {}
+            pnl_hist = (
+                entry.get("pnl_history", [])
+                or metrics.get("pnl_history", [])
+                or []
+            )
+            status = entry.get("status", "active")
+            if hasattr(status, "value"):
+                status = status.value
+            out.append({
+                "name": entry.get("name"),
+                "status": status,
+                "score": entry.get("blended_score", 0),
+                "trades": entry.get("trade_count", 0),
+                "win_rate": round(float(metrics.get("win_rate", 0) or 0) * 100, 1),
+                "expectancy": round(float(metrics.get("expectancy", 0) or 0), 3),
+                "sharpe": round(float(metrics.get("oos_sharpe", 0) or 0), 2),
+                "max_dd": round(float(metrics.get("max_drawdown", 0) or 0) * 100, 1),
+                "profit_factor": round(float(metrics.get("profit_factor", 0) or 0), 2),
+                "pnl_sparkline": [round(float(x), 2) for x in pnl_hist[-30:]],
+                "last_updated": entry.get("last_updated"),
+            })
+    counts = {"active": 0, "reduced": 0, "cooldown": 0, "retired": 0}
+    for s in out:
+        counts[s["status"]] = counts.get(s["status"], 0) + 1
+    return _sanitize_for_json({
+        "timestamp": datetime.utcnow().isoformat(),
+        "counts": counts,
+        "strategies": out,
+    })
+
+
+@app.get("/api/desk/monitor", tags=["desk"])
+async def desk_monitor():
+    """Operational health: engine, broker, data freshness, alerts."""
+    eng = _get_engine()
+    state = eng.get_cached_state() if eng else {}
+    engine_block = {
+        "running": eng is not None,
+        "dry_run": state.get("dry_run", True),
+        "cycle_count": state.get("cycle_count", 0),
+        "cycle_interval_s": getattr(eng, "cycle_interval_seconds", None) if eng else None,
+        "signals_today": state.get("signals_today", 0),
+        "trades_today": state.get("trades_today", 0),
+    }
+    cb = state.get("circuit_breaker", {}) or {}
+    nt = state.get("no_trade_card") or {}
+
+    broker_block = {
+        "connected": False,
+        "name": "paper",
+        "last_sync": None,
+        "mode": "PAPER" if state.get("dry_run", True) else "LIVE",
+    }
+    try:
+        from src.brokers.broker_manager import get_broker_manager
+
+        mgr = await get_broker_manager()
+        bt = getattr(mgr, "active_broker_type", None)
+        broker_block = {
+            "connected": True,
+            "name": bt.value if bt else "paper",
+            "last_sync": datetime.utcnow().isoformat(),
+            "mode": "PAPER" if state.get("dry_run", True) else "LIVE",
+        }
+    except Exception:  # noqa: BLE001
+        pass
+
+    mkt = state.get("market_state", {}) or {}
+    data_block = {
+        "source": mkt.get("data_source", "unknown"),
+        "vix": mkt.get("vix"),
+        "spy_20d": mkt.get("spy_return_20d"),
+        "breadth_pct": mkt.get("breadth_pct"),
+    }
+
+    alerts = []
+    if cb.get("triggered"):
+        alerts.append({
+            "level": "critical",
+            "msg": f"Circuit breaker: {cb.get('reason', 'unknown')}",
+        })
+    if cb.get("consecutive_losses", 0) >= 3:
+        alerts.append({
+            "level": "warn",
+            "msg": f"{cb['consecutive_losses']} consecutive losses",
+        })
+    if nt.get("active") or nt.get("decision") == "NO_TRADE":
+        alerts.append({
+            "level": "info",
+            "msg": f"NO-TRADE: {nt.get('reason', 'risk gates')}",
+        })
+    if not engine_block["running"]:
+        alerts.append({"level": "critical", "msg": "Engine not running"})
+
+    return _sanitize_for_json({
+        "timestamp": datetime.utcnow().isoformat(),
+        "engine": engine_block,
+        "broker": broker_block,
+        "data": data_block,
+        "circuit_breaker": cb,
+        "no_trade_card": nt,
+        "alerts": alerts,
+    })
+
+
 async def _get_regime():
     """Return cached RegimeState, refreshing every 60 s.
 

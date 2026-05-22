@@ -255,6 +255,18 @@
         <span x-show="!pmStrip.funds.length" style="font-size:10px;color:var(--t3);cursor:pointer" @click="fetchPMStrip()">Load funds ↻</span>
       </div>
       <div style="width:1px;height:18px;background:var(--bd);flex-shrink:0"></div>
+      <!-- Engine / broker runtime (desk API) -->
+      <div style="display:flex;align-items:center;gap:6px" x-show="desk.monitor">
+        <span style="font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--t3)">Runtime</span>
+        <span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px"
+              :style="desk.monitor?.engine?.running?'background:rgba(0,212,170,.12);color:var(--green)':'background:rgba(255,92,92,.12);color:var(--red)'"
+              x-text="desk.monitor?.engine?.running?'ENG':'STOP'"></span>
+        <span style="font-size:10px;font-weight:600;color:var(--t2)"
+              x-text="(desk.monitor?.broker?.name||'paper').toUpperCase()"></span>
+        <span style="font-size:10px" :style="desk.monitor?.broker?.connected?'color:var(--green)':'color:var(--amber)'"
+              x-text="desk.monitor?.broker?.connected?'● sync':'○ paper'"></span>
+      </div>
+      <div style="width:1px;height:18px;background:var(--bd);flex-shrink:0" x-show="desk.portfolio"></div>
       <!-- Biggest risks -->
       <div style="display:flex;align-items:center;gap:5px;flex:1;min-width:0">
         <span style="font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--t3);white-space:nowrap">Risks</span>
@@ -636,6 +648,45 @@
         <div class="kpi-box">
           <div class="kpi-val mono" :class="today7.tradeability==='NO_TRADE'?'text-red-400':today7.tradeability==='WAIT'?'text-amber-300':'text-green-400'" x-text="today7.tradeability||'—'"></div>
           <div class="kpi-lbl">Regime</div>
+        </div>
+      </div>
+
+      <!-- ── Engine portfolio / sleeves (desk decision layer) ── -->
+      <div style="padding:8px 12px" x-show="desk.portfolio">
+        <div class="card card-p">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-[9px] font-bold uppercase" style="color:var(--t3)">🏛️ Engine Portfolio</div>
+            <div class="text-[10px] mono font-bold" :class="(desk.portfolio?.kpis?.total_return_pct||0)>=0?'text-green-400':'text-red-400'"
+                 x-text="'$'+Number(desk.portfolio?.kpis?.equity||0).toLocaleString(undefined,{maximumFractionDigits:0})+' · '+((desk.portfolio?.kpis?.total_return_pct||0)>=0?'+':'')+(desk.portfolio?.kpis?.total_return_pct||0).toFixed(2)+'%'"></div>
+          </div>
+          <div class="flex gap-3 text-[9px] mb-2" style="color:var(--t3)">
+            <span><span style="color:var(--green)">●</span> Book</span>
+            <span><span style="color:var(--blue)">●</span> SPY B&H</span>
+          </div>
+          <div x-html="deskSparkSvg(desk.portfolio?.equity_curve, desk.portfolio?.benchmark_curve, 320, 48)"></div>
+          <div class="grid grid-cols-4 gap-2 text-center text-[10px] mt-2">
+            <div><div style="color:var(--t3)">Day P&L</div><div class="mono font-bold" :class="(desk.portfolio?.kpis?.daily_pnl||0)>=0?'text-green-400':'text-red-400'" x-text="(desk.portfolio?.kpis?.daily_pnl>=0?'+':'')+'$'+Number(desk.portfolio?.kpis?.daily_pnl||0).toFixed(0)"></div></div>
+            <div><div style="color:var(--t3)">Open</div><div class="mono font-bold" x-text="desk.portfolio?.kpis?.open_positions||0"></div></div>
+            <div><div style="color:var(--t3)">Win%</div><div class="mono font-bold" x-text="(desk.portfolio?.kpis?.win_rate||0)+'%'"></div></div>
+            <div><div style="color:var(--t3)">Trades</div><div class="mono font-bold" x-text="desk.portfolio?.kpis?.total_trades||0"></div></div>
+          </div>
+          <template x-if="(desk.portfolio?.active_sleeves||[]).length">
+            <div class="text-[9px] font-bold uppercase mt-3 mb-1" style="color:var(--t3)">Active Sleeves</div>
+            <div class="flex flex-wrap gap-1.5">
+              <template x-for="sl in (desk.portfolio?.active_sleeves||[]).slice(0,4)">
+                <span class="pill pw text-[9px]" x-text="sl.name+' · '+sl.score"></span>
+              </template>
+            </div>
+          </template>
+          <template x-if="(desk.portfolio?.allocation?.holdings||[]).length">
+            <div class="text-[9px] font-bold uppercase mt-2 mb-1" style="color:var(--t3)">Allocation</div>
+            <template x-for="h in (desk.portfolio?.allocation?.holdings||[]).slice(0,4)">
+              <div class="flex justify-between text-[10px] py-0.5">
+                <span class="mono font-bold" x-text="h.ticker"></span>
+                <span style="color:var(--t3)" x-text="h.actual_pct+'% / tgt '+h.target_pct+'%'"></span>
+              </div>
+            </template>
+          </template>
         </div>
       </div>
 
@@ -2741,7 +2792,7 @@
     <!-- ═══════════════════════════════════════════════════════ -->
     <!-- SURFACE: PORTFOLIO MANAGEMENT                          -->
     <!-- ═══════════════════════════════════════════════════════ -->
-    <main x-show="tab==='portfolio'" class="fade" x-init="$watch('tab',v=>{if(v==='portfolio')fetchPortfolio()})">
+    <main x-show="tab==='portfolio'" class="fade" x-init="$watch('tab',v=>{if(v==='portfolio'){fetchPortfolio();fetchDesk()}})">
       <div class="trust-strip">
         <span style="color:var(--blue)">● PORTFOLIO</span>
         <span x-text="pf.summary?pf.summary.total_positions+' positions':'No positions'"></span>
@@ -2794,6 +2845,19 @@
               <span style="color:var(--t3)">Cost: <strong class="text-white" x-text="'$'+pf.summary.total_cost.toLocaleString()"></strong></span>
               <span style="color:var(--t3)">P&L: <strong :class="pf.summary.total_pnl>=0?'text-green-400':'text-red-400'" x-text="(pf.summary.total_pnl>=0?'+':'')+pf.summary.total_pnl.toLocaleString()+' ('+pf.summary.total_pnl_pct+'%)'"></strong></span>
             </div>
+          </div>
+        </template>
+        <!-- Engine book: target vs actual (desk API) -->
+        <template x-if="desk.portfolio&&(desk.portfolio.allocation?.holdings||[]).length">
+          <div class="card card-p">
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">⚖️ Engine Book · Target vs Actual</div>
+            <template x-for="h in desk.portfolio.allocation.holdings">
+              <div class="flex justify-between text-[10px] py-1 border-b border-gray-800/30 last:border-0">
+                <span class="mono font-bold" x-text="h.ticker"></span>
+                <span style="color:var(--t3)" x-text="h.actual_pct+'% actual · '+h.target_pct+'% tgt · drift '+(h.drift_pct>=0?'+':'')+h.drift_pct+'%'"></span>
+              </div>
+            </template>
+            <div class="text-[9px] mt-1" style="color:var(--t3)" x-text="'Cash '+desk.portfolio.allocation.cash_pct+'% · Gross '+desk.portfolio.allocation.gross_pct+'%'"></div>
           </div>
         </template>
         <!-- Position cards -->
@@ -5739,6 +5803,7 @@ Regime gate:  FUND_ALPHA only in BULL, FUND_PENDA in all regimes
       fundLab:{loading:false,period:'1y',benchmark:'SPY',topN:5,data:null,error:''},
       fundMonitor:{loading:false,data:null,error:'',lastRefresh:null,autoRefreshTimer:null,benchmark:'SPY',activeFund:null},
       pmStrip:{funds:[],lastFetch:0},
+      desk:{portfolio:null,monitor:null,strategies:null},
       modelFunds:{loading:false,data:null,error:'',benchmark:'SPY',activeFund:null,lastRefresh:null},
       tradeIntel:{loading:false,data:null,error:'',confData:null,mistakesData:null},
       tradeJournal:{loading:false,recent:null,review:null,error:'',calibration:null},
@@ -5795,7 +5860,8 @@ Regime gate:  FUND_ALPHA only in BULL, FUND_PENDA in all regimes
         this.fetchHealth();setInterval(()=>this.fetchHealth(),120000);
         this.fetchNoTrade();
         // Lazy-load PM strip after 3s so it doesn't block above-the-fold render
-        setTimeout(()=>this.fetchPMStrip(),3000);
+        setTimeout(()=>{this.fetchPMStrip();this.fetchDesk();},3000);
+        setInterval(()=>this.fetchDesk(),120000);
         if(!localStorage.getItem('cc_guide_seen')){this.tab='guide'}
       },
       tick(){this.clock=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'})},
@@ -6338,6 +6404,41 @@ Regime gate:  FUND_ALPHA only in BULL, FUND_PENDA in all regimes
       },
       fundColor(name){return name==='FUND_ALPHA'?'var(--green)':name==='FUND_PENDA'?'var(--blue)':name==='FUND_MACRO'?'var(--purple)':'var(--orange)'},
       fundIcon(name){return name==='FUND_ALPHA'?'🚀':name==='FUND_PENDA'?'🛡':name==='FUND_MACRO'?'🌐':'⚙️'},
+
+      // ── Desk API (curves, allocation, runtime — institutional layer) ─────
+      async fetchDesk(){
+        try{
+          const [p,m]=await Promise.all([
+            fetch('/api/desk/portfolio').then(r=>r.ok?r.json():null).catch(()=>null),
+            fetch('/api/desk/monitor').then(r=>r.ok?r.json():null).catch(()=>null),
+          ]);
+          if(p)this.desk.portfolio=p;
+          if(m)this.desk.monitor=m;
+        }catch(e){console.warn('desk fetch:',e)}
+      },
+      deskSeriesPts(series){
+        return (series||[]).map(x=>typeof x==='number'?x:(x.equity??x.value??0));
+      },
+      deskSparkSvg(primary,overlay,w,h){
+        const ptsA=this.deskSeriesPts(primary);
+        const ptsB=this.deskSeriesPts(overlay);
+        if(!ptsA.length&&!ptsB.length)return '<div style="text-align:center;font-size:10px;color:var(--t3);padding:12px">no curve data</div>';
+        const pad=4,combined=ptsA.length?ptsA:ptsB;
+        const min=Math.min(...combined,...ptsB);
+        const max=Math.max(...combined,...ptsB);
+        const rng=(max-min)||1;
+        const mkPath=(pts,color,dash)=>{
+          if(!pts.length)return '';
+          const sx=(w-pad*2)/Math.max(pts.length-1,1);
+          const d=pts.map((v,i)=>{
+            const x=pad+i*sx;
+            const y=pad+(h-pad*2)*(1-(v-min)/rng);
+            return (i?'L':'M')+x.toFixed(1)+','+y.toFixed(1);
+          }).join(' ');
+          return '<path d="'+d+'" fill="none" stroke="'+color+'" stroke-width="1.5"'+(dash?' stroke-dasharray="4 3"':'')+'/>';
+        };
+        return '<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'">'+mkPath(ptsA,'#00d4aa',false)+mkPath(ptsB,'#58a6ff',true)+'</svg>';
+      },
 
       // ── PM Strip (model funds mini-cards, refreshed lazily) ────────────────
       async fetchPMStrip(){
