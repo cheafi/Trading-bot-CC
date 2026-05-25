@@ -6075,6 +6075,13 @@ try:
 except Exception:
     logger.exception("[Router] Failed to load portfolio_decision router")
 
+try:
+    from src.api.routers.platform_extras import router as platform_extras_router
+
+    app.include_router(platform_extras_router)
+except Exception:
+    logger.exception("[Router] Failed to load platform_extras router")
+
 
 if __name__ == "__main__":
     start()

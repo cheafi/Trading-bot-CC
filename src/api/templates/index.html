@@ -600,6 +600,22 @@
         </div>
       </template>
 
+      <!-- Quick PM routines -->
+      <div style="padding:6px 12px;display:flex;flex-wrap:gap:6px;border-bottom:1px solid var(--bd)">
+        <button class="btn-s text-[9px]" @click="fetchToday7();switchTab('today')">☀ Morning briefing</button>
+        <button class="btn-s text-[9px]" @click="fetchPortfolioDecision();switchTab('portfolio')">💼 Portfolio risk</button>
+        <button class="btn-s text-[9px]" @click="fetchCatalystCalendar()">📅 Catalysts</button>
+        <button class="btn-s text-[9px]" @click="runPmMemo('portfolio')">📝 PM memo</button>
+        <button class="btn-s text-[9px]" @click="fetchDecisionHub()">🎯 Decision hub</button>
+      </div>
+      <template x-if="platformExtras.catalyst&&platformExtras.catalyst.events">
+        <div style="padding:4px 12px;font-size:[9px]">
+          <template x-for="ev in platformExtras.catalyst.events.slice(0,4)" :key="ev.label">
+            <span class="pill pa text-[8px] mr-1" x-text="(ev.ticker||'')+' '+ev.label"></span>
+          </template>
+        </div>
+      </template>
+
       <!-- ── 3-COLUMN BODY ── -->
       <div class="cc-body">
 
@@ -1537,10 +1553,13 @@
       <!-- ── Avoid List ── -->
       <template x-if="today7.avoid_list && today7.avoid_list.length > 0">
         <div style="padding:0 12px;margin-top:8px">
-          <div class="section-hdr" style="margin:0 0 4px">🚫 Avoid Today</div>
+          <div class="section-hdr" style="margin:0 0 4px">🚫 Avoid Now</div>
           <div class="flex gap-2 flex-wrap">
             <template x-for="a in today7.avoid_list">
-              <span class="pill pr text-[9px]" x-text="(a.ticker||'')+' '+(a.reason||a)"></span>
+              <span class="pill pr text-[8px]">
+                <span class="text-[7px] opacity-70" x-text="a.category||'filter'"></span>
+                <span x-text="(a.ticker&&a.ticker!=='—'?a.ticker+' ':'')+(a.reason||a)"></span>
+              </span>
             </template>
           </div>
         </div>
@@ -2867,6 +2886,19 @@
               <span class="text-green-400" x-show="pfDecision.return_attribution.top_contributor" x-text="'▲ '+(pfDecision.return_attribution.top_contributor?.asset||'')+' '+((pfDecision.return_attribution.top_contributor?.contribution_pct)||0)+'%'"></span>
               <span class="text-red-400 ml-2" x-show="pfDecision.return_attribution.top_detractor" x-text="'▼ '+(pfDecision.return_attribution.top_detractor?.asset||'')+' '+((pfDecision.return_attribution.top_detractor?.contribution_pct)||0)+'%'"></span>
             </div>
+          </div>
+        </template>
+        <template x-if="pfDecision&&pfDecision.risk_cockpit">
+          <div class="card card-p mb-2" style="border-left:3px solid var(--amber)">
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--amber)">Risk cockpit · grade <span x-text="pfDecision.risk_cockpit.grade"></span></div>
+            <div class="flex flex-wrap gap-3 text-[9px] mb-2">
+              <span>HHI <strong class="mono" x-text="pfDecision.risk_cockpit.hhi"></strong></span>
+              <span>Top <strong x-text="pfDecision.risk_cockpit.top_ticker"></strong> <strong x-text="pfDecision.risk_cockpit.top_weight_pct"></strong>%</span>
+              <span>Diversification <strong x-text="pfDecision.risk_cockpit.diversification_score"></strong>/100</span>
+            </div>
+            <template x-for="al in (pfDecision.risk_cockpit.alerts||[]).slice(0,3)" :key="al.message">
+              <div class="text-[8px] py-0.5" :class="al.severity==='critical'?'text-red-400':'text-amber-300'" x-text="al.message"></div>
+            </template>
           </div>
         </template>
         <template x-if="pfDecision&&(pfDecision.sleeve_monitor||[]).length">
@@ -4352,6 +4384,7 @@
       dos:{ticker:'',loading:false,data:null,intel:null,error:'',subTab:'decision',showSignals:true,chartPeriod:'6mo',benchPeriod:'1y',chartSignals:[],benchStats:null,benchSummary:null,benchMonthly:null,benchQuarterly:null,benchYearly:null,benchTab:'monthly',buyPrice:'',advice:null,adviceLoading:false,peers:null,peersLoading:false,conviction:null,convictionLoading:false,optionsData:null,optionsLoading:false},
       pf:{loading:false,source:'manual',positions:[],alerts:[],summary:null,corrPreview:null,showAdd:false,addTicker:'',addShares:0,addEntry:0,addStop:0,addT1r:0,addT2r:0,addNotes:'',editTicker:null},
       pfDecision:null,pfDecisionLoading:false,
+      platformExtras:{catalyst:null,pmMemo:null,loading:false},
       ledgerView:{loading:false,loaded:false,rows:[],stats:null,filterStrategy:'',filterDirection:'',filterTicker:'',expanded:false},
       factory:{loading:false,ticker:'SPY',period:'2y',mode:'demo',result:null,detail:null,showDetail:false,sortBy:'score'},
       brief:{loading:false,data:null},
@@ -4883,6 +4916,24 @@
           if(r&&r.ok)this.pfDecision=await r.json();
         }catch(e){console.warn('portfolio-decision',e)}
         finally{this.pfDecisionLoading=false}
+      },
+      async fetchCatalystCalendar(){
+        this.platformExtras.loading=true;
+        try{
+          const r=await this.ccFetch('/api/v7/catalyst-calendar',{retries:2,backoff:500});
+          if(r&&r.ok)this.platformExtras.catalyst=await r.json();
+        }catch(e){console.warn('catalyst-calendar',e)}
+        finally{this.platformExtras.loading=false}
+      },
+      async runPmMemo(scope){
+        const u='/api/v7/pm-memo?scope='+encodeURIComponent(scope)+(scope==='ticker'&&this.dos.ticker?'&ticker='+encodeURIComponent(this.dos.ticker):'');
+        try{
+          const r=await this.ccFetch(u,{retries:2,backoff:500});
+          if(!r||!r.ok)return;
+          this.platformExtras.pmMemo=await r.json();
+          alert(this.platformExtras.pmMemo.one_liner||'Memo ready — see console');
+          console.log(this.platformExtras.pmMemo.markdown);
+        }catch(e){console.warn('pm-memo',e)}
       },
         // Auto-trigger historical VaR after positions hydrate (throttled to 5min)
         try{
@@ -5620,7 +5671,7 @@
         return curve.map((v,i)=>`${i*4},${18-Math.round(((v-mn)/rg)*16)}`).join(' ');
       },
       async fetchToday7(){
-        try{const r=await this.ccFetch('/api/v7/today',{retries:4,backoff:600});if(!r||!r.ok)throw 0;const d=await r.json();this.today7.regime=d.market_regime||null;this.today7.top_ranked=d.top_5||[];this.today7.best_action=d.best_action||null;this.today7.overlap_warning=d.overlap_warning||null;this.today7.near_miss=d.near_miss||[];this.today7.no_setup_diagnosis=d.no_setup_diagnosis||null;this.today7.regime_wait_explanation=d.regime_wait_explanation||[];this.today7.monitor_triggers=d.monitor_triggers||[];this.today7.sleeve_summary=d.sleeve_summary||null;this.today7.execution_readiness=d.execution_readiness||d.best_action?.execution_readiness||null;this.today7.evidence_badges=d.evidence_badges||null;this.today7.filter_funnel=d.filter_funnel||null;this.today7.avoid_list=(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'⚠',reason:a}:a);this.today7.tradeability=(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{};
+        try{const r=await this.ccFetch('/api/v7/today',{retries:4,backoff:600});if(!r||!r.ok)throw 0;const d=await r.json();this.today7.regime=d.market_regime||null;this.today7.top_ranked=d.top_5||[];this.today7.best_action=d.best_action||null;this.today7.overlap_warning=d.overlap_warning||null;this.today7.near_miss=d.near_miss||[];this.today7.no_setup_diagnosis=d.no_setup_diagnosis||null;this.today7.regime_wait_explanation=d.regime_wait_explanation||[];this.today7.monitor_triggers=d.monitor_triggers||[];this.today7.sleeve_summary=d.sleeve_summary||null;this.today7.execution_readiness=d.execution_readiness||d.best_action?.execution_readiness||null;this.today7.evidence_badges=d.evidence_badges||null;this.today7.filter_funnel=d.filter_funnel||null;this.today7.avoid_list=(d.avoid_now||[]).length?(d.avoid_now||[]):(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'—',reason:a,category:'regime'}:a);this.today7.tradeability=(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{};
           // DAY-OVER-DAY DIFF — tag NEW vs CARRYOVER vs MOVED
           try{
             const todayKey=(d.date||new Date().toISOString().slice(0,10));

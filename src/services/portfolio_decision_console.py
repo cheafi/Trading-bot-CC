@@ -374,6 +374,7 @@ def build_curve_diagnostics_placeholder() -> Dict[str, Any]:
 async def build_portfolio_decision(request) -> Dict[str, Any]:
     """Full portfolio decision payload for UI + API."""
     from src.services.execution_readiness import build_execution_readiness
+    from src.services.portfolio_risk_cockpit import build_portfolio_risk_cockpit
 
     holdings: List[Dict[str, Any]] = []
     source = "manual"
@@ -465,8 +466,11 @@ async def build_portfolio_decision(request) -> Dict[str, Any]:
         top_concentration_pct=top_pct,
     )
 
+    risk_cockpit = build_portfolio_risk_cockpit(positions)
+
     return {
         "as_of": datetime.now(timezone.utc).isoformat() + "Z",
+        "risk_cockpit": risk_cockpit,
         "allocator_summary": allocator_summary,
         "execution": execution,
         "allocation_monitor": allocation_rows,

@@ -5,6 +5,124 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Set
 
 
+_AVOID_CATEGORIES = (
+    "regime",
+    "breadth",
+    "earnings_risk",
+    "failed_breakout",
+    "stretched_vol",
+    "insider_cluster",
+    "low_rr",
+    "concentration",
+)
+
+
+def build_avoid_now_engine(
+    *,
+    regime_label: str,
+    should_trade: bool,
+    tradeability: str,
+    vix: float,
+    breadth: float,
+    confidence: float,
+    council_results: Optional[List[Any]] = None,
+    scanned: Optional[List[Dict[str, Any]]] = None,
+    top5: Optional[List[Dict[str, Any]]] = None,
+    limit: int = 8,
+) -> List[Dict[str, Any]]:
+    """
+    Categorized avoid list — not gossip, evidence-typed for PM / decision hub.
+    """
+    items: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def _add(ticker: str, reason: str, category: str, severity: str = "medium"):
+        key = f"{ticker}:{category}"
+        if key in seen or len(items) >= limit:
+            return
+        seen.add(key)
+        items.append(
+            {
+                "ticker": ticker,
+                "reason": reason,
+                "category": category,
+                "severity": severity,
+            }
+        )
+
+    if not should_trade:
+        _add("—", "Regime gate closed — no new risk", "regime", "high")
+    if regime_label == "RISK_OFF":
+        _add("—", "Risk-off regime — avoid aggressive momentum", "regime", "high")
+    if tradeability in ("NO_TRADE", "WAIT") and not should_trade:
+        _add("—", f"Tradeability {tradeability} — observe only", "regime", "medium")
+    if vix > 28:
+        _add("—", f"VIX {vix:.0f} — elevated; avoid full-size adds", "stretched_vol", "high")
+    if breadth < 40:
+        _add("—", f"Breadth {breadth:.0f}% — narrow market; avoid broad deploy", "breadth", "medium")
+    if confidence < 0.4:
+        _add("—", "Low regime confidence — size down", "regime", "medium")
+
+    for cr in council_results or []:
+        try:
+            pr = cr.pipeline
+            sig = pr.signal
+            ticker = (sig.get("ticker") or "").upper()
+            if not ticker:
+                continue
+            act = (pr.decision.action or "").upper()
+            if act not in ("AVOID", "NO_TRADE", "PASS"):
+                continue
+            struct = sig.get("structure") or {}
+            if struct.get("is_extended"):
+                _add(
+                    ticker,
+                    "Extended from support — failed breakout risk",
+                    "failed_breakout",
+                    "medium",
+                )
+            earn = sig.get("earnings") or {}
+            if earn.get("in_blackout"):
+                _add(ticker, "Earnings blackout window", "earnings_risk", "high")
+            elif (earn.get("days_to_earnings") or 999) <= 3:
+                _add(
+                    ticker,
+                    f"Earnings in {earn.get('days_to_earnings')}d",
+                    "earnings_risk",
+                    "high",
+                )
+            rr = float(sig.get("risk_reward") or pr.decision.risk_reward_ratio or 0)
+            if 0 < rr < 2.0:
+                _add(ticker, f"R:R {rr:.1f} below 2.0 gate", "low_rr", "medium")
+            inv = pr.decision.invalidation or ""
+            if inv:
+                _add(ticker, inv[:100], "regime", "medium")
+        except Exception:
+            continue
+
+    for sig in scanned or []:
+        ticker = (sig.get("ticker") or "").upper()
+        if not ticker:
+            continue
+        struct = sig.get("structure") or {}
+        if struct.get("is_extended") and ticker not in {i["ticker"] for i in items}:
+            _add(ticker, "Scanner: extended structure", "failed_breakout", "low")
+        earn = sig.get("earnings") or {}
+        if earn.get("in_blackout"):
+            _add(ticker, "Earnings blackout (scanner)", "earnings_risk", "high")
+
+    for t in top5 or []:
+        if (t.get("action") or "").upper() in ("AVOID", "NO_TRADE"):
+            _add(
+                t.get("ticker", "—"),
+                t.get("invalidation") or "Top list avoid gate",
+                "regime",
+                "medium",
+            )
+
+    return items
+
+
 def build_regime_wait_explanation(
     *,
     trend_label: str,

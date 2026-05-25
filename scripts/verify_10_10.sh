@@ -97,9 +97,11 @@ check_http "/api/v7/playbook/today" "$BASE/api/v7/playbook/today" 45
 check_http "/api/v7/stock-intel/AAPL" "$BASE/api/v7/stock-intel/AAPL" 120
 check_http "/api/v7/decision-hub" "$BASE/api/v7/decision-hub" 60
 check_http "/api/v7/portfolio-decision" "$BASE/api/v7/portfolio-decision" 45
+check_http "/api/v7/catalyst-calendar" "$BASE/api/v7/catalyst-calendar" 30
+check_http "/api/v7/portfolio-risk-cockpit" "$BASE/api/v7/portfolio-risk-cockpit" 30
 
 # 5) Unit tests (host) — no pytest required
-if python3 -m unittest tests.test_best_action tests.test_today_insights tests.test_execution_readiness tests.test_fund_manager_console tests.test_stock_intel tests.test_decision_hub tests.test_portfolio_decision_console -q 2>/dev/null; then
+if python3 -m unittest tests.test_best_action tests.test_today_insights tests.test_execution_readiness tests.test_fund_manager_console tests.test_stock_intel tests.test_decision_hub tests.test_portfolio_decision_console tests.test_avoid_now_engine -q 2>/dev/null; then
   ok "unittest best_action today_insights execution_readiness stock_intel"
 else
   bad "unittest suite"

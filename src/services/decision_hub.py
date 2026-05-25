@@ -139,7 +139,7 @@ async def build_decision_hub(request) -> Dict[str, Any]:
     today: Dict[str, Any] = getattr(request.app.state, "today_v7_cache", None) or {}
 
     top5 = today.get("top_5") or []
-    avoid_raw = today.get("avoid") or []
+    avoid_raw = today.get("avoid_now") or today.get("avoid") or []
     best_action = today.get("best_action") or {}
     regime = today.get("market_regime") or {}
     tradeability = regime.get("tradeability") or "WAIT"

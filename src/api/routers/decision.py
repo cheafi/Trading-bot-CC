@@ -540,17 +540,9 @@ async def today_summary(request: Request):
             key=lambda k: family_scores[k] / max(family_counts[k], 1),
         )
 
-    # 7. Avoid list
-    avoid = []
-    if not should_trade:
-        avoid.append("All new positions — regime unfavorable")
-    if regime_label == "RISK_OFF":
-        avoid.append("Aggressive breakouts — risk-off environment")
-        avoid.append("Extended momentum plays — reversal risk")
-    if confidence < 0.4:
-        avoid.append("Large positions — low regime confidence")
-    if vix_val > 30:
-        avoid.append(f"VIX at {vix_val:.0f} — size down or sit out")
+    # 7. Avoid list placeholder — filled after tradeability (section 9)
+    avoid: list = []
+    avoid_now: list = []
 
     # 8. Narrative — morning-briefing style
     idx_summary = ""
@@ -617,6 +609,31 @@ async def today_summary(request: Request):
         tradeability = "SELECTIVE"
     else:
         tradeability = "WAIT"
+
+    from src.services.today_insights import build_avoid_now_engine
+
+    avoid_now = build_avoid_now_engine(
+        regime_label=regime_label,
+        should_trade=should_trade,
+        tradeability=tradeability,
+        vix=vix_val,
+        breadth=breadth_val,
+        confidence=confidence,
+        council_results=council_results,
+        scanned=scanned,
+        top5=top5,
+    )
+    avoid = [
+        f"{a.get('ticker', '—')}: {a.get('reason')}" if a.get("ticker") != "—" else a.get("reason", "")
+        for a in avoid_now
+    ]
+    if not avoid:
+        if not should_trade:
+            avoid.append("All new positions — regime unfavorable")
+        if regime_label == "RISK_OFF":
+            avoid.append("Aggressive breakouts — risk-off environment")
+        if vix_val > 30:
+            avoid.append(f"VIX at {vix_val:.0f} — size down or sit out")
 
     # 10. What Changed
     what_changed = []
@@ -785,6 +802,7 @@ async def today_summary(request: Request):
             for k, v in family_scores.items()
         },
         "avoid": avoid,
+        "avoid_now": avoid_now,
         "what_changed": what_changed,
         "event_risks": event_risks,
         "sector_summary": sector_summary,
