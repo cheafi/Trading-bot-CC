@@ -22,14 +22,16 @@ logger = logging.getLogger(__name__)
 
 class Action:
     TRADE = "TRADE"
+    PILOT = "PILOT"
     WATCH = "WATCH"
     WAIT = "WAIT"
     HOLD = "HOLD"
     REDUCE = "REDUCE"
     EXIT = "EXIT"
-    NO_TRADE = "NO_TRADE"
+    AVOID = "AVOID"
+    NO_TRADE = "AVOID"
 
-    ALL = (TRADE, WATCH, WAIT, HOLD, REDUCE, EXIT, NO_TRADE)
+    ALL = (TRADE, PILOT, WATCH, WAIT, HOLD, REDUCE, EXIT, AVOID, NO_TRADE)
 
 
 @dataclass
@@ -46,11 +48,11 @@ class Decision:
     position_size_pct: float = 0.0  # % of portfolio
     size_rationale: str = ""
     # Entry/exit instructions (Priority 4 from review)
-    entry_trigger: str = ""    # e.g. "Buy above $152.30 on 1.5x avg volume"
-    stop_price: float = 0.0   # Computed from structure, not passed in
-    stop_rationale: str = ""   # e.g. "Below swing low at $145.20"
+    entry_trigger: str = ""  # e.g. "Buy above $152.30 on 1.5x avg volume"
+    stop_price: float = 0.0  # Computed from structure, not passed in
+    stop_rationale: str = ""  # e.g. "Below swing low at $145.20"
     target_price: float = 0.0
-    risk_reward: float = 0.0   # Computed entry→stop / entry→target
+    risk_reward: float = 0.0  # Computed entry→stop / entry→target
 
     def to_dict(self) -> Dict[str, Any]:
         d = {
@@ -125,8 +127,8 @@ class DecisionMapper:
         # Score+confidence matrix
         # Minimum confidence floor — very low confidence = NO_TRADE
         if conf < 0.35:
-            d.action = Action.NO_TRADE
-            d.rationale = f"Confidence too low ({conf:.0%}) — insufficient conviction"
+            d.action = Action.AVOID
+            d.rationale = f"Confidence too low ({conf:.0%}) — structurally broken or insufficient data"
             d.risk_level = "HIGH"
         elif score >= 8.0 and conf >= 0.65:
             d.action = Action.TRADE
@@ -136,21 +138,25 @@ class DecisionMapper:
             d.action = Action.TRADE
             d.rationale = "Good setup with decent confidence"
             d.risk_level = "MEDIUM"
-        elif score >= 6.5 and conf >= 0.5:
-            d.action = Action.WATCH
-            d.rationale = "Promising but needs confirmation"
+        elif score >= 6.0 and conf >= 0.45 and regime.get("regime", "") == "UPTREND":
+            d.action = Action.PILOT
+            d.rationale = "Decent setup in UPTREND — Buy Small (Pilot)"
             d.risk_level = "MEDIUM"
-        elif score >= 5.5 and conf >= 0.4:
-            d.action = Action.WAIT
-            d.rationale = "Setup forming — wait for better entry"
+        elif score >= 6.0 and conf >= 0.45:
+            d.action = Action.PILOT
+            d.rationale = "Decent setup forming — Buy Small (Pilot)"
             d.risk_level = "MEDIUM"
-        elif score >= 4.0:
+        elif score >= 5.0 and conf >= 0.4:
             d.action = Action.WATCH
-            d.rationale = "Weak setup — monitor only"
+            d.rationale = "Wait for specific trigger criteria"
+            d.risk_level = "MEDIUM"
+        elif score >= 3.5:
+            d.action = Action.AVOID
+            d.rationale = "Weak setup — monitor only but actively avoid now"
             d.risk_level = "HIGH"
         else:
-            d.action = Action.NO_TRADE
-            d.rationale = "Insufficient quality"
+            d.action = Action.AVOID
+            d.rationale = "Structurally broken — AVOID"
             d.risk_level = "HIGH"
 
         # Override for laggards
@@ -161,12 +167,17 @@ class DecisionMapper:
             d.rationale += " (downgraded: laggard, not leader)"
             d.risk_level = "MEDIUM"
 
-        # Position sizing (only for TRADE)
-        if d.action == Action.TRADE:
+        # Position sizing (only for TRADE and PILOT)
+        if d.action in (Action.TRADE, Action.PILOT):
             # atr_pct is passed via signal dict in _set_entry_exit; use 0 as fallback
             d.position_size_pct, d.size_rationale = self._size(
                 conf, d.risk_level, score, atr_pct=0.0
             )
+            if d.action == Action.PILOT:
+                d.position_size_pct = round(
+                    d.position_size_pct * 0.5, 1
+                )  # Half size for pilots
+                d.size_rationale += " (Pilot size: half risk)"
 
         return d
 
@@ -185,14 +196,19 @@ class DecisionMapper:
         d = self.decide(fit, confidence, sector, regime)
 
         # ATR-normalized sizing now that we have the signal
-        if d.action == Action.TRADE:
+        if d.action in (Action.TRADE, Action.PILOT):
             atr_pct = signal.get("atr_pct", 0.0)
             d.position_size_pct, d.size_rationale = self._size(
                 confidence.final, d.risk_level, fit.final_score, atr_pct=atr_pct
             )
+            if d.action == Action.PILOT:
+                d.position_size_pct = round(
+                    d.position_size_pct * 0.5, 1
+                )  # Half size for pilots
+                d.size_rationale += " (Pilot size: half risk)"
 
         # Entry trigger + stop/target from signal structure data
-        if d.action in (Action.TRADE, Action.WATCH):
+        if d.action in (Action.TRADE, Action.PILOT, Action.WATCH):
             self._set_entry_exit(d, signal)
 
         return d
@@ -207,10 +223,10 @@ class DecisionMapper:
 
         # Entry trigger: buy above resistance with volume
         if resistance > 0 and price > 0:
-            d.entry_trigger = (
-                f"Buy above ${resistance:.2f}"
-                + (f" on ≥{int(avg_vol * 1.5):,} vol"
-                   if avg_vol > 0 else " with volume confirmation")
+            d.entry_trigger = f"Buy above ${resistance:.2f}" + (
+                f" on ≥{int(avg_vol * 1.5):,} vol"
+                if avg_vol > 0
+                else " with volume confirmation"
             )
         elif price > 0:
             d.entry_trigger = f"Buy near ${price:.2f} with volume confirmation"
@@ -232,12 +248,14 @@ class DecisionMapper:
                 d.risk_reward = round(2.5, 2)
             elif resistance > price:
                 d.target_price = resistance
-                r = (resistance - price)
+                r = resistance - price
                 d.risk_reward = round(r / abs(risk), 2) if risk != 0 else 0
 
     @staticmethod
     def _size(
-        conf: float, risk_level: str, score: float,
+        conf: float,
+        risk_level: str,
+        score: float,
         atr_pct: float = 0.0,
     ) -> tuple[float, str]:
         """Compute position size as % of portfolio, ATR-normalized."""

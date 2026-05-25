@@ -1,0 +1,270 @@
+      <template x-if="dos.data">
+        <div class="fade" style="padding-bottom:16px">
+          <!-- Sticky command strip -->
+          <div style="position:sticky;top:0;z-index:20;background:var(--bg);padding:8px 12px 4px;border-bottom:1px solid var(--bd)">
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <div class="flex items-center gap-2 min-w-0">
+                <div class="text-lg font-bold text-white mono" x-text="dos.data.symbol"></div>
+                <div style="display:flex;gap:4px" @click.stop>
+                  <button :class="'btn-s text-[14px] px-1 py-0.5 '+(ccStarred[dos.data.symbol]?'text-yellow-400':'text-gray-400')" @click="toggleStar(dos.data.symbol)">★</button>
+                  <button :class="'btn-s text-[14px] px-1 py-0.5 '+(ccLoved[dos.data.symbol]?'text-pink-400':'text-gray-400')" @click="toggleLove(dos.data.symbol)">❤</button>
+                  <button :class="'btn-s text-[14px] px-1 py-0.5 '+(ccWatchlist[dos.data.symbol]?'text-blue-400':'text-gray-400')" @click="toggleWatchlist(dos.data.symbol)">👁</button>
+                </div>
+                <span class="pill" :class="(dos.data.change_pct||0)>=0?'pg':'pr'" x-text="((dos.data.change_pct||0)>=0?'+':'')+(dos.data.change_pct||0).toFixed(2)+'%'"></span>
+              </div>
+              <div class="text-right">
+                <div class="text-xl font-black mono" :class="(dos.data.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="'$'+(dos.data.price||0).toFixed(2)"></div>
+                <div class="text-[8px]" style="color:var(--t3)" x-text="dos.intel&&dos.intel.as_of?dos.intel.as_of.slice(0,19):''"></div>
+              </div>
+            </div>
+            <!-- Unified Decision Card -->
+            <div class="card card-p mb-2" :style="'border-left:4px solid var(--'+(dosUnified().color)+')'">
+              <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] font-bold uppercase" style="color:var(--t3)">Unified Decision</span>
+                  <span class="pill text-[11px] font-black" :class="dosUnified().pill" x-text="dosUnified().label"></span>
+                  <template x-if="dos.conviction">
+                    <span class="pill text-[9px] pa" x-text="'Conv '+dos.conviction.action"></span>
+                  </template>
+                </div>
+                <span class="text-[9px] mono" style="color:var(--t3)" x-text="'Conf '+((dosUnified().confidence||0)*100).toFixed(0)+'%'"></span>
+              </div>
+              <div class="text-[10px] mb-2" style="color:var(--t2)" x-text="dosUnified().reason"></div>
+              <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[9px]">
+                <div><div style="color:var(--t3)">Entry zone</div><div class="mono text-white" x-text="dosUnified().entry_zone?('$'+dosUnified().entry_zone[0]+'–$'+dosUnified().entry_zone[1]):'—'"></div></div>
+                <div><div style="color:var(--t3)">Stop</div><div class="mono text-red-400" x-text="dosUnified().stop?'$'+dosUnified().stop:'—'"></div></div>
+                <div><div style="color:var(--t3)">T1 / T2</div><div class="mono text-green-400" x-text="(dosUnified().target_1r&&dosUnified().target_2r)?('$'+dosUnified().target_1r+' / $'+dosUnified().target_2r):'—'"></div></div>
+                <div><div style="color:var(--t3)">R:R</div><div class="mono text-white" x-text="dosUnified().rr_ratio||'—'"></div></div>
+                <div><div style="color:var(--t3)">Size @1%</div><div class="mono text-green-400" x-text="dosSizeShares()+' sh'"></div></div>
+              </div>
+              <div class="flex flex-wrap gap-2 mt-2 pt-2" style="border-top:1px dashed var(--bd)">
+                <button class="btn-s text-[9px]" @click="dosIbkrSetAlert()">🔔 Set Alert</button>
+                <button class="btn-s text-[9px]" @click="dosIbkrPaperDraft()">📝 Paper Order Draft</button>
+                <button class="btn-s text-[9px]" @click="openReplayForDossier()">⏱ Replay</button>
+              </div>
+            </div>
+            <!-- Catalyst strip -->
+            <template x-if="dos.intel&&dos.intel.catalysts&&dos.intel.catalysts.items&&dos.intel.catalysts.items.length">
+              <div class="flex gap-2 overflow-x-auto pb-1 mb-2" style="scrollbar-width:thin">
+                <template x-for="c in dos.intel.catalysts.items" :key="c.label+c.horizon">
+                  <div class="card card-p flex-shrink-0 px-2 py-1" style="min-width:120px;border-left:3px solid var(--amber)">
+                    <div class="text-[8px] uppercase" style="color:var(--t3)" x-text="c.horizon"></div>
+                    <div class="text-[10px] font-bold text-white" x-text="c.label"></div>
+                    <div class="text-[8px]" style="color:var(--t2)" x-text="c.detail||''"></div>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <!-- Tab bar -->
+            <div class="flex gap-1 overflow-x-auto pb-1" style="scrollbar-width:thin">
+              <template x-for="t in ['decision','fundamentals','technicals','peers','ownership','options','catalysts','risk','monitor']">
+                <button class="btn-s text-[9px] flex-shrink-0" :class="dos.subTab===t?'':'opacity-50'" @click="dosSetTab(t)" x-text="t.charAt(0).toUpperCase()+t.slice(1)"></button>
+              </template>
+            </div>
+          </div>
+
+          <div class="px-3 space-y-2">
+            <!-- DECISION -->
+            <div x-show="dos.subTab==='decision'">
+              <template x-if="dos.intel&&dos.intel.narrative">
+                <div class="grid md:grid-cols-3 gap-2">
+                  <div class="card card-p">
+                    <div class="text-[10px] font-bold uppercase mb-1 text-green-400">Bull case</div>
+                    <template x-for="b in (dos.intel.narrative.bull_case||[])" :key="b"><div class="text-[9px] mb-1" style="color:var(--t2)" x-text="'• '+b"></div></template>
+                  </div>
+                  <div class="card card-p">
+                    <div class="text-[10px] font-bold uppercase mb-1 text-red-400">Bear case</div>
+                    <template x-for="b in (dos.intel.narrative.bear_case||[])" :key="b"><div class="text-[9px] mb-1" style="color:var(--t2)" x-text="'• '+b"></div></template>
+                  </div>
+                  <div class="card card-p">
+                    <div class="text-[10px] font-bold uppercase mb-1 text-amber-300">Contradictions</div>
+                    <template x-for="c in (dos.intel.narrative.contradictions||[])" :key="c"><div class="text-[9px] mb-1" style="color:var(--t2)" x-text="'⚡ '+c"></div></template>
+                    <div x-show="!(dos.intel.narrative.contradictions||[]).length" class="text-[9px]" style="color:var(--t3)">No major contradictions flagged.</div>
+                  </div>
+                </div>
+              </template>
+              <template x-if="dos.conviction">
+                <div class="card card-p mt-2">
+                  <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">Conviction stack</div>
+                  <div class="grid grid-cols-4 gap-2 text-[9px]">
+                    <div><div style="color:var(--t3)">Options</div><div class="font-bold" x-text="dos.conviction.options?.top_grade||'—'"></div></div>
+                    <div><div style="color:var(--t3)">Insider</div><div class="font-bold" x-text="dos.conviction.insider?.sentiment?.signal||'—'"></div></div>
+                    <div><div style="color:var(--t3)">Sponsor</div><div class="font-bold" x-text="dos.conviction.sponsor?.accumulation_score!=null?(dos.conviction.sponsor.accumulation_score+'/100'):'—'"></div></div>
+                    <div><div style="color:var(--t3)">RS vs SPY</div><div class="font-bold" x-text="dos.conviction.relative_strength_vs_spy_pct!=null?(dos.conviction.relative_strength_vs_spy_pct+'%'):'—'"></div></div>
+                  </div>
+                </div>
+              </template>
+              <div class="card card-p mt-2">
+                <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--t3)">Trade plan</div>
+                <div class="text-[9px] mono" style="color:var(--t2)" x-text="JSON.stringify(dos.data.trade_plan||{},null,0).slice(0,400)"></div>
+              </div>
+            </div>
+
+            <!-- FUNDAMENTALS -->
+            <div x-show="dos.subTab==='fundamentals'">
+              <template x-if="dos.data._p9&&dos.data._p9.fundamentals">
+                <div class="card card-p">
+                  <div class="text-[10px] font-bold mb-2" style="color:var(--t3)">Quality score <span class="text-white" x-text="dos.data._p9.fundamentals.quality_score"></span></div>
+                  <div class="grid grid-cols-3 gap-2 text-[9px]">
+                    <div><div style="color:var(--t3)">P/E</div><div class="mono" x-text="dos.data._p9.fundamentals.valuation?.pe_trailing||'—'"></div></div>
+                    <div><div style="color:var(--t3)">ROE</div><div class="mono" x-text="dos.data._p9.fundamentals.profitability?.roe||'—'"></div></div>
+                    <div><div style="color:var(--t3)">Rev growth</div><div class="mono" x-text="dos.data._p9.fundamentals.growth?.revenue_growth||'—'"></div></div>
+                  </div>
+                </div>
+              </template>
+              <div x-show="!(dos.data._p9&&dos.data._p9.fundamentals)" class="text-[9px] py-4 text-center" style="color:var(--t3)">Fundamentals loading or unavailable.</div>
+            </div>
+
+            <!-- TECHNICALS -->
+            <div x-show="dos.subTab==='technicals'">
+              <div class="card card-p mb-2">
+                <div class="flex gap-2 mb-2">
+                  <button class="btn-s text-[8px]" :class="dos.showSignals?'':'opacity-50'" @click="dos.showSignals=!dos.showSignals;renderDossierChart()">📍 Signals</button>
+                  <template x-for="p in ['3mo','6mo','1y']"><button class="btn-s text-[8px]" :class="dos.chartPeriod===p?'':'opacity-50'" @click="dos.chartPeriod=p;renderDossierChart()" x-text="p"></button></template>
+                </div>
+                <div id="dossier-chart" style="height:260px;width:100%"></div>
+              </div>
+              <template x-if="dos.data.technicals">
+                <div class="grid grid-cols-4 gap-2 text-[9px]">
+                  <div class="card card-p"><div style="color:var(--t3)">RSI</div><div class="mono font-bold" x-text="dos.data.technicals.rsi"></div></div>
+                  <div class="card card-p"><div style="color:var(--t3)">ATR</div><div class="mono font-bold" x-text="dos.data.technicals.atr"></div></div>
+                  <div class="card card-p"><div style="color:var(--t3)">Vol ratio</div><div class="mono font-bold" x-text="dos.data.technicals.volume_ratio"></div></div>
+                  <div class="card card-p"><div style="color:var(--t3)">MACD</div><div class="mono font-bold" x-text="dos.data.technicals.macd_signal"></div></div>
+                </div>
+              </template>
+              <div class="card card-p mt-2">
+                <div class="text-[10px] font-bold mb-1" style="color:var(--t3)">vs SPY</div>
+                <div id="bench-chart" style="height:200px;width:100%"></div>
+              </div>
+            </div>
+
+            <!-- PEERS -->
+            <div x-show="dos.subTab==='peers'">
+              <div x-show="dos.peersLoading" class="text-[9px] text-center py-4" style="color:var(--t3)"><span class="spin"></span> Loading peers…</div>
+              <template x-if="dos.peers&&(dos.peers.table||dos.peers.rankings)&&!dos.peersLoading">
+                <div class="card card-p overflow-x-auto">
+                  <div class="text-[10px] mb-2" style="color:var(--t2)" x-text="dos.peers.verdict||(dos.peers.why&&dos.peers.why[0])||''"></div>
+                  <table class="w-full text-[9px]" style="border-collapse:collapse">
+                    <thead><tr style="color:var(--t3);text-align:left">
+                      <th class="py-1 pr-2">Ticker</th><th>1M</th><th>3M</th><th>6M</th><th>YTD</th><th>P/E</th><th>Rev%</th><th>RS vs SPY</th>
+                    </tr></thead>
+                    <tbody>
+                      <template x-for="p in (dos.peers.table||dos.peers.rankings)" :key="p.ticker">
+                        <tr :style="p.is_self||p.ticker===dos.peers.ticker?'background:rgba(88,166,255,.08)':''">
+                          <td class="py-1 pr-2 font-bold mono" x-text="p.ticker"></td>
+                          <td class="mono" :class="(p.mom_1m||0)>=0?'text-green-400':'text-red-400'" x-text="p.mom_1m!=null?((p.mom_1m>=0?'+':'')+p.mom_1m+'%'):'—'"></td>
+                          <td class="mono" :class="(p.mom_3m||0)>=0?'text-green-400':'text-red-400'" x-text="p.mom_3m!=null?((p.mom_3m>=0?'+':'')+p.mom_3m+'%'):'—'"></td>
+                          <td class="mono" :class="(p.mom_6m||0)>=0?'text-green-400':'text-red-400'" x-text="p.mom_6m!=null?((p.mom_6m>=0?'+':'')+p.mom_6m+'%'):'—'"></td>
+                          <td class="mono" :class="(p.ret_ytd||0)>=0?'text-green-400':'text-red-400'" x-text="p.ret_ytd!=null?((p.ret_ytd>=0?'+':'')+p.ret_ytd+'%'):'—'"></td>
+                          <td class="mono" x-text="p.pe!=null?p.pe:'—'"></td>
+                          <td class="mono" x-text="p.rev_growth_pct!=null?p.rev_growth_pct+'%':'—'"></td>
+                          <td class="mono" :class="(p.rs_vs_spy||0)>=0?'text-green-400':'text-red-400'" x-text="p.rs_vs_spy!=null?((p.rs_vs_spy>=0?'+':'')+p.rs_vs_spy+'%'):'—'"></td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
+            </div>
+
+            <!-- OWNERSHIP -->
+            <div x-show="dos.subTab==='ownership'">
+              <template x-if="dos.intel&&dos.intel.ownership">
+                <div class="card card-p mb-2">
+                  <div class="text-[9px] mb-2 italic" style="color:var(--t3)" x-text="dos.intel.ownership.lag_warning"></div>
+                  <template x-for="f in (dos.intel.ownership.filings_summary||[])" :key="f.source">
+                    <div class="flex justify-between text-[9px] py-1" style="border-bottom:1px solid var(--bd)">
+                      <span x-text="f.source"></span>
+                      <span style="color:var(--t3)" x-text="f.lag"></span>
+                      <span class="font-bold" x-text="f.signal||'—'"></span>
+                    </div>
+                  </template>
+                </div>
+              </template>
+              <template x-if="dos.conviction&&dos.conviction.insider">
+                <div class="card card-p text-[9px]">
+                  <div class="font-bold mb-1" style="color:var(--t3)">Insider (conviction)</div>
+                  <div x-text="'Signal: '+(dos.conviction.insider.sentiment?.signal||'—')+' · cluster buy: '+(dos.conviction.insider.cluster_buy?'yes':'no')"></div>
+                </div>
+              </template>
+            </div>
+
+            <!-- OPTIONS -->
+            <div x-show="dos.subTab==='options'">
+              <div x-show="dos.optionsLoading" class="text-[9px] text-center py-4" style="color:var(--t3)"><span class="spin"></span> Loading options…</div>
+              <template x-if="dos.optionsData&&!dos.optionsLoading">
+                <div class="card card-p">
+                  <div class="text-[10px] mb-2" style="color:var(--t3)">IV rank <span class="text-white font-bold" x-text="dos.optionsData.iv_rank"></span> · <span x-text="dos.optionsData.term_structure"></span></div>
+                  <div class="overflow-x-auto">
+                    <table class="w-full text-[9px]">
+                      <thead><tr style="color:var(--t3)"><th>Strike</th><th>Type</th><th>DTE</th><th>Δ</th><th>IV</th><th>OI</th></tr></thead>
+                      <tbody>
+                        <template x-for="c in (dos.optionsData.contracts||[])" :key="c.strike+c.type">
+                          <tr><td class="mono py-1" x-text="c.strike"></td><td x-text="c.type"></td><td x-text="c.dte"></td><td x-text="c.delta"></td><td x-text="c.iv"></td><td x-text="c.oi"></td></tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="text-[8px] mt-2 italic" style="color:var(--t3)" x-text="dos.optionsData.disclaimer||'Synthetic research surface — verify with live chain.'"></div>
+                </div>
+              </template>
+            </div>
+
+            <!-- CATALYSTS -->
+            <div x-show="dos.subTab==='catalysts'">
+              <template x-if="dos.data._p9&&dos.data._p9.earnings">
+                <div class="card card-p mb-2 text-[9px]">
+                  <div><span style="color:var(--t3)">Next earnings:</span> <span class="mono" x-text="dos.data._p9.earnings.next_earnings_date||'—'"></span></div>
+                  <div><span style="color:var(--t3)">Days:</span> <span x-text="dos.data._p9.earnings.days_to_earnings"></span> · <span style="color:var(--t3)">Blackout:</span> <span x-text="dos.data._p9.earnings.in_blackout?'YES':'no'"></span></div>
+                </div>
+              </template>
+              <template x-if="dos.intel&&dos.intel.catalysts">
+                <template x-for="c in dos.intel.catalysts.items" :key="'cat-'+c.label">
+                  <div class="card card-p mb-1 text-[9px] flex justify-between">
+                    <span class="font-bold" x-text="c.label"></span>
+                    <span style="color:var(--t3)" x-text="c.horizon+(c.date?(' · '+c.date):'')"></span>
+                  </div>
+                </template>
+              </template>
+            </div>
+
+            <!-- RISK -->
+            <div x-show="dos.subTab==='risk'">
+              <div class="card card-p">
+                <div class="text-[10px] font-bold uppercase mb-2 text-red-400">Why stop / risk</div>
+                <template x-for="w in (dos.data.why_stop||[])" :key="w"><div class="text-[9px] mb-1" style="color:var(--t2)" x-text="w"></div></template>
+              </div>
+              <template x-if="(dos.data.analogs||[]).length">
+                <div class="card card-p mt-2">
+                  <div class="text-[10px] font-bold mb-1" style="color:var(--t3)">Historical analogs</div>
+                  <template x-for="a in dos.data.analogs" :key="a.window">
+                    <div class="text-[9px] mono" x-text="a.window+': median '+a.median_return+'% · win '+a.win_rate+'% (n='+a.sample_size+')'"></div>
+                  </template>
+                </div>
+              </template>
+            </div>
+
+            <!-- MONITOR -->
+            <div x-show="dos.subTab==='monitor'">
+              <template x-if="dos.intel&&dos.intel.monitor">
+                <div class="card card-p">
+                  <div class="text-[10px] font-bold mb-2" style="color:var(--t3)">Position monitor</div>
+                  <div class="text-[9px] mb-2" x-text="'PnL: '+(dos.intel.monitor.pnl_pct!=null?(dos.intel.monitor.pnl_pct+'%'):'—')"></div>
+                  <template x-for="chk in (dos.intel.monitor.checklist||[])" :key="chk.item">
+                    <div class="flex justify-between text-[9px] py-1">
+                      <span x-text="chk.item"></span>
+                      <span :class="chk.ok?'text-green-400':'text-amber-300'" x-text="chk.ok?'✓':'○'"></span>
+                    </div>
+                  </template>
+                  <template x-for="d in (dos.intel.monitor.what_changed||[])" :key="d">
+                    <div class="text-[8px] mt-1" style="color:var(--t3)" x-text="d"></div>
+                  </template>
+                </div>
+              </template>
+              <div x-show="!(dos.intel&&dos.intel.monitor)" class="card card-p text-[9px] text-center py-6" style="color:var(--t3)">
+                No position in portfolio for this ticker. Add via Portfolio tab to enable thesis monitor.
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>

@@ -1,12 +1,7 @@
 ---
 name: swift-reviewer
-description: >
-  Swift code review specialist with embedded style and safety rules.
-  Use when: reviewing Swift code, Swift best practices, type safety,
-  Swift-specific patterns, idiomatic Swift, concurrency review, SwiftUI patterns.
-model: claude-sonnet-4-6
-tools: [readFile, read, search, codebase, problems, usages]
-user-invocable: true
+description: Swift code review specialist — reviews Swift code for value semantics, optional safety, structured concurrency, and SwiftUI patterns.
+tools: [search, codebase, problems, usages]
 ---
 
 # Swift Reviewer

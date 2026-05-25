@@ -1,0 +1,153 @@
+*** Begin Patch
+*** Update File: src/api/templates/index.html
+@@
+                     <div class="flex items-center justify-between gap-2">
+                       <span class="font-bold text-[10px] text-white" x-text="row.display_name"></span>
+-                      <span class="mono text-[12px] font-bold" :class="row.pm_score>=70?'text-green-400':row.pm_score>=50?'text-amber-300':'text-red-400'" x-text="row.pm_score.toFixed(1)"></span>
++                      <template x-if="row.trust_label && row.trust_label.includes('Training')">
++                         <span class="mono text-[10px] text-gray-400" title="Training proxy score">SIM</span>
++                      </template>
++                      <template x-if="!row.trust_label || !row.trust_label.includes('Training')">
++                         <span class="mono text-[12px] font-bold" :class="row.pm_score>=70?'text-green-400':row.pm_score>=50?'text-amber-300':'text-red-400'" x-text="row.pm_score.toFixed(1)"></span>
++                      </template>
+                     </div>
+                     <div class="text-[8px] mt-1" style="color:var(--t3)" x-text="row.posture+' · '+row.trust_label"></div>
+                     <div class="flex gap-2 mt-1 text-[8px]" style="color:var(--t3)">
+-                      <span x-text="'α '+(row.alpha_vs_benchmark==null?'—':Number(row.alpha_vs_benchmark).toFixed(1)+'%')"></span>
+-                      <span x-text="'DD '+(row.drawdown==null?'—':Number(row.drawdown).toFixed(1)+'%')"></span>
++                      <span x-text="'α '+(row.trust_label?.includes('Training')?'—':(row.alpha_vs_benchmark==null?'—':Number(row.alpha_vs_benchmark).toFixed(1)+'%'))"></span>
++                      <span x-text="'DD '+(row.trust_label?.includes('Training')?'—':(row.drawdown==null?'—':Number(row.drawdown).toFixed(1)+'%'))"></span>
+                       <span x-text="'Fit '+(row.regime_fit||0)+'%'"></span>
+                     </div>
+@@
+ 
+                     <!-- Performance KPIs -->
+-                    <div style="display:grid;grid-template-columns:repeat(4,auto);gap:8px 16px">
+-                      <div style="text-align:center">
+-                        <div class="text-[9px] uppercase" style="color:var(--t3);letter-spacing:.6px">Fund Return</div>
+-                        <div class="mono font-bold text-[16px]" :class="f.fund_return_pct>=0?'text-green-400':'text-red-400'" x-text="(f.fund_return_pct>=0?'+':'')+f.fund_return_pct+'%'"></div>
+-                      </div>
+-                      <div style="text-align:center">
+-                        <div class="text-[9px] uppercase" style="color:var(--t3);letter-spacing:.6px">Alpha</div>
+-                        <div class="mono font-bold text-[16px]" :class="f.excess_return_pct>=0?'text-green-400':'text-red-400'" x-text="(f.excess_return_pct>=0?'+':'')+f.excess_return_pct+'%α'"></div>
+-                      </div>
+-                      <div style="text-align:center">
+-                        <div class="text-[9px] uppercase" style="color:var(--t3);letter-spacing:.6px">Sharpe</div>
+-                        <div class="mono font-bold text-[14px]" :class="f.sharpe>=1?'text-green-400':f.sharpe>=0?'text-amber-300':'text-red-400'" x-text="Number(f.sharpe).toFixed(2)"></div>
+-                      </div>
+-                      <div style="text-align:center">
+-                        <div class="text-[9px] uppercase" style="color:var(--t3);letter-spacing:.6px">Max DD</div>
+-                        <div class="mono font-bold text-[14px] text-red-400" x-text="f.max_drawdown_pct+'%'"></div>
++                    <div style="display:grid;grid-template-columns:repeat(4,auto);gap:8px 16px" :class="f.trust_label?.includes('Training')?'opacity-50 grayscale mix-blend-luminosity brightness-75':''">
++                      <!-- Mask if training mode -->
++                      <div style="position:relative">
++                        <template x-if="f.trust_label?.includes('Training')">
++                           <div class="absolute inset-0 flex items-center justify-center bg-transparent backdrop-blur-sm z-10 w-full ml-1" title="Training metrics hidden">
++                             <span class="text-[9px] px-2 py-0.5 rounded bg-gray-800 text-gray-300 font-bold border border-gray-600 shadow uppercase">Live P&L req</span>
++                           </div>
++                        </template>
++                        <div class="flex gap-4">
++                          <div style="text-align:center;min-width:60px">
++                            <div class="text-[9px] uppercase" style="color:var(--t3);letter-spacing:.6px">Fund Return</div>
++                            <div class="mono font-bold text-[16px]" :class="f.fund_return_pct>=0?'text-green-400':'text-red-400'" x-text="(f.fund_return_pct>=0?'+':'')+f.fund_return_pct+'%'"></div>
++                          </div>
++                          <div style="text-align:center;min-width:60px">
++                            <div class="text-[9px] uppercase" style="color:var(--t3);letter-spacing:.6px">Alpha</div>
++                            <div class="mono font-bold text-[16px]" :class="f.excess_return_pct>=0?'text-green-400':'text-red-400'" x-text="(f.excess_return_pct>=0?'+':'')+f.excess_return_pct+'%α'"></div>
++                          </div>
++                          <div style="text-align:center;min-width:60px">
++                            <div class="text-[9px] uppercase" style="color:var(--t3);letter-spacing:.6px">Sharpe</div>
++                            <div class="mono font-bold text-[14px]" :class="f.sharpe>=1?'text-green-400':f.sharpe>=0?'text-amber-300':'text-red-400'" x-text="Number(f.sharpe).toFixed(2)"></div>
++                          </div>
++                          <div style="text-align:center;min-width:60px">
++                            <div class="text-[9px] uppercase" style="color:var(--t3);letter-spacing:.6px">Max DD</div>
++                            <div class="mono font-bold text-[14px] text-red-400" x-text="f.max_drawdown_pct+'%'"></div>
++                          </div>
++                        </div>
+                       </div>
+                     </div>
+@@
+ 
+                 <!-- Two-column lower section -->
+-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+-                  <!-- Holdings -->
+-                  <div class="card" style="padding:10px">
+-                    <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📋 Holdings (<span x-text="f.holdings_count"></span>)</div>
+-                    <template x-for="h in f.holdings" :key="h.ticker">
+-                      <div class="flex items-center gap-2 py-1" style="border-bottom:1px solid var(--bd)">
+-                        <span class="mono font-bold text-[11px]" style="color:var(--t1);min-width:50px" x-text="h.ticker"></span>
+-                        <div style="flex:1;height:4px;border-radius:2px;background:var(--bd2)">
+-                          <div :style="'width:'+Math.min(h.weight*100*5,100)+'%;height:100%;border-radius:2px;background:'+f.color"></div>
++                <div style="display:grid;grid-template-columns:1.35fr .65fr;gap:8px;margin-top:8px">
++                  <!-- Active Trades / The Action Book -->
++                  <div class="card" style="padding:0">
++                    <div class="flex items-center justify-between" style="padding:10px 12px;background:var(--s2);border-bottom:1px solid var(--bd)">
++                       <div class="text-[10px] font-bold uppercase" style="color:var(--t1)">Real Book / Active Setups</div>
++                       <span class="pill text-[8px] pw" x-text="f.holdings?.length+' positions'"></span>
++                    </div>
++                    
++                    <div style="overflow-x:auto">
++                        <table style="width:100%;border-collapse:collapse;min-width:500px">
++                           <thead>
++                             <tr style="text-align:left;background:var(--s1);color:var(--t3);font-size:9px;text-transform:uppercase;letter-spacing:.5px">
++                                <th style="padding:6px 12px;font-weight:700">Sym</th>
++                                <th style="padding:6px 8px;font-weight:700">Wt</th>
++                                <th style="padding:6px 8px;font-weight:700;text-align:center">Action</th>
++                                <th style="padding:6px 8px;font-weight:700">Entry</th>
++                                <th style="padding:6px 8px;font-weight:700">Target</th>
++                                <th style="padding:6px 8px;font-weight:700">Stop</th>
++                                <th style="padding:6px 12px;font-weight:700">Keep Thesis</th>
++                             </tr>
++                           </thead>
++                           <tbody>
++                             <template x-for="h in f.holdings" :key="h.ticker">
++                               <tr style="border-bottom:1px solid var(--bd);background:var(--s1);transition:.1s" @mouseenter="$el.style.background='var(--s2)'" @mouseleave="$el.style.background='var(--s1)'">
++                                  <td style="padding:6px 12px">
++                                     <span class="mono font-bold text-[11px]" style="color:var(--t1)" x-text="h.ticker"></span>
++                                  </td>
++                                  <td style="padding:6px 8px">
++                                     <span class="mono text-[10px]" style="color:var(--t3)" x-text="(h.weight*100).toFixed(1)+'%'"></span>
++                                  </td>
++                                  <td style="padding:6px 8px;text-align:center">
++                                     <span class="pill text-[8px]" :class="(h.action||'HOLD')==='BUY'?'pg':(h.action||'HOLD')==='SELL'?'pr':'pb'" x-text="(h.action||'HOLD').substring(0,4)"></span>
++                                  </td>
++                                  <td style="padding:6px 8px">
++                                     <span class="mono text-[10px]" style="color:var(--t2)" x-text="h.entry?'$'+parseFloat(h.entry).toFixed(2):'—'"></span>
++                                  </td>
++                                  <td style="padding:6px 8px">
++                                     <span class="mono text-[10px] text-green-400" x-text="h.target?'$'+parseFloat(h.target).toFixed(2):'—'"></span>
++                                  </td>
++                                  <td style="padding:6px 8px">
++                                     <span class="mono text-[10px] text-amber-500" x-text="h.stop?'$'+parseFloat(h.stop).toFixed(2):'—'"></span>
++                                  </td>
++                                  <td style="padding:6px 12px">
++                                     <span class="text-[9px]" style="color:var(--t2)" style="display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;text-overflow:ellipsis" x-text="h.reason||'Score '+h.score"></span>
++                                  </td>
++                               </tr>
++                             </template>
++                             <template x-if="!f.holdings||!f.holdings.length">
++                               <tr><td colspan="7" style="padding:20px 12px;text-align:center;color:var(--t3);font-size:10px">No confirmed live positions. Watchlist / PM intent required.</td></tr>
++                             </template>
++                           </tbody>
+                         </div>
+-                        <span class="mono text-[10px]" style="color:var(--t3)" x-text="(h.weight*100).toFixed(1)+'%'"></span>
+-                        <span class="mono text-[9px]" style="color:var(--t3)" x-text="'S:'+h.score"></span>
+-                      </div>
+-                    </template>
+-                    <template x-if="!f.holdings||!f.holdings.length">
+-                      <div class="text-[10px]" style="color:var(--t3)">No holdings data</div>
+-                    </template>
++                    </div>
+                   </div>
+ 
+                   <!-- Changes + Attribution + Regime fit -->
+@@ -3371,7 +3414,7 @@
+ 
+                     <!-- Attribution -->
+                     <div class="card" style="padding:10px">
+-                      <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🏆 Attribution</div>
++                      <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)" x-text="f.trust_label?.includes('Training')?'🏆 Proxy Score Attribution (Sim)':'🏆 Real P&L Attribution'"></div>
+                       <div class="text-[9px] uppercase mb-1" style="color:var(--green)">Top contributors</div>
+                       <template x-for="a in (f.attribution?.top||[])" :key="a.ticker">
+                         <div class="flex items-center gap-2 text-[10px]">
+*** End Patch

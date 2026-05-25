@@ -213,7 +213,11 @@ class BreakoutMonitor:
 
     def save(self, path: Optional[str] = None):
         """Persist state to JSON."""
-        fpath = path or os.path.join(_DATA_DIR, "breakout_monitor.json")
+        fpath = (
+            path
+            or os.getenv("BREAKOUT_STATE_PATH")
+            or os.path.join(_DATA_DIR, "breakout_monitor.json")
+        )
         os.makedirs(os.path.dirname(fpath), exist_ok=True)
         data = {
             "active": {k: v.to_dict() for k, v in self._active.items()},
@@ -225,7 +229,11 @@ class BreakoutMonitor:
 
     def load(self, path: Optional[str] = None):
         """Load state from JSON."""
-        fpath = path or os.path.join(_DATA_DIR, "breakout_monitor.json")
+        fpath = (
+            path
+            or os.getenv("BREAKOUT_STATE_PATH")
+            or os.path.join(_DATA_DIR, "breakout_monitor.json")
+        )
         if not os.path.exists(fpath):
             return
         try:
@@ -242,7 +250,7 @@ class BreakoutMonitor:
                     max_gain_pct=v.get("max_gain_pct", 0),
                     current_pct=v.get("current_pct", 0),
                 )
-            logger.info(
+            logger.debug(
                 "Loaded %d active breakouts",
                 len(self._active),
             )

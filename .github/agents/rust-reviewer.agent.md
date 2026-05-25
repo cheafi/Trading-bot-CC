@@ -1,12 +1,7 @@
 ---
 name: rust-reviewer
-description: >
-  Rust code review specialist with embedded style and safety rules.
-  Use when: reviewing Rust code, Rust best practices, memory safety,
-  Rust-specific patterns, idiomatic Rust, ownership and borrowing.
-model: claude-sonnet-4-6
-tools: [readFile, read, search, codebase, problems, usages]
-user-invocable: true
+description: Rust code review specialist — reviews Rust code for memory safety, ownership correctness, and idiomatic patterns.
+tools: [search, codebase, problems, usages]
 ---
 
 # Rust Reviewer

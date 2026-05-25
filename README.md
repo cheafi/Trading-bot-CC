@@ -17,7 +17,8 @@
 | **Regime Router** | VIX-entropy probabilistic regime detection (RISK_ON / RISK_OFF / NEUTRAL) with EMA hysteresis |
 | **Expert Council** | Multi-agent weighted-accuracy voting across 10+ specialist engines |
 | **Portfolio Risk** | Fixed-fractional sizing, ATR stops, correlation guards, drawdown circuit breaker, trailing stops |
-| **Live Dashboard** | Alpine.js single-page UI — morning brief, signals, regime status, position tracker, playbook |
+| **AI Advisor** | Local Docker Model Runner routing — PM memos, expert-view narratives, trade review with similar-case retrieval |
+| **Live Dashboard** | Alpine.js single-page UI — morning brief, signals, regime status, position tracker, playbook, AI panels |
 | **Scheduler** | APScheduler pre-market signal generation, intraday refresh, EOD brief + portfolio review |
 | **Discord Alerts** | Real-time trade signals, regime changes, and EOD summaries via Discord bot |
 
@@ -31,7 +32,8 @@ src/
 │   ├── main.py              # FastAPI app + lifespan startup
 │   ├── deps.py              # Canonical auth deps (verify_api_key, sanitize_for_json)
 │   ├── routers/             # 10 feature routers (brief, intel, playbook, decision …)
-│   └── templates/index.html # Alpine.js dashboard (~3100 lines)
+│   ├── templates/index.html # Alpine.js dashboard (~3100 lines)
+│   └── routers/ai_advisor.py # PM memo / expert-view / trade review endpoints
 ├── engines/
 │   ├── regime_router.py     # VIX/breadth/entropy regime classification
 │   ├── signal_engine.py     # UniverseFilter + 4 strategy engines
@@ -40,9 +42,13 @@ src/
 ├── algo/
 │   └── position_manager.py  # Position sizing, trailing stops, exit logic
 ├── services/
-│   ├── regime_service.py    # RegimeService singleton (4h cache)
+│   ├── regime_service.py        # RegimeService singleton (4h cache)
 │   ├── brief_data_service.py
-│   └── indicators.py        # compute_indicators() shared shim
+│   ├── indicators.py            # compute_indicators() shared shim
+│   ├── ai_service.py            # Multi-provider AI router (local → cloud fallback)
+│   ├── fund_ai_service.py       # PM memo + expert-view generation
+│   ├── trade_review_ai_service.py # JSON-structured trade review
+│   └── trade_memory_service.py  # Embedding-aware similar-trade retrieval
 ├── scheduler/main.py        # APScheduler jobs (premarket / intraday / EOD)
 ├── core/
 │   └── risk_limits.py       # RISK, VIX, UNIVERSE_GATES, SIGNAL_THRESHOLDS
@@ -77,6 +83,10 @@ python _cc_instant.py          # starts uvicorn on :8000 → :8001
 | `DISCORD_BOT_TOKEN` | `""` | Discord bot token |
 | `DISCORD_CHANNEL_ID` | `""` | Channel for alerts |
 | `OPENAI_API_KEY` | `""` | GPT signal validation (optional) |
+| `LOCAL_LLM_BASE_URL` | `http://localhost:12434/engines/llama.cpp/v1` | Docker Model Runner endpoint |
+| `LOCAL_LLM_ADVISOR_MODEL` | `ai/gemma3` | PM memo / expert-view model |
+| `LOCAL_LLM_REVIEWER_MODEL` | `ai/qwen3-coder` | Trade review model |
+| `LOCAL_LLM_EMBED_MODEL` | `ai/all-minilm-l6-v2-vllm` | Embedding model for similar-trade search |
 | `VIX_CRISIS` | `35.0` | VIX threshold → NO TRADE |
 | `RISK_MAX_POSITIONS` | `10` | Max concurrent open positions |
 | `RISK_MAX_DRAWDOWN_PCT` | `0.15` | Portfolio drawdown circuit breaker |
@@ -119,7 +129,12 @@ python -m pytest test_sprint73.py -v                                  # 33 sprin
 | `src/engines/signal_engine.py` | UniverseFilter + strategy engines |
 | `src/core/risk_limits.py` | All risk constants — RISK, VIX, UNIVERSE_GATES |
 | `src/scheduler/main.py` | TradingScheduler — premarket/intraday/EOD jobs |
+| `src/services/ai_service.py` | Multi-provider AI router with fail-fast on auth errors |
+| `src/services/fund_ai_service.py` | PM memo + expert-view with deterministic fallbacks |
+| `src/services/trade_memory_service.py` | Embedding-aware similar-trade retrieval from `closed_trades.jsonl` |
+| `src/api/routers/ai_advisor.py` | AI advisor REST routes (memo / expert-view / overview / review) |
 | `data/brief-*.json` | Daily brief data files |
+| `data/closed_trades.jsonl` | Trade history for AI similarity search |
 | `_cc_instant.py` | Server launcher (venv auto-detect) |
 
 ---

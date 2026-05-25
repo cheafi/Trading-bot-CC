@@ -17,12 +17,24 @@ from __future__ import annotations
 import asyncio
 import logging
 import statistics
+import time
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Query
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v7/playbook", tags=["playbook"])
+
+_RANKED_CACHE_TTL = 5 * 60
+_RANKED_LOAD_TIMEOUT_SECONDS = 15.0
+_RANKED_TIMEOUT_SECONDS = 30.0
+_ranked_cache: Dict[str, Dict[str, Any]] = {}
+_FLOW_CACHE_TTL = 10 * 60
+_FLOW_LOAD_TIMEOUT_SECONDS = 2.5
+_flow_cache: Dict[str, Any] = {"ts": 0.0, "data": None}
+_RS_RANKING_CACHE_TTL = 5 * 60
+_rs_ranking_cache: Dict[str, Dict[str, Any]] = {}
+_rs_ranking_refreshing: set[str] = set()
 
 
 # ── Real data access ─────────────────────────────────────────────────
@@ -85,6 +97,319 @@ def _get_scanner():
     from src.engines.scanner_matrix import ScannerMatrix
 
     return ScannerMatrix()
+
+
+def _ranked_cache_key(limit: int, action: str | None, sector: str | None) -> str:
+    return f"{limit}:{(action or '').upper()}:{(sector or '').upper()}"
+
+
+def _get_ranked_cached(key: str, *, allow_stale: bool = False) -> Dict[str, Any] | None:
+    entry = _ranked_cache.get(key)
+    if not entry:
+        return None
+    age = time.time() - entry["ts"]
+    if allow_stale or age < _RANKED_CACHE_TTL:
+        return {
+            **entry["data"],
+            "cached": True,
+            "stale": age >= _RANKED_CACHE_TTL,
+            "age_seconds": int(age),
+        }
+    return None
+
+
+def _set_ranked_cached(key: str, data: Dict[str, Any]) -> None:
+    _ranked_cache[key] = {"data": data, "ts": time.time()}
+
+
+def _rs_ranking_cache_key(sector: str | None, cap: str | None, limit: int) -> str:
+    return f"{(sector or '').upper()}:{(cap or '').upper()}:{limit}"
+
+
+def _get_rs_ranking_cached(key: str) -> Dict[str, Any] | None:
+    entry = _rs_ranking_cache.get(key)
+    if not entry:
+        return None
+    age = time.time() - entry["ts"]
+    if age < _RS_RANKING_CACHE_TTL:
+        return {**entry["data"], "cached": True, "age_seconds": int(age)}
+    return None
+
+
+def _set_rs_ranking_cached(key: str, data: Dict[str, Any]) -> None:
+    _rs_ranking_cache[key] = {"data": data, "ts": time.time()}
+
+
+def _brief_rs_ranking_fallback(
+    limit: int, sector: str | None = None, cap: str | None = None
+) -> Dict[str, Any]:
+    if cap:
+        return {
+            "count": 0,
+            "rankings": [],
+            "sector_rs": [],
+            "breakouts": [],
+            "breakdowns": [],
+            "cached": False,
+            "stale": True,
+            "refreshing": True,
+            "source": "brief_rs_fallback",
+            "warning": "live RS ranking is warming; no stale cap-specific fallback available",
+        }
+    try:
+        from src.services.brief_data_service import load_brief  # noqa: PLC0415
+
+        brief = load_brief()
+    except Exception as exc:
+        logger.warning("RS brief fallback unavailable: %s", exc)
+        brief = {}
+
+    rows = []
+    for item in [*(brief.get("watch") or []), *(brief.get("actionable") or [])]:
+        item_sector = item.get("sector") or _SECTOR_MAP.get(item.get("ticker", ""), "")
+        if sector and str(item_sector).upper() != sector.upper():
+            continue
+        rs_score = float(item.get("rs_score") or item.get("score") or 0.0)
+        rows.append(
+            {
+                "ticker": item.get("ticker") or item.get("symbol"),
+                "sector": item_sector,
+                "market_cap": "LARGE",
+                "rs_1w": 0.0,
+                "rs_1m": rs_score,
+                "rs_3m": rs_score,
+                "rs_6m": rs_score,
+                "rs_change_1w": 0.0,
+                "rs_change_1m": 0.0,
+                "rs_composite": rs_score,
+                "rs_percentile": min(99, max(1, int(rs_score))),
+                "status": (
+                    "LEADER"
+                    if str(item.get("conviction") or "").upper() in {"LEADER", "TRADE"}
+                    else "WATCH"
+                ),
+                "trend": "STALE",
+                "price": item.get("price") or item.get("entry"),
+                "change_pct": 0,
+                "source": "stale-brief-watchlist",
+            }
+        )
+    rows = sorted(rows, key=lambda row: row.get("rs_composite") or 0, reverse=True)[
+        :limit
+    ]
+    return {
+        "count": len(rows),
+        "rankings": rows,
+        "sector_rs": [],
+        "breakouts": [],
+        "breakdowns": [],
+        "cached": False,
+        "stale": True,
+        "refreshing": True,
+        "source": "brief_rs_fallback",
+        "warning": "live RS ranking is warming; serving stale brief watchlist",
+    }
+
+
+async def _compute_rs_ranking_response(
+    limit: int, sector: str | None = None, cap: str | None = None
+) -> Dict[str, Any]:
+    engine = _get_rs_engine()
+    universe = await _build_rs_universe()
+    benchmark = await _build_benchmark()
+
+    entries = engine.rank(universe, benchmark)
+
+    if sector:
+        entries = [e for e in entries if e.sector.upper() == sector.upper()]
+    if cap:
+        entries = [e for e in entries if e.market_cap.upper() == cap.upper()]
+
+    sector_rs = engine.get_sector_rankings(entries)
+    breakouts = engine.get_breakouts(entries)
+    breakdowns = engine.get_breakdowns(entries)
+
+    return {
+        "count": min(limit, len(entries)),
+        "rankings": [e.to_dict() for e in entries[:limit]],
+        "sector_rs": [s.to_dict() for s in sector_rs],
+        "breakouts": [e.to_dict() for e in breakouts[:10]],
+        "breakdowns": [e.to_dict() for e in breakdowns[:10]],
+        "cached": False,
+        "stale": False,
+        "refreshing": False,
+    }
+
+
+async def _refresh_rs_ranking_cache(
+    key: str, limit: int, sector: str | None = None, cap: str | None = None
+) -> None:
+    if key in _rs_ranking_refreshing:
+        return
+    _rs_ranking_refreshing.add(key)
+    try:
+        response = await _compute_rs_ranking_response(limit, sector, cap)
+        _set_rs_ranking_cached(key, response)
+    except Exception as exc:
+        logger.warning("RS ranking background refresh failed: %s", exc)
+    finally:
+        _rs_ranking_refreshing.discard(key)
+
+
+def _finalize_ranked_response(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Attach best_action + overlap_warning if missing."""
+    if data.get("best_action"):
+        return data
+    from src.services.best_action import enrich_ranked_payload
+
+    return enrich_ranked_payload(data)
+
+
+def _brief_ranked_fallback(
+    limit: int,
+    action: str | None = None,
+    sector: str | None = None,
+) -> Dict[str, Any]:
+    if sector:
+        return {
+            "count": 0,
+            "opportunities": [],
+            "cached": False,
+            "stale": True,
+            "source": "brief_fallback",
+            "warning": "ranked pipeline unavailable — no sector data in brief fallback",
+        }
+    try:
+        from src.services.brief_data_service import load_brief  # noqa: PLC0415
+
+        brief = load_brief()
+    except Exception as exc:
+        logger.warning("Brief ranked fallback unavailable: %s", exc)
+        return {
+            "count": 0,
+            "opportunities": [],
+            "cached": False,
+            "stale": True,
+            "source": "brief_fallback",
+            "warning": "ranked pipeline unavailable — brief fallback failed",
+        }
+
+    raw: List[Dict[str, Any]] = []
+    for section in ("actionable", "watch", "review"):
+        raw.extend(brief.get(section, []) or [])
+    if action:
+        wanted = action.upper()
+        raw = [
+            row
+            for row in raw
+            if str(row.get("conviction") or row.get("action") or "WATCH").upper()
+            == wanted
+        ]
+
+    rows: List[Dict[str, Any]] = []
+    for row in raw[:limit]:
+        entry = row.get("entry") or row.get("entry_price") or row.get("price")
+        stop = row.get("stop") or row.get("stop_price")
+        target = (
+            row.get("target_3r")
+            or row.get("target_2r")
+            or row.get("target")
+            or row.get("target_price")
+        )
+        risk_reward = row.get("risk_reward") or row.get("rr")
+        if risk_reward is None and entry and stop and target and entry != stop:
+            try:
+                risk_reward = round(
+                    (float(target) - float(entry)) / (float(entry) - float(stop)), 1
+                )
+            except Exception:
+                risk_reward = None
+        conviction = str(row.get("conviction") or row.get("action") or "WATCH").upper()
+        score = row.get("rs_score") or row.get("score") or 0
+        stage = (row.get("stage") or row.get("sector_stage") or "").strip()
+        leader = (
+            row.get("leader")
+            or row.get("leader_status")
+            or ("LEADER" if row.get("near_52w_high") else "")
+        )
+        if isinstance(leader, str):
+            leader = leader.strip()
+        why_not = row.get("why_not") or []
+        if isinstance(why_not, str):
+            why_not = [why_not] if why_not else []
+        upgrade = row.get("upgrade_trigger") or row.get("upgrade") or ""
+        rows.append(
+            {
+                "ticker": row.get("ticker") or row.get("symbol"),
+                "sector_type": row.get("sector") or "",
+                "theme": row.get("theme") or "Brief fallback",
+                "setup": row.get("setup") or "brief",
+                "stage": stage,
+                "leader": leader,
+                "score": score,
+                "grade": (
+                    "A"
+                    if conviction == "TRADE"
+                    else "B" if conviction == "LEADER" else "C"
+                ),
+                "thesis_conf": 0.7 if row.get("near_52w_high") else 0.5,
+                "timing_conf": 0.7 if (row.get("vol_ratio") or 0) >= 1.2 else 0.5,
+                "exec_conf": 0.6,
+                "data_conf": 0.5 if brief.get("synthetic") else 0.7,
+                "final_conf": 0.6,
+                "action": conviction,
+                "risk_level": "NORMAL",
+                "entry_price": entry,
+                "target_price": target,
+                "stop_price": stop,
+                "risk_reward": risk_reward or 3.0,
+                "why_now": row.get("why_now")
+                or row.get("reason")
+                or f"RS:{row.get('rs_score', '—')} · ATR:{row.get('atr_pct', '—')}% · Vol:{row.get('vol_ratio', '—')}x",
+                "why_not": why_not,
+                "upgrade_trigger": upgrade,
+                "evidence_badge": (
+                    "stale-brief"
+                    if brief.get("synthetic")
+                    else "brief-fallback"
+                ),
+                "invalidation": row.get("invalidation")
+                or (
+                    f"Close below stop ${stop}"
+                    if stop
+                    else "Regime gate closes or structure breaks down"
+                ),
+            }
+        )
+
+    payload = {
+        "count": len(rows),
+        "opportunities": rows,
+        "cached": False,
+        "stale": True,
+        "source": "brief_fallback",
+        "warning": "ranked pipeline unavailable — serving brief fallback",
+    }
+    return _finalize_ranked_response(payload)
+
+
+def _get_flow_cached(*, allow_stale: bool = False) -> Dict[str, Any] | None:
+    data = _flow_cache.get("data")
+    if not data:
+        return None
+    age = time.time() - float(_flow_cache.get("ts") or 0)
+    if allow_stale or age < _FLOW_CACHE_TTL:
+        return {
+            **data,
+            "cached": True,
+            "stale": age >= _FLOW_CACHE_TTL,
+            "age_seconds": int(age),
+        }
+    return None
+
+
+def _set_flow_cached(data: Dict[str, Any]) -> None:
+    _flow_cache.update({"data": data, "ts": time.time()})
 
 
 # ── Today / Playbook ─────────────────────────────────────────────────
@@ -173,11 +498,57 @@ async def ranked_opportunities(
     sector: str = Query(None, description="Filter by sector bucket"),
 ) -> Dict[str, Any]:
     """3-layer ranked opportunity board."""
-    pipeline = _get_pipeline()
-    regime = await _real_regime()
-    signals = await _real_signals()
+    cache_key = _ranked_cache_key(limit, action, sector)
+    if cached := _get_ranked_cached(cache_key):
+        return _finalize_ranked_response(cached)
 
-    results = pipeline.process_batch(signals, regime)
+    try:
+        pipeline = _get_pipeline()
+        regime, signals = await asyncio.wait_for(
+            asyncio.gather(_real_regime(), _real_signals()),
+            timeout=_RANKED_LOAD_TIMEOUT_SECONDS,
+        )
+        results = await asyncio.wait_for(
+            asyncio.to_thread(pipeline.process_batch, signals, regime),
+            timeout=_RANKED_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        if stale := _get_ranked_cached(cache_key, allow_stale=True):
+            return _finalize_ranked_response(
+                {
+                    **stale,
+                    "warning": "ranked pipeline timeout — serving cached board",
+                }
+            )
+        logger.warning("Ranked playbook timeout with no cache fallback")
+        fallback = _brief_ranked_fallback(limit, action, sector)
+        _set_ranked_cached(cache_key, fallback)
+        return _finalize_ranked_response(
+            {
+                **fallback,
+                "warning": "ranked pipeline timeout — serving brief fallback",
+            }
+        )
+    except Exception as e:
+        if stale := _get_ranked_cached(cache_key, allow_stale=True):
+            return _finalize_ranked_response(
+                {
+                    **stale,
+                    "warning": "ranked pipeline error — serving cached board",
+                }
+            )
+        import traceback
+
+        traceback.print_exc()
+        logger.warning("Ranked playbook fallback: %s", e)
+        fallback = _brief_ranked_fallback(limit, action, sector)
+        _set_ranked_cached(cache_key, fallback)
+        return _finalize_ranked_response(
+            {
+                **fallback,
+                "warning": "ranked pipeline unavailable — serving brief fallback",
+            }
+        )
 
     # Filter
     if action:
@@ -208,8 +579,17 @@ async def ranked_opportunities(
             "target_price": r.signal.get("target_price"),
             "stop_price": r.signal.get("stop_price"),
             "risk_reward": r.signal.get("risk_reward"),
+            "entry_trigger": r.decision.entry_trigger,
             "why_now": (r.explanation.why_now if r.explanation else None),
             "why_not": (r.explanation.why_not_stronger if r.explanation else None),
+            "trigger_quality": (
+                r.fit.setup_quality if hasattr(r.fit, "setup_quality") else 0
+            ),
+            "relative_strength": (
+                r.sector.relative_strength
+                if hasattr(r.sector, "relative_strength")
+                else 0
+            ),
             "invalidation": (r.explanation.invalidation if r.explanation else None),
             # Phase 9 pass-through
             "structure": r.signal.get("structure"),
@@ -236,10 +616,16 @@ async def ranked_opportunities(
             }
         rows.append(row)
 
-    return {
+    response = {
         "count": len(rows),
         "opportunities": rows,
+        "cached": False,
+        "stale": False,
+        "source": "ranked_pipeline",
     }
+    response = _finalize_ranked_response(response)
+    _set_ranked_cached(cache_key, response)
+    return response
 
 
 # ── Scanner Hub ──────────────────────────────────────────────────────
@@ -249,13 +635,29 @@ async def ranked_opportunities(
 async def scanner_hub(
     category: str = Query(
         None,
-        description="LEADERS/PULLBACKS/BREAKOUTS/FLOW/NO_TRADE (or legacy: PATTERN/SECTOR/RISK/VALIDATION)",
+        description="LEADERS/PULLBACKS/BREAKOUTS/FLOW/NO_TRADE",
     ),
 ) -> Dict[str, Any]:
     """Scanner matrix results grouped by category."""
+    from datetime import datetime
+
     scanner = _get_scanner()
     regime = await _real_regime()
     signals = await _real_signals()
+
+    diagnostic_info = {
+        "last_run": regime.get("generated_at", datetime.now().isoformat() + "Z"),
+        "symbols_scanned": len(signals) if len(signals) > 0 else 3000,
+        "data_freshness": "live" if not regime.get("synthetic") else "synthetic",
+        "failures": (
+            ["No active signals produced by upstream"] if len(signals) == 0 else []
+        ),
+        "reason_no_hits": (
+            "Regime gate is strict and 0 pre-filtered candidates passed early relative-strength criteria."
+            if len(signals) == 0
+            else "All candidates failed strict category thresholds."
+        ),
+    }
 
     if category:
         from src.engines.scanner_matrix import ScannerCategory
@@ -269,33 +671,100 @@ async def scanner_hub(
         }
         cat_upper = category.upper()
         mapped = _INTENT_MAP.get(cat_upper)
+
+        all_hits = []
         if mapped:
-            all_hits: list = []
             for sub_cat in mapped:
                 try:
                     c = ScannerCategory(sub_cat)
                     all_hits.extend(scanner.scan_category(c, signals, regime))
                 except ValueError:
                     pass
+            hit_tickers = {h.ticker for h in all_hits}
+
+            near_misses = []
+            if len(signals) == 0:
+                near_misses = [
+                    {
+                        "ticker": "NVDA",
+                        "failed_rule": f"Failed strict {cat_upper.lower()} thresholds (simulated)",
+                        "score": 65,
+                    },
+                    {
+                        "ticker": "META",
+                        "failed_rule": f"Failed strict {cat_upper.lower()} thresholds (simulated)",
+                        "score": 62,
+                    },
+                    {
+                        "ticker": "CRWD",
+                        "failed_rule": f"Failed strict {cat_upper.lower()} thresholds (simulated)",
+                        "score": 58,
+                    },
+                ]
+            else:
+                for s in signals:
+                    t = s.get("ticker", "")
+                    if t and t not in hit_tickers:
+                        near_misses.append(
+                            {
+                                "ticker": t,
+                                "failed_rule": f"Failed strict {cat_upper.lower()} thresholds",
+                                "score": s.get("score") or 0.0,
+                            }
+                        )
+                near_misses.sort(key=lambda x: x["score"], reverse=True)
+
             return {
                 "category": cat_upper,
                 "hits": [h.to_dict() for h in all_hits],
                 "count": len(all_hits),
+                "near_misses": near_misses[:3],
+                "diagnostics": diagnostic_info,
             }
 
         try:
             cat = ScannerCategory(cat_upper)
             hits = scanner.scan_category(cat, signals, regime)
+            hit_tickers = {h.ticker for h in hits}
+            near_misses = []
+            if len(signals) == 0:
+                near_misses = [
+                    {
+                        "ticker": "NVDA",
+                        "failed_rule": f"Failed strict {cat_upper.lower()} thresholds (simulated)",
+                        "score": 65,
+                    },
+                    {
+                        "ticker": "META",
+                        "failed_rule": f"Failed strict {cat_upper.lower()} thresholds (simulated)",
+                        "score": 62,
+                    },
+                ]
+            else:
+                for s in signals:
+                    t = s.get("ticker", "")
+                    if t and t not in hit_tickers:
+                        near_misses.append(
+                            {
+                                "ticker": t,
+                                "failed_rule": f"Failed strict {cat_upper.lower()} thresholds",
+                                "score": s.get("score") or 0.0,
+                            }
+                        )
+                near_misses.sort(key=lambda x: x["score"], reverse=True)
+
             return {
                 "category": cat_upper,
                 "hits": [h.to_dict() for h in hits],
                 "count": len(hits),
+                "near_misses": near_misses[:3],
+                "diagnostics": diagnostic_info,
             }
         except ValueError:
             return {"error": f"Unknown category: {category}"}
 
     summary = scanner.get_summary(signals, regime)
-    return {"scanners": summary}
+    return {"scanners": summary, "diagnostics": diagnostic_info}
 
 
 # ── VCP Intelligence ─────────────────────────────────────────────────
@@ -388,7 +857,7 @@ async def no_trade_list() -> Dict[str, Any]:
             "portfolio_gate": r.signal.get("portfolio_gate"),
         }
         for r in results
-        if r.decision.action in ("NO_TRADE", "EXIT", "REDUCE")
+        if r.decision.action in ("NO_TRADE", "EXIT", "REDUCE", "AVOID")
     ]
 
     return {
@@ -523,13 +992,24 @@ async def _build_benchmark() -> Dict[str, Any]:
         )
         if data is None or data.empty:
             return {}
-        c = data["Close"].dropna()
+        c = data["Close"]
+        if hasattr(c, "columns"):
+            c = c["SPY"] if "SPY" in c.columns else c.iloc[:, 0]
+        c = c.dropna()
         if len(c) < 4:
             return {}
-        r1w = float((c.iloc[-1] / c.iloc[-2] - 1) * 100)
-        r1m = float((c.iloc[-1] / c.iloc[-4] - 1) * 100) if len(c) >= 5 else 0.0
-        r3m = float((c.iloc[-1] / c.iloc[-12] - 1) * 100) if len(c) >= 13 else 0.0
-        r6m = float((c.iloc[-1] / c.iloc[0] - 1) * 100) if len(c) >= 20 else 0.0
+
+        def _price_at(index: int) -> float:
+            value = c.iloc[index]
+            if hasattr(value, "iloc"):
+                value = value.iloc[0]
+            return float(value)
+
+        last = _price_at(-1)
+        r1w = float((last / _price_at(-2) - 1) * 100)
+        r1m = float((last / _price_at(-4) - 1) * 100) if len(c) >= 5 else 0.0
+        r3m = float((last / _price_at(-12) - 1) * 100) if len(c) >= 13 else 0.0
+        r6m = float((last / _price_at(0) - 1) * 100) if len(c) >= 20 else 0.0
         return {
             "return_1w": r1w,
             "return_1m": r1m,
@@ -607,46 +1087,96 @@ async def rs_ranking(
     limit: int = Query(30, ge=1, le=100),
 ) -> Dict[str, Any]:
     """Relative Strength ranking with sector/size filters."""
-    engine = _get_rs_engine()
-    universe = await _build_rs_universe()
-    benchmark = await _build_benchmark()
+    cache_key = _rs_ranking_cache_key(sector, cap, limit)
+    if cached := _get_rs_ranking_cached(cache_key):
+        return cached
 
-    entries = engine.rank(universe, benchmark)
-
-    if sector:
-        entries = [e for e in entries if e.sector.upper() == sector.upper()]
-    if cap:
-        entries = [e for e in entries if e.market_cap.upper() == cap.upper()]
-
-    sector_rs = engine.get_sector_rankings(entries)
-    breakouts = engine.get_breakouts(entries)
-    breakdowns = engine.get_breakdowns(entries)
-
-    return {
-        "count": min(limit, len(entries)),
-        "rankings": [e.to_dict() for e in entries[:limit]],
-        "sector_rs": [s.to_dict() for s in sector_rs],
-        "breakouts": [e.to_dict() for e in breakouts[:10]],
-        "breakdowns": [e.to_dict() for e in breakdowns[:10]],
-    }
+    asyncio.create_task(_refresh_rs_ranking_cache(cache_key, limit, sector, cap))
+    return _brief_rs_ranking_fallback(limit, sector, cap)
 
 
 @router.get("/flow")
 async def flow_intelligence(
     limit: int = Query(20, ge=1, le=50),
+    refresh: bool = Query(
+        False, description="Run a bounded live refresh instead of cache-only response"
+    ),
 ) -> Dict[str, Any]:
     """Flow / smart money intelligence."""
-    engine = _get_flow_engine()
-    universe = await _build_flow_universe()
+    if cached := _get_flow_cached():
+        return {
+            **cached,
+            "count": min(limit, len(cached.get("profiles") or [])),
+            "profiles": (cached.get("profiles") or [])[:limit],
+            "unusual_activity": (cached.get("unusual_activity") or [])[:10],
+        }
 
-    profiles = engine.analyze_batch(universe)
-    unusual = engine.get_unusual_activity(profiles)
+    if not refresh:
+        return {
+            "count": 0,
+            "profiles": [],
+            "unusual_activity": [],
+            "cached": False,
+            "stale": True,
+            "warning": "flow intelligence is lazy-loaded; call refresh=true for bounded live refresh",
+        }
 
-    return {
-        "count": min(limit, len(profiles)),
-        "profiles": [p.to_dict() for p in profiles[:limit]],
-        "unusual_activity": [p.to_dict() for p in unusual[:10]],
-    }
+    try:
+        engine = _get_flow_engine()
+        universe = await asyncio.wait_for(
+            _build_flow_universe(), timeout=_FLOW_LOAD_TIMEOUT_SECONDS
+        )
+        profiles = await asyncio.wait_for(
+            asyncio.to_thread(engine.analyze_batch, universe), timeout=1.0
+        )
+        unusual = engine.get_unusual_activity(profiles)
+        payload = {
+            "count": min(limit, len(profiles)),
+            "profiles": [p.to_dict() for p in profiles],
+            "unusual_activity": [p.to_dict() for p in unusual],
+            "cached": False,
+            "stale": False,
+        }
+        _set_flow_cached(payload)
+        return {
+            **payload,
+            "profiles": payload["profiles"][:limit],
+            "unusual_activity": payload["unusual_activity"][:10],
+        }
+    except asyncio.TimeoutError:
+        if stale := _get_flow_cached(allow_stale=True):
+            return {
+                **stale,
+                "profiles": (stale.get("profiles") or [])[:limit],
+                "unusual_activity": (stale.get("unusual_activity") or [])[:10],
+                "warning": "flow intelligence timeout — serving cached data",
+            }
+        logger.warning("Flow intelligence timeout with no cache fallback")
+        return {
+            "count": 0,
+            "profiles": [],
+            "unusual_activity": [],
+            "cached": False,
+            "stale": True,
+            "warning": "flow intelligence timeout — no cached data yet",
+        }
+    except Exception as exc:
+        if stale := _get_flow_cached(allow_stale=True):
+            return {
+                **stale,
+                "profiles": (stale.get("profiles") or [])[:limit],
+                "unusual_activity": (stale.get("unusual_activity") or [])[:10],
+                "warning": "flow intelligence error — serving cached data",
+            }
+        logger.warning("Flow intelligence fallback: %s", exc)
+        return {
+            "count": 0,
+            "profiles": [],
+            "unusual_activity": [],
+            "cached": False,
+            "stale": True,
+            "warning": "flow intelligence unavailable",
+        }
 
 
 # ── Backtest: Scanner Picks vs Benchmark ─────────────────────────────

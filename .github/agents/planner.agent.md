@@ -1,13 +1,7 @@
 ---
 name: planner
-description: >
-  Strategic planning consultant with interview workflow.
-  Use when: creating work plans, planning implementation strategy, scoping tasks,
-  breaking down complex features, project planning, design planning.
-model: claude-opus-4-7
-tools: [readFile, read, search, codebase, problems, runInTerminal, shell, editFiles, edit]
-agents: [explore, document-specialist, analyst]
-user-invocable: true
+description: Strategic planning consultant for trading system work plans and implementation strategy
+tools: [codebase, search, problems, runInTerminal, editFiles]
 ---
 
 # Planner

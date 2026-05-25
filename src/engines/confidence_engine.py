@@ -78,7 +78,10 @@ class ConfidenceEngine:
 
         # Weighted final
         raw = 0.35 * cb.thesis + 0.30 * cb.timing + 0.20 * cb.execution + 0.15 * cb.data
-        cb.final = max(0, min(1.0, raw - cb.penalties))
+        # Force dispersion by steepening the curve around 0.5
+        raw_centered = raw - 0.5
+        raw_dispersed = 0.5 + (raw_centered * 1.5)  # 1.5x dispersion multiplier
+        cb.final = max(0, min(1.0, raw_dispersed - cb.penalties))
         cb.label = self._label(cb.final)
         return cb
 

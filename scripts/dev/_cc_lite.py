@@ -2,6 +2,7 @@
 Lightweight CC server - serves dashboard with minimal imports.
 Heavy modules load in background after server starts.
 """
+
 import logging
 import os
 import sys
@@ -22,7 +23,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("cc-lite")
 
 app = FastAPI(title="CC Trading Intelligence")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
+)
 
 TEMPLATES_DIR = Path("src/api/templates")
 STATIC_DIR = Path("src/api/static")
@@ -33,6 +36,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 # Track startup
 _start = datetime.now(timezone.utc)
 _full_app = None
+
 
 @app.get("/health")
 @app.get("/api/health")
@@ -61,15 +65,18 @@ async def health():
         },
     }
 
+
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     return templates.TemplateResponse(request, "index.html")
+
 
 # Load full app routes in background
 import threading
 
 # Routes the lite server already handles — skip these when merging
 _SKIP_PATHS = {"/", "/health", "/api/health", "/docs", "/redoc", "/openapi.json"}
+
 
 def _load_full():
     global _full_app
@@ -87,6 +94,7 @@ def _load_full():
                 continue
             # Skip Mount objects (StaticFiles) to avoid conflicts
             from starlette.routing import Mount
+
             if isinstance(route, Mount):
                 continue
             app.routes.append(route)
@@ -108,12 +116,15 @@ def _load_full():
 async def _on_startup():
     """Start background loading AFTER uvicorn is listening."""
     import time
+
     def _delayed():
         time.sleep(2)  # let uvicorn fully bind first
         _load_full()
+
     threading.Thread(target=_delayed, daemon=True).start()
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

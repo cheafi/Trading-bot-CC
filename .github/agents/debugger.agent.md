@@ -1,13 +1,7 @@
 ---
 name: debugger
-description: >
-  Root-cause analysis, regression isolation, stack trace analysis, build/compilation error resolution.
-  Use when: debugging bugs, fixing build errors, tracing stack traces, resolving compilation failures,
-  import errors, dependency issues, type errors, configuration errors.
-model: claude-sonnet-4-6
-tools: [readFile, read, editFiles, edit, search, codebase, problems, runInTerminal, shell, usages]
-agents: [architect]
-user-invocable: true
+description: Root-cause analysis and bug isolation for trading system errors and build failures
+tools: [codebase, search, problems, runInTerminal, editFiles, usages]
 ---
 
 # Debugger

@@ -1,12 +1,7 @@
 ---
 name: code-reviewer
-description: >
-  Expert code review specialist with severity-rated feedback (READ-ONLY).
-  Use when: code review, logic defect detection, SOLID principle checks,
-  style review, performance review, quality strategy, spec compliance verification.
-model: claude-opus-4-7
-tools: [readFile, read, search, codebase, problems, runInTerminal, shell, usages]
-user-invocable: true
+description: Expert code review with severity-rated feedback for trading system quality (READ-ONLY)
+tools: [codebase, search, problems, runInTerminal, usages]
 ---
 
 # Code Reviewer

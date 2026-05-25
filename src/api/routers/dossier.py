@@ -398,3 +398,172 @@ async def trade_advice(ticker: str, buy_price: float):
 
     advice = _compute_trade_advice(ticker, buy_price, current_price, dossier)
     return advice
+
+
+# ── Peer Comparison (Sprint 116) ──────────────────────────────────────────
+
+# Sector peer groups for "why this one, not its peer?" logic
+_SECTOR_PEERS: Dict[str, List[str]] = {
+    "SMH": ["NVDA", "AMD", "INTC", "TSM", "AVGO", "QCOM", "TXN", "MU", "LRCX", "AMAT"],
+    "XLK": [
+        "AAPL",
+        "MSFT",
+        "GOOGL",
+        "META",
+        "CRM",
+        "ADBE",
+        "ORCL",
+        "NOW",
+        "INTU",
+        "PANW",
+    ],
+    "XLY": ["AMZN", "TSLA", "HD", "NKE", "MCD", "SBUX", "LOW", "TJX"],
+    "XLF": ["JPM", "BAC", "GS", "MS", "WFC", "C", "BLK", "SCHW"],
+    "XLV": ["JNJ", "UNH", "PFE", "ABBV", "LLY", "TMO", "ABT", "MRK"],
+    "XLE": ["XOM", "CVX", "COP", "SLB", "EOG", "MPC", "PSX"],
+    "XLI": ["CAT", "BA", "GE", "HON", "UPS", "RTX", "DE", "LMT"],
+    "XLP": ["PG", "KO", "PEP", "WMT", "COST", "PM", "CL", "MDLZ"],
+}
+
+
+@router.get("/{ticker}/peers")
+async def peer_comparison(ticker: str):
+    """
+    Why this ticker, not its strongest peer?
+    Returns sector peers with momentum comparison.
+    """
+    import asyncio
+    import yfinance as yf
+
+    ticker = ticker.strip().upper()
+    sector_etf = _SECTOR_ETF.get(ticker, "SPY")
+    peers = _SECTOR_PEERS.get(sector_etf, [])
+    # Exclude self, limit to 5 peers
+    peers = [p for p in peers if p != ticker][:5]
+
+    if not peers:
+        return {"ticker": ticker, "peers": [], "message": "No peer group defined"}
+
+    def _ret_pct(close, idx: int) -> Optional[float]:
+        if idx < 0 or idx >= len(close):
+            return None
+        cur = float(close.iloc[-1])
+        base = float(close.iloc[idx])
+        if base <= 0:
+            return None
+        return round((cur / base - 1) * 100, 2)
+
+    def _get_peer_metrics(sym: str, spy_ytd: Optional[float]) -> Dict:
+        try:
+            t = yf.Ticker(sym)
+            hist = t.history(period="1y")
+            if hist is None or len(hist) < 2:
+                return {"ticker": sym, "error": "no data"}
+            close = hist["Close"]
+            cur = float(close.iloc[-1])
+            n = len(close)
+            ret_1m = _ret_pct(close, max(0, n - 22))
+            ret_3m = _ret_pct(close, max(0, n - 63))
+            ret_6m = _ret_pct(close, max(0, n - 126))
+            ytd_idx = 0
+            try:
+                import pandas as pd
+
+                yr = pd.Timestamp.now().year
+                ytd_idx = int(close.index.get_indexer([f"{yr}-01-01"], method="nearest")[0])
+                if ytd_idx < 0:
+                    ytd_idx = 0
+            except Exception:
+                ytd_idx = max(0, n - 252)
+            ret_ytd = _ret_pct(close, ytd_idx)
+            pe = None
+            rev_growth = None
+            try:
+                info = t.info or {}
+                pe = info.get("trailingPE") or info.get("forwardPE")
+                rev_growth = info.get("revenueGrowth")
+                if rev_growth is not None:
+                    rev_growth = round(float(rev_growth) * 100, 1)
+                if pe is not None:
+                    pe = round(float(pe), 1)
+            except Exception:
+                pass
+            rs_vs_spy = None
+            if ret_ytd is not None and spy_ytd is not None:
+                rs_vs_spy = round(ret_ytd - spy_ytd, 2)
+            return {
+                "ticker": sym,
+                "price": round(cur, 2),
+                "mom_1m": ret_1m,
+                "mom_3m": ret_3m,
+                "mom_6m": ret_6m,
+                "ret_ytd": ret_ytd,
+                "pe": pe,
+                "rev_growth_pct": rev_growth,
+                "rs_vs_spy": rs_vs_spy,
+            }
+        except Exception:
+            return {"ticker": sym, "error": "fetch failed"}
+
+    spy_row = await asyncio.to_thread(_get_peer_metrics, "SPY", None)
+    spy_ytd = spy_row.get("ret_ytd") if "error" not in spy_row else None
+
+    all_tickers = [ticker] + peers
+    results = await asyncio.gather(
+        *[asyncio.to_thread(_get_peer_metrics, s, spy_ytd) for s in all_tickers]
+    )
+
+    # Separate self from peers
+    self_data = results[0]
+    peer_data = [r for r in results[1:] if "error" not in r]
+    peer_data.sort(key=lambda x: x.get("mom_3m") or 0, reverse=True)
+
+    # Why this one?
+    why = []
+    if self_data.get("mom_3m") and peer_data:
+        rank = 1 + sum(
+            1 for p in peer_data if p.get("mom_3m", 0) > self_data.get("mom_3m", 0)
+        )
+        why.append(
+            f"{ticker} ranks #{rank}/{len(peer_data)+1} in 3M momentum among sector peers"
+        )
+        if rank == 1:
+            why.append(f"✅ {ticker} IS the sector leader — strongest momentum")
+        elif rank <= 3:
+            better = [
+                p["ticker"]
+                for p in peer_data
+                if p.get("mom_3m", 0) > self_data.get("mom_3m", 0)
+            ]
+            why.append(f"Consider: {', '.join(better)} have stronger momentum")
+        else:
+            why.append(f"⚠ {ticker} is lagging peers — consider alternatives")
+
+    table_rows = []
+    if "error" not in self_data:
+        table_rows.append({**self_data, "is_self": True})
+    for p in peer_data:
+        table_rows.append({**p, "is_self": False})
+    table_rows.sort(key=lambda x: x.get("mom_3m") or 0, reverse=True)
+    ticker_rank = 1
+    if self_data.get("mom_3m") is not None:
+        ticker_rank = 1 + sum(
+            1 for p in peer_data if (p.get("mom_3m") or 0) > (self_data.get("mom_3m") or 0)
+        )
+    verdict = why[0] if why else "Peer comparison complete"
+
+    return {
+        "ticker": ticker,
+        "sector_etf": sector_etf,
+        "self": self_data,
+        "peers": peer_data,
+        "table": table_rows,
+        "rankings": table_rows,
+        "ticker_rank": ticker_rank,
+        "verdict": verdict,
+        "peer_rank": {
+            "rank": ticker_rank,
+            "total": len(peer_data) + 1,
+        },
+        "why": why,
+    }

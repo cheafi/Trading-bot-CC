@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,11 @@ class DecisionJournal:
         self,
         path: Optional[str] = None,
     ):
-        self.path = path or os.path.join(_DATA_DIR, "decision_journal.jsonl")
+        self.path = (
+            path
+            or os.getenv("DECISION_JOURNAL_PATH")
+            or os.path.join(_DATA_DIR, "decision_journal.jsonl")
+        )
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
 
     def record(
@@ -86,6 +90,190 @@ class DecisionJournal:
             logger.warning("Failed to write decision journal: %s", e)
 
         return entry
+
+    def record_recommendation(
+        self,
+        recommendation: Dict[str, Any],
+        *,
+        source: str,
+        mode: str,
+        regime: str = "unknown",
+        response_trust: Optional[Dict[str, Any]] = None,
+        data_freshness: Optional[Dict[str, Any]] = None,
+        dedupe_window_seconds: int = 300,
+        recent_entries: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """Record one canonical recommendation snapshot.
+
+        Keeps the learning loop append-only while avoiding duplicate rows from
+        repeated dashboard refreshes over the same recommendation snapshot.
+        """
+        if not isinstance(recommendation, dict) and hasattr(recommendation, "__dict__"):
+            recommendation = dict(recommendation.__dict__)
+        if not isinstance(recommendation, dict):
+            return {}
+
+        ticker = (
+            str(recommendation.get("ticker") or recommendation.get("symbol") or "")
+            .upper()
+            .strip()
+        )
+        if not ticker:
+            return {}
+
+        action_state = recommendation.get("action_state") or {}
+        if not isinstance(action_state, dict):
+            action_state = {}
+        calibrated = recommendation.get("calibrated_confidence") or {}
+        if not isinstance(calibrated, dict):
+            calibrated = {}
+        trust_strip = recommendation.get("trust_strip") or {}
+        if not isinstance(trust_strip, dict):
+            trust_strip = {}
+
+        confidence = self._as_float(
+            recommendation.get("confidence"),
+            self._as_float(recommendation.get("score"), 0.0) * 10,
+        )
+        if 0 < confidence <= 1:
+            confidence *= 100
+        confidence = max(0.0, min(100.0, confidence))
+
+        entry_price = self._as_float(recommendation.get("entry_price"), 0.0)
+        stop_price = self._as_float(
+            recommendation.get("stop_price") or recommendation.get("stop_loss"), 0.0
+        )
+        target_price = self._as_float(
+            recommendation.get("target_price") or recommendation.get("take_profit"),
+            0.0,
+        )
+        rr = self._as_float(
+            recommendation.get("risk_reward") or recommendation.get("rr"), 0.0
+        )
+        if rr <= 0 and entry_price and stop_price and target_price:
+            risk = abs(entry_price - stop_price)
+            reward = abs(target_price - entry_price)
+            rr = round(reward / risk, 2) if risk > 0 else 0.0
+
+        decision_tier = str(
+            action_state.get("action")
+            or recommendation.get("action")
+            or recommendation.get("decision_tier")
+            or recommendation.get("grade")
+            or "WATCH"
+        )
+        strategy = str(recommendation.get("strategy") or "unknown")
+
+        if self._is_duplicate_recommendation(
+            ticker=ticker,
+            source=source,
+            mode=mode,
+            strategy=strategy,
+            decision_tier=decision_tier,
+            entry_price=entry_price,
+            window=timedelta(seconds=dedupe_window_seconds),
+            recent_entries=recent_entries,
+        ):
+            return {
+                "record_type": "recommendation",
+                "ticker": ticker,
+                "deduped": True,
+            }
+
+        confidence_source = (
+            "calibrated_confidence"
+            if calibrated.get("forecast_probability") is not None
+            else "raw_recommendation_confidence"
+        )
+        response_trust = response_trust or {}
+        merged_trust = {
+            **response_trust,
+            **trust_strip,
+            "recommendation_source": source,
+            "confidence_source": confidence_source,
+        }
+
+        return self.record(
+            ticker=ticker,
+            decision_tier=decision_tier,
+            composite_score=confidence,
+            should_trade=decision_tier.upper() in {"TRADE", "BUY", "STRONG_BUY"},
+            regime=str(recommendation.get("regime") or regime or "unknown"),
+            sector=str(recommendation.get("sector") or "unknown"),
+            entry_price=entry_price,
+            stop_price=stop_price,
+            target_price=target_price,
+            expert_consensus=str(recommendation.get("expert_consensus") or "system"),
+            extra={
+                "record_type": "recommendation",
+                "ledger_version": 1,
+                "mode": mode,
+                "recommendation_source": source,
+                "strategy": strategy,
+                "direction": recommendation.get("direction", "LONG"),
+                "score": self._as_float(recommendation.get("score"), 0.0),
+                "risk_reward": rr,
+                "grade": recommendation.get("grade"),
+                "confidence": round(confidence, 2),
+                "confidence_source": confidence_source,
+                "forecast_probability": calibrated.get(
+                    "forecast_probability", round(confidence / 100, 3)
+                ),
+                "historical_reliability_bucket": calibrated.get(
+                    "historical_reliability_bucket"
+                ),
+                "uncertainty_band": calibrated.get("uncertainty_band"),
+                "data_freshness": data_freshness,
+                "trust_strip": merged_trust,
+            },
+        )
+
+    def record_recommendations(
+        self,
+        recommendations: List[Dict[str, Any]],
+        *,
+        source: str,
+        mode: str,
+        regime: str = "unknown",
+        response_trust: Optional[Dict[str, Any]] = None,
+        data_freshness: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Record a batch of recommendation snapshots."""
+        written = 0
+        deduped = 0
+        recent_entries = self._load_all()[-200:]
+        for recommendation in recommendations:
+            if not isinstance(recommendation, dict) and hasattr(
+                recommendation, "__dict__"
+            ):
+                recommendation = dict(recommendation.__dict__)
+            if not isinstance(recommendation, dict):
+                continue
+            entry = self.record_recommendation(
+                recommendation,
+                source=source,
+                mode=mode,
+                regime=regime,
+                response_trust=response_trust,
+                data_freshness=data_freshness,
+                recent_entries=recent_entries,
+            )
+            if entry.get("deduped"):
+                deduped += 1
+            elif entry:
+                written += 1
+                recent_entries.append(entry)
+                recent_entries = recent_entries[-200:]
+        return {"written": written, "deduped": deduped}
+
+    def get_recent_recommendations(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get recent recommendation ledger entries only."""
+        entries = [
+            entry
+            for entry in self._load_all()
+            if entry.get("record_type") == "recommendation"
+        ]
+        return entries[-limit:]
 
     def resolve(
         self,
@@ -188,6 +376,54 @@ class DecisionJournal:
                         pass
         return entries
 
+    @staticmethod
+    def _as_float(value: Any, default: float = 0.0) -> float:
+        try:
+            if value is None or value == "":
+                return default
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _is_duplicate_recommendation(
+        self,
+        *,
+        ticker: str,
+        source: str,
+        mode: str,
+        strategy: str,
+        decision_tier: str,
+        entry_price: float,
+        window: timedelta,
+        recent_entries: Optional[List[Dict[str, Any]]] = None,
+    ) -> bool:
+        cutoff = datetime.now(timezone.utc) - window
+        entries = (
+            recent_entries if recent_entries is not None else self._load_all()[-200:]
+        )
+        for entry in reversed(entries):
+            if entry.get("record_type") != "recommendation":
+                continue
+            try:
+                ts = datetime.fromisoformat(str(entry.get("timestamp", "")))
+            except ValueError:
+                continue
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            if ts < cutoff:
+                return False
+            if (
+                entry.get("ticker") == ticker
+                and entry.get("recommendation_source") == source
+                and entry.get("mode") == mode
+                and entry.get("strategy") == strategy
+                and entry.get("decision_tier") == decision_tier
+                and abs(self._as_float(entry.get("entry_price"), 0.0) - entry_price)
+                < 0.01
+            ):
+                return True
+        return False
+
     def _save_all(
         self,
         entries: List[Dict[str, Any]],
@@ -212,7 +448,11 @@ class ExpertRecordStore:
         self,
         path: Optional[str] = None,
     ):
-        self.path = path or os.path.join(_DATA_DIR, "expert_track_record.json")
+        self.path = (
+            path
+            or os.getenv("EXPERT_TRACK_RECORD_PATH")
+            or os.path.join(_DATA_DIR, "expert_track_record.json")
+        )
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
         self.records: Dict[str, Dict[str, Any]] = {}
         self._load()

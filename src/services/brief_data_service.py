@@ -8,6 +8,7 @@ Replaces 5 duplicate _load_brief() functions across routers.
 from __future__ import annotations
 
 import glob
+import errno
 import json
 import logging
 import os
@@ -19,6 +20,9 @@ logger = logging.getLogger(__name__)
 _BRIEF_CACHE: Optional[Dict] = None
 _BRIEF_CACHE_TS: float = 0
 _BRIEF_CACHE_TTL = 120  # 2 min — brief files change at most daily
+_BRIEF_FAILURE_CACHE_TTL = 900  # macOS Docker bind mounts can deadlock briefly
+_BRIEF_CACHE_FAILED = False
+_BRIEF_LAST_WARNING_TS = 0.0
 
 
 def _brief_dir() -> str:
@@ -31,10 +35,11 @@ def load_brief() -> Dict[str, Any]:
     Load the latest brief-*.json file. Cached for 2 minutes.
     Returns empty dict on failure — never raises.
     """
-    global _BRIEF_CACHE, _BRIEF_CACHE_TS
+    global _BRIEF_CACHE, _BRIEF_CACHE_FAILED, _BRIEF_CACHE_TS, _BRIEF_LAST_WARNING_TS
 
     now = time.time()
-    if _BRIEF_CACHE is not None and (now - _BRIEF_CACHE_TS) < _BRIEF_CACHE_TTL:
+    cache_ttl = _BRIEF_FAILURE_CACHE_TTL if _BRIEF_CACHE_FAILED else _BRIEF_CACHE_TTL
+    if _BRIEF_CACHE is not None and (now - _BRIEF_CACHE_TS) < cache_ttl:
         return _BRIEF_CACHE
 
     try:
@@ -44,12 +49,24 @@ def load_brief() -> Dict[str, Any]:
                 data = json.load(f)
             _BRIEF_CACHE = data
             _BRIEF_CACHE_TS = now
+            _BRIEF_CACHE_FAILED = False
             logger.debug("[BriefData] Loaded %s", os.path.basename(files[-1]))
             return data
-    except Exception:
-        logger.exception("[BriefData] Failed to load brief file")
+    except OSError as exc:
+        if exc.errno == errno.EDEADLK:
+            logger.debug("[BriefData] Brief file temporarily unavailable: %s", exc)
+        elif now - _BRIEF_LAST_WARNING_TS > 300:
+            logger.warning("[BriefData] Brief file unavailable: %s", exc)
+            _BRIEF_LAST_WARNING_TS = now
+    except Exception as exc:
+        if now - _BRIEF_LAST_WARNING_TS > 300:
+            logger.warning("[BriefData] Failed to load brief file: %s", exc)
+            _BRIEF_LAST_WARNING_TS = now
 
-    return {}
+    _BRIEF_CACHE = {}
+    _BRIEF_CACHE_TS = now
+    _BRIEF_CACHE_FAILED = True
+    return _BRIEF_CACHE
 
 
 def find_signal(ticker: str, brief_data: Optional[Dict] = None) -> tuple:
@@ -127,6 +144,7 @@ class BriefDataService:
     @classmethod
     def invalidate_cache(cls) -> None:
         """Force a cache miss on next load."""
-        global _BRIEF_CACHE, _BRIEF_CACHE_TS
+        global _BRIEF_CACHE, _BRIEF_CACHE_FAILED, _BRIEF_CACHE_TS
         _BRIEF_CACHE = None
+        _BRIEF_CACHE_FAILED = False
         _BRIEF_CACHE_TS = 0

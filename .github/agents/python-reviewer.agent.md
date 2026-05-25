@@ -1,12 +1,7 @@
 ---
 name: python-reviewer
-description: >
-  Python code review specialist with embedded style and safety rules.
-  Use when: reviewing Python code, Python best practices, type hints,
-  Python-specific patterns, idiomatic Python, PEP 8 compliance.
-model: claude-sonnet-4-6
-tools: [readFile, read, search, codebase, problems, usages]
-user-invocable: true
+description: Python code review specialist for trading system style, type hints, and safety (READ-ONLY)
+tools: [codebase, search, problems, usages]
 ---
 
 # Python Reviewer

@@ -124,9 +124,11 @@ def compute_indicators(close: np.ndarray, volume: np.ndarray) -> Dict:
     bb_lower = bb_mid - 2.0 * bb_std
     bb_range = bb_upper - bb_lower
     # %B: 0=at lower band, 0.5=mid, 1.0=at upper band
-    bb_pct_b = np.where(bb_range > 0, (close - bb_lower) / bb_range, 0.5)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        bb_pct_b = np.where(bb_range > 0, (close - bb_lower) / bb_range, 0.5)
     # Band width normalised by mid: contraction signal
-    bb_width = np.where(bb_mid > 0, bb_range / bb_mid, 0.0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        bb_width = np.where(bb_mid > 0, bb_range / bb_mid, 0.0)
 
     # Heikin-Ashi close (smoothed candle noise filter) — je-suis-tm #3
     # HA_close = (O + H + L + C) / 4 — approximate with close only

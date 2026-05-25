@@ -1,11 +1,13 @@
 """
 CC - AI Service (Multi-Provider Smart Router)
-Routes each AI task to the optimal model via OpenClaw gateway.
-Provider priority: OpenClaw -> NVIDIA NIM -> OpenAI direct
+Routes each AI task to the optimal model via local Docker Model Runner first,
+then falls back to external OpenAI-compatible providers when configured.
 All calls cached 5 min.
 """
+
 from __future__ import annotations
 import hashlib, json, logging, os, time
+from contextlib import suppress
 from typing import Any, Dict, List, Optional
 import aiohttp
 
@@ -23,19 +25,21 @@ _OPENAI_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
 # Container: http://model-runner.docker.internal/engines/llama.cpp/v1
 _LOCAL_LLM_URL = os.getenv(
     "LOCAL_LLM_URL",
-    "http://model-runner.docker.internal/engines/llama.cpp/v1"
-    if os.getenv("RUNNING_IN_DOCKER") == "1"
-    else "http://localhost:12434/engines/llama.cpp/v1",
+    (
+        "http://model-runner.docker.internal/engines/llama.cpp/v1"
+        if os.getenv("RUNNING_IN_DOCKER") == "1"
+        else "http://localhost:12434/engines/llama.cpp/v1"
+    ),
 )
 _LOCAL_LLM_ENABLED = os.getenv("LOCAL_LLM_ENABLED", "auto")  # auto|on|off
-# Model routing: heavy tasks -> llama3.3 (70B), fast tasks -> gemma3n
-_LOCAL_MODEL_HEAVY = os.getenv("LOCAL_MODEL_HEAVY", "ai/llama3.3:latest")
-_LOCAL_MODEL_FAST  = os.getenv("LOCAL_MODEL_FAST",  "ai/gemma3n:latest")
+_LOCAL_MODEL_ADVISOR = os.getenv("LOCAL_MODEL_ADVISOR", "ai/gemma3")
+_LOCAL_MODEL_REVIEWER = os.getenv("LOCAL_MODEL_REVIEWER", "ai/qwen3-coder")
+_LOCAL_MODEL_EMBED = os.getenv("LOCAL_MODEL_EMBED", "ai/all-minilm-l6-v2-vllm")
 
-_MODEL_NARRATIVE = "gpt-5.4"              # best prose + reasoning
-_MODEL_SIGNAL = "gpt-4o"                 # fast structured
-_MODEL_DOSSIER = "gpt-5.4"               # deep reasoning
-_MODEL_QUICK = "gpt-4o-mini"             # cheap & fast
+_MODEL_NARRATIVE = "gpt-5.4"  # best prose + reasoning
+_MODEL_SIGNAL = "gpt-4o"  # fast structured
+_MODEL_DOSSIER = "gpt-5.4"  # deep reasoning
+_MODEL_QUICK = "gpt-4o-mini"  # cheap & fast
 _MODEL_NVIDIA = "nvidia/llama-3.1-nemotron-70b-instruct"
 _CACHE_TTL = 300
 _TIMEOUT = 90  # local models may be slower on first token
@@ -55,6 +59,22 @@ SYSTEM_SIGNAL_ANALYST = (
     "Max 100 words. Never ignore volume."
 )
 
+SYSTEM_PM_ADVISOR = (
+    "You are CC PM Advisor, a senior fund manager aide. "
+    "Respect deterministic signals, risk gates, and regime filters. "
+    "Never override hard risk limits. "
+    "Always reference conviction tier, regime gate, and R:R when relevant. "
+    "Be concise, specific, and decision-oriented."
+)
+
+SYSTEM_TRADE_REVIEWER = (
+    "You are CC Trade Reviewer. "
+    "Review completed trades like a disciplined portfolio manager. "
+    "Identify what worked, what failed, and what should change next time. "
+    "Never invent facts. If evidence is thin, say so. "
+    "Keep answers structured and brief."
+)
+
 
 class _AICache:
     def __init__(self):
@@ -62,9 +82,7 @@ class _AICache:
 
     def get(self, key: str) -> Optional[str]:
         e = self._store.get(key)
-        if e and (time.monotonic() - e[0]) < _CACHE_TTL:
-            return e[1]
-        return None
+        return e[1] if e and (time.monotonic() - e[0]) < _CACHE_TTL else None
 
     def set(self, key: str, value: str):
         self._store[key] = (time.monotonic(), value)
@@ -72,7 +90,7 @@ class _AICache:
     def stats(self) -> Dict[str, int]:
         now = time.monotonic()
         total = len(self._store)
-        fresh = sum(1 for t, _ in self._store.values() if now - t < _CACHE_TTL)
+        fresh = len([1 for t, _ in self._store.values() if now - t < _CACHE_TTL])
         return {"total": total, "fresh": fresh}
 
 
@@ -87,10 +105,16 @@ class AIService:
         self._provider_used = "none"
         self._last_model = ""
         self._local_llm_ok: bool = False  # set by probe_local_llm()
+        self._disabled_providers: set[str] = set()
 
     @property
     def is_configured(self) -> bool:
-        return bool(self._local_llm_ok or _OPENCLAW_KEY or _NVIDIA_KEY or _OPENAI_KEY)
+        return bool(
+            self._local_llm_ok
+            or (_OPENCLAW_KEY and "openclaw" not in self._disabled_providers)
+            or (_NVIDIA_KEY and "nvidia" not in self._disabled_providers)
+            or (_OPENAI_KEY and "openai" not in self._disabled_providers)
+        )
 
     @property
     def local_llm_available(self) -> bool:
@@ -103,18 +127,30 @@ class AIService:
             "providers": {
                 "local_llm": self._local_llm_ok,
                 "local_llm_url": _LOCAL_LLM_URL,
-                "local_model_fast": _LOCAL_MODEL_FAST,
-                "local_model_heavy": _LOCAL_MODEL_HEAVY,
-                "openclaw": bool(_OPENCLAW_KEY),
-                "nvidia": bool(_NVIDIA_KEY),
-                "openai": bool(_OPENAI_KEY),
+                "local_model_advisor": _LOCAL_MODEL_ADVISOR,
+                "local_model_reviewer": _LOCAL_MODEL_REVIEWER,
+                "local_model_embed": _LOCAL_MODEL_EMBED,
+                "openclaw": bool(_OPENCLAW_KEY)
+                and "openclaw" not in self._disabled_providers,
+                "nvidia": bool(_NVIDIA_KEY)
+                and "nvidia" not in self._disabled_providers,
+                "openai": bool(_OPENAI_KEY)
+                and "openai" not in self._disabled_providers,
             },
+            "disabled_providers": sorted(self._disabled_providers),
             "last_provider": self._provider_used,
             "last_model": self._last_model,
             "calls": self._call_count,
             "errors": self._error_count,
             "cache": self._cache.stats(),
         }
+
+    def _disable_provider(self, provider_name: str, reason: str) -> None:
+        if provider_name == "local_llm":
+            self._local_llm_ok = False
+        else:
+            self._disabled_providers.add(provider_name)
+        logger.warning("[AI] disabling provider %s: %s", provider_name, reason)
 
     async def probe_local_llm(self) -> bool:
         """Check if Docker Model Runner is reachable and has models loaded."""
@@ -149,19 +185,32 @@ class AIService:
             )
         return self._session
 
-    async def _call_provider(self, base_url, api_key, model, messages, max_tokens, temperature, provider_name):
+    async def _call_provider(
+        self,
+        base_url,
+        api_key,
+        model,
+        messages,
+        max_tokens,
+        temperature,
+        provider_name,
+        response_format=None,
+    ):
         """Call a single OpenAI-compatible provider."""
         session = await self._get_session()
         try:
+            payload = {
+                "model": model,
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "stream": False,
+            }
+            if response_format is not None:
+                payload["response_format"] = response_format
             async with session.post(
                 f"{base_url}/chat/completions",
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "max_tokens": max_tokens,
-                    "temperature": temperature,
-                    "stream": False,
-                },
+                json=payload,
                 headers={
                     **({"Authorization": f"Bearer {api_key}"} if api_key else {}),
                     "Content-Type": "application/json",
@@ -173,21 +222,44 @@ class AIService:
                     self._call_count += 1
                     self._provider_used = provider_name
                     self._last_model = model
-                    logger.info("[AI] %s/%s -> %d chars", provider_name, model, len(text))
+                    logger.info(
+                        "[AI] %s/%s -> %d chars", provider_name, model, len(text)
+                    )
                     return text
                 body = await resp.text()
+                if resp.status in (401, 403):
+                    self._disable_provider(provider_name, f"auth {resp.status}")
+                elif provider_name == "local_llm" and resp.status >= 400:
+                    self._disable_provider(provider_name, f"status {resp.status}")
                 logger.warning("[AI] %s %s: %s", provider_name, resp.status, body[:200])
         except Exception as exc:
+            if provider_name == "local_llm":
+                self._disable_provider(provider_name, str(exc))
             logger.warning("[AI] %s error: %s", provider_name, exc)
             self._error_count += 1
         return None
 
-    async def _call_llm(self, system, user_prompt, max_tokens=800, temperature=0.3, preferred_model=None):
+    def _resolve_local_model(self, preferred_model: str) -> str:
+        if preferred_model in (_MODEL_NARRATIVE, _MODEL_DOSSIER, _MODEL_QUICK):
+            return _LOCAL_MODEL_ADVISOR
+        if preferred_model == _MODEL_SIGNAL:
+            return _LOCAL_MODEL_REVIEWER
+        return _LOCAL_MODEL_ADVISOR
+
+    async def _call_llm(
+        self,
+        system,
+        user_prompt,
+        max_tokens=800,
+        temperature=0.3,
+        preferred_model=None,
+        response_format=None,
+    ):
         """Route to best available provider with fallback chain."""
         if preferred_model is None:
             preferred_model = _MODEL_QUICK
         cache_key = hashlib.md5(
-            f"{preferred_model}:{system[:40]}:{user_prompt[:200]}".encode()
+            f"{preferred_model}:{response_format}:{system[:40]}:{user_prompt[:200]}".encode()
         ).hexdigest()
         cached = self._cache.get(cache_key)
         if cached is not None:
@@ -202,27 +274,107 @@ class AIService:
         # Build provider chain: Local Docker LLM -> OpenClaw -> NVIDIA -> OpenAI
         chain = []
         if self._local_llm_ok and _LOCAL_LLM_ENABLED != "off":
-            # Route heavy models (narrative/dossier) to llama3.3; quick/signal to gemma3n
-            local_model = (
-                _LOCAL_MODEL_HEAVY
-                if preferred_model in (_MODEL_NARRATIVE, _MODEL_DOSSIER)
-                else _LOCAL_MODEL_FAST
-            )
+            local_model = self._resolve_local_model(preferred_model)
             chain.append((_LOCAL_LLM_URL, "", local_model, "local_llm"))
-        if _OPENCLAW_KEY:
+        if _OPENCLAW_KEY and "openclaw" not in self._disabled_providers:
             chain.append((_OPENCLAW_BASE, _OPENCLAW_KEY, preferred_model, "openclaw"))
-        if _NVIDIA_KEY:
+        if _NVIDIA_KEY and "nvidia" not in self._disabled_providers:
             chain.append((_NVIDIA_BASE, _NVIDIA_KEY, _MODEL_NVIDIA, "nvidia"))
-        if _OPENAI_KEY:
+        if _OPENAI_KEY and "openai" not in self._disabled_providers:
             chain.append((_OPENAI_BASE, _OPENAI_KEY, _MODEL_QUICK, "openai"))
 
         for base, key, model, name in chain:
-            text = await self._call_provider(base, key, model, messages, max_tokens, temperature, name)
+            text = await self._call_provider(
+                base,
+                key,
+                model,
+                messages,
+                max_tokens,
+                temperature,
+                name,
+                response_format=response_format,
+            )
             if text:
                 self._cache.set(cache_key, text)
                 return text
         self._error_count += 1
         return None
+
+    @staticmethod
+    def _extract_json_block(text: str) -> Optional[Dict[str, Any]]:
+        if not text:
+            return None
+        stripped = text.strip()
+        with suppress(Exception):
+            parsed = json.loads(stripped)
+            if isinstance(parsed, dict):
+                return parsed
+        start = stripped.find("{")
+        end = stripped.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            return None
+        try:
+            parsed = json.loads(stripped[start : end + 1])
+            return parsed if isinstance(parsed, dict) else None
+        except Exception:
+            return None
+
+    async def generate_json(
+        self,
+        system: str,
+        user_prompt: str,
+        preferred_model: Optional[str] = None,
+        max_tokens: int = 700,
+    ) -> Optional[Dict[str, Any]]:
+        text = await self._call_llm(
+            system,
+            user_prompt + "\nReturn valid JSON only.",
+            max_tokens=max_tokens,
+            temperature=0.2,
+            preferred_model=preferred_model,
+            response_format={"type": "json_object"},
+        )
+        parsed = self._extract_json_block(text or "")
+        if parsed is not None:
+            return parsed
+        text = await self._call_llm(
+            system,
+            user_prompt + "\nReturn valid JSON only.",
+            max_tokens=max_tokens,
+            temperature=0.2,
+            preferred_model=preferred_model,
+        )
+        return self._extract_json_block(text or "")
+
+    async def embed_texts(self, texts: List[str]) -> List[List[float]]:
+        if not texts:
+            return []
+        if not (self._local_llm_ok and _LOCAL_LLM_ENABLED != "off"):
+            return []
+        session = await self._get_session()
+        try:
+            async with session.post(
+                f"{_LOCAL_LLM_URL}/embeddings",
+                json={"model": _LOCAL_MODEL_EMBED, "input": texts},
+                headers={"Content-Type": "application/json"},
+            ) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    self._disable_provider(
+                        "local_llm", f"embeddings status {resp.status}"
+                    )
+                    logger.warning("[AI] embeddings %s: %s", resp.status, body[:200])
+                    return []
+                data = await resp.json()
+                rows = data.get("data", [])
+                vectors = [row.get("embedding", []) for row in rows]
+                self._provider_used = "local_llm"
+                self._last_model = _LOCAL_MODEL_EMBED
+                return [v for v in vectors if isinstance(v, list)]
+        except Exception as exc:
+            self._disable_provider("local_llm", f"embeddings error: {exc}")
+            logger.warning("[AI] embeddings error: %s", exc)
+            return []
 
     # ── High-level API ───────────────────────────────────────────
 
@@ -247,8 +399,10 @@ class AIService:
             f"Write 2-3 paragraphs: regime outlook, opportunities, action guidance."
         )
         return await self._call_llm(
-            SYSTEM_MARKET_ANALYST, prompt,
-            max_tokens=500, preferred_model=_MODEL_NARRATIVE,
+            SYSTEM_MARKET_ANALYST,
+            prompt,
+            max_tokens=500,
+            preferred_model=_MODEL_NARRATIVE,
         )
 
     async def analyze_signal(self, signal):
@@ -264,8 +418,10 @@ class AIService:
             f"Give: VERDICT, SETUP (2 sent), CATALYST (1 sent), KEY RISK (1 sent)"
         )
         text = await self._call_llm(
-            SYSTEM_SIGNAL_ANALYST, prompt,
-            max_tokens=250, preferred_model=_MODEL_SIGNAL,
+            SYSTEM_SIGNAL_ANALYST,
+            prompt,
+            max_tokens=250,
+            preferred_model=_MODEL_SIGNAL,
         )
         if not text:
             return None
@@ -301,18 +457,23 @@ class AIService:
             f"3 paragraphs: STRUCTURE, SETUP, PLAN with conviction level."
         )
         return await self._call_llm(
-            SYSTEM_MARKET_ANALYST, prompt,
-            max_tokens=500, preferred_model=_MODEL_DOSSIER,
+            SYSTEM_MARKET_ANALYST,
+            prompt,
+            max_tokens=500,
+            preferred_model=_MODEL_DOSSIER,
         )
 
     async def generate_brief(self, portfolio, regime):
         """Portfolio brief -> GPT-4o-mini (fast)."""
-        holdings = "\n".join(
-            f"- {h.get('ticker','?')}: {h.get('qty',0)} sh "
-            f"@ ${h.get('avg_cost',0):.2f}, "
-            f"P&L {h.get('pnl_pct',0):.1f}%"
-            for h in portfolio[:10]
-        ) or "No positions"
+        holdings = (
+            "\n".join(
+                f"- {h.get('ticker','?')}: {h.get('qty',0)} sh "
+                f"@ ${h.get('avg_cost',0):.2f}, "
+                f"P&L {h.get('pnl_pct',0):.1f}%"
+                for h in portfolio[:10]
+            )
+            or "No positions"
+        )
         prompt = (
             f"Portfolio brief:\n{holdings}\n"
             f"Regime: {regime.get('label','?')} {regime.get('trend','?')} "
@@ -320,8 +481,26 @@ class AIService:
             f"2 paragraphs: EXPOSURE (risk, sectors), ACTION (trim/hold/add for this regime)"
         )
         return await self._call_llm(
-            SYSTEM_MARKET_ANALYST, prompt,
-            max_tokens=350, preferred_model=_MODEL_QUICK,
+            SYSTEM_MARKET_ANALYST,
+            prompt,
+            max_tokens=350,
+            preferred_model=_MODEL_QUICK,
+        )
+
+    async def generate_pm_memo(self, context: str) -> Optional[str]:
+        return await self._call_llm(
+            SYSTEM_PM_ADVISOR,
+            context,
+            max_tokens=350,
+            preferred_model=_MODEL_NARRATIVE,
+        )
+
+    async def review_trade(self, context: str) -> Optional[Dict[str, Any]]:
+        return await self.generate_json(
+            SYSTEM_TRADE_REVIEWER,
+            context,
+            preferred_model=_MODEL_SIGNAL,
+            max_tokens=500,
         )
 
     async def close(self):

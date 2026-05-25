@@ -1,12 +1,7 @@
 ---
 name: verifier
-description: >
-  Verification strategy, evidence-based completion checks, test adequacy.
-  Use when: verifying task completion, checking acceptance criteria, validating implementations,
-  running verification suites, assessing regression risk, confirming work is done.
-model: claude-sonnet-4-6
-tools: [readFile, read, search, codebase, problems, runInTerminal, shell, findTestFiles, testFailures]
-user-invocable: true
+description: Evidence-based verification of trading system task completion and acceptance criteria
+tools: [codebase, search, problems, runInTerminal]
 ---
 
 # Verifier

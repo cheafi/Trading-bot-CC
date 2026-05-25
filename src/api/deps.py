@@ -8,9 +8,12 @@ Routers import from here instead of from main.py.
 from __future__ import annotations
 
 import math
+import re
 from typing import Any
 
 from fastapi import Header, HTTPException
+
+_TICKER_RE = re.compile(r"^[A-Z0-9.\-^]{1,10}$")
 
 # ── JSON sanitizer ────────────────────────────────────────────────────────────
 
@@ -28,6 +31,22 @@ def sanitize_for_json(obj: Any) -> Any:
 
 # Keep underscore alias for backward-compat callers
 _sanitize_for_json = sanitize_for_json
+
+
+def validate_ticker(ticker: str) -> str:
+    """Sanitize and validate a ticker symbol."""
+    cleaned = ticker.strip().upper()
+    if not cleaned:
+        raise HTTPException(status_code=422, detail="Ticker symbol is required.")
+    if not _TICKER_RE.match(cleaned):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Invalid ticker '{ticker}'. "
+                "Allowed: letters, digits, '.', '-', '^'. Max 10 chars."
+            ),
+        )
+    return cleaned
 
 
 # ── Auth dependencies ─────────────────────────────────────────────────────────

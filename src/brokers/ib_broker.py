@@ -75,7 +75,7 @@ class IBBroker(BaseBroker):
             self._ib_insync = __import__("ib_insync")
             self._ib_insync_available = True
         except ImportError:
-            logger.warning("ib_insync not installed. Run: pip install ib_insync")
+            logger.info("ib_insync not installed — IB broker disabled")
             self._ib_insync = None
 
     @property
@@ -86,7 +86,7 @@ class IBBroker(BaseBroker):
     async def connect(self) -> bool:
         """Connect to IB TWS or Gateway."""
         if not self._ib_insync_available:
-            logger.error("ib_insync not available. Install with: pip install ib_insync")
+            logger.info("ib_insync not available — skipping IB broker connection")
             raise BrokerError(message="Connection failed", broker=self.name)
 
         try:

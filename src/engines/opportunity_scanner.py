@@ -59,6 +59,7 @@ _WEAK_REGIMES = {"BEAR", "CHOPPY"}
 _LEADER_THRESH = 0.90
 _ACTIONABLE_THRESH = 0.58
 _WATCH_THRESH = 0.50
+_PILOT_SCORE_THRESH = 50.0
 
 # Scanner defaults
 _DEFAULT_TOP_N = 50
@@ -108,6 +109,23 @@ class OpportunityCandidate:
             t.append("👀")
         return t
 
+    @property
+    def action_tier(self) -> str:
+        """TRADE/PILOT/WATCH tier without loosening hard risk gates."""
+        if self.is_actionable:
+            return "TRADE"
+        if self.is_watch or self.score >= _PILOT_SCORE_THRESH:
+            return "PILOT"
+        return "WATCH"
+
+    @property
+    def position_hint(self) -> str:
+        if self.action_tier == "TRADE":
+            return "1.0R max if portfolio gates pass"
+        if self.action_tier == "PILOT":
+            return "0.25R pilot / buy-small only"
+        return "Watchlist only"
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "rank": self.rank,
@@ -120,6 +138,8 @@ class OpportunityCandidate:
             "is_actionable": self.is_actionable,
             "is_watch": self.is_watch,
             "tags": self.tags,
+            "action_tier": self.action_tier,
+            "position_hint": self.position_hint,
             "close": round(self.close, 2),
             "stop_loss": round(self.stop_loss, 2),
             "activation": round(self.activation, 2),
@@ -461,26 +481,35 @@ async def run_opportunity_scanner(
             spy_close = np.ones(252)
 
     # ── Step 2: Batch-fetch universe (chunked for rate limits) ──────────────
-    chunk_size = 50
+    chunk_size = 100
     chunks = [universe[i : i + chunk_size] for i in range(0, len(universe), chunk_size)]
 
     raw_scores: List[Dict[str, float]] = []
     passed_initial = 0
 
-    for chunk in chunks:
-        tickers_str = " ".join(chunk)
-        try:
-            df = await asyncio.to_thread(
-                yf.download,
-                tickers_str,
-                period="1y",
-                auto_adjust=True,
-                group_by="ticker",
-                progress=False,
-                threads=True,
-            )
-        except Exception as exc:
-            logger.debug("Chunk download failed: %s", exc)
+    sem = asyncio.Semaphore(15)
+
+    async def _download_chunk(chunk_tickers):
+        async with sem:
+            try:
+                df = await asyncio.to_thread(
+                    yf.download,
+                    " ".join(chunk_tickers),
+                    period="1y",
+                    auto_adjust=True,
+                    group_by="ticker",
+                    progress=False,
+                    threads=False,
+                )
+                return chunk_tickers, df
+            except Exception as exc:
+                logger.debug("Chunk download failed: %s", exc)
+                return chunk_tickers, None
+
+    chunk_results = await asyncio.gather(*[_download_chunk(c) for c in chunks])
+
+    for chunk, df in chunk_results:
+        if df is None:
             continue
 
         for ticker in chunk:

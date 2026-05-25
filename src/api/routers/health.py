@@ -15,6 +15,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -45,6 +46,21 @@ class HealthResponse(BaseModel):
         None, description="Service uptime in seconds"
     )
     phase9_engines: Optional[dict] = Field(None, description="Phase 9 engine status")
+    ai_status: Optional[dict] = Field(None, description="AI/LLM availability status")
+
+
+def _ai_status() -> Dict[str, Any]:
+    """Report AI availability without gating readiness on optional LLM services."""
+    openai_key = bool(os.getenv("OPENAI_API_KEY"))
+    azure_key = bool(os.getenv("AZURE_OPENAI_API_KEY"))
+    disabled = os.getenv("AI_DISABLED", "").lower() in {"1", "true", "yes"}
+    if disabled:
+        return {"status": "disabled", "provider": None, "reason": "AI_DISABLED set"}
+    if azure_key:
+        return {"status": "active", "provider": "azure_openai"}
+    if openai_key:
+        return {"status": "active", "provider": "openai"}
+    return {"status": "missing_key", "provider": None}
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -63,6 +79,7 @@ async def health_check():
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "version": APP_VERSION,
         "uptime_seconds": telemetry.get_uptime_seconds(),
+        "ai_status": _ai_status(),
     }
 
 
@@ -73,9 +90,9 @@ async def health_check():
 )
 async def detailed_health_check(_: bool = Depends(verify_api_key)):
     """Detailed health check with component status."""
-    from src.core.database import check_database_health
-
     try:
+        from src.core.database import check_database_health
+
         db_health = await check_database_health()
         db_status = "connected" if db_health else "disconnected"
     except Exception as e:
@@ -115,8 +132,6 @@ async def health_ready(request: Request):
     Readiness check — gate on DB, market data, data freshness, and Phase 9 engines.
     Returns 200 only when all critical checks pass.
     """
-    from src.core.database import check_database_health
-
     checks: Dict[str, Any] = {
         "database": False,
         "market_data": False,
@@ -125,6 +140,8 @@ async def health_ready(request: Request):
     }
 
     try:
+        from src.core.database import check_database_health
+
         checks["database"] = await check_database_health()
     except Exception:
         pass
@@ -152,6 +169,7 @@ async def health_ready(request: Request):
         "ready": ready,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "checks": checks,
+        "ai_status": _ai_status(),
     }
 
 

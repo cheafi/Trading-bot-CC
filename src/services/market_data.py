@@ -39,6 +39,8 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
+logging.getLogger("yfinance").setLevel(logging.CRITICAL)
+
 logger = logging.getLogger(__name__)
 
 
@@ -364,7 +366,7 @@ class MarketDataService:
                 if validated is not None:
                     return validated
                 # Validation failed — may be transient (partial data); retry
-                logger.warning(
+                logger.debug(
                     f"[MarketData] {ticker}/{period}/{interval} "
                     f"validation failed (attempt {attempt + 1}/{MAX_RETRIES})"
                 )
@@ -382,8 +384,9 @@ class MarketDataService:
                 logger.debug(f"[MarketData] {ticker} retry in {delay:.1f}s")
                 await asyncio.sleep(delay)
 
-        logger.error(
-            f"[MarketData] {ticker}/{period}/{interval} failed after "
+        log_failed = logger.warning if last_exc is not None else logger.debug
+        log_failed(
+            f"[MarketData] {ticker}/{period}/{interval} unavailable after "
             f"{MAX_RETRIES} attempts. Last error: {last_exc}"
         )
         return None

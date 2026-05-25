@@ -430,6 +430,10 @@ class AutoTradingEngine:
 
         return all_ok
 
+    @property
+    def running(self) -> bool:
+        return self._running
+
     async def run(self):
         """Main loop — runs until stopped."""
         self._running = True
@@ -499,7 +503,13 @@ class AutoTradingEngine:
 
         # Regime classification and trade gate
         mkt_state = self._context.get("market_state", {})
-        self._regime_state = self.regime_router.classify(mkt_state)
+        _raw_regime = self.regime_router.classify(mkt_state)
+        if hasattr(_raw_regime, "to_dict"):
+            self._regime_state = _raw_regime.to_dict()
+        elif isinstance(_raw_regime, dict):
+            self._regime_state = _raw_regime
+        else:
+            self._regime_state = {}
 
         # Persist regime snapshot to DB
         try:
@@ -561,11 +571,7 @@ class AutoTradingEngine:
         ranked = self.ensembler.rank_opportunities(
             recommendations,
             self._regime_state,
-            portfolio_state=self._context.get("portfolio_state"),
-            strategy_scores=self.leaderboard.get_strategy_scores(),
-            regime_weights=self.regime_router.get_strategy_multipliers(
-                self._regime_state
-            ),
+            strategy_health=self.leaderboard.get_strategy_scores(),
         )
 
         # Cache ranked results for API (JSON-safe)

@@ -1,12 +1,7 @@
 ---
 name: writer
-description: >
-  Technical documentation writer for README, API docs, and comments.
-  Use when: writing documentation, README files, API docs, architecture docs,
-  user guides, code comments, technical writing.
-model: claude-haiku-4-5
-tools: [readFile, read, editFiles, edit, search, codebase, runInTerminal, shell]
-user-invocable: true
+description: Technical documentation writer for README, API docs, and comments. Use when writing documentation, README files, API docs, architecture docs, user guides, code comments, technical writing.
+tools: [editFiles, search, codebase, runInTerminal]
 ---
 
 # Writer

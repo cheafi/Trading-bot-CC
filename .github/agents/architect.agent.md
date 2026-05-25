@@ -1,13 +1,7 @@
 ---
 name: architect
-description: >
-  Strategic Architecture & Debugging Advisor (READ-ONLY).
-  Use when: architecture analysis, code diagnosis, debugging root causes,
-  implementation verification, structural recommendations, system design review.
-model: claude-opus-4-7
-tools: [readFile, read, search, codebase, problems, runInTerminal, shell, usages]
-agents: [critic]
-user-invocable: true
+description: Architecture analysis and system design advisor for trading platform (READ-ONLY)
+tools: [codebase, search, problems, runInTerminal, usages]
 ---
 
 # Architect

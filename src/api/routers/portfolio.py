@@ -92,6 +92,7 @@ async def portfolio_import(req: PortfolioImportRequest, request: Request):
                 "ticker": t,
                 "shares": h.shares,
                 "avg_cost": h.avg_cost,
+                "stop_price": float(h.stop_price or 0),
                 "current_price": price,
                 "market_value": round(price * h.shares, 2) if price else None,
                 "unrealized_pnl": (
@@ -119,6 +120,66 @@ async def portfolio_import(req: PortfolioImportRequest, request: Request):
 async def portfolio_holdings():
     """Return the currently stored portfolio."""
     return _user_portfolio
+
+
+@router.post("/api/portfolio/seed-demo", tags=["portfolio"])
+async def portfolio_seed_demo(request: Request):
+    """Seed a 3-position demo portfolio (AAPL/MSFT/NVDA) for instant HISTSIM demo.
+
+    Idempotent — overwrites any existing holdings. Pulls live prices via
+    market_data so cost basis is realistic.
+    """
+    global _user_portfolio
+    now = datetime.now(timezone.utc).isoformat() + "Z"
+    mds = request.app.state.market_data
+    demo = [
+        {"ticker": "AAPL", "shares": 100},
+        {"ticker": "MSFT", "shares": 50},
+        {"ticker": "NVDA", "shares": 30},
+    ]
+    enriched = []
+    for d in demo:
+        t = d["ticker"]
+        price = None
+        try:
+            hist = await mds.get_history(t, period="5d", interval="1d")
+            if hist is not None and not hist.empty:
+                c_col = "Close" if "Close" in hist.columns else "close"
+                price = float(hist[c_col].iloc[-1])
+        except Exception:
+            pass
+        avg_cost = round((price or 100) * 0.95, 2)  # pretend bought 5% lower
+        enriched.append(
+            {
+                "ticker": t,
+                "shares": d["shares"],
+                "avg_cost": avg_cost,
+                "current_price": price,
+                "market_value": (price * d["shares"]) if price else None,
+                "unrealized_pnl": (
+                    round((price - avg_cost) * d["shares"], 2)
+                    if price and avg_cost
+                    else None
+                ),
+                "pnl_pct": (
+                    round((price / avg_cost - 1) * 100, 2)
+                    if price and avg_cost
+                    else None
+                ),
+            }
+        )
+    _user_portfolio = {
+        "holdings": enriched,
+        "source": "demo-seed",
+        "updated_at": now,
+        "count": len(enriched),
+    }
+    return {
+        "ok": True,
+        "seeded": len(enriched),
+        "holdings": enriched,
+        "next": "Open Portfolio tab; VaR pill should flip to HISTSIM in 5min refresh window.",
+    }
 
 
 @router.get("/api/portfolio/futu", tags=["portfolio"])

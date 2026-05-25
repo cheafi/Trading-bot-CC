@@ -51,7 +51,7 @@
 	// ── Git performance (large history from monorepo merge) ───────────────────
 	// Disable VS Code's built-in git to prevent background `git status` hanging
 	// on this 4000-file monorepo. Use terminal for git operations instead.
-	"git.enabled": false,
+	"git.enabled": true,
 	"git.autoRepositoryDetection": false,
 	"git.decorations.enabled": false,
 	"git.untrackedChanges": "separate",
@@ -111,5 +111,16 @@
 			"env": {}
 		}
 	},
-	"terminal.integrated.defaultProfile.osx": "zsh"
+	"terminal.integrated.defaultProfile.osx": "zsh",
+	"C_Cpp.default.configurationProvider": "ms-vscode.makefile-tools",
+	"cursorpyright.analysis.exclude": [
+		"**/node_modules/**",
+		"**/venv/**",
+		"**/.venv/**",
+		"**/backup_untracked/**",
+		"**/locales/**"
+	],
+	"cursorpyright.analysis.include": [
+		"src/**"
+	]
 }

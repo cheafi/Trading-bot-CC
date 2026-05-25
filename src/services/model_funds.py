@@ -106,6 +106,31 @@ FUND_IDENTITY: Dict[str, Dict[str, Any]] = {
 _SOURCE_TO_MODEL = {v["source_fund"]: k for k, v in FUND_IDENTITY.items()}
 
 
+def _fund_stance(gate_status: str, model_id: str) -> str:
+    """PM posture: ATTACK / NEUTRAL / DEFEND / OFF."""
+    gs = (gate_status or "").upper()
+    if gs in ("PAUSED", "NO_DATA"):
+        return "OFF"
+    if gs == "REDUCED":
+        return "DEFEND"
+    if model_id == "LEADER_MOMENTUM" and gs == "ACTIVE":
+        return "ATTACK"
+    if model_id == "TACTICAL_DEF" and gs == "ACTIVE":
+        return "DEFEND"
+    if gs == "ACTIVE":
+        return "NEUTRAL"
+    return "NEUTRAL"
+
+
+def _fund_mode() -> str:
+    """Model sleeves are backtest/training unless live engine assigns capital."""
+    import os
+
+    if os.getenv("CC_FUND_MODE", "").lower() in ("live", "paper"):
+        return os.getenv("CC_FUND_MODE", "paper").lower()
+    return "training"
+
+
 class ModelFundService:
     """Build PM-facing fund cards from a fund_lab payload + SQLite history."""
 
@@ -270,10 +295,18 @@ class ModelFundService:
             picks: List[Dict[str, Any]] = (raw or {}).get("picks", [])
             metrics: Dict[str, Any] = (raw or {}).get("metrics", {})
 
-            fund_return = float(metrics.get("total_return_pct", 0.0))
-            excess_return = round(fund_return - bm_return, 2)
+            fund_return = float(
+                metrics.get("total_return_pct")
+                or metrics.get("total_return")
+                or 0.0
+            )
+            # Total-period excess vs benchmark (not annualized excess_return field)
+            excess_return = round(
+                float(metrics.get("roi_vs_benchmark") or (fund_return - bm_return)),
+                2,
+            )
             sharpe = round(float(metrics.get("sharpe", 0.0)), 2)
-            max_dd = round(float(metrics.get("max_drawdown_pct", 0.0)), 2)
+            max_dd = round(float(metrics.get("max_drawdown_pct") or metrics.get("max_drawdown") or 0.0), 2)
             calmar = round(float(metrics.get("calmar", 0.0)), 2)
             regime_fit = self._regime_fit(model_id, regime)
             diff = self._compute_diff(model_id, source, picks)
@@ -288,6 +321,11 @@ class ModelFundService:
                 gate_status = "REDUCED"
             else:
                 gate_status = "PAUSED"
+
+            equity_curve_20 = metrics.get("equity_curve_20") or []
+            equity_curve_60 = metrics.get("equity_curve_60") or []
+            stance = _fund_stance(gate_status, model_id)
+            mode = _fund_mode()
 
             card: Dict[str, Any] = {
                 "id": model_id,
@@ -330,10 +368,30 @@ class ModelFundService:
                 # Regime
                 "regime_fit": regime_fit,
                 "gate_status": gate_status,
+                "stance": stance,
+                "mode": mode,
+                "controls_capital": False,
+                "fund_manager_stance": stance,
+                "equity_curve_20": equity_curve_20,
+                "equity_curve_60": equity_curve_60,
+                "roi_vs_benchmark_pct": excess_return,
+                "evidence_badge": "model_backtest",
                 "regime_affinity": meta["regime_affinity"],
                 "benchmark": benchmark,
             }
             cards.append(card)
+
+        # Single sleeve controls capital today — highest regime_fit among ACTIVE
+        active_cards = [c for c in cards if c.get("gate_status") == "ACTIVE"]
+        if active_cards:
+            controller = max(
+                active_cards,
+                key=lambda c: (c.get("regime_fit") or 0, c.get("excess_return_pct") or 0),
+            )
+            controller["controls_capital"] = True
+            for c in cards:
+                if c["id"] != controller["id"]:
+                    c["controls_capital"] = False
 
         return cards
 

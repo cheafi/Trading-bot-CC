@@ -34,13 +34,36 @@ import logging
 import os
 import statistics
 from collections import defaultdict
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-_CLOSED_TRADES_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "..", "data", "closed_trades.jsonl"
-)
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _resolve_closed_trades_path() -> str:
+    env_path = os.getenv("CLOSED_TRADES_PATH")
+    candidates = []
+    if env_path:
+        candidates.append(Path(env_path))
+    candidates.extend(
+        [
+            Path.cwd() / "data" / "closed_trades.jsonl",
+            _REPO_ROOT / "data" / "closed_trades.jsonl",
+            Path("/app/data/closed_trades.jsonl"),
+        ]
+    )
+    for path in candidates:
+        try:
+            if path.exists() and path.stat().st_size > 0:
+                return str(path)
+        except OSError:
+            continue
+    return env_path or str(_REPO_ROOT / "data" / "closed_trades.jsonl")
+
+
+_CLOSED_TRADES_PATH = _resolve_closed_trades_path()
 
 # Map setup_grade → conviction tier (fallback when conviction field absent)
 _GRADE_TIER_MAP = {
@@ -129,26 +152,29 @@ class ConfidenceValidator:
             logger.warning("closed_trades.jsonl not found at %s", self._path)
             return trades
         seen: set = set()
-        with open(self._path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    t = json.loads(line)
-                    # deduplicate by key fields
-                    key = (
-                        t.get("ticker", ""),
-                        t.get("entry_time", ""),
-                        t.get("exit_time", ""),
-                        t.get("strategy_id", ""),
-                    )
-                    if key in seen:
+        try:
+            with open(self._path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
                         continue
-                    seen.add(key)
-                    trades.append(t)
-                except Exception:
-                    continue
+                    try:
+                        t = json.loads(line)
+                        # deduplicate by key fields
+                        key = (
+                            t.get("ticker", ""),
+                            t.get("entry_time", ""),
+                            t.get("exit_time", ""),
+                            t.get("strategy_id", ""),
+                        )
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        trades.append(t)
+                    except Exception:
+                        continue
+        except OSError as exc:
+            logger.debug("Closed trades unavailable: %s", exc)
         return trades
 
     def _enrich(self, trades: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -194,6 +220,7 @@ class ConfidenceValidator:
                 "by_regime": {},
                 "by_strategy": {},
                 "sample_size": 0,
+                "data_source": self._path,
                 "note": "Load real trade history to enable confidence validation.",
             }
 
@@ -261,6 +288,7 @@ class ConfidenceValidator:
             "by_regime": by_regime,
             "by_strategy": by_strategy,
             "sample_size": sample_size,
+            "data_source": self._path,
             "note": note,
         }
 

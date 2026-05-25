@@ -1,0 +1,58 @@
+# ── CC Prod-Local Compose ──────────────────────────────────────────────────
+# Uses embedded source code (no volume mounts) to avoid Docker Desktop osxfs deadlocks
+# Rebuilds on code change (slower but more reliable for macOS local dev)
+# Usage:    docker compose -f docker-compose.prod-local.yml up --build
+# Dashboard: http://localhost:8000
+
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+      args:
+        DOCKER_BUILDKIT: "1"
+    container_name: cc_api_prod_local
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    volumes:
+      # Writable data only (no source code volumes to avoid osxfs deadlock)
+      - ./data:/app/data
+      - ./models:/app/models
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - HOME=/tmp/tradingai
+      - XDG_CACHE_HOME=/tmp/tradingai/cache
+      - TASKS_DB_PATH=/tmp/tradingai/tasks.db
+      - EXECUTION_DB_PATH=/tmp/tradingai/execution_fills.db
+      - FUND_STATE_DB_PATH=/tmp/tradingai/fund_state.db
+      - BREAKOUT_STATE_PATH=/tmp/tradingai/breakout_monitor.json
+      - DECISION_JOURNAL_PATH=/tmp/tradingai/decision_journal.jsonl
+      - EXPERT_TRACK_RECORD_PATH=/tmp/tradingai/expert_track_record.json
+      - CLOSED_TRADES_PATH=/tmp/tradingai/closed_trades.jsonl
+      - CC_ENV=production
+      - LOG_LEVEL=INFO
+      - API_SECRET_KEY=${API_SECRET_KEY:-dev-secret-local}
+      - RUNNING_IN_DOCKER=1
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 15s
+      timeout: 5s
+      start_period: 45s
+      retries: 4
+
+volumes:
+  data:
+  models:

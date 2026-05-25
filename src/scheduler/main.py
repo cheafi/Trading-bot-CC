@@ -352,6 +352,18 @@ class TradingScheduler:
 
             BriefDataService.invalidate_cache()
 
+            # --- IBKR PAPER TRADING SYNC ---
+            try:
+                from src.engines.paper_trading_engine import (
+                    PaperTradingEngine,
+                )  # noqa: PLC0415
+
+                logger.info("Executing Paper Trading Engine Sync...")
+                paper_engine = PaperTradingEngine()
+                await paper_engine.execute_top_strategy()
+            except Exception as pe:
+                logger.error("Paper Trader execution failed: %s", pe)
+
         except Exception as e:
             logger.error("Signal refresh job failed: %s", e)
 

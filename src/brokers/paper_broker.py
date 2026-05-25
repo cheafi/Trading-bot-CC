@@ -171,7 +171,7 @@ class PaperBroker(BaseBroker):
             from src.ingestors.market_data import MarketDataIngestor
             self._market_data = MarketDataIngestor()
         except Exception as e:
-            logger.warning(f"Market data source unavailable: {e}")
+            logger.info("Paper broker market data source unavailable: %s", e)
 
         return True
 
