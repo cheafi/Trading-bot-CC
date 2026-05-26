@@ -1,3 +1,4 @@
+/* eslint-disable no-undef -- service worker: self, caches, fetch, clients */
 /**
  * TradingAI Pro - Service Worker
  * Enables offline support, caching, and push notifications
