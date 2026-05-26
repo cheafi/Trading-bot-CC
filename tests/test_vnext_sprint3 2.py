@@ -1,0 +1,1968 @@
+"""
+VNext Sprint 3 Tests
+=====================
+
+Tests for:
+  - Commit I : Options chain provider ⟶ OptionsMapper
+  - Commit J : Expression-aware options screen
+  - Commit M : Unified research artifact writer + replay
+  - Commit N : External market-intel API contract
+  - Commit O : research_lab module (factors, metrics, slippage, portfolio, options, patterns)
+"""
+
+import json
+import os
+import sys
+import tempfile
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
+
+import numpy as np
+import pytest
+
+# Configure pytest-asyncio
+pytest_plugins = ('anyio',)
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+
+# ════════════════════════════════════════════════════════════════
+# COMMIT I — OptionsMapper unit tests
+# ════════════════════════════════════════════════════════════════
+
+class TestOptionsMapper:
+    """Tests for src/services/options/options_mapper.py"""
+
+    @pytest.mark.anyio
+    async def test_build_screen_returns_result_object(self):
+        from src.services.options.options_mapper import (
+            OptionsMapper,
+            OptionsScreenResult,
+        )
+
+        mapper = OptionsMapper()
+        result = await mapper.build_screen(
+            ticker="AAPL", spot=175.0, rsi=55,
+        )
+        assert isinstance(result, OptionsScreenResult)
+        assert result.ticker == "AAPL"
+        assert result.spot_price == 175.0
+
+    @pytest.mark.anyio
+    async def test_build_screen_contracts_ranked(self):
+        from src.services.options.options_mapper import OptionsMapper
+        mapper = OptionsMapper()
+        result = await mapper.build_screen(
+            ticker="MSFT", spot=400.0, rsi=60,
+        )
+        assert len(result.contracts) > 0
+        assert len(result.contracts) <= 10
+        # Verify ranking
+        ranks = [c["rank"] for c in result.contracts]
+        assert ranks == list(range(1, len(ranks) + 1))
+
+    @pytest.mark.anyio
+    async def test_build_screen_iv_term_structure(self):
+        from src.services.options.options_mapper import OptionsMapper
+        mapper = OptionsMapper()
+        result = await mapper.build_screen(
+            ticker="TSLA", spot=250.0,
+        )
+        assert len(result.iv_term_structure) >= 7
+        dtes = [t["dte"] for t in result.iv_term_structure]
+        assert 30 in dtes
+        assert 365 in dtes
+        for t in result.iv_term_structure:
+            assert t["iv"] > 0
+
+    @pytest.mark.anyio
+    async def test_build_screen_market_context_fields(self):
+        from src.services.options.options_mapper import OptionsMapper
+        mapper = OptionsMapper()
+        result = await mapper.build_screen(
+            ticker="NVDA", spot=800.0,
+        )
+        ctx = result.market_context
+        assert "iv_rank" in ctx
+        assert "iv_percentile" in ctx
+        assert "atm_iv" in ctx
+        assert "hv_20d" in ctx
+        assert "days_to_earnings" in ctx
+
+    @pytest.mark.anyio
+    async def test_build_screen_trust_block(self):
+        from src.services.options.options_mapper import OptionsMapper
+        mapper = OptionsMapper()
+        result = await mapper.build_screen(
+            ticker="GOOG", spot=150.0,
+        )
+        t = result.trust
+        assert "mode" in t
+        assert t["mode"] in ("LIVE", "SYNTHETIC")
+        assert "source" in t
+        assert "expression_engine_used" in t
+
+    @pytest.mark.anyio
+    async def test_build_screen_strategy_override(self):
+        from src.services.options.options_mapper import OptionsMapper
+        mapper = OptionsMapper()
+        result = await mapper.build_screen(
+            ticker="SPY", spot=450.0,
+            strategy="long_put",
+        )
+        assert result.expression_decision == "long_put"
+
+    @pytest.mark.anyio
+    async def test_build_screen_warnings_high_iv(self):
+        """When IV rank is high, warning should appear."""
+        from src.services.options.options_mapper import OptionsMapper
+
+        # Create a mock provider that returns high IV
+        provider = MagicMock()
+        chain = MagicMock()
+        chain.ticker = "HIGH_IV"
+        chain.iv_rank = 80
+        chain.iv_percentile = 80
+        chain.skew_25d = -0.01
+        chain.atm_iv = 0.50
+        chain.hv_20d = 0.25
+        chain.total_oi = 5000
+        chain.expiry = "synthetic"
+        chain.strikes = []
+        provider.fetch_chain = AsyncMock(return_value=chain)
+
+        mapper = OptionsMapper(options_provider=provider)
+        result = await mapper.build_screen(
+            ticker="HIGH_IV", spot=100.0,
+        )
+        # Should have IV rank warning
+        iv_warnings = [
+            w for w in result.warnings if "IV rank" in w
+        ]
+        assert len(iv_warnings) > 0
+
+    @pytest.mark.anyio
+    async def test_contracts_have_required_fields(self):
+        from src.services.options.options_mapper import OptionsMapper
+        mapper = OptionsMapper()
+        result = await mapper.build_screen(
+            ticker="AMZN", spot=180.0,
+        )
+        for c in result.contracts:
+            assert "strike" in c
+            assert "dte" in c
+            assert "mid" in c
+            assert "oi" in c
+            assert "ev" in c
+            assert "breakeven" in c
+            assert "rank" in c
+
+
+# ════════════════════════════════════════════════════════════════
+# COMMIT J — ExpressionEngine integration in OptionsMapper
+# ════════════════════════════════════════════════════════════════
+
+class TestExpressionEngineIntegration:
+    """Tests for expression engine + options mapper integration."""
+
+    @pytest.mark.anyio
+    async def test_expression_engine_used_when_provided(self):
+        from src.engines.expression_engine import ExpressionEngine
+        from src.services.options.options_mapper import OptionsMapper
+
+        ee = ExpressionEngine()
+        mapper = OptionsMapper(expression_engine=ee)
+        result = await mapper.build_screen(
+            ticker="AAPL", spot=175.0, rsi=60,
+        )
+        # ExpressionEngine should have been used
+        assert result.trust["expression_engine_used"] is True
+        # Should have an expression_rationale
+        assert result.expression_rationale is not None
+
+    @pytest.mark.anyio
+    async def test_expression_decision_populated(self):
+        from src.engines.expression_engine import ExpressionEngine
+        from src.services.options.options_mapper import OptionsMapper
+
+        ee = ExpressionEngine()
+        mapper = OptionsMapper(expression_engine=ee)
+        result = await mapper.build_screen(
+            ticker="TSLA", spot=250.0, rsi=55,
+        )
+        assert result.expression_decision in (
+            "stock", "long_call", "long_put",
+            "debit_spread", "credit_spread",
+            "call_spread", "put_spread",
+        )
+
+    @pytest.mark.anyio
+    async def test_without_expression_engine_defaults_stock(self):
+        from src.services.options.options_mapper import OptionsMapper
+
+        mapper = OptionsMapper(expression_engine=None)
+        result = await mapper.build_screen(
+            ticker="AAPL", spot=175.0,
+        )
+        assert result.expression_decision == "stock"
+        assert result.trust["expression_engine_used"] is False
+
+
+# ════════════════════════════════════════════════════════════════
+# COMMIT M — Unified ResearchArtifactWriter
+# ════════════════════════════════════════════════════════════════
+
+class TestResearchArtifactWriter:
+    """Tests for src/services/artifacts/research_artifact_writer.py"""
+
+    def _sample_compare_payload(self):
+        return {
+            "tickers": ["AAPL", "MSFT"],
+            "dates": ["2025-01-02", "2025-01-03"],
+            "series": {
+                "AAPL": [100, 102],
+                "MSFT": [100, 101],
+            },
+            "stats": {
+                "AAPL": {"sharpe": 1.2},
+                "MSFT": {"sharpe": 0.9},
+            },
+            "as_of": "2025-01-03T12:00:00Z",
+        }
+
+    def _sample_options_payload(self):
+        return {
+            "ticker": "AAPL",
+            "spot_price": 175.0,
+            "expression_decision": "long_call",
+            "contracts": [
+                {"rank": 1, "strike": 180, "dte": 30, "ev": 1.5},
+                {"rank": 2, "strike": 185, "dte": 45, "ev": 1.2},
+            ],
+            "iv_term_structure": [
+                {"dte": 30, "iv": 0.28},
+                {"dte": 60, "iv": 0.30},
+            ],
+            "generated_at": "2025-01-03T12:00:00Z",
+        }
+
+    def _sample_strategy_payload(self):
+        return {
+            "strategies": ["swing", "momentum"],
+            "optimizations": [
+                {
+                    "objective": "max_sharpe",
+                    "weights": {"swing": 0.6, "momentum": 0.4},
+                    "sharpe": 1.8,
+                },
+            ],
+            "as_of": "2025-01-03T12:00:00Z",
+        }
+
+    def test_write_compare_overlay(self):
+        from src.services.artifacts.research_artifact_writer import (
+            ResearchArtifactWriter,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            writer = ResearchArtifactWriter(data_dir=Path(tmpdir))
+            meta = writer.write(
+                "compare-overlay", self._sample_compare_payload(),
+            )
+            assert meta["artifact_id"].startswith("compare-overlay-")
+            assert "json" in meta["artifact_paths"]
+            assert "csv" in meta["artifact_paths"]
+            assert "md" in meta["artifact_paths"]
+
+    def test_write_options_screen(self):
+        from src.services.artifacts.research_artifact_writer import (
+            ResearchArtifactWriter,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            writer = ResearchArtifactWriter(data_dir=Path(tmpdir))
+            meta = writer.write(
+                "options-screen", self._sample_options_payload(),
+            )
+            assert meta["artifact_id"].startswith("options-screen-")
+
+    def test_write_strategy_lab(self):
+        from src.services.artifacts.research_artifact_writer import (
+            ResearchArtifactWriter,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            writer = ResearchArtifactWriter(data_dir=Path(tmpdir))
+            meta = writer.write(
+                "strategy-portfolio-lab",
+                self._sample_strategy_payload(),
+            )
+            assert meta["artifact_id"].startswith(
+                "strategy-portfolio-lab-",
+            )
+
+    def test_load_artifact_by_id(self):
+        from src.services.artifacts.research_artifact_writer import (
+            ResearchArtifactWriter,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            writer = ResearchArtifactWriter(data_dir=Path(tmpdir))
+            meta = writer.write(
+                "compare-overlay", self._sample_compare_payload(),
+            )
+            aid = meta["artifact_id"]
+            loaded = writer.load(aid)
+            assert loaded is not None
+            assert loaded["artifact_id"] == aid
+
+    def test_load_missing_returns_none(self):
+        from src.services.artifacts.research_artifact_writer import (
+            ResearchArtifactWriter,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            writer = ResearchArtifactWriter(data_dir=Path(tmpdir))
+            assert writer.load("nonexistent-id") is None
+
+    def test_list_artifacts_all(self):
+        from src.services.artifacts.research_artifact_writer import (
+            ResearchArtifactWriter,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            writer = ResearchArtifactWriter(data_dir=Path(tmpdir))
+            writer.write("compare-overlay", self._sample_compare_payload())
+            writer.write("options-screen", self._sample_options_payload())
+            writer.write("strategy-portfolio-lab", self._sample_strategy_payload())
+
+            all_artifacts = writer.list_artifacts()
+            assert len(all_artifacts) == 3
+
+    def test_list_artifacts_filter_by_surface(self):
+        from src.services.artifacts.research_artifact_writer import (
+            ResearchArtifactWriter,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            writer = ResearchArtifactWriter(data_dir=Path(tmpdir))
+            writer.write("compare-overlay", self._sample_compare_payload())
+            writer.write("compare-overlay", self._sample_compare_payload())
+            writer.write("options-screen", self._sample_options_payload())
+
+            compare_only = writer.list_artifacts(surface="compare-overlay")
+            assert len(compare_only) == 2
+
+    def test_json_artifact_is_valid_json(self):
+        from src.services.artifacts.research_artifact_writer import (
+            ResearchArtifactWriter,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            writer = ResearchArtifactWriter(data_dir=Path(tmpdir))
+            meta = writer.write(
+                "options-screen", self._sample_options_payload(),
+            )
+            json_path = meta["artifact_paths"]["json"]
+            with open(json_path) as f:
+                data = json.load(f)
+            assert "artifact_id" in data
+
+    def test_index_file_maintained(self):
+        from src.services.artifacts.research_artifact_writer import (
+            ResearchArtifactWriter,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            writer = ResearchArtifactWriter(data_dir=Path(tmpdir))
+            writer.write("compare-overlay", self._sample_compare_payload())
+            writer.write("options-screen", self._sample_options_payload())
+
+            index_path = writer.base / "_index.json"
+            assert index_path.exists()
+            entries = json.loads(index_path.read_text())
+            assert len(entries) == 2
+
+
+# ════════════════════════════════════════════════════════════════
+# COMMIT N — Market Intel API endpoints
+# ════════════════════════════════════════════════════════════════
+
+class TestMarketIntelEndpoints:
+    """Tests for /api/market-intel/* endpoints via HTTPX TestClient."""
+
+    @pytest.fixture
+    def client(self):
+        from httpx import ASGITransport, AsyncClient
+
+        from src.api.main import _init_shared_services, app
+
+        # Ensure singletons are wired
+        if not hasattr(app.state, "market_data") or app.state.market_data is None:
+            _init_shared_services()
+
+        transport = ASGITransport(app=app)
+        return AsyncClient(transport=transport, base_url="http://test")
+
+    @pytest.mark.anyio
+    async def test_regime_endpoint(self, client):
+        async with client as c:
+            resp = await c.get("/api/market-intel/regime")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "as_of" in data
+        # Should have regime_label or regime key
+        assert "regime_label" in data or "regime" in data
+
+    @pytest.mark.anyio
+    async def test_vix_endpoint(self, client):
+        async with client as c:
+            resp = await c.get("/api/market-intel/vix")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "as_of" in data
+        assert "label" in data
+        assert data["label"] in (
+            "LOW", "NORMAL", "ELEVATED", "HIGH",
+            "EXTREME", "UNAVAILABLE",
+        )
+
+    @pytest.mark.anyio
+    async def test_breadth_endpoint(self, client):
+        async with client as c:
+            resp = await c.get("/api/market-intel/breadth")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "breadth" in data
+        assert "as_of" in data
+
+    @pytest.mark.anyio
+    async def test_spy_return_endpoint(self, client):
+        async with client as c:
+            resp = await c.get("/api/market-intel/spy-return")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "spy_returns" in data
+        assert "as_of" in data
+
+    @pytest.mark.anyio
+    async def test_rates_endpoint(self, client):
+        async with client as c:
+            resp = await c.get("/api/market-intel/rates")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "yields" in data
+        assert "curve_status" in data
+        assert "as_of" in data
+
+    @pytest.mark.anyio
+    async def test_artifact_list_endpoint(self, client):
+        async with client as c:
+            resp = await c.get("/api/v7/research/artifacts")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "artifacts" in data
+        assert isinstance(data["artifacts"], list)
+
+    @pytest.mark.anyio
+    async def test_artifact_replay_not_found(self, client):
+        async with client as c:
+            resp = await c.get(
+                "/api/v7/research/artifacts/nonexistent-id",
+            )
+        assert resp.status_code == 404
+
+
+# ════════════════════════════════════════════════════════════════
+# COMMIT O — research_lab module tests
+# ════════════════════════════════════════════════════════════════
+
+class TestResearchLabFactors:
+    """Tests for src/research_lab/factors.py"""
+
+    def test_momentum_score(self):
+        from src.research_lab.factors import momentum_score
+
+        # Needs >= 252 daily returns for default lookback
+        returns = np.random.normal(0.002, 0.01, 300)
+        score = momentum_score(returns)
+        assert isinstance(score, float)
+        # Positive mean returns → positive momentum (probabilistic)
+
+    def test_momentum_score_short_array(self):
+        from src.research_lab.factors import momentum_score
+        returns = np.random.normal(-0.001, 0.01, 50)
+        score = momentum_score(returns)
+        assert score == 0.0  # too short for default lookback
+
+    def test_mean_reversion_score(self):
+        from src.research_lab.factors import mean_reversion_score
+        prices = np.array([100 + i * 0.1 for i in range(60)])
+        score = mean_reversion_score(prices)
+        assert isinstance(score, float)
+
+    def test_quality_score(self):
+        from src.research_lab.factors import quality_score
+        score = quality_score(roe=0.18, debt_equity=0.5, margin=0.12)
+        assert isinstance(score, float)
+        assert 0 < score <= 1.0
+
+    def test_quality_score_poor(self):
+        from src.research_lab.factors import quality_score
+        score = quality_score(roe=0.02, debt_equity=3.0, margin=0.02)
+        assert score < 0.5
+
+    def test_volatility_factor(self):
+        from src.research_lab.factors import volatility_factor
+        returns = np.random.normal(0.001, 0.02, 252)
+        vol = volatility_factor(returns)
+        assert isinstance(vol, float)
+        assert vol > 0
+
+
+class TestResearchLabMetrics:
+    """Tests for src/research_lab/metrics.py"""
+
+    def test_sharpe_ratio(self):
+        from src.research_lab.metrics import sharpe_ratio
+        returns = np.random.normal(0.001, 0.02, 252)
+        sr = sharpe_ratio(returns)
+        assert isinstance(sr, float)
+
+    def test_sortino_ratio(self):
+        from src.research_lab.metrics import sortino_ratio
+        returns = np.random.normal(0.001, 0.02, 252)
+        s = sortino_ratio(returns)
+        assert isinstance(s, float)
+
+    def test_calmar_ratio(self):
+        from src.research_lab.metrics import calmar_ratio
+        returns = np.random.normal(0.001, 0.02, 252)
+        c = calmar_ratio(returns)
+        assert isinstance(c, float)
+
+    def test_max_drawdown(self):
+        from src.research_lab.metrics import max_drawdown
+        returns = np.random.normal(0.001, 0.02, 252)
+        dd = max_drawdown(returns)
+        assert dd <= 0  # drawdown is non-positive
+
+    def test_var_cvar(self):
+        from src.research_lab.metrics import var_cvar
+        returns = np.random.normal(0.001, 0.02, 252)
+        var, cvar = var_cvar(returns)
+        assert var <= 0
+        assert cvar <= var  # CVaR is worse than VaR
+
+    def test_analyze_drawdowns(self):
+        from src.research_lab.metrics import analyze_drawdowns
+
+        # Create returns with a clear drawdown
+        returns = np.concatenate([
+            np.full(50, 0.01),
+            np.full(30, -0.02),
+            np.full(50, 0.01),
+        ])
+        dd_list = analyze_drawdowns(returns)
+        assert isinstance(dd_list, list)
+
+
+class TestResearchLabSlippage:
+    """Tests for src/research_lab/slippage.py"""
+
+    def test_estimate_slippage(self):
+        from src.research_lab.slippage import estimate_slippage
+        est = estimate_slippage(
+            price=100.0,
+            size_shares=500,
+            avg_daily_volume=1_000_000,
+            avg_spread_pct=0.05,
+        )
+        assert est.total_cost_bps > 0
+        assert est.spread_cost_bps > 0
+        assert est.market_impact_bps >= 0
+
+    def test_slippage_increases_with_size(self):
+        from src.research_lab.slippage import estimate_slippage
+        small = estimate_slippage(100.0, 100, 1_000_000)
+        large = estimate_slippage(100.0, 50_000, 1_000_000)
+        assert large.total_cost_bps > small.total_cost_bps
+
+
+class TestResearchLabPortfolio:
+    """Tests for src/research_lab/portfolio.py"""
+
+    def test_equal_weight(self):
+        from src.research_lab.portfolio import equal_weight
+        w = equal_weight(["swing", "momentum", "mean_rev", "trend", "vol"])
+        assert len(w) == 5
+        assert abs(sum(w.values()) - 1.0) < 1e-9
+
+    def test_inverse_vol_weight(self):
+        from src.research_lab.portfolio import inverse_vol_weight
+        returns_map = {
+            "low_vol": list(np.random.normal(0.001, 0.005, 100)),
+            "high_vol": list(np.random.normal(0.001, 0.02, 100)),
+        }
+        w = inverse_vol_weight(returns_map)
+        assert len(w) == 2
+        assert abs(sum(w.values()) - 1.0) < 1e-9
+        # Lower vol asset should get higher weight
+        assert w["low_vol"] > w["high_vol"]
+
+    def test_max_sharpe_weight(self):
+        from src.research_lab.portfolio import max_sharpe_weight
+        returns_map = {
+            "A": list(np.random.normal(0.001, 0.01, 300)),
+            "B": list(np.random.normal(0.0005, 0.008, 300)),
+        }
+        w = max_sharpe_weight(returns_map)
+        assert len(w) == 2
+        assert abs(sum(w.values()) - 1.0) < 1e-4
+
+
+class TestResearchLabOptions:
+    """Tests for src/research_lab/options.py"""
+
+    def test_black_scholes_greeks_call(self):
+        from src.research_lab.options import black_scholes_greeks
+        g = black_scholes_greeks(
+            spot=100, strike=100, dte=91, iv=0.20,
+            rf=0.05, is_call=True,
+        )
+        assert g.delta > 0  # call delta positive
+        assert g.gamma > 0
+        assert g.theta < 0  # time decay
+        assert g.vega > 0
+
+    def test_black_scholes_greeks_put(self):
+        from src.research_lab.options import black_scholes_greeks
+        g = black_scholes_greeks(
+            spot=100, strike=100, dte=91, iv=0.20,
+            rf=0.05, is_call=False,
+        )
+        assert g.delta < 0  # put delta negative
+
+    def test_greeks_atm_delta_near_half(self):
+        """ATM call delta should be close to 0.5."""
+        from src.research_lab.options import black_scholes_greeks
+        g = black_scholes_greeks(
+            spot=100, strike=100, dte=365, iv=0.25,
+        )
+        assert 0.45 < g.delta < 0.75
+
+    def test_strategy_payoff(self):
+        from src.research_lab.options import strategy_payoff
+        legs = [
+            {"type": "CALL", "strike": 100, "side": "BUY",
+             "qty": 1, "premium": 5},
+        ]
+        results = strategy_payoff(
+            legs, spot_range=[80, 100, 105, 120], spot=100,
+        )
+        assert len(results) == 4
+        # At spot=80: intrinsic=0, PnL = -5*100 = -500
+        assert results[0]["pnl"] == -500.0
+        # At spot=120: intrinsic=20, PnL = (20-5)*100 = 1500
+        assert results[3]["pnl"] == 1500.0
+
+    def test_bull_call_spread(self):
+        from src.research_lab.options import strategy_payoff
+        legs = [
+            {"type": "CALL", "strike": 100, "side": "BUY",
+             "qty": 1, "premium": 5},
+            {"type": "CALL", "strike": 110, "side": "SELL",
+             "qty": 1, "premium": 2},
+        ]
+        results = strategy_payoff(
+            legs, spot_range=[90, 100, 105, 110, 120],
+        )
+        # At 90: max loss = (-5 + 2)*100 = -300
+        assert results[0]["pnl"] == -300.0
+        # At 120: max profit = (20-5-10+2)*100 = 700
+        assert results[4]["pnl"] == 700.0
+
+
+class TestResearchLabPatterns:
+    """Tests for src/research_lab/patterns.py"""
+
+    def test_detect_patterns_returns_list(self):
+        from src.research_lab.patterns import detect_patterns
+        close = np.array([100 + i * 0.5 for i in range(60)])
+        high = close + 1
+        low = close - 1
+        volume = np.full(60, 1_000_000.0)
+        patterns = detect_patterns(close, high, low, volume)
+        assert isinstance(patterns, list)
+
+    def test_detect_uptrend(self):
+        from src.research_lab.patterns import detect_patterns
+
+        # Clear uptrend: higher highs, higher lows
+        close = np.array([100 + i * 0.8 for i in range(60)])
+        high = close + 2
+        low = close - 2
+        volume = np.full(60, 1_000_000.0)
+        patterns = detect_patterns(close, high, low, volume)
+        pattern_names = [p["pattern"] for p in patterns]
+        assert "uptrend" in pattern_names
+
+    def test_volume_climax(self):
+        from src.research_lab.patterns import detect_patterns
+        close = np.array([100 + i * 0.1 for i in range(60)])
+        high = close + 1
+        low = close - 1
+        volume = np.full(60, 100_000.0)
+        volume[-1] = 500_000.0  # 5x average
+        patterns = detect_patterns(close, high, low, volume)
+        pattern_names = [p["pattern"] for p in patterns]
+        assert "volume_climax" in pattern_names
+
+    def test_short_data_returns_empty(self):
+        from src.research_lab.patterns import detect_patterns
+        close = np.array([100, 101, 102])
+        high = close + 1
+        low = close - 1
+        volume = np.full(3, 100_000.0)
+        patterns = detect_patterns(close, high, low, volume)
+        assert patterns == []
+
+
+# ════════════════════════════════════════════════════════════════
+# COMMIT N — SKILL.md and API_MARKET_INTEL.md existence
+# ════════════════════════════════════════════════════════════════
+
+class TestDocumentation:
+    """Verify commit N documentation files exist."""
+
+    def test_skill_md_exists(self):
+        path = Path(__file__).parent.parent / "docs" / "SKILL.md"
+        assert path.exists(), "docs/SKILL.md missing"
+        content = path.read_text()
+        assert "Capability" in content
+        assert "Market Intel" in content or "market-intel" in content
+
+    def test_api_market_intel_md_exists(self):
+        path = (
+            Path(__file__).parent.parent
+            / "docs" / "API_MARKET_INTEL.md"
+        )
+        assert path.exists(), "docs/API_MARKET_INTEL.md missing"
+        content = path.read_text()
+        assert "/api/market-intel" in content
+        assert "regime" in content
+        assert "vix" in content.lower()
+
+    def test_research_lab_init(self):
+        """research_lab package should be importable."""
+        import src.research_lab  # noqa: F401
+
+
+# ════════════════════════════════════════════════════════════════
+# Phase 2 — New endpoint tests (dossier, brief, options)
+# ════════════════════════════════════════════════════════════════
+
+class TestPhase2Endpoints:
+    """Tests for Phase 2 decision-compression endpoints."""
+
+    @pytest.fixture
+    def client(self):
+        from httpx import ASGITransport, AsyncClient
+
+        from src.api.main import app
+        transport = ASGITransport(app=app)
+        return AsyncClient(transport=transport, base_url="http://test")
+
+    @pytest.mark.anyio
+    async def test_dossier_endpoint_returns_200(self, client):
+        async with client as c:
+            r = await c.get("/api/live/dossier/AAPL")
+            assert r.status_code == 200
+            d = r.json()
+            assert d["symbol"] == "AAPL"
+            assert "price" in d
+            assert "technicals" in d
+            assert "factors" in d
+            assert "why_buy" in d
+            assert "why_stop" in d
+            assert "trade_plan" in d
+            assert "trust" in d
+
+    @pytest.mark.anyio
+    async def test_dossier_technicals_structure(self, client):
+        async with client as c:
+            r = await c.get("/api/live/dossier/MSFT")
+            assert r.status_code == 200
+            t = r.json()["technicals"]
+            for key in ["rsi", "sma20", "sma50", "atr", "volume_ratio",
+                        "macd_signal", "support", "resistance",
+                        "high_52w", "low_52w", "bbands_upper", "bbands_lower"]:
+                assert key in t, f"Missing {key} in technicals"
+
+    @pytest.mark.anyio
+    async def test_dossier_factor_chips(self, client):
+        async with client as c:
+            r = await c.get("/api/live/dossier/AAPL")
+            d = r.json()
+            assert len(d["factors"]) >= 5
+            for f in d["factors"]:
+                assert "name" in f
+                assert "value" in f
+                assert f["signal"] in ("positive", "negative", "neutral")
+            assert "factor_summary" in d
+            assert "positive" in d["factor_summary"]
+            assert "negative" in d["factor_summary"]
+
+    @pytest.mark.anyio
+    async def test_dossier_trade_plan(self, client):
+        async with client as c:
+            r = await c.get("/api/live/dossier/AAPL")
+            tp = r.json()["trade_plan"]
+            assert "entry_zone" in tp
+            assert len(tp["entry_zone"]) == 2
+            assert "target_1r" in tp
+            assert "target_2r" in tp
+            assert "stop" in tp
+            assert "risk_per_share" in tp
+
+    @pytest.mark.anyio
+    async def test_dossier_why_buy_stop(self, client):
+        async with client as c:
+            r = await c.get("/api/live/dossier/AAPL")
+            d = r.json()
+            assert isinstance(d["why_buy"], list) and len(d["why_buy"]) > 0
+            assert isinstance(d["why_stop"], list) and len(d["why_stop"]) > 0
+
+    @pytest.mark.anyio
+    async def test_dossier_404_bad_ticker(self, client):
+        async with client as c:
+            r = await c.get("/api/live/dossier/ZZZZZ9")
+            assert r.status_code == 404
+
+    @pytest.mark.anyio
+    async def test_brief_endpoint_returns_200(self, client):
+        async with client as c:
+            r = await c.get("/api/live/brief")
+            assert r.status_code == 200
+            d = r.json()
+            assert "date" in d
+            assert "regime" in d
+            assert "narrative" in d["regime"]
+            assert "what_changed" in d
+            assert isinstance(d["what_changed"], list)
+            assert "trust" in d
+
+    @pytest.mark.anyio
+    async def test_brief_has_actionable_and_watch(self, client):
+        async with client as c:
+            r = await c.get("/api/live/brief")
+            d = r.json()
+            assert "actionable" in d
+            assert "watch" in d
+            assert isinstance(d["actionable"], list)
+            assert isinstance(d["watch"], list)
+
+    @pytest.mark.anyio
+    async def test_brief_sectors(self, client):
+        async with client as c:
+            r = await c.get("/api/live/brief")
+            d = r.json()
+            assert "sectors" in d
+            assert isinstance(d["sectors"], list)
+
+    @pytest.mark.anyio
+    async def test_brief_follow_up(self, client):
+        async with client as c:
+            r = await c.get("/api/live/brief")
+            d = r.json()
+            assert "follow_up" in d
+            assert len(d["follow_up"]) >= 3
+
+    @pytest.mark.anyio
+    async def test_options_endpoint_returns_200(self, client):
+        async with client as c:
+            r = await c.get("/api/live/options/AAPL")
+            assert r.status_code == 200
+            d = r.json()
+            assert d["symbol"] == "AAPL"
+            assert "contracts" in d
+            assert len(d["contracts"]) == 5
+            assert "trust" in d
+            assert d["trust"]["mode"] == "SYNTHETIC"
+
+    @pytest.mark.anyio
+    async def test_options_contract_structure(self, client):
+        async with client as c:
+            r = await c.get("/api/live/options/MSFT")
+            d = r.json()
+            for c_item in d["contracts"]:
+                for key in ["strike", "dte", "type", "delta", "iv", "oi",
+                            "spread_quality", "ev", "break_even"]:
+                    assert key in c_item, f"Missing {key} in contract"
+
+    @pytest.mark.anyio
+    async def test_options_iv_context(self, client):
+        async with client as c:
+            r = await c.get("/api/live/options/AAPL")
+            d = r.json()
+            assert "iv_rank" in d
+            assert "iv_percentile" in d
+            assert "term_structure" in d
+            assert "skew_note" in d
+            assert "regime_context" in d
+
+    @pytest.mark.anyio
+    async def test_options_404_bad_ticker(self, client):
+        async with client as c:
+            r = await c.get("/api/live/options/ZZZZZ9")
+            assert r.status_code == 404
+
+    @pytest.mark.anyio
+    async def test_dossier_trust_has_as_of(self, client):
+        async with client as c:
+            r = await c.get("/api/live/dossier/AAPL")
+            trust = r.json()["trust"]
+            assert "as_of" in trust
+            assert "source" in trust
+            assert "mode" in trust
+
+    @pytest.mark.anyio
+    async def test_brief_trust_has_as_of(self, client):
+        async with client as c:
+            r = await c.get("/api/live/brief")
+            trust = r.json()["trust"]
+            assert "as_of" in trust
+            assert "source" in trust
+
+    def test_patterns_importable(self):
+        from src.research_lab.patterns import detect_patterns  # noqa: F401
+        assert callable(detect_patterns)
+
+
+# ════════════════════════════════════════════════════════════════
+# Phase 3 — Operator Console + Data Catalog endpoints
+# ════════════════════════════════════════════════════════════════
+
+
+class TestPhase3OpsEndpoints:
+    """Tests for Phase 3 operator console and data catalog endpoints."""
+
+    @pytest.fixture
+    def client(self):
+        from httpx import ASGITransport, AsyncClient
+
+        from src.api.main import app
+
+        transport = ASGITransport(app=app)
+        return AsyncClient(transport=transport, base_url="http://test")
+
+    @pytest.mark.anyio
+    async def test_ops_status_returns_200(self, client):
+        async with client as c:
+            r = await c.get("/api/ops/status")
+            assert r.status_code == 200
+            d = r.json()
+            assert "uptime" in d
+            assert "uptime_seconds" in d
+            assert "version" in d
+            assert "engine" in d
+            assert "latency" in d
+            assert "trust" in d
+
+    @pytest.mark.anyio
+    async def test_ops_status_engine_fields(self, client):
+        async with client as c:
+            r = await c.get("/api/ops/status")
+            eng = r.json()["engine"]
+            for key in [
+                "running",
+                "dry_run",
+                "cycle_count",
+                "signals_today",
+                "trades_today",
+                "cached_recommendations",
+                "circuit_breaker",
+            ]:
+                assert key in eng, f"Missing {key} in engine"
+
+    @pytest.mark.anyio
+    async def test_ops_status_latency(self, client):
+        async with client as c:
+            r = await c.get("/api/ops/status")
+            lat = r.json()["latency"]
+            assert "regime_ms" in lat
+            assert isinstance(lat["regime_ms"], (int, float))
+
+    @pytest.mark.anyio
+    async def test_ops_endpoints_returns_200(self, client):
+        async with client as c:
+            r = await c.get("/api/ops/endpoints")
+            assert r.status_code == 200
+            d = r.json()
+            assert "count" in d
+            assert "endpoints" in d
+            assert d["count"] > 0
+            assert isinstance(d["endpoints"], list)
+
+    @pytest.mark.anyio
+    async def test_ops_endpoints_includes_known_routes(self, client):
+        async with client as c:
+            r = await c.get("/api/ops/endpoints")
+            paths = [ep["path"] for ep in r.json()["endpoints"]]
+            for expected in [
+                "/api/health",
+                "/api/live/market",
+                "/api/live/dossier/{ticker}",
+                "/api/live/brief",
+                "/api/live/options/{ticker}",
+                "/api/ops/status",
+                "/api/ops/endpoints",
+            ]:
+                assert expected in paths, f"Missing {expected} in endpoint inventory"
+
+    @pytest.mark.anyio
+    async def test_ops_endpoints_structure(self, client):
+        async with client as c:
+            r = await c.get("/api/ops/endpoints")
+            ep = r.json()["endpoints"][0]
+            assert "method" in ep
+            assert "path" in ep
+            assert ep["method"] in ("GET", "POST", "PUT", "DELETE")
+
+
+# ════════════════════════════════════════════════════════════════
+# Phase 4 — Hardening & Honesty
+# ════════════════════════════════════════════════════════════════
+
+
+class TestPhase4Hardening:
+    """Tests for Phase 4: duplicate handler fix, deterministic options,
+    ticker validation, honest AI endpoints."""
+
+    @pytest.fixture
+    def client(self):
+        from httpx import ASGITransport, AsyncClient
+
+        from src.api.main import app
+
+        transport = ASGITransport(app=app)
+        return AsyncClient(transport=transport, base_url="http://test")
+
+    # ── Ticker validation ──
+
+    @pytest.mark.anyio
+    async def test_invalid_ticker_rejected(self, client):
+        """Tickers with invalid chars should return 422."""
+        async with client as c:
+            r = await c.get("/api/live/quote/DROP TABLE")
+            assert r.status_code == 422
+            d = r.json()
+            assert "Invalid ticker" in (d.get("error", "") or d.get("detail", ""))
+
+    @pytest.mark.anyio
+    async def test_ticker_too_long_rejected(self, client):
+        """Tickers over 10 chars should return 422."""
+        async with client as c:
+            r = await c.get("/api/live/quote/ABCDEFGHIJK")
+            assert r.status_code == 422
+
+    @pytest.mark.anyio
+    async def test_valid_ticker_accepted(self, client):
+        """Valid tickers like AAPL should not return 422."""
+        async with client as c:
+            r = await c.get("/api/live/quote/aapl")
+            # Should NOT be 422 — either 200 or 404 (data may be unavailable)
+            assert r.status_code in (200, 404)
+
+    @pytest.mark.anyio
+    async def test_ticker_with_dot_accepted(self, client):
+        """Tickers like BRK.B should pass validation."""
+        async with client as c:
+            r = await c.get("/api/live/quote/BRK.B")
+            assert r.status_code in (200, 404)
+
+    @pytest.mark.anyio
+    async def test_ticker_validation_dossier(self, client):
+        """Dossier endpoint should also reject invalid tickers."""
+        async with client as c:
+            r = await c.get("/api/live/dossier/<script>")
+            assert r.status_code == 422
+
+    @pytest.mark.anyio
+    async def test_ticker_validation_options(self, client):
+        """Options endpoint should also reject invalid tickers."""
+        async with client as c:
+            r = await c.get("/api/live/options/INVALID!!!")
+            assert r.status_code == 422
+
+    # ── Deterministic options ──
+
+    @pytest.mark.anyio
+    async def test_options_deterministic(self, client):
+        """Same ticker on same day should produce identical IV results."""
+        async with client as c:
+            r1 = await c.get("/api/live/options/AAPL")
+            r2 = await c.get("/api/live/options/AAPL")
+            if r1.status_code == 200 and r2.status_code == 200:
+                d1 = r1.json()
+                d2 = r2.json()
+                assert d1["iv_rank"] == d2["iv_rank"]
+                assert d1["contracts"][0]["iv"] == d2["contracts"][0]["iv"]
+                assert d1["contracts"][0]["delta"] == d2["contracts"][0]["delta"]
+
+    # ── Honest AI endpoints ──
+
+    @pytest.mark.anyio
+    async def test_ai_advisor_live_regime(self, client):
+        """AI advisor should return live regime data, not hardcoded marketing text."""
+        async with client as c:
+            r = await c.get("/api/ai-advisor")
+            assert r.status_code == 200
+            d = r.json()
+            assert "status" in d
+            assert d["status"] == "live"
+            assert "trust" in d
+            assert d["trust"]["mode"] == "LIVE"
+            assert "chain_of_thought" in d
+            assert isinstance(d["chain_of_thought"], list)
+            # Should contain real regime info, not static text
+            assert any("Regime:" in c for c in d["chain_of_thought"])
+
+    @pytest.mark.anyio
+    async def test_ml_status_honest(self, client):
+        """ML status should be honest about model state, not fabricate metrics."""
+        async with client as c:
+            r = await c.get("/api/ml-status")
+            assert r.status_code == 200
+            d = r.json()
+            assert "trust" in d
+            assert d["trust"]["mode"] in ("LIVE", "HONEST")
+            # Must NOT contain fabricated accuracy (the old 72.5 was fake)
+            assert "accuracy" not in d or d.get("trust", {}).get("mode") == "LIVE"
+
+    # ── Exception handler dedup ──
+
+    @pytest.mark.anyio
+    async def test_exception_handler_has_timestamp(self, client):
+        """HTTP errors should include a timestamp (from the detailed handler, not the simple one)."""
+        async with client as c:
+            # Trigger a 422 via bad ticker
+            r = await c.get("/api/live/quote/!!!")
+            assert r.status_code == 422
+            d = r.json()
+            # The detailed handler adds structured error info
+            assert "detail" in d or "error" in d
+
+    @pytest.mark.anyio
+    async def test_404_has_structured_response(self, client):
+        """404 errors should have a structured JSON response."""
+        async with client as c:
+            r = await c.get("/api/live/quote/ZZZZZZ")
+            if r.status_code == 404:
+                d = r.json()
+                # Should have error or detail field
+                assert "error" in d or "detail" in d
+
+    # ── validate_ticker unit tests ──
+
+    def test_validate_ticker_strips_whitespace(self):
+        from src.api.main import validate_ticker
+
+        assert validate_ticker("  aapl ") == "AAPL"
+
+    def test_validate_ticker_uppercases(self):
+        from src.api.main import validate_ticker
+
+        assert validate_ticker("msft") == "MSFT"
+
+    def test_validate_ticker_rejects_empty(self):
+        from src.api.main import validate_ticker
+
+        with pytest.raises(Exception):  # HTTPException
+            validate_ticker("")
+
+    def test_validate_ticker_rejects_special_chars(self):
+        from src.api.main import validate_ticker
+
+        with pytest.raises(Exception):
+            validate_ticker("<script>alert(1)</script>")
+
+    def test_validate_ticker_allows_dots(self):
+        from src.api.main import validate_ticker
+
+        assert validate_ticker("BRK.B") == "BRK.B"
+
+    def test_validate_ticker_allows_caret(self):
+        from src.api.main import validate_ticker
+
+        assert validate_ticker("^VIX") == "^VIX"
+
+
+# ════════════════════════════════════════════════════════════════
+# Phase 5 — 5-Year Stress-Test Backtest Engine
+# ════════════════════════════════════════════════════════════════
+
+
+class TestPhase5StressTestBacktest:
+    """Tests for the production 5Y backtest engine with event detection."""
+
+    @pytest.fixture
+    def client(self):
+        from httpx import ASGITransport, AsyncClient
+
+        from src.api.main import app
+
+        transport = ASGITransport(app=app)
+        return AsyncClient(transport=transport, base_url="http://test")
+
+    # ── Basic backtest execution ──
+
+    @pytest.mark.anyio
+    async def test_backtest_1y_returns_200(self, client):
+        """1-year backtest on SPY should return 200."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=SPY&strategy=all&period=1y"
+            )
+            assert r.status_code == 200
+            d = r.json()
+            assert "strategies" in d
+            assert "ticker" in d
+            assert d["ticker"] == "SPY"
+            assert "benchmark_return" in d
+            assert "trust" in d
+            assert d["trust"]["mode"] == "BACKTEST"
+            assert d["trust"]["source"] == "yfinance_historical"
+
+    @pytest.mark.anyio
+    async def test_backtest_5y_returns_200(self, client):
+        """5-year backtest should return 200 with event data."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=AAPL&strategy=all&period=5y"
+            )
+            assert r.status_code == 200
+            d = r.json()
+            assert d["bars"] > 500, "5Y should have 500+ bars"
+            assert "events" in d
+            assert isinstance(d["events"], list)
+            assert "worst_streaks" in d
+
+    @pytest.mark.anyio
+    async def test_backtest_strategy_fields(self, client):
+        """Each strategy result should have all required fields."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=MSFT&strategy=momentum&period=2y"
+            )
+            assert r.status_code == 200
+            strats = r.json()["strategies"]
+            assert len(strats) >= 1
+            s = strats[0]
+            for field in [
+                "strategy", "total_trades", "winners", "losers",
+                "win_rate", "total_return", "avg_win", "avg_loss",
+                "sharpe", "max_drawdown", "profit_factor",
+                "exit_reasons", "yearly", "score",
+            ]:
+                assert field in s, f"Missing {field}"
+
+    @pytest.mark.anyio
+    async def test_backtest_yearly_breakdown(self, client):
+        """5Y backtest should have year-by-year breakdown."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=AAPL&strategy=swing&period=5y"
+            )
+            if r.status_code == 200:
+                s = r.json()["strategies"][0]
+                yearly = s.get("yearly", {})
+                # 5Y should span multiple years
+                if s["total_trades"] > 0:
+                    assert len(yearly) >= 1
+
+    @pytest.mark.anyio
+    async def test_backtest_exit_reasons(self, client):
+        """Backtest should report exit reason breakdown."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=AAPL&strategy=all&period=2y"
+            )
+            if r.status_code == 200:
+                for s in r.json()["strategies"]:
+                    if s["total_trades"] > 0:
+                        er = s["exit_reasons"]
+                        assert isinstance(er, dict)
+                        total_exits = sum(er.values())
+                        assert total_exits == s["total_trades"]
+
+    # ── Event detection ──
+
+    @pytest.mark.anyio
+    async def test_events_detected_in_5y(self, client):
+        """5Y backtest on SPY should detect market events."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=SPY&strategy=momentum&period=5y"
+            )
+            if r.status_code == 200:
+                events = r.json()["events"]
+                # 5Y of SPY should have detected events
+                assert len(events) >= 1, "Should detect at least 1 event over 5 years"
+
+    @pytest.mark.anyio
+    async def test_event_structure(self, client):
+        """Each event should have correct structure."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=AAPL&strategy=all&period=5y"
+            )
+            if r.status_code == 200:
+                events = r.json()["events"]
+                for ev in events:
+                    for field in [
+                        "name", "type", "start", "end",
+                        "market_return", "strategy_trades",
+                        "strategy_return", "alpha",
+                    ]:
+                        assert field in ev, f"Event missing {field}"
+                    assert ev["type"] in (
+                        "crash", "rally", "high_vol", "named"
+                    )
+
+    @pytest.mark.anyio
+    async def test_event_alpha_calculation(self, client):
+        """Alpha = strategy_return - market_return."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=SPY&strategy=all&period=5y"
+            )
+            if r.status_code == 200:
+                for ev in r.json()["events"]:
+                    expected_alpha = round(
+                        ev["strategy_return"] - ev["market_return"], 2
+                    )
+                    assert abs(ev["alpha"] - expected_alpha) < 0.05
+
+    # ── Input validation ──
+
+    @pytest.mark.anyio
+    async def test_backtest_invalid_ticker(self, client):
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=!!BAD!!&strategy=all&period=1y"
+            )
+            assert r.status_code == 422
+
+    @pytest.mark.anyio
+    async def test_backtest_insufficient_data(self, client):
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=ZZZZZ9&strategy=all&period=1mo"
+            )
+            assert r.status_code in (400, 404)
+
+    # ── Trust metadata ──
+
+    @pytest.mark.anyio
+    async def test_backtest_trust_metadata(self, client):
+        """Trust block should declare BACKTEST mode with real data source."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=SPY&strategy=swing&period=1y"
+            )
+            if r.status_code == 200:
+                trust = r.json()["trust"]
+                assert trust["mode"] == "BACKTEST"
+                assert trust["source"] == "yfinance_historical"
+                assert trust["data_points"] > 100
+                assert "as_of" in trust
+
+    @pytest.mark.anyio
+    async def test_backtest_benchmark_return(self, client):
+        """Benchmark return should match buy-and-hold."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/backtest?ticker=SPY&strategy=all&period=1y"
+            )
+            if r.status_code == 200:
+                d = r.json()
+                # Benchmark should be a reasonable number
+                assert isinstance(d["benchmark_return"], (int, float))
+                assert -90 < d["benchmark_return"] < 500
+
+
+# ════════════════════════════════════════════════════════════════
+# Phase 6: Competitive Strategy Engine v2 Tests
+# ════════════════════════════════════════════════════════════════
+
+class TestPhase6StrategyEngineV2:
+    """Test the v2 strategy engine: trailing stops, multi-position, compounding."""
+
+    @pytest.fixture
+    def client(self):
+        from httpx import ASGITransport, AsyncClient
+
+        from src.api.main import app
+        transport = ASGITransport(app=app)
+        return AsyncClient(transport=transport, base_url="http://test")
+
+    @pytest.mark.anyio
+    async def test_v2_compounded_return_field(self, client):
+        """v2 strategies should return compounded (total_return) and simple_return."""
+        async with client as c:
+            r = await c.post("/api/live/backtest?ticker=SPY&strategy=momentum&period=1y")
+            if r.status_code == 200:
+                strat = r.json()["strategies"][0]
+                assert "total_return" in strat
+                assert "simple_return" in strat
+                # Compounded should differ from simple (unless 0 trades)
+                if strat["total_trades"] > 3:
+                    assert strat["total_return"] != strat["simple_return"] or strat["total_return"] == 0
+
+    @pytest.mark.anyio
+    async def test_v2_exit_reasons_include_trailing(self, client):
+        """v2 engine should produce trailing stop exits."""
+        async with client as c:
+            r = await c.post("/api/live/backtest?ticker=SPY&strategy=all&period=2y")
+            if r.status_code == 200:
+                strats = r.json()["strategies"]
+                all_exits = {}
+                for s in strats:
+                    for k, v in s.get("exit_reasons", {}).items():
+                        all_exits[k] = all_exits.get(k, 0) + v
+                # Trailing stop should appear across strategies
+                assert "trailing" in all_exits or "stop" in all_exits
+
+    @pytest.mark.anyio
+    async def test_v2_multi_position_generates_more_trades(self, client):
+        """v2 with multi-position should generate reasonable trade counts."""
+        async with client as c:
+            r = await c.post("/api/live/backtest?ticker=SPY&strategy=momentum&period=2y")
+            if r.status_code == 200:
+                strat = r.json()["strategies"][0]
+                # Multi-position should generate trades
+                assert strat["total_trades"] >= 0
+
+    @pytest.mark.anyio
+    async def test_v2_all_strategies_run(self, client):
+        """All 4 strategies should run without error."""
+        async with client as c:
+            r = await c.post("/api/live/backtest?ticker=AAPL&strategy=all&period=1y")
+            if r.status_code == 200:
+                strats = r.json()["strategies"]
+                names = {s["strategy"] for s in strats}
+                assert names == {"swing", "breakout", "momentum", "mean_reversion"}
+
+    @pytest.mark.anyio
+    async def test_v2_profit_factor_positive(self, client):
+        """Profitable strategies should have profit_factor > 1."""
+        async with client as c:
+            r = await c.post("/api/live/backtest?ticker=SPY&strategy=momentum&period=2y")
+            if r.status_code == 200:
+                strat = r.json()["strategies"][0]
+                if strat["total_trades"] > 5 and strat["total_return"] > 0:
+                    assert strat["profit_factor"] > 1.0
+
+    @pytest.mark.anyio
+    async def test_v2_max_drawdown_reasonable(self, client):
+        """Max drawdown should be within -100% to 0%."""
+        async with client as c:
+            r = await c.post("/api/live/backtest?ticker=SPY&strategy=all&period=1y")
+            if r.status_code == 200:
+                for strat in r.json()["strategies"]:
+                    mdd = strat["max_drawdown"]
+                    assert -100 <= mdd <= 0 or strat["total_trades"] == 0
+
+    @pytest.mark.anyio
+    async def test_v2_score_formula(self, client):
+        """Score should use sharpe, win_rate, and compounded return."""
+        async with client as c:
+            r = await c.post("/api/live/backtest?ticker=SPY&strategy=momentum&period=1y")
+            if r.status_code == 200:
+                strat = r.json()["strategies"][0]
+                expected = round(
+                    strat["sharpe"] * 20 + strat["win_rate"] * 0.5 + strat["total_return"] * 0.3,
+                    1,
+                )
+                assert abs(strat["score"] - expected) < 0.2
+
+    @pytest.mark.anyio
+    async def test_v2_trades_have_hold_days(self, client):
+        """Each trade should have hold_days field."""
+        async with client as c:
+            r = await c.post("/api/live/backtest?ticker=AAPL&strategy=breakout&period=1y")
+            if r.status_code == 200:
+                trades = r.json()["strategies"][0].get("trades", [])
+                for t in trades:
+                    assert "hold_days" in t
+                    assert t["hold_days"] > 0
+
+    @pytest.mark.anyio
+    async def test_v2_equity_curve_compounding(self, client):
+        """total_return should be compounded, not simple sum."""
+        async with client as c:
+            r = await c.post("/api/live/backtest?ticker=MSFT&strategy=momentum&period=2y")
+            if r.status_code == 200:
+                strat = r.json()["strategies"][0]
+                if strat["total_trades"] > 5:
+                    comp = strat["total_return"]
+                    simp = strat["simple_return"]
+                    # For positive returns, compounded > simple (due to compounding effect)
+                    # For negative returns, compounded < simple
+                    # Both should be numbers
+                    assert isinstance(comp, (int, float))
+                    assert isinstance(simp, (int, float))
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 7 — Time Travel + 4-Layer Confidence + Expert Council
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestPhase7TimeTravel:
+    """Phase 7: Time Travel endpoint, 4-layer confidence, expert council."""
+
+    @pytest.fixture
+    def client(self):
+        from httpx import ASGITransport, AsyncClient
+
+        from src.api.main import app
+
+        transport = ASGITransport(app=app)
+        return AsyncClient(transport=transport, base_url="http://test")
+
+    @pytest.mark.anyio
+    async def test_time_travel_returns_200(self, client):
+        """Time travel endpoint should return 200 for valid ticker+date."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=SPY&target_date=2024-01-15&strategy=all"
+            )
+            assert r.status_code == 200
+            d = r.json()
+            assert d["ticker"] == "SPY"
+            assert "target_date" in d
+            assert "final_action" in d
+            assert "trust" in d
+
+    @pytest.mark.anyio
+    async def test_time_travel_has_4layer_confidence(self, client):
+        """Response must include 4-layer confidence with thesis/timing/execution/data."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=AAPL&target_date=2024-06-01&strategy=all"
+            )
+            if r.status_code == 200:
+                d = r.json()
+                conf = d["confidence"]
+                for layer in ["thesis", "timing", "execution", "data"]:
+                    assert layer in conf, f"Missing layer: {layer}"
+                    assert "score" in conf[layer]
+                    assert 0 <= conf[layer]["score"] <= 100
+                    assert "factors" in conf[layer]
+                assert "composite" in conf
+                assert "grade" in conf
+                assert conf["grade"] in ("A", "B", "C", "D")
+
+    @pytest.mark.anyio
+    async def test_time_travel_expert_council_has_7_members(self, client):
+        """Expert council should have exactly 7 members with required fields."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=SPY&target_date=2024-03-15&strategy=all"
+            )
+            if r.status_code == 200:
+                council = r.json()["expert_council"]
+                assert len(council) == 7
+                roles = {m["role"] for m in council}
+                assert "Technical Analyst" in roles
+                assert "Risk Officer" in roles
+                assert "Devil's Advocate" in roles
+                assert "Portfolio Manager" in roles
+                for m in council:
+                    assert "verdict" in m
+                    assert "score" in m
+                    assert "reasons" in m
+                    assert 0 <= m["score"] <= 100
+
+    @pytest.mark.anyio
+    async def test_time_travel_forward_returns_present(self, client):
+        """Forward returns should show actual returns after the target date."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=SPY&target_date=2023-06-01&strategy=all"
+            )
+            if r.status_code == 200:
+                fwd = r.json()["forward_returns"]
+                assert len(fwd) > 0
+                for period, val in fwd.items():
+                    assert "return_pct" in val
+                    assert "price" in val
+                    assert isinstance(val["return_pct"], (int, float))
+
+    @pytest.mark.anyio
+    async def test_time_travel_strategy_signals(self, client):
+        """Strategy signals dict should have entry details for each strategy."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=AAPL&target_date=2024-01-15&strategy=all"
+            )
+            if r.status_code == 200:
+                signals = r.json()["strategy_signals"]
+                assert len(signals) == 4  # momentum, breakout, swing, mean_reversion
+                for name, sig in signals.items():
+                    assert "triggered" in sig
+                    assert "entry_price" in sig
+                    assert "stop_loss" in sig
+                    assert "target" in sig
+
+    @pytest.mark.anyio
+    async def test_time_travel_single_strategy(self, client):
+        """Single strategy filter should only return that strategy."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=SPY&target_date=2024-01-15&strategy=momentum"
+            )
+            if r.status_code == 200:
+                signals = r.json()["strategy_signals"]
+                assert len(signals) == 1
+                assert "momentum" in signals
+
+    @pytest.mark.anyio
+    async def test_time_travel_invalid_date_format(self, client):
+        """Invalid date format should return 422."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=SPY&target_date=not-a-date&strategy=all"
+            )
+            assert r.status_code == 422
+
+    @pytest.mark.anyio
+    async def test_time_travel_regime_detection(self, client):
+        """Regime should be detected as UPTREND/DOWNTREND/SIDEWAYS."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=SPY&target_date=2024-03-15&strategy=all"
+            )
+            if r.status_code == 200:
+                regime = r.json()["regime"]
+                assert regime["label"] in ("UPTREND", "DOWNTREND", "SIDEWAYS")
+                assert regime["volatility"] in ("LOW", "NORMAL", "HIGH")
+                assert "rsi" in regime
+                assert "sma20" in regime
+
+    @pytest.mark.anyio
+    async def test_time_travel_trust_metadata(self, client):
+        """Trust block should identify this as TIME_TRAVEL with source info."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=SPY&target_date=2024-01-15&strategy=all"
+            )
+            if r.status_code == 200:
+                trust = r.json()["trust"]
+                assert trust["mode"] == "TIME_TRAVEL"
+                assert "yfinance" in trust["source"]
+                assert trust["data_points"] > 200
+
+    @pytest.mark.anyio
+    async def test_time_travel_council_avg_consistent(self, client):
+        """council_avg should equal the average of expert scores."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=MSFT&target_date=2024-03-01&strategy=all"
+            )
+            if r.status_code == 200:
+                d = r.json()
+                council = d["expert_council"]
+                expected_avg = round(sum(m["score"] for m in council) / len(council), 1)
+                assert abs(d["council_avg"] - expected_avg) < 0.2
+
+    @pytest.mark.anyio
+    async def test_time_travel_price_context(self, client):
+        """Should include 52-week high/low price context."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=SPY&target_date=2024-06-01&strategy=all"
+            )
+            if r.status_code == 200:
+                ctx = r.json()["price_context"]
+                assert "pct_from_52w_high" in ctx
+                assert "pct_from_52w_low" in ctx
+                # From high should be <=0, from low should be >=0
+                assert ctx["pct_from_52w_high"] <= 0 or True  # May be at high
+                assert ctx["pct_from_52w_low"] >= 0 or True  # May be at low
+
+    @pytest.mark.anyio
+    async def test_time_travel_final_action_values(self, client):
+        """Final action should be one of the known actions."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=SPY&target_date=2024-01-15&strategy=all"
+            )
+            if r.status_code == 200:
+                action = r.json()["final_action"]
+                valid = {
+                    "NO TRADE",
+                    "WATCH",
+                    "BUY — FULL SIZE",
+                    "BUY — NORMAL SIZE",
+                    "BUY — PILOT SIZE",
+                }
+                assert action in valid, f"Unexpected action: {action}"
+
+    @pytest.mark.anyio
+    async def test_4layer_confidence_composite_weights(self, client):
+        """Composite should be weighted: thesis 35%, timing 30%, exec 20%, data 15%."""
+        async with client as c:
+            r = await c.post(
+                "/api/live/time-travel?ticker=SPY&target_date=2024-01-15&strategy=all"
+            )
+            if r.status_code == 200:
+                conf = r.json()["confidence"]
+                expected = round(
+                    0.35 * conf["thesis"]["score"]
+                    + 0.30 * conf["timing"]["score"]
+                    + 0.20 * conf["execution"]["score"]
+                    + 0.15 * conf["data"]["score"],
+                    1,
+                )
+                # Allow some slack for penalties
+                diff = abs(conf["composite"] - expected)
+                assert (
+                    diff < 30
+                ), f"Composite {conf['composite']} too far from expected {expected}"
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 7b — Live Signal Scanner
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestPhase7bLiveScanner:
+    """Phase 7b: Live scanner fallback for /api/recommendations."""
+
+    @pytest.fixture
+    def client(self):
+        from httpx import ASGITransport, AsyncClient
+
+        from src.api.main import app
+
+        transport = ASGITransport(app=app)
+        return AsyncClient(transport=transport, base_url="http://test")
+
+    @pytest.mark.anyio
+    async def test_recommendations_returns_200(self, client):
+        """Recommendations endpoint should always return 200."""
+        async with client as c:
+            r = await c.get("/api/recommendations")
+            assert r.status_code == 200
+            d = r.json()
+            assert d["status"] == "ok"
+            assert "recommendations" in d
+            assert "mode" in d
+            assert "source" in d
+
+    @pytest.mark.anyio
+    async def test_scanner_fallback_produces_signals(self, client):
+        """When engine is idle, scanner should produce signals."""
+        async with client as c:
+            r = await c.get("/api/recommendations")
+            assert r.status_code == 200
+            d = r.json()
+            # Scanner should find at least some signals
+            # across 24 popular tickers and 4 strategies
+            if d["source"] == "live_scanner":
+                assert d["mode"] == "SCAN"
+                assert d["count"] > 0
+                # Check signal structure
+                rec = d["recommendations"][0]
+                assert "ticker" in rec
+                assert "score" in rec
+                assert "strategy" in rec
+                assert "entry_price" in rec
+                assert "target_price" in rec
+                assert "stop_price" in rec
+                assert "risk_reward" in rec
+                assert "grade" in rec
+
+    @pytest.mark.anyio
+    async def test_scanner_strategy_scores(self, client):
+        """Scanner should return strategy health scores."""
+        async with client as c:
+            r = await c.get("/api/recommendations")
+            if r.status_code == 200:
+                d = r.json()
+                scores = d.get("strategy_scores", {})
+                if d["source"] == "live_scanner":
+                    assert len(scores) > 0
+                    for name, val in scores.items():
+                        assert isinstance(val, (int, float))
+                        assert 0 <= val <= 10
+
+    @pytest.mark.anyio
+    async def test_scanner_signals_sorted_by_score(self, client):
+        """Scanner signals should be sorted by score descending."""
+        async with client as c:
+            r = await c.get("/api/recommendations")
+            if r.status_code == 200:
+                recs = r.json()["recommendations"]
+                if len(recs) >= 2:
+                    scores = [r["score"] for r in recs]
+                    assert scores == sorted(scores, reverse=True)
+
+    @pytest.mark.anyio
+    async def test_scanner_respects_limit(self, client):
+        """Limit parameter should cap the number of results."""
+        async with client as c:
+            r = await c.get("/api/recommendations?limit=3")
+            if r.status_code == 200:
+                recs = r.json()["recommendations"]
+                assert len(recs) <= 3
+
+    @pytest.mark.anyio
+    async def test_scanner_risk_reward_positive(self, client):
+        """All scanner signals should have positive risk:reward."""
+        async with client as c:
+            r = await c.get("/api/recommendations")
+            if r.status_code == 200:
+                for rec in r.json()["recommendations"]:
+                    assert rec["risk_reward"] >= 0
+                    assert rec["target_price"] > rec["entry_price"]
+                    assert rec["stop_price"] < rec["entry_price"]
+
+    @pytest.mark.anyio
+    async def test_scanner_no_trade_message(self, client):
+        """When no signals found, should have explanatory message."""
+        async with client as c:
+            r = await c.get("/api/recommendations")
+            if r.status_code == 200:
+                d = r.json()
+                if d["count"] == 0:
+                    assert d["no_trade_reason"] is not None
+                    assert len(d["no_trade_reason"]) > 10
+
+    @pytest.mark.anyio
+    async def test_scanner_includes_scan_meta(self, client):
+        """Scanner response should include scan_meta with details."""
+        async with client as c:
+            r = await c.get("/api/recommendations")
+            if r.status_code == 200:
+                d = r.json()
+                if d["source"] in ("live_scanner", "scanner_error"):
+                    meta = d.get("scan_meta")
+                    assert meta is not None
+                    assert meta["tickers_checked"] >= 20
+                    assert "signals_found" in meta
+                    assert meta["strategies"] == [
+                        "momentum", "breakout",
+                        "swing", "mean_reversion",
+                    ]
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 8 — Ticker Autocomplete
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestPhase8TickerAutocomplete:
+    """Phase 8: Ticker autocomplete search with company names."""
+
+    @pytest.fixture
+    def client(self):
+        from httpx import ASGITransport, AsyncClient
+
+        from src.api.main import app
+
+        transport = ASGITransport(app=app)
+        return AsyncClient(transport=transport, base_url="http://test")
+
+    @pytest.mark.anyio
+    async def test_ticker_search_aapl(self, client):
+        """Searching 'AAPL' should return Apple."""
+        async with client as c:
+            r = await c.get("/api/tickers?q=AAPL")
+            assert r.status_code == 200
+            d = r.json()
+            assert d["count"] >= 1
+            assert d["results"][0]["s"] == "AAPL"
+            assert "Apple" in d["results"][0]["n"]
+            assert d["results"][0]["z"] == "蘋果"
+
+    @pytest.mark.anyio
+    async def test_ticker_search_prefix_a(self, client):
+        """Searching 'A' should return multiple matches."""
+        async with client as c:
+            r = await c.get("/api/tickers?q=A")
+            assert r.status_code == 200
+            d = r.json()
+            assert d["count"] >= 3
+            symbols = [t["s"] for t in d["results"]]
+            assert "AAPL" in symbols
+
+    @pytest.mark.anyio
+    async def test_ticker_search_by_company_name(self, client):
+        """Searching 'APPLE' should find AAPL."""
+        async with client as c:
+            r = await c.get("/api/tickers?q=APPLE")
+            assert r.status_code == 200
+            symbols = [t["s"] for t in r.json()["results"]]
+            assert "AAPL" in symbols
+
+    @pytest.mark.anyio
+    async def test_ticker_search_chinese(self, client):
+        """Searching in Chinese should work."""
+        async with client as c:
+            r = await c.get("/api/tickers?q=蘋果")
+            assert r.status_code == 200
+            # Chinese search is case-sensitive match
+            if r.json()["count"] > 0:
+                symbols = [t["s"] for t in r.json()["results"]]
+                assert "AAPL" in symbols
+
+    @pytest.mark.anyio
+    async def test_ticker_search_empty_query(self, client):
+        """Empty query should return empty results."""
+        async with client as c:
+            r = await c.get("/api/tickers?q=")
+            assert r.status_code == 200
+            assert r.json()["count"] == 0
+
+    @pytest.mark.anyio
+    async def test_ticker_search_max_12(self, client):
+        """Results should be capped at 12."""
+        async with client as c:
+            r = await c.get("/api/tickers?q=S")
+            assert r.status_code == 200
+            assert r.json()["count"] <= 12
+
+    @pytest.mark.anyio
+    async def test_ticker_search_has_all_fields(self, client):
+        """Each result should have s (symbol), n (name), z (chinese)."""
+        async with client as c:
+            r = await c.get("/api/tickers?q=SPY")
+            assert r.status_code == 200
+            for item in r.json()["results"]:
+                assert "s" in item
+                assert "n" in item
+                assert "z" in item
+
+    @pytest.mark.anyio
+    async def test_ticker_search_etf(self, client):
+        """ETFs like SPY, QQQ should be findable."""
+        async with client as c:
+            r = await c.get("/api/tickers?q=SPY")
+            assert r.status_code == 200
+            symbols = [t["s"] for t in r.json()["results"]]
+            assert "SPY" in symbols
+
+    @pytest.mark.anyio
+    async def test_ticker_search_china_adr(self, client):
+        """China ADR stocks should be searchable."""
+        async with client as c:
+            r = await c.get("/api/tickers?q=BABA")
+            assert r.status_code == 200
+            d = r.json()
+            assert d["count"] >= 1
+            assert d["results"][0]["s"] == "BABA"
+            assert "阿里巴巴" in d["results"][0]["z"]

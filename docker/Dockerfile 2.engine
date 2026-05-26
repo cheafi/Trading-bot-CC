@@ -1,0 +1,28 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements/base.txt requirements/engine.txt ./requirements/
+RUN pip install --no-cache-dir -r requirements/engine.txt
+
+# Copy application code
+COPY src/ ./src/
+COPY config/ ./config/
+
+# Create logs directory
+RUN mkdir -p /app/logs
+
+# Set Python path
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+# Run engine based on SERVICE_NAME env var
+CMD ["python", "-m", "src.engines.main"]

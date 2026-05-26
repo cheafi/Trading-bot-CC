@@ -1,0 +1,2 @@
+2026-05-04 18:38:56,343 - src.api.main - INFO - [Singleton] shared services registered on app.state
+2026-05-04 18:38:57,500 - src.services.regime_service - WARNING - No market data — using synthetic

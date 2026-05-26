@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#00d4aa">
+    <title>TradingAI Pro — Trading Desk</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *{font-family:'Inter',sans-serif;-webkit-tap-highlight-color:transparent}
+        body{background:#0b0e14;color:#e2e8f0;overflow-x:hidden}
+        .card{background:#141820;border:1px solid #1e2433;border-radius:12px}
+        .card-hi{background:linear-gradient(135deg,#141820,#172033);border:1px solid #00d4aa30;border-radius:14px}
+        .g{color:#00d4aa}.r{color:#ff5c5c}.y{color:#fbbf24}.w{color:#e2e8f0}.m{color:#94a3b8}
+        .pill{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+        .pill-g{background:#00d4aa20;color:#00d4aa}.pill-r{background:#ff5c5c20;color:#ff5c5c}
+        .pill-y{background:#fbbf2420;color:#fbbf24}.pill-b{background:#0ea5e920;color:#0ea5e9}
+        .pill-m{background:#94a3b820;color:#94a3b8}
+        .btn{padding:10px 18px;border-radius:10px;font-weight:600;font-size:14px;cursor:pointer;border:none;transition:all .15s}
+        .btn:active{transform:scale(0.96)}
+        .btn-p{background:linear-gradient(135deg,#00d4aa,#0ea5e9);color:#fff}
+        .btn-s{background:#1e2433;color:#94a3b8;border:1px solid #2d3654}
+        .btn-s:hover{border-color:#00d4aa;color:#00d4aa}
+        input,select{background:#141820;border:1px solid #1e2433;color:#e2e8f0;border-radius:10px;padding:10px 14px;font-size:14px;outline:none;width:100%}
+        input:focus,select:focus{border-color:#00d4aa}
+        .bar{background:#1e2433;border-radius:6px;height:6px;overflow:hidden}
+        .bar-f{background:linear-gradient(90deg,#00d4aa,#0ea5e9);height:100%;border-radius:6px;transition:width .6s}
+        .tab{padding:10px 0;font-size:13px;font-weight:500;color:#64748b;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+        .tab-a{color:#00d4aa;border-color:#00d4aa;font-weight:700}
+        .spin{display:inline-block;width:16px;height:16px;border:2px solid #1e2433;border-top-color:#00d4aa;border-radius:50%;animation:sp .5s linear infinite}
+        @keyframes sp{to{transform:rotate(360deg)}}
+        .fade-in{animation:fi .3s ease}@keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        .no-scroll::-webkit-scrollbar{display:none}
+        .safe-b{padding-bottom:env(safe-area-inset-bottom,20px)}
+        .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+        table{width:100%;font-size:12px;border-collapse:collapse}
+        th{text-align:left;padding:6px 6px;color:#64748b;font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #1e2433}
+        td{padding:8px 6px;border-bottom:1px solid #1a1f2a;color:#cbd5e1}
+        .row-hi:hover{background:#1a2030}
+        svg.spark{display:block}
+    </style>
+</head>
+<body x-data="desk()" x-init="init()" class="safe-b">
+
+<!-- HEADER -->
+<header class="sticky top-0 z-50 px-4 py-3 flex items-center justify-between" style="background:#0b0e14ee;backdrop-filter:blur(12px);border-bottom:1px solid #1e2433">
+    <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 bg-gradient-to-br from-green-400 to-cyan-500 rounded-lg flex items-center justify-center text-base">📈</div>
+        <div>
+            <div class="text-sm font-bold text-white leading-tight">TradingAI Pro — Desk</div>
+            <div class="text-[10px] text-gray-500"><span x-text="health.engine?.dry_run?'PAPER':'LIVE'"></span> · <span x-text="health.broker?.name||'paper'"></span> · cyc <span x-text="health.engine?.cycle_count||0"></span></div>
+        </div>
+    </div>
+    <div class="flex items-center gap-3 text-xs">
+        <span class="dot" :style="'background:'+(live?'#00d4aa':'#ff5c5c')"></span>
+        <span class="text-gray-500" x-text="clock"></span>
+    </div>
+</header>
+
+<!-- TAB BAR -->
+<nav class="px-4 flex gap-5 overflow-x-auto no-scroll border-b border-gray-800/50">
+    <template x-for="t in tabs">
+        <button @click="tab=t.id" class="tab flex-shrink-0" :class="tab===t.id&&'tab-a'" x-text="t.icon+' '+t.label"></button>
+    </template>
+</nav>
+
+<!-- ══════════════════════════ HOME ══════════════════════════ -->
+<main x-show="tab==='home'" class="px-4 py-4 space-y-4 fade-in">
+
+    <!-- HERO: equity + regime + circuit -->
+    <div class="card-hi p-4">
+        <div class="flex items-start justify-between mb-3">
+            <div>
+                <div class="text-[10px] text-gray-500 uppercase tracking-wider">Portfolio Equity</div>
+                <div class="text-3xl font-extrabold text-white" x-text="'$'+fmt(portfolio.kpis?.equity||0)"></div>
+                <div class="text-xs mt-0.5" :class="(portfolio.kpis?.total_return_pct||0)>=0?'g':'r'">
+                    <span x-text="((portfolio.kpis?.total_return_pct||0)>=0?'+':'')+(portfolio.kpis?.total_return_pct||0).toFixed(2)+'%'"></span>
+                    <span class="text-gray-500">all-time</span>
+                </div>
+            </div>
+            <div class="text-right">
+                <span class="pill" :class="regime.label==='RISK_ON'?'pill-g':regime.label==='RISK_OFF'?'pill-r':'pill-y'" x-text="regime.label||'…'"></span>
+                <div class="text-[10px] text-gray-500 mt-1">regime · score <span x-text="regime.score||0"></span></div>
+            </div>
+        </div>
+        <!-- portfolio vs benchmark curve -->
+        <div class="mb-1 flex items-center justify-between text-[10px] m">
+            <span><span class="g">●</span> Portfolio</span>
+            <span x-show="(portfolio.benchmark_curve||[]).length"><span style="color:#0ea5e9">●</span> SPY B&H</span>
+        </div>
+        <div class="mb-2" x-html="dualSparkSvg(portfolio.equity_curve, portfolio.benchmark_curve, 320, 56)"></div>
+        <!-- KPI strip -->
+        <div class="grid grid-cols-4 gap-2 text-center text-xs">
+            <div><div class="text-gray-500 text-[10px]">Day P&L</div><div class="font-bold" :class="(portfolio.kpis?.daily_pnl||0)>=0?'g':'r'" x-text="(portfolio.kpis?.daily_pnl||0>=0?'+':'')+'$'+fmt(portfolio.kpis?.daily_pnl||0)"></div></div>
+            <div><div class="text-gray-500 text-[10px]">Win Rate</div><div class="font-bold w" x-text="(portfolio.kpis?.win_rate||0)+'%'"></div></div>
+            <div><div class="text-gray-500 text-[10px]">Open</div><div class="font-bold w" x-text="portfolio.kpis?.open_positions||0"></div></div>
+            <div><div class="text-gray-500 text-[10px]">Trades</div><div class="font-bold w" x-text="portfolio.kpis?.total_trades||0"></div></div>
+        </div>
+    </div>
+
+    <!-- Runtime / IB strip -->
+    <div class="card p-3">
+        <div class="grid grid-cols-2 gap-2 text-[11px]">
+            <div class="flex items-center justify-between">
+                <span class="m">Engine</span>
+                <span class="pill" :class="health.engine?.running?'pill-g':'pill-r'" x-text="health.engine?.running?'RUN':'STOP'"></span>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="m">Mode</span>
+                <span class="font-bold w" x-text="health.broker?.mode||(health.engine?.dry_run?'PAPER':'LIVE')"></span>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="m">Broker</span>
+                <span class="pill" :class="(portfolio.broker?.connected||health.broker?.connected)?'pill-g':'pill-y'">
+                    <span x-text="(portfolio.broker?.name||health.broker?.name||'paper').toUpperCase()"></span>
+                </span>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="m">Sync</span>
+                <span class="w" x-text="fmtSync(portfolio.broker?.last_sync||health.broker?.last_sync)"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active fund sleeves -->
+    <div class="card p-4" x-show="(portfolio.active_sleeves||[]).length">
+        <div class="flex items-center justify-between mb-2">
+            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">🏛️ Active Sleeves</div>
+            <button @click="tab='strategies'" class="text-[11px] g">all →</button>
+        </div>
+        <div class="space-y-2">
+            <template x-for="sl in (portfolio.active_sleeves||[]).slice(0,4)">
+                <div class="p-2.5 rounded-lg flex items-center justify-between" style="background:#1a2030">
+                    <div>
+                        <div class="text-sm font-bold w" x-text="sl.name"></div>
+                        <div class="text-[10px] m" x-text="sl.stance+' · '+sl.trades+' trades'"></div>
+                    </div>
+                    <div class="text-right text-[11px]">
+                        <div class="font-bold g" x-text="'score '+sl.score"></div>
+                        <div class="m" x-text="'DD '+sl.max_dd+'%'"></div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Allocation snapshot -->
+    <div class="card p-4" x-show="(portfolio.allocation?.holdings||[]).length">
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">⚖️ Allocation</div>
+        <template x-for="h in (portfolio.allocation?.holdings||[]).slice(0,6)">
+            <div class="mb-2">
+                <div class="flex justify-between text-[11px] mb-0.5">
+                    <span class="font-bold w" x-text="h.ticker"></span>
+                    <span class="m"><span x-text="h.actual_pct+'%'"></span> / tgt <span x-text="h.target_pct+'%'"></span></span>
+                </div>
+                <div class="bar"><div class="bar-f" :style="'width:'+Math.min(100,h.actual_pct*4)+'%'"></div></div>
+            </div>
+        </template>
+        <div class="text-[10px] m mt-1" x-text="'Cash '+((portfolio.allocation?.cash_pct)||0).toFixed(1)+'% · Gross '+((portfolio.allocation?.gross_pct)||0).toFixed(1)+'%'"></div>
+    </div>
+
+    <!-- Alerts -->
+    <template x-if="(health.alerts||[]).length">
+        <div class="space-y-1.5">
+            <template x-for="a in health.alerts">
+                <div class="card p-2.5 flex items-center gap-2 text-xs"
+                     :style="'border-left:3px solid '+(a.level==='critical'?'#ff5c5c':a.level==='warn'?'#fbbf24':'#0ea5e9')">
+                    <span :class="a.level==='critical'?'r':a.level==='warn'?'y':'pill-b'" x-text="a.level.toUpperCase()" class="font-bold text-[10px]"></span>
+                    <span class="text-gray-300 flex-1" x-text="a.msg"></span>
+                </div>
+            </template>
+        </div>
+    </template>
+
+    <!-- Top opportunities (from dashboard top signals) -->
+    <div class="card p-4" x-show="(dash.topSignals||[]).length">
+        <div class="flex items-center justify-between mb-2">
+            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">🎯 Top Opportunities</div>
+            <button @click="tab='signals'" class="text-[11px] g">view all →</button>
+        </div>
+        <div class="space-y-1.5">
+            <template x-for="s in (dash.topSignals||[]).slice(0,5)">
+                <div class="flex items-center justify-between py-1.5 border-b border-gray-800/50 last:border-0">
+                    <div class="flex items-center gap-2">
+                        <span class="pill" :class="s.direction==='LONG'?'pill-g':'pill-r'" x-text="s.direction==='LONG'?'L':'S'"></span>
+                        <div>
+                            <div class="text-sm font-bold w" x-text="s.ticker"></div>
+                            <div class="text-[10px] text-gray-500" x-text="s.strategy"></div>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-sm font-bold g" x-text="s.score.toFixed(1)"></div>
+                        <div class="text-[10px] text-gray-500" x-text="'conf '+(s.confidence||0).toFixed(2)"></div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- US Indices — rich 2-col cards -->
+    <div>
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">🇺🇸 US Indices</div>
+        <div class="grid grid-cols-2 gap-2">
+            <template x-for="it in (market.indices||[])">
+                <div class="card p-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] m" x-text="it.name||it.symbol"></span>
+                        <span class="text-[9px] m" x-text="it.symbol"></span>
+                    </div>
+                    <div class="text-base font-bold w" x-text="'$'+(it.price||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})"></div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-bold" :class="(it.change_pct||0)>=0?'g':'r'" x-text="((it.change_pct||0)>=0?'+':'')+(it.change_pct||0).toFixed(2)+'%'"></span>
+                        <span class="text-[10px] m" x-text="'52w '+(it.low_52w||0).toFixed(0)+'-'+(it.high_52w||0).toFixed(0)"></span>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Macro & Crypto -->
+    <div>
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">🌍 Macro & Crypto</div>
+        <div class="flex gap-2 overflow-x-auto no-scroll pb-1">
+            <template x-for="it in (market.macro||[])">
+                <div class="card p-2.5 min-w-[110px] flex-shrink-0">
+                    <div class="text-[10px] m truncate" x-text="(it.name||it.symbol).replace('^','')"></div>
+                    <div class="text-sm font-bold w" x-text="(it.price||0)>=1000?'$'+(it.price||0).toLocaleString(undefined,{maximumFractionDigits:0}):'$'+(it.price||0).toFixed(2)"></div>
+                    <div class="text-xs font-bold" :class="(it.change_pct||0)>=0?'g':'r'" x-text="((it.change_pct||0)>=0?'+':'')+(it.change_pct||0).toFixed(2)+'%'"></div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Sectors grid -->
+    <div>
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">🏭 Sector Heatmap</div>
+        <div class="grid grid-cols-3 gap-1.5">
+            <template x-for="it in (market.sectors||[])">
+                <div class="card p-2 text-center" :style="'background:'+((it.change_pct||0)>=0?'rgba(0,212,170,'+Math.min(0.25,Math.abs(it.change_pct||0)/15)+')':'rgba(255,92,92,'+Math.min(0.25,Math.abs(it.change_pct||0)/15)+')')">
+                    <div class="text-[9px] m truncate" x-text="(it.name||it.symbol).replace(/ETF$/,'').trim()"></div>
+                    <div class="text-xs font-bold" :class="(it.change_pct||0)>=0?'g':'r'" x-text="((it.change_pct||0)>=0?'+':'')+(it.change_pct||0).toFixed(2)+'%'"></div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Asia row -->
+    <div>
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">🌏 Asia</div>
+        <div class="flex gap-2 overflow-x-auto no-scroll pb-1">
+            <template x-for="it in (market.asia||[])">
+                <div class="card p-2 min-w-[100px] flex-shrink-0 text-center">
+                    <div class="text-[10px] m truncate" x-text="(it.name||it.symbol).replace('^','')"></div>
+                    <div class="text-[11px] w" x-text="(it.price||0).toLocaleString(undefined,{maximumFractionDigits:2})"></div>
+                    <div class="text-xs font-bold" :class="(it.change_pct||0)>=0?'g':'r'" x-text="((it.change_pct||0)>=0?'+':'')+(it.change_pct||0).toFixed(2)+'%'"></div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Strategy summary -->
+    <div class="card p-4">
+        <div class="flex items-center justify-between mb-2">
+            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">📊 Active Strategies</div>
+            <button @click="tab='strategies'" class="text-[11px] g">leaderboard →</button>
+        </div>
+        <div class="grid grid-cols-4 gap-2 text-center text-xs">
+            <div><div class="text-base font-bold g" x-text="strategies.counts?.active||0"></div><div class="text-gray-500 text-[10px]">Active</div></div>
+            <div><div class="text-base font-bold y" x-text="strategies.counts?.reduced||0"></div><div class="text-gray-500 text-[10px]">Reduced</div></div>
+            <div><div class="text-base font-bold r" x-text="strategies.counts?.cooldown||0"></div><div class="text-gray-500 text-[10px]">Cooldown</div></div>
+            <div><div class="text-base font-bold m" x-text="strategies.counts?.retired||0"></div><div class="text-gray-500 text-[10px]">Retired</div></div>
+        </div>
+    </div>
+</main>
+
+<!-- ══════════════════════════ PORTFOLIO ══════════════════════════ -->
+<main x-show="tab==='portfolio'" class="px-4 py-4 space-y-4 fade-in">
+    <!-- Live market context band -->
+    <div class="card p-3">
+        <div class="flex items-center justify-between mb-1">
+            <div class="text-[10px] m uppercase tracking-wider">Market Context · LIVE</div>
+            <span class="pill" :class="regime.label==='RISK_ON'?'pill-g':regime.label==='RISK_OFF'?'pill-r':'pill-y'" x-text="regime.label||'…'"></span>
+        </div>
+        <div class="grid grid-cols-4 gap-2 text-center text-xs">
+            <div><div class="text-[10px] m">SPY</div><div class="font-bold" :class="spy()>=0?'g':'r'" x-text="(spy()>=0?'+':'')+spy().toFixed(2)+'%'"></div></div>
+            <div><div class="text-[10px] m">VIX</div><div class="font-bold w" x-text="vix().toFixed(2)"></div></div>
+            <div><div class="text-[10px] m">BTC</div><div class="font-bold" :class="btc()>=0?'g':'r'" x-text="(btc()>=0?'+':'')+btc().toFixed(2)+'%'"></div></div>
+            <div><div class="text-[10px] m">Gold</div><div class="font-bold" :class="gold()>=0?'g':'r'" x-text="(gold()>=0?'+':'')+gold().toFixed(2)+'%'"></div></div>
+        </div>
+    </div>
+
+    <!-- broker pill + account -->
+    <div class="card p-4">
+        <div class="flex items-center justify-between mb-3">
+            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">💼 Account</div>
+            <span class="pill" :class="portfolio.broker?.account?'pill-g':'pill-y'">
+                <span class="dot" :style="'background:'+(portfolio.broker?.account?'#00d4aa':'#fbbf24')"></span>
+                <span x-text="(portfolio.broker?.name||'paper').toUpperCase()"></span>
+            </span>
+        </div>
+        <template x-if="portfolio.broker?.account">
+            <div class="grid grid-cols-2 gap-3 text-sm">
+                <div><div class="text-[10px] m">Cash</div><div class="font-bold w" x-text="'$'+fmt(portfolio.broker.account.cash)"></div></div>
+                <div><div class="text-[10px] m">Buying Power</div><div class="font-bold w" x-text="'$'+fmt(portfolio.broker.account.buying_power)"></div></div>
+                <div><div class="text-[10px] m">Portfolio Value</div><div class="font-bold g" x-text="'$'+fmt(portfolio.broker.account.portfolio_value)"></div></div>
+                <div><div class="text-[10px] m">Unrealized P&L</div><div class="font-bold" :class="portfolio.broker.account.unrealized_pnl>=0?'g':'r'" x-text="(portfolio.broker.account.unrealized_pnl>=0?'+':'')+'$'+fmt(portfolio.broker.account.unrealized_pnl)"></div></div>
+            </div>
+        </template>
+        <template x-if="!portfolio.broker?.account">
+            <div class="text-xs m">Broker not connected · using paper simulator. Set IB / Futu credentials to enable live linkage.</div>
+        </template>
+    </div>
+
+    <!-- equity curve large -->
+    <div class="card p-4">
+        <div class="flex items-center justify-between mb-2">
+            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">📈 Equity Curve</div>
+            <div class="text-[11px]">
+                <span class="m">start</span> $<span x-text="fmt(portfolio.kpis?.start_equity||0)"></span> →
+                <span class="m">now</span> <span class="font-bold" :class="(portfolio.kpis?.total_return_pct||0)>=0?'g':'r'" x-text="'$'+fmt(portfolio.kpis?.equity||0)"></span>
+            </div>
+        </div>
+        <div x-html="dualSparkSvg(portfolio.equity_curve, portfolio.benchmark_curve, 340, 110)"></div>
+    </div>
+
+    <!-- Target vs actual allocation -->
+    <div class="card p-4" x-show="(portfolio.allocation?.holdings||[]).length">
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">⚖️ Target vs Actual</div>
+        <div class="overflow-x-auto">
+            <table>
+                <thead><tr><th>Ticker</th><th>Strategy</th><th>Actual</th><th>Target</th><th>Drift</th></tr></thead>
+                <tbody>
+                    <template x-for="h in (portfolio.allocation?.holdings||[])">
+                        <tr class="row-hi">
+                            <td class="font-bold w" x-text="h.ticker"></td>
+                            <td class="m text-[10px]" x-text="h.strategy"></td>
+                            <td x-text="h.actual_pct+'%'"></td>
+                            <td x-text="h.target_pct+'%'"></td>
+                            <td :class="Math.abs(h.drift_pct)>1?'y':'m'" x-text="(h.drift_pct>=0?'+':'')+h.drift_pct+'%'"></td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- positions table -->
+    <div class="card p-4">
+        <div class="flex items-center justify-between mb-2">
+            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">📦 Open Positions</div>
+            <span class="pill pill-b" x-text="(portfolio.positions||[]).length+' open'"></span>
+        </div>
+        <template x-if="(portfolio.positions||[]).length===0">
+            <div class="text-xs m py-4 text-center">No open positions. Engine is scanning…</div>
+        </template>
+        <template x-if="(portfolio.positions||[]).length">
+            <div class="overflow-x-auto">
+                <table>
+                    <thead><tr>
+                        <th>Ticker</th><th>Qty</th><th>Entry</th><th>Last</th><th>Stop</th><th>P&L</th>
+                    </tr></thead>
+                    <tbody>
+                        <template x-for="p in portfolio.positions">
+                            <tr class="row-hi">
+                                <td class="font-bold w" x-text="p.ticker"></td>
+                                <td x-text="p.shares"></td>
+                                <td x-text="'$'+p.entry"></td>
+                                <td x-text="'$'+p.current"></td>
+                                <td class="r" x-text="p.stop?'$'+p.stop:'—'"></td>
+                                <td :class="p.unrealized_pnl>=0?'g':'r'" class="font-bold">
+                                    <span x-text="(p.unrealized_pnl>=0?'+':'')+'$'+fmt(p.unrealized_pnl)"></span>
+                                    <div class="text-[10px]" x-text="(p.unrealized_pct>=0?'+':'')+p.unrealized_pct.toFixed(2)+'%'"></div>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </template>
+    </div>
+
+    <!-- Pro KPIs -->
+    <div class="card p-4" x-show="portfolio.pro_kpis">
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">🏛️ Pro KPIs</div>
+        <div class="grid grid-cols-3 gap-2 text-center text-xs">
+            <div><div class="text-[10px] m">Expectancy</div><div class="font-bold w" x-text="'$'+(portfolio.pro_kpis?.net_expectancy||0).toFixed(2)"></div></div>
+            <div><div class="text-[10px] m">Profit Factor</div><div class="font-bold w" x-text="(portfolio.pro_kpis?.profit_factor||0).toFixed(2)"></div></div>
+            <div><div class="text-[10px] m">Avg Win</div><div class="font-bold g" x-text="'$'+(portfolio.pro_kpis?.avg_win||0).toFixed(0)"></div></div>
+            <div><div class="text-[10px] m">Avg Loss</div><div class="font-bold r" x-text="'$'+(portfolio.pro_kpis?.avg_loss||0).toFixed(0)"></div></div>
+            <div><div class="text-[10px] m">Trades</div><div class="font-bold w" x-text="portfolio.pro_kpis?.total_trades||0"></div></div>
+            <div><div class="text-[10px] m">Win %</div><div class="font-bold w" x-text="((portfolio.pro_kpis?.win_rate||0)*100).toFixed(1)+'%'"></div></div>
+        </div>
+    </div>
+</main>
+
+<!-- ══════════════════════════ STRATEGIES ══════════════════════════ -->
+<main x-show="tab==='strategies'" class="px-4 py-4 space-y-4 fade-in">
+    <div class="card p-4">
+        <div class="flex items-center justify-between mb-2">
+            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">🏆 Strategy Leaderboard</div>
+            <div class="flex gap-1">
+                <span class="pill pill-g" x-text="(strategies.counts?.active||0)+' A'"></span>
+                <span class="pill pill-y" x-text="(strategies.counts?.reduced||0)+' R'"></span>
+                <span class="pill pill-r" x-text="(strategies.counts?.cooldown||0)+' C'"></span>
+            </div>
+        </div>
+        <template x-if="(strategies.strategies||[]).length===0">
+            <div class="text-xs m py-3 text-center">No closed-trade metrics yet — leaderboard fills once cycles produce wins/losses.</div>
+        </template>
+        <div class="space-y-2">
+            <template x-for="(s, i) in (strategies.strategies||[])">
+                <div class="p-3 rounded-lg" style="background:#1a2030">
+                    <div class="flex items-center justify-between mb-1">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs m" x-text="'#'+(i+1)"></span>
+                            <span class="text-sm font-bold w" x-text="s.name"></span>
+                        </div>
+                        <span class="pill" :class="s.status==='active'?'pill-g':s.status==='reduced'?'pill-y':s.status==='cooldown'?'pill-r':'pill-m'" x-text="s.status.toUpperCase()"></span>
+                    </div>
+                    <div class="grid grid-cols-5 gap-2 text-center text-[11px] mb-1">
+                        <div><div class="m text-[10px]">Score</div><div class="font-bold g" x-text="(s.score||0).toFixed(2)"></div></div>
+                        <div><div class="m text-[10px]">Trades</div><div class="font-bold w" x-text="s.trades"></div></div>
+                        <div><div class="m text-[10px]">Win</div><div class="font-bold" :class="s.win_rate>50?'g':'r'" x-text="s.win_rate+'%'"></div></div>
+                        <div><div class="m text-[10px]">Sharpe</div><div class="font-bold w" x-text="s.sharpe"></div></div>
+                        <div><div class="m text-[10px]">DD</div><div class="font-bold r" x-text="s.max_dd+'%'"></div></div>
+                    </div>
+                    <div x-show="s.pnl_sparkline?.length" x-html="sparkSvg(s.pnl_sparkline.map((v,i)=>({i,equity:v})), 300, 30, true)"></div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Static strategy roster — always visible -->
+    <div class="card p-4">
+        <div class="flex items-center justify-between mb-2">
+            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">📘 Strategy Roster</div>
+            <span class="pill pill-m" x-text="(roster.strategies||[]).length+' available'"></span>
+        </div>
+        <div class="space-y-2">
+            <template x-for="r in (roster.strategies||[])">
+                <div class="p-2.5 rounded-lg" style="background:#1a2030">
+                    <div class="flex items-center justify-between mb-0.5">
+                        <span class="text-sm font-bold w" x-text="r.name"></span>
+                        <span class="pill pill-b text-[10px]" x-text="r.best_regime"></span>
+                    </div>
+                    <div class="text-[11px] m" x-text="r.description"></div>
+                    <button @click="bt.ticker='AAPL';bt.strategy=r.id;tab='backtest';runBacktest()" class="text-[10px] g mt-1">🔬 backtest →</button>
+                </div>
+            </template>
+        </div>
+    </div>
+</main>
+
+<!-- ══════════════════════════ SIGNALS ══════════════════════════ -->
+<main x-show="tab==='signals'" class="px-4 py-4 space-y-4 fade-in">
+    <div class="card p-4">
+        <div class="flex items-center justify-between mb-3">
+            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">⚡ Engine Signals</div>
+            <span class="pill pill-b" x-text="(dash.topSignals||[]).length+' active'"></span>
+        </div>
+        <template x-if="(dash.topSignals||[]).length===0">
+            <div class="text-xs m py-4 text-center">No engine signals this cycle — showing live tape below.</div>
+        </template>
+        <div class="overflow-x-auto" x-show="(dash.topSignals||[]).length">
+            <table>
+                <thead><tr><th>Side</th><th>Ticker</th><th>Strategy</th><th>Score</th><th>Conf</th><th></th></tr></thead>
+                <tbody>
+                    <template x-for="s in (dash.topSignals||[])">
+                        <tr class="row-hi">
+                            <td><span class="pill" :class="s.direction==='LONG'?'pill-g':'pill-r'" x-text="s.direction==='LONG'?'L':'S'"></span></td>
+                            <td class="font-bold w" x-text="s.ticker"></td>
+                            <td class="m" x-text="s.strategy"></td>
+                            <td class="font-bold g" x-text="s.score.toFixed(1)"></td>
+                            <td x-text="(s.confidence||0).toFixed(2)"></td>
+                            <td><button @click="qt.ticker=s.ticker;tab='quote';fetchQuote()" class="text-[11px] g">→</button></td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- LIVE TAPE: real movers from yfinance -->
+    <div class="card p-4">
+        <div class="flex items-center justify-between mb-2">
+            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">📡 Live Tape — Top Movers</div>
+            <span class="pill pill-g">LIVE</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table>
+                <thead><tr><th>Symbol</th><th>Type</th><th>Price</th><th>%Δ</th><th>52w Pos</th><th></th></tr></thead>
+                <tbody>
+                    <template x-for="it in liveMovers()">
+                        <tr class="row-hi">
+                            <td class="font-bold w" x-text="it.symbol"></td>
+                            <td class="m text-[10px]" x-text="it.group"></td>
+                            <td x-text="(it.price||0)>=1000?'$'+(it.price||0).toLocaleString(undefined,{maximumFractionDigits:0}):'$'+(it.price||0).toFixed(2)"></td>
+                            <td class="font-bold" :class="(it.change_pct||0)>=0?'g':'r'" x-text="((it.change_pct||0)>=0?'+':'')+(it.change_pct||0).toFixed(2)+'%'"></td>
+                            <td class="text-[10px] m" x-text="pct52w(it)"></td>
+                            <td><button @click="qt.ticker=it.symbol;tab='quote';fetchQuote()" class="text-[11px] g">→</button></td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card p-4">
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">📊 Today</div>
+        <div class="grid grid-cols-3 gap-2 text-center text-xs">
+            <div><div class="text-base font-bold g" x-text="dash.signalsToday||0"></div><div class="m text-[10px]">Signals</div></div>
+            <div><div class="text-base font-bold w" x-text="dash.tradesToday||0"></div><div class="m text-[10px]">Trades</div></div>
+            <div><div class="text-base font-bold" :class="(dash.stats?.todayPnL||0)>=0?'g':'r'" x-text="(dash.stats?.todayPnL>=0?'+':'')+'$'+fmt(dash.stats?.todayPnL||0)"></div><div class="m text-[10px]">P&L</div></div>
+        </div>
+    </div>
+</main>
+
+<!-- ══════════════════════════ MONITOR ══════════════════════════ -->
+<main x-show="tab==='monitor'" class="px-4 py-4 space-y-4 fade-in">
+    <div class="card p-4">
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">⚙️ Engine</div>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+            <div><span class="m">Status</span> <span class="font-bold" :class="health.engine?.running?'g':'r'" x-text="health.engine?.running?'RUNNING':'STOPPED'"></span></div>
+            <div><span class="m">Mode</span> <span class="font-bold w" x-text="health.engine?.dry_run?'PAPER':'LIVE'"></span></div>
+            <div><span class="m">Cycle</span> <span class="font-bold w" x-text="(health.engine?.cycle_count||0)+' (~'+(health.engine?.cycle_interval_s||0)+'s)'"></span></div>
+            <div><span class="m">Today</span> <span class="font-bold w" x-text="(health.engine?.signals_today||0)+' sig · '+(health.engine?.trades_today||0)+' trd'"></span></div>
+        </div>
+    </div>
+
+    <div class="card p-4">
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">🔌 Broker</div>
+        <div class="flex items-center justify-between text-xs">
+            <span class="m">Connection</span>
+            <span class="pill" :class="health.broker?.connected?'pill-g':'pill-y'">
+                <span class="dot" :style="'background:'+(health.broker?.connected?'#00d4aa':'#fbbf24')"></span>
+                <span x-text="(health.broker?.name||'paper').toUpperCase()"></span>
+            </span>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-xs mt-2">
+            <div><span class="m">Mode</span> <span class="w" x-text="health.broker?.mode||'PAPER'"></span></div>
+            <div><span class="m">Last sync</span> <span class="w" x-text="fmtSync(health.broker?.last_sync)"></span></div>
+        </div>
+        <div class="text-[11px] m mt-2">IB linkage: set <code>IB_ACCOUNT</code> + <code>IB_PORT</code>. Paper simulator used when disconnected.</div>
+    </div>
+
+    <div class="card p-4">
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">🛰️ Data Freshness</div>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+            <div><span class="m">Source</span> <span class="w" x-text="health.data?.source||'—'"></span></div>
+            <div><span class="m">VIX</span> <span class="w" x-text="(health.data?.vix||0).toFixed(2)"></span></div>
+            <div><span class="m">SPY 20d</span> <span class="w" x-text="((health.data?.spy_20d||0)>=0?'+':'')+(health.data?.spy_20d||0).toFixed(2)+'%'"></span></div>
+            <div><span class="m">Breadth</span> <span class="w" x-text="(health.data?.breadth_pct||0).toFixed(0)+'%'"></span></div>
+        </div>
+    </div>
+
+    <!-- Rich regime telemetry (live engine context) -->
+    <div class="card p-4" x-show="dash.regime">
+        <div class="flex items-center justify-between mb-2">
+            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">🧭 Regime Telemetry</div>
+            <span class="pill" :class="(dash.regime?.should_trade)?'pill-g':'pill-r'" x-text="(dash.regime?.should_trade)?'TRADE':'NO-TRADE'"></span>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+            <div><span class="m">Risk</span> <span class="w" x-text="dash.regime?.risk_regime||'—'"></span></div>
+            <div><span class="m">Trend</span> <span class="w" x-text="dash.regime?.trend_regime||'—'"></span></div>
+            <div><span class="m">Vol</span> <span class="w" x-text="dash.regime?.volatility_regime||'—'"></span></div>
+            <div><span class="m">Confidence</span> <span class="w" x-text="((dash.regime?.confidence||0)*100).toFixed(0)+'%'"></span></div>
+            <div><span class="m">RiskOn/Up</span> <span class="g" x-text="((dash.regime?.risk_on_uptrend||0)*100).toFixed(0)+'%'"></span></div>
+            <div><span class="m">RiskOff/Dn</span> <span class="r" x-text="((dash.regime?.risk_off_downtrend||0)*100).toFixed(0)+'%'"></span></div>
+            <div><span class="m">Realized Vol</span> <span class="w" x-text="((dash.regime?.realized_vol_20d||0)*100).toFixed(1)+'%'"></span></div>
+            <div><span class="m">MOVE Index</span> <span class="w" x-text="(dash.regime?.move_index||0).toFixed(0)"></span></div>
+            <div><span class="m">VIX Term</span> <span class="w" x-text="(dash.regime?.vix_term_slope||0).toFixed(2)"></span></div>
+            <div><span class="m">Credit Z</span> <span class="w" x-text="(dash.regime?.credit_spread_z||0).toFixed(2)"></span></div>
+            <div><span class="m">Entropy</span> <span class="w" x-text="(dash.regime?.entropy||0).toFixed(2)"></span></div>
+            <div><span class="m">Size Scalar</span> <span class="g" x-text="((dash.regime?.size_scalar||0)*100).toFixed(0)+'%'"></span></div>
+        </div>
+    </div>
+
+    <div class="card p-4">
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">🛡️ Risk Gates</div>
+        <div class="flex items-center justify-between text-xs mb-1">
+            <span class="m">Circuit Breaker</span>
+            <span class="pill" :class="health.circuit_breaker?.triggered?'pill-r':'pill-g'" x-text="health.circuit_breaker?.triggered?'TRIPPED':'OK'"></span>
+        </div>
+        <div class="flex items-center justify-between text-xs mb-1">
+            <span class="m">Consecutive Losses</span>
+            <span class="font-bold" :class="(health.circuit_breaker?.consecutive_losses||0)>2?'r':'w'" x-text="health.circuit_breaker?.consecutive_losses||0"></span>
+        </div>
+        <div class="flex items-center justify-between text-xs">
+            <span class="m">Daily P&L</span>
+            <span class="font-bold" :class="(health.circuit_breaker?.daily_pnl||0)>=0?'g':'r'" x-text="(health.circuit_breaker?.daily_pnl>=0?'+':'')+'$'+fmt(health.circuit_breaker?.daily_pnl||0)"></span>
+        </div>
+    </div>
+
+    <div class="card p-4" x-show="(health.alerts||[]).length">
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">🚨 Alerts</div>
+        <template x-for="a in (health.alerts||[])">
+            <div class="text-xs py-1.5 flex items-center gap-2 border-b border-gray-800/40 last:border-0">
+                <span class="font-bold" :class="a.level==='critical'?'r':a.level==='warn'?'y':'pill-b'" x-text="a.level.toUpperCase()"></span>
+                <span class="text-gray-300" x-text="a.msg"></span>
+            </div>
+        </template>
+    </div>
+</main>
+
+<!-- ══════════════════════════ BACKTEST ══════════════════════════ -->
+<main x-show="tab==='backtest'" class="px-4 py-4 space-y-4 fade-in">
+    <div class="card p-4">
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">🔬 Strategy Backtester</div>
+        <div class="space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+                <div><label class="text-[11px] m block mb-1">Ticker</label><input type="text" x-model="bt.ticker" placeholder="AAPL" class="uppercase"></div>
+                <div><label class="text-[11px] m block mb-1">Strategy</label>
+                    <select x-model="bt.strategy">
+                        <option value="all">All (compare)</option><option value="swing">Swing</option>
+                        <option value="breakout">Breakout</option><option value="momentum">Momentum</option>
+                        <option value="mean_reversion">Mean Reversion</option>
+                    </select></div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div><label class="text-[11px] m block mb-1">Start</label><input type="date" x-model="bt.startDate"></div>
+                <div><label class="text-[11px] m block mb-1">End</label><input type="date" x-model="bt.endDate"></div>
+            </div>
+            <button @click="runBacktest()" class="btn btn-p w-full" :disabled="bt.loading">
+                <span x-show="!bt.loading">▶ Run Backtest</span>
+                <span x-show="bt.loading" class="flex items-center justify-center gap-2"><span class="spin"></span> Running…</span>
+            </button>
+            <div class="flex gap-2 flex-wrap">
+                <template x-for="p in ['1mo','3mo','6mo','1y','2y']">
+                    <button @click="bt.startDate='';bt.endDate='';bt.period=p;runBacktest()" class="btn btn-s text-xs py-1.5 px-3" x-text="p"></button>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <template x-if="bt.result">
+        <div class="space-y-3 fade-in">
+            <!-- Result dashboard: summary → curve → metrics -->
+            <div class="card p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <div>
+                        <div class="text-sm font-bold w" x-text="'📊 '+bt.result.ticker+' — '+bt.result.period"></div>
+                        <div class="text-[10px] m" x-text="bt.result.date_range||''"></div>
+                    </div>
+                    <span class="pill pill-g" x-text="(bt.result.best_strategy||'').replace('_',' ')"></span>
+                </div>
+                <div class="flex gap-3 text-[10px] m mb-2">
+                    <span><span class="g">●</span> Best strategy</span>
+                    <span><span style="color:#0ea5e9">●</span> Buy & hold</span>
+                </div>
+                <div x-html="dualSparkSvg(btTopCurve(), bt.result.benchmark_curve, 340, 90)"></div>
+                <div class="grid grid-cols-4 gap-2 text-center text-xs mt-3">
+                    <div><div class="m">Buy&Hold</div><div class="font-bold" :class="(bt.result.benchmark_return||0)>=0?'g':'r'" x-text="((bt.result.benchmark_return||0)>=0?'+':'')+(bt.result.benchmark_return||0)+'%'"></div></div>
+                    <div><div class="m">Best Return</div><div class="font-bold g" x-text="((bt.result.strategies?.[0]?.total_return||0)>=0?'+':'')+(bt.result.strategies?.[0]?.total_return||0)+'%'"></div></div>
+                    <div><div class="m">Alpha Δ</div><div class="font-bold" :class="btAlpha()>=0?'g':'r'" x-text="(btAlpha()>=0?'+':'')+btAlpha().toFixed(2)+'%'"></div></div>
+                    <div><div class="m">Bars</div><div class="font-bold w" x-text="bt.result.bars||0"></div></div>
+                </div>
+            </div>
+
+            <!-- Selected run detail (best strategy) -->
+            <div class="card p-4" x-show="bt.result.strategies?.[0]">
+                <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">📌 Selected Run</div>
+                <div class="text-sm font-bold w mb-1" x-text="btStrategyLabel(bt.result.strategies[0])"></div>
+                <div class="text-[11px] m mb-2" x-text="btRuleSummary(bt.result.strategies[0].strategy)"></div>
+                <div class="grid grid-cols-4 gap-2 text-center text-[11px]">
+                    <div><div class="m">Sharpe</div><div class="font-bold w" x-text="bt.result.strategies[0].sharpe"></div></div>
+                    <div><div class="m">Sortino</div><div class="font-bold w" x-text="bt.result.strategies[0].sortino||'—'"></div></div>
+                    <div><div class="m">Vol</div><div class="font-bold w" x-text="(bt.result.strategies[0].volatility||0)+'%'"></div></div>
+                    <div><div class="m">Hold</div><div class="font-bold w" x-text="(bt.result.strategies[0].avg_hold_days||0)+'d'"></div></div>
+                </div>
+            </div>
+
+            <template x-for="(s, i) in (bt.result.strategies||[])">
+                <div class="card p-3 fade-in" :class="i===0&&'border-green-500/40'">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-base" x-text="i===0?'🥇':i===1?'🥈':i===2?'🥉':'#'+(i+1)"></span>
+                            <span class="text-sm font-bold w" x-text="btStrategyLabel(s)"></span>
+                        </div>
+                        <span class="text-xs m" x-text="'Score '+s.score"></span>
+                    </div>
+                    <div x-show="s.equity_curve?.length" class="mb-2" x-html="dualSparkSvg(s.equity_curve, bt.result.benchmark_curve, 300, 40)"></div>
+                    <div class="grid grid-cols-4 gap-2 text-xs text-center">
+                        <div><div class="m">Trades</div><div class="font-bold w" x-text="s.total_trades||0"></div></div>
+                        <div><div class="m">Win</div><div class="font-bold" :class="(s.win_rate||0)>50?'g':'r'" x-text="(s.win_rate||0)+'%'"></div></div>
+                        <div><div class="m">Return</div><div class="font-bold" :class="(s.total_return||0)>=0?'g':'r'" x-text="((s.total_return||0)>=0?'+':'')+(s.total_return||0)+'%'"></div></div>
+                        <div><div class="m">vs B&H</div><div class="font-bold" :class="(s.total_return||0)-(bt.result.benchmark_return||0)>=0?'g':'r'" x-text="(((s.total_return||0)-(bt.result.benchmark_return||0))>=0?'+':'')+((s.total_return||0)-(bt.result.benchmark_return||0)).toFixed(2)+'%'"></div></div>
+                        <div><div class="m">Sharpe</div><div class="font-bold w" x-text="s.sharpe||0"></div></div>
+                        <div><div class="m">Max DD</div><div class="font-bold r" x-text="(s.max_drawdown||0)+'%'"></div></div>
+                        <div><div class="m">P.Factor</div><div class="font-bold w" x-text="s.profit_factor||0"></div></div>
+                        <div><div class="m">Sortino</div><div class="font-bold w" x-text="s.sortino||'—'"></div></div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </template>
+
+    <!-- Previous runs -->
+    <div class="card p-4" x-show="(bt.history||[]).length">
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">🗂️ Recent Runs</div>
+        <template x-for="h in (bt.history||[]).slice(0,8)">
+            <div class="flex items-center justify-between py-1.5 border-b border-gray-800/40 last:border-0 text-xs row-hi cursor-pointer"
+                 @click="loadBtHistory(h)">
+                <span class="w font-bold" x-text="h.ticker+' · '+h.best"></span>
+                <span class="m" x-text="h.period"></span>
+                <span class="g" x-text="h.return+'%'"></span>
+            </div>
+        </template>
+    </div>
+</main>
+
+<!-- ══════════════════════════ QUOTE / DOSSIER ══════════════════════════ -->
+<main x-show="tab==='quote'" class="px-4 py-4 space-y-4 fade-in">
+    <div class="card p-4">
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">🔍 Stock Dossier</div>
+        <div class="flex gap-2">
+            <input type="text" x-model="qt.ticker" @keydown.enter="fetchQuote()" placeholder="AAPL, NVDA, BTC-USD…" class="uppercase">
+            <button @click="fetchQuote()" class="btn btn-p flex-shrink-0 px-4" :disabled="qt.loading">
+                <span x-show="!qt.loading">Go</span><span x-show="qt.loading"><span class="spin"></span></span>
+            </button>
+        </div>
+    </div>
+    <template x-if="qt.data">
+        <div class="space-y-3 fade-in">
+            <div class="card p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="text-xl font-extrabold w" x-text="qt.data.symbol"></div>
+                    <div class="flex gap-1.5">
+                        <button @click="bt.ticker=qt.data.symbol;tab='backtest'" class="btn btn-s text-xs py-1 px-3">🔬 BT</button>
+                        <button @click="tab='signals'" class="btn btn-s text-xs py-1 px-3">⚡ Signals</button>
+                    </div>
+                </div>
+                <div class="text-3xl font-extrabold mb-0.5" :class="(qt.data.change_pct||0)>=0?'g':'r'" x-text="'$'+(qt.data.price||0).toFixed(2)"></div>
+                <div class="text-lg font-bold" :class="(qt.data.change_pct||0)>=0?'g':'r'" x-text="((qt.data.change_pct||0)>=0?'+':'')+(qt.data.change_pct||0).toFixed(2)+'%'"></div>
+            </div>
+            <div class="card p-4">
+                <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">📊 Key Data</div>
+                <div class="grid grid-cols-2 gap-3 text-sm">
+                    <div><span class="m">Day Range</span><br><span class="w" x-text="'$'+(qt.data.low||0)+' — $'+(qt.data.high||0)"></span></div>
+                    <div><span class="m">52W</span><br><span class="w" x-text="'$'+(qt.data.low_52w||0)+' — $'+(qt.data.high_52w||0)"></span></div>
+                    <div><span class="m">Volume</span><br><span class="w" x-text="(qt.data.volume||0).toLocaleString()"></span></div>
+                    <div><span class="m">Prev Close</span><br><span class="w" x-text="'$'+(qt.data.prev_close||0)"></span></div>
+                </div>
+            </div>
+            <div class="card p-4" x-show="qt.data.rsi">
+                <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">📈 Technicals</div>
+                <div class="grid grid-cols-3 gap-3 text-center text-sm">
+                    <div><div class="m text-xs">RSI(14)</div><div class="font-bold" :class="(qt.data.rsi||50)>70?'r':(qt.data.rsi||50)<30?'g':'w'" x-text="qt.data.rsi||'—'"></div></div>
+                    <div><div class="m text-xs">SMA 20</div><div class="font-bold w" x-text="'$'+(qt.data.sma20||'—')"></div></div>
+                    <div><div class="m text-xs">SMA 50</div><div class="font-bold w" x-text="'$'+(qt.data.sma50||'—')"></div></div>
+                    <div><div class="m text-xs">Vol Ratio</div><div class="font-bold" :class="(qt.data.volume_ratio||1)>1.5?'g':'w'" x-text="(qt.data.volume_ratio||1).toFixed(1)+'x'"></div></div>
+                    <div><div class="m text-xs">Mkt Cap</div><div class="font-bold w" x-text="(qt.data.market_cap||0)>1e12?'$'+((qt.data.market_cap||0)/1e12).toFixed(1)+'T':(qt.data.market_cap||0)>1e9?'$'+((qt.data.market_cap||0)/1e9).toFixed(1)+'B':'$'+((qt.data.market_cap||0)/1e6).toFixed(0)+'M'"></div></div>
+                </div>
+            </div>
+        </div>
+    </template>
+    <div x-show="qt.error" class="card p-4 border-red-500/40"><div class="r text-sm" x-text="qt.error"></div></div>
+</main>
+
+<!-- ══════════════════════════ COMMANDS (demoted) ══════════════════════════ -->
+<main x-show="tab==='cmds'" class="px-4 py-4 space-y-3 fade-in">
+    <div class="card p-3">
+        <div class="text-[11px] m">Secondary support surface — all features above are also exposed via Discord <code class="bg-white/10 px-1 rounded">/menu</code>.</div>
+    </div>
+    <template x-for="cat in cmdCats">
+        <div class="card p-3 fade-in">
+            <div class="text-xs font-bold w mb-1.5" x-text="cat.icon+' '+cat.name"></div>
+            <template x-for="c in cat.cmds">
+                <div class="flex items-center justify-between py-1 border-b border-gray-800/40 last:border-0">
+                    <code class="text-[11px] text-cyan-400" x-text="c[0]"></code>
+                    <span class="text-[10px] m text-right" x-text="c[1]"></span>
+                </div>
+            </template>
+        </div>
+    </template>
+</main>
+
+<footer class="px-4 py-3 mt-4 border-t border-gray-800/30 text-center text-[10px] text-gray-600">
+    TradingAI Pro · Sprint 45 · Trading Desk · auto-refresh 30s
+</footer>
+
+<script>
+function desk() {
+    return {
+        tab: 'home',
+        tabs: [
+            {id:'home', icon:'🏠', label:'Home'},
+            {id:'portfolio', icon:'💼', label:'Portfolio'},
+            {id:'strategies', icon:'🏆', label:'Strategies'},
+            {id:'signals', icon:'⚡', label:'Signals'},
+            {id:'monitor', icon:'⚙️', label:'Monitor'},
+            {id:'backtest', icon:'🔬', label:'Backtest'},
+            {id:'quote', icon:'🔍', label:'Quote'},
+            {id:'cmds', icon:'💬', label:'Cmds'},
+        ],
+        live: false, clock: '',
+        regime: {},
+        market: {indices:[], macro:[], sectors:[], asia:[]},
+        dash: {topSignals:[], stats:{}},
+        portfolio: {kpis:{}, broker:{}, positions:[], equity_curve:[], benchmark_curve:[], allocation:{}, active_sleeves:[], pro_kpis:{}},
+        strategies: {counts:{}, strategies:[]},
+        roster: {strategies:[]},
+        health: {engine:{}, broker:{}, data:{}, circuit_breaker:{}, alerts:[]},
+        bt: {ticker:'AAPL', strategy:'all', startDate:'', endDate:'', period:'1y', loading:false, result:null, history:[]},
+        qt: {ticker:'', loading:false, data:null, error:''},
+        cmdCats: [
+            {icon:'⚡', name:'Signals & Scans', cmds:[['/signals','Latest signals'],['/scan vcp','Scan setups'],['/momentum','Momentum picks']]},
+            {icon:'💼', name:'Portfolio', cmds:[['/portfolio','Full portfolio'],['/positions','Open positions'],['/pnl','Today P&L']]},
+            {icon:'🔬', name:'Backtest', cmds:[['/backtest AAPL','All strategies'],['/best_strategy AAPL','Best now']]},
+            {icon:'🧠', name:'Research', cmds:[['/ai AAPL','AI breakdown'],['/levels AAPL','S/R levels'],['/compare AAPL MSFT','Compare']]},
+            {icon:'🛠️', name:'Ops', cmds:[['/status','System health'],['/alert AAPL 200','Price alert']]},
+        ],
+        init() {
+            this.updateClock(); setInterval(()=>this.updateClock(),1000);
+            try { this.bt.history = JSON.parse(localStorage.getItem('bt_history')||'[]'); } catch(e) { this.bt.history=[]; }
+            this.refreshAll(); setInterval(()=>this.refreshAll(),30000);
+        },
+        updateClock() {
+            this.clock=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        },
+        async refreshAll() {
+            try {
+                const [m, d, p, s, h, rs] = await Promise.all([
+                    fetch('/api/live/market').then(r=>r.json()).catch(()=>({})),
+                    fetch('/api/dashboard').then(r=>r.json()).catch(()=>({})),
+                    fetch('/api/desk/portfolio').then(r=>r.json()).catch(()=>({})),
+                    fetch('/api/desk/strategies').then(r=>r.json()).catch(()=>({})),
+                    fetch('/api/desk/monitor').then(r=>r.json()).catch(()=>({})),
+                    fetch('/api/live/strategies').then(r=>r.json()).catch(()=>({strategies:[]})),
+                ]);
+                this.market = m || this.market;
+                this.regime = (m && m.regime) || (d && d.regime) || {};
+                this.dash = d || this.dash;
+                this.portfolio = p || this.portfolio;
+                this.strategies = s || this.strategies;
+                this.health = h || this.health;
+                this.roster = rs || this.roster;
+                this.live = true;
+            } catch(e) { console.error('refresh:',e); this.live=false; }
+        },
+        async runBacktest() {
+            if(!this.bt.ticker) return;
+            this.bt.loading=true; this.bt.result=null;
+            try {
+                let url='/api/live/backtest?ticker='+encodeURIComponent(this.bt.ticker)+'&strategy='+this.bt.strategy;
+                if(this.bt.startDate&&this.bt.endDate) url+='&start_date='+this.bt.startDate+'&end_date='+this.bt.endDate;
+                else url+='&period='+this.bt.period;
+                const r=await fetch(url,{method:'POST'});
+                if(!r.ok){const e=await r.json();throw new Error(e.detail||'Failed');}
+                this.bt.result=await r.json();
+                const top = this.bt.result.strategies?.[0];
+                const entry = {
+                    ticker: this.bt.result.ticker,
+                    period: this.bt.result.period,
+                    best: (this.bt.result.best_strategy||'').replace('_',' '),
+                    return: top?.total_return||0,
+                    ts: Date.now(),
+                    payload: this.bt.result,
+                };
+                this.bt.history = [entry, ...this.bt.history.filter(h=>!(h.ticker===entry.ticker&&h.period===entry.period))].slice(0,12);
+                try { localStorage.setItem('bt_history', JSON.stringify(this.bt.history)); } catch(e) {}
+            } catch(e) { alert('Error: '+e.message); }
+            finally { this.bt.loading=false; }
+        },
+        loadBtHistory(h) {
+            if (h.payload) { this.bt.result = h.payload; this.bt.ticker = h.ticker; }
+        },
+        btTopCurve() {
+            return this.bt.result?.strategies?.[0]?.equity_curve || [];
+        },
+        btAlpha() {
+            const top = this.bt.result?.strategies?.[0]?.total_return||0;
+            return top - (this.bt.result?.benchmark_return||0);
+        },
+        btStrategyLabel(s) {
+            return (s.strategy||'').replace('_',' ').replace(/\b\w/g,l=>l.toUpperCase());
+        },
+        btRuleSummary(id) {
+            const rules = {
+                swing: 'RSI oversold + reclaim SMA20 above SMA50; 5% stop / 10% target.',
+                breakout: '20-day high breakout + volume surge; trend filter SMA20.',
+                momentum: 'Price > SMA20 > SMA50, RSI 50–75, volume confirmation.',
+                mean_reversion: 'RSI < 30, price below SMA20; tighter 4% stop / 6% target.',
+            };
+            return rules[id] || 'Vectorized rule backtest on daily bars.';
+        },
+        fmtSync(iso) {
+            if (!iso) return '—';
+            try {
+                const d = new Date(iso);
+                return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+            } catch(e) { return '—'; }
+        },
+        async fetchQuote() {
+            if(!this.qt.ticker) return;
+            this.qt.loading=true; this.qt.data=null; this.qt.error='';
+            try {
+                const r=await fetch('/api/live/quote/'+encodeURIComponent(this.qt.ticker));
+                if(!r.ok){const e=await r.json();throw new Error(e.detail||'Not found');}
+                this.qt.data=(await r.json()).quote;
+            } catch(e) { this.qt.error=e.message; }
+            finally { this.qt.loading=false; }
+        },
+        fmt(n) {
+            n = Number(n)||0;
+            if (Math.abs(n)>=1e6) return (n/1e6).toFixed(2)+'M';
+            if (Math.abs(n)>=1e3) return (n/1e3).toFixed(1)+'k';
+            return n.toFixed(2);
+        },
+        // Live market accessors
+        _findMkt(sym) {
+            const all = [...(this.market.indices||[]), ...(this.market.macro||[]), ...(this.market.sectors||[]), ...(this.market.asia||[])];
+            return all.find(x => x.symbol===sym) || {};
+        },
+        spy() { return this._findMkt('SPY').change_pct || 0; },
+        vix() { return this._findMkt('^VIX').price || 0; },
+        btc() { return this._findMkt('BTC-USD').change_pct || 0; },
+        gold() { return this._findMkt('GLD').change_pct || 0; },
+        pct52w(it) {
+            const lo = it.low_52w||0, hi = it.high_52w||0, p = it.price||0;
+            if (!lo || !hi || hi===lo) return '—';
+            return (((p-lo)/(hi-lo))*100).toFixed(0)+'%';
+        },
+        liveMovers() {
+            const tag = (arr, group) => (arr||[]).map(x => ({...x, group}));
+            const all = [
+                ...tag(this.market.indices, 'index'),
+                ...tag(this.market.sectors, 'sector'),
+                ...tag(this.market.macro, 'macro'),
+                ...tag(this.market.asia, 'asia'),
+            ];
+            return all
+                .filter(x => Number.isFinite(x.change_pct))
+                .sort((a,b) => Math.abs(b.change_pct||0) - Math.abs(a.change_pct||0))
+                .slice(0, 15);
+        },
+        _seriesPts(series) {
+            return (series||[]).map(p => typeof p==='number'?p:(p.equity ?? p.value ?? 0));
+        },
+        _pathFromPts(pts, w, h, pad, color) {
+            if (!pts.length) return '';
+            const min = Math.min(...pts), max = Math.max(...pts);
+            const rng = (max-min) || 1;
+            const sx = (w-pad*2)/Math.max(pts.length-1,1);
+            const coords = pts.map((v,i)=>{
+                const x = pad + i*sx;
+                const y = pad + (h-pad*2)*(1 - (v-min)/rng);
+                return [x,y];
+            });
+            const path = coords.map((c,i)=>(i===0?'M':'L')+c[0].toFixed(1)+','+c[1].toFixed(1)).join(' ');
+            const last = pts[pts.length-1], first = pts[0];
+            const stroke = color || (last>=first ? '#00d4aa' : '#ff5c5c');
+            const fill = last>=first ? 'rgba(0,212,170,0.10)' : 'rgba(255,92,92,0.10)';
+            const areaPath = path + ' L'+coords[coords.length-1][0].toFixed(1)+','+(h-pad)+' L'+pad+','+(h-pad)+' Z';
+            return `<path d="${areaPath}" fill="${fill}" stroke="none"/><path d="${path}" fill="none" stroke="${stroke}" stroke-width="1.5" stroke-linejoin="round"/>`;
+        },
+        sparkSvg(series, w, h, smallPad) {
+            const pts = this._seriesPts(series);
+            if (!pts.length) return '<div class="text-[10px] m text-center py-4">no curve data yet</div>';
+            const pad = smallPad?2:4;
+            const inner = this._pathFromPts(pts, w, h, pad);
+            return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${inner}</svg>`;
+        },
+        dualSparkSvg(primary, overlay, w, h) {
+            const ptsA = this._seriesPts(primary);
+            const ptsB = this._seriesPts(overlay);
+            if (!ptsA.length && !ptsB.length) return '<div class="text-[10px] m text-center py-4">no curve data yet</div>';
+            const pad = 4;
+            const combined = ptsA.length ? ptsA : ptsB;
+            const min = Math.min(...combined, ...(ptsB.length?ptsB:[]));
+            const max = Math.max(...combined, ...(ptsB.length?ptsB:[]));
+            const rng = (max-min) || 1;
+            const mkPath = (pts, color, dash) => {
+                if (!pts.length) return '';
+                const sx = (w-pad*2)/Math.max(pts.length-1,1);
+                const d = pts.map((v,i)=>{
+                    const x = pad + i*sx;
+                    const y = pad + (h-pad*2)*(1 - (v-min)/rng);
+                    return (i===0?'M':'L')+x.toFixed(1)+','+y.toFixed(1);
+                }).join(' ');
+                return `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.5" ${dash?'stroke-dasharray="4 3"':''}/>`;
+            };
+            let svg = mkPath(ptsA, '#00d4aa', false);
+            if (ptsB.length) svg += mkPath(ptsB, '#0ea5e9', true);
+            return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${svg}</svg>`;
+        },
+    }
+}
+</script>
+</body>
+</html>

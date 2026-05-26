@@ -11,6 +11,8 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from pydantic import BaseModel
+
 from src.services.leader_tracking_service import (
     ensure_seeded,
     get_alerts,
@@ -20,6 +22,8 @@ from src.services.leader_tracking_service import (
     get_flow_ticker,
     get_flow_tracked,
     get_leader_detail,
+    get_portfolio_overlap,
+    get_ticker_embed,
     list_baskets_enriched,
     list_leaders_enriched,
 )
@@ -57,6 +61,46 @@ async def api_list_leaders(
 async def api_leaders_dashboard():
     """Home cards: top moves, verified updates, consensus, flow-confirmed."""
     return get_dashboard_cards()
+
+
+@router.get("/api/leaders/ticker/{ticker}/context")
+async def api_ticker_context(ticker: str):
+    """Dossier embed: tracked-by leaders, consensus, flow."""
+    return get_ticker_embed(ticker)
+
+
+class PortfolioOverlapRequest(BaseModel):
+    tickers: list[str] = []
+
+
+@router.post("/api/leaders/portfolio-overlap")
+async def api_portfolio_overlap(body: PortfolioOverlapRequest):
+    """Overlap between user portfolio tickers and leader consensus."""
+    return get_portfolio_overlap(body.tickers)
+
+
+@router.get("/api/leaders/portfolio-overlap")
+async def api_portfolio_overlap_get(
+    tickers: str = Query(..., description="Comma-separated tickers e.g. AAPL,NVDA"),
+):
+    return get_portfolio_overlap([t.strip() for t in tickers.split(",") if t.strip()])
+
+
+@router.post("/api/leaders/ingest/13f")
+async def api_ingest_13f(leader_id: Optional[str] = Query(None)):
+    """Sync 13F filing metadata from SEC EDGAR (verified filers only)."""
+    from src.services.leader_13f_ingest import sync_all_verified_filers, sync_filer_filings
+
+    if leader_id:
+        return await sync_filer_filings(leader_id)
+    return await sync_all_verified_filers()
+
+
+@router.post("/api/leaders/admin/reseed")
+async def api_reseed_demo(force: bool = Query(True)):
+    """Re-seed demo data (dev/admin)."""
+    ensure_seeded(force=force)
+    return {"ok": True, "message": "Leader tracking demo data reseeded"}
 
 
 @router.get("/api/leaders/{leader_id}")
@@ -162,10 +206,3 @@ async def api_leader_alerts(
     if unseen_only:
         alerts = [a for a in alerts if not a.get("seen")]
     return {"alerts": alerts}
-
-
-@router.post("/api/leaders/admin/reseed")
-async def api_reseed_demo(force: bool = Query(True)):
-    """Re-seed demo data (dev/admin)."""
-    ensure_seeded(force=force)
-    return {"ok": True, "message": "Leader tracking demo data reseeded"}

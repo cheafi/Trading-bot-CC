@@ -634,3 +634,98 @@ def list_baskets_enriched() -> List[Dict[str, Any]]:
 def get_alerts() -> List[Dict[str, Any]]:
     ensure_seeded()
     return store.list_alerts(unseen_only=False)
+
+
+def get_ticker_embed(ticker: str) -> Dict[str, Any]:
+    """Dossier embed: tracked-by-leaders + flow confirmation."""
+    ensure_seeded()
+    t = ticker.upper()
+    ctx = get_consensus_ticker(t)
+    flow = store.get_flow_signal(t)
+    leaders_rows = []
+    for h in ctx.get("leaders", []):
+        leaders_rows.append({
+            "leader_id": h.get("leader_id"),
+            "leader_name": h.get("leader_name"),
+            "action": ACTION_LABELS.get(h.get("action_type"), h.get("action_type")),
+            "source_quality": h.get("source_quality"),
+            "source_quality_label": SOURCE_QUALITY_LABELS.get(
+                h.get("source_quality"), h.get("source_quality"),
+            ),
+            "disclosure_date": h.get("disclosure_date"),
+            "actionability": h.get("actionability"),
+            "verified": bool(h.get("verified_flag")),
+        })
+    baskets = []
+    for b in store.list_baskets():
+        full = store.get_basket(b["id"])
+        if full and any(m["ticker"] == t for m in full.get("members", [])):
+            baskets.append({"id": b["id"], "name": b["name"]})
+    return {
+        "ticker": t,
+        "tracked_by": leaders_rows,
+        "consensus": ctx.get("consensus"),
+        "flow": flow,
+        "flow_confirmation_score": (flow or {}).get("final_confirmation_score"),
+        "data_mode": (flow or {}).get("data_mode", "heuristic"),
+        "shadow_baskets": baskets,
+        "decision": ctx.get("decision"),
+        "disclaimer": (
+            "Leader rows may be delayed disclosures or inferred mentions — "
+            "not verified live holdings unless source_quality is verified."
+        ),
+    }
+
+
+def get_portfolio_overlap(tickers: List[str]) -> Dict[str, Any]:
+    """Compare user holdings vs tracked leader consensus."""
+    ensure_seeded()
+    tickers = [x.upper().strip() for x in tickers if x]
+    rows = []
+    crowded = 0
+    for t in tickers:
+        ctx = get_consensus_ticker(t)
+        c = ctx.get("consensus") or {}
+        overlap = c.get("mention_count", 0) or 0
+        verified = c.get("verified_count", 0) or 0
+        flow_score = c.get("flow_confirmation_score", 0) or 0
+        if overlap >= 3:
+            crowded += 1
+        net_signal = "neutral"
+        if (c.get("add_count", 0) + c.get("new_buy_count", 0)) > c.get("reduce_count", 0):
+            net_signal = "accumulation"
+        elif c.get("reduce_count", 0) > (c.get("add_count", 0) + c.get("new_buy_count", 0)):
+            net_signal = "distribution"
+        rows.append({
+            "ticker": t,
+            "overlap_count": overlap,
+            "verified_sources": verified,
+            "consensus_score": c.get("consensus_score", 0),
+            "flow_confirmation_score": flow_score,
+            "net_signal": net_signal,
+            "leaders": [
+                {
+                    "name": h.get("leader_name"),
+                    "action": h.get("action_type"),
+                    "source_quality": h.get("source_quality"),
+                }
+                for h in ctx.get("leaders", [])[:5]
+            ],
+            "risk_note": (
+                "Crowded consensus — check extension risk"
+                if overlap >= 4
+                else None
+            ),
+        })
+    return {
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "holdings_checked": len(tickers),
+        "crowded_positions": crowded,
+        "rows": sorted(rows, key=lambda x: -x["consensus_score"]),
+        "summary": {
+            "high_overlap": [r["ticker"] for r in rows if r["overlap_count"] >= 3],
+            "flow_confirmed": [
+                r["ticker"] for r in rows if (r["flow_confirmation_score"] or 0) >= 60
+            ],
+        },
+    }

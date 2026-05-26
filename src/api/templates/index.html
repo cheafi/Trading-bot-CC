@@ -1877,6 +1877,40 @@
             <div class="text-[10px] mono mt-1" style="color:var(--t3)" x-text="'Prev $'+(dos.data.prev_close||0)+' · Vol '+(dos.data.volume||0).toLocaleString()"></div>
             <div class="text-[9px] mt-1" style="color:var(--t3)" x-text="'Regime: '+(dos.data.regime?dos.data.regime.label||'—':'—')+' · '+(dos.data.regime&&dos.data.regime.should_trade?'Trading OK':'⚠ No Trade')"></div>
           </div>
+          <!-- Leader / Holdings Tracking embed -->
+          <template x-if="dos.data.leader_tracking && (dos.data.leader_tracking.tracked_by||[]).length">
+            <div class="card card-p" style="border-color:rgba(88,166,255,.25)">
+              <div class="flex items-center justify-between mb-2">
+                <div class="text-[10px] font-bold uppercase" style="color:var(--blue)">👥 Tracked by Leaders</div>
+                <button class="btn-s text-[8px]" @click="switchTab('leaders');leadersView='consensus'">Consensus →</button>
+              </div>
+              <div class="space-y-1">
+                <template x-for="lb in (dos.data.leader_tracking.tracked_by||[]).slice(0,6)" :key="lb.leader_id+lb.action">
+                  <div class="flex justify-between text-[10px] py-0.5 border-b border-gray-800/30 last:border-0">
+                    <span class="font-bold text-white" x-text="lb.leader_name"></span>
+                    <span>
+                      <span x-text="lb.action"></span>
+                      <span class="pill text-[7px] ml-1" :class="lb.verified?'pg':'pa'" x-text="lb.source_quality_label||lb.source_quality"></span>
+                    </span>
+                  </div>
+                </template>
+              </div>
+              <template x-if="dos.data.leader_tracking.consensus">
+                <div class="mt-2 pt-2 text-[9px] mono" style="border-top:1px solid var(--bd);color:var(--t3)">
+                  Consensus: <strong class="text-white" x-text="(dos.data.leader_tracking.consensus.consensus_score||0)+'/100'"></strong>
+                  · mentions <strong x-text="dos.data.leader_tracking.consensus.mention_count||0"></strong>
+                  · verified <strong x-text="dos.data.leader_tracking.consensus.verified_count||0"></strong>
+                </div>
+              </template>
+              <template x-if="dos.data.leader_tracking.flow_confirmation_score!=null">
+                <div class="mt-1 text-[9px]" style="color:var(--t3)">
+                  Flow confirmation (heuristic): <strong :class="(dos.data.leader_tracking.flow_confirmation_score||0)>=60?'text-green-400':'text-amber-400'" x-text="dos.data.leader_tracking.flow_confirmation_score+'/100'"></strong>
+                  <span class="text-[8px] ml-1" x-text="'· '+((dos.data.leader_tracking.data_mode)||'heuristic')"></span>
+                </div>
+              </template>
+              <div class="text-[8px] mt-2" style="color:var(--t3);line-height:1.4" x-text="dos.data.leader_tracking.disclaimer"></div>
+            </div>
+          </template>
           <!-- TradingView Chart -->
           <div class="card" style="overflow:hidden">
             <div class="flex items-center justify-between px-3 pt-2">
@@ -3045,6 +3079,26 @@
               <span style="color:var(--t3)">Cost: <strong class="text-white" x-text="'$'+pf.summary.total_cost.toLocaleString()"></strong></span>
               <span style="color:var(--t3)">P&L: <strong :class="pf.summary.total_pnl>=0?'text-green-400':'text-red-400'" x-text="(pf.summary.total_pnl>=0?'+':'')+pf.summary.total_pnl.toLocaleString()+' ('+pf.summary.total_pnl_pct+'%)'"></strong></span>
             </div>
+          </div>
+        </template>
+        <!-- Leader consensus overlap -->
+        <template x-if="pf.leaderOverlap && (pf.leaderOverlap.rows||[]).length">
+          <div class="card card-p" style="border-color:rgba(251,191,36,.3)">
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-[10px] font-bold uppercase" style="color:var(--amber)">👥 Leader Crowd Overlap</div>
+              <span class="text-[9px]" style="color:var(--t3)" x-text="(pf.leaderOverlap.crowded_positions||0)+' crowded'"></span>
+            </div>
+            <template x-for="row in (pf.leaderOverlap.rows||[]).slice(0,8)" :key="row.ticker">
+              <div class="flex justify-between text-[10px] py-1 border-b border-gray-800/30 last:border-0">
+                <span class="mono font-bold text-white cursor-pointer" @click="openDossier(row.ticker)" x-text="row.ticker"></span>
+                <span style="color:var(--t3)">
+                  <span x-text="row.overlap_count+' leaders'"></span>
+                  · <span :class="row.net_signal==='accumulation'?'text-green-400':row.net_signal==='distribution'?'text-red-400':''" x-text="row.net_signal"></span>
+                  <template x-if="row.risk_note"><span class="text-amber-400 ml-1" x-text="'⚠'"></span></template>
+                </span>
+              </div>
+            </template>
+            <div class="text-[8px] mt-2" style="color:var(--t3)">Delayed/inferred disclosures — not live verified holdings unless labeled verified.</div>
           </div>
         </template>
         <!-- Engine book: target vs actual (desk API) -->
@@ -4512,6 +4566,23 @@
                           <div class="text-[8px]" style="color:var(--t3)" x-text="s.yearly[yr].trades+'T '+s.yearly[yr].win_rate+'%W'"></div>
                         </div>
                       </template>
+                    </div>
+                  </div>
+                </template>
+                <!-- Monthly heatmap (best strategy only, first card) -->
+                <template x-if="i===0 && s.monthly && Object.keys(s.monthly).length>3">
+                  <div class="mt-2 pt-2" style="border-top:1px solid rgba(255,255,255,.06)">
+                    <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">Monthly Returns Heatmap</div>
+                    <div class="overflow-x-auto">
+                      <div class="flex flex-wrap gap-1" style="max-width:100%">
+                        <template x-for="mo in Object.keys(s.monthly).sort()">
+                          <div class="text-center rounded px-1 py-0.5" style="min-width:42px;font-size:8px"
+                               :style="'background:'+(s.monthly[mo].return_pct>=5?'rgba(0,212,170,.35)':s.monthly[mo].return_pct>=0?'rgba(0,212,170,.15)':s.monthly[mo].return_pct>=-5?'rgba(255,92,92,.15)':'rgba(255,92,92,.35)')">
+                            <div style="color:var(--t3)" x-text="mo.slice(5)"></div>
+                            <div class="font-bold mono" :class="s.monthly[mo].return_pct>=0?'text-green-400':'text-red-400'" x-text="(s.monthly[mo].return_pct>=0?'+':'')+s.monthly[mo].return_pct+'%'"></div>
+                          </div>
+                        </template>
+                      </div>
                     </div>
                   </div>
                 </template>
@@ -5994,7 +6065,7 @@ Regime gate:  FUND_ALPHA only in BULL, FUND_PENDA in all regimes
       live:false,clock:'',regime:{},indices:[],macro:[],sectors:[],asia:[],trust:{},
       sig:{mode:'—',source:'',as_of:'',recs:[],strategy_scores:{},no_trade_reason:null,scan_meta:null},
       dos:{ticker:'',loading:false,data:null,error:'',showSignals:true,chartPeriod:'6mo',benchPeriod:'1y',chartSignals:[],benchStats:null,benchSummary:null,benchMonthly:null,benchQuarterly:null,benchYearly:null,benchTab:'monthly',buyPrice:'',advice:null,adviceLoading:false,peers:null,peersLoading:false},
-      pf:{loading:false,positions:[],alerts:[],summary:null,showAdd:false,addTicker:'',addShares:0,addEntry:0,addStop:0,addT1r:0,addT2r:0,addNotes:'',editTicker:null},
+      pf:{loading:false,positions:[],alerts:[],summary:null,leaderOverlap:null,showAdd:false,addTicker:'',addShares:0,addEntry:0,addStop:0,addT1r:0,addT2r:0,addNotes:'',editTicker:null},
       factory:{loading:false,ticker:'SPY',period:'2y',mode:'demo',result:null,detail:null,showDetail:false,sortBy:'score'},
       opt:{ticker:'',loading:false,data:null},
       brief:{loading:false,data:null},
@@ -6225,6 +6296,11 @@ Regime gate:  FUND_ALPHA only in BULL, FUND_PENDA in all regimes
           this.pf.positions=d.positions||[];
           this.pf.alerts=d.alerts||[];
           this.pf.summary=d.summary||null;
+          const tickers=(this.pf.positions||[]).map(p=>p.ticker).filter(Boolean);
+          if(tickers.length){
+            fetch('/api/leaders/portfolio-overlap?tickers='+encodeURIComponent(tickers.join(',')))
+              .then(r=>r.ok?r.json():null).then(d=>{this.pf.leaderOverlap=d}).catch(()=>{this.pf.leaderOverlap=null});
+          }else{this.pf.leaderOverlap=null}
           // Enrich with trade advice (action + alpha) in background
           if(this.pf.positions.length>0){
             const enrichTasks=this.pf.positions.filter(p=>p.entry_price&&p.ticker).map(p=>

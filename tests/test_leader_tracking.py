@@ -57,3 +57,21 @@ def test_api_router_import():
     paths = [getattr(r, "path", "") for r in router.routes]
     assert "/api/leaders" in paths
     assert "/api/consensus" in paths
+
+
+def test_ticker_embed_nvda(leader_db):
+    from src.services.leader_tracking_service import get_ticker_embed
+
+    emb = get_ticker_embed("NVDA")
+    assert emb["ticker"] == "NVDA"
+    assert "disclaimer" in emb
+    assert len(emb.get("tracked_by", [])) >= 1
+
+
+def test_portfolio_overlap(leader_db):
+    from src.services.leader_tracking_service import get_portfolio_overlap
+
+    out = get_portfolio_overlap(["NVDA", "AAPL"])
+    assert out["holdings_checked"] == 2
+    assert len(out["rows"]) == 2
+    assert "summary" in out

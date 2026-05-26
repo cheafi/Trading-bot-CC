@@ -7645,6 +7645,14 @@ async def live_dossier(ticker: str):
     except Exception as _ai_exc:
         logger.debug("AI dossier analysis unavailable: %s", _ai_exc)
 
+    leader_tracking = None
+    try:
+        from src.services.leader_tracking_service import get_ticker_embed
+
+        leader_tracking = get_ticker_embed(ticker)
+    except Exception as _lt_exc:
+        logger.debug("Leader tracking embed unavailable: %s", _lt_exc)
+
     return _sanitize_for_json(
         {
             "symbol": ticker,
@@ -7691,6 +7699,7 @@ async def live_dossier(ticker: str):
                 "should_trade": should_trade,
             },
             "ai_analysis": ai_analysis,
+            "leader_tracking": leader_tracking,
             "trust": {
                 "mode": (
                     "PAPER"
@@ -8466,6 +8475,25 @@ async def live_backtest(
                 else 0
             )
 
+        # Monthly breakdown (YYYY-MM) for heatmap
+        monthly = {}
+        for t in trades:
+            ed = t.get("entry_date") or ""
+            mo = ed[:7] if len(ed) >= 7 else "unknown"
+            if mo not in monthly:
+                monthly[mo] = {"trades": 0, "winners": 0, "return_pct": 0.0}
+            monthly[mo]["trades"] += 1
+            if t["pnl_pct"] > 0:
+                monthly[mo]["winners"] += 1
+            monthly[mo]["return_pct"] += t["pnl_pct"]
+        for mo in monthly:
+            monthly[mo]["return_pct"] = round(monthly[mo]["return_pct"], 2)
+            monthly[mo]["win_rate"] = (
+                round(monthly[mo]["winners"] / monthly[mo]["trades"] * 100, 1)
+                if monthly[mo]["trades"] > 0
+                else 0
+            )
+
         return {
             "strategy": strat_id,
             "total_trades": total_trades,
@@ -8483,6 +8511,7 @@ async def live_backtest(
             "profit_factor": round(profit_factor, 2),
             "exit_reasons": exit_reasons,
             "yearly": yearly,
+            "monthly": monthly,
             "rolling_sharpe": rolling_sharpe[-50:],
             "trades": trades[-30:],
             "all_trades": trades,  # needed for event breakdown
@@ -8515,6 +8544,7 @@ async def live_backtest(
 
     ranked = sorted(results.values(), key=lambda x: x.get("score", 0), reverse=True)
     best = ranked[0]["strategy"] if ranked else "none"
+    monthly_heatmap = ranked[0].get("monthly", {}) if ranked else {}
 
     # ── Detect market events ──
     events = _detect_market_events(close, dates_idx)
@@ -8687,6 +8717,7 @@ async def live_backtest(
             "date_range": f"{dates_idx[0].date()} → {dates_idx[-1].date()}",
             "benchmark_return": round(bh_return, 2),
             "best_strategy": best,
+            "monthly_heatmap": monthly_heatmap,
             "strategies": ranked,
             "events": event_performance,
             "worst_streaks": worst_streaks[:5],

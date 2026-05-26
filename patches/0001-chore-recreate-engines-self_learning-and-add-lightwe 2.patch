@@ -1,0 +1,1433 @@
+From b5317f0099626f387cc729c012f33394efbce229 Mon Sep 17 00:00:00 2001
+From: cheafi <135965528+cheafi@users.noreply.github.com>
+Date: Thu, 30 Apr 2026 17:32:58 +0800
+Subject: [PATCH 1/2] chore: recreate engines/self_learning and add lightweight
+ opportunity_ensembler runner
+
+---
+ src/engines/opportunity_ensembler.py | 473 ++++++++++++++
+ src/engines/self_learning.py         | 932 +++++++++++++++++++++++++++
+ 2 files changed, 1405 insertions(+)
+ create mode 100644 src/engines/opportunity_ensembler.py
+ create mode 100644 src/engines/self_learning.py
+
+diff --git a/src/engines/opportunity_ensembler.py b/src/engines/opportunity_ensembler.py
+new file mode 100644
+index 000000000..4f8dd4c72
+--- /dev/null
++++ b/src/engines/opportunity_ensembler.py
+@@ -0,0 +1,473 @@
++import sys
++from pathlib import Path
++import logging
++
++# Ensure project root is on sys.path so `src` imports work when run directly
++project_root = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(project_root))
++
++logger = logging.getLogger(__name__)
++
++
++def main():
++    print("opportunity_ensembler: started")
++    try:
++        # Try to import a project module to validate imports
++        from src.core import models  # type: ignore
++        print("imported src.core.models OK")
++    except Exception as e:
++        logger.debug("project import failed: %s", e)
++        print("warning: project imports unavailable — running in degraded mode")
++
++
++if __name__ == "__main__":
++    main()
++"""
++Opportunity Ensembler.
++
++Replaces the naïve pick-highest-score conflict resolution with
++multi-strategy ensemble voting, calibrated scoring, and a
++no-trade suppression layer.
++
++The ensembler produces a single ranked list of opportunities
++from potentially overlapping signals, applying regime fit,
++correlation penalty, and event-proximity adjustments.
++"""
++
++import sys
++from pathlib import Path
++
++# Add the project root to the Python path
++project_root = Path(__file__).resolve().parent.parent.parent
++sys.path.insert(0, str(project_root))
++
++import logging
++from typing import Dict, List, Any, Optional, Union
++from datetime import datetime
++
++from src.core.models import TradeRecommendation
++
++logger = logging.getLogger(__name__)
++
++
++class OpportunityEnsembler:
++    """
++    Ensemble scorer: combines strategy votes, applies adjustments,
++    and decides whether an opportunity is strong enough to trade.
++    """
++
++    # Default component weights — sum to 1.0
++    # Sprint 34: net_expectancy is primary; win rate is secondary
++    DEFAULT_WEIGHTS = {
++        "net_expectancy": 0.30,
++        "calibrated_pwin": 0.15,
++        "expected_r": 0.10,
++        "regime_fit": 0.15,
++        "strategy_health": 0.10,
++        "timing_quality": 0.05,
++        "risk_reward": 0.10,
++        "conviction_bonus": 0.05,
++    }
++
++    # Penalties
++    CORRELATION_PENALTY_THRESHOLD = 0.65
++    EVENT_PROXIMITY_PENALTY = 0.15
++    UNCERTAINTY_PENALTY_PER_UNIT = 0.05
++
++    # No-trade thresholds
++    MIN_COMPOSITE_SCORE = 0.35
++    MIN_STRATEGY_AGREEMENT = 0.50  # fraction of strategies agreeing
++
++    def __init__(
++        self,
++        weights: Optional[Dict[str, float]] = None,
++        min_score: float = None,
++    ):
++        self.weights = weights or self.DEFAULT_WEIGHTS.copy()
++        # Read from config with fallback
++        if min_score is not None:
++            self.min_score = min_score
++        else:
++            try:
++                from src.core.config import get_trading_config
++
++                tc = get_trading_config()
++                val = tc.ensemble_min_score
++                self.min_score = float(val) if isinstance(val, (int, float)) else 0.35
++            except Exception:
++                self.min_score = 0.35
++
++    # ── Sprint 38: accept learned weights from MetaEnsemble ──
++
++    def set_weights(
++        self,
++        learned: Dict[str, float],
++    ) -> None:
++        """Replace component weights with learned values.
++
++        Only keys that exist in DEFAULT_WEIGHTS are accepted;
++        unknown keys are silently dropped.  The resulting weights
++        are re-normalised to sum to 1.0.
++        """
++        merged = self.DEFAULT_WEIGHTS.copy()
++        for k, v in learned.items():
++            if k in merged:
++                merged[k] = max(float(v), 0.02)
++        total = sum(merged.values()) or 1.0
++        self.weights = {k: v / total for k, v in merged.items()}
++        logger.info(
++            "Ensembler weights updated from MetaEnsemble: %s",
++            {k: round(v, 3) for k, v in self.weights.items()},
++        )
++
++    def rank_opportunities(
++        self,
++        signals: List[Union[Dict[str, Any], "TradeRecommendation"]],
++        regime_state: Dict[str, Any],
++        portfolio_state: Optional[Dict[str, Any]] = None,
++        strategy_scores: Optional[Dict[str, float]] = None,
++        regime_weights: Optional[Dict[str, float]] = None,
++    ) -> List["TradeRecommendation"]:
++        """
++        Rank a list of signals into scored TradeRecommendation objects.
++
++        Accepts both legacy signal dicts and TradeRecommendation objects.
++        Dict inputs are auto-converted via TradeRecommendation.from_dict().
++
++        Args:
++            signals: list of TradeRecommendation or legacy signal dicts
++            regime_weights: strategy_family → 0–1 regime
++                multiplier from RegimeRouter.get_strategy_multipliers()
++
++        Returns list of TradeRecommendation sorted by composite_score
++        descending, each augmented with composite_score, components,
++        and trade_decision.
++        """
++        # Normalise inputs to TradeRecommendation
++        recs: List[TradeRecommendation] = []
++        for sig in signals:
++            if isinstance(sig, TradeRecommendation):
++                recs.append(sig)
++            else:
++                recs.append(TradeRecommendation.from_dict(sig))
++
++        scored: List[TradeRecommendation] = []
++        for rec in recs:
++            entry = self._score_opportunity(
++                rec,
++                regime_state,
++                portfolio_state,
++                strategy_scores,
++                regime_weights,
++            )
++            scored.append(entry)
++
++        # Sort descending by composite score
++        scored.sort(
++            key=lambda x: x.composite_score,
++            reverse=True,
++        )
++
++        # Apply no-trade suppression
++        scored = self._apply_suppression(scored, regime_state)
++
++        return scored
++
++    def _score_opportunity(
++        self,
++        rec: "TradeRecommendation",
++        regime: Dict[str, Any],
++        portfolio: Optional[Dict[str, Any]],
++        strategy_health: Optional[Dict[str, float]],
++        regime_weights: Optional[Dict[str, float]] = None,
++    ) -> "TradeRecommendation":
++        """Score a single TradeRecommendation in-place."""
++        w = self.weights
++
++        # Component: calibrated win probability
++        # Prefer non-zero edge_p_t1, fall back to normalised score
++        pwin = rec.edge_p_t1 if rec.edge_p_t1 > 0 else rec.score
++        pwin = min(pwin, 1.0)
++
++        # Component: expected return — SIGNED, aligned to direction
++        # Sprint 34: negative EV now correctly penalises, not rewards
++        exp_r = rec.edge_ev if rec.edge_ev != 0 else rec.expected_return
++        # Align sign: for LONG, positive EV is good; for SHORT, flip
++        direction = getattr(rec, "direction", "LONG")
++        if isinstance(direction, str) and direction.upper() == "SHORT":
++            exp_r = -exp_r  # SHORT profits when price falls
++        exp_r_norm = max(min(exp_r / 0.10, 1.0), -0.5)  # cap [-0.5, 1.0]
++
++        # Component: NET EXPECTANCY (Sprint 34)
++        # net_exp = p(win) * avg_win_R - p(loss) * avg_loss_R
++        avg_win_r = rec.risk_reward_ratio if rec.risk_reward_ratio > 0 else 2.0
++        avg_loss_r = 1.0  # normalised to 1R
++        net_exp = pwin * avg_win_r - (1 - pwin) * avg_loss_r
++        # Normalise: 1.0R net expectancy = perfect score
++        net_exp_norm = max(min(net_exp / 1.0, 1.0), -0.5)
++
++        # Component: regime fit
++        regime_fit = self._calc_regime_fit(rec, regime)
++
++        # Component: strategy health (leaderboard * regime weight)
++        strat = rec.strategy_id
++        lb_score = 0.5
++        if strategy_health and strat in strategy_health:
++            lb_score = min(strategy_health[strat], 1.0)
++        # Blend with regime weight for this strategy family
++        rw = self._resolve_regime_weight(strat, regime_weights)
++        health = lb_score * rw
++
++        # Component: timing quality (simplified)
++        timing = rec.timing_score
++
++        # Component: risk/reward ratio
++        rr = rec.risk_reward_ratio
++        rr_norm = min(rr / 4.0, 1.0)  # 4:1 = perfect
++
++        # Component: conviction (multi-strategy agreement)
++        conviction = rec.strategy_agreement
++
++        # Composite — net_expectancy is primary signal
++        composite = (
++            w.get("net_expectancy", 0.30) * net_exp_norm
++            + w.get("calibrated_pwin", 0.15) * pwin
++            + w.get("expected_r", 0.10) * exp_r_norm
++            + w.get("regime_fit", 0.15) * regime_fit
++            + w.get("strategy_health", 0.10) * health
++            + w.get("timing_quality", 0.05) * timing
++            + w.get("risk_reward", 0.10) * rr_norm
++            + w.get("conviction_bonus", 0.05) * conviction
++        )
++
++        # Penalties
++        penalties: Dict[str, float] = {}
++
++        # Correlation penalty: if portfolio already has correlated
++        if portfolio:
++            corr_penalty = self._correlation_penalty(rec, portfolio)
++            composite -= corr_penalty
++            if corr_penalty > 0:
++                penalties["correlation"] = round(corr_penalty, 3)
++
++        # Event proximity (earnings within 3 days)
++        if rec.days_to_earnings <= 3:
++            composite -= self.EVENT_PROXIMITY_PENALTY
++            penalties["event_proximity"] = self.EVENT_PROXIMITY_PENALTY
++
++        # Regime uncertainty penalty
++        entropy = regime.get("entropy", 0.5)
++        if entropy > 0.8:
++            unc_pen = (entropy - 0.8) * self.UNCERTAINTY_PENALTY_PER_UNIT * 10
++            composite -= unc_pen
++            penalties["uncertainty"] = round(unc_pen, 3)
++
++        composite = max(composite, 0.0)
++
++        # Mutate the recommendation with ensemble results
++        rec.composite_score = round(composite, 4)
++        rec.trade_decision = composite >= self.min_score
++        rec.regime_fit = regime_fit
++        rec.regime_weight = rw
++        rec.strategy_health = health
++        rec.components = {
++            "net_expectancy": round(net_exp_norm, 3),
++            "net_expectancy_raw": round(net_exp, 3),
++            "pwin": round(pwin, 3),
++            "exp_r": round(exp_r_norm, 3),
++            "regime_fit": round(regime_fit, 3),
++            "strategy_health": round(health, 3),
++            "timing": round(timing, 3),
++            "risk_reward": round(rr_norm, 3),
++            "conviction": round(conviction, 3),
++        }
++        rec.penalties = penalties
++        return rec
++
++    def _calc_regime_fit(
++        self,
++        signal,
++        regime: Dict[str, Any],
++    ) -> float:
++        """How well does this signal's strategy fit the regime?
++
++        Accepts both TradeRecommendation objects and plain dicts.
++        Uses attribute access for TradeRecommendation, .get() for dicts.
++        """
++        if isinstance(signal, TradeRecommendation):
++            strat = (signal.strategy_id or "").lower()
++            direction = signal.direction
++        else:
++            strat = (
++                (signal.get("strategy_name") or signal.get("strategy_id", "")).lower()
++                if callable(getattr(signal, "get", None))
++                else ""
++            )
++            direction = (
++                signal.get("direction", "LONG")
++                if callable(getattr(signal, "get", None))
++                else "LONG"
++            )
++
++        risk_on = regime.get("risk_on_uptrend", 0.33)
++        neutral = regime.get("neutral_range", 0.33)
++        risk_off = regime.get("risk_off_downtrend", 0.33)
++
++        # Strategy-to-regime affinity mapping
++        if "momentum" in strat or "trend" in strat:
++            return risk_on * 0.8 + neutral * 0.3
++        elif "mean_rev" in strat or "reversion" in strat:
++            return neutral * 0.9 + risk_on * 0.2
++        elif "swing" in strat:
++            return risk_on * 0.5 + neutral * 0.5
++        elif "vcp" in strat:
++            return neutral * 0.7 + risk_on * 0.4
++        elif "earnings" in strat:
++            return 0.5  # regime-neutral
++        elif "defensive" in strat:
++            return risk_off * 0.8 + neutral * 0.3
++        else:
++            return 0.4  # unknown strategy
++
++    def _correlation_penalty(
++        self,
++        signal,
++        portfolio: Dict[str, Any],
++    ) -> float:
++        """Penalise if ticker/sector already represented.
++
++        Accepts both TradeRecommendation objects and plain dicts.
++        """
++        if isinstance(signal, TradeRecommendation):
++            ticker = signal.ticker
++            sector = signal.sector
++        else:
++            ticker = (
++                signal.get("ticker", "")
++                if callable(getattr(signal, "get", None))
++                else ""
++            )
++            sector = (
++                signal.get("sector", "")
++                if callable(getattr(signal, "get", None))
++                else ""
++            )
++
++        existing_tickers = portfolio.get("tickers", [])
++        existing_sectors = portfolio.get("sectors", {})
++
++        penalty = 0.0
++
++        # Same ticker already held
++        if ticker in existing_tickers:
++            penalty += 0.15
++
++        # Sector concentration
++        if sector and sector in existing_sectors:
++            sector_weight = existing_sectors.get(sector, 0)
++            if sector_weight > 0.25:
++                penalty += 0.10
++
++        return min(penalty, 0.25)  # cap
++
++    @staticmethod
++    def _resolve_regime_weight(
++        strategy_name: str,
++        regime_weights: Optional[Dict[str, float]],
++    ) -> float:
++        """Look up regime sizing multiplier for a strategy.
++
++        Matches strategy_name against regime_weights keys using
++        substring matching (e.g. 'momentum_breakout' matches
++        the 'momentum' key).
++
++        Returns 1.0 when no regime_weights provided (neutral).
++        """
++        if not regime_weights:
++            return 1.0
++        name = strategy_name.lower()
++        # Exact match first
++        if name in regime_weights:
++            return max(regime_weights[name], 0.1)
++        # Substring match
++        for key, val in regime_weights.items():
++            if key in name or name in key:
++                return max(val, 0.1)
++        return 0.5  # unknown strategy → conservative
++
++    def _apply_suppression(
++        self,
++        ranked: List["TradeRecommendation"],
++        regime: Dict[str, Any],
++    ) -> List["TradeRecommendation"]:
++        """Post-ranking suppression with detailed user reasons.
++
++        Sets ``trade_decision = False``, ``suppression_reason``
++        (machine key), and ``why_not_trade`` (user-facing text).
++
++        Works directly on TradeRecommendation attributes — no dict
++        protocol needed.
++        """
++        if not regime.get("should_trade", True):
++            no_trade = regime.get(
++                "no_trade_reason",
++                "regime_no_trade",
++            )
++            for r in ranked:
++                r.trade_decision = False
++                r.suppression_reason = "regime_no_trade"
++                r.why_not_trade = (
++                    no_trade or "Market regime indicates no new " "entries right now"
++                )
++            return ranked
++
++        for r in ranked:
++            reasons: List[str] = []
++            cs = r.composite_score
++
++            if cs < self.min_score:
++                reasons.append(
++                    f"Composite score {cs:.3f} below " f"minimum {self.min_score}",
++                )
++                r.suppression_reason = "weak_top_signal"
++
++            # Low confidence
++            pwin = r.components.get("pwin", 0) if r.components else 0
++            if pwin < 0.35:
++                reasons.append(
++                    f"Win probability too low ({pwin:.0%})",
++                )
++
++            # Poor risk/reward
++            rr = r.components.get("risk_reward", 0) if r.components else 0
++            if rr < 0.15:
++                reasons.append("Risk/reward ratio insufficient")
++
++            # Event risk
++            dte = r.days_to_earnings
++            if dte <= 2:
++                reasons.append(
++                    f"Earnings in {dte}d \u2014 event risk " f"too close",
++                )
++
++            # Regime uncertainty
++            ent = regime.get("entropy", 0)
++            if ent > 0.9:
++                reasons.append(
++                    f"Regime uncertainty elevated " f"(entropy {ent:.2f})",
++                )
++
++            # Correlation penalty
++            corr_pen = r.penalties.get("correlation", 0) if r.penalties else 0
++            if corr_pen > 0.10:
++                reasons.append(
++                    "Too correlated with current portfolio",
++                )
++
++            if reasons:
++                r.trade_decision = False
++                if not r.suppression_reason:
++                    r.suppression_reason = "multi_factor_reject"
++                r.why_not_trade = "; ".join(reasons)
++
++        return ranked
+diff --git a/src/engines/self_learning.py b/src/engines/self_learning.py
+new file mode 100644
+index 000000000..d82ec36c5
+--- /dev/null
++++ b/src/engines/self_learning.py
+@@ -0,0 +1,932 @@
++"""
++Controlled Self-Learning Engine.
++
++Implements safe, bounded self-learning for portfolio and rule tuning:
++
++  1. Parameter sensitivity analysis — which rules have most impact
++  2. Outcome-based rule adjustment — only after sufficient sample size
++  3. Guardrails — max adjustment per cycle, no extreme values
++  4. Audit trail — every adjustment logged with before/after
++  5. Kill switch — disable auto-tuning at any time
++
++Design principle: the system learns from outcomes but never
++drifts beyond human-defined bounds. Every adjustment is reversible.
++"""
++from __future__ import annotations
++
++import json
++import logging
++from dataclasses import dataclass, field
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any, Dict, List, Optional, Tuple
++
++logger = logging.getLogger(__name__)
++
++AUDIT_DIR = Path("models")
++AUDIT_DIR.mkdir(exist_ok=True)
++
++
++@dataclass
++class RuleAdjustment:
++    """A single rule parameter adjustment."""
++    rule_name: str
++    parameter: str
++    old_value: float
++    new_value: float
++    reason: str
++    confidence: float  # 0-1, how confident we are this helps
++    sample_size: int  # how many outcomes informed this
++    timestamp: str = ""
++    applied: bool = False
++
++    def to_dict(self) -> Dict[str, Any]:
++        return {
++            "rule_name": self.rule_name,
++            "parameter": self.parameter,
++            "old_value": self.old_value,
++            "new_value": self.new_value,
++            "reason": self.reason,
++            "confidence": round(self.confidence, 2),
++            "sample_size": self.sample_size,
++            "timestamp": self.timestamp,
++            "applied": self.applied,
++        }
++
++
++@dataclass
++class LearningState:
++    """Current state of the self-learning system."""
++    enabled: bool = True
++    total_adjustments: int = 0
++    adjustments_this_cycle: int = 0
++    max_adjustments_per_cycle: int = 3
++    min_sample_size: int = 30  # minimum trades before tuning
++    max_adjustment_pct: float = 0.15  # max 15% change per parameter per cycle
++    last_cycle_timestamp: str = ""
++    audit_log: List[Dict[str, Any]] = field(default_factory=list)
++
++    def to_dict(self) -> Dict[str, Any]:
++        return {
++            "enabled": self.enabled,
++            "total_adjustments": self.total_adjustments,
++            "adjustments_this_cycle": self.adjustments_this_cycle,
++            "max_adjustments_per_cycle": self.max_adjustments_per_cycle,
++            "min_sample_size": self.min_sample_size,
++            "max_adjustment_pct": self.max_adjustment_pct,
++            "last_cycle_timestamp": self.last_cycle_timestamp,
++            "recent_adjustments": self.audit_log[-10:],
++        }
++
++
++# ── Tunable rules with bounds ──────────────────────────────────────
++
++TUNABLE_RULES: Dict[str, Dict[str, Any]] = {
++    "ensemble_min_score": {
++        "description": "Minimum composite score to trade",
++        "min": 0.20,
++        "max": 0.50,
++        "default": 0.35,
++        "step": 0.02,
++    },
++    "signal_cooldown_hours": {
++        "description": "Hours before same signal can re-fire",
++        "min": 1,
++        "max": 12,
++        "default": 4,
++        "step": 0.5,
++    },
++    "anti_flip_hours": {
++        "description": "Hours before opposite direction allowed",
++        "min": 2,
++        "max": 16,
++        "default": 6,
++        "step": 1.0,
++    },
++    "max_position_pct": {
++        "description": "Max single-name position size",
++        "min": 0.02,
++        "max": 0.10,
++        "default": 0.05,
++        "step": 0.005,
++    },
++    "stop_loss_pct": {
++        "description": "Default stop loss percentage",
++        "min": 0.01,
++        "max": 0.08,
++        "default": 0.03,
++        "step": 0.005,
++    },
++    "trailing_stop_pct": {
++        "description": "Trailing stop activation distance",
++        "min": 0.01,
++        "max": 0.05,
++        "default": 0.02,
++        "step": 0.005,
++    },
++}
++
++
++class SelfLearningEngine:
++    """
++    Controlled self-learning for portfolio and rule tuning.
++
++    Only adjusts parameters after:
++      1. Sufficient sample size (min_sample_size trades)
++      2. Clear statistical signal (win rate or expectancy deviation)
++      3. Within guardrail bounds (max_adjustment_pct)
++      4. Not exceeding max_adjustments_per_cycle
++    """
++
++    def __init__(self):
++        self.state = LearningState()
++        self._audit_path = AUDIT_DIR / "self_learning_audit.json"
++        self._load_audit()
++
++    def analyze_and_recommend(
++        self,
++        trade_outcomes: List[Dict[str, Any]],
++        current_rules: Dict[str, float],
++    ) -> List[RuleAdjustment]:
++        """
++        Analyze trade outcomes and recommend rule adjustments.
++
++        Args:
++            trade_outcomes: list of closed trade dicts with keys:
++                strategy, pnl_pct, confidence, regime, exit_reason, etc.
++            current_rules: current parameter values {rule_name: value}
++
++        Returns:
++            List of recommended adjustments (not yet applied)
++        """
++        if not self.state.enabled:
++            return []
++
++        if len(trade_outcomes) < self.state.min_sample_size:
++            logger.info(
++                "Self-learning: %d trades < %d minimum — no adjustments",
++                len(trade_outcomes), self.state.min_sample_size,
++            )
++            return []
++
++        recommendations: List[RuleAdjustment] = []
++
++        # Analyze stop-loss effectiveness
++        stop_adjustment = self._analyze_stop_loss(trade_outcomes, current_rules)
++        if stop_adjustment:
++            recommendations.append(stop_adjustment)
++
++        # Analyze cooldown effectiveness
++        cooldown_adjustment = self._analyze_cooldown(trade_outcomes, current_rules)
++        if cooldown_adjustment:
++            recommendations.append(cooldown_adjustment)
++
++        # Analyze position sizing
++        sizing_adjustment = self._analyze_position_sizing(trade_outcomes, current_rules)
++        if sizing_adjustment:
++            recommendations.append(sizing_adjustment)
++
++        # Analyze ensemble threshold
++        threshold_adjustment = self._analyze_ensemble_threshold(trade_outcomes, current_rules)
++        if threshold_adjustment:
++            recommendations.append(threshold_adjustment)
++
++        # Apply guardrails
++        recommendations = self._apply_guardrails(recommendations)
++
++        # Limit per cycle
++        recommendations = recommendations[:self.state.max_adjustments_per_cycle]
++
++        return recommendations
++
++    def apply_adjustments(
++        self, adjustments: List[RuleAdjustment]
++    ) -> List[RuleAdjustment]:
++        """Apply approved adjustments, persist to config, and log them."""
++        from src.core.config import save_trading_config_override
++
++        applied = []
++        for adj in adjustments:
++            adj.timestamp = datetime.now(timezone.utc).isoformat()
++            adj.applied = True
++            self.state.total_adjustments += 1
++            self.state.adjustments_this_cycle += 1
++            self.state.audit_log.append(adj.to_dict())
++            applied.append(adj)
++
++            # Write-back: persist the new value so it survives restarts
++            try:
++                save_trading_config_override(adj.parameter, adj.new_value)
++            except Exception as exc:
++                logger.warning(
++                    "Self-learning: failed to persist %s override: %s",
++                    adj.parameter, exc,
++                )
++
++            logger.info(
++                "Self-learning: %s.%s %s → %s (reason: %s, sample=%d)",
++                adj.rule_name, adj.parameter,
++                adj.old_value, adj.new_value,
++                adj.reason, adj.sample_size,
++            )
++        self._save_audit()
++        return applied
++
++    def reset_cycle(self):
++        """Reset per-cycle counters (call at start of new trading day)."""
++        self.state.adjustments_this_cycle = 0
++        self.state.last_cycle_timestamp = datetime.now(timezone.utc).isoformat()
++
++    def disable(self):
++        """Kill switch: disable all auto-tuning."""
++        self.state.enabled = False
++        logger.warning("Self-learning DISABLED by user")
++
++    def enable(self):
++        """Re-enable auto-tuning."""
++        self.state.enabled = True
++        logger.info("Self-learning re-enabled")
++
++    # ── Analysis methods ──────────────────────────────────────────
++
++    def _analyze_stop_loss(
++        self, outcomes: List[Dict], rules: Dict[str, float]
++    ) -> Optional[RuleAdjustment]:
++        """Check if stops are too tight (many stop-outs that recover)."""
++        stop_exits = [
++            o for o in outcomes
++            if o.get("exit_reason") in ("stop_hit", "trailing_stop", "sl_hit")
++        ]
++        if len(stop_exits) < 10:
++            return None
++
++        # Check if stopped-out trades would have recovered
++        # (MAE analysis: if price went back above stop within 5 days)
++        premature_stops = sum(
++            1 for o in stop_exits
++            if o.get("would_have_recovered", False)
++        )
++        premature_pct = premature_stops / len(stop_exits) * 100
++
++        if premature_pct > 40:
++            # Stops too tight — widen
++            current = rules.get("stop_loss_pct", 0.03)
++            rule = TUNABLE_RULES["stop_loss_pct"]
++            new_val = min(rule["max"], current + rule["step"])
++            if new_val != current:
++                return RuleAdjustment(
++                    rule_name="trading_config",
++                    parameter="stop_loss_pct",
++                    old_value=current,
++                    new_value=new_val,
++                    reason=f"Premature stop-outs: {premature_pct:.0f}% of stopped trades recovered",
++                    confidence=min(0.8, premature_pct / 100),
++                    sample_size=len(stop_exits),
++                )
++
++        return None
++
++    def _analyze_cooldown(
++        self, outcomes: List[Dict], rules: Dict[str, float]
++    ) -> Optional[RuleAdjustment]:
++        """Check if cooldown is too long (missing good re-entries)."""
++        # Look for patterns where same ticker was re-signaled
++        # but blocked by cooldown, then moved significantly
++        cooldown_blocks = [
++            o for o in outcomes
++            if o.get("blocked_by_cooldown", False)
++        ]
++        if len(cooldown_blocks) < 5:
++            return None
++
++        missed_moves = sum(
++            1 for o in cooldown_blocks
++            if abs(o.get("missed_return_pct", 0)) > 3.0
++        )
++        if missed_moves > len(cooldown_blocks) * 0.5:
++            current = rules.get("signal_cooldown_hours", 4)
++            rule = TUNABLE_RULES["signal_cooldown_hours"]
++            new_val = max(rule["min"], current - rule["step"])
++            if new_val != current:
++                return RuleAdjustment(
++                    rule_name="trading_config",
++                    parameter="signal_cooldown_hours",
++                    old_value=current,
++                    new_value=new_val,
++                    reason=f"Cooldown blocking good re-entries: {missed_moves}/{len(cooldown_blocks)} missed >3% moves",
++                    confidence=0.5,
++                    sample_size=len(cooldown_blocks),
++                )
++
++        return None
++
++    def _analyze_position_sizing(
++        self, outcomes: List[Dict], rules: Dict[str, float]
++    ) -> Optional[RuleAdjustment]:
++        """Check if position sizing is suboptimal."""
++        if len(outcomes) < 20:
++            return None
++
++        # Check if winning trades are undersized relative to losers
++        wins = [o for o in outcomes if o.get("pnl_pct", 0) > 0]
++        losses = [o for o in outcomes if o.get("pnl_pct", 0) <= 0]
++
++        if not wins or not losses:
++            return None
++
++        avg_win = sum(o.get("pnl_pct", 0) for o in wins) / len(wins)
++        avg_loss = abs(sum(o.get("pnl_pct", 0) for o in losses) / len(losses))
++
++        # If avg_win/avg_loss < 1.5, winners are too small
++        if avg_loss > 0 and avg_win / avg_loss < 1.0:
++            # Suggest increasing position size for high-confidence trades
++            current = rules.get("max_position_pct", 0.05)
++            rule = TUNABLE_RULES["max_position_pct"]
++            new_val = min(rule["max"], current + rule["step"])
++            if new_val != current:
++                return RuleAdjustment(
++                    rule_name="trading_config",
++                    parameter="max_position_pct",
++                    old_value=current,
++                    new_value=new_val,
++                    reason=f"Win/loss ratio {avg_win/avg_loss:.2f} < 1.0 — winners undersized",
++                    confidence=0.4,
++                    sample_size=len(outcomes),
++                )
++
++        return None
++
++    def _analyze_ensemble_threshold(
++        self, outcomes: List[Dict], rules: Dict[str, float]
++    ) -> Optional[RuleAdjustment]:
++        """Check if ensemble threshold is too high or too low."""
++        if len(outcomes) < 20:
++            return None
++
++        # Check win rate of trades near the threshold
++        threshold = rules.get("ensemble_min_score", 0.35)
++        near_threshold = [
++            o for o in outcomes
++            if abs(o.get("composite_score", 0.5) - threshold) < 0.1
++        ]
++
++        if len(near_threshold) < 10:
++            return None
++
++        win_rate = sum(
++            1 for o in near_threshold if o.get("pnl_pct", 0) > 0
++        ) / len(near_threshold)
++
++        if win_rate > 0.65:
++            # Threshold too high — lower it to capture more winners
++            current = rules.get("ensemble_min_score", 0.35)
++            rule = TUNABLE_RULES["ensemble_min_score"]
++            new_val = max(rule["min"], current - rule["step"])
++            if new_val != current:
++                return RuleAdjustment(
++                    rule_name="trading_config",
++                    parameter="ensemble_min_score",
++                    old_value=current,
++                    new_value=new_val,
++                    reason=f"Near-threshold win rate {win_rate:.0%} — threshold may be too restrictive",
++                    confidence=0.5,
++                    sample_size=len(near_threshold),
++                )
++        elif win_rate < 0.40:
++            # Threshold too low — raise it
++            current = rules.get("ensemble_min_score", 0.35)
++            rule = TUNABLE_RULES["ensemble_min_score"]
++            new_val = min(rule["max"], current + rule["step"])
++            if new_val != current:
++                return RuleAdjustment(
++                    rule_name="trading_config",
++                    parameter="ensemble_min_score",
++                    old_value=current,
++                    new_value=new_val,
++                    reason=f"Near-threshold win rate {win_rate:.0%} — threshold may be too permissive",
++                    confidence=0.5,
++                    sample_size=len(near_threshold),
++                )
++
++        return None
++
++    def _apply_guardrails(
++        self, adjustments: List[RuleAdjustment]
++    ) -> List[RuleAdjustment]:
++        """Ensure adjustments stay within bounds."""
++        approved = []
++        for adj in adjustments:
++            rule = TUNABLE_RULES.get(adj.parameter, {})
++            max_pct = self.state.max_adjustment_pct
++
++            old = adj.old_value
++            new = adj.new_value
++            if old != 0:
++                change_pct = abs(new - old) / abs(old)
++            else:
++                change_pct = abs(new)
++
++            if change_pct > max_pct:
++                # Clamp to max adjustment
++                if new > old:
++                    adj.new_value = old * (1 + max_pct)
++                else:
++                    adj.new_value = old * (1 - max_pct)
++
++            # Hard bounds
++            adj.new_value = max(rule.get("min", 0), min(rule.get("max", 1), adj.new_value))
++
++            if adj.new_value != adj.old_value:
++                approved.append(adj)
++
++        return approved
++
++    # ── Persistence ────────────────────────────────────────────────
++
++    def _save_audit(self):
++        try:
++            data = {
++                "state": self.state.to_dict(),
++                "audit_log": self.state.audit_log[-200:],
++            }
++            with open(self._audit_path, "w") as f:
++                json.dump(data, f, indent=2, default=str)
++        except Exception as e:
++            logger.debug("Self-learning audit save error: %s", e)
++
++    def _load_audit(self):
++        if not self._audit_path.exists():
++            return
++        try:
++            with open(self._audit_path, "r") as f:
++                data = json.load(f)
++            self.state.total_adjustments = data.get("state", {}).get("total_adjustments", 0)
++            self.state.audit_log = data.get("audit_log", [])
++        except Exception as e:
++            logger.debug("Self-learning audit load error: %s", e)
++"""
++Controlled Self-Learning Engine.
++
++Implements safe, bounded self-learning for portfolio and rule tuning:
++
++  1. Parameter sensitivity analysis — which rules have most impact
++  2. Outcome-based rule adjustment — only after sufficient sample size
++  3. Guardrails — max adjustment per cycle, no extreme values
++  4. Audit trail — every adjustment logged with before/after
++  5. Kill switch — disable auto-tuning at any time
++
++Design principle: the system learns from outcomes but never
++drifts beyond human-defined bounds. Every adjustment is reversible.
++"""
++from __future__ import annotations
++
++import json
++import logging
++from dataclasses import dataclass, field
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any, Dict, List, Optional, Tuple
++
++logger = logging.getLogger(__name__)
++
++AUDIT_DIR = Path("models")
++AUDIT_DIR.mkdir(exist_ok=True)
++
++
++@dataclass
++class RuleAdjustment:
++    """A single rule parameter adjustment."""
++    rule_name: str
++    parameter: str
++    old_value: float
++    new_value: float
++    reason: str
++    confidence: float  # 0-1, how confident we are this helps
++    sample_size: int  # how many outcomes informed this
++    timestamp: str = ""
++    applied: bool = False
++
++    def to_dict(self) -> Dict[str, Any]:
++        return {
++            "rule_name": self.rule_name,
++            "parameter": self.parameter,
++            "old_value": self.old_value,
++            "new_value": self.new_value,
++            "reason": self.reason,
++            "confidence": round(self.confidence, 2),
++            "sample_size": self.sample_size,
++            "timestamp": self.timestamp,
++            "applied": self.applied,
++        }
++
++
++@dataclass
++class LearningState:
++    """Current state of the self-learning system."""
++    enabled: bool = True
++    total_adjustments: int = 0
++    adjustments_this_cycle: int = 0
++    max_adjustments_per_cycle: int = 3
++    min_sample_size: int = 30  # minimum trades before tuning
++    max_adjustment_pct: float = 0.15  # max 15% change per parameter per cycle
++    last_cycle_timestamp: str = ""
++    audit_log: List[Dict[str, Any]] = field(default_factory=list)
++
++    def to_dict(self) -> Dict[str, Any]:
++        return {
++            "enabled": self.enabled,
++            "total_adjustments": self.total_adjustments,
++            "adjustments_this_cycle": self.adjustments_this_cycle,
++            "max_adjustments_per_cycle": self.max_adjustments_per_cycle,
++            "min_sample_size": self.min_sample_size,
++            "max_adjustment_pct": self.max_adjustment_pct,
++            "last_cycle_timestamp": self.last_cycle_timestamp,
++            "recent_adjustments": self.audit_log[-10:],
++        }
++
++
++# ── Tunable rules with bounds ──────────────────────────────────────
++
++TUNABLE_RULES: Dict[str, Dict[str, Any]] = {
++    "ensemble_min_score": {
++        "description": "Minimum composite score to trade",
++        "min": 0.20,
++        "max": 0.50,
++        "default": 0.35,
++        "step": 0.02,
++    },
++    "signal_cooldown_hours": {
++        "description": "Hours before same signal can re-fire",
++        "min": 1,
++        "max": 12,
++        "default": 4,
++        "step": 0.5,
++    },
++    "anti_flip_hours": {
++        "description": "Hours before opposite direction allowed",
++        "min": 2,
++        "max": 16,
++        "default": 6,
++        "step": 1.0,
++    },
++    "max_position_pct": {
++        "description": "Max single-name position size",
++        "min": 0.02,
++        "max": 0.10,
++        "default": 0.05,
++        "step": 0.005,
++    },
++    "stop_loss_pct": {
++        "description": "Default stop loss percentage",
++        "min": 0.01,
++        "max": 0.08,
++        "default": 0.03,
++        "step": 0.005,
++    },
++    "trailing_stop_pct": {
++        "description": "Trailing stop activation distance",
++        "min": 0.01,
++        "max": 0.05,
++        "default": 0.02,
++        "step": 0.005,
++    },
++}
++
++
++class SelfLearningEngine:
++    """
++    Controlled self-learning for portfolio and rule tuning.
++
++    Only adjusts parameters after:
++      1. Sufficient sample size (min_sample_size trades)
++      2. Clear statistical signal (win rate or expectancy deviation)
++      3. Within guardrail bounds (max_adjustment_pct)
++      4. Not exceeding max_adjustments_per_cycle
++    """
++
++    def __init__(self):
++        self.state = LearningState()
++        self._audit_path = AUDIT_DIR / "self_learning_audit.json"
++        self._load_audit()
++
++    def analyze_and_recommend(
++        self,
++        trade_outcomes: List[Dict[str, Any]],
++        current_rules: Dict[str, float],
++    ) -> List[RuleAdjustment]:
++        """
++        Analyze trade outcomes and recommend rule adjustments.
++
++        Args:
++            trade_outcomes: list of closed trade dicts with keys:
++                strategy, pnl_pct, confidence, regime, exit_reason, etc.
++            current_rules: current parameter values {rule_name: value}
++
++        Returns:
++            List of recommended adjustments (not yet applied)
++        """
++        if not self.state.enabled:
++            return []
++
++        if len(trade_outcomes) < self.state.min_sample_size:
++            logger.info(
++                "Self-learning: %d trades < %d minimum — no adjustments",
++                len(trade_outcomes), self.state.min_sample_size,
++            )
++            return []
++
++        recommendations: List[RuleAdjustment] = []
++
++        # Analyze stop-loss effectiveness
++        stop_adjustment = self._analyze_stop_loss(trade_outcomes, current_rules)
++        if stop_adjustment:
++            recommendations.append(stop_adjustment)
++
++        # Analyze cooldown effectiveness
++        cooldown_adjustment = self._analyze_cooldown(trade_outcomes, current_rules)
++        if cooldown_adjustment:
++            recommendations.append(cooldown_adjustment)
++
++        # Analyze position sizing
++        sizing_adjustment = self._analyze_position_sizing(trade_outcomes, current_rules)
++        if sizing_adjustment:
++            recommendations.append(sizing_adjustment)
++
++        # Analyze ensemble threshold
++        threshold_adjustment = self._analyze_ensemble_threshold(trade_outcomes, current_rules)
++        if threshold_adjustment:
++            recommendations.append(threshold_adjustment)
++
++        # Apply guardrails
++        recommendations = self._apply_guardrails(recommendations)
++
++        # Limit per cycle
++        recommendations = recommendations[:self.state.max_adjustments_per_cycle]
++
++        return recommendations
++
++    def apply_adjustments(
++        self, adjustments: List[RuleAdjustment]
++    ) -> List[RuleAdjustment]:
++        """Apply approved adjustments, persist to config, and log them."""
++        from src.core.config import save_trading_config_override
++
++        applied = []
++        for adj in adjustments:
++            adj.timestamp = datetime.now(timezone.utc).isoformat()
++            adj.applied = True
++            self.state.total_adjustments += 1
++            self.state.adjustments_this_cycle += 1
++            self.state.audit_log.append(adj.to_dict())
++            applied.append(adj)
++
++            # Write-back: persist the new value so it survives restarts
++            try:
++                save_trading_config_override(adj.parameter, adj.new_value)
++            except Exception as exc:
++                logger.warning(
++                    "Self-learning: failed to persist %s override: %s",
++                    adj.parameter, exc,
++                )
++
++            logger.info(
++                "Self-learning: %s.%s %s → %s (reason: %s, sample=%d)",
++                adj.rule_name, adj.parameter,
++                adj.old_value, adj.new_value,
++                adj.reason, adj.sample_size,
++            )
++        self._save_audit()
++        return applied
++
++    def reset_cycle(self):
++        """Reset per-cycle counters (call at start of new trading day)."""
++        self.state.adjustments_this_cycle = 0
++        self.state.last_cycle_timestamp = datetime.now(timezone.utc).isoformat()
++
++    def disable(self):
++        """Kill switch: disable all auto-tuning."""
++        self.state.enabled = False
++        logger.warning("Self-learning DISABLED by user")
++
++    def enable(self):
++        """Re-enable auto-tuning."""
++        self.state.enabled = True
++        logger.info("Self-learning re-enabled")
++
++    # ── Analysis methods ──────────────────────────────────────────
++
++    def _analyze_stop_loss(
++        self, outcomes: List[Dict], rules: Dict[str, float]
++    ) -> Optional[RuleAdjustment]:
++        """Check if stops are too tight (many stop-outs that recover)."""
++        stop_exits = [
++            o for o in outcomes
++            if o.get("exit_reason") in ("stop_hit", "trailing_stop", "sl_hit")
++        ]
++        if len(stop_exits) < 10:
++            return None
++
++        # Check if stopped-out trades would have recovered
++        # (MAE analysis: if price went back above stop within 5 days)
++        premature_stops = sum(
++            1 for o in stop_exits
++            if o.get("would_have_recovered", False)
++        )
++        premature_pct = premature_stops / len(stop_exits) * 100
++
++        if premature_pct > 40:
++            # Stops too tight — widen
++            current = rules.get("stop_loss_pct", 0.03)
++            rule = TUNABLE_RULES["stop_loss_pct"]
++            new_val = min(rule["max"], current + rule["step"])
++            if new_val != current:
++                return RuleAdjustment(
++                    rule_name="trading_config",
++                    parameter="stop_loss_pct",
++                    old_value=current,
++                    new_value=new_val,
++                    reason=f"Premature stop-outs: {premature_pct:.0f}% of stopped trades recovered",
++                    confidence=min(0.8, premature_pct / 100),
++                    sample_size=len(stop_exits),
++                )
++
++        return None
++
++    def _analyze_cooldown(
++        self, outcomes: List[Dict], rules: Dict[str, float]
++    ) -> Optional[RuleAdjustment]:
++        """Check if cooldown is too long (missing good re-entries)."""
++        # Look for patterns where same ticker was re-signaled
++        # but blocked by cooldown, then moved significantly
++        cooldown_blocks = [
++            o for o in outcomes
++            if o.get("blocked_by_cooldown", False)
++        ]
++        if len(cooldown_blocks) < 5:
++            return None
++
++        missed_moves = sum(
++            1 for o in cooldown_blocks
++            if abs(o.get("missed_return_pct", 0)) > 3.0
++        )
++        if missed_moves > len(cooldown_blocks) * 0.5:
++            current = rules.get("signal_cooldown_hours", 4)
++            rule = TUNABLE_RULES["signal_cooldown_hours"]
++            new_val = max(rule["min"], current - rule["step"])
++            if new_val != current:
++                return RuleAdjustment(
++                    rule_name="trading_config",
++                    parameter="signal_cooldown_hours",
++                    old_value=current,
++                    new_value=new_val,
++                    reason=f"Cooldown blocking good re-entries: {missed_moves}/{len(cooldown_blocks)} missed >3% moves",
++                    confidence=0.5,
++                    sample_size=len(cooldown_blocks),
++                )
++
++        return None
++
++    def _analyze_position_sizing(
++        self, outcomes: List[Dict], rules: Dict[str, float]
++    ) -> Optional[RuleAdjustment]:
++        """Check if position sizing is suboptimal."""
++        if len(outcomes) < 20:
++            return None
++
++        # Check if winning trades are undersized relative to losers
++        wins = [o for o in outcomes if o.get("pnl_pct", 0) > 0]
++        losses = [o for o in outcomes if o.get("pnl_pct", 0) <= 0]
++
++        if not wins or not losses:
++            return None
++
++        avg_win = sum(o.get("pnl_pct", 0) for o in wins) / len(wins)
++        avg_loss = abs(sum(o.get("pnl_pct", 0) for o in losses) / len(losses))
++
++        # If avg_win/avg_loss < 1.5, winners are too small
++        if avg_loss > 0 and avg_win / avg_loss < 1.0:
++            # Suggest increasing position size for high-confidence trades
++            current = rules.get("max_position_pct", 0.05)
++            rule = TUNABLE_RULES["max_position_pct"]
++            new_val = min(rule["max"], current + rule["step"])
++            if new_val != current:
++                return RuleAdjustment(
++                    rule_name="trading_config",
++                    parameter="max_position_pct",
++                    old_value=current,
++                    new_value=new_val,
++                    reason=f"Win/loss ratio {avg_win/avg_loss:.2f} < 1.0 — winners undersized",
++                    confidence=0.4,
++                    sample_size=len(outcomes),
++                )
++
++        return None
++
++    def _analyze_ensemble_threshold(
++        self, outcomes: List[Dict], rules: Dict[str, float]
++    ) -> Optional[RuleAdjustment]:
++        """Check if ensemble threshold is too high or too low."""
++        if len(outcomes) < 20:
++            return None
++
++        # Check win rate of trades near the threshold
++        threshold = rules.get("ensemble_min_score", 0.35)
++        near_threshold = [
++            o for o in outcomes
++            if abs(o.get("composite_score", 0.5) - threshold) < 0.1
++        ]
++
++        if len(near_threshold) < 10:
++            return None
++
++        win_rate = sum(
++            1 for o in near_threshold if o.get("pnl_pct", 0) > 0
++        ) / len(near_threshold)
++
++        if win_rate > 0.65:
++            # Threshold too high — lower it to capture more winners
++            current = rules.get("ensemble_min_score", 0.35)
++            rule = TUNABLE_RULES["ensemble_min_score"]
++            new_val = max(rule["min"], current - rule["step"])
++            if new_val != current:
++                return RuleAdjustment(
++                    rule_name="trading_config",
++                    parameter="ensemble_min_score",
++                    old_value=current,
++                    new_value=new_val,
++                    reason=f"Near-threshold win rate {win_rate:.0%} — threshold may be too restrictive",
++                    confidence=0.5,
++                    sample_size=len(near_threshold),
++                )
++        elif win_rate < 0.40:
++            # Threshold too low — raise it
++            current = rules.get("ensemble_min_score", 0.35)
++            rule = TUNABLE_RULES["ensemble_min_score"]
++            new_val = min(rule["max"], current + rule["step"])
++            if new_val != current:
++                return RuleAdjustment(
++                    rule_name="trading_config",
++                    parameter="ensemble_min_score",
++                    old_value=current,
++                    new_value=new_val,
++                    reason=f"Near-threshold win rate {win_rate:.0%} — threshold may be too permissive",
++                    confidence=0.5,
++                    sample_size=len(near_threshold),
++                )
++
++        return None
++
++    def _apply_guardrails(
++        self, adjustments: List[RuleAdjustment]
++    ) -> List[RuleAdjustment]:
++        """Ensure adjustments stay within bounds."""
++        approved = []
++        for adj in adjustments:
++            rule = TUNABLE_RULES.get(adj.parameter, {})
++            max_pct = self.state.max_adjustment_pct
++
++            old = adj.old_value
++            new = adj.new_value
++            if old != 0:
++                change_pct = abs(new - old) / abs(old)
++            else:
++                change_pct = abs(new)
++
++            if change_pct > max_pct:
++                # Clamp to max adjustment
++                if new > old:
++                    adj.new_value = old * (1 + max_pct)
++                else:
++                    adj.new_value = old * (1 - max_pct)
++
++            # Hard bounds
++            adj.new_value = max(rule.get("min", 0), min(rule.get("max", 1), adj.new_value))
++
++            if adj.new_value != adj.old_value:
++                approved.append(adj)
++
++        return approved
++
++    # ── Persistence ────────────────────────────────────────────────
++
++    def _save_audit(self):
++        try:
++            data = {
++                "state": self.state.to_dict(),
++                "audit_log": self.state.audit_log[-200:],
++            }
++            with open(self._audit_path, "w") as f:
++                json.dump(data, f, indent=2, default=str)
++        except Exception as e:
++            logger.debug("Self-learning audit save error: %s", e)
++
++    def _load_audit(self):
++        if not self._audit_path.exists():
++            return
++        try:
++            with open(self._audit_path, "r") as f:
++                data = json.load(f)
++            self.state.total_adjustments = data.get("state", {}).get("total_adjustments", 0)
++            self.state.audit_log = data.get("audit_log", [])
++        except Exception as e:
++            logger.debug("Self-learning audit load error: %s", e)
+-- 
+2.39.5 (Apple Git-154)
+

@@ -1,0 +1,129 @@
+"""
+Agent Router — Sprint 77
+========================
+Agentic decision surfaces inspired by multi-agent trading research:
+- researcher / macro / risk / execution / critic perspectives
+- deterministic aggregation on top of existing ExpertCouncil
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from typing import Any, Dict, List
+
+from fastapi import APIRouter, Depends, Query, Request
+
+from src.api.deps import sanitize_for_json, verify_api_key
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/v7/agents", tags=["agents"])
+
+
+def _service_from_state(request: Request):
+    svc = getattr(request.app.state, "agent_orchestrator", None)
+    if svc is not None:
+        return svc
+    from src.services.agent_orchestrator_service import get_agent_orchestrator_service
+
+    svc = get_agent_orchestrator_service()
+    request.app.state.agent_orchestrator = svc
+    return svc
+
+
+@router.get("/run/{ticker}")
+async def run_agent_for_ticker(
+    request: Request,
+    ticker: str,
+    persist: bool = Query(default=True, description="Persist run to decision journal"),
+    _: bool = Depends(verify_api_key),
+):
+    """Run multi-agent deliberation for one ticker."""
+    svc = _service_from_state(request)
+    result = await asyncio.to_thread(svc.run_ticker, ticker, None, persist)
+    return sanitize_for_json(result)
+
+
+@router.get("/batch")
+async def run_agent_batch(
+    request: Request,
+    tickers: str = Query(
+        default="AAPL,MSFT,NVDA", description="Comma-separated tickers"
+    ),
+    limit: int = Query(default=10, ge=1, le=30),
+    persist: bool = Query(
+        default=False, description="Persist batch results to decision journal"
+    ),
+    _: bool = Depends(verify_api_key),
+):
+    """Run multi-agent deliberation for a batch of tickers."""
+    svc = _service_from_state(request)
+    ticker_list: List[str] = [
+        t.strip().upper() for t in tickers.split(",") if t.strip()
+    ]
+    result = await asyncio.to_thread(svc.run_batch, ticker_list, limit, persist)
+    return sanitize_for_json(result)
+
+
+@router.get("/today")
+async def run_agent_today(
+    request: Request,
+    limit: int = Query(default=10, ge=1, le=30),
+    persist: bool = Query(
+        default=False, description="Persist today batch to decision journal"
+    ),
+    _: bool = Depends(verify_api_key),
+):
+    """Run multi-agent deliberation for today's brief universe."""
+    svc = _service_from_state(request)
+    result = await asyncio.to_thread(svc.run_today, limit, persist)
+    return sanitize_for_json(result)
+
+
+@router.get("/journal")
+async def agent_journal(
+    limit: int = Query(default=20, ge=1, le=200),
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Recent persisted agent runs from decision journal."""
+    from src.engines.decision_persistence import get_journal
+
+    rows = get_journal().get_recent(limit=limit)
+    agent_rows = [r for r in rows if r.get("agent_mode") == "deterministic-multi-agent"]
+    return {
+        "count": len(agent_rows),
+        "entries": agent_rows[-limit:],
+    }
+
+
+@router.get("/reliability")
+async def agent_reliability(
+    request: Request,
+    lookback: int = Query(default=600, ge=50, le=5000),
+    min_samples: int = Query(default=5, ge=1, le=50),
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Per-agent reliability by regime (IC/IR style) from persisted journal."""
+    svc = _service_from_state(request)
+    result = await asyncio.to_thread(svc.reliability_report, lookback, min_samples)
+    return sanitize_for_json(result)
+
+
+@router.get("/status")
+async def agent_status(
+    request: Request,
+    _: bool = Depends(verify_api_key),
+) -> Dict[str, Any]:
+    """Health/status of the agent orchestrator surface."""
+    svc = _service_from_state(request)
+    reliability = await asyncio.to_thread(svc.reliability_report, 400, 5)
+    return {
+        "status": "ok",
+        "mode": "deterministic-multi-agent",
+        "pipeline": ["research", "macro", "risk", "execution", "critic"],
+        "version": "sprint79",
+        "service_loaded": bool(svc),
+        "reliability_samples": reliability.get("resolved_samples", 0),
+        "top_agents": reliability.get("top_agents", []),
+    }
