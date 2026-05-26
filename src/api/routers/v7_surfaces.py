@@ -449,23 +449,10 @@ async def portfolio_brief_data(
         watchlist = [t.strip().upper() for t in holdings.split(",") if t.strip()]
         watchlist_type = "user_holdings"
     else:
-        watchlist = [
-            "NVDA",
-            "AAPL",
-            "MSFT",
-            "AMD",
-            "MU",
-            "CRDO",
-            "SOFI",
-            "INTC",
-            "PLTR",
-            "AVGO",
-            "SMCI",
-            "META",
-            "GOOGL",
-            "AMZN",
-        ]
-        watchlist_type = "static_default"
+        from src.core.stock_universe import CORE_WATCHLIST
+
+        watchlist = CORE_WATCHLIST
+        watchlist_type = "core_universe"
 
     holdings_with_signals = []
     holdings_no_signal = []

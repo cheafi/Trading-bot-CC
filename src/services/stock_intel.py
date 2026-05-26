@@ -11,6 +11,18 @@ from src.api.deps import sanitize_for_json
 
 logger = logging.getLogger(__name__)
 
+_SUB_FETCH_TIMEOUT_SEC = 12.0
+_DOSSIER_TIMEOUT_SEC = 18.0
+
+
+async def _await_bounded(coro, timeout_sec: float, label: str):
+    """Bound sub-fetch latency so stock-intel does not hang the UI."""
+    try:
+        return await asyncio.wait_for(coro, timeout=timeout_sec)
+    except asyncio.TimeoutError:
+        logger.warning("stock-intel sub-fetch timeout: %s (%.0fs)", label, timeout_sec)
+        return TimeoutError(f"{label} timed out after {timeout_sec}s")
+
 
 def _build_unified_decision(
     dossier: Dict[str, Any],
@@ -299,6 +311,65 @@ def _smart_money_summary(
     }
 
 
+def _build_institutional_action_box(
+    *,
+    unified: Dict[str, Any],
+    pm_answer: Dict[str, Any],
+    regime: Any,
+    portfolio_fit: Dict[str, Any],
+    options_block: Dict[str, Any],
+    flow_intel: Optional[Dict[str, Any]],
+    catalysts: Dict[str, Any],
+) -> Dict[str, Any]:
+    """PM action enum — explicit, not fake precision."""
+    label = (unified.get("label") or "WATCH").upper()
+    rsi = None
+    change = None
+    flow_top = (flow_intel or {}).get("top") or {}
+    flow_action = flow_top.get("pm_action")
+    regime_ok = getattr(regime, "should_trade", True)
+    pf_score = int(portfolio_fit.get("score") or 50)
+
+    state = "WATCH_CONFIRM"
+    reason = unified.get("reason") or "Monitor for trigger."
+
+    if not regime_ok or label in ("NO TRADE", "AVOID", "PASS"):
+        state = "AVOID_NOW"
+        reason = "Regime or unified decision blocks new risk."
+    elif flow_action == "BUYABLE_NOW" and label == "TRADE":
+        state = "BUY_NOW"
+        reason = "Flow + stock + unified decision aligned."
+    elif flow_action in ("WATCH_FOR_STOCK_CONFIRM",) or label == "WATCH":
+        state = "BUY_ON_PULLBACK" if pf_score >= 55 else "WATCH_CONFIRM"
+        reason = "Setup forming — wait for confirmation or pullback."
+    elif flow_action == "AVOID_CHASE":
+        state = "OVEREXTENDED"
+        reason = "Flow suggests late chase / crowded."
+    elif flow_action in ("LIKELY_HEDGING_FLOW", "HEDGE_NO_EDGE"):
+        state = "HEDGE_CANDIDATE"
+        reason = "Options activity may be hedge — not directional edge."
+    elif catalysts.get("next_label") and label != "TRADE":
+        state = "CATALYST_WATCH"
+        reason = f"Event-driven: {catalysts.get('next_label')}"
+    elif label == "TRADE":
+        state = "BUY_NOW"
+        reason = unified.get("reason") or "Unified trade signal."
+
+    return {
+        "state": state,
+        "reason": reason[:280],
+        "confidence": unified.get("confidence"),
+        "evidence_quality": (
+            "live_flow_calibrated"
+            if (flow_intel or {}).get("top", {}).get("follow_through", {}).get("sufficient")
+            else "heuristic"
+        ),
+        "flow_pm_action": flow_action,
+        "portfolio_fit_score": pf_score,
+        "regime_allows": regime_ok,
+    }
+
+
 def _pm_answer_layer(
     unified: Dict[str, Any],
     narrative: Dict[str, Any],
@@ -405,28 +476,17 @@ async def build_stock_intel(request, ticker: str) -> Dict[str, Any]:
 
     mds = request.app.state.market_data
 
-    dossier_coro = live_dossier(ticker, request)
-    conviction_coro = _conviction_endpoint(ticker, request)
-    peers_coro = peer_comparison(ticker)
-    p9_fund_coro = _fetch_v9(mds, ticker, "fundamentals")
-    p9_earn_coro = _fetch_v9(mds, ticker, "earnings")
-    p9_struct_coro = _fetch_v9(mds, ticker, "structure")
-    options_coro = _fetch_options(request, ticker)
-    events_coro = _fetch_events(ticker)
-    edgar_coro = _fetch_edgar_insider(ticker)
-    ibkr_coro = _fetch_ibkr_status()
-
     results = await asyncio.gather(
-        dossier_coro,
-        conviction_coro,
-        peers_coro,
-        p9_fund_coro,
-        p9_earn_coro,
-        p9_struct_coro,
-        options_coro,
-        events_coro,
-        edgar_coro,
-        ibkr_coro,
+        _await_bounded(live_dossier(ticker, request), _DOSSIER_TIMEOUT_SEC, "dossier"),
+        _await_bounded(_conviction_endpoint(ticker, request), _SUB_FETCH_TIMEOUT_SEC, "conviction"),
+        _await_bounded(peer_comparison(ticker), 8.0, "peers"),
+        _await_bounded(_fetch_v9(mds, ticker, "fundamentals"), _SUB_FETCH_TIMEOUT_SEC, "p9_fundamentals"),
+        _await_bounded(_fetch_v9(mds, ticker, "earnings"), _SUB_FETCH_TIMEOUT_SEC, "p9_earnings"),
+        _await_bounded(_fetch_v9(mds, ticker, "structure"), _SUB_FETCH_TIMEOUT_SEC, "p9_structure"),
+        _await_bounded(_fetch_options(request, ticker), 8.0, "options"),
+        _await_bounded(_fetch_events(ticker), 6.0, "events"),
+        _await_bounded(_fetch_edgar_insider(ticker), 8.0, "edgar_insider"),
+        _await_bounded(_fetch_ibkr_status(), 4.0, "ibkr_status"),
         return_exceptions=True,
     )
 
@@ -478,10 +538,92 @@ async def build_stock_intel(request, ticker: str) -> Dict[str, Any]:
     pm_answer = _pm_answer_layer(unified, narrative, dossier, catalysts)
     identity = _identity_layer(dossier, peers)
 
+    from src.services.confluence_engine import build_confluence
+    from src.services.decision_bar import bar_from_stock
+    from src.services.pm_memory import build_thesis_block, get_memory
+    from src.services.portfolio_fit import build_portfolio_fit
+    from src.services.thesis_drift import build_thesis_drift
+
+    sect_name = identity.get("sector")
+    portfolio_fit = build_portfolio_fit(
+        ticker, positions, sector=sect_name
+    )
+    confluence = build_confluence(
+        dossier=dossier,
+        unified=unified,
+        smart_money=smart_money,
+        pm_answer=pm_answer,
+        regime={"should_trade": regime.should_trade, "label": regime.regime},
+        portfolio_fit=portfolio_fit,
+    )
+    decision_bar = bar_from_stock(
+        ticker=ticker,
+        unified=unified,
+        pm_answer=pm_answer,
+        catalysts=catalysts,
+        smart_money=smart_money,
+    )
+    thesis = build_thesis_block(ticker, {"narrative": narrative, "pm_answer": pm_answer, "unified_decision": unified})
+    pm_mem = get_memory(ticker)
+    thesis_drift = build_thesis_drift(
+        ticker,
+        stock_intel={
+            "unified_decision": unified,
+            "narrative": narrative,
+            "regime": {"should_trade": regime.should_trade},
+        },
+        pm_memory=pm_mem.get("summary"),
+    )
+    fundamentals_block = _fundamentals_block(p9.get("fundamentals"), dossier)
+    peers_block = _peers_block(peers)
+    options_block = _options_block(options)
+
+    flow_intel = None
+    try:
+        from src.services.flow_decision_surface import build_ticker_flow_intel
+
+        flow_intel = await build_ticker_flow_intel(request, ticker)
+        if flow_intel.get("top"):
+            top = flow_intel["top"]
+            options_block = {
+                **options_block,
+                "has_data": True,
+                "flow_pm_action": top.get("pm_action"),
+                "flow_grade": top.get("quality_grade"),
+                "flow_synthetic": top.get("synthetic"),
+                "follow_through": top.get("follow_through"),
+                "classification": top.get("options_detail", {}).get(
+                    "open_close_estimate", options_block.get("classification")
+                ),
+            }
+    except Exception as exc:
+        logger.debug("ticker flow intel skipped for %s: %s", ticker, exc)
+
+    action_box = _build_institutional_action_box(
+        unified=unified,
+        pm_answer=pm_answer,
+        regime=regime,
+        portfolio_fit=portfolio_fit,
+        options_block=options_block,
+        flow_intel=flow_intel,
+        catalysts=catalysts,
+    )
+
     return sanitize_for_json(
         {
             "ticker": ticker,
             "as_of": datetime.now(timezone.utc).isoformat() + "Z",
+            "decision_bar": decision_bar,
+            "action_box": action_box,
+            "flow_intel": flow_intel,
+            "confluence": confluence,
+            "portfolio_fit": portfolio_fit,
+            "thesis": thesis,
+            "thesis_drift": thesis_drift,
+            "pm_memory": pm_mem,
+            "fundamentals_block": fundamentals_block,
+            "peers_block": peers_block,
+            "options_block": options_block,
             "identity": identity,
             "dossier": dossier,
             "conviction": conviction,
@@ -499,15 +641,84 @@ async def build_stock_intel(request, ticker: str) -> Dict[str, Any]:
             "has_position": monitor is not None,
             "layers": {
                 "identity": bool(identity),
-                "fundamentals": bool(p9.get("fundamentals")),
+                "fundamentals": bool(p9.get("fundamentals") or fundamentals_block),
                 "technicals": bool(dossier.get("technicals")),
+                "peers": bool(peers_block.get("rows")),
                 "positioning": bool(options or ownership),
+                "options": bool(options_block.get("has_data")),
                 "smart_money": bool(smart_money),
                 "catalysts": bool(catalysts.get("items")),
+                "portfolio_fit": bool(portfolio_fit),
+                "thesis": True,
                 "pm_answer": True,
             },
         }
     )
+
+
+def _fundamentals_block(
+    raw: Optional[Dict[str, Any]],
+    dossier: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Structured fundamental intelligence."""
+    flags: List[str] = []
+    if raw:
+        pe = raw.get("pe_ratio") or raw.get("trailingPE")
+        if pe and float(pe) > 40:
+            flags.append("rich_valuation")
+        growth = raw.get("revenue_growth") or raw.get("revenueGrowth")
+        if growth and float(growth) < 0:
+            flags.append("story_broken_risk")
+    return {
+        "has_data": bool(raw),
+        "raw": raw,
+        "revenue_growth": (raw or {}).get("revenue_growth") or (raw or {}).get("revenueGrowth"),
+        "earnings_growth": (raw or {}).get("earnings_growth"),
+        "margin_trend": (raw or {}).get("profit_margin"),
+        "valuation_note": (raw or {}).get("valuation") or "See multiples vs peers",
+        "quality_score": (raw or {}).get("quality_score"),
+        "flags": flags,
+        "cheap_for_reason": "rich_valuation" in flags,
+        "story_broken": "story_broken_risk" in flags,
+        "price": dossier.get("price"),
+    }
+
+
+def _peers_block(peers: Any) -> Dict[str, Any]:
+    table = []
+    if isinstance(peers, dict):
+        table = peers.get("rankings") or peers.get("table") or peers.get("peers") or []
+    return {
+        "rows": table[:8] if isinstance(table, list) else [],
+        "winner_label": "Compare RS and growth in table",
+        "crowded_leader": None,
+        "evidence": {"basis": "peer_comparison_api", "label": "Live peer matrix when cached"},
+    }
+
+
+def _options_block(options: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not options or not isinstance(options, dict):
+        return {
+            "has_data": False,
+            "flow_quality_score": 0,
+            "classification": "no_data",
+        }
+    grade = options.get("grade") or options.get("quality_grade") or "—"
+    return {
+        "has_data": True,
+        "iv_percentile": options.get("iv_percentile"),
+        "put_call_skew": options.get("put_call_ratio") or options.get("skew"),
+        "unusual_volume": options.get("unusual_activity"),
+        "leaps_note": options.get("leaps_accumulation"),
+        "flow_quality_score": 70 if grade in ("A", "B") else 40,
+        "classification": (
+            "directional_conviction"
+            if grade in ("A", "B")
+            else "short_dated_noise"
+        ),
+        "expected_move": options.get("expected_move"),
+        "raw_summary": options.get("summary") or options.get("headline"),
+    }
 
 
 async def _fetch_v9(mds, ticker: str, kind: str) -> Optional[Dict[str, Any]]:

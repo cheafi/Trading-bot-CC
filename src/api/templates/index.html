@@ -547,6 +547,22 @@
           <span class="pill text-[7px] pr" x-show="(decisionHub.decision_strip.avoid_now||[]).length" x-text="'Avoid '+(decisionHub.decision_strip.avoid_now.length)"></span>
         </div>
       </template>
+      <!-- Unified Decision Summary Bar (Layer 1) -->
+      <template x-if="contextDecisionBar()">
+        <div style="width:100%;padding:6px 0 2px;border-top:1px solid var(--bd);margin-top:4px">
+          <div class="flex flex-wrap gap-2 items-center text-[9px]">
+            <span style="font-size:8px;font-weight:700;color:var(--green)">DECISION BAR</span>
+            <span class="pill font-bold" :class="verdictPillClass(contextDecisionBar().verdict)" x-text="contextDecisionBar().verdict"></span>
+            <span class="mono" x-text="'Conv '+contextDecisionBar().conviction+'/100'"></span>
+            <span class="pill text-[7px] pw" x-text="(contextDecisionBar().evidence_quality&&contextDecisionBar().evidence_quality.label)||'—'"></span>
+            <span class="pill text-[7px] pa" x-text="'Risk '+contextDecisionBar().risk_state"></span>
+            <span style="color:var(--t3)" x-text="'⏱ '+contextDecisionBar().time_horizon"></span>
+            <span style="color:var(--amber)" x-text="'📅 '+contextDecisionBar().next_catalyst"></span>
+          </div>
+          <div class="text-[9px] mt-1 text-white font-bold" x-text="contextDecisionBar().next_action"></div>
+          <div class="text-[8px] mt-0.5" style="color:var(--t2)" x-show="contextDecisionBar().why_now" x-text="contextDecisionBar().why_now"></div>
+        </div>
+      </template>
       </div>
 
     <!-- ═══════════════════════════════════════════════════════ -->
@@ -949,6 +965,35 @@
               <div><div style="color:var(--t3)">Heartbeat</div><div class="mono" x-text="today7.execution_readiness.last_heartbeat||'—'"></div></div>
               <div><div style="color:var(--t3)">Handoff</div><div class="font-bold" :class="today7.execution_readiness.trade_handoff_ready?'text-green-400':'text-amber-300'" x-text="today7.execution_readiness.trade_handoff_ready?'Yes':'No'"></div></div>
             </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- ── Cross-asset confirmation ── -->
+      <template x-if="today7.cross_asset_confirmation">
+        <div style="padding:0 12px 6px">
+          <div class="card card-p" style="border-left:3px solid var(--green)">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+              <div class="text-[9px] font-bold uppercase" style="color:var(--green)">Cross-asset confirmation</div>
+              <span class="pill text-[7px]" :class="today7.cross_asset_confirmation.alignment==='confirmed'?'pg':today7.cross_asset_confirmation.alignment==='conflicted'?'pr':'pa'" x-text="(today7.cross_asset_confirmation.alignment||'—').toUpperCase()"></span>
+              <span class="mono text-[8px]" style="color:var(--t3)" x-text="'Score '+today7.cross_asset_confirmation.confirmation_score"></span>
+            </div>
+            <div class="text-[10px] font-bold text-white mb-1" x-text="today7.cross_asset_confirmation.summary"></div>
+            <div class="text-[9px] mb-2" style="color:var(--t2)" x-text="today7.cross_asset_confirmation.action_hint"></div>
+            <div class="grid grid-cols-2 sm:grid-cols-5 gap-1 text-[8px] mb-2">
+              <template x-for="a in (today7.cross_asset_confirmation.assets||[])" :key="a.symbol">
+                <div class="p-1 rounded" style="background:var(--s2)">
+                  <div class="font-bold" x-text="a.symbol"></div>
+                  <div :class="(a.change_20d_pct||0)>=0?'text-green-400':'text-red-400'" x-text="'20d '+(a.change_20d_pct!=null?a.change_20d_pct+'%':'—')"></div>
+                </div>
+              </template>
+            </div>
+            <template x-if="(today7.cross_asset_confirmation.confirms||[]).length">
+              <div class="text-[8px] text-green-400" x-text="'✓ '+today7.cross_asset_confirmation.confirms.join(' · ')"></div>
+            </template>
+            <template x-if="(today7.cross_asset_confirmation.conflicts||[]).length">
+              <div class="text-[8px] text-amber-300 mt-1" x-text="'⚠ '+today7.cross_asset_confirmation.conflicts.join(' · ')"></div>
+            </template>
           </div>
         </div>
       </template>
@@ -1550,6 +1595,22 @@
         </div></div>
       </template>
 
+      <!-- ── Monitor rules (CRUD-backed) ── -->
+      <div style="padding:0 12px;margin-top:8px">
+        <div class="card card-p" style="border-left:3px solid var(--blue)">
+          <div class="flex justify-between items-center mb-2">
+            <div class="text-[10px] font-bold uppercase" style="color:var(--blue)">Alert center</div>
+            <button @click="fetchAosMonitors()" class="btn-s text-[8px]" :disabled="aosMonitors.loading">↻</button>
+          </div>
+          <template x-if="(aosMonitors.alerts||[]).length">
+            <template x-for="al in aosMonitors.alerts.slice(0,4)" :key="al.id||al.what_changed">
+              <div class="text-[8px] py-0.5" :class="al.severity==='high'?'text-red-400':'text-amber-300'" x-text="al.what_changed"></div>
+            </template>
+          </template>
+          <div x-show="!(aosMonitors.alerts||[]).length" class="text-[8px]" style="color:var(--t3)">No active rule alerts · <span x-text="(aosMonitors.rules||[]).length+' rules'"></span></div>
+        </div>
+      </div>
+
       <!-- ── Avoid List ── -->
       <template x-if="today7.avoid_list && today7.avoid_list.length > 0">
         <div style="padding:0 12px;margin-top:8px">
@@ -2042,6 +2103,57 @@
                 </template>
               </div>
             </template>
+            <template x-if="dos.intel&&dos.intel.decision_bar">
+              <div class="card card-p mb-2" style="border:2px solid var(--green)">
+                <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--green)">360 · Decision header</div>
+                <div class="flex flex-wrap gap-2 mb-1">
+                  <span class="pill font-bold" :class="verdictPillClass(dos.intel.decision_bar.verdict)" x-text="dos.intel.decision_bar.verdict"></span>
+                  <span class="mono" x-text="'Conv '+dos.intel.decision_bar.conviction+'/100'"></span>
+                  <span class="pill text-[7px] pw" x-text="dos.intel.decision_bar.evidence_quality&&dos.intel.decision_bar.evidence_quality.label"></span>
+                  <span class="pill text-[7px] pa" x-text="'Risk '+dos.intel.decision_bar.risk_state"></span>
+                </div>
+                <div class="text-[9px] text-white" x-text="dos.intel.decision_bar.next_action"></div>
+                <div class="text-[8px] text-red-400 mt-1" x-show="dos.intel.decision_bar.invalidation" x-text="'Invalidates: '+dos.intel.decision_bar.invalidation"></div>
+              </div>
+            </template>
+            <template x-if="dos.intel&&dos.intel.action_box">
+              <div class="card card-p mb-2" style="border-left:4px solid var(--amber)">
+                <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--amber)">Action box</div>
+                <div class="flex flex-wrap gap-2 mb-1">
+                  <span class="pill text-[9px] font-bold pa" x-text="dos.intel.action_box.state"></span>
+                  <span class="pill text-[7px] pw" x-text="dos.intel.action_box.evidence_quality"></span>
+                  <span x-show="dos.intel.action_box.flow_pm_action" class="pill text-[7px] pb" x-text="'Flow '+dos.intel.action_box.flow_pm_action"></span>
+                </div>
+                <div class="text-[9px] text-white" x-text="dos.intel.action_box.reason"></div>
+              </div>
+            </template>
+            <template x-if="dos.intel&&dos.intel.flow_intel&&dos.intel.flow_intel.top">
+              <div class="card card-p mb-2" style="border-left:3px solid var(--purple)">
+                <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--purple)">Unusual flow (fused)</div>
+                <div class="text-[8px] mono">
+                  <span class="font-bold text-white" x-text="dos.intel.flow_intel.top.pm_action"></span>
+                  <span x-text="' · Grade '+dos.intel.flow_intel.top.quality_grade"></span>
+                  <span x-show="dos.intel.flow_intel.synthetic" class="text-amber-300"> · MOCK</span>
+                </div>
+                <div class="text-[8px]" style="color:var(--t3)" x-text="dos.intel.flow_intel.top.reason||dos.intel.flow_intel.top.explanation"></div>
+                <div class="text-[7px]" style="color:var(--t3)" x-show="dos.intel.flow_intel.top.follow_through?.label" x-text="dos.intel.flow_intel.top.follow_through.label"></div>
+              </div>
+            </template>
+            <template x-if="dos.intel&&dos.intel.confluence">
+              <div class="card card-p mb-2"><div class="text-[9px] font-bold uppercase mb-1" style="color:var(--blue)">Confluence</div><div class="text-[11px] font-bold text-white" x-text="dos.intel.confluence.headline"></div></div>
+            </template>
+            <template x-if="dos.intel&&dos.intel.portfolio_fit">
+              <div class="card card-p mb-2"><div class="text-[9px] font-bold uppercase mb-1">Portfolio fit</div><div class="text-[11px] font-bold" :class="dos.intel.portfolio_fit.score>=60?'text-green-400':'text-amber-300'" x-text="dos.intel.portfolio_fit.score+'/100 · '+dos.intel.portfolio_fit.fit_label"></div><div class="text-[8px]" style="color:var(--t3)" x-text="(dos.intel.portfolio_fit.notes||[]).join(' · ')"></div></div>
+            </template>
+            <template x-if="dos.intel&&dos.intel.thesis">
+              <div class="card card-p mb-2"><div class="text-[9px] font-bold uppercase mb-1">Thesis engine</div><div class="text-[8px] text-green-400" x-text="'Bull: '+((dos.intel.thesis.bull_case||[]).slice(0,2).join(' · ')||'—')"></div><div class="text-[8px] text-red-400" x-text="'Bear: '+((dos.intel.thesis.bear_case||[]).slice(0,2).join(' · ')||'—')"></div></div>
+            </template>
+            <template x-if="dos.intel&&dos.intel.thesis_drift">
+              <div class="card card-p mb-2" style="border-left:3px solid var(--amber)"><div class="text-[9px] font-bold uppercase mb-1" style="color:var(--amber)">Thesis drift · <span x-text="dos.intel.thesis_drift.status"></span></div><div class="text-[8px]" x-text="dos.intel.thesis_drift.recommended_action"></div></div>
+            </template>
+            <template x-if="dos.intel&&dos.intel.options_block&&dos.intel.options_block.has_data">
+              <div class="card card-p mb-2"><div class="text-[9px] font-bold uppercase mb-1">Options</div><div class="text-[8px]" x-text="dos.intel.options_block.classification+' · flow '+dos.intel.options_block.flow_quality_score"></div></div>
+            </template>
             <!-- PM answer + smart money (institutional dossier) -->
             <template x-if="dos.intel&&dos.intel.pm_answer">
               <div class="card card-p mb-2" style="border-left:4px solid var(--purple)">
@@ -2075,13 +2187,59 @@
             </template>
             <!-- Tab bar -->
             <div class="flex gap-1 overflow-x-auto pb-1" style="scrollbar-width:thin">
-              <template x-for="t in ['decision','fundamentals','technicals','peers','ownership','options','catalysts','risk','monitor']">
-                <button class="btn-s text-[9px] flex-shrink-0" :class="dos.subTab===t?'':'opacity-50'" @click="dosSetTab(t)" x-text="t.charAt(0).toUpperCase()+t.slice(1)"></button>
+              <template x-for="t in ['decision','workstation','fundamentals','technicals','peers','ownership','options','catalysts','risk','monitor']">
+                <button class="btn-s text-[9px] flex-shrink-0" :class="dos.subTab===t?'':'opacity-50'" @click="dosSetTab(t)" x-text="t==='workstation'?'Quote 6-panel':t.charAt(0).toUpperCase()+t.slice(1)"></button>
               </template>
             </div>
           </div>
 
           <div class="px-3 space-y-2">
+            <!-- QUOTE WORKSTATION (6 panels) -->
+            <div x-show="dos.subTab==='workstation'">
+              <div class="flex gap-2 mb-2">
+                <button class="btn-p text-[10px]" @click="fetchQuoteWorkstation()" :disabled="dosWorkstation.loading||!dos.ticker">Load workstation</button>
+                <span x-show="dosWorkstation.loading" class="spin"></span>
+              </div>
+              <template x-if="dosWorkstation.data&&dosWorkstation.data.panels">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                  <template x-for="(panel,key) in dosWorkstation.data.panels" :key="key">
+                    <div class="card card-p" style="min-height:120px">
+                      <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)" x-text="key.replace(/^\d+_/,'').replace(/_/g,' ')"></div>
+                      <template x-if="panel.error">
+                        <div class="text-[8px] text-red-400" x-text="panel.error"></div>
+                      </template>
+                      <template x-if="panel.quote">
+                        <div class="text-lg font-bold mono text-white" x-text="'$'+panel.quote.price"></div>
+                        <div class="text-[8px]" :class="(panel.quote.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="(panel.quote.change_pct||0)+'%'"></div>
+                      </template>
+                      <template x-if="!panel.quote&&(panel.price!=null||panel.last!=null)">
+                        <div class="text-lg font-bold mono text-white" x-text="'$'+(panel.price||panel.last)"></div>
+                        <div class="text-[8px]" :class="(panel.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="(panel.change_pct||0)+'%'"></div>
+                      </template>
+                      <template x-if="panel.decision_bar">
+                        <div class="text-[9px] font-bold" x-text="panel.decision_bar.verdict"></div>
+                        <div class="text-[8px]" x-text="panel.decision_bar.next_action"></div>
+                      </template>
+                      <template x-if="panel.unified_decision">
+                        <div class="text-[9px]" x-text="panel.unified_decision.action"></div>
+                      </template>
+                      <template x-if="panel.label">
+                        <div class="text-[9px] font-bold" x-text="panel.label"></div>
+                        <div class="text-[8px]" x-text="'Trade '+(panel.should_trade?'yes':'no')"></div>
+                      </template>
+                      <template x-if="panel.summary&&panel.summary.total_return">
+                        <div class="mono text-[9px]" x-text="'Stock '+panel.summary.total_return.stock+'% · SPY '+panel.summary.total_return.spy+'% · α '+panel.summary.total_return.alpha+'%'"></div>
+                      </template>
+                      <template x-if="panel.calls||panel.puts">
+                        <div class="text-[8px]" x-text="'IV rank '+(panel.iv_rank||'—')"></div>
+                      </template>
+                      <pre x-show="!panel.error&&!panel.price&&!panel.decision_bar&&!panel.label" class="text-[7px] overflow-auto max-h-24" style="color:var(--t3)" x-text="JSON.stringify(panel).slice(0,280)"></pre>
+                    </div>
+                  </template>
+                </div>
+              </template>
+              <div x-show="!dosWorkstation.data&&!dosWorkstation.loading" class="text-[9px]" style="color:var(--t3)">Six-panel quote command center — quote, chart, perf vs SPY, options, intel, regime.</div>
+            </div>
             <!-- DECISION -->
             <div x-show="dos.subTab==='decision'">
               <template x-if="dos.intel&&dos.intel.narrative">
@@ -2287,6 +2445,72 @@
         </div>
       </template>
       <div x-show="dos.error" class="mx-3 card card-p" style="border-color:var(--red)"><div class="text-red-400 text-sm" x-text="dos.error"></div></div>
+    </main>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- SURFACE: BACKTEST LAB (P2)                             -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <main x-show="tab==='btlab'" class="fade" style="padding:12px;padding-bottom:40px">
+      <div class="text-[11px] font-bold uppercase mb-2" style="color:var(--green)">🧪 Backtest Lab</div>
+      <div class="flex flex-wrap gap-2 mb-3">
+        <input x-model="btLab.ticker" class="rounded px-2 py-1 text-[11px] mono w-20" style="background:var(--s2);border:1px solid var(--bd)" placeholder="Ticker">
+        <select x-model="btLab.strategy" class="rounded px-2 py-1 text-[10px]" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)">
+          <option value="all">All strategies</option>
+          <option value="momentum">Momentum</option>
+          <option value="breakout">Breakout</option>
+          <option value="swing">Swing</option>
+        </select>
+        <select x-model="btLab.period" class="rounded px-2 py-1 text-[10px]" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)">
+          <option value="6mo">6mo</option>
+          <option value="1y">1y</option>
+          <option value="2y">2y</option>
+          <option value="5y">5y</option>
+        </select>
+        <label class="text-[9px] flex items-center gap-1" style="color:var(--t3)"><input type="checkbox" x-model="btLab.walkForward"> Walk-forward</label>
+        <button class="btn-p text-[10px]" @click="fetchBacktestLab()" :disabled="btLab.loading">Run lab</button>
+      </div>
+      <template x-if="btLab.loading"><div class="card card-p"><span class="spin"></span> Running attribution + walk-forward…</div></template>
+      <template x-if="btLab.data">
+        <div class="card card-p mb-2">
+          <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--amber)">Walk-forward stability · <span x-text="btLab.data.walk_forward?.verdict"></span> · score <span x-text="btLab.data.walk_forward?.stability_score"></span></div>
+          <template x-for="w in (btLab.data.walk_forward?.windows||[])" :key="w.window">
+            <div class="text-[8px] py-0.5 flex gap-2"><span class="font-bold w-12" x-text="w.window"></span>
+              <span x-text="w.best_strategy||w.error"></span>
+              <span class="mono" :class="(w.return_pct||0)>=0?'text-green-400':'text-red-400'" x-text="w.return_pct!=null?w.return_pct+'%':''"></span>
+              <span style="color:var(--t3)" x-text="w.trades?w.trades+' trades':''"></span>
+            </div>
+          </template>
+        </div>
+        <div class="card card-p mb-2">
+          <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--blue)">Strategy attribution</div>
+          <template x-for="s in (btLab.data.attribution?.ranked||[])" :key="s.name">
+            <div class="text-[8px] py-0.5"><span class="font-bold" x-text="s.name"></span> <span class="mono" x-text="s.return_pct+'%'"></span> <span style="color:var(--t3)" x-text="'Sharpe '+s.sharpe"></span></div>
+          </template>
+        </div>
+        <div class="card card-p mb-2">
+          <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--purple)">Trade-level review · <span x-text="btLab.data.trade_level_review?.strategy"></span></div>
+          <div class="text-[8px] mb-1" x-text="'Win '+btLab.data.trade_level_review?.win_rate+'% · avg win '+btLab.data.trade_level_review?.avg_win_pct+'% · avg loss '+btLab.data.trade_level_review?.avg_loss_pct+'%'"></div>
+          <div class="grid md:grid-cols-2 gap-2">
+            <div>
+              <div class="text-[8px] font-bold text-green-400 mb-1">Best trades</div>
+              <template x-for="t in (btLab.data.trade_level_review?.best_trades||[])" :key="t.entry_date||t.date">
+                <div class="text-[7px]"><span x-text="t.entry_date||t.date"></span> <span class="mono text-green-400" x-text="t.pnl_pct+'%'"></span></div>
+              </template>
+            </div>
+            <div>
+              <div class="text-[8px] font-bold text-red-400 mb-1">Worst trades</div>
+              <template x-for="t in (btLab.data.trade_level_review?.worst_trades||[])" :key="'w'+(t.entry_date||t.date)">
+                <div class="text-[7px]"><span x-text="t.entry_date||t.date"></span> <span class="mono text-red-400" x-text="t.pnl_pct+'%'"></span></div>
+              </template>
+            </div>
+          </div>
+        </div>
+        <div class="card card-p">
+          <div class="text-[10px] font-bold uppercase mb-1">Core backtest</div>
+          <div id="btlab-equity-chart" style="height:220px;width:100%"></div>
+          <div class="text-[7px] mt-1" style="color:var(--t3)" x-text="btLab.data.evidence?.label"></div>
+        </div>
+      </template>
     </main>
 
     <!-- ═══════════════════════════════════════════════════════ -->
@@ -2818,7 +3042,7 @@
     <!-- ═══════════════════════════════════════════════════════ -->
     <!-- SURFACE: PORTFOLIO MANAGEMENT                          -->
     <!-- ═══════════════════════════════════════════════════════ -->
-    <main x-show="tab==='portfolio'" class="fade" x-init="$watch('tab',v=>{if(v==='portfolio'){fetchPortfolio();fetchPortfolioDecision()}})">
+    <main x-show="tab==='portfolio'" class="fade" x-init="$watch('tab',v=>{if(v==='portfolio'){fetchPortfolio();fetchPortfolioDecision();fetchPortfolioEquity()}})">
       <div class="trust-strip">
         <span :style="pf.source==='ibkr'?'color:var(--green)':'color:var(--blue)'" x-text="pf.source==='ibkr'?'● IBKR LIVE':'● MANUAL'"></span>
         <span x-text="pf.summary?pf.summary.total_positions+' positions':'No positions'"></span>
@@ -2830,6 +3054,18 @@
         <!-- Allocator Decision Summary -->
         <template x-if="pfDecisionLoading&&!pfDecision">
           <div class="card card-p text-center py-4"><span class="spin"></span> <span class="text-[10px]" style="color:var(--t3)">Loading portfolio decision…</span></div>
+        </template>
+        <template x-if="pfDecision&&pfDecision.decision_bar">
+          <div class="card card-p mb-2" style="border-left:4px solid var(--green)">
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--green)">Decision summary</div>
+            <div class="flex flex-wrap gap-2 mb-1">
+              <span class="pill font-bold" :class="verdictPillClass(pfDecision.decision_bar.verdict)" x-text="pfDecision.decision_bar.verdict"></span>
+              <span class="mono text-[9px]" x-text="'Conv '+pfDecision.decision_bar.conviction"></span>
+              <span class="pill text-[7px] pw" x-text="pfDecision.decision_bar.evidence_quality&&pfDecision.decision_bar.evidence_quality.label"></span>
+              <span x-show="pfDecision.allocator_summary&&pfDecision.allocator_summary.rebalance_suggested" class="pill text-[7px] pa">Rebalance</span>
+            </div>
+            <div class="text-[10px] font-bold text-white" x-text="pfDecision.decision_bar.next_action"></div>
+          </div>
         </template>
         <template x-if="pfDecision&&pfDecision.allocator_summary">
           <div class="card card-p mb-2" style="border-left:4px solid var(--green)">
@@ -2899,8 +3135,104 @@
             <template x-for="al in (pfDecision.risk_cockpit.alerts||[]).slice(0,3)" :key="al.message">
               <div class="text-[8px] py-0.5" :class="al.severity==='critical'?'text-red-400':'text-amber-300'" x-text="al.message"></div>
             </template>
+            <template x-if="pfDecision.risk_cockpit.sector_correlation_matrix&&pfDecision.risk_cockpit.sector_correlation_matrix.labels">
+              <div class="text-[8px] font-bold uppercase mt-2 mb-1" style="color:var(--t3)">Sector correlation (heuristic)</div>
+              <div class="overflow-x-auto text-[7px] mono">
+                <template x-for="lbl in pfDecision.risk_cockpit.sector_correlation_matrix.labels" :key="lbl">
+                  <span class="pill text-[6px] pw mr-1 mb-1" x-text="lbl"></span>
+                </template>
+                <div class="text-[7px] mt-1" style="color:var(--t3)" x-text="pfDecision.risk_cockpit.evidence&&pfDecision.risk_cockpit.evidence.label"></div>
+              </div>
+            </template>
           </div>
         </template>
+        <template x-if="pfEquityLoading&&!pfEquity">
+          <div class="card card-p mb-2 text-center py-3"><span class="spin"></span> <span class="text-[9px]" style="color:var(--t3)">Loading mark-to-market equity…</span></div>
+        </template>
+        <template x-if="pfEquity&&!pfEquity.has_series">
+          <div class="card card-p mb-2">
+            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--amber)">Book equity curve</div>
+            <div class="text-[9px]" style="color:var(--t3)" x-text="pfEquity.note||'No holdings — add positions or sync IBKR'"></div>
+            <span class="pill text-[7px] pw mt-1" x-text="pfEquity.evidence&&pfEquity.evidence.label||'—'"></span>
+          </div>
+        </template>
+        <template x-if="pfEquity&&pfEquity.has_series&&(pfEquity.equity_curve||[]).length">
+          <div class="card card-p mb-2">
+            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--green)">Book equity vs benchmark · <span x-text="pfEquity.benchmark||'SPY'"></span></div>
+            <div class="flex flex-wrap gap-3 items-center text-[9px] mb-2">
+              <span class="mono" :class="(pfEquity.total_return_pct||0)>=0?'text-green-400':'text-red-400'" x-text="'Book '+pfEquity.total_return_pct+'%'"></span>
+              <span class="mono" style="color:var(--t3)" x-text="'Bench '+pfEquity.benchmark_return_pct+'%'"></span>
+              <span class="mono text-blue-400" x-text="'α '+pfEquity.active_return_pct+'%'"></span>
+              <template x-if="pfEquity.rolling&&pfEquity.rolling.beta_20d!=null">
+                <span class="mono" x-text="'β '+pfEquity.rolling.beta_20d"></span>
+                <span class="mono" x-text="'Sharpe '+pfEquity.rolling.sharpe_20d"></span>
+              </template>
+            </div>
+            <svg width="100%" height="48" viewBox="0 0 240 48" preserveAspectRatio="none">
+              <polyline :points="sleeveSparkPoints(pfEquity.equity_curve)" fill="none" stroke="var(--green)" stroke-width="2"/>
+              <polyline :points="sleeveSparkPoints(pfEquity.benchmark_curve)" fill="none" stroke="var(--amber)" stroke-width="1" opacity="0.7"/>
+            </svg>
+            <div class="text-[7px] mt-1" style="color:var(--t3)" x-text="pfEquity.evidence&&pfEquity.evidence.label"></div>
+          </div>
+        </template>
+        <template x-if="pfDecision&&pfDecision.curve_diagnostics&&(pfDecision.curve_diagnostics.equity_curve||[]).length">
+          <div class="card card-p mb-2">
+            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--green)">Book equity vs SPY</div>
+            <div class="flex flex-wrap gap-3 items-center text-[9px] mb-2">
+              <span class="mono" :class="(pfDecision.curve_diagnostics.total_return_pct||0)>=0?'text-green-400':'text-red-400'" x-text="'Book '+pfDecision.curve_diagnostics.total_return_pct+'%'"></span>
+              <span class="mono" style="color:var(--t3)" x-text="'SPY '+pfDecision.curve_diagnostics.benchmark_return_pct+'%'"></span>
+              <span class="mono text-blue-400" x-text="'α '+pfDecision.curve_diagnostics.active_return_pct+'%'"></span>
+              <template x-if="pfDecision.curve_diagnostics.rolling">
+                <span class="mono" x-text="'β '+pfDecision.curve_diagnostics.rolling.beta_20d"></span>
+                <span class="mono" x-text="'Sharpe '+pfDecision.curve_diagnostics.rolling.sharpe_20d"></span>
+              </template>
+            </div>
+            <svg width="100%" height="48" viewBox="0 0 240 48" preserveAspectRatio="none">
+              <polyline :points="sleeveSparkPoints(pfDecision.curve_diagnostics.equity_curve)" fill="none" stroke="var(--green)" stroke-width="2"/>
+              <polyline :points="sleeveSparkPoints(pfDecision.curve_diagnostics.benchmark_curve)" fill="none" stroke="var(--amber)" stroke-width="1" opacity="0.7"/>
+            </svg>
+            <div class="text-[7px] mt-1" style="color:var(--t3)" x-text="pfDecision.curve_diagnostics.rolling_alpha_note||pfDecision.curve_diagnostics.evidence?.label"></div>
+          </div>
+        </template>
+        <template x-if="pfDecision&&pfDecision.brinson_attribution">
+          <div class="card card-p mb-2">
+            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--purple)">Brinson attribution</div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[8px]">
+              <div><span style="color:var(--t3)">Active</span> <strong x-text="pfDecision.brinson_attribution.active_return+'%'"></strong></div>
+              <div><span style="color:var(--t3)">Alloc</span> <strong x-text="pfDecision.brinson_attribution.allocation_effect+'%'"></strong></div>
+              <div><span style="color:var(--t3)">Select</span> <strong x-text="pfDecision.brinson_attribution.selection_effect+'%'"></strong></div>
+              <div><span style="color:var(--t3)">IR</span> <strong x-text="pfDecision.brinson_attribution.information_ratio"></strong></div>
+            </div>
+          </div>
+        </template>
+        <div class="card card-p mb-2">
+          <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--blue)">Rebalance &amp; scenario</div>
+          <div class="flex flex-wrap gap-2 mb-2">
+            <input x-model="pfRebalanceTargets" class="flex-1 min-w-[140px] rounded px-2 py-1 text-[9px] mono" style="background:var(--s2);border:1px solid var(--bd)" placeholder='Targets JSON {"AAPL":40,"MSFT":30}'>
+            <button class="btn-s text-[9px]" @click="runRebalanceSim('equal_weight')">Equal weight</button>
+            <button class="btn-s text-[9px]" @click="runRebalanceSim('custom',pfRebalanceTargets)" :disabled="!pfRebalanceTargets">Custom targets</button>
+            <button class="btn-s text-[9px]" @click="fetchScenarioList()">Load shocks</button>
+          </div>
+          <template x-if="pfDecision&&pfDecision.rebalance_sim&&pfDecision.rebalance_sim.feasible">
+            <div class="text-[8px] mb-1">Sim · <span x-text="pfDecision.rebalance_sim.trade_count"></span> trades</div>
+            <template x-for="tr in (pfDecision.rebalance_sim.trades||[]).slice(0,5)" :key="tr.ticker">
+              <div class="text-[8px] py-0.5"><span class="font-bold" x-text="tr.ticker"></span> <span x-text="tr.side+' $'+tr.notional_usd"></span> <span style="color:var(--t3)" x-text="'drift '+tr.drift_pct+'%'"></span></div>
+            </template>
+          </template>
+          <template x-if="pfScenario.list.length">
+            <div class="flex flex-wrap gap-1 mt-2">
+              <template x-for="sc in pfScenario.list.slice(0,6)" :key="sc.key">
+                <button class="btn-s text-[8px]" @click="runScenarioShock(sc.key)" x-text="sc.name||sc.key"></button>
+              </template>
+            </div>
+          </template>
+          <template x-if="pfScenario.result">
+            <div class="text-[9px] mt-2 p-2 rounded" style="background:var(--s2)">
+              <div class="font-bold text-red-400" x-text="(pfScenario.result.scenario?.name||pfScenario.selected)+': est. '+(pfScenario.result.estimated_pnl_pct!=null?(Math.abs(pfScenario.result.estimated_pnl_pct)<=1?pfScenario.result.estimated_pnl_pct*100:pfScenario.result.estimated_pnl_pct).toFixed(1):'—')+'%'"></div>
+              <div style="color:var(--t2)" x-text="pfScenario.result.risk_summary||''"></div>
+            </div>
+          </template>
+        </div>
         <template x-if="pfDecision&&(pfDecision.sleeve_monitor||[]).length">
           <div class="card card-p mb-2">
             <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">Active sleeves</div>
@@ -3206,9 +3538,34 @@
       <div class="p-3 space-y-3">
         <div class="flex justify-between items-center flex-wrap gap-2">
           <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">💼 Active Fund Manager</div>
-          <button @click="fetchFunds()" class="btn-s text-[10px]" :disabled="fundMonitor.loading">🔄 Refresh</button>
+          <button @click="fetchFunds();fetchLeaders()" class="btn-s text-[10px]" :disabled="fundMonitor.loading">🔄 Refresh</button>
         </div>
 
+        <template x-if="leadersPanel.data">
+          <div class="card card-p" style="border-left:3px solid var(--blue)">
+            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--blue)">Holder / leader overlay</div>
+            <div class="text-[7px] mb-2" style="color:var(--t3)" x-text="leadersPanel.data.evidence?.label||''"></div>
+            <template x-for="r in (leadersPanel.data.repeated_accumulation||[]).slice(0,5)" :key="r.ticker">
+              <div class="text-[8px] flex justify-between py-0.5 cursor-pointer" @click="openDossier(r.ticker)">
+                <span class="mono font-bold" x-text="r.ticker"></span>
+                <span class="pill text-[7px] pw" x-text="r.signal_quality||'lagged'"></span>
+              </div>
+            </template>
+          </div>
+        </template>
+        <span x-show="leadersPanel.error" class="text-[8px] text-red-400" x-text="leadersPanel.error"></span>
+
+        <template x-if="fundMonitor.console?.decision_bar">
+          <div class="card card-p mb-2" style="border-left:4px solid var(--purple)">
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--purple)">Fund decision bar</div>
+            <div class="flex flex-wrap gap-2">
+              <span class="pill font-bold" :class="verdictPillClass(fundMonitor.console.decision_bar.verdict)" x-text="fundMonitor.console.decision_bar.verdict"></span>
+              <span class="mono text-[9px]" x-text="'Conv '+fundMonitor.console.decision_bar.conviction"></span>
+              <span class="pill text-[7px] pw" x-text="fundMonitor.console.decision_bar.evidence_quality&&fundMonitor.console.decision_bar.evidence_quality.label"></span>
+            </div>
+            <div class="text-[10px] font-bold text-white mt-1" x-text="fundMonitor.console.decision_bar.next_action"></div>
+          </div>
+        </template>
         <!-- Layer 1: Allocator decision strip -->
         <template x-if="fundMonitor.console?.allocator_decision">
           <div class="card card-p" style="border:2px solid var(--green);background:linear-gradient(135deg,rgba(0,212,170,.06),transparent)">
@@ -3383,7 +3740,10 @@
               </template>
               <div class="flex gap-4 mb-2 flex-wrap">
                 <template x-if="(card.equity_curve_60||card.equity_curve_20||[]).length>2">
-                  <svg width="100" height="36"><polyline :points="sleeveSparkPoints(card.equity_curve_60||card.equity_curve_20)" fill="none" stroke="var(--green)" stroke-width="1.5"/></svg>
+                  <div>
+                    <svg width="100" height="36"><polyline :points="sleeveSparkPoints(card.equity_curve_60||card.equity_curve_20)" fill="none" stroke="var(--green)" stroke-width="1.5"/></svg>
+                    <div class="text-[7px] mt-0.5" style="color:var(--amber)" x-text="(card.curve_diagnostics&&card.curve_diagnostics.curve_label)||'Backtest curve'"></div>
+                  </div>
                 </template>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[9px] mono flex-1">
                   <div><div style="color:var(--t3)">Return</div><div class="font-bold" :class="(card.fund_return_pct||0)>=0?'text-green-400':'text-red-400'" x-text="(card.fund_return_pct||0)+'%'"></div></div>
@@ -3422,81 +3782,237 @@
       </div>
     </main>
 
-    <!-- SURFACE: FLOW INTELLIGENCE (options + unusual activity)   -->
+    <!-- SURFACE: FLOW DECISION (options + smart money)              -->
     <!-- ═══════════════════════════════════════════════════════ -->
     <main x-show="tab==='flow'" class="fade">
       <div class="trust-strip">
-        <span style="color:var(--purple)">● FLOW</span>
-        <span x-text="flowPanel.radar?.trust?.mode?('Mode: '+flowPanel.radar.trust.mode):'—'"></span>
-        <span x-show="flowPanel.radar?.trust?.synthetic" class="text-amber-300">⚠ SYNTHETIC/MOCK</span>
-        <span x-show="flowPanel.radar?.warning" class="text-amber-300" x-text="flowPanel.radar.warning"></span>
+        <span style="color:var(--purple)">● Flow Decision</span>
+        <span class="pill text-[8px]" :class="flowPanel.decision?.freshness?.synthetic?'pr':(flowPanel.decision?.count_live?'pg':'pa')" x-text="flowPanel.decision?.freshness?.synthetic?'MOCK':(flowPanel.decision?.count_live?'LIVE':'—')"></span>
+        <span class="mono text-[8px]" x-text="flowPanel.decision?.freshness?.provider||''"></span>
+        <span x-show="flowPanel.decision?.warning" class="text-amber-300 text-[8px]" x-text="flowPanel.decision.warning"></span>
+        <span x-show="flowPanel.decision?.provider_hint" class="text-[7px]" style="color:var(--t3)" x-text="flowPanel.decision.provider_hint"></span>
+        <span x-show="flowPanel.decision?.calibration?.label" class="text-[7px] mono" style="color:var(--t3)" x-text="flowPanel.decision.calibration.label"></span>
         <span x-show="flowPanel.error" style="color:var(--red)" x-text="flowPanel.error"></span>
       </div>
       <div class="p-3 space-y-3">
-        <div class="flex justify-between items-center">
-          <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">💧 Options & Smart Money</div>
-          <button @click="fetchFlow(true)" class="btn-s text-[10px]" :disabled="flowPanel.loading">🔄 Refresh</button>
-        </div>
-        <template x-if="flowPanel.loading && !flowPanel.radar">
-          <div class="card card-p text-center" style="padding:24px;color:var(--t3)"><span class="spin"></span> Scanning flow…</div>
-        </template>
-        <template x-for="c in (flowPanel.radar?.candidates||[])" :key="c.contract_symbol||c.underlying">
-          <div class="card card-p" style="cursor:pointer" @click="openDossier(c.underlying)">
-            <div class="flex items-center gap-2 mb-1">
-              <span class="mono font-bold text-white" x-text="c.underlying"></span>
-              <span class="pill text-[8px]" :class="c.quality_grade==='A'?'pg':c.quality_grade==='B'?'pa':'pw'" x-text="'Grade '+c.quality_grade"></span>
-              <span class="pill text-[8px] ml-auto" x-text="c.action_label||'—'"></span>
-            </div>
-            <div class="text-[10px]" style="color:var(--t2)" x-text="c.explanation||''"></div>
-            <div class="text-[9px] mono mt-1" style="color:var(--t3)" x-text="'Premium $'+((c.premium||0)/1000).toFixed(0)+'k · Score '+(c.radar_score||0).toFixed(0)"></div>
+        <template x-if="flowPanel.decision?.regime">
+          <div class="card card-p" style="border-left:3px solid var(--purple)">
+            <div class="text-[9px] font-bold" x-text="(today7.regime?.trend||'—')+' · '+(flowPanel.decision.regime.tradeability||today7.tradeability)"></div>
+            <div class="text-[8px] text-amber-300" x-text="flowPanel.decision.regime.stance"></div>
           </div>
         </template>
-        <template x-if="!flowPanel.loading && !(flowPanel.radar?.candidates||[]).length">
-          <div class="card card-p text-center" style="padding:24px;color:var(--t3)">No flow candidates. Try refresh or check OPTIONS_RADAR_PROVIDER.</div>
+        <div class="flex justify-between items-center">
+          <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">💧 Options flow console</div>
+          <button @click="fetchFlow()" class="btn-s text-[10px]" :disabled="flowPanel.loading">🔄 Live scan</button>
+        </div>
+        <template x-if="flowPanel.loading && !flowPanel.decision">
+          <div class="card card-p text-center" style="padding:24px;color:var(--t3)"><span class="spin"></span> Scanning unusual flow…</div>
+        </template>
+        <template x-if="(flowPanel.decision?.actionable_top3||[]).length">
+          <div class="card card-p" style="border-left:3px solid var(--green)">
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--green)">Top actionable flow</div>
+            <template x-for="c in flowPanel.decision.actionable_top3" :key="'a'+c.contract_symbol">
+              <div class="mb-2 p-2 rounded cursor-pointer" style="background:var(--s2)" @click="openDossier(c.underlying)">
+                <div class="flex gap-2 flex-wrap items-center">
+                  <span class="mono font-bold text-white" x-text="c.underlying"></span>
+                  <span class="pill text-[7px] pg" x-text="c.pm_action"></span>
+                  <span class="pill text-[7px] pb" x-text="'Grade '+c.quality_grade"></span>
+                </div>
+                <div class="text-[8px] mt-1" x-text="c.reason"></div>
+                <div class="text-[8px] mono" style="color:var(--t3)" x-text="(c.options_detail?.call_put||'')+' $'+c.options_detail?.strike+' · '+c.options_detail?.dte+'d · $'+(c.options_detail?.premium_usd/1000).toFixed(0)+'k'"></div>
+              </div>
+            </template>
+          </div>
+        </template>
+        <template x-if="(flowPanel.decision?.watch_for_confirm||[]).length">
+          <div class="text-[9px] font-bold uppercase" style="color:var(--amber)">Watch for stock confirm</div>
+          <template x-for="c in flowPanel.decision.watch_for_confirm" :key="'w'+c.contract_symbol">
+            <div class="text-[8px] py-0.5 mono flex flex-wrap gap-2 items-center">
+              <span class="font-bold" x-text="c.underlying"></span>
+              <span x-text="c.reason||c.explanation"></span>
+              <button class="btn-s text-[7px]" @click.stop="openDossier(c.underlying)">360</button>
+            </div>
+          </template>
+        </template>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <template x-if="(flowPanel.decision?.best_bullish_flow||[]).length">
+            <div class="card card-p" style="border-left:3px solid var(--green)">
+              <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--green)">Best bullish flow</div>
+              <template x-for="c in flowPanel.decision.best_bullish_flow" :key="'bull'+c.contract_symbol">
+                <div class="text-[8px] py-0.5 flex flex-wrap gap-1 items-center">
+                  <span class="mono font-bold" x-text="c.underlying"></span>
+                  <span class="pill text-[7px] pw" x-text="c.pm_action"></span>
+                  <button class="btn-s text-[7px]" @click.stop="openDossier(c.underlying)">360</button>
+                  <button class="btn-s text-[7px]" @click.stop="flowIbkrDraft(c)" x-show="c.data_freshness==='LIVE'">IB</button>
+                </div>
+              </template>
+            </div>
+          </template>
+          <template x-if="(flowPanel.decision?.best_bearish_flow||[]).length">
+            <div class="card card-p" style="border-left:3px solid var(--red)">
+              <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--red)">Best bearish flow</div>
+              <template x-for="c in flowPanel.decision.best_bearish_flow" :key="'bear'+c.contract_symbol">
+                <div class="text-[8px] py-0.5 flex flex-wrap gap-1 items-center">
+                  <span class="mono font-bold" x-text="c.underlying"></span>
+                  <span class="pill text-[7px] pw" x-text="c.pm_action"></span>
+                  <button class="btn-s text-[7px]" @click.stop="openDossier(c.underlying)">360</button>
+                </div>
+              </template>
+            </div>
+          </template>
+          <template x-if="(flowPanel.decision?.crowded_trap_risk||[]).length">
+            <div class="card card-p" style="border-left:3px solid var(--amber)">
+              <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--amber)">Crowded / trap risk</div>
+              <template x-for="c in flowPanel.decision.crowded_trap_risk" :key="'trap'+c.contract_symbol">
+                <div class="text-[8px] py-0.5 mono"><span x-text="c.underlying"></span> · <span x-text="c.pm_action"></span></div>
+              </template>
+            </div>
+          </template>
+        </div>
+        <div class="text-[9px] font-bold uppercase" style="color:var(--t3)">Live flow <span x-text="'('+(flowPanel.decision?.count_live||0)+')'"></span></div>
+        <template x-for="c in (flowPanel.decision?.live_flow||[])" :key="c.contract_symbol">
+          <div class="card card-p" :class="c.actionable?'':'opacity-75'" style="cursor:pointer" @click="openDossier(c.underlying)">
+            <div class="flex flex-wrap gap-2 items-center mb-1">
+              <span class="mono font-bold text-white" x-text="c.underlying"></span>
+              <span class="pill text-[7px]" :class="c.actionable?'pg':c.pm_action==='AVOID_CHASE'?'pa':'pw'" x-text="c.pm_action"></span>
+              <span class="pill text-[7px] pw" x-show="c.data_freshness==='LIVE'">LIVE</span>
+              <span class="ml-auto mono text-[8px]" x-text="'Score '+(c.radar_score||0).toFixed(0)"></span>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-[8px] mono mb-1">
+              <span x-text="(c.options_detail?.call_put||'')+' '+c.options_detail?.strike+' exp '+c.options_detail?.expiry"></span>
+              <span x-text="'Vol/OI '+c.options_detail?.volume_oi+' · '+c.options_detail?.unusual_vs_baseline"></span>
+              <span x-text="'Premium $'+(c.premium/1000).toFixed(0)+'k · '+c.options_detail?.aggressiveness"></span>
+              <span x-text="'Stock '+(c.stock_linkage?.change_pct!=null?c.stock_linkage.change_pct+'%':c.stock_move_pct+'%')"></span>
+            </div>
+            <div class="text-[7px]" style="color:var(--t3)">
+              <span x-text="'Ladder '+c.evidence_ladder?.steps_passed+'/5'"></span>
+              <span x-show="c.evidence_ladder?.stock_confirmed" class="text-green-400"> · stock confirmed</span>
+              <span x-show="!c.evidence_ladder?.stock_confirmed" class="text-amber-300"> · stock not confirmed</span>
+              <span x-show="c.evidence_ladder?.follow_through_label" class="text-blue-300"> · <span x-text="c.evidence_ladder.follow_through_label"></span></span>
+            </div>
+            <div class="flex gap-1 mt-1" @click.stop>
+              <button class="btn-s text-[7px]" @click="flowIbkrDraft(c)" x-show="c.actionable">IB handoff</button>
+            </div>
+          </div>
+        </template>
+        <template x-if="(flowPanel.decision?.mock_flow||[]).length">
+          <div class="card card-p" style="opacity:0.5;border:1px dashed var(--bd)">
+            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">Mock / synthetic — NOT actionable</div>
+            <template x-for="c in flowPanel.decision.mock_flow.slice(0,6)" :key="'m'+c.contract_symbol">
+              <div class="text-[8px] py-0.5"><span class="mono" x-text="c.underlying"></span> <span class="pr">NOT_ACTIONABLE</span> <span style="color:var(--t3)" x-text="c.explanation"></span></div>
+            </template>
+          </div>
+        </template>
+        <template x-if="flowPanel.decision?.freshness?.methodology">
+          <div class="text-[7px]" style="color:var(--t3)" x-text="flowPanel.decision.freshness.methodology"></div>
         </template>
       </div>
     </main>
 
-    <!-- SURFACE: RELATIVE STRENGTH LEADERS                        -->
+    <!-- SURFACE: RELATIVE STRENGTH — PM DECISION                         -->
     <main x-show="tab==='rs'" class="fade">
       <div class="trust-strip">
-        <span style="color:var(--blue)">● RS</span>
-        <span x-text="rsPanel.data?'Leaders: '+(rsPanel.data.count||0):'Loading…'"></span>
-        <span x-show="rsPanel.data?.warning" class="text-amber-300" x-text="rsPanel.data.warning"></span>
+        <span style="color:var(--blue)">● RS Decision</span>
+        <span class="pill text-[8px]" :class="rsPanel.data?.freshness?.live?'pg':'pr'" x-text="rsPanel.data?.freshness?.live?'LIVE':'STALE'"></span>
+        <span x-show="rsPanel.data?.freshness?.universe_size" class="mono text-[8px]" x-text="'Universe '+rsPanel.data.freshness.universe_size"></span>
+        <span x-show="rsPanel.data?.compute_ms" class="mono text-[8px]" style="color:var(--t3)" x-text="rsPanel.data.compute_ms+'ms'"></span>
+        <span x-show="rsPanel.data?.warning" class="text-amber-300 text-[8px]" x-text="rsPanel.data.warning"></span>
         <span x-show="rsPanel.error" style="color:var(--red)" x-text="rsPanel.error"></span>
       </div>
       <div class="p-3 space-y-3">
+        <!-- Regime strip -->
+        <template x-if="rsPanel.data?.regime">
+          <div class="card card-p" style="border-left:3px solid var(--blue)">
+            <div class="flex flex-wrap gap-2 text-[9px] items-center">
+              <span class="font-bold text-white" x-text="(today7.regime?.trend||rsPanel.data.regime.trend||'—')+' · '+(rsPanel.data.regime.tradeability||today7.tradeability||'—')"></span>
+              <span style="color:var(--t3)" x-text="'VIX '+(rsPanel.data.regime.vix||today7.regime?.vix||'—')"></span>
+              <span class="text-amber-300" x-text="rsPanel.data.regime.stance"></span>
+            </div>
+          </div>
+        </template>
         <div class="flex justify-between items-center flex-wrap gap-2">
-          <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">📈 RS vs SPY</div>
-          <div class="flex gap-1">
+          <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">📈 RS vs SPY · daily windows</div>
+          <div class="flex gap-1 flex-wrap">
             <button class="pill text-[8px]" :class="!rsPanel.sectorFilter?'pg':'pw'" @click="rsPanel.sectorFilter='';fetchRs()">All</button>
             <template x-for="sec in ['Tech','Consumer','Energy','Health','Finance']">
               <button class="pill text-[8px]" :class="rsPanel.sectorFilter===sec?'pg':'pw'" @click="rsPanel.sectorFilter=sec;fetchRs()" x-text="sec"></button>
             </template>
-            <button @click="fetchRs()" class="btn-s text-[10px]" :disabled="rsPanel.loading">🔄</button>
+            <button @click="fetchRs()" class="btn-s text-[10px]" :disabled="rsPanel.loading">🔄 Live</button>
           </div>
         </div>
         <template x-if="rsPanel.loading && !rsPanel.data">
-          <div class="card card-p text-center" style="padding:24px;color:var(--t3)"><span class="spin"></span> Ranking RS…</div>
+          <div class="card card-p text-center" style="padding:24px;color:var(--t3)"><span class="spin"></span> Computing live RS universe…</div>
         </template>
-        <template x-for="row in (rsPanel.data?.rankings||[])" :key="row.ticker">
-          <div class="card card-p" style="cursor:pointer" @click="openDossier(row.ticker)">
-            <div class="flex items-center gap-2 mb-1">
-              <span class="mono font-bold text-white" x-text="row.ticker"></span>
-              <span class="pill text-[8px]" :class="row.status==='LEADER'?'pg':row.status==='STRONG'?'pb':row.status==='LAGGARD'?'pr':'pw'" x-text="row.status"></span>
-              <span class="text-[9px] ml-auto" style="color:var(--t3)" x-text="row.sector"></span>
-            </div>
-            <div class="grid grid-cols-5 gap-2 text-[9px] mono">
-              <div><div style="color:var(--t3)">RS 1M</div><div class="font-bold" :class="row.rs_1m>=100?'text-green-400':'text-red-400'" x-text="row.rs_1m"></div></div>
-              <div><div style="color:var(--t3)">RS 3M</div><div class="font-bold" x-text="row.rs_3m"></div></div>
-              <div><div style="color:var(--t3)">Composite</div><div class="font-bold text-white" x-text="row.rs_composite"></div></div>
-              <div><div style="color:var(--t3)">Pctile</div><div class="font-bold" x-text="row.rs_percentile"></div></div>
-              <div><div style="color:var(--t3)">Trend</div><div class="font-bold text-amber-300" x-text="row.trend"></div></div>
+        <!-- Top actionable -->
+        <template x-if="(rsPanel.data?.actionable_top3||[]).length">
+          <div class="card card-p" style="border-left:3px solid var(--green)">
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--green)">Top actionable RS leaders</div>
+            <template x-for="row in rsPanel.data.actionable_top3" :key="'a'+row.ticker">
+              <div class="mb-2 p-2 rounded cursor-pointer" style="background:var(--s2)" @click="openDossier(row.ticker)">
+                <div class="flex gap-2 items-center flex-wrap">
+                  <span class="mono font-bold text-white" x-text="row.ticker"></span>
+                  <span class="pill text-[7px] pg" x-text="row.action_label"></span>
+                  <span class="pill text-[7px] pb" x-text="row.buyability"></span>
+                  <span class="mono text-[8px] ml-auto" x-text="'RS '+row.rs_composite+' · '+row.rs_percentile+'%ile'"></span>
+                </div>
+                <div class="text-[8px] mt-1" style="color:var(--t2)" x-text="row.why_leader"></div>
+                <div class="grid grid-cols-4 gap-1 text-[8px] mono mt-1">
+                  <span x-text="'Entry '+((row.entry_zone&&row.entry_zone.low)?row.entry_zone.low+'-'+row.entry_zone.high:'—')"></span>
+                  <span x-text="'Stop '+row.stop"></span>
+                  <span x-text="'Target '+row.target"></span>
+                  <span x-text="'R:R '+row.risk_reward"></span>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+        <!-- Sector rotation -->
+        <template x-if="(rsPanel.data?.sector_rotation||[]).length">
+          <div class="card card-p">
+            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--purple)">Sector rotation</div>
+            <div class="flex flex-wrap gap-2 text-[8px]">
+              <template x-for="s in rsPanel.data.sector_rotation.slice(0,5)" :key="s.sector">
+                <span class="pill pw" x-text="(s.sector_short||s.sector)+' '+s.rs_composite"></span>
+              </template>
             </div>
           </div>
         </template>
-        <template x-if="!rsPanel.loading && !(rsPanel.data?.rankings||[]).length">
-          <div class="card card-p text-center" style="padding:24px;color:var(--t3)">No RS rankings yet — live cache may still be warming.</div>
+        <!-- Live leaders table -->
+        <div class="text-[9px] font-bold uppercase" style="color:var(--t3)">Live leaders <span x-text="'('+(rsPanel.data?.count_live||0)+')'"></span></div>
+        <template x-for="row in (rsPanel.data?.live_leaders||[])" :key="row.ticker">
+          <div class="card card-p" :class="row.actionable?'':'opacity-70'" style="cursor:pointer;border-left:3px solid" :style="'border-left-color:'+(row.actionable?'var(--green)':row.buyability==='EXTENDED'?'var(--amber)':'var(--bd)')" @click="openDossier(row.ticker)">
+            <div class="flex items-center gap-2 mb-1 flex-wrap">
+              <span class="mono font-bold text-white" x-text="row.ticker"></span>
+              <span class="pill text-[7px]" :class="row.actionable?'pg':row.buyability==='EXTENDED'?'pa':row.buyability==='FAILING'?'pr':'pw'" x-text="row.action_label||row.buyability"></span>
+              <span class="pill text-[7px] pw" x-text="row.status"></span>
+              <span class="pill text-[7px] pw" x-show="row.data_freshness==='LIVE'">LIVE</span>
+              <span class="text-[9px] ml-auto" x-text="row.sector_short||row.sector"></span>
+            </div>
+            <div class="grid grid-cols-6 gap-1 text-[8px] mono mb-1">
+              <div><div style="color:var(--t3)">1W</div><div :class="row.rs_1w>=100?'text-green-400':'text-red-400'" x-text="row.rs_1w"></div></div>
+              <div><div style="color:var(--t3)">1M</div><div :class="row.rs_1m>=100?'text-green-400':'text-red-400'" x-text="row.rs_1m"></div></div>
+              <div><div style="color:var(--t3)">3M</div><div x-text="row.rs_3m"></div></div>
+              <div><div style="color:var(--t3)">Comp</div><div class="font-bold text-white" x-text="row.rs_composite"></div></div>
+              <div><div style="color:var(--t3)">Δ1W</div><div :class="row.rs_change_1w>=0?'text-green-400':'text-red-400'" x-text="row.rs_change_1w"></div></div>
+              <div><div style="color:var(--t3)">Accel</div><div x-text="row.rs_acceleration"></div></div>
+            </div>
+            <div class="text-[7px]" style="color:var(--t3)" x-text="row.why_leader"></div>
+          </div>
+        </template>
+        <!-- Stale bucket — grayed, not leaders -->
+        <template x-if="(rsPanel.data?.stale_watchlist||[]).length">
+          <div class="card card-p" style="opacity:0.55;border:1px dashed var(--bd)">
+            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">Stale cached watchlist — NOT actionable</div>
+            <template x-for="row in rsPanel.data.stale_watchlist.slice(0,8)" :key="'s'+row.ticker">
+              <div class="text-[8px] py-0.5 flex gap-2"><span class="mono" x-text="row.ticker"></span><span class="pr">NOT_ACTIONABLE</span><span style="color:var(--t3)" x-text="row.sector"></span></div>
+            </template>
+          </div>
+        </template>
+        <template x-if="!rsPanel.loading && !(rsPanel.data?.live_leaders||[]).length && !(rsPanel.data?.stale_watchlist||[]).length">
+          <div class="card card-p text-center" style="padding:24px;color:var(--t3)">No RS data — click Live to compute.</div>
+        </template>
+        <template x-if="rsPanel.data?.freshness?.methodology">
+          <div class="text-[7px]" style="color:var(--t3)" x-text="rsPanel.data.freshness.methodology"></div>
         </template>
       </div>
     </main>
@@ -3853,11 +4369,36 @@
     <!-- ═══════════════════════════════════════════════════════ -->
     <main x-show="tab==='ops'" class="fade">
       <div class="trust-strip">
-        <span :style="opsDetail.trust?'color:var(--blue)':'color:var(--blue)'" x-text="'● '+(opsDetail.trust?opsDetail.trust.mode:'SYSTEM')"></span>
-        <span x-text="opsDetail.version?'v'+opsDetail.version:'—'"></span>
-        <span x-text="opsDetail.trust?'As-of: '+opsDetail.trust.as_of.slice(0,19):'Polled: '+new Date().toISOString().slice(0,19)"></span>
+        <span style="color:var(--blue)">● Ops Console</span>
+        <span class="pill text-[8px]" :class="opsConsole.data?.runnable?'pg':opsConsole.data?.system_verdict==='PAPER_ONLY'?'pa':'pr'" x-text="opsConsole.data?.system_verdict||'—'"></span>
+        <span x-show="opsConsole.data?.blockers?.length" class="text-amber-300 text-[8px]" x-text="opsConsole.data.blockers.length+' blocker(s)'"></span>
+        <span x-show="opsConsole.error" style="color:var(--red)" x-text="opsConsole.error"></span>
       </div>
       <div class="p-3 space-y-3">
+        <template x-if="opsConsole.data">
+          <div class="card card-p" style="border-left:4px solid" :style="'border-left-color:'+(opsConsole.data.runnable?'var(--green)':opsConsole.data.system_verdict==='PAPER_ONLY'?'var(--amber)':'var(--red)')">
+            <div class="text-[12px] font-bold text-white mb-1" x-text="opsConsole.data.system_verdict"></div>
+            <div class="text-[10px] mb-2" style="color:var(--t2)" x-text="opsConsole.data.verdict_detail"></div>
+            <template x-if="(opsConsole.data.blockers||[]).length">
+              <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--red)">Blockers</div>
+              <template x-for="b in opsConsole.data.blockers" :key="b">
+                <div class="text-[8px] text-red-400">• <span x-text="b"></span></div>
+              </template>
+            </template>
+            <div class="text-[9px] font-bold uppercase mt-2 mb-1" style="color:var(--green)">Next operator actions</div>
+            <template x-for="na in (opsConsole.data.next_actions||[])" :key="na.step">
+              <div class="text-[8px] py-0.5"><span class="font-bold" x-text="na.step+'.'"></span> <span x-text="na.action"></span> — <span style="color:var(--t3)" x-text="na.why"></span></div>
+            </template>
+          </div>
+        </template>
+        <template x-if="(opsConsole.data?.why_no_signals||[]).length">
+          <div class="card card-p">
+            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">Why no signals today?</div>
+            <template x-for="w in opsConsole.data.why_no_signals" :key="w.gate">
+              <div class="text-[8px] flex justify-between"><span x-text="w.gate"></span><span class="mono" x-text="w.count||w.note||''"></span></div>
+            </template>
+          </div>
+        </template>
         <div class="card card-p">
           <div class="flex items-center justify-between mb-3">
             <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">⚙️ Engine State</div>
@@ -3885,16 +4426,36 @@
           <div class="text-[9px] mt-2 mono" style="color:var(--t3)" x-text="opsDetail.startup_time?'Boot: '+opsDetail.startup_time.slice(0,19):''"></div>
           <template x-if="opsDetail.engine&&opsDetail.engine.last_cycle"><div class="text-[9px] mono" style="color:var(--t3)" x-text="'Last cycle: '+opsDetail.engine.last_cycle"></div></template>
         </div>
-        <!-- Component Health -->
+        <!-- Component evidence (not health alone) -->
         <div class="card card-p">
-          <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">🔧 Component Health</div>
-          <template x-for="[name,ok] in Object.entries(ops.components||{})">
-            <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)">
-              <span class="text-[11px]" x-text="name.replace(/_/g,' ')"></span>
-              <div class="flex items-center gap-2"><span class="health-dot" :class="ok?'health-ok':'health-err'"></span><span class="text-[10px] mono" :class="ok?'text-green-400':'text-red-400'" x-text="ok?'OK':'FAIL'"></span></div>
+          <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">🔧 Component evidence</div>
+          <div class="text-[8px] mb-2" style="color:var(--t3)">OK = probe passed, not proof engine is trading</div>
+          <template x-for="c in (opsConsole.data?.component_evidence||[])" :key="c.name">
+            <div class="flex items-center justify-between py-1 text-[10px]" style="border-bottom:1px solid var(--bd)">
+              <span x-text="c.name.replace(/_/g,' ')"></span>
+              <span :class="c.ok?'text-green-400':'text-red-400'" x-text="c.label"></span>
             </div>
           </template>
+          <template x-if="!(opsConsole.data?.component_evidence||[]).length">
+            <template x-for="[name,ok] in Object.entries(ops.components||{})">
+              <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)">
+                <span class="text-[11px]" x-text="name.replace(/_/g,' ')"></span>
+                <span class="text-[10px] mono" :class="ok?'text-green-400':'text-red-400'" x-text="ok?'OK':'FAIL'"></span>
+              </div>
+            </template>
+          </template>
         </div>
+        <template x-if="opsConsole.data?.section_states">
+          <div class="card card-p">
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">Experimental modules</div>
+            <template x-for="[k,v] in Object.entries(opsConsole.data.section_states)" :key="k">
+              <div class="flex justify-between text-[9px] py-0.5">
+                <span x-text="k.replace(/_/g,' ')"></span>
+                <span class="pill text-[7px] pw" x-text="v.label"></span>
+              </div>
+            </template>
+          </div>
+        </template>
         <!-- Data Providers -->
         <div class="card card-p">
           <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📡 Data Providers</div>
@@ -3930,8 +4491,18 @@
           </div>
         </template>
 
+        <template x-if="!opsSectionShowAdvanced()">
+          <div class="card card-p" style="border:1px dashed var(--bd)">
+            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--t3)">Advanced diagnostics (collapsed)</div>
+            <div class="text-[9px] mb-2" style="color:var(--t2)">Engine off or insufficient sample — panels below need runtime evidence before they affect capital decisions.</div>
+            <template x-for="[k,v] in Object.entries(opsConsole.data?.section_states||{})" :key="'sx'+k">
+              <div class="text-[8px] flex justify-between py-0.5"><span x-text="k.replace(/_/g,' ')"></span><span class="pill text-[7px] pw" x-text="v.label"></span></div>
+            </template>
+          </div>
+        </template>
+
         <!-- Self-Learn Engine Panel (Ops) -->
-        <div class="card card-p" style="border-left:3px solid var(--purple)">
+        <div class="card card-p" style="border-left:3px solid var(--purple)" x-show="opsSectionShowAdvanced() || selfLearn.status">
           <div class="flex items-center justify-between mb-2">
             <div class="text-[10px] font-bold uppercase" style="color:var(--purple)">🧠 Self-Learning Engine</div>
             <div class="flex gap-1">
@@ -4049,7 +4620,7 @@
                   </div>
                 </template>
                 <template x-if="!selfLearn.calibration">
-                  <div class="text-[8px]" style="color:var(--t3)">Click Refresh to load.</div>
+                  <div class="text-[8px]" style="color:var(--t3)" x-text="opsSectionInactiveMsg('self_learning')"></div>
                 </template>
               </div>
 
@@ -4120,12 +4691,12 @@
             </div>
           </template>
           <template x-if="!selfLearn.status">
-            <div class="text-[9px]" style="color:var(--t3)">Click Refresh to load engine state.</div>
+            <div class="text-[9px]" style="color:var(--t3)" x-text="opsSectionInactiveMsg('self_learning')"></div>
           </template>
         </div>
 
         <!-- Feedback Pipeline (Sprint 113) -->
-        <div class="card card-p">
+        <div class="card card-p" x-show="opsSectionShowAdvanced() || selfLearn.feedback">
           <div class="flex items-center justify-between mb-2">
             <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">🔄 Feedback Pipeline</div>
             </div>
@@ -4157,12 +4728,12 @@
             </div>
           </template>
           <template x-if="!selfLearn.feedback">
-            <div class="text-[9px]" style="color:var(--t3)">Click Refresh to load pipeline stats.</div>
+            <div class="text-[9px]" style="color:var(--t3)" x-text="opsSectionInactiveMsg('pipeline_stats')"></div>
           </template>
         </div>
 
         <!-- Portfolio Risk Guard (Sprint 100) -->
-        <div class="card card-p">
+        <div class="card card-p" x-show="opsSectionShowAdvanced() || risk.summary">
           <div class="flex items-center justify-between mb-2">
             <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">🛡 Portfolio Risk</div>
             </div>
@@ -4190,12 +4761,12 @@
             </div>
           </template>
           <template x-if="!risk.summary">
-            <div class="text-[9px]" style="color:var(--t3)">Click Refresh to load risk gates.</div>
+            <div class="text-[9px]" style="color:var(--t3)">Refresh portfolio risk or start engine.</div>
           </template>
         </div>
 
         <!-- Execution Quality (Sprint 99) -->
-        <div class="card card-p">
+        <div class="card card-p" x-show="opsSectionShowAdvanced() || exec.metrics">
           <div class="flex items-center justify-between mb-2">
             <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">⚡ Execution Quality</div>
             </div>
@@ -4219,18 +4790,12 @@
             </div>
           </template>
           <template x-if="!exec.metrics">
-            <div class="text-[9px]" style="color:var(--t3)">Click Refresh to load execution metrics.</div>
+            <div class="text-[9px]" style="color:var(--t3)" x-text="opsSectionInactiveMsg('execution_metrics')"></div>
           </template>
         </div>
 
-        <!-- What's New (Changelog) -->
-        <div class="card card-p">
-          <div class="flex items-center justify-between mb-3">
-            <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">📋 What's New</div>
-            </div>
-
         <!-- Thompson RL Sizing (Sprint 103) -->
-        <div class="card card-p">
+        <div class="card card-p" x-show="opsSectionShowAdvanced() || rl.thompson">
           <div class="flex items-center justify-between mb-2">
             <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">🎰 Thompson Sizing</div>
             </div>
@@ -4258,12 +4823,12 @@
             </div>
           </template>
           <template x-if="!rl.thompson">
-            <div class="text-[9px]" style="color:var(--t3)">Click Refresh to load Thompson arms.</div>
+            <div class="text-[9px]" style="color:var(--t3)" x-text="opsSectionInactiveMsg('thompson_sizing')"></div>
           </template>
         </div>
 
         <!-- Feature IC Decay (Sprint 103) -->
-        <div class="card card-p">
+        <div class="card card-p" x-show="opsSectionShowAdvanced() || rl.featureIC">
           <div class="flex items-center justify-between mb-2">
             <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">📉 Feature IC Decay</div>
             </div>
@@ -4285,7 +4850,7 @@
             </div>
           </template>
           <template x-if="!rl.featureIC">
-            <div class="text-[9px]" style="color:var(--t3)">Click Refresh to load feature IC.</div>
+            <div class="text-[9px]" style="color:var(--t3)" x-text="opsSectionInactiveMsg('feature_ic')"></div>
           </template>
         </div>
 
@@ -4373,6 +4938,7 @@
         {id:'notrade',icon:'🚫',label:'Rejections'},
         {id:'ops',icon:'⚙️',label:'Ops'},
         {id:'ibkr',icon:'⚡',label:'IBKR'},
+        {id:'btlab',icon:'🧪',label:'Backtest Lab'},
         {id:'guide',icon:'📖',label:'Guide'},
       ],
 
@@ -4384,7 +4950,9 @@
       dos:{ticker:'',loading:false,data:null,intel:null,error:'',subTab:'decision',showSignals:true,chartPeriod:'6mo',benchPeriod:'1y',chartSignals:[],benchStats:null,benchSummary:null,benchMonthly:null,benchQuarterly:null,benchYearly:null,benchTab:'monthly',buyPrice:'',advice:null,adviceLoading:false,peers:null,peersLoading:false,conviction:null,convictionLoading:false,optionsData:null,optionsLoading:false},
       pf:{loading:false,source:'manual',positions:[],alerts:[],summary:null,corrPreview:null,showAdd:false,addTicker:'',addShares:0,addEntry:0,addStop:0,addT1r:0,addT2r:0,addNotes:'',editTicker:null},
       pfDecision:null,pfDecisionLoading:false,
+      pfEquity:null,pfEquityLoading:false,
       platformExtras:{catalyst:null,pmMemo:null,loading:false},
+      aosMonitors:{rules:[],alerts:[],loading:false},
       ledgerView:{loading:false,loaded:false,rows:[],stats:null,filterStrategy:'',filterDirection:'',filterTicker:'',expanded:false},
       factory:{loading:false,ticker:'SPY',period:'2y',mode:'demo',result:null,detail:null,showDetail:false,sortBy:'score'},
       brief:{loading:false,data:null},
@@ -4394,13 +4962,18 @@
       // Already deleted (true orphans): perfTracker, fundLab, modelFunds, tradeJournal, apiEndpoints, oppScanner, rsData, rsFilter, rejectsData, noTradeData
       benchBT:{period:'5y',benchmark:'SPY',loading:false,data:null,error:''},
       fundMonitor:{loading:false,data:null,console:null,error:'',lastRefresh:null,autoRefreshTimer:null,benchmark:'SPY',activeFund:null},
+      leadersPanel:{loading:false,data:null,error:''},
       pmStrip:{funds:[],lastFetch:0},
       tradeIntel:{loading:false,data:null,error:'',confData:null,mistakesData:null,aiLoading:false,aiError:'',aiReview:null,selectedTradeKey:''},
       ibkr:{connected:false,mode:'paper',host:'127.0.0.1',loading:false,pingResult:null,account:null,positions:[],orderForm:{symbol:'',secType:'STK',action:'BUY',qty:1,orderType:'MKT',limitPrice:'',useBracket:false,stopPrice:'',targetPrice:'',trail:false,trailKind:'percent',trailValue:''},orderResult:null,orderError:'',statusLoading:false,lastRefresh:null,workingBracket:null,bracketArchive:[]},
       ops:{running:false,cycle_count:0,signals_today:0,trades_today:0,circuit_breaker:false,circuit_breaker_reason:'',dry_run:true,components:{}},
       providers:{yfinance:false,regime_router:false,alpaca:{configured:false,connected:false,paper:true}},
       opsDetail:{},
-      today7:{regime:null,top_ranked:[],filter_funnel:null,avoid_list:[],tradeability:'',what_changed:[],event_risks:[],best_family:null,pulse:null,narrative:'',ai_narrative:null,ai_loading:false,ai_provider:'',ai_model:'',date:'',trust:{},best_action:null,overlap_warning:null,near_miss:[],no_setup_diagnosis:null,regime_wait_explanation:[],monitor_triggers:[],sleeve_summary:null,execution_readiness:null,evidence_badges:null,ai_commentary_open:false},
+      today7:{regime:null,top_ranked:[],filter_funnel:null,avoid_list:[],tradeability:'',what_changed:[],event_risks:[],best_family:null,pulse:null,narrative:'',ai_narrative:null,ai_loading:false,ai_provider:'',ai_model:'',date:'',trust:{},best_action:null,overlap_warning:null,near_miss:[],no_setup_diagnosis:null,regime_wait_explanation:[],monitor_triggers:[],sleeve_summary:null,execution_readiness:null,evidence_badges:null,cross_asset_confirmation:null,ai_commentary_open:false},
+      btLab:{ticker:'AAPL',strategy:'all',period:'6mo',loading:false,data:null,walkForward:true},
+      dosWorkstation:{loading:false,data:null},
+      pfScenario:{loading:false,list:[],result:null,selected:''},
+      pfRebalanceTargets:'',
       decisionHub:null,
       opps:[],oppsSort:'score',
       changelog:[],
@@ -4420,7 +4993,8 @@
       notifyLog:{events:[],discord_configured:false,loading:false},
       scannerHub:{loading:false,data:null,category:null,duration_ms:0,last_run:null,universe:0,error:''},
       rankedOpps:{loading:false,rows:[],actionFilter:'',sectorFilter:'',source:'playbook',bestAction:null,overlapWarning:null,warning:''},
-      flowPanel:{loading:false,data:null,radar:null,error:''},
+      flowPanel:{loading:false,data:null,radar:null,decision:null,error:''},
+      opsConsole:{loading:false,data:null,error:''},
       rsPanel:{loading:false,data:null,error:'',sectorFilter:''},
       rejectionsPanel:{loading:false,data:null,error:'',regimeReasons:[]},
       cmd:{
@@ -4454,7 +5028,7 @@
         // Phase 2 — secondary panels (staggered)
         setTimeout(()=>{this.fetchRanked();this.fetchFlow()},600);
         setTimeout(()=>{this.fetchFunds()},1200);
-        setTimeout(()=>{this.fetchDecisionHub();this.fetchPortfolio()},2000);
+        setTimeout(()=>{this.fetchDecisionHub();this.fetchPortfolio();this.fetchAosMonitors()},2000);
         setInterval(()=>this.fetchDecisionHub(),120000);
         setInterval(()=>this.fetchPortfolio(),180000);
         // Per-strategy realized analytics (cheap; refresh every 10min)
@@ -4678,6 +5252,29 @@
       toggleStar(ticker){this.ccStarred[ticker]=!this.ccStarred[ticker];localStorage.setItem('ccStarred',JSON.stringify(this.ccStarred))},
       toggleLove(ticker){this.ccLoved[ticker]=!this.ccLoved[ticker];localStorage.setItem('ccLoved',JSON.stringify(this.ccLoved))},
       toggleWatchlist(ticker){this.ccWatchlist[ticker]=!this.ccWatchlist[ticker];localStorage.setItem('ccWatchlist',JSON.stringify(this.ccWatchlist))},
+      contextDecisionBar(){
+        if(this.tab==='portfolio'&&this.pfDecision&&this.pfDecision.decision_bar)return this.pfDecision.decision_bar;
+        if(this.tab==='funds'&&this.fundMonitor.console&&this.fundMonitor.console.decision_bar)return this.fundMonitor.console.decision_bar;
+        if(this.tab==='dossier'&&this.dos.intel&&this.dos.intel.decision_bar)return this.dos.intel.decision_bar;
+        if(this.decisionHub&&this.decisionHub.decision_bar)return this.decisionHub.decision_bar;
+        return null;
+      },
+      verdictPillClass(v){
+        const m={BUY:'pg',DEPLOY:'pg',ALLOCATE:'pg',TRADE:'pg',HOLD:'pw',WAIT:'pa',WATCH:'pa',REDUCE:'pr',AVOID:'pr',REBALANCE:'pa',PAUSE:'pr'};
+        return m[(v||'').toUpperCase()]||'pw';
+      },
+      async fetchAosMonitors(){
+        this.aosMonitors.loading=true;
+        try{
+          const[r1,r2]=await Promise.all([
+            fetch('/api/v7/monitors',{headers:{'X-API-Key':window._apiKey||'dev-secret-local'}}),
+            fetch('/api/v7/monitors/evaluate',{headers:{'X-API-Key':window._apiKey||'dev-secret-local'}})
+          ]);
+          if(r1.ok){const d=await r1.json();this.aosMonitors.rules=d.monitors||[];}
+          if(r2.ok){const d=await r2.json();this.aosMonitors.alerts=d.alerts||[];}
+        }catch(e){}
+        finally{this.aosMonitors.loading=false}
+      },
       switchTab(t){
         this.tab=t;
         if(t==='today'){this.fetchToday7();}
@@ -4685,13 +5282,14 @@
         if(t==='scanners'){this.fetchScanners();}
         if(t==='portfolio'){this.fetchPortfolio();}
         if(t==='dossier'&&this.dos.ticker){this.fetchDossier();}
-        if(t==='funds'){this.fetchFunds();}
-        if(t==='flow'){this.fetchFlow(true);}
+        if(t==='funds'){this.fetchFunds();this.fetchLeaders();}
+        if(t==='flow'){this.fetchFlow();}
         if(t==='rs'){this.fetchRs();}
         if(t==='notrade'){this.fetchRejections();}
         if(t==='command'){this.fetchCommandBoard();}
-        if(t==='ops'){this.fetchCcStatus();}
+        if(t==='ops'){this.fetchCcStatus();this.fetchOpsConsole();}
         if(t==='ibkr'){this.ibkrFetchStatus();}
+        if(t==='btlab'&&!this.btLab.data&&!this.btLab.loading){/* user clicks Run lab */}
       },
 
       cmdActionColor(action){
@@ -4814,6 +5412,7 @@
         this.dos.subTab=t;
         if(t==='technicals')this.$nextTick(()=>{this.renderDossierChart();this.renderBenchChart()});
         if(t==='options'&&!this.dos.optionsData)this.fetchDosOptions();
+        if(t==='workstation'&&this.dos.ticker&&!this.dosWorkstation.data)this.fetchQuoteWorkstation();
       },
       async fetchDosOptions(){
         const tk=(this.dos.ticker||'').trim().toUpperCase();
@@ -4824,6 +5423,39 @@
           this.dos.optionsData=r.ok?await r.json():null;
         }catch(e){console.warn('options',e);this.dos.optionsData=null}
         finally{this.dos.optionsLoading=false}
+      },
+      flowIbkrDraft(c){
+        const tk=(c&&c.underlying||'').toUpperCase();
+        if(!tk)return;
+        const cp=(c.call_put||c.options_detail?.call_put||'C').toString().toUpperCase();
+        const isPut=cp==='P'||cp==='PUT';
+        this.dos.ticker=tk;
+        this.ibkr.orderForm={...this.ibkr.orderForm,symbol:tk,secType:'STK',action:isPut?'SELL':'BUY',qty:this.dosSizeShares()||1,orderType:'MKT',limitPrice:'',useBracket:false};
+        alert('Flow → IBKR: paper order draft loaded — review in IBKR tab.');
+        this.switchTab('ibkr');
+      },
+      opsSectionActive(key){
+        const s=this.opsConsole&&this.opsConsole.data&&this.opsConsole.data.section_states;
+        return s&&s[key]&&s[key].state==='active';
+      },
+      opsSectionShowAdvanced(){
+        const s=this.opsConsole&&this.opsConsole.data&&this.opsConsole.data.section_states;
+        if(!s)return !!(this.selfLearn.status||this.risk.summary||this.exec.metrics);
+        return Object.values(s).some(v=>v&&v.state==='active');
+      },
+      opsSectionInactiveMsg(key){
+        const s=this.opsConsole&&this.opsConsole.data&&this.opsConsole.data.section_states;
+        if(s&&s[key])return (s[key].label||'inactive')+': '+(s[key].detail||'');
+        return 'Start engine or refresh ops console for evidence.';
+      },
+      async fetchLeaders(){
+        this.leadersPanel.loading=true;this.leadersPanel.error='';
+        try{
+          const r=await this.ccFetch('/api/v7/leaders-tracker?limit=12',{retries:2,backoff:500});
+          if(!r||!r.ok)throw new Error('HTTP '+(r?r.status:'fail'));
+          this.leadersPanel.data=await r.json();
+        }catch(e){this.leadersPanel.error=e.message||'leaders failed';this.leadersPanel.data=null}
+        finally{this.leadersPanel.loading=false}
       },
       dosIbkrPaperDraft(){
         const tk=(this.dos.ticker||this.dos.data?.symbol||'').toUpperCase();
@@ -4906,6 +5538,12 @@
               });
             },4000);
           }
+          try{
+            const now=Date.now();
+            if((this.pf.positions||[]).length>0 && (now - (this.histVar.last_run||0)) > 300000){
+              this.fetchHistVar();
+            }
+          }catch(_){}
         }catch(e){console.warn('Portfolio fetch error:',e)}finally{this.pf.loading=false}
         this.fetchPortfolioDecision();
       },
@@ -4916,6 +5554,83 @@
           if(r&&r.ok)this.pfDecision=await r.json();
         }catch(e){console.warn('portfolio-decision',e)}
         finally{this.pfDecisionLoading=false}
+      },
+      async fetchPortfolioEquity(){
+        this.pfEquityLoading=true;
+        try{
+          const r=await this.ccFetch('/api/v7/portfolio-equity?period=6mo&benchmark=SPY',{retries:2,backoff:500});
+          if(r&&r.ok)this.pfEquity=await r.json();
+        }catch(e){console.warn('portfolio-equity',e)}
+        finally{this.pfEquityLoading=false}
+      },
+      async runRebalanceSim(policy,targetsStr){
+        let u='/api/v7/rebalance-sim?policy='+encodeURIComponent(policy||'equal_weight');
+        if(targetsStr)u+='&targets='+encodeURIComponent(targetsStr);
+        try{
+          const r=await this.ccFetch(u,{method:'POST',retries:2,backoff:400});
+          if(r&&r.ok){
+            const sim=await r.json();
+            if(this.pfDecision)this.pfDecision={...this.pfDecision,rebalance_sim:sim};
+          }
+        }catch(e){console.warn('rebalance-sim',e)}
+      },
+      async fetchScenarioList(){
+        try{
+          const r=await fetch('/api/scenarios');
+          if(r.ok){const d=await r.json();this.pfScenario.list=d.scenarios||[];}
+        }catch(e){console.warn('scenarios list',e)}
+      },
+      async runScenarioShock(key){
+        if(!key)return;
+        this.pfScenario.loading=true;this.pfScenario.selected=key;this.pfScenario.result=null;
+        try{
+          const r=await this.ccFetch('/api/v7/scenario-shock?scenario_key='+encodeURIComponent(key),{method:'POST',retries:2,backoff:600});
+          if(r&&r.ok)this.pfScenario.result=await r.json();
+        }catch(e){console.warn('scenario-shock',e)}
+        finally{this.pfScenario.loading=false}
+      },
+      async fetchBacktestLab(){
+        if(!this.btLab.ticker)return;
+        this.btLab.loading=true;
+        try{
+          const u='/api/v7/backtest-lab?ticker='+encodeURIComponent(this.btLab.ticker)+'&strategy='+encodeURIComponent(this.btLab.strategy)+'&period='+encodeURIComponent(this.btLab.period)+'&walk_forward='+(this.btLab.walkForward?'true':'false');
+          const r=await this.ccFetch(u,{retries:2,backoff:800});
+          if(r&&r.ok){
+            this.btLab.data=await r.json();
+            this.bt.result=this.btLab.data.core_backtest||null;
+            this.$nextTick(()=>this.renderBtlabChart());
+          }
+        }catch(e){console.warn('backtest-lab',e)}
+        finally{this.btLab.loading=false}
+      },
+      renderBtlabChart(){
+        const ec=this.btLab.data&&this.btLab.data.core_backtest&&this.btLab.data.core_backtest.equity_chart;
+        if(!ec||!ec.bh||!ec.bh.length)return;
+        const el=document.getElementById('btlab-equity-chart');
+        if(!el||typeof LightweightCharts==='undefined')return;
+        el.innerHTML='';
+        try{
+          const chart=LightweightCharts.createChart(el,{width:el.clientWidth,height:220,layout:{background:{color:'#161b22'},textColor:'#8b949e',fontSize:10},grid:{vertLines:{color:'#21262d'},horzLines:{color:'#21262d'}},crosshair:{mode:0},rightPriceScale:{borderColor:'#21262d'},timeScale:{borderColor:'#21262d',timeVisible:false}});
+          if(ec.strategy&&ec.strategy.length){
+            const sl=chart.addLineSeries({color:'#00d4aa',lineWidth:2,priceLineVisible:false,lastValueVisible:true,title:'Strategy'});
+            sl.setData(ec.strategy);
+            if(ec.signals&&ec.signals.length)sl.setMarkers(ec.signals);
+          }
+          const bl=chart.addLineSeries({color:'#fbbf24',lineWidth:1,priceLineVisible:false,lastValueVisible:true,title:'Buy&Hold',lineStyle:2});
+          bl.setData(ec.bh);
+          chart.timeScale().fitContent();
+          new ResizeObserver(()=>{chart.applyOptions({width:el.clientWidth})}).observe(el);
+        }catch(e){console.warn('btlab chart',e)}
+      },
+      async fetchQuoteWorkstation(){
+        const tk=(this.dos.ticker||'').trim().toUpperCase();
+        if(!tk)return;
+        this.dosWorkstation.loading=true;
+        try{
+          const r=await this.ccFetch('/api/v7/quote-workstation/'+encodeURIComponent(tk),{retries:2,backoff:600});
+          if(r&&r.ok)this.dosWorkstation.data=await r.json();
+        }catch(e){console.warn('quote-workstation',e)}
+        finally{this.dosWorkstation.loading=false}
       },
       async fetchCatalystCalendar(){
         this.platformExtras.loading=true;
@@ -4934,14 +5649,6 @@
           alert(this.platformExtras.pmMemo.one_liner||'Memo ready — see console');
           console.log(this.platformExtras.pmMemo.markdown);
         }catch(e){console.warn('pm-memo',e)}
-      },
-        // Auto-trigger historical VaR after positions hydrate (throttled to 5min)
-        try{
-          const now=Date.now();
-          if((this.pf.positions||[]).length>0 && (now - (this.histVar.last_run||0)) > 300000){
-            this.fetchHistVar();
-          }
-        }catch(_){ }
       },
       async fetchLedgerView(force=false){
         if(this.ledgerView.loading)return;
@@ -5671,7 +6378,7 @@
         return curve.map((v,i)=>`${i*4},${18-Math.round(((v-mn)/rg)*16)}`).join(' ');
       },
       async fetchToday7(){
-        try{const r=await this.ccFetch('/api/v7/today',{retries:4,backoff:600});if(!r||!r.ok)throw 0;const d=await r.json();this.today7.regime=d.market_regime||null;this.today7.top_ranked=d.top_5||[];this.today7.best_action=d.best_action||null;this.today7.overlap_warning=d.overlap_warning||null;this.today7.near_miss=d.near_miss||[];this.today7.no_setup_diagnosis=d.no_setup_diagnosis||null;this.today7.regime_wait_explanation=d.regime_wait_explanation||[];this.today7.monitor_triggers=d.monitor_triggers||[];this.today7.sleeve_summary=d.sleeve_summary||null;this.today7.execution_readiness=d.execution_readiness||d.best_action?.execution_readiness||null;this.today7.evidence_badges=d.evidence_badges||null;this.today7.filter_funnel=d.filter_funnel||null;this.today7.avoid_list=(d.avoid_now||[]).length?(d.avoid_now||[]):(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'—',reason:a,category:'regime'}:a);this.today7.tradeability=(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{};
+        try{const r=await this.ccFetch('/api/v7/today',{retries:4,backoff:600});if(!r||!r.ok)throw 0;const d=await r.json();this.today7.regime=d.market_regime||null;this.today7.top_ranked=d.top_5||[];this.today7.best_action=d.best_action||null;this.today7.overlap_warning=d.overlap_warning||null;this.today7.near_miss=d.near_miss||[];this.today7.no_setup_diagnosis=d.no_setup_diagnosis||null;this.today7.regime_wait_explanation=d.regime_wait_explanation||[];this.today7.monitor_triggers=d.monitor_triggers||[];this.today7.sleeve_summary=d.sleeve_summary||null;this.today7.execution_readiness=d.execution_readiness||d.best_action?.execution_readiness||null;this.today7.evidence_badges=d.evidence_badges||null;this.today7.cross_asset_confirmation=d.cross_asset_confirmation||null;this.today7.filter_funnel=d.filter_funnel||null;this.today7.avoid_list=(d.avoid_now||[]).length?(d.avoid_now||[]):(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'—',reason:a,category:'regime'}:a);this.today7.tradeability=(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{};
           // DAY-OVER-DAY DIFF — tag NEW vs CARRYOVER vs MOVED
           try{
             const todayKey=(d.date||new Date().toISOString().slice(0,10));
@@ -5771,24 +6478,31 @@
       },
 
       flowPanelCount(){
+        const d=this.flowPanel&&this.flowPanel.decision;
+        if(d&&d.count_live)return String(d.count_live);
         const radar=(this.flowPanel&&this.flowPanel.radar)||{};
-        const n=(radar.candidates||[]).length;
-        if(n>0)return String(n);
-        const flow=(this.flowPanel&&this.flowPanel.data)||{};
-        return String((flow.unusual_activity||[]).length||0);
+        return String((radar.candidates||[]).length||0);
       },
 
-      async fetchFlow(refresh=false){
+      async fetchFlow(){
         this.flowPanel.loading=true;this.flowPanel.error='';
         try{
-          const [radarR,flowR]=await Promise.allSettled([
-            fetch('/api/v1/options-radar/top?limit=15'),
-            fetch('/api/v7/playbook/flow?limit=15'+(refresh?'&refresh=true':'')),
-          ]);
-          if(radarR.status==='fulfilled'&&radarR.value.ok){this.flowPanel.radar=await radarR.value.json();}
-          if(flowR.status==='fulfilled'&&flowR.value.ok){this.flowPanel.data=await flowR.value.json();}
-        }catch(e){this.flowPanel.error=e.message||'flow fetch failed'}
+          const r=await this.ccFetch('/api/v7/flow-decision?limit=20',{retries:2,backoff:1000});
+          if(!r||!r.ok)throw new Error('HTTP '+(r?r.status:'fail'));
+          this.flowPanel.decision=await r.json();
+          this.flowPanel.radar={candidates:this.flowPanel.decision.live_flow||[],trust:this.flowPanel.decision.freshness||{}};
+        }catch(e){this.flowPanel.error=e.message||'flow fetch failed';this.flowPanel.decision=null}
         finally{this.flowPanel.loading=false}
+      },
+
+      async fetchOpsConsole(){
+        this.opsConsole.loading=true;this.opsConsole.error='';
+        try{
+          const r=await this.ccFetch('/api/v7/ops-console',{retries:2,backoff:600});
+          if(!r||!r.ok)throw new Error('HTTP '+(r?r.status:'fail'));
+          this.opsConsole.data=await r.json();
+        }catch(e){this.opsConsole.error=e.message||'ops console failed'}
+        finally{this.opsConsole.loading=false}
       },
 
       async fetchFunds(){
@@ -5816,10 +6530,10 @@
       async fetchRs(){
         this.rsPanel.loading=true;this.rsPanel.error='';
         try{
-          let u='/api/v7/playbook/rs-ranking?limit=30';
+          let u='/api/v7/rs-decision?limit=40';
           if(this.rsPanel.sectorFilter) u+='&sector='+encodeURIComponent(this.rsPanel.sectorFilter);
-          const r=await fetch(u);
-          if(!r.ok)throw new Error('HTTP '+r.status);
+          const r=await this.ccFetch(u,{retries:2,backoff:1200});
+          if(!r||!r.ok)throw new Error('HTTP '+(r?r.status:'timeout'));
           this.rsPanel.data=await r.json();
         }catch(e){this.rsPanel.error=e.message||'RS fetch failed';this.rsPanel.data=null}
         finally{this.rsPanel.loading=false}
@@ -5897,7 +6611,7 @@
       async fetchCommandBoard(){
         this.cmd.loading=true;this.cmd.error='';
         try{
-          const r=await fetch('/api/watchlist?limit=40');
+          const r=await fetch('/api/watchlist?limit=60');
           if(!r.ok)throw new Error('HTTP '+r.status);
           const d=await r.json();
           this.cmd.watchlistRows=(d.board||[]).map(row=>({

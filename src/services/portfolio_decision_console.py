@@ -468,8 +468,47 @@ async def build_portfolio_decision(request) -> Dict[str, Any]:
 
     risk_cockpit = build_portfolio_risk_cockpit(positions)
 
+    curve_diagnostics = build_curve_diagnostics_placeholder()
+    try:
+        from src.services.portfolio_equity import build_portfolio_equity_series
+
+        eq = await build_portfolio_equity_series(request, positions, period="6mo")
+        if eq.get("has_series"):
+            curve_diagnostics = {
+                "equity_curve": eq.get("equity_curve"),
+                "benchmark_curve": eq.get("benchmark_curve"),
+                "underwater_curve": eq.get("underwater_curve"),
+                "dates": eq.get("dates"),
+                "total_return_pct": eq.get("total_return_pct"),
+                "benchmark_return_pct": eq.get("benchmark_return_pct"),
+                "active_return_pct": eq.get("active_return_pct"),
+                "rolling": eq.get("rolling"),
+                "brinson": eq.get("brinson"),
+                "rolling_sharpe_note": f"20d Sharpe {eq.get('rolling', {}).get('sharpe_20d', '—')}",
+                "rolling_alpha_note": f"20d α {eq.get('rolling', {}).get('alpha_20d_ann_pct', '—')}% ann",
+                "evidence": eq.get("evidence"),
+            }
+    except Exception:
+        logger.debug("portfolio equity series failed", exc_info=True)
+
+    from src.services.decision_bar import bar_from_portfolio
+    from src.services.monitors_store import evaluate_monitors
+    from src.services.rebalance_sim import simulate_rebalance
+
+    rebalance_urgency = allocator_summary.get("rebalance_suggested", False)
+    decision_bar = bar_from_portfolio(
+        allocator_summary,
+        regime_fit,
+        rebalance_urgency=rebalance_urgency,
+    )
+    rebalance_sim = simulate_rebalance(positions)
+    monitor_alerts = evaluate_monitors(today=today, positions=positions)
+
     return {
         "as_of": datetime.now(timezone.utc).isoformat() + "Z",
+        "decision_bar": decision_bar,
+        "rebalance_sim": rebalance_sim,
+        "monitor_alerts": monitor_alerts,
         "risk_cockpit": risk_cockpit,
         "allocator_summary": allocator_summary,
         "execution": execution,
@@ -480,7 +519,8 @@ async def build_portfolio_decision(request) -> Dict[str, Any]:
         "sleeve_monitor": build_sleeve_monitor(fund_console),
         "fund_allocator": fund_allocator,
         "action_needed": action_needed,
-        "curve_diagnostics": build_curve_diagnostics_placeholder(),
+        "curve_diagnostics": curve_diagnostics,
+        "brinson_attribution": curve_diagnostics.get("brinson") if isinstance(curve_diagnostics, dict) else None,
         "why_now": build_why_now(allocator_summary, regime_fit),
         "evidence": {
             "basis": allocator_summary.get("evidence_quality"),

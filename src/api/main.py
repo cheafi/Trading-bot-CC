@@ -748,6 +748,8 @@ async def _startup_prewarm():
 @asynccontextmanager
 async def _lifespan(app):  # noqa: ARG001
     global _breakout_monitor_task
+    if not getattr(app.state, "startup_time", None):
+        app.state.startup_time = datetime.now(timezone.utc)
     # Seed self-learning default files (no-op if already exist)
     try:
         from src.engines.self_learning import (
@@ -6081,6 +6083,31 @@ try:
     app.include_router(platform_extras_router)
 except Exception:
     logger.exception("[Router] Failed to load platform_extras router")
+
+try:
+    from src.api.routers.monitors import router as monitors_router
+
+    app.include_router(monitors_router)
+except Exception:
+    logger.exception("[Router] Failed to load monitors router")
+
+try:
+    from src.api.routers.aos import router as aos_router
+
+    app.include_router(aos_router)
+except Exception:
+    logger.exception("[Router] Failed to load aos router")
+
+try:
+    from src.api.routers.platform_p2 import router as platform_p2_router
+
+    app.include_router(platform_p2_router)
+    logger.info(
+        "[Router] platform_p2 loaded (%d routes)",
+        len(platform_p2_router.routes),
+    )
+except Exception:
+    logger.exception("[Router] Failed to load platform_p2 router")
 
 
 if __name__ == "__main__":

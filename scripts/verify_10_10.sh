@@ -98,10 +98,20 @@ check_http "/api/v7/stock-intel/AAPL" "$BASE/api/v7/stock-intel/AAPL" 120
 check_http "/api/v7/decision-hub" "$BASE/api/v7/decision-hub" 60
 check_http "/api/v7/portfolio-decision" "$BASE/api/v7/portfolio-decision" 45
 check_http "/api/v7/catalyst-calendar" "$BASE/api/v7/catalyst-calendar" 30
+check_http "/api/v7/stock-universe" "$BASE/api/v7/stock-universe" 15
+check_http "/api/v7/monitors" "$BASE/api/v7/monitors" 15
+check_http "/api/v7/leaders-tracker" "$BASE/api/v7/leaders-tracker" 15
 check_http "/api/v7/portfolio-risk-cockpit" "$BASE/api/v7/portfolio-risk-cockpit" 30
+check_http "/api/v7/backtest-lab" "$BASE/api/v7/backtest-lab?ticker=AAPL&period=6mo&strategy=momentum" 120
+check_http "/api/v7/quote-workstation/AAPL" "$BASE/api/v7/quote-workstation/AAPL" 90
+check_http "/api/v7/portfolio-equity" "$BASE/api/v7/portfolio-equity?period=3mo" 60
+check_http "/api/v7/cross-asset-confirmation" "$BASE/api/v7/cross-asset-confirmation" 45
+check_http "/api/v7/rs-decision" "$BASE/api/v7/rs-decision?limit=10" 90
+check_http "/api/v7/flow-decision" "$BASE/api/v7/flow-decision?limit=5" 60
+check_http "/api/v7/ops-console" "$BASE/api/v7/ops-console" 45
 
 # 5) Unit tests (host) — no pytest required
-if python3 -m unittest tests.test_best_action tests.test_today_insights tests.test_execution_readiness tests.test_fund_manager_console tests.test_stock_intel tests.test_decision_hub tests.test_portfolio_decision_console tests.test_avoid_now_engine -q 2>/dev/null; then
+if python3 -m unittest tests.test_best_action tests.test_today_insights tests.test_execution_readiness tests.test_fund_manager_console tests.test_stock_intel tests.test_decision_hub tests.test_portfolio_decision_console tests.test_avoid_now_engine tests.test_platform_p2 tests.test_flow_ops_console tests.test_rs_decision_surface -q 2>/dev/null; then
   ok "unittest best_action today_insights execution_readiness stock_intel"
 else
   bad "unittest suite"

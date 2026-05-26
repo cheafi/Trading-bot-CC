@@ -124,7 +124,7 @@ async def portfolio_holdings():
 
 @router.post("/api/portfolio/seed-demo", tags=["portfolio"])
 async def portfolio_seed_demo(request: Request):
-    """Seed a 3-position demo portfolio (AAPL/MSFT/NVDA) for instant HISTSIM demo.
+    """Seed a diversified demo portfolio for instant HISTSIM / portfolio console demo.
 
     Idempotent — overwrites any existing holdings. Pulls live prices via
     market_data so cost basis is realistic.
@@ -132,11 +132,9 @@ async def portfolio_seed_demo(request: Request):
     global _user_portfolio
     now = datetime.now(timezone.utc).isoformat() + "Z"
     mds = request.app.state.market_data
-    demo = [
-        {"ticker": "AAPL", "shares": 100},
-        {"ticker": "MSFT", "shares": 50},
-        {"ticker": "NVDA", "shares": 30},
-    ]
+    from src.core.stock_universe import DEMO_PORTFOLIO_POSITIONS
+
+    demo = DEMO_PORTFOLIO_POSITIONS
     enriched = []
     for d in demo:
         t = d["ticker"]

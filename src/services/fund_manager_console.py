@@ -465,6 +465,9 @@ def enrich_fund_card(
     out["performance_evidence"] = build_performance_evidence(
         out, period=period, benchmark_return_pct=benchmark_return_pct
     )
+    from src.services.decision_bar import enrich_curve_diagnostics
+
+    out["curve_diagnostics"] = enrich_curve_diagnostics(out)
     out["evidence_quality"] = {
         "badge": out["performance_evidence"]["evidence"],
         "mode": out["performance_evidence"]["mode"],
@@ -678,19 +681,27 @@ def build_fund_console_payload(
     comparison = build_comparison_table(enriched)
     controller = next((c for c in enriched if c.get("controls_capital")), None)
     regime_display = market_regime_label or regime_resolved
+    allocator_decision = build_allocator_decision_strip(
+        enriched,
+        regime_display=regime_display,
+        tradeability=tradeability,
+        best_action_liner=best_action_liner,
+        benchmark_return_pct=benchmark_return_pct,
+    )
+    from src.services.decision_bar import bar_from_funds
+
+    decision_bar = bar_from_funds(
+        allocator_decision,
+        active_sleeve=(controller or {}).get("display_name"),
+    )
     return {
         "regime": regime_resolved,
         "regime_display": regime_display,
         "benchmark": benchmark,
         "benchmark_return_pct": benchmark_return_pct,
         "period": period,
-        "allocator_decision": build_allocator_decision_strip(
-            enriched,
-            regime_display=regime_display,
-            tradeability=tradeability,
-            best_action_liner=best_action_liner,
-            benchmark_return_pct=benchmark_return_pct,
-        ),
+        "allocator_decision": allocator_decision,
+        "decision_bar": decision_bar,
         "cards": enriched,
         "allocation": allocation,
         "comparison_table": comparison,

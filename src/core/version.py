@@ -23,6 +23,8 @@ DOCKER_SERVICE_COUNT = (
 # ── Supported Universe ────────────────────────────────────────
 UNIVERSE_SUMMARY = {
     "us_equities": 2751,
+    "core_watchlist_us": 86,
+    "rs_universe_us": 58,
     "hk": 78,
     "japan": 60,
     "korea_tw_au_in": 51,

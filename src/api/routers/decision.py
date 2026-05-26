@@ -270,6 +270,41 @@ def _setup_family(strategy: str) -> str:
     return families.get(strategy, strategy.title())
 
 
+async def _cross_asset_for_today(
+    request: Request,
+    *,
+    market_regime: Dict[str, Any],
+    should_trade: bool,
+) -> Dict[str, Any]:
+    import asyncio
+
+    try:
+        from src.services.cross_asset_confirmation import (
+            build_cross_asset_confirmation,
+        )
+
+        return await asyncio.wait_for(
+            build_cross_asset_confirmation(
+                request,
+                regime=market_regime,
+                should_trade=should_trade,
+            ),
+            timeout=12.0,
+        )
+    except asyncio.TimeoutError:
+        logger.debug("cross_asset_confirmation timed out")
+        return {
+            "alignment": "unknown",
+            "summary": "Cross-asset proxies slow — retry",
+            "assets": [],
+            "confirms": [],
+            "conflicts": [],
+        }
+    except Exception:
+        logger.debug("cross_asset_confirmation failed", exc_info=True)
+        return {"alignment": "unknown", "summary": "Cross-asset data unavailable"}
+
+
 # ══════════════════════════════════════════════════════════════════════
 # /api/v7/today — Decision Homepage
 # ══════════════════════════════════════════════════════════════════════
@@ -304,6 +339,7 @@ async def today_summary(request: Request):
     confidence = getattr(regime_state, "confidence", 0.5)
     vix_val = getattr(regime_state, "vix", 18.0)
     breadth = getattr(regime_state, "breadth_pct", 0.50)
+    breadth_val = round(float(breadth) * 100) if float(breadth) <= 1.0 else round(float(breadth))
     entropy = getattr(regime_state, "entropy", 1.0)
 
     # Map regime fields properly
@@ -819,6 +855,17 @@ async def today_summary(request: Request):
             scanner_degraded=scanner_degraded,
             regime_synthetic=bool(getattr(request.app.state, "regime_synthetic", False)),
             ai_powered=False,
+        ),
+        "cross_asset_confirmation": await _cross_asset_for_today(
+            request,
+            market_regime={
+                "trend": trend_label,
+                "vix": round(vix_val, 1),
+                "breadth": round(breadth * 100),
+                "should_trade": should_trade,
+                "tradeability": tradeability,
+            },
+            should_trade=should_trade,
         ),
         "trust": {
             "mode": "LIVE" if should_trade else "PAPER",

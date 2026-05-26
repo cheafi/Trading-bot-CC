@@ -30,6 +30,10 @@ async def build_catalyst_calendar(
             ]
         except Exception:
             pass
+        if not symbols:
+            from src.core.stock_universe import CORE_WATCHLIST
+
+            symbols = CORE_WATCHLIST[:25]
 
     mds = getattr(request.app.state, "market_data", None)
     events: List[Dict[str, Any]] = []

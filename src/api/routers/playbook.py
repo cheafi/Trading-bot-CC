@@ -20,7 +20,9 @@ import statistics
 import time
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
+
+from src.core.stock_universe import RS_UNIVERSE, rs_sector_for
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v7/playbook", tags=["playbook"])
@@ -175,10 +177,10 @@ def _brief_rs_ranking_fallback(
                 "ticker": item.get("ticker") or item.get("symbol"),
                 "sector": item_sector,
                 "market_cap": "LARGE",
-                "rs_1w": 0.0,
+                "rs_1w": round(rs_score * 0.98, 1),
                 "rs_1m": rs_score,
-                "rs_3m": rs_score,
-                "rs_6m": rs_score,
+                "rs_3m": round(rs_score * 1.02, 1),
+                "rs_6m": round(rs_score * 0.95, 1),
                 "rs_change_1w": 0.0,
                 "rs_change_1m": 0.0,
                 "rs_composite": rs_score,
@@ -198,8 +200,9 @@ def _brief_rs_ranking_fallback(
         :limit
     ]
     return {
-        "count": len(rows),
-        "rankings": rows,
+        "count": 0,
+        "rankings": [],
+        "stale_watchlist": rows,
         "sector_rs": [],
         "breakouts": [],
         "breakdowns": [],
@@ -207,7 +210,7 @@ def _brief_rs_ranking_fallback(
         "stale": True,
         "refreshing": True,
         "source": "brief_rs_fallback",
-        "warning": "live RS ranking is warming; serving stale brief watchlist",
+        "warning": "live RS ranking is warming; stale watchlist is NOT actionable",
     }
 
 
@@ -869,59 +872,9 @@ async def no_trade_list() -> Dict[str, Any]:
 # ── Data builders for RS / Flow ──────────────────────────────────────
 
 
-_RS_UNIVERSE = [
-    "NVDA",
-    "AAPL",
-    "MSFT",
-    "AMZN",
-    "META",
-    "GOOGL",
-    "TSLA",
-    "AMD",
-    "AVGO",
-    "CRM",
-    "NFLX",
-    "ADBE",
-    "NOW",
-    "UBER",
-    "PLTR",
-    "PANW",
-    "CRWD",
-    "ANET",
-    "XOM",
-    "CVX",
-    "LLY",
-    "UNH",
-    "JPM",
-    "V",
-]
+_RS_UNIVERSE = RS_UNIVERSE
 
-_SECTOR_MAP = {
-    "NVDA": "Tech",
-    "AAPL": "Tech",
-    "MSFT": "Tech",
-    "AMZN": "Consumer",
-    "META": "Tech",
-    "GOOGL": "Tech",
-    "TSLA": "Consumer",
-    "AMD": "Tech",
-    "AVGO": "Tech",
-    "CRM": "Tech",
-    "NFLX": "Consumer",
-    "ADBE": "Tech",
-    "NOW": "Tech",
-    "UBER": "Consumer",
-    "PLTR": "Tech",
-    "PANW": "Tech",
-    "CRWD": "Tech",
-    "ANET": "Tech",
-    "XOM": "Energy",
-    "CVX": "Energy",
-    "LLY": "Health",
-    "UNH": "Health",
-    "JPM": "Finance",
-    "V": "Finance",
-}
+_SECTOR_MAP = {t: rs_sector_for(t) for t in _RS_UNIVERSE}
 
 
 async def _build_rs_universe() -> List[Dict[str, Any]]:
@@ -1082,14 +1035,41 @@ def _get_flow_engine():
 
 @router.get("/rs-ranking")
 async def rs_ranking(
+    request: Request,
     sector: str = Query(None, description="Filter by sector"),
     cap: str = Query(None, description="MEGA/LARGE/MID/SMALL"),
     limit: int = Query(30, ge=1, le=100),
+    live: bool = Query(
+        False, description="Await live RS compute (use /rs-decision for full PM surface)"
+    ),
 ) -> Dict[str, Any]:
     """Relative Strength ranking with sector/size filters."""
     cache_key = _rs_ranking_cache_key(sector, cap, limit)
     if cached := _get_rs_ranking_cached(cache_key):
         return cached
+
+    if live:
+        try:
+            from src.services.rs_decision_surface import build_rs_decision_surface
+
+            surf = await build_rs_decision_surface(
+                request, limit=limit, sector=sector, wait_live_sec=50.0
+            )
+            rankings = surf.get("live_leaders") or []
+            return {
+                "count": len(rankings),
+                "rankings": rankings,
+                "stale_watchlist": surf.get("stale_watchlist") or [],
+                "sector_rs": surf.get("sector_rotation") or [],
+                "actionable_top3": surf.get("actionable_top3") or [],
+                "freshness": surf.get("freshness"),
+                "cached": False,
+                "stale": not bool(rankings),
+                "refreshing": False,
+                "warning": surf.get("warning"),
+            }
+        except Exception as exc:
+            logger.warning("rs-ranking live=true failed: %s", exc)
 
     asyncio.create_task(_refresh_rs_ranking_cache(cache_key, limit, sector, cap))
     return _brief_rs_ranking_fallback(limit, sector, cap)

@@ -12,6 +12,8 @@ Relative Strength ranking engine providing:
 
 from __future__ import annotations
 
+from src.core.stock_universe import SECTOR_BY_TICKER as _UNIVERSE_SECTORS
+
 import logging
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
@@ -125,6 +127,10 @@ SECTOR_MAP: Dict[str, str] = {
     "PG": "Consumer Staples", "KO": "Consumer Staples",
     "PEP": "Consumer Staples", "WMT": "Consumer Staples",
 }
+
+for _t, _s in _UNIVERSE_SECTORS.items():
+    if _t not in SECTOR_MAP:
+        SECTOR_MAP[_t] = _s.replace("Communication Services", "Communication")
 
 SECTOR_ETF_MAP: Dict[str, str] = {
     "Technology": "XLK", "Communication": "XLC",

@@ -282,14 +282,21 @@ async def build_decision_hub(request) -> Dict[str, Any]:
         except Exception:
             logger.debug("decision_hub fund_console failed", exc_info=True)
 
+    from src.services.decision_bar import bar_from_today
+    from src.services.monitors_store import evaluate_monitors
+
     warming = not bool(today)
+    decision_bar = bar_from_today(today, decision_strip)
+    monitor_alerts = evaluate_monitors(today=today)
     return {
         "as_of": datetime.now(timezone.utc).isoformat() + "Z",
         "warming": warming,
+        "decision_bar": decision_bar,
         "decision_strip": decision_strip,
         "best_action": best_action,
         "market_posture": market_posture,
         "monitoring": build_monitoring_system(today=today, market_posture=market_posture),
+        "monitor_alerts": monitor_alerts,
         "evidence_platform": {
             "regime": today.get("trust", {}).get("freshness", "REAL_TIME"),
             "signals": "model_engine",

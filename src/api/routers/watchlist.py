@@ -27,13 +27,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
 
-# ---------------------------------------------------------------------------
+from src.core.stock_universe import POPULAR_TICKERS
+
 # Popular fallback tickers for Command-K empty-state
-# ---------------------------------------------------------------------------
-_POPULAR = [
-    "NVDA", "AAPL", "MSFT", "TSLA", "META",
-    "AMZN", "GOOGL", "AMD", "SPY", "QQQ",
-]
+_POPULAR = POPULAR_TICKERS
 
 # Simple in-process cache: {ticker: (timestamp, card)}
 _CARD_CACHE: Dict[str, tuple[float, Dict]] = {}

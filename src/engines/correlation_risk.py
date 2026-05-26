@@ -14,52 +14,20 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 
-# ── Sector mapping (top tickers) ────────────────────────────────────
-_SECTOR_MAP: dict[str, str] = {
-    "AAPL": "Technology",
-    "MSFT": "Technology",
-    "GOOGL": "Technology",
-    "AMZN": "Consumer Discretionary",
-    "TSLA": "Consumer Discretionary",
-    "META": "Technology",
-    "NVDA": "Technology",
-    "AMD": "Technology",
-    "NFLX": "Communication Services",
-    "CRM": "Technology",
-    "JPM": "Financials",
-    "BAC": "Financials",
-    "GS": "Financials",
-    "V": "Financials",
-    "MA": "Financials",
-    "UNH": "Healthcare",
-    "JNJ": "Healthcare",
-    "LLY": "Healthcare",
-    "PFE": "Healthcare",
-    "ABBV": "Healthcare",
-    "XOM": "Energy",
-    "CVX": "Energy",
-    "COP": "Energy",
-    "COST": "Consumer Staples",
-    "WMT": "Consumer Staples",
-    "PG": "Consumer Staples",
-    "KO": "Consumer Staples",
-    "MU": "Technology",
-    "PLTR": "Technology",
-    "AVGO": "Technology",
-    "INTC": "Technology",
-    "QCOM": "Technology",
-    "DIS": "Communication Services",
-    "CMCSA": "Communication Services",
-    "BA": "Industrials",
-    "CAT": "Industrials",
-    "HON": "Industrials",
-    "NEE": "Utilities",
-    "DUK": "Utilities",
-    "SPY": "Index",
-    "QQQ": "Index",
-    "IWM": "Index",
-    "DIA": "Index",
-}
+from src.core.stock_universe import SECTOR_BY_TICKER
+
+# ── Sector mapping (core universe + legacy aliases) ─────────────────
+_SECTOR_MAP: dict[str, str] = dict(SECTOR_BY_TICKER)
+_SECTOR_MAP.update(
+    {
+        "PG": "Consumer Staples",
+        "KO": "Consumer Staples",
+        "NEE": "Utilities",
+        "DUK": "Utilities",
+        "DIA": "Index",
+        "CMCSA": "Communication Services",
+    }
+)
 
 
 def get_sector(ticker: str) -> str:
