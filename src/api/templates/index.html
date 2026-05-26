@@ -3159,6 +3159,7 @@
             <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--amber)">Book equity curve</div>
             <div class="text-[9px]" style="color:var(--t3)" x-text="pfEquity.note||'No holdings — add positions or sync IBKR'"></div>
             <span class="pill text-[7px] pw mt-1" x-text="pfEquity.evidence&&pfEquity.evidence.label||'—'"></span>
+            <button type="button" class="btn-s text-[9px] mt-2" @click="seedDemoPortfolio()" :disabled="pf.loading">Seed demo book</button>
           </div>
         </template>
         <template x-if="pfEquity&&pfEquity.has_series&&(pfEquity.equity_curve||[]).length">
@@ -3180,7 +3181,7 @@
             <div class="text-[7px] mt-1" style="color:var(--t3)" x-text="pfEquity.evidence&&pfEquity.evidence.label"></div>
           </div>
         </template>
-        <template x-if="pfDecision&&pfDecision.curve_diagnostics&&(pfDecision.curve_diagnostics.equity_curve||[]).length">
+        <template x-if="pfDecision&&pfDecision.curve_diagnostics&&(pfDecision.curve_diagnostics.equity_curve||[]).length&&!(pfEquity&&pfEquity.has_series)">
           <div class="card card-p mb-2">
             <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--green)">Book equity vs SPY</div>
             <div class="flex flex-wrap gap-3 items-center text-[9px] mb-2">
@@ -5683,6 +5684,8 @@
           if(!r.ok)throw new Error('HTTP '+r.status);
           const d=await r.json();
           await this.fetchPortfolio();
+          await this.fetchPortfolioDecision();
+          await this.fetchPortfolioEquity();
           this.histVar.last_run=0;
           await this.fetchHistVar();
           alert('✅ Seeded '+d.seeded+' positions.\n\n'+d.next);
