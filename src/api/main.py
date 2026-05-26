@@ -744,12 +744,22 @@ async def _startup_prewarm():
     except Exception as exc:
         logger.warning("[Prewarm] Overview cache fill failed (non-fatal): %s", exc)
 
+    # Warm universe scanner so /api/v7/today is not stuck on empty scan_cache.
+    try:
+        recs, _scores = await _scan_live_signals(40)
+        logger.info("[Prewarm] Scanner cache warm: %d signals", len(recs))
+    except Exception as exc:
+        logger.warning("[Prewarm] Scanner warm failed (non-fatal): %s", exc)
+
 
 @asynccontextmanager
 async def _lifespan(app):  # noqa: ARG001
     global _breakout_monitor_task
     if not getattr(app.state, "startup_time", None):
         app.state.startup_time = datetime.now(timezone.utc)
+    # Share module scanner cache with Today / decision routers (same dict ref).
+    app.state.scan_cache = _scan_cache
+    app.state.scan_watchlist = _SCAN_WATCHLIST
     # Seed self-learning default files (no-op if already exist)
     try:
         from src.engines.self_learning import (

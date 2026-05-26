@@ -1106,6 +1106,11 @@
         <div style="padding:0 12px 8px;display:grid;gap:6px;grid-template-columns:1fr">
           <div class="card card-p">
             <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">Why no setup today?</div>
+            <div x-show="today7.no_setup_diagnosis.scanner_degraded||(today7.trust&&today7.trust.stale)" class="text-[9px] p-2 rounded mb-2" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--amber)">
+              <span class="font-bold">Scanner warming</span> — not a regime veto.
+              <span x-text="today7.no_setup_diagnosis.headline||today7.trust?.reason||'Cache empty; signals appear after scan prewarm.'"></span>
+              <button class="btn-s text-[8px] ml-1" @click="switchTab('scanners');fetchScanners()">Open Discovery</button>
+            </div>
             <div class="grid grid-cols-3 sm:grid-cols-6 gap-2 text-[9px]">
               <template x-for="[k,v] in Object.entries(today7.no_setup_diagnosis.breakdown||{})">
                 <div class="text-center p-1 rounded" style="background:var(--s2)">
@@ -4394,8 +4399,9 @@
         <template x-if="(opsConsole.data?.why_no_signals||[]).length">
           <div class="card card-p">
             <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">Why no signals today?</div>
+            <div x-show="opsConsole.data.why_no_signals.some(w=>w.gate==='failed_freshness'&&(w.count||0)>0)" class="text-[8px] mb-1 p-1 rounded" style="background:rgba(251,191,36,.08);color:var(--amber)">failed_freshness = scanner cache warming, not 7 separate failures.</div>
             <template x-for="w in opsConsole.data.why_no_signals" :key="w.gate">
-              <div class="text-[8px] flex justify-between"><span x-text="w.gate"></span><span class="mono" x-text="w.count||w.note||''"></span></div>
+              <div class="text-[8px] flex justify-between" :class="(w.count||0)===0?'opacity-50':''"><span x-text="w.gate"></span><span class="mono" x-text="w.count||w.note||''"></span></div>
             </template>
           </div>
         </template>

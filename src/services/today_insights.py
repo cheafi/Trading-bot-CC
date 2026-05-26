@@ -201,14 +201,25 @@ def build_no_setup_diagnosis(
         except Exception:
             continue
     total = sum(buckets.values())
+    only_freshness = (
+        scanner_degraded
+        and buckets.get("failed_freshness", 0) >= 1
+        and sum(v for k, v in buckets.items() if k != "failed_freshness") == 0
+    )
+    if only_freshness:
+        headline = (
+            "Scanner cache warming — not a regime veto. "
+            "Wait for prewarm or open Discovery to refresh."
+        )
+    elif total:
+        headline = "No deploy candidate passed action rules"
+    else:
+        headline = "Scanner still warming — diagnosis unavailable"
     return {
         "breakdown": buckets,
         "total_evaluated": total,
-        "headline": (
-            "No deploy candidate passed action rules"
-            if total
-            else "Scanner still warming — diagnosis unavailable"
-        ),
+        "scanner_degraded": scanner_degraded,
+        "headline": headline,
     }
 
 
