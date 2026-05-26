@@ -310,6 +310,11 @@ async def _cross_asset_for_today(
 # ══════════════════════════════════════════════════════════════════════
 
 
+def _scan_cache_has_recs(request: Request) -> bool:
+    sc = getattr(request.app.state, "scan_cache", None) or {}
+    return bool(sc.get("recs"))
+
+
 @router.get("/api/v7/today")
 async def today_summary(request: Request):
     """Decision homepage: regime + top 5 + filter funnel + action guidance.
@@ -320,7 +325,12 @@ async def today_summary(request: Request):
     global _today_cache, _today_cache_ts
     now_ts = time.time()
     if _today_cache and now_ts - _today_cache_ts < _TODAY_CACHE_TTL:
-        return _today_cache
+        trust = _today_cache.get("trust") or {}
+        if trust.get("stale") and _scan_cache_has_recs(request):
+            _today_cache = None
+            _today_cache_ts = 0.0
+        else:
+            return _today_cache
     if _today_lock.locked():
         cached = _cached_today_payload("fresh scan already running")
         if cached:
@@ -441,10 +451,10 @@ async def today_summary(request: Request):
     except Exception as exc:
         logger.debug("Market pulse unavailable: %s", exc)
 
-    # 3. Use scanner cache only — first dashboard load must never start a universe scan
+    # 3. Scanner cache (app.state.scan_cache aliases module _scan_cache from lifespan)
     scanner_degraded = False
     scanner_reason = ""
-    scan_cache = getattr(request.app.state, "scan_cache", {}) or {}
+    scan_cache = getattr(request.app.state, "scan_cache", None) or {}
     scanned = list(scan_cache.get("recs", []))[:50]
     scores = dict(scan_cache.get("scores", {}) or {})
     if not scanned:
@@ -882,8 +892,12 @@ async def today_summary(request: Request):
         },
         "generated_at": now.isoformat() + "Z",
     }
-    _today_cache = payload
-    _today_cache_ts = time.time()
+    if not scanner_degraded:
+        _today_cache = payload
+        _today_cache_ts = time.time()
+    else:
+        _today_cache = None
+        _today_cache_ts = 0.0
     try:
         request.app.state.today_v7_cache = payload
     except Exception:
