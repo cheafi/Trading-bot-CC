@@ -167,8 +167,13 @@ async def ops_console(request: Request):
     from src.api.app_state import get_engine
     from src.services.ops_operator_console import build_ops_operator_console
 
+    from src.core.telemetry import telemetry
+    from src.services.execution_readiness import build_execution_readiness
+    from src.services.ops_operator_console import _read_engine_heartbeat
+
     engine = get_engine(request.app)
     st = getattr(request.app.state, "startup_time", None)
+    startup_iso = st.isoformat() + "Z" if st is not None else None
     if st is not None:
         uptime_s = (datetime.now(timezone.utc) - st).total_seconds()
     else:
@@ -177,24 +182,29 @@ async def ops_console(request: Request):
     minutes = int((uptime_s % 3600) // 60)
     uptime_str = f"{hours}h {minutes}m"
 
+    cb = getattr(engine, "circuit_breaker", None) if engine else None
+    last_cycle = None
+    if engine:
+        last_cycle = getattr(engine, "last_cycle_time", None)
+        if not last_cycle:
+            last_cycle = _read_engine_heartbeat()
+
     eng_snap: dict = {
         "running": bool(getattr(engine, "_running", False)) if engine else False,
         "dry_run": bool(getattr(engine, "dry_run", True)) if engine else True,
-        "cycle_count": int(getattr(engine, "cycle_count", 0)) if engine else 0,
-        "signals_today": int(getattr(engine, "signals_today", 0)) if engine else 0,
-        "trades_today": int(getattr(engine, "trades_today", 0)) if engine else 0,
+        "cycle_count": int(getattr(engine, "_cycle_count", 0)) if engine else 0,
+        "signals_today": (
+            len(getattr(engine, "_signals_today", [])) if engine else 0
+        ),
+        "trades_today": (
+            len(getattr(engine, "_trades_today", [])) if engine else 0
+        ),
         "cached_recommendations": (
             len(getattr(engine, "_cached_recommendations", [])) if engine else 0
         ),
-        "circuit_breaker": bool(
-            getattr(engine, "circuit_breaker_triggered", False)
-        )
-        if engine
-        else False,
-        "circuit_breaker_reason": str(
-            getattr(engine, "circuit_breaker_reason", "") or ""
-        ),
-        "last_cycle": str(getattr(engine, "last_cycle_time", "") or "") or None,
+        "circuit_breaker": bool(getattr(cb, "triggered", False)) if cb else False,
+        "circuit_breaker_reason": str(getattr(cb, "trigger_reason", "") or ""),
+        "last_cycle": str(last_cycle) if last_cycle else None,
     }
 
     t0 = _time.monotonic()
@@ -214,11 +224,35 @@ async def ops_console(request: Request):
         "engine": eng_snap,
         "latency": {"regime_ms": regime_ms},
     }
+    from src.services.ibkr_service import get_ibkr_service
+
+    ibkr_st = get_ibkr_service().status()
+    exec_ready = build_execution_readiness(
+        ibkr_connected=bool(ibkr_st.get("connected")),
+        ibkr_mode=ibkr_st.get("mode") or "paper",
+        engine_running=eng_snap["running"],
+        circuit_breaker=eng_snap["circuit_breaker"],
+    )
+
+    if not eng_snap["running"]:
+        try:
+            from src.services.platform_error_log import log_engine_stopped
+
+            log_engine_stopped(
+                cycle_count=int(eng_snap.get("cycle_count") or 0),
+                cached_recs=int(eng_snap.get("cached_recommendations") or 0),
+            )
+        except Exception:
+            logger.debug("platform error log append failed", exc_info=True)
 
     return sanitize_for_json(
         build_ops_operator_console(
             ops_status=ops_status,
             cc_header=cc if isinstance(cc, dict) else {},
             today=today,
+            jobs_status=telemetry.get_jobs_status(),
+            signals_status=telemetry.get_signals_status(),
+            execution_readiness=exec_ready,
+            startup_time=startup_iso,
         )
     )

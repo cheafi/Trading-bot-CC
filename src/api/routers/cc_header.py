@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 
 from src.api.app_state import get_engine
 from src.api.deps import optional_api_key, sanitize_for_json
 from src.api.routers.brief_regenerate import _latest_brief
-from src.api.routers.ibkr import _gateway_port_open
 from src.core.config import get_settings
-from src.services.ibkr_service import default_ibkr_port, get_ibkr_service, resolve_ibkr_host
+from src.services.ibkr_service import get_ibkr_service
+from src.services.surface_authority import header_summary_for_tab, resolve_surface_mode
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["ops"])
@@ -82,6 +82,35 @@ async def _provider_components(
     return components
 
 
+def _cached_today_payload() -> Dict[str, Any] | None:
+    try:
+        from src.api.routers.decision import _today_cache
+
+        if _today_cache and isinstance(_today_cache, dict):
+            return _today_cache
+    except Exception as exc:
+        logger.debug("cc-header today cache unavailable: %s", exc)
+    return None
+
+
+def _page_authority_mode(
+    *,
+    decision_authority: Dict[str, Any] | None,
+    engine_running: bool,
+    circuit_breaker: bool,
+) -> str:
+    if circuit_breaker or not engine_running:
+        return "diagnostic"
+    da = decision_authority or {}
+    if da.get("source") == "fallback_brief" or (da.get("gates") or {}).get(
+        "fallback_brief"
+    ):
+        return "fallback_board"
+    if da.get("degraded") or da.get("gates_active"):
+        return "degraded_board"
+    return "active"
+
+
 def _engine_snapshot(engine) -> Dict[str, Any]:
     if not engine:
         return {
@@ -101,7 +130,11 @@ def _engine_snapshot(engine) -> Dict[str, Any]:
 
 
 @router.get("/api/ops/cc-header")
-async def cc_header(request: Request, _=optional_api_key):
+async def cc_header(
+    request: Request,
+    tab: Optional[str] = Query(None, description="Active UI tab for surface-aware header"),
+    _=optional_api_key,
+):
     """Aggregate status for CC top bar (mode, data, brief, alerts, IBKR)."""
     from src.services.data_freshness_service import freshness_report
 
@@ -134,9 +167,12 @@ async def cc_header(request: Request, _=optional_api_key):
         logger.debug("cc-header alerts failed: %s", exc)
 
     ibkr_st = get_ibkr_service().status()
-    host = ibkr_st.get("host") or resolve_ibkr_host(None)
-    port = int(ibkr_st.get("port") or default_ibkr_port(ibkr_st.get("mode") or "paper"))
-    ibkr_st["gateway_reachable"] = _gateway_port_open(host, port)
+    ibkr_st["health_label"] = (
+        (ibkr_st.get("diagnosis") or {}).get("label")
+        or ibkr_st.get("health_label")
+        or (ibkr_st.get("health") or {}).get("summary_label")
+    )
+    ibkr_st["health_label_short"] = (ibkr_st.get("diagnosis") or {}).get("short")
 
     components = await _provider_components(request, engine, freshness)
     alpaca_configured = bool(settings.alpaca_api_key and settings.alpaca_secret_key)
@@ -154,6 +190,68 @@ async def cc_header(request: Request, _=optional_api_key):
         and not eng["circuit_breaker"]
     )
 
+    today = _cached_today_payload()
+    decision_authority = (today or {}).get("decision_authority")
+    tradeability = "WAIT"
+    should_trade = True
+    if today:
+        regime = today.get("market_regime") or {}
+        tradeability = str(
+            regime.get("tradeability")
+            or (today.get("decision_model") or {}).get("honest_tradeability")
+            or "WAIT"
+        )
+        should_trade = bool(regime.get("should_trade", True))
+
+    if not decision_authority:
+        from src.services.decision_truth_model import build_decision_authority
+
+        data_stale = pills["data"] in ("STALE", "CRITICAL")
+        brief_stale = pills["brief"] in ("STALE", "CRITICAL")
+        ibkr_connected = bool(
+            ibkr_st.get("session_usable") or ibkr_st.get("connected")
+        )
+        decision_authority = build_decision_authority(
+            tradeability=tradeability,
+            should_trade=should_trade,
+            data_stale=data_stale,
+            fallback_brief=brief_stale,
+            broker_offline=not ibkr_connected,
+            engine_off=not eng["running"],
+            exec_blocked=bool(eng.get("circuit_breaker")),
+            trust_source="cc-header",
+        )
+
+    page_authority_mode = _page_authority_mode(
+        decision_authority=decision_authority,
+        engine_running=bool(eng["running"]),
+        circuit_breaker=bool(eng["circuit_breaker"]),
+    )
+
+    ibkr_connected = bool(ibkr_st.get("session_usable") or ibkr_st.get("connected"))
+    portfolio_context: Dict[str, Any]
+    try:
+        from src.api.routers.portfolio import portfolio_header_snapshot_for_cc
+
+        portfolio_context = portfolio_header_snapshot_for_cc(ibkr_connected=ibkr_connected)
+    except Exception as exc:
+        logger.debug("cc-header portfolio snapshot failed: %s", exc)
+        portfolio_context = {
+            "mode": "portfolio",
+            "book_label": "Manual book",
+            "position_count": 0,
+            "positions_label": "No positions",
+            "broker_sync": "unavailable" if not ibkr_connected else "ok",
+            "broker_sync_label": (
+                "Broker sync unavailable"
+                if not ibkr_connected
+                else "Broker linked"
+            ),
+            "rebalance_only": True,
+            "rebalance_label": "Rebalance support only",
+            "source": "manual",
+        }
+
     return sanitize_for_json(
         {
             "as_of": now.isoformat() + "Z",
@@ -167,6 +265,25 @@ async def cc_header(request: Request, _=optional_api_key):
             "ibkr": ibkr_st,
             "pills": pills,
             "components": components,
+            "decision_authority": decision_authority,
+            "page_authority_mode": page_authority_mode,
+            "portfolio_context": portfolio_context,
+            "surface_mode": resolve_surface_mode(tab) if tab else None,
+            "header_summary": header_summary_for_tab(
+                tab,
+                {
+                    "tradeability": tradeability,
+                    "regime_trend": (today or {}).get("market_regime", {}).get("trend"),
+                    "execution_blocked": bool(eng["circuit_breaker"])
+                    or not ibkr_connected,
+                    "stale": pills["data"] in ("STALE", "CRITICAL"),
+                    "fallback": page_authority_mode == "fallback_board",
+                    "position_count": portfolio_context.get("position_count"),
+                    "ibkr_label": ibkr_st.get("health_label") or "IBKR",
+                },
+            )
+            if tab
+            else None,
             "providers": {
                 "yfinance": components.get("market_data", False),
                 "regime_router": components.get("regime_router", False),

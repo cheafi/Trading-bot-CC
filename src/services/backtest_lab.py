@@ -31,11 +31,14 @@ async def build_backtest_lab(
 
     from src.api.routers.live_backtest import live_backtest
 
+    # Pass explicit None for date bounds — direct calls must not use FastAPI Query() defaults.
     core = await live_backtest(
         request,
         ticker=sym,
         strategy=strategy,
         period=period,
+        start_date=None,
+        end_date=None,
     )
     wf = (
         await _walk_forward_summary(request, sym, strategy, period)
@@ -80,19 +83,32 @@ async def _walk_forward_summary(
     async def _one(p: str, label: str):
         try:
             res = await live_backtest(
-                request, ticker=ticker.upper(), strategy=strategy, period=p
+                request,
+                ticker=ticker.upper(),
+                strategy=strategy,
+                period=p,
+                start_date=None,
+                end_date=None,
             )
-            best = res.get("best_strategy") or {}
+            best_key = res.get("best_strategy")
+            best_row = next(
+                (
+                    s
+                    for s in (res.get("strategies") or [])
+                    if _strategy_name(s) == best_key
+                ),
+                {},
+            )
             return {
                 "window": label,
                 "period": p,
-                "best_strategy": best.get("name"),
-                "return_pct": best.get("total_return_pct"),
-                "win_rate": best.get("win_rate"),
-                "sharpe": best.get("sharpe"),
-                "max_dd": best.get("max_drawdown"),
-                "trades": best.get("total_trades"),
-                "vs_benchmark": best.get("vs_benchmark"),
+                "best_strategy": best_key if isinstance(best_key, str) else best_row.get("name"),
+                "return_pct": best_row.get("total_return_pct", best_row.get("total_return")),
+                "win_rate": best_row.get("win_rate"),
+                "sharpe": best_row.get("sharpe"),
+                "max_dd": best_row.get("max_drawdown"),
+                "trades": best_row.get("total_trades"),
+                "vs_benchmark": best_row.get("vs_benchmark"),
             }
         except Exception as exc:
             return {"window": label, "error": str(exc)[:80]}
@@ -113,11 +129,16 @@ async def _walk_forward_summary(
     }
 
 
+def _strategy_name(row: Dict[str, Any]) -> str:
+    return str(row.get("name") or row.get("strategy") or "")
+
+
 def _trade_level_review(core: Dict[str, Any]) -> Dict[str, Any]:
     """Trade-level stats from best strategy."""
     strategies = core.get("strategies") or []
-    best_name = (core.get("best_strategy") or {}).get("name")
-    best = next((s for s in strategies if s.get("name") == best_name), None)
+    raw_best = core.get("best_strategy")
+    best_name = raw_best if isinstance(raw_best, str) else (raw_best or {}).get("name", "")
+    best = next((s for s in strategies if _strategy_name(s) == best_name), None)
     if not best:
         return {"trades": [], "summary": "No strategy trades", "trade_count": 0}
     trades = best.get("trades") or best.get("all_trades") or []
@@ -153,15 +174,17 @@ def _strategy_attribution(core: Dict[str, Any]) -> Dict[str, Any]:
     strategies = core.get("strategies") or []
     ranked = sorted(
         strategies,
-        key=lambda s: float(s.get("total_return_pct") or s.get("return_pct") or 0),
+        key=lambda s: float(
+            s.get("total_return_pct") or s.get("total_return") or s.get("return_pct") or 0
+        ),
         reverse=True,
     )
     return {
         "benchmark_return_pct": core.get("benchmark_return"),
         "ranked": [
             {
-                "name": s.get("name"),
-                "return_pct": s.get("total_return_pct", s.get("return_pct")),
+                "name": _strategy_name(s),
+                "return_pct": s.get("total_return_pct", s.get("total_return", s.get("return_pct"))),
                 "sharpe": s.get("sharpe"),
                 "trades": s.get("total_trades", s.get("trades")),
                 "contribution_note": "Standalone strategy run — not blended portfolio",

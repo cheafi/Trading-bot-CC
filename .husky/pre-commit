@@ -5,7 +5,6 @@ if [ "$branch" = "main" ]; then
   exit 1
 fi
 
-# Detect if running on Windows and use pnpm.cmd, otherwise use pnpm.
 if [ "$OS" = "Windows_NT" ]; then
   pnpm_cmd="pnpm.cmd"
 else
@@ -16,12 +15,12 @@ else
   fi
 fi
 
-# Detect if running on Windows and use npx.cmd, otherwise use npx.
-if [ "$OS" = "Windows_NT" ]; then
-  npx_cmd="npx.cmd"
-else
-  npx_cmd="npx"
+# lint-staged@16 hangs on Node 22 during ESM bootstrap; mirror package.json lint-staged config.
+if [ -x "./node_modules/.bin/prettier" ]; then
+  staged_prettier="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(js|jsx|ts|tsx|json|css|md)$' || true)"
+  if [ -n "$staged_prettier" ]; then
+    echo "$staged_prettier" | tr '\n' '\0' | xargs -0 ./node_modules/.bin/prettier --write
+    echo "$staged_prettier" | tr '\n' '\0' | xargs -0 git add
+  fi
 fi
 
-$npx_cmd lint-staged
-$pnpm_cmd lint

@@ -12,6 +12,7 @@ Integrates with Discord bot for real-time trading.
 
 import asyncio
 import logging
+import os
 from datetime import datetime
 from typing import Optional, Dict, List, Any
 from enum import Enum
@@ -104,7 +105,8 @@ class BrokerManager:
                 logger.warning(f"Futu broker not available: {e}")
 
         # Initialize IB if configured (legacy ib_insync path; new IBKRService uses ibapi directly)
-        if settings.has_ib:
+        skip_insync = os.getenv("CC_SKIP_IB_INSYNC", "").strip().lower() in ("1", "true", "yes")
+        if settings.has_ib and not skip_insync:
             try:
                 ib = IBBroker()
                 if await ib.connect():

@@ -129,8 +129,10 @@ class FundamentalExpert(NamedExpert):
     name = "Fundamental"
 
     def vote(self, signal, sector, regime):
+        from src.utils.numeric_parse import parse_ratio
+
         bucket = sector.sector_bucket
-        rr = signal.get("risk_reward", 0)
+        rr = parse_ratio(signal.get("risk_reward"), 0.0) or 0.0
         score = signal.get("score", 0)
 
         # ── Real fundamental data (populated by dossier / p9 pipeline) ───────
@@ -355,8 +357,10 @@ class RiskExpert(NamedExpert):
     name = "Risk"
 
     def vote(self, signal, sector, regime):
+        from src.utils.numeric_parse import parse_ratio
+
         atr_pct = signal.get("atr_pct", 0.02)
-        rr = signal.get("risk_reward", 0)
+        rr = parse_ratio(signal.get("risk_reward"), 0.0) or 0.0
         vix = regime.get("vix", 18)
         vol_label = regime.get("volatility", "NORMAL")
 

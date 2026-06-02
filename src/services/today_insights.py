@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Set
 
+from src.utils.numeric_parse import parse_ratio
+
 
 _AVOID_CATEGORIES = (
     "regime",
@@ -91,10 +93,15 @@ def build_avoid_now_engine(
                     "earnings_risk",
                     "high",
                 )
-            rr = float(sig.get("risk_reward") or pr.decision.risk_reward_ratio or 0)
+            from src.services.decision_truth_model import (
+                _pipeline_invalidation,
+                _pipeline_risk_reward,
+            )
+
+            rr = _pipeline_risk_reward(pr)
             if 0 < rr < 2.0:
                 _add(ticker, f"R:R {rr:.1f} below 2.0 gate", "low_rr", "medium")
-            inv = pr.decision.invalidation or ""
+            inv = _pipeline_invalidation(pr)
             if inv:
                 _add(ticker, inv[:100], "regime", "medium")
         except Exception:
@@ -163,8 +170,13 @@ def build_no_setup_diagnosis(
     council_results: List[Any],
     *,
     scanner_degraded: bool = False,
+    tradeability: str = "WAIT",
+    should_trade: bool = True,
+    validated_count: int = 0,
+    deployable_count: int = 0,
+    execution_readiness: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Why no deploy today — failure bucket counts."""
+    """Why no deploy today — failure bucket counts + blocker tree."""
     buckets = {
         "failed_regime": 0,
         "failed_timing": 0,
@@ -183,7 +195,9 @@ def build_no_setup_diagnosis(
             timing = float(pr.confidence.timing)
             thesis = float(pr.confidence.thesis)
             execution = float(pr.confidence.execution)
-            rr = float(pr.signal.get("risk_reward") or pr.decision.risk_reward_ratio or 0)
+            from src.services.decision_truth_model import _pipeline_risk_reward
+
+            rr = _pipeline_risk_reward(pr)
             if act in ("NO_TRADE", "AVOID"):
                 buckets["failed_regime"] += 1
             elif timing < 0.5:
@@ -215,21 +229,152 @@ def build_no_setup_diagnosis(
         headline = "No deploy candidate passed action rules"
     else:
         headline = "Scanner still warming — diagnosis unavailable"
+
+    ex = execution_readiness or {}
+    tb = (tradeability or "WAIT").upper()
+    regime_blocked = not should_trade or tb == "NO_TRADE"
+    freshness_blocked = scanner_degraded or bool(buckets.get("failed_freshness"))
+    timing_blocked = buckets.get("failed_timing", 0) > 0
+    rr_blocked = buckets.get("failed_rr", 0) > 0
+    execution_blocked = (
+        buckets.get("failed_execution", 0) > 0
+        or not ex.get("broker_connected")
+        or not ex.get("trade_handoff_ready")
+    )
+
+    blocker_tree = {
+        "regime": {"blocked": regime_blocked, "label": "Regime gate"},
+        "freshness": {"blocked": freshness_blocked, "label": "Data freshness"},
+        "timing": {"blocked": timing_blocked, "label": "Timing confirmation"},
+        "rr": {"blocked": rr_blocked, "label": "R:R ≥2.5"},
+        "execution": {"blocked": execution_blocked, "label": "Execution / broker"},
+    }
+    primary_blocker = ""
+    if regime_blocked:
+        primary_blocker = f"Regime {tb} — no full deploy today"
+    elif deployable_count < 1 and validated_count < 1 and freshness_blocked:
+        primary_blocker = "Scanner warming — watch-qualified setups not ready yet"
+    elif deployable_count < 1 and rr_blocked:
+        primary_blocker = "Names scanned but R:R below full-size gate"
+    elif deployable_count < 1 and timing_blocked:
+        primary_blocker = "Setups lack timing confirmation for deploy"
+    elif deployable_count < 1 and execution_blocked:
+        primary_blocker = "Broker or bracket not ready for handoff"
+    elif deployable_count < 1:
+        primary_blocker = "No name passed watch-qualified + deploy-qualified bar"
+    else:
+        primary_blocker = headline
+
     return {
         "breakdown": buckets,
         "total_evaluated": total,
         "scanner_degraded": scanner_degraded,
         "headline": headline,
+        "blocker_tree": blocker_tree,
+        "validated_count": validated_count,
+        "watch_qualified_count": validated_count,
+        "deployable_count": deployable_count,
+        "primary_blocker": primary_blocker,
     }
+
+
+def build_unlock_deploy(
+    *,
+    tradeability: str,
+    should_trade: bool,
+    deployable_count: int,
+    scanner_degraded: bool,
+    execution_readiness: Optional[Dict[str, Any]] = None,
+    watch_qualified_count: int = 0,
+    validated_count: Optional[int] = None,
+    scan_ranked_count: int = 0,
+) -> Dict[str, Any]:
+    """Conditions required before full deploy unlocks."""
+    from src.services.decision_truth_model import format_board_quality_detail
+
+    ex = execution_readiness or {}
+    tb = (tradeability or "WAIT").upper()
+    wq = int(
+        watch_qualified_count
+        if watch_qualified_count is not None
+        else (validated_count or 0)
+    )
+    sr = max(0, int(scan_ranked_count or 0))
+    broker_ready = bool(
+        ex.get("trade_handoff_ready")
+        or (ex.get("broker_connected") and ex.get("bracket_order_ready"))
+    )
+    regime_ok = should_trade and tb in ("SELECTIVE", "TRADE", "STRONG_TRADE")
+    watch_ok = wq >= 1
+    freshness_ok = not scanner_degraded
+    board_quality_ok = watch_ok and freshness_ok
+    conditions = [
+        {
+            "key": "regime",
+            "label": "Tradeability improves to SELECTIVE+",
+            "met": regime_ok,
+            "detail": f"Current: {tb}",
+        },
+        {
+            "key": "deployable",
+            "label": "At least 1 deploy-qualified setup exists",
+            "met": deployable_count >= 1,
+            "detail": f"{deployable_count} deploy-qualified",
+        },
+        {
+            "key": "broker",
+            "label": "Broker handoff is live",
+            "met": broker_ready,
+            "detail": ex.get("unified_label") or ex.get("readiness_label") or "Offline",
+        },
+        {
+            "key": "board",
+            "label": "Board-level quality supports risk",
+            "met": board_quality_ok,
+            "detail": format_board_quality_detail(
+                wq, scan_ranked=sr, scanner_degraded=scanner_degraded
+            ),
+        },
+    ]
+    unlocked = all(c["met"] for c in conditions)
+    remaining = [c["label"] for c in conditions if not c["met"]]
+    board_present = wq >= 1 or deployable_count >= 1 or sr >= 1
+    if unlocked:
+        status_line = "Current status: all conditions met — confirm size and brackets before send."
+    elif board_present and deployable_count < 1:
+        status_line = "Current status: board present, deploy absent."
+    elif not board_present:
+        status_line = "Current status: board thin, deploy absent."
+    else:
+        status_line = "Current status: deploy gate not cleared."
+    return {
+        "unlocked": unlocked,
+        "conditions": conditions,
+        "remaining": remaining,
+        "summary": status_line if not unlocked else status_line,
+        "intro": (
+            "Unlock deploy requires all 4 conditions together: "
+            "tradeability SELECTIVE+, ≥1 deploy-qualified setup, live broker handoff, "
+            "and ≥1 watch-qualified name on fresh data (scan-ranked alone does not qualify)."
+        ),
+    }
+
+
+def _timing_bucket(timing_conf: float, score: float) -> str:
+    if timing_conf >= 0.55:
+        return "intraday"
+    if score >= 6.5:
+        return "1-3d"
+    return "1-2w"
 
 
 def build_near_miss_candidates(
     council_results: List[Any],
     top5_tickers: Set[str],
     *,
-    limit: int = 3,
+    limit: int = 8,
 ) -> List[Dict[str, Any]]:
-    """Closest names to TRADE that did not make top deploy list."""
+    """Dedicated near-miss board — always WATCH, with upgrade/invalidation."""
     rows: List[Dict[str, Any]] = []
     for cr in council_results or []:
         try:
@@ -238,16 +383,24 @@ def build_near_miss_candidates(
             ticker = sig.get("ticker") or ""
             if not ticker or ticker in top5_tickers:
                 continue
-            action = (pr.decision.action or "WATCH").upper()
-            if action in ("TRADE", "BUY", "NO_TRADE", "AVOID"):
-                if action in ("NO_TRADE", "AVOID"):
-                    continue
+            from src.services.decision_truth_model import (
+                _pipeline_risk_reward,
+                is_execution_ready,
+                refine_action,
+            )
+
+            if is_execution_ready(cr):
+                continue
+            action = refine_action(cr)
+            if action in ("TRADE", "AVOID", "NO_TRADE"):
+                continue
+            action = "WATCH"
             score = float(pr.fit.final_score)
             if score < 6.0:
                 continue
             timing = float(pr.confidence.timing)
             thesis = float(pr.confidence.thesis)
-            rr = float(sig.get("risk_reward") or pr.decision.risk_reward_ratio or 0)
+            rr = _pipeline_risk_reward(pr)
             gaps: List[str] = []
             if timing < 0.5:
                 gaps.append("timing")
@@ -283,6 +436,9 @@ def build_near_miss_candidates(
             if rr > 0 and rr < 2.5:
                 distance_parts.append(f"R:R need {2.5 - rr:.1f}")
             distance_to_pass = " · ".join(distance_parts) if distance_parts else "At gate — review sizing"
+            whats_missing = (
+                ", ".join(gaps) if gaps else "At gate — confirm volume and R:R"
+            )
             rows.append(
                 {
                     "ticker": ticker,
@@ -290,13 +446,21 @@ def build_near_miss_candidates(
                     "score": round(score, 1),
                     "final_conf": round(float(pr.confidence.final), 2),
                     "gaps": gaps,
+                    "whats_missing": whats_missing,
                     "upgrade_trigger": trigger,
                     "distance_to_pass": distance_to_pass,
+                    "invalidation": inv
+                    if (
+                        inv := (getattr(expl, "invalidation", None) if expl else None)
+                        or getattr(pr.decision, "invalidation", None)
+                    )
+                    else (f"Below ${float(stop):.2f}" if stop else ""),
                     "invalidation_price": stop,
                     "entry_price": entry,
                     "stop_price": stop,
                     "target_price": target,
                     "risk_reward": round(rr, 1) if rr else None,
+                    "timing_bucket": _timing_bucket(timing, score),
                     "why_not": (
                         getattr(expl, "why_not_stronger", None) or gaps if expl else gaps
                     ),
@@ -405,7 +569,273 @@ def build_evidence_badges(
     }
 
 
-def build_sleeve_summary(cards: List[Dict[str, Any]], regime: str = "") -> Dict[str, Any]:
+_TRADE_ACTIONS = frozenset({"TRADE", "BUY", "BUY_ON_DIP", "STRONG_TRADE"})
+_PILOT_ACTIONS = frozenset({"PILOT"})
+_WATCH_ACTIONS = frozenset({"WATCH", "WAIT", "WATCH_TRIGGER"})
+_AVOID_ACTIONS = frozenset({"AVOID", "NO_TRADE", "PASS", "EXIT", "REDUCE"})
+
+
+def _norm_action(action: Optional[str]) -> str:
+    return (action or "WATCH").upper().strip()
+
+
+def _pick_best(
+    rows: List[Dict[str, Any]],
+    actions: frozenset,
+    *,
+    execution_ready_only: bool = False,
+) -> Optional[Dict[str, Any]]:
+    for o in rows:
+        act = _norm_action(o.get("action"))
+        tk = o.get("ticker")
+        if not tk or act not in actions:
+            continue
+        if execution_ready_only and not o.get("execution_ready"):
+            continue
+        return {
+            "ticker": tk,
+            "action": act,
+            "score": o.get("score"),
+            "final_conf": o.get("final_conf") or o.get("confidence"),
+            "risk_reward": o.get("risk_reward"),
+            "entry_price": o.get("entry_price"),
+            "stop_price": o.get("stop_price"),
+            "execution_ready": bool(o.get("execution_ready")),
+            "upgrade_trigger": o.get("upgrade_trigger")
+            or (o.get("explanation") or {}).get("upgrade_trigger"),
+            "why_pilot": o.get("why_pilot"),
+        }
+    return None
+
+
+def _deploy_posture(
+    *,
+    tradeability: str,
+    should_trade: bool,
+    has_trade: bool,
+    has_pilot: bool,
+    execution_ready: int,
+) -> str:
+    """Unified PM taxonomy: AVOID / WAIT / WATCH / PILOT / TRADE / SCALE."""
+    tb = (tradeability or "WAIT").upper()
+    if not should_trade or tb == "NO_TRADE":
+        return "AVOID"
+    if has_trade and execution_ready >= 2 and tb == "STRONG_TRADE":
+        return "SCALE"
+    if has_trade:
+        return "TRADE"
+    if has_pilot or tb == "SELECTIVE":
+        return "PILOT"
+    if tb in ("WAIT", "SELECTIVE"):
+        return "WATCH"
+    return "WAIT"
+
+
+def _derive_day_state(
+    *,
+    tradeability: str,
+    should_trade: bool,
+    execution_ready_count: int,
+    has_pilot: bool,
+    has_watch: bool,
+) -> str:
+    """Headline taxonomy for dashboard honesty."""
+    tb = (tradeability or "WAIT").upper()
+    if not should_trade or tb == "NO_TRADE":
+        return "NO_TRADE_DAY"
+    if execution_ready_count >= 1:
+        if execution_ready_count >= 2 and tb == "STRONG_TRADE":
+            return "A_GRADE_TRADE_DAY"
+        return "TRADE_DAY"
+    if has_pilot or has_watch or tb in ("SELECTIVE", "WAIT"):
+        return "PILOT_WATCH_DAY"
+    return "NO_TRADE_DAY"
+
+
+def build_todays_decision(
+    *,
+    tradeability: str,
+    should_trade: bool,
+    trend_label: str,
+    decision_model: Optional[Dict[str, Any]],
+    best_action: Optional[Dict[str, Any]],
+    opportunities: List[Dict[str, Any]],
+    near_miss: Optional[List[Dict[str, Any]]],
+    no_setup_diagnosis: Optional[Dict[str, Any]],
+    regime_wait_explanation: Optional[List[str]],
+    execution_readiness: Optional[Dict[str, Any]],
+    event_risks: Optional[List[str]],
+    narrative: str = "",
+    execution_ready_count: int = 0,
+    decision_authority: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Single primary decision card — answers deploy / best trade / watch / pilot / why not.
+    """
+    ba = best_action or {}
+    dm = decision_model or {}
+    trade_rows = [
+        o for o in opportunities if _norm_action(o.get("action")) in _TRADE_ACTIONS
+    ]
+    pilot_rows = [
+        o for o in opportunities if _norm_action(o.get("action")) in _PILOT_ACTIONS
+    ]
+    watch_rows = [
+        o
+        for o in opportunities
+        if _norm_action(o.get("action")) in _WATCH_ACTIONS
+    ]
+
+    exec_ready_count = execution_ready_count or sum(
+        1 for o in opportunities if o.get("execution_ready")
+    )
+    best_trade = ba.get("best_trade_now") if (ba.get("best_trade_now") or {}).get(
+        "execution_ready"
+    ) else None
+    if not best_trade:
+        best_trade = _pick_best(
+            opportunities, _TRADE_ACTIONS, execution_ready_only=True
+        )
+    best_pilot = ba.get("best_pilot_now") or _pick_best(opportunities, _PILOT_ACTIONS)
+    best_watch = (
+        ba.get("best_watch_upgrade")
+        or _pick_best(opportunities, _WATCH_ACTIONS)
+        or (near_miss[0] if near_miss else None)
+        or _pick_best(watch_rows, _WATCH_ACTIONS)
+    )
+
+    has_trade = bool(best_trade) and exec_ready_count >= 1
+    has_pilot = bool(best_pilot)
+    has_watch = bool(best_watch)
+    day_state = _derive_day_state(
+        tradeability=tradeability,
+        should_trade=should_trade,
+        execution_ready_count=exec_ready_count,
+        has_pilot=has_pilot,
+        has_watch=has_watch,
+    )
+    posture = _deploy_posture(
+        tradeability=tradeability,
+        should_trade=should_trade,
+        has_trade=has_trade,
+        has_pilot=has_pilot,
+        execution_ready=exec_ready_count,
+    )
+
+    can_deploy = posture in ("TRADE", "SCALE") and should_trade and has_trade
+    deploy_label = {
+        "AVOID": "Do not deploy",
+        "WAIT": "Wait — preserve capital",
+        "WATCH": "Watch only — no new risk",
+        "PILOT": "Pilot only — half size, not full deploy",
+        "TRADE": "Deploy selectively — A-grade at 1R",
+        "SCALE": "Scale selectively — multiple execution-ready",
+    }.get(posture, "Wait")
+    if day_state == "PILOT_WATCH_DAY" and posture in ("WATCH", "PILOT", "WAIT"):
+        deploy_label = "Pilot / watch day — no full-size deploy"
+    elif day_state == "NO_TRADE_DAY":
+        deploy_label = "No-trade day — patience is the decision"
+    hero_label = {
+        "A_GRADE_TRADE_DAY": "#1 TRADE TODAY",
+        "TRADE_DAY": "#1 TRADE TODAY",
+        "PILOT_WATCH_DAY": "#1 WATCH/PILOT CANDIDATE",
+        "NO_TRADE_DAY": "",
+    }.get(day_state, "")
+
+    hero_label = _apply_hero_authority(hero_label, decision_authority)
+
+    why_not: List[str] = []
+    if regime_wait_explanation:
+        why_not.extend(regime_wait_explanation[:3])
+    if not has_trade and no_setup_diagnosis:
+        why_not.append(
+            no_setup_diagnosis.get("primary_blocker")
+            or no_setup_diagnosis.get("headline", "")
+        )
+    if dm.get("guidance"):
+        why_not.append(str(dm["guidance"]))
+    if not why_not:
+        why_not.append(
+            "No name passed full TRADE bar (thesis+timing, R:R ≥2.5, execution-ready)."
+        )
+
+    risk_blockers: List[str] = []
+    if event_risks:
+        risk_blockers.extend(event_risks[:4])
+    ex = execution_readiness or ba.get("execution_readiness") or {}
+    if not ex.get("broker_connected") and not ex.get("ibkr_connected"):
+        risk_blockers.append("Broker offline — ENGINE OFF blocks live handoff")
+    elif ex.get("readiness_label"):
+        if "blocked" in str(ex.get("level", "")).lower():
+            risk_blockers.append(f"Execution: {ex.get('readiness_label')}")
+    if not ex.get("bracket_order_ready") and not ex.get("bracket_ready"):
+        risk_blockers.append("Bracket not ready — cannot send protected order")
+    if dm.get("macro_regime") == "Hostile":
+        risk_blockers.append(f"Macro hostile — {dm.get('macro_detail', '')[:80]}")
+    if dm.get("opportunity_quality") == "Weak":
+        risk_blockers.append(f"Board weak — {dm.get('opportunity_detail', '')[:80]}")
+
+    exec_label = dm.get("execution_readiness") or ex.get("readiness_label") or "—"
+    if ex.get("paper_or_live"):
+        exec_label = f"{exec_label} · {(ex.get('paper_or_live') or 'paper').upper()}"
+
+    if decision_authority and decision_authority.get("source") == "fallback_brief":
+        deploy_label = "Brief fallback — informational watch only"
+        can_deploy = False
+
+    return {
+        "day_state": day_state,
+        "hero_label": hero_label,
+        "deploy_posture": posture,
+        "deploy_label": deploy_label,
+        "can_deploy_today": can_deploy,
+        "execution_ready_count": exec_ready_count,
+        "regime": {
+            "trend": trend_label,
+            "tradeability": tradeability,
+            "macro": dm.get("macro_regime"),
+            "opportunity": dm.get("opportunity_quality"),
+        },
+        "best_trade": best_trade,
+        "best_watch": best_watch,
+        "best_pilot": best_pilot,
+        "trade_count": len(trade_rows),
+        "pilot_count": len(pilot_rows),
+        "watch_count": len(watch_rows),
+        "why_not_aggressive": [w for w in why_not if w][:5],
+        "risk_blockers": [r for r in risk_blockers if r][:6],
+        "execution_readiness_label": exec_label,
+        "capital_stance": ba.get("capital_stance"),
+        "stance_one_liner": ba.get("stance_one_liner"),
+        "narrative_snippet": (narrative or "")[:280],
+        "headline": (
+            f"{deploy_label} · Best TRADE: {(best_trade or {}).get('ticker') or 'None'}"
+            f" · Watch: {(best_watch or {}).get('ticker') or '—'}"
+        ),
+    }
+
+
+def _apply_hero_authority(label: str, authority: Optional[Dict[str, Any]]) -> str:
+    if not authority or not label:
+        return label
+    if authority.get("authority_level") == "suspended":
+        return (
+            "Top fallback candidate"
+            if authority.get("source") == "fallback_brief"
+            else ""
+        )
+    if authority.get("gates_active") or not authority.get("allows_trade_labels"):
+        if "TRADE" in label.upper():
+            return "#1 WATCH TODAY"
+    return label
+
+
+def build_sleeve_summary(
+    cards: List[Dict[str, Any]],
+    regime: str = "",
+    *,
+    sector_leaders: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     """Deployability-aware sleeve strip (replaces alpha-only optics)."""
     if not cards:
         return {
@@ -440,10 +870,66 @@ def build_sleeve_summary(cards: List[Dict[str, Any]], regime: str = "") -> Dict[
             "max_drawdown_pct": c.get("max_drawdown_pct"),
             "equity_curve_20": c.get("equity_curve_20") or [],
             "evidence_badge": c.get("evidence_badge", "model_backtest"),
+            "status_reason": c.get("status_reason"),
+            "evidence_quality": c.get("evidence_quality"),
+            "last_change": c.get("last_change") or c.get("last_rebalance"),
+            "upgrade_trigger": c.get("upgrade_trigger") or c.get("next_trigger"),
+            "top_monitored": c.get("top_monitored") or [],
+            "deployability": c.get("deployability"),
         }
 
+    live_sleeves = [c for c in cards if (c.get("mode") or "").lower() == "live"]
+    strongest_live_card = (
+        max(live_sleeves, key=lambda c: (c.get("regime_fit") or 0), default=None)
+        if live_sleeves
+        else strongest
+    )
+    evidence_q = (controller or {}).get("evidence_quality") or "model_backtest"
+    allocation_reason = (controller or {}).get("status_reason") or (
+        f"Regime fit {(controller or {}).get('regime_fit', 0)}% · "
+        f"gate {(controller or {}).get('gate_status', '—')}"
+        if controller
+        else ""
+    )
+    risk_budget = (
+        f"Max DD {(controller or {}).get('max_drawdown_pct', '—')}% · "
+        f"cash reserve per allocator"
+        if controller
+        else "—"
+    )
+    sleeve_action = (controller or {}).get("stance") or "NEUTRAL"
+    if (controller or {}).get("gate_status") == "PAUSED":
+        sleeve_action = "PAUSE"
+    elif (controller or {}).get("gate_status") == "REDUCED":
+        sleeve_action = "REDUCE"
+
+    leader_names = [
+        (s.get("name") or s.get("symbol") or "")
+        for s in (sector_leaders or [])[:3]
+        if s
+    ]
+    sector_rotation = (
+        f"Rotate toward {', '.join(leader_names)} — active sleeve favors "
+        f"names with sector tailwind"
+        if leader_names
+        else "No clear sector leadership — sleeve stays balanced"
+    )
+    monitored = (controller or {}).get("top_monitored") or []
+    top_adds = [
+        m.get("ticker") or m.get("symbol")
+        for m in monitored[:3]
+        if isinstance(m, dict) and (m.get("ticker") or m.get("symbol"))
+    ]
+    if not top_adds and monitored:
+        top_adds = [str(m) for m in monitored[:3]]
+    activation = (controller or {}).get("upgrade_trigger") or (
+        f"Gate → ACTIVE when regime fit ≥70% and drawdown within budget"
+        if controller
+        else ""
+    )
+
     return {
-        "strongest_live": _card_strip(strongest),
+        "strongest_live": _card_strip(strongest_live_card or strongest),
         "strongest_training": _card_strip(strongest_training),
         "active_today": _card_strip(controller),
         "fund_manager": {
@@ -453,10 +939,26 @@ def build_sleeve_summary(cards: List[Dict[str, Any]], regime: str = "") -> Dict[
             "mode": (controller or {}).get("mode", "training"),
             "controls_capital": bool((controller or {}).get("controls_capital")),
             "regime_fit": (controller or {}).get("regime_fit"),
+            "evidence_quality": evidence_q,
+            "allocation_reason": allocation_reason,
+            "risk_budget": risk_budget,
+            "sleeve_action_now": sleeve_action,
+            "upgrade_trigger": (controller or {}).get("upgrade_trigger"),
+            "sector_rotation_note": sector_rotation,
+            "leading_sector_implication": (
+                f"Leading sectors ({', '.join(leader_names)}) support "
+                f"{(controller or {}).get('display_name', 'active sleeve')} "
+                f"overweight when gate is ACTIVE"
+                if leader_names
+                else "No sector leadership edge for sleeve tilt today"
+            ),
+            "top_adds": top_adds,
+            "top_trims": [],
+            "activation_trigger": activation,
         },
         "active_count": len(active),
         "paused_count": len([c for c in cards if c.get("gate_status") == "PAUSED"]),
-        "cards": [_card_strip(c) for c in sorted_cards[:3] if _card_strip(c)],
+        "cards": [_card_strip(c) for c in sorted_cards[:6] if _card_strip(c)],
         "regime": regime,
         "stance": (
             f"Active: {(controller or {}).get('display_name')} · "
@@ -466,3 +968,73 @@ def build_sleeve_summary(cards: List[Dict[str, Any]], regime: str = "") -> Dict[
             else "No sleeve data"
         ),
     }
+
+
+def merge_brief_board_fallback(
+    top5: List[Dict[str, Any]],
+    near_miss: List[Dict[str, Any]],
+    *,
+    scanner_degraded: bool,
+    top_limit: int = 5,
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], bool]:
+    """Seed WATCH / near-miss rows from morning brief when live scanner is empty."""
+    if top5 or not scanner_degraded:
+        return top5, near_miss, False
+    try:
+        from src.services.playbook_board_fallback import build_compressed_fallback
+
+        fb = build_compressed_fallback(max(30, top_limit))
+    except Exception:
+        return top5, near_miss, False
+
+    opps = fb.get("opportunities") or []
+    fb_near = fb.get("near_miss") or []
+    if not opps and not fb_near:
+        return top5, near_miss, False
+
+    from src.services.decision_truth_model import assemble_confidence_breakdown
+
+    merged_top: List[Dict[str, Any]] = []
+    for i, row in enumerate(opps[:top_limit]):
+        why = row.get("why_now")
+        base = {
+            "rank": i + 1,
+            "ticker": row.get("ticker"),
+            "strategy": row.get("setup") or "brief_watch",
+            "score": row.get("score", 0),
+            "grade": row.get("grade", "C"),
+            "timing": "Developing",
+            "action": "WATCH",
+            "raw_action": row.get("action") or "WATCH",
+            "action_reason": (
+                "Morning brief fallback — reference plan only · indicative levels · "
+                "monitor zone · no deploy authority"
+            ),
+            "why_now": [why] if isinstance(why, str) and why else (why or []),
+            "entry_price": row.get("entry_price"),
+            "target_price": row.get("target_price"),
+            "stop_price": row.get("stop_price"),
+            "risk_reward": row.get("risk_reward"),
+            "invalidation": row.get("invalidation"),
+            "execution_ready": False,
+            "confidence_fallback_only": True,
+            "card_display_mode": "reference_only",
+            "levels_indicative_only": True,
+            "deploy_authority": False,
+            "monitor_zone_only": True,
+            "evidence_badge": row.get("evidence_badge") or "brief-fallback",
+            "thesis_conf": 0,
+            "timing_conf": 0,
+            "exec_conf": 0,
+            "data_conf": 0,
+        }
+        conf = assemble_confidence_breakdown(base)
+        base["confidence_breakdown"] = conf
+        base["final_conf"] = conf.get("final")
+        merged_top.append(base)
+
+    merged_near = list(near_miss)
+    if not merged_near and fb_near:
+        merged_near = fb_near[:3]
+
+    return merged_top, merged_near, True

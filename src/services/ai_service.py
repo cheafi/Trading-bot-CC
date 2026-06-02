@@ -75,6 +75,75 @@ SYSTEM_TRADE_REVIEWER = (
     "Keep answers structured and brief."
 )
 
+AI_SETUP_HINT = (
+    "Set OPENAI_API_KEY, NVIDIA_API_KEY, OPENCLAW_API_KEY, "
+    "or enable LOCAL_LLM_URL (Docker Model Runner)."
+)
+
+
+def build_stub_narrative(
+    regime: Dict[str, Any],
+    top_signals: List[Dict[str, Any]],
+    pulse: Dict[str, Any],
+    funnel: Dict[str, Any],
+    board_narrative: str = "",
+) -> str:
+    """Deterministic narrative when no LLM is configured or all providers fail."""
+    trend = regime.get("trend") or regime.get("label") or "unknown"
+    tradeability = regime.get("tradeability") or (
+        "open" if regime.get("should_trade", True) else "wait"
+    )
+    vix = regime.get("vix")
+    breadth = regime.get("breadth")
+    regime_bits = [f"Regime **{trend}**", f"tradeability **{tradeability}**"]
+    if vix is not None:
+        regime_bits.append(f"VIX **{float(vix):.0f}**")
+    if breadth is not None:
+        regime_bits.append(f"breadth **{float(breadth):.0f}%**")
+
+    funnel_bits = []
+    if funnel:
+        universe = funnel.get("universe")
+        actionable = funnel.get("actionable_above_7")
+        high_conv = funnel.get("high_conviction_above_8")
+        if universe is not None:
+            funnel_bits.append(f"{universe} scanned")
+        if actionable is not None:
+            funnel_bits.append(f"{actionable} actionable (score ≥7)")
+        if high_conv is not None:
+            funnel_bits.append(f"{high_conv} high-conviction (≥8)")
+
+    sig_lines = []
+    for i, sig in enumerate(top_signals[:5], 1):
+        ticker = sig.get("ticker") or "?"
+        score = sig.get("score", 0)
+        strategy = sig.get("strategy") or "setup"
+        rr = sig.get("risk_reward", 0)
+        sig_lines.append(
+            f"{i}. **{ticker}** — score {float(score):.1f}, {strategy}, R:R {float(rr):.1f}"
+        )
+
+    paragraphs = [
+        "Rule-based briefing (narrative only — does not affect ranking, sizing, or deploy gates).",
+        " · ".join(regime_bits) + ".",
+    ]
+    if funnel_bits:
+        paragraphs.append("Funnel: " + ", ".join(funnel_bits) + ".")
+    if sig_lines:
+        paragraphs.append("Top board:\n" + "\n".join(sig_lines))
+    elif board_narrative:
+        paragraphs.append(board_narrative.strip()[:600])
+    else:
+        paragraphs.append("No ranked setups on the board yet — observe until the funnel clears.")
+
+    action = (
+        "Bias: selective adds only where the board and regime align."
+        if str(tradeability).upper() not in ("NO_TRADE", "WAIT", "REDUCE")
+        else "Bias: restraint — prioritize capital preservation and monitor triggers."
+    )
+    paragraphs.append(action)
+    return "\n\n".join(paragraphs)
+
 
 class _AICache:
     def __init__(self):
@@ -161,7 +230,7 @@ class AIService:
             session = await self._get_session()
             async with session.get(
                 f"{_LOCAL_LLM_URL}/models",
-                timeout=aiohttp.ClientTimeout(total=5),
+                timeout=aiohttp.ClientTimeout(total=5, connect=2, sock_connect=2),
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()

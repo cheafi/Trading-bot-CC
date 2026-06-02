@@ -44,13 +44,11 @@ def _as_dict(item: Any) -> Dict[str, Any]:
     return {}
 
 
+from src.utils.numeric_parse import parse_numeric, parse_ratio
+
+
 def _as_float(value: Any, default: float = 0.0) -> float:
-    try:
-        if value is None or value == "":
-            return default
-        return float(value)
-    except (TypeError, ValueError):
-        return default
+    return parse_numeric(value, default)
 
 
 def _unit_confidence(row: Dict[str, Any]) -> float:
@@ -68,9 +66,10 @@ def _unit_confidence(row: Dict[str, Any]) -> float:
 
 
 def _risk_reward(row: Dict[str, Any]) -> float:
-    rr = _as_float(
-        row.get("risk_reward") or row.get("rr") or row.get("risk_reward_ratio")
-    )
+    rr = parse_ratio(
+        row.get("risk_reward") or row.get("rr") or row.get("risk_reward_ratio"),
+        0.0,
+    ) or 0.0
     if rr > 0:
         return rr
     entry = _as_float(row.get("entry_price") or row.get("entry"))

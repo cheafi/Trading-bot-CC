@@ -1,0 +1,16 @@
+        <div class="card card-p" style="border-left:3px solid var(--green)" data-cc="ops-recovery-runbook">
+          <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--t3)">Recovery runbook</div>
+          <div class="text-[9px] font-bold text-green-400 mb-0.5">Retry</div>
+          <template x-for="ln in opsRecoveryGuide().retry" :key="'ops-retry-'+ln">
+            <div class="text-[9px]" style="color:var(--t2)" x-text="'• '+ln"></div>
+          </template>
+          <div class="text-[9px] font-bold text-red-400 mt-2 mb-0.5">Blocks capital</div>
+          <template x-for="ln in opsRecoveryGuide().blocks_capital" :key="'ops-block-'+ln">
+            <div class="text-[9px]" style="color:var(--t2)" x-text="'• '+ln"></div>
+          </template>
+          <div x-show="!opsRecoveryGuide().blocks_capital.length" class="text-[9px]" style="color:var(--t3)">No hard blocks flagged from Ops snapshot</div>
+          <div class="text-[9px] font-bold text-amber-300 mt-2 mb-0.5">Safe in degraded mode</div>
+          <template x-for="ln in opsRecoveryGuide().safe_degraded" :key="'ops-safe-'+ln">
+            <div class="text-[9px]" style="color:var(--t2)" x-text="'• '+ln"></div>
+          </template>
+        </div>

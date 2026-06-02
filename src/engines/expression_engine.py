@@ -96,7 +96,9 @@ class ExpressionEngine:
         hold_days = signal_data.get("hold_period_days", 5)
         confidence = signal_data.get("confidence", 0.5)
         exp_return = signal_data.get("expected_return", 0.02)
-        rr_ratio = signal_data.get("risk_reward_ratio", 1.5)
+        from src.utils.numeric_parse import parse_numeric
+
+        rr_ratio = parse_numeric(signal_data.get("risk_reward_ratio"), 1.5)
 
         # Default: stock
         plan = {

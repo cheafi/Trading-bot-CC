@@ -32,6 +32,7 @@ def init_shared_services(app) -> None:
     # Engine singletons — lazy init
     app.state.engine = None
     app.state.engine_init_done = False
+    app.state.engine_task = None
     app.state.expert_council = None
     app.state.expert_council_init = False
     app.state.learning_loop = None

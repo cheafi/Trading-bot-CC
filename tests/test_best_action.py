@@ -18,6 +18,7 @@ class TestBestAction(unittest.TestCase):
                 "final_conf": 0.72,
                 "entry_price": 180,
                 "stop_price": 170,
+                "execution_ready": True,
             },
             {
                 "ticker": "AMD",

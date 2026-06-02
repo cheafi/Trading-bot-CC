@@ -129,7 +129,13 @@ def global_calibration_summary(*, cal: Optional[Dict[str, Any]] = None) -> Dict[
             "available": False,
             "total_records": total,
             "reason": "insufficient_sample",
-            "label": f"Need 5+ closed trades with forward returns (have {total})",
+            "label": "Calibration status: insufficient evidence",
+            "detail": (
+                "The flow model has not yet logged enough closed trade outcomes to "
+                "estimate hit-rate, follow-through quality, or sizing usefulness. "
+                "Until this sample exists, all flow grades should be treated as "
+                "heuristic research labels only."
+            ),
         }
 
     buckets = cal.get("buckets") or []

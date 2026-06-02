@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from src.api.deps import sanitize_for_json, validate_ticker
+from src.utils.numeric_parse import parse_ratio
 from src.api.live_analytics import compute_4layer_confidence as _compute_4layer_confidence
 from src.api.live_state import fetch_regime_state
 
@@ -82,7 +83,13 @@ async def regime_screener_data(request: Request):
                         "stop": r.get("stop_loss", r.get("stop", 0)),
                         "tp1": r.get("target_price", r.get("tp1", 0)),
                         "tp2": r.get("target_2", r.get("tp2", 0)),
-                        "rr": round(r.get("risk_reward_ratio", r.get("rr", 0)), 1),
+                        "rr": round(
+                            parse_ratio(
+                                r.get("risk_reward_ratio", r.get("rr", 0)), 0.0
+                            )
+                            or 0.0,
+                            1,
+                        ),
                         "confidence": int(
                             r.get("confidence", r.get("score", 0.5)) * 100
                         ),

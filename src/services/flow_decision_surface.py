@@ -9,6 +9,13 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+
+def _metric(value: Any, default: float = 0.0) -> float:
+    """Safe float for flow metrics — accepts colon ratios without raising."""
+    from src.utils.numeric_parse import coerce_float
+
+    return coerce_float(value, default)
+
 _PM_ACTIONS = (
     "BUYABLE_NOW",
     "WATCH_FOR_STOCK_CONFIRM",
@@ -21,8 +28,14 @@ _PM_ACTIONS = (
 
 _METHODOLOGY = (
     "Radar score blends flow magnitude, novelty (vol/OI, IV), tradeability (spread, "
-    "liquidity), and stock/regime context. Grades are heuristic — not backtest-calibrated "
-    "until historical follow-through is wired."
+    "liquidity), and stock/regime context. Grades are heuristic research labels — "
+    "not backtest-calibrated until closed-trade forward outcomes are logged."
+)
+
+_MOCK_WARNING = (
+    "MOCK MODE — illustrative only. Signals shown here are synthetic examples used "
+    "to test UI and ranking logic. They are not validated market flow events and "
+    "must not be treated as trade triggers or sizing inputs."
 )
 
 
@@ -31,7 +44,7 @@ def _evidence_ladder(
     *,
     follow_through: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    stock_move = float(row.get("stock_move_pct") or 0)
+    stock_move = _metric(row.get("stock_move_pct"), 0)
     cp = (row.get("call_put") or "C").upper()
     stock_confirmed = abs(stock_move) >= 2 and (
         (cp == "C" and stock_move > 0) or (cp == "P" and stock_move < 0)
@@ -47,8 +60,8 @@ def _evidence_ladder(
         ),
         "sweep_or_block": bool(row.get("sweep_flag") or row.get("block_flag")),
         "stock_confirmed": stock_confirmed,
-        "volume_confirmed": float(row.get("volume_vs_avg_ratio") or 0) >= 1.5,
-        "iv_skew_confirmed": abs(float(row.get("iv_change") or 0)) >= 0.05,
+        "volume_confirmed": _metric(row.get("volume_vs_avg_ratio"), 0) >= 1.5,
+        "iv_skew_confirmed": abs(_metric(row.get("iv_change"), 0)) >= 0.05,
         "catalyst_nearby": bool(row.get("catalyst")),
         "follow_through_percentile": ft.get("follow_through_percentile"),
         "follow_through_label": ft.get("label"),
@@ -57,10 +70,10 @@ def _evidence_ladder(
         "steps_passed": sum(
             [
                 True,
-                float(row.get("volume_oi_ratio") or 0) >= 0.5,
+                _metric(row.get("volume_oi_ratio"), 0) >= 0.5,
                 bool(row.get("sweep_flag") or row.get("block_flag")),
                 stock_confirmed,
-                float(row.get("volume_vs_avg_ratio") or 0) >= 1.2,
+                _metric(row.get("volume_vs_avg_ratio"), 0) >= 1.2,
             ]
         ),
     }
@@ -76,10 +89,10 @@ def _pm_action(
         return {
             "pm_action": "NOT_ACTIONABLE",
             "actionable": False,
-            "reason": "Synthetic/mock flow — not for capital deployment",
+            "reason": "Mock/synthetic flow — watchlist context only, not deployable",
         }
 
-    stock_move = float(row.get("stock_move_pct") or 0)
+    stock_move = _metric(row.get("stock_move_pct"), 0)
     cp = (row.get("call_put") or "C").upper()
     stock_confirmed = abs(stock_move) >= 2 and (
         (cp == "C" and stock_move > 0) or (cp == "P" and stock_move < 0)
@@ -140,7 +153,7 @@ def _pm_action(
 
 def _options_detail(row: Dict[str, Any]) -> Dict[str, Any]:
     prem = float(row.get("premium") or 0)
-    vol_avg = float(row.get("volume_vs_avg_ratio") or 0)
+    vol_avg = _metric(row.get("volume_vs_avg_ratio"), 0)
     return {
         "call_put": "CALL" if (row.get("call_put") or "C") == "C" else "PUT",
         "strike": row.get("strike"),
@@ -158,7 +171,7 @@ def _options_detail(row: Dict[str, Any]) -> Dict[str, Any]:
         "sweep": bool(row.get("sweep_flag")),
         "block": bool(row.get("block_flag")),
         "open_close_estimate": (
-            "likely_opening" if float(row.get("volume_oi_ratio") or 0) >= 1.0 else "unclear"
+            "likely_opening" if _metric(row.get("volume_oi_ratio"), 0) >= 1.0 else "unclear"
         ),
         "aggressiveness": row.get("side_bias") or "UNKNOWN",
         "unusual_vs_baseline": (
@@ -397,7 +410,7 @@ async def build_flow_decision_surface(
         "count_mock": len(mock_enriched),
         "summary": payload.get("summary"),
         "warning": (
-            "MOCK MODE — grades are illustrative only"
+            _MOCK_WARNING
             if global_synthetic and not live_enriched
             else payload.get("warning")
         ),

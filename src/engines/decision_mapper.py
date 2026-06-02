@@ -53,6 +53,10 @@ class Decision:
     stop_rationale: str = ""  # e.g. "Below swing low at $145.20"
     target_price: float = 0.0
     risk_reward: float = 0.0  # Computed entry→stop / entry→target
+    # PILOT transparency (required when action == PILOT)
+    why_pilot: str = ""
+    upgrade_to_trade: str = ""
+    downgrade_to_watch_avoid: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         d = {
@@ -75,6 +79,12 @@ class Decision:
             d["target_price"] = round(self.target_price, 2)
         if self.risk_reward > 0:
             d["risk_reward"] = round(self.risk_reward, 2)
+        if self.why_pilot:
+            d["why_pilot"] = self.why_pilot
+        if self.upgrade_to_trade:
+            d["upgrade_to_trade"] = self.upgrade_to_trade
+        if self.downgrade_to_watch_avoid:
+            d["downgrade_to_watch_avoid"] = self.downgrade_to_watch_avoid
         return d
 
 
@@ -138,17 +148,30 @@ class DecisionMapper:
             d.action = Action.TRADE
             d.rationale = "Good setup with decent confidence"
             d.risk_level = "MEDIUM"
-        elif score >= 6.0 and conf >= 0.45 and regime.get("regime", "") == "UPTREND":
+        elif (
+            score >= 6.5
+            and conf >= 0.50
+            and confidence.timing >= 0.45
+            and confidence.thesis >= 0.50
+            and confidence.execution >= 0.35
+            and confidence.data >= 0.35
+        ):
             d.action = Action.PILOT
-            d.rationale = "Decent setup in UPTREND — Buy Small (Pilot)"
+            d.rationale = "Partial edge with defined stop — pilot size only"
             d.risk_level = "MEDIUM"
-        elif score >= 6.0 and conf >= 0.45:
-            d.action = Action.PILOT
-            d.rationale = "Decent setup forming — Buy Small (Pilot)"
-            d.risk_level = "MEDIUM"
+            d.why_pilot = (
+                f"Score {score:.1f} and conf {conf:.0%} — not full TRADE bar "
+                f"(need ≥8.0 score, ≥65% thesis+timing)"
+            )
+            d.upgrade_to_trade = (
+                "Thesis+timing ≥65%, score ≥8.0, R:R ≥2.5, volume at trigger"
+            )
+            d.downgrade_to_watch_avoid = (
+                "Stop hit, regime gate, or thesis/timing failure → exit or WATCH"
+            )
         elif score >= 5.0 and conf >= 0.4:
             d.action = Action.WATCH
-            d.rationale = "Wait for specific trigger criteria"
+            d.rationale = "Setup forming — edge incomplete, not pilot-ready"
             d.risk_level = "MEDIUM"
         elif score >= 3.5:
             d.action = Action.AVOID

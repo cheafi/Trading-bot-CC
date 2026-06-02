@@ -206,7 +206,9 @@ class AgentOrchestratorService:
         # Backward-compatible fallback for old rows without per-agent stance.
         action = str(entry.get("final_action") or entry.get("decision_tier") or "")
         regime_gate = str(entry.get("regime_gate") or "").upper()
-        rr = float(entry.get("rr_multiple") or 0.0)
+        from src.utils.numeric_parse import parse_ratio
+
+        rr = parse_ratio(entry.get("rr_multiple"), 0.0) or 0.0
 
         if agent == "macro":
             return 1.0 if regime_gate == "PASS" else -1.0
@@ -256,7 +258,9 @@ class AgentOrchestratorService:
         enriched = council_result.pipeline.to_dict()
 
         action = str(enriched.get("action", "WATCH"))
-        rr = float(signal.get("risk_reward") or 0.0)
+        from src.utils.numeric_parse import parse_ratio
+
+        rr = parse_ratio(signal.get("risk_reward"), 0.0) or 0.0
         conviction_tier = self._conviction_tier(action)
         action_stance = self._numeric_stance(action)
 

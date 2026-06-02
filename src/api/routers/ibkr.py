@@ -11,9 +11,7 @@ Endpoints:
   POST /api/ibkr/order                — place an order (paper-safe)
 """
 
-import asyncio
 import logging
-import socket
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -50,6 +48,10 @@ class ConnectRequest(BaseModel):
         le=999999,
         description="Override IB API client ID; defaults to IBKR_CLIENT_ID/IB_CLIENT_ID and auto-retries nearby IDs",
     )
+    source: Optional[str] = Field(
+        default="ibkr_page",
+        description="Diagnostic connect source (ibkr_page, manual_test, account_sync, …)",
+    )
 
 
 class PlaceOrderRequest(BaseModel):
@@ -61,6 +63,8 @@ class PlaceOrderRequest(BaseModel):
     quantity: float = Field(..., gt=0)
     order_type: str = Field(default="MKT", pattern="^(MKT|LMT|STP)$")
     limit_price: Optional[float] = None
+    stop_price: Optional[float] = None
+    tif: str = Field(default="DAY", pattern="^(DAY|GTC)$")
     exchange: str = "SMART"
     currency: str = "USD"
 
@@ -90,22 +94,47 @@ class PlaceBracketRequest(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
-def _gateway_port_open(host: str, port: int, timeout: float = 2.0) -> bool:
-    try:
-        with socket.create_connection((host, port), timeout=timeout):
-            return True
-    except OSError:
-        return False
-
-
 @router.get("/status")
-async def ibkr_status():
-    """Connection state — no auth required for health polling."""
+async def ibkr_status(
+    manual_positions: int = 0,
+    broker_positions: int = 0,
+    bracket_enabled: bool = False,
+    bracket_stop: Optional[float] = None,
+    bracket_target: Optional[float] = None,
+):
+    """Connection state + execution readiness matrix — no auth required for health polling."""
     svc = get_ibkr_service()
     st = svc.status()
-    host = st.get("host") or resolve_ibkr_host(None)
-    port = int(st.get("port") or default_ibkr_port(st.get("mode") or "paper"))
-    st["gateway_reachable"] = _gateway_port_open(host, port)
+    gateway_reachable = bool(st.get("gateway_reachable"))
+    st["diagnostics"] = svc.diagnostics()
+    st["readiness"] = svc.build_readiness_matrix(
+        gateway_reachable=gateway_reachable,
+        broker_position_count=max(0, broker_positions),
+        manual_position_count=max(0, manual_positions),
+        bracket_enabled=bracket_enabled,
+        bracket_stop=bracket_stop,
+        bracket_target=bracket_target,
+    )
+    st["health"] = st.get("health") or st["readiness"].get("health")
+    diagnosis = svc.build_diagnosis(
+        bracket_status=str(st["readiness"].get("bracket_status") or "unavailable"),
+        bracket_enabled=bracket_enabled,
+        trade_handoff_ready=bool(st["readiness"].get("full_handoff_ready")),
+    )
+    st["diagnosis"] = diagnosis
+    st["gateway_reachable"] = bool(diagnosis.get("gateway_reachable", gateway_reachable))
+    st["api_port_open"] = bool(diagnosis.get("api_port_open"))
+    st["health_label"] = diagnosis.get("label") or st.get("health_label")
+    st["health_label_short"] = diagnosis.get("short")
+    st["source_of_truth"] = {
+        "broker_label": "IBKR positions = broker truth",
+        "portfolio_label": "Portfolio page = research/manual book",
+        "note": (
+            st["readiness"].get("portfolio_sync_reason")
+            if st.get("connected")
+            else "Connect IBKR for broker-authoritative positions"
+        ),
+    }
     return st
 
 
@@ -117,16 +146,30 @@ async def ibkr_connect(req: ConnectRequest, _=Depends(verify_api_key)):
     mode='live'  → port 4001 for IB Gateway unless overridden (7496 for TWS live)
     """
     svc = get_ibkr_service()
+    source = (req.source or "ibkr_page").strip() or "ibkr_page"
     result = await svc.connect(
         mode=req.mode,
         host=req.host or None,
         port=req.port,
         client_id=req.client_id,
+        source=source,  # type: ignore[arg-type]
     )
     if not result.get("ok"):
-        raise HTTPException(
-            status_code=503, detail=result.get("error", "Connection failed")
-        )
+        err = result.get("error", "Connection failed")
+        try:
+            from src.services.platform_error_log import log_broker_event
+
+            log_broker_event(
+                event="IBKR connect failed",
+                detail=(
+                    f"Handshake to IB Gateway did not succeed ({err}). "
+                    "The IBKR tab will show disconnected until Gateway/TWS accepts the API session."
+                ),
+                severity="critical",
+            )
+        except Exception:
+            logger.debug("platform error log append failed", exc_info=True)
+        raise HTTPException(status_code=503, detail=err)
     return result
 
 
@@ -147,30 +190,46 @@ class PingRequest(BaseModel):
 @router.post("/ping")
 async def ibkr_ping(req: PingRequest):
     """
-    TCP reachability probe — checks if IB Gateway port is open.
-    No ibapi handshake, no auth required. Paper=7497, Live Gateway=4001, Live TWS=7496.
+    Session snapshot — does NOT open a raw TCP socket (avoids JTS log spam).
+    Use POST /connect for a full IB API handshake.
     """
+    svc = get_ibkr_service()
+    transport = svc.get_transport_snapshot()
     host = resolve_ibkr_host(req.host)
     port = req.port or default_ibkr_port(req.mode)
+    from src.services.ibkr_diagnosis import build_ibkr_diagnosis, probe_tcp_port
+    from src.services.ibkr_service import IBAPI_AVAILABLE, _running_in_docker
 
-    def _probe():
-        try:
-            with socket.create_connection((host, port), timeout=4):
-                return True
-        except OSError:
-            return False
-
-    reachable = await asyncio.to_thread(_probe)
+    diagnosis = build_ibkr_diagnosis(
+        mode=req.mode,
+        host=host,
+        port=port,
+        docker=_running_in_docker(),
+        ibapi_available=IBAPI_AVAILABLE,
+        socket_connected=svc.is_connected,
+        session_usable=bool(transport.get("session_status") not in ("inactive", "lost")),
+        ib_api_ready=bool(transport.get("ib_api_ready")),
+        paper_port=svc.PAPER_PORT,
+        live_ports=[svc.LIVE_PORT, svc.LIVE_TWS_PORT],
+    )
+    api_open = probe_tcp_port(host, port)
+    reachable = bool(diagnosis.get("gateway_reachable") or transport.get("gateway_reachable"))
+    message = diagnosis.get("label") or (
+        f"IB API session ready on {host}:{port}"
+        if transport.get("ib_api_ready")
+        else f"Port {'open' if api_open else 'closed'} at {host}:{port}"
+    )
     return {
         "reachable": reachable,
+        "api_port_open": api_open,
         "host": host,
         "port": port,
         "mode": req.mode,
-        "message": (
-            f"IB Gateway/TWS reachable at {host}:{port}"
-            if reachable
-            else f"Cannot reach {host}:{port} — is IB Gateway/TWS running and is the API socket enabled?"
-        ),
+        "message": message,
+        "hint": diagnosis.get("hint"),
+        "diagnosis": diagnosis,
+        "transport": transport,
+        "probe_type": "tcp_plus_session",
     }
 
 
@@ -311,6 +370,8 @@ async def ibkr_place_order(
         quantity=req.quantity,
         order_type=req.order_type,
         limit_price=req.limit_price,
+        stop_price=req.stop_price,
+        tif=req.tif,
         exchange=req.exchange,
         currency=req.currency,
     )
@@ -440,3 +501,13 @@ async def ibkr_open_orders(_=Depends(verify_api_key)):
         raise HTTPException(status_code=503, detail="Not connected to IB Gateway.")
     orders = await svc.get_open_orders()
     return sanitize_for_json({"count": len(orders), "orders": orders})
+
+
+@router.get("/recent-fills")
+async def ibkr_recent_fills(_=Depends(verify_api_key)):
+    """Recent execution fills captured from IB execDetails callbacks (session-local)."""
+    svc = get_ibkr_service()
+    if not svc.is_connected:
+        raise HTTPException(status_code=503, detail="Not connected to IB Gateway.")
+    fills = svc.get_recent_fills()
+    return sanitize_for_json({"count": len(fills), "fills": fills})

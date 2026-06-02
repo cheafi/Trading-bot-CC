@@ -25,6 +25,7 @@ class _FakeDecision:
         self.action = action
         self.entry_trigger = entry_trigger
         self.risk_reward_ratio = 2.0
+        self.invalidation = ""
 
 
 class _FakeExpl:

@@ -147,9 +147,11 @@ class DecisionJournal:
             recommendation.get("target_price") or recommendation.get("take_profit"),
             0.0,
         )
-        rr = self._as_float(
+        from src.utils.numeric_parse import parse_ratio
+
+        rr = parse_ratio(
             recommendation.get("risk_reward") or recommendation.get("rr"), 0.0
-        )
+        ) or 0.0
         if rr <= 0 and entry_price and stop_price and target_price:
             risk = abs(entry_price - stop_price)
             reward = abs(target_price - entry_price)
@@ -378,12 +380,9 @@ class DecisionJournal:
 
     @staticmethod
     def _as_float(value: Any, default: float = 0.0) -> float:
-        try:
-            if value is None or value == "":
-                return default
-            return float(value)
-        except (TypeError, ValueError):
-            return default
+        from src.utils.numeric_parse import parse_numeric
+
+        return parse_numeric(value, default)
 
     def _is_duplicate_recommendation(
         self,

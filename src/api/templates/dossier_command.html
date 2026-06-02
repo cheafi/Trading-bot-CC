@@ -35,7 +35,7 @@
                 <div><div style="color:var(--t3)">Stop</div><div class="mono text-red-400" x-text="dosUnified().stop?'$'+dosUnified().stop:'—'"></div></div>
                 <div><div style="color:var(--t3)">T1 / T2</div><div class="mono text-green-400" x-text="(dosUnified().target_1r&&dosUnified().target_2r)?('$'+dosUnified().target_1r+' / $'+dosUnified().target_2r):'—'"></div></div>
                 <div><div style="color:var(--t3)">R:R</div><div class="mono text-white" x-text="dosUnified().rr_ratio||'—'"></div></div>
-                <div><div style="color:var(--t3)">Size @1%</div><div class="mono text-green-400" x-text="dosSizeShares()+' sh'"></div></div>
+                <div><div style="color:var(--t3)" x-text="dossierSizingBlocked()?'Sizing':'Size @1%'"></div><div class="mono" :class="dossierSizingBlocked()?'text-amber-300':'text-green-400'" x-text="dosSizeDisplay()"></div></div>
               </div>
               <div class="flex flex-wrap gap-2 mt-2 pt-2" style="border-top:1px dashed var(--bd)">
                 <button class="btn-s text-[9px]" @click="dosIbkrSetAlert()">🔔 Set Alert</button>

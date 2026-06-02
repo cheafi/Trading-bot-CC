@@ -54,31 +54,30 @@ async def _scan_with_fallback(
     use_polygon = mode == "polygon" or (
         mode == "auto" and os.getenv("POLYGON_API_KEY", "").strip()
     )
-    if not use_polygon:
-        return payload
 
     # Polygon configured but no scorable contracts — try last-good snapshot
-    try:
-        last = get_options_flow_persistence().latest_snapshot()
-        if last and (last.get("candidates") or []):
-            last["warning"] = (
-                "Polygon scan returned no candidates; serving last-good snapshot."
-            )
-            last["trust"] = {
-                **(last.get("trust") or {}),
-                "fallback": "persistence",
-            }
-            return last
-    except Exception:
-        logger.debug("options radar persistence fallback skipped", exc_info=True)
+    if use_polygon:
+        try:
+            last = get_options_flow_persistence().latest_snapshot()
+            if last and (last.get("candidates") or []):
+                last["warning"] = (
+                    "Polygon scan returned no candidates; serving last-good snapshot."
+                )
+                last["trust"] = {
+                    **(last.get("trust") or {}),
+                    "fallback": "persistence",
+                }
+                return last
+        except Exception:
+            logger.debug("options radar persistence fallback skipped", exc_info=True)
 
-    # Final fallback: mock with explicit synthetic flag
+    # Final fallback: mock with explicit synthetic flag (research-only UI cards)
     mock_snap = await OptionsFlowRadar(MockOptionsFlowProvider()).scan(
         tickers, limit=limit, min_grade=min_grade
     )
     mock_payload = mock_snap.to_dict()
     mock_payload["warning"] = (
-        "Polygon scan returned no candidates; serving mock synthetic fallback."
+        "Live flow unavailable or empty; serving mock synthetic fallback."
     )
     trust = mock_payload.get("trust") or {}
     trust["fallback"] = "mock"

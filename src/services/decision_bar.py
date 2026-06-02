@@ -10,6 +10,22 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat() + "Z"
 
 
+def _display_text(value: Any, default: str = "—") -> str:
+    """Coerce UI-bound decision bar fields — never leak raw booleans."""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    text = str(value).strip()
+    if not text or text.lower() in ("true", "false", "none"):
+        if text.lower() == "true":
+            return "Yes"
+        if text.lower() == "false":
+            return "No"
+        return default
+    return text
+
+
 def evidence_quality_block(
     *,
     basis: str,
@@ -64,18 +80,19 @@ def build_decision_bar(
     as_of: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Canonical decision bar payload."""
+    action_text = _display_text(next_action, default=_display_text(verdict))
     return {
         "surface": surface,
-        "verdict": verdict,
+        "verdict": _display_text(verdict),
         "conviction": max(0, min(100, int(conviction))),
         "evidence_quality": evidence,
-        "risk_state": risk_state,
-        "next_catalyst": next_catalyst or "—",
-        "time_horizon": time_horizon,
-        "next_action": next_action or verdict,
-        "invalidation": invalidation,
-        "why_now": (why_now or "")[:240],
-        "why_not": (why_not or "")[:240],
+        "risk_state": _display_text(risk_state),
+        "next_catalyst": _display_text(next_catalyst, default="Sleeve gate review"),
+        "time_horizon": _display_text(time_horizon),
+        "next_action": action_text,
+        "invalidation": _display_text(invalidation, default="") if invalidation else None,
+        "why_now": _display_text(why_now, default="")[:240],
+        "why_not": _display_text(why_not, default="")[:240],
         "as_of": as_of or _now(),
     }
 
@@ -175,32 +192,68 @@ def bar_from_portfolio(
     )
 
 
+def _format_deploy_str(deploy: Any) -> str:
+    if isinstance(deploy, bool):
+        return "Selective deploy" if deploy else "Preserve cash"
+    if deploy is None:
+        return "—"
+    text = str(deploy).replace("_", " ")
+    if text.lower() in ("true", "false"):
+        return "Selective deploy" if text.lower() == "true" else "Preserve cash"
+    return text
+
+
 def bar_from_funds(
     allocator_decision: Dict[str, Any],
     *,
     active_sleeve: Optional[str] = None,
+    execution_readiness: Optional[Dict[str, Any]] = None,
+    regime_stale: bool = False,
 ) -> Dict[str, Any]:
-    deploy = allocator_decision.get("deploy_capital") or allocator_decision.get("deploy_posture")
-    verdict = "ALLOCATE" if deploy and "cash" not in str(deploy).lower() else "HOLD CASH"
-    if allocator_decision.get("reduce_exposure"):
+    deploy_label = str(allocator_decision.get("deploy_capital_label") or "")
+    posture = str(allocator_decision.get("deploy_posture") or "").lower()
+    should_deploy = bool(allocator_decision.get("deploy_capital"))
+    if "research-weight" in deploy_label.lower() or regime_stale:
+        verdict = "RESEARCH ONLY"
+    elif "analysis only" in deploy_label.lower() or "not execution" in deploy_label.lower():
+        verdict = "ANALYSIS ONLY"
+    elif should_deploy:
+        verdict = "ALLOCATE"
+    elif allocator_decision.get("reduce_exposure"):
         verdict = "REDUCE"
+    else:
+        verdict = "HOLD CASH"
+    ex = execution_readiness or {}
+    conv = int(allocator_decision.get("confidence") or 40)
+    if regime_stale:
+        conv = min(conv, 35)
+    if not ex.get("broker_connected"):
+        conv = min(conv, 40)
+    why_not_parts = [
+        str(x)
+        for x in (allocator_decision.get("do_not_allocate_now") or [])
+        if x and not isinstance(x, bool)
+    ]
+    if allocator_decision.get("why_not"):
+        why_not_parts.insert(0, str(allocator_decision.get("why_not")))
+    freshness = "stale" if regime_stale else "recent"
     return build_decision_bar(
         surface="funds",
         verdict=verdict,
-        conviction=int(allocator_decision.get("confidence") or 55),
+        conviction=conv,
         evidence=evidence_quality_block(
             basis="model_backtest",
-            sample_size=None,
-            freshness="recent",
-            source_quality="medium",
-            label="Fund lab · backtest sleeves",
+            sample_size=0,
+            freshness=freshness,
+            source_quality="low",
+            label="Fund lab · backtest only · not live-validated",
         ),
-        risk_state="Normal",
-        next_catalyst=allocator_decision.get("next_rebalance") or "Sleeve gate review",
+        risk_state="Elevated" if regime_stale or not ex.get("broker_connected") else "Normal",
+        next_catalyst="Regime sync + execution login" if regime_stale else "Sleeve gate review",
         time_horizon="medium",
-        next_action=allocator_decision.get("marginal_instruction") or deploy,
-        why_now=allocator_decision.get("headline"),
-        why_not="; ".join(allocator_decision.get("do_not_allocate_now") or [])[:200],
+        next_action=deploy_label or _format_deploy_str(allocator_decision.get("deploy_capital")),
+        why_now=allocator_decision.get("why_now") or active_sleeve or allocator_decision.get("where"),
+        why_not="; ".join(why_not_parts)[:200],
     )
 
 
@@ -252,13 +305,23 @@ def bar_from_stock(
 
 
 def enrich_curve_diagnostics(card: Dict[str, Any]) -> Dict[str, Any]:
-    """Curve block with explicit live/backtest separation."""
+    """Curve block with explicit live/backtest separation and DD underwater series."""
     perf = card.get("performance_evidence") or {}
     mode = (card.get("mode") or perf.get("mode") or "training").lower()
     evidence = perf.get("evidence") or "backtest"
-    curve = card.get("equity_curve_20") or []
+    curve = card.get("equity_curve_60") or card.get("equity_curve_20") or []
+    dd_curve: List[float] = []
+    if len(curve) >= 2:
+        peak = float(curve[0]) or 1.0
+        for v in curve:
+            fv = float(v)
+            if fv > peak:
+                peak = fv
+            dd_curve.append(round((fv - peak) / peak * 100, 2))
     return {
-        "equity_curve_20": curve,
+        "equity_curve_20": card.get("equity_curve_20") or [],
+        "equity_curve_60": card.get("equity_curve_60") or [],
+        "underwater_curve_20": dd_curve[-20:] if dd_curve else [],
         "curve_basis": evidence,
         "curve_mode": mode,
         "curve_label": perf.get("label")
@@ -267,4 +330,6 @@ def enrich_curve_diagnostics(card: Dict[str, Any]) -> Dict[str, Any]:
         "forward_degradation_flag": False,
         "rolling_sharpe_note": "Wire live sleeve equity for rolling Sharpe",
         "sample": perf.get("sample") or "model_universe_backtest",
+        "max_drawdown_pct": card.get("max_drawdown_pct"),
+        "watermark_drawdown": card.get("watermark_drawdown"),
     }

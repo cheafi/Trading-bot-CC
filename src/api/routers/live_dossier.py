@@ -315,16 +315,21 @@ async def live_dossier(ticker: str, request: Request):
 
     # ── Trade plan ──
     risk_per_share = round(atr * 1.5, 2) if atr else round(price * 0.05, 2)
-    trade_plan = {
-        "entry_zone": [round(price * 0.98, 2), round(price * 1.01, 2)],
-        "target_1r": round(price + risk_per_share * 2, 2),
-        "target_2r": round(price + risk_per_share * 3, 2),
-        "stop": round(price - risk_per_share, 2),
-        "risk_per_share": risk_per_share,
-        "rr_ratio": "1:2",
-        "invalidation": f"Close below ${support:.2f}",
-        "note": "ATR-based plan" if atr else "Percentage-based estimate",
-    }
+    from src.utils.numeric_parse import normalize_trade_plan
+
+    trade_plan = normalize_trade_plan(
+        {
+            "entry_zone": [round(price * 0.98, 2), round(price * 1.01, 2)],
+            "target_1r": round(price + risk_per_share * 2, 2),
+            "target_2r": round(price + risk_per_share * 3, 2),
+            "stop": round(price - risk_per_share, 2),
+            "risk_per_share": risk_per_share,
+            "rr_ratio": 2.0,
+            "rr_ratio_label": "1:2",
+            "invalidation": f"Close below ${support:.2f}",
+            "note": "ATR-based plan" if atr else "Percentage-based estimate",
+        }
+    )
 
     # ── Regime context ──
     regime = await fetch_regime_state(request)

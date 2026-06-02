@@ -33,10 +33,12 @@ def _pick_best_by_style(
 
 
 def _best_rr(rows: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    from src.utils.numeric_parse import parse_ratio
+
     best = None
     best_rr = 0.0
     for row in rows:
-        rr = float(row.get("risk_reward") or 0)
+        rr = parse_ratio(row.get("risk_reward"), 0.0) or 0.0
         if rr > best_rr:
             best_rr = rr
             best = row
@@ -54,6 +56,7 @@ def build_monitoring_system(
     *,
     today: Dict[str, Any],
     market_posture: Dict[str, Any],
+    execution_readiness: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Four-class institutional monitor framework."""
     regime = today.get("market_regime") or {}
@@ -109,11 +112,61 @@ def build_monitoring_system(
             "detail": "Do not trade 13F alone — 45–90d lag",
         },
     ]
+    exec_state = execution_readiness or {}
+    execution_rules: List[Dict[str, str]] = [
+        {
+            "class": "execution",
+            "rule": "Gateway",
+            "detail": (
+                "Up — connect session"
+                if exec_state.get("gateway_reachable")
+                else "Down — paper signals only"
+            ),
+        },
+        {
+            "class": "execution",
+            "rule": "Broker login",
+            "detail": (
+                f"{(exec_state.get('paper_or_live') or 'paper').upper()} connected"
+                if exec_state.get("broker_connected")
+                else "Not logged in — open IBKR tab"
+            ),
+        },
+        {
+            "class": "execution",
+            "rule": "Position sync",
+            "detail": exec_state.get("portfolio_source")
+            or ("IBKR" if exec_state.get("portfolio_synced") else "Manual"),
+        },
+        {
+            "class": "execution",
+            "rule": "Bracket readiness",
+            "detail": (
+                "Ready — stop + target required"
+                if exec_state.get("bracket_order_ready")
+                else "Draft bracket in IBKR tab"
+            ),
+        },
+        {
+            "class": "execution",
+            "rule": "Order handoff",
+            "detail": exec_state.get("readiness_label") or "Broker offline",
+        },
+    ]
+    if exec_state.get("last_heartbeat"):
+        execution_rules.append(
+            {
+                "class": "execution",
+                "rule": "Heartbeat",
+                "detail": str(exec_state.get("last_heartbeat")),
+            }
+        )
     return {
         "stock": stock_rules,
         "portfolio": portfolio_rules,
         "market": market_rules,
         "smart_money": smart_money_rules,
+        "execution": execution_rules,
         "posture": market_posture.get("deploy_posture"),
     }
 
@@ -283,19 +336,26 @@ async def build_decision_hub(request) -> Dict[str, Any]:
             logger.debug("decision_hub fund_console failed", exc_info=True)
 
     from src.services.decision_bar import bar_from_today
+    from src.services.macro_trend import assess_market_macro
     from src.services.monitors_store import evaluate_monitors
 
     warming = not bool(today)
     decision_bar = bar_from_today(today, decision_strip)
     monitor_alerts = evaluate_monitors(today=today)
+    macro_trend_strip = assess_market_macro(regime)
     return {
         "as_of": datetime.now(timezone.utc).isoformat() + "Z",
         "warming": warming,
         "decision_bar": decision_bar,
         "decision_strip": decision_strip,
+        "macro_trend_strip": macro_trend_strip,
         "best_action": best_action,
         "market_posture": market_posture,
-        "monitoring": build_monitoring_system(today=today, market_posture=market_posture),
+        "monitoring": build_monitoring_system(
+            today=today,
+            market_posture=market_posture,
+            execution_readiness=execution,
+        ),
         "monitor_alerts": monitor_alerts,
         "evidence_platform": {
             "regime": today.get("trust", {}).get("freshness", "REAL_TIME"),

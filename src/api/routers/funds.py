@@ -54,10 +54,16 @@ async def _build_payload(
     )
     market_regime_label = ""
     tradeability = ""
+    today_trend = ""
+    today_tradeability = ""
     vix_val: float | None = None
     breadth_val: float | None = None
     best_action_liner = ""
+    fund_lab_sync_ts: float | None = None
     try:
+        cached_funds = getattr(request.app.state, "fund_cards_cache", None)
+        if isinstance(cached_funds, dict) and cached_funds.get("ts"):
+            fund_lab_sync_ts = float(cached_funds["ts"])
         cache = getattr(request.app.state, "regime_cache", None)
         if cache is not None:
             if isinstance(cache, dict):
@@ -71,18 +77,35 @@ async def _build_payload(
                 vix_val = getattr(cache, "vix", None)
                 breadth_val = getattr(cache, "breadth", None)
             if trend:
+                today_trend = str(trend)
                 market_regime_label = f"{trend} · {trade or 'WAIT'}"
+            if trade:
+                today_tradeability = str(trade)
             tradeability = str(trade or "")
         today_cache = getattr(request.app.state, "today_v7_cache", None)
         if isinstance(today_cache, dict):
             ba = today_cache.get("best_action") or {}
             best_action_liner = str(ba.get("stance_one_liner") or "")
+            mr = today_cache.get("market_regime") or {}
+            if not today_trend:
+                today_trend = str(mr.get("trend") or "")
+            if not today_tradeability:
+                today_tradeability = str(mr.get("tradeability") or "")
+            if not market_regime_label and today_trend:
+                market_regime_label = f"{today_trend} · {today_tradeability or 'WAIT'}"
             if not tradeability:
-                tradeability = str(
-                    (today_cache.get("market_regime") or {}).get("tradeability") or ""
-                )
+                tradeability = today_tradeability
+            if vix_val is None and mr.get("vix") is not None:
+                vix_val = float(mr.get("vix"))
+            if breadth_val is None and mr.get("breadth") is not None:
+                breadth_val = float(mr.get("breadth"))
     except Exception:
         logger.debug("fund-lab regime/today context failed", exc_info=True)
+
+    from src.services.fund_manager_console import _is_unknown_regime
+
+    if _is_unknown_regime(regime) and market_regime_label:
+        regime = market_regime_label.split("·")[0].strip() or regime
 
     execution_readiness: Dict[str, Any] = {}
     try:
@@ -105,12 +128,16 @@ async def _build_payload(
 
     from src.services.fund_manager_console import build_fund_console_payload
 
+    run_ts = time.time()
     console = build_fund_console_payload(
         cards=cards,
         regime=regime,
         benchmark=benchmark.upper(),
         execution_readiness=execution_readiness,
         market_regime_label=market_regime_label,
+        today_trend=today_trend,
+        today_tradeability=today_tradeability,
+        fund_lab_sync_ts=fund_lab_sync_ts or run_ts,
         period=period,
         benchmark_return_pct=float(lab.get("benchmark_return_pct") or 0),
         tradeability=tradeability,
@@ -133,7 +160,7 @@ async def _build_payload(
         request.app.state.fund_cards_cache = {
             "cards": cards,
             "regime": regime,
-            "ts": time.time(),
+            "ts": run_ts,
         }
     except Exception:
         pass

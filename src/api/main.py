@@ -530,6 +530,17 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     """Handle HTTP exceptions with consistent format."""
+    if exc.status_code >= 500:
+        try:
+            from src.services.platform_error_log import log_api_failure
+
+            log_api_failure(
+                path=str(request.url.path),
+                status_code=exc.status_code,
+                detail=str(exc.detail),
+            )
+        except Exception:
+            logger.debug("platform error log append failed", exc_info=True)
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -544,6 +555,17 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 async def general_exception_handler(request: Request, exc: Exception):
     """Handle unexpected errors."""
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    try:
+        from src.services.platform_error_log import capture_exception
+
+        capture_exception(
+            component="api",
+            message=f"Unhandled error on {request.url.path}",
+            exc=exc,
+            dedupe_key=f"unhandled:{request.url.path}:{exc.__class__.__name__}",
+        )
+    except Exception:
+        logger.debug("platform error log append failed", exc_info=True)
     return JSONResponse(
         status_code=500,
         content={
@@ -4602,11 +4624,19 @@ async def ops_status():
     if engine:
         running = bool(getattr(engine, "running", getattr(engine, "_running", False)))
         dry_run = getattr(engine, "dry_run", True)
-        cycle_count = getattr(engine, "cycle_count", 0)
-        signals_today = getattr(engine, "signals_today", 0)
-        trades_today = getattr(engine, "trades_today", 0)
-        circuit_breaker = getattr(engine, "circuit_breaker_triggered", False)
-        circuit_breaker_reason = getattr(engine, "circuit_breaker_reason", "")
+        cycle_count = getattr(engine, "_cycle_count", getattr(engine, "cycle_count", 0))
+        signals_today = len(getattr(engine, "_signals_today", [])) or getattr(
+            engine, "signals_today", 0
+        )
+        trades_today = len(getattr(engine, "_trades_today", [])) or getattr(
+            engine, "trades_today", 0
+        )
+        circuit_breaker = getattr(engine, "circuit_breaker_triggered", False) or bool(
+            getattr(getattr(engine, "circuit_breaker", None), "triggered", False)
+        )
+        circuit_breaker_reason = getattr(engine, "circuit_breaker_reason", "") or str(
+            getattr(getattr(engine, "circuit_breaker", None), "trigger_reason", "") or ""
+        )
         cached_recs = len(getattr(engine, "_cached_recommendations", []))
         lc = getattr(engine, "last_cycle_time", None)
         if lc:
@@ -6093,6 +6123,13 @@ try:
     app.include_router(platform_extras_router)
 except Exception:
     logger.exception("[Router] Failed to load platform_extras router")
+
+try:
+    from src.api.routers.ops import router as ops_router
+
+    app.include_router(ops_router)
+except Exception:
+    logger.exception("[Router] Failed to load ops router")
 
 try:
     from src.api.routers.monitors import router as monitors_router

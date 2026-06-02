@@ -183,8 +183,10 @@ class ExplanationEngine:
         """Key supporting evidence."""
         evidence = []
 
+        from src.utils.numeric_parse import parse_ratio
+
         score = sig.get("score", 0)
-        rr = sig.get("risk_reward", 0)
+        rr = parse_ratio(sig.get("risk_reward"), 0.0) or 0.0
         vol = sig.get("vol_ratio", 1.0)
 
         if score >= 7:

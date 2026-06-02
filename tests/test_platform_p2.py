@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import unittest
 
-from src.services.backtest_lab import _strategy_attribution, _trade_level_review
+from src.services.backtest_lab import (
+    _strategy_attribution,
+    _strategy_name,
+    _trade_level_review,
+)
 from src.services.rebalance_sim import simulate_rebalance
 
 
@@ -39,12 +43,30 @@ class TestBacktestLabHelpers(unittest.TestCase):
         core = {
             "benchmark_return": 10,
             "strategies": [
-                {"name": "momentum", "total_return_pct": 20, "sharpe": 1.2},
-                {"name": "swing", "total_return_pct": 5, "sharpe": 0.5},
+                {"strategy": "momentum", "total_return": 20, "sharpe": 1.2},
+                {"strategy": "swing", "total_return": 5, "sharpe": 0.5},
             ],
         }
         out = _strategy_attribution(core)
         self.assertEqual(out["ranked"][0]["name"], "momentum")
+
+    def test_strategy_name_fallback(self):
+        self.assertEqual(_strategy_name({"strategy": "breakout"}), "breakout")
+        self.assertEqual(_strategy_name({"name": "swing"}), "swing")
+
+    def test_trade_level_review_best_strategy_string(self):
+        core = {
+            "best_strategy": "momentum",
+            "strategies": [
+                {
+                    "strategy": "momentum",
+                    "trades": [{"pnl_pct": 2.5, "hold_days": 3}],
+                }
+            ],
+        }
+        out = _trade_level_review(core)
+        self.assertEqual(out["strategy"], "momentum")
+        self.assertEqual(out["trade_count"], 1)
 
 
 if __name__ == "__main__":

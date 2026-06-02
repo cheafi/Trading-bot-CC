@@ -5,7 +5,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-_TRADE_ACTIONS = frozenset({"TRADE", "BUY", "TRADE_NOW", "STRONG_TRADE"})
+from src.utils.numeric_parse import parse_ratio
+
+_TRADE_ACTIONS = frozenset({"TRADE", "BUY", "BUY_ON_DIP", "TRADE_NOW", "STRONG_TRADE"})
+_PILOT_ACTIONS = frozenset({"PILOT"})
 _WATCH_ACTIONS = frozenset({"WATCH", "WAIT", "WATCH_TRIGGER", "LEADER", "LEADER_MONITOR"})
 _AVOID_ACTIONS = frozenset({"AVOID", "NO_TRADE", "NO_TOUCH", "DO_NOT_TOUCH", "AVOID_NOW"})
 
@@ -34,6 +37,19 @@ def _norm_action(action: Optional[str]) -> str:
     return (action or "WATCH").upper().strip()
 
 
+_CAPITAL_STANCE_LABELS = {
+    "hold_cash": "Hold cash",
+    "deploy_selectively": "Deploy selectively",
+    "pilot_only": "Pilot only",
+}
+
+
+def _decision_confidence_label(quality: str, detail: str) -> str:
+    q = (quality or "low").lower()
+    tier = {"high": "High", "medium": "Medium", "low": "Low"}.get(q, "Low")
+    return f"{tier} — {detail}" if detail else tier
+
+
 def _evidence_quality(
     opportunities: List[Dict[str, Any]],
     *,
@@ -41,9 +57,12 @@ def _evidence_quality(
     stale: bool = False,
 ) -> tuple[str, str]:
     if stale or "fallback" in (source or ""):
-        return "low", "Stale or fallback data — verify before sizing"
+        return (
+            "low",
+            "Fallback / stale-context board — rankings lack normal deploy authority",
+        )
     if not opportunities:
-        return "low", "No ranked opportunities"
+        return "low", "No deploy-qualified setups in pipeline"
     badges = [str(o.get("evidence_badge") or "") for o in opportunities[:5]]
     if any("stale" in b for b in badges):
         return "low", "Stale brief fallback"
@@ -83,6 +102,37 @@ def compute_theme_overlap(opportunities: List[Dict[str, Any]], limit: int = 10) 
     }
 
 
+def _capital_stance(
+    tradeability: str,
+    should_trade: bool,
+    *,
+    execution_ready_count: int,
+    pilot_count: int,
+) -> tuple[str, str]:
+    tradeability = (tradeability or "WAIT").upper()
+    if not should_trade or tradeability == "NO_TRADE":
+        return "hold_cash", "Regime gate closed — protect capital, no new risk."
+    if execution_ready_count >= 1 and tradeability in ("STRONG_TRADE", "TRADE"):
+        return (
+            "deploy_selectively",
+            f"{execution_ready_count} execution-ready — size only at 1R with bracket.",
+        )
+    if pilot_count >= 1 or tradeability == "SELECTIVE":
+        return (
+            "pilot_only",
+            "PILOT / WATCH only — half size max; no full-size deploy.",
+        )
+    if tradeability == "WAIT":
+        return (
+            "hold_cash",
+            "WAIT — no deploy-qualified setups and no broker handoff. Monitor near-misses, queue alerts, and only consider pilot entries after manual confirmation.",
+        )
+    return (
+        "hold_cash",
+        f"{tradeability} — watch triggers; do not chase.",
+    )
+
+
 def build_best_action(
     opportunities: List[Dict[str, Any]],
     *,
@@ -97,39 +147,50 @@ def build_best_action(
 ) -> Dict[str, Any]:
     """Derive sticky Best Action Now payload from ranked opportunities."""
     tradeability = (tradeability or "WAIT").upper()
-    if not should_trade:
-        capital_stance = "hold_cash"
-        stance_liner = "Regime gate closed — protect capital, no new risk."
-    elif tradeability in ("NO_TRADE",):
-        capital_stance = "hold_cash"
-        stance_liner = "NO TRADE day — cash is a position."
-    elif tradeability in ("STRONG_TRADE", "TRADE"):
-        capital_stance = "deploy_selectively"
-        stance_liner = f"{tradeability} environment — size only A-grade setups at 1R."
-    elif tradeability == "SELECTIVE":
-        capital_stance = "deploy_selectively"
-        stance_liner = "Selective deployment — high bar for new entries."
-    else:
-        capital_stance = "deploy_selectively"
-        stance_liner = f"{tradeability or 'WAIT'} — monitor triggers, do not chase."
 
     best_trade = None
+    best_pilot = None
     best_watch = None
     best_avoid = None
+    trade_count = 0
+    execution_ready_count = 0
+    pilot_count = 0
 
     for o in opportunities:
         act = _norm_action(o.get("action"))
         tk = o.get("ticker")
         if not tk:
             continue
-        conf = float(o.get("final_conf") or o.get("score", 0) / 10 if o.get("score") else 0.6)
-        if act in _TRADE_ACTIONS and not best_trade:
-            best_trade = {
+        conf = float(
+            o.get("final_conf")
+            or o.get("score", 0) / 10
+            if o.get("score")
+            else 0.6
+        )
+        if o.get("execution_ready"):
+            execution_ready_count += 1
+        if act in _TRADE_ACTIONS:
+            trade_count += 1
+            if not best_trade and o.get("execution_ready"):
+                best_trade = {
+                    "ticker": tk,
+                    "action": "TRADE",
+                    "confidence": round(conf, 2),
+                    "entry_price": o.get("entry_price"),
+                    "stop_price": o.get("stop_price"),
+                    "risk_reward": o.get("risk_reward"),
+                    "execution_ready": True,
+                }
+        if act in _PILOT_ACTIONS and not best_pilot:
+            pilot_count += 1
+            best_pilot = {
                 "ticker": tk,
-                "action": act,
+                "action": "PILOT",
                 "confidence": round(conf, 2),
                 "entry_price": o.get("entry_price"),
                 "stop_price": o.get("stop_price"),
+                "why_pilot": o.get("why_pilot"),
+                "risk_reward": o.get("risk_reward"),
             }
         if act in _WATCH_ACTIONS and not best_watch:
             upgrade = o.get("upgrade_trigger") or o.get("entry_trigger") or ""
@@ -148,6 +209,13 @@ def build_best_action(
                 or o.get("invalidation")
                 or "Regime or setup mismatch",
             }
+
+    capital_stance, stance_liner = _capital_stance(
+        tradeability,
+        should_trade,
+        execution_ready_count=execution_ready_count,
+        pilot_count=pilot_count,
+    )
 
     eq, eq_label = _evidence_quality(opportunities, source=source, stale=stale)
     bracket_ready = bool(
@@ -180,12 +248,21 @@ def build_best_action(
 
     return {
         "capital_stance": capital_stance,
+        "risk_posture": _CAPITAL_STANCE_LABELS.get(
+            capital_stance, capital_stance.replace("_", " ").title()
+        ),
         "stance_one_liner": stance_liner,
         "best_trade_now": best_trade,
+        "best_pilot_now": best_pilot,
         "best_watch_upgrade": best_watch,
         "best_avoid_now": best_avoid,
+        "trade_count": trade_count,
+        "execution_ready_count": execution_ready_count,
+        "pilot_count": pilot_count,
         "evidence_quality": eq,
         "evidence_label": eq_label,
+        "decision_confidence": eq,
+        "decision_confidence_label": _decision_confidence_label(eq, eq_label),
         "execution_readiness": exec_ready,
         "regime_label": regime_label,
         "tradeability": tradeability,
@@ -195,7 +272,7 @@ def build_best_action(
 
 
 def enrich_ranked_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Attach best_action + overlap_warning to playbook ranked response."""
+    """Attach best_action + overlap_warning + truth model to playbook ranked."""
     opps = payload.get("opportunities") or []
     stale = bool(payload.get("stale"))
     source = str(payload.get("source") or "")
@@ -205,18 +282,116 @@ def enrich_ranked_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         st = get_ibkr_service().status()
         ibkr_on = bool(st.get("connected"))
         ibkr_mode = st.get("mode") or "paper"
+        exec_blocked = bool(st.get("circuit_breaker"))
     except Exception:
         ibkr_on = False
         ibkr_mode = "paper"
+        exec_blocked = False
 
     payload["overlap_warning"] = compute_theme_overlap(opps)
+    trade_count = sum(1 for o in opps if _norm_action(o.get("action")) in _TRADE_ACTIONS)
+    execution_ready_count = sum(1 for o in opps if o.get("execution_ready"))
+    pilot_count = sum(1 for o in opps if _norm_action(o.get("action")) in _PILOT_ACTIONS)
+    try:
+        from src.services.decision_truth_model import compute_honest_tradeability
+
+        tradeability = compute_honest_tradeability(
+            should_trade=True,
+            execution_ready=execution_ready_count,
+            pilot_ready=pilot_count,
+            council_high_8=len(
+                [o for o in opps if float(o.get("score") or 0) >= 8.0]
+            ),
+            macro="Neutral",
+            opportunity=(
+                "Strong"
+                if execution_ready_count >= 2
+                else "Mixed"
+                if execution_ready_count >= 1 or pilot_count >= 1
+                else "Weak"
+            ),
+        )
+    except ImportError:
+        tradeability = (
+            "TRADE"
+            if execution_ready_count >= 1
+            else "SELECTIVE"
+            if pilot_count >= 1
+            else "WAIT"
+        )
     payload["best_action"] = build_best_action(
         opps,
-        tradeability="SELECTIVE" if opps else "WAIT",
+        tradeability=tradeability,
         should_trade=True,
         ibkr_connected=ibkr_on,
         ibkr_mode=ibkr_mode,
         source=source,
         stale=stale,
     )
+    _near_miss_missing = (
+        "stronger timing, confirmed volume follow-through, "
+        "monitor-pipeline support, and execution-ready status"
+    )
+    _near_miss_horizon = "next 1–3 sessions if conditions improve"
+    payload["near_miss"] = []
+    for o in opps:
+        if _norm_action(o.get("action")) not in _WATCH_ACTIONS:
+            continue
+        if float(o.get("score") or 0) < 6.0 or o.get("execution_ready"):
+            continue
+        nm = dict(o)
+        if not nm.get("whats_missing") and not nm.get("gaps"):
+            nm["whats_missing"] = _near_miss_missing
+        if not nm.get("timing_bucket"):
+            nm["timing_bucket"] = _near_miss_horizon
+        payload["near_miss"].append(nm)
+        if len(payload["near_miss"]) >= 8:
+            break
+    try:
+        from src.services.decision_truth_model import (
+            build_avoid_grouped_from_rows,
+            build_bucket_quality_from_rows,
+        )
+
+        payload["avoid_grouped"] = build_avoid_grouped_from_rows(opps)
+        payload["bucket_quality"] = build_bucket_quality_from_rows(opps)
+    except ImportError:
+        pass
+    try:
+        from src.services.decision_truth_model import (
+            apply_authority_to_rows,
+            build_decision_authority,
+        )
+
+        board_mode = str(payload.get("board_mode") or "").lower()
+        fallback_brief = (
+            board_mode == "compressed_fallback"
+            or "brief" in source
+            or "fallback" in source
+        )
+        authority = build_decision_authority(
+            tradeability=tradeability if not fallback_brief else "WAIT",
+            should_trade=not fallback_brief,
+            scanner_degraded=stale or fallback_brief,
+            data_stale=stale,
+            fallback_brief=fallback_brief,
+            broker_offline=not ibkr_on,
+            engine_off=False,
+            exec_blocked=exec_blocked,
+            ranked_source=source,
+            ranked_stale=stale,
+            deploy_ideas_count=execution_ready_count,
+        )
+        payload["decision_authority"] = authority
+        if opps:
+            payload["opportunities"] = apply_authority_to_rows(opps, authority)
+        if payload.get("near_miss"):
+            payload["near_miss"] = apply_authority_to_rows(
+                payload["near_miss"], authority
+            )
+        for key in ("near_miss_rows",):
+            if payload.get(key):
+                payload[key] = apply_authority_to_rows(payload[key], authority)
+    except Exception:
+        pass
     return payload

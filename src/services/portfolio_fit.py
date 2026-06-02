@@ -46,6 +46,11 @@ def build_portfolio_fit(
         notes.append("Empty book — fit neutral until policy set")
 
     score = max(0, min(100, score))
+    sector_overlap_pct = round(same_sector * 100, 1)
+    concentration = "high" if same_sector > 0.25 or sym in holdings else "low"
+    if not holdings:
+        concentration = "neutral"
+
     return {
         "score": score,
         "fit_label": (
@@ -56,9 +61,19 @@ def build_portfolio_fit(
             else "poor_fit"
         ),
         "overlap_tickers": overlap,
-        "sector_weight_pct": round(same_sector * 100, 1),
+        "sector_weight_pct": sector_overlap_pct,
+        "sector_overlap_pct": sector_overlap_pct,
+        "factor_exposure": factors_or_default(sector),
+        "correlation_note": (
+            f"~{sector_overlap_pct}% book in same sector"
+            if sector_overlap_pct > 0
+            else "No sector overlap in book"
+        ),
+        "beta_note": "Wire position betas for book-level beta delta",
+        "concentration": concentration,
+        "concentration_impact": concentration if concentration != "neutral" else "low",
+        "cap_compatibility": "neutral — cap tier not modeled",
         "diversification_benefit": score >= 60,
-        "concentration_impact": "high" if same_sector > 0.25 else "low",
         "beta_impact_note": "Wire position betas for book-level beta delta",
         "recommended_sizing_context": (
             "Starter size — 0.5–1R"
@@ -67,6 +82,25 @@ def build_portfolio_fit(
             if score < 50
             else "Standard sleeve sizing"
         ),
+        "decomposition": [
+            {"factor": "Sector overlap", "value": f"{sector_overlap_pct}%", "impact": "high" if sector_overlap_pct > 25 else "low"},
+            {"factor": "Factor", "value": factors_or_default(sector), "impact": "neutral"},
+            {"factor": "Correlation", "value": "same-sector cluster" if sector_overlap_pct > 25 else "diversifying", "impact": "medium" if sector_overlap_pct > 25 else "low"},
+            {"factor": "Beta", "value": "unmodeled", "impact": "neutral"},
+            {"factor": "Concentration", "value": concentration, "impact": concentration},
+            {"factor": "Cap compatibility", "value": "neutral default", "impact": "neutral"},
+        ],
         "notes": notes,
         "evidence": {"basis": "heuristic", "label": "Sector map + holdings overlap"},
     }
+
+
+def factors_or_default(sector: str | None) -> str:
+    if not sector:
+        return "general_equity"
+    s = sector.lower()
+    if "tech" in s or "semi" in s:
+        return "growth / AI_beta"
+    if "health" in s or "util" in s:
+        return "defensive"
+    return "sector_beta"

@@ -114,6 +114,51 @@ jobs:
         env:
           TRADING_ENV: paper
 
+  cc-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python runtime for instant server
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements/base.txt -r requirements/api.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Playwright
+        run: |
+          npm install --no-save @playwright/test@1.49.1
+          npx playwright install --with-deps chromium
+
+      - name: CC template partial drift check
+        run: node scripts/build-cc-template.mjs --check
+
+      - name: CC operator workflow E2E
+        run: npx playwright test tests/e2e/cc_operator_workflows.spec.ts
+        env:
+          CI: "true"
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cc-playwright-report
+          path: |
+            test-results/playwright/
+            test-results/playwright-junit.xml
+            playwright-report/
+          retention-days: 7
+
   security:
     runs-on: ubuntu-latest
     timeout-minutes: 5

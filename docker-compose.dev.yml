@@ -42,6 +42,7 @@ services:
       # Docker Model Runner — local LLM (ai/gemma3n, ai/llama3.3)
       # model-runner.docker.internal resolves inside Docker Desktop containers
       - RUNNING_IN_DOCKER=1
+      - CC_SKIP_IB_INSYNC=1
       - LOCAL_LLM_ENABLED=auto
       - LOCAL_MODEL_FAST=ai/gemma3n:latest
       - LOCAL_MODEL_HEAVY=ai/llama3.3:latest

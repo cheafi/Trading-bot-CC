@@ -465,6 +465,18 @@ class AutoTradingEngine:
         self._running = False
         logger.info("AutoTradingEngine stopped")
 
+    async def run_one_cycle(self) -> Dict[str, Any]:
+        """Run a single scan cycle without starting the main loop."""
+        await self._run_cycle()
+        self._touch_heartbeat()
+        return {
+            "cycle_count": self._cycle_count,
+            "cached_recommendations": len(self._cached_recommendations),
+            "signals_today": len(self._signals_today),
+            "trades_today": len(self._trades_today),
+            "last_cycle": getattr(self, "last_cycle_time", None),
+        }
+
     async def _run_cycle(self):
         self._cycle_count += 1
         set_correlation_id(f"cyc-{self._cycle_count}")

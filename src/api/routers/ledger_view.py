@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter
 
 from src.api.deps import optional_api_key
+from src.utils.numeric_parse import parse_numeric
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -82,10 +83,10 @@ async def ledger_stats(_=optional_api_key):
         return {"ok": True, "count": 0, "summary": None, "by_strategy": {}}
 
     def _safe_float(v) -> Optional[float]:
-        try:
-            return float(v)
-        except Exception:
+        if v is None or v == "":
             return None
+        parsed = parse_numeric(v, default=None)
+        return parsed if parsed is not None else None
 
     pnls = [
         _safe_float(r.get("pnl_pct"))
@@ -161,10 +162,50 @@ async def ledger_stats(_=optional_api_key):
         b.pop("r_sum", None)
         b.pop("r_count", None)
 
+    trades_with_pnl = len(pnls)
+    incomplete = trades_with_pnl < len(rows)
+    metrics_available = trades_with_pnl > 0
+    strategy_has_outcomes = any(
+        b.get("wins", 0) > 0 or b.get("losses", 0) > 0 for b in by_strategy.values()
+    )
+    partially_hydrated = (
+        not metrics_available and len(rows) > 0 and strategy_has_outcomes
+    ) or (incomplete and strategy_has_outcomes)
+    data_quality = {
+        "complete": not incomplete and trades_with_pnl > 0,
+        "aggregate_metrics_available": metrics_available and not partially_hydrated,
+        "partially_hydrated": partially_hydrated,
+        "trades_total": len(rows),
+        "trades_with_pnl_pct": trades_with_pnl,
+        "trades_with_r_multiple": len(rs),
+        "label": (
+            "PARTIALLY HYDRATED — strategy rows present but aggregate PnL missing"
+            if partially_hydrated
+            else "AGGREGATE METRICS UNAVAILABLE — missing pnl_pct on closed trades"
+            if not metrics_available and rows
+            else "AGGREGATE METRICS INCOMPLETE — partial trade history"
+            if incomplete
+            else "LIVE / AUDITED"
+            if trades_with_pnl
+            else "empty"
+        ),
+        "evidence": (
+            "incomplete"
+            if incomplete or not metrics_available
+            else "live"
+            if trades_with_pnl
+            else "empty"
+        ),
+    }
+
+    # Flatten summary fields for UI consumers that read top-level keys.
     return {
         "ok": True,
         "count": len(rows),
-        "summary": summary,
+        "summary": summary if metrics_available else None,
         "by_strategy": by_strategy,
+        "data_quality": data_quality,
+        "aggregate_metrics_available": metrics_available and not partially_hydrated,
         "path": LEDGER_PATH,
+        **(summary if metrics_available else {"count": len(rows)}),
     }

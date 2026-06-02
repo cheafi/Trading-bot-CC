@@ -15,6 +15,16 @@ from src.core.risk_limits import SIGNAL_THRESHOLDS
 router = APIRouter(prefix="/api/live", tags=["live"])
 
 
+def _replay_value_error_detail(exc: ValueError) -> str:
+    msg = str(exc)
+    if "could not convert string to float" in msg:
+        return (
+            "Invalid replay input: expected numeric value, "
+            f"received non-numeric ratio ({msg.split(':')[-1].strip().rstrip(')')})"
+        )
+    return f"Invalid replay input: {msg}"
+
+
 @router.post("/time-travel")
 async def live_time_travel(
     request: Request,
@@ -36,9 +46,21 @@ async def live_time_travel(
     - What actually happened after (forward returns)
     """
 
-    import numpy as np
-
     ticker = validate_ticker(ticker)
+
+    try:
+        return await _run_time_travel(request, ticker, target_date, strategy)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=_replay_value_error_detail(exc)) from exc
+
+
+async def _run_time_travel(
+    request: Request,
+    ticker: str,
+    target_date: str,
+    strategy: str,
+):
+    import numpy as np
 
     # Parse target date
     try:

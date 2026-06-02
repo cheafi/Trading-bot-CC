@@ -18,8 +18,13 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from src.services.regime_service import get_regime as _fetch_regime
+from src.utils.numeric_parse import parse_ratio
 
 logger = logging.getLogger(__name__)
+
+
+def _signal_rr(signal: dict, default: float = 0.0) -> float:
+    return parse_ratio(signal.get("risk_reward"), default) or default
 
 router = APIRouter(tags=["decision-product"])
 
@@ -166,7 +171,7 @@ def _timing_label(distance_to_pivot_pct: float) -> str:
 def _action_from_signal(signal: dict, regime_ok: bool) -> tuple[str, str]:
     """Derive action + reason from signal context."""
     score = signal.get("score", 0)
-    rr = signal.get("risk_reward", 0)
+    rr = _signal_rr(signal)
     timing = signal.get("_timing", "ON_TIME")
     strategy = signal.get("strategy", "unknown")
 
@@ -199,8 +204,8 @@ def _why_now(signal: dict) -> List[str]:
         reasons.append(f"RSI {rsi:.0f} — oversold bounce candidate")
     if vol_r > 1.5:
         reasons.append(f"Volume {vol_r:.1f}x average — institutional interest")
-    if signal.get("risk_reward", 0) >= 3.0:
-        rr = signal["risk_reward"]
+    rr = _signal_rr(signal)
+    if rr >= 3.0:
         reasons.append(f"R:R {rr:.1f} — excellent risk/reward")
     if strategy == "breakout":
         reasons.append("Near 20-day high — breakout structure")
@@ -218,7 +223,7 @@ def _why_not(signal: dict) -> List[str]:
     rsi = signal.get("rsi", 50)
     atr_pct = signal.get("atr_pct", 1.0)
     vol_r = signal.get("vol_ratio", 1.0)
-    rr = signal.get("risk_reward", 0)
+    rr = _signal_rr(signal, 0.0)
 
     if rsi > 75:
         warnings.append(f"RSI {rsi:.0f} — overbought risk")
@@ -303,6 +308,16 @@ async def _cross_asset_for_today(
     except Exception:
         logger.debug("cross_asset_confirmation failed", exc_info=True)
         return {"alignment": "unknown", "summary": "Cross-asset data unavailable"}
+
+
+def _build_score_reconciliation_for_today(
+    rows: list,
+    *,
+    cross_asset: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    from src.services.score_families import build_score_reconciliation
+
+    return build_score_reconciliation(rows, cross_asset=cross_asset)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -437,7 +452,7 @@ async def today_summary(request: Request):
                     *[_fetch_sec(sym, name) for sym, name in _LIVE_SECTORS[:6]]
                 ),
             ),
-            timeout=1.25,
+            timeout=2.5,
         )
         idx_data = [r for r in idx_results if r]
         sec_data = sorted(
@@ -474,14 +489,6 @@ async def today_summary(request: Request):
     actionable = len([s for s in scanned if s.get("score", 0) >= 7.0])
     high_conv = len([s for s in scanned if s.get("score", 0) >= 8.0])
 
-    funnel = {
-        "universe": universe,
-        "signals_triggered": triggered,
-        "score_above_6": high_score,
-        "actionable_above_7": actionable,
-        "high_conviction_above_8": high_conv,
-    }
-
     # 5. Top 5 ranked — sector-adaptive pipeline
     # 5. Top 5 ranked — Expert Council pipeline
     council = _council(request)
@@ -501,9 +508,65 @@ async def today_summary(request: Request):
         [cr.pipeline for cr in council_results]
     )
 
+    from src.services.decision_truth_model import (
+        build_avoid_grouped,
+        build_bucket_quality_summary,
+        build_honest_funnel,
+        build_three_layer_model,
+        enrich_opportunity_row,
+        is_execution_ready,
+        is_pilot_eligible,
+        refine_action,
+    )
+
+    funnel = build_honest_funnel(
+        universe=universe,
+        scanned=scanned,
+        council_results=council_results,
+    )
+    execution_ready_count = funnel.get("execution_ready_setups", 0)
+    pilot_ready_count = funnel.get("pilot_eligible_setups", 0)
+    council_high_8 = funnel.get("high_conviction_above_8", 0)
+    avoid_grouped = build_avoid_grouped(council_results)
+    bucket_quality = build_bucket_quality_summary(council_results)
+
+    _ACTION_SORT = {
+        "TRADE": 0,
+        "PILOT": 1,
+        "WATCH": 2,
+        "WAIT": 3,
+        "AVOID": 4,
+        "NO_TRADE": 5,
+    }
+
+    sector_leaders = market_pulse.get("sector_leaders") or []
+    sector_laggards = market_pulse.get("sector_laggards") or []
+
+    def _council_sort_key(cr: Any) -> tuple:
+        from src.services.decision_truth_model import (
+            _score as _fit_score,
+            sector_rank_adjustment,
+        )
+
+        act = refine_action(cr)
+        pr = cr.pipeline
+        sig = pr.signal
+        adj_row = {
+            "sector_type": pr.sector.sector_bucket.value,
+            "leader": pr.sector.leader_status.value,
+        }
+        adj = sector_rank_adjustment(
+            adj_row,
+            sector_leaders=sector_leaders,
+            sector_laggards=sector_laggards,
+        )
+        return (_ACTION_SORT.get(act, 9), -(_fit_score(cr) + adj))
+
+    sorted_council = sorted(council_results, key=_council_sort_key)
+
     top5 = []
     seen_tickers = set()
-    for cr in council_results:
+    for cr in sorted_council:
         pr = cr.pipeline
         sig = pr.signal
         ticker = sig.get("ticker", "")
@@ -511,40 +574,60 @@ async def today_summary(request: Request):
             continue
         seen_tickers.add(ticker)
 
+        row = {
+            "rank": len(top5) + 1,
+            "ticker": ticker,
+            "strategy": _setup_family(sig.get("strategy", "")),
+            "score": pr.fit.final_score,
+            "grade": pr.fit.grade,
+            "timing": _timing_label(
+                abs(sig.get("entry_price", 0) - sig.get("stop_price", 0))
+                / max(sig.get("entry_price", 1), 1)
+                * 100
+            ),
+            "action": refine_action(cr),
+            "action_reason": pr.decision.rationale,
+            "why_now": ([pr.explanation.why_now] if pr.explanation.why_now else []),
+            "entry_price": sig.get("entry_price", 0),
+            "target_price": sig.get("target_price", 0),
+            "stop_price": sig.get("stop_price", 0),
+            "risk_reward": sig.get("risk_reward", 0)
+            or getattr(pr.decision, "risk_reward", None)
+            or getattr(pr.decision, "risk_reward_ratio", None)
+            or 0,
+            "rsi": sig.get("rsi", 0),
+            "invalidation": getattr(pr.explanation, "invalidation", None) or _invalidation(sig),
+            "position_hint": _position_hint(sig, should_trade),
+            "sector_bucket": pr.sector.sector_bucket.value,
+            "final_conf": round(pr.confidence.final, 2),
+            "confidence_breakdown": pr.confidence.to_dict(),
+            "decision": pr.decision.to_dict(),
+            "explanation": pr.explanation.to_dict(),
+            "expert_council": cr.verdict.to_dict(),
+        }
+        if row["action"] == "PILOT":
+            row["why_pilot"] = pr.decision.why_pilot or ""
+            row["upgrade_to_trade"] = pr.decision.upgrade_to_trade or ""
+            row["downgrade_to_watch_avoid"] = pr.decision.downgrade_to_watch_avoid or ""
         top5.append(
-            {
-                "rank": len(top5) + 1,
-                "ticker": ticker,
-                "strategy": _setup_family(sig.get("strategy", "")),
-                "score": pr.fit.final_score,
-                "grade": pr.fit.grade,
-                "timing": _timing_label(
-                    abs(sig.get("entry_price", 0) - sig.get("stop_price", 0))
-                    / max(sig.get("entry_price", 1), 1)
-                    * 100
-                ),
-                "action": pr.decision.action,
-                "action_reason": pr.decision.rationale,
-                "why_now": ([pr.explanation.why_now] if pr.explanation.why_now else []),
-                "entry_price": sig.get("entry_price", 0),
-                "target_price": sig.get("target_price", 0),
-                "stop_price": sig.get("stop_price", 0),
-                "risk_reward": sig.get("risk_reward", 0)
-                or pr.decision.risk_reward_ratio
-                or 0,
-                "rsi": sig.get("rsi", 0),
-                "invalidation": pr.explanation.invalidation,
-                "position_hint": _position_hint(sig, should_trade),
-                "sector_bucket": pr.sector.sector_bucket.value,
-                "final_conf": round(pr.confidence.final, 2),
-                "confidence_breakdown": pr.confidence.to_dict(),
-                "decision": pr.decision.to_dict(),
-                "explanation": pr.explanation.to_dict(),
-                "expert_council": cr.verdict.to_dict(),
-            }
+            enrich_opportunity_row(
+                cr,
+                row,
+                sector_leaders=sector_leaders,
+                sector_laggards=sector_laggards,
+            )
         )
         if len(top5) >= 5:
             break
+
+    from src.services.decision_truth_model import build_runner_up_comparison
+
+    for i, row in enumerate(top5):
+        if i < len(top5) - 1:
+            nxt = top5[i + 1]
+            cmp_row = build_runner_up_comparison(row, nxt)
+            if cmp_row:
+                row["runner_up"] = cmp_row
 
     # 6. Full candidate list (for table)
     cands = []
@@ -565,7 +648,10 @@ async def today_summary(request: Request):
                 "price": sig.get("entry_price", str(sig.get("current_price", 0))),
                 "target": sig.get("target_price", 0),
                 "stop_loss": sig.get("stop_price", 0),
-                "rr": sig.get("risk_reward", 0) or pr.decision.risk_reward_ratio or 0,
+                "rr": sig.get("risk_reward", 0)
+                or getattr(pr.decision, "risk_reward", None)
+                or getattr(pr.decision, "risk_reward_ratio", None)
+                or 0,
                 "strategy": _setup_family(sig.get("strategy", "")),
                 "reason": pr.decision.rationale,
             }
@@ -601,7 +687,10 @@ async def today_summary(request: Request):
 
     # Stricter summary generation based on PM feedback
     trade_count = sum(
-        1 for c in top5 if c.get("action") in ("TRADE", "BUY", "BUY_ON_DIP")
+        1 for cr in council_results if is_execution_ready(cr)
+    )
+    pilot_count = sum(
+        1 for cr in council_results if refine_action(cr) == "PILOT" and is_pilot_eligible(cr)
     )
 
     if not should_trade:
@@ -644,15 +733,10 @@ async def today_summary(request: Request):
             f"Review the watchlist for developing patterns."
         )
 
-    # 9. Tradeability
+    # 9. Tradeability — council-validated, not raw scanner ≥8 alone
+    breadth_val = breadth * 100 if breadth <= 1 else breadth
     if not should_trade:
         tradeability = "NO_TRADE"
-    elif high_conv >= 3:
-        tradeability = "STRONG_TRADE"
-    elif actionable >= 3:
-        tradeability = "TRADE"
-    elif actionable >= 1:
-        tradeability = "SELECTIVE"
     else:
         tradeability = "WAIT"
 
@@ -685,8 +769,15 @@ async def today_summary(request: Request):
     what_changed = []
     if regime_label == "RISK_OFF":
         what_changed.append("Regime shifted to RISK_OFF — defensive posture")
-    if high_conv >= 3:
-        what_changed.append(f"{high_conv} high-conviction signals (≥8.0)")
+    if council_high_8 >= 1:
+        what_changed.append(
+            f"{council_high_8} council-validated high-score setup(s) (fit ≥8.0)"
+        )
+    if raw_hi := funnel.get("raw_scanner_above_8", 0):
+        if raw_hi != council_high_8:
+            what_changed.append(
+                f"Scanner raw ≥8: {raw_hi} — council validated: {council_high_8}"
+            )
     if best_family:
         what_changed.append(f"Leading setup family: {best_family}")
     # Sector movers
@@ -723,12 +814,38 @@ async def today_summary(request: Request):
         build_no_setup_diagnosis,
         build_regime_wait_explanation,
         build_sleeve_summary,
+        build_todays_decision,
+        build_unlock_deploy,
+        merge_brief_board_fallback,
     )
 
     top5_tickers = {x["ticker"] for x in top5 if x.get("ticker")}
     near_miss = build_near_miss_candidates(council_results, top5_tickers, limit=3)
+    top5, near_miss, used_brief_fallback = merge_brief_board_fallback(
+        top5,
+        near_miss,
+        scanner_degraded=scanner_degraded,
+    )
+    if used_brief_fallback:
+        top5_tickers = {x["ticker"] for x in top5 if x.get("ticker")}
+        funnel = {
+            **funnel,
+            "note": "Brief fallback — scanner cache empty; WATCH rows are not deployable",
+        }
+        if not scanner_reason:
+            scanner_reason = "scanner cache empty — brief watch fallback"
+        narrative = (
+            "Morning brief fallback — live scanner unavailable. "
+            "Informational watch candidates only; not execution-grade."
+        )
+    validated_count = int(funnel.get("watch_qualified_setups") or 0)
     no_setup_diagnosis = build_no_setup_diagnosis(
-        council_results, scanner_degraded=scanner_degraded
+        council_results,
+        scanner_degraded=scanner_degraded,
+        tradeability=tradeability,
+        should_trade=should_trade,
+        validated_count=validated_count,
+        deployable_count=execution_ready_count,
     )
     regime_wait_explanation = build_regime_wait_explanation(
         trend_label=trend_label,
@@ -763,21 +880,40 @@ async def today_summary(request: Request):
         except Exception:
             logger.debug("fund cards preload for today failed", exc_info=True)
     if fund_cards:
-        sleeve_summary = build_sleeve_summary(fund_cards, regime=regime_label)
+        sleeve_summary = build_sleeve_summary(
+            fund_cards,
+            regime=regime_label,
+            sector_leaders=market_pulse.get("sector_leaders"),
+        )
 
-    top5_for_action = [
-        {
-            "ticker": x["ticker"],
-            "action": x["action"],
-            "final_conf": (x.get("confidence_breakdown") or {}).get("final", 0.6),
-            "entry_price": x.get("entry_price"),
-            "stop_price": x.get("stop_price"),
-            "upgrade_trigger": (x.get("explanation") or {}).get("upgrade_trigger"),
-            "invalidation": x.get("invalidation"),
-            "sector_type": x.get("sector_bucket"),
+    def _row_for_action(cr: Any) -> Dict[str, Any]:
+        pr = cr.pipeline
+        sig = pr.signal
+        return {
+            "ticker": sig.get("ticker", ""),
+            "action": refine_action(cr),
+            "final_conf": round(float(pr.confidence.final), 2),
+            "score": pr.fit.final_score,
+            "entry_price": sig.get("entry_price"),
+            "stop_price": sig.get("stop_price"),
+            "risk_reward": sig.get("risk_reward")
+            or getattr(pr.decision, "risk_reward", None)
+            or getattr(pr.decision, "risk_reward_ratio", None),
+            "upgrade_trigger": pr.decision.entry_trigger
+            or getattr(pr.explanation, "upgrade_trigger", None),
+            "invalidation": getattr(pr.explanation, "invalidation", None) or _invalidation(sig),
+            "sector_type": pr.sector.sector_bucket.value,
+            "why_pilot": pr.decision.why_pilot or "",
+            "data_conf": float(pr.confidence.data),
+            "thesis_conf": round(float(pr.confidence.thesis), 2),
+            "timing_conf": round(float(pr.confidence.timing), 2),
+            "exec_conf": round(float(pr.confidence.execution), 2),
+            "leader": pr.sector.leader_status.value,
+            "execution_ready": is_execution_ready(cr),
         }
-        for x in top5
-    ]
+
+    all_opps_for_action = [_row_for_action(cr) for cr in sorted_council]
+    top5_for_action = all_opps_for_action[:12]
     try:
         from src.api.app_state import get_engine
         from src.services.best_action import build_best_action, compute_theme_overlap
@@ -819,6 +955,236 @@ async def today_summary(request: Request):
         overlap_warning = {"warnings": [], "level": "low"}
         execution_readiness = {}
 
+    bracket_ready = bool(
+        top5
+        and top5[0].get("entry_price")
+        and top5[0].get("stop_price")
+    )
+    ibkr_connected = bool(
+        (best_action.get("execution_readiness") or {}).get("ibkr_connected")
+    )
+    decision_model = build_three_layer_model(
+        should_trade=should_trade,
+        trend_label=trend_label,
+        tradeability=tradeability,
+        vix=vix_val,
+        breadth=breadth_val,
+        council_results=council_results,
+        execution_ready=execution_ready_count,
+        pilot_ready=pilot_ready_count,
+        ibkr_connected=ibkr_connected,
+        bracket_ready=bracket_ready,
+    )
+    if should_trade:
+        tradeability = decision_model.get("honest_tradeability", tradeability)
+
+    from src.services.decision_truth_model import (
+        apply_authority_to_rows,
+        build_decision_authority,
+    )
+
+    eng_running = bool(
+        (execution_readiness or {}).get("engine_running")
+        or (best_action.get("execution_readiness") or {}).get("engine_running")
+    )
+    exec_blocked = bool(
+        (execution_readiness or {}).get("circuit_breaker")
+        or (best_action.get("execution_readiness") or {}).get("circuit_breaker")
+    )
+    if not eng_running or not exec_blocked:
+        try:
+            from src.api.app_state import get_engine
+
+            engine = get_engine(request.app)
+            if engine:
+                if not eng_running:
+                    eng_running = bool(getattr(engine, "_running", False))
+                if not exec_blocked:
+                    exec_blocked = bool(getattr(engine, "circuit_breaker", False))
+        except Exception:
+            pass
+
+    decision_authority = build_decision_authority(
+        tradeability=tradeability,
+        should_trade=should_trade,
+        scanner_degraded=scanner_degraded,
+        scanner_loading=scanner_degraded and not scanned,
+        data_stale=scanner_degraded,
+        fallback_brief=used_brief_fallback,
+        broker_offline=not ibkr_connected,
+        engine_off=not eng_running,
+        exec_blocked=exec_blocked,
+        trust_source="brief-fallback" if used_brief_fallback else "decision_engine",
+        ranked_stale=scanner_degraded,
+        council_count=len(council_results),
+        deploy_ideas_count=execution_ready_count,
+        live_council_count=len(council_results) if not used_brief_fallback else 0,
+        live_deploy_count=execution_ready_count if not used_brief_fallback else 0,
+    )
+    top5 = apply_authority_to_rows(top5, decision_authority)
+    all_opps_for_action = apply_authority_to_rows(all_opps_for_action, decision_authority)
+    near_miss = apply_authority_to_rows(near_miss, decision_authority)
+
+    todays_decision = build_todays_decision(
+        tradeability=tradeability,
+        should_trade=should_trade,
+        trend_label=trend_label,
+        decision_model=decision_model,
+        best_action=best_action,
+        opportunities=all_opps_for_action,
+        near_miss=near_miss,
+        no_setup_diagnosis=no_setup_diagnosis,
+        regime_wait_explanation=regime_wait_explanation,
+        execution_readiness=execution_readiness,
+        event_risks=event_risks,
+        narrative=narrative,
+        execution_ready_count=execution_ready_count,
+        decision_authority=decision_authority,
+    )
+    from src.services.decision_truth_model import playbook_scan_ranked_count
+
+    unlock_deploy = build_unlock_deploy(
+        tradeability=tradeability,
+        should_trade=should_trade,
+        watch_qualified_count=validated_count,
+        deployable_count=execution_ready_count,
+        scan_ranked_count=playbook_scan_ranked_count(funnel),
+        scanner_degraded=scanner_degraded,
+        execution_readiness=execution_readiness,
+    )
+
+    from src.services.anti_overtrading import restraint_from_today_context
+    from src.services.decision_hierarchy import hierarchy_for_dashboard
+    from src.services.passive_baseline import build_passive_baseline_for_today
+    from src.services.score_families import complexity_verdict
+    from src.services.crisis_regime import crisis_strip_for_today
+    from src.services.buffett_judgment import buffett_clarity_strip_for_today
+    from src.services.index_fund_judgment import index_fund_posture_strip_for_today
+    from src.services.decision_quality_naval import naval_clarity_strip_for_today
+    from src.services.principles_engine import principles_posture_for_today
+    from src.services.surface_authority import authority_strip_for_today
+
+    restraint = restraint_from_today_context(
+        tradeability=tradeability,
+        deployable_count=execution_ready_count,
+        pilot_ready_count=pilot_ready_count,
+        opportunities=all_opps_for_action,
+    )
+    crisis_regime = crisis_strip_for_today(
+        {
+            "tradeability": tradeability,
+            "vix": round(vix_val, 1),
+            "breadth": round(breadth * 100),
+            "should_trade": should_trade,
+            "entropy": round(entropy, 2),
+        },
+        decision_model,
+        execution_readiness=execution_readiness,
+    )
+    naval_clarity = naval_clarity_strip_for_today(
+        {
+            "tradeability": tradeability,
+            "vix": round(vix_val, 1),
+            "breadth": round(breadth * 100),
+            "should_trade": should_trade,
+        },
+        decision_model,
+        opportunities=all_opps_for_action,
+        deployable_count=execution_ready_count,
+    )
+    buffett_clarity = buffett_clarity_strip_for_today(
+        {
+            "tradeability": tradeability,
+            "vix": round(vix_val, 1),
+            "breadth": round(breadth * 100),
+            "should_trade": should_trade,
+        },
+        decision_model,
+        opportunities=all_opps_for_action,
+        deployable_count=execution_ready_count,
+    )
+    index_fund_posture = index_fund_posture_strip_for_today(
+        {
+            "tradeability": tradeability,
+            "vix": round(vix_val, 1),
+            "breadth": round(breadth * 100),
+            "should_trade": should_trade,
+        },
+        decision_model,
+        benchmark="SPY",
+    )
+    principles_posture = principles_posture_for_today(
+        {
+            "tradeability": tradeability,
+            "vix": round(vix_val, 1),
+            "breadth": round(breadth * 100),
+            "should_trade": should_trade,
+        },
+        decision_model,
+        opportunities=all_opps_for_action,
+        deployable_count=execution_ready_count,
+    )
+    decision_hierarchy = hierarchy_for_dashboard(
+        decision_model=decision_model,
+        execution_readiness=execution_readiness,
+        restraint=restraint,
+        should_trade=should_trade,
+        tradeability=tradeability,
+        execution_ready_count=execution_ready_count,
+        pilot_ready_count=pilot_ready_count,
+        crisis_bundle=crisis_regime,
+        market_regime={
+            "tradeability": tradeability,
+            "vix": round(vix_val, 1),
+            "breadth": round(breadth * 100),
+            "should_trade": should_trade,
+            "entropy": round(entropy, 2),
+        },
+    )
+    best_net = None
+    for row in all_opps_for_action[:12]:
+        net = row.get("net_deploy_score")
+        if net is not None:
+            best_net = max(best_net or 0, float(net))
+    complexity = complexity_verdict(
+        deployable_count=execution_ready_count,
+        net_edge=best_net,
+        tradeability=tradeability,
+    )
+    pf_count = 0
+    pf_local_only = False
+    try:
+        from src.api.routers.portfolio import _user_portfolio
+
+        pf_holdings = _user_portfolio.get("holdings") or []
+        pf_count = len(pf_holdings)
+        pf_local_only = (_user_portfolio.get("source") or "manual") != "ibkr"
+    except Exception:
+        pass
+    passive_baseline = await build_passive_baseline_for_today(
+        opportunities=all_opps_for_action,
+        deployable_count=execution_ready_count,
+        position_count=pf_count,
+        local_only=pf_local_only,
+    )
+    surface_authority = authority_strip_for_today(
+        tradeability=decision_model.get("honest_tradeability") or tradeability,
+        ibkr_connected=ibkr_connected,
+        deployable_count=execution_ready_count,
+    )
+
+    cross_asset_confirmation = await _cross_asset_for_today(
+        request,
+        market_regime={
+            "trend": trend_label,
+            "vix": round(vix_val, 1),
+            "breadth": round(breadth * 100),
+            "should_trade": should_trade,
+            "tradeability": tradeability,
+        },
+        should_trade=should_trade,
+    )
+
     payload = {
         "date": now.strftime("%Y-%m-%d"),
         "narrative": narrative,
@@ -828,6 +1194,7 @@ async def today_summary(request: Request):
             "should_trade": should_trade,
             "confidence": round(confidence, 2),
             "tradeability": tradeability,
+            "honest_tradeability": decision_model.get("honest_tradeability", tradeability),
             "summary": narrative,
             "trend": trend_label,
             "volatility": vol_label,
@@ -854,9 +1221,11 @@ async def today_summary(request: Request):
         "sector_summary": sector_summary,
         "action_summary": action_summary,
         "best_action": best_action,
+        "todays_decision": todays_decision,
         "overlap_warning": overlap_warning,
         "near_miss": near_miss,
         "no_setup_diagnosis": no_setup_diagnosis,
+        "unlock_deploy": unlock_deploy,
         "regime_wait_explanation": regime_wait_explanation,
         "monitor_triggers": monitor_triggers,
         "sleeve_summary": sleeve_summary,
@@ -866,27 +1235,41 @@ async def today_summary(request: Request):
             regime_synthetic=bool(getattr(request.app.state, "regime_synthetic", False)),
             ai_powered=False,
         ),
-        "cross_asset_confirmation": await _cross_asset_for_today(
-            request,
-            market_regime={
-                "trend": trend_label,
-                "vix": round(vix_val, 1),
-                "breadth": round(breadth * 100),
-                "should_trade": should_trade,
-                "tradeability": tradeability,
-            },
-            should_trade=should_trade,
+        "decision_model": decision_model,
+        "decision_hierarchy": decision_hierarchy,
+        "passive_baseline": passive_baseline,
+        "complexity_challenge": complexity,
+        "restraint": restraint,
+        "surface_authority": surface_authority,
+        "crisis_regime": crisis_regime,
+        "naval_clarity": naval_clarity,
+        "buffett_clarity": buffett_clarity,
+        "index_fund_posture": index_fund_posture,
+        "principles_posture": principles_posture,
+        "avoid_grouped": avoid_grouped,
+        "bucket_quality": bucket_quality,
+        "cross_asset_confirmation": cross_asset_confirmation,
+        "score_reconciliation": _build_score_reconciliation_for_today(
+            top5,
+            cross_asset=cross_asset_confirmation,
         ),
+        "decision_authority": decision_authority,
         "trust": {
             "mode": "LIVE" if should_trade else "PAPER",
             "source": (
-                "decision_engine"
-                if not scanner_degraded
-                else "decision_engine_degraded"
+                "brief-fallback"
+                if used_brief_fallback
+                else (
+                    "decision_engine"
+                    if not scanner_degraded
+                    else "decision_engine_degraded"
+                )
             ),
             "freshness": "REAL_TIME" if not scanner_degraded else "DEGRADED",
-            "stale": scanner_degraded,
-            "reason": scanner_reason,
+            "stale": scanner_degraded or used_brief_fallback,
+            "reason": scanner_reason or (
+                "brief fallback board" if used_brief_fallback else ""
+            ),
             "as_of": now.isoformat() + "Z",
             "ai_powered": False,
         },
@@ -1271,6 +1654,17 @@ async def signal_card(ticker: str, request: Request):
     except HTTPException:
         raise
     except Exception as exc:
+        try:
+            from src.services.platform_error_log import capture_exception
+
+            capture_exception(
+                component="decision",
+                message=f"Signal card failed for {ticker}",
+                exc=exc,
+                dedupe_key=f"decision:signal-card:{ticker}",
+            )
+        except Exception:
+            logger.debug("platform error log append failed", exc_info=True)
         raise HTTPException(500, f"Signal card error: {exc}") from exc
 
 
@@ -1610,36 +2004,74 @@ async def generate_today_ai_narrative(payload: dict):
     """Standalone AI narrative decoupled from the hot path.
 
     Returns the literal provider + model used so the UI can display
-    real attribution (no decorative badges).
+    real attribution (no decorative badges). When no LLM is configured,
+    returns a deterministic stub so Generate always produces text.
     """
+    regime_ctx = payload.get("regime_ctx") or {}
+    top5 = payload.get("top_5") or []
+    market_pulse = payload.get("market_pulse") or {}
+    funnel = payload.get("filter_funnel") or {}
+    board_narrative = payload.get("narrative") or ""
+
     try:
-        from src.services.ai_service import get_ai_service
+        from src.services.ai_service import AI_SETUP_HINT, build_stub_narrative, get_ai_service
 
         ai = get_ai_service()
+        try:
+            await asyncio.wait_for(ai.probe_local_llm(), timeout=3.0)
+        except (asyncio.TimeoutError, Exception):
+            logger.debug("Local LLM probe skipped or timed out for ai-narrative")
+
         if not ai.is_configured:
             return {
-                "ai_narrative": None,
-                "provider": "none",
-                "model": "",
+                "ai_narrative": build_stub_narrative(
+                    regime_ctx, top5, market_pulse, funnel, board_narrative
+                ),
+                "provider": "stub",
+                "model": "deterministic",
                 "configured": False,
+                "message": "LLM not configured — showing rule-based narrative.",
+                "setup_hint": AI_SETUP_HINT,
             }
 
-        regime_ctx = payload.get("regime_ctx", {})
-        top5 = payload.get("top_5", [])
-        market_pulse = payload.get("market_pulse", {})
-        funnel = payload.get("filter_funnel", {})
+        narrative = await ai.generate_narrative(
+            regime_ctx, top5, market_pulse, funnel
+        )
+        if narrative:
+            return {
+                "ai_narrative": narrative,
+                "provider": getattr(ai, "_provider_used", "unknown"),
+                "model": getattr(ai, "_last_model", ""),
+                "configured": True,
+            }
 
-        narrative = await ai.generate_narrative(regime_ctx, top5, market_pulse, funnel)
+        stub = build_stub_narrative(
+            regime_ctx, top5, market_pulse, funnel, board_narrative
+        )
+        logger.warning("AI narrative generation returned empty — using stub fallback")
         return {
-            "ai_narrative": narrative,
-            "provider": getattr(ai, "_provider_used", "unknown"),
-            "model": getattr(ai, "_last_model", ""),
+            "ai_narrative": stub,
+            "provider": "stub",
+            "model": "deterministic",
             "configured": True,
+            "message": "LLM call failed — showing rule-based fallback.",
+            "setup_hint": "",
         }
     except Exception as exc:
+        logger.warning("AI narrative generation failed: %s", exc)
+        try:
+            from src.services.ai_service import AI_SETUP_HINT, build_stub_narrative
+
+            stub = build_stub_narrative(
+                regime_ctx, top5, market_pulse, funnel, board_narrative
+            )
+        except Exception:
+            stub = f"Error generating commentary: {exc}"
         return {
-            "ai_narrative": f"Error: {exc}",
+            "ai_narrative": stub,
             "provider": "error",
             "model": "",
             "configured": False,
+            "message": f"Error: {exc}",
+            "setup_hint": AI_SETUP_HINT,
         }
