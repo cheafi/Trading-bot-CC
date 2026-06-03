@@ -57,6 +57,12 @@ def test_build_script_includes_guide():
     script = BUILD_SCRIPT.read_text(encoding="utf-8")
     assert "guide:" in script
     assert "ops_recovery_runbook" in script
+    assert "deploy_surfaces:" in script
+
+
+def test_deploy_status_strip_selector():
+    raw = INDEX_HTML.read_text(encoding="utf-8")
+    assert 'data-cc="deploy-status-strip"' in raw
 
 
 def test_cc_helpers_stabilization_exports():

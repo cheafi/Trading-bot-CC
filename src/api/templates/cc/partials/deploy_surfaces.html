@@ -1,0 +1,45 @@
+      <template x-if="tab==='today'&&(todayMissionPanel().system_blockers.length||todayMissionPanel().card_gates.length||todayMissionPanel().monitors.length)">
+        <div data-cc="today-mission-panel" style="padding:4px 12px 0">
+          <div class="card card-p" style="padding:8px 10px;border-left:3px solid var(--blue)">
+            <div class="text-[9px] font-bold uppercase mb-0.5" style="color:var(--t3)" x-text="todayMissionPanelTitle()"></div>
+            <div x-show="todayMissionWaitSubtitle()" class="text-[8px] mb-1" style="color:var(--t2)" x-text="todayMissionWaitSubtitle()"></div>
+            <div x-show="todayMissionSafeUnlockHint()" class="text-[8px] mb-1" style="color:var(--t3)" x-text="todayMissionSafeUnlockHint()"></div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[9px]">
+              <div>
+                <div class="font-bold text-red-400 mb-0.5" x-text="todayMissionBlockersTitle()"></div>
+                <template x-for="b in todayMissionPanel().system_blockers" :key="'sys-'+b">
+                  <div class="font-semibold" style="color:var(--amber)" x-text="'• '+b"></div>
+                </template>
+                <template x-for="b in todayMissionPanel().card_gates" :key="'gate-'+b">
+                  <div style="color:var(--t2)" x-text="'• '+b"></div>
+                </template>
+                <div x-show="!todayMissionPanel().system_blockers.length&&!todayMissionPanel().card_gates.length" style="color:var(--t3)" x-text="todayMissionEmptyBlockersCopy()"></div>
+                <div x-show="todayMissionPanel().system_blockers.length&&!todayMissionPanel().card_gates.length" class="text-[8px] mt-0.5" style="color:var(--t3)" x-text="todayMissionEmptyBlockersCopy()"></div>
+              </div>
+              <div>
+                <div class="font-bold text-amber-300 mb-0.5" x-text="todayMissionMonitorsLabel()"></div>
+                <div class="text-[8px] mb-0.5" style="color:var(--t3)" x-text="todayMissionMonitorsColumnHint()"></div>
+                <template x-for="m in todayMissionPanel().monitors" :key="'mon-'+m">
+                  <div style="color:var(--t2)" class="mono" x-text="'• '+m"></div>
+                </template>
+                <div x-show="!todayMissionPanel().monitors.length" style="color:var(--t3)">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- ── Ops / IB / Monitor strip (institutional cockpit) ── -->
+      <div data-cc="deploy-status-strip" style="padding:6px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <span class="pill text-[8px]" :class="ibkrStateFrom(today7.execution_readiness).level==='ready'?'pg':ibkrStateFrom(today7.execution_readiness).level==='blocked'?'pr':'pa'" x-text="'IBKR '+ibkrUnifiedShort(today7.execution_readiness)"></span>
+        <span class="pill text-[8px]" :class="cc_status.breaker?'pr':(ops.running?'pg':'pw')" x-text="cc_status.breaker?'BREAKER':(ops.running?'ENGINE ON':'ENGINE OFF')"></span>
+        <template x-if="today7.evidence_badges">
+          <span class="pill text-[7px] pw" :title="today7.evidence_badges.regime?.label" x-text="today7.evidence_badges.regime?.badge"></span>
+          <span class="pill text-[7px] pw" :title="today7.evidence_badges.funds?.label" x-text="today7.evidence_badges.funds?.badge"></span>
+          <span class="pill text-[7px] pw" :title="today7.evidence_badges.ai?.label" x-text="today7.evidence_badges.ai?.badge"></span>
+        </template>
+        <span x-show="freshness&&freshness.worst_tier" class="pill text-[8px]" :class="['STALE','CRITICAL'].includes(freshness.worst_tier)?'pa':'pg'" x-text="'DATA '+freshness.worst_tier"></span>
+        <span x-show="risk_alerts&&risk_alerts.count>0" class="pill text-[8px] pr" x-text="risk_alerts.count+' RISK ALERTS'" @click="showAlertsModal=true" style="cursor:pointer"></span>
+        <span x-show="pf.summary&&pf.summary.total_positions>0" class="pill text-[8px] pb" x-text="portfolioSummaryPositionsLabel()+' · $'+pf.summary.total_value.toLocaleString()"></span>
+        <button @click="switchTab('funds')" class="btn-s text-[8px] ml-auto" x-show="(pmStrip.funds||[]).length===0">Load Funds</button>
+      </div>

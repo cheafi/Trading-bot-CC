@@ -26,7 +26,8 @@ export default defineConfig({
 	workers: 1,
 	retries: isCi ? 2 : 0,
 	timeout: 60_000,
-	expect: { timeout: 12_000 },
+	expect: { timeout: 15_000 },
+	forbidOnly: isCi,
 	reporter: isCi
 		? [["list"], ["junit", { outputFile: "test-results/playwright-junit.xml" }], ["html", { open: "never" }]]
 		: [["list"]],

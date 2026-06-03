@@ -1386,9 +1386,9 @@ def build_ranked_decision_authority(payload: Dict[str, Any]) -> Dict[str, Any]:
         or payload.get("compressed")
     )
     try:
-        from src.services.ibkr_service import get_ibkr_service
+        from src.services.ibkr_service import ibkr_authority_gate_snapshot
 
-        st = get_ibkr_service().status()
+        st = ibkr_authority_gate_snapshot()
         ibkr_on = bool(st.get("connected"))
         exec_blocked = bool(st.get("circuit_breaker"))
     except Exception:

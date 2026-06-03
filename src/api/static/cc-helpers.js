@@ -268,6 +268,19 @@
 		return ""
 	}
 
+	/** Staging soak anchors — mirrors fetch_surface_state.soak_confirmation_signals(). */
+	function soakConfirmationSelectors() {
+		return {
+			instantDegraded: '[data-cc="instant-degraded-banner"]',
+			warmupStrip: '[data-cc="warmup-context-strip"]',
+			deployStrip: '[data-cc="deploy-status-strip"]',
+			missionPanel: '[data-cc="today-mission-panel"]',
+			playbookSurface: '[data-cc="playbook-surface"]',
+			marketStale: '[data-cc="market-strip-stale"]',
+			opsRunbook: '[data-cc="ops-recovery-runbook"]',
+		}
+	}
+
 	/** Safe operator actions while loading or on WAIT (no deploy authority). */
 	function operatorLoadingSafeLine(opts) {
 		var o = opts || {}
@@ -311,5 +324,6 @@
 		engineOffRecoveryLine: engineOffRecoveryLine,
 		ibkrLoginToReadyHint: ibkrLoginToReadyHint,
 		todayMissionSafeUnlockHint: todayMissionSafeUnlockHint,
+		soakConfirmationSelectors: soakConfirmationSelectors,
 	}
 })(typeof window !== "undefined" ? window : globalThis)

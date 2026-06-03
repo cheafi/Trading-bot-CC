@@ -277,12 +277,12 @@ def enrich_ranked_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     stale = bool(payload.get("stale"))
     source = str(payload.get("source") or "")
     try:
-        from src.services.ibkr_service import get_ibkr_service
+        from src.services.ibkr_service import get_ibkr_service, ibkr_authority_gate_snapshot
 
-        st = get_ibkr_service().status()
-        ibkr_on = bool(st.get("connected"))
-        ibkr_mode = st.get("mode") or "paper"
-        exec_blocked = bool(st.get("circuit_breaker"))
+        gates = ibkr_authority_gate_snapshot()
+        ibkr_on = bool(gates.get("connected"))
+        exec_blocked = bool(gates.get("circuit_breaker"))
+        ibkr_mode = get_ibkr_service()._mode or "paper"
     except Exception:
         ibkr_on = False
         ibkr_mode = "paper"

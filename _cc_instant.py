@@ -14,7 +14,6 @@ import atexit
 import fcntl
 import http.server
 import json
-import multiprocessing
 import os
 import signal
 import sys
@@ -1841,7 +1840,7 @@ def _kill_port(port):
     my_pid = os.getpid()
     try:
         r = subprocess.run(
-            ["lsof", "-ti", f":{port}"],
+            ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN"],
             capture_output=True,
             text=True,
             timeout=5,
@@ -1988,24 +1987,26 @@ def _run_backend():
     sys.exit(1)
 
 
-def _spawn_backend(ctx: multiprocessing.context.BaseContext):
-    proc = ctx.Process(
-        target=_run_backend,
-        name="cc-backend",
-        daemon=False,
+def _spawn_backend() -> subprocess.Popen:
+    """Start backend in a separate interpreter (avoids multiprocessing spawn taking down :8000)."""
+    env = os.environ.copy()
+    env["CC_INSTANT_BACKEND_CHILD"] = "1"
+    proc = subprocess.Popen(
+        [sys.executable, "-u", str(Path(__file__).resolve())],
+        env=env,
+        cwd=str(Path(__file__).resolve().parent),
     )
-    proc.start()
     print(f"[backend] child started pid={proc.pid}", flush=True)
     return proc
 
 
-def _supervise_backend(ctx, proc) -> None:
+def _supervise_backend(proc: subprocess.Popen) -> None:
     """Log backend child exit; restart without stopping the instant server."""
     while True:
-        proc.join(timeout=5.0)
-        if proc.is_alive():
+        try:
+            code = proc.wait(timeout=5.0)
+        except subprocess.TimeoutExpired:
             continue
-        code = proc.exitcode
         print(
             f"[backend] child exited (code={code!r}) — instant server stays up; restarting backend in 3s",
             flush=True,
@@ -2013,7 +2014,7 @@ def _supervise_backend(ctx, proc) -> None:
         global _backend_ready
         _backend_ready = False
         time.sleep(3)
-        proc = _spawn_backend(ctx)
+        proc = _spawn_backend()
 
 
 def _log_main_exit() -> None:
@@ -2031,17 +2032,16 @@ def main() -> None:
 
     atexit.register(_log_main_exit)
 
-    # Backend import + uvicorn in a child process so heavy native imports cannot
-    # take down the instant HTTP server (observed silent exit ~30s with threads).
-    ctx = multiprocessing.get_context("spawn")
+    # Backend import + uvicorn in a child interpreter so heavy native imports cannot
+    # take down the instant HTTP server (multiprocessing.spawn also killed :8000 ~30–60s).
     if os.environ.get("CC_INSTANT_NO_BACKEND") == "1":
         print("[backend] skipped (CC_INSTANT_NO_BACKEND)", flush=True)
         backend_proc = None
     else:
-        backend_proc = _spawn_backend(ctx)
+        backend_proc = _spawn_backend()
         threading.Thread(
             target=_supervise_backend,
-            args=(ctx, backend_proc),
+            args=(backend_proc,),
             name="cc-backend-supervisor",
             daemon=True,
         ).start()
@@ -2067,4 +2067,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    if os.environ.get("CC_INSTANT_BACKEND_CHILD") == "1":
+        _run_backend()
+    else:
+        main()

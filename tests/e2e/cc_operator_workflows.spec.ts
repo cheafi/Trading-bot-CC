@@ -27,13 +27,16 @@ async function openTab(page: Page, pattern: RegExp, dataCcNav?: string) {
 	if (dataCcNav) {
 		const nav = page.locator(`[data-cc-nav="${dataCcNav}"]`).first()
 		if (await nav.count()) {
+			await expect(nav).toBeVisible({ timeout: 8_000 })
 			await nav.click()
-			await page.waitForTimeout(150)
+			await page.waitForLoadState("domcontentloaded")
 			return
 		}
 	}
-	await page.locator("a", { hasText: pattern }).first().click()
-	await page.waitForTimeout(150)
+	const link = page.locator("a", { hasText: pattern }).first()
+	await expect(link).toBeVisible({ timeout: 8_000 })
+	await link.click()
+	await page.waitForLoadState("domcontentloaded")
 }
 
 test.describe("CC operator workflows", () => {
@@ -105,17 +108,12 @@ test.describe("CC operator workflows", () => {
 		})
 	})
 
-	test("playbook — Send to IBKR hidden on WAIT / degraded board", async ({ page }) => {
+	test("playbook — no Send to IBKR handoff on WAIT board", async ({ page }) => {
 		await openTab(page, /Playbook|Signals/i, "signals")
 		const surface = page.locator('[data-cc="playbook-surface"]')
-		await expect(surface).toBeAttached()
+		await expect(surface).toBeVisible({ timeout: 12_000 })
 		await expect(surface.locator("text=/Send to IBKR/i")).toHaveCount(0)
-	})
-
-	test("playbook surface — no handoff control on WAIT board", async ({ page }) => {
-		await openTab(page, /Playbook|Signals/i, "signals")
-		await expect(page.locator('[data-cc="playbook-surface"]')).toBeVisible({ timeout: 12_000 })
-		await expect(page.locator('[data-cc="playbook-surface"] button', { hasText: /Send to IBKR/i })).toHaveCount(0)
+		await expect(surface.locator("button", { hasText: /Send to IBKR/i })).toHaveCount(0)
 	})
 
 	test("IBKR — LOGIN or OFFLINE when gateway/session not ready", async ({ page }) => {
@@ -130,6 +128,13 @@ test.describe("CC operator workflows", () => {
 		await expect(page.locator('[data-cc="guide-surface"]')).toBeVisible({ timeout: 10_000 })
 		await expect(page.locator("text=/Send to IBKR/i")).toHaveCount(0)
 		await expect(page.locator("text=/GUIDE MODE/i").first()).toBeVisible({ timeout: 10_000 })
+	})
+
+	test("dashboard deploy strip — IBKR and engine pills visible", async ({ page }) => {
+		await openTab(page, /Overview/i, "today")
+		const strip = page.locator('[data-cc="deploy-status-strip"]')
+		await expect(strip).toBeAttached({ timeout: 10_000 })
+		await expect(strip.locator("text=/IBKR|ENGINE/i").first()).toBeVisible()
 	})
 
 	test("today mission panel — WAIT focus or monitors on dashboard", async ({ page }) => {

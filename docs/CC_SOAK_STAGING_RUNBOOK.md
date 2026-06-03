@@ -89,6 +89,22 @@
 
 ---
 
+## 9. Soak confirmation signals (automated anchors)
+
+Cross-check visible UI against Python `soak_confirmation_signals()` and `CCHelpers.soakConfirmationSelectors()`.
+
+| Signal           | Selector / copy                       | Pass                                                                         |
+| ---------------- | ------------------------------------- | ---------------------------------------------------------------------------- |
+| Instant degraded | `[data-cc="instant-degraded-banner"]` | Banner dismissible; warmup strip hidden when shown                           |
+| Warmup           | `[data-cc="warmup-context-strip"]`    | `loadingSessionRecoveryLine` + `operatorLoadingSafeLine` when `mode=loading` |
+| Deploy strip     | `[data-cc="deploy-status-strip"]`     | IBKR + ENGINE pills; no green TRADE on WAIT                                  |
+| Mission          | `[data-cc="today-mission-panel"]`     | Safe/unlock hint; blockers vs monitors columns                               |
+| Playbook         | `[data-cc="playbook-surface"]`        | No Send to IBKR on WAIT                                                      |
+| Market stale     | `[data-cc="market-strip-stale"]`      | `staleRefreshRecoveryLine` when visible                                      |
+| Ops runbook      | `[data-cc="ops-recovery-runbook"]`    | Retry / Safe in degraded                                                     |
+
+---
+
 ## Sign-off
 
 | Area           | Owner | Date | Notes |

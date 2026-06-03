@@ -11,9 +11,17 @@ if [ -f "$_lock" ]; then
       echo ""
       exit 0
     fi
-    echo "CC server pid $_pid still running (import may be in progress) — skip kill/restart"
-    exit 0
+    if lsof -nP -iTCP:8000 -sTCP:LISTEN >/dev/null 2>&1; then
+      echo "CC server pid $_pid still listening on :8000 (import may be in progress) — skip kill/restart"
+      exit 0
+    fi
+    echo "Stale CC server pid $_pid (no listener on :8000) — stopping before restart"
+    kill -TERM "$_pid" 2>/dev/null || true
+    sleep 1
+  else
+    echo "Removing stale lock (pid ${_pid:-?} not running)"
   fi
+  rm -f "$_lock"
 fi
 
 _http=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:8000/health 2>/dev/null || echo "000")

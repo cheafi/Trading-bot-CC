@@ -559,6 +559,21 @@ def ibkr_login_to_ready_hint() -> str:
     )
 
 
+def soak_confirmation_signals() -> Dict[str, str]:
+    """Stable data-cc / copy anchors for staging soak sign-off (no authority change)."""
+    return {
+        "instant_degraded": 'data-cc="instant-degraded-banner"',
+        "warmup_strip": 'data-cc="warmup-context-strip"',
+        "deploy_strip": 'data-cc="deploy-status-strip"',
+        "mission_panel": 'data-cc="today-mission-panel"',
+        "playbook_surface": 'data-cc="playbook-surface"',
+        "market_stale": 'data-cc="market-strip-stale"',
+        "ops_runbook": 'data-cc="ops-recovery-runbook"',
+        "loading_recovery": loading_session_recovery_line(health_mode="loading"),
+        "route_abort_dossier": route_abort_recovery_hint("dossier"),
+    }
+
+
 def today_mission_safe_unlock_hint(
     *,
     wait_day: bool = False,

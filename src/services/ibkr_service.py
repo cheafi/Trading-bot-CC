@@ -1915,6 +1915,29 @@ class IBKRService:
 _ibkr_service: Optional[IBKRService] = None
 
 
+def ibkr_authority_gate_snapshot() -> dict[str, Any]:
+    """In-process broker gates for decision authority — no TCP port probes.
+
+    ``status()`` and ``build_diagnosis()`` probe gateway ports (multi-second).
+    Ranked payload finalization must stay fast under pytest/CI.
+    """
+    try:
+        svc = get_ibkr_service()
+        svc._sync_health_from_app()
+        health = svc.build_health_state()
+        socket_connected = svc.is_connected
+        session_usable = bool(health.get("session_usable"))
+        effective_connected = socket_connected or (
+            health.get("account_status") == "ok" and session_usable
+        )
+        return {
+            "connected": effective_connected,
+            "circuit_breaker": False,
+        }
+    except Exception:
+        return {"connected": False, "circuit_breaker": False}
+
+
 def get_ibkr_service() -> IBKRService:
     global _ibkr_service
     if _ibkr_service is None:

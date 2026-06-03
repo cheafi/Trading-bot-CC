@@ -20,6 +20,10 @@ const PARTIALS = {
     'src/api/templates/cc/partials/ops_recovery_runbook.html',
   ),
   guide: path.join(ROOT, 'src/api/templates/cc/partials/guide.html'),
+  deploy_surfaces: path.join(
+    ROOT,
+    'src/api/templates/cc/partials/deploy_surfaces.html',
+  ),
 };
 
 function injectPartial(name, html, partialBody) {
