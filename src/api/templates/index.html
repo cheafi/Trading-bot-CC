@@ -2630,9 +2630,9 @@
                   <div class="text-[8px] mb-1 mono" style="color:var(--amber)" x-text="r.net_edge_display||r.gross_net_display||(r.raw_score!=null&&r.net_deploy_score!=null?('Raw '+Number(r.raw_score??r.gross_edge_score).toFixed(1)+' · Net '+Number(r.net_deploy_score??r.net_edge_score).toFixed(1)+' after cost'):'')"></div>
                 </template>
                 <template x-if="r.cost_rank_label">
-                  <span class="pill text-[6px] mr-1" :class="(window.CCHelpers&&CCHelpers.costRankPillClass)?CCHelpers.costRankPillClass(r):'pw'" x-text="(window.CCHelpers&&CCHelpers.costRankTag)?CCHelpers.costRankTag(r):r.cost_rank_label"></span>
+                  <span data-cc="playbook-cost-rank-pill" class="pill text-[6px] mr-1" :class="(window.CCHelpers&&CCHelpers.costRankPillClass)?CCHelpers.costRankPillClass(r):'pw'" x-text="(window.CCHelpers&&CCHelpers.costRankTag)?CCHelpers.costRankTag(r):r.cost_rank_label"></span>
                 </template>
-                <div x-show="playbookStrategyDecayLine(r)" class="text-[7px] mb-1" style="color:var(--t3);line-height:1.4" x-text="playbookStrategyDecayLine(r)"></div>
+                <div data-cc="playbook-strategy-decay-line" x-show="playbookStrategyDecayLine(r)" class="text-[7px] mb-1" style="color:var(--t3);line-height:1.4" x-text="playbookStrategyDecayLine(r)"></div>
                 <template x-if="(r.guardrail_labels||[]).length">
                   <div class="flex flex-wrap gap-1 mb-1">
                     <template x-for="gl in (r.guardrail_labels||[]).slice(0,4)" :key="gl">

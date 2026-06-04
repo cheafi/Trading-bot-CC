@@ -10,7 +10,6 @@ Transforms raw signals into decision-ready endpoints:
 
 import asyncio
 import logging
-import os
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -484,11 +483,6 @@ async def today_summary(request: Request):
     if universe == 0:
         universe = len(getattr(request.app.state, "scan_watchlist", []))
 
-    triggered = len(scanned)
-    high_score = len([s for s in scanned if s.get("score", 0) >= 6.0])
-    actionable = len([s for s in scanned if s.get("score", 0) >= 7.0])
-    high_conv = len([s for s in scanned if s.get("score", 0) >= 8.0])
-
     # 5. Top 5 ranked — sector-adaptive pipeline
     # 5. Top 5 ranked — Expert Council pipeline
     council = _council(request)
@@ -815,6 +809,7 @@ async def today_summary(request: Request):
         build_no_setup_diagnosis,
         build_quant_cluster_hints,
         build_regime_wait_explanation,
+        resolve_book_dd_utilization_for_hints,
         build_sleeve_summary,
         build_todays_decision,
         build_unlock_deploy,
@@ -1024,6 +1019,9 @@ async def today_summary(request: Request):
         tradeability=tradeability,
         deploy_qualified_count=execution_ready_count,
         best_net_score=best_net_edge_from_opportunities(all_opps_for_action),
+        dd_utilization_pct=resolve_book_dd_utilization_for_hints(
+            fallback_or_stale=used_brief_fallback or scanner_degraded,
+        ),
     )
     monitor_triggers = build_monitor_triggers(
         market_pulse=market_pulse,

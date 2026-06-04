@@ -396,6 +396,8 @@
 			deployStrip: '[data-cc="deploy-status-strip"]',
 			missionPanel: '[data-cc="today-mission-panel"]',
 			playbookSurface: '[data-cc="playbook-surface"]',
+			playbookCostRankPill: '[data-cc="playbook-cost-rank-pill"]',
+			playbookStrategyDecayLine: '[data-cc="playbook-strategy-decay-line"]',
 			marketStale: '[data-cc="market-strip-stale"]',
 			opsRunbook: '[data-cc="ops-recovery-runbook"]',
 			dataContractStrip: '[data-cc="data-contract-strip"]',

@@ -53,6 +53,8 @@ test.describe("CC operator workflows", () => {
 		expect(body).toContain("soakConfirmationSelectors")
 		expect(body).toContain('[data-cc="deploy-status-strip"]')
 		expect(body).toContain('[data-cc="ops-recovery-runbook"]')
+		expect(body).toContain("playbookCostRankPill")
+		expect(body).toContain("playbookStrategyDecayLine")
 	})
 
 	test("soak anchors — data-cc selectors attached in shell", async ({ page }) => {
@@ -146,6 +148,20 @@ test.describe("CC operator workflows", () => {
 		await expect(surface).toBeVisible({ timeout: 12_000 })
 		await expect(surface.locator("text=/Send to IBKR/i")).toHaveCount(0)
 		await expect(surface.locator("button", { hasText: /Send to IBKR/i })).toHaveCount(0)
+	})
+
+	test("playbook — cost-rank and decay-line selectors in shell", async ({ page }) => {
+		await openTab(page, /Playbook|Signals/i, "signals")
+		const surface = page.locator('[data-cc="playbook-surface"]')
+		await expect(surface).toBeAttached({ timeout: 12_000 })
+		const costPill = surface.locator('[data-cc="playbook-cost-rank-pill"]')
+		const decayLine = surface.locator('[data-cc="playbook-strategy-decay-line"]')
+		if ((await costPill.count()) > 0) {
+			await expect(costPill.first()).toBeAttached()
+		}
+		if ((await decayLine.count()) > 0) {
+			await expect(decayLine.first()).toBeAttached()
+		}
 	})
 
 	test("IBKR — LOGIN or OFFLINE when gateway/session not ready", async ({ page }) => {

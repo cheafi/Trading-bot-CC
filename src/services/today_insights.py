@@ -524,6 +524,44 @@ _OPPORTUNITY_MONITOR_TYPES = frozenset(
 )
 
 
+def resolve_book_dd_utilization_for_hints(
+    *,
+    fallback_or_stale: bool = False,
+) -> Optional[float]:
+    """
+    Live book drawdown utilization for quant cluster hints — monitor/research only.
+
+    Uses portfolio heat when positions exist; omitted on brief fallback or stale scanner.
+    """
+    if fallback_or_stale:
+        return None
+    try:
+        from src.core.risk_limits import RISK
+        from src.engines.portfolio_heat import get_portfolio_heat_engine
+
+        snap = get_portfolio_heat_engine().snapshot()
+        current_dd = float(getattr(snap, "max_drawdown_pct", 0) or 0)
+        if current_dd <= 0:
+            return None
+        budget_pct = float(RISK.max_drawdown_pct) * 100.0
+        if budget_pct <= 0:
+            return None
+        return round(min(100.0, max(0.0, current_dd / budget_pct * 100.0)), 1)
+    except Exception:
+        return None
+
+
+def _near_miss_monitor_gap_suffix(row: Dict[str, Any]) -> str:
+    """Backend monitor copy when near-miss gate gaps tighten — not deploy authority."""
+    gaps = row.get("gaps") or []
+    gap_n = len(gaps)
+    if gap_n == 0:
+        return "at gate — confirm volume; not deploy"
+    if gap_n == 1:
+        return f"closest upgrade — 1 gate gap ({gaps[0]})"
+    return f"{gap_n} gate gaps — monitor upgrade, not deploy"
+
+
 def build_quant_cluster_hints(
     *,
     tradeability: str = "WAIT",
@@ -623,6 +661,9 @@ def build_monitor_triggers(
             detail = f"{detail} · {dist}" if detail else dist
         if not detail:
             detail = str(nm.get("whats_missing") or "Monitor upgrade — not deploy")
+        gap_suffix = _near_miss_monitor_gap_suffix(nm)
+        if gap_suffix:
+            detail = f"{detail} · {gap_suffix}" if detail else gap_suffix
         triggers.append(
             {
                 "type": "near_miss",
