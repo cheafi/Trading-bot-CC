@@ -28,7 +28,9 @@ def test_route_abort_recovery_hint_surfaces():
 def test_stale_and_engine_recovery_lines():
     assert "stale" in stale_refresh_recovery_line().lower()
     assert "Engine OFF" in engine_off_recovery_line()
-    assert "READY" in ibkr_login_to_ready_hint()
+    assert "OFFLINE" in ibkr_login_to_ready_hint(ibkr_short="OFFLINE")
+    assert "LOGIN" in ibkr_login_to_ready_hint(ibkr_short="LOGIN", gateway_reachable=True)
+    assert "READY" in ibkr_login_to_ready_hint(ibkr_short="READY", handoff_ready=True)
 
 
 def test_today_mission_safe_unlock_hint_wait():
@@ -43,7 +45,8 @@ def test_index_stabilization_selectors():
     assert 'data-cc-nav="guide"' in raw
     assert "<!-- @cc-partial guide -->" in raw
     assert "todayMissionSafeUnlockHint()" in raw
-    assert "gate context below (not deploy)" in raw
+    assert "playbookWhatToMonitorLine()" in raw
+    assert "no deploy authority" in raw
 
 
 def test_guide_partial_extracted():

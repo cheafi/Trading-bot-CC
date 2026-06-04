@@ -109,21 +109,45 @@
 		return "Refresh when fetch badges clear · page gates still apply on WAIT days"
 	}
 
-	function todayMissionMonitorsLabel(monitors, nearMissCount) {
+	function todayMissionMonitorsLabel(monitors, nearMissCount, watchQualified) {
 		var n = (monitors || []).length
 		var nm = Number(nearMissCount) || 0
+		var wq = Number(watchQualified)
 		if (!n && !nm) return "Monitors"
-		var base = n ? "Monitors (" + n + ")" : "Monitors"
+		var prefix = n && (isNaN(wq) || wq === 0) ? "Fallback monitors" : "Monitors"
+		var base = n ? prefix + " (" + n + ")" : prefix
 		return nm ? base + " · " + nm + " near-miss" : base
 	}
 
 	/** Clarifies monitor vs near-miss vs deploy — attention routing without tradability. */
 	function todayMissionMonitorsColumnHint(opts) {
 		var o = opts || {}
+		var wq = Number(o.watchQualified)
+		var mc = Number(o.monitorCount) || 0
+		if (!isNaN(wq) && wq > 0) {
+			return wq + " watch-qualified on funnel — mission tickers are attention queue, not extra KPI count"
+		}
+		if (mc > 0) {
+			return "Fallback monitors — scan / near-miss queue; filter_funnel is authority for watch-qualified"
+		}
 		if (o.waitDay) {
 			return "Near-miss · watch queue — priority only, not deploy on WAIT"
 		}
 		return "Watch / near-miss — ranking for attention, not handoff permission"
+	}
+
+	function playbookWhatToMonitorLine(opts) {
+		var o = opts || {}
+		if (!o.waitDay) return ""
+		var sym = String(o.topSymbol || "")
+			.trim()
+			.toUpperCase()
+		var nm = Number(o.nearMissCount) || 0
+		var parts = []
+		if (sym) parts.push(sym + " upgrade triggers")
+		if (nm) parts.push(nm + " near-miss row" + (nm === 1 ? "" : "s"))
+		parts.push("deploy unlock checklist below")
+		return "Monitor only — " + parts.join(" · ") + " · no deploy authority"
 	}
 
 	function todayMissionWaitSubtitle(opts) {
@@ -184,6 +208,23 @@
 			return "No card-level gate flags"
 		}
 		return "None flagged"
+	}
+
+	/** Playbook WAIT-day monitor guidance — operator-facing, no deploy authority. */
+	function playbookWhatToMonitorLine(opts) {
+		var o = opts || {}
+		if (!o.waitDay) return ""
+		var parts = []
+		if (o.topSymbol) {
+			parts.push(String(o.topSymbol).toUpperCase() + " upgrade triggers")
+		}
+		var nm = Number(o.nearMissCount) || 0
+		if (nm > 0) {
+			parts.push(nm + " near-miss row" + (nm === 1 ? "" : "s"))
+		}
+		parts.push("deploy unlock checklist below")
+		var body = parts.length ? parts.join(" · ") : "near-miss strip · gate context"
+		return "Monitor only — " + body + " · no deploy authority"
 	}
 
 	/** PM strip / trust strip chip tiers — primary authority first, context second. */
@@ -248,9 +289,27 @@
 		return "Engine OFF — start engine in Ops or set CC_AUTO_START_ENGINE=1; board may be precomputed only"
 	}
 
-	/** IBKR LOGIN→READY — execution-dependent, not deploy gate alone. */
-	function ibkrLoginToReadyHint() {
-		return "IBKR LOGIN — connect session on IBKR tab; READY required before handoff (bracket aligned)"
+	/** IBKR recovery copy — aligned with ibkr_diagnosis short codes (not deploy gate). */
+	function ibkrLoginToReadyHint(state) {
+		var st = state || {}
+		var short = String(st.short || "").toUpperCase()
+		var hint = String(st.hint || "").trim()
+		if (short === "OFFLINE" || short === "NO IBAPI" || short === "API OFF" || st.level === "offline") {
+			return hint || "IBKR OFFLINE — start Gateway/TWS and confirm API port; Connect on IBKR tab when reachable"
+		}
+		if (short === "BLOCKED") {
+			return "IBKR BLOCKED — circuit breaker active; clear risk gate before handoff"
+		}
+		if (short === "READY" || st.handoff || st.level === "ready") {
+			return hint || "IBKR READY — handoff path verified; confirm bracket alignment before transmit"
+		}
+		if (short === "LOGIN" || short === "HANDSHAKE" || (st.gw && !st.connected)) {
+			return hint || "IBKR LOGIN — connect session on IBKR tab; READY required before handoff (bracket aligned)"
+		}
+		if (short === "MONITOR" || short === "PARTIAL" || st.level === "partial") {
+			return hint || "IBKR partial — session up; confirm bracket and portfolio sync before handoff"
+		}
+		return hint || "IBKR OFFLINE — start Gateway/TWS; Connect on IBKR tab when API port is reachable"
 	}
 
 	/** Mission panel — safe vs blocked unlock (no fake authority). */
@@ -395,10 +454,12 @@
 		instantDegradedBannerHint: instantDegradedBannerHint,
 		todayMissionMonitorsLabel: todayMissionMonitorsLabel,
 		todayMissionMonitorsColumnHint: todayMissionMonitorsColumnHint,
+		playbookWhatToMonitorLine: playbookWhatToMonitorLine,
 		todayMissionWaitSubtitle: todayMissionWaitSubtitle,
 		todayMissionSystemBlockers: todayMissionSystemBlockers,
 		todayMissionBlockersTitle: todayMissionBlockersTitle,
 		todayMissionEmptyBlockersCopy: todayMissionEmptyBlockersCopy,
+		playbookWhatToMonitorLine: playbookWhatToMonitorLine,
 		partitionHeaderChips: partitionHeaderChips,
 		operatorLoadingSafeLine: operatorLoadingSafeLine,
 		routeAbortRecoveryHint: routeAbortRecoveryHint,

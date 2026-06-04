@@ -95,7 +95,7 @@ def build_institutional_context(
         "ticker": sym,
         "holders": holders,
         "lag_label": LAG_LABEL_STANDARD,
-        "lag_copy": "13F reflects prior quarter — not real-time positioning",
+        "lag_copy": "13F reflects prior quarter with standard filing lag — not real-time positioning",
         "crowdedness": hint,
         "top10_pct_float_est": top10_pct,
         "sponsorship_verdict": (

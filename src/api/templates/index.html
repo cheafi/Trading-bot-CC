@@ -1543,8 +1543,9 @@
           <div class="text-[7px]" style="color:var(--t3)" x-text="kpiDeployQualifiedHint()"></div>
         </div>
         <div class="kpi-box" style="cursor:pointer" @click="switchTab('flow')" :title="flowKpiTitle()">
-          <div class="kpi-val mono text-purple-400" :class="flowOverlayDegraded()?'text-[9px] leading-tight text-amber-300':'text-purple-400'" x-text="flowKpiValue()"></div>
+          <div class="kpi-val mono" :class="flowOverlayDegraded()?'text-[9px] leading-tight text-amber-300':'text-purple-400'" x-text="flowKpiValue()"></div>
           <div class="kpi-lbl-pipeline" x-text="flowKpiLabel()"></div>
+          <div class="text-[7px]" style="color:var(--t3)" x-text="flowKpiSubLabel()"></div>
         </div>
         <div class="kpi-box">
           <div class="kpi-val mono text-[10px]" :class="canonicalTradeability()==='NO_TRADE'?'text-red-400':canonicalTradeability()==='WAIT'?'text-amber-300':'text-green-400'" x-text="canonicalRegimeLine()"></div>
@@ -1725,17 +1726,15 @@
               <template x-if="today7.ai_provider==='none'||(!today7.ai_configured&&!today7.ai_provider)">
                 <span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:#3f3f46;color:#a1a1aa">NOT CONFIGURED</span>
               </template>
-              <template x-if="today7.ai_provider==='error'">
+              <template x-if="today7.ai_provider==='loading'||today7.ai_loading">
+                <span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:#422006;color:#fde68a">LOADING</span>
+              </template>
+              <template x-if="today7.ai_provider==='error'&&!today7.ai_loading">
                 <span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:#7f1d1d;color:#fca5a5">ERROR</span>
               </template>
             </div>
             <div class="flex items-center gap-2 shrink-0">
-              <template x-if="today7.ai_loading">
-                <span class="text-[10px]" style="color:#a78bfa;font-style:italic">Thinking…</span>
-              </template>
-              <template x-if="!today7.ai_loading">
-                <button @click.stop="fetchAINarrative()" class="btn-s text-[10px]" style="padding:2px 6px" x-text="today7.ai_narrative?'Regenerate':'Generate'"></button>
-              </template>
+              <button @click.stop="fetchAINarrative()" class="btn-s text-[10px]" style="padding:2px 6px" :disabled="today7.ai_loading" x-text="aiCommentaryCtaLabel()"></button>
             </div>
           </div>
           <div x-show="today7.ai_commentary_open">
@@ -1744,14 +1743,17 @@
           <template x-if="today7.ai_setup_hint && !today7.ai_configured">
             <div class="text-[9px] mb-2 p-2 rounded" style="color:#fde68a;background:#422006;line-height:1.5" x-text="today7.ai_setup_hint"></div>
           </template>
-          <template x-if="today7.ai_error">
+          <template x-if="today7.ai_error&&(today7.ai_provider==='loading'||today7.ai_loading)">
+            <div class="text-[9px] mb-2 p-2 rounded" style="color:#fde68a;background:#422006;line-height:1.5" x-text="today7.ai_error"></div>
+          </template>
+          <template x-if="today7.ai_error&&today7.ai_provider!=='loading'&&!today7.ai_loading">
             <div class="text-[9px] mb-2 p-2 rounded" style="color:#fca5a5;background:#450a0a;line-height:1.5" x-text="today7.ai_error"></div>
           </template>
           <template x-if="today7.ai_narrative">
             <div class="text-[11px] mt-2" style="color:var(--t1);line-height:1.7;white-space:pre-wrap" x-text="today7.ai_narrative"></div>
           </template>
           <template x-if="!today7.ai_narrative && !today7.ai_loading && !today7.ai_error">
-            <div class="text-[10px] mt-2" style="color:var(--t3);font-style:italic">Click Generate for a narrative briefing. Without an LLM key, a rule-based summary is shown.</div>
+            <div class="text-[10px] mt-2" style="color:var(--t3);font-style:italic" x-text="aiCommentaryEmptyLine()"></div>
           </template>
           </div>
         </div>
@@ -2360,7 +2362,7 @@
         <main x-show="tab==='signals'" class="fade" data-cc="playbook-surface">
       <div class="trust-strip">
         <span :style="sig.mode==='SCAN'?'color:var(--green)':sig.mode==='PAPER'?'color:var(--blue)':sig.mode==='OFFLINE'?'color:var(--red)':'color:var(--green)'" x-text="'● '+(sig.mode||'—')"></span>
-        <span x-text="playbookFunnelLabel(rankedOpps.filter_funnel||today7.filter_funnel, null)" :title="'Watch-qualified from filter_funnel — same as Dashboard KPIs'"></span>
+        <span x-text="playbookFunnelLabel(rankedOpps.filter_funnel||today7.filter_funnel, rankedOpps.rows)" :title="'Funnel watch-qualified from filter_funnel — board scan pool is monitor ranking only'"></span>
         <span class="pill pa text-[8px]" x-show="tab==='signals'" x-text="canonicalRegimeLine()"></span>
         <span x-show="playbookBoardModeLabel()" class="pill pa text-[8px]" x-text="playbookBoardModeLabel()"></span>
         <span x-show="rankedOpps.refreshing" class="text-amber-300 text-[9px]">↻ refreshing</span>
@@ -2427,7 +2429,7 @@
         <div class="mx-3 mb-2 card card-p" :style="'border-left:4px solid var(--'+(playbookBoardWait()?'amber':'green')+')'">
           <div class="text-[10px] font-bold uppercase mb-1" :style="'color:var(--'+(playbookBoardWait()?'amber':'green')+')'">Best Action Now</div>
           <div class="text-[11px] font-bold text-white mb-1" x-text="playbookBestActionDisplay()"></div>
-          <div x-show="playbookBoardWait()" class="text-[8px] mb-1" style="color:var(--t3)" x-text="'What to monitor: '+playbookTopWatchSymbol()+' · near-miss strip · gate context below (not deploy)'"></div>
+          <div x-show="playbookBoardWait()" class="text-[8px] mb-1" style="color:var(--t3)" x-text="playbookWhatToMonitorLine()"></div>
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[9px]" x-show="!playbookBoardWait()">
             <div><div style="color:var(--t3)">Risk posture</div><div class="font-bold text-white" x-text="rankedOpps.bestAction.risk_posture||rankedOpps.bestAction.capital_stance?.replace(/_/g,' ')||'—'"></div></div>
             <div><div style="color:var(--t3)" x-text="dashboardBestActionLabel('action')"></div><div class="font-bold text-green-400" x-text="rankedOpps.bestAction.best_trade_now?rankedOpps.bestAction.best_trade_now.ticker:'—'"></div></div>
@@ -2572,8 +2574,7 @@
                 </template>
                 <template x-if="playbookUseCompactCards(r)">
                   <div class="text-[8px] p-2 mb-1 rounded" style="background:var(--s2);line-height:1.5">
-                    <div><span class="font-bold text-white" x-text="playbookCardStatus(r)"></span></div>
-                    <div class="text-amber-300 mt-0.5" x-text="'Blocker · '+playbookCardPrimaryBlocker(r)"></div>
+                    <div class="text-amber-300" x-text="playbookCardGateLine(r)"></div>
                     <div class="text-blue-300 mt-0.5" x-text="'Upgrade · '+playbookCardUpgradeTrigger(r)"></div>
                   </div>
                 </template>
@@ -4412,7 +4413,7 @@
             <span x-text="discoveryFallbackBannerLine()"></span>
           </div>
           <div x-show="scannerHub.data&&scannerHub.data.diagnostics&&scannerHub.data.diagnostics.reason_no_hits" class="text-[8px] mt-2" style="color:var(--t3)" x-text="'ℹ '+scannerHub.data.diagnostics.reason_no_hits"></div>
-          <div x-show="scannerHub.data&&(scannerHub.data.hub_status==='warming'||scannerHub.data.hub_status==='degraded')" class="text-[8px] mt-2 p-2 rounded" style="background:rgba(251,191,36,.08);color:var(--amber);border:1px solid rgba(251,191,36,.25)">
+          <div x-show="scannerHub.data&&(scannerHub.data.hub_status==='warming'||scannerHub.data.hub_status==='degraded')&&!scannerDiscoveryHasFallbackRows()" class="text-[8px] mt-2 p-2 rounded" style="background:rgba(251,191,36,.08);color:var(--amber);border:1px solid rgba(251,191,36,.25)">
             <span class="font-bold">Scanner warming</span> — brief or cached hub visible; live matrix may still be loading. Research-only until Playbook confirms.
           </div>
         </div>
@@ -4449,7 +4450,7 @@
           <div class="card mb-3" style="border-left:4px solid var(--green);overflow:hidden">
             <div style="padding:8px 12px;background:var(--s2);border-bottom:1px solid var(--bd)">
               <span class="text-[10px] font-bold uppercase text-white">Discovery Verdict</span>
-              <span class="pill pa text-[8px] ml-2" x-text="(scannerHub.data.scanner_quality&&scannerHub.data.scanner_quality.label)||'HEURISTIC'"></span>
+              <span class="pill pa text-[8px] ml-2" x-text="discoveryVerdictQualityLabel()"></span>
             </div>
             <div class="grid grid-cols-2 gap-2 p-3 text-[9px]" style="color:var(--t2)">
               <div><span style="color:var(--t3)">Best scanner today</span><div class="font-bold text-white mono" x-text="(scannerHub.data.discovery_verdict.best_scanner_today||'—').replace(/_/g,' ')+' ('+(scannerHub.data.discovery_verdict.best_scanner_hits||0)+')'"></div></div>
@@ -8770,12 +8771,14 @@
       },
       todayMissionMonitorsLabel(){
         const p=this.todayMissionPanel();
+        const {watch}=this.playbookFunnelCounts(this.today7.filter_funnel,null);
         if(typeof CCHelpers!=='undefined'&&CCHelpers.todayMissionMonitorsLabel)
-          return CCHelpers.todayMissionMonitorsLabel(p.monitors,(this.today7.near_miss||[]).length);
+          return CCHelpers.todayMissionMonitorsLabel(p.monitors,(this.today7.near_miss||[]).length,watch);
         const n=(p.monitors||[]).length;
         const nm=(this.today7.near_miss||[]).length;
         if(!n&&!nm) return 'Monitors';
-        const base=n?('Monitors ('+n+')'):'Monitors';
+        const prefix=n&&!watch?'Fallback monitors':'Monitors';
+        const base=n?(prefix+' ('+n+')'):prefix;
         return nm?(base+' · '+nm+' near-miss'):base;
       },
       todayMissionWaitSubtitle(){
@@ -8785,9 +8788,13 @@
         return opts.waitDay?'Deploy blocked — use monitors and Playbook ranking only':'';
       },
       todayMissionMonitorsColumnHint(){
-        const opts={waitDay:!!this.isWaitDay()};
+        const p=this.todayMissionPanel();
+        const {watch}=this.playbookFunnelCounts(this.today7.filter_funnel,null);
+        const opts={waitDay:!!this.isWaitDay(),watchQualified:watch,monitorCount:(p.monitors||[]).length};
         if(typeof CCHelpers!=='undefined'&&CCHelpers.todayMissionMonitorsColumnHint)
           return CCHelpers.todayMissionMonitorsColumnHint(opts);
+        if(watch>0) return watch+' watch-qualified on funnel — mission tickers are attention queue, not extra KPI count';
+        if(opts.monitorCount>0) return 'Fallback monitors — scan / near-miss queue; filter_funnel is authority for watch-qualified';
         return opts.waitDay
           ?'Near-miss · watch queue — priority only, not deploy on WAIT'
           :'Watch / near-miss — ranking for attention, not handoff permission';
@@ -8841,9 +8848,14 @@
         return 'Engine OFF — start engine in Ops or set CC_AUTO_START_ENGINE=1; board may be precomputed only';
       },
       ibkrLoginToReadyHint(){
+        const st=this.ibkrStateFrom(this.today7.execution_readiness||{});
         if(typeof CCHelpers!=='undefined'&&CCHelpers.ibkrLoginToReadyHint)
-          return CCHelpers.ibkrLoginToReadyHint();
-        return 'IBKR LOGIN — connect session on IBKR tab; READY required before handoff (bracket aligned)';
+          return CCHelpers.ibkrLoginToReadyHint(st);
+        const short=String(st.short||'').toUpperCase();
+        if(short==='OFFLINE'||st.level==='offline') return 'IBKR OFFLINE — start Gateway/TWS and confirm API port; Connect on IBKR tab when reachable';
+        if(short==='LOGIN'||(st.gw&&!st.connected)) return 'IBKR LOGIN — connect session on IBKR tab; READY required before handoff (bracket aligned)';
+        if(st.handoff||st.level==='ready') return 'IBKR READY — handoff path verified; confirm bracket alignment before transmit';
+        return 'IBKR partial — session up; confirm bracket and portfolio sync before handoff';
       },
       warmupStatusLine(){
         const mode=String(this.healthMode||this.healthData?.mode||'').toLowerCase();
@@ -9133,21 +9145,20 @@
           return (n!=null&&n!=='')?String(n):'—';
         }
         if(r.score_display_label) return String(r.score_display_label);
-        if(r.score_display) return String(r.score_display);
-        if(r.priority_tier) return String(r.priority_tier);
+        if(r.priority_tier) return 'Fallback rank · '+String(r.priority_tier).toLowerCase();
+        if(r.score_display) return 'Fallback rank · '+String(r.score_display).toLowerCase();
         const n=Number(r.strength??r.score??r.max_score);
         if(!Number.isNaN(n)&&n>0){
-          if(n>=7.5) return 'High';
-          if(n>=6) return 'Medium';
-          return 'Low';
+          if(n>=7.5) return 'Fallback rank · high';
+          if(n>=6) return 'Fallback rank · medium';
+          return 'Fallback rank · low';
         }
-        return 'Fallback rank · relevance only';
+        return 'Indicative rank (fallback)';
       },
       scannerScoreLabel(h){
         const row=h||{};
         if(String(row.score_display_mode||'')==='fallback_rank'||this.scannerUsesBriefFallback()){
-          const fb=this.formatFallbackScore(row);
-          return fb.includes('Fallback rank')?fb:('Rank '+fb);
+          return this.formatFallbackScore(row);
         }
         const n=row.strength!=null?row.strength:(row.score!=null?row.score:null);
         return 'Score '+(n!=null?n:'—');
@@ -9738,8 +9749,16 @@
       discoveryVerdictConfirmedLabel(){
         const dv=this.scannerHub.data?.discovery_verdict||{};
         if(dv.best_confirmed_label) return dv.best_confirmed_label;
-        if(this.scannerUsesBriefFallback()||this.scannerDiscoveryHasFallbackRows()) return 'Top fallback candidate';
+        if(this.scannerDiscoveryHasFallbackRows()) return 'Top fallback candidate';
+        if(this.scannerUsesBriefFallback()) return 'Top fallback candidate';
         return 'Most represented scanner sample';
+      },
+      discoveryVerdictQualityLabel(){
+        if(this.scannerDiscoveryHasFallbackRows()) return 'FETCH FAILED · heuristic';
+        const d=this.scannerHub.data||{};
+        const hub=String(d.hub_status||'').toLowerCase();
+        if(hub==='warming'||hub==='degraded') return 'WARMING';
+        return (d.scanner_quality&&d.scanner_quality.label)||'HEURISTIC';
       },
       scannerDiscoveryHasFallbackRows(){
         return !!(this.scannerHub.error&&this.scannerHubIsRenderable(this.scannerHub.data));
@@ -9756,12 +9775,15 @@
         return 'Live fetch failed — showing fallback watchlist samples. Research-only fallback results — not live scanner output. Confirm in Playbook before sizing.';
       },
       scannerHubHeaderNote(){
+        if(this.scannerDiscoveryHasFallbackRows()){
+          return 'Decision-intent scanners (Leaders, Pullbacks, Breakouts, Flow, No-Trade) are research/supporting unless Playbook confirms. Regime '+this.canonicalRegimeLine()+' — counts below are fallback samples, not live scanner output.';
+        }
         const d=this.scannerHub.data||{};
         if(d.research_note) return d.research_note;
         return 'Decision-intent scanners (Leaders, Pullbacks, Breakouts, Flow, No-Trade) are research/supporting unless Playbook confirms. Regime '+this.canonicalRegimeLine()+' — zero hits on WAIT/NO_TRADE days is normal.';
       },
       scannerDiscoveryEmptyMessage(){
-        if(this.scannerDiscoveryHasFallbackRows()) return 'Fallback watchlist samples are visible (FETCH FAILED).';
+        if(this.scannerDiscoveryHasFallbackRows()) return 'Fallback watchlist samples visible — see banner above.';
         if(this.scannerHub.error) return 'Scanner hub could not load: '+this.scannerHub.error+'. Retry or open Dashboard for board posture.';
         if(this.discoveryWaitZeroHits()) return this.discoveryWaitEmptyLine();
         return 'Decision-intent scanners are research-only until Playbook confirms. Candidates for monitoring only — zero hits on WAIT days is normal.';
@@ -9775,9 +9797,25 @@
         if(deploy==null) deploy=f.execution_ready_setups??0;
         return {scanned:Number(scanned)||0,watch:Number(watch)||0,deploy:Number(deploy)||0};
       },
+      playbookBoardScanPoolCount(funnel,rows){
+        const f=funnel||{};
+        const {watch,scanned}=this.playbookFunnelCounts(f,rows);
+        const rowN=(rows||[]).length;
+        const wq=Number(watch)||0;
+        if(wq>0) return rowN>wq?rowN:0;
+        for(const k of ['triggered_setups','high_score_setups','raw_signal_candidates']){
+          const n=Number(f[k])||0;
+          if(n>0) return n;
+        }
+        if(rowN>0) return rowN;
+        return Number(scanned)||0;
+      },
       playbookFunnelLabel(funnel,rows){
         const {scanned,watch,deploy}=this.playbookFunnelCounts(funnel,rows);
-        return scanned+' scanned · '+watch+' watch-qualified · '+deploy+' deploy-qualified';
+        let s=scanned+' scanned · '+watch+' funnel watch-qualified · '+deploy+' deploy-qualified';
+        const pool=this.playbookBoardScanPoolCount(funnel,rows);
+        if(Number(watch)>0&&pool>Number(watch)) s+=' · '+pool+' board scan pool';
+        return s;
       },
       playbookLayerDefinitions(){
         return {
@@ -9795,11 +9833,19 @@
         const raw=String((c&&c.detail)||'');
         if(!raw) return '';
         if(c&&c.key==='board'){
-          const wq=this.playbookFunnelCounts(this.rankedOpps.filter_funnel||this.today7.filter_funnel,null).watch||0;
-          const m=raw.match(/(\d+)\s+validated/i);
-          if(m&&Number(wq)===0){
-            return m[1]+' scan-ranked (not watch-qualified)'+(raw.includes('STALE')?' · data STALE':'');
+          const funnel=this.rankedOpps.filter_funnel||this.today7.filter_funnel;
+          const {watch}=this.playbookFunnelCounts(funnel,null);
+          const wq=Number(watch)||0;
+          const stale=raw.includes('STALE')?' · data STALE':'';
+          const rows=this.rankedOpps.rows||null;
+          if(wq>0){
+            const pool=this.playbookBoardScanPoolCount(funnel,rows);
+            if(pool>wq) return wq+' funnel watch-qualified · '+pool+' board scan pool'+stale;
+            return wq+' funnel watch-qualified'+stale;
           }
+          const sr=this.playbookBoardScanPoolCount(funnel,rows);
+          if(sr>=1) return sr+' scan-ranked (not watch-qualified)'+stale;
+          return '0 watch-qualified'+stale;
         }
         return raw
           .replace(/\b(\d+)\s+validated\b/gi,(m,n)=>n+' scan-ranked (not watch-qualified)')
@@ -9953,6 +9999,28 @@
       playbookCardStatus(r){
         return this.effectiveCardAction(r)||'WATCH';
       },
+      playbookCardGateLine(r){
+        const status=String(this.playbookCardStatus(r)||'WATCH').trim();
+        let detail=String(this.playbookCardPrimaryBlocker(r)||'').trim();
+        const norm=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();
+        const su=norm(status);
+        if(!detail){
+          if(su==='BLOCKED') return 'Deploy blocked — gates incomplete';
+          if(su==='AVOID'||su==='NO TRADE') return 'Avoid — not deploy-ready';
+          return status.replace(/_/g,' ')+' — monitor only';
+        }
+        detail=detail.replace(/^(AVOID|BLOCKED|WATCH|NO_TRADE|PILOT|FALLBACK WATCH)\s*[·\-\—:\u2014]\s*/i,'').trim();
+        const du=norm(detail);
+        if(!detail||du===su||su.includes(du)||du.includes(su)){
+          if(su==='BLOCKED') return 'Deploy blocked — gates incomplete';
+          if(su==='AVOID'||su==='NO TRADE') return 'Avoid — not deploy-ready';
+          return status.replace(/_/g,' ')+' — monitor only';
+        }
+        if(su==='BLOCKED') return 'Deploy blocked — '+detail;
+        if(su==='AVOID'||su==='NO TRADE') return 'Avoid — '+detail;
+        return status.replace(/_/g,' ')+' — '+detail;
+      },
+      playbookCardMonitorLine(r){ return this.playbookCardGateLine(r); },
       playbookCardPrimaryBlocker(r){
         const dep=r.score_card?.deployability_label;
         if(dep&&String(dep).toUpperCase()!=='DEPLOY'&&String(dep).toUpperCase()!=='TRADE') return dep;
@@ -10113,14 +10181,29 @@
         return this.playbookUsesBriefFallback()||this.playbookBrokerOffline()||this.playbookDeployableCount()<1;
       },
       playbookWaitDayIntro(){
-        return 'WAIT — no deploy. Monitor near-miss upgrades; unlock when tradeability, deploy-qualified setup, broker handoff, and watch-qualified data align.';
+        return 'WAIT — no deploy today. Monitor-only session until tradeability, deploy-qualified setup, broker handoff, and funnel watch-qualified data all clear.';
+      },
+      playbookWhatToMonitorLine(){
+        if(!this.playbookBoardWait()) return '';
+        const opts={
+          waitDay:true,
+          topSymbol:this.playbookTopWatchSymbol(),
+          nearMissCount:(this.rankedOpps.near_miss||this.today7.near_miss||[]).length,
+        };
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.playbookWhatToMonitorLine)
+          return CCHelpers.playbookWhatToMonitorLine(opts);
+        const parts=[];
+        if(opts.topSymbol) parts.push(String(opts.topSymbol).toUpperCase()+' upgrade triggers');
+        if(opts.nearMissCount) parts.push(opts.nearMissCount+' near-miss row'+(opts.nearMissCount===1?'':'s'));
+        parts.push('deploy unlock checklist below');
+        return 'Monitor only — '+parts.join(' · ')+' · no deploy authority';
       },
       playbookTopComment(){
         if(!this.playbookBoardWait()) return '';
-        const parts=['No deploy today — monitor-only session.'];
+        const parts=['Rankings show attention priority, not deploy permission.'];
         if(this.playbookBrokerOffline()) parts.push('IBKR offline — no handoff.');
         else if(this.playbookDeployableCount()<1) parts.push('0 deploy-qualified.');
-        if(this.playbookUsesBriefFallback()) parts.push('Brief fallback — verify before pilot.');
+        if(this.playbookUsesBriefFallback()) parts.push('Brief fallback board — uncalibrated ranks.');
         return parts.join(' ');
       },
       playbookRankingsDisclaimer(){
@@ -10148,7 +10231,7 @@
       playbookDecisionConfidenceDisplay(){
         const ba=this.rankedOpps.bestAction;
         if(this.playbookBoardWait()&&(this.playbookUsesBriefFallback()||ba?.data_freshness==='STALE'||String(ba?.evidence_quality||'').toLowerCase()==='low')){
-          return 'LOW — Fallback / stale-context board. Rankings may highlight relevant names, but they do not carry normal deploy authority. Verify quote freshness, trend structure, volume confirmation, and stop logic before any sizing decision.';
+          return 'Uncalibrated fallback — rank ≠ deploy permission';
         }
         return ba?.decision_confidence_label||ba?.evidence_label||'';
       },
@@ -12888,6 +12971,7 @@
         this.today7.ai_commentary_open=true;
         this.today7.ai_loading=true;
         this.today7.ai_error='';
+        this.today7.ai_provider='loading';
         try{
             const r=await this.ccFetch('/api/v7/today/ai-narrative',{
                 retries:2,
@@ -12911,7 +12995,7 @@
                 this.today7.ai_error=warming
                     ? this.surfaceWarmupLoadingLine('dashboard')
                     : ('Generation failed (HTTP '+(st||'no response')+').');
-                this.today7.ai_provider=warming?'stub':'error';
+                this.today7.ai_provider=warming?'loading':'error';
                 return;
             }
             const d=await r.json();
@@ -12935,12 +13019,14 @@
             const raw=String(e&&e.message||e||'');
             if(this.normalizeFetchError(raw)){
                 this.today7.ai_error=this.surfaceWarmupLoadingLine('dashboard');
+                this.today7.ai_provider='loading';
             }else if(/aborted|timeout/i.test(raw)){
                 this.today7.ai_error='Narrative request timed out — retry after API warm-up.';
+                this.today7.ai_provider='loading';
             }else{
                 this.today7.ai_error='Request failed: '+raw;
+                this.today7.ai_provider='error';
             }
-            this.today7.ai_provider='error';
         }finally{
             this.today7.ai_loading=false;
         }
@@ -13107,7 +13193,7 @@
         const n=Number(this.scannerHitCount(hits));
         const safe=Number.isFinite(n)?n:0;
         const list=this.scannerHitList(hits);
-        if(safe>0) return (this.tab==='scanners'&&this.scannerDiscoveryHasFallbackRows())?(safe+' fallback hits'):(safe+' hits');
+        if(safe>0) return safe+' hits';
         if(list.length>0) return list.length+' top samples';
         return '0 hits';
       },
@@ -13217,7 +13303,7 @@
         if(hits===null||hits===undefined||hits==='—') return '—';
         const n=Number(hits);
         const safe=Number.isFinite(n)?n:0;
-        if(this.scannerDiscoveryHasFallbackRows()) return safe+' fallback hits';
+        if(this.scannerDiscoveryHasFallbackRows()) return safe+' hits · fallback';
         return safe+' hits';
       },
       discoveryConfidenceLabel(row){
@@ -13393,12 +13479,23 @@
         if(!(d?.count_live||0)) return 'Flow overlay unavailable';
         return 'Flow overlay unavailable';
       },
-      flowKpiLabel(){
-        return this.flowOverlayDegraded()?'flow overlay':'flow signals';
+      flowKpiLabel(){ return 'flow'; },
+      flowKpiSubLabel(){
+        if(this.flowOverlayDegraded()) return 'overlay';
+        const n=Number(this.flowPanelCount())||0;
+        return n===1?'signal':'signals';
       },
       flowKpiValue(){
-        if(this.flowOverlayDegraded()) return this.flowOverlayDegradedShort();
+        if(this.flowOverlayDegraded()) return '—';
         return this.flowPanelCount();
+      },
+      aiCommentaryCtaLabel(){
+        if(this.today7.ai_loading) return 'Loading…';
+        return this.today7.ai_narrative?'Regenerate':'Generate';
+      },
+      aiCommentaryEmptyLine(){
+        if(this.today7.ai_provider==='stub') return 'Rule-based summary only — configure an LLM for richer narrative; board authority unchanged.';
+        return 'Generate a narrative briefing when the API is ready. Commentary is explanatory only — it does not change deploy permission.';
       },
       flowKpiTitle(){
         if(this.flowOverlayDegraded()) return this.flowRegimeSupportLine()+' — confirmation overlay only';

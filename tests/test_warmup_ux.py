@@ -5,7 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.services.fetch_surface_state import (
+    ibkr_login_to_ready_hint,
     loading_session_recovery_line,
+    today_mission_monitors_column_hint,
+    today_mission_monitors_label,
     today_mission_panel,
     trust_provenance_line,
     warmup_status_line,
@@ -64,3 +67,20 @@ def test_index_html_warmup_helpers_wired():
     assert "todayMissionPanel()" in raw
     assert "todayMissionMonitorsLabel()" in raw
     assert "severityBadgeClass(" in raw
+
+
+def test_ibkr_recovery_hint_offline_not_login():
+    assert "OFFLINE" in ibkr_login_to_ready_hint(ibkr_short="OFFLINE")
+    assert "LOGIN" not in ibkr_login_to_ready_hint(ibkr_short="OFFLINE").split("—")[0]
+
+
+def test_mission_monitors_fallback_when_zero_watch():
+    assert "Fallback monitors" in today_mission_monitors_label(
+        ["QCOM", "NET"], watch_qualified=0
+    )
+    assert "filter_funnel" in today_mission_monitors_column_hint(
+        watch_qualified=0, monitor_count=3
+    )
+    assert "watch-qualified on funnel" in today_mission_monitors_column_hint(
+        watch_qualified=2, monitor_count=3
+    )
