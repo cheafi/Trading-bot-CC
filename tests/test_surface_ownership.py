@@ -6,6 +6,8 @@ import re
 from html.parser import HTMLParser
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = ROOT / "src" / "api" / "templates" / "index.html"
 DEPLOY_PARTIAL = (
@@ -15,6 +17,25 @@ DEPLOY_PARTIAL = (
 TODAY_MAIN_OPEN = '<main x-show="tab===\'today\'"'
 PLAYBOOK_MAIN_OPEN = '<main x-show="tab===\'signals\'"'
 DISCOVERY_MARKER = 'data-cc="discovery-surface"'
+
+TODAY_ONLY_MARKERS = (
+    "deploy-status-strip",
+    "today-deploy-chrome",
+    "today-mission-panel",
+    "today-dashboard-body",
+    "FALLBACK / BRIEF ONLY",
+    "honestFunnelLabel(today7.filter_funnel",
+)
+
+RESEARCH_SURFACES: list[tuple[str, str]] = [
+    ("rs", 'data-cc="rs-surface"'),
+    ("scanners", DISCOVERY_MARKER),
+    ("dossier", 'data-cc="dossier-surface"'),
+    ("guide", 'data-cc="guide-surface"'),
+    ("ops", 'data-cc="ops-surface"'),
+    ("notrade", 'data-cc="rejections-surface"'),
+    ("btlab", 'data-cc="btlab-surface"'),
+]
 
 
 def _read_index() -> str:
@@ -67,9 +88,7 @@ class _MainStackParser(HTMLParser):
             and self.stack[-1][1].get("x-show") == "tab==='today'"
         ):
             self.stray_div_after_today_open = True
-        if tag == "main" and (
-            not self.stack or self.stack[-1][0] != "main"
-        ):
+        if tag == "main" and (not self.stack or self.stack[-1][0] != "main"):
             if self.today_main_depth is not None:
                 self.today_main_orphan_close = True
             return
@@ -97,6 +116,7 @@ def test_deploy_status_strip_inside_today_main_block():
     today = _surface_block(raw, TODAY_MAIN_OPEN)
     assert 'data-cc="deploy-status-strip"' in today
     assert 'data-cc="today-deploy-chrome"' in today
+    assert 'data-cc="today-dashboard-body"' in today
 
 
 def test_discovery_surface_excludes_deploy_strip():
@@ -114,11 +134,20 @@ def test_playbook_surface_excludes_today_deploy_strip():
     assert "today-deploy-chrome" not in playbook
 
 
+@pytest.mark.parametrize("tab_name,open_marker", RESEARCH_SURFACES)
+def test_research_surface_excludes_today_deploy_chrome(tab_name: str, open_marker: str):
+    raw = _read_index()
+    block = _surface_block(raw, open_marker)
+    for needle in TODAY_ONLY_MARKERS:
+        assert needle not in block, f"{tab_name} surface must not contain {needle!r}"
+
+
 def test_deploy_partial_wrapped_with_today_tab_guard():
     partial = DEPLOY_PARTIAL.read_text(encoding="utf-8")
     assert 'x-show="tab===\'today\'"' in partial
     assert 'data-cc="today-deploy-chrome"' in partial
     assert 'data-cc="deploy-status-strip"' in partial
+    assert 'x-show="tab===\'today\'" data-cc="deploy-status-strip"' in partial
 
 
 def test_deploy_partial_markers_only_in_today_section():
@@ -150,4 +179,28 @@ def test_playwright_surface_hooks_present():
     assert 'data-cc="today-surface"' in raw
     assert 'data-cc="playbook-surface"' in raw
     assert 'data-cc="discovery-surface"' in raw
+    assert 'data-cc="rs-surface"' in raw
     assert 'data-cc="deploy-status-strip"' in raw
+
+
+def test_header_context_scopes_board_fallback_to_dashboard_playbook():
+    raw = _read_index()
+    idx = raw.index("headerContext(){")
+    body = raw[idx : idx + 900]
+    assert "mode==='dashboard_core'&&this.todayUsesBriefFallback()" in body
+    assert "mode==='playbook_core'&&this.playbookUsesBriefFallback()" in body
+    assert "this.todayUsesBriefFallback()||this.playbookUsesBriefFallback()" not in body
+
+
+def test_build_cc_template_check_passes():
+    import subprocess
+
+    root = INDEX_HTML.resolve().parents[3]
+    proc = subprocess.run(
+        ["node", "scripts/build-cc-template.mjs", "--check"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr or proc.stdout

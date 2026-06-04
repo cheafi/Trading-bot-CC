@@ -31,7 +31,7 @@
       </template>
 
       <!-- ── Ops / IB / Monitor strip (institutional cockpit) ── -->
-      <div data-cc="deploy-status-strip" style="padding:6px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <div x-show="tab==='today'" data-cc="deploy-status-strip" style="padding:6px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <span class="pill text-[8px]" :class="ibkrStateFrom(today7.execution_readiness).level==='ready'?'pg':ibkrStateFrom(today7.execution_readiness).level==='blocked'?'pr':'pa'" x-text="'IBKR '+ibkrUnifiedShort(today7.execution_readiness)"></span>
         <span class="pill text-[8px]" :class="cc_status.breaker?'pr':(ops.running?'pg':'pw')" x-text="cc_status.breaker?'BREAKER':(ops.running?'ENGINE ON':'ENGINE OFF')"></span>
         <template x-if="today7.evidence_badges">
@@ -44,6 +44,6 @@
         <span x-show="portfolioSummaryStripVisible()" class="pill text-[8px] pb" x-text="portfolioSummaryStripLine()"></span>
         <button @click="switchTab('funds')" class="btn-s text-[8px] ml-auto" x-show="(pmStrip.funds||[]).length===0">Load Funds</button>
       </div>
-      <div x-show="!ops.running" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="engineOffRecoveryLine()"></div>
-      <div x-show="ibkrStateFrom(today7.execution_readiness).level!=='ready'" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="ibkrLoginToReadyHint()"></div>
+      <div x-show="tab==='today'&&!ops.running" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="engineOffRecoveryLine()"></div>
+      <div x-show="tab==='today'&&ibkrStateFrom(today7.execution_readiness).level!=='ready'" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="ibkrLoginToReadyHint()"></div>
       </div>

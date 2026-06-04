@@ -443,7 +443,7 @@
       <span style="color:var(--t2);font-weight:600">Reference only · Decision surfaces suspended</span>
       <span style="margin-left:auto;color:var(--t3);font-size:10px" x-text="guideStatusNote()"></span>
     </div>
-    <div class="trust-strip" x-show="live && tab!=='guide'" style="flex-wrap:wrap;align-items:center;gap:8px">
+    <div class="trust-strip" x-show="live && tab==='today'" style="flex-wrap:wrap;align-items:center;gap:8px">
       <div class="flex items-center gap-2 flex-wrap trust-strip-tier-primary">
         <span x-show="instantDegradedBannerVisible()" style="padding:2px 8px;border-radius:4px;font-weight:700;font-size:10px;letter-spacing:.5px;background:#7f1d1d;color:#fde68a;border:1px solid #ef4444">INSTANT DEGRADED</span>
         <span x-show="pageAuthorityIsDegraded()&&!instantDegradedBannerVisible()" style="padding:2px 8px;border-radius:4px;font-weight:700;font-size:10px;letter-spacing:.5px;background:#422006;color:#fde68a;border:1px solid #b45309">MONITOR ONLY</span>
@@ -534,7 +534,7 @@
     </div>
 
     <!-- ══════ Surface authority — current tab + peer surfaces (non-Guide only) ══════ -->
-    <template x-if="today7.surface_authority && today7.surface_authority.surfaces && tab!=='guide'">
+    <template x-if="today7.surface_authority && today7.surface_authority.surfaces && (tab==='today' || tab==='signals')">
       <div style="background:var(--s0);border-bottom:1px solid var(--bd);padding:4px 12px;display:flex;flex-wrap:wrap;align-items:center;gap:6px">
         <span class="text-[8px] font-bold uppercase" style="color:var(--t3)">Authority</span>
         <span class="pill text-[7px] font-bold"
@@ -1041,7 +1041,7 @@
       </template>
 
       <!-- ── Ops / IB / Monitor strip (institutional cockpit) ── -->
-      <div data-cc="deploy-status-strip" style="padding:6px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <div x-show="tab==='today'" data-cc="deploy-status-strip" style="padding:6px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <span class="pill text-[8px]" :class="ibkrStateFrom(today7.execution_readiness).level==='ready'?'pg':ibkrStateFrom(today7.execution_readiness).level==='blocked'?'pr':'pa'" x-text="'IBKR '+ibkrUnifiedShort(today7.execution_readiness)"></span>
         <span class="pill text-[8px]" :class="cc_status.breaker?'pr':(ops.running?'pg':'pw')" x-text="cc_status.breaker?'BREAKER':(ops.running?'ENGINE ON':'ENGINE OFF')"></span>
         <template x-if="today7.evidence_badges">
@@ -1054,12 +1054,14 @@
         <span x-show="portfolioSummaryStripVisible()" class="pill text-[8px] pb" x-text="portfolioSummaryStripLine()"></span>
         <button @click="switchTab('funds')" class="btn-s text-[8px] ml-auto" x-show="(pmStrip.funds||[]).length===0">Load Funds</button>
       </div>
-      <div x-show="!ops.running" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="engineOffRecoveryLine()"></div>
-      <div x-show="ibkrStateFrom(today7.execution_readiness).level!=='ready'" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="ibkrLoginToReadyHint()"></div>
+      <div x-show="tab==='today'&&!ops.running" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="engineOffRecoveryLine()"></div>
+      <div x-show="tab==='today'&&ibkrStateFrom(today7.execution_readiness).level!=='ready'" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="ibkrLoginToReadyHint()"></div>
       </div>
     <!-- @cc-partial-end deploy_surfaces -->
 
-      <template x-if="authorityDegradedBanner() || todayUsesBriefFallback() || staleSnapshotContext()">
+      <div x-show="tab==='today'" data-cc="today-dashboard-body">
+
+      <template x-if="tab==='today'&&(authorityDegradedBanner() || todayUsesBriefFallback() || staleSnapshotContext())">
         <div style="padding:4px 12px 0">
           <div class="p-2 rounded text-[9px]" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.28);color:var(--amber);line-height:1.55">
             <span class="pill pa text-[7px] font-bold mr-1" x-text="todayUsesBriefFallback()?'FALLBACK / BRIEF ONLY':(staleSnapshotContext()?'HISTORICAL SNAPSHOT':'DEGRADED')"></span>
@@ -2341,6 +2343,8 @@
           </template>
         </div>
       </details>
+
+      </div><!-- end today-dashboard-body -->
     </main>
 
     <!-- ═══════════════════════════════════════════════════════ -->
@@ -3724,7 +3728,7 @@
     <!-- ═══════════════════════════════════════════════════════ -->
     <!-- SURFACE: BACKTEST LAB (P2)                             -->
     <!-- ═══════════════════════════════════════════════════════ -->
-    <main x-show="tab==='btlab'" class="fade" style="padding:12px;padding-bottom:40px">
+    <main x-show="tab==='btlab'" class="fade" data-cc="btlab-surface" style="padding:12px;padding-bottom:40px">
       <div class="text-[11px] font-bold uppercase mb-2" style="color:var(--green)">🧪 Backtest Lab</div>
       <div class="flex flex-wrap gap-2 mb-3">
         <input x-model="btLab.ticker" class="rounded px-2 py-1 text-[11px] mono w-20" style="background:var(--s2);border:1px solid var(--bd)" placeholder="Ticker">
@@ -5153,7 +5157,7 @@
               <span style="color:var(--t3)">Positions: <strong class="text-white" x-text="portfolioSummaryPositionsLabel()"></strong></span>
               <span style="color:var(--t3)">Value: <strong class="text-white" x-text="portfolioSummaryMoneyLine('total_value')"></strong></span>
               <span style="color:var(--t3)">Cost: <strong class="text-white" x-text="portfolioSummaryMoneyLine('total_cost')"></strong></span>
-              <span style="color:var(--t3)">P&L: <strong :class="pf.summary.total_pnl>=0?'text-green-400':'text-red-400'" x-text="portfolioSummaryPnlLine()"></strong></span>
+              <span style="color:var(--t3)">P&L: <strong :class="portfolioSummaryPnlIsPositive()?'text-green-400':'text-red-400'" x-text="portfolioSummaryPnlLine()"></strong></span>
             </div>
           </div>
         </template>
@@ -5921,7 +5925,7 @@
     </main>
 
     <!-- SURFACE: RELATIVE STRENGTH — PM DECISION                         -->
-    <main x-show="tab==='rs'" class="fade">
+    <main x-show="tab==='rs'" class="fade" data-cc="rs-surface">
       <div class="section-hdr flex flex-wrap items-center gap-2" style="margin:8px 12px 0">
         <span>📈 Relative strength — Discovery funnel input</span>
         <button class="btn-s text-[8px]" @click="switchTab('scanners');fetchScanners()">Open Discovery scanners →</button>
@@ -6033,7 +6037,7 @@
     </main>
 
     <!-- SURFACE: REJECTIONS / DECISION AUDIT LOG                  -->
-    <main x-show="tab==='notrade'" class="fade">
+    <main x-show="tab==='notrade'" class="fade" data-cc="rejections-surface">
       <div class="trust-strip">
         <span style="color:var(--red)">● REJECTIONS</span>
         <span x-text="rejectionsTrustStripStatus()"></span>
@@ -6662,7 +6666,7 @@
     <!-- ═══════════════════════════════════════════════════════ -->
     <!-- SURFACE 7: OPERATOR CONSOLE                            -->
     <!-- ═══════════════════════════════════════════════════════ -->
-    <main x-show="tab==='ops'" class="fade">
+    <main x-show="tab==='ops'" class="fade" data-cc="ops-surface">
       <div class="trust-strip">
         <span style="color:var(--blue)">● Ops Console</span>
         <span class="pill text-[8px]" :class="opsConsole.data?.runnable?'pg':(opsConsole.data?.paper_ready?'pa':'pr')" x-text="opsConsole.data?.verdict_code||'—'"></span>
@@ -8080,6 +8084,12 @@
         const val=Number(s[field]);
         return Number.isFinite(val)?'$'+val.toLocaleString():'—';
       },
+      portfolioSummaryPnlIsPositive(){
+        const s=this.pf&&this.pf.summary;
+        if(!s) return false;
+        const pnl=Number(s.total_pnl);
+        return Number.isFinite(pnl)&&pnl>=0;
+      },
       portfolioSummaryPnlLine(){
         const s=this.pf&&this.pf.summary;
         if(!s) return '—';
@@ -8344,7 +8354,7 @@
           loading:!!hints.loading,
           error:hints.error||'',
           stale:!!(this.today7.trust&&this.today7.trust.stale)||!!hints.stale,
-          fallback:this.todayUsesBriefFallback()||this.playbookUsesBriefFallback()||!!hints.fallback,
+          fallback:((mode==='dashboard_core'&&this.todayUsesBriefFallback())||(mode==='playbook_core'&&this.playbookUsesBriefFallback())||!!hints.fallback),
           mock_only:!!hints.mock_only,
           research_only:!!hints.research_only,
           execution_blocked:!!this.cc_status.breaker||this.degradedExecutionUnavailable()||!!hints.execution_blocked,
@@ -8705,7 +8715,7 @@
         return this.cc_status.ibkr_connected?'READY':'OFFLINE';
       },
       dataContractStripVisible(){
-        return this.tab!=='guide'&&!this.dataContractDismissed;
+        return (this.tab==='today'||this.tab==='signals')&&!this.dataContractDismissed;
       },
       dataContractStrip(){
         return {
