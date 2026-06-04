@@ -18,6 +18,37 @@ FLAG_OOS_FAIL = "oos_fail"
 FLAG_OVERFIT = "overfit_suspect"
 FLAG_DECAY = "expectancy_decay"
 
+STRATEGY_DECAY_DOWNGRADE_COPY = (
+    "Strategy expectancy decay — sizing template downgrade (research only, not deploy)"
+)
+
+
+def resolve_strategy_decay_line(row: Dict[str, Any]) -> Optional[str]:
+    """Playbook card hint when validity / edge decay — never grants deploy."""
+    flags = row.get("validity_flags") or []
+    if isinstance(flags, str):
+        flags = [flags]
+    if FLAG_DECAY in flags:
+        return STRATEGY_DECAY_DOWNGRADE_COPY
+    ds = row.get("decay_score")
+    if ds is not None:
+        try:
+            if float(ds) < 50:
+                return STRATEGY_DECAY_DOWNGRADE_COPY
+        except (TypeError, ValueError):
+            pass
+    curve = str(row.get("curve_label") or row.get("health_state") or "").lower()
+    if curve in ("monitor", "paused", "reduced"):
+        return STRATEGY_DECAY_DOWNGRADE_COPY
+    from src.services.cost_adjusted_ranker import LABEL_COST_TOO_HIGH
+
+    if str(row.get("cost_rank_label") or "") == LABEL_COST_TOO_HIGH:
+        raw = float(row.get("raw_score") or row.get("score") or 0)
+        net = float(row.get("net_edge_score") or row.get("net_deploy_score") or 0)
+        if raw >= 5.5 and raw - net >= 2.0:
+            return STRATEGY_DECAY_DOWNGRADE_COPY
+    return None
+
 
 def compute_decay_score(
     *,

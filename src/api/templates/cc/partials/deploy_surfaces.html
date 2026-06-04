@@ -1,5 +1,5 @@
       <div x-show="tab==='today'" data-cc="today-deploy-chrome">
-      <template x-if="tab==='today'&&(todayMissionPanel().system_blockers.length||todayMissionPanel().card_gates.length||todayMissionPanel().monitors.length)">
+      <template x-if="tab==='today'&&(todayMissionPanel().system_blockers.length||todayMissionPanel().card_gates.length||todayMissionPanel().monitors.length||todayMissionPanel().quant_cluster_lines.length)">
         <div data-cc="today-mission-panel" style="padding:4px 12px 0">
           <div class="card card-p" style="padding:8px 10px;border-left:3px solid var(--blue)">
             <div class="text-[9px] font-bold uppercase mb-0.5" style="color:var(--t3)" x-text="todayMissionPanelTitle()"></div>
@@ -24,6 +24,12 @@
                   <div style="color:var(--t2)" class="mono" x-text="'• '+m"></div>
                 </template>
                 <div x-show="!todayMissionPanel().monitors.length" style="color:var(--t3)">—</div>
+                <template x-if="todayMissionPanel().quant_cluster_lines.length">
+                  <div class="font-bold text-blue-300 mt-1 mb-0.5">Quant clusters (monitor)</div>
+                  <template x-for="line in todayMissionPanel().quant_cluster_lines" :key="'qc-'+line">
+                    <div class="text-[8px]" style="color:var(--t3);line-height:1.4" x-text="'• '+line"></div>
+                  </template>
+                </template>
               </div>
             </div>
           </div>
@@ -46,4 +52,5 @@
       </div>
       <div x-show="tab==='today'&&!ops.running" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="engineOffRecoveryLine()"></div>
       <div x-show="tab==='today'&&ibkrStateFrom(today7.execution_readiness).level!=='ready'" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="ibkrLoginToReadyHint()"></div>
+      <div x-show="tab==='today'&&todayExecutionReadinessDiagnostic()" class="w-full text-[8px] px-3 pb-1 mono" style="color:var(--t3)" x-text="todayExecutionReadinessDiagnostic()"></div>
       </div>

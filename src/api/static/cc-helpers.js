@@ -120,6 +120,43 @@
 	}
 
 	/** Clarifies monitor vs near-miss vs deploy — attention routing without tradability. */
+	function todayMissionQuantClusterLines(hints) {
+		var list = hints || []
+		var lines = []
+		for (var i = 0; i < list.length && lines.length < 3; i++) {
+			var h = list[i] || {}
+			var label = String(h.label || "").trim()
+			if (!label) label = String(h.cluster || "").trim()
+			var detail = String(h.detail || "").trim()
+			var line = label + (detail && detail.length <= 72 ? " — " + detail : " — monitor only, not deploy")
+			if (line && lines.indexOf(line) < 0) lines.push(line)
+		}
+		return lines
+	}
+
+	function todayExecutionReadinessDiagnostic(er) {
+		var e = er || {}
+		var sub = e.sub_status || {}
+		var gaps = []
+		if (sub.broker_transport !== "up") gaps.push("transport down")
+		if (sub.session_auth !== "active") gaps.push("session inactive")
+		if (sub.engine !== "on") gaps.push("engine off")
+		if (sub.handoff_readiness !== "ready") gaps.push("handoff blocked")
+		if (sub.bracket_readiness !== "ready") gaps.push("bracket draft")
+		if (e.circuit_breaker) gaps.push("breaker on")
+		if (!gaps.length && e.trade_handoff_ready) return ""
+		var reasons = (e.degraded_reasons || []).slice(0, 2)
+		var base =
+			"Exec diagnostic: " + (gaps.length ? gaps.join(" · ") : String(e.readiness_label || "path incomplete"))
+		if (reasons.length) base += " — " + reasons.join("; ")
+		return base + " (not deploy authority)"
+	}
+
+	function playbookStrategyDecayLine(row) {
+		var r = row || {}
+		return String(r.strategy_decay_line || "").trim()
+	}
+
 	function todayMissionMonitorsColumnHint(opts) {
 		var o = opts || {}
 		var wq = Number(o.watchQualified)
@@ -528,6 +565,9 @@
 		loadingSessionRecoveryLine: loadingSessionRecoveryLine,
 		instantDegradedBannerHint: instantDegradedBannerHint,
 		todayMissionMonitorsLabel: todayMissionMonitorsLabel,
+		todayMissionQuantClusterLines: todayMissionQuantClusterLines,
+		todayExecutionReadinessDiagnostic: todayExecutionReadinessDiagnostic,
+		playbookStrategyDecayLine: playbookStrategyDecayLine,
 		todayMissionMonitorsColumnHint: todayMissionMonitorsColumnHint,
 		playbookWhatToMonitorLine: playbookWhatToMonitorLine,
 		todayMissionWaitSubtitle: todayMissionWaitSubtitle,

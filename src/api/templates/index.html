@@ -1009,7 +1009,7 @@
 
     <!-- @cc-partial deploy_surfaces -->
       <div x-show="tab==='today'" data-cc="today-deploy-chrome">
-      <template x-if="tab==='today'&&(todayMissionPanel().system_blockers.length||todayMissionPanel().card_gates.length||todayMissionPanel().monitors.length)">
+      <template x-if="tab==='today'&&(todayMissionPanel().system_blockers.length||todayMissionPanel().card_gates.length||todayMissionPanel().monitors.length||todayMissionPanel().quant_cluster_lines.length)">
         <div data-cc="today-mission-panel" style="padding:4px 12px 0">
           <div class="card card-p" style="padding:8px 10px;border-left:3px solid var(--blue)">
             <div class="text-[9px] font-bold uppercase mb-0.5" style="color:var(--t3)" x-text="todayMissionPanelTitle()"></div>
@@ -1034,6 +1034,12 @@
                   <div style="color:var(--t2)" class="mono" x-text="'• '+m"></div>
                 </template>
                 <div x-show="!todayMissionPanel().monitors.length" style="color:var(--t3)">—</div>
+                <template x-if="todayMissionPanel().quant_cluster_lines.length">
+                  <div class="font-bold text-blue-300 mt-1 mb-0.5">Quant clusters (monitor)</div>
+                  <template x-for="line in todayMissionPanel().quant_cluster_lines" :key="'qc-'+line">
+                    <div class="text-[8px]" style="color:var(--t3);line-height:1.4" x-text="'• '+line"></div>
+                  </template>
+                </template>
               </div>
             </div>
           </div>
@@ -1056,6 +1062,7 @@
       </div>
       <div x-show="tab==='today'&&!ops.running" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="engineOffRecoveryLine()"></div>
       <div x-show="tab==='today'&&ibkrStateFrom(today7.execution_readiness).level!=='ready'" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="ibkrLoginToReadyHint()"></div>
+      <div x-show="tab==='today'&&todayExecutionReadinessDiagnostic()" class="w-full text-[8px] px-3 pb-1 mono" style="color:var(--t3)" x-text="todayExecutionReadinessDiagnostic()"></div>
       </div>
     <!-- @cc-partial-end deploy_surfaces -->
 
@@ -2576,6 +2583,7 @@
                   <div class="text-[8px] p-2 mb-1 rounded" style="background:var(--s2);line-height:1.5">
                     <div class="text-amber-300" x-text="playbookCardGateLine(r)"></div>
                     <div class="text-blue-300 mt-0.5" x-text="'Upgrade · '+playbookCardUpgradeTrigger(r)"></div>
+                    <div x-show="playbookStrategyDecayLine(r)" class="text-[7px] mt-0.5" style="color:var(--t3)" x-text="playbookStrategyDecayLine(r)"></div>
                   </div>
                 </template>
                 <template x-if="!playbookUseCompactCards(r)">
@@ -2622,6 +2630,7 @@
                 <template x-if="r.cost_rank_label">
                   <span class="pill text-[6px] mr-1" :class="(window.CCHelpers&&CCHelpers.costRankPillClass)?CCHelpers.costRankPillClass(r):'pw'" x-text="(window.CCHelpers&&CCHelpers.costRankTag)?CCHelpers.costRankTag(r):r.cost_rank_label"></span>
                 </template>
+                <div x-show="playbookStrategyDecayLine(r)" class="text-[7px] mb-1" style="color:var(--t3);line-height:1.4" x-text="playbookStrategyDecayLine(r)"></div>
                 <template x-if="(r.guardrail_labels||[]).length">
                   <div class="flex flex-wrap gap-1 mb-1">
                     <template x-for="gl in (r.guardrail_labels||[]).slice(0,4)" :key="gl">
@@ -8799,6 +8808,39 @@
           ?'Near-miss · watch queue — priority only, not deploy on WAIT'
           :'Watch / near-miss — ranking for attention, not handoff permission';
       },
+      todayMissionQuantClusterLines(){
+        const hints=this.today7?.quant_cluster_hints||[];
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.todayMissionQuantClusterLines)
+          return CCHelpers.todayMissionQuantClusterLines(hints);
+        return hints.slice(0,3).map(h=>{
+          const label=String(h?.label||'').trim();
+          const detail=String(h?.detail||'').trim();
+          return label?(label+(detail&&detail.length<=72?' — '+detail:' — monitor only, not deploy')):'';
+        }).filter(Boolean);
+      },
+      todayExecutionReadinessDiagnostic(){
+        const er=this.today7?.execution_readiness||{};
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.todayExecutionReadinessDiagnostic)
+          return CCHelpers.todayExecutionReadinessDiagnostic(er);
+        const sub=er.sub_status||{};
+        const gaps=[];
+        if(sub.broker_transport!=='up') gaps.push('transport down');
+        if(sub.session_auth!=='active') gaps.push('session inactive');
+        if(sub.engine!=='on') gaps.push('engine off');
+        if(sub.handoff_readiness!=='ready') gaps.push('handoff blocked');
+        if(sub.bracket_readiness!=='ready') gaps.push('bracket draft');
+        if(er.circuit_breaker) gaps.push('breaker on');
+        if(!gaps.length&&er.trade_handoff_ready) return '';
+        const reasons=(er.degraded_reasons||[]).slice(0,2).filter(Boolean);
+        let base='Exec diagnostic: '+(gaps.length?gaps.join(' · '):(er.readiness_label||'path incomplete'));
+        if(reasons.length) base+=' — '+reasons.join('; ');
+        return base+' (not deploy authority)';
+      },
+      playbookStrategyDecayLine(r){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.playbookStrategyDecayLine)
+          return CCHelpers.playbookStrategyDecayLine(r);
+        return String(r?.strategy_decay_line||'').trim();
+      },
       todayMissionSafeUnlockHint(){
         const er=this.today7?.execution_readiness||{};
         const ib=this.ibkrStateFrom(er);
@@ -8955,7 +8997,13 @@
         (this.today7.near_miss||[]).forEach(nm=>add(nm.ticker));
         (this.today7.top_ranked||[]).forEach(r=>add(r.ticker));
         if(td.best_watch?.ticker) add(td.best_watch.ticker);
-        return {system_blockers:system_blockers.slice(0,5),card_gates:cardGates.slice(0,3),blockers:blockers.slice(0,5),monitors:monitors.slice(0,3)};
+        return {
+          system_blockers:system_blockers.slice(0,5),
+          card_gates:cardGates.slice(0,3),
+          blockers:blockers.slice(0,5),
+          monitors:monitors.slice(0,3),
+          quant_cluster_lines:this.todayMissionQuantClusterLines(),
+        };
       },
       headerChipGroups(){
         const hs=this.headerSummary();
