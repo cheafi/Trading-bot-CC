@@ -1,3 +1,4 @@
+      <div x-show="tab==='today'" data-cc="today-deploy-chrome">
       <template x-if="tab==='today'&&(todayMissionPanel().system_blockers.length||todayMissionPanel().card_gates.length||todayMissionPanel().monitors.length)">
         <div data-cc="today-mission-panel" style="padding:4px 12px 0">
           <div class="card card-p" style="padding:8px 10px;border-left:3px solid var(--blue)">
@@ -45,3 +46,4 @@
       </div>
       <div x-show="!ops.running" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="engineOffRecoveryLine()"></div>
       <div x-show="ibkrStateFrom(today7.execution_readiness).level!=='ready'" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="ibkrLoginToReadyHint()"></div>
+      </div>
