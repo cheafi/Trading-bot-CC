@@ -6,6 +6,7 @@ from pathlib import Path
 
 from src.services.cost_adjusted_ranker import rank_single_row
 from src.services.fetch_surface_state import (
+    today_board_hero_synthesis_line,
     today_execution_readiness_diagnostic,
     today_mission_quant_cluster_lines,
 )
@@ -14,12 +15,32 @@ from src.services.strategy_validity import (
     STRATEGY_DECAY_DOWNGRADE_COPY,
     resolve_strategy_decay_line,
 )
-from src.services.today_insights import build_quant_cluster_hints
+from src.services.today_insights import build_no_setup_diagnosis, build_quant_cluster_hints
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = ROOT / "src" / "api" / "templates" / "index.html"
 CC_HELPERS = ROOT / "src" / "api" / "static" / "cc-helpers.js"
 DEPLOY_PARTIAL = ROOT / "src/api/templates/cc/partials/deploy_surfaces.html"
+
+
+def test_today_board_hero_synthesis_wait_context():
+    hints = build_quant_cluster_hints(tradeability="WAIT", best_net_score=5.0)
+    diag = build_no_setup_diagnosis([], tradeability="WAIT", should_trade=False)
+    line = today_board_hero_synthesis_line(
+        wait_day=True,
+        quant_cluster_hints=hints,
+        no_setup_diagnosis=diag,
+    )
+    assert "Synthesis hint (monitor only)" in line
+    assert "not deploy permission" in line
+    assert any(str(h.get("label") or "") in line for h in hints)
+    blocker = str(diag.get("primary_blocker") or diag.get("headline") or "")
+    assert blocker in line
+
+
+def test_today_board_hero_synthesis_empty_when_not_wait():
+    hints = build_quant_cluster_hints(tradeability="WAIT", best_net_score=5.0)
+    assert today_board_hero_synthesis_line(wait_day=False, quant_cluster_hints=hints) == ""
 
 
 def test_today_mission_quant_cluster_lines_monitor_only():
@@ -81,11 +102,14 @@ def test_index_pass2_wiring():
     raw = INDEX_HTML.read_text(encoding="utf-8")
     partial = DEPLOY_PARTIAL.read_text(encoding="utf-8")
     assert "todayMissionQuantClusterLines" in raw
+    assert "todayBoardHeroSynthesisLine" in raw
     assert "todayExecutionReadinessDiagnostic" in raw
     assert "playbookStrategyDecayLine" in raw
     assert "quant_cluster_lines" in raw
     assert "Quant clusters (monitor)" in partial
+    assert "todayBoardHeroSynthesisLine()" in partial
     js = CC_HELPERS.read_text(encoding="utf-8")
     assert "todayMissionQuantClusterLines" in js
+    assert "todayBoardHeroSynthesisLine" in js
     assert "todayExecutionReadinessDiagnostic" in js
     assert "playbookStrategyDecayLine" in js

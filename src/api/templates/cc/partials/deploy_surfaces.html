@@ -4,6 +4,7 @@
           <div class="card card-p" style="padding:8px 10px;border-left:3px solid var(--blue)">
             <div class="text-[9px] font-bold uppercase mb-0.5" style="color:var(--t3)" x-text="todayMissionPanelTitle()"></div>
             <div x-show="todayMissionWaitSubtitle()" class="text-[8px] mb-1" style="color:var(--t2)" x-text="todayMissionWaitSubtitle()"></div>
+            <div x-show="todayBoardHeroSynthesisLine()" class="text-[8px] mb-1" style="color:var(--t3);line-height:1.45" x-text="todayBoardHeroSynthesisLine()"></div>
             <div x-show="todayMissionSafeUnlockHint()" class="text-[8px] mb-1" style="color:var(--t3)" x-text="todayMissionSafeUnlockHint()"></div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[9px]">
               <div>

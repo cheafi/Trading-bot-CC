@@ -134,6 +134,30 @@
 		return lines
 	}
 
+	function todayBoardHeroSynthesisLine(opts) {
+		var o = opts || {}
+		if (!o.waitDay) return ""
+		var parts = []
+		var hints = o.quantClusterHints || []
+		if (hints.length) {
+			var h0 = hints[0] || {}
+			var label = String(h0.label || "").trim()
+			if (!label) label = String(h0.cluster || "").trim()
+			var detail = String(h0.detail || "").trim()
+			if (label) {
+				var qp = label
+				if (detail && detail.length <= 48) qp += " (" + detail + ")"
+				else if (detail) qp += " — monitor context"
+				parts.push(qp)
+			}
+		}
+		var diag = o.noSetupDiagnosis || {}
+		var blocker = String(diag.primary_blocker || diag.headline || "").trim()
+		if (blocker) parts.push(blocker)
+		if (!parts.length) return ""
+		return "Synthesis hint (monitor only): " + parts.join(" · ") + " — not deploy permission"
+	}
+
 	function todayExecutionReadinessDiagnostic(er) {
 		var e = er || {}
 		var sub = e.sub_status || {}
@@ -566,6 +590,7 @@
 		instantDegradedBannerHint: instantDegradedBannerHint,
 		todayMissionMonitorsLabel: todayMissionMonitorsLabel,
 		todayMissionQuantClusterLines: todayMissionQuantClusterLines,
+		todayBoardHeroSynthesisLine: todayBoardHeroSynthesisLine,
 		todayExecutionReadinessDiagnostic: todayExecutionReadinessDiagnostic,
 		playbookStrategyDecayLine: playbookStrategyDecayLine,
 		todayMissionMonitorsColumnHint: todayMissionMonitorsColumnHint,

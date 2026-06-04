@@ -955,6 +955,44 @@ def today_mission_quant_cluster_lines(
     return lines
 
 
+def today_board_hero_synthesis_line(
+    *,
+    wait_day: bool = False,
+    quant_cluster_hints: Optional[list] = None,
+    no_setup_diagnosis: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Board hero one-liner for WAIT/monitor context — synthesis only, not deploy permission."""
+    if not wait_day:
+        return ""
+    parts: list[str] = []
+    hints = list(quant_cluster_hints or [])
+    if hints and isinstance(hints[0], dict):
+        h0 = hints[0]
+        label = str(h0.get("label") or "").strip()
+        if not label:
+            cluster = str(h0.get("cluster") or "").strip()
+            label = QUANT_CLUSTER_MONITOR_LABELS.get(cluster, cluster)
+        detail = str(h0.get("detail") or "").strip()
+        if label:
+            quant_part = label
+            if detail and len(detail) <= 48:
+                quant_part += f" ({detail})"
+            elif detail:
+                quant_part += " — monitor context"
+            parts.append(quant_part)
+    diag = no_setup_diagnosis if isinstance(no_setup_diagnosis, dict) else {}
+    blocker = str(diag.get("primary_blocker") or diag.get("headline") or "").strip()
+    if blocker:
+        parts.append(blocker)
+    if not parts:
+        return ""
+    return (
+        "Synthesis hint (monitor only): "
+        + " · ".join(parts)
+        + " — not deploy permission"
+    )
+
+
 def today_execution_readiness_diagnostic(
     execution_readiness: Optional[Dict[str, Any]] = None,
 ) -> str:
