@@ -350,16 +350,91 @@
 		return "RESEARCH ONLY"
 	}
 
-	function insiderContextLabel(quality) {
+	var DOSSIER_CONFIRM_ONLY_SIZING = "No sizing guidance in confirm-only mode"
+
+	function dossierQuoteAvailable(data) {
+		var d = data || {}
+		if (d.quote_pending || d.quote_unavailable) return false
+		var p = Number(d.price)
+		return !isNaN(p) && p > 0
+	}
+
+	function dossierPriceDisplay(data) {
+		if (!dossierQuoteAvailable(data)) return "Quote unavailable"
+		return "$" + Number(data.price).toFixed(2)
+	}
+
+	function dossierChangePctDisplay(data) {
+		if (!dossierQuoteAvailable(data)) return "—"
+		var c = Number(data.change_pct)
+		if (isNaN(c)) return "—"
+		return (c >= 0 ? "+" : "") + c.toFixed(2) + "%"
+	}
+
+	function dossierConfirmOnlySizingLine() {
+		return DOSSIER_CONFIRM_ONLY_SIZING
+	}
+
+	function dossierSizingDisplay(blocked, reason) {
+		if (!blocked) return ""
+		var r = String(reason || "")
+		if (r === "confirm_only") return "—"
+		if (r === "failed" || r === "partial") return "Blocked"
+		return "—"
+	}
+
+	function dossierSizingExplanation(blocked, reason) {
+		if (!blocked) return ""
+		var r = String(reason || "")
+		if (r === "confirm_only") return DOSSIER_CONFIRM_ONLY_SIZING
+		if (r === "failed" || r === "partial") return "Sizing blocked until live dossier loads"
+		if (r === "rr_unavailable") return "Size unavailable — R:R not confirmed"
+		return "Size unavailable"
+	}
+
+	function dossierTradePlanNote(opts) {
+		var o = opts || {}
+		var note = String(o.note || o.setup_type || "").trim()
+		var researchOnly = !!o.research_only
+		var levelsBlank = !!o.levels_blank
+		if (researchOnly && levelsBlank) {
+			return "Live structure unavailable — confirm-only dossier"
+		}
+		if (levelsBlank) return "Live structure unavailable"
+		if (note) return note
+		return "Structure-based plan"
+	}
+
+	function opportunityIntelDegraded(payload) {
+		var p = payload || {}
+		return !!(p.degraded || p.instant_degraded || String(p.data_tier || "").toLowerCase() === "mock")
+	}
+
+	function insiderContextLabel(quality, payload) {
+		var degraded = opportunityIntelDegraded(payload)
 		var q = String(quality || "").toLowerCase()
 		var map = {
-			supportive_only: "Supportive context",
-			notable_accumulation: "Notable accumulation (lagged)",
-			notable_distribution: "Distribution risk (lagged)",
-			noise: "Routine Form 4",
-			insufficient_data: "Insufficient history",
+			supportive_only: degraded ? "Supportive context (mock/lagged)" : "Supportive context",
+			notable_accumulation: degraded ? "Possible accumulation (mock/lagged)" : "Notable accumulation (lagged)",
+			notable_distribution: degraded ? "Possible distribution (mock/lagged)" : "Distribution risk (lagged)",
+			noise: degraded ? "Routine Form 4 (mock)" : "Routine Form 4",
+			insufficient_data: degraded ? "Insufficient history (mock)" : "Insufficient history",
 		}
-		return map[q] || "Insider context (lagged)"
+		return map[q] || (degraded ? "Insider context (mock/lagged)" : "Insider context (lagged)")
+	}
+
+	function institutionalSponsorshipLabel(verdict, payload) {
+		var v = String(verdict || "").trim()
+		if (!v) return "—"
+		if (!opportunityIntelDegraded(payload)) return v
+		var low = v.toLowerCase()
+		if (low.indexOf("added sponsorship") >= 0) {
+			return "Illustrative added sponsorship (mock/lagged)"
+		}
+		if (low.indexOf("mixed") >= 0 || low.indexOf("unchanged") >= 0) {
+			return "Illustrative mixed / unchanged (mock/lagged)"
+		}
+		return v + " (mock/lagged)"
 	}
 
 	function eventRiskDowngradeOnly(events) {
@@ -469,6 +544,14 @@
 		todayMissionSafeUnlockHint: todayMissionSafeUnlockHint,
 		soakConfirmationSelectors: soakConfirmationSelectors,
 		opportunityIntelligenceBadge: opportunityIntelligenceBadge,
+		dossierQuoteAvailable: dossierQuoteAvailable,
+		dossierPriceDisplay: dossierPriceDisplay,
+		dossierChangePctDisplay: dossierChangePctDisplay,
+		dossierConfirmOnlySizingLine: dossierConfirmOnlySizingLine,
+		dossierSizingDisplay: dossierSizingDisplay,
+		dossierSizingExplanation: dossierSizingExplanation,
+		dossierTradePlanNote: dossierTradePlanNote,
+		institutionalSponsorshipLabel: institutionalSponsorshipLabel,
 		insiderContextLabel: insiderContextLabel,
 		eventRiskDowngradeOnly: eventRiskDowngradeOnly,
 		strategyCurveHealthPill: strategyCurveHealthPill,

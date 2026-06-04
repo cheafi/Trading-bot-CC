@@ -949,3 +949,138 @@ def describe_opportunity_monitor_trigger(trigger_type: str) -> str:
         key,
         "Opportunity context — monitoring only, not deploy authority",
     )
+
+
+DOSSIER_CONFIRM_ONLY_SIZING = "No sizing guidance in confirm-only mode"
+
+
+def dossier_quote_available(data: Optional[Dict[str, Any]] = None) -> bool:
+    """True when dossier header may show a live price (not $0 placeholder)."""
+    d = data or {}
+    if d.get("quote_pending") or d.get("quote_unavailable"):
+        return False
+    try:
+        price = float(d.get("price") or 0)
+    except (TypeError, ValueError):
+        return False
+    return price > 0
+
+
+def dossier_price_display(data: Optional[Dict[str, Any]] = None) -> str:
+    if not dossier_quote_available(data):
+        return "Quote unavailable"
+    return f"${float(data['price']):.2f}"
+
+
+def dossier_change_pct_display(data: Optional[Dict[str, Any]] = None) -> str:
+    if not dossier_quote_available(data):
+        return "—"
+    try:
+        change = float((data or {}).get("change_pct"))
+    except (TypeError, ValueError):
+        return "—"
+    sign = "+" if change >= 0 else ""
+    return f"{sign}{change:.2f}%"
+
+
+def dossier_confirm_only_sizing_line() -> str:
+    return DOSSIER_CONFIRM_ONLY_SIZING
+
+
+def dossier_sizing_display(*, blocked: bool, reason: str = "") -> str:
+    if not blocked:
+        return ""
+    r = str(reason or "")
+    if r == "confirm_only":
+        return "—"
+    if r in ("failed", "partial"):
+        return "Blocked"
+    return "—"
+
+
+def dossier_sizing_explanation(*, blocked: bool, reason: str = "") -> str:
+    if not blocked:
+        return ""
+    r = str(reason or "")
+    if r == "confirm_only":
+        return DOSSIER_CONFIRM_ONLY_SIZING
+    if r in ("failed", "partial"):
+        return "Sizing blocked until live dossier loads"
+    if r == "rr_unavailable":
+        return "Size unavailable — R:R not confirmed"
+    return "Size unavailable"
+
+
+def _opportunity_intel_degraded(payload: Optional[Dict[str, Any]] = None) -> bool:
+    p = payload or {}
+    tier = str(p.get("data_tier") or "").lower()
+    return bool(p.get("degraded") or p.get("instant_degraded") or tier == "mock")
+
+
+def insider_context_label(
+    quality: str = "",
+    payload: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Dossier opp-intel insider line — softer when mock/degraded."""
+    degraded = _opportunity_intel_degraded(payload)
+    q = str(quality or "").lower()
+    labels = {
+        "supportive_only": (
+            "Supportive context (mock/lagged)"
+            if degraded
+            else "Supportive context"
+        ),
+        "notable_accumulation": (
+            "Possible accumulation (mock/lagged)"
+            if degraded
+            else "Notable accumulation (lagged)"
+        ),
+        "notable_distribution": (
+            "Possible distribution (mock/lagged)"
+            if degraded
+            else "Distribution risk (lagged)"
+        ),
+        "noise": "Routine Form 4 (mock)" if degraded else "Routine Form 4",
+        "insufficient_data": (
+            "Insufficient history (mock)" if degraded else "Insufficient history"
+        ),
+    }
+    return labels.get(
+        q,
+        "Insider context (mock/lagged)" if degraded else "Insider context (lagged)",
+    )
+
+
+def institutional_sponsorship_label(
+    verdict: str = "",
+    payload: Optional[Dict[str, Any]] = None,
+) -> str:
+    v = str(verdict or "").strip()
+    if not v:
+        return "—"
+    if not _opportunity_intel_degraded(payload):
+        return v
+    low = v.lower()
+    if "added sponsorship" in low:
+        return "Illustrative added sponsorship (mock/lagged)"
+    if "mixed" in low or "unchanged" in low:
+        return "Illustrative mixed / unchanged (mock/lagged)"
+    return f"{v} (mock/lagged)"
+
+
+def dossier_trade_plan_note(
+    *,
+    note: str = "",
+    setup_type: str = "",
+    research_only: bool = False,
+    levels_blank: bool = False,
+) -> str:
+    """Trade-plan footnote when structure levels are missing in confirm-only mode."""
+    text = str(note or setup_type or "").strip()
+    if research_only and levels_blank:
+        return "Live structure unavailable — confirm-only dossier"
+    if levels_blank:
+        return "Live structure unavailable"
+    if text:
+        return text
+    return "Structure-based plan"

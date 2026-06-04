@@ -1344,10 +1344,33 @@ def _trade_plan_human(
         },
         {
             "label": "Note",
-            "value": str(tp.get("note") or tp.get("setup_type") or "Structure-based plan"),
+            "value": _dossier_trade_plan_note_value(tp, unified),
         },
     ]
     return rows
+
+
+def _dossier_trade_plan_note_value(
+    trade_plan: Dict[str, Any],
+    unified: Dict[str, Any],
+) -> str:
+    from src.services.fetch_surface_state import dossier_trade_plan_note
+
+    tp = trade_plan or {}
+    ez = tp.get("entry_zone") or unified.get("entry_zone")
+    has_entry = bool(ez and len(ez) >= 2)
+    stop = tp.get("stop") or unified.get("stop")
+    t1 = tp.get("target_1r") or unified.get("target_1r")
+    t2 = tp.get("target_2r") or unified.get("target_2r")
+    levels_blank = not (has_entry or stop or t1 or t2)
+    label_upper = str(unified.get("label") or "").upper()
+    research_only = label_upper in _RESEARCH_ONLY_LABELS
+    return dossier_trade_plan_note(
+        note=str(tp.get("note") or ""),
+        setup_type=str(tp.get("setup_type") or ""),
+        research_only=research_only,
+        levels_blank=levels_blank,
+    )
 
 
 def _monitor_panel(ticker: str, dossier: Dict[str, Any], positions: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:

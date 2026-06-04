@@ -10,10 +10,10 @@
                   <button :class="'btn-s text-[14px] px-1 py-0.5 '+(ccLoved[dos.data.symbol]?'text-pink-400':'text-gray-400')" @click="toggleLove(dos.data.symbol)">❤</button>
                   <button :class="'btn-s text-[14px] px-1 py-0.5 '+(ccWatchlist[dos.data.symbol]?'text-blue-400':'text-gray-400')" @click="toggleWatchlist(dos.data.symbol)">👁</button>
                 </div>
-                <span class="pill" :class="(dos.data.change_pct||0)>=0?'pg':'pr'" x-text="((dos.data.change_pct||0)>=0?'+':'')+(dos.data.change_pct||0).toFixed(2)+'%'"></span>
+                <span class="pill" :class="dosQuoteToneClass()" x-text="dosChangePctDisplay()"></span>
               </div>
               <div class="text-right">
-                <div class="text-xl font-black mono" :class="(dos.data.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="'$'+(dos.data.price||0).toFixed(2)"></div>
+                <div class="text-xl font-black mono" :class="dosQuoteToneClass()" x-text="dosPriceDisplay()"></div>
                 <div class="text-[8px]" style="color:var(--t3)" x-text="dos.intel&&dos.intel.as_of?dos.intel.as_of.slice(0,19):''"></div>
               </div>
             </div>
