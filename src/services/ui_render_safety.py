@@ -27,6 +27,20 @@ _HANDLER_FRAGMENT = re.compile(
     re.IGNORECASE,
 )
 
+# Alpine x-show/x-if with unspaced `>0` can terminate HTML tags early and leak JS into DOM.
+_ALPINE_HTML_BREAK_PATTERNS: List[Pattern[str]] = [
+    re.compile(r'x-(?:show|if)="[^"]*total_positions>0'),
+    re.compile(r'x-text="[^"]*\+\s*pf\.summary\.total_value\.toLocaleString\(\)'),
+    re.compile(r"portfolioSummaryPositionsLabel\(\)\+' · \$'\+pf"),
+    re.compile(r"\+\s*pf\.summary\.total_value\.toLocaleString\(\)"),
+]
+
+_CC_PARTIAL_BREAK_PATTERNS: List[Pattern[str]] = [
+    re.compile(r'x-(?:show|if)="[^"]*\.count>0'),
+    re.compile(r'x-(?:show|if)="[^"]*total_positions>0'),
+    re.compile(r"x-text=\"[^\"]*\+\s*pf\.summary"),
+]
+
 
 def contains_js_leak_fragment(text: str) -> bool:
     """Return True if text looks like leaked JS/handler markup."""
@@ -75,6 +89,19 @@ def format_visible_value(value: object, default: str = "—") -> str:
     return default
 
 
+def find_alpine_html_break_leaks(path: Path) -> List[str]:
+    """Detect Alpine attribute patterns that can leak raw JS into visible DOM."""
+    raw = path.read_text(encoding="utf-8")
+    hits: List[str] = []
+    patterns = list(_ALPINE_HTML_BREAK_PATTERNS)
+    if path.parent.name == "partials" and path.parent.parent.name == "cc":
+        patterns.extend(_CC_PARTIAL_BREAK_PATTERNS)
+    for pat in patterns:
+        for m in pat.finditer(raw):
+            hits.append(f"alpine_html_break:{m.group()[:72]!r}")
+    return hits
+
+
 def find_js_leaks_in_file(path: Path) -> List[str]:
     """Scan a template file for known leak signatures (post-</html> tails, etc.)."""
     raw = path.read_text(encoding="utf-8")
@@ -103,6 +130,8 @@ def assert_template_render_safe(paths: Iterable[Path]) -> None:
     problems: List[str] = []
     for path in paths:
         for hit in find_js_leaks_in_file(path):
+            problems.append(f"{path}: {hit}")
+        for hit in find_alpine_html_break_leaks(path):
             problems.append(f"{path}: {hit}")
     if problems:
         raise AssertionError("UI render safety violations:\n" + "\n".join(problems))

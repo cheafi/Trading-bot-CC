@@ -1051,8 +1051,8 @@
           <span class="pill text-[7px] pw" :title="today7.evidence_badges.ai?.label" x-text="today7.evidence_badges.ai?.badge"></span>
         </template>
         <span x-show="freshness&&freshness.worst_tier" class="pill text-[8px]" :class="['STALE','CRITICAL'].includes(freshness.worst_tier)?'pa':'pg'" x-text="'DATA '+freshness.worst_tier"></span>
-        <span x-show="risk_alerts&&risk_alerts.count>0" class="pill text-[8px] pr" x-text="risk_alerts.count+' RISK ALERTS'" @click="showAlertsModal=true" style="cursor:pointer"></span>
-        <span x-show="pf.summary&&pf.summary.total_positions>0" class="pill text-[8px] pb" x-text="portfolioSummaryPositionsLabel()+' · $'+pf.summary.total_value.toLocaleString()"></span>
+        <span x-show="riskAlertsStripVisible()" class="pill text-[8px] pr" x-text="riskAlertsStripLine()" @click="showAlertsModal=true" style="cursor:pointer"></span>
+        <span x-show="portfolioSummaryStripVisible()" class="pill text-[8px] pb" x-text="portfolioSummaryStripLine()"></span>
         <button @click="switchTab('funds')" class="btn-s text-[8px] ml-auto" x-show="(pmStrip.funds||[]).length===0">Load Funds</button>
       </div>
       <div x-show="!ops.running" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="engineOffRecoveryLine()"></div>
@@ -4660,7 +4660,7 @@
       <div class="trust-strip">
         <span :style="pfBrokerSource().pillClass" x-text="'● '+pfBrokerSource().pill"></span>
         <span x-text="portfolioSummaryPositionsLabel()"></span>
-        <span x-text="pf.summary?'Value $'+pf.summary.total_value.toLocaleString():''"></span>
+        <span x-text="portfolioSummaryValueShortLine()"></span>
         <span x-show="pfDecision&&pfDecision.ibkr_linkage" class="text-[9px]" style="color:var(--t3)" x-text="'Sync '+(pfDecision.ibkr_linkage.last_sync||'—')"></span>
         <span x-show="pfDecision&&pfDecision.ibkr_linkage&&pfDecision.ibkr_linkage.unsynced_count>0" class="text-[9px]" style="color:var(--amber)" x-text="pfDecision.ibkr_linkage.unsynced_count+' local-only'"></span>
         <span x-show="pfDecision&&pfDecision.ibkr_linkage" class="text-[9px]" :style="pfDecision.ibkr_linkage.broker_truth?'color:var(--green)':'color:var(--amber)'" x-text="pfDecision.ibkr_linkage.local_model_note"></span>
@@ -5147,13 +5147,13 @@
           </div>
         </template>
         <!-- Summary strip -->
-        <template x-if="pf.summary&&pf.summary.total_positions>0">
+        <template x-if="portfolioSummaryStripVisible()">
           <div class="card" style="padding:8px 12px">
             <div class="flex flex-wrap gap-x-5 gap-y-1 text-[10px] mono">
               <span style="color:var(--t3)">Positions: <strong class="text-white" x-text="portfolioSummaryPositionsLabel()"></strong></span>
-              <span style="color:var(--t3)">Value: <strong class="text-white" x-text="'$'+pf.summary.total_value.toLocaleString()"></strong></span>
-              <span style="color:var(--t3)">Cost: <strong class="text-white" x-text="'$'+pf.summary.total_cost.toLocaleString()"></strong></span>
-              <span style="color:var(--t3)">P&L: <strong :class="pf.summary.total_pnl>=0?'text-green-400':'text-red-400'" x-text="(pf.summary.total_pnl>=0?'+':'')+pf.summary.total_pnl.toLocaleString()+' ('+pf.summary.total_pnl_pct+'%)'"></strong></span>
+              <span style="color:var(--t3)">Value: <strong class="text-white" x-text="portfolioSummaryMoneyLine('total_value')"></strong></span>
+              <span style="color:var(--t3)">Cost: <strong class="text-white" x-text="portfolioSummaryMoneyLine('total_cost')"></strong></span>
+              <span style="color:var(--t3)">P&L: <strong :class="pf.summary.total_pnl>=0?'text-green-400':'text-red-400'" x-text="portfolioSummaryPnlLine()"></strong></span>
             </div>
           </div>
         </template>
@@ -17404,7 +17404,7 @@
       <div class="trust-strip">
         <span :style="pfBrokerSource().pillClass" x-text="'● '+pfBrokerSource().pill"></span>
         <span x-text="portfolioSummaryPositionsLabel()"></span>
-        <span x-text="pf.summary?'Value $'+pf.summary.total_value.toLocaleString():''"></span>
+        <span x-text="portfolioSummaryValueShortLine()"></span>
         <span x-show="pfDecision&&pfDecision.ibkr_linkage" class="text-[9px]" style="color:var(--t3)" x-text="'Sync '+(pfDecision.ibkr_linkage.last_sync||'—')"></span>
         <span x-show="pfDecision&&pfDecision.ibkr_linkage&&pfDecision.ibkr_linkage.unsynced_count>0" class="text-[9px]" style="color:var(--amber)" x-text="pfDecision.ibkr_linkage.unsynced_count+' local-only'"></span>
         <span x-show="pfDecision&&pfDecision.ibkr_linkage" class="text-[9px]" :style="pfDecision.ibkr_linkage.broker_truth?'color:var(--green)':'color:var(--amber)'" x-text="pfDecision.ibkr_linkage.local_model_note"></span>
@@ -17891,13 +17891,13 @@
           </div>
         </template>
         <!-- Summary strip -->
-        <template x-if="pf.summary&&pf.summary.total_positions>0">
+        <template x-if="portfolioSummaryStripVisible()">
           <div class="card" style="padding:8px 12px">
             <div class="flex flex-wrap gap-x-5 gap-y-1 text-[10px] mono">
               <span style="color:var(--t3)">Positions: <strong class="text-white" x-text="portfolioSummaryPositionsLabel()"></strong></span>
-              <span style="color:var(--t3)">Value: <strong class="text-white" x-text="'$'+pf.summary.total_value.toLocaleString()"></strong></span>
-              <span style="color:var(--t3)">Cost: <strong class="text-white" x-text="'$'+pf.summary.total_cost.toLocaleString()"></strong></span>
-              <span style="color:var(--t3)">P&L: <strong :class="pf.summary.total_pnl>=0?'text-green-400':'text-red-400'" x-text="(pf.summary.total_pnl>=0?'+':'')+pf.summary.total_pnl.toLocaleString()+' ('+pf.summary.total_pnl_pct+'%)'"></strong></span>
+              <span style="color:var(--t3)">Value: <strong class="text-white" x-text="portfolioSummaryMoneyLine('total_value')"></strong></span>
+              <span style="color:var(--t3)">Cost: <strong class="text-white" x-text="portfolioSummaryMoneyLine('total_cost')"></strong></span>
+              <span style="color:var(--t3)">P&L: <strong :class="pf.summary.total_pnl>=0?'text-green-400':'text-red-400'" x-text="portfolioSummaryPnlLine()"></strong></span>
             </div>
           </div>
         </template>

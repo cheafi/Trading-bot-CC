@@ -39,8 +39,8 @@
           <span class="pill text-[7px] pw" :title="today7.evidence_badges.ai?.label" x-text="today7.evidence_badges.ai?.badge"></span>
         </template>
         <span x-show="freshness&&freshness.worst_tier" class="pill text-[8px]" :class="['STALE','CRITICAL'].includes(freshness.worst_tier)?'pa':'pg'" x-text="'DATA '+freshness.worst_tier"></span>
-        <span x-show="risk_alerts&&risk_alerts.count>0" class="pill text-[8px] pr" x-text="risk_alerts.count+' RISK ALERTS'" @click="showAlertsModal=true" style="cursor:pointer"></span>
-        <span x-show="pf.summary&&pf.summary.total_positions>0" class="pill text-[8px] pb" x-text="portfolioSummaryPositionsLabel()+' · $'+pf.summary.total_value.toLocaleString()"></span>
+        <span x-show="riskAlertsStripVisible()" class="pill text-[8px] pr" x-text="riskAlertsStripLine()" @click="showAlertsModal=true" style="cursor:pointer"></span>
+        <span x-show="portfolioSummaryStripVisible()" class="pill text-[8px] pb" x-text="portfolioSummaryStripLine()"></span>
         <button @click="switchTab('funds')" class="btn-s text-[8px] ml-auto" x-show="(pmStrip.funds||[]).length===0">Load Funds</button>
       </div>
       <div x-show="!ops.running" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="engineOffRecoveryLine()"></div>

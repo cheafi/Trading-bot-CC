@@ -9,12 +9,16 @@ import pytest
 from src.utils.ui_render_safety import (
     assert_template_render_safe,
     contains_js_leak_fragment,
+    find_alpine_html_break_leaks,
     find_js_leaks_in_file,
     sanitize_visible_text,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = ROOT / "src" / "api" / "templates" / "index.html"
+DEPLOY_PARTIAL = (
+    ROOT / "src" / "api" / "templates" / "cc" / "partials" / "deploy_surfaces.html"
+)
 
 
 def test_index_html_has_no_post_close_leak():
@@ -23,7 +27,12 @@ def test_index_html_has_no_post_close_leak():
 
 
 def test_index_html_passes_template_render_safe():
-    assert_template_render_safe([INDEX_HTML])
+    assert_template_render_safe([INDEX_HTML, DEPLOY_PARTIAL])
+
+
+def test_index_html_no_alpine_portfolio_strip_breaks():
+    hits = find_alpine_html_break_leaks(INDEX_HTML)
+    assert hits == [], f"index.html alpine break leaks: {hits}"
 
 
 def test_contains_js_leak_fragment_detects_known_tail():
