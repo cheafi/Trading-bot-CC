@@ -1052,7 +1052,12 @@
         </template>
         <span x-show="freshness&&freshness.worst_tier" class="pill text-[8px]" :class="['STALE','CRITICAL'].includes(freshness.worst_tier)?'pa':'pg'" x-text="'DATA '+freshness.worst_tier"></span>
         <span x-show="risk_alerts&&risk_alerts.count>0" class="pill text-[8px] pr" x-text="risk_alerts.count+' RISK ALERTS'" @click="showAlertsModal=true" style="cursor:pointer"></span>
-        <span x-show="pf.summary&&pf.summary.total_positions>0" class="pill text-[8px] pb" x-text="portfolioSummaryPositionsLabel()+' · 
+        <span x-show="pf.summary&&pf.summary.total_positions>0" class="pill text-[8px] pb" x-text="portfolioSummaryPositionsLabel()+' · $'+pf.summary.total_value.toLocaleString()"></span>
+        <button @click="switchTab('funds')" class="btn-s text-[8px] ml-auto" x-show="(pmStrip.funds||[]).length===0">Load Funds</button>
+      </div>
+      <div x-show="!ops.running" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="engineOffRecoveryLine()"></div>
+      <div x-show="ibkrStateFrom(today7.execution_readiness).level!=='ready'" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="ibkrLoginToReadyHint()"></div>
+    <!-- @cc-partial-end deploy_surfaces -->
 
       <template x-if="authorityDegradedBanner() || todayUsesBriefFallback() || staleSnapshotContext()">
         <div style="padding:4px 12px 0">
@@ -1457,6 +1462,7 @@
               <div><div style="color:var(--t3)">Controls capital</div><div class="font-bold" :class="today7.sleeve_summary.fund_manager?.controls_capital?'text-green-400':'text-amber-300'" x-text="today7.sleeve_summary.fund_manager?.controls_capital?'Yes':'No'"></div></div>
             </div>
             <div class="text-[8px] mb-2" style="color:var(--t2)" x-text="today7.sleeve_summary.fund_manager?.allocation_reason||''"></div>
+            <div x-show="today7.quant_alloc&&(window.CCHelpers&&CCHelpers.quantSleeveHint)" class="text-[8px] mb-2" style="color:var(--t3)" x-text="CCHelpers.quantSleeveHint(today7.quant_alloc)"></div>
             <div class="text-[8px] mb-1" style="color:var(--t2)" x-show="today7.sleeve_summary.fund_manager?.sector_rotation_note" x-text="'Rotation: '+today7.sleeve_summary.fund_manager.sector_rotation_note"></div>
             <div class="text-[8px] mb-1" style="color:var(--amber)" x-show="today7.sleeve_summary.fund_manager?.leading_sector_implication" x-text="today7.sleeve_summary.fund_manager.leading_sector_implication"></div>
             <div class="text-[8px] mb-2" x-show="(today7.sleeve_summary.fund_manager?.top_adds||[]).length">
@@ -2608,6 +2614,9 @@
                 <template x-if="r.net_edge_display||r.gross_net_display||(r.raw_score!=null&&r.net_deploy_score!=null)||(r.gross_edge_score!=null&&r.net_edge_score!=null)">
                   <div class="text-[8px] mb-1 mono" style="color:var(--amber)" x-text="r.net_edge_display||r.gross_net_display||(r.raw_score!=null&&r.net_deploy_score!=null?('Raw '+Number(r.raw_score??r.gross_edge_score).toFixed(1)+' · Net '+Number(r.net_deploy_score??r.net_edge_score).toFixed(1)+' after cost'):'')"></div>
                 </template>
+                <template x-if="r.cost_rank_label">
+                  <span class="pill text-[6px] mr-1" :class="(window.CCHelpers&&CCHelpers.costRankPillClass)?CCHelpers.costRankPillClass(r):'pw'" x-text="(window.CCHelpers&&CCHelpers.costRankTag)?CCHelpers.costRankTag(r):r.cost_rank_label"></span>
+                </template>
                 <template x-if="(r.guardrail_labels||[]).length">
                   <div class="flex flex-wrap gap-1 mb-1">
                     <template x-for="gl in (r.guardrail_labels||[]).slice(0,4)" :key="gl">
@@ -3025,6 +3034,29 @@
                   <div><span class="font-bold" style="color:var(--t3)">Size</span> <span style="color:var(--t2)" x-text="dos.intel.pm_answer.thirty_second.size_guidance"></span></div>
                   <div class="sm:col-span-2"><span class="font-bold" style="color:var(--t3)">Catalyst risk</span> <span style="color:var(--t2)" x-text="dos.intel.pm_answer.thirty_second.catalyst_risk"></span></div>
                 </div>
+              </div>
+            </template>
+            <!-- Opportunity intelligence: insider + institutional (research_only) -->
+            <template x-if="dos.oppIntel&&(dos.oppIntel.insider||dos.oppIntel.institutional)">
+              <div class="card card-p mb-2" data-cc="dossier-opp-intel" style="border-left:4px solid var(--purple)">
+                <div class="flex flex-wrap items-center gap-2 mb-2">
+                  <div class="text-[9px] font-bold uppercase" style="color:var(--purple)">Opportunity context (lagged)</div>
+                  <span class="pill text-[7px] pw font-bold" x-text="(window.CCHelpers&&CCHelpers.opportunityIntelligenceBadge)?CCHelpers.opportunityIntelligenceBadge(dos.oppIntel.insider||dos.oppIntel.institutional):'RESEARCH ONLY'"></span>
+                </div>
+                <template x-if="dos.oppIntel.insider">
+                  <div class="mb-2 p-2 rounded text-[9px]" style="background:var(--s2)">
+                    <div class="font-bold text-white mb-1">Insider · Form 4</div>
+                    <div style="color:var(--t2)" x-text="(window.CCHelpers&&CCHelpers.insiderContextLabel)?CCHelpers.insiderContextLabel(dos.oppIntel.insider.cluster_quality):dos.oppIntel.insider.cluster_copy"></div>
+                    <div class="text-[8px] mt-1" style="color:var(--t3)" x-text="'Typical lag '+((dos.oppIntel.insider.lag_days_typical)||'2–45+')+' · not a trade trigger'"></div>
+                  </div>
+                </template>
+                <template x-if="dos.oppIntel.institutional">
+                  <div class="p-2 rounded text-[9px]" style="background:var(--s2)">
+                    <div class="font-bold text-white mb-1">Institutional · 13F</div>
+                    <div style="color:var(--t2)" x-text="dos.oppIntel.institutional.sponsorship_verdict||'—'"></div>
+                    <div class="text-[8px] mt-1" style="color:var(--t3)" x-text="dos.oppIntel.institutional.lag_copy||'Quarterly lag — sponsorship context only'"></div>
+                  </div>
+                </template>
               </div>
             </template>
             <!-- Decision stack -->
@@ -3735,6 +3767,21 @@
             </div>
           </template>
           <div x-show="!(btLab.data.walk_forward?.windows||[]).length" class="text-[8px] py-1" style="color:var(--t3)">No walk-forward windows yet — run lab with walk-forward enabled.</div>
+        </div>
+        <div class="card card-p mb-2" data-cc="strategy-curve-console" style="border-left:3px solid var(--purple)">
+          <div class="flex flex-wrap gap-2 items-center mb-1">
+            <div class="text-[10px] font-bold uppercase" style="color:var(--purple)">Strategy Curve Console</div>
+            <span class="pill text-[7px] pw font-bold" x-text="(window.CCHelpers&&CCHelpers.quantResearchBadge)?CCHelpers.quantResearchBadge(btLab.quantCurve):'RESEARCH ONLY'"></span>
+          </div>
+          <template x-if="btLab.quantCurve&&btLab.quantCurve.strategies&&btLab.quantCurve.strategies[0]">
+            <div class="text-[8px] mb-1" style="color:var(--t2)">
+              <span class="pill text-[7px]" :class="(window.CCHelpers&&CCHelpers.strategyCurveHealthPill)?CCHelpers.strategyCurveHealthPill(btLab.quantCurve.strategies[0].health_state):'pw'" x-text="btLab.quantCurve.strategies[0].health_label||btLab.quantCurve.strategies[0].health_state"></span>
+              <span class="ml-1" x-text="btLab.quantCurve.strategies[0].regime_filter?.sample_label||''"></span>
+            </div>
+            <div class="text-[8px]" style="color:var(--t3)" x-text="btLab.quantCurve.strategies[0].regime_filter?.dd_label||''"></div>
+            <div class="text-[7px] mt-1" style="color:var(--amber)">Curve ≠ deploy permission · backtest ≠ live edge</div>
+          </template>
+          <div x-show="!btLab.quantCurve" class="text-[8px]" style="color:var(--t3)">Run lab to load walk-forward curve health from quant API.</div>
         </div>
         <div class="card card-p mb-2">
           <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--blue)">Strategy attribution</div>
@@ -4592,6 +4639,7 @@
               <span x-show="scannerHub.data&&scannerHub.data.diagnostics">Freshness: <strong class="text-white" x-text="scannerHub.data.diagnostics.data_freshness||'—'"></strong></span>
               <span x-show="scannerHub.category">Category: <strong class="text-white" x-text="scannerCategoryLabel(scannerHub.category)"></strong></span>
               <span x-show="scannerHub.error" style="color:var(--red)">⚠ <span x-text="scannerHub.error"></span></span>
+              <span x-show="scannerHub.error" class="w-full text-[8px] block mt-1" style="color:var(--t3)" x-text="routeAbortRecoveryHint('scanners')"></span>
               <button @click="fetchScanners(scannerHub.category)" class="btn-s text-[9px] ml-auto" style="padding:2px 8px">🔄 Re-scan</button>
             </div>
           </div>
@@ -4787,6 +4835,16 @@
               <span class="pill text-[7px] pa" x-show="(pfDecision.portfolio_action_now.metrics_incomplete||[]).length" x-text="'Incomplete: '+(pfDecision.portfolio_action_now.metrics_incomplete||[]).join(', ')"></span>
               <span x-show="pfDecision.ibkr_linkage" class="text-[8px]" style="color:var(--t3)" x-text="'Sync '+(pfDecision.ibkr_linkage.last_sync||'—')+' · '+(pfDecision.ibkr_linkage.sync_quality||'')"></span>
             </div>
+          </div>
+        </template>
+        <template x-if="pfQuantSizing&&pfQuantSizing.sizing">
+          <div class="card card-p mb-2" data-cc="portfolio-dd-sizing" style="border-left:3px solid var(--amber)">
+            <div class="flex flex-wrap gap-2 items-center mb-1">
+              <div class="text-[10px] font-bold uppercase" style="color:var(--amber)">Drawdown budget · sizing mode</div>
+              <span class="pill text-[7px] pw font-bold" x-text="(window.CCHelpers&&CCHelpers.quantResearchBadge)?CCHelpers.quantResearchBadge(pfQuantSizing):'RESEARCH ONLY'"></span>
+            </div>
+            <div class="text-[9px]" style="color:var(--t2)" x-text="(window.CCHelpers&&CCHelpers.drawdownSizingLine)?CCHelpers.drawdownSizingLine(pfQuantSizing.sizing):pfQuantSizing.sizing.sizing_label"></div>
+            <div class="text-[8px] mt-1" style="color:var(--t3)" x-text="'Restore when: '+(pfQuantSizing.sizing.restore_when||'—')"></div>
           </div>
         </template>
         <template x-if="pfDecision&&pfDecision.operating_discipline">
@@ -7499,9 +7557,9 @@
       live:false,clock:'',regime:{},indices:[],macro:[],sectors:[],asia:[],trust:{},
       marketStrip:{loading:false,error:'',source:'',lastOk:null,snapshotAt:null,renderedAt:null,fromPulse:false},
       sig:{mode:'—',source:'',as_of:'',recs:[],strategy_scores:{},no_trade_reason:null,scan_meta:null},
-      dos:{ticker:'',loading:false,loadingEnrich:false,status:'idle_no_query',data:null,intel:null,error:'',partialNotice:'',fetchDetail:'',failedModule:'',staleAt:null,subTab:'decision',showSignals:true,chartPeriod:'6mo',benchPeriod:'1y',chartSignals:[],benchStats:null,benchSummary:null,benchMonthly:null,benchQuarterly:null,benchYearly:null,benchTab:'monthly',buyPrice:'',advice:null,adviceLoading:false,peers:null,peersLoading:false,conviction:null,convictionLoading:false,optionsData:null,optionsLoading:false},
+      dos:{ticker:'',loading:false,loadingEnrich:false,status:'idle_no_query',data:null,intel:null,oppIntel:null,oppIntelLoading:false,error:'',partialNotice:'',fetchDetail:'',failedModule:'',staleAt:null,subTab:'decision',showSignals:true,chartPeriod:'6mo',benchPeriod:'1y',chartSignals:[],benchStats:null,benchSummary:null,benchMonthly:null,benchQuarterly:null,benchYearly:null,benchTab:'monthly',buyPrice:'',advice:null,adviceLoading:false,peers:null,peersLoading:false,conviction:null,convictionLoading:false,optionsData:null,optionsLoading:false},
       pf:{loading:false,source:'manual',positions:[],alerts:[],summary:null,corrPreview:null,showAdd:false,showAdvanced:false,addTicker:'',addShares:0,addEntry:0,addStop:0,addT1r:0,addT2r:0,addNotes:'',addSleeve:'',addSector:'',addError:'',addSuccess:'',editTicker:null},
-      pfDecision:null,pfDecisionLoading:false,
+      pfDecision:null,pfDecisionLoading:false,pfQuantSizing:null,
       pfEquity:null,pfEquityLoading:false,
       platformExtras:{catalyst:null,pmMemo:null,loading:false},
       aosMonitors:{rules:[],alerts:[],loading:false},
@@ -7524,8 +7582,8 @@
       errorLog:{loading:false,error:'',entries:[],total:0,filter:'all'},
       providers:{yfinance:false,regime_router:false,alpaca:{configured:false,connected:false,paper:true}},
       opsDetail:{},
-      today7:{regime:null,top_ranked:[],filter_funnel:null,avoid_list:[],avoid_grouped:null,bucket_quality:[],decision_model:null,decision_hierarchy:null,passive_baseline:null,complexity_challenge:null,restraint:null,surface_authority:null,crisis_regime:null,naval_clarity:null,buffett_clarity:null,index_fund_posture:null,principles_posture:null,todays_decision:null,decision_authority:null,tradeability:'',what_changed:[],event_risks:[],best_family:null,pulse:null,narrative:'',ai_narrative:null,ai_loading:false,ai_provider:'',ai_model:'',ai_error:'',ai_configured:false,ai_setup_hint:'',date:'',trust:{},best_action:null,overlap_warning:null,near_miss:[],no_setup_diagnosis:null,unlock_deploy:null,regime_wait_explanation:[],monitor_triggers:[],sleeve_summary:null,execution_readiness:null,evidence_badges:null,cross_asset_confirmation:null,score_reconciliation:null,ai_commentary_open:false,avoid_collapsed:true},
-      btLab:{ticker:'AAPL',strategy:'all',period:'6mo',loading:false,data:null,error:'',walkForward:true},
+      today7:{regime:null,top_ranked:[],filter_funnel:null,avoid_list:[],avoid_grouped:null,bucket_quality:[],decision_model:null,decision_hierarchy:null,passive_baseline:null,complexity_challenge:null,restraint:null,surface_authority:null,crisis_regime:null,naval_clarity:null,buffett_clarity:null,index_fund_posture:null,principles_posture:null,todays_decision:null,decision_authority:null,tradeability:'',what_changed:[],event_risks:[],best_family:null,pulse:null,narrative:'',ai_narrative:null,ai_loading:false,ai_provider:'',ai_model:'',ai_error:'',ai_configured:false,ai_setup_hint:'',date:'',trust:{},best_action:null,overlap_warning:null,near_miss:[],no_setup_diagnosis:null,unlock_deploy:null,regime_wait_explanation:[],monitor_triggers:[],sleeve_summary:null,quant_alloc:null,execution_readiness:null,evidence_badges:null,cross_asset_confirmation:null,score_reconciliation:null,ai_commentary_open:false,avoid_collapsed:true},
+      btLab:{ticker:'AAPL',strategy:'all',period:'6mo',loading:false,data:null,quantCurve:null,error:'',walkForward:true},
       dosWorkstation:{loading:false,data:null},
       pfScenario:{loading:false,list:[],result:null,selected:''},
       pfRebalanceTargets:'',
@@ -7909,7 +7967,12 @@
           const copy=this.dossierFetchStateCopy('partial', note, this.dosFetchServiceName());
           return note||copy.explanation;
         }
-        return this.dosFetchErrorDetail();
+        const detail=this.dosFetchErrorDetail();
+        if(kind==='error'){
+          const hint=this.routeAbortRecoveryHint('dossier');
+          if(hint) return detail?(detail+' · '+hint):hint;
+        }
+        return detail;
       },
       dosFetchBannerGrade(){
         const kind=this.dosFetchBannerKind();
@@ -8713,6 +8776,26 @@
           return 'Safe now: near-miss monitors, Discovery context, Playbook ranking — deploy blocked on WAIT';
         return '';
       },
+      routeAbortRecoveryHint(surface){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.routeAbortRecoveryHint)
+          return CCHelpers.routeAbortRecoveryHint(surface);
+        return 'Fetch failed — retry when badges clear; monitor queue and Guide remain safe';
+      },
+      staleRefreshRecoveryLine(){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.staleRefreshRecoveryLine)
+          return CCHelpers.staleRefreshRecoveryLine();
+        return 'Market snapshot stale — refresh market data before using levels for sizing';
+      },
+      engineOffRecoveryLine(){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.engineOffRecoveryLine)
+          return CCHelpers.engineOffRecoveryLine();
+        return 'Engine OFF — start engine in Ops or set CC_AUTO_START_ENGINE=1; board may be precomputed only';
+      },
+      ibkrLoginToReadyHint(){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.ibkrLoginToReadyHint)
+          return CCHelpers.ibkrLoginToReadyHint();
+        return 'IBKR LOGIN — connect session on IBKR tab; READY required before handoff (bracket aligned)';
+      },
       warmupStatusLine(){
         const mode=String(this.healthMode||this.healthData?.mode||'').toLowerCase();
         const offline=!this.healthData&&this.healthMode==='loading'&&!!this.apiError;
@@ -8852,7 +8935,9 @@
         if(!st.connected&&!this.cc_status.ibkr_connected)
           blocks.push('IBKR session inactive — no handoff until LOGIN→READY on IBKR tab');
         if(this.pageAuthorityIsDegraded()||mode==='loading'){
-          safe.push('Monitor-only: near-miss, Discovery context, Guide checklist');
+          const safeLine=this.operatorLoadingSafeLine();
+          if(safeLine) safe.push(safeLine);
+          else safe.push('Monitor-only: near-miss, Discovery context, Guide checklist');
           safe.push('Read data contract strip — FETCH FAILED / FALLBACK suspends sizing');
         }else{
           safe.push('Paper review and dossier research when board is WAIT');
@@ -9790,8 +9875,12 @@
       },
       marketStripStaleDowngradeLines(){
         const lines=this.decisionAuthority().degraded_copy?.stale_snapshot_lines;
-        if(Array.isArray(lines)&&lines.length) return lines;
-        return ['Historical snapshot only','Not suitable for execution decisions','Refresh required for decision use'];
+        const base=Array.isArray(lines)&&lines.length
+          ?lines.slice()
+          :['Historical snapshot only','Not suitable for execution decisions','Refresh required for decision use'];
+        const recovery=this.staleRefreshRecoveryLine();
+        if(recovery&&!base.includes(recovery)) base.push(recovery);
+        return base;
       },
       dashboardHasNoBoardData(){
         const hasTop=(this.today7.top_ranked||[]).length>0;
@@ -11237,6 +11326,11 @@
         try{
           const r=await this.ccFetch('/api/v7/portfolio-decision',{retries:3,backoff:500});
           if(r&&r.ok)this.pfDecision=await r.json();
+          try{
+            const ddPct=(this.pfDecision&&this.pfDecision.curve_diagnostics&&this.pfDecision.curve_diagnostics.max_drawdown_pct)||8.5;
+            const qs=await this.ccFetchJson('/api/v7/quant/drawdown-sizing?current_dd_pct='+encodeURIComponent(ddPct)+'&research_only='+((this.authorityDegradedBanner()||this.todayUsesBriefFallback())?'true':'false'),{tab:'portfolio',retries:1,backoff:400});
+            if(qs.ok)this.pfQuantSizing=qs.data;
+          }catch(e){console.warn('quant drawdown-sizing',e)}
         }catch(e){console.warn('portfolio-decision',e)}
         finally{this.pfDecisionLoading=false}
       },
@@ -11289,6 +11383,10 @@
             this.surfaceFetchHints.btlab={loading:false,stale:true,fallback:true,error:''};
           }
           this.bt.result=this.btLab.data.core_backtest||null;
+          try{
+            const qc=await this.ccFetchJson('/api/v7/quant/strategy-health?ticker='+encodeURIComponent(this.btLab.ticker),{tab:'btlab',retries:1,backoff:400});
+            if(qc.ok)this.btLab.quantCurve=qc.data;
+          }catch(e){console.warn('quant strategy-health',e)}
           this.$nextTick(()=>this.renderBtlabChart());
         }catch(e){this.btLab.error=this.surfaceFetchErrorLine(e.message||String(e),'btlab');console.warn('backtest-lab',e)}
         finally{this.btLab.loading=false}
@@ -11759,6 +11857,32 @@
           }
         }
       },
+      async fetchOpportunityIntel(){
+        const tk=(this.dos.ticker||'').trim().toUpperCase();
+        if(!tk){this.dos.oppIntel=null;return;}
+        const reqId=this.dos._reqId;
+        this.dos.oppIntelLoading=true;
+        try{
+          const key=window._apiKey||'dev-secret-local';
+          const hdr={headers:{'X-API-Key':key}};
+          const base='/api/v7/intelligence/';
+          const q='?ticker='+encodeURIComponent(tk);
+          const [insR,instR]=await Promise.all([
+            this.ccFetch(base+'insider'+q,{retries:1,backoff:400,...hdr}),
+            this.ccFetch(base+'institutional'+q,{retries:1,backoff:400,...hdr}),
+          ]);
+          if(reqId!==this.dos._reqId)return;
+          const insider=insR&&insR.ok?await insR.json():null;
+          const institutional=instR&&instR.ok?await instR.json():null;
+          if(reqId!==this.dos._reqId)return;
+          this.captureInstantDegradedBanner(insider||institutional||{});
+          this.dos.oppIntel={insider,institutional};
+        }catch(_){
+          if(reqId===this.dos._reqId)this.dos.oppIntel=null;
+        }finally{
+          if(reqId===this.dos._reqId)this.dos.oppIntelLoading=false;
+        }
+      },
       async fetchDossier(opts={}){
         const tk=(this.dos.ticker||'').trim().toUpperCase();
         if(!tk){
@@ -11807,6 +11931,7 @@
           if(reqId!==this.dos._reqId)return;
           this._applyDossierIntel(intel);
           this.dosSaveCache(tk,intel);
+          this.fetchOpportunityIntel();
           const degraded=this._dossierIntelDegraded(intel);
           const modErr=intel.module_errors||{};
           const notice=this._dossierPartialNoticeFromIntel(intel);
@@ -12656,6 +12781,10 @@
           this.buildDecisionHubFromToday(d);
           if(this.today7.top_ranked.length)setTimeout(()=>this.loadSparklines(this.today7.top_ranked),200);
           if(!(this.pmStrip.funds||[]).length)this.fetchFunds();
+          try{
+            const qa=await this.ccFetchJson('/api/v7/quant/sleeve-allocation',{tab:'today',retries:1,backoff:400});
+            if(qa.ok)this.today7.quant_alloc=qa.data;
+          }catch(e){console.warn('quant sleeve-allocation',e)}
         }catch(e){console.warn('v7/today fetch failed',e);this.today7.trust={...(this.today7.trust||{}),stale:true,reason:String(e.message||e).slice(0,140)};this.hydrateToday7FromCache()}
       },
       hydrateToday7FromCache(){
@@ -13673,11 +13802,6 @@
       },
     }}
     </script>
-  </body>
-</html>+pf.summary.total_value.toLocaleString()"></span>
-        <button @click="switchTab('funds')" class="btn-s text-[8px] ml-auto" x-show="(pmStrip.funds||[]).length===0">Load Funds</button>
-      </div>
-    <!-- @cc-partial-end deploy_surfaces -->
 
       <template x-if="authorityDegradedBanner() || todayUsesBriefFallback() || staleSnapshotContext()">
         <div style="padding:4px 12px 0">
@@ -14082,6 +14206,7 @@
               <div><div style="color:var(--t3)">Controls capital</div><div class="font-bold" :class="today7.sleeve_summary.fund_manager?.controls_capital?'text-green-400':'text-amber-300'" x-text="today7.sleeve_summary.fund_manager?.controls_capital?'Yes':'No'"></div></div>
             </div>
             <div class="text-[8px] mb-2" style="color:var(--t2)" x-text="today7.sleeve_summary.fund_manager?.allocation_reason||''"></div>
+            <div x-show="today7.quant_alloc&&(window.CCHelpers&&CCHelpers.quantSleeveHint)" class="text-[8px] mb-2" style="color:var(--t3)" x-text="CCHelpers.quantSleeveHint(today7.quant_alloc)"></div>
             <div class="text-[8px] mb-1" style="color:var(--t2)" x-show="today7.sleeve_summary.fund_manager?.sector_rotation_note" x-text="'Rotation: '+today7.sleeve_summary.fund_manager.sector_rotation_note"></div>
             <div class="text-[8px] mb-1" style="color:var(--amber)" x-show="today7.sleeve_summary.fund_manager?.leading_sector_implication" x-text="today7.sleeve_summary.fund_manager.leading_sector_implication"></div>
             <div class="text-[8px] mb-2" x-show="(today7.sleeve_summary.fund_manager?.top_adds||[]).length">
@@ -15233,6 +15358,9 @@
                 <template x-if="r.net_edge_display||r.gross_net_display||(r.raw_score!=null&&r.net_deploy_score!=null)||(r.gross_edge_score!=null&&r.net_edge_score!=null)">
                   <div class="text-[8px] mb-1 mono" style="color:var(--amber)" x-text="r.net_edge_display||r.gross_net_display||(r.raw_score!=null&&r.net_deploy_score!=null?('Raw '+Number(r.raw_score??r.gross_edge_score).toFixed(1)+' · Net '+Number(r.net_deploy_score??r.net_edge_score).toFixed(1)+' after cost'):'')"></div>
                 </template>
+                <template x-if="r.cost_rank_label">
+                  <span class="pill text-[6px] mr-1" :class="(window.CCHelpers&&CCHelpers.costRankPillClass)?CCHelpers.costRankPillClass(r):'pw'" x-text="(window.CCHelpers&&CCHelpers.costRankTag)?CCHelpers.costRankTag(r):r.cost_rank_label"></span>
+                </template>
                 <template x-if="(r.guardrail_labels||[]).length">
                   <div class="flex flex-wrap gap-1 mb-1">
                     <template x-for="gl in (r.guardrail_labels||[]).slice(0,4)" :key="gl">
@@ -15650,6 +15778,29 @@
                   <div><span class="font-bold" style="color:var(--t3)">Size</span> <span style="color:var(--t2)" x-text="dos.intel.pm_answer.thirty_second.size_guidance"></span></div>
                   <div class="sm:col-span-2"><span class="font-bold" style="color:var(--t3)">Catalyst risk</span> <span style="color:var(--t2)" x-text="dos.intel.pm_answer.thirty_second.catalyst_risk"></span></div>
                 </div>
+              </div>
+            </template>
+            <!-- Opportunity intelligence: insider + institutional (research_only) -->
+            <template x-if="dos.oppIntel&&(dos.oppIntel.insider||dos.oppIntel.institutional)">
+              <div class="card card-p mb-2" data-cc="dossier-opp-intel" style="border-left:4px solid var(--purple)">
+                <div class="flex flex-wrap items-center gap-2 mb-2">
+                  <div class="text-[9px] font-bold uppercase" style="color:var(--purple)">Opportunity context (lagged)</div>
+                  <span class="pill text-[7px] pw font-bold" x-text="(window.CCHelpers&&CCHelpers.opportunityIntelligenceBadge)?CCHelpers.opportunityIntelligenceBadge(dos.oppIntel.insider||dos.oppIntel.institutional):'RESEARCH ONLY'"></span>
+                </div>
+                <template x-if="dos.oppIntel.insider">
+                  <div class="mb-2 p-2 rounded text-[9px]" style="background:var(--s2)">
+                    <div class="font-bold text-white mb-1">Insider · Form 4</div>
+                    <div style="color:var(--t2)" x-text="(window.CCHelpers&&CCHelpers.insiderContextLabel)?CCHelpers.insiderContextLabel(dos.oppIntel.insider.cluster_quality):dos.oppIntel.insider.cluster_copy"></div>
+                    <div class="text-[8px] mt-1" style="color:var(--t3)" x-text="'Typical lag '+((dos.oppIntel.insider.lag_days_typical)||'2–45+')+' · not a trade trigger'"></div>
+                  </div>
+                </template>
+                <template x-if="dos.oppIntel.institutional">
+                  <div class="p-2 rounded text-[9px]" style="background:var(--s2)">
+                    <div class="font-bold text-white mb-1">Institutional · 13F</div>
+                    <div style="color:var(--t2)" x-text="dos.oppIntel.institutional.sponsorship_verdict||'—'"></div>
+                    <div class="text-[8px] mt-1" style="color:var(--t3)" x-text="dos.oppIntel.institutional.lag_copy||'Quarterly lag — sponsorship context only'"></div>
+                  </div>
+                </template>
               </div>
             </template>
             <!-- Decision stack -->
@@ -16360,6 +16511,21 @@
             </div>
           </template>
           <div x-show="!(btLab.data.walk_forward?.windows||[]).length" class="text-[8px] py-1" style="color:var(--t3)">No walk-forward windows yet — run lab with walk-forward enabled.</div>
+        </div>
+        <div class="card card-p mb-2" data-cc="strategy-curve-console" style="border-left:3px solid var(--purple)">
+          <div class="flex flex-wrap gap-2 items-center mb-1">
+            <div class="text-[10px] font-bold uppercase" style="color:var(--purple)">Strategy Curve Console</div>
+            <span class="pill text-[7px] pw font-bold" x-text="(window.CCHelpers&&CCHelpers.quantResearchBadge)?CCHelpers.quantResearchBadge(btLab.quantCurve):'RESEARCH ONLY'"></span>
+          </div>
+          <template x-if="btLab.quantCurve&&btLab.quantCurve.strategies&&btLab.quantCurve.strategies[0]">
+            <div class="text-[8px] mb-1" style="color:var(--t2)">
+              <span class="pill text-[7px]" :class="(window.CCHelpers&&CCHelpers.strategyCurveHealthPill)?CCHelpers.strategyCurveHealthPill(btLab.quantCurve.strategies[0].health_state):'pw'" x-text="btLab.quantCurve.strategies[0].health_label||btLab.quantCurve.strategies[0].health_state"></span>
+              <span class="ml-1" x-text="btLab.quantCurve.strategies[0].regime_filter?.sample_label||''"></span>
+            </div>
+            <div class="text-[8px]" style="color:var(--t3)" x-text="btLab.quantCurve.strategies[0].regime_filter?.dd_label||''"></div>
+            <div class="text-[7px] mt-1" style="color:var(--amber)">Curve ≠ deploy permission · backtest ≠ live edge</div>
+          </template>
+          <div x-show="!btLab.quantCurve" class="text-[8px]" style="color:var(--t3)">Run lab to load walk-forward curve health from quant API.</div>
         </div>
         <div class="card card-p mb-2">
           <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--blue)">Strategy attribution</div>
@@ -17217,6 +17383,7 @@
               <span x-show="scannerHub.data&&scannerHub.data.diagnostics">Freshness: <strong class="text-white" x-text="scannerHub.data.diagnostics.data_freshness||'—'"></strong></span>
               <span x-show="scannerHub.category">Category: <strong class="text-white" x-text="scannerCategoryLabel(scannerHub.category)"></strong></span>
               <span x-show="scannerHub.error" style="color:var(--red)">⚠ <span x-text="scannerHub.error"></span></span>
+              <span x-show="scannerHub.error" class="w-full text-[8px] block mt-1" style="color:var(--t3)" x-text="routeAbortRecoveryHint('scanners')"></span>
               <button @click="fetchScanners(scannerHub.category)" class="btn-s text-[9px] ml-auto" style="padding:2px 8px">🔄 Re-scan</button>
             </div>
           </div>
@@ -17412,6 +17579,16 @@
               <span class="pill text-[7px] pa" x-show="(pfDecision.portfolio_action_now.metrics_incomplete||[]).length" x-text="'Incomplete: '+(pfDecision.portfolio_action_now.metrics_incomplete||[]).join(', ')"></span>
               <span x-show="pfDecision.ibkr_linkage" class="text-[8px]" style="color:var(--t3)" x-text="'Sync '+(pfDecision.ibkr_linkage.last_sync||'—')+' · '+(pfDecision.ibkr_linkage.sync_quality||'')"></span>
             </div>
+          </div>
+        </template>
+        <template x-if="pfQuantSizing&&pfQuantSizing.sizing">
+          <div class="card card-p mb-2" data-cc="portfolio-dd-sizing" style="border-left:3px solid var(--amber)">
+            <div class="flex flex-wrap gap-2 items-center mb-1">
+              <div class="text-[10px] font-bold uppercase" style="color:var(--amber)">Drawdown budget · sizing mode</div>
+              <span class="pill text-[7px] pw font-bold" x-text="(window.CCHelpers&&CCHelpers.quantResearchBadge)?CCHelpers.quantResearchBadge(pfQuantSizing):'RESEARCH ONLY'"></span>
+            </div>
+            <div class="text-[9px]" style="color:var(--t2)" x-text="(window.CCHelpers&&CCHelpers.drawdownSizingLine)?CCHelpers.drawdownSizingLine(pfQuantSizing.sizing):pfQuantSizing.sizing.sizing_label"></div>
+            <div class="text-[8px] mt-1" style="color:var(--t3)" x-text="'Restore when: '+(pfQuantSizing.sizing.restore_when||'—')"></div>
           </div>
         </template>
         <template x-if="pfDecision&&pfDecision.operating_discipline">
@@ -20124,9 +20301,9 @@
       live:false,clock:'',regime:{},indices:[],macro:[],sectors:[],asia:[],trust:{},
       marketStrip:{loading:false,error:'',source:'',lastOk:null,snapshotAt:null,renderedAt:null,fromPulse:false},
       sig:{mode:'—',source:'',as_of:'',recs:[],strategy_scores:{},no_trade_reason:null,scan_meta:null},
-      dos:{ticker:'',loading:false,loadingEnrich:false,status:'idle_no_query',data:null,intel:null,error:'',partialNotice:'',fetchDetail:'',failedModule:'',staleAt:null,subTab:'decision',showSignals:true,chartPeriod:'6mo',benchPeriod:'1y',chartSignals:[],benchStats:null,benchSummary:null,benchMonthly:null,benchQuarterly:null,benchYearly:null,benchTab:'monthly',buyPrice:'',advice:null,adviceLoading:false,peers:null,peersLoading:false,conviction:null,convictionLoading:false,optionsData:null,optionsLoading:false},
+      dos:{ticker:'',loading:false,loadingEnrich:false,status:'idle_no_query',data:null,intel:null,oppIntel:null,oppIntelLoading:false,error:'',partialNotice:'',fetchDetail:'',failedModule:'',staleAt:null,subTab:'decision',showSignals:true,chartPeriod:'6mo',benchPeriod:'1y',chartSignals:[],benchStats:null,benchSummary:null,benchMonthly:null,benchQuarterly:null,benchYearly:null,benchTab:'monthly',buyPrice:'',advice:null,adviceLoading:false,peers:null,peersLoading:false,conviction:null,convictionLoading:false,optionsData:null,optionsLoading:false},
       pf:{loading:false,source:'manual',positions:[],alerts:[],summary:null,corrPreview:null,showAdd:false,showAdvanced:false,addTicker:'',addShares:0,addEntry:0,addStop:0,addT1r:0,addT2r:0,addNotes:'',addSleeve:'',addSector:'',addError:'',addSuccess:'',editTicker:null},
-      pfDecision:null,pfDecisionLoading:false,
+      pfDecision:null,pfDecisionLoading:false,pfQuantSizing:null,
       pfEquity:null,pfEquityLoading:false,
       platformExtras:{catalyst:null,pmMemo:null,loading:false},
       aosMonitors:{rules:[],alerts:[],loading:false},
@@ -20149,8 +20326,8 @@
       errorLog:{loading:false,error:'',entries:[],total:0,filter:'all'},
       providers:{yfinance:false,regime_router:false,alpaca:{configured:false,connected:false,paper:true}},
       opsDetail:{},
-      today7:{regime:null,top_ranked:[],filter_funnel:null,avoid_list:[],avoid_grouped:null,bucket_quality:[],decision_model:null,decision_hierarchy:null,passive_baseline:null,complexity_challenge:null,restraint:null,surface_authority:null,crisis_regime:null,naval_clarity:null,buffett_clarity:null,index_fund_posture:null,principles_posture:null,todays_decision:null,decision_authority:null,tradeability:'',what_changed:[],event_risks:[],best_family:null,pulse:null,narrative:'',ai_narrative:null,ai_loading:false,ai_provider:'',ai_model:'',ai_error:'',ai_configured:false,ai_setup_hint:'',date:'',trust:{},best_action:null,overlap_warning:null,near_miss:[],no_setup_diagnosis:null,unlock_deploy:null,regime_wait_explanation:[],monitor_triggers:[],sleeve_summary:null,execution_readiness:null,evidence_badges:null,cross_asset_confirmation:null,score_reconciliation:null,ai_commentary_open:false,avoid_collapsed:true},
-      btLab:{ticker:'AAPL',strategy:'all',period:'6mo',loading:false,data:null,error:'',walkForward:true},
+      today7:{regime:null,top_ranked:[],filter_funnel:null,avoid_list:[],avoid_grouped:null,bucket_quality:[],decision_model:null,decision_hierarchy:null,passive_baseline:null,complexity_challenge:null,restraint:null,surface_authority:null,crisis_regime:null,naval_clarity:null,buffett_clarity:null,index_fund_posture:null,principles_posture:null,todays_decision:null,decision_authority:null,tradeability:'',what_changed:[],event_risks:[],best_family:null,pulse:null,narrative:'',ai_narrative:null,ai_loading:false,ai_provider:'',ai_model:'',ai_error:'',ai_configured:false,ai_setup_hint:'',date:'',trust:{},best_action:null,overlap_warning:null,near_miss:[],no_setup_diagnosis:null,unlock_deploy:null,regime_wait_explanation:[],monitor_triggers:[],sleeve_summary:null,quant_alloc:null,execution_readiness:null,evidence_badges:null,cross_asset_confirmation:null,score_reconciliation:null,ai_commentary_open:false,avoid_collapsed:true},
+      btLab:{ticker:'AAPL',strategy:'all',period:'6mo',loading:false,data:null,quantCurve:null,error:'',walkForward:true},
       dosWorkstation:{loading:false,data:null},
       pfScenario:{loading:false,list:[],result:null,selected:''},
       pfRebalanceTargets:'',
@@ -20534,7 +20711,12 @@
           const copy=this.dossierFetchStateCopy('partial', note, this.dosFetchServiceName());
           return note||copy.explanation;
         }
-        return this.dosFetchErrorDetail();
+        const detail=this.dosFetchErrorDetail();
+        if(kind==='error'){
+          const hint=this.routeAbortRecoveryHint('dossier');
+          if(hint) return detail?(detail+' · '+hint):hint;
+        }
+        return detail;
       },
       dosFetchBannerGrade(){
         const kind=this.dosFetchBannerKind();
@@ -21338,6 +21520,26 @@
           return 'Safe now: near-miss monitors, Discovery context, Playbook ranking — deploy blocked on WAIT';
         return '';
       },
+      routeAbortRecoveryHint(surface){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.routeAbortRecoveryHint)
+          return CCHelpers.routeAbortRecoveryHint(surface);
+        return 'Fetch failed — retry when badges clear; monitor queue and Guide remain safe';
+      },
+      staleRefreshRecoveryLine(){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.staleRefreshRecoveryLine)
+          return CCHelpers.staleRefreshRecoveryLine();
+        return 'Market snapshot stale — refresh market data before using levels for sizing';
+      },
+      engineOffRecoveryLine(){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.engineOffRecoveryLine)
+          return CCHelpers.engineOffRecoveryLine();
+        return 'Engine OFF — start engine in Ops or set CC_AUTO_START_ENGINE=1; board may be precomputed only';
+      },
+      ibkrLoginToReadyHint(){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.ibkrLoginToReadyHint)
+          return CCHelpers.ibkrLoginToReadyHint();
+        return 'IBKR LOGIN — connect session on IBKR tab; READY required before handoff (bracket aligned)';
+      },
       warmupStatusLine(){
         const mode=String(this.healthMode||this.healthData?.mode||'').toLowerCase();
         const offline=!this.healthData&&this.healthMode==='loading'&&!!this.apiError;
@@ -21477,7 +21679,9 @@
         if(!st.connected&&!this.cc_status.ibkr_connected)
           blocks.push('IBKR session inactive — no handoff until LOGIN→READY on IBKR tab');
         if(this.pageAuthorityIsDegraded()||mode==='loading'){
-          safe.push('Monitor-only: near-miss, Discovery context, Guide checklist');
+          const safeLine=this.operatorLoadingSafeLine();
+          if(safeLine) safe.push(safeLine);
+          else safe.push('Monitor-only: near-miss, Discovery context, Guide checklist');
           safe.push('Read data contract strip — FETCH FAILED / FALLBACK suspends sizing');
         }else{
           safe.push('Paper review and dossier research when board is WAIT');
@@ -22415,8 +22619,12 @@
       },
       marketStripStaleDowngradeLines(){
         const lines=this.decisionAuthority().degraded_copy?.stale_snapshot_lines;
-        if(Array.isArray(lines)&&lines.length) return lines;
-        return ['Historical snapshot only','Not suitable for execution decisions','Refresh required for decision use'];
+        const base=Array.isArray(lines)&&lines.length
+          ?lines.slice()
+          :['Historical snapshot only','Not suitable for execution decisions','Refresh required for decision use'];
+        const recovery=this.staleRefreshRecoveryLine();
+        if(recovery&&!base.includes(recovery)) base.push(recovery);
+        return base;
       },
       dashboardHasNoBoardData(){
         const hasTop=(this.today7.top_ranked||[]).length>0;
@@ -23862,6 +24070,11 @@
         try{
           const r=await this.ccFetch('/api/v7/portfolio-decision',{retries:3,backoff:500});
           if(r&&r.ok)this.pfDecision=await r.json();
+          try{
+            const ddPct=(this.pfDecision&&this.pfDecision.curve_diagnostics&&this.pfDecision.curve_diagnostics.max_drawdown_pct)||8.5;
+            const qs=await this.ccFetchJson('/api/v7/quant/drawdown-sizing?current_dd_pct='+encodeURIComponent(ddPct)+'&research_only='+((this.authorityDegradedBanner()||this.todayUsesBriefFallback())?'true':'false'),{tab:'portfolio',retries:1,backoff:400});
+            if(qs.ok)this.pfQuantSizing=qs.data;
+          }catch(e){console.warn('quant drawdown-sizing',e)}
         }catch(e){console.warn('portfolio-decision',e)}
         finally{this.pfDecisionLoading=false}
       },
@@ -23914,6 +24127,10 @@
             this.surfaceFetchHints.btlab={loading:false,stale:true,fallback:true,error:''};
           }
           this.bt.result=this.btLab.data.core_backtest||null;
+          try{
+            const qc=await this.ccFetchJson('/api/v7/quant/strategy-health?ticker='+encodeURIComponent(this.btLab.ticker),{tab:'btlab',retries:1,backoff:400});
+            if(qc.ok)this.btLab.quantCurve=qc.data;
+          }catch(e){console.warn('quant strategy-health',e)}
           this.$nextTick(()=>this.renderBtlabChart());
         }catch(e){this.btLab.error=this.surfaceFetchErrorLine(e.message||String(e),'btlab');console.warn('backtest-lab',e)}
         finally{this.btLab.loading=false}
@@ -24384,6 +24601,32 @@
           }
         }
       },
+      async fetchOpportunityIntel(){
+        const tk=(this.dos.ticker||'').trim().toUpperCase();
+        if(!tk){this.dos.oppIntel=null;return;}
+        const reqId=this.dos._reqId;
+        this.dos.oppIntelLoading=true;
+        try{
+          const key=window._apiKey||'dev-secret-local';
+          const hdr={headers:{'X-API-Key':key}};
+          const base='/api/v7/intelligence/';
+          const q='?ticker='+encodeURIComponent(tk);
+          const [insR,instR]=await Promise.all([
+            this.ccFetch(base+'insider'+q,{retries:1,backoff:400,...hdr}),
+            this.ccFetch(base+'institutional'+q,{retries:1,backoff:400,...hdr}),
+          ]);
+          if(reqId!==this.dos._reqId)return;
+          const insider=insR&&insR.ok?await insR.json():null;
+          const institutional=instR&&instR.ok?await instR.json():null;
+          if(reqId!==this.dos._reqId)return;
+          this.captureInstantDegradedBanner(insider||institutional||{});
+          this.dos.oppIntel={insider,institutional};
+        }catch(_){
+          if(reqId===this.dos._reqId)this.dos.oppIntel=null;
+        }finally{
+          if(reqId===this.dos._reqId)this.dos.oppIntelLoading=false;
+        }
+      },
       async fetchDossier(opts={}){
         const tk=(this.dos.ticker||'').trim().toUpperCase();
         if(!tk){
@@ -24432,6 +24675,7 @@
           if(reqId!==this.dos._reqId)return;
           this._applyDossierIntel(intel);
           this.dosSaveCache(tk,intel);
+          this.fetchOpportunityIntel();
           const degraded=this._dossierIntelDegraded(intel);
           const modErr=intel.module_errors||{};
           const notice=this._dossierPartialNoticeFromIntel(intel);
@@ -25281,6 +25525,10 @@
           this.buildDecisionHubFromToday(d);
           if(this.today7.top_ranked.length)setTimeout(()=>this.loadSparklines(this.today7.top_ranked),200);
           if(!(this.pmStrip.funds||[]).length)this.fetchFunds();
+          try{
+            const qa=await this.ccFetchJson('/api/v7/quant/sleeve-allocation',{tab:'today',retries:1,backoff:400});
+            if(qa.ok)this.today7.quant_alloc=qa.data;
+          }catch(e){console.warn('quant sleeve-allocation',e)}
         }catch(e){console.warn('v7/today fetch failed',e);this.today7.trust={...(this.today7.trust||{}),stale:true,reason:String(e.message||e).slice(0,140)};this.hydrateToday7FromCache()}
       },
       hydrateToday7FromCache(){

@@ -37,7 +37,8 @@ function injectPartial(name, html, partialBody) {
     throw new Error(`Missing markers for partial "${name}" in index.html`);
   }
   const block = `${start}\n${partialBody.trimEnd()}\n    ${end}`;
-  return html.replace(re, block);
+  // Use replacer fn — partial HTML may contain `$` (Alpine x-text), which breaks string replace.
+  return html.replace(re, () => block);
 }
 
 function escapeRe(s) {

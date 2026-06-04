@@ -564,13 +564,19 @@ def soak_confirmation_signals() -> Dict[str, str]:
     return {
         "instant_degraded": 'data-cc="instant-degraded-banner"',
         "warmup_strip": 'data-cc="warmup-context-strip"',
+        "data_contract_strip": 'data-cc="data-contract-strip"',
         "deploy_strip": 'data-cc="deploy-status-strip"',
         "mission_panel": 'data-cc="today-mission-panel"',
         "playbook_surface": 'data-cc="playbook-surface"',
         "market_stale": 'data-cc="market-strip-stale"',
         "ops_runbook": 'data-cc="ops-recovery-runbook"',
         "loading_recovery": loading_session_recovery_line(health_mode="loading"),
+        "operator_loading_safe": operator_loading_safe_line(health_mode="loading"),
+        "engine_off": engine_off_recovery_line(),
+        "stale_refresh": stale_refresh_recovery_line(),
+        "ibkr_login_ready": ibkr_login_to_ready_hint(),
         "route_abort_dossier": route_abort_recovery_hint("dossier"),
+        "route_abort_scanners": route_abort_recovery_hint("discovery"),
     }
 
 
@@ -807,3 +813,39 @@ def ops_recovery_guide(
         safe.append("Ops diagnostics do not override Dashboard deploy gate")
 
     return {"retry": retry, "blocks_capital": blocks, "safe_degraded": safe}
+
+
+# Opportunity intelligence monitor types — labels for Today / mission panel only.
+OPPORTUNITY_MONITOR_TRIGGER_TYPES: Dict[str, str] = {
+    "structure": "Structure repair — monitor for playbook gate",
+    "volume": "Volume confirmation — attention only",
+    "event_clear": "Event risk cleared — narrative context, not trigger",
+    "insider_cluster": "Insider cluster (lagged Form 4) — research context",
+    "13f_sponsorship": "13F sponsorship change (lagged) — research context",
+    "strategy_health": "Strategy curve health — sizing template research only",
+    "cluster_deploy": "Deploy cluster — board gate still required",
+    "cluster_pilot": "Pilot cluster — half-size research template",
+    "cluster_watch": "Watch cluster — WAIT day monitors",
+    "cluster_near_miss": "Near-miss cluster — upgrade layer, not deploy",
+    "cluster_blocked_cost": "Blocked by cost — net edge after drag too weak",
+    "cluster_blocked_dd": "Blocked by DD — drawdown budget constrains sizing",
+}
+
+# Alias for quant / algo daily hooks (same labels as opportunity monitor types).
+QUANT_CLUSTER_MONITOR_LABELS: Dict[str, str] = {
+    "deploy": OPPORTUNITY_MONITOR_TRIGGER_TYPES["cluster_deploy"],
+    "pilot": OPPORTUNITY_MONITOR_TRIGGER_TYPES["cluster_pilot"],
+    "watch": OPPORTUNITY_MONITOR_TRIGGER_TYPES["cluster_watch"],
+    "near-miss": OPPORTUNITY_MONITOR_TRIGGER_TYPES["cluster_near_miss"],
+    "blocked-by-cost": OPPORTUNITY_MONITOR_TRIGGER_TYPES["cluster_blocked_cost"],
+    "blocked-by-dd": OPPORTUNITY_MONITOR_TRIGGER_TYPES["cluster_blocked_dd"],
+}
+
+
+def describe_opportunity_monitor_trigger(trigger_type: str) -> str:
+    """Human label for opportunity monitor rows (monitoring_only in today_insights)."""
+    key = str(trigger_type or "").strip().lower()
+    return OPPORTUNITY_MONITOR_TRIGGER_TYPES.get(
+        key,
+        "Opportunity context — monitoring only, not deploy authority",
+    )

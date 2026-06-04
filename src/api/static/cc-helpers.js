@@ -278,7 +278,89 @@
 			playbookSurface: '[data-cc="playbook-surface"]',
 			marketStale: '[data-cc="market-strip-stale"]',
 			opsRunbook: '[data-cc="ops-recovery-runbook"]',
+			dataContractStrip: '[data-cc="data-contract-strip"]',
 		}
+	}
+
+	/** Opportunity intelligence — always research / monitor, never deploy chip. */
+	function opportunityIntelligenceBadge(payload) {
+		var p = payload || {}
+		if (p.degraded || p.instant_degraded) return "MOCK / DEGRADED"
+		var tier = String(p.data_tier || "").toLowerCase()
+		if (tier === "mock") return "MOCK ONLY"
+		return "RESEARCH ONLY"
+	}
+
+	function insiderContextLabel(quality) {
+		var q = String(quality || "").toLowerCase()
+		var map = {
+			supportive_only: "Supportive context",
+			notable_accumulation: "Notable accumulation (lagged)",
+			notable_distribution: "Distribution risk (lagged)",
+			noise: "Routine Form 4",
+			insufficient_data: "Insufficient history",
+		}
+		return map[q] || "Insider context (lagged)"
+	}
+
+	function eventRiskDowngradeOnly(events) {
+		var list = events || []
+		for (var i = 0; i < list.length; i++) {
+			if (list[i] && list[i].impact_framing === "risk_downgrade") return true
+		}
+		return false
+	}
+
+	function strategyCurveHealthPill(state) {
+		var s = String(state || "").toLowerCase()
+		if (s === "paused" || s === "monitor") return "pr"
+		if (s === "pilot" || s === "reduced") return "pa"
+		return "pw"
+	}
+
+	function quantResearchBadge(payload) {
+		var p = payload || {}
+		if (p.degraded || p.instant_degraded) return "MOCK / DEGRADED"
+		if (p.data_mode === "research_only" || p.research_only) return "RESEARCH ONLY"
+		if (p.data_mode === "ops_probe") return "OPS CONTEXT"
+		return "RESEARCH ONLY"
+	}
+
+	function costRankTag(row) {
+		var r = row || {}
+		var label = String(r.cost_rank_label || "").toLowerCase()
+		if (label === "net_survives") return "Net survives cost"
+		if (label === "cost_too_high") return "Cost drag high"
+		return "Monitor only (cost)"
+	}
+
+	function costRankPillClass(row) {
+		var r = row || {}
+		var label = String(r.cost_rank_label || "").toLowerCase()
+		if (label === "net_survives") return "pg"
+		if (label === "cost_too_high") return "pa"
+		return "pw"
+	}
+
+	function drawdownSizingLine(sizing) {
+		var s = sizing || {}
+		if (!s.sizing_mode || s.sizing_mode === "blocked") {
+			return "DD sizing blocked — confirm-only / research / stale"
+		}
+		return (
+			(s.sizing_label || s.sizing_mode) +
+			" · " +
+			(s.size_multiplier != null ? s.size_multiplier + "× template" : "")
+		)
+	}
+
+	function quantSleeveHint(alloc) {
+		var a = alloc || {}
+		var route = a.routing || a.sleeve_strip || {}
+		if (!route.strongest && !route.weakest) return ""
+		var s = route.strongest && route.strongest.name ? route.strongest.name : "—"
+		var w = route.weakest && route.weakest.name ? route.weakest.name : "—"
+		return "Quant hint: strongest sleeve " + s + " · weakest " + w + " (not a trade route)"
 	}
 
 	/** Safe operator actions while loading or on WAIT (no deploy authority). */
@@ -325,5 +407,14 @@
 		ibkrLoginToReadyHint: ibkrLoginToReadyHint,
 		todayMissionSafeUnlockHint: todayMissionSafeUnlockHint,
 		soakConfirmationSelectors: soakConfirmationSelectors,
+		opportunityIntelligenceBadge: opportunityIntelligenceBadge,
+		insiderContextLabel: insiderContextLabel,
+		eventRiskDowngradeOnly: eventRiskDowngradeOnly,
+		strategyCurveHealthPill: strategyCurveHealthPill,
+		quantResearchBadge: quantResearchBadge,
+		costRankTag: costRankTag,
+		costRankPillClass: costRankPillClass,
+		drawdownSizingLine: drawdownSizingLine,
+		quantSleeveHint: quantSleeveHint,
 	}
 })(typeof window !== "undefined" ? window : globalThis)
