@@ -483,6 +483,8 @@ async def today_summary(request: Request):
     if universe == 0:
         universe = len(getattr(request.app.state, "scan_watchlist", []))
 
+    actionable = len([s for s in scanned if s.get("score", 0) >= 7.0])
+
     # 5. Top 5 ranked — sector-adaptive pipeline
     # 5. Top 5 ranked — Expert Council pipeline
     council = _council(request)
@@ -503,14 +505,15 @@ async def today_summary(request: Request):
     )
 
     from src.services.decision_truth_model import (
+        _score as _fit_score,
         build_avoid_grouped,
         build_bucket_quality_summary,
         build_honest_funnel,
         build_three_layer_model,
         enrich_opportunity_row,
         is_execution_ready,
-        is_pilot_eligible,
         refine_action,
+        sector_rank_adjustment,
     )
 
     funnel = build_honest_funnel(
@@ -537,14 +540,8 @@ async def today_summary(request: Request):
     sector_laggards = market_pulse.get("sector_laggards") or []
 
     def _council_sort_key(cr: Any) -> tuple:
-        from src.services.decision_truth_model import (
-            _score as _fit_score,
-            sector_rank_adjustment,
-        )
-
         act = refine_action(cr)
         pr = cr.pipeline
-        sig = pr.signal
         adj_row = {
             "sector_type": pr.sector.sector_bucket.value,
             "leader": pr.sector.leader_status.value,
@@ -682,9 +679,6 @@ async def today_summary(request: Request):
     # Stricter summary generation based on PM feedback
     trade_count = sum(
         1 for cr in council_results if is_execution_ready(cr)
-    )
-    pilot_count = sum(
-        1 for cr in council_results if refine_action(cr) == "PILOT" and is_pilot_eligible(cr)
     )
 
     if not should_trade:
