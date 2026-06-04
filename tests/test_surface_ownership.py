@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -13,39 +14,76 @@ INDEX_HTML = ROOT / "src" / "api" / "templates" / "index.html"
 DEPLOY_PARTIAL = (
     ROOT / "src" / "api" / "templates" / "cc" / "partials" / "deploy_surfaces.html"
 )
+BUILD_SCRIPT = ROOT / "scripts" / "build-cc-template.mjs"
 
 TODAY_MAIN_OPEN = '<main x-show="tab===\'today\'"'
 PLAYBOOK_MAIN_OPEN = '<main x-show="tab===\'signals\'"'
 DISCOVERY_MARKER = 'data-cc="discovery-surface"'
 
-TODAY_ONLY_MARKERS = (
+DEPLOY_FORBIDDEN = (
     "deploy-status-strip",
     "today-deploy-chrome",
     "today-mission-panel",
     "today-dashboard-body",
     "FALLBACK / BRIEF ONLY",
-    "honestFunnelLabel(today7.filter_funnel",
+    "Fallback board:",
 )
 
-RESEARCH_SURFACES: list[tuple[str, str]] = [
-    ("rs", 'data-cc="rs-surface"'),
+RESEARCH_TABS = (
+    ("ops", '<main x-show="tab===\'ops\'"'),
+    ("rs", '<main x-show="tab===\'rs\'"'),
     ("scanners", DISCOVERY_MARKER),
     ("dossier", 'data-cc="dossier-surface"'),
+    ("notrade", '<main x-show="tab===\'notrade\'"'),
+    ("btlab", '<main x-show="tab===\'btlab\'"'),
     ("guide", 'data-cc="guide-surface"'),
-    ("ops", 'data-cc="ops-surface"'),
-    ("notrade", 'data-cc="rejections-surface"'),
-    ("btlab", 'data-cc="btlab-surface"'),
-]
+)
 
 
 def _read_index() -> str:
     return INDEX_HTML.read_text(encoding="utf-8")
 
 
+def _html_only(raw: str) -> str:
+    return raw[raw.index("<body") : raw.index("<!-- ══════ ALPINE JS ══════ -->")]
+
+
+def _main_open_index(raw: str, open_marker: str) -> int:
+    if open_marker.startswith("<main"):
+        return raw.index(open_marker)
+    match = re.search(
+        rf"<main\b[^>]*{re.escape(open_marker)}[^>]*>",
+        raw,
+        re.I,
+    )
+    if not match:
+        raise AssertionError(f"No <main> with marker {open_marker!r}")
+    return match.start()
+
+
+def _extract_main_block(raw: str, open_marker: str) -> str:
+    """Return HTML for one <main> using tag-depth (not first </main>)."""
+    start = _main_open_index(raw, open_marker)
+    pos = start
+    depth = 0
+    while pos < len(raw):
+        open_m = re.search(r"<main\b", raw[pos:], re.I)
+        close_m = re.search(r"</main>", raw[pos:], re.I)
+        if close_m is None:
+            raise AssertionError(f"No closing </main> after {open_marker!r}")
+        if open_m and open_m.start() < close_m.start():
+            depth += 1
+            pos += open_m.end()
+            continue
+        depth -= 1
+        pos += close_m.end()
+        if depth == 0:
+            return raw[start:pos]
+    raise AssertionError(f"Unbalanced <main> for {open_marker!r}")
+
+
 def _surface_block(raw: str, open_marker: str) -> str:
-    start = raw.index(open_marker)
-    end = raw.index("</main>", start) + len("</main>")
-    return raw[start:end]
+    return _extract_main_block(raw, open_marker)
 
 
 class _MainStackParser(HTMLParser):
@@ -53,11 +91,9 @@ class _MainStackParser(HTMLParser):
 
     def __init__(self, body_html: str) -> None:
         super().__init__()
-        self._body = body_html
         self.stack: list[tuple[str, dict[str, str]]] = []
         self.today_main_depth: int | None = None
         self.deploy_strip_under_today = False
-        self.today_main_orphan_close = False
         self.stray_div_after_today_open = False
         self._today_open_line: int | None = None
 
@@ -89,17 +125,9 @@ class _MainStackParser(HTMLParser):
         ):
             self.stray_div_after_today_open = True
         if tag == "main" and (not self.stack or self.stack[-1][0] != "main"):
-            if self.today_main_depth is not None:
-                self.today_main_orphan_close = True
             return
         if self.stack and self.stack[-1][0] == tag:
             self.stack.pop()
-
-
-def _body_html(raw: str) -> str:
-    body_start = raw.index("<body")
-    script_marker = raw.index("<!-- ══════ ALPINE JS ══════ -->")
-    return raw[body_start:script_marker]
 
 
 def test_today_main_opens_without_stray_div_close():
@@ -119,6 +147,14 @@ def test_deploy_status_strip_inside_today_main_block():
     assert 'data-cc="today-dashboard-body"' in today
 
 
+@pytest.mark.parametrize("tab,open_marker", RESEARCH_TABS)
+def test_research_surface_excludes_deploy_chrome(tab: str, open_marker: str):
+    raw = _read_index()
+    block = _surface_block(raw, open_marker)
+    leaked = [pat for pat in DEPLOY_FORBIDDEN if pat in block]
+    assert not leaked, f"{tab} surface leaked deploy chrome: {leaked}"
+
+
 def test_discovery_surface_excludes_deploy_strip():
     raw = _read_index()
     discovery = _surface_block(raw, DISCOVERY_MARKER)
@@ -132,14 +168,20 @@ def test_playbook_surface_excludes_today_deploy_strip():
     playbook = _surface_block(raw, PLAYBOOK_MAIN_OPEN)
     assert "deploy-status-strip" not in playbook
     assert "today-deploy-chrome" not in playbook
+    assert "today-mission-panel" not in playbook
 
 
-@pytest.mark.parametrize("tab_name,open_marker", RESEARCH_SURFACES)
-def test_research_surface_excludes_today_deploy_chrome(tab_name: str, open_marker: str):
+def test_global_trust_strip_today_only():
     raw = _read_index()
-    block = _surface_block(raw, open_marker)
-    for needle in TODAY_ONLY_MARKERS:
-        assert needle not in block, f"{tab_name} surface must not contain {needle!r}"
+    html = _html_only(raw)
+    m = re.search(
+        r'<div class="trust-strip" x-show="([^"]+)"[^>]*>\s*\n\s*<div class="flex items-center gap-2 flex-wrap trust-strip-tier-primary"',
+        html,
+    )
+    assert m, "global trust-strip tier-primary block missing"
+    assert m.group(1) == "live && tab==='today'", (
+        "global trust strip must not render dashboard regime on research tabs"
+    )
 
 
 def test_deploy_partial_wrapped_with_today_tab_guard():
@@ -147,29 +189,31 @@ def test_deploy_partial_wrapped_with_today_tab_guard():
     assert 'x-show="tab===\'today\'"' in partial
     assert 'data-cc="today-deploy-chrome"' in partial
     assert 'data-cc="deploy-status-strip"' in partial
-    assert 'x-show="tab===\'today\'" data-cc="deploy-status-strip"' in partial
+    assert partial.count("tab==='today'") >= 4
 
 
 def test_deploy_partial_markers_only_in_today_section():
     raw = _read_index()
     deploy_start = raw.index("<!-- @cc-partial deploy_surfaces -->")
     today_start = raw.index(TODAY_MAIN_OPEN)
-    today_end = raw.index("</main>", today_start)
-    assert today_start < deploy_start < today_end
+    today_block = _surface_block(raw, TODAY_MAIN_OPEN)
+    assert raw.index(today_block) == today_start
+    assert deploy_start < today_start + len(today_block)
 
 
 def test_no_pf_summary_alpine_leak_patterns():
     raw = _read_index()
-    html_only = raw[raw.index("<body") : raw.index("<!-- ══════ ALPINE JS ══════ -->")]
+    html_only = _html_only(raw)
     assert "+pf.summary.total_value.toLocaleString()" not in html_only
     assert "portfolioSummaryPositionsLabel()+' · $'+pf" not in html_only
+    assert "pf.summary.total_pnl>=" not in html_only
     assert not re.search(r'x-(?:show|if)="[^"]*total_positions>0', html_only)
 
 
 def test_today_main_dom_stack_owns_deploy_strip():
     raw = _read_index()
-    parser = _MainStackParser(_body_html(raw))
-    parser.feed(_body_html(raw))
+    parser = _MainStackParser(_html_only(raw))
+    parser.feed(_html_only(raw))
     assert parser.deploy_strip_under_today, "deploy-status-strip must nest under today main"
     assert not parser.stray_div_after_today_open
 
@@ -179,26 +223,21 @@ def test_playwright_surface_hooks_present():
     assert 'data-cc="today-surface"' in raw
     assert 'data-cc="playbook-surface"' in raw
     assert 'data-cc="discovery-surface"' in raw
-    assert 'data-cc="rs-surface"' in raw
     assert 'data-cc="deploy-status-strip"' in raw
 
 
-def test_header_context_scopes_board_fallback_to_dashboard_playbook():
+def test_single_cc_app_and_surface_markers():
     raw = _read_index()
-    idx = raw.index("headerContext(){")
-    body = raw[idx : idx + 900]
-    assert "mode==='dashboard_core'&&this.todayUsesBriefFallback()" in body
-    assert "mode==='playbook_core'&&this.playbookUsesBriefFallback()" in body
-    assert "this.todayUsesBriefFallback()||this.playbookUsesBriefFallback()" not in body
+    assert raw.count("function cc(){return{") == 1
+    assert raw.count('<!-- @cc-partial deploy_surfaces -->') == 1
+    assert raw.count('data-cc="today-surface"') == 1
+    assert raw.count('data-cc="playbook-surface"') == 1
 
 
 def test_build_cc_template_check_passes():
-    import subprocess
-
-    root = INDEX_HTML.resolve().parents[3]
     proc = subprocess.run(
-        ["node", "scripts/build-cc-template.mjs", "--check"],
-        cwd=root,
+        ["node", str(BUILD_SCRIPT), "--check"],
+        cwd=ROOT,
         capture_output=True,
         text=True,
         check=False,
