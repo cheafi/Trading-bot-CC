@@ -6139,6 +6139,22 @@ except Exception:
     logger.exception("[Router] Failed to load monitors router")
 
 try:
+    from src.api.routers.opportunity_intelligence import (
+        router as opportunity_intelligence_router,
+    )
+
+    app.include_router(opportunity_intelligence_router)
+except Exception:
+    logger.exception("[Router] Failed to load opportunity_intelligence router")
+
+try:
+    from src.api.routers.quant_intelligence import router as quant_intelligence_router
+
+    app.include_router(quant_intelligence_router)
+except Exception:
+    logger.exception("[Router] Failed to load quant_intelligence router")
+
+try:
     from src.api.routers.aos import router as aos_router
 
     app.include_router(aos_router)
