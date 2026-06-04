@@ -276,6 +276,11 @@ def enrich_ranked_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     opps = payload.get("opportunities") or []
     stale = bool(payload.get("stale"))
     source = str(payload.get("source") or "")
+    tradeability_hint = str(
+        payload.get("tradeability")
+        or payload.get("board_tradeability")
+        or ""
+    ).upper()
     try:
         from src.services.ibkr_service import get_ibkr_service, ibkr_authority_gate_snapshot
 
@@ -287,6 +292,14 @@ def enrich_ranked_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         ibkr_on = False
         ibkr_mode = "paper"
         exec_blocked = False
+
+    try:
+        from src.services.cost_adjusted_ranker import rank_opportunity_rows
+
+        opps = rank_opportunity_rows(opps, tradeability=tradeability_hint)
+        payload["opportunities"] = opps
+    except Exception:
+        pass
 
     payload["overlap_warning"] = compute_theme_overlap(opps)
     trade_count = sum(1 for o in opps if _norm_action(o.get("action")) in _TRADE_ACTIONS)
@@ -347,6 +360,14 @@ def enrich_ranked_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         payload["near_miss"].append(nm)
         if len(payload["near_miss"]) >= 8:
             break
+    if payload["near_miss"]:
+        payload["near_miss"] = sorted(
+            payload["near_miss"],
+            key=lambda r: (
+                len(r.get("gaps") or []),
+                -float(r.get("net_edge_score") or r.get("score") or 0),
+            ),
+        )[:8]
     try:
         from src.services.decision_truth_model import (
             build_avoid_grouped_from_rows,

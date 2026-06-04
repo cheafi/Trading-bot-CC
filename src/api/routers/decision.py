@@ -808,10 +808,12 @@ async def today_summary(request: Request):
     now = datetime.now(timezone.utc)
 
     from src.services.today_insights import (
+        best_net_edge_from_opportunities,
         build_evidence_badges,
         build_monitor_triggers,
         build_near_miss_candidates,
         build_no_setup_diagnosis,
+        build_quant_cluster_hints,
         build_regime_wait_explanation,
         build_sleeve_summary,
         build_todays_decision,
@@ -855,13 +857,6 @@ async def today_summary(request: Request):
         should_trade=should_trade,
         vix=vix_val,
         breadth=breadth * 100 if breadth <= 1 else breadth,
-    )
-    monitor_triggers = build_monitor_triggers(
-        market_pulse=market_pulse,
-        near_miss=near_miss,
-        vix=vix_val,
-        breadth=breadth * 100 if breadth <= 1 else breadth,
-        tradeability=tradeability,
     )
     sleeve_summary: Dict[str, Any] = {"cards": [], "note": "lazy-load via /api/fund-lab/cards"}
     fund_cards: List[Dict[str, Any]] = []
@@ -1024,6 +1019,20 @@ async def today_summary(request: Request):
     top5 = apply_authority_to_rows(top5, decision_authority)
     all_opps_for_action = apply_authority_to_rows(all_opps_for_action, decision_authority)
     near_miss = apply_authority_to_rows(near_miss, decision_authority)
+
+    quant_cluster_hints = build_quant_cluster_hints(
+        tradeability=tradeability,
+        deploy_qualified_count=execution_ready_count,
+        best_net_score=best_net_edge_from_opportunities(all_opps_for_action),
+    )
+    monitor_triggers = build_monitor_triggers(
+        market_pulse=market_pulse,
+        near_miss=near_miss,
+        vix=vix_val,
+        breadth=breadth * 100 if breadth <= 1 else breadth,
+        tradeability=tradeability,
+        quant_cluster_hints=quant_cluster_hints,
+    )
 
     todays_decision = build_todays_decision(
         tradeability=tradeability,
@@ -1228,6 +1237,7 @@ async def today_summary(request: Request):
         "unlock_deploy": unlock_deploy,
         "regime_wait_explanation": regime_wait_explanation,
         "monitor_triggers": monitor_triggers,
+        "quant_cluster_hints": quant_cluster_hints,
         "sleeve_summary": sleeve_summary,
         "execution_readiness": execution_readiness,
         "evidence_badges": build_evidence_badges(

@@ -368,6 +368,40 @@ def _timing_bucket(timing_conf: float, score: float) -> str:
     return "1-2w"
 
 
+def _near_miss_gate_distance(row: Dict[str, Any]) -> tuple:
+    """Sort key: fewer gaps first, then higher score (closest to deploy gate)."""
+    gaps = row.get("gaps") or []
+    return (len(gaps), -float(row.get("score") or 0), -float(row.get("final_conf") or 0))
+
+
+def best_net_edge_from_opportunities(
+    rows: Optional[List[Dict[str, Any]]],
+) -> Optional[float]:
+    """Best net edge after cost drag across opportunity rows — ranking humility only."""
+    from src.services.cost_adjusted_edge import compute_net_edge, infer_burdens_from_row
+
+    best: Optional[float] = None
+    for row in rows or []:
+        raw = row.get("raw_score")
+        if raw is None:
+            raw = row.get("score")
+        if raw is None:
+            continue
+        burdens = infer_burdens_from_row(row)
+        edge = compute_net_edge(
+            float(raw),
+            turnover_burden=burdens["turnover_burden"],
+            spread_burden=burdens["spread_burden"],
+            action=row.get("action"),
+            extended=bool(row.get("extended") or row.get("timing_extended")),
+            partial_data=bool(row.get("partial")),
+        )
+        net = float(edge["net_edge_score"])
+        if best is None or net > best:
+            best = net
+    return best
+
+
 def build_near_miss_candidates(
     council_results: List[Any],
     top5_tickers: Set[str],
@@ -468,7 +502,7 @@ def build_near_miss_candidates(
             )
         except Exception:
             continue
-    rows.sort(key=lambda x: (-x["score"], -x["final_conf"]))
+    rows.sort(key=_near_miss_gate_distance)
     return rows[:limit]
 
 
@@ -583,12 +617,19 @@ def build_monitor_triggers(
     triggers: List[Dict[str, Any]] = []
     if near_miss:
         nm = near_miss[0]
+        detail = str(nm.get("upgrade_trigger") or "").strip()
+        dist = str(nm.get("distance_to_pass") or "").strip()
+        if dist:
+            detail = f"{detail} · {dist}" if detail else dist
+        if not detail:
+            detail = str(nm.get("whats_missing") or "Monitor upgrade — not deploy")
         triggers.append(
             {
                 "type": "near_miss",
                 "label": f"Upgrade watch: {nm['ticker']}",
-                "detail": nm.get("upgrade_trigger", ""),
+                "detail": detail,
                 "horizon": "intraday",
+                "monitoring_only": True,
             }
         )
     leaders = (market_pulse or {}).get("sector_leaders") or []

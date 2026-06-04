@@ -672,26 +672,6 @@ def playbook_what_to_monitor_line(
     top_symbol: str = "",
     near_miss_count: int = 0,
 ) -> str:
-    """Playbook WAIT day — operator monitor routing without deploy authority."""
-    if not wait_day:
-        return ""
-    sym = str(top_symbol or "").strip().upper()
-    nm = int(near_miss_count or 0)
-    parts: list[str] = []
-    if sym:
-        parts.append(f"{sym} upgrade triggers")
-    if nm:
-        parts.append(f"{nm} near-miss row{'s' if nm != 1 else ''}")
-    parts.append("deploy unlock checklist below")
-    return "Monitor only — " + " · ".join(parts) + " · no deploy authority"
-
-
-def playbook_what_to_monitor_line(
-    *,
-    wait_day: bool = False,
-    top_symbol: str = "",
-    near_miss_count: int = 0,
-) -> str:
     """Playbook WAIT-day monitor guidance — operator-facing, no deploy authority."""
     if not wait_day:
         return ""
