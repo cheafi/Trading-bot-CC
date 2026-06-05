@@ -412,6 +412,9 @@
 			playbookSurface: '[data-cc="playbook-surface"]',
 			playbookCostRankPill: '[data-cc="playbook-cost-rank-pill"]',
 			playbookStrategyDecayLine: '[data-cc="playbook-strategy-decay-line"]',
+			execAnalyticsSample: '[data-cc="exec-analytics-sample"]',
+			regimeStackStrip: '[data-cc="regime-stack-strip"]',
+			aiReasonCodes: '[data-cc="ai-reason-codes"]',
 			marketStale: '[data-cc="market-strip-stale"]',
 			opsRunbook: '[data-cc="ops-recovery-runbook"]',
 			dataContractStrip: '[data-cc="data-contract-strip"]',
@@ -624,6 +627,13 @@
 		return msg + " — monitor only"
 	}
 
+	function execAnalyticsSample(analytics) {
+		var a = analytics || {}
+		var label = String(a.sample_state_label || (a.fill_quality && a.fill_quality.status_label) || "").trim()
+		if (!label) return "Execution analytics unavailable — monitor only"
+		return label + " — not deploy authority"
+	}
+
 	function regimeStackStripLine(summary) {
 		var s = summary || {}
 		var line = String(s.strip_line || "").trim()
@@ -721,6 +731,7 @@
 		drawdownSizingLine: drawdownSizingLine,
 		quantSleeveHint: quantSleeveHint,
 		aiReasonCodeLine: aiReasonCodeLine,
+		execAnalyticsSample: execAnalyticsSample,
 		regimeStackStripLine: regimeStackStripLine,
 		allocatorStanceHint: allocatorStanceHint,
 		aiContradictionDossierLine: aiContradictionDossierLine,
