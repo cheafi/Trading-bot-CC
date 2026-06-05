@@ -25,6 +25,12 @@ MODE_LABELS: Dict[str, str] = {
     MODE_BLOCKED: "Sizing blocked — surface not authoritative",
 }
 
+DOWNGRADE_MODE_LABELS: Dict[str, str] = {
+    MODE_REDUCED: "Downgrade-only: reduced template from DD pressure (not deploy permission)",
+    MODE_MINIMAL: "Downgrade-only: minimal pilot from elevated DD (board gate still required)",
+    MODE_BLOCKED: "Downgrade-only: sizing blocked on research/confirm-only/stale",
+}
+
 
 def evaluate_drawdown_sizing(
     *,
@@ -77,6 +83,7 @@ def evaluate_drawdown_sizing(
     return {
         "sizing_mode": mode,
         "sizing_label": MODE_LABELS[mode],
+        "sizing_downgrade_label": DOWNGRADE_MODE_LABELS.get(mode, MODE_LABELS[mode]),
         "size_multiplier": mult,
         "has_sizing_authority": mode != MODE_BLOCKED,
         "dd_utilization_pct": round(utilization * 100, 1),
@@ -84,6 +91,7 @@ def evaluate_drawdown_sizing(
         "current_dd_pct": round(dd, 2),
         "restore_when": restore,
         "deploy_from_sizer_alone": False,
+        "downgrade_only": mode != MODE_FULL,
     }
 
 
