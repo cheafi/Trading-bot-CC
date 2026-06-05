@@ -3573,6 +3573,7 @@ for _sector, _tickers in _SECTOR_CLUSTERS.items():
 _MAX_SIGNALS_PER_SECTOR = RISK.max_correlated_names  # default 3
 
 _scan_cache: dict = {"recs": [], "scores": {}, "ts": 0.0}
+_scan_lock = asyncio.Lock()
 _SCAN_CACHE_TTL = 300  # 5 minutes
 
 # Negative cache: tickers that fail consistently are skipped for 1 hour
@@ -3812,6 +3813,16 @@ def _build_why_wait(conf: dict, rr: float) -> str | None:
     return "Consider waiting: " + "; ".join(reasons)
 
 
+def _scan_cache_slice(limit: int, *, degraded: bool = False, reason: str = "") -> tuple[list, dict]:
+    """Return cached scanner rows; optional degraded stamp for in-flight scans."""
+    scores = dict(_scan_cache.get("scores") or {})
+    if degraded:
+        scores["_degraded"] = True
+        if reason:
+            scores["_reason"] = reason
+    return list(_scan_cache.get("recs") or [])[:limit], scores
+
+
 async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
     """Scan watchlist for live signals using current market data.
 
@@ -3827,510 +3838,334 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
     if _scan_cache["recs"] and (now - _scan_cache["ts"]) < _SCAN_CACHE_TTL:
         return _scan_cache["recs"][:limit], _scan_cache["scores"]
 
-    mds = app.state.market_data
-    recs = []
-    strat_wins = {"momentum": 0, "breakout": 0, "swing": 0, "mean_reversion": 0}
-    strat_total = {"momentum": 0, "breakout": 0, "swing": 0, "mean_reversion": 0}
-
-    # Filter out negative-cached tickers
-    active_tickers = [
-        t
-        for t in _SCAN_WATCHLIST
-        if t not in _neg_cache or (now - _neg_cache[t]) > _NEG_CACHE_TTL
-    ]
-    logger.info(
-        f"[Scanner] {len(active_tickers)}/{len(_SCAN_WATCHLIST)} tickers "
-        f"({len(_SCAN_WATCHLIST) - len(active_tickers)} neg-cached)"
-    )
-
-    # Parallel batch fetch
-    async def _fetch_one(ticker: str):
-        try:
-            hist = await mds.get_history(ticker, period="1y", interval="1d")
-            if hist is None or hist.empty or len(hist) < 60:
-                _neg_cache[ticker] = now  # skip next time
-                return None
-            return (ticker, hist)
-        except Exception:
-            _neg_cache[ticker] = now
-            return None
-
-    all_results = []
-    for batch_start in range(0, len(active_tickers), _SCAN_BATCH_SIZE):
-        batch = active_tickers[batch_start : batch_start + _SCAN_BATCH_SIZE]
-        batch_results = await asyncio.gather(
-            *[_fetch_one(t) for t in batch], return_exceptions=True
-        )
-        all_results.extend(
-            r for r in batch_results if r is not None and not isinstance(r, Exception)
-        )
-
-    # Fetch SPY benchmark for RS computation
-    spy_close = await _get_spy_close()
-
-    for ticker, hist in all_results:
-        try:
-            if hist is None or hist.empty or len(hist) < 60:
-                continue
-
-            c_col = "Close" if "Close" in hist.columns else "close"
-            v_col = "Volume" if "Volume" in hist.columns else "volume"
-            close = hist[c_col].values.astype(float)
-            volume = hist[v_col].values.astype(float)
-            n = len(close)
-            i = n - 1  # latest bar
-
-            if n < 60:
-                continue
-
-            # ── Compute indicators (causal, no look-ahead) ──
-            _ind = _compute_indicators(close, volume)
-            sma20 = _ind["sma20"]
-            sma50 = _ind["sma50"]
-            sma200 = _ind["sma200"]
-            rsi = _ind["rsi"]
-            vol_ratio = _ind["vol_ratio"]
-            atr_pct = _ind["atr_pct"]
-            cur_atr = max(float(atr_pct[i]), 0.005)
-
-            trending = bool(close[i] > sma50[i] and sma50[i] > sma200[i])
-
-            # ── RS vs SPY ──
-            rs_info = (
-                _compute_rs_vs_benchmark(close, spy_close)
-                if spy_close is not None
-                else {
-                    "rs_composite": 100.0,
-                    "rs_1m": 100.0,
-                    "rs_3m": 100.0,
-                    "rs_6m": 100.0,
-                    "rs_slope": 0.0,
-                    "rs_status": "NEUTRAL",
-                }
+    # One universe scan at a time — concurrent scans were starving market_data/yfinance.
+    if _scan_lock.locked():
+        if _scan_cache["recs"]:
+            return _scan_cache_slice(
+                limit,
+                degraded=True,
+                reason="scan in flight — serving last good cache",
             )
+        return [], {"_degraded": True, "_reason": "scan in flight"}
 
-            # ── Check each strategy ──
-            _ST = SIGNAL_THRESHOLDS
-            strategies = {
-                "momentum": bool(
-                    close[i] > sma20[i] > sma50[i]
-                    and rsi[i] > _ST.rsi_momentum_low
-                    and rsi[i] < _ST.rsi_momentum_high
-                    and vol_ratio[i] > _ST.volume_confirmation
-                ),
-                "breakout": (
-                    bool(
-                        close[i] > float(np.max(close[max(0, i - 20) : i]))
-                        and vol_ratio[i] > _ST.volume_surge_threshold
-                        and close[i] > sma20[i]
-                    )
-                    if i > 20
-                    else False
-                ),
-                "swing": (
-                    bool(
-                        rsi[i] < _ST.rsi_swing_entry
-                        and close[i] > sma50[i] * (1 - _ST.swing_sma_distance)
-                        and (close[i] > sma20[i] or close[i - 1] < sma20[i - 1])
-                        and close[i] > close[i - 1]
-                    )
-                    if i > 1
-                    else False
-                ),
-                "mean_reversion": bool(
-                    rsi[i] < _ST.rsi_oversold
-                    and close[i] < sma20[i] * (1 - _ST.mean_rev_sma_distance)
-                    and vol_ratio[i] > _ST.volume_confirmation
-                ),
-            }
+    async with _scan_lock:
+        now = _t.time()
+        if _scan_cache["recs"] and (now - _scan_cache["ts"]) < _SCAN_CACHE_TTL:
+            return _scan_cache["recs"][:limit], _scan_cache["scores"]
 
-            # Strategy params
-            strat_params = {
-                "momentum": {
-                    "stop": cur_atr * _ST.stop_atr_multiplier_momentum,
-                    "target": _ST.target_trending if trending else _ST.target_normal,
-                },
-                "breakout": {
-                    "stop": cur_atr * _ST.stop_atr_multiplier_breakout,
-                    "target": (
-                        _ST.target_breakout_trending
-                        if trending
-                        else _ST.target_breakout_normal
-                    ),
-                },
-                "swing": {
-                    "stop": cur_atr * _ST.stop_atr_multiplier_swing,
-                    "target": (
-                        _ST.target_swing_trending
-                        if trending
-                        else _ST.target_swing_normal
-                    ),
-                },
-                "mean_reversion": {
-                    "stop": cur_atr * _ST.stop_atr_multiplier_mean_rev,
-                    "target": cur_atr * 3,
-                },
-            }
+        mds = app.state.market_data
+        recs = []
+        strat_wins = {"momentum": 0, "breakout": 0, "swing": 0, "mean_reversion": 0}
+        strat_total = {"momentum": 0, "breakout": 0, "swing": 0, "mean_reversion": 0}
 
-            for strat_name, triggered in strategies.items():
-                strat_total[strat_name] += 1
-                if not triggered:
-                    continue
-                strat_wins[strat_name] += 1
+        # Filter out negative-cached tickers
+        active_tickers = [
+            t
+            for t in _SCAN_WATCHLIST
+            if t not in _neg_cache or (now - _neg_cache[t]) > _NEG_CACHE_TTL
+        ]
+        logger.info(
+            f"[Scanner] {len(active_tickers)}/{len(_SCAN_WATCHLIST)} tickers "
+            f"({len(_SCAN_WATCHLIST) - len(active_tickers)} neg-cached)"
+        )
 
-                params = strat_params[strat_name]
-                # Enter at next bar's close to avoid look-ahead bias
-                entry_idx = min(i + 1, len(close) - 1)
-                entry_price = round(float(close[entry_idx]), 2)
-                stop_price = round(entry_price * (1 - params["stop"]), 2)
-                target_price = round(entry_price * (1 + params["target"]), 2)
-                risk = entry_price - stop_price
-                reward = target_price - entry_price
-                rr = round(reward / risk, 1) if risk > 0 else 0
-
-                # ── Phase 9: Pre-compute engines before confidence ──
-                _structure = {}
-                _entry_qual = {}
-                _earnings = {}
-                _fundamentals_brief = {}
-                _portfolio_check = {}
-                _gate_passed = True
-                if _P9_ENGINES:
-                    try:
-                        _pg = PortfolioGate()
-                        _gr = _pg.check(
-                            ticker=ticker,
-                            sector=_TICKER_SECTOR.get(ticker, "unknown"),
-                            atr_risk_pct=float(atr_pct[i]) * 100,
-                            current_positions=[
-                                {
-                                    "ticker": r["ticker"],
-                                    "sector": r.get("sector", "unknown"),
-                                    "size_pct": 5.0,
-                                    "risk_pct": 1.0,
-                                }
-                                for r in recs
-                            ],
-                        )
-                        _portfolio_check = _gr.to_dict()
-                        if not _gr.allowed:
-                            _gate_passed = False
-                    except Exception as _e9:
-                        logger.debug("[Phase9] PortfolioGate: %s", _e9)
-                if _P9_ENGINES:
-                    try:
-                        h_col = "High" if "High" in hist.columns else "high"
-                        l_col = "Low" if "Low" in hist.columns else "low"
-                        _hi = hist[h_col].values.astype(float)
-                        _lo = hist[l_col].values.astype(float)
-                        _sd = StructureDetector()
-                        _sr = _sd.analyze(close, _hi, _lo, volume)
-                        _structure = _sr.to_dict()
-                        # Use S/R for better stops/targets
-                        _sup = _sr.nearest_support
-                        _res = _sr.nearest_resistance
-                        if _sup and _sup < entry_price:
-                            stop_price = round(
-                                max(stop_price, _sup * 0.995),
-                                2,
-                            )
-                        if _res and _res > entry_price:
-                            target_price = round(
-                                min(target_price, _res * 0.99),
-                                2,
-                            )
-                        risk = entry_price - stop_price
-                        reward = target_price - entry_price
-                        rr = round(reward / risk, 1) if risk > 0 else 0
-                        _eq = EntryQualityEngine()
-                        _eqr = _eq.assess(
-                            close,
-                            _hi,
-                            _lo,
-                            volume,
-                            float(atr_pct[i]),
-                            entry_price,
-                            stop_price,
-                            target_price,
-                            _res,
-                            _sup,
-                            _TICKER_SECTOR.get(ticker, "unknown"),
-                        )
-                        _entry_qual = _eqr.to_dict()
-                    except Exception as _e9:
-                        logger.debug("[Phase9] StructureDetector/EntryQuality: %s", _e9)
-                    try:
-                        _earnings = get_earnings_info(ticker)
-                    except Exception as _e9:
-                        logger.debug("[Phase9] EarningsCalendar: %s", _e9)
-                    try:
-                        _fd = get_fundamentals(ticker)
-                        _fundamentals_brief = {
-                            "quality": _fd.get("quality_score", None),
-                            "pe": _fd.get("valuation", {}).get("pe_trailing"),
-                            "roe": _fd.get("profitability", {}).get("roe"),
-                            "rev_growth": _fd.get("growth", {}).get("revenue_growth"),
-                            "moat": _fd.get("moat_indicators", {}).get(
-                                "has_moat", False
-                            ),
-                        }
-                    except Exception as _e9:
-                        logger.debug("[Phase9] FundamentalData: %s", _e9)
-
-                # Confidence from 4-layer (now includes Phase 9 penalties)
-                conf = _compute_4layer_confidence(
-                    close,
-                    sma20,
-                    sma50,
-                    sma200,
-                    rsi,
-                    atr_pct,
-                    vol_ratio,
-                    i,
-                    volume,
-                    trending,
-                    structure_result=_structure,
-                    entry_quality_result=_entry_qual,
-                    earnings_info=_earnings,
-                    fundamentals_info=_fundamentals_brief,
-                    regime_label="UPTREND" if trending else "SIDEWAYS",
-                    ticker_sector=_TICKER_SECTOR.get(ticker, "unknown"),
-                )
-                score = round(conf["composite"] / 10, 1)  # 0-10 scale
-                if not _gate_passed:
-                    score = max(0, score - 2.0)
-
-                recs.append(
-                    {
-                        "ticker": ticker,
-                        "symbol": ticker,
-                        "score": score,
-                        "confidence": conf["composite"],
-                        "grade": conf["grade"] if _gate_passed else "F",
-                        "direction": "LONG",
-                        "strategy": strat_name,
-                        "entry_price": entry_price,
-                        "target_price": target_price,
-                        "stop_price": stop_price,
-                        "risk_reward": rr,
-                        "regime": "UPTREND" if trending else "SIDEWAYS",
-                        "rsi": round(float(rsi[i]), 1),
-                        "vol_ratio": round(float(vol_ratio[i]), 2),
-                        "atr_pct": round(float(atr_pct[i]) * 100, 2),
-                        # ── Calibrated confidence (6-layer) ──
-                        "calibrated_confidence": _enrich_calibration(conf, strat_name),
-                        # ── Action state ──
-                        "action_state": _compute_action_state(conf, rr, trending),
-                        # ── Trust strip ──
-                        "trust_strip": {
-                            "mode": "SCAN",
-                            "source": "yfinance",
-                            "freshness": "delayed_15m",
-                            "sample_size": None,
-                            "assumptions": "gross returns, no commissions/slippage",
-                            "feature_stage": "BETA",
-                        },
-                        # ── Contradiction / reasons against ──
-                        "reasons_for": _build_reasons_for(
-                            close,
-                            sma20,
-                            sma50,
-                            sma200,
-                            rsi,
-                            vol_ratio,
-                            i,
-                            strat_name,
-                            trending,
-                        ),
-                        "reasons_against": _build_reasons_against(
-                            close,
-                            sma20,
-                            sma50,
-                            sma200,
-                            rsi,
-                            vol_ratio,
-                            atr_pct,
-                            i,
-                            strat_name,
-                        ),
-                        "invalidation": f"Close below ${stop_price}",
-                        "pre_mortem": _build_pre_mortem(strat_name, trending),
-                        "why_wait": _build_why_wait(conf, rr),
-                        # ── Sprint 44: uncertainty + reliability ──
-                        "honest_confidence": _honest_confidence_label(
-                            conf["composite"]
-                        ),
-                        "reliability": {
-                            "bucket": reliability_bucket(len(close) - 60),
-                            "sample_size": len(close) - 60,
-                            "note": reliability_note(len(close) - 60),
-                        },
-                        # ── Phase 9: new engines ──
-                        "structure": _structure,
-                        "entry_quality": _entry_qual,
-                        "earnings": _earnings,
-                        "fundamentals": _fundamentals_brief,
-                        "portfolio_gate": _portfolio_check,
-                        "rs": rs_info,
-                        "sector": _TICKER_SECTOR.get(ticker, "unknown"),
-                    }
-                )
-                # ── Wire Phase 9 feedback engines ──
-                if _P9_ENGINES:
-                    try:
-                        _bm = BreakoutMonitor()
-                        _bm.load()
-                        _bm.register_breakout(
-                            ticker=ticker,
-                            breakout_price=entry_price,
-                            pivot_price=stop_price,
-                        )
-                        _bm.save()
-                    except Exception as _e9:
-                        logger.debug("[Phase9] BreakoutMonitor: %s", _e9)
-                    try:
-                        get_journal().record(
-                            ticker=ticker,
-                            decision_tier=conf.get("grade", "C"),
-                            composite_score=conf["composite"] * 100,
-                            should_trade=score >= 7.0,
-                            regime="UPTREND" if trending else "SIDEWAYS",
-                            sector=_TICKER_SECTOR.get(ticker, "unknown"),
-                            entry_price=entry_price,
-                            stop_price=stop_price,
-                            target_price=target_price,
-                            extra={"strategy": strat_name, "rr": rr, "score": score},
-                        )
-                    except Exception as _e9:
-                        logger.debug("[Phase9] DecisionJournal: %s", _e9)
-        except Exception as exc:
-            logger.debug(f"[Scanner] {ticker} skip: {exc}")
-            continue
-
-    # ── Fallback: if no strategy triggered, rank all tickers by strength ──
-    if not recs:
-        _fallback: list[tuple[str, dict]] = []
-        for ticker in _SCAN_WATCHLIST:
+        # Parallel batch fetch
+        async def _fetch_one(ticker: str):
             try:
                 hist = await mds.get_history(ticker, period="1y", interval="1d")
                 if hist is None or hist.empty or len(hist) < 60:
+                    _neg_cache[ticker] = now  # skip next time
+                    return None
+                return (ticker, hist)
+            except Exception:
+                _neg_cache[ticker] = now
+                return None
+
+        all_results = []
+        for batch_start in range(0, len(active_tickers), _SCAN_BATCH_SIZE):
+            batch = active_tickers[batch_start : batch_start + _SCAN_BATCH_SIZE]
+            batch_results = await asyncio.gather(
+                *[_fetch_one(t) for t in batch], return_exceptions=True
+            )
+            all_results.extend(
+                r for r in batch_results if r is not None and not isinstance(r, Exception)
+            )
+
+        # Fetch SPY benchmark for RS computation
+        spy_close = await _get_spy_close()
+
+        for ticker, hist in all_results:
+            try:
+                if hist is None or hist.empty or len(hist) < 60:
                     continue
+
                 c_col = "Close" if "Close" in hist.columns else "close"
                 v_col = "Volume" if "Volume" in hist.columns else "volume"
                 close = hist[c_col].values.astype(float)
                 volume = hist[v_col].values.astype(float)
                 n = len(close)
-                ii = n - 1
+                i = n - 1  # latest bar
+
+                if n < 60:
+                    continue
+
+                # ── Compute indicators (causal, no look-ahead) ──
                 _ind = _compute_indicators(close, volume)
                 sma20 = _ind["sma20"]
                 sma50 = _ind["sma50"]
                 sma200 = _ind["sma200"]
-                rsi_v = _ind["rsi"]
-                vol_ratio_v = _ind["vol_ratio"]
-                atr_pct_v = _ind["atr_pct"]
-                cur_atr = max(float(atr_pct_v[ii]), 0.005)
-                trending = bool(close[ii] > sma50[ii] and sma50[ii] > sma200[ii])
+                rsi = _ind["rsi"]
+                vol_ratio = _ind["vol_ratio"]
+                atr_pct = _ind["atr_pct"]
+                cur_atr = max(float(atr_pct[i]), 0.005)
 
-                # ── Phase 9: Pre-compute for fallback path ──
-                _fb_structure = {}
-                _fb_entry_qual = {}
-                _fb_earnings = {}
-                _fb_fundamentals = {}
-                if _P9_ENGINES:
-                    try:
-                        h_col = "High" if "High" in hist.columns else "high"
-                        l_col = "Low" if "Low" in hist.columns else "low"
-                        _hi = hist[h_col].values.astype(float)
-                        _lo = hist[l_col].values.astype(float)
-                        _sd = StructureDetector()
-                        _sr = _sd.analyze(close, _hi, _lo, volume)
-                        _fb_structure = _sr.to_dict()
-                    except Exception as _e9:
-                        logger.debug("[Phase9-fb] structure: %s", _e9)
-                    try:
-                        _fb_earnings = get_earnings_info(ticker)
-                    except Exception as _e9:
-                        logger.debug("[Phase9-fb] earnings: %s", _e9)
-                    try:
-                        _fd = get_fundamentals(ticker)
-                        _fb_fundamentals = {
-                            "quality": _fd.get("quality_score"),
-                            "pe": _fd.get("valuation", {}).get("pe_trailing"),
-                            "roe": _fd.get("profitability", {}).get("roe"),
-                            "rev_growth": _fd.get("growth", {}).get("revenue_growth"),
-                            "moat": _fd.get("moat_indicators", {}).get(
-                                "has_moat", False
-                            ),
-                        }
-                    except Exception as _e9:
-                        logger.debug("[Phase9-fb] fundamentals: %s", _e9)
+                trending = bool(close[i] > sma50[i] and sma50[i] > sma200[i])
 
-                conf = _compute_4layer_confidence(
-                    close,
-                    sma20,
-                    sma50,
-                    sma200,
-                    rsi_v,
-                    atr_pct_v,
-                    vol_ratio_v,
-                    ii,
-                    volume,
-                    trending,
-                    structure_result=_fb_structure,
-                    entry_quality_result=_fb_entry_qual,
-                    earnings_info=_fb_earnings,
-                    fundamentals_info=_fb_fundamentals,
-                    regime_label="UPTREND" if trending else "SIDEWAYS",
-                    ticker_sector=_TICKER_SECTOR.get(ticker, "unknown"),
+                # ── RS vs SPY ──
+                rs_info = (
+                    _compute_rs_vs_benchmark(close, spy_close)
+                    if spy_close is not None
+                    else {
+                        "rs_composite": 100.0,
+                        "rs_1m": 100.0,
+                        "rs_3m": 100.0,
+                        "rs_6m": 100.0,
+                        "rs_slope": 0.0,
+                        "rs_status": "NEUTRAL",
+                    }
                 )
-                score = round(conf["composite"] / 10, 1)
-                entry_price = round(float(close[ii]), 2)
-                stop_price = round(entry_price * (1 - cur_atr * 2), 2)
-                target_price = round(entry_price * 1.05, 2)
-                risk = entry_price - stop_price
-                reward = target_price - entry_price
-                rr = round(reward / risk, 1) if risk > 0 else 0
 
-                _fallback.append(
-                    (
-                        ticker,
+                # ── Check each strategy ──
+                _ST = SIGNAL_THRESHOLDS
+                strategies = {
+                    "momentum": bool(
+                        close[i] > sma20[i] > sma50[i]
+                        and rsi[i] > _ST.rsi_momentum_low
+                        and rsi[i] < _ST.rsi_momentum_high
+                        and vol_ratio[i] > _ST.volume_confirmation
+                    ),
+                    "breakout": (
+                        bool(
+                            close[i] > float(np.max(close[max(0, i - 20) : i]))
+                            and vol_ratio[i] > _ST.volume_surge_threshold
+                            and close[i] > sma20[i]
+                        )
+                        if i > 20
+                        else False
+                    ),
+                    "swing": (
+                        bool(
+                            rsi[i] < _ST.rsi_swing_entry
+                            and close[i] > sma50[i] * (1 - _ST.swing_sma_distance)
+                            and (close[i] > sma20[i] or close[i - 1] < sma20[i - 1])
+                            and close[i] > close[i - 1]
+                        )
+                        if i > 1
+                        else False
+                    ),
+                    "mean_reversion": bool(
+                        rsi[i] < _ST.rsi_oversold
+                        and close[i] < sma20[i] * (1 - _ST.mean_rev_sma_distance)
+                        and vol_ratio[i] > _ST.volume_confirmation
+                    ),
+                }
+
+                # Strategy params
+                strat_params = {
+                    "momentum": {
+                        "stop": cur_atr * _ST.stop_atr_multiplier_momentum,
+                        "target": _ST.target_trending if trending else _ST.target_normal,
+                    },
+                    "breakout": {
+                        "stop": cur_atr * _ST.stop_atr_multiplier_breakout,
+                        "target": (
+                            _ST.target_breakout_trending
+                            if trending
+                            else _ST.target_breakout_normal
+                        ),
+                    },
+                    "swing": {
+                        "stop": cur_atr * _ST.stop_atr_multiplier_swing,
+                        "target": (
+                            _ST.target_swing_trending
+                            if trending
+                            else _ST.target_swing_normal
+                        ),
+                    },
+                    "mean_reversion": {
+                        "stop": cur_atr * _ST.stop_atr_multiplier_mean_rev,
+                        "target": cur_atr * 3,
+                    },
+                }
+
+                for strat_name, triggered in strategies.items():
+                    strat_total[strat_name] += 1
+                    if not triggered:
+                        continue
+                    strat_wins[strat_name] += 1
+
+                    params = strat_params[strat_name]
+                    # Enter at next bar's close to avoid look-ahead bias
+                    entry_idx = min(i + 1, len(close) - 1)
+                    entry_price = round(float(close[entry_idx]), 2)
+                    stop_price = round(entry_price * (1 - params["stop"]), 2)
+                    target_price = round(entry_price * (1 + params["target"]), 2)
+                    risk = entry_price - stop_price
+                    reward = target_price - entry_price
+                    rr = round(reward / risk, 1) if risk > 0 else 0
+
+                    # ── Phase 9: Pre-compute engines before confidence ──
+                    _structure = {}
+                    _entry_qual = {}
+                    _earnings = {}
+                    _fundamentals_brief = {}
+                    _portfolio_check = {}
+                    _gate_passed = True
+                    if _P9_ENGINES:
+                        try:
+                            _pg = PortfolioGate()
+                            _gr = _pg.check(
+                                ticker=ticker,
+                                sector=_TICKER_SECTOR.get(ticker, "unknown"),
+                                atr_risk_pct=float(atr_pct[i]) * 100,
+                                current_positions=[
+                                    {
+                                        "ticker": r["ticker"],
+                                        "sector": r.get("sector", "unknown"),
+                                        "size_pct": 5.0,
+                                        "risk_pct": 1.0,
+                                    }
+                                    for r in recs
+                                ],
+                            )
+                            _portfolio_check = _gr.to_dict()
+                            if not _gr.allowed:
+                                _gate_passed = False
+                        except Exception as _e9:
+                            logger.debug("[Phase9] PortfolioGate: %s", _e9)
+                    if _P9_ENGINES:
+                        try:
+                            h_col = "High" if "High" in hist.columns else "high"
+                            l_col = "Low" if "Low" in hist.columns else "low"
+                            _hi = hist[h_col].values.astype(float)
+                            _lo = hist[l_col].values.astype(float)
+                            _sd = StructureDetector()
+                            _sr = _sd.analyze(close, _hi, _lo, volume)
+                            _structure = _sr.to_dict()
+                            # Use S/R for better stops/targets
+                            _sup = _sr.nearest_support
+                            _res = _sr.nearest_resistance
+                            if _sup and _sup < entry_price:
+                                stop_price = round(
+                                    max(stop_price, _sup * 0.995),
+                                    2,
+                                )
+                            if _res and _res > entry_price:
+                                target_price = round(
+                                    min(target_price, _res * 0.99),
+                                    2,
+                                )
+                            risk = entry_price - stop_price
+                            reward = target_price - entry_price
+                            rr = round(reward / risk, 1) if risk > 0 else 0
+                            _eq = EntryQualityEngine()
+                            _eqr = _eq.assess(
+                                close,
+                                _hi,
+                                _lo,
+                                volume,
+                                float(atr_pct[i]),
+                                entry_price,
+                                stop_price,
+                                target_price,
+                                _res,
+                                _sup,
+                                _TICKER_SECTOR.get(ticker, "unknown"),
+                            )
+                            _entry_qual = _eqr.to_dict()
+                        except Exception as _e9:
+                            logger.debug("[Phase9] StructureDetector/EntryQuality: %s", _e9)
+                        try:
+                            _earnings = get_earnings_info(ticker)
+                        except Exception as _e9:
+                            logger.debug("[Phase9] EarningsCalendar: %s", _e9)
+                        try:
+                            _fd = get_fundamentals(ticker)
+                            _fundamentals_brief = {
+                                "quality": _fd.get("quality_score", None),
+                                "pe": _fd.get("valuation", {}).get("pe_trailing"),
+                                "roe": _fd.get("profitability", {}).get("roe"),
+                                "rev_growth": _fd.get("growth", {}).get("revenue_growth"),
+                                "moat": _fd.get("moat_indicators", {}).get(
+                                    "has_moat", False
+                                ),
+                            }
+                        except Exception as _e9:
+                            logger.debug("[Phase9] FundamentalData: %s", _e9)
+
+                    # Confidence from 4-layer (now includes Phase 9 penalties)
+                    conf = _compute_4layer_confidence(
+                        close,
+                        sma20,
+                        sma50,
+                        sma200,
+                        rsi,
+                        atr_pct,
+                        vol_ratio,
+                        i,
+                        volume,
+                        trending,
+                        structure_result=_structure,
+                        entry_quality_result=_entry_qual,
+                        earnings_info=_earnings,
+                        fundamentals_info=_fundamentals_brief,
+                        regime_label="UPTREND" if trending else "SIDEWAYS",
+                        ticker_sector=_TICKER_SECTOR.get(ticker, "unknown"),
+                    )
+                    score = round(conf["composite"] / 10, 1)  # 0-10 scale
+                    if not _gate_passed:
+                        score = max(0, score - 2.0)
+
+                    recs.append(
                         {
                             "ticker": ticker,
                             "symbol": ticker,
                             "score": score,
                             "confidence": conf["composite"],
-                            "grade": conf["grade"],
+                            "grade": conf["grade"] if _gate_passed else "F",
                             "direction": "LONG",
-                            "strategy": "watch",
+                            "strategy": strat_name,
                             "entry_price": entry_price,
                             "target_price": target_price,
                             "stop_price": stop_price,
                             "risk_reward": rr,
                             "regime": "UPTREND" if trending else "SIDEWAYS",
-                            "rsi": round(float(rsi_v[ii]), 1),
-                            "vol_ratio": round(float(vol_ratio_v[ii]), 2),
-                            "atr_pct": round(float(atr_pct_v[ii]) * 100, 2),
-                            "calibrated_confidence": _enrich_calibration(
-                                conf, "momentum"
-                            ),
+                            "rsi": round(float(rsi[i]), 1),
+                            "vol_ratio": round(float(vol_ratio[i]), 2),
+                            "atr_pct": round(float(atr_pct[i]) * 100, 2),
+                            # ── Calibrated confidence (6-layer) ──
+                            "calibrated_confidence": _enrich_calibration(conf, strat_name),
+                            # ── Action state ──
                             "action_state": _compute_action_state(conf, rr, trending),
+                            # ── Trust strip ──
                             "trust_strip": {
-                                "mode": "WATCH",
+                                "mode": "SCAN",
                                 "source": "yfinance",
                                 "freshness": "delayed_15m",
                                 "sample_size": None,
-                                "assumptions": "no entry criteria met — ranked by technical strength",
+                                "assumptions": "gross returns, no commissions/slippage",
                                 "feature_stage": "BETA",
                             },
+                            # ── Contradiction / reasons against ──
                             "reasons_for": _build_reasons_for(
                                 close,
                                 sma20,
                                 sma50,
                                 sma200,
-                                rsi_v,
-                                vol_ratio_v,
-                                ii,
-                                "momentum",
+                                rsi,
+                                vol_ratio,
+                                i,
+                                strat_name,
                                 trending,
                             ),
                             "reasons_against": _build_reasons_against(
@@ -4338,78 +4173,269 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                                 sma20,
                                 sma50,
                                 sma200,
-                                rsi_v,
-                                vol_ratio_v,
-                                atr_pct_v,
-                                ii,
-                                "momentum",
+                                rsi,
+                                vol_ratio,
+                                atr_pct,
+                                i,
+                                strat_name,
                             ),
                             "invalidation": f"Close below ${stop_price}",
-                            "pre_mortem": "No strategy triggered — watch only",
-                            "why_wait": "Wait for a defined entry setup before committing capital",
-                            # Phase 9 fields (from pre-computed results)
-                            "structure": _fb_structure,
-                            "entry_quality": _fb_entry_qual,
-                            "earnings": _fb_earnings,
-                            "fundamentals": _fb_fundamentals,
-                            "portfolio_gate": {},
-                            "rs": (
-                                _compute_rs_vs_benchmark(close, spy_close)
-                                if spy_close is not None
-                                else {"rs_composite": 100.0, "rs_status": "NEUTRAL"}
+                            "pre_mortem": _build_pre_mortem(strat_name, trending),
+                            "why_wait": _build_why_wait(conf, rr),
+                            # ── Sprint 44: uncertainty + reliability ──
+                            "honest_confidence": _honest_confidence_label(
+                                conf["composite"]
                             ),
+                            "reliability": {
+                                "bucket": reliability_bucket(len(close) - 60),
+                                "sample_size": len(close) - 60,
+                                "note": reliability_note(len(close) - 60),
+                            },
+                            # ── Phase 9: new engines ──
+                            "structure": _structure,
+                            "entry_quality": _entry_qual,
+                            "earnings": _earnings,
+                            "fundamentals": _fundamentals_brief,
+                            "portfolio_gate": _portfolio_check,
+                            "rs": rs_info,
                             "sector": _TICKER_SECTOR.get(ticker, "unknown"),
-                        },
+                        }
                     )
-                )
-            except Exception as _e_fb:
-                logger.debug("[Scanner-fb] %s skip: %s", ticker, _e_fb)
+                    # ── Wire Phase 9 feedback engines ──
+                    if _P9_ENGINES:
+                        try:
+                            _bm = BreakoutMonitor()
+                            _bm.load()
+                            _bm.register_breakout(
+                                ticker=ticker,
+                                breakout_price=entry_price,
+                                pivot_price=stop_price,
+                            )
+                            _bm.save()
+                        except Exception as _e9:
+                            logger.debug("[Phase9] BreakoutMonitor: %s", _e9)
+                        try:
+                            get_journal().record(
+                                ticker=ticker,
+                                decision_tier=conf.get("grade", "C"),
+                                composite_score=conf["composite"] * 100,
+                                should_trade=score >= 7.0,
+                                regime="UPTREND" if trending else "SIDEWAYS",
+                                sector=_TICKER_SECTOR.get(ticker, "unknown"),
+                                entry_price=entry_price,
+                                stop_price=stop_price,
+                                target_price=target_price,
+                                extra={"strategy": strat_name, "rr": rr, "score": score},
+                            )
+                        except Exception as _e9:
+                            logger.debug("[Phase9] DecisionJournal: %s", _e9)
+            except Exception as exc:
+                logger.debug(f"[Scanner] {ticker} skip: {exc}")
                 continue
-        _fallback.sort(key=lambda x: x[1]["score"], reverse=True)
-        recs = [r for _, r in _fallback[:limit]]
-        logger.info(
-            f"[Scanner] no strategy triggered — returning top {len(recs)} by strength"
-        )
 
-    # Sort by score desc
-    recs.sort(key=lambda r: r["score"], reverse=True)
+        # ── Fallback: if no strategy triggered, rank all tickers by strength ──
+        if not recs:
+            _fallback: list[tuple[str, dict]] = []
+            for ticker in _SCAN_WATCHLIST:
+                try:
+                    hist = await mds.get_history(ticker, period="1y", interval="1d")
+                    if hist is None or hist.empty or len(hist) < 60:
+                        continue
+                    c_col = "Close" if "Close" in hist.columns else "close"
+                    v_col = "Volume" if "Volume" in hist.columns else "volume"
+                    close = hist[c_col].values.astype(float)
+                    volume = hist[v_col].values.astype(float)
+                    n = len(close)
+                    ii = n - 1
+                    _ind = _compute_indicators(close, volume)
+                    sma20 = _ind["sma20"]
+                    sma50 = _ind["sma50"]
+                    sma200 = _ind["sma200"]
+                    rsi_v = _ind["rsi"]
+                    vol_ratio_v = _ind["vol_ratio"]
+                    atr_pct_v = _ind["atr_pct"]
+                    cur_atr = max(float(atr_pct_v[ii]), 0.005)
+                    trending = bool(close[ii] > sma50[ii] and sma50[ii] > sma200[ii])
 
-    # ── Sector correlation guard (P3) ──
-    # Cap signals per sector cluster to prevent hidden concentration.
-    # Walk the sorted list top-down; skip if sector already at capacity.
-    sector_counts: dict[str, int] = {}
-    filtered_recs: list = []
-    demoted: list = []
-    for rec in recs:
-        sector = _TICKER_SECTOR.get(rec["ticker"], "Other")
-        rec["sector"] = sector
-        cur = sector_counts.get(sector, 0)
-        if cur < _MAX_SIGNALS_PER_SECTOR:
-            sector_counts[sector] = cur + 1
-            filtered_recs.append(rec)
-        else:
-            rec["demoted_reason"] = (
-                f"Sector cap ({sector}: {_MAX_SIGNALS_PER_SECTOR} max)"
+                    # ── Phase 9: Pre-compute for fallback path ──
+                    _fb_structure = {}
+                    _fb_entry_qual = {}
+                    _fb_earnings = {}
+                    _fb_fundamentals = {}
+                    if _P9_ENGINES:
+                        try:
+                            h_col = "High" if "High" in hist.columns else "high"
+                            l_col = "Low" if "Low" in hist.columns else "low"
+                            _hi = hist[h_col].values.astype(float)
+                            _lo = hist[l_col].values.astype(float)
+                            _sd = StructureDetector()
+                            _sr = _sd.analyze(close, _hi, _lo, volume)
+                            _fb_structure = _sr.to_dict()
+                        except Exception as _e9:
+                            logger.debug("[Phase9-fb] structure: %s", _e9)
+                        try:
+                            _fb_earnings = get_earnings_info(ticker)
+                        except Exception as _e9:
+                            logger.debug("[Phase9-fb] earnings: %s", _e9)
+                        try:
+                            _fd = get_fundamentals(ticker)
+                            _fb_fundamentals = {
+                                "quality": _fd.get("quality_score"),
+                                "pe": _fd.get("valuation", {}).get("pe_trailing"),
+                                "roe": _fd.get("profitability", {}).get("roe"),
+                                "rev_growth": _fd.get("growth", {}).get("revenue_growth"),
+                                "moat": _fd.get("moat_indicators", {}).get(
+                                    "has_moat", False
+                                ),
+                            }
+                        except Exception as _e9:
+                            logger.debug("[Phase9-fb] fundamentals: %s", _e9)
+
+                    conf = _compute_4layer_confidence(
+                        close,
+                        sma20,
+                        sma50,
+                        sma200,
+                        rsi_v,
+                        atr_pct_v,
+                        vol_ratio_v,
+                        ii,
+                        volume,
+                        trending,
+                        structure_result=_fb_structure,
+                        entry_quality_result=_fb_entry_qual,
+                        earnings_info=_fb_earnings,
+                        fundamentals_info=_fb_fundamentals,
+                        regime_label="UPTREND" if trending else "SIDEWAYS",
+                        ticker_sector=_TICKER_SECTOR.get(ticker, "unknown"),
+                    )
+                    score = round(conf["composite"] / 10, 1)
+                    entry_price = round(float(close[ii]), 2)
+                    stop_price = round(entry_price * (1 - cur_atr * 2), 2)
+                    target_price = round(entry_price * 1.05, 2)
+                    risk = entry_price - stop_price
+                    reward = target_price - entry_price
+                    rr = round(reward / risk, 1) if risk > 0 else 0
+
+                    _fallback.append(
+                        (
+                            ticker,
+                            {
+                                "ticker": ticker,
+                                "symbol": ticker,
+                                "score": score,
+                                "confidence": conf["composite"],
+                                "grade": conf["grade"],
+                                "direction": "LONG",
+                                "strategy": "watch",
+                                "entry_price": entry_price,
+                                "target_price": target_price,
+                                "stop_price": stop_price,
+                                "risk_reward": rr,
+                                "regime": "UPTREND" if trending else "SIDEWAYS",
+                                "rsi": round(float(rsi_v[ii]), 1),
+                                "vol_ratio": round(float(vol_ratio_v[ii]), 2),
+                                "atr_pct": round(float(atr_pct_v[ii]) * 100, 2),
+                                "calibrated_confidence": _enrich_calibration(
+                                    conf, "momentum"
+                                ),
+                                "action_state": _compute_action_state(conf, rr, trending),
+                                "trust_strip": {
+                                    "mode": "WATCH",
+                                    "source": "yfinance",
+                                    "freshness": "delayed_15m",
+                                    "sample_size": None,
+                                    "assumptions": "no entry criteria met — ranked by technical strength",
+                                    "feature_stage": "BETA",
+                                },
+                                "reasons_for": _build_reasons_for(
+                                    close,
+                                    sma20,
+                                    sma50,
+                                    sma200,
+                                    rsi_v,
+                                    vol_ratio_v,
+                                    ii,
+                                    "momentum",
+                                    trending,
+                                ),
+                                "reasons_against": _build_reasons_against(
+                                    close,
+                                    sma20,
+                                    sma50,
+                                    sma200,
+                                    rsi_v,
+                                    vol_ratio_v,
+                                    atr_pct_v,
+                                    ii,
+                                    "momentum",
+                                ),
+                                "invalidation": f"Close below ${stop_price}",
+                                "pre_mortem": "No strategy triggered — watch only",
+                                "why_wait": "Wait for a defined entry setup before committing capital",
+                                # Phase 9 fields (from pre-computed results)
+                                "structure": _fb_structure,
+                                "entry_quality": _fb_entry_qual,
+                                "earnings": _fb_earnings,
+                                "fundamentals": _fb_fundamentals,
+                                "portfolio_gate": {},
+                                "rs": (
+                                    _compute_rs_vs_benchmark(close, spy_close)
+                                    if spy_close is not None
+                                    else {"rs_composite": 100.0, "rs_status": "NEUTRAL"}
+                                ),
+                                "sector": _TICKER_SECTOR.get(ticker, "unknown"),
+                            },
+                        )
+                    )
+                except Exception as _e_fb:
+                    logger.debug("[Scanner-fb] %s skip: %s", ticker, _e_fb)
+                    continue
+            _fallback.sort(key=lambda x: x[1]["score"], reverse=True)
+            recs = [r for _, r in _fallback[:limit]]
+            logger.info(
+                f"[Scanner] no strategy triggered — returning top {len(recs)} by strength"
             )
-            demoted.append(rec)
-    recs = filtered_recs  # demoted signals dropped from active list
 
-    # Strategy scores (0-10 scale)
-    scores = {}
-    for s in strat_wins:
-        total = strat_total[s]
-        wins = strat_wins[s]
-        scores[s] = round((wins / total * 10) if total > 0 else 5.0, 1)
+        # Sort by score desc
+        recs.sort(key=lambda r: r["score"], reverse=True)
 
-    _scan_cache["recs"] = recs
-    _scan_cache["scores"] = scores
-    _scan_cache["ts"] = now
-    _scan_cache["demoted"] = demoted
-    logger.info(
-        f"[Scanner] scanned {len(_SCAN_WATCHLIST)} tickers → "
-        f"{len(recs)} signals ({len(demoted)} demoted by sector cap)"
-    )
-    return recs[:limit], scores
+        # ── Sector correlation guard (P3) ──
+        # Cap signals per sector cluster to prevent hidden concentration.
+        # Walk the sorted list top-down; skip if sector already at capacity.
+        sector_counts: dict[str, int] = {}
+        filtered_recs: list = []
+        demoted: list = []
+        for rec in recs:
+            sector = _TICKER_SECTOR.get(rec["ticker"], "Other")
+            rec["sector"] = sector
+            cur = sector_counts.get(sector, 0)
+            if cur < _MAX_SIGNALS_PER_SECTOR:
+                sector_counts[sector] = cur + 1
+                filtered_recs.append(rec)
+            else:
+                rec["demoted_reason"] = (
+                    f"Sector cap ({sector}: {_MAX_SIGNALS_PER_SECTOR} max)"
+                )
+                demoted.append(rec)
+        recs = filtered_recs  # demoted signals dropped from active list
+
+        # Strategy scores (0-10 scale)
+        scores = {}
+        for s in strat_wins:
+            total = strat_total[s]
+            wins = strat_wins[s]
+            scores[s] = round((wins / total * 10) if total > 0 else 5.0, 1)
+
+        _scan_cache["recs"] = recs
+        _scan_cache["scores"] = scores
+        _scan_cache["ts"] = now
+        _scan_cache["demoted"] = demoted
+        logger.info(
+            f"[Scanner] scanned {len(_SCAN_WATCHLIST)} tickers → "
+            f"{len(recs)} signals ({len(demoted)} demoted by sector cap)"
+        )
+        return recs[:limit], scores
 
 
 # ── P3: wire scan_signals onto app.state so routers never import from main ──
