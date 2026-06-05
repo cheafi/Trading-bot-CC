@@ -5,6 +5,7 @@ from __future__ import annotations
 from src.services.cost_adjusted_ranker import build_cost_rank_context, rank_single_row
 from src.services.signal_provenance import (
     SIGNAL_COST_RANK,
+    SIGNAL_INDEX_REGIME,
     SIGNAL_STRATEGY_ALLOCATION,
     SIGNAL_STRATEGY_CURVE,
     SIGNAL_STRATEGY_VALIDITY,
@@ -13,6 +14,7 @@ from src.services.signal_provenance import (
     quant_authority_can,
     quant_authority_cannot,
 )
+from src.services.index_regime import build_index_regime_summary
 from src.services.strategy_allocator import build_allocator_context
 from src.services.strategy_curve_health import build_strategy_curve_context
 from src.services.strategy_validity import build_strategy_validity_context
@@ -25,6 +27,7 @@ def test_quant_signal_types_never_may_deploy():
         SIGNAL_COST_RANK,
         SIGNAL_STRATEGY_ALLOCATION,
         SIGNAL_STRATEGY_VALIDITY,
+        SIGNAL_INDEX_REGIME,
     ):
         assert may_authorize_deploy(st) is False
         assert quant_authority_can(st, "TRADE") is False
@@ -42,6 +45,15 @@ def test_cost_rank_wait_blocked():
     assert payload["may_override_wait"] is False
     row = rank_single_row({"action": "TRADE", "raw_score": 9}, tradeability="WAIT")
     assert row["action"] != "TRADE"
+
+
+def test_index_regime_outputs_never_set_deploy_true():
+    summary = build_index_regime_summary(tradeability="TRADE", should_trade=True)
+    assert summary.get("may_authorize_deploy") is False
+    assert summary.get("may_override_wait") is False
+    for block_key in ("vol_regime", "breadth_regime", "factor_regime"):
+        block = summary.get(block_key) or {}
+        assert block.get("monitor_only") is True
 
 
 def test_allocator_and_validity_envelopes():

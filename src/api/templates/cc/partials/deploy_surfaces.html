@@ -37,6 +37,36 @@
         </div>
       </template>
 
+      <template x-if="tab==='today'&&today7.index_regime_summary">
+        <div data-cc="index-regime-strip" style="padding:4px 12px 0">
+          <div class="card card-p" style="padding:6px 10px;border-left:3px solid var(--amber)">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="pill text-[7px] pa" x-text="today7.regime_strip?.degraded?'MOCK/DEGRADED':'REGIME FILTER'"></span>
+              <span class="text-[9px] font-bold" style="color:var(--t2)" x-text="today7.regime_strip?.posture_label||today7.index_regime_summary?.posture_label||'Index regime'"></span>
+            </div>
+            <div class="text-[8px] mt-0.5" style="color:var(--t3);line-height:1.45" x-text="(window.CCHelpers&&CCHelpers.indexRegimeStripLine)?CCHelpers.indexRegimeStripLine(today7.index_regime_summary,today7.regime_strip):((today7.regime_strip&&today7.regime_strip.line)||today7.index_regime_summary?.strip_line||'')"></div>
+          </div>
+        </div>
+      </template>
+
+      <template x-if="tab==='today'&&(today7.regime_stack_summary||today7.ai_reason_codes?.length)">
+        <div data-cc="regime-stack-strip" style="padding:4px 12px 0">
+          <div class="card card-p" style="padding:6px 10px;border-left:3px solid var(--blue)">
+            <div class="flex flex-wrap items-center gap-2 mb-0.5">
+              <span class="pill text-[7px] pb">REGIME STACK</span>
+              <span class="pill text-[7px] pw">AI EXPLANATORY</span>
+            </div>
+            <div x-show="today7.regime_stack_summary" class="text-[8px] mb-1" style="color:var(--t3);line-height:1.45" x-text="(window.CCHelpers&&CCHelpers.regimeStackStripLine)?CCHelpers.regimeStackStripLine(today7.regime_stack_summary):''"></div>
+            <div x-show="today7.allocator_stance&&today7.allocator_stance.suggestion" class="text-[8px] mb-1" style="color:var(--t3)" x-text="(window.CCHelpers&&CCHelpers.allocatorStanceHint)?CCHelpers.allocatorStanceHint(today7.allocator_stance):''"></div>
+            <template x-if="today7.ai_reason_codes&&today7.ai_reason_codes.length">
+              <template x-for="rc in today7.ai_reason_codes.slice(0,3)" :key="'ai-rc-'+rc.code">
+                <div class="text-[8px]" style="color:var(--t2);line-height:1.4" x-text="'• '+(window.CCHelpers&&CCHelpers.aiReasonCodeLine?CCHelpers.aiReasonCodeLine(rc):rc.message)"></div>
+              </template>
+            </template>
+          </div>
+        </div>
+      </template>
+
       <!-- ── Ops / IB / Monitor strip (institutional cockpit) ── -->
       <div x-show="tab==='today'" data-cc="deploy-status-strip" style="padding:6px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <span class="pill text-[8px]" :class="ibkrStateFrom(today7.execution_readiness).level==='ready'?'pg':ibkrStateFrom(today7.execution_readiness).level==='blocked'?'pr':'pa'" x-text="'IBKR '+ibkrUnifiedShort(today7.execution_readiness)"></span>

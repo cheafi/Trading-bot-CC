@@ -1728,6 +1728,39 @@ async def _build_intel_payload(
         regime={"tradeability": getattr(regime, "tradeability", None), "should_trade": regime.should_trade},
     )
 
+    from src.services.index_relative_leadership import resolve_index_leadership
+
+    peer_ctx = peer_context if isinstance(peer_context, dict) else {}
+    index_relative_leadership = resolve_index_leadership(
+        ticker=ticker,
+        sector=str(dossier.get("sector") or peer_ctx.get("sector") or ""),
+        change_20d_pct=peer_ctx.get("return_20d_pct") or dossier.get("change_20d_pct"),
+        spy_20d_pct=peer_ctx.get("spy_return_20d_pct"),
+        qqq_20d_pct=peer_ctx.get("qqq_return_20d_pct"),
+        sector_20d_pct=peer_ctx.get("sector_return_20d_pct"),
+        degraded=bool(dossier.get("_partial")) or bool(module_errors),
+    )
+    from src.services.ai_intelligence import detect_contradictions
+
+    dossier_contradictions = detect_contradictions(
+        row={
+            "ticker": ticker,
+            "action": unified.get("label"),
+            "strategy": dossier.get("setup_type") or dossier.get("strategy"),
+        },
+        event_risks=[
+            str(c.get("headline") or c.get("title") or "")
+            for c in (catalysts.get("items") or [])[:3]
+            if isinstance(c, dict)
+        ],
+    )
+    if dossier_contradictions:
+        index_relative_leadership = {
+            **index_relative_leadership,
+            "ai_contradiction_hint": dossier_contradictions[0].get("hint"),
+            "ai_contradiction_hints": dossier_contradictions,
+        }
+
     partial = bool(dossier.get("_partial")) or bool(module_errors)
     size_info, sizing_blocked = _apply_sizing_authority(
         size_info,
@@ -1781,6 +1814,7 @@ async def _build_intel_payload(
             "naval_thinking": naval_thinking,
             "buffett_owner_view": buffett_owner_view,
             "principles_memo": principles_memo,
+            "index_relative_leadership": index_relative_leadership,
             "unified_decision": unified,
             "narrative": narrative,
             "pm_answer": pm_answer,

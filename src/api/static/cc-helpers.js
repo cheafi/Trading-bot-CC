@@ -539,6 +539,49 @@
 		return "pw"
 	}
 
+	function indexRegimeStripLine(summary, strip) {
+		var s = summary || {}
+		var st = strip || {}
+		var line = String(st.line || s.strip_line || s.summary || "").trim()
+		if (!line) return "Index regime unavailable — MOCK/DEGRADED"
+		if (s.degraded || st.degraded) return line.indexOf("MOCK") >= 0 ? line : "MOCK/DEGRADED · " + line
+		return line + " — monitor only, not deploy"
+	}
+
+	function regimeFitTag(row) {
+		var fit = String((row || {}).regime_fit || "").toLowerCase()
+		if (fit === "aligned") return "Regime aligned"
+		if (fit === "stressed_filter") return "Stressed filter"
+		if (fit === "wait_filter") return "WAIT filter"
+		if (fit === "lag_vs_index") return "Lags index"
+		return "Selective filter"
+	}
+
+	function regimeFitPillClass(row) {
+		var fit = String((row || {}).regime_fit || "").toLowerCase()
+		if (fit === "aligned") return "pg"
+		if (fit === "stressed_filter" || fit === "lag_vs_index") return "pr"
+		if (fit === "wait_filter") return "pa"
+		return "pw"
+	}
+
+	function indexLeadershipTag(row) {
+		var tag = String((row || {}).index_leadership || "").toLowerCase()
+		if (tag === "outperform") return "Leads index"
+		if (tag === "lag") return "Lags index"
+		if (tag === "inline") return "Inline index"
+		return "Index rel. unknown"
+	}
+
+	function indexLeadershipDossierLine(block) {
+		var b = block || {}
+		var summary = String(b.summary || "").trim()
+		if (b.degraded && summary.indexOf("MOCK") < 0) {
+			return (summary || "Relative leadership unavailable") + " — MOCK/DEGRADED · confirm-only"
+		}
+		return (summary || "Relative leadership — confirm-only") + " — not deploy authority"
+	}
+
 	function drawdownSizingLine(sizing) {
 		var s = sizing || {}
 		if (!s.sizing_mode || s.sizing_mode === "blocked") {
@@ -558,6 +601,35 @@
 		var s = route.strongest && route.strongest.name ? route.strongest.name : "—"
 		var w = route.weakest && route.weakest.name ? route.weakest.name : "—"
 		return "Quant hint: strongest sleeve " + s + " · weakest " + w + " (not a trade route)"
+	}
+
+	function aiReasonCodeLine(code) {
+		var c = code || {}
+		var msg = String(c.message || "").trim()
+		if (!msg) return "AI context — explanatory only, not deploy authority"
+		return msg + " — monitor only"
+	}
+
+	function regimeStackStripLine(summary) {
+		var s = summary || {}
+		var line = String(s.strip_line || "").trim()
+		if (!line) return "Regime stack unavailable — MOCK/DEGRADED"
+		if (s.degraded && line.indexOf("MOCK") < 0) return "MOCK/DEGRADED · " + line
+		return line + " — monitor only, not deploy"
+	}
+
+	function allocatorStanceHint(stance) {
+		var a = stance || {}
+		var sug = String(a.suggestion || "").trim()
+		if (sug) return sug
+		return quantSleeveHint(a)
+	}
+
+	function aiContradictionDossierLine(hint, degraded) {
+		var text = String(hint || "").trim()
+		if (!text) return ""
+		if (degraded && text.indexOf("MOCK") < 0) text = text + " — MOCK/DEGRADED"
+		return text + " — confirm-only, not deploy authority"
 	}
 
 	/** Safe operator actions while loading or on WAIT (no deploy authority). */
@@ -625,7 +697,16 @@
 		quantResearchBadge: quantResearchBadge,
 		costRankTag: costRankTag,
 		costRankPillClass: costRankPillClass,
+		indexRegimeStripLine: indexRegimeStripLine,
+		regimeFitTag: regimeFitTag,
+		regimeFitPillClass: regimeFitPillClass,
+		indexLeadershipTag: indexLeadershipTag,
+		indexLeadershipDossierLine: indexLeadershipDossierLine,
 		drawdownSizingLine: drawdownSizingLine,
 		quantSleeveHint: quantSleeveHint,
+		aiReasonCodeLine: aiReasonCodeLine,
+		regimeStackStripLine: regimeStackStripLine,
+		allocatorStanceHint: allocatorStanceHint,
+		aiContradictionDossierLine: aiContradictionDossierLine,
 	}
 })(typeof window !== "undefined" ? window : globalThis)

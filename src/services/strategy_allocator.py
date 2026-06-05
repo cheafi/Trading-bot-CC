@@ -82,6 +82,28 @@ def routing_suggestion(sleeves: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def downgrade_routing_suggestion(
+    *,
+    tradeability: str = "WAIT",
+    sleeves: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Sleeve routing downgrade-only — never upgrades deploy posture."""
+    ctx = build_allocator_context(sleeves=sleeves)
+    route = ctx.get("routing") or {}
+    tb = str(tradeability or "").upper()
+    if tb in ("NO_TRADE", "WAIT"):
+        route = {
+            **route,
+            "suggestion": "WAIT day — sleeve routing frozen (downgrade-only hint)",
+            "downgrade_only": True,
+        }
+    else:
+        route = {**route, "downgrade_only": True}
+    ctx["routing"] = route
+    ctx["downgrade_only"] = True
+    return ctx
+
+
 def build_allocator_context(
     *,
     sleeves: Optional[List[Dict[str, Any]]] = None,

@@ -20,8 +20,11 @@ from fastapi import APIRouter, Depends, Query
 from src.api.deps import sanitize_for_json, verify_api_key
 from src.services.cost_adjusted_ranker import build_cost_rank_context
 from src.services.drawdown_sizer import build_drawdown_sizer_context
+from src.services.execution_algo_selector import build_execution_algo_context
 from src.services.execution_analytics import build_execution_analytics
 from src.services.factor_exposure import build_factor_exposure
+from src.services.index_regime import build_index_regime_summary
+from src.services.ai_intelligence import build_ai_intelligence_for_today
 from src.services.strategy_allocator import build_allocator_context
 from src.services.strategy_curve_health import build_strategy_curve_context
 from src.services.strategy_validity import build_strategy_validity_context
@@ -106,5 +109,51 @@ async def quant_drawdown_sizing(
             current_dd_pct=current_dd_pct,
             dd_budget_pct=dd_budget_pct,
             research_only=research_only,
+        )
+    )
+
+
+@router.get("/index-regime")
+async def quant_index_regime(
+    trend: str = Query("SIDEWAYS", max_length=24),
+    vix: Optional[float] = Query(None, ge=0, le=100),
+    breadth: Optional[float] = Query(None, ge=0, le=100),
+    tradeability: str = Query("WAIT", max_length=24),
+    _=Depends(verify_api_key),
+):
+    return sanitize_for_json(
+        build_index_regime_summary(
+            trend=trend,
+            vix=vix,
+            breadth=breadth,
+            tradeability=tradeability,
+            should_trade=tradeability not in ("WAIT", "NO_TRADE"),
+            degraded=vix is None,
+        )
+    )
+
+
+@router.get("/execution-algo")
+async def quant_execution_algo(
+    ticker: str = Query("AAPL", min_length=1, max_length=12),
+    spread_bps: float = Query(8.0, ge=0, le=100),
+    _=Depends(verify_api_key),
+):
+    sym = _validate_ticker(ticker)
+    return sanitize_for_json(
+        build_execution_algo_context(ticker=sym, spread_bps=spread_bps)
+    )
+
+
+@router.get("/ai-intelligence")
+async def quant_ai_intelligence(
+    tradeability: str = Query("WAIT", max_length=24),
+    _=Depends(verify_api_key),
+):
+    return sanitize_for_json(
+        build_ai_intelligence_for_today(
+            market_regime={"tradeability": tradeability, "trend": "SIDEWAYS"},
+            scanner_degraded=True,
+            degraded=True,
         )
     )

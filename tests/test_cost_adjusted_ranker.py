@@ -4,10 +4,12 @@ from src.services.cost_adjusted_ranker import (
     LABEL_COST_TOO_HIGH,
     LABEL_MONITOR_ONLY,
     LABEL_NET_SURVIVES,
+    enrich_opportunity_rows,
     rank_opportunity_rows,
     rank_single_row,
     resolve_cost_rank_label,
 )
+from src.services.index_regime import build_index_regime_summary
 
 
 def test_wait_forces_monitor_only_label():
@@ -55,3 +57,18 @@ def test_sort_orders_net_survives_first():
         tradeability="SELECTIVE",
     )
     assert rows[0]["ticker"] == "B"
+
+
+def test_enrich_adds_regime_and_leadership_monitor_only():
+    regime = build_index_regime_summary(tradeability="WAIT", should_trade=False)
+    rows = enrich_opportunity_rows(
+        [{"ticker": "NVDA", "raw_score": 8.0, "vol_ratio": 1.2}],
+        index_regime=regime,
+        tradeability="WAIT",
+    )
+    row = rows[0]
+    assert row["regime_fit"] == "wait_filter"
+    assert row["regime_intel_monitor_only"] is True
+    assert row["may_authorize_deploy"] is False
+    assert "index_leadership" in row
+    assert row.get("net_edge_score") is not None

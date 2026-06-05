@@ -27,6 +27,9 @@ SIGNAL_EXECUTION_ANALYTICS = "execution_analytics"
 SIGNAL_STRATEGY_ALLOCATION = "strategy_allocation"
 SIGNAL_FACTOR_EXPOSURE = "factor_exposure"
 SIGNAL_STRATEGY_VALIDITY = "strategy_validity"
+SIGNAL_INDEX_REGIME = "index_regime"
+SIGNAL_EXECUTION_ALGO = "execution_algo_recommendation"
+SIGNAL_AI_INTELLIGENCE = "ai_intelligence"
 
 ALL_SIGNAL_TYPES = (
     SIGNAL_INSIDER_FORM4,
@@ -39,6 +42,9 @@ ALL_SIGNAL_TYPES = (
     SIGNAL_STRATEGY_ALLOCATION,
     SIGNAL_FACTOR_EXPOSURE,
     SIGNAL_STRATEGY_VALIDITY,
+    SIGNAL_INDEX_REGIME,
+    SIGNAL_EXECUTION_ALGO,
+    SIGNAL_AI_INTELLIGENCE,
 )
 
 # Max authority any single signal may confer (never deploy alone).
@@ -53,6 +59,9 @@ _SIGNAL_AUTHORITY_CEILING: Dict[str, str] = {
     SIGNAL_STRATEGY_ALLOCATION: AUTHORITY_RESEARCH,
     SIGNAL_FACTOR_EXPOSURE: AUTHORITY_RESEARCH,
     SIGNAL_STRATEGY_VALIDITY: AUTHORITY_RESEARCH,
+    SIGNAL_INDEX_REGIME: AUTHORITY_RESEARCH,
+    SIGNAL_EXECUTION_ALGO: AUTHORITY_OPS,
+    SIGNAL_AI_INTELLIGENCE: AUTHORITY_RESEARCH,
 }
 
 _SIGNAL_RULES: Dict[str, Dict[str, Any]] = {
@@ -127,6 +136,29 @@ _SIGNAL_RULES: Dict[str, Dict[str, Any]] = {
         "lag_disclosure": "OOS / decay flags — backtest ≠ live edge",
         "may_authorize_deploy": False,
         "may_upgrade_tradeability": False,
+        "monitor_only": True,
+    },
+    SIGNAL_INDEX_REGIME: {
+        "label": "Index regime filter",
+        "lag_disclosure": "VIX/breadth/factor proxies — regime filter only",
+        "may_authorize_deploy": False,
+        "may_upgrade_tradeability": False,
+        "downgrade_only": True,
+        "monitor_only": True,
+    },
+    SIGNAL_EXECUTION_ALGO: {
+        "label": "Execution algo recommendation",
+        "lag_disclosure": "IBKR-style hint — recommendation only, no routing",
+        "may_authorize_deploy": False,
+        "may_upgrade_tradeability": False,
+        "monitor_only": True,
+    },
+    SIGNAL_AI_INTELLIGENCE: {
+        "label": "AI intelligence (deterministic)",
+        "lag_disclosure": "Heuristic explainer — no LLM required for CI",
+        "may_authorize_deploy": False,
+        "may_upgrade_tradeability": False,
+        "downgrade_only": True,
         "monitor_only": True,
     },
 }

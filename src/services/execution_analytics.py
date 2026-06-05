@@ -18,12 +18,35 @@ STATUS_ACCEPTABLE = "acceptable"
 STATUS_DEGRADED = "degraded"
 STATUS_UNKNOWN = "unknown"
 
+SAMPLE_STATE_LIVE = "live_sample"
+SAMPLE_STATE_STUB = "stub_sample"
+SAMPLE_STATE_INSUFFICIENT = "insufficient_sample"
+
 STATUS_LABELS: Dict[str, str] = {
     STATUS_EXCELLENT: "Fill quality excellent — ops context",
     STATUS_ACCEPTABLE: "Acceptable slippage — monitor size",
     STATUS_DEGRADED: "Execution degraded — reduce urgency",
     STATUS_UNKNOWN: "Insufficient fill sample",
 }
+
+SAMPLE_STATE_LABELS: Dict[str, str] = {
+    SAMPLE_STATE_LIVE: "Live fill sample — ops context",
+    SAMPLE_STATE_STUB: "Stub sample — MOCK/DEGRADED",
+    SAMPLE_STATE_INSUFFICIENT: "Insufficient sample — monitor only",
+}
+
+
+def resolve_sample_state(
+    *,
+    orders_sampled: int,
+    ibkr_connected: bool,
+    degraded: bool,
+) -> str:
+    if orders_sampled < 5 or degraded:
+        return SAMPLE_STATE_INSUFFICIENT
+    if ibkr_connected and orders_sampled >= 5:
+        return SAMPLE_STATE_LIVE
+    return SAMPLE_STATE_STUB
 
 
 def _latency_bucket(ms: float) -> str:
@@ -68,8 +91,21 @@ def build_execution_analytics(
     if orders_sampled < 5 or degraded:
         status = STATUS_UNKNOWN
 
+    sample_state = resolve_sample_state(
+        orders_sampled=orders_sampled,
+        ibkr_connected=ibkr_connected,
+        degraded=degraded or orders_sampled < 5,
+    )
+
     body = {
         "orders_sampled": orders_sampled,
+        "sample_state": sample_state,
+        "sample_state_label": SAMPLE_STATE_LABELS.get(sample_state, ""),
+        "structure": {
+            "latency_bucket": _latency_bucket(median_latency_ms),
+            "slippage_band": "within band" if median_slippage_bps <= 12 else "elevated",
+            "fill_quality_status": status,
+        },
         "latency": {
             "median_ms": median_latency_ms,
             "p95_ms": p95_latency_ms,
@@ -95,6 +131,20 @@ def build_execution_analytics(
         degraded=degraded or not ibkr_connected,
         data_mode="ops_probe" if ibkr_connected else "research_only",
         extra=body,
+    )
+
+
+def build_empty_execution_analytics_state() -> Dict[str, Any]:
+    """Structure + empty sample — honest degraded when no fills."""
+    return build_execution_analytics(
+        orders_sampled=0,
+        median_latency_ms=0.0,
+        p95_latency_ms=0.0,
+        median_slippage_bps=0.0,
+        fill_rate_pct=0.0,
+        partial_fill_pct=0.0,
+        ibkr_connected=False,
+        degraded=True,
     )
 
 
