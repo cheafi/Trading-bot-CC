@@ -7,12 +7,16 @@ from pathlib import Path
 from src.services.ui_render_safety import (
     assert_template_render_safe,
     contains_js_leak_fragment,
+    find_alpine_html_break_leaks,
     format_visible_value,
     sanitize_visible_text,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = ROOT / "src" / "api" / "templates" / "index.html"
+DEPLOY_PARTIAL = (
+    ROOT / "src" / "api" / "templates" / "cc" / "partials" / "deploy_surfaces.html"
+)
 
 
 def test_index_html_passes_render_safe():
@@ -165,3 +169,57 @@ def test_index_html_playbook_empty_state_kinds():
     assert "kind:'FETCH_FAILED'" in raw
     assert "kind:'WAIT_DAY_OK'" in raw
     assert "kind:'WARMING'" in raw
+
+
+def test_index_html_no_portfolio_strip_js_leaks():
+    raw = INDEX_HTML.read_text(encoding="utf-8")
+    assert "+pf.summary.total_value.toLocaleString()" not in raw
+    assert "portfolioSummaryPositionsLabel()+' · $'+pf" not in raw
+    assert 'total_positions>0"' not in raw
+    assert "portfolioSummaryStripLine()" in raw
+    assert "portfolioSummaryStripVisible()" in raw
+    assert "riskAlertsStripVisible()" in raw
+
+
+def test_deploy_surfaces_partial_no_alpine_html_breaks():
+    hits = find_alpine_html_break_leaks(DEPLOY_PARTIAL)
+    assert hits == [], f"deploy_surfaces.html leaks: {hits}"
+    raw = DEPLOY_PARTIAL.read_text(encoding="utf-8")
+    assert "portfolioSummaryStripLine()" in raw
+    assert "riskAlertsStripLine()" in raw
+
+
+def test_index_html_single_cc_app_no_duplicate_blocks():
+    raw = INDEX_HTML.read_text(encoding="utf-8")
+    assert raw.count("function cc(){return{") == 1
+    assert raw.count('<!-- @cc-partial deploy_surfaces -->') == 1
+    assert raw.count('data-cc="playbook-surface"') == 1
+    assert raw.count("<!-- ══════ ALPINE JS ══════ -->") == 1
+    html_only = raw[raw.index("<body") : raw.index("<!-- ══════ ALPINE JS ══════ -->")]
+    assert "+pf.summary.total_value.toLocaleString()" not in html_only
+    assert "portfolioSummaryPositionsLabel()+' · $'+pf" not in html_only
+    assert html_only.count("Near-miss · upgrade layer") == 1
+    assert html_only.count('class="fade" data-cc="playbook-surface"') == 1
+
+
+def test_index_html_playbook_unlock_detail_uses_filter_funnel_when_watch_positive():
+    raw = INDEX_HTML.read_text(encoding="utf-8")
+    idx = raw.index("playbookUnlockConditionDetail(c){")
+    body = raw[idx : idx + 1200]
+    assert "filter_funnel" in body
+    assert "watch-qualified on fresh data (from filter_funnel" in body
+    assert "Number(watch)>0" in body
+
+
+def test_build_cc_template_check_passes():
+    import subprocess
+
+    root = INDEX_HTML.resolve().parents[3]
+    proc = subprocess.run(
+        ["node", "scripts/build-cc-template.mjs", "--check"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr or proc.stdout
