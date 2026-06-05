@@ -524,25 +524,68 @@ _OPPORTUNITY_MONITOR_TYPES = frozenset(
 )
 
 
+def _dd_pct_from_underwater_curve(underwater: List[float]) -> Optional[float]:
+    """Current book DD % from equity underwater series — omitted at peak (no fake DD)."""
+    if not underwater:
+        return None
+    cur = float(underwater[-1])
+    if cur >= 0:
+        return None
+    dd = abs(cur)
+    return round(dd, 2) if dd > 0 else None
+
+
+async def load_equity_dd_pct_for_hints(request) -> Optional[float]:
+    """
+    Book DD from portfolio equity underwater — same source as drawdown-sizing UI.
+
+    Omitted when no holdings or series unavailable (no synthetic DD).
+    """
+    if request is None:
+        return None
+    try:
+        from src.api.routers.portfolio import _user_portfolio
+        from src.services.portfolio_equity import build_portfolio_equity_series
+
+        holdings = _user_portfolio.get("holdings") or []
+        if not holdings:
+            return None
+        eq = await build_portfolio_equity_series(request, holdings, period="6mo")
+        if not eq.get("has_series"):
+            return None
+        return _dd_pct_from_underwater_curve(eq.get("underwater_curve") or [])
+    except Exception:
+        return None
+
+
 def resolve_book_dd_utilization_for_hints(
     *,
     fallback_or_stale: bool = False,
+    equity_dd_pct: Optional[float] = None,
 ) -> Optional[float]:
     """
     Live book drawdown utilization for quant cluster hints — monitor/research only.
 
-    Uses portfolio heat when positions exist; omitted on brief fallback or stale scanner.
+    Uses portfolio heat when populated; falls back to equity underwater (drawdown-sizing
+    path) when heat DD is empty. Omitted on brief fallback or stale scanner.
     """
     if fallback_or_stale:
         return None
+    current_dd = 0.0
     try:
-        from src.core.risk_limits import RISK
         from src.engines.portfolio_heat import get_portfolio_heat_engine
 
         snap = get_portfolio_heat_engine().snapshot()
         current_dd = float(getattr(snap, "max_drawdown_pct", 0) or 0)
-        if current_dd <= 0:
-            return None
+    except Exception:
+        current_dd = 0.0
+    if current_dd <= 0 and equity_dd_pct is not None and equity_dd_pct > 0:
+        current_dd = float(equity_dd_pct)
+    if current_dd <= 0:
+        return None
+    try:
+        from src.core.risk_limits import RISK
+
         budget_pct = float(RISK.max_drawdown_pct) * 100.0
         if budget_pct <= 0:
             return None

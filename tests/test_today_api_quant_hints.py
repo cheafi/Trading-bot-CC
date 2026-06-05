@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.services.today_insights import (
+    _dd_pct_from_underwater_curve,
     build_monitor_triggers,
     build_quant_cluster_hints,
     resolve_book_dd_utilization_for_hints,
@@ -21,7 +22,8 @@ def test_today_router_contract_quant_cluster_hints():
     src = DECISION_SRC.read_text(encoding="utf-8")
     assert '"quant_cluster_hints": quant_cluster_hints' in src
     assert "resolve_book_dd_utilization_for_hints" in src
-    assert "dd_utilization_pct=resolve_book_dd_utilization_for_hints" in src
+    assert "load_equity_dd_pct_for_hints" in src
+    assert "equity_dd_pct=equity_dd_pct" in src
 
 
 def test_wait_fixture_quant_cluster_hints_types():
@@ -34,6 +36,36 @@ def test_wait_fixture_quant_cluster_hints_types():
 
 def test_dd_utilization_omitted_when_fallback_stale():
     assert resolve_book_dd_utilization_for_hints(fallback_or_stale=True) is None
+    assert (
+        resolve_book_dd_utilization_for_hints(
+            fallback_or_stale=True,
+            equity_dd_pct=12.0,
+        )
+        is None
+    )
+
+
+def test_dd_pct_from_underwater_curve_omits_at_peak():
+    assert _dd_pct_from_underwater_curve([-4.0, -3.2, -2.1]) == 2.1
+    assert _dd_pct_from_underwater_curve([0.0, 0.5]) is None
+    assert _dd_pct_from_underwater_curve([]) is None
+
+
+def test_dd_utilization_equity_fallback_when_heat_empty(monkeypatch):
+    class _Snap:
+        max_drawdown_pct = 0
+
+    class _Engine:
+        def snapshot(self):
+            return _Snap()
+
+    monkeypatch.setattr(
+        "src.engines.portfolio_heat.get_portfolio_heat_engine",
+        lambda: _Engine(),
+    )
+    util = resolve_book_dd_utilization_for_hints(equity_dd_pct=7.5)
+    assert util is not None
+    assert util > 0
 
 
 def test_quant_hints_blocked_dd_when_util_high():

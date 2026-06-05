@@ -506,6 +506,8 @@ async def today_summary(request: Request):
 
     from src.services.decision_truth_model import (
         _score as _fit_score,
+    )
+    from src.services.decision_truth_model import (
         build_avoid_grouped,
         build_bucket_quality_summary,
         build_honest_funnel,
@@ -803,11 +805,12 @@ async def today_summary(request: Request):
         build_no_setup_diagnosis,
         build_quant_cluster_hints,
         build_regime_wait_explanation,
-        resolve_book_dd_utilization_for_hints,
         build_sleeve_summary,
         build_todays_decision,
         build_unlock_deploy,
+        load_equity_dd_pct_for_hints,
         merge_brief_board_fallback,
+        resolve_book_dd_utilization_for_hints,
     )
 
     top5_tickers = {x["ticker"] for x in top5 if x.get("ticker")}
@@ -1009,12 +1012,16 @@ async def today_summary(request: Request):
     all_opps_for_action = apply_authority_to_rows(all_opps_for_action, decision_authority)
     near_miss = apply_authority_to_rows(near_miss, decision_authority)
 
+    equity_dd_pct = None
+    if not used_brief_fallback and not scanner_degraded:
+        equity_dd_pct = await load_equity_dd_pct_for_hints(request)
     quant_cluster_hints = build_quant_cluster_hints(
         tradeability=tradeability,
         deploy_qualified_count=execution_ready_count,
         best_net_score=best_net_edge_from_opportunities(all_opps_for_action),
         dd_utilization_pct=resolve_book_dd_utilization_for_hints(
             fallback_or_stale=used_brief_fallback or scanner_degraded,
+            equity_dd_pct=equity_dd_pct,
         ),
     )
     monitor_triggers = build_monitor_triggers(
@@ -1055,14 +1062,14 @@ async def today_summary(request: Request):
     )
 
     from src.services.anti_overtrading import restraint_from_today_context
-    from src.services.decision_hierarchy import hierarchy_for_dashboard
-    from src.services.passive_baseline import build_passive_baseline_for_today
-    from src.services.score_families import complexity_verdict
-    from src.services.crisis_regime import crisis_strip_for_today
     from src.services.buffett_judgment import buffett_clarity_strip_for_today
-    from src.services.index_fund_judgment import index_fund_posture_strip_for_today
+    from src.services.crisis_regime import crisis_strip_for_today
+    from src.services.decision_hierarchy import hierarchy_for_dashboard
     from src.services.decision_quality_naval import naval_clarity_strip_for_today
+    from src.services.index_fund_judgment import index_fund_posture_strip_for_today
+    from src.services.passive_baseline import build_passive_baseline_for_today
     from src.services.principles_engine import principles_posture_for_today
+    from src.services.score_families import complexity_verdict
     from src.services.surface_authority import authority_strip_for_today
 
     restraint = restraint_from_today_context(
@@ -1504,11 +1511,11 @@ async def signal_card(ticker: str, request: Request):
     - When does this setup fail?
     - Position size hint?
     """
+    from src.engines.conformal_predictor import ConformalPredictor
     from src.services.confidence import (
         compute_4layer_confidence as _compute_4layer_confidence,
     )
     from src.services.indicators import compute_indicators as _compute_indicators
-    from src.engines.conformal_predictor import ConformalPredictor
 
     ticker = ticker.upper().strip()
     mds = request.app.state.market_data
@@ -2016,7 +2023,11 @@ async def generate_today_ai_narrative(payload: dict):
     board_narrative = payload.get("narrative") or ""
 
     try:
-        from src.services.ai_service import AI_SETUP_HINT, build_stub_narrative, get_ai_service
+        from src.services.ai_service import (
+            AI_SETUP_HINT,
+            build_stub_narrative,
+            get_ai_service,
+        )
 
         ai = get_ai_service()
         try:
