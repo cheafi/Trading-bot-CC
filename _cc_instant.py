@@ -106,6 +106,9 @@ def _proxy_timeout(path: str) -> int:
             "/api/recommendations",
             "/api/v7/today",
             "/api/ops/cc-header",
+            "/api/ops/error-log",
+            "/api/ops/changelog",
+            "/api/ops/engine/status",
             "/api/v7/playbook/ranked",
             "/api/v7/flow-decision",
             "/api/v7/playbook/scanners",
@@ -134,6 +137,8 @@ def _proxy_timeout(path: str) -> int:
             "/api/v7/backtest-lab",
             "/api/fund-lab/live",
             "/api/v7/today/ai-narrative",
+            "/api/ops/status",
+            "/api/v7/ops-console",
         )
     ):
         return 90
@@ -909,6 +914,82 @@ def _stale_ops_console_bytes(reason: str) -> bytes:
     )
 
 
+def _stale_ops_error_log_bytes(reason: str) -> bytes:
+    """Session ring buffer lives in uvicorn — honest warming stub for Ops Error Log."""
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    entry = {
+        "id": "ops-warming",
+        "timestamp": now,
+        "severity": "warning",
+        "component": "ops",
+        "message": "Session error buffer not yet confirmed",
+        "detail": (
+            f"{reason}. The in-memory error log is owned by the full API process — "
+            "this panel cannot confirm whether errors were logged this session until "
+            "the backend is ready."
+        ),
+        "suggested_action": "Wait for /api/health mode=full, then click Refresh.",
+    }
+    return _encode_degraded(
+        {
+            "count": 1,
+            "total_buffered": 1,
+            "severity_filter": "all",
+            "include_stack": False,
+            "entries": [entry],
+            "session_confirmed": False,
+        },
+        reason=reason,
+    )
+
+
+def _stale_ops_changelog_bytes(reason: str) -> bytes:
+    """Disk changelog while uvicorn is still importing."""
+    from datetime import datetime, timezone
+
+    path = Path("data/changelog.json")
+    now = datetime.now(timezone.utc)
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise ValueError("changelog root must be object")
+        entries = raw.get("entries")
+        if not isinstance(entries, list):
+            entries = []
+        payload = {
+            "version": raw.get("version") or "—",
+            "updated": raw.get("updated") or now.strftime("%Y-%m-%d"),
+            "product": raw.get("product") or "CC — Clarity Console",
+            "source": "data/changelog.json",
+            "entries": entries,
+            "instant_degraded": True,
+            "degraded_reason": reason,
+        }
+        return _encode_degraded(payload, reason=reason)
+    except (OSError, json.JSONDecodeError, ValueError, TypeError):
+        return _encode_degraded(
+            {
+                "version": "—",
+                "updated": now.strftime("%Y-%m-%d"),
+                "product": "CC — Clarity Console",
+                "source": "instant-fallback",
+                "entries": [
+                    {
+                        "date": now.strftime("%Y-%m-%d"),
+                        "title": "CC platform",
+                        "summary": (
+                            f"{reason}. Changelog file unavailable — showing built-in fallback."
+                        ),
+                        "surfaces": ["Ops"],
+                    }
+                ],
+            },
+            reason=reason,
+        )
+
+
 def _stale_rs_decision_bytes(reason: str) -> bytes:
     from datetime import datetime, timezone
 
@@ -1589,6 +1670,10 @@ def _degraded_response(path_only: str, reason: str, full_path: str = "") -> byte
         return _stale_today_bytes(reason)
     if path_only == "/api/ops/cc-header":
         return _stale_cc_header_bytes()
+    if path_only == "/api/ops/error-log":
+        return _stale_ops_error_log_bytes(reason)
+    if path_only == "/api/ops/changelog":
+        return _stale_ops_changelog_bytes(reason)
     if path_only in (
         "/api/v7/playbook/ranked/snapshot",
         "/api/v7/playbook/ranked",
@@ -2013,7 +2098,10 @@ def _backend_healthy() -> bool:
             if resp.status != 200:
                 return False
             data = json.loads(resp.read().decode("utf-8"))
-        return data.get("status") == "ok" and bool(data.get("version"))
+        status = data.get("status")
+        if status not in ("ok", "healthy"):
+            return False
+        return bool(data.get("version")) or bool(data.get("components"))
     except Exception:
         return False
 

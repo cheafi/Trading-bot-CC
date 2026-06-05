@@ -6327,7 +6327,7 @@
           <div class="flex gap-2 mb-3">
             <div style="min-width:160px">
               <label class="text-[9px] font-bold uppercase mb-1 block" style="color:var(--t3)">Host / IP</label>
-              <input x-model="ibkr.host" type="text" placeholder="127.0.0.1" :disabled="ibkr.connected" style="font-size:12px;width:100%" />
+              <input x-model="ibkr.host" type="text" :placeholder="(window.CCHelpers&&CCHelpers.ibkrHostPlaceholder)?CCHelpers.ibkrHostPlaceholder(ibkr.docker):'127.0.0.1'" :disabled="ibkr.connected" style="font-size:12px;width:100%" />
             </div>
             <div class="flex-1">
               <label class="text-[9px] font-bold uppercase mb-1 block" style="color:var(--t3)">Mode</label>
@@ -6352,7 +6352,7 @@
               </div>
             </template>
             <template x-if="!ibkr.connected">
-              <div>Enter IB Gateway host (default <code>127.0.0.1</code>) and select mode. Paper port 7497 · Live port 7496.</div>
+              <div>Enter IB Gateway host (default <code x-text="(window.CCHelpers&&CCHelpers.ibkrHostPlaceholder)?CCHelpers.ibkrHostPlaceholder(ibkr.docker):'127.0.0.1'"></code>) and select mode. Paper port 7497 · Live port 7496.</div>
             </template>
             <template x-if="ibkr.connected">
               <div style="color:var(--green)">✅ Connected to <strong x-text="ibkr.host"></strong> — mode: <strong x-text="ibkr.mode"></strong></div>
@@ -6899,7 +6899,7 @@
           <div class="card card-p text-[10px]" style="border-left:3px solid var(--blue);background:rgba(59,130,246,.06)">
             <div class="font-bold mb-1" style="color:var(--t1)">IBKR session not active</div>
             <div class="text-[9px] mb-2" style="color:var(--t2)" x-text="opsConsole.data.ibkr.gateway_reachable?'Gateway signals present — confirm login on IBKR tab.':'No IB API session yet. Start IB Gateway/TWS, then Connect. Raw TCP probes are disabled (CC_SKIP_IB_INSYNC avoids log spam). '"></div>
-            <div class="text-[8px] mono mb-2" style="color:var(--t3)" x-text="'Host '+(opsConsole.data.ibkr.host||ibkr.host||'127.0.0.1')+':'+(opsConsole.data.ibkr.port||(ibkr.mode==='paper'?'7497':'4001'))+' · POST /api/ibkr/connect'"></div>
+            <div class="text-[8px] mono mb-2" style="color:var(--t3)" x-text="'Host '+(opsConsole.data.ibkr.host||ibkr.host||((window.CCHelpers&&CCHelpers.ibkrHostPlaceholder)?CCHelpers.ibkrHostPlaceholder(ibkr.docker):'127.0.0.1'))+':'+(opsConsole.data.ibkr.port||(ibkr.mode==='paper'?'7497':'4001'))+' · POST /api/ibkr/connect'"></div>
             <button type="button" @click="switchTab('ibkr')" class="btn-p text-[9px]">Open IBKR tab → Connect</button>
           </div>
         </template>
@@ -7640,7 +7640,7 @@
       leadersPanel:{loading:false,data:null,error:''},
       pmStrip:{funds:[],lastFetch:0},
       tradeIntel:{loading:false,data:null,error:'',confData:null,mistakesData:null,aiLoading:false,aiError:'',aiReview:null,selectedTradeKey:''},
-      ibkr:{connected:false,mode:'paper',host:'127.0.0.1',loading:false,pingResult:null,account:null,positions:[],readiness:null,diagnostics:null,health:null,health_label:'',session_usable:false,monitoring_only:false,openOrders:[],recentFills:[],portfolioCompare:{manual:0,broker:0,note:''},lastSyncedAt:null,orderPreview:null,orderForm:{symbol:'',secType:'STK',action:'BUY',qty:1,orderType:'MKT',limitPrice:'',stopPrice:'',tif:'DAY',useBracket:false,targetPrice:'',trail:false,trailKind:'percent',trailValue:''},orderResult:null,orderError:'',statusLoading:false,statusFetchError:'',lastRefresh:null,workingBracket:null,bracketArchive:[]},
+      ibkr:{connected:false,mode:'paper',host:'127.0.0.1',docker:false,loading:false,pingResult:null,account:null,positions:[],readiness:null,diagnostics:null,health:null,health_label:'',session_usable:false,monitoring_only:false,openOrders:[],recentFills:[],portfolioCompare:{manual:0,broker:0,note:''},lastSyncedAt:null,orderPreview:null,orderForm:{symbol:'',secType:'STK',action:'BUY',qty:1,orderType:'MKT',limitPrice:'',stopPrice:'',tif:'DAY',useBracket:false,targetPrice:'',trail:false,trailKind:'percent',trailValue:''},orderResult:null,orderError:'',statusLoading:false,statusFetchError:'',lastRefresh:null,workingBracket:null,bracketArchive:[]},
       ops:{running:false,cycle_count:0,signals_today:0,trades_today:0,circuit_breaker:false,circuit_breaker_reason:'',dry_run:true,components:{},engineStarting:false},
       opsPanel:'health',
       changelogPanel:{loading:false,loaded:false,error:'',timeout:false,version:'',product:'CC',entries:[]},
@@ -9163,10 +9163,10 @@
         this.ibkr.diagnosis=d.diagnosis||null;
         this.ibkr.gateway_reachable=!!d.gateway_reachable;
         this.ibkr.api_port_open=!!d.api_port_open;
-        if(d.host)this.ibkr.host=d.host;
-        if(d.docker&&this.ibkr.host==='127.0.0.1'&&d.diagnosis&&d.diagnosis.code==='wrong_host_docker'){
-          this.ibkr.host='host.docker.internal';
-        }
+        if(typeof d.docker==='boolean')this.ibkr.docker=!!d.docker;
+        this.ibkr.host=(window.CCHelpers&&CCHelpers.ibkrSyncHostFromStatus)
+          ?CCHelpers.ibkrSyncHostFromStatus(d.host||this.ibkr.host,!!d.docker)
+          :(d.host||this.ibkr.host);
         if(d.readiness&&d.readiness.portfolio_sync_reason){
           this.ibkr.portfolioCompare.note=d.readiness.portfolio_sync_reason;
         }
@@ -10728,7 +10728,10 @@
             this.cc_status.ibkr_monitoring=!!(ib.monitoring_only||ib.health&&ib.health.handoff_status==='monitoring_only');
             this.cc_status.ibkr_health_label=ib.health_label||(ib.diagnosis&&ib.diagnosis.label)||(ib.health&&ib.health.summary_label)||'';
             if(ib.diagnosis)this.ibkr.diagnosis=ib.diagnosis;
-            if(ib.host)this.ibkr.host=ib.host;
+            if(typeof ib.docker==='boolean')this.ibkr.docker=!!ib.docker;
+            this.ibkr.host=(window.CCHelpers&&CCHelpers.ibkrSyncHostFromStatus)
+              ?CCHelpers.ibkrSyncHostFromStatus(ib.host||this.ibkr.host,!!ib.docker)
+              :(ib.host||this.ibkr.host);
             this.ibkr.gateway_reachable=!!ib.gateway_reachable;
             this.ibkr.api_port_open=!!ib.api_port_open;
             this.ops.components=h.components||{};
@@ -10758,6 +10761,7 @@
           const r2=await fetch('/api/ibkr/status');
           if(r2.ok){
             const d2=await r2.json();
+            this.ibkrApplyStatusPayload(d2);
             this.cc_status.ibkr_connected=!!(d2.session_usable||d2.connected);
             this.cc_status.ibkr_mode=(d2.mode||'paper').toLowerCase();
             this.cc_status.ibkr_gateway=!!d2.gateway_reachable;

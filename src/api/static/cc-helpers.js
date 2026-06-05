@@ -373,6 +373,20 @@
 		return hint || "IBKR OFFLINE — start Gateway/TWS; Connect on IBKR tab when API port is reachable"
 	}
 
+	/** Resolve IBKR host for UI — loopback inside Docker maps to host.docker.internal. */
+	function ibkrSyncHostFromStatus(host, docker) {
+		var h = String(host || "").trim()
+		if (!h) h = docker ? "host.docker.internal" : "127.0.0.1"
+		if (docker && ["127.0.0.1", "localhost", "::1"].indexOf(h.toLowerCase()) >= 0) {
+			return "host.docker.internal"
+		}
+		return h
+	}
+
+	function ibkrHostPlaceholder(docker) {
+		return docker ? "host.docker.internal" : "127.0.0.1"
+	}
+
 	/** Mission panel — safe vs blocked unlock (no fake authority). */
 	function todayMissionSafeUnlockHint(opts) {
 		var o = opts || {}
@@ -680,6 +694,8 @@
 		staleRefreshRecoveryLine: staleRefreshRecoveryLine,
 		engineOffRecoveryLine: engineOffRecoveryLine,
 		ibkrLoginToReadyHint: ibkrLoginToReadyHint,
+		ibkrSyncHostFromStatus: ibkrSyncHostFromStatus,
+		ibkrHostPlaceholder: ibkrHostPlaceholder,
 		todayMissionSafeUnlockHint: todayMissionSafeUnlockHint,
 		soakConfirmationSelectors: soakConfirmationSelectors,
 		opportunityIntelligenceBadge: opportunityIntelligenceBadge,

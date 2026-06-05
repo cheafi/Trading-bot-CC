@@ -4642,12 +4642,14 @@ async def ops_status():
         if lc:
             last_cycle = str(lc)
 
-    # Component health
+    # Component health — cap broker probe so instant proxy does not 503 at 20s
     components = {}
     try:
         if engine:
-            hc = await engine.health_check()
+            hc = await asyncio.wait_for(engine.health_check(), timeout=5.0)
             components = hc.get("components", {})
+    except asyncio.TimeoutError:
+        logger.warning("[ops/status] engine health_check timed out after 5s")
     except Exception:
         pass
 

@@ -64,10 +64,20 @@ async def _provider_components(
     broker_ok = bool(settings.alpaca_api_key and settings.alpaca_secret_key)
     if engine:
         try:
-            hc = await engine.health_check()
+            import asyncio
+
+            hc = await asyncio.wait_for(engine.health_check(), timeout=5.0)
             broker_ok = broker_ok or bool((hc.get("components") or {}).get("broker"))
+        except asyncio.TimeoutError:
+            logger.debug("cc-header broker probe timed out")
         except Exception as exc:
             logger.debug("cc-header broker probe failed: %s", exc)
+    try:
+        ibkr_probe = get_ibkr_service().status()
+        if ibkr_probe.get("gateway_reachable") or ibkr_probe.get("session_usable") or ibkr_probe.get("connected"):
+            broker_ok = True
+    except Exception as exc:
+        logger.debug("cc-header ibkr broker probe failed: %s", exc)
     components["broker"] = broker_ok
 
     if engine:

@@ -417,6 +417,15 @@ def build_ops_operator_console(
         or ibkr.get("connected")
         or ibkr.get("broker_connected")
     )
+    regime_ms = (ops_status.get("latency") or {}).get("regime_ms", -1)
+    if regime_ms is not None and regime_ms >= 0:
+        components["regime_router"] = True
+    if gateway_ok or broker_connected:
+        components["broker"] = True
+    if freshness.get("worst_tier") == "FRESH" or any(
+        s.get("ok") for s in (freshness.get("streams") or [])
+    ):
+        components["market_data"] = True
     ibkr_health = ibkr.get("health") or {}
     account_api_ok = ibkr_health.get("account_status") == "ok" or bool(
         ibkr.get("account_loaded")
