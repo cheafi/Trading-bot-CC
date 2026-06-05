@@ -10,7 +10,6 @@ Transforms raw signals into decision-ready endpoints:
 
 import asyncio
 import logging
-import os
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -484,10 +483,7 @@ async def today_summary(request: Request):
     if universe == 0:
         universe = len(getattr(request.app.state, "scan_watchlist", []))
 
-    triggered = len(scanned)
-    high_score = len([s for s in scanned if s.get("score", 0) >= 6.0])
     actionable = len([s for s in scanned if s.get("score", 0) >= 7.0])
-    high_conv = len([s for s in scanned if s.get("score", 0) >= 8.0])
 
     # 5. Top 5 ranked — sector-adaptive pipeline
     # 5. Top 5 ranked — Expert Council pipeline
@@ -509,14 +505,17 @@ async def today_summary(request: Request):
     )
 
     from src.services.decision_truth_model import (
+        _score as _fit_score,
+    )
+    from src.services.decision_truth_model import (
         build_avoid_grouped,
         build_bucket_quality_summary,
         build_honest_funnel,
         build_three_layer_model,
         enrich_opportunity_row,
         is_execution_ready,
-        is_pilot_eligible,
         refine_action,
+        sector_rank_adjustment,
     )
 
     funnel = build_honest_funnel(
@@ -543,14 +542,8 @@ async def today_summary(request: Request):
     sector_laggards = market_pulse.get("sector_laggards") or []
 
     def _council_sort_key(cr: Any) -> tuple:
-        from src.services.decision_truth_model import (
-            _score as _fit_score,
-            sector_rank_adjustment,
-        )
-
         act = refine_action(cr)
         pr = cr.pipeline
-        sig = pr.signal
         adj_row = {
             "sector_type": pr.sector.sector_bucket.value,
             "leader": pr.sector.leader_status.value,
@@ -689,9 +682,6 @@ async def today_summary(request: Request):
     trade_count = sum(
         1 for cr in council_results if is_execution_ready(cr)
     )
-    pilot_count = sum(
-        1 for cr in council_results if refine_action(cr) == "PILOT" and is_pilot_eligible(cr)
-    )
 
     if not should_trade:
         narrative = (
@@ -808,15 +798,19 @@ async def today_summary(request: Request):
     now = datetime.now(timezone.utc)
 
     from src.services.today_insights import (
+        best_net_edge_from_opportunities,
         build_evidence_badges,
         build_monitor_triggers,
         build_near_miss_candidates,
         build_no_setup_diagnosis,
+        build_quant_cluster_hints,
         build_regime_wait_explanation,
         build_sleeve_summary,
         build_todays_decision,
         build_unlock_deploy,
+        load_equity_dd_pct_for_hints,
         merge_brief_board_fallback,
+        resolve_book_dd_utilization_for_hints,
     )
 
     top5_tickers = {x["ticker"] for x in top5 if x.get("ticker")}
@@ -855,13 +849,6 @@ async def today_summary(request: Request):
         should_trade=should_trade,
         vix=vix_val,
         breadth=breadth * 100 if breadth <= 1 else breadth,
-    )
-    monitor_triggers = build_monitor_triggers(
-        market_pulse=market_pulse,
-        near_miss=near_miss,
-        vix=vix_val,
-        breadth=breadth * 100 if breadth <= 1 else breadth,
-        tradeability=tradeability,
     )
     sleeve_summary: Dict[str, Any] = {"cards": [], "note": "lazy-load via /api/fund-lab/cards"}
     fund_cards: List[Dict[str, Any]] = []
@@ -1025,6 +1012,27 @@ async def today_summary(request: Request):
     all_opps_for_action = apply_authority_to_rows(all_opps_for_action, decision_authority)
     near_miss = apply_authority_to_rows(near_miss, decision_authority)
 
+    equity_dd_pct = None
+    if not used_brief_fallback and not scanner_degraded:
+        equity_dd_pct = await load_equity_dd_pct_for_hints(request)
+    quant_cluster_hints = build_quant_cluster_hints(
+        tradeability=tradeability,
+        deploy_qualified_count=execution_ready_count,
+        best_net_score=best_net_edge_from_opportunities(all_opps_for_action),
+        dd_utilization_pct=resolve_book_dd_utilization_for_hints(
+            fallback_or_stale=used_brief_fallback or scanner_degraded,
+            equity_dd_pct=equity_dd_pct,
+        ),
+    )
+    monitor_triggers = build_monitor_triggers(
+        market_pulse=market_pulse,
+        near_miss=near_miss,
+        vix=vix_val,
+        breadth=breadth * 100 if breadth <= 1 else breadth,
+        tradeability=tradeability,
+        quant_cluster_hints=quant_cluster_hints,
+    )
+
     todays_decision = build_todays_decision(
         tradeability=tradeability,
         should_trade=should_trade,
@@ -1054,14 +1062,14 @@ async def today_summary(request: Request):
     )
 
     from src.services.anti_overtrading import restraint_from_today_context
-    from src.services.decision_hierarchy import hierarchy_for_dashboard
-    from src.services.passive_baseline import build_passive_baseline_for_today
-    from src.services.score_families import complexity_verdict
-    from src.services.crisis_regime import crisis_strip_for_today
     from src.services.buffett_judgment import buffett_clarity_strip_for_today
-    from src.services.index_fund_judgment import index_fund_posture_strip_for_today
+    from src.services.crisis_regime import crisis_strip_for_today
+    from src.services.decision_hierarchy import hierarchy_for_dashboard
     from src.services.decision_quality_naval import naval_clarity_strip_for_today
+    from src.services.index_fund_judgment import index_fund_posture_strip_for_today
+    from src.services.passive_baseline import build_passive_baseline_for_today
     from src.services.principles_engine import principles_posture_for_today
+    from src.services.score_families import complexity_verdict
     from src.services.surface_authority import authority_strip_for_today
 
     restraint = restraint_from_today_context(
@@ -1228,6 +1236,7 @@ async def today_summary(request: Request):
         "unlock_deploy": unlock_deploy,
         "regime_wait_explanation": regime_wait_explanation,
         "monitor_triggers": monitor_triggers,
+        "quant_cluster_hints": quant_cluster_hints,
         "sleeve_summary": sleeve_summary,
         "execution_readiness": execution_readiness,
         "evidence_badges": build_evidence_badges(
@@ -1502,11 +1511,11 @@ async def signal_card(ticker: str, request: Request):
     - When does this setup fail?
     - Position size hint?
     """
+    from src.engines.conformal_predictor import ConformalPredictor
     from src.services.confidence import (
         compute_4layer_confidence as _compute_4layer_confidence,
     )
     from src.services.indicators import compute_indicators as _compute_indicators
-    from src.engines.conformal_predictor import ConformalPredictor
 
     ticker = ticker.upper().strip()
     mds = request.app.state.market_data
@@ -2014,7 +2023,11 @@ async def generate_today_ai_narrative(payload: dict):
     board_narrative = payload.get("narrative") or ""
 
     try:
-        from src.services.ai_service import AI_SETUP_HINT, build_stub_narrative, get_ai_service
+        from src.services.ai_service import (
+            AI_SETUP_HINT,
+            build_stub_narrative,
+            get_ai_service,
+        )
 
         ai = get_ai_service()
         try:

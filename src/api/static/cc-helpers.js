@@ -120,6 +120,67 @@
 	}
 
 	/** Clarifies monitor vs near-miss vs deploy — attention routing without tradability. */
+	function todayMissionQuantClusterLines(hints) {
+		var list = hints || []
+		var lines = []
+		for (var i = 0; i < list.length && lines.length < 3; i++) {
+			var h = list[i] || {}
+			var label = String(h.label || "").trim()
+			if (!label) label = String(h.cluster || "").trim()
+			var detail = String(h.detail || "").trim()
+			var line = label + (detail && detail.length <= 72 ? " — " + detail : " — monitor only, not deploy")
+			if (line && lines.indexOf(line) < 0) lines.push(line)
+		}
+		return lines
+	}
+
+	function todayBoardHeroSynthesisLine(opts) {
+		var o = opts || {}
+		if (!o.waitDay) return ""
+		var parts = []
+		var hints = o.quantClusterHints || []
+		if (hints.length) {
+			var h0 = hints[0] || {}
+			var label = String(h0.label || "").trim()
+			if (!label) label = String(h0.cluster || "").trim()
+			var detail = String(h0.detail || "").trim()
+			if (label) {
+				var qp = label
+				if (detail && detail.length <= 48) qp += " (" + detail + ")"
+				else if (detail) qp += " — monitor context"
+				parts.push(qp)
+			}
+		}
+		var diag = o.noSetupDiagnosis || {}
+		var blocker = String(diag.primary_blocker || diag.headline || "").trim()
+		if (blocker) parts.push(blocker)
+		if (!parts.length) return ""
+		return "Synthesis hint (monitor only): " + parts.join(" · ") + " — not deploy permission"
+	}
+
+	function todayExecutionReadinessDiagnostic(er) {
+		var e = er || {}
+		var sub = e.sub_status || {}
+		var gaps = []
+		if (sub.broker_transport !== "up") gaps.push("transport down")
+		if (sub.session_auth !== "active") gaps.push("session inactive")
+		if (sub.engine !== "on") gaps.push("engine off")
+		if (sub.handoff_readiness !== "ready") gaps.push("handoff blocked")
+		if (sub.bracket_readiness !== "ready") gaps.push("bracket draft")
+		if (e.circuit_breaker) gaps.push("breaker on")
+		if (!gaps.length && e.trade_handoff_ready) return ""
+		var reasons = (e.degraded_reasons || []).slice(0, 2)
+		var base =
+			"Exec diagnostic: " + (gaps.length ? gaps.join(" · ") : String(e.readiness_label || "path incomplete"))
+		if (reasons.length) base += " — " + reasons.join("; ")
+		return base + " (not deploy authority)"
+	}
+
+	function playbookStrategyDecayLine(row) {
+		var r = row || {}
+		return String(r.strategy_decay_line || "").trim()
+	}
+
 	function todayMissionMonitorsColumnHint(opts) {
 		var o = opts || {}
 		var wq = Number(o.watchQualified)
@@ -335,6 +396,8 @@
 			deployStrip: '[data-cc="deploy-status-strip"]',
 			missionPanel: '[data-cc="today-mission-panel"]',
 			playbookSurface: '[data-cc="playbook-surface"]',
+			playbookCostRankPill: '[data-cc="playbook-cost-rank-pill"]',
+			playbookStrategyDecayLine: '[data-cc="playbook-strategy-decay-line"]',
 			marketStale: '[data-cc="market-strip-stale"]',
 			opsRunbook: '[data-cc="ops-recovery-runbook"]',
 			dataContractStrip: '[data-cc="data-contract-strip"]',
@@ -528,6 +591,10 @@
 		loadingSessionRecoveryLine: loadingSessionRecoveryLine,
 		instantDegradedBannerHint: instantDegradedBannerHint,
 		todayMissionMonitorsLabel: todayMissionMonitorsLabel,
+		todayMissionQuantClusterLines: todayMissionQuantClusterLines,
+		todayBoardHeroSynthesisLine: todayBoardHeroSynthesisLine,
+		todayExecutionReadinessDiagnostic: todayExecutionReadinessDiagnostic,
+		playbookStrategyDecayLine: playbookStrategyDecayLine,
 		todayMissionMonitorsColumnHint: todayMissionMonitorsColumnHint,
 		playbookWhatToMonitorLine: playbookWhatToMonitorLine,
 		todayMissionWaitSubtitle: todayMissionWaitSubtitle,

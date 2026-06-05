@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from src.services.cost_adjusted_edge import compute_net_edge, infer_burdens_from_row
+from src.services.strategy_validity import resolve_strategy_decay_line
 from src.services.signal_provenance import (
     SIGNAL_COST_RANK,
     build_provenance_envelope,
@@ -87,6 +88,9 @@ def rank_single_row(
     }
     if tb == "WAIT":
         out["action"] = row.get("action") if row.get("action") not in ("TRADE", "BUY", "PILOT") else "WATCH"
+    decay_line = resolve_strategy_decay_line(out)
+    if decay_line:
+        out["strategy_decay_line"] = decay_line
     return out
 
 

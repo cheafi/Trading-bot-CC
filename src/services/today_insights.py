@@ -368,6 +368,40 @@ def _timing_bucket(timing_conf: float, score: float) -> str:
     return "1-2w"
 
 
+def _near_miss_gate_distance(row: Dict[str, Any]) -> tuple:
+    """Sort key: fewer gaps first, then higher score (closest to deploy gate)."""
+    gaps = row.get("gaps") or []
+    return (len(gaps), -float(row.get("score") or 0), -float(row.get("final_conf") or 0))
+
+
+def best_net_edge_from_opportunities(
+    rows: Optional[List[Dict[str, Any]]],
+) -> Optional[float]:
+    """Best net edge after cost drag across opportunity rows — ranking humility only."""
+    from src.services.cost_adjusted_edge import compute_net_edge, infer_burdens_from_row
+
+    best: Optional[float] = None
+    for row in rows or []:
+        raw = row.get("raw_score")
+        if raw is None:
+            raw = row.get("score")
+        if raw is None:
+            continue
+        burdens = infer_burdens_from_row(row)
+        edge = compute_net_edge(
+            float(raw),
+            turnover_burden=burdens["turnover_burden"],
+            spread_burden=burdens["spread_burden"],
+            action=row.get("action"),
+            extended=bool(row.get("extended") or row.get("timing_extended")),
+            partial_data=bool(row.get("partial")),
+        )
+        net = float(edge["net_edge_score"])
+        if best is None or net > best:
+            best = net
+    return best
+
+
 def build_near_miss_candidates(
     council_results: List[Any],
     top5_tickers: Set[str],
@@ -468,7 +502,7 @@ def build_near_miss_candidates(
             )
         except Exception:
             continue
-    rows.sort(key=lambda x: (-x["score"], -x["final_conf"]))
+    rows.sort(key=_near_miss_gate_distance)
     return rows[:limit]
 
 
@@ -488,6 +522,87 @@ _OPPORTUNITY_MONITOR_TYPES = frozenset(
         "cluster_blocked_dd",
     }
 )
+
+
+def _dd_pct_from_underwater_curve(underwater: List[float]) -> Optional[float]:
+    """Current book DD % from equity underwater series — omitted at peak (no fake DD)."""
+    if not underwater:
+        return None
+    cur = float(underwater[-1])
+    if cur >= 0:
+        return None
+    dd = abs(cur)
+    return round(dd, 2) if dd > 0 else None
+
+
+async def load_equity_dd_pct_for_hints(request) -> Optional[float]:
+    """
+    Book DD from portfolio equity underwater — same source as drawdown-sizing UI.
+
+    Omitted when no holdings or series unavailable (no synthetic DD).
+    """
+    if request is None:
+        return None
+    try:
+        from src.api.routers.portfolio import _user_portfolio
+        from src.services.portfolio_equity import build_portfolio_equity_series
+
+        holdings = _user_portfolio.get("holdings") or []
+        if not holdings:
+            return None
+        eq = await build_portfolio_equity_series(request, holdings, period="6mo")
+        if not eq.get("has_series"):
+            return None
+        return _dd_pct_from_underwater_curve(eq.get("underwater_curve") or [])
+    except Exception:
+        return None
+
+
+def resolve_book_dd_utilization_for_hints(
+    *,
+    fallback_or_stale: bool = False,
+    equity_dd_pct: Optional[float] = None,
+) -> Optional[float]:
+    """
+    Live book drawdown utilization for quant cluster hints — monitor/research only.
+
+    Uses portfolio heat when populated; falls back to equity underwater (drawdown-sizing
+    path) when heat DD is empty. Omitted on brief fallback or stale scanner.
+    """
+    if fallback_or_stale:
+        return None
+    current_dd = 0.0
+    try:
+        from src.engines.portfolio_heat import get_portfolio_heat_engine
+
+        snap = get_portfolio_heat_engine().snapshot()
+        current_dd = float(getattr(snap, "max_drawdown_pct", 0) or 0)
+    except Exception:
+        current_dd = 0.0
+    if current_dd <= 0 and equity_dd_pct is not None and equity_dd_pct > 0:
+        current_dd = float(equity_dd_pct)
+    if current_dd <= 0:
+        return None
+    try:
+        from src.core.risk_limits import RISK
+
+        budget_pct = float(RISK.max_drawdown_pct) * 100.0
+        if budget_pct <= 0:
+            return None
+        return round(min(100.0, max(0.0, current_dd / budget_pct * 100.0)), 1)
+    except Exception:
+        return None
+
+
+def _near_miss_monitor_gap_suffix(row: Dict[str, Any]) -> str:
+    """Backend monitor copy when near-miss gate gaps tighten — not deploy authority."""
+    gaps = row.get("gaps") or []
+    gap_n = len(gaps)
+    if gap_n == 0:
+        return "at gate — confirm volume; not deploy"
+    if gap_n == 1:
+        return f"closest upgrade — 1 gate gap ({gaps[0]})"
+    return f"{gap_n} gate gaps — monitor upgrade, not deploy"
 
 
 def build_quant_cluster_hints(
@@ -583,12 +698,22 @@ def build_monitor_triggers(
     triggers: List[Dict[str, Any]] = []
     if near_miss:
         nm = near_miss[0]
+        detail = str(nm.get("upgrade_trigger") or "").strip()
+        dist = str(nm.get("distance_to_pass") or "").strip()
+        if dist:
+            detail = f"{detail} · {dist}" if detail else dist
+        if not detail:
+            detail = str(nm.get("whats_missing") or "Monitor upgrade — not deploy")
+        gap_suffix = _near_miss_monitor_gap_suffix(nm)
+        if gap_suffix:
+            detail = f"{detail} · {gap_suffix}" if detail else gap_suffix
         triggers.append(
             {
                 "type": "near_miss",
                 "label": f"Upgrade watch: {nm['ticker']}",
-                "detail": nm.get("upgrade_trigger", ""),
+                "detail": detail,
                 "horizon": "intraday",
+                "monitoring_only": True,
             }
         )
     leaders = (market_pulse or {}).get("sector_leaders") or []

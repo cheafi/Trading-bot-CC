@@ -672,26 +672,6 @@ def playbook_what_to_monitor_line(
     top_symbol: str = "",
     near_miss_count: int = 0,
 ) -> str:
-    """Playbook WAIT day — operator monitor routing without deploy authority."""
-    if not wait_day:
-        return ""
-    sym = str(top_symbol or "").strip().upper()
-    nm = int(near_miss_count or 0)
-    parts: list[str] = []
-    if sym:
-        parts.append(f"{sym} upgrade triggers")
-    if nm:
-        parts.append(f"{nm} near-miss row{'s' if nm != 1 else ''}")
-    parts.append("deploy unlock checklist below")
-    return "Monitor only — " + " · ".join(parts) + " · no deploy authority"
-
-
-def playbook_what_to_monitor_line(
-    *,
-    wait_day: bool = False,
-    top_symbol: str = "",
-    near_miss_count: int = 0,
-) -> str:
     """Playbook WAIT-day monitor guidance — operator-facing, no deploy authority."""
     if not wait_day:
         return ""
@@ -949,6 +929,96 @@ def describe_opportunity_monitor_trigger(trigger_type: str) -> str:
         key,
         "Opportunity context — monitoring only, not deploy authority",
     )
+
+
+def today_mission_quant_cluster_lines(
+    hints: Optional[list] = None,
+    *,
+    limit: int = 3,
+) -> list[str]:
+    """Short monitor-only lines from /api/v7/today quant_cluster_hints — no deploy authority."""
+    lines: list[str] = []
+    for hint in list(hints or [])[:limit]:
+        if not isinstance(hint, dict):
+            continue
+        label = str(hint.get("label") or "").strip()
+        if not label:
+            cluster = str(hint.get("cluster") or "").strip()
+            label = QUANT_CLUSTER_MONITOR_LABELS.get(cluster, cluster)
+        detail = str(hint.get("detail") or "").strip()
+        if detail and len(detail) <= 72:
+            line = f"{label} — {detail}"
+        else:
+            line = f"{label} — monitor only, not deploy"
+        if line and line not in lines:
+            lines.append(line)
+    return lines
+
+
+def today_board_hero_synthesis_line(
+    *,
+    wait_day: bool = False,
+    quant_cluster_hints: Optional[list] = None,
+    no_setup_diagnosis: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Board hero one-liner for WAIT/monitor context — synthesis only, not deploy permission."""
+    if not wait_day:
+        return ""
+    parts: list[str] = []
+    hints = list(quant_cluster_hints or [])
+    if hints and isinstance(hints[0], dict):
+        h0 = hints[0]
+        label = str(h0.get("label") or "").strip()
+        if not label:
+            cluster = str(h0.get("cluster") or "").strip()
+            label = QUANT_CLUSTER_MONITOR_LABELS.get(cluster, cluster)
+        detail = str(h0.get("detail") or "").strip()
+        if label:
+            quant_part = label
+            if detail and len(detail) <= 48:
+                quant_part += f" ({detail})"
+            elif detail:
+                quant_part += " — monitor context"
+            parts.append(quant_part)
+    diag = no_setup_diagnosis if isinstance(no_setup_diagnosis, dict) else {}
+    blocker = str(diag.get("primary_blocker") or diag.get("headline") or "").strip()
+    if blocker:
+        parts.append(blocker)
+    if not parts:
+        return ""
+    return (
+        "Synthesis hint (monitor only): "
+        + " · ".join(parts)
+        + " — not deploy permission"
+    )
+
+
+def today_execution_readiness_diagnostic(
+    execution_readiness: Optional[Dict[str, Any]] = None,
+) -> str:
+    """One-line exec path gap summary for Today strip — diagnostic only."""
+    er = execution_readiness if isinstance(execution_readiness, dict) else {}
+    sub = er.get("sub_status") if isinstance(er.get("sub_status"), dict) else {}
+    gaps: list[str] = []
+    if sub.get("broker_transport") != "up":
+        gaps.append("transport down")
+    if sub.get("session_auth") != "active":
+        gaps.append("session inactive")
+    if sub.get("engine") != "on":
+        gaps.append("engine off")
+    if sub.get("handoff_readiness") != "ready":
+        gaps.append("handoff blocked")
+    if sub.get("bracket_readiness") != "ready":
+        gaps.append("bracket draft")
+    if er.get("circuit_breaker"):
+        gaps.append("breaker on")
+    if not gaps and er.get("trade_handoff_ready"):
+        return ""
+    reasons = [str(r).strip() for r in (er.get("degraded_reasons") or [])[:2] if r]
+    base = "Exec diagnostic: " + (" · ".join(gaps) if gaps else (er.get("readiness_label") or "path incomplete"))
+    if reasons:
+        base += " — " + "; ".join(reasons)
+    return base + " (not deploy authority)"
 
 
 DOSSIER_CONFIRM_ONLY_SIZING = "No sizing guidance in confirm-only mode"
