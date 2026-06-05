@@ -15,6 +15,11 @@ from src.services.signal_provenance import (
     build_provenance_envelope,
 )
 
+try:
+    from src.services.index_relative_leadership import leadership_from_row
+except ImportError:
+    leadership_from_row = None  # type: ignore[misc, assignment]
+
 LABEL_NET_SURVIVES = "net_survives"
 LABEL_COST_TOO_HIGH = "cost_too_high"
 LABEL_MONITOR_ONLY = "monitor_only"
@@ -92,6 +97,86 @@ def rank_single_row(
     if decay_line:
         out["strategy_decay_line"] = decay_line
     return out
+
+
+def resolve_regime_fit_label(
+    row: Dict[str, Any],
+    *,
+    index_regime: Optional[Dict[str, Any]] = None,
+    tradeability: str = "",
+) -> str:
+    """Regime fit pill for playbook — filter hint, not deploy gate."""
+    posture = str((index_regime or {}).get("posture") or "").lower()
+    tb = str(tradeability or row.get("tradeability") or "").upper()
+    leadership = str(row.get("index_leadership") or "")
+    if tb in ("NO_TRADE", "WAIT"):
+        return "wait_filter"
+    if posture in ("stressed", "no_trade_pressure"):
+        return "stressed_filter"
+    if leadership == "lag":
+        return "lag_vs_index"
+    if leadership == "outperform" and posture in ("risk_on", "normal"):
+        return "aligned"
+    return "selective_filter"
+
+
+def resolve_execution_fit_label(row: Dict[str, Any]) -> str:
+    vol_q = str(row.get("vol_quality") or "").upper()
+    extended = bool(row.get("extended") or row.get("timing_extended"))
+    if vol_q == "LOW" or extended:
+        return "caution"
+    if row.get("execution_ready"):
+        return "ready_hint"
+    return "monitor"
+
+
+def resolve_liquidity_fit_label(row: Dict[str, Any]) -> str:
+    vol_r = row.get("vol_ratio")
+    try:
+        vr = float(vol_r) if vol_r is not None else 1.0
+    except (TypeError, ValueError):
+        vr = 1.0
+    if vr < 0.5:
+        return "thin"
+    if vr > 2.5:
+        return "elevated_turnover"
+    return "ok"
+
+
+def enrich_row_with_index_intel(
+    row: Dict[str, Any],
+    *,
+    index_regime: Optional[Dict[str, Any]] = None,
+    tradeability: str = "",
+) -> Dict[str, Any]:
+    """Attach regime/execution/liquidity fit + index leadership (monitor-only)."""
+    out = dict(row)
+    if leadership_from_row is not None:
+        lead = leadership_from_row(out, index_regime=index_regime)
+        out["index_leadership"] = lead.get("composite")
+        out["index_leadership_detail"] = lead
+    out["regime_fit"] = resolve_regime_fit_label(
+        out, index_regime=index_regime, tradeability=tradeability
+    )
+    out["execution_fit"] = resolve_execution_fit_label(out)
+    out["liquidity_fit"] = resolve_liquidity_fit_label(out)
+    out["regime_intel_monitor_only"] = True
+    out["may_authorize_deploy"] = False
+    return out
+
+
+def enrich_opportunity_rows(
+    rows: List[Dict[str, Any]],
+    *,
+    index_regime: Optional[Dict[str, Any]] = None,
+    tradeability: str = "",
+) -> List[Dict[str, Any]]:
+    """Rank + index intel enrichment for playbook rows."""
+    ranked = rank_opportunity_rows(rows, tradeability=tradeability)
+    return [
+        enrich_row_with_index_intel(r, index_regime=index_regime, tradeability=tradeability)
+        for r in ranked
+    ]
 
 
 def rank_opportunity_rows(

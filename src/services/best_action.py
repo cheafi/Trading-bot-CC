@@ -294,10 +294,21 @@ def enrich_ranked_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         exec_blocked = False
 
     try:
-        from src.services.cost_adjusted_ranker import rank_opportunity_rows
+        from src.services.cost_adjusted_ranker import enrich_opportunity_rows
+        from src.services.index_regime import build_index_regime_summary
 
-        opps = rank_opportunity_rows(opps, tradeability=tradeability_hint)
+        index_regime = build_index_regime_summary(
+            tradeability=tradeability_hint or "WAIT",
+            should_trade=tradeability_hint not in ("NO_TRADE", "WAIT"),
+            degraded=stale or "fallback" in source,
+        )
+        opps = enrich_opportunity_rows(
+            opps,
+            index_regime=index_regime,
+            tradeability=tradeability_hint,
+        )
         payload["opportunities"] = opps
+        payload["index_regime_summary"] = index_regime
     except Exception:
         pass
 

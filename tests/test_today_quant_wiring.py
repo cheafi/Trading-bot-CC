@@ -70,3 +70,24 @@ def test_fetch_surface_state_single_playbook_monitor_helper():
 
 def test_build_near_miss_candidates_importable():
     assert callable(build_near_miss_candidates)
+
+
+def test_index_regime_strip_helpers_parity():
+    from src.services.fetch_surface_state import (
+        index_regime_strip_line,
+        regime_fit_tag,
+    )
+
+    summary = {"strip_line": "Normal regime", "degraded": True}
+    line = index_regime_strip_line(summary)
+    assert "MOCK" in line.upper()
+    assert "monitor only" in line.lower()
+    assert regime_fit_tag("wait_filter") == "WAIT filter"
+
+
+def test_index_regime_summary_authority_fields():
+    from src.services.index_regime import build_index_regime_summary
+
+    s = build_index_regime_summary()
+    assert s["may_authorize_deploy"] is False
+    assert "deploy_gate" in s["may_never_influence"]

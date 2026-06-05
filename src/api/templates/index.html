@@ -1047,6 +1047,36 @@
         </div>
       </template>
 
+      <template x-if="tab==='today'&&today7.index_regime_summary">
+        <div data-cc="index-regime-strip" style="padding:4px 12px 0">
+          <div class="card card-p" style="padding:6px 10px;border-left:3px solid var(--amber)">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="pill text-[7px] pa" x-text="today7.regime_strip?.degraded?'MOCK/DEGRADED':'REGIME FILTER'"></span>
+              <span class="text-[9px] font-bold" style="color:var(--t2)" x-text="today7.regime_strip?.posture_label||today7.index_regime_summary?.posture_label||'Index regime'"></span>
+            </div>
+            <div class="text-[8px] mt-0.5" style="color:var(--t3);line-height:1.45" x-text="(window.CCHelpers&&CCHelpers.indexRegimeStripLine)?CCHelpers.indexRegimeStripLine(today7.index_regime_summary,today7.regime_strip):((today7.regime_strip&&today7.regime_strip.line)||today7.index_regime_summary?.strip_line||'')"></div>
+          </div>
+        </div>
+      </template>
+
+      <template x-if="tab==='today'&&(today7.regime_stack_summary||today7.ai_reason_codes?.length)">
+        <div data-cc="regime-stack-strip" style="padding:4px 12px 0">
+          <div class="card card-p" style="padding:6px 10px;border-left:3px solid var(--blue)">
+            <div class="flex flex-wrap items-center gap-2 mb-0.5">
+              <span class="pill text-[7px] pb">REGIME STACK</span>
+              <span class="pill text-[7px] pw">AI EXPLANATORY</span>
+            </div>
+            <div x-show="today7.regime_stack_summary" class="text-[8px] mb-1" style="color:var(--t3);line-height:1.45" x-text="(window.CCHelpers&&CCHelpers.regimeStackStripLine)?CCHelpers.regimeStackStripLine(today7.regime_stack_summary):''"></div>
+            <div x-show="today7.allocator_stance&&today7.allocator_stance.suggestion" class="text-[8px] mb-1" style="color:var(--t3)" x-text="(window.CCHelpers&&CCHelpers.allocatorStanceHint)?CCHelpers.allocatorStanceHint(today7.allocator_stance):''"></div>
+            <template x-if="today7.ai_reason_codes&&today7.ai_reason_codes.length">
+              <template x-for="rc in today7.ai_reason_codes.slice(0,3)" :key="'ai-rc-'+rc.code">
+                <div class="text-[8px]" style="color:var(--t2);line-height:1.4" x-text="'• '+(window.CCHelpers&&CCHelpers.aiReasonCodeLine?CCHelpers.aiReasonCodeLine(rc):rc.message)"></div>
+              </template>
+            </template>
+          </div>
+        </div>
+      </template>
+
       <!-- ── Ops / IB / Monitor strip (institutional cockpit) ── -->
       <div x-show="tab==='today'" data-cc="deploy-status-strip" style="padding:6px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <span class="pill text-[8px]" :class="ibkrStateFrom(today7.execution_readiness).level==='ready'?'pg':ibkrStateFrom(today7.execution_readiness).level==='blocked'?'pr':'pa'" x-text="'IBKR '+ibkrUnifiedShort(today7.execution_readiness)"></span>
@@ -2632,6 +2662,13 @@
                 <template x-if="r.cost_rank_label">
                   <span data-cc="playbook-cost-rank-pill" class="pill text-[6px] mr-1" :class="(window.CCHelpers&&CCHelpers.costRankPillClass)?CCHelpers.costRankPillClass(r):'pw'" x-text="(window.CCHelpers&&CCHelpers.costRankTag)?CCHelpers.costRankTag(r):r.cost_rank_label"></span>
                 </template>
+                <template x-if="r.regime_fit">
+                  <span data-cc="playbook-regime-fit-pill" class="pill text-[6px] mr-1" :class="(window.CCHelpers&&CCHelpers.regimeFitPillClass)?CCHelpers.regimeFitPillClass(r):'pw'" x-text="(window.CCHelpers&&CCHelpers.regimeFitTag)?CCHelpers.regimeFitTag(r):r.regime_fit"></span>
+                </template>
+                <template x-if="r.index_leadership">
+                  <span data-cc="playbook-index-leadership-pill" class="pill text-[6px] mr-1 pw" x-text="(window.CCHelpers&&CCHelpers.indexLeadershipTag)?CCHelpers.indexLeadershipTag(r):r.index_leadership"></span>
+                </template>
+                <div x-show="r.ai_contradiction_hint" class="text-[7px] mb-1" style="color:var(--amber);line-height:1.35" x-text="r.ai_contradiction_hint"></div>
                 <div data-cc="playbook-strategy-decay-line" x-show="playbookStrategyDecayLine(r)" class="text-[7px] mb-1" style="color:var(--t3);line-height:1.4" x-text="playbookStrategyDecayLine(r)"></div>
                 <template x-if="(r.guardrail_labels||[]).length">
                   <div class="flex flex-wrap gap-1 mb-1">
@@ -3274,6 +3311,18 @@
                   <span x-show="dos.intel.peer_context.peer_rank"><span style="color:var(--t3)">Peer rank</span> <span x-text="'#'+dos.intel.peer_context.peer_rank+' / '+dos.intel.peer_context.peer_count"></span></span>
                   <span x-show="dos.intel.peer_context.peer_verdict" style="color:var(--t2)" x-text="dos.intel.peer_context.peer_verdict"></span>
                 </div>
+              </div>
+            </template>
+            <template x-if="dos.intel&&dos.intel.index_relative_leadership">
+              <div data-cc="dossier-index-leadership" class="card card-p mb-2 opacity-90">
+                <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">Index-relative leadership <span class="pill text-[7px] pa ml-1">CONFIRM ONLY</span></div>
+                <div class="text-[8px] mb-1" style="color:var(--t3)" x-text="(window.CCHelpers&&CCHelpers.indexLeadershipDossierLine)?CCHelpers.indexLeadershipDossierLine(dos.intel.index_relative_leadership):(dos.intel.index_relative_leadership.summary||'')"></div>
+                <div class="flex flex-wrap gap-2 text-[8px]">
+                  <span class="pill text-[7px] pw" x-text="'SPY · '+(dos.intel.index_relative_leadership.vs_spy&&dos.intel.index_relative_leadership.vs_spy.tag||'—')"></span>
+                  <span class="pill text-[7px] pw" x-text="'QQQ · '+(dos.intel.index_relative_leadership.vs_qqq&&dos.intel.index_relative_leadership.vs_qqq.tag||'—')"></span>
+                  <span class="pill text-[7px] pw" x-text="'Sector · '+(dos.intel.index_relative_leadership.vs_sector&&dos.intel.index_relative_leadership.vs_sector.tag||'—')"></span>
+                </div>
+                <div x-show="dos.intel.index_relative_leadership.ai_contradiction_hint" class="text-[8px] mt-1" style="color:var(--amber)" x-text="(window.CCHelpers&&CCHelpers.aiContradictionDossierLine)?CCHelpers.aiContradictionDossierLine(dos.intel.index_relative_leadership.ai_contradiction_hint,dos.intel.index_relative_leadership.degraded):dos.intel.index_relative_leadership.ai_contradiction_hint"></div>
               </div>
             </template>
             <!-- Unified Decision Card -->
@@ -7598,7 +7647,7 @@
       errorLog:{loading:false,error:'',entries:[],total:0,filter:'all'},
       providers:{yfinance:false,regime_router:false,alpaca:{configured:false,connected:false,paper:true}},
       opsDetail:{},
-      today7:{regime:null,top_ranked:[],filter_funnel:null,avoid_list:[],avoid_grouped:null,bucket_quality:[],decision_model:null,decision_hierarchy:null,passive_baseline:null,complexity_challenge:null,restraint:null,surface_authority:null,crisis_regime:null,naval_clarity:null,buffett_clarity:null,index_fund_posture:null,principles_posture:null,todays_decision:null,decision_authority:null,tradeability:'',what_changed:[],event_risks:[],best_family:null,pulse:null,narrative:'',ai_narrative:null,ai_loading:false,ai_provider:'',ai_model:'',ai_error:'',ai_configured:false,ai_setup_hint:'',date:'',trust:{},best_action:null,overlap_warning:null,near_miss:[],no_setup_diagnosis:null,quant_cluster_hints:[],unlock_deploy:null,regime_wait_explanation:[],monitor_triggers:[],sleeve_summary:null,quant_alloc:null,execution_readiness:null,evidence_badges:null,cross_asset_confirmation:null,score_reconciliation:null,ai_commentary_open:false,avoid_collapsed:true},
+      today7:{regime:null,top_ranked:[],filter_funnel:null,avoid_list:[],avoid_grouped:null,bucket_quality:[],decision_model:null,decision_hierarchy:null,passive_baseline:null,complexity_challenge:null,restraint:null,surface_authority:null,crisis_regime:null,naval_clarity:null,buffett_clarity:null,index_fund_posture:null,principles_posture:null,todays_decision:null,decision_authority:null,tradeability:'',what_changed:[],event_risks:[],best_family:null,pulse:null,narrative:'',ai_narrative:null,ai_loading:false,ai_provider:'',ai_model:'',ai_error:'',ai_configured:false,ai_setup_hint:'',date:'',trust:{},best_action:null,overlap_warning:null,near_miss:[],no_setup_diagnosis:null,quant_cluster_hints:[],unlock_deploy:null,regime_wait_explanation:[],monitor_triggers:[],sleeve_summary:null,quant_alloc:null,execution_readiness:null,evidence_badges:null,cross_asset_confirmation:null,index_regime_summary:null,regime_strip:null,regime_stack_summary:null,allocator_stance:null,ai_reason_codes:[],score_reconciliation:null,ai_commentary_open:false,avoid_collapsed:true},
       btLab:{ticker:'AAPL',strategy:'all',period:'6mo',loading:false,data:null,quantCurve:null,error:'',walkForward:true},
       dosWorkstation:{loading:false,data:null},
       pfScenario:{loading:false,list:[],result:null,selected:''},
@@ -13007,7 +13056,7 @@
         }
       },
       async fetchToday7(){
-        try{const r=await this.ccFetch('/api/v7/today',{retries:4,backoff:600});if(!r||!r.ok)throw new Error('HTTP '+(r?r.status:'fail'));const d=await r.json();this.captureInstantDegradedBanner(d);if(d&&d.error)throw new Error(String(d.error));if(!d||!d.market_regime)throw new Error('incomplete today payload');this.today7.regime=d.market_regime||null;this.today7.decision_authority=d.decision_authority||null;this.today7.top_ranked=d.top_5||[];this.today7.todays_decision=d.todays_decision||null;this.today7.best_action=d.best_action||null;this.today7.overlap_warning=d.overlap_warning||null;this.today7.near_miss=d.near_miss||[];this.today7.score_reconciliation=d.score_reconciliation||null;this.today7.no_setup_diagnosis=d.no_setup_diagnosis||null;this.today7.quant_cluster_hints=d.quant_cluster_hints||[];this.today7.unlock_deploy=d.unlock_deploy||null;this.today7.regime_wait_explanation=d.regime_wait_explanation||[];this.today7.monitor_triggers=d.monitor_triggers||[];this.today7.sleeve_summary=d.sleeve_summary||null;this.today7.execution_readiness=d.execution_readiness||d.best_action?.execution_readiness||null;this.today7.evidence_badges=d.evidence_badges||null;this.today7.cross_asset_confirmation=d.cross_asset_confirmation||null;this.today7.filter_funnel=d.filter_funnel||null;this.today7.decision_model=d.decision_model||null;this.today7.decision_hierarchy=d.decision_hierarchy||null;this.today7.passive_baseline=d.passive_baseline||null;this.today7.complexity_challenge=d.complexity_challenge||null;this.today7.restraint=d.restraint||null;this.today7.surface_authority=d.surface_authority||null;this.today7.crisis_regime=d.crisis_regime||null;this.today7.naval_clarity=d.naval_clarity||null;this.today7.buffett_clarity=d.buffett_clarity||null;this.today7.index_fund_posture=d.index_fund_posture||null;this.today7.principles_posture=d.principles_posture||null;this.today7.avoid_grouped=d.avoid_grouped||null;this.today7.bucket_quality=d.bucket_quality||[];this.today7.avoid_list=(d.avoid_now||[]).length?(d.avoid_now||[]):(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'—',reason:a,category:'regime'}:a);this.today7.tradeability=(d.decision_model&&d.decision_model.honest_tradeability)||(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{};if(this.isWaitDay()){this.today7.avoid_collapsed=true;this.today7.ai_commentary_open=false;}
+        try{const r=await this.ccFetch('/api/v7/today',{retries:4,backoff:600});if(!r||!r.ok)throw new Error('HTTP '+(r?r.status:'fail'));const d=await r.json();this.captureInstantDegradedBanner(d);if(d&&d.error)throw new Error(String(d.error));if(!d||!d.market_regime)throw new Error('incomplete today payload');this.today7.regime=d.market_regime||null;this.today7.decision_authority=d.decision_authority||null;this.today7.top_ranked=d.top_5||[];this.today7.todays_decision=d.todays_decision||null;this.today7.best_action=d.best_action||null;this.today7.overlap_warning=d.overlap_warning||null;this.today7.near_miss=d.near_miss||[];this.today7.score_reconciliation=d.score_reconciliation||null;this.today7.no_setup_diagnosis=d.no_setup_diagnosis||null;this.today7.quant_cluster_hints=d.quant_cluster_hints||[];this.today7.unlock_deploy=d.unlock_deploy||null;this.today7.regime_wait_explanation=d.regime_wait_explanation||[];this.today7.monitor_triggers=d.monitor_triggers||[];this.today7.sleeve_summary=d.sleeve_summary||null;this.today7.execution_readiness=d.execution_readiness||d.best_action?.execution_readiness||null;this.today7.evidence_badges=d.evidence_badges||null;this.today7.cross_asset_confirmation=d.cross_asset_confirmation||null;this.today7.index_regime_summary=d.index_regime_summary||null;this.today7.regime_strip=d.regime_strip||null;this.today7.regime_stack_summary=d.regime_stack_summary||null;this.today7.allocator_stance=d.allocator_stance||null;this.today7.ai_reason_codes=d.ai_reason_codes||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.decision_model=d.decision_model||null;this.today7.decision_hierarchy=d.decision_hierarchy||null;this.today7.passive_baseline=d.passive_baseline||null;this.today7.complexity_challenge=d.complexity_challenge||null;this.today7.restraint=d.restraint||null;this.today7.surface_authority=d.surface_authority||null;this.today7.crisis_regime=d.crisis_regime||null;this.today7.naval_clarity=d.naval_clarity||null;this.today7.buffett_clarity=d.buffett_clarity||null;this.today7.index_fund_posture=d.index_fund_posture||null;this.today7.principles_posture=d.principles_posture||null;this.today7.avoid_grouped=d.avoid_grouped||null;this.today7.bucket_quality=d.bucket_quality||[];this.today7.avoid_list=(d.avoid_now||[]).length?(d.avoid_now||[]):(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'—',reason:a,category:'regime'}:a);this.today7.tradeability=(d.decision_model&&d.decision_model.honest_tradeability)||(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{};if(this.isWaitDay()){this.today7.avoid_collapsed=true;this.today7.ai_commentary_open=false;}
           this.applyPulseToMarketStrip(this.today7.pulse);
           this.saveToday7ToCache(d);
           // DAY-OVER-DAY DIFF — tag NEW vs CARRYOVER vs MOVED

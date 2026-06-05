@@ -931,6 +931,54 @@ def describe_opportunity_monitor_trigger(trigger_type: str) -> str:
     )
 
 
+def index_regime_strip_line(
+    summary: Optional[Dict[str, Any]] = None,
+    *,
+    strip: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Monitor-only index regime copy for Today strip — never deploy authority."""
+    s = summary or {}
+    st = strip or {}
+    line = str(st.get("line") or s.get("strip_line") or s.get("summary") or "").strip()
+    if not line:
+        return "Index regime unavailable — MOCK/DEGRADED"
+    degraded = bool(s.get("degraded") or st.get("degraded"))
+    if degraded and "MOCK" not in line.upper():
+        line = f"MOCK/DEGRADED · {line}"
+    return f"{line} — monitor only, not deploy"
+
+
+def regime_fit_pill_class(regime_fit: str = "") -> str:
+    fit = str(regime_fit or "").lower()
+    if fit == "aligned":
+        return "pg"
+    if fit in ("stressed_filter", "lag_vs_index"):
+        return "pr"
+    if fit == "wait_filter":
+        return "pa"
+    return "pw"
+
+
+def regime_fit_tag(regime_fit: str = "") -> str:
+    fit = str(regime_fit or "").lower()
+    labels = {
+        "aligned": "Regime aligned",
+        "stressed_filter": "Stressed filter",
+        "wait_filter": "WAIT filter",
+        "lag_vs_index": "Lags index",
+        "selective_filter": "Selective filter",
+    }
+    return labels.get(fit, "Selective filter")
+
+
+def index_leadership_dossier_line(block: Optional[Dict[str, Any]] = None) -> str:
+    b = block or {}
+    summary = str(b.get("summary") or "").strip()
+    if b.get("degraded") and "MOCK" not in summary.upper():
+        summary = f"{summary or 'Relative leadership unavailable'} — MOCK/DEGRADED"
+    return f"{summary or 'Relative leadership — confirm-only'} — not deploy authority"
+
+
 def today_mission_quant_cluster_lines(
     hints: Optional[list] = None,
     *,
@@ -1154,3 +1202,43 @@ def dossier_trade_plan_note(
     if text:
         return text
     return "Structure-based plan"
+
+
+def ai_reason_code_line(code: Optional[Dict[str, Any]] = None) -> str:
+    """Single AI reason code — monitor-only explainer."""
+    c = code or {}
+    msg = str(c.get("message") or "").strip()
+    if not msg:
+        return "AI context — explanatory only, not deploy authority"
+    return f"{msg} — monitor only"
+
+
+def regime_stack_strip_line(summary: Optional[Dict[str, Any]] = None) -> str:
+    """Compact regime stack copy for Today strip."""
+    s = summary or {}
+    line = str(s.get("strip_line") or "").strip()
+    if not line:
+        return "Regime stack unavailable — MOCK/DEGRADED"
+    if s.get("degraded") and "MOCK" not in line.upper():
+        line = f"MOCK/DEGRADED · {line}"
+    return f"{line} — monitor only, not deploy"
+
+
+def allocator_stance_hint(stance: Optional[Dict[str, Any]] = None) -> str:
+    a = stance or {}
+    sug = str(a.get("suggestion") or "").strip()
+    if sug:
+        return sug
+    route = a.get("routing") or {}
+    strongest = (route.get("strongest") or {}).get("name") or "—"
+    weakest = (route.get("weakest") or {}).get("name") or "—"
+    return f"Quant hint: strongest sleeve {strongest} · weakest {weakest} (not a trade route)"
+
+
+def ai_contradiction_dossier_line(hint: str = "", *, degraded: bool = False) -> str:
+    text = str(hint or "").strip()
+    if not text:
+        return ""
+    if degraded and "MOCK" not in text.upper():
+        text = f"{text} — MOCK/DEGRADED"
+    return f"{text} — confirm-only, not deploy authority"

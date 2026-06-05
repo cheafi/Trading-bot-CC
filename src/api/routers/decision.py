@@ -1012,6 +1012,58 @@ async def today_summary(request: Request):
     all_opps_for_action = apply_authority_to_rows(all_opps_for_action, decision_authority)
     near_miss = apply_authority_to_rows(near_miss, decision_authority)
 
+    cross_asset_confirmation = await _cross_asset_for_today(
+        request,
+        market_regime={
+            "trend": trend_label,
+            "vix": round(vix_val, 1),
+            "breadth": round(breadth * 100),
+            "should_trade": should_trade,
+            "tradeability": tradeability,
+        },
+        should_trade=should_trade,
+    )
+    from src.services.index_regime import build_index_regime_for_today
+    from src.services.cost_adjusted_ranker import enrich_opportunity_rows
+
+    index_regime_summary = await build_index_regime_for_today(
+        request,
+        market_regime={
+            "trend": trend_label,
+            "vix": round(vix_val, 1),
+            "breadth": round(breadth * 100),
+            "should_trade": should_trade,
+            "tradeability": tradeability,
+            "volatility": vol_label,
+        },
+        cross_asset=cross_asset_confirmation,
+        funnel=funnel,
+    )
+    regime_strip = {
+        "line": index_regime_summary.get("strip_line") or index_regime_summary.get("summary"),
+        "posture": index_regime_summary.get("posture"),
+        "posture_label": index_regime_summary.get("posture_label"),
+        "authority": "monitor_only",
+        "data_mode": "regime_filter",
+        "degraded": bool(index_regime_summary.get("degraded")),
+        "may_authorize_deploy": False,
+    }
+    all_opps_for_action = enrich_opportunity_rows(
+        all_opps_for_action,
+        index_regime=index_regime_summary,
+        tradeability=tradeability,
+    )
+    top5 = enrich_opportunity_rows(
+        top5,
+        index_regime=index_regime_summary,
+        tradeability=tradeability,
+    )
+    near_miss = enrich_opportunity_rows(
+        near_miss,
+        index_regime=index_regime_summary,
+        tradeability=tradeability,
+    )
+
     equity_dd_pct = None
     if not used_brief_fallback and not scanner_degraded:
         equity_dd_pct = await load_equity_dd_pct_for_hints(request)
@@ -1031,6 +1083,57 @@ async def today_summary(request: Request):
         breadth=breadth * 100 if breadth <= 1 else breadth,
         tradeability=tradeability,
         quant_cluster_hints=quant_cluster_hints,
+    )
+
+    from src.services.ai_intelligence import (
+        attach_row_ai_hints,
+        build_ai_intelligence_for_today,
+    )
+
+    ai_intel = build_ai_intelligence_for_today(
+        market_regime={
+            "trend": trend_label,
+            "vix": round(vix_val, 1),
+            "breadth": round(breadth * 100),
+            "should_trade": should_trade,
+            "tradeability": tradeability,
+        },
+        index_regime=index_regime_summary,
+        decision_authority=decision_authority,
+        quant_cluster_hints=quant_cluster_hints,
+        near_miss=near_miss,
+        monitor_triggers=monitor_triggers,
+        top_ranked=top5,
+        event_risks=event_risks,
+        sleeve_summary=sleeve_summary,
+        scanner_degraded=scanner_degraded or used_brief_fallback,
+    )
+    regime_stack_summary = ai_intel.get("regime_stack_summary") or {}
+    allocator_stance = ai_intel.get("allocator_stance") or {}
+    ai_reason_codes = ai_intel.get("ai_reason_codes") or []
+
+    _mr_ctx = {
+        "trend": trend_label,
+        "tradeability": tradeability,
+        "breadth": round(breadth * 100),
+    }
+    all_opps_for_action = attach_row_ai_hints(
+        all_opps_for_action,
+        market_regime=_mr_ctx,
+        index_regime=index_regime_summary,
+        event_risks=event_risks,
+    )
+    top5 = attach_row_ai_hints(
+        top5,
+        market_regime=_mr_ctx,
+        index_regime=index_regime_summary,
+        event_risks=event_risks,
+    )
+    near_miss = attach_row_ai_hints(
+        near_miss,
+        market_regime=_mr_ctx,
+        index_regime=index_regime_summary,
+        event_risks=event_risks,
     )
 
     todays_decision = build_todays_decision(
@@ -1181,18 +1284,6 @@ async def today_summary(request: Request):
         deployable_count=execution_ready_count,
     )
 
-    cross_asset_confirmation = await _cross_asset_for_today(
-        request,
-        market_regime={
-            "trend": trend_label,
-            "vix": round(vix_val, 1),
-            "breadth": round(breadth * 100),
-            "should_trade": should_trade,
-            "tradeability": tradeability,
-        },
-        should_trade=should_trade,
-    )
-
     payload = {
         "date": now.strftime("%Y-%m-%d"),
         "narrative": narrative,
@@ -1258,6 +1349,12 @@ async def today_summary(request: Request):
         "avoid_grouped": avoid_grouped,
         "bucket_quality": bucket_quality,
         "cross_asset_confirmation": cross_asset_confirmation,
+        "index_regime_summary": index_regime_summary,
+        "regime_strip": regime_strip,
+        "regime_stack_summary": regime_stack_summary,
+        "allocator_stance": allocator_stance,
+        "ai_reason_codes": ai_reason_codes,
+        "ai_intelligence": ai_intel,
         "score_reconciliation": _build_score_reconciliation_for_today(
             top5,
             cross_asset=cross_asset_confirmation,
