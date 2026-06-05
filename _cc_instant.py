@@ -1489,9 +1489,102 @@ def _degraded_portfolio_monitor_bytes() -> bytes:
     )
 
 
+def _stale_quant_intelligence_bytes(path: str, reason: str) -> bytes | None:
+    """Research-only quant / algo stubs while backend warms."""
+    try:
+        from urllib.parse import parse_qs, urlparse
+
+        from src.services.cost_adjusted_ranker import build_cost_rank_context
+        from src.services.drawdown_sizer import build_drawdown_sizer_context
+        from src.services.execution_analytics import build_execution_analytics
+        from src.services.factor_exposure import build_factor_exposure
+        from src.services.strategy_allocator import build_allocator_context
+        from src.services.strategy_curve_health import build_strategy_curve_context
+        from src.services.strategy_validity import build_strategy_validity_context
+
+        parsed = urlparse(path)
+        qs = parse_qs(parsed.query)
+        ticker = (qs.get("ticker") or ["AAPL"])[0].upper()
+        route = parsed.path.rstrip("/").split("/")[-1]
+        strategy_id = (qs.get("strategy_id") or ["momentum_breakout_v2"])[0]
+        raw_score = float((qs.get("raw_score") or ["7.0"])[0])
+        tradeability = (qs.get("tradeability") or ["WAIT"])[0]
+        builders = {
+            "strategy-health": lambda: build_strategy_curve_context(
+                ticker, strategy_id=strategy_id, degraded=True
+            ),
+            "cost-ranked": lambda: build_cost_rank_context(
+                ticker,
+                raw_score=raw_score,
+                tradeability=tradeability,
+                degraded=True,
+            ),
+            "sleeve-allocation": lambda: build_allocator_context(degraded=True),
+            "execution-analytics": lambda: build_execution_analytics(degraded=True),
+            "factor-exposure": lambda: build_factor_exposure(ticker, degraded=True),
+            "strategy-validity": lambda: build_strategy_validity_context(
+                strategy_id, degraded=True
+            ),
+            "drawdown-sizing": lambda: build_drawdown_sizer_context(
+                research_only=True, degraded=True
+            ),
+        }
+        build = builders.get(route)
+        if not build:
+            return None
+        payload = build()
+        payload["instant_degraded"] = True
+        payload["degraded_reason"] = reason
+        payload["research_only"] = True
+        return _encode_degraded(payload, reason=reason)
+    except Exception:
+        return None
+
+
+def _stale_opportunity_intelligence_bytes(path: str, reason: str) -> bytes | None:
+    """Research-only opportunity intel while backend warms."""
+    try:
+        from urllib.parse import parse_qs, urlparse
+
+        from src.services.event_noise_filter import build_event_risk_context
+        from src.services.insider_tracker import build_insider_context
+        from src.services.institutional_13f import build_institutional_context
+        from src.services.strategy_curve_health import build_strategy_curve_context
+
+        parsed = urlparse(path)
+        qs = parse_qs(parsed.query)
+        ticker = (qs.get("ticker") or ["AAPL"])[0].upper()
+        route = parsed.path.rstrip("/").split("/")[-1]
+        builders = {
+            "insider": lambda: build_insider_context(ticker, degraded=True),
+            "institutional": lambda: build_institutional_context(ticker, degraded=True),
+            "events": lambda: build_event_risk_context(ticker, degraded=True),
+            "strategy-health": lambda: build_strategy_curve_context(
+                ticker, degraded=True
+            ),
+        }
+        build = builders.get(route)
+        if not build:
+            return None
+        payload = build()
+        payload["instant_degraded"] = True
+        payload["degraded_reason"] = reason
+        return _encode_degraded(payload, reason=reason)
+    except Exception:
+        return None
+
+
 def _degraded_response(path_only: str, reason: str, full_path: str = "") -> bytes | None:
     """Disk/brief fallbacks for dashboard-critical endpoints."""
     path = full_path or path_only
+    if path_only.startswith("/api/v7/intelligence/"):
+        body = _stale_opportunity_intelligence_bytes(path, reason)
+        if body is not None:
+            return body
+    if path_only.startswith("/api/v7/quant/"):
+        body = _stale_quant_intelligence_bytes(path, reason)
+        if body is not None:
+            return body
     if path_only == "/api/v7/today":
         return _stale_today_bytes(reason)
     if path_only == "/api/ops/cc-header":

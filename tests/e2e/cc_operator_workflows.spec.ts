@@ -46,6 +46,38 @@ test.describe("CC operator workflows", () => {
 		await waitForCcShell(page)
 	})
 
+	test("cc-helpers exposes soak confirmation selectors", async ({ page }) => {
+		const res = await page.request.get("/static/cc-helpers.js")
+		expect(res.ok()).toBeTruthy()
+		const body = await res.text()
+		expect(body).toContain("soakConfirmationSelectors")
+		expect(body).toContain('[data-cc="deploy-status-strip"]')
+		expect(body).toContain('[data-cc="ops-recovery-runbook"]')
+	})
+
+	test("soak anchors — data-cc selectors attached in shell", async ({ page }) => {
+		const anchors = [
+			'[data-cc="instant-degraded-banner"]',
+			'[data-cc="warmup-context-strip"]',
+			'[data-cc="data-contract-strip"]',
+			'[data-cc="deploy-status-strip"]',
+			'[data-cc="playbook-surface"]',
+			'[data-cc="ops-recovery-runbook"]',
+		]
+		for (const sel of anchors) {
+			await expect(page.locator(sel).first()).toBeAttached()
+		}
+	})
+
+	test("soak anchors — recovery copy helpers in static bundle", async ({ page }) => {
+		const res = await page.request.get("/static/cc-helpers.js")
+		const body = await res.text()
+		expect(body).toContain("staleRefreshRecoveryLine")
+		expect(body).toContain("engineOffRecoveryLine")
+		expect(body).toContain("ibkrLoginToReadyHint")
+		expect(body).toContain("routeAbortRecoveryHint")
+	})
+
 	test("loads cc-helpers before Alpine boot", async ({ page }) => {
 		const res = await page.request.get("/static/cc-helpers.js")
 		expect(res.ok()).toBeTruthy()

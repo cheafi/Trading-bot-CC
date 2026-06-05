@@ -472,6 +472,103 @@ def build_near_miss_candidates(
     return rows[:limit]
 
 
+_OPPORTUNITY_MONITOR_TYPES = frozenset(
+    {
+        "structure",
+        "volume",
+        "event_clear",
+        "insider_cluster",
+        "13f_sponsorship",
+        "strategy_health",
+        "cluster_deploy",
+        "cluster_pilot",
+        "cluster_watch",
+        "cluster_near_miss",
+        "cluster_blocked_cost",
+        "cluster_blocked_dd",
+    }
+)
+
+
+def build_quant_cluster_hints(
+    *,
+    tradeability: str = "WAIT",
+    deploy_qualified_count: int = 0,
+    best_net_score: Optional[float] = None,
+    dd_utilization_pct: Optional[float] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Daily opportunity cluster labels — monitoring only, not deploy authority.
+
+    deploy/pilot labels describe board-adjacent posture; board gate still required.
+    """
+    hints: List[Dict[str, Any]] = []
+    tb = str(tradeability or "").upper()
+    net = best_net_score
+    dd_util = dd_utilization_pct
+
+    if dd_util is not None and dd_util >= 85:
+        hints.append(
+            {
+                "type": "cluster_blocked_dd",
+                "label": "Blocked by DD budget",
+                "detail": f"Drawdown utilization {dd_util:.0f}% — sizing templates blocked in research",
+                "horizon": "daily",
+                "cluster": "blocked-by-dd",
+            }
+        )
+    if net is not None and net < 6.0:
+        hints.append(
+            {
+                "type": "cluster_blocked_cost",
+                "label": "Blocked by cost drag",
+                "detail": f"Best net edge {net:.1f} after cost — demote ranking, not a veto alone",
+                "horizon": "intraday",
+                "cluster": "blocked-by-cost",
+            }
+        )
+    if tb == "WAIT":
+        hints.append(
+            {
+                "type": "cluster_watch",
+                "label": "Watch cluster",
+                "detail": "Board WAIT — near-miss and monitors only",
+                "horizon": "daily",
+                "cluster": "watch",
+            }
+        )
+        hints.append(
+            {
+                "type": "cluster_near_miss",
+                "label": "Near-miss cluster",
+                "detail": "Closest upgrades — still not deploy without tradeability lift",
+                "horizon": "intraday",
+                "cluster": "near-miss",
+            }
+        )
+    elif deploy_qualified_count >= 1 and tb in ("TRADE", "SELECTIVE"):
+        hints.append(
+            {
+                "type": "cluster_deploy",
+                "label": "Deploy cluster (board-gated)",
+                "detail": f"{deploy_qualified_count} execution-ready — Dashboard gate still required",
+                "horizon": "intraday",
+                "cluster": "deploy",
+            }
+        )
+    else:
+        hints.append(
+            {
+                "type": "cluster_pilot",
+                "label": "Pilot cluster",
+                "detail": "Selective posture — half-size research template only",
+                "horizon": "daily",
+                "cluster": "pilot",
+            }
+        )
+    return hints
+
+
 def build_monitor_triggers(
     *,
     market_pulse: Dict[str, Any],
@@ -479,6 +576,8 @@ def build_monitor_triggers(
     vix: float,
     breadth: float,
     tradeability: str,
+    opportunity_hints: Optional[List[Dict[str, Any]]] = None,
+    quant_cluster_hints: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     """What to watch when there are zero deploy setups."""
     triggers: List[Dict[str, Any]] = []
@@ -530,7 +629,24 @@ def build_monitor_triggers(
                 "horizon": "daily",
             }
         )
-    return triggers[:6]
+    for hint in list(opportunity_hints or []) + list(quant_cluster_hints or []):
+        t = str(hint.get("type") or "")
+        if t not in _OPPORTUNITY_MONITOR_TYPES:
+            continue
+        triggers.append(
+            {
+                "type": t,
+                "label": str(hint.get("label") or f"Monitor: {t}"),
+                "detail": str(
+                    hint.get("detail")
+                    or "Opportunity context — monitoring only, not deploy"
+                ),
+                "horizon": str(hint.get("horizon") or "weekly"),
+                "monitoring_only": True,
+                "cluster": hint.get("cluster"),
+            }
+        )
+    return triggers[:8]
 
 
 def build_evidence_badges(
