@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Set
 
-from src.utils.numeric_parse import parse_ratio
-
 
 _AVOID_CATEGORIES = (
     "regime",
@@ -594,6 +592,137 @@ def resolve_book_dd_utilization_for_hints(
         return None
 
 
+def near_miss_gap_count(row: Dict[str, Any]) -> int:
+    """Count deploy gate gaps on a near-miss row."""
+    return len(row.get("gaps") or [])
+
+
+def prior_near_miss_gap_map(
+    prior_rows: Optional[List[Dict[str, Any]]],
+) -> Dict[str, int]:
+    """Ticker → prior gap count from last playbook snapshot — monitor-only."""
+    out: Dict[str, int] = {}
+    for row in prior_rows or []:
+        if not isinstance(row, dict):
+            continue
+        ticker = str(row.get("ticker") or "").upper().strip()
+        if not ticker:
+            continue
+        out[ticker] = near_miss_gap_count(row)
+    return out
+
+
+def format_monitor_upgrade_gap_alert(
+    row: Dict[str, Any],
+    *,
+    prior_gap_count: Optional[int] = None,
+) -> Optional[str]:
+    """Backend monitor copy when near-miss gate gap count drops — not deploy authority."""
+    gaps = row.get("gaps") or []
+    gap_n = len(gaps)
+    ticker = str(row.get("ticker") or "—")
+    if prior_gap_count is not None and prior_gap_count > gap_n:
+        return (
+            f"Monitor upgrade alert — {ticker} gate gaps dropped "
+            f"({prior_gap_count}→{gap_n}); still not deploy"
+        )
+    if gap_n == 1:
+        return (
+            f"Monitor upgrade alert — {ticker} single gate gap ({gaps[0]}); "
+            "closest upgrade — not deploy"
+        )
+    if gap_n == 0:
+        return (
+            f"Monitor upgrade alert — {ticker} at gate — confirm volume; not deploy"
+        )
+    return None
+
+
+def detect_monitor_upgrade_gap_alerts(
+    near_miss: List[Dict[str, Any]],
+    *,
+    prior_near_miss: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    """Monitor upgrade alerts when gap count drops vs prior snapshot or single-gap lead."""
+    prior_map = prior_near_miss_gap_map(prior_near_miss)
+    alerts: List[Dict[str, Any]] = []
+    for nm in near_miss or []:
+        if not isinstance(nm, dict):
+            continue
+        ticker = str(nm.get("ticker") or "").upper().strip()
+        if not ticker:
+            continue
+        gap_n = near_miss_gap_count(nm)
+        prior_n = prior_map.get(ticker)
+        msg = format_monitor_upgrade_gap_alert(nm, prior_gap_count=prior_n)
+        if not msg:
+            continue
+        improved = prior_n is not None and prior_n > gap_n
+        if improved or gap_n <= 1:
+            alerts.append(
+                {
+                    "type": "monitor_upgrade_alert",
+                    "label": f"Upgrade alert: {ticker}",
+                    "detail": msg,
+                    "horizon": "intraday",
+                    "monitoring_only": True,
+                    "gap_count": gap_n,
+                    "prior_gap_count": prior_n,
+                    "gap_improved": improved,
+                }
+            )
+    return alerts[:3]
+
+
+def build_opportunity_recheck_heuristic(
+    *,
+    near_miss: Optional[List[Dict[str, Any]]] = None,
+    prior_near_miss: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    """Auto-recheck stale near-miss rows — monitor-only, no deploy trigger."""
+    prior_map = prior_near_miss_gap_map(prior_near_miss)
+    hints: List[Dict[str, Any]] = []
+    for nm in near_miss or []:
+        if not isinstance(nm, dict):
+            continue
+        ticker = str(nm.get("ticker") or "").upper().strip()
+        if not ticker:
+            continue
+        gap_n = near_miss_gap_count(nm)
+        gaps = nm.get("gaps") or []
+        prior_n = prior_map.get(ticker)
+        if prior_n is None:
+            if gap_n >= 2:
+                hints.append(
+                    {
+                        "ticker": ticker,
+                        "hint": (
+                            f"{ticker} — recheck {', '.join(gaps[:2])} on next poll; "
+                            "monitor upgrade only"
+                        ),
+                        "recheck_horizon": "intraday",
+                        "monitor_only": True,
+                        "may_authorize_deploy": False,
+                    }
+                )
+            continue
+        if gap_n >= prior_n:
+            focus = gaps[0] if gaps else "gate"
+            hints.append(
+                {
+                    "ticker": ticker,
+                    "hint": (
+                        f"{ticker} recycle watch — gap count unchanged ({gap_n}); "
+                        f"reconfirm {focus}"
+                    ),
+                    "recheck_horizon": "intraday",
+                    "monitor_only": True,
+                    "may_authorize_deploy": False,
+                }
+            )
+    return hints[:5]
+
+
 def _near_miss_monitor_gap_suffix(row: Dict[str, Any]) -> str:
     """Backend monitor copy when near-miss gate gaps tighten — not deploy authority."""
     gaps = row.get("gaps") or []
@@ -693,9 +822,14 @@ def build_monitor_triggers(
     tradeability: str,
     opportunity_hints: Optional[List[Dict[str, Any]]] = None,
     quant_cluster_hints: Optional[List[Dict[str, Any]]] = None,
+    prior_near_miss: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     """What to watch when there are zero deploy setups."""
     triggers: List[Dict[str, Any]] = []
+    for alert in detect_monitor_upgrade_gap_alerts(
+        near_miss, prior_near_miss=prior_near_miss
+    ):
+        triggers.append(alert)
     if near_miss:
         nm = near_miss[0]
         detail = str(nm.get("upgrade_trigger") or "").strip()
@@ -1164,7 +1298,7 @@ def build_sleeve_summary(
     if not top_adds and monitored:
         top_adds = [str(m) for m in monitored[:3]]
     activation = (controller or {}).get("upgrade_trigger") or (
-        f"Gate → ACTIVE when regime fit ≥70% and drawdown within budget"
+        "Gate → ACTIVE when regime fit ≥70% and drawdown within budget"
         if controller
         else ""
     )
@@ -1219,6 +1353,10 @@ def merge_brief_board_fallback(
     top_limit: int = 5,
 ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], bool]:
     """Seed WATCH / near-miss rows from morning brief when live scanner is empty."""
+    from src.services.cc_live_policy import cc_live_data_only_enabled
+
+    if cc_live_data_only_enabled():
+        return top5, near_miss, False
     if top5 or not scanner_degraded:
         return top5, near_miss, False
     try:

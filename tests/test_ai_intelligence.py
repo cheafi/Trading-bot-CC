@@ -61,6 +61,16 @@ def test_watchlist_recurrence_near_miss():
     assert any(r["ticker"] == "AAPL" for r in recurring)
 
 
+def test_opportunity_recycle_hints_monitor_only():
+    from src.services.ai_intelligence import build_opportunity_recycle_hints
+
+    hints = build_opportunity_recycle_hints(
+        near_miss=[{"ticker": "MSFT", "gaps": ["thesis"]}],
+        prior_near_miss=[{"ticker": "MSFT", "gaps": ["thesis", "timing"]}],
+    )
+    assert not hints or all(h.get("may_authorize_deploy") is False for h in hints)
+
+
 def test_regime_stack_summary_monitor_only():
     idx = build_index_regime_summary(vix=18, breadth=55, cross_asset={"alignment": "mixed"})
     stack = build_regime_stack_summary(idx)

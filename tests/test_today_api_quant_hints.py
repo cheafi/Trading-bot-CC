@@ -7,7 +7,10 @@ from pathlib import Path
 from src.services.today_insights import (
     _dd_pct_from_underwater_curve,
     build_monitor_triggers,
+    build_opportunity_recheck_heuristic,
     build_quant_cluster_hints,
+    detect_monitor_upgrade_gap_alerts,
+    format_monitor_upgrade_gap_alert,
     resolve_book_dd_utilization_for_hints,
 )
 
@@ -103,5 +106,64 @@ def test_playbook_e2e_selectors_present():
     js = CC_HELPERS.read_text(encoding="utf-8")
     assert 'data-cc="playbook-cost-rank-pill"' in html
     assert 'data-cc="playbook-strategy-decay-line"' in html
+    assert 'data-cc="regime-stack-strip"' in html
+    assert 'data-cc="ai-reason-codes"' in html
+    assert 'data-cc="exec-analytics-sample"' in html
     assert "playbookCostRankPill" in js
     assert "playbookStrategyDecayLine" in js
+    assert "regimeStackStrip" in js
+    assert "aiReasonCodes" in js
+    assert "execAnalyticsSample" in js
+
+
+def test_opportunities_router_enrich_parity():
+    """Ranked /api/v7/opportunities uses same enrich stack as Today/Playbook."""
+    src = DECISION_SRC.read_text(encoding="utf-8")
+    start = src.index("async def ranked_opportunities(")
+    assert start > 0
+    end = src.index("\n\n# ═", start)
+    block = src[start:end]
+    assert "enrich_opportunity_row" in block
+    assert "enrich_opportunity_rows" in block
+    assert "attach_row_ai_hints" in block
+    assert "may_authorize_deploy" in block
+    assert block.index("may_authorize_deploy") > block.index("attach_row_ai_hints")
+
+
+def test_monitor_upgrade_alert_gap_drop():
+    prior = [{"ticker": "AMD", "gaps": ["timing", "thesis"]}]
+    current = [{"ticker": "AMD", "gaps": ["timing"], "upgrade_trigger": "Reclaim"}]
+    alerts = detect_monitor_upgrade_gap_alerts(current, prior_near_miss=prior)
+    assert alerts
+    assert alerts[0]["type"] == "monitor_upgrade_alert"
+    assert "dropped" in alerts[0]["detail"]
+    assert alerts[0].get("monitoring_only") is True
+
+
+def test_monitor_upgrade_alert_single_gap_trigger():
+    triggers = build_monitor_triggers(
+        market_pulse={},
+        near_miss=[{"ticker": "NVDA", "gaps": ["timing"], "upgrade_trigger": "Vol"}],
+        vix=18,
+        breadth=55,
+        tradeability="WAIT",
+    )
+    upgrade = [t for t in triggers if t["type"] == "monitor_upgrade_alert"]
+    assert upgrade
+    assert "single gate gap" in upgrade[0]["detail"]
+
+
+def test_opportunity_recheck_heuristic_monitor_only():
+    hints = build_opportunity_recheck_heuristic(
+        near_miss=[{"ticker": "AAPL", "gaps": ["timing", "R:R"]}],
+        prior_near_miss=[{"ticker": "AAPL", "gaps": ["timing", "R:R"]}],
+    )
+    assert hints
+    assert hints[0]["may_authorize_deploy"] is False
+    assert "recycle" in hints[0]["hint"].lower()
+
+
+def test_today_router_execution_analytics_wired():
+    src = DECISION_SRC.read_text(encoding="utf-8")
+    assert '"execution_analytics": execution_analytics' in src
+    assert "build_empty_execution_analytics_state" in src

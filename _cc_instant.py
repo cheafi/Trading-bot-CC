@@ -97,24 +97,33 @@ def _proxy_timeout(path: str) -> int:
     """Keep dashboard-critical calls from hanging the instant server."""
     if path.startswith("/api/v7/opportunity-scanner") and "force_refresh=true" in path:
         return 35
+    # Fast probes only — must answer quickly or instant server serves disk fallback.
     if path.startswith(
         (
             "/healthz",
             "/readyz",
             "/api/health",
-            "/api/live/market",
-            "/api/recommendations",
-            "/api/v7/today",
-            "/api/ops/cc-header",
             "/api/ops/error-log",
             "/api/ops/changelog",
             "/api/ops/engine/status",
+        )
+    ):
+        return 5
+    # Scanner / freshness paths can take 35–90s on cold start; 5s caused false brief-fallback.
+    if path.startswith(
+        (
+            "/api/live/market",
+            "/api/recommendations",
+            "/api/v7/today",
+            "/api/v7/opportunities",
+            "/api/ops/cc-header",
+            "/api/data/freshness",
             "/api/v7/playbook/ranked",
             "/api/v7/flow-decision",
             "/api/v7/playbook/scanners",
         )
     ):
-        return 5
+        return 90
     if "strategy-factory" in path:
         return 120
     if path.startswith("/api/v7/macro-intel"):
@@ -342,8 +351,32 @@ def _today_bytes_from_brief(brief: dict, reason: str) -> bytes:
     return _encode_degraded(payload, reason=reason)
 
 
+def _cc_live_data_only() -> bool:
+    try:
+        from src.services.cc_live_policy import cc_live_data_only_enabled
+
+        return cc_live_data_only_enabled()
+    except Exception:
+        return os.environ.get("CC_LIVE_DATA_ONLY", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+
+
 def _stale_today_bytes(reason: str = "backend importing") -> bytes:
     """Minimal /api/v7/today payload so the dashboard renders during cold start."""
+    if _cc_live_data_only():
+        try:
+            from src.services.cc_live_policy import build_live_unavailable_today_payload
+
+            return _encode_degraded(
+                build_live_unavailable_today_payload(reason=reason),
+                reason=reason,
+            )
+        except Exception:
+            pass
     brief = _load_latest_brief()
     if brief and (brief.get("actionable") or brief.get("watch")):
         return _today_bytes_from_brief(brief, reason)
@@ -945,6 +978,47 @@ def _stale_ops_error_log_bytes(reason: str) -> bytes:
     )
 
 
+
+
+def _stale_ops_status_bytes(reason: str) -> bytes:
+    """Minimal operator status while backend is slow or proxy times out."""
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    uptime_s = round(time.time() - _start, 1)
+    return _encode_degraded(
+        {
+            "uptime": f"{int(uptime_s // 3600)}h {int((uptime_s % 3600) // 60)}m",
+            "uptime_seconds": int(uptime_s),
+            "startup_time": now.isoformat().replace("+00:00", "Z"),
+            "version": "9.0.0",
+            "engine": {
+                "running": False,
+                "dry_run": True,
+                "cycle_count": 0,
+                "signals_today": 0,
+                "trades_today": 0,
+                "cached_recommendations": 0,
+                "circuit_breaker": False,
+                "circuit_breaker_reason": "",
+                "last_cycle": None,
+            },
+            "components": {},
+            "cache_stats": {},
+            "latency": {"regime_ms": -1},
+            "trust": {
+                "mode": "PAPER",
+                "source": "instant-degraded",
+                "as_of": now.isoformat().replace("+00:00", "Z"),
+                "stale": True,
+                "reason": reason,
+            },
+            "instant_degraded": True,
+            "degraded_reason": reason,
+        },
+        reason=reason,
+    )
+
 def _stale_ops_changelog_bytes(reason: str) -> bytes:
     """Disk changelog while uvicorn is still importing."""
     from datetime import datetime, timezone
@@ -1181,6 +1255,16 @@ def _stale_scanners_bytes() -> bytes:
 
 
 def _stale_ranked_bytes(reason: str) -> bytes:
+    if _cc_live_data_only():
+        try:
+            from src.services.cc_live_policy import build_live_unavailable_ranked
+
+            return _encode_degraded(
+                build_live_unavailable_ranked(reason=reason),
+                reason=reason,
+            )
+        except Exception:
+            pass
     body = _load_ranked_snapshot_bytes()
     if body:
         return _maybe_stamp_degraded_body(body)
@@ -1668,6 +1752,10 @@ def _degraded_response(path_only: str, reason: str, full_path: str = "") -> byte
             return body
     if path_only == "/api/v7/today":
         return _stale_today_bytes(reason)
+    if path_only == "/api/v7/opportunities":
+        return _stale_ranked_bytes(reason)
+    if path_only == "/api/ops/status":
+        return _stale_ops_status_bytes(reason)
     if path_only == "/api/ops/cc-header":
         return _stale_cc_header_bytes()
     if path_only == "/api/ops/error-log":

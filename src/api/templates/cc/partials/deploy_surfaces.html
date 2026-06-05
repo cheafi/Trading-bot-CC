@@ -58,11 +58,13 @@
             </div>
             <div x-show="today7.regime_stack_summary" class="text-[8px] mb-1" style="color:var(--t3);line-height:1.45" x-text="(window.CCHelpers&&CCHelpers.regimeStackStripLine)?CCHelpers.regimeStackStripLine(today7.regime_stack_summary):''"></div>
             <div x-show="today7.allocator_stance&&today7.allocator_stance.suggestion" class="text-[8px] mb-1" style="color:var(--t3)" x-text="(window.CCHelpers&&CCHelpers.allocatorStanceHint)?CCHelpers.allocatorStanceHint(today7.allocator_stance):''"></div>
+            <div data-cc="ai-reason-codes">
             <template x-if="today7.ai_reason_codes&&today7.ai_reason_codes.length">
               <template x-for="rc in today7.ai_reason_codes.slice(0,3)" :key="'ai-rc-'+rc.code">
                 <div class="text-[8px]" style="color:var(--t2);line-height:1.4" x-text="'• '+(window.CCHelpers&&CCHelpers.aiReasonCodeLine?CCHelpers.aiReasonCodeLine(rc):rc.message)"></div>
               </template>
             </template>
+            </div>
           </div>
         </div>
       </template>

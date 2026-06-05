@@ -21,3 +21,9 @@ def test_payload_no_authorize_execution():
 def test_unknown_low_sample():
     p = build_execution_analytics(orders_sampled=2, degraded=True)
     assert p["fill_quality"]["status"] == STATUS_UNKNOWN
+
+
+def test_sample_state_insufficient_when_degraded():
+    p = build_execution_analytics(orders_sampled=2, degraded=True)
+    assert p["sample_state"] == "insufficient_sample"
+    assert p["sample_state_label"]

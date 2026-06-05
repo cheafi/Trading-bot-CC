@@ -4656,10 +4656,15 @@ async def ops_status():
     try:
         from src.services.data_freshness_service import freshness_report
 
-        fr = await freshness_report(app.state.market_data)
+        fr = await asyncio.wait_for(
+            freshness_report(app.state.market_data), timeout=5.0
+        )
         components["market_data"] = fr.get("worst_tier") == "FRESH" or any(
             s.get("ok") for s in (fr.get("streams") or [])
         )
+    except asyncio.TimeoutError:
+        logger.warning("[ops/status] freshness_report timed out after 5s")
+        components.setdefault("market_data", False)
     except Exception:
         components.setdefault("market_data", False)
 
@@ -4673,8 +4678,11 @@ async def ops_status():
     # Latency probe (time a simple regime fetch)
     t0 = _time.monotonic()
     try:
-        await _get_regime()
+        await asyncio.wait_for(_get_regime(), timeout=5.0)
         regime_latency_ms = round((_time.monotonic() - t0) * 1000, 1)
+    except asyncio.TimeoutError:
+        logger.warning("[ops/status] regime fetch timed out after 5s")
+        regime_latency_ms = -1
     except Exception:
         regime_latency_ms = -1
 

@@ -543,6 +543,14 @@ def _ranked_fallback_chain(
     reason: str,
 ) -> Dict[str, Any]:
     """Memory stale → disk snapshot → compressed → emergency."""
+    from src.services.cc_live_policy import (
+        build_live_unavailable_ranked,
+        cc_live_data_only_enabled,
+    )
+
+    if cc_live_data_only_enabled():
+        return build_live_unavailable_ranked(reason=reason)
+
     from src.services.playbook_board_fallback import (
         BOARD_MODE_EMERGENCY,
         build_emergency_response,
@@ -784,10 +792,24 @@ async def ranked_snapshot(
     sector: str = Query(None),
 ) -> Dict[str, Any]:
     """Instant last-good board — memory or disk only, no live compute."""
+    from src.services.cc_live_policy import (
+        build_live_unavailable_ranked,
+        cc_live_data_only_enabled,
+    )
     from src.services.playbook_board_fallback import (
         BOARD_MODE_EMERGENCY,
         build_emergency_response,
     )
+
+    if cc_live_data_only_enabled():
+        return _finalize_ranked_response(
+            build_live_unavailable_ranked(
+                reason="live-only mode — snapshot endpoint disabled; use /ranked?refresh=true"
+            ),
+            limit=limit,
+            action=action,
+            sector=sector,
+        )
 
     cache_key = _ranked_cache_key(limit, action, sector)
     if cached := _get_ranked_cached(cache_key, allow_stale=True):
@@ -832,13 +854,19 @@ async def ranked_opportunities(
 
     from src.services.playbook_board_fallback import board_has_content
 
-    cache_key = _ranked_cache_key(limit, action, sector)
-    if cached := _get_ranked_cached(cache_key):
-        return _finalize_ranked_response(
-            cached, limit=limit, action=action, sector=sector
-        )
+    from src.services.cc_live_policy import cc_live_data_only_enabled
 
-    if not refresh and not action and not sector:
+    cache_key = _ranked_cache_key(limit, action, sector)
+    live_only = cc_live_data_only_enabled()
+    if cached := _get_ranked_cached(cache_key):
+        if not live_only or (
+            cached.get("source") == "ranked_pipeline" and not cached.get("stale")
+        ):
+            return _finalize_ranked_response(
+                cached, limit=limit, action=action, sector=sector
+            )
+
+    if not live_only and not refresh and not action and not sector:
         if snap := load_playbook_snapshot(cache_key):
             asyncio.create_task(
                 _refresh_ranked_cache(cache_key, limit, action, sector)

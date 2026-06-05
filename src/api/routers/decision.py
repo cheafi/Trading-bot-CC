@@ -466,6 +466,12 @@ async def today_summary(request: Request):
         logger.debug("Market pulse unavailable: %s", exc)
 
     # 3. Scanner cache (app.state.scan_cache aliases module _scan_cache from lifespan)
+    from src.services.cc_live_policy import (
+        build_live_unavailable_today_payload,
+        cc_live_data_only_enabled,
+    )
+
+    live_only = cc_live_data_only_enabled()
     scanner_degraded = False
     scanner_reason = ""
     scan_cache = getattr(request.app.state, "scan_cache", None) or {}
@@ -477,6 +483,42 @@ async def today_summary(request: Request):
     if scores.get("_degraded"):
         scanner_degraded = True
         scanner_reason = str(scores.get("_reason") or "scanner degraded")
+
+    if live_only and scanner_degraded:
+        try:
+            live_recs, live_scores = await asyncio.wait_for(
+                request.app.state.scan_signals(limit=50),
+                timeout=_TODAY_SCAN_TIMEOUT,
+            )
+            if live_recs:
+                scanned = list(live_recs)[:50]
+                scores = dict(live_scores or {})
+                scanner_degraded = False
+                scanner_reason = ""
+            else:
+                try:
+                    from src.api.app_state import get_engine
+
+                    engine = get_engine(request.app)
+                    if engine and not bool(getattr(engine, "_running", False)):
+                        await asyncio.wait_for(engine.run_one_cycle(), timeout=30.0)
+                        scan_cache = getattr(request.app.state, "scan_cache", None) or {}
+                        scanned = list(scan_cache.get("recs", []))[:50]
+                        scores = dict(scan_cache.get("scores", {}) or {})
+                        if scanned:
+                            scanner_degraded = False
+                            scanner_reason = ""
+                except Exception as exc:
+                    logger.debug("live-only engine cycle failed: %s", exc)
+        except Exception as exc:
+            logger.debug("live-only scan_signals failed: %s", exc)
+
+        if scanner_degraded and not scanned:
+            reason = (
+                scanner_reason
+                or "live-only mode — scanner empty after live scan and engine cycle"
+            )
+            return build_live_unavailable_today_payload(reason=reason)
 
     # 4. Filter funnel
     universe = len(getattr(request.app.state, "_scan_watchlist", []))
@@ -1076,6 +1118,16 @@ async def today_summary(request: Request):
             equity_dd_pct=equity_dd_pct,
         ),
     )
+    prior_near_miss: List[Dict[str, Any]] = []
+    if not used_brief_fallback:
+        try:
+            from src.services.playbook_board_fallback import load_playbook_snapshot
+
+            snap = load_playbook_snapshot()
+            if snap:
+                prior_near_miss = list(snap.get("near_miss") or [])
+        except Exception:
+            prior_near_miss = []
     monitor_triggers = build_monitor_triggers(
         market_pulse=market_pulse,
         near_miss=near_miss,
@@ -1083,6 +1135,7 @@ async def today_summary(request: Request):
         breadth=breadth * 100 if breadth <= 1 else breadth,
         tradeability=tradeability,
         quant_cluster_hints=quant_cluster_hints,
+        prior_near_miss=prior_near_miss or None,
     )
 
     from src.services.ai_intelligence import (
@@ -1102,6 +1155,7 @@ async def today_summary(request: Request):
         decision_authority=decision_authority,
         quant_cluster_hints=quant_cluster_hints,
         near_miss=near_miss,
+        prior_near_miss=prior_near_miss or None,
         monitor_triggers=monitor_triggers,
         top_ranked=top5,
         event_risks=event_risks,
@@ -1284,6 +1338,19 @@ async def today_summary(request: Request):
         deployable_count=execution_ready_count,
     )
 
+    from src.services.execution_analytics import (
+        build_empty_execution_analytics_state,
+        build_execution_analytics,
+    )
+
+    if ibkr_connected and not scanner_degraded and not used_brief_fallback:
+        execution_analytics = build_execution_analytics(
+            ibkr_connected=True,
+            degraded=False,
+        )
+    else:
+        execution_analytics = build_empty_execution_analytics_state()
+
     payload = {
         "date": now.strftime("%Y-%m-%d"),
         "narrative": narrative,
@@ -1330,6 +1397,7 @@ async def today_summary(request: Request):
         "quant_cluster_hints": quant_cluster_hints,
         "sleeve_summary": sleeve_summary,
         "execution_readiness": execution_readiness,
+        "execution_analytics": execution_analytics,
         "evidence_badges": build_evidence_badges(
             scanner_degraded=scanner_degraded,
             regime_synthetic=bool(getattr(request.app.state, "regime_synthetic", False)),
@@ -1418,7 +1486,18 @@ async def ranked_opportunities(
     regime_state = await _fetch_regime(request)
     should_trade = getattr(regime_state, "should_trade", True)
 
-    scanned, _ = await request.app.state.scan_signals(limit=100)
+    import asyncio as _asyncio
+
+    try:
+        scanned, _ = await _asyncio.wait_for(
+            request.app.state.scan_signals(limit=100), timeout=35.0
+        )
+    except _asyncio.TimeoutError:
+        logger.warning("[opportunities] scan_signals timed out after 35s")
+        scanned = []
+    except Exception as exc:
+        logger.warning("[opportunities] scan_signals failed: %s", exc)
+        scanned = []
 
     # Filter
     if setup_filter:
@@ -1446,69 +1525,139 @@ async def ranked_opportunities(
     }
     council_results = council.evaluate_batch(scanned, regime_ctx)
 
-    enriched = []
+    from src.services.decision_truth_model import (
+        apply_authority_to_rows,
+        build_decision_authority,
+        build_honest_funnel,
+        enrich_opportunity_row,
+    )
+    from src.services.cost_adjusted_ranker import enrich_opportunity_rows
+    from src.services.index_regime import build_index_regime_summary
+    from src.services.ai_intelligence import attach_row_ai_hints
+
+    trend_label = trend_map.get(regime_label, "SIDEWAYS")
+    breadth_val = round(float(breadth) * 100) if float(breadth) <= 1.0 else round(float(breadth))
+    funnel = build_honest_funnel(
+        universe=len(scanned),
+        scanned=scanned,
+        council_results=council_results,
+    )
+    execution_ready_count = int(funnel.get("execution_ready_setups") or 0)
+    if not should_trade:
+        tradeability = "NO_TRADE"
+    elif execution_ready_count >= 1:
+        tradeability = "SELECTIVE"
+    else:
+        tradeability = "WAIT"
+
+    enriched: List[Dict[str, Any]] = []
     for cr in council_results:
         pr = cr.pipeline
         sig = pr.signal
-        enriched.append(
-            {
-                "ticker": sig.get("ticker", ""),
-                "strategy": _setup_family(sig.get("strategy", "")),
-                "score": pr.fit.final_score,
-                "grade": pr.fit.grade,
-                "timing": _timing_label(
-                    abs(sig.get("entry_price", 0) - sig.get("stop_price", 0))
-                    / max(sig.get("entry_price", 1), 1)
-                    * 100
-                ),
-                "risk_reward": sig.get("risk_reward", 0),
-                "rsi": sig.get("rsi", 0),
-                "vol_quality": (
-                    "HIGH"
-                    if sig.get("vol_ratio", 0) > 1.5
-                    else ("OK" if sig.get("vol_ratio", 0) > 0.8 else "LOW")
-                ),
-                "sector_bucket": pr.sector.sector_bucket.value,
-                "regime_fit": sig.get("regime", ""),
-                "entry_price": sig.get("entry_price", 0),
-                "target_price": sig.get("target_price", 0),
-                "stop_price": sig.get("stop_price", 0),
-                "action": pr.decision.action,
-                "action_reason": pr.decision.rationale,
-                "why_now": ([pr.explanation.why_now] if pr.explanation.why_now else []),
-                "position_hint": _position_hint(sig, should_trade),
-                "confidence_breakdown": pr.confidence.to_dict(),
-                "decision": pr.decision.to_dict(),
-                "expert_council": cr.verdict.to_dict(),
-            }
-        )
+        row = {
+            "ticker": sig.get("ticker", ""),
+            "strategy": _setup_family(sig.get("strategy", "")),
+            "score": pr.fit.final_score,
+            "grade": pr.fit.grade,
+            "timing": _timing_label(
+                abs(sig.get("entry_price", 0) - sig.get("stop_price", 0))
+                / max(sig.get("entry_price", 1), 1)
+                * 100
+            ),
+            "risk_reward": sig.get("risk_reward", 0)
+            or getattr(pr.decision, "risk_reward", None)
+            or getattr(pr.decision, "risk_reward_ratio", None)
+            or 0,
+            "rsi": sig.get("rsi", 0),
+            "vol_quality": (
+                "HIGH"
+                if sig.get("vol_ratio", 0) > 1.5
+                else ("OK" if sig.get("vol_ratio", 0) > 0.8 else "LOW")
+            ),
+            "sector_bucket": pr.sector.sector_bucket.value,
+            "sector_type": pr.sector.sector_bucket.value,
+            "entry_price": sig.get("entry_price", 0),
+            "target_price": sig.get("target_price", 0),
+            "stop_price": sig.get("stop_price", 0),
+            "action": pr.decision.action,
+            "action_reason": pr.decision.rationale,
+            "why_now": ([pr.explanation.why_now] if pr.explanation.why_now else []),
+            "why_not": (
+                pr.explanation.why_not_stronger if pr.explanation else None
+            ),
+            "invalidation": getattr(pr.explanation, "invalidation", None)
+            or _invalidation(sig),
+            "position_hint": _position_hint(sig, should_trade),
+            "confidence_breakdown": pr.confidence.to_dict(),
+            "decision": pr.decision.to_dict(),
+            "expert_council": cr.verdict.to_dict(),
+            "thesis_conf": round(float(pr.confidence.thesis), 2),
+            "timing_conf": round(float(pr.confidence.timing), 2),
+            "exec_conf": round(float(pr.confidence.execution), 2),
+            "data_conf": float(pr.confidence.data),
+            "final_conf": round(float(pr.confidence.final), 2),
+            "leader": pr.sector.leader_status.value,
+        }
+        enriched.append(enrich_opportunity_row(cr, row))
 
-    # Sort
+    index_regime_summary = build_index_regime_summary(
+        tradeability=tradeability,
+        should_trade=should_trade,
+        degraded=False,
+    )
+    enriched = enrich_opportunity_rows(
+        enriched,
+        index_regime=index_regime_summary,
+        tradeability=tradeability,
+    )
+    market_regime = {
+        "trend": trend_label,
+        "tradeability": tradeability,
+        "breadth": breadth_val,
+    }
+    enriched = attach_row_ai_hints(
+        enriched,
+        market_regime=market_regime,
+        index_regime=index_regime_summary,
+        event_risks=[],
+    )
+    decision_authority = build_decision_authority(
+        tradeability=tradeability,
+        should_trade=should_trade,
+        scanner_degraded=False,
+        deploy_ideas_count=execution_ready_count,
+        live_deploy_count=execution_ready_count,
+    )
+    enriched = apply_authority_to_rows(enriched, decision_authority)
+
     sort_keys = {
-        "score": lambda x: -x["score"],
+        "score": lambda x: -float(x.get("score") or 0),
         "timing": lambda x: [
             "NEAR_PIVOT",
             "EARLY",
             "ON_TIME",
             "EXTENDED",
             "LATE",
-        ].index(x["timing"]),
-        "risk_reward": lambda x: -x["risk_reward"],
-        "strategy": lambda x: x["strategy"],
+        ].index(x.get("timing") or "LATE"),
+        "risk_reward": lambda x: -float(x.get("risk_reward") or 0),
+        "strategy": lambda x: x.get("strategy") or "",
     }
     sort_fn = sort_keys.get(sort_by, sort_keys["score"])
     enriched.sort(key=sort_fn)
 
-    # Add rank
     for i, item in enumerate(enriched[:limit], 1):
         item["rank"] = i
 
     return {
         "regime_allows_trading": should_trade,
+        "tradeability": tradeability,
         "total_signals": len(enriched),
         "opportunities": enriched[:limit],
+        "index_regime_summary": index_regime_summary,
         "sort_by": sort_by,
         "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
+        "enrichment_authority": "monitor_only",
+        "may_authorize_deploy": False,
     }
 
 

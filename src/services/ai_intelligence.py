@@ -247,6 +247,20 @@ def detect_watchlist_recurrence(
     return recurring[:5]
 
 
+def build_opportunity_recycle_hints(
+    *,
+    near_miss: Optional[List[Dict[str, Any]]] = None,
+    prior_near_miss: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    """Monitor-only auto-recheck for stale near-miss rows — never deploy authority."""
+    from src.services.today_insights import build_opportunity_recheck_heuristic
+
+    return build_opportunity_recheck_heuristic(
+        near_miss=near_miss,
+        prior_near_miss=prior_near_miss,
+    )
+
+
 def build_regime_stack_summary(
     index_regime: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -430,6 +444,7 @@ def build_ai_intelligence_for_today(
     decision_authority: Optional[Dict[str, Any]] = None,
     quant_cluster_hints: Optional[List[Dict[str, Any]]] = None,
     near_miss: Optional[List[Dict[str, Any]]] = None,
+    prior_near_miss: Optional[List[Dict[str, Any]]] = None,
     monitor_triggers: Optional[List[Dict[str, Any]]] = None,
     top_ranked: Optional[List[Dict[str, Any]]] = None,
     event_risks: Optional[List[Any]] = None,
@@ -456,12 +471,17 @@ def build_ai_intelligence_for_today(
         monitor_triggers=monitor_triggers,
         top_ranked=top_ranked,
     )
+    opportunity_recheck = build_opportunity_recycle_hints(
+        near_miss=near_miss,
+        prior_near_miss=prior_near_miss,
+    )
     body = {
         "regime_stack_summary": regime_stack,
         "allocator_stance": allocator_stance,
         "ai_reason_codes": reason_codes,
         "catalyst_triage": catalysts,
         "watchlist_recurrence": recurrence,
+        "opportunity_recheck": opportunity_recheck,
         "ai_explanatory_only": True,
         "deploy_from_ai_alone": False,
         "may_authorize_deploy": False,
