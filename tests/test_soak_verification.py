@@ -51,7 +51,8 @@ def test_soak_recovery_copy_parity():
     assert "Safe now" in operator_loading_safe_line(health_mode="loading")
     assert "Engine OFF" in engine_off_recovery_line()
     assert "stale" in stale_refresh_recovery_line().lower()
-    assert "READY" in ibkr_login_to_ready_hint()
+    assert "READY" in ibkr_login_to_ready_hint(ibkr_short="READY", handoff_ready=True)
+    assert "OFFLINE" in ibkr_login_to_ready_hint(ibkr_short="OFFLINE")
     assert "CONFIRM ONLY" in route_abort_recovery_hint("dossier")
     assert "Run Scanners" in route_abort_recovery_hint("discovery")
 

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from src.services.decision_truth_model import normalize_playbook_funnel
 from src.services.fetch_surface_state import (
+    playbook_what_to_monitor_line,
     today_mission_empty_blockers_copy,
     today_mission_system_blockers,
     today_mission_panel,
@@ -47,11 +48,12 @@ def test_today_mission_panel_splits_system_and_card_gates():
 
 def test_playbook_funnel_label_uses_funnel_not_row_actions():
     raw = INDEX_HTML.read_text(encoding="utf-8")
-    assert "playbookFunnelLabel(rankedOpps.filter_funnel||today7.filter_funnel, null)" in raw
+    assert "playbookFunnelLabel(rankedOpps.filter_funnel||today7.filter_funnel, rankedOpps.rows)" in raw
     idx = raw.index("playbookFunnelCounts(funnel")
     body = raw[idx : idx + 420]
     assert "rows.filter" not in body
     assert "watch_qualified_setups" in body
+    assert "funnel watch-qualified" in raw
 
 
 def test_index_mission_panel_system_blockers():
@@ -81,7 +83,23 @@ def test_index_header_chip_groups():
 def test_playbook_wait_day_compression_copy():
     raw = INDEX_HTML.read_text(encoding="utf-8")
     assert "playbookWaitDayIntro()" in raw
+    assert "playbookWhatToMonitorLine()" in raw
     assert "Monitor ranking only" in raw
+    helpers = CC_HELPERS.read_text(encoding="utf-8")
+    assert "playbookWhatToMonitorLine" in helpers
+
+
+def test_playbook_what_to_monitor_line_parity():
+    line = playbook_what_to_monitor_line(
+        wait_day=True,
+        top_symbol="cost",
+        near_miss_count=2,
+    )
+    assert "COST upgrade triggers" in line
+    assert "2 near-miss rows" in line
+    assert "deploy unlock checklist below" in line
+    assert "no deploy authority" in line
+    assert playbook_what_to_monitor_line(wait_day=False) == ""
 
 
 def test_normalize_watch_not_inflated_from_board_rows():

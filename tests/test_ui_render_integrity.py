@@ -154,6 +154,35 @@ def test_index_html_ai_commentary_warmup_errors():
     block = raw[raw.find("async fetchAINarrative(") : raw.find("async fetchRanked(")]
     assert "surfaceWarmupLoadingLine('dashboard')" in block
     assert "normalizeFetchError" in block
+    assert "aiCommentaryCtaLabel()" in raw
+    assert "today7.ai_provider='loading'" in block
+    assert "ai_provider==='loading'" in raw
+
+
+def test_index_html_ibkr_recovery_hint_state_driven():
+    raw = INDEX_HTML.read_text(encoding="utf-8")
+    idx = raw.index("ibkrLoginToReadyHint(){")
+    body = raw[idx : idx + 700]
+    assert "ibkrStateFrom(this.today7.execution_readiness" in body
+    assert "IBKR OFFLINE" in body
+    assert "IBKR LOGIN" in body
+
+
+def test_index_html_flow_kpi_pipeline_structure():
+    raw = INDEX_HTML.read_text(encoding="utf-8")
+    assert "flowKpiLabel()" in raw
+    assert "flowKpiSubLabel()" in raw
+    idx = raw.index("flowKpiLabel(){")
+    assert "return 'flow'" in raw[idx : idx + 80]
+
+
+def test_index_html_mission_monitors_fallback_label():
+    raw = INDEX_HTML.read_text(encoding="utf-8")
+    assert "Fallback monitors" in raw
+    idx = raw.index("todayMissionMonitorsColumnHint(){")
+    body = raw[idx : idx + 600]
+    assert "watchQualified" in body
+    assert "filter_funnel" in body
 
 
 def test_cc_instant_degraded_banner_contract():
@@ -207,8 +236,9 @@ def test_index_html_playbook_unlock_detail_uses_filter_funnel_when_watch_positiv
     idx = raw.index("playbookUnlockConditionDetail(c){")
     body = raw[idx : idx + 1200]
     assert "filter_funnel" in body
-    assert "watch-qualified on fresh data (from filter_funnel" in body
-    assert "Number(watch)>0" in body
+    assert "playbookFunnelCounts" in body
+    assert "scan-ranked (not watch-qualified)" in body
+    assert "wq>0" in body or "Number(wq)>0" in body or "if(wq>0)" in body
 
 
 def test_build_cc_template_check_passes():

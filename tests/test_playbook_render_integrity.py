@@ -12,15 +12,16 @@ INDEX_HTML = ROOT / "src" / "api" / "templates" / "index.html"
 def _playbook_unlock_detail_block() -> str:
     raw = INDEX_HTML.read_text(encoding="utf-8")
     idx = raw.index("playbookUnlockConditionDetail(c){")
-    return raw[idx : idx + 900]
+    return raw[idx : idx + 1400]
 
 
 def test_playbook_unlock_detail_uses_capture_not_dollar_one():
-    """Callback .replace must use capture group n, not literal '$1'."""
+    """Board detail uses funnel authority; fallback replace uses capture group n."""
     body = _playbook_unlock_detail_block()
     assert "(m,n)=>'$1 scan-ranked" not in body
+    assert "funnel watch-qualified" in body
+    assert "scan-ranked (not watch-qualified)" in body
     assert "n+' scan-ranked (not watch-qualified)'" in body
-    assert "m[1]+' scan-ranked (not watch-qualified)'" in body
 
 
 def test_playbook_unlock_detail_replace_produces_numeric_count():

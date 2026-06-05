@@ -38,6 +38,7 @@ def test_format_fallback_score_helpers_in_template():
     assert "!discoveryHeaderMode() && decisionHub" in text
     assert "Candidates for monitoring only" in text
     assert "discoveryFallbackBannerLine()" in text
+    assert "discoveryVerdictQualityLabel()" in text
     assert "scannerDiscoveryHitsLabel()" in text
     assert "discoveryConfidenceLabel(row)" in text
     assert "cardScoreLabel(row)" in text
@@ -62,6 +63,7 @@ def test_enrich_hit_fallback_rank_uses_tier_not_deploy_score():
     assert payload["score_display_mode"] == "fallback_rank"
     assert payload["priority_tier"] == "High"
     assert payload["score_display"] == "High"
+    assert payload["score_display_label"] == "Fallback rank · high"
     assert payload["score_source"] == "brief-fallback"
     assert payload["strength"] == 9.0
 

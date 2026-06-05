@@ -527,6 +527,15 @@ def loading_session_recovery_line(
     )
 
 
+def discovery_fallback_banner_line() -> str:
+    """Primary scanners-tab banner when live fetch failed but fallback rows render."""
+    return (
+        "Live fetch failed — showing fallback watchlist samples. "
+        "Research-only fallback results — not live scanner output. "
+        "Confirm in Playbook before sizing."
+    )
+
+
 def route_abort_recovery_hint(surface: str = "") -> str:
     """One-time recovery copy after client route abort — no backend auto-heal."""
     key = str(surface or "").lower()
@@ -552,10 +561,41 @@ def engine_off_recovery_line() -> str:
     )
 
 
-def ibkr_login_to_ready_hint() -> str:
-    return (
-        "IBKR LOGIN — connect session on IBKR tab; READY required before handoff "
-        "(bracket aligned)"
+def ibkr_login_to_ready_hint(
+    *,
+    ibkr_short: str = "",
+    ibkr_level: str = "",
+    hint: str = "",
+    gateway_reachable: bool = False,
+    session_connected: bool = False,
+    handoff_ready: bool = False,
+) -> str:
+    """State-driven IBKR recovery line — mirrors ibkr_diagnosis short codes."""
+    custom = str(hint or "").strip()
+    short = str(ibkr_short or "").upper()
+    level = str(ibkr_level or "").lower()
+    if short in ("OFFLINE", "NO IBAPI", "API OFF") or level == "offline":
+        return custom or (
+            "IBKR OFFLINE — start Gateway/TWS and confirm API port; "
+            "Connect on IBKR tab when reachable"
+        )
+    if short == "BLOCKED":
+        return "IBKR BLOCKED — circuit breaker active; clear risk gate before handoff"
+    if short == "READY" or handoff_ready or level == "ready":
+        return custom or (
+            "IBKR READY — handoff path verified; confirm bracket alignment before transmit"
+        )
+    if short in ("LOGIN", "HANDSHAKE") or (gateway_reachable and not session_connected):
+        return custom or (
+            "IBKR LOGIN — connect session on IBKR tab; READY required before handoff "
+            "(bracket aligned)"
+        )
+    if short in ("MONITOR", "PARTIAL") or level == "partial":
+        return custom or (
+            "IBKR partial — session up; confirm bracket and portfolio sync before handoff"
+        )
+    return custom or (
+        "IBKR OFFLINE — start Gateway/TWS; Connect on IBKR tab when API port is reachable"
     )
 
 
@@ -602,11 +642,68 @@ def today_mission_wait_subtitle(*, wait_day: bool = False) -> str:
     return ""
 
 
-def today_mission_monitors_column_hint(*, wait_day: bool = False) -> str:
+def today_mission_monitors_column_hint(
+    *,
+    wait_day: bool = False,
+    watch_qualified: int = 0,
+    monitor_count: int = 0,
+) -> str:
     """Mission panel monitors column — attention routing without tradability."""
+    wq = int(watch_qualified or 0)
+    mc = int(monitor_count or 0)
+    if wq > 0:
+        return (
+            f"{wq} watch-qualified on funnel — mission tickers are attention queue, "
+            "not extra KPI count"
+        )
+    if mc > 0:
+        return (
+            "Fallback monitors — scan / near-miss queue; "
+            "filter_funnel is authority for watch-qualified"
+        )
     if wait_day:
         return "Near-miss · watch queue — priority only, not deploy on WAIT"
     return "Watch / near-miss — ranking for attention, not handoff permission"
+
+
+def playbook_what_to_monitor_line(
+    *,
+    wait_day: bool = False,
+    top_symbol: str = "",
+    near_miss_count: int = 0,
+) -> str:
+    """Playbook WAIT day — operator monitor routing without deploy authority."""
+    if not wait_day:
+        return ""
+    sym = str(top_symbol or "").strip().upper()
+    nm = int(near_miss_count or 0)
+    parts: list[str] = []
+    if sym:
+        parts.append(f"{sym} upgrade triggers")
+    if nm:
+        parts.append(f"{nm} near-miss row{'s' if nm != 1 else ''}")
+    parts.append("deploy unlock checklist below")
+    return "Monitor only — " + " · ".join(parts) + " · no deploy authority"
+
+
+def playbook_what_to_monitor_line(
+    *,
+    wait_day: bool = False,
+    top_symbol: str = "",
+    near_miss_count: int = 0,
+) -> str:
+    """Playbook WAIT-day monitor guidance — operator-facing, no deploy authority."""
+    if not wait_day:
+        return ""
+    parts: list[str] = []
+    if top_symbol:
+        parts.append(f"{top_symbol.upper()} upgrade triggers")
+    nm = int(near_miss_count or 0)
+    if nm > 0:
+        parts.append(f"{nm} near-miss row{'s' if nm != 1 else ''}")
+    parts.append("deploy unlock checklist below")
+    body = " · ".join(parts) if parts else "near-miss strip · gate context"
+    return f"Monitor only — {body} · no deploy authority"
 
 
 def operator_loading_safe_line(
@@ -641,13 +738,16 @@ def today_mission_monitors_label(
     monitors: Optional[list] = None,
     *,
     near_miss_count: int = 0,
+    watch_qualified: int = 0,
 ) -> str:
     """Dashboard mission panel monitors column heading."""
     n = len(monitors or [])
     nm = int(near_miss_count or 0)
+    wq = int(watch_qualified or 0)
     if not n and not nm:
         return "Monitors"
-    base = f"Monitors ({n})" if n else "Monitors"
+    prefix = "Fallback monitors" if n and wq == 0 else "Monitors"
+    base = f"{prefix} ({n})" if n else prefix
     return f"{base} · {nm} near-miss" if nm else base
 
 
@@ -849,3 +949,138 @@ def describe_opportunity_monitor_trigger(trigger_type: str) -> str:
         key,
         "Opportunity context — monitoring only, not deploy authority",
     )
+
+
+DOSSIER_CONFIRM_ONLY_SIZING = "No sizing guidance in confirm-only mode"
+
+
+def dossier_quote_available(data: Optional[Dict[str, Any]] = None) -> bool:
+    """True when dossier header may show a live price (not $0 placeholder)."""
+    d = data or {}
+    if d.get("quote_pending") or d.get("quote_unavailable"):
+        return False
+    try:
+        price = float(d.get("price") or 0)
+    except (TypeError, ValueError):
+        return False
+    return price > 0
+
+
+def dossier_price_display(data: Optional[Dict[str, Any]] = None) -> str:
+    if not dossier_quote_available(data):
+        return "Quote unavailable"
+    return f"${float(data['price']):.2f}"
+
+
+def dossier_change_pct_display(data: Optional[Dict[str, Any]] = None) -> str:
+    if not dossier_quote_available(data):
+        return "—"
+    try:
+        change = float((data or {}).get("change_pct"))
+    except (TypeError, ValueError):
+        return "—"
+    sign = "+" if change >= 0 else ""
+    return f"{sign}{change:.2f}%"
+
+
+def dossier_confirm_only_sizing_line() -> str:
+    return DOSSIER_CONFIRM_ONLY_SIZING
+
+
+def dossier_sizing_display(*, blocked: bool, reason: str = "") -> str:
+    if not blocked:
+        return ""
+    r = str(reason or "")
+    if r == "confirm_only":
+        return "—"
+    if r in ("failed", "partial"):
+        return "Blocked"
+    return "—"
+
+
+def dossier_sizing_explanation(*, blocked: bool, reason: str = "") -> str:
+    if not blocked:
+        return ""
+    r = str(reason or "")
+    if r == "confirm_only":
+        return DOSSIER_CONFIRM_ONLY_SIZING
+    if r in ("failed", "partial"):
+        return "Sizing blocked until live dossier loads"
+    if r == "rr_unavailable":
+        return "Size unavailable — R:R not confirmed"
+    return "Size unavailable"
+
+
+def _opportunity_intel_degraded(payload: Optional[Dict[str, Any]] = None) -> bool:
+    p = payload or {}
+    tier = str(p.get("data_tier") or "").lower()
+    return bool(p.get("degraded") or p.get("instant_degraded") or tier == "mock")
+
+
+def insider_context_label(
+    quality: str = "",
+    payload: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Dossier opp-intel insider line — softer when mock/degraded."""
+    degraded = _opportunity_intel_degraded(payload)
+    q = str(quality or "").lower()
+    labels = {
+        "supportive_only": (
+            "Supportive context (mock/lagged)"
+            if degraded
+            else "Supportive context"
+        ),
+        "notable_accumulation": (
+            "Possible accumulation (mock/lagged)"
+            if degraded
+            else "Notable accumulation (lagged)"
+        ),
+        "notable_distribution": (
+            "Possible distribution (mock/lagged)"
+            if degraded
+            else "Distribution risk (lagged)"
+        ),
+        "noise": "Routine Form 4 (mock)" if degraded else "Routine Form 4",
+        "insufficient_data": (
+            "Insufficient history (mock)" if degraded else "Insufficient history"
+        ),
+    }
+    return labels.get(
+        q,
+        "Insider context (mock/lagged)" if degraded else "Insider context (lagged)",
+    )
+
+
+def institutional_sponsorship_label(
+    verdict: str = "",
+    payload: Optional[Dict[str, Any]] = None,
+) -> str:
+    v = str(verdict or "").strip()
+    if not v:
+        return "—"
+    if not _opportunity_intel_degraded(payload):
+        return v
+    low = v.lower()
+    if "added sponsorship" in low:
+        return "Illustrative added sponsorship (mock/lagged)"
+    if "mixed" in low or "unchanged" in low:
+        return "Illustrative mixed / unchanged (mock/lagged)"
+    return f"{v} (mock/lagged)"
+
+
+def dossier_trade_plan_note(
+    *,
+    note: str = "",
+    setup_type: str = "",
+    research_only: bool = False,
+    levels_blank: bool = False,
+) -> str:
+    """Trade-plan footnote when structure levels are missing in confirm-only mode."""
+    text = str(note or setup_type or "").strip()
+    if research_only and levels_blank:
+        return "Live structure unavailable — confirm-only dossier"
+    if levels_blank:
+        return "Live structure unavailable"
+    if text:
+        return text
+    return "Structure-based plan"

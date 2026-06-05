@@ -122,6 +122,8 @@ def test_index_html_dossier_sizing_gated_when_research_only():
     assert "dosSizeDisplay()" in text
     assert "dossierSizingBlockedReason()" in text
     assert "No sizing guidance in confirm-only mode" in text
+    assert "dosSizeExplanationVisible()" in text
+    assert "dosPriceDisplay()" in text
     assert "Sizing blocked until live dossier loads" in text
     # Trade plan table must not render raw share counts unconditionally
     trade_plan = text[text.find("Trade plan") : text.find("Trade plan") + 2500]

@@ -999,7 +999,7 @@ class ScannerMatrix:
             payload["priority_tier"] = tier
             payload["score_source"] = "brief-fallback"
             payload["score_display"] = tier
-            payload["score_display_label"] = "Fallback rank · relevance only"
+            payload["score_display_label"] = f"Fallback rank · {tier.lower()}"
         else:
             payload["score_display_mode"] = "live"
         return payload
@@ -1211,7 +1211,7 @@ class ScannerMatrix:
                 row["priority_tier"] = tier
                 row["score_source"] = "brief-fallback"
                 row["score_display"] = tier
-                row["score_display_label"] = "Fallback rank · relevance only"
+                row["score_display_label"] = f"Fallback rank · {tier.lower()}"
             else:
                 row["score_display_mode"] = "live"
             merged_top_names.append(row)
