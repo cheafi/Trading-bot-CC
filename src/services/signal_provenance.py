@@ -30,6 +30,9 @@ SIGNAL_STRATEGY_VALIDITY = "strategy_validity"
 SIGNAL_INDEX_REGIME = "index_regime"
 SIGNAL_EXECUTION_ALGO = "execution_algo_recommendation"
 SIGNAL_AI_INTELLIGENCE = "ai_intelligence"
+SIGNAL_SIGNAL_COHORT = "signal_cohort"
+SIGNAL_REGIME_TIMELINE = "regime_timeline"
+SIGNAL_CAPACITY = "capacity_intelligence"
 
 ALL_SIGNAL_TYPES = (
     SIGNAL_INSIDER_FORM4,
@@ -45,6 +48,9 @@ ALL_SIGNAL_TYPES = (
     SIGNAL_INDEX_REGIME,
     SIGNAL_EXECUTION_ALGO,
     SIGNAL_AI_INTELLIGENCE,
+    SIGNAL_SIGNAL_COHORT,
+    SIGNAL_REGIME_TIMELINE,
+    SIGNAL_CAPACITY,
 )
 
 # Max authority any single signal may confer (never deploy alone).
@@ -62,6 +68,9 @@ _SIGNAL_AUTHORITY_CEILING: Dict[str, str] = {
     SIGNAL_INDEX_REGIME: AUTHORITY_RESEARCH,
     SIGNAL_EXECUTION_ALGO: AUTHORITY_OPS,
     SIGNAL_AI_INTELLIGENCE: AUTHORITY_RESEARCH,
+    SIGNAL_SIGNAL_COHORT: AUTHORITY_RESEARCH,
+    SIGNAL_REGIME_TIMELINE: AUTHORITY_RESEARCH,
+    SIGNAL_CAPACITY: AUTHORITY_RESEARCH,
 }
 
 _SIGNAL_RULES: Dict[str, Dict[str, Any]] = {
@@ -159,6 +168,30 @@ _SIGNAL_RULES: Dict[str, Dict[str, Any]] = {
         "may_authorize_deploy": False,
         "may_upgrade_tradeability": False,
         "downgrade_only": True,
+        "monitor_only": True,
+    },
+    SIGNAL_SIGNAL_COHORT: {
+        "label": "Signal cohort tracker",
+        "lag_disclosure": "Forward outcomes accrue over days — sample may be thin",
+        "may_authorize_deploy": False,
+        "may_upgrade_tradeability": False,
+        "monitor_only": True,
+    },
+    SIGNAL_REGIME_TIMELINE: {
+        "label": "Market regime timeline",
+        "lag_disclosure": "Distribution/follow-through proxies — regime context only",
+        "may_authorize_deploy": False,
+        "may_upgrade_tradeability": False,
+        "downgrade_only": True,
+        "monitor_only": True,
+    },
+    SIGNAL_CAPACITY: {
+        "label": "Capacity intelligence",
+        "lag_disclosure": "%ADV / impact heuristics — scale humility, not live TCA",
+        "may_authorize_deploy": False,
+        "may_upgrade_tradeability": False,
+        "may_override_wait": False,
+        "downgrade_only": True,  # capacity can only demote / shrink, never upgrade
         "monitor_only": True,
     },
 }
