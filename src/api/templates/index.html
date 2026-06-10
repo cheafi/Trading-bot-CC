@@ -7580,14 +7580,14 @@
     <!-- ══════ BOTTOM NAV ══════ -->
     <nav style="position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--bd);padding:6px 0 max(env(safe-area-inset-bottom),6px);z-index:50">
       <div class="flex justify-around max-w-lg mx-auto">
-        <a href="#" data-cc-nav="guide" @click.prevent="switchTab('guide')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='guide'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📖</span>Guide</a>
-        <a href="#" data-cc-nav="today" @click.prevent="switchTab('today')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='today'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🎯</span>Overview</a>
-        <a href="#" data-cc-nav="signals" @click.prevent="switchTab('signals')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='signals'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📊</span>Ranked</a>
-        <a href="#" data-cc-nav="scanners" @click.prevent="switchTab('scanners')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='scanners'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🔬</span>Scan</a>
-        <a href="#" data-cc-nav="portfolio" @click.prevent="switchTab('portfolio')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='portfolio'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">💼</span>Book</a>
-        <a href="#" data-cc-nav="ibkr" @click.prevent="switchTab('ibkr')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='ibkr'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">⚡</span>IBKR</a>
-        <a href="#" data-cc-nav="dossier" @click.prevent="switchTab('dossier')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='dossier'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🔍</span>Dossier</a>
-        <a href="#" data-cc-nav="ops" @click.prevent="switchTab('ops')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='ops'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">⚙️</span>Ops</a>
+        <a href="#" data-cc-nav="guide" @click.prevent="switchTab('guide')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='guide'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📖</span>指南<span style="font-size:8px;opacity:.5">Guide</span></a>
+        <a href="#" data-cc-nav="today" @click.prevent="switchTab('today')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='today'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🎯</span>總覽<span style="font-size:8px;opacity:.5">Overview</span></a>
+        <a href="#" data-cc-nav="signals" @click.prevent="switchTab('signals')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='signals'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📊</span>排序<span style="font-size:8px;opacity:.5">Ranked</span></a>
+        <a href="#" data-cc-nav="scanners" @click.prevent="switchTab('scanners')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='scanners'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🔬</span>掃描<span style="font-size:8px;opacity:.5">Scan</span></a>
+        <a href="#" data-cc-nav="portfolio" @click.prevent="switchTab('portfolio')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='portfolio'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">💼</span>持倉<span style="font-size:8px;opacity:.5">Book</span></a>
+        <a href="#" data-cc-nav="ibkr" @click.prevent="switchTab('ibkr')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='ibkr'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">⚡</span>券商<span style="font-size:8px;opacity:.5">IBKR</span></a>
+        <a href="#" data-cc-nav="dossier" @click.prevent="switchTab('dossier')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='dossier'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🔍</span>檔案<span style="font-size:8px;opacity:.5">Dossier</span></a>
+        <a href="#" data-cc-nav="ops" @click.prevent="switchTab('ops')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='ops'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">⚙️</span>運維<span style="font-size:8px;opacity:.5">Ops</span></a>
       </div>
     </nav>
 
@@ -7597,22 +7597,22 @@
       tab:'today',
       disclaimerAccepted:localStorage.getItem('cc_disclaimer_ok')==='1',
       tabs:[
-        {id:'guide',icon:'📖',label:'Guide'},
-        {id:'today',icon:'🎯',label:'Dashboard'},
-        {id:'signals',icon:'📋',label:'Playbook'},
-        {id:'scanners',icon:'🔬',label:'Discovery'},
-        {id:'portfolio',icon:'💼',label:'Portfolio & Risk'},
-        {id:'dossier',icon:'🔍',label:'Search / Dossier'},
+        {id:'guide',icon:'📖',label:'指南 Guide'},
+        {id:'today',icon:'🎯',label:'儀表板 Dashboard'},
+        {id:'signals',icon:'📋',label:'策略簿 Playbook'},
+        {id:'scanners',icon:'🔬',label:'探索 Discovery'},
+        {id:'portfolio',icon:'💼',label:'持倉與風險 Portfolio & Risk'},
+        {id:'dossier',icon:'🔍',label:'檔案 Search / Dossier'},
       ],
       moreTabs:[
-        {id:'funds',icon:'💼',label:'Funds'},
-        {id:'flow',icon:'💧',label:'Flow'},
-        {id:'rs',icon:'📈',label:'RS·research'},
-        {id:'command',icon:'🖥',label:'Command · advanced',hidden_from_primary_nav:true},
-        {id:'notrade',icon:'🚫',label:'Rejections'},
-        {id:'ops',icon:'⚙️',label:'Ops'},
-        {id:'ibkr',icon:'⚡',label:'IBKR'},
-        {id:'btlab',icon:'🧪',label:'Backtest Lab'},
+        {id:'funds',icon:'💼',label:'基金 Funds'},
+        {id:'flow',icon:'💧',label:'資金流 Flow'},
+        {id:'rs',icon:'📈',label:'相對強度 RS·research'},
+        {id:'command',icon:'🖥',label:'指揮台 Command · advanced',hidden_from_primary_nav:true},
+        {id:'notrade',icon:'🚫',label:'否決 Rejections'},
+        {id:'ops',icon:'⚙️',label:'運維 Ops'},
+        {id:'ibkr',icon:'⚡',label:'券商 IBKR'},
+        {id:'btlab',icon:'🧪',label:'回測室 Backtest Lab'},
       ],
 
       showMore:false,
