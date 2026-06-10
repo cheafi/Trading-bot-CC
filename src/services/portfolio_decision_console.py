@@ -1493,7 +1493,7 @@ async def build_portfolio_decision(request) -> Dict[str, Any]:
         "urgency": (
             "now"
             if heat.get("stop_breached_count")
-            or heat.get("heat_pct", 0) > 6
+            or (heat.get("heat_pct") or 0) > 6
             or any(a.get("severity") == "critical" for a in action_needed)
             else "today"
             if allocator_summary.get("rebalance_suggested")

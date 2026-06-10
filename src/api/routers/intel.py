@@ -22,7 +22,12 @@ from src.engines.signal_decay import SignalDecayTracker
 from src.engines.trade_gate import TradeGate
 from src.engines.watchlist_intel import WatchlistIntelEngine
 from src.engines.meta_ensemble import MetaEnsemble
-from src.core.trust_metadata import FreshnessLevel
+from src.core.trust_metadata import (
+    MODEL_VERSION,
+    FreshnessLevel,
+    TrustBadge,
+    TrustMetadata,
+)
 
 router = APIRouter()
 
@@ -207,7 +212,6 @@ async def api_trust_card(ticker: str):
     meta = TrustMetadata.for_entry(
         badge=TrustBadge.PAPER,
         source_count=3,
-        model_version=MODEL_VERSION,
     )
     return {
         "ticker": ticker,
@@ -266,6 +270,8 @@ async def concentration_risk_endpoint(
     _: bool = Depends(_get_verify_api_key()),
 ):
     """Analyse portfolio concentration and correlation risk."""
+    from src.api.routers.portfolio import _user_portfolio
+
     holdings = _user_portfolio.get("holdings", [])
     if not holdings:
         return {

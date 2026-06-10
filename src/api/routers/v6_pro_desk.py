@@ -286,21 +286,23 @@ async def get_data_quality_status(request: Request):
     """
     # Build a synthetic report from current state
     now = datetime.now(timezone.utc)
-    report = DataQualityReport(
-        report_date=date.today(),
-        total_tickers_expected=50,
-        tickers_with_data=48,
-        coverage_pct=96.0,
-        stale_tickers=[],
-        gap_tickers=[],
-        schema_issues=[],
-        freshness_median_minutes=5.0,
-        freshness_p95_minutes=12.0,
-        overall_grade="A",
-    )
+    # Aggregate report dict (the DataQualityReport model now describes per-check
+    # rows, not this aggregate — build the dict directly to avoid schema drift).
+    report = {
+        "report_date": date.today().isoformat(),
+        "total_tickers_expected": 50,
+        "tickers_with_data": 48,
+        "coverage_pct": 96.0,
+        "stale_tickers": [],
+        "gap_tickers": [],
+        "schema_issues": [],
+        "freshness_median_minutes": 5.0,
+        "freshness_p95_minutes": 12.0,
+        "overall_grade": "A",
+    }
 
     return {
-        "data_quality": report.model_dump(),
+        "data_quality": report,
         "timestamp": now.isoformat(),
         "version": "v6",
     }
@@ -405,50 +407,61 @@ async def get_signal_card(request: Request, ticker: str):
         setup_grade = "N/A"
 
     entry_price = round(price, 2)
-    signal = Signal(
-        ticker=ticker.upper(),
-        direction=direction,
-        confidence=round(confidence, 2),
-        strategy="momentum" if direction == "BUY" else "none",
-        entry_price=entry_price,
-        stop_loss=round(entry_price * (1 - stop_pct), 2) if entry_price > 0 else 0,
-        take_profit=round(entry_price * (1 + target_pct), 2) if entry_price > 0 else 0,
-        reasons=reasons[:3],
-        # v6 fields
-        setup_grade=setup_grade,
-        edge_type="trend_continuation" if direction == "BUY" else "none",
-        approval_status=(
-            "APPROVED"
-            if confidence >= 0.65
-            else "REVIEW" if confidence >= 0.50 else "REJECTED"
-        ),
-        why_now=(
-            f"{ticker.upper()} technical signal based on live market data"
-            if price > 0
-            else "No data available"
-        ),
-        evidence=evidence[:4],
-        scenario_plan={
-            "base_case": {
-                "probability": f"{int(confidence*60+20)}%",
-                "description": f"Move to target +{target_pct*100:.0f}%",
+    try:
+        signal = Signal(
+            ticker=ticker.upper(),
+            direction=direction,
+            confidence=round(confidence, 2),
+            strategy="momentum" if direction == "BUY" else "none",
+            entry_price=entry_price,
+            stop_loss=round(entry_price * (1 - stop_pct), 2) if entry_price > 0 else 0,
+            take_profit=round(entry_price * (1 + target_pct), 2) if entry_price > 0 else 0,
+            reasons=reasons[:3],
+            # v6 fields
+            setup_grade=setup_grade,
+            edge_type="trend_continuation" if direction == "BUY" else "none",
+            approval_status=(
+                "APPROVED"
+                if confidence >= 0.65
+                else "REVIEW" if confidence >= 0.50 else "REJECTED"
+            ),
+            why_now=(
+                f"{ticker.upper()} technical signal based on live market data"
+                if price > 0
+                else "No data available"
+            ),
+            evidence=evidence[:4],
+            scenario_plan={
+                "base_case": {
+                    "probability": f"{int(confidence*60+20)}%",
+                    "description": f"Move to target +{target_pct*100:.0f}%",
+                },
+                "bull_case": {
+                    "probability": f"{int(confidence*20+10)}%",
+                    "description": f"Extended move +{target_pct*200:.0f}%",
+                },
+                "bear_case": {
+                    "probability": f"{int(100-confidence*80-30)}%",
+                    "description": f"Stop hit -{stop_pct*100:.0f}%",
+                },
+                "triggers": ["Earnings", "Sector rotation", "Macro events"],
             },
-            "bull_case": {
-                "probability": f"{int(confidence*20+10)}%",
-                "description": f"Extended move +{target_pct*200:.0f}%",
-            },
-            "bear_case": {
-                "probability": f"{int(100-confidence*80-30)}%",
-                "description": f"Stop hit -{stop_pct*100:.0f}%",
-            },
-            "triggers": ["Earnings", "Sector rotation", "Macro events"],
-        },
-        time_stop_days=10,
-        event_risk="Check earnings calendar",
-        portfolio_fit="review_required",
-    )
-
-    card = build_signal_card(signal)
+            time_stop_days=10,
+            event_risk="Check earnings calendar",
+            portfolio_fit="review_required",
+        )
+        card = build_signal_card(signal)
+    except Exception as exc:
+        # Legacy v6 Signal schema drift / no live data — degrade, do not 500.
+        # Superseded by /api/v7/signal-card on the Clarity Console.
+        return {
+            "card": None,
+            "ticker": ticker.upper(),
+            "degraded": True,
+            "data_source": "live" if price > 0 else "unavailable",
+            "note": f"v6 signal-card unavailable ({type(exc).__name__}) — use /api/v7/signal-card",
+            "version": "v6",
+        }
     return {
         "card": card,
         "ticker": ticker.upper(),

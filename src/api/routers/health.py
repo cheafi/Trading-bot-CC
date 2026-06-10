@@ -47,6 +47,9 @@ class HealthResponse(BaseModel):
     )
     phase9_engines: Optional[dict] = Field(None, description="Phase 9 engine status")
     ai_status: Optional[dict] = Field(None, description="AI/LLM availability status")
+    mode: Optional[str] = Field(
+        None, description="Serving mode: 'full' (real backend) vs 'loading' (instant shell)"
+    )
 
 
 def _ai_status() -> Dict[str, Any]:
@@ -80,6 +83,9 @@ async def health_check():
         "version": APP_VERSION,
         "uptime_seconds": telemetry.get_uptime_seconds(),
         "ai_status": _ai_status(),
+        # The full backend is answering — this is 'full' mode (the cold-start
+        # instant shell reports 'loading'). Clears the dashboard warmup banner.
+        "mode": "full",
     }
 
 

@@ -255,7 +255,14 @@ async def portfolio_from_futu():
         }
         return _user_portfolio
     except Exception as exc:
-        raise HTTPException(500, f"Futu fetch failed: {exc}") from exc
+        # FUTU OpenD not running / not installed — degrade honestly, do not 500.
+        return {
+            "holdings": _user_portfolio.get("holdings", []),
+            "source": _user_portfolio.get("source", "manual"),
+            "futu_connected": False,
+            "degraded": True,
+            "error": f"Futu unavailable: {exc}",
+        }
 
 
 # ── Position management (add/update/remove/monitor) ──────────────────

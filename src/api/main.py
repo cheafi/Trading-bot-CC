@@ -200,7 +200,22 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
 
 # Create FastAPI app
+class SafeJSONResponse(JSONResponse):
+    """Default response that strips NaN/Inf floats to null.
+
+    Degraded / no-live-data conditions can leave NaN/Inf in payloads, which the
+    stdlib JSON encoder rejects (500). Sanitizing at the response layer makes
+    every endpoint degrade honestly instead of crashing. App-wide hardening.
+    """
+
+    def render(self, content: Any) -> bytes:  # type: ignore[override]
+        from src.api.deps import sanitize_for_json
+
+        return super().render(sanitize_for_json(content))
+
+
 app = FastAPI(
+    default_response_class=SafeJSONResponse,
     title="TradingAI Bot API",
     description="""
 # TradingAI Bot API — v6 Pro Desk
@@ -6189,6 +6204,13 @@ try:
     app.include_router(quant_intelligence_router)
 except Exception:
     logger.exception("[Router] Failed to load quant_intelligence router")
+
+try:
+    from src.api.routers.strategy_tracking import router as strategy_tracking_router
+
+    app.include_router(strategy_tracking_router)
+except Exception:
+    logger.exception("[Router] Failed to load strategy_tracking router")
 
 try:
     from src.api.routers.aos import router as aos_router

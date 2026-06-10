@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from src.api.deps import sanitize_for_json
 from src.services.regime_service import get_regime as _fetch_regime
 from src.utils.numeric_parse import parse_ratio
 
@@ -386,11 +387,13 @@ async def today_summary(request: Request):
         getattr(regime_state, "volatility_regime", "normal_vol"),
         "NORMAL",
     )
+    # `confidence == confidence` is False for NaN — guards int(NaN) on degraded data.
+    _conf_ok = isinstance(confidence, (int, float)) and confidence == confidence
     score = max(
         0,
         min(
             100,
-            int(confidence * 100) if isinstance(confidence, (int, float)) else 50,
+            int(confidence * 100) if _conf_ok else 50,
         ),
     )
 
@@ -1449,6 +1452,9 @@ async def today_summary(request: Request):
         },
         "generated_at": now.isoformat() + "Z",
     }
+    # Degraded/empty market data can leave NaN/Inf floats in the payload, which
+    # the JSON encoder rejects (500). Sanitize once before caching + returning.
+    payload = sanitize_for_json(payload)
     if not scanner_degraded:
         _today_cache = payload
         _today_cache_ts = time.time()

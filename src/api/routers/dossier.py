@@ -89,6 +89,10 @@ def _find_signal_in_brief(ticker: str, brief_data: Dict) -> tuple[Dict, str]:
 
 def _conviction_tier(score: float) -> str:
     """Map brief score (0-10) to conviction tier."""
+    try:
+        score = float(score)
+    except (TypeError, ValueError):
+        return "WAIT"  # non-numeric / missing score -> no conviction
     if score >= 8:
         return "TRADE"
     elif score >= 7:
@@ -110,6 +114,10 @@ def _build_dossier(ticker: str) -> Dict[str, Any]:
 
     indicators = signal.get("indicators") or {}
     score = signal.get("score", signal.get("conviction", 0))
+    try:
+        score = float(score)  # brief score may arrive as a string / 'NO DATA'
+    except (TypeError, ValueError):
+        score = 0.0
 
     # ── Quick Decision Card ──
     action = _conviction_tier(score)

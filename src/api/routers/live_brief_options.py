@@ -200,7 +200,7 @@ async def live_options(ticker: str, request: Request):
         ev = round(moneyness * 100 + (1 - i) * 0.5, 1)
         contracts.append(
             {
-                "strike": int(strike),
+                "strike": int(strike) if strike == strike else None,
                 "dte": dtes[i],
                 "type": types[i],
                 "delta": base_deltas[i],
