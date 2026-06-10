@@ -165,7 +165,7 @@
         <div class="flex items-center gap-2">
           <div style="width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,var(--green),var(--blue));display:flex;align-items:center;justify-content:center;font-size:18px">📊</div>
           <div>
-            <div class="text-base font-bold text-white">CC · Clarity Console</div>
+            <div class="text-base font-bold text-white">CC · 清晰操盤台 Clarity Console</div>
             <div class="text-xs mono" style="color:var(--t3)">regime-aware · decision-grade · auditable</div>
           </div>
         </div>
@@ -505,7 +505,7 @@
         <div class="text-[10px] font-bold" style="color:#fde68a" x-text="instantDegradedBannerLine()"></div>
         <div class="text-[8px] mt-1" style="color:var(--t2)" x-text="instantDegradedBannerHint()"></div>
       </div>
-      <button type="button" @click="dismissInstantDegradedBanner()" class="btn-s text-[9px] flex-shrink:0" style="color:#fde68a;border-color:rgba(251,191,36,.4)">Dismiss</button>
+      <button type="button" @click="dismissInstantDegradedBanner()" class="btn-s text-[9px] flex-shrink:0" style="color:#fde68a;border-color:rgba(251,191,36,.4)">關閉 Dismiss</button>
     </div>
 
     <div data-cc="warmup-context-strip" x-show="warmupContextStripVisible()" x-cloak
@@ -2424,7 +2424,7 @@
           <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--red)" x-text="rankedOpps.emergency?.headline||'Playbook board unavailable'"></div>
           <div x-text="rankedOpps.emergency?.detail||rankedOpps.board_explanation||'Live ranking did not return a board. Use refresh or check that the API process finished loading.'"></div>
           <div class="flex gap-2 mt-2 flex-wrap">
-            <button type="button" @click="fetchRanked({refresh:true})" class="btn-s text-[10px]">Refresh playbook</button>
+            <button type="button" @click="fetchRanked({refresh:true})" class="btn-s text-[10px]">重新整理策略簿 Refresh playbook</button>
             <button type="button" @click="switchTab('today')" class="btn-s text-[10px]">Open dashboard</button>
           </div>
         </div>
@@ -3780,8 +3780,8 @@
         <div class="text-[9px] mb-2" style="color:var(--t3)" x-text="dosFetchBannerGrade()"></div>
         <div class="text-[9px] mb-2" style="color:var(--t3)" x-show="dos.failedModule&&dosFetchBannerKind()==='error'">Failed module: <span class="mono" x-text="dos.failedModule"></span></div>
         <div class="flex flex-wrap gap-2 items-center">
-          <button class="btn-s text-[9px]" @click="fetchDossier()">Retry</button>
-          <button class="btn-s text-[9px]" @click="fetchDossier({coreOnly:true})" title="Loads quote, basic technicals, and cached structure only — skips extended research panels">Load core only</button>
+          <button class="btn-s text-[9px]" @click="fetchDossier()">重試 Retry</button>
+          <button class="btn-s text-[9px]" @click="fetchDossier({coreOnly:true})" title="Loads quote, basic technicals, and cached structure only — skips extended research panels">僅載入核心 Load core only</button>
           <button class="btn-s text-[9px]" @click="fetchDossierEnrichments()" x-show="dos.data&&dos.status!=='loading_enrichments'">Load enrichments</button>
           <button class="btn-s text-[9px]" @click="fetchDossier({useCached:true})" x-show="dosHasCached()" :class="dossierResearchOnly()?'opacity-80':''" :title="dossierResearchOnly()?'Loads cached research — confirm-only until live fetch succeeds':''">Use cached dossier (confirm-only)</button>
         </div>
@@ -3896,8 +3896,8 @@
       <!-- Hero -->
       <div class="guide-hero" style="position:relative;overflow:hidden;margin-bottom:20px">
         <div style="position:absolute;right:20px;top:20px;font-size:64px;opacity:.07;line-height:1">📊</div>
-        <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:6px">CC · Clarity Console — Operator Guide</div>
-        <div style="font-size:20px;font-weight:800;color:var(--t1);margin-bottom:8px;line-height:1.3">How to use this platform</div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:6px">CC · 清晰操盤台 Clarity Console — 操盤手指南 Operator Guide</div>
+        <div style="font-size:20px;font-weight:800;color:var(--t1);margin-bottom:8px;line-height:1.3">使用說明 How to use this platform</div>
         <div style="font-size:12px;color:var(--t2);line-height:1.7;max-width:520px">
           <strong style="color:var(--t1)">Layer 1</strong> (~30s quick start) · <strong style="color:var(--t1)">Layer 2</strong> (read the UI) · <strong style="color:var(--t1)">Layer 3</strong> (glossary). Reference only — open Dashboard for live board posture.
         </div>
@@ -6190,7 +6190,7 @@
         <span x-show="!ibkrNeedsConnectCta()&&ibkr.health&&ibkr.health.last_disconnect_at" class="text-[9px]" style="color:var(--amber)" x-text="'Last disconnect: '+ibkr.health.last_disconnect_at"></span>
         <span x-show="ibkr.health&&ibkr.health.last_restore_at" class="text-[9px]" style="color:var(--green)" x-text="'Restored: '+ibkr.health.last_restore_at"></span>
         <span x-show="ibkrNeedsConnectCta()" class="text-[9px] font-bold" style="color:var(--amber)">Connect required — log in to TWS / Gateway and enable API</span>
-        <button x-show="ibkrNeedsConnectCta()" @click="ibkrOpenConnectFlow()" class="btn-s text-[8px]">Connect IBKR</button>
+        <button x-show="ibkrNeedsConnectCta()" @click="ibkrOpenConnectFlow()" class="btn-s text-[8px]">連接券商 Connect IBKR</button>
         <span style="color:var(--amber)">⚠ Paper mode default — verify before live</span>
       </div>
       <div class="p-3 space-y-3">
@@ -6758,7 +6758,7 @@
               <span class="pill pg" x-text="'v'+(changelogPanel.version||'—')"></span>
               <span style="color:var(--t3)" x-text="changelogPanel.product||'CC'"></span>
               <span x-show="changelogPanel.loading" style="color:var(--t3)" x-text="opsPanelLoadingShort()"></span>
-              <button type="button" class="btn-s text-[8px] ml-auto" @click="fetchChangelog()" :disabled="changelogPanel.loading">Refresh</button>
+              <button type="button" class="btn-s text-[8px] ml-auto" @click="fetchChangelog()" :disabled="changelogPanel.loading">重新整理 Refresh</button>
             </div>
           </div>
           <template x-if="changelogPanel.loading && !changelogPanel.loaded">
@@ -6803,7 +6803,7 @@
               <button type="button" class="btn-s text-[8px]" :class="errorLog.filter==='critical'?'btn-p':''" @click="errorLog.filter='critical';fetchErrorLog()">Critical</button>
               <button type="button" class="btn-s text-[8px]" :class="errorLog.filter==='warning'?'btn-p':''" @click="errorLog.filter='warning';fetchErrorLog()">Warnings</button>
               <button type="button" class="btn-s text-[8px]" :class="errorLog.filter==='info'?'btn-p':''" @click="errorLog.filter='info';fetchErrorLog()">Info</button>
-              <button type="button" class="btn-s text-[8px] ml-auto" @click="fetchErrorLog()" :disabled="errorLog.loading">Refresh</button>
+              <button type="button" class="btn-s text-[8px] ml-auto" @click="fetchErrorLog()" :disabled="errorLog.loading">重新整理 Refresh</button>
             </div>
           </div>
           <template x-if="errorLog.loading && !errorLog.entries.length">
@@ -6854,7 +6854,7 @@
         <!-- @cc-partial ops_recovery_runbook -->
         <div class="card card-p" style="border-left:3px solid var(--green)" data-cc="ops-recovery-runbook">
           <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--t3)">Recovery runbook</div>
-          <div class="text-[9px] font-bold text-green-400 mb-0.5">Retry</div>
+          <div class="text-[9px] font-bold text-green-400 mb-0.5">重試 Retry</div>
           <template x-for="ln in opsRecoveryGuide().retry" :key="'ops-retry-'+ln">
             <div class="text-[9px]" style="color:var(--t2)" x-text="'• '+ln"></div>
           </template>
