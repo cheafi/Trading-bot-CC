@@ -167,7 +167,36 @@
     "READY": "就緒",
     "STALE": "過期",
     "BREAKER": "熔斷",
-    "OFF": "關閉"
+    "OFF": "關閉",
+    // ── Status / guidance sentences (static occurrences) ──
+    "Setup triggered · entry zone active now": "型態已觸發 · 進場區間現正有效",
+    "Service down · signals may be stale": "服務中斷 · 訊號可能過期",
+    "Risk-On · full position sizing": "風險偏好 · 全額部位",
+    "Regime gate · sit out new risk": "狀態閘門 · 暫不承擔新風險",
+    "Positive factor — works for the trade": "正面因子 — 有利於此交易",
+    "Negative factor — works against it": "負面因子 — 不利於此交易",
+    "No directional signal from this factor": "此因子無方向性訊號",
+    "Portfolio advisory · not a new-entry signal": "投組建議 · 非新進場訊號",
+    "Partial edge · half size · stop required": "部分優勢 · 半倉 · 須設止損",
+    "Normal · standard sizing": "正常 · 標準部位",
+    "No sizing guidance in confirm-only mode": "僅確認模式下無部位建議",
+    "No hard blocks flagged from Ops snapshot": "Ops 快照未標記硬性阻擋",
+    "Monitor · not ready for full size": "監控 · 尚未可全倉",
+    "High · reduce size 50%": "高 · 減倉 50%",
+    "Elevated · reduce size 25%": "升高 · 減倉 25%",
+    "Good setup, wait for pullback to zone": "型態良好，等待回測至區間",
+    "Extended or broken · skip new entry": "過度延伸或已破壞 · 略過新進場",
+    "Got it — hide until reset": "知道了 — 隱藏至重設",
+    "Layer 2 — How to Read the Platform": "第二層 — 如何解讀平台",
+    "Layer 3 — Reference Manual": "第三層 — 參考手冊",
+    "Illustrative examples only — reference surface, not live board data.": "僅為示意範例 — 參考介面，非即時看板資料。",
+    "Health, rejections, ops visibility": "健康度、否決、運維可視性",
+    "GATEWAY UP · LOGIN REQUIRED": "閘道已啟動 · 需登入",
+    "Funds sleeves marked research/backtest — not live capital.": "基金策略組標記為研究／回測 — 非實盤資金。",
+    "Flow surface in synthetic/mock mode — colour only.": "資金流介面為合成／模擬模式 — 僅供顏色參考。",
+    "Discovery loading or 0 hits on WAIT day — often correct, not a miss.": "探索載入中或等待日 0 命中 — 通常正確，非遺漏。",
+    "Portfolio or broker positions not reconciled after last session.": "上次工作階段後，投組或券商部位尚未對帳。",
+    "Mode pill grey or Ops shows no fresh cycle — decisions stale or absent.": "模式標記為灰或 Ops 無最新週期 — 決策過期或缺失。"
   };
 
   var SEP = " · ";
