@@ -1223,7 +1223,8 @@ def build_decision_authority(
         "authority_level": authority_level,
         "gates": gates,
         "gates_active": gates_active,
-        "effective_action_max": (
+        "effective_action_max": effective_action_max,
+        "display_action_max": (
             effective_action_max
             if effective_action_max != "DEPLOY"
             else "WATCH"
@@ -1359,6 +1360,36 @@ def apply_authority_to_row(
         "effective_action_max": authority.get("effective_action_max"),
         "allows_trade_labels": authority.get("allows_trade_labels"),
     }
+    eff_u = str(out.get("effective_action") or "").upper()
+    raw_u = str(out.get("raw_action") or "").upper()
+    gates = authority.get("gates") or {}
+    blocked = bool(
+        eff_u == "BLOCKED"
+        or gates.get("exec_blocked")
+        or gates.get("broker_offline")
+        or gates.get("engine_off")
+    )
+    if blocked:
+        out["pilot_state"] = "BLOCKED"
+    elif (
+        bool(out.get("execution_ready"))
+        and eff_u in _AUTHORITY_TRADE_ACTIONS
+        and bool(authority.get("allows_trade_labels"))
+        and not bool(authority.get("gates_active"))
+    ):
+        out["pilot_state"] = "FULL_DEPLOY"
+    elif raw_u == "PILOT" or eff_u == "PILOT":
+        if (
+            bool(out.get("execution_ready"))
+            and str(authority.get("authority_level") or "").lower() == "deploy"
+            and not bool(authority.get("gates_active"))
+            and not bool(gates.get("regime_wait"))
+        ):
+            out["pilot_state"] = "PILOT_EXECUTABLE"
+        else:
+            out["pilot_state"] = "PILOT_RESEARCH_ONLY"
+    else:
+        out["pilot_state"] = "MONITOR_ONLY"
     return out
 
 
@@ -1375,6 +1406,7 @@ def build_ranked_decision_authority(payload: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(existing, dict) and existing.get("gates") is not None:
         return existing
     ba = payload.get("best_action") or {}
+    ex = ba.get("execution_readiness") or payload.get("execution_readiness") or {}
     tradeability = str(ba.get("tradeability") or "WAIT").upper()
     source = str(payload.get("source") or "").lower()
     board_mode = str(payload.get("board_mode") or "").lower()
@@ -1390,7 +1422,7 @@ def build_ranked_decision_authority(payload: Dict[str, Any]) -> Dict[str, Any]:
 
         st = ibkr_authority_gate_snapshot()
         ibkr_on = bool(st.get("connected"))
-        exec_blocked = bool(st.get("circuit_breaker"))
+        exec_blocked = bool(st.get("circuit_breaker") or ex.get("circuit_breaker"))
     except Exception:
         ibkr_on = False
         exec_blocked = False
@@ -1403,7 +1435,7 @@ def build_ranked_decision_authority(payload: Dict[str, Any]) -> Dict[str, Any]:
         data_stale=stale,
         fallback_brief=fallback_brief,
         broker_offline=not ibkr_on,
-        engine_off=False,
+        engine_off=not bool(ex.get("engine_running")),
         exec_blocked=exec_blocked,
         ranked_source=source or "ranked",
         ranked_stale=stale,

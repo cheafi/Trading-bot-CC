@@ -5,6 +5,7 @@ from src.services.decision_truth_model import (
     build_decision_authority,
     finalize_ranked_payload_authority,
 )
+from src.services.runtime_truth import engine_runtime_snapshot, merge_execution_runtime_truth
 from src.services.score_families import build_score_reconciliation, row_has_council_scanner_divergence
 
 
@@ -34,6 +35,57 @@ def test_finalize_ranked_payload_authority_on_all_row_keys():
     out = finalize_ranked_payload_authority(payload)
     assert out["opportunities"][0].get("effective_action")
     assert out["near_miss"][0].get("effective_action")
+
+
+def test_build_decision_authority_keeps_canonical_deploy_ceiling():
+    authority = build_decision_authority(
+        tradeability="SELECTIVE",
+        should_trade=True,
+        fallback_brief=False,
+        broker_offline=False,
+        engine_off=False,
+        exec_blocked=False,
+        data_stale=False,
+    )
+    assert authority["authority_level"] == "deploy"
+    assert authority["effective_action_max"] == "DEPLOY"
+    assert authority["display_action_max"] == "WATCH"
+
+
+def test_finalize_ranked_payload_authority_respects_engine_off_from_execution_readiness():
+    payload = {
+        "source": "ranked_pipeline",
+        "best_action": {
+            "tradeability": "SELECTIVE",
+            "execution_readiness": {"engine_running": False, "circuit_breaker": False},
+        },
+        "opportunities": [
+            {"ticker": "A", "action": "TRADE", "score": 7.0, "risk_reward": 2.0},
+        ],
+    }
+    out = finalize_ranked_payload_authority(payload)
+    assert out["decision_authority"]["gates"]["engine_off"] is True
+
+
+def test_runtime_truth_uses_breaker_trigger_not_object_truthiness():
+    class _Breaker:
+        triggered = False
+        trigger_reason = ""
+
+    class _Engine:
+        _running = True
+        dry_run = True
+        _cycle_count = 3
+        _cached_recommendations = []
+        _signals_today = []
+        _trades_today = []
+        circuit_breaker = _Breaker()
+
+    snap = engine_runtime_snapshot(_Engine())
+    merged = merge_execution_runtime_truth({}, engine=_Engine())
+    assert snap["circuit_breaker"] is False
+    assert merged["circuit_breaker"] is False
+    assert merged["engine_running"] is True
 
 
 def test_score_reconciliation_flags_divergence():

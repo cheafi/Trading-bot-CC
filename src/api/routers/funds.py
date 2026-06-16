@@ -112,16 +112,23 @@ async def _build_payload(
         from src.api.app_state import get_engine
         from src.services.execution_readiness import build_execution_readiness
         from src.services.ibkr_service import get_ibkr_service
+        from src.services.runtime_truth import (
+            engine_runtime_snapshot,
+            merge_execution_runtime_truth,
+        )
 
         ibkr_st = get_ibkr_service().status()
         engine = get_engine(request.app)
+        runtime = engine_runtime_snapshot(engine)
         execution_readiness = build_execution_readiness(
             ibkr_connected=bool(ibkr_st.get("connected")),
             ibkr_mode=ibkr_st.get("mode") or "paper",
-            engine_running=bool(getattr(engine, "_running", False)) if engine else False,
-            circuit_breaker=bool(getattr(engine, "circuit_breaker_triggered", False))
-            if engine
-            else False,
+            engine_running=bool(runtime.get("running")),
+            circuit_breaker=bool(runtime.get("circuit_breaker")),
+        )
+        execution_readiness = merge_execution_runtime_truth(
+            execution_readiness,
+            engine=engine,
         )
     except Exception:
         logger.debug("fund-lab execution_readiness failed", exc_info=True)

@@ -35,11 +35,15 @@ def compute_indicators(close: np.ndarray, volume: np.ndarray) -> dict:
 
     vol_float = volume.astype(float)
     vol_ma = rolling_mean(vol_float, 20)
-    vol_ratio = np.where(vol_ma > 0, vol_float / vol_ma, 1.0)
+    vol_ratio = np.ones_like(vol_float, dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        np.divide(vol_float, vol_ma, out=vol_ratio, where=vol_ma > 0)
 
     true_range = np.abs(np.diff(close, prepend=close[0]))
     atr = rolling_mean(true_range, 14)
-    atr_pct = np.where(close > 0, atr / close, 0.02)
+    atr_pct = np.full_like(atr, 0.02, dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        np.divide(atr, close, out=atr_pct, where=close > 0)
 
     return {
         "sma20": sma20,

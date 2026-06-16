@@ -951,11 +951,16 @@ async def today_summary(request: Request):
         from src.services.best_action import build_best_action, compute_theme_overlap
         from src.services.execution_readiness import build_execution_readiness
         from src.services.ibkr_service import get_ibkr_service
+        from src.services.runtime_truth import (
+            engine_runtime_snapshot,
+            merge_execution_runtime_truth,
+        )
 
         ibkr_st = get_ibkr_service().status()
         engine = get_engine(request.app)
-        eng_running = bool(getattr(engine, "_running", False)) if engine else False
-        eng_breaker = bool(getattr(engine, "circuit_breaker_triggered", False)) if engine else False
+        runtime = engine_runtime_snapshot(engine)
+        eng_running = bool(runtime.get("running"))
+        eng_breaker = bool(runtime.get("circuit_breaker"))
         bracket_ready = bool(
             top5_for_action
             and top5_for_action[0].get("entry_price")
@@ -968,6 +973,10 @@ async def today_summary(request: Request):
             portfolio_source="manual",
             engine_running=eng_running,
             circuit_breaker=eng_breaker,
+        )
+        execution_readiness = merge_execution_runtime_truth(
+            execution_readiness,
+            engine=engine,
         )
         best_action = build_best_action(
             top5_for_action,
@@ -1026,13 +1035,22 @@ async def today_summary(request: Request):
     if not eng_running or not exec_blocked:
         try:
             from src.api.app_state import get_engine
+            from src.services.runtime_truth import (
+                engine_runtime_snapshot,
+                merge_execution_runtime_truth,
+            )
 
             engine = get_engine(request.app)
             if engine:
+                execution_readiness = merge_execution_runtime_truth(
+                    execution_readiness,
+                    engine=engine,
+                )
+                runtime = engine_runtime_snapshot(engine)
                 if not eng_running:
-                    eng_running = bool(getattr(engine, "_running", False))
+                    eng_running = bool(runtime.get("running"))
                 if not exec_blocked:
-                    exec_blocked = bool(getattr(engine, "circuit_breaker", False))
+                    exec_blocked = bool(runtime.get("circuit_breaker"))
         except Exception:
             pass
 
@@ -1354,6 +1372,26 @@ async def today_summary(request: Request):
     else:
         execution_analytics = build_empty_execution_analytics_state()
 
+    from src.services.cc_state import build_cc_state
+
+    trust = {
+        "mode": "LIVE" if should_trade else "PAPER",
+        "source": (
+            "brief-fallback"
+            if used_brief_fallback
+            else (
+                "decision_engine"
+                if not scanner_degraded
+                else "decision_engine_degraded"
+            )
+        ),
+        "freshness": "REAL_TIME" if not scanner_degraded else "DEGRADED",
+        "stale": scanner_degraded or used_brief_fallback,
+        "reason": scanner_reason or ("brief fallback board" if used_brief_fallback else ""),
+        "as_of": now.isoformat() + "Z",
+        "ai_powered": False,
+    }
+
     payload = {
         "date": now.strftime("%Y-%m-%d"),
         "narrative": narrative,
@@ -1431,27 +1469,17 @@ async def today_summary(request: Request):
             cross_asset=cross_asset_confirmation,
         ),
         "decision_authority": decision_authority,
-        "trust": {
-            "mode": "LIVE" if should_trade else "PAPER",
-            "source": (
-                "brief-fallback"
-                if used_brief_fallback
-                else (
-                    "decision_engine"
-                    if not scanner_degraded
-                    else "decision_engine_degraded"
-                )
-            ),
-            "freshness": "REAL_TIME" if not scanner_degraded else "DEGRADED",
-            "stale": scanner_degraded or used_brief_fallback,
-            "reason": scanner_reason or (
-                "brief fallback board" if used_brief_fallback else ""
-            ),
-            "as_of": now.isoformat() + "Z",
-            "ai_powered": False,
-        },
+        "trust": trust,
         "generated_at": now.isoformat() + "Z",
     }
+    payload["cc_state"] = build_cc_state(
+        tradeability=decision_model.get("honest_tradeability") or tradeability,
+        should_trade=should_trade,
+        decision_authority=decision_authority,
+        execution_readiness=execution_readiness,
+        surface_authority=surface_authority,
+        trust=trust,
+    )
     # Degraded/empty market data can leave NaN/Inf floats in the payload, which
     # the JSON encoder rejects (500). Sanitize once before caching + returning.
     payload = sanitize_for_json(payload)

@@ -110,11 +110,14 @@ def bar_from_today(
     vix = regime.get("vix")
     breadth = regime.get("breadth")
 
-    verdict = deploy
-    if deploy == "DEPLOY":
+    deploy_upper = str(deploy or "WAIT").upper()
+    trade_upper = str(tradeability or "WAIT").upper()
+    if deploy_upper == "DEPLOY" and trade_upper in ("TRADE", "STRONG_TRADE", "SELECTIVE"):
         verdict = "DEPLOY"
-    elif deploy == "REDUCE":
+    elif deploy_upper == "REDUCE":
         verdict = "REDUCE"
+    elif trade_upper in ("NO_TRADE", "WAIT"):
+        verdict = "MONITOR ONLY"
     else:
         verdict = "WAIT"
 

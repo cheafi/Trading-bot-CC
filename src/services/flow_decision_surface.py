@@ -134,9 +134,9 @@ def _pm_action(
         }
     if grade in ("A", "B") and stock_confirmed and regime_ok and spread <= 8:
         return {
-            "pm_action": "BUYABLE_NOW",
-            "actionable": True,
-            "reason": "Flow + stock aligned — deploy selective size",
+            "pm_action": "PROMOTION_CANDIDATE",
+            "actionable": False,
+            "reason": "Flow + stock aligned — compare in Playbook / Dossier only",
         }
     if grade == "B":
         return {
@@ -302,7 +302,7 @@ async def build_ticker_flow_intel(
 async def build_flow_decision_surface(
     request,
     *,
-    limit: int = 20,
+    limit: int = 50,
 ) -> Dict[str, Any]:
     """PM-grade flow console from options radar + stock linkage."""
     from src.api.routers.options_radar import _scan_with_fallback
@@ -362,7 +362,9 @@ async def build_flow_decision_surface(
         for r in mock_raw
     ]
 
-    actionable = [c for c in live_enriched if c.get("actionable")][:3]
+    actionable = [
+        c for c in live_enriched if c.get("pm_action") == "PROMOTION_CANDIDATE"
+    ][:3]
     watch_confirm = [
         c
         for c in live_enriched
@@ -381,9 +383,9 @@ async def build_flow_decision_surface(
             "trend": regime.get("trend"),
             "vix": regime.get("vix"),
             "stance": (
-                "Flow confirms risk-on selectively"
+                "研究確認 · research confirm only"
                 if tradeability in ("TRADE", "SELECTIVE", "STRONG_TRADE")
-                else "Stand down — regime blocks flow chasing"
+                else "只可監察 · monitor only"
             ),
         },
         "freshness": {

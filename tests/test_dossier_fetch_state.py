@@ -70,9 +70,9 @@ def test_index_html_dossier_fetch_helpers_and_copy():
     assert "dosFetchErrorGrade" in text
     assert "dossierFetchStateCopy" in text
     assert "_syncDossierFetchHints" in text
-    assert "Research unavailable" in text
-    assert "This page is not decision-grade until research loads" in text
-    assert "Load core only — quote, basic technicals, and cached structure" in text
+    assert "即時研究暫不可用" in text
+    assert "Retry 重試 live fetch；Load core only 保留 core；Load enrichments 補回擴展研究。" in text
+    assert "Loads quote, basic technicals, and cached structure only — skips extended research panels" in text
     assert "skips extended research panels" in text
 
 
@@ -83,7 +83,8 @@ def test_index_html_error_banner_does_not_repeat_ticker():
     banner = text[start:end]
     assert "x-text=\"dos.ticker\"" not in banner
     assert "dosFetchBannerHeadline()" in banner
-    assert "dosFetchBannerDetail()" in banner
+    assert "dosFetchBannerNowLine()" in banner
+    assert "dosFetchBannerBlockerLine()" in banner
 
 
 def test_describe_dossier_partial_instant_degraded_copy():
@@ -102,18 +103,26 @@ def test_index_html_dossier_partial_banner_helpers():
     text = INDEX_HTML.read_text(encoding="utf-8")
     assert "dosShowsFetchBanner" in text
     assert "dosFetchBannerKind" in text
+    assert "dosFetchBannerBadge" in text
     assert "partialNotice" in text
     assert "_dossierIntelDegraded" in text
     assert "dosFetchBannerHeadline" in text
+    assert "dosFetchBannerNowLine" in text
+    assert "dosFetchBannerBlockerLine" in text
+    assert "dosFetchBannerRestoreLine" in text
+    assert "核心暫不可用 · confirm-only" in text
+    assert "顯示快取研究 · confirm-only" in text
+    assert "return 'CONFIRM ONLY';" in text
 
 
 def test_index_html_surface_fetch_error_line_handles_dossier():
     text = INDEX_HTML.read_text(encoding="utf-8")
     assert "mode==='dossier_research'" in text
     assert "Live dossier fetch failed from" in text
-    assert "levels not live-confirmed" in text
-    assert "Live evidence" in text
-    assert "board-ranked score" in text
+    assert "現有資料" in text
+    assert "缺少 · " in text
+    assert "即時證據 · Live" in text
+    assert "decision stack" in text
 
 
 def test_index_html_dossier_sizing_gated_when_research_only():

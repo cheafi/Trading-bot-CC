@@ -149,7 +149,7 @@ def _buyability(row: Dict[str, Any], regime_tradeability: str) -> Dict[str, Any]
     rr = round(reward / risk, 1) if risk and reward and risk > 0 else None
 
     regime_ok = regime_tradeability in ("TRADE", "STRONG_TRADE", "SELECTIVE")
-    actionable = (
+    promotion_ready = (
         state in ("BREAKOUT", "PULLBACK")
         and pct >= 75
         and comp >= 108
@@ -157,13 +157,13 @@ def _buyability(row: Dict[str, Any], regime_tradeability: str) -> Dict[str, Any]
         and not row.get("stale")
     )
     if state == "EXTENDED":
-        actionable = False
+        promotion_ready = False
         action_label = "AVOID_CHASE"
     elif state == "FAILING":
-        actionable = False
+        promotion_ready = False
         action_label = "NOT_ACTIONABLE"
-    elif actionable:
-        action_label = "BUYABLE_NOW"
+    elif promotion_ready:
+        action_label = "PROMOTION_CANDIDATE"
     elif state == "PULLBACK":
         action_label = "WATCH_PULLBACK"
     else:
@@ -172,7 +172,7 @@ def _buyability(row: Dict[str, Any], regime_tradeability: str) -> Dict[str, Any]
     return {
         "buyability": state,
         "action_label": action_label,
-        "actionable": actionable,
+        "actionable": False,
         "entry_zone": (
             {"low": entry_lo, "high": entry_hi} if entry_lo and entry_hi else None
         ),
@@ -224,7 +224,7 @@ def _why_leader(row: Dict[str, Any]) -> str:
 async def build_rs_decision_surface(
     request,
     *,
-    limit: int = 30,
+    limit: int = 50,
     sector: Optional[str] = None,
     wait_live_sec: float = 55.0,
 ) -> Dict[str, Any]:
@@ -299,12 +299,14 @@ async def build_rs_decision_surface(
             sr["why_leader"] = "Cached brief watchlist — not live RS"
             stale_rows.append(sr)
 
-    actionable = [r for r in live_rows if r.get("actionable")][:3]
+    actionable = [
+        r for r in live_rows if r.get("action_label") == "PROMOTION_CANDIDATE"
+    ][:3]
     false_leaders = [
         r
         for r in live_rows
         if r.get("status") in ("LEADER", "STRONG")
-        and not r.get("actionable")
+        and r.get("action_label") != "PROMOTION_CANDIDATE"
         and r.get("buyability") in ("EXTENDED", "FAILING", "WATCH")
     ][:3]
     pullback_candidates = [
@@ -334,9 +336,9 @@ async def build_rs_decision_surface(
             "vix": regime.get("vix"),
             "breadth": regime.get("breadth"),
             "stance": (
-                "Deploy selective"
+                "研究模式 · research only"
                 if tradeability in ("TRADE", "STRONG_TRADE", "SELECTIVE")
-                else "Stand down — regime WAIT/NO_TRADE"
+                else "只可監察 · monitor only"
             ),
         },
         "actionable_top3": actionable,

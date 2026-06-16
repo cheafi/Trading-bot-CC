@@ -49,7 +49,6 @@
     "Factor Chips": "因子標籤",
     "Sector Peers": "同業比較",
     "Why Now": "為何是現在",
-    "Reset first-visit flag": "重設首次造訪標記",
     // ── Surface names / section headers ──
     "Overview": "總覽",
     "Dashboard": "儀表板",

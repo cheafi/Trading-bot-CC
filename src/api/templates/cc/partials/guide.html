@@ -1,15 +1,15 @@
 
       <!-- Hero -->
-      <div class="guide-hero" style="position:relative;overflow:hidden;margin-bottom:20px">
+      <div class="guide-hero" style="position:relative;overflow:hidden;margin-bottom:16px">
         <div style="position:absolute;right:20px;top:20px;font-size:64px;opacity:.07;line-height:1">📊</div>
-        <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:6px">CC · 清晰操盤台 Clarity Console — 操盤手指南 Operator Guide</div>
-        <div style="font-size:20px;font-weight:800;color:var(--t1);margin-bottom:8px;line-height:1.3">使用說明 How to use this platform</div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:6px">CC · Clarity Console · 操盤手手冊</div>
+        <div style="font-size:20px;font-weight:800;color:var(--t1);margin-bottom:8px;line-height:1.3">使用手冊 · Operator Manual</div>
         <div style="font-size:12px;color:var(--t2);line-height:1.7;max-width:520px">
-          <strong style="color:var(--t1)">Layer 1</strong> (~30s quick start) · <strong style="color:var(--t1)">Layer 2</strong> (read the UI) · <strong style="color:var(--t1)">Layer 3</strong> (glossary). Reference only — open Dashboard for live board posture.
+          <strong style="color:var(--t1)">第 1 層</strong>（30 秒上手）· <strong style="color:var(--t1)">第 2 層</strong>（讀版面）· <strong style="color:var(--t1)">第 3 層</strong>（參考手冊）。Reference-only；即時盤面以 Dashboard 為準。
         </div>
         <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
-          <button @click="localStorage.setItem('cc_guide_seen','1');switchTab('today')" class="btn-p" style="font-size:13px;padding:10px 24px">🚀 Open Dashboard</button>
-          <button @click="localStorage.removeItem('cc_guide_seen')" style="background:none;border:none;color:var(--t3);font-size:11px;cursor:pointer;text-decoration:underline">Reset first-visit flag</button>
+          <button @click="switchTab('today')" class="btn-p" style="font-size:13px;padding:10px 24px">開啟儀表板 · Dashboard</button>
+          <button @click="switchTab('signals');fetchRanked()" class="btn-s" style="font-size:12px">開啟 Playbook</button>
         </div>
       </div>
 
@@ -68,30 +68,28 @@
       </details>
 
       <!-- ══ LAYER 1 — QUICK START (30 sec) ══ -->
-      <div class="card" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--green)">
+      <div class="card" style="margin-bottom:16px;overflow:visible;border-left:4px solid var(--green)">
         <div style="padding:12px 16px;background:var(--s2);border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:8px">
           <span style="font-size:18px">⚡</span>
-          <span class="guide-layer-hdr" style="color:var(--green)">Layer 1 — Quick Start</span>
-          <span style="font-size:10px;color:var(--t3);margin-left:auto;font-weight:600">~30 seconds</span>
+          <span class="guide-layer-hdr" style="color:var(--green)">第 1 層 · Quick Start</span>
+          <span style="font-size:10px;color:var(--t3);margin-left:auto;font-weight:600">~30 秒</span>
         </div>
         <div style="padding:14px 16px">
-
-          <div class="guide-operator-checklist" x-show="operatorChecklistVisible()" id="cc-operator-checklist">
+          <div class="guide-operator-checklist" id="cc-operator-checklist">
             <div style="font-size:11px;font-weight:800;color:var(--green);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">Operator checklist</div>
-            <ul style="font-size:11px;color:var(--t2);line-height:1.65;padding-left:16px;margin:0 0 8px">
-              <li><strong style="color:var(--t1)">Page gate beats card rank</strong> — WAIT/NO_TRADE caps deploy surfaces</li>
-              <li><strong style="color:var(--t1)">Research ≠ permission</strong> — Discovery, Flow, Funds, RS inform only</li>
-              <li><strong style="color:var(--t1)">Dashboard first</strong> — live board posture; Guide is reference only</li>
+            <ul style="font-size:11px;color:var(--t2);line-height:1.65;padding-left:16px;margin:0">
+              <li><strong style="color:var(--t1)">Page gate beats card rank</strong> — WAIT / NO_TRADE 先於任何靚卡。</li>
+              <li><strong style="color:var(--t1)">Research ≠ permission</strong> — Discovery、Flow、Funds、RS 只供研究。</li>
+              <li><strong style="color:var(--t1)">Dashboard first</strong> — 即時盤面同部署權限以 Dashboard / Playbook 為準。</li>
             </ul>
-            <button type="button" @click="dismissOperatorChecklist()" class="btn-s text-[9px]">Got it — hide until reset</button>
           </div>
 
-          <div style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Most common mistakes</div>
+          <div style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.4px;margin:12px 0 6px">Most common mistakes</div>
           <ul style="font-size:11px;color:var(--t2);line-height:1.65;padding-left:16px;margin:0 0 12px">
-            <li><strong style="color:var(--t1)">Don't size from fallback cards</strong> — FALLBACK WATCH / brief fallback = monitor-only</li>
-            <li><strong style="color:var(--t1)">Don't treat IBKR LOGIN as execution-ready</strong> — GATEWAY UP · LOGIN REQUIRED still blocks handoff</li>
-            <li><strong style="color:var(--t1)">Don't treat Discovery / Flow / RS as deploy permission</strong> — research-only surfaces</li>
-            <li><strong style="color:var(--t1)">Don't treat Backtest Lab as live evidence</strong> — historical simulation, not deployment authority</li>
+            <li><strong style="color:var(--t1)">不要用 fallback 卡做 sizing</strong> — brief / fallback 只供 monitor。</li>
+            <li><strong style="color:var(--t1)">不要把 IBKR LOGIN 當 READY</strong> — transport up 仍未等於可 handoff。</li>
+            <li><strong style="color:var(--t1)">不要把 Discovery / Flow / RS 當部署權限</strong> — research-only 永遠先去 Playbook / Dashboard 確認。</li>
+            <li><strong style="color:var(--t1)">不要把 Backtest Lab 當 live evidence</strong> — 只係 historical simulation。</li>
           </ul>
 
           <details style="margin-top:4px">
@@ -552,6 +550,6 @@
 
       <!-- Bottom CTA -->
       <div style="text-align:center;padding:20px 0 8px">
-        <button @click="localStorage.setItem('cc_guide_seen','1');switchTab('today')" class="btn-p" style="font-size:14px;padding:12px 32px">🚀 Open Dashboard</button>
+        <button @click="switchTab('today')" class="btn-p" style="font-size:14px;padding:12px 32px">Open Dashboard</button>
         <div style="font-size:11px;color:var(--t3);margin-top:10px">Return here anytime: 📖 Guide tab (first in nav)</div>
       </div>

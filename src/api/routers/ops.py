@@ -12,6 +12,7 @@ from src.api.app_state import get_engine
 from src.api.deps import sanitize_for_json, verify_api_key
 from src.core.config import get_settings
 from src.services.platform_error_log import get_error_log, load_changelog
+from src.services.runtime_truth import engine_runtime_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -19,25 +20,7 @@ router = APIRouter(prefix="/api/ops", tags=["ops"])
 
 
 def _engine_snapshot(engine) -> Dict[str, Any]:
-    if not engine:
-        return {
-            "running": False,
-            "cycle_count": 0,
-            "cached_recommendations": 0,
-            "signals_today": 0,
-            "trades_today": 0,
-        }
-    cb = getattr(engine, "circuit_breaker", None)
-    return {
-        "running": bool(getattr(engine, "_running", False)),
-        "dry_run": bool(getattr(engine, "dry_run", True)),
-        "cycle_count": int(getattr(engine, "_cycle_count", 0)),
-        "cached_recommendations": len(getattr(engine, "_cached_recommendations", [])),
-        "signals_today": len(getattr(engine, "_signals_today", [])),
-        "trades_today": len(getattr(engine, "_trades_today", [])),
-        "circuit_breaker": bool(getattr(cb, "triggered", False)) if cb else False,
-        "circuit_breaker_reason": str(getattr(cb, "trigger_reason", "") or ""),
-    }
+    return engine_runtime_snapshot(engine)
 
 
 async def _start_engine_loop(app) -> Dict[str, Any]:

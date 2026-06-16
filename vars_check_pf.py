@@ -7,9 +7,8 @@ if m:
     cc_body = m.group(1)
     
     # Are methods defined?
-    for mth in ["pfRisk", "dosVerdict", "fetchCcStatus", "fetchScanners", "opsDetail", "scannerHub", "showGuideModal", "opsDetail"]:
+    for mth in ["pfRisk", "dosVerdict", "fetchCcStatus", "fetchScanners", "opsDetail", "scannerHub"]:
         if mth in cc_body:
             print(f"{mth} exists in cc()")
         else:
             print(f"{mth} missing from cc()")
-

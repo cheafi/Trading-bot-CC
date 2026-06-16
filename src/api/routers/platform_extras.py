@@ -96,7 +96,7 @@ async def pm_memo(
 @router.get("/rs-decision")
 async def rs_decision(
     request: Request,
-    limit: int = Query(30, ge=5, le=60),
+    limit: int = Query(50, ge=5, le=100),
     sector: Optional[str] = Query(None),
 ):
     """Institutional RS decision surface — live leaders, buyability, freshness."""
@@ -108,7 +108,7 @@ async def rs_decision(
 
 
 @router.get("/flow-decision")
-async def flow_decision(request: Request, limit: int = Query(20, ge=1, le=40)):
+async def flow_decision(request: Request, limit: int = Query(50, ge=1, le=60)):
     """Institutional options flow console — evidence ladder + PM actions."""
     from src.services.flow_decision_surface import build_flow_decision_surface
 

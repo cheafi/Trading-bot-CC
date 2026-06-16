@@ -1009,7 +1009,7 @@ class ScannerMatrix:
         hits: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """UI-safe bucket: count always matches top_hits length cap."""
-        top = hits[:10]
+        top = hits[:25]
         return {"count": len(hits), "top_hits": top, "display_count": len(top)}
 
     @staticmethod
@@ -1034,7 +1034,7 @@ class ScannerMatrix:
     ) -> Dict[str, Any]:
         enriched = [enrich(h) for h in hits]
         total = len(hits)
-        top = sorted(hits, key=lambda x: x.score, reverse=True)[:5]
+        top = sorted(hits, key=lambda x: x.score, reverse=True)[:15]
         top_enriched = [enrich(h) for h in top]
         return {
             "count": total,
@@ -1220,7 +1220,7 @@ class ScannerMatrix:
             key=lambda x: (x["overlap"], x["max_score"]),
             reverse=True,
         )
-        merged_top_names = merged_top_names[:15]
+        merged_top_names = merged_top_names[:40]
 
         best_scanner_today: Optional[str] = None
         if scanner_totals:
@@ -1341,7 +1341,7 @@ class ScannerMatrix:
                     f"{empty_why} Scanner universe is warming "
                     "(no upstream signals yet)."
                 )
-            top = sorted(raw_hits, key=lambda x: x.score, reverse=True)[:5]
+            top = sorted(raw_hits, key=lambda x: x.score, reverse=True)[:15]
             out[intent] = {
                 "intent": intent,
                 "count": count,

@@ -25,16 +25,16 @@
 	}
 
 	var SURFACE_WARMUP_LOADING_LINES = {
-		dossier_research: "Live dossier fetch still loading — retry when core panels populate.",
+		dossier_research: "Dossier warming — retry after core panels load.",
 		backtest_research:
-			"Backtest API still loading — retry Run lab in a few seconds (research-only shell may appear meanwhile).",
-		funds_research: "Fund lab still loading — sleeve cards refresh when the API is ready.",
-		rejections_diagnostic: "Rejection audit still loading — brief shell may show until the pipeline is ready.",
-		flow_supporting: "Flow API still loading — mock/research shell may appear until live provider connects.",
-		ops_diagnostic: "Ops API still loading — refresh Ops panels in a few seconds.",
+			"Backtest warming — research shell may appear before live stats load.",
+		funds_research: "Funds warming — sleeve cards refresh when the API is ready.",
+		rejections_diagnostic: "Rejections warming — blocker audit will fill in shortly.",
+		flow_supporting: "Flow warming — research shell may appear before live provider connects.",
+		ops_diagnostic: "Ops warming — refresh in a few seconds.",
 		ibkr_execution:
-			"IBKR API still loading — status may show LOGIN from port probe; Connect when /health mode=full.",
-		"": "API still loading — retry in a few seconds.",
+			"IBKR warming — probe status may show LOGIN; wait for /health mode=full.",
+		"": "Backend warming — retry in a few seconds.",
 	}
 
 	function severityBadgeClass(state) {
@@ -51,18 +51,18 @@
 		var o = opts || {}
 		var mode = String(o.healthMode || "").toLowerCase()
 		if (o.apiReachable === false) {
-			return "OFFLINE — API unreachable · instant snapshot may be stale"
+			return "OFFLINE - API unreachable; cached snapshot may be stale"
 		}
 		if (mode === "loading") {
-			return "WARMING — backend importing modules · brief/monitor queue only until full"
+			return "WARMING - monitor-only until full"
 		}
 		if (o.instantDegraded || o.fetchFailed) {
-			return "DEGRADED — instant snapshot · council/scanner may disagree until live ranked loads"
+			return "DEGRADED - snapshot only until live ranked data returns"
 		}
 		if (mode === "full") {
-			return "LIVE — health mode full · ranked payloads authoritative when fetch badges clear"
+			return "LIVE - ranked payloads are authoritative when fetch badges clear"
 		}
-		return "LOADING — probing /health before treating board as live"
+		return "LOADING - probing health before treating the board as live"
 	}
 
 	function warmupUpgradeQueue(opts) {
@@ -73,7 +73,7 @@
 		if (o.nearMiss || o.briefFallback) {
 			parts.unshift("monitor queue (brief near-miss + top watch)")
 		}
-		return "When API ready: " + parts.join(" · ")
+		return "Next: " + parts.join(" · ")
 	}
 
 	/** Instant banner wins over warmup strip — avoids duplicate WARMING copy. */
@@ -90,10 +90,7 @@
 		var mode = String(o.healthMode || "").toLowerCase()
 		var ccMode = String(o.ccMode || "").toUpperCase()
 		if (mode !== "loading" && ccMode !== "LOADING") return ""
-		return (
-			"Cold start: port 8000 instant shell may proxy to :8001 — " +
-			"wait for /health mode=full; restart once if loading exceeds ~2 min"
-		)
+		return "Cold start - wait for /health mode=full; restart once if loading exceeds ~2 min"
 	}
 
 	function instantDegradedBannerHint(healthData) {
@@ -103,10 +100,10 @@
 			return (
 				"Wait for /health mode=full before sizing or IBKR handoff · uptime " +
 				up +
-				"s · data contract + warmup strip stay authoritative if you dismiss"
+				"s · data contract stays authoritative if you dismiss"
 			)
 		}
-		return "Refresh when fetch badges clear · page gates still apply on WAIT days"
+		return "Refresh when fetch badges clear · page gates still apply"
 	}
 
 	function todayMissionMonitorsLabel(monitors, nearMissCount, watchQualified) {
@@ -155,7 +152,7 @@
 		var blocker = String(diag.primary_blocker || diag.headline || "").trim()
 		if (blocker) parts.push(blocker)
 		if (!parts.length) return ""
-		return "Synthesis hint (monitor only): " + parts.join(" · ") + " — not deploy permission"
+		return "Monitor context: " + parts.join(" · ") + " — not deploy permission"
 	}
 
 	function todayExecutionReadinessDiagnostic(er) {
@@ -208,12 +205,12 @@
 		if (sym) parts.push(sym + " upgrade triggers")
 		if (nm) parts.push(nm + " near-miss row" + (nm === 1 ? "" : "s"))
 		parts.push("deploy unlock checklist below")
-		return "Monitor only — " + parts.join(" · ") + " · no deploy authority"
+		return "Monitor only - " + parts.join(" · ") + " · no deploy authority"
 	}
 
 	function todayMissionWaitSubtitle(opts) {
 		if (!opts || !opts.waitDay) return ""
-		return "Deploy blocked — use monitors and Playbook ranking only"
+		return "Deploy blocked - use monitors and Playbook ranking only"
 	}
 
 	function todayMissionSystemBlockers(opts) {
@@ -229,7 +226,7 @@
 			out.push("ENGINE OFF")
 		}
 		if (o.breaker) {
-			out.push("EXEC BLOCKED — risk breaker")
+			out.push("EXEC BLOCKED")
 		}
 		var tier = String(o.dataTier || "").toUpperCase()
 		if (tier === "STALE" || tier === "CRITICAL") {
@@ -237,16 +234,16 @@
 		}
 		var fb = String(o.fetchBadge || "").toUpperCase()
 		if (fb === "FALLBACK") {
-			out.push("FALLBACK / BRIEF ONLY")
+			out.push("BRIEF ONLY")
 		} else if (fb === "FETCH FAILED") {
-			out.push("FETCH FAILED — not decision-grade")
+			out.push("FETCH FAILED")
 		}
 		if (o.briefFallback || o.instantDegraded) {
 			var hasFb = out.some(function (x) {
 				return x.indexOf("FALLBACK") >= 0 || x.indexOf("BRIEF") >= 0
 			})
 			if (!hasFb) {
-				out.push("FALLBACK / BRIEF ONLY")
+				out.push("BRIEF ONLY")
 			}
 		}
 		return out
@@ -269,23 +266,6 @@
 			return "No card-level gate flags"
 		}
 		return "None flagged"
-	}
-
-	/** Playbook WAIT-day monitor guidance — operator-facing, no deploy authority. */
-	function playbookWhatToMonitorLine(opts) {
-		var o = opts || {}
-		if (!o.waitDay) return ""
-		var parts = []
-		if (o.topSymbol) {
-			parts.push(String(o.topSymbol).toUpperCase() + " upgrade triggers")
-		}
-		var nm = Number(o.nearMissCount) || 0
-		if (nm > 0) {
-			parts.push(nm + " near-miss row" + (nm === 1 ? "" : "s"))
-		}
-		parts.push("deploy unlock checklist below")
-		var body = parts.length ? parts.join(" · ") : "near-miss strip · gate context"
-		return "Monitor only — " + body + " · no deploy authority"
 	}
 
 	/** PM strip / trust strip chip tiers — primary authority first, context second. */
@@ -332,7 +312,7 @@
 	function routeAbortRecoveryHint(surface) {
 		var s = String(surface || "").toLowerCase()
 		if (s === "dossier" || s === "dossier_research") {
-			return "Route failed — retry Load core only; CONFIRM ONLY until live dossier returns"
+			return "Route failed — retry or Load core only"
 		}
 		if (s === "discovery" || s === "scanners") {
 			return "Scanner route failed — retry Run Scanners; fallback funnel is not deploy authority"
@@ -347,7 +327,7 @@
 
 	/** Engine off — no new cycle authority (copy-only). */
 	function engineOffRecoveryLine() {
-		return "Engine OFF — start engine in Ops or set CC_AUTO_START_ENGINE=1; board may be precomputed only"
+		return "Engine OFF - start the engine in Ops; board may be precomputed only"
 	}
 
 	/** IBKR recovery copy — aligned with ibkr_diagnosis short codes (not deploy gate). */
@@ -356,21 +336,21 @@
 		var short = String(st.short || "").toUpperCase()
 		var hint = String(st.hint || "").trim()
 		if (short === "OFFLINE" || short === "NO IBAPI" || short === "API OFF" || st.level === "offline") {
-			return hint || "IBKR OFFLINE — start Gateway/TWS and confirm API port; Connect on IBKR tab when reachable"
+			return hint || "IBKR OFFLINE - start Gateway/TWS and confirm API port"
 		}
 		if (short === "BLOCKED") {
-			return "IBKR BLOCKED — circuit breaker active; clear risk gate before handoff"
+			return "IBKR BLOCKED - clear the risk gate before handoff"
 		}
 		if (short === "READY" || st.handoff || st.level === "ready") {
-			return hint || "IBKR READY — handoff path verified; confirm bracket alignment before transmit"
+			return hint || "IBKR READY - handoff path verified; confirm bracket alignment before transmit"
 		}
 		if (short === "LOGIN" || short === "HANDSHAKE" || (st.gw && !st.connected)) {
-			return hint || "IBKR LOGIN — connect session on IBKR tab; READY required before handoff (bracket aligned)"
+			return hint || "IBKR LOGIN - connect the session on the IBKR tab; READY required before handoff"
 		}
 		if (short === "MONITOR" || short === "PARTIAL" || st.level === "partial") {
-			return hint || "IBKR partial — session up; confirm bracket and portfolio sync before handoff"
+			return hint || "IBKR PARTIAL - session up; confirm bracket and portfolio sync before handoff"
 		}
-		return hint || "IBKR OFFLINE — start Gateway/TWS; Connect on IBKR tab when API port is reachable"
+		return hint || "IBKR OFFLINE - start Gateway/TWS and reconnect from the IBKR tab"
 	}
 
 	/** Resolve IBKR host for UI — loopback inside Docker maps to host.docker.internal. */
@@ -430,7 +410,7 @@
 		return "RESEARCH ONLY"
 	}
 
-	var DOSSIER_CONFIRM_ONLY_SIZING = "No sizing guidance in confirm-only mode"
+	var DOSSIER_CONFIRM_ONLY_SIZING = "Confirm-only - no sizing or IBKR handoff"
 
 	function dossierQuoteAvailable(data) {
 		var d = data || {}
@@ -467,8 +447,8 @@
 		if (!blocked) return ""
 		var r = String(reason || "")
 		if (r === "confirm_only") return DOSSIER_CONFIRM_ONLY_SIZING
-		if (r === "failed" || r === "partial") return "Sizing blocked until live dossier loads"
-		if (r === "rr_unavailable") return "Size unavailable — R:R not confirmed"
+		if (r === "failed" || r === "partial") return "Sizing blocked until live dossier data loads"
+		if (r === "rr_unavailable") return "Sizing unavailable - R:R not confirmed"
 		return "Size unavailable"
 	}
 
@@ -478,7 +458,7 @@
 		var researchOnly = !!o.research_only
 		var levelsBlank = !!o.levels_blank
 		if (researchOnly && levelsBlank) {
-			return "Live structure unavailable — confirm-only dossier"
+			return "Live structure unavailable - confirm-only dossier"
 		}
 		if (levelsBlank) return "Live structure unavailable"
 		if (note) return note
@@ -662,8 +642,8 @@
 		var mode = String(o.healthMode || "").toLowerCase()
 		if (mode === "loading" || String(o.ccMode || "").toUpperCase() === "LOADING") {
 			return (
-				"Safe now: monitor queue, Guide checklist, dossier core-only — " +
-				"wait for backend import + /health mode=full before sizing or IBKR handoff"
+				"Safe now: monitor queue, Guide, dossier core-only — " +
+				"wait for /health mode=full before sizing or IBKR handoff"
 			)
 		}
 		if (o.fetchFailed || o.instantDegraded) {

@@ -13,6 +13,7 @@ from src.api.deps import optional_api_key, sanitize_for_json
 from src.api.routers.brief_regenerate import _latest_brief
 from src.core.config import get_settings
 from src.services.ibkr_service import get_ibkr_service
+from src.services.runtime_truth import engine_runtime_snapshot
 from src.services.surface_authority import header_summary_for_tab, resolve_surface_mode
 
 logger = logging.getLogger(__name__)
@@ -122,20 +123,12 @@ def _page_authority_mode(
 
 
 def _engine_snapshot(engine) -> Dict[str, Any]:
-    if not engine:
-        return {
-            "running": False,
-            "dry_run": True,
-            "circuit_breaker": False,
-            "circuit_breaker_reason": "",
-        }
+    eng = engine_runtime_snapshot(engine)
     return {
-        "running": bool(getattr(engine, "_running", False)),
-        "dry_run": bool(getattr(engine, "dry_run", True)),
-        "circuit_breaker": bool(getattr(engine, "circuit_breaker_triggered", False)),
-        "circuit_breaker_reason": str(
-            getattr(engine, "circuit_breaker_reason", "") or ""
-        ),
+        "running": bool(eng.get("running")),
+        "dry_run": bool(eng.get("dry_run", True)),
+        "circuit_breaker": bool(eng.get("circuit_breaker")),
+        "circuit_breaker_reason": str(eng.get("circuit_breaker_reason") or ""),
     }
 
 
@@ -262,6 +255,35 @@ async def cc_header(
             "source": "manual",
         }
 
+    from src.services.cc_state import build_cc_state
+
+    trust = {
+        "mode": trust_mode,
+        "source": "cc-header",
+        "freshness": "DEGRADED" if pills["data"] in ("STALE", "CRITICAL") else "REAL_TIME",
+        "stale": pills["data"] in ("STALE", "CRITICAL") or pills["brief"] in ("STALE", "CRITICAL"),
+        "reason": "",
+        "as_of": now.isoformat() + "Z",
+        "ai_powered": False,
+    }
+    execution_readiness = {
+        "gateway_reachable": bool(ibkr_st.get("gateway_reachable")),
+        "api_port_open": bool(ibkr_st.get("api_port_open")),
+        "broker_connected": bool(ibkr_connected),
+        "ibkr_connected": bool(ibkr_connected),
+        "monitoring_only": bool(ibkr_st.get("monitoring_only")),
+        "engine_running": bool(eng.get("running")),
+        "circuit_breaker": bool(eng.get("circuit_breaker")),
+    }
+    cc_state = build_cc_state(
+        tradeability=tradeability,
+        should_trade=should_trade,
+        decision_authority=decision_authority,
+        execution_readiness=execution_readiness,
+        surface_authority=None,
+        trust=trust,
+    )
+
     return sanitize_for_json(
         {
             "as_of": now.isoformat() + "Z",
@@ -276,6 +298,7 @@ async def cc_header(
             "pills": pills,
             "components": components,
             "decision_authority": decision_authority,
+            "cc_state": cc_state,
             "page_authority_mode": page_authority_mode,
             "portfolio_context": portfolio_context,
             "surface_mode": resolve_surface_mode(tab) if tab else None,

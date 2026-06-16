@@ -1,6 +1,8 @@
 #!/bin/bash
-cd /Users/chantszwai/Documents/GitHub/TradingAI_Bot-main
-source venv/bin/activate
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "venv/bin/activate" ]; then
+  source venv/bin/activate
+fi
 
 # macOS: clear Gatekeeper quarantine from .so files to avoid 5-10 min import hang
 if [[ "$(uname)" == "Darwin" ]]; then

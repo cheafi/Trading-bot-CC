@@ -44,8 +44,12 @@ for _port in 8000 8001; do
 done
 sleep 1
 
-cd /Users/chantszwai/Documents/GitHub/TradingAI_Bot-main
-nohup venv/bin/python3 -u _cc_instant.py >> /tmp/cc_server.log 2>&1 &
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_py="python3"
+if [ -x "./venv/bin/python3" ]; then
+  _py="./venv/bin/python3"
+fi
+nohup "$_py" -u _cc_instant.py >> /tmp/cc_server.log 2>&1 &
 echo "PID=$!"
 sleep 5
 curl -s http://127.0.0.1:8000/health

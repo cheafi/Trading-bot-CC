@@ -433,7 +433,14 @@ _init_shared_services()
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def dashboard(request: Request):
     """Serve the main dashboard."""
-    return templates.TemplateResponse(request, "index.html")
+    api_key = ""
+    try:
+        from src.core.config import settings
+
+        api_key = settings.api_secret_key or ""
+    except Exception:
+        api_key = ""
+    return templates.TemplateResponse(request, "index.html", {"api_key": api_key})
 
 
 @app.get("/signals/explorer", response_class=HTMLResponse, include_in_schema=False)
@@ -4663,6 +4670,9 @@ async def ops_status():
     cached_recs = 0
 
     if engine:
+        from src.services.runtime_truth import engine_runtime_snapshot
+
+        runtime = engine_runtime_snapshot(engine)
         running = bool(getattr(engine, "running", getattr(engine, "_running", False)))
         dry_run = getattr(engine, "dry_run", True)
         cycle_count = getattr(engine, "_cycle_count", getattr(engine, "cycle_count", 0))
@@ -4672,12 +4682,8 @@ async def ops_status():
         trades_today = len(getattr(engine, "_trades_today", [])) or getattr(
             engine, "trades_today", 0
         )
-        circuit_breaker = getattr(engine, "circuit_breaker_triggered", False) or bool(
-            getattr(getattr(engine, "circuit_breaker", None), "triggered", False)
-        )
-        circuit_breaker_reason = getattr(engine, "circuit_breaker_reason", "") or str(
-            getattr(getattr(engine, "circuit_breaker", None), "trigger_reason", "") or ""
-        )
+        circuit_breaker = bool(runtime.get("circuit_breaker"))
+        circuit_breaker_reason = str(runtime.get("circuit_breaker_reason") or "")
         cached_recs = len(getattr(engine, "_cached_recommendations", []))
         lc = getattr(engine, "last_cycle_time", None)
         if lc:

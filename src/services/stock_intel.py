@@ -1777,6 +1777,37 @@ async def _build_intel_payload(
         or label_upper in _RESEARCH_ONLY_LABELS
         or dossier.get("_partial")
     )
+    missing_modules = sorted(
+        str(k) for k, v in (module_errors or {}).items() if v
+    )
+    dossier_freshness = None
+    try:
+        from src.services.data_freshness_service import freshness_report
+
+        mds = request.app.state.market_data
+        dossier_freshness = await freshness_report(mds, tickers=[ticker])
+    except Exception:
+        dossier_freshness = None
+    dossier_freshness_tier = ""
+    if isinstance(dossier_freshness, dict):
+        dossier_freshness_tier = str(dossier_freshness.get("worst_tier") or "")
+
+    today = getattr(request.app.state, "today_v7_cache", None) or {}
+    decision_authority = today.get("decision_authority") or {}
+    tradeability = str((today.get("market_regime") or {}).get("tradeability") or "WAIT")
+    should_trade = bool((today.get("market_regime") or {}).get("should_trade", True))
+    trust = today.get("trust") if isinstance(today.get("trust"), dict) else None
+    from src.services.cc_state import build_cc_state
+
+    cc_state = build_cc_state(
+        tradeability=tradeability,
+        should_trade=should_trade,
+        decision_authority=decision_authority if isinstance(decision_authority, dict) else {},
+        execution_readiness=(today.get("execution_readiness") or {}),
+        surface_authority=None,
+        trust=trust,
+        dossier_freshness=dossier_freshness_tier,
+    )
     return sanitize_for_json(
         {
             "ticker": ticker,
@@ -1786,6 +1817,9 @@ async def _build_intel_payload(
             "research_only": research_only,
             "sizing_blocked": sizing_blocked,
             "module_errors": module_errors,
+            "missing_modules": missing_modules,
+            "dossier_freshness": dossier_freshness,
+            "cc_state": cc_state,
             "page_summary": page_summary,
             "decision_stack": decision_stack,
             "confidence_metrics": confidence_metrics,

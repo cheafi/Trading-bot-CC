@@ -23,6 +23,16 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Query, Request
 
 from src.core.stock_universe import RS_UNIVERSE, rs_sector_for
+from src.scanners.intl_universe import (
+    AU_TICKERS,
+    CRYPTO_TICKERS,
+    HK_TICKERS,
+    IN_TICKERS,
+    JP_TICKERS,
+    KR_TICKERS,
+    TW_TICKERS,
+)
+from src.scanners.us_universe import US_UNIVERSE
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v7/playbook", tags=["playbook"])
@@ -38,6 +48,29 @@ _flow_cache: Dict[str, Any] = {"ts": 0.0, "data": None}
 _RS_RANKING_CACHE_TTL = 5 * 60
 _rs_ranking_cache: Dict[str, Dict[str, Any]] = {}
 _rs_ranking_refreshing: set[str] = set()
+_SCANNER_SIGNAL_UNIVERSE_TARGET = 3000
+_SCANNER_DISCOVERY_EXTRA_TICKERS = [
+    "BUG",
+    "FDN",
+    "PNQI",
+    "IYR",
+    "PAVE",
+    "SPHB",
+    "SPHQ",
+]
+_SCANNER_DISCOVERY_UNIVERSE = list(
+    dict.fromkeys(
+        list(US_UNIVERSE)
+        + list(HK_TICKERS)
+        + list(JP_TICKERS)
+        + list(KR_TICKERS)
+        + list(TW_TICKERS)
+        + list(AU_TICKERS)
+        + list(IN_TICKERS)
+        + list(CRYPTO_TICKERS)
+        + _SCANNER_DISCOVERY_EXTRA_TICKERS
+    )
+)
 
 
 # ── Real data access ─────────────────────────────────────────────────
@@ -75,7 +108,7 @@ async def _real_signals() -> List[Dict[str, Any]]:
 
         brief = await asyncio.to_thread(load_brief)
         recs = []
-        for section in ("actionable", "watch", "review"):
+        for section in ("actionable", "watch", "review", "monitor", "pilot", "near_miss", "candidates"):
             recs.extend(brief.get(section, []))
         return recs
     except Exception as e:
@@ -112,15 +145,39 @@ async def _scanner_signal_universe() -> tuple[List[Dict[str, Any]], str]:
     """
     signals = await _real_signals()
     if signals:
-        label = "watchlist" if len(signals) <= 50 else "broad_universe"
-        return signals, label
+        # Keep live brief rows first, then top up with RS defaults so Discovery can
+        # scan a broader research universe without changing deploy authority.
+        pooled: List[Dict[str, Any]] = list(signals)
+        seen = {
+            str((row or {}).get("ticker") or (row or {}).get("symbol") or "")
+            .strip()
+            .upper()
+            for row in pooled
+        }
+        for ticker in _SCANNER_DISCOVERY_UNIVERSE:
+            if len(pooled) >= _SCANNER_SIGNAL_UNIVERSE_TARGET:
+                break
+            tk = str(ticker or "").strip().upper()
+            if not tk or tk in seen:
+                continue
+            pooled.append(
+                {
+                    "ticker": tk,
+                    "score": 5.0,
+                    "strategy": "default",
+                    "pattern": "universe",
+                }
+            )
+            seen.add(tk)
+        label = "watchlist" if len(pooled) <= 50 else "broad_universe"
+        return pooled, label
 
     try:
         from src.services.brief_data_service import load_brief  # noqa: PLC0415
 
         brief = await asyncio.to_thread(load_brief)
         pooled: List[Dict[str, Any]] = []
-        for section in ("actionable", "watch", "review"):
+        for section in ("actionable", "watch", "review", "monitor", "pilot", "near_miss", "candidates"):
             for row in brief.get(section) or []:
                 sig = _brief_row_to_scanner_signal(row)
                 if sig:
@@ -132,7 +189,7 @@ async def _scanner_signal_universe() -> tuple[List[Dict[str, Any]], str]:
 
     default = [
         {"ticker": t, "score": 5.0, "strategy": "default", "pattern": "universe"}
-        for t in RS_UNIVERSE[:40]
+        for t in _SCANNER_DISCOVERY_UNIVERSE[:_SCANNER_SIGNAL_UNIVERSE_TARGET]
     ]
     return default, "synthetic_default"
 
@@ -419,6 +476,20 @@ def _finalize_ranked_response(
                 if str(r.get("conflict_level") or "").upper() == "HIGH"
                 for c in [f"{r.get('ticker')}: high conflict"]
             ],
+        )
+    except Exception:
+        pass
+    try:
+        from src.services.cc_state import build_cc_state
+
+        ba = data.get("best_action") or {}
+        data["cc_state"] = build_cc_state(
+            tradeability=tb,
+            should_trade=tb not in ("NO_TRADE", "WAIT"),
+            decision_authority=data.get("decision_authority") or {},
+            execution_readiness=ba.get("execution_readiness") or {},
+            surface_authority=data.get("surface_authority"),
+            trust=data.get("trust") if isinstance(data.get("trust"), dict) else None,
         )
     except Exception:
         pass
@@ -787,7 +858,7 @@ async def _refresh_ranked_cache(
 
 @router.get("/ranked/snapshot")
 async def ranked_snapshot(
-    limit: int = Query(30, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=100),
     action: str = Query(None),
     sector: str = Query(None),
 ) -> Dict[str, Any]:
@@ -1524,7 +1595,7 @@ async def rs_ranking(
     request: Request,
     sector: str = Query(None, description="Filter by sector"),
     cap: str = Query(None, description="MEGA/LARGE/MID/SMALL"),
-    limit: int = Query(30, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=100),
     live: bool = Query(
         False, description="Await live RS compute (use /rs-decision for full PM surface)"
     ),
