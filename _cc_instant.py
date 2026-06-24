@@ -29,18 +29,273 @@ from pathlib import Path
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)) or ".")
 
-PORT = 8000
+_REPO_ROOT = Path(__file__).resolve().parent
+_PORT_RAW = os.environ.get("CC_PORT", "8000")
+PORT = int(_PORT_RAW) if str(_PORT_RAW).isdigit() else 8000
 BACKEND_PORT = 8001
-TEMPLATE = Path("src/api/templates/index.html").read_text()
-TEMPLATE_BYTES = TEMPLATE.encode()
-TEMPLATE_GZIP = gzip.compress(TEMPLATE_BYTES)
+_TEMPLATE_PATH = _REPO_ROOT / "src/api/templates/index.html"
+_GZIP_DASHBOARD_PATH = _REPO_ROOT / "src/api/static/cc-dashboard.html.gz"
+_GZIP_DASHBOARD_CACHE = _REPO_ROOT / "data/cache/cc-dashboard.html.gz"
+# Full CC template is ~650KiB–1.2MiB; partial iCloud/Docker reads often stop at 512KiB.
+_MIN_TEMPLATE_BYTES = 600_000
+_MAX_GZIP_DASHBOARD_BYTES = 400_000
+_TEMPLATE_CACHE: dict = {"mtime": 0.0, "bytes": b"", "gzip": b""}
+
+
+def _read_file_bytes(path: Path, *, max_bytes: int | None = None) -> bytes:
+    """Read a file in chunks (avoids some FUSE partial-read quirks)."""
+    chunks: list[bytes] = []
+    total = 0
+    with path.open("rb") as fh:
+        while True:
+            block = fh.read(65536)
+            if not block:
+                break
+            chunks.append(block)
+            total += len(block)
+            if max_bytes is not None and total >= max_bytes:
+                break
+    return b"".join(chunks)
+
+
+def _bootstrap_gzip_dashboard_cache() -> None:
+    """Copy small gzip bundle into data/cache (visible to Docker when iCloud lags)."""
+    try:
+        src = _GZIP_DASHBOARD_PATH
+        dest = _GZIP_DASHBOARD_CACHE
+        if not src.is_file():
+            return
+        raw = _read_file_bytes(src, max_bytes=_MAX_GZIP_DASHBOARD_BYTES)
+        if not raw or len(raw) >= _MAX_GZIP_DASHBOARD_BYTES:
+            return
+        if dest.is_file() and dest.stat().st_size == len(raw):
+            if dest.stat().st_mtime >= src.stat().st_mtime:
+                return
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(raw)
+    except Exception:
+        pass
+
+
+def _dashboard_from_gzip_asset() -> tuple[bytes, bytes] | None:
+    """Serve precompressed dashboard (~210KiB) — safe under 512KiB mount limits."""
+    _bootstrap_gzip_dashboard_cache()
+    for gz_path in (_GZIP_DASHBOARD_CACHE, _GZIP_DASHBOARD_PATH):
+        if not gz_path.is_file():
+            continue
+        try:
+            src_mtime = _TEMPLATE_PATH.stat().st_mtime
+            gz_mtime = gz_path.stat().st_mtime
+            if gz_path is _GZIP_DASHBOARD_PATH and gz_mtime < src_mtime:
+                continue
+            gz = _read_file_bytes(gz_path, max_bytes=_MAX_GZIP_DASHBOARD_BYTES)
+            if not gz or len(gz) >= _MAX_GZIP_DASHBOARD_BYTES:
+                continue
+            plain = gzip.decompress(gz)
+            if len(plain) < _MIN_TEMPLATE_BYTES:
+                continue
+            return plain, gz
+        except Exception:
+            continue
+    return None
+
+
+def _read_template_bytes() -> bytes:
+    """Load dashboard HTML from disk; reload when mtime changes."""
+    global _TEMPLATE_CACHE
+    asset = _dashboard_from_gzip_asset()
+    if asset:
+        plain, gz = asset
+        _TEMPLATE_CACHE = {
+            "mtime": _TEMPLATE_PATH.stat().st_mtime,
+            "bytes": plain,
+            "gzip": gz,
+        }
+        return plain
+
+    fallback = _TEMPLATE_CACHE.get("bytes") or b""
+    try:
+        stat = _TEMPLATE_PATH.stat()
+        mtime = float(stat.st_mtime)
+        cached = _TEMPLATE_CACHE
+        if (
+            cached["bytes"]
+            and mtime == cached["mtime"]
+            and len(cached["bytes"]) >= _MIN_TEMPLATE_BYTES
+        ):
+            return cached["bytes"]
+        for delay in (0.0, 0.05, 0.15, 0.35):
+            if delay:
+                time.sleep(delay)
+            raw = _read_file_bytes(_TEMPLATE_PATH)
+            if len(raw) >= _MIN_TEMPLATE_BYTES:
+                _TEMPLATE_CACHE = {
+                    "mtime": mtime,
+                    "bytes": raw,
+                    "gzip": gzip.compress(raw),
+                }
+                return raw
+    except Exception:
+        pass
+    if len(fallback) >= _MIN_TEMPLATE_BYTES:
+        return fallback
+    return fallback or b"<html><body>CC template unavailable - run node scripts/build-cc-template.mjs</body></html>"
+
+
+def _patch_dashboard_api_key(plain: bytes) -> bytes:
+    """Instant server serves raw template — replace Jinja api_key token."""
+    key = os.environ.get("API_SECRET_KEY", "dev-secret-local")
+    token = b"window._apiKey = {{ api_key|tojson|safe }};"
+    if token in plain:
+        repl = ("window._apiKey = " + json.dumps(key) + ";").encode()
+        return plain.replace(token, repl)
+    return plain
+
+
+def _read_gzip_dashboard_file() -> bytes | None:
+    _bootstrap_gzip_dashboard_cache()
+    for gz_path in (_GZIP_DASHBOARD_CACHE, _GZIP_DASHBOARD_PATH):
+        if not gz_path.is_file():
+            continue
+        try:
+            gz = _read_file_bytes(gz_path, max_bytes=_MAX_GZIP_DASHBOARD_BYTES)
+            if gz and len(gz) < _MAX_GZIP_DASHBOARD_BYTES:
+                plain = gzip.decompress(gz)
+                if len(plain) >= _MIN_TEMPLATE_BYTES:
+                    return gz
+        except Exception:
+            continue
+    return None
+
+
+_DASHBOARD_LOADER_HTML = b"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>CC &middot; Clarity Console</title>
+<style>body{background:#0d1117;color:#e6edf3;font-family:Inter,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}</style>
+</head><body>
+<p id="cc-load">Loading Clarity Console...</p>
+<script>
+(async function(){
+  var urls=['/cc-asset/dashboard.html.gz','/static/cc-dashboard.html.gz'];
+  for(var i=0;i<urls.length;i++){
+    try{
+      var r=await fetch(urls[i]);
+      if(!r.ok) continue;
+      var buf=await r.arrayBuffer();
+      var html;
+      if(typeof DecompressionStream!=='undefined'){
+        var ds=new DecompressionStream('gzip');
+        html=await new Response(new Blob([buf]).stream().pipeThrough(ds)).text();
+      }else{
+        document.getElementById('cc-load').textContent='Update your browser (Safari/Chrome latest)';
+        return;
+      }
+      document.open();
+      document.write(html);
+      document.close();
+      return;
+    }catch(e){console.warn(urls[i],e);}
+  }
+  document.getElementById('cc-load').textContent='Dashboard bundle missing. Run: bash scripts/dev/fix-cc-black-screen.sh';
+})();
+</script></body></html>"""
+
+
+def _dashboard_response_body(*, use_gzip: bool) -> bytes:
+    """Never serve truncated index.html — gzip bundle or client loader only."""
+    gz_asset = _read_gzip_dashboard_file()
+    if gz_asset:
+        if use_gzip:
+            return gz_asset
+        try:
+            plain = _patch_dashboard_api_key(gzip.decompress(gz_asset))
+            return plain
+        except Exception:
+            pass
+    loader = _DASHBOARD_LOADER_HTML
+    return gzip.compress(loader) if use_gzip else loader
+
+
+def _template_response_bodies() -> tuple[bytes, bytes]:
+    gz_asset = _read_gzip_dashboard_file()
+    if gz_asset:
+        plain = _patch_dashboard_api_key(gzip.decompress(gz_asset))
+        return plain, gz_asset
+    raw = _read_template_bytes()
+    if len(raw) >= _MIN_TEMPLATE_BYTES:
+        raw = _patch_dashboard_api_key(raw)
+        cached = _TEMPLATE_CACHE
+        if cached.get("bytes") is raw and cached.get("gzip"):
+            return raw, cached["gzip"]
+        return raw, gzip.compress(raw)
+    return _DASHBOARD_LOADER_HTML, gzip.compress(_DASHBOARD_LOADER_HTML)
+
+
+# Bootstrap cache at import (may be retried on first request if partial read).
+_read_template_bytes()
+TEMPLATE_BYTES = _TEMPLATE_CACHE.get("bytes") or b""
+TEMPLATE_GZIP = _TEMPLATE_CACHE.get("gzip") or gzip.compress(TEMPLATE_BYTES)
 _backend_ready = False
 _start = time.time()
-_SNAPSHOT_PATH = Path("data/market_overview_last_good.json")
-_BRIEF_GLOB = Path("data")
-_RANKED_SNAPSHOT_PATH = Path("data/cache/playbook_ranked_snapshot.json")
+_SNAPSHOT_PATH = _REPO_ROOT / "data/market_overview_last_good.json"
+_BRIEF_GLOB = _REPO_ROOT / "data"
+_RANKED_SNAPSHOT_PATH = _REPO_ROOT / "data/cache/playbook_ranked_snapshot.json"
 _RANKED_SNAPSHOT_KEY = "30::"
-_PORTFOLIO_LOCAL_PATH = Path("data/portfolio_local_holdings.json")
+_BACKEND_FATAL_PATH = _REPO_ROOT / "data/cache/backend_fatal.json"
+_PORTFOLIO_LOCAL_PATH = _REPO_ROOT / "data/portfolio_local_holdings.json"
+
+
+def _write_backend_fatal(exc: BaseException) -> None:
+    """Persist last backend child crash for Ops /health (operator-safe, no secrets)."""
+    try:
+        _BACKEND_FATAL_PATH.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "at": time.time(),
+            "error": str(exc)[:240],
+            "hint": (
+                "Install API deps: pip install \"uvicorn[standard]==0.25.0\" "
+                "\"fastapi==0.108.0\" (or pip install -e .) then restart _cc_instant.py"
+                if "uvicorn" in str(exc).lower() or "No module named" in str(exc)
+                else "See terminal [backend] FATAL traceback; fix import error and restart."
+            ),
+        }
+        _BACKEND_FATAL_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _read_backend_fatal_hint() -> str | None:
+    """Last backend child failure — helps when stuck in loading for hours."""
+    if _backend_healthy():
+        _clear_backend_fatal()
+        return None
+    try:
+        if not _BACKEND_FATAL_PATH.is_file():
+            return None
+        data = json.loads(_BACKEND_FATAL_PATH.read_text(encoding="utf-8"))
+        at = float(data.get("at") or 0)
+        # Stale crash files from a prior local/Docker run should not block Ops copy.
+        if at and (time.time() - at) > 600:
+            _clear_backend_fatal()
+            return None
+        err = str(data.get("error") or "").strip()
+        hint = str(data.get("hint") or "").strip()
+        if err and hint:
+            return f"{err} — {hint}"
+        return err or hint or None
+    except Exception:
+        return None
+
+
+def _clear_backend_fatal() -> None:
+    try:
+        if _BACKEND_FATAL_PATH.is_file():
+            _BACKEND_FATAL_PATH.unlink()
+    except Exception:
+        pass
+
 
 DEGRADED_BANNER = (
     "INSTANT DEGRADED — snapshot only · not suitable for sizing or IBKR handoff"
@@ -123,6 +378,9 @@ def _proxy_timeout(path: str) -> int:
             "/api/v7/playbook/scanners",
         )
     ):
+        # Ranked live compute can exceed 90s on cold Docker — fallback sooner.
+        if path.startswith("/api/v7/playbook/ranked") and "refresh=true" not in path:
+            return 12
         return 90
     if "strategy-factory" in path:
         return 120
@@ -195,19 +453,122 @@ def _load_snapshot():
 
 def _load_latest_brief() -> dict | None:
     """Load newest data/brief-YYYY-MM-DD.json without importing the app stack."""
+    cache_path = _REPO_ROOT / "data/cache/brief_latest.json"
+    try:
+        from src.services.brief_data_service import load_brief
+
+        data = load_brief()
+        if isinstance(data, dict) and data:
+            data = dict(data)
+            data["_brief_path"] = data.get("_brief_path") or "brief_data_service"
+            return data
+    except Exception:
+        pass
+
     try:
         candidates = sorted(_BRIEF_GLOB.glob("brief-*.json"), reverse=True)
         for path in candidates:
             if not path.is_file():
                 continue
-            with path.open(encoding="utf-8") as fh:
-                data = json.load(fh)
-            if isinstance(data, dict):
-                data["_brief_path"] = str(path)
+            for attempt in range(3):
+                try:
+                    with path.open(encoding="utf-8") as fh:
+                        data = json.load(fh)
+                    if isinstance(data, dict):
+                        data["_brief_path"] = str(path)
+                        try:
+                            cache_path.parent.mkdir(parents=True, exist_ok=True)
+                            cache_path.write_text(json.dumps(data), encoding="utf-8")
+                        except Exception:
+                            pass
+                        return data
+                except OSError as exc:
+                    if getattr(exc, "errno", None) == 11 and attempt < 2:
+                        time.sleep(0.05 * (attempt + 1))
+                        continue
+                    break
+                except Exception:
+                    break
+    except Exception:
+        pass
+
+    try:
+        if cache_path.is_file():
+            data = json.loads(cache_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and data:
+                data["_brief_path"] = str(cache_path)
                 return data
     except Exception:
-        return None
+        pass
     return None
+
+
+def _ranked_payload_has_names(payload: dict) -> bool:
+    return bool(payload.get("opportunities") or payload.get("near_miss"))
+
+
+def _brief_fallback_ranked_rows(limit: int = 30) -> list[dict]:
+    """Normalized brief rows for instant-server playbook when :8001 is down."""
+    signals: list[dict] = []
+    try:
+        from src.services.playbook_signal_universe import load_brief_pipeline_signals
+
+        signals = load_brief_pipeline_signals()
+    except Exception:
+        signals = []
+
+    if not signals:
+        brief = _load_latest_brief() or {}
+        for section in ("actionable", "watch", "review"):
+            for row in brief.get(section) or []:
+                try:
+                    from src.services.playbook_signal_universe import normalize_brief_row
+
+                    sig = normalize_brief_row(row)
+                except Exception:
+                    sig = {}
+                if sig.get("ticker"):
+                    signals.append(sig)
+
+    opps: list[dict] = []
+    for sig in signals:
+        ticker = sig.get("ticker")
+        if not ticker:
+            continue
+        score = float(sig.get("score") or 0)
+        rs = float(sig.get("rs_score") or score)
+        tier = "High" if score >= 7.5 else ("Medium" if score >= 6 else "Low")
+        opps.append(
+            {
+                "ticker": ticker,
+                "score": round(score, 1) if score <= 10 else round(rs, 1),
+                "rs_score": rs,
+                "score_display_mode": "fallback_rank",
+                "score_display": tier,
+                "score_display_label": "Fallback rank · relevance only",
+                "priority_tier": tier,
+                "score_source": "brief-fallback",
+                "action": "WATCH",
+                "raw_action": "WATCH",
+                "grade": "C",
+                "why_now": "Brief fallback board — monitor only, not deploy authority",
+                "evidence_badge": "brief-fallback",
+                "confidence_fallback_only": True,
+                "card_display_mode": "reference_only",
+                "entry_price": sig.get("entry_price"),
+                "stop_price": sig.get("stop_price"),
+                "target_price": sig.get("target_price"),
+                "risk_reward": sig.get("risk_reward"),
+                "thesis_conf": 0,
+                "timing_conf": 0,
+                "exec_conf": 0,
+                "data_conf": 0,
+                "execution_ready": False,
+            }
+        )
+        if len(opps) >= limit:
+            break
+    return opps
 
 
 def _brief_row_to_top5(row: dict, rank: int) -> dict:
@@ -251,7 +612,7 @@ def _today_bytes_from_brief(brief: dict, reason: str) -> bytes:
     now = datetime.now(timezone.utc)
     top5: list[dict] = []
     rank = 1
-    for section in ("actionable", "watch"):
+    for section in ("actionable", "watch", "review"):
         for row in brief.get(section) or []:
             if rank > 5:
                 break
@@ -378,7 +739,7 @@ def _stale_today_bytes(reason: str = "backend importing") -> bytes:
         except Exception:
             pass
     brief = _load_latest_brief()
-    if brief and (brief.get("actionable") or brief.get("watch")):
+    if brief and any(brief.get(s) for s in ("actionable", "watch", "review")):
         return _today_bytes_from_brief(brief, reason)
     from datetime import datetime, timezone
 
@@ -468,6 +829,8 @@ def _load_ranked_snapshot_bytes() -> bytes | None:
             "board_mode": payload.get("board_mode") or "compressed_fallback",
         }
         payload = _finalize_degraded_ranked(payload)
+        if not _ranked_payload_has_names(payload):
+            return None
         return _encode_degraded(payload, reason="disk snapshot — backend still loading")
     except Exception:
         return None
@@ -941,9 +1304,14 @@ def _stale_ops_console_bytes(reason: str) -> bytes:
     from src.services.ops_operator_console import build_degraded_ops_operator_console
 
     brief_ok = bool(_load_latest_brief())
+    fatal_hint = _read_backend_fatal_hint()
     return _encode_degraded(
-        build_degraded_ops_operator_console(reason=reason, brief_ok=brief_ok),
-        reason=reason,
+        build_degraded_ops_operator_console(
+            reason=reason,
+            brief_ok=brief_ok,
+            backend_fatal_hint=fatal_hint,
+        ),
+        reason=fatal_hint or reason,
     )
 
 
@@ -1267,31 +1635,39 @@ def _stale_ranked_bytes(reason: str) -> bytes:
             pass
     body = _load_ranked_snapshot_bytes()
     if body:
-        return _maybe_stamp_degraded_body(body)
-    brief = _load_latest_brief() or {}
-    opps = []
-    for row in (brief.get("actionable") or []) + (brief.get("watch") or []):
-        rs = float(row.get("rs_score") or 0)
-        tier = "High" if rs >= 7.5 else ("Medium" if rs >= 6 else "Low")
-        opps.append(
-            {
-                "ticker": row.get("ticker"),
-                "score": rs,
-                "score_display_mode": "fallback_rank",
-                "score_display": tier,
-                "score_display_label": "Fallback rank · relevance only",
-                "priority_tier": tier,
-                "score_source": "brief-fallback",
-                "action": "WATCH",
-                "grade": "C",
-                "why_now": "Brief fallback board",
-                "evidence_badge": "brief-fallback",
-                "confidence_fallback_only": True,
-                "card_display_mode": "reference_only",
-            }
-        )
-        if len(opps) >= 30:
-            break
+        try:
+            parsed = json.loads(body.decode())
+            if _ranked_payload_has_names(parsed):
+                return body
+        except Exception:
+            pass
+    opps = _brief_fallback_ranked_rows(limit=30)
+    if not opps:
+        brief = _load_latest_brief() or {}
+        for row in (brief.get("actionable") or []) + (brief.get("watch") or []) + (
+            brief.get("review") or []
+        ):
+            rs = float(row.get("rs_score") or 0)
+            tier = "High" if rs >= 75 else ("Medium" if rs >= 60 else "Low")
+            opps.append(
+                {
+                    "ticker": row.get("ticker"),
+                    "score": rs,
+                    "score_display_mode": "fallback_rank",
+                    "score_display": tier,
+                    "score_display_label": "Fallback rank · relevance only",
+                    "priority_tier": tier,
+                    "score_source": "brief-fallback",
+                    "action": "WATCH",
+                    "grade": "C",
+                    "why_now": "Brief fallback board",
+                    "evidence_badge": "brief-fallback",
+                    "confidence_fallback_only": True,
+                    "card_display_mode": "reference_only",
+                }
+            )
+            if len(opps) >= 30:
+                break
     payload = {
         "count": len(opps),
         "opportunities": opps,
@@ -1767,6 +2143,20 @@ def _degraded_response(path_only: str, reason: str, full_path: str = "") -> byte
         "/api/v7/playbook/ranked",
     ):
         return _stale_ranked_bytes(reason)
+    if path_only == "/api/v7/warmup/brief-board":
+        rows = _brief_fallback_ranked_rows(limit=30)
+        payload = _finalize_degraded_ranked(
+            {
+                "count": len(rows),
+                "opportunities": rows,
+                "cached": True,
+                "stale": True,
+                "source": "brief-fallback",
+                "board_mode": "compressed_fallback",
+                "board_message": reason,
+            }
+        )
+        return _encode_degraded(payload, reason=reason)
     if path_only == "/api/v7/flow-decision":
         return _stale_flow_bytes()
     if path_only == "/api/v7/playbook/scanners":
@@ -1897,24 +2287,44 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _handle(self):
         global _backend_ready
 
-        # Dashboard — always local
+        # Dashboard — always local (gzip bundle or tiny loader; never truncated HTML)
         if self.path in ("/", ""):
             use_gzip = "gzip" in self.headers.get("Accept-Encoding", "").lower()
-            body = TEMPLATE_GZIP if use_gzip else TEMPLATE_BYTES
+            body = _dashboard_response_body(use_gzip=use_gzip)
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             if use_gzip:
                 self.send_header("Content-Encoding", "gzip")
             self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "public, max-age=30")
+            self.send_header("Cache-Control", "no-cache")
             self._cors_headers()
             self.end_headers()
             self.wfile.write(body)
             return
 
+        dash_gz_path = self.path.split("?", 1)[0]
+        if dash_gz_path in (
+            "/static/cc-dashboard.html.gz",
+            "/cc-asset/dashboard.html.gz",
+        ):
+            gz = _read_gzip_dashboard_file()
+            if gz:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/gzip")
+                self.send_header("Content-Length", str(len(gz)))
+                self.send_header("Cache-Control", "public, max-age=60")
+                self._cors_headers()
+                self.end_headers()
+                self.wfile.write(gz)
+                return
+            self._json_error(404, "Dashboard gzip bundle not found")
+            return
+
         # Health — local fast path (mode=full only when our API responds on :8001)
         if self.path in ("/health", "/api/health"):
             listening = _backend_healthy()
+            if listening:
+                _clear_backend_fatal()
             health_payload = {
                 "status": "ok",
                 "version": "9.0.0",
@@ -1938,17 +2348,68 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 },
             }
             if not listening:
+                fatal_hint = _read_backend_fatal_hint()
+                brief = _load_latest_brief()
+                fallback_rows = _brief_fallback_ranked_rows(limit=15)
+                fallback_n = len(fallback_rows)
+                extra: dict = {
+                    "warmup_diagnostics": {
+                        "brief_found": bool(brief),
+                        "brief_date": (brief or {}).get("date"),
+                        "brief_path": (brief or {}).get("_brief_path"),
+                        "fallback_row_count": fallback_n,
+                        "fallback_tickers": [
+                            str(r.get("ticker") or "") for r in fallback_rows[:12]
+                        ],
+                        "repo_root": str(_REPO_ROOT),
+                        "backend_fatal_hint": fatal_hint,
+                        "action": (
+                            "docker compose -f docker-compose.dev.yml restart api"
+                            if fatal_hint
+                            else (
+                                "等待 mode=full 或重啟 API 容器 · Wait for mode=full or restart API"
+                                if fallback_n < 1
+                                else "強制重新整理瀏覽器 — brief 後備列可用 · Hard-refresh browser"
+                            )
+                        ),
+                    },
+                    "fallback_board": {
+                        "count": fallback_n,
+                        "opportunities": fallback_rows,
+                        "source": "brief-fallback",
+                        "stale": True,
+                        "degraded": True,
+                    },
+                }
+                if fatal_hint:
+                    extra["backend_fatal_hint"] = fatal_hint
                 health_payload = _stamp_instant_degraded(
-                    {**health_payload, "degraded": True, "display_mode": "LOADING"},
-                    reason="backend importing — full API still loading",
+                    {
+                        **health_payload,
+                        "degraded": True,
+                        "display_mode": "LOADING",
+                        **extra,
+                    },
+                    reason=(
+                        fatal_hint
+                        if fatal_hint
+                        else "backend importing — full API still loading"
+                    ),
                 )
             self._send_json(json.dumps(health_payload).encode())
             return
 
         # Static files — serve locally
         if self.path.startswith("/static/"):
-            fpath = Path("src/api") / self.path.lstrip("/")
+            fpath = _REPO_ROOT / "src/api" / self.path.lstrip("/")
+            body = b""
             if fpath.is_file():
+                body = _read_file_bytes(fpath)
+            if fpath.name == "cc-helpers.js" and len(body) < 50000:
+                cache = _REPO_ROOT / "data/cache/cc-helpers.bundle.js"
+                if cache.is_file():
+                    body = _read_file_bytes(cache)
+            if body:
                 self.send_response(200)
                 ct = {
                     ".css": "text/css",
@@ -1959,14 +2420,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     ".ico": "image/x-icon",
                 }.get(fpath.suffix, "application/octet-stream")
                 self.send_header("Content-Type", ct)
+                self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
-                self.wfile.write(fpath.read_bytes())
+                self.wfile.write(body)
             else:
                 self._json_error(404, "Static file not found")
             return
 
         path_only = self.path.split("?", 1)[0]
         degrade_reason = "backend importing — full API still loading"
+
+        # Always-local fast GET paths — never block the UI on a slow :8001 ranked pipeline.
+        if self.command == "GET" and path_only in (
+            "/api/v7/warmup/brief-board",
+            "/api/v7/playbook/ranked/snapshot",
+        ):
+            body = _degraded_response(path_only, degrade_reason, self.path)
+            if body is None and path_only == "/api/v7/playbook/ranked/snapshot":
+                body = _stale_ranked_bytes(degrade_reason)
+            if body is not None:
+                self._send_json(body)
+                return
 
         if _mark_backend_ready():
             if self._proxy():
@@ -2201,6 +2675,7 @@ def _mark_backend_ready() -> bool:
         return True
     if _backend_healthy():
         _backend_ready = True
+        _clear_backend_fatal()
     return _backend_ready
 
 
@@ -2231,6 +2706,7 @@ def _run_backend():
         def _mark_ready_on_startup():
             global _backend_ready
             _backend_ready = True
+            _clear_backend_fatal()
             print("[backend] uvicorn listening — proxy enabled", flush=True)
 
         @_app.on_event("startup")
@@ -2250,6 +2726,7 @@ def _run_backend():
         uvicorn.run(_app, **_uvicorn_kw)
     except Exception as e:
         print(f"[backend] FATAL: {e}", flush=True)
+        _write_backend_fatal(e)
         import traceback
 
         traceback.print_exc()

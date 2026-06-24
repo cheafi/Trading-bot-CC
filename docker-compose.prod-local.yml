@@ -38,6 +38,9 @@ services:
       - LOG_LEVEL=INFO
       - API_SECRET_KEY=${API_SECRET_KEY:-dev-secret-local}
       - RUNNING_IN_DOCKER=1
+      # Optional local LLM — enable Docker Model Runner + copy vars from config/docker-models.env.example
+      # - LOCAL_LLM_ENABLED=auto
+      # - LOCAL_LLM_URL=http://model-runner.docker.internal/engines/llama.cpp/v1
     deploy:
       resources:
         limits:

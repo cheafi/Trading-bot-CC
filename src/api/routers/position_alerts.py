@@ -210,7 +210,10 @@ async def portfolio_risk_alerts(request: Request, _=optional_api_key):
                     try:
                         from src.services.alert_service import _push_discord
 
-                        sev_lower = a.get("severity", "info").lower()
+                        sev_map = {"CRITICAL": "critical", "HIGH": "warning"}
+                        sev_lower = sev_map.get(
+                            str(a.get("severity", "info")).upper(), "info"
+                        )
                         _push_discord(
                             title=f"{a.get('kind')} · {a.get('ticker')}",
                             message=a.get("msg", ""),

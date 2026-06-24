@@ -99,7 +99,7 @@ class TestOpsConsole(unittest.TestCase):
         by_name = {c["name"]: c for c in out["component_evidence"]}
         self.assertEqual(by_name["market_data"]["probe"], "Probe OK")
         self.assertIn("session", by_name["market_data"]["runtime_evidence"].lower())
-        self.assertEqual(by_name["regime_router"]["runtime_evidence"], "No cycle executed")
+        self.assertIn("No cycle executed", by_name["regime_router"]["runtime_evidence"])
         self.assertIn("diagnostics", out)
         self.assertTrue(out["diagnostics"]["probe_only_mode"])
         self.assertTrue(out["diagnostics"]["engine_stopped"])

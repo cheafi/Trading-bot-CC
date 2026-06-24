@@ -532,6 +532,17 @@ class TradingScheduler:
             except Exception as _ale:
                 logger.warning("EOD AlertService check failed (non-fatal): %s", _ale)
 
+            # 9. Vibe Agent evaluate + overnight brief to Discord
+            try:
+                from src.services.alert_service import push_overnight_brief_discord
+                from src.services.vibe_agent import evaluate_watch_rules
+
+                evaluate_watch_rules()
+                if push_overnight_brief_discord():
+                    logger.info("EOD overnight brief pushed to Discord")
+            except Exception as _ob:
+                logger.warning("EOD overnight brief failed (non-fatal): %s", _ob)
+
         except Exception as e:
             logger.error("EOD processing failed: %s", e)
 

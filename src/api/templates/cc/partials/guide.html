@@ -67,13 +67,27 @@
         </div>
       </details>
 
-      <!-- ══ LAYER 1 — QUICK START (30 sec) ══ -->
-      <div class="card" style="margin-bottom:16px;overflow:visible;border-left:4px solid var(--green)">
-        <div style="padding:12px 16px;background:var(--s2);border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:8px">
+      <!-- ══ DAILY OPERATOR FLOW (always visible) ══ -->
+      <div class="card" style="margin-bottom:12px;border-left:4px solid var(--green)">
+        <div style="padding:10px 14px">
+          <div style="font-size:11px;font-weight:800;color:var(--green);margin-bottom:6px;text-transform:uppercase">Daily operator flow · 每日操盤順序</div>
+          <ol style="font-size:11px;color:var(--t2);line-height:1.7;padding-left:18px;margin:0">
+            <li><strong style="color:var(--t1)">Dashboard</strong> — 今日狀態、monitor queue、repair priority</li>
+            <li><strong style="color:var(--t1)">Playbook</strong> — ranked board、near-miss upgrades</li>
+            <li><strong style="color:var(--t1)">Dossier</strong> — 單一標的結構確認</li>
+            <li><strong style="color:var(--t1)">Portfolio</strong> — book / risk layer</li>
+            <li><strong style="color:var(--t1)">IBKR / Ops</strong> — 只在需要 execution 時打開</li>
+          </ol>
+        </div>
+      </div>
+
+      <!-- ══ LAYER 1 — QUICK START (collapsed by default) ══ -->
+      <details class="card guide-layer" style="margin-bottom:16px;overflow:visible;border-left:4px solid var(--green)">
+        <summary style="padding:12px 16px;background:var(--s2);border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:8px;cursor:pointer">
           <span style="font-size:18px">⚡</span>
           <span class="guide-layer-hdr" style="color:var(--green)">第 1 層 · Quick Start</span>
-          <span style="font-size:10px;color:var(--t3);margin-left:auto;font-weight:600">~30 秒</span>
-        </div>
+          <span style="font-size:10px;color:var(--t3);margin-left:auto;font-weight:600">~30 秒 · Expand</span>
+        </summary>
         <div style="padding:14px 16px">
           <div class="guide-operator-checklist" id="cc-operator-checklist">
             <div style="font-size:11px;font-weight:800;color:var(--green);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">Operator checklist</div>
@@ -117,7 +131,7 @@
             <span class="guide-badge pw" style="font-size:8px">Diagnostic</span> / <span class="guide-badge pa" style="font-size:8px">Execution-dependent</span> confirms — details in Layer 3.
           </div>
         </div>
-      </div>
+      </details>
 
       <!-- ══ LAYER 2 — HOW TO READ THE PLATFORM ══ -->
       <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--blue)">

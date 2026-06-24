@@ -18,7 +18,7 @@ import asyncio
 import logging
 import statistics
 import time
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
 from fastapi import APIRouter, Query, Request
 
@@ -101,40 +101,22 @@ async def _real_regime() -> Dict[str, Any]:
         }
 
 
-async def _real_signals() -> List[Dict[str, Any]]:
-    """Get real signals — uses BriefDataService (no import from main.py)."""
-    try:
-        from src.services.brief_data_service import load_brief  # noqa: PLC0415
+async def _real_signals(
+    *,
+    scan_fn: Callable[..., Any] | None = None,
+) -> List[Dict[str, Any]]:
+    """Pipeline-ready signals — normalized brief, optional live scan top-up."""
+    from src.services.playbook_signal_universe import load_playbook_signals
 
-        brief = await asyncio.to_thread(load_brief)
-        recs = []
-        for section in ("actionable", "watch", "review", "monitor", "pilot", "near_miss", "candidates"):
-            recs.extend(brief.get(section, []))
-        return recs
-    except Exception as e:
-        logger.warning("Signals fallback: %s", e)
-        return []
+    signals, _meta = await load_playbook_signals(scan_fn=scan_fn)
+    return signals
 
 
 def _brief_row_to_scanner_signal(row: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize morning-brief rows for scanner_matrix heuristics."""
-    ticker = row.get("ticker") or row.get("symbol")
-    if not ticker:
-        return {}
-    conviction = str(row.get("conviction") or "WATCH").upper()
-    rs = float(row.get("rs_score") or row.get("score") or 5.0)
-    vol_ratio = float(row.get("vol_ratio") or 1.0)
-    return {
-        "ticker": ticker,
-        "score": min(10.0, max(3.0, rs / 10.0 if rs > 10 else rs)),
-        "rs_score": rs,
-        "vol_ratio": vol_ratio,
-        "atr_pct": row.get("atr_pct"),
-        "near_52w_high": bool(row.get("near_52w_high")),
-        "conviction": conviction,
-        "strategy": "brief",
-        "pattern": "watchlist",
-    }
+    from src.services.playbook_signal_universe import normalize_brief_row
+
+    return normalize_brief_row(row)
 
 
 async def _scanner_signal_universe() -> tuple[List[Dict[str, Any]], str]:
@@ -145,13 +127,9 @@ async def _scanner_signal_universe() -> tuple[List[Dict[str, Any]], str]:
     """
     signals = await _real_signals()
     if signals:
-        # Keep live brief rows first, then top up with RS defaults so Discovery can
-        # scan a broader research universe without changing deploy authority.
         pooled: List[Dict[str, Any]] = list(signals)
         seen = {
-            str((row or {}).get("ticker") or (row or {}).get("symbol") or "")
-            .strip()
-            .upper()
+            str((row or {}).get("ticker") or "").strip().upper()
             for row in pooled
         }
         for ticker in _SCANNER_DISCOVERY_UNIVERSE:
@@ -493,6 +471,19 @@ def _finalize_ranked_response(
         )
     except Exception:
         pass
+    try:
+        from src.services.playbook_operator_intelligence import enrich_playbook_payload
+
+        data = enrich_playbook_payload(data)
+    except Exception:
+        pass
+    try:
+        from src.services.cc_state import attach_page_capability, attach_system_state
+
+        data = attach_system_state(data)
+        data = attach_page_capability(data, "signals")
+    except Exception:
+        pass
     return data
 
 
@@ -665,11 +656,18 @@ async def _compute_ranked_live(
     limit: int,
     action: str | None,
     sector: str | None,
+    *,
+    scan_fn: Callable[..., Any] | None = None,
 ) -> Dict[str, Any]:
     """Full live ranked pipeline."""
+    from src.services.playbook_signal_universe import load_playbook_signals
+
     pipeline = _get_pipeline()
-    regime, signals = await asyncio.wait_for(
-        asyncio.gather(_real_regime(), _real_signals()),
+    regime, (signals, signal_meta) = await asyncio.wait_for(
+        asyncio.gather(
+            _real_regime(),
+            load_playbook_signals(scan_fn=scan_fn),
+        ),
         timeout=_RANKED_LOAD_TIMEOUT_SECONDS,
     )
     results = await asyncio.wait_for(
@@ -816,6 +814,7 @@ async def _compute_ranked_live(
         "avoid_grouped": avoid_grouped,
         "rejection_clusters": rejection_clusters,
         "rejection_clusters_note": cluster_note,
+        "signal_universe": signal_meta,
         "unlock_deploy": build_unlock_deploy(
             tradeability="WAIT",
             should_trade=bool(regime.get("should_trade", True)),
@@ -913,6 +912,7 @@ async def ranked_snapshot(
 
 @router.get("/ranked")
 async def ranked_opportunities(
+    request: Request,
     limit: int = Query(20, ge=1, le=100),
     action: str = Query(None, description="Filter by action"),
     sector: str = Query(None, description="Filter by sector bucket"),
@@ -955,7 +955,10 @@ async def ranked_opportunities(
             )
 
     try:
-        response = await _compute_ranked_live(limit, action, sector)
+        scan_fn = getattr(request.app.state, "scan_signals", None)
+        response = await _compute_ranked_live(
+            limit, action, sector, scan_fn=scan_fn
+        )
         response = _finalize_ranked_response(
             response, from_live=True, limit=limit, action=action, sector=sector
         )

@@ -186,3 +186,49 @@ def build_cc_state(
             "as_of": str(trust_obj.get("as_of") or ""),
         },
     }
+
+
+def attach_system_state(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Attach system_state to any payload that already has cc_state."""
+    from src.services.operator_state_contract import build_system_state
+
+    cs = payload.get("cc_state") if isinstance(payload.get("cc_state"), dict) else {}
+    da = payload.get("decision_authority") or cs.get("board_decision_state") or {}
+    tb = str(
+        (cs.get("tradeability_state") or {}).get("tradeability")
+        or payload.get("tradeability")
+        or da.get("tradeability")
+        or "WAIT"
+    )
+    should_trade = bool((cs.get("tradeability_state") or {}).get("should_trade"))
+    payload["system_state"] = build_system_state(
+        tradeability=tb,
+        should_trade=should_trade,
+        cc_state=cs,
+        execution_readiness=payload.get("execution_readiness"),
+        trust=payload.get("trust"),
+        decision_authority=da if isinstance(da, dict) else {},
+    )
+    return payload
+
+
+def attach_page_capability(
+    payload: Dict[str, Any],
+    tab: str,
+    *,
+    fetch_state: str = "ok",
+    mock_only: bool = False,
+) -> Dict[str, Any]:
+    """Attach page_capability for a UI tab (requires system_state on payload)."""
+    from src.services.operator_state_contract import build_page_capability, resolve_tab_id
+
+    if not payload.get("system_state"):
+        attach_system_state(payload)
+    tab_key = resolve_tab_id(tab)
+    payload["page_capability"] = build_page_capability(
+        tab_key,
+        system_state=payload.get("system_state") or {},
+        fetch_state=fetch_state,
+        mock_only=mock_only,
+    )
+    return payload

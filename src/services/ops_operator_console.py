@@ -6,6 +6,11 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 
+def _ops_bi(zh: str, en: str) -> str:
+    """Bilingual operator copy — 繁中 · English (English kept for tests/API parity)."""
+    return f"{zh} · {en}"
+
+
 def _section_state(
     *,
     active: bool,
@@ -203,15 +208,25 @@ def build_degraded_ops_operator_console(
     *,
     reason: str = "backend importing",
     brief_ok: bool = False,
+    backend_fatal_hint: str | None = None,
 ) -> Dict[str, Any]:
     """Instant / warmup ops-console — honest probes without faking runtime OK."""
     now = datetime.now(timezone.utc)
-    runtime_warm = (
-        f"Backend warming ({reason}) — engine runtime unconfirmed"
+    runtime_warm = _ops_bi(
+        f"後端預熱中（{reason}）— engine 執行時未確認",
+        f"Backend warming ({reason}) — engine runtime unconfirmed",
     )
+    if backend_fatal_hint:
+        runtime_warm = _ops_bi(
+            f"後端子程序失敗 — {backend_fatal_hint[:200]}",
+            f"Backend child failed — {backend_fatal_hint[:200]}",
+        )
     md_probe_ok = bool(brief_ok)
     md_runtime = (
-        "Brief on disk — not consumed by engine this session"
+        _ops_bi(
+            "磁碟 brief 存在 — 本 session engine 未消費",
+            "Brief on disk — not consumed by engine this session",
+        )
         if md_probe_ok
         else runtime_warm
     )
@@ -225,9 +240,15 @@ def build_degraded_ops_operator_console(
         runtime_ev: str,
     ) -> Dict[str, Any]:
         evidence = runtime_ev if ok else (
-            "Probe warming — reachability not confirmed"
+            _ops_bi(
+                "探測預熱 — 可達性未確認",
+                "Probe warming — reachability not confirmed",
+            )
             if tier == "warming"
-            else "Probe failed or component down"
+            else _ops_bi(
+                "探測失敗或元件離線",
+                "Probe failed or component down",
+            )
         )
         return {
             "name": name,
@@ -282,15 +303,30 @@ def build_degraded_ops_operator_console(
         "Backend importing on :8001",
         "No engine cycle this session",
     ]
+    if backend_fatal_hint:
+        blockers.insert(0, f"Backend crash: {backend_fatal_hint[:160]}")
     if not md_probe_ok:
         blockers.append("Market data probe not confirmed — wait for full API")
 
-    page_intro = (
+    page_intro = _ops_bi(
+        "Ops 處於 API 預熱模式。"
+        f"{reason.capitalize()}. "
+        "探測 OK 僅代表有限可達性（如磁碟 brief），非 live engine 健康度。"
+        "請依下方 Recovery runbook 操作，待 /health 回報 mode=full 後重新整理。",
         "Ops is in API warmup mode. "
         f"{reason.capitalize()}. "
         "Probe OK means limited reachability (e.g. disk brief), not live engine health. "
-        "Use Recovery runbook below, then refresh when /health reports mode=full."
+        "Use Recovery runbook below, then refresh when /health reports mode=full.",
     )
+    if backend_fatal_hint:
+        page_intro = _ops_bi(
+            "後端子程序 :8001 崩潰 — instant 伺服器僅提供磁碟 fallback。"
+            f"{backend_fatal_hint} "
+            "修正錯誤、重啟 _cc_instant.py，待 /health mode=full。",
+            "Backend child on :8001 is crashing — instant server is serving disk fallbacks only. "
+            f"{backend_fatal_hint} "
+            "Fix the error, restart _cc_instant.py, then wait for /health mode=full.",
+        )
 
     return {
         "as_of": now.isoformat() + "Z",
@@ -345,7 +381,10 @@ def build_degraded_ops_operator_console(
                 "Signals today: 0 — API warming — not evidence the market produced zero opportunities."
             ),
             "probe_table_note": (
-                "Warming probes — see Recovery runbook. Do not treat FAIL as final until backend is full."
+                "Backend crash detected — see blockers above."
+                if backend_fatal_hint
+                else "Warming probes — see Recovery runbook. "
+                "Do not treat FAIL as final until backend is full."
             ),
             "engine_stopped_banner": (
                 "API warming — engine runtime evidence unavailable. "
@@ -772,44 +811,92 @@ def build_ops_operator_console(
         if name == "market_data":
             if cycles > 0 and _is_today(last_cycle):
                 tier = freshness.get("worst_tier") or "unknown"
-                return f"Consumed in completed cycle ({tier})"
-            return "Runtime none this session"
+                return _ops_bi(
+                    f"於完成的 cycle 中已消費（{tier}）",
+                    f"Consumed in completed cycle ({tier})",
+                )
+            return _ops_bi(
+                "本 session 無執行時證據",
+                "Runtime none this session",
+            )
         if name == "regime_router":
             if cycles > 0 and regime_ms is not None and regime_ms >= 0:
-                return f"Routed in session (last probe {regime_ms}ms)"
+                return _ops_bi(
+                    f"本 session 已路由（上次探測 {regime_ms}ms）",
+                    f"Routed in session (last probe {regime_ms}ms)",
+                )
             if cycles > 0:
-                return "Cycle executed — regime output present"
-            return "No cycle executed"
+                return _ops_bi(
+                    "已執行 cycle — 體制輸出存在",
+                    "Cycle executed — regime output present",
+                )
+            return _ops_bi("未執行 cycle", "No cycle executed")
         if name == "broker":
             if broker_connected and order_path_tested:
-                return "Live handoff exercised this session"
+                return _ops_bi(
+                    "本 session 已演練 live handoff",
+                    "Live handoff exercised this session",
+                )
             if broker_connected:
-                return "Session active — no order test this session"
+                return _ops_bi(
+                    "Session 已連線 — 本 session 未測試下單",
+                    "Session active — no order test this session",
+                )
             if gateway_ok:
-                return "Gateway reachable — session inactive"
+                return _ops_bi(
+                    "Gateway 可達 — session 未啟動",
+                    "Gateway reachable — session inactive",
+                )
             transport = ibkr.get("transport") or {}
             if transport.get("failed_handshake_count_1m"):
-                return "Connect failed — verify Gateway host:port and API client ID"
+                return _ops_bi(
+                    "連線失敗 — 請確認 Gateway host:port 與 API client ID",
+                    "Connect failed — verify Gateway host:port and API client ID",
+                )
             if transport.get("ib_handshake_started"):
-                return "Handshake incomplete — retry Connect on IBKR tab"
-            return "Not connected — IBKR tab → Connect (Gateway may still be up; no TCP probe)"
+                return _ops_bi(
+                    "握手未完成 — 請於 IBKR 分頁重試 Connect",
+                    "Handshake incomplete — retry Connect on IBKR tab",
+                )
+            return _ops_bi(
+                "未連線 — 至 IBKR 分頁 Connect（Gateway 可能仍運行；無 TCP 探測）",
+                "Not connected — IBKR tab → Connect (Gateway may still be up; no TCP probe)",
+            )
         if name == "leaderboard":
             if cached_recs > 0:
-                return f"{cached_recs} cached recs generated"
-            return "No cache generated"
+                return _ops_bi(
+                    f"已產生 {cached_recs} 筆快取 rec",
+                    f"{cached_recs} cached recs generated",
+                )
+            return _ops_bi("未產生快取", "No cache generated")
         if name == "learning_loop":
             if closed_trades >= 5:
-                return f"{closed_trades} closed trades in runtime sample"
+                return _ops_bi(
+                    f"執行時樣本含 {closed_trades} 筆平倉",
+                    f"{closed_trades} closed trades in runtime sample",
+                )
             if closed_trades > 0:
-                return f"Insufficient sample ({closed_trades} trades)"
-            return "No runtime sample"
+                return _ops_bi(
+                    f"樣本不足（{closed_trades} 筆）",
+                    f"Insufficient sample ({closed_trades} trades)",
+                )
+            return _ops_bi("無執行時樣本", "No runtime sample")
         if not running and name in engine_related:
-            return "Engine off — no runtime path"
+            return _ops_bi("引擎關閉 — 無執行路徑", "Engine off — no runtime path")
         if cycles == 0 and name in engine_related:
-            return "No cycle executed this session"
+            return _ops_bi(
+                "本 session 未執行 cycle",
+                "No cycle executed this session",
+            )
         if components.get(name):
-            return "Probe only — runtime unconfirmed"
-        return "Probe failed — no runtime path"
+            return _ops_bi(
+                "僅探測 — 執行時未確認",
+                "Probe only — runtime unconfirmed",
+            )
+        return _ops_bi(
+            "探測失敗 — 無執行路徑",
+            "Probe failed — no runtime path",
+        )
 
     component_evidence = []
     for name, ok in sorted(components.items()):
@@ -817,7 +904,10 @@ def build_ops_operator_console(
         if not ok:
             tier = "fail"
             probe_label = "FAIL"
-            evidence = "Probe failed or component down"
+            evidence = _ops_bi(
+                "探測失敗或元件離線",
+                "Probe failed or component down",
+            )
         elif name in ("broker",) and broker_connected and cycles > 0 and order_path_tested:
             tier = "trading_ready"
             probe_label = "Probe OK"
@@ -853,16 +943,22 @@ def build_ops_operator_console(
         intro_parts.append("no cache has been generated")
     intro_detail = ", ".join(intro_parts)
     if probe_only_mode:
-        page_intro = (
+        page_intro = _ops_bi(
+            "Ops 目前為僅探測模式。"
+            + (f"{intro_detail.capitalize()}. " if intro_detail else "")
+            + "探測可能通過，但探測健康 ≠ live 執行時健康。"
+            + "待有新執行時證據前，請將此頁視為診斷介面。",
             "Ops is currently in probe-only mode. "
             + (f"{intro_detail.capitalize()}. " if intro_detail else "")
             + "Probe checks may still pass, but probe health is not the same as live runtime health. "
-            "Treat this page as a diagnostics surface until fresh runtime evidence exists."
+            + "Treat this page as a diagnostics surface until fresh runtime evidence exists.",
         )
     else:
-        page_intro = (
+        page_intro = _ops_bi(
+            "本 session 已有執行時證據。"
+            + "探測 OK 仍僅代表可達性 — 資本決策前請核對執行時欄位。",
             "Runtime evidence is present this session. "
-            "Probe OK still means reachability — verify runtime column before trusting capital decisions."
+            + "Probe OK still means reachability — verify runtime column before trusting capital decisions.",
         )
 
     if signals_today == 0:
@@ -881,46 +977,79 @@ def build_ops_operator_console(
 
     market_data_probe = bool(components.get("market_data"))
     if market_data_probe and (cycles == 0 or not _is_today(last_cycle)):
-        market_data_runtime = (
-            "Reachable, but not recently consumed by a completed engine cycle"
+        market_data_runtime = _ops_bi(
+            "可達，但最近完成的 engine cycle 未消費",
+            "Reachable, but not recently consumed by a completed engine cycle",
         )
     elif market_data_probe:
-        market_data_runtime = "Consumed in last completed engine cycle"
+        market_data_runtime = _ops_bi(
+            "最近完成的 engine cycle 已消費",
+            "Consumed in last completed engine cycle",
+        )
     else:
-        market_data_runtime = "Probe failed — no runtime consumption possible"
+        market_data_runtime = _ops_bi(
+            "探測失敗 — 無法執行時消費",
+            "Probe failed — no runtime consumption possible",
+        )
 
     if components.get("regime_router"):
         regime_runtime = (
-            "Service available, runtime output this session"
+            _ops_bi(
+                "服務可用，本 session 有執行輸出",
+                "Service available, runtime output this session",
+            )
             if cycles > 0
-            else "Service available, no runtime output this session"
+            else _ops_bi(
+                "服務可用，本 session 無執行輸出",
+                "Service available, no runtime output this session",
+            )
         )
     else:
-        regime_runtime = "Service unavailable"
+        regime_runtime = _ops_bi("服務不可用", "Service unavailable")
 
     if broker_connected and order_path_tested:
-        broker_runtime = "Connected — live handoff exercised"
+        broker_runtime = _ops_bi(
+            "已連線 — 已演練 live handoff",
+            "Connected — live handoff exercised",
+        )
     elif broker_connected:
-        broker_runtime = "Connected — handoff not exercised this session"
+        broker_runtime = _ops_bi(
+            "已連線 — 本 session 未演練 handoff",
+            "Connected — handoff not exercised this session",
+        )
     elif gateway_ok:
-        broker_runtime = "Gateway reachable — no live handoff possible"
+        broker_runtime = _ops_bi(
+            "Gateway 可達 — 無法 live handoff",
+            "Gateway reachable — no live handoff possible",
+        )
     else:
-        broker_runtime = "Unreachable, no live handoff possible"
+        broker_runtime = _ops_bi(
+            "不可達，無法 live handoff",
+            "Unreachable, no live handoff possible",
+        )
 
     providers_honest = {
         "market_data": {
-            "probe": "Connected" if market_data_probe else "Disconnected",
+            "probe": _ops_bi("已連線", "Connected")
+            if market_data_probe
+            else _ops_bi("未連線", "Disconnected"),
             "runtime": market_data_runtime,
         },
         "regime_router": {
-            "probe": "Available" if components.get("regime_router") else "Down",
+            "probe": _ops_bi("可用", "Available")
+            if components.get("regime_router")
+            else _ops_bi("離線", "Down"),
             "runtime": regime_runtime,
         },
         "broker": {
             "probe": (
-                "Session active"
+                _ops_bi("Session 已連線", "Session active")
                 if broker_connected
-                else ("Gateway OK" if gateway_ok else "Not connected")
+                else (
+                    _ops_bi("Gateway 正常", "Gateway OK")
+                    if gateway_ok
+                    else _ops_bi("未連線", "Not connected")
+                )
             ),
             "runtime": broker_runtime,
         },

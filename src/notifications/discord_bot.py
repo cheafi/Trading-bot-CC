@@ -234,7 +234,7 @@ class DiscordInteractiveBot:
 
     @property
     def is_configured(self) -> bool:
-        return bool(self.bot_token)
+        return bool(self.webhook_url or self.bot_token)
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:

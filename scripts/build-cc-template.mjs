@@ -5,11 +5,13 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const INDEX = path.join(ROOT, 'src/api/templates/index.html');
+const GZIP_DASHBOARD = path.join(ROOT, 'src/api/static/cc-dashboard.html.gz');
 const PARTIALS = {
   degraded_banners: path.join(
     ROOT,
@@ -58,10 +60,29 @@ const check = process.argv.includes('--check');
 const built = build();
 const current = fs.readFileSync(INDEX, 'utf8');
 
+function writeDashboardGzip(html) {
+  const gz = zlib.gzipSync(Buffer.from(html, 'utf8'), { level: 9 });
+  fs.writeFileSync(GZIP_DASHBOARD, gz);
+}
+
 if (check) {
   if (built !== current) {
     console.error(
       'index.html is out of date — run: node scripts/build-cc-template.mjs',
+    );
+    process.exit(1);
+  }
+  if (!fs.existsSync(GZIP_DASHBOARD)) {
+    console.error(
+      'cc-dashboard.html.gz missing — run: node scripts/build-cc-template.mjs',
+    );
+    process.exit(1);
+  }
+  const gzMtime = fs.statSync(GZIP_DASHBOARD).mtimeMs;
+  const htmlMtime = fs.statSync(INDEX).mtimeMs;
+  if (gzMtime < htmlMtime) {
+    console.error(
+      'cc-dashboard.html.gz stale — run: node scripts/build-cc-template.mjs',
     );
     process.exit(1);
   }
@@ -71,7 +92,33 @@ if (check) {
 
 if (built !== current) {
   fs.writeFileSync(INDEX, built);
+  writeDashboardGzip(built);
+  bundleCcAppIntoHelpers();
   console.log('Updated', INDEX);
+  console.log('Updated', GZIP_DASHBOARD);
 } else {
+  writeDashboardGzip(built);
+  bundleCcAppIntoHelpers();
   console.log('index.html already up to date');
+  console.log('Refreshed', GZIP_DASHBOARD);
+}
+
+function bundleCcAppIntoHelpers() {
+  const helpersPath = path.join(ROOT, 'src/api/static/cc-helpers.js');
+  const appPath = path.join(ROOT, 'src/api/static/cc-app.js');
+  const cachePath = path.join(ROOT, 'data/cache/cc-helpers.bundle.js');
+  if (!fs.existsSync(appPath)) return;
+  let helpers = fs.readFileSync(helpersPath, 'utf8');
+  const marker = '/* CC_APP_BUNDLE_START';
+  const app = fs.readFileSync(appPath, 'utf8');
+  if (helpers.includes(marker)) {
+    helpers = helpers.split(marker)[0].trimEnd();
+  }
+  const bundled =
+    helpers +
+    '\n\n/* CC_APP_BUNDLE_START — cc() Alpine app (source: cc-app.js) */\n' +
+    app;
+  fs.writeFileSync(helpersPath, bundled);
+  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+  fs.writeFileSync(cachePath, bundled);
 }

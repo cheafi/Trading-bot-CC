@@ -22,10 +22,31 @@ class DiscordNotifier:
 
     @property
     def is_configured(self) -> bool:
-        return bool(self.webhook_url)
+        try:
+            from src.notifications.discord_dispatch import discord_is_configured
+
+            return discord_is_configured()
+        except Exception:
+            return bool(self.webhook_url)
 
     async def send_message(self, text: str) -> bool:
-        if not self.is_configured:
+        try:
+            from src.notifications.discord_dispatch import (
+                discord_is_configured,
+                push_notice_async,
+            )
+
+            if discord_is_configured():
+                return await push_notice_async(
+                    title="CC Notice",
+                    message=text,
+                    severity="info",
+                    event_type="multi_channel",
+                )
+        except Exception as exc:
+            self.logger.debug("discord_dispatch fallback failed: %s", exc)
+
+        if not self.webhook_url:
             return False
 
         # Discord message limit ~2000 chars

@@ -1528,21 +1528,22 @@ class IBKRService:
             bracket_reason = "ibapi not installed"
         elif not connected:
             bracket_status = "unavailable"
-            bracket_reason = "Connect IB Gateway session first"
+            bracket_reason = "請先連線 IB Gateway · Connect IB Gateway session first"
         elif not order_routing_ready:
             bracket_status = "unavailable"
-            bracket_reason = "Waiting for nextValidId / order queue"
+            bracket_reason = "等待 nextValidId／訂單佇列 · Waiting for nextValidId / order queue"
         elif bracket_enabled and (not bracket_stop or not bracket_target):
             bracket_status = "partial"
-            bracket_reason = "Bracket preview pending stop + target fields"
+            bracket_reason = "Bracket 預覽待填止損＋目標 · Bracket preview pending stop + target fields"
         elif bracket_enabled:
             bracket_status = "ready"
-            bracket_reason = "Bracket builder ready — parent + OCA children on transmit"
+            bracket_reason = "Bracket 已就緒 — 送出時 parent + OCA 子單 · Bracket builder ready on transmit"
         else:
             bracket_status = "partial"
             bracket_reason = (
-                "Bracket builder is available but not fully configured. "
-                "Do not treat a connected broker alone as sufficient protection; "
+                "Bracket 建構器可用但未完整設定；勿將「已連線」當作足夠保護，"
+                "送出前請確認止損／目標邏輯。"
+                " · Bracket builder available but not fully configured — "
                 "confirm stop / target logic before transmit."
             )
 

@@ -145,8 +145,13 @@ class Settings:
         )
 
         # Discord
-        self.discord_webhook_url = _env("DISCORD_WEBHOOK_URL")
+        self.discord_webhook_url = _env("DISCORD_WEBHOOK_URL") or _env(
+            "DISCORD_ALERT_WEBHOOK"
+        )
         self.discord_bot_token = _env("DISCORD_BOT_TOKEN")
+        self.discord_channel_id = _env("DISCORD_CHANNEL_ID") or _env(
+            "DISCORD_ALERT_CHANNEL_ID"
+        )
         self.discord_channel_name = _env(
             "DISCORD_CHANNEL_NAME", "Trading CC"
         )

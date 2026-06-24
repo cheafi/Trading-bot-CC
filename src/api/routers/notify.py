@@ -1,13 +1,4 @@
-"""
-Notify Router — Sprint 106
-==========================
-REST endpoints for querying the alert event log and test-firing a notification.
-
-Endpoints:
-  GET  /api/v7/notify/log         — last N alert events from alert_log.json
-  POST /api/v7/notify/test        — fire a test notification to Discord
-  GET  /api/v7/notify/status      — Discord webhook configured? last event ts?
-"""
+"""Notify Router — alert log, Discord test, unified status."""
 
 from __future__ import annotations
 
@@ -16,7 +7,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Query
 
-from src.api.deps import optional_api_key, sanitize_for_json
+from src.api.deps import sanitize_for_json
 
 router = APIRouter(prefix="/api/v7/notify", tags=["notify"])
 
@@ -25,15 +16,10 @@ router = APIRouter(prefix="/api/v7/notify", tags=["notify"])
 async def alert_log(limit: int = Query(default=20, ge=1, le=50)) -> Dict[str, Any]:
     """Return the last *limit* alert events persisted by AlertService."""
     try:
-        from src.services.alert_service import get_alert_log  # noqa: PLC0415
+        from src.services.alert_service import get_alert_log
 
         events = get_alert_log(limit=limit)
-        return sanitize_for_json(
-            {
-                "count": len(events),
-                "events": events,
-            }
-        )
+        return sanitize_for_json({"count": len(events), "events": events})
     except Exception as exc:
         return {"count": 0, "events": [], "error": str(exc)}
 
@@ -43,55 +29,96 @@ async def send_test_alert(
     message: str = Query(default="AlertService test ping from TradingAI Bot"),
     severity: str = Query(default="info"),
 ) -> Dict[str, Any]:
-    """Fire a test Discord alert and log it.  Returns push success flag."""
+    """Fire a test Discord alert and log it."""
     valid_severities = {"info", "warning", "critical", "ok"}
     if severity not in valid_severities:
         severity = "info"
     try:
-        from src.services.alert_service import (
-            _append_log,
-            _make_event,
-            _push_discord,
-        )  # noqa: PLC0415
+        from src.notifications.discord_dispatch import (
+            discord_config_status,
+            push_notice,
+        )
 
-        event = _make_event(
-            event_type="test",
-            title="🧪 Test Alert",
+        pushed = push_notice(
+            title="🧪 Test Alert · CC",
             message=message,
             severity=severity,
+            event_type="test",
+            log=True,
         )
-        _append_log(event)
-        pushed = _push_discord("🧪 Test Alert", message, severity)
         return {
             "ok": True,
             "pushed_to_discord": pushed,
             "severity": severity,
             "message": message,
+            "config": discord_config_status(),
         }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
 
 
+@router.get("/setup")
+async def notify_setup() -> Dict[str, Any]:
+    """Human-readable Discord setup checklist."""
+    from src.notifications.discord_dispatch import discord_config_status
+
+    st = discord_config_status()
+    steps = [
+        "1. Discord channel → Integrations → Webhooks → New Webhook → copy URL",
+        "2. Add DISCORD_WEBHOOK_URL=<url> to .env (recommended — no bot permissions needed)",
+        "OR: DISCORD_BOT_TOKEN + DISCORD_CHANNEL_ID (right-click channel → Copy ID)",
+        "OR: DISCORD_BOT_TOKEN + DISCORD_CHANNEL_NAME=Trading CC (auto-resolve on first ping)",
+        "3. Restart API process",
+        "4. Ops tab → Test Discord ping (or GET /api/v7/notify/resolve-channel)",
+    ]
+    return {**st, "steps": steps}
+
+
+@router.get("/resolve-channel")
+async def resolve_discord_channel() -> Dict[str, Any]:
+    """Try to resolve DISCORD_CHANNEL_NAME → channel ID (bot token required)."""
+    from src.notifications.discord_dispatch import (
+        discord_config_status,
+        resolve_channel_id_async,
+    )
+
+    cid = await resolve_channel_id_async()
+    st = discord_config_status()
+    return {
+        "ok": bool(cid),
+        "channel_id": cid or None,
+        "config": st,
+        "hint": (
+            "Channel resolved — test ping should work"
+            if cid
+            else "Check bot token, server invite, and channel name"
+        ),
+    }
+
+
 @router.get("/status")
 async def notify_status() -> Dict[str, Any]:
-    """Check whether Discord webhook is configured and show last alert timestamp."""
-    webhook = os.getenv("DISCORD_WEBHOOK_URL", "") or os.getenv(
-        "DISCORD_ALERT_WEBHOOK", ""
-    )
-    configured = bool(webhook)
+    """Discord configuration and last alert timestamp."""
     try:
-        from src.services.alert_service import get_alert_log  # noqa: PLC0415
+        from src.notifications.discord_dispatch import discord_config_status
+        from src.services.alert_service import get_alert_log
 
+        status = discord_config_status()
         log = get_alert_log(limit=1)
-        last_ts = log[-1]["ts"] if log else None
-        last_type = log[-1]["event_type"] if log else None
-    except Exception:
-        last_ts = None
-        last_type = None
-
-    return {
-        "discord_configured": configured,
-        "webhook_set": "yes" if configured else "no (set DISCORD_WEBHOOK_URL)",
-        "last_alert_ts": last_ts,
-        "last_alert_type": last_type,
-    }
+        status["last_alert_ts"] = log[-1]["ts"] if log else None
+        status["last_alert_type"] = log[-1]["event_type"] if log else None
+        if not status["discord_configured"]:
+            status["setup_hint"] = (
+                "Set DISCORD_WEBHOOK_URL (recommended), or "
+                "DISCORD_BOT_TOKEN + DISCORD_CHANNEL_ID, or "
+                "DISCORD_BOT_TOKEN + DISCORD_CHANNEL_NAME"
+            )
+        return status
+    except Exception as exc:
+        webhook = os.getenv("DISCORD_WEBHOOK_URL", "") or os.getenv(
+            "DISCORD_ALERT_WEBHOOK", ""
+        )
+        return {
+            "discord_configured": bool(webhook),
+            "error": str(exc),
+        }

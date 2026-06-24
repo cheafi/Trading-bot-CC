@@ -284,6 +284,21 @@ async def cc_header(
         trust=trust,
     )
 
+    from src.services.cc_state import attach_page_capability, attach_system_state
+
+    state_payload = {
+        "cc_state": cc_state,
+        "decision_authority": decision_authority,
+        "trust": trust,
+        "execution_readiness": execution_readiness,
+    }
+    attach_system_state(state_payload)
+    page_capability = None
+    if tab:
+        cap_payload = dict(state_payload)
+        attach_page_capability(cap_payload, tab)
+        page_capability = cap_payload.get("page_capability")
+
     return sanitize_for_json(
         {
             "as_of": now.isoformat() + "Z",
@@ -299,6 +314,8 @@ async def cc_header(
             "components": components,
             "decision_authority": decision_authority,
             "cc_state": cc_state,
+            "system_state": state_payload.get("system_state"),
+            "page_capability": page_capability,
             "page_authority_mode": page_authority_mode,
             "portfolio_context": portfolio_context,
             "surface_mode": resolve_surface_mode(tab) if tab else None,

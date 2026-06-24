@@ -89,6 +89,18 @@ def test_degraded_ops_console_includes_component_evidence():
     assert "Recovery runbook" in out["diagnostics"]["page_intro"]
 
 
+def test_degraded_ops_console_surfaces_backend_fatal_hint():
+    hint = "No module named 'uvicorn' — pip install uvicorn"
+    out = build_degraded_ops_operator_console(
+        reason="backend importing",
+        brief_ok=True,
+        backend_fatal_hint=hint,
+    )
+    assert any("Backend crash" in b for b in out["blockers"])
+    assert "uvicorn" in out["diagnostics"]["page_intro"]
+    assert "Backend crash detected" in out["diagnostics"]["probe_table_note"]
+
+
 def test_index_html_ops_uses_shared_degraded_copy():
     raw = INDEX_HTML.read_text(encoding="utf-8")
     ops = _ops_surface_html(raw)
@@ -106,10 +118,25 @@ def test_index_html_ops_uses_shared_degraded_copy():
     assert "Probe available · runtime unknown" in raw
     assert "Probe only — runtime unconfirmed" in raw
     assert "opsProbeRuntimeFallbackRows()" in raw
+    assert "opsFormatEvidence(" in ops
+    assert "opsComponentLabel(" in ops
+    assert "opsProbeLabel(" in ops
+    assert "Probe vs runtime evidence" in ops
+    assert "探測 vs 執行時證據" in ops
     assert "probe_table_note" in raw
     assert "opsDegradedLine('loading')" not in ops
     assert 'x-text="opsGlobalLoadingLine()"' in ops
     assert "API still loading — retry in a few seconds." not in ops
+
+
+def test_index_html_ops_advanced_diagnostics_bilingual_wiring():
+    raw = INDEX_HTML.read_text(encoding="utf-8")
+    ops = _ops_surface_html(raw)
+    assert "opsAdvancedDiagnosticsTitle()" in ops
+    assert "opsAdvancedDiagnosticsCollapsedTitle()" in ops
+    assert "opsAdvancedCollapsedCopy()" in ops
+    assert "opsAdvancedSectionKey(" in ops
+    assert "opsAdvancedSectionStatus(" in ops
 
 
 def test_index_html_autoschedule_button_is_clean():

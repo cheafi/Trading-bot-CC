@@ -58,6 +58,20 @@ async def monitors_evaluate(request: Request):
         positions = _user_portfolio.get("holdings") or []
     except Exception:
         logger.debug("monitors evaluate holdings failed", exc_info=True)
-    return sanitize_for_json(
-        {"alerts": evaluate_monitors(today=today, positions=positions)}
-    )
+    alerts = evaluate_monitors(today=today, positions=positions)
+    for alert in alerts:
+        try:
+            from src.notifications.discord_dispatch import push_notice
+
+            sev = str(alert.get("severity") or alert.get("level") or "info").lower()
+            if sev in ("high", "critical", "warning"):
+                push_notice(
+                    title=f"Monitor · {alert.get('ticker') or alert.get('name', '—')}",
+                    message=str(alert.get("message") or alert.get("reason") or ""),
+                    severity="critical" if sev == "critical" else "warning",
+                    event_type="monitor_alert",
+                    meta={"monitor_id": alert.get("id")},
+                )
+        except Exception:
+            pass
+    return sanitize_for_json({"alerts": alerts})

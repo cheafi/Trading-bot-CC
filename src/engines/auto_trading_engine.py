@@ -190,10 +190,18 @@ class RiskCircuitBreaker:
         return True
 
     def _trigger(self, reason: str):
+        was_triggered = self.triggered
         self.triggered = True
         self.trigger_reason = reason
         self.trigger_time = datetime.now(timezone.utc)
         logger.warning(f"🚨 Circuit breaker triggered: {reason}")
+        if not was_triggered:
+            try:
+                from src.services.alert_service import on_circuit_breaker
+
+                on_circuit_breaker(reason)
+            except Exception as exc:
+                logger.debug("circuit breaker discord notify skipped: %s", exc)
 
 
 class AutoTradingEngine:

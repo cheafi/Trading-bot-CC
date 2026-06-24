@@ -6236,6 +6236,22 @@ try:
 except Exception:
     logger.exception("[Router] Failed to load platform_p2 router")
 
+try:
+    from src.api.routers.vibe_agent import router as vibe_agent_router
+
+    app.include_router(vibe_agent_router)
+    logger.info("[Router] vibe_agent loaded (%d routes)", len(vibe_agent_router.routes))
+except Exception:
+    logger.exception("[Router] Failed to load vibe_agent router")
+
+try:
+    from src.api.routers.research_pipeline import router as research_pipeline_router
+
+    app.include_router(research_pipeline_router)
+    logger.info("[Router] research_pipeline loaded (%d routes)", len(research_pipeline_router.routes))
+except Exception:
+    logger.exception("[Router] Failed to load research_pipeline router")
+
 
 if __name__ == "__main__":
     start()

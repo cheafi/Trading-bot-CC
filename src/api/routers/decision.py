@@ -330,6 +330,17 @@ def _scan_cache_has_recs(request: Request) -> bool:
     return bool(sc.get("recs"))
 
 
+@router.get("/api/v7/warmup/brief-board")
+async def warmup_brief_board(limit: int = Query(30, ge=1, le=100)):
+    """Fast local brief board for UI bootstrap — monitor only, no deploy authority."""
+    from src.services.playbook_board_fallback import build_compressed_fallback
+
+    payload = build_compressed_fallback(
+        limit, reason="warmup brief board — monitor only"
+    )
+    return payload
+
+
 @router.get("/api/v7/today")
 async def today_summary(request: Request):
     """Decision homepage: regime + top 5 + filter funnel + action guidance.
@@ -1480,6 +1491,25 @@ async def today_summary(request: Request):
         surface_authority=surface_authority,
         trust=trust,
     )
+    from src.services.cc_state import attach_system_state, attach_page_capability
+
+    payload = attach_system_state(payload)
+    payload = attach_page_capability(payload, "today")
+    try:
+        from src.services.operator_state_contract import pick_dashboard_monitors, structural_valid_for_monitor
+
+        payload["dashboard_monitors"] = pick_dashboard_monitors(
+            watch_qualified=[
+                r
+                for r in (payload.get("top_ranked") or [])
+                if structural_valid_for_monitor(r)
+                and str(r.get("action") or "").upper() in ("WATCH", "PILOT", "MONITOR")
+            ],
+            near_miss=payload.get("near_miss") or [],
+            top_ranked=payload.get("top_ranked") or [],
+        )
+    except Exception:
+        pass
     # Degraded/empty market data can leave NaN/Inf floats in the payload, which
     # the JSON encoder rejects (500). Sanitize once before caching + returning.
     payload = sanitize_for_json(payload)
@@ -1489,6 +1519,17 @@ async def today_summary(request: Request):
     else:
         _today_cache = None
         _today_cache_ts = 0.0
+    try:
+        prev = getattr(request.app.state, "today_v7_cache", None) or {}
+        old_regime = str((prev.get("market_regime") or {}).get("trend") or "")
+        new_regime = str((payload.get("market_regime") or {}).get("trend") or "")
+        vix = float((payload.get("market_regime") or {}).get("vix") or 0)
+        if old_regime and new_regime and old_regime != new_regime:
+            from src.services.alert_service import on_regime_change
+
+            on_regime_change(old_regime, new_regime, vix)
+    except Exception:
+        pass
     try:
         request.app.state.today_v7_cache = payload
     except Exception:

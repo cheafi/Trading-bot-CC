@@ -39,13 +39,17 @@ services:
       - API_SECRET_KEY=dev-secret-local
       - CC_AUTO_START_ENGINE=1
       - YFINANCE_CACHE_DIR=/tmp/yfinance-cache
-      # Docker Model Runner — local LLM (ai/gemma3n, ai/llama3.3)
-      # model-runner.docker.internal resolves inside Docker Desktop containers
+      # Docker Model Runner — local LLM (Docker Desktop AI)
+      # Update tags after `docker model pull <tag>`; see config/docker-models.env.example
+      # Host URL inside container: http://model-runner.docker.internal/engines/llama.cpp/v1
+      # Pull examples: ai/gemma3n:latest, ai/llama3.3:latest, ai/qwen3-coder, ai/gemma3
       - RUNNING_IN_DOCKER=1
       - CC_SKIP_IB_INSYNC=1
       - LOCAL_LLM_ENABLED=auto
-      - LOCAL_MODEL_FAST=ai/gemma3n:latest
-      - LOCAL_MODEL_HEAVY=ai/llama3.3:latest
+      # Role tags consumed by src/services/ai_service.py (not LOCAL_MODEL_FAST/HEAVY)
+      - LOCAL_MODEL_ADVISOR=ai/gemma3n:latest
+      - LOCAL_MODEL_REVIEWER=ai/qwen3-coder
+      - LOCAL_MODEL_EMBED=ai/all-minilm-l6-v2-vllm
     # Resource limits: prevent runaway yfinance calls from hogging the host
     deploy:
       resources:

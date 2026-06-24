@@ -316,11 +316,19 @@ def enrich_ranked_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     trade_count = sum(1 for o in opps if _norm_action(o.get("action")) in _TRADE_ACTIONS)
     execution_ready_count = sum(1 for o in opps if o.get("execution_ready"))
     pilot_count = sum(1 for o in opps if _norm_action(o.get("action")) in _PILOT_ACTIONS)
+    board_tb = str(
+        tradeability_hint
+        or ((payload.get("cc_state") or {}).get("tradeability_state") or {}).get(
+            "tradeability"
+        )
+        or (payload.get("decision_authority") or {}).get("tradeability")
+        or ""
+    ).upper()
     try:
         from src.services.decision_truth_model import compute_honest_tradeability
 
         tradeability = compute_honest_tradeability(
-            should_trade=True,
+            should_trade=board_tb not in ("WAIT", "NO_TRADE"),
             execution_ready=execution_ready_count,
             pilot_ready=pilot_count,
             council_high_8=len(
@@ -343,10 +351,20 @@ def enrich_ranked_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
             if pilot_count >= 1
             else "WAIT"
         )
+    # Page-level board gate beats opportunity-derived tradeability.
+    if board_tb in ("WAIT", "NO_TRADE"):
+        tradeability = board_tb
+        should_trade_board = False
+    elif board_tb:
+        tradeability = board_tb
+        should_trade_board = board_tb not in ("WAIT", "NO_TRADE")
+    else:
+        should_trade_board = str(tradeability).upper() not in ("WAIT", "NO_TRADE")
     payload["best_action"] = build_best_action(
         opps,
         tradeability=tradeability,
-        should_trade=True,
+        should_trade=should_trade_board,
+        regime_label=board_tb or tradeability,
         ibkr_connected=ibkr_on,
         ibkr_mode=ibkr_mode,
         source=source,
@@ -403,7 +421,7 @@ def enrich_ranked_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         )
         authority = build_decision_authority(
             tradeability=tradeability if not fallback_brief else "WAIT",
-            should_trade=not fallback_brief,
+            should_trade=should_trade_board and not fallback_brief,
             scanner_degraded=stale or fallback_brief,
             data_stale=stale,
             fallback_brief=fallback_brief,

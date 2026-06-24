@@ -56,5 +56,31 @@ class TestBestAction(unittest.TestCase):
         self.assertIn("overlap_warning", payload)
 
 
+def test_enrich_ranked_payload_respects_board_wait_gate():
+    payload = enrich_ranked_payload(
+        {
+            "opportunities": [
+                {
+                    "ticker": "QCOM",
+                    "action": "TRADE",
+                    "final_conf": 0.72,
+                    "entry_price": 180,
+                    "stop_price": 170,
+                    "execution_ready": True,
+                    "score": 8.5,
+                },
+            ],
+            "stale": False,
+            "source": "test",
+            "tradeability": "WAIT",
+            "cc_state": {"tradeability_state": {"tradeability": "WAIT", "should_trade": False}},
+        }
+    )
+    ba = payload["best_action"]
+    assert ba["tradeability"] == "WAIT"
+    assert ba["best_trade_now"] is None or ba["tradeability"] == "WAIT"
+    assert payload["decision_authority"]["tradeability"] == "WAIT"
+
+
 if __name__ == "__main__":
     unittest.main()
