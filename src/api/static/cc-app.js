@@ -1187,6 +1187,133 @@
         const p=this.opsFormatEvidence(probe);
         return p?('探測 · Probe: '+p):'';
       },
+      _opsH(){ return window.CCHelpers||{}; },
+      opsSystemVerdictText(){
+        const H=this._opsH();
+        const t=this.opsConsole.data?.system_verdict||'';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
+      },
+      opsVerdictDetailText(){
+        const H=this._opsH();
+        const t=this.opsConsole.data?.verdict_detail||'';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
+      },
+      opsBlockerText(b){
+        const H=this._opsH();
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(String(b||'')):String(b||'');
+      },
+      opsNextActionText(na){
+        const H=this._opsH();
+        const t=(na&&na.action)||'';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
+      },
+      opsNextActionWhy(na){
+        const H=this._opsH();
+        const t=(na&&na.why)||'';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
+      },
+      opsExecutionLayerField(row,field){
+        const H=this._opsH();
+        const t=(row&&row[field])||'';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(String(t)):String(t);
+      },
+      opsOperationalEventKey(k){
+        const H=this._opsH();
+        return H.localizeOpsDictKey?H.localizeOpsDictKey(k):String(k||'').replace(/_/g,' ');
+      },
+      opsOperationalEventValue(v){
+        return this.opsFormatEvidence(v);
+      },
+      opsDictKeyLabel(k){
+        const H=this._opsH();
+        return H.localizeOpsDictKey?H.localizeOpsDictKey(k):String(k||'').replace(/_/g,' ');
+      },
+      opsMachineLabel(m){
+        const H=this._opsH();
+        return H.localizeOpsMachineField?H.localizeOpsMachineField('label',m?.label):String(m?.label||'');
+      },
+      opsMachineConstraint(m){
+        const H=this._opsH();
+        return H.localizeOpsMachineField?H.localizeOpsMachineField('constraint',m?.constraint):String(m?.constraint||'');
+      },
+      opsMachineHealthText(m){
+        const H=this._opsH();
+        return H.localizeOpsMachineField?H.localizeOpsMachineField('health',m?.health):String(m?.health||'');
+      },
+      opsMachineHeadlineText(){
+        const H=this._opsH();
+        const t=this.opsConsole.data?.machines_health?.headline||'';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
+      },
+      opsSystemVerdictTitle(){
+        const H=this._opsH();
+        return H.opsSystemVerdictTitle?H.opsSystemVerdictTitle():'系統裁決 · System verdict';
+      },
+      opsDecisionMachinesTitle(){
+        const H=this._opsH();
+        return H.opsDecisionMachinesTitle?H.opsDecisionMachinesTitle():'決策機器 · Decision machines';
+      },
+      opsExecutionReadinessTitle(){
+        const H=this._opsH();
+        return H.opsExecutionReadinessTitle?H.opsExecutionReadinessTitle():'執行就緒層 · Execution readiness layers';
+      },
+      opsExecutionReadinessHint(){
+        const H=this._opsH();
+        return H.opsExecutionReadinessHint?H.opsExecutionReadinessHint():'僅探測狀態顯示灰／琥珀 — 非綠色交易就緒 · Probe-only states shown gray/amber — not green trading-ready';
+      },
+      opsBlockersTitle(){
+        const H=this._opsH();
+        return H.opsBlockersTitle?H.opsBlockersTitle():'根因／阻擋 · Root cause / blockers';
+      },
+      opsNextActionsTitle(){
+        const H=this._opsH();
+        return H.opsNextActionsTitle?H.opsNextActionsTitle():'下一步操作 · Next operator actions';
+      },
+      opsEngineStateTitle(){
+        const H=this._opsH();
+        return H.opsEngineStateTitle?H.opsEngineStateTitle():'引擎狀態 · Engine State';
+      },
+      opsUptimeLatencyTitle(){
+        const H=this._opsH();
+        return H.opsUptimeLatencyTitle?H.opsUptimeLatencyTitle():'運行時間與延遲 · Uptime & Latency';
+      },
+      opsExperimentalModulesTitle(){
+        const H=this._opsH();
+        return H.opsExperimentalModulesTitle?H.opsExperimentalModulesTitle():'實驗模組 · Experimental modules';
+      },
+      opsProbeVerdictNote(){
+        const H=this._opsH();
+        return H.opsProbeVerdictNote?H.opsProbeVerdictNote():'探測 OK ≠ 執行時健康。資本決策前請先看上方探測 vs 執行時表。 · Probe OK ≠ runtime health. Use the probe vs runtime table above before capital.';
+      },
+      opsMetricLabel(name){
+        const H=this._opsH();
+        return H.opsMetricLabel?H.opsMetricLabel(name):name;
+      },
+      opsMetricDisplayText(metricKey,field,fallback){
+        const H=this._opsH();
+        const raw=this.opsConsole.data?.metrics_display?.[metricKey]?.[field]||(field==='display'&&metricKey==='uptime'?this.opsDetail.uptime:'')||fallback||'';
+        if(field==='reason') return H.localizeOpsMetricReason?H.localizeOpsMetricReason(raw):raw;
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(String(raw)):String(raw);
+      },
+      opsEngineRunLabel(){
+        const H=this._opsH();
+        const t=this.ops.running?'RUNNING':'STOPPED';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
+      },
+      opsCircuitBreakerLabel(){
+        const H=this._opsH();
+        const t=this.ops.circuit_breaker?'TRIPPED':'CLEAR';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
+      },
+      opsDryRunLabel(){
+        const H=this._opsH();
+        const t=this.ops.dry_run?'DRY RUN / PAPER':'LIVE TRADING';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
+      },
+      opsLastTimeValue(v){
+        if(!v) return this.opsFormatEvidence('— none this session');
+        return String(v).slice(0,19).replace('T',' ');
+      },
       opsProbeRuntimeFallbackRows(){
         const warming=!!(this.opsConsole.data?.degraded||this.opsConsole.data?.diagnostics?.warming_mode||this.healthMode==='loading');
         const names=['market_data','regime_router','broker'];
@@ -2918,6 +3045,7 @@
           return CCHelpers.localizeIbkrBracketReason(raw)||'—';
         return raw||'—';
       },
+      ibkrRepairPrimaryLine(){
         if(this.ibkr.readiness?.full_handoff_ready) return 'IBKR 已到 handoff-ready。';
         if(this.ibkrPageBannerShort()) return this.ibkrPageBannerShort();
         return 'IBKR 尚未 ready。';

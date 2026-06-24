@@ -7603,15 +7603,15 @@
         <!-- DECISION MACHINES HEALTH -->
         <template x-if="opsConsole.data?.machines_health?.machines?.length">
           <div class="card card-p" style="border-left:4px solid var(--purple)">
-            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--purple)">Decision machines</div>
-            <div class="text-[10px] mb-2" style="color:var(--t2)" x-text="opsConsole.data.machines_health.headline"></div>
+            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--purple)" x-text="opsDecisionMachinesTitle()"></div>
+            <div class="text-[10px] mb-2" style="color:var(--t2)" x-text="opsMachineHeadlineText()"></div>
             <template x-for="m in opsConsole.data.machines_health.machines" :key="m.id">
               <div class="flex items-start justify-between py-1 text-[9px]" style="border-bottom:1px solid var(--bd)">
                 <div>
-                  <span class="font-bold text-white" x-text="m.label"></span>
-                  <div class="text-[7px]" style="color:var(--t3)" x-text="m.constraint"></div>
+                  <span class="font-bold text-white" x-text="opsMachineLabel(m)"></span>
+                  <div class="text-[7px]" style="color:var(--t3)" x-text="opsMachineConstraint(m)"></div>
                 </div>
-                <span class="pill text-[7px]" :class="m.health==='healthy'?'pg':m.health==='degraded'?'pa':'pr'" x-text="m.health"></span>
+                <span class="pill text-[7px]" :class="m.health==='healthy'?'pg':m.health==='degraded'?'pa':'pr'" x-text="opsMachineHealthText(m)"></span>
               </div>
             </template>
           </div>
@@ -7620,19 +7620,19 @@
         <!-- SYSTEM VERDICT -->
         <template x-if="opsConsole.data">
           <div class="card card-p" style="border-left:4px solid" :style="'border-left-color:'+(opsConsole.data.runnable?'var(--green)':opsConsole.data.paper_ready?'var(--amber)':'var(--red)')">
-            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">System verdict</div>
-            <div class="text-[13px] font-bold text-white mb-1" x-text="opsConsole.data.system_verdict"></div>
-            <div class="text-[10px] mb-2" style="color:var(--t2)" x-text="opsConsole.data.verdict_detail"></div>
-            <div class="text-[8px] mb-2 p-1.5 rounded" style="background:var(--s2);color:var(--t3)">Probe OK ≠ runtime health. Use the probe vs runtime table above before capital.</div>
+            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)" x-text="opsSystemVerdictTitle()"></div>
+            <div class="text-[13px] font-bold text-white mb-1" x-text="opsSystemVerdictText()"></div>
+            <div class="text-[10px] mb-2" style="color:var(--t2)" x-text="opsVerdictDetailText()"></div>
+            <div class="text-[8px] mb-2 p-1.5 rounded" style="background:var(--s2);color:var(--t3)" x-text="opsProbeVerdictNote()"></div>
             <template x-if="(opsConsole.data.blockers||[]).length">
-              <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--red)">Root cause / blockers</div>
+              <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--red)" x-text="opsBlockersTitle()"></div>
               <template x-for="b in opsConsole.data.blockers" :key="b">
-                <div class="text-[8px] text-red-400">• <span x-text="b"></span></div>
+                <div class="text-[8px] text-red-400">• <span x-text="opsBlockerText(b)"></span></div>
               </template>
             </template>
-            <div class="text-[9px] font-bold uppercase mt-2 mb-1" style="color:var(--green)">Next operator actions</div>
+            <div class="text-[9px] font-bold uppercase mt-2 mb-1" style="color:var(--green)" x-text="opsNextActionsTitle()"></div>
             <template x-for="na in (opsConsole.data.next_actions||[])" :key="na.step">
-              <div class="text-[8px] py-0.5"><span class="font-bold" x-text="na.step+'.'"></span> <span x-text="na.action"></span> — <span style="color:var(--t3)" x-text="na.why"></span></div>
+              <div class="text-[8px] py-0.5"><span class="font-bold" x-text="na.step+'.'"></span> <span x-text="opsNextActionText(na)"></span> — <span style="color:var(--t3)" x-text="opsNextActionWhy(na)"></span></div>
             </template>
           </div>
         </template>
@@ -7640,14 +7640,14 @@
         <!-- EXECUTION LAYERS (connected vs trading-ready) -->
         <template x-if="opsConsole.data?.execution_layers?.length">
           <div class="card card-p">
-            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">Execution readiness layers</div>
-            <div class="text-[8px] mb-2" style="color:var(--t3)">Probe-only states shown gray/amber — not green trading-ready</div>
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)" x-text="opsExecutionReadinessTitle()"></div>
+            <div class="text-[8px] mb-2" style="color:var(--t3)" x-text="opsExecutionReadinessHint()"></div>
             <template x-for="row in opsConsole.data.execution_layers" :key="row.layer">
               <div class="flex items-center justify-between py-1 text-[10px]" style="border-bottom:1px solid var(--bd)">
-                <span style="color:var(--t2)" x-text="row.layer"></span>
+                <span style="color:var(--t2)" x-text="opsExecutionLayerField(row,'layer')"></span>
                 <div class="text-right">
-                  <span class="mono font-bold" :class="row.tone==='ok'?'text-green-400':row.tone==='warn'?'text-amber-300':'text-red-400'" x-text="row.status"></span>
-                  <div class="text-[7px]" style="color:var(--t3)" x-text="row.detail"></div>
+                  <span class="mono font-bold" :class="row.tone==='ok'?'text-green-400':row.tone==='warn'?'text-amber-300':'text-red-400'" x-text="opsExecutionLayerField(row,'status')"></span>
+                  <div class="text-[7px]" style="color:var(--t3)" x-text="opsExecutionLayerField(row,'detail')"></div>
                 </div>
               </div>
             </template>
@@ -7661,8 +7661,8 @@
             <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;font-size:10px">
               <template x-for="[k,v] in Object.entries(opsConsole.data.execution_boundary)" :key="k">
                 <div class="p-1.5 rounded" style="background:var(--s2)">
-                  <div class="text-[7px] uppercase" style="color:var(--t3)" x-text="k.replace(/_/g,' ')"></div>
-                  <div class="mono font-bold" :class="k==='execution_mode'&&v==='live'?'text-red-400':k==='signal_engine'&&v==='off'?'text-amber-300':'text-white'" x-text="v"></div>
+                  <div class="text-[7px] uppercase" style="color:var(--t3)" x-text="opsDictKeyLabel(k)"></div>
+                  <div class="mono font-bold" :class="k==='execution_mode'&&v==='live'?'text-red-400':k==='signal_engine'&&v==='off'?'text-amber-300':'text-white'" x-text="opsFormatEvidence(v)"></div>
                 </div>
               </template>
             </div>
@@ -7675,8 +7675,8 @@
             <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">Last successful times</div>
             <template x-for="[k,v] in Object.entries(opsConsole.data.last_times)" :key="k">
               <div class="flex justify-between py-0.5 text-[9px]" style="border-bottom:1px solid var(--bd)">
-                <span style="color:var(--t3)" x-text="k.replace(/_/g,' ')"></span>
-                <span class="mono" :class="v?'text-white':'text-amber-300'" x-text="v?(String(v).slice(0,19).replace('T',' ')):'— none this session'"></span>
+                <span style="color:var(--t3)" x-text="opsDictKeyLabel(k)"></span>
+                <span class="mono" :class="v?'text-white':'text-amber-300'" x-text="opsLastTimeValue(v)"></span>
               </div>
             </template>
           </div>
@@ -7688,8 +7688,8 @@
             <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">Operational events</div>
             <template x-for="[k,v] in Object.entries(opsConsole.data.operational_events)" :key="k">
               <div class="flex justify-between py-0.5 text-[9px]" style="border-bottom:1px solid var(--bd)">
-                <span style="color:var(--t3)" x-text="k.replace(/_/g,' ')"></span>
-                <span class="mono text-right max-w-[60%]" :class="v?'text-amber-300':'text-gray-500'" x-text="v||'—'"></span>
+                <span style="color:var(--t3)" x-text="opsOperationalEventKey(k)"></span>
+                <span class="mono text-right max-w-[60%]" :class="v?'text-amber-300':'text-gray-500'" x-text="opsOperationalEventValue(v)||'—'"></span>
               </div>
             </template>
           </div>
@@ -7714,40 +7714,40 @@
         <!-- ENGINE STATE -->
         <div class="card card-p">
           <div class="flex items-center justify-between mb-3">
-            <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">⚙️ Engine State</div>
+            <div class="text-[10px] font-bold uppercase" style="color:var(--t3)" x-text="opsEngineStateTitle()"></div>
           </div>
           <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
-            <div class="card card-p" style="text-align:center"><div class="text-[20px]" x-text="ops.running?'🟡':'🔴'"></div><div class="text-[10px] font-bold" :class="ops.running?'text-amber-300':'text-red-400'" x-text="ops.running?'RUNNING':'STOPPED'"></div><div class="kpi-lbl">Engine</div></div>
-            <div class="card card-p" style="text-align:center"><div class="text-[20px]" x-text="ops.circuit_breaker?'🛑':'✅'"></div><div class="text-[10px] font-bold" :class="ops.circuit_breaker?'text-red-400':'text-gray-400'" x-text="ops.circuit_breaker?'TRIPPED':'CLEAR'"></div><div class="kpi-lbl">Circuit Breaker</div></div>
-            <div class="card card-p" style="text-align:center"><div class="kpi-val mono text-white" x-text="ops.cycle_count||0"></div><div class="kpi-lbl">Cycles</div></div>
-            <div class="card card-p" style="text-align:center"><div class="kpi-val mono text-white" x-text="ops.signals_today||0"></div><div class="kpi-lbl">Signals Today</div><div class="text-[7px] mt-0.5 text-amber-300" x-show="(ops.signals_today||0)===0" x-text="'Not market silence'"></div></div>
+            <div class="card card-p" style="text-align:center"><div class="text-[20px]" x-text="ops.running?'🟡':'🔴'"></div><div class="text-[10px] font-bold" :class="ops.running?'text-amber-300':'text-red-400'" x-text="opsEngineRunLabel()"></div><div class="kpi-lbl" x-text="opsMetricLabel('engine')"></div></div>
+            <div class="card card-p" style="text-align:center"><div class="text-[20px]" x-text="ops.circuit_breaker?'🛑':'✅'"></div><div class="text-[10px] font-bold" :class="ops.circuit_breaker?'text-red-400':'text-gray-400'" x-text="opsCircuitBreakerLabel()"></div><div class="kpi-lbl" x-text="opsMetricLabel('circuit breaker')"></div></div>
+            <div class="card card-p" style="text-align:center"><div class="kpi-val mono text-white" x-text="ops.cycle_count||0"></div><div class="kpi-lbl" x-text="opsMetricLabel('cycles')"></div></div>
+            <div class="card card-p" style="text-align:center"><div class="kpi-val mono text-white" x-text="ops.signals_today||0"></div><div class="kpi-lbl" x-text="opsMetricLabel('signals today')"></div><div class="text-[7px] mt-0.5 text-amber-300" x-show="(ops.signals_today||0)===0" x-text="opsFormatEvidence('Not market silence')"></div></div>
           </div>
           <div x-show="(ops.signals_today||0)===0" class="text-[8px] mt-1 p-1 rounded" style="background:var(--s2);color:var(--amber)" x-text="opsSignalsTodayNote()"></div>
           <template x-if="ops.circuit_breaker_reason"><div style="margin-top:8px;padding:6px 10px;background:rgba(255,92,92,.08);border:1px solid rgba(255,92,92,.2);border-radius:6px;font-size:10px;color:var(--red)" x-text="'⚠ '+ops.circuit_breaker_reason"></div></template>
           <div class="flex items-center gap-2 mt-3">
-            <span class="pill" :class="ops.dry_run?'pa':'pr'" x-text="ops.dry_run?'DRY RUN / PAPER':'LIVE TRADING'"></span>
+            <span class="pill" :class="ops.dry_run?'pa':'pr'" x-text="opsDryRunLabel()"></span>
             <span class="pill pw" x-text="'Trades today: '+(ops.trades_today||0)"></span>
           </div>
         </div>
 
         <!-- Uptime + Latency (with reasons, not bare —) -->
         <div class="card card-p">
-          <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">⏱ Uptime & Latency</div>
+          <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)" x-text="opsUptimeLatencyTitle()"></div>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;font-size:11px">
             <div>
-              <div class="text-[10px]" style="color:var(--t3)">Uptime</div>
-              <div class="font-bold mono" :class="opsConsole.data?.metrics_display?.uptime?.value?'text-white':'text-amber-300'" x-text="opsConsole.data?.metrics_display?.uptime?.display||(opsDetail.uptime||'Not available — engine not started this session')"></div>
-              <div class="text-[7px] mt-0.5" style="color:var(--t3)" x-text="opsConsole.data?.metrics_display?.uptime?.reason||''"></div>
+              <div class="text-[10px]" style="color:var(--t3)" x-text="opsMetricLabel('uptime')"></div>
+              <div class="font-bold mono" :class="opsConsole.data?.metrics_display?.uptime?.value?'text-white':'text-amber-300'" x-text="opsMetricDisplayText('uptime','display','Not available — engine not started this session')"></div>
+              <div class="text-[7px] mt-0.5" style="color:var(--t3)" x-text="opsMetricDisplayText('uptime','reason','')"></div>
             </div>
             <div>
-              <div class="text-[10px]" style="color:var(--t3)">Regime Latency</div>
-              <div class="font-bold mono" :class="(opsConsole.data?.metrics_display?.regime_latency_ms?.value||0)>0&&opsConsole.data.metrics_display.regime_latency_ms.value<500?'text-green-400':(opsConsole.data?.metrics_display?.regime_latency_ms?.value||0)>0?'text-amber-300':'text-amber-300'" x-text="opsConsole.data?.metrics_display?.regime_latency_ms?.display||(opsDetail.latency?'—':'No cycle executed yet')"></div>
-              <div class="text-[7px] mt-0.5" style="color:var(--t3)" x-text="opsConsole.data?.metrics_display?.regime_latency_ms?.reason||''"></div>
+              <div class="text-[10px]" style="color:var(--t3)" x-text="opsMetricLabel('regime latency')"></div>
+              <div class="font-bold mono" :class="(opsConsole.data?.metrics_display?.regime_latency_ms?.value||0)>0&&opsConsole.data.metrics_display.regime_latency_ms.value<500?'text-green-400':(opsConsole.data?.metrics_display?.regime_latency_ms?.value||0)>0?'text-amber-300':'text-amber-300'" x-text="opsMetricDisplayText('regime_latency_ms','display',opsDetail.latency?'—':'No cycle executed yet')"></div>
+              <div class="text-[7px] mt-0.5" style="color:var(--t3)" x-text="opsMetricDisplayText('regime_latency_ms','reason','')"></div>
             </div>
             <div>
-              <div class="text-[10px]" style="color:var(--t3)">Cached Recs</div>
-              <div class="font-bold mono" :class="(opsConsole.data?.metrics_display?.cached_recommendations?.value||0)>0?'text-white':'text-amber-300'" x-text="opsConsole.data?.metrics_display?.cached_recommendations?.display||(opsDetail.engine?'0':'No cache generated yet')"></div>
-              <div class="text-[7px] mt-0.5" style="color:var(--t3)" x-text="opsConsole.data?.metrics_display?.cached_recommendations?.reason||''"></div>
+              <div class="text-[10px]" style="color:var(--t3)" x-text="opsMetricLabel('cached recs')"></div>
+              <div class="font-bold mono" :class="(opsConsole.data?.metrics_display?.cached_recommendations?.value||0)>0?'text-white':'text-amber-300'" x-text="opsMetricDisplayText('cached_recommendations','display',opsDetail.engine?'0':'No cache generated yet')"></div>
+              <div class="text-[7px] mt-0.5" style="color:var(--t3)" x-text="opsMetricDisplayText('cached_recommendations','reason','')"></div>
             </div>
           </div>
           <div class="text-[9px] mt-2 mono" style="color:var(--t3)" x-text="opsConsole.data?.startup_time?'Boot: '+opsConsole.data.startup_time.slice(0,19):''"></div>
@@ -7756,11 +7756,11 @@
 
         <template x-if="opsConsole.data?.section_states">
           <div class="card card-p">
-            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">Experimental modules</div>
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)" x-text="opsExperimentalModulesTitle()"></div>
             <template x-for="[k,v] in Object.entries(opsConsole.data.section_states)" :key="k">
               <div class="flex justify-between text-[9px] py-0.5">
-                <span x-text="k.replace(/_/g,' ')"></span>
-                <span class="pill text-[7px] pw" x-text="v.label"></span>
+                <span x-text="opsAdvancedSectionKey(k)"></span>
+                <span class="pill text-[7px] pw" x-text="opsAdvancedSectionStatus(v)"></span>
               </div>
             </template>
           </div>

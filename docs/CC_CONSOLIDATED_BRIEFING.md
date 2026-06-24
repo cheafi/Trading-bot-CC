@@ -273,7 +273,7 @@ Based on current working tree (not yet committed):
 |-------|--------|
 | **Chinese incomplete** | `cc-i18n.js` only covers static literal labels; dynamic Alpine `x-text` strings often English-only |
 | **Missing data** | WAIT/NO_TRADE days, engine off, or stale brief → empty playbook/deploy lists (often correct, not a bug) |
-| **Ops English strings** | Probe/runtime + advanced diagnostics now bilingual. Remaining English: some degraded copy, execution layers, system verdict detail from API |
+| **Ops English strings** | Probe/runtime + advanced diagnostics bilingual. System verdict block, execution readiness layers, decision machines, engine state, uptime/latency labels, experimental modules — client-side via `localizeOpsRuntimeText` maps + `ops*()` Alpine wrappers. Remaining: HTTP 500 banner, some degraded warmup strings outside advanced block. |
 | **Flow mock mode** | Flow surface synthetic — "colour only" per guide |
 | **IBKR in Docker dev** | `CC_SKIP_IB_INSYNC=1` — broker features unavailable in dev container |
 
@@ -408,7 +408,7 @@ docker compose -f docker-compose.dev.yml up --build
 |-----------|---------------------|
 | **Chinese incomplete** | `cc-i18n.js` only translates static literal DOM text (~300 entries). Dynamic content from API (`x-text`, `x-html`) and Ops probe/runtime table remain English. Operator sentences in contract are bilingual; many panel labels are not. |
 | **Missing data** | Common on WAIT/NO_TRADE days, engine-off, stale brief fallback, or pre-warmup — playbook deploy list empty by design. Discovery 0 hits on WAIT day is often correct. Portfolio/broker reconciliation gaps after session. |
-| **Ops English strings** | Probe/runtime table bilingual as of latest pass. Advanced diagnostics collapsed block + experimental module names (`self learning`, `Not loaded`) still English. |
+| **Ops English strings** | Probe/runtime + advanced diagnostics bilingual. System verdict, execution layers, decision machines, engine state, uptime/latency, experimental modules now wired via `CCHelpers.localizeOpsRuntimeText` + Alpine wrappers (`opsSystemVerdictText`, `opsExecutionLayerField`, etc.). Remaining: some static section titles outside advanced block, HTTP 500 banner, degraded warmup copy in non-Ops areas. |
 | **Black screen (reported)** | Mitigated via gzip dashboard cache (`cc-dashboard.html.gz`), `_cc_instant.py` chunked reads, `scripts/dev/fix-cc-black-screen.sh` |
 | **Discord not pinging** | Missing `DISCORD_WEBHOOK_URL` or bot 403 — see §6 |
 

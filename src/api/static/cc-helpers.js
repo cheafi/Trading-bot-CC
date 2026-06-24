@@ -393,7 +393,240 @@
 		if (/^Backend warming/.test(t) || /^Backend child failed/.test(t)) {
 			return "後端預熱／失敗 · " + t
 		}
+		// System verdict + detail
+		var verdictMap = {
+			"NOT READY FOR LIVE EXECUTION": _opsBilingual("未就緒 — 不宜 live 執行", "NOT READY FOR LIVE EXECUTION"),
+			"NOT READY FOR PAPER EXECUTION": _opsBilingual("未就緒 — 不宜 paper 執行", "NOT READY FOR PAPER EXECUTION"),
+			"PAPER EXECUTION READY": _opsBilingual("Paper 執行就緒", "PAPER EXECUTION READY"),
+			"LIVE EXECUTION READY": _opsBilingual("Live 執行就緒", "LIVE EXECUTION READY"),
+			"API WARMING — NOT RUNNABLE": _opsBilingual("API 預熱 — 不可運行", "API WARMING — NOT RUNNABLE"),
+			"Circuit breaker active — do not deploy capital": _opsBilingual("熔斷生效 — 勿部署資金", "Circuit breaker active — do not deploy capital"),
+			"Engine stopped — infrastructure may be up but trading loop is off": _opsBilingual("引擎已停 — 基礎設施可能正常但交易迴圈關閉", "Engine stopped — infrastructure may be up but trading loop is off"),
+			"Paper/dry-run path can accept handoff after checklist": _opsBilingual("Paper/dry-run 路徑 — 檢查清單後可 handoff", "Paper/dry-run path can accept handoff after checklist"),
+			"Paper mode — complete operator checklist before trusting signals": _opsBilingual("Paper 模式 — 信任訊號前請完成操作檢查清單", "Paper mode — complete operator checklist before trusting signals"),
+			"Engine running live — verify gates and risk before deploy": _opsBilingual("引擎 live 運行 — 部署前請確認閘門與風險", "Engine running live — verify gates and risk before deploy"),
+			"Live mode — blockers remain on execution path": _opsBilingual("Live 模式 — 執行路徑仍有阻擋", "Live mode — blockers remain on execution path"),
+		}
+		if (verdictMap[t]) return verdictMap[t]
+		// Execution readiness layers
+		var layerMap = {
+			"Service reachable": _opsBilingual("服務可達", "Service reachable"),
+			"Engine running": _opsBilingual("引擎運行", "Engine running"),
+			"Scheduler alive": _opsBilingual("排程存活", "Scheduler alive"),
+			"Session auth": _opsBilingual("Session 驗證", "Session auth"),
+			"Order path tested": _opsBilingual("下單路徑已測", "Order path tested"),
+			"Engine handoff": _opsBilingual("引擎 handoff", "Engine handoff"),
+			"Last successful cycle": _opsBilingual("上次成功 cycle", "Last successful cycle"),
+			"Gateway / market data probe": _opsBilingual("Gateway／市場資料探測", "Gateway / market data probe"),
+			"Trading loop": _opsBilingual("交易迴圈", "Trading loop"),
+			"IBKR login / Alpaca keys": _opsBilingual("IBKR 登入／Alpaca 金鑰", "IBKR login / Alpaca keys"),
+			"Paper/live order exercised this session": _opsBilingual("本 session 已演練 paper/live 下單", "Paper/live order exercised this session"),
+			"Broker + engine ready for orders": _opsBilingual("券商＋引擎可下單", "Broker + engine ready for orders"),
+			"No cycle timestamp": _opsBilingual("無 cycle 時間戳", "No cycle timestamp"),
+			"NOT ACTIVE": _opsBilingual("未啟用", "NOT ACTIVE"),
+			"NONE TODAY": _opsBilingual("今日無", "NONE TODAY"),
+		}
+		if (layerMap[t]) return layerMap[t]
+		// Next actions + blockers (common)
+		var opsCopyMap = {
+			"Start trading engine": _opsBilingual("啟動交易引擎", "Start trading engine"),
+			"Loop is stopped — nothing else will run": _opsBilingual("迴圈已停 — 其他程序不會運行", "Loop is stopped — nothing else will run"),
+			"Verify scheduler heartbeat": _opsBilingual("確認排程心跳", "Verify scheduler heartbeat"),
+			"Run one full engine scan cycle": _opsBilingual("執行一次完整 engine 掃描 cycle", "Run one full engine scan cycle"),
+			"Confirms signal + cache pipeline": _opsBilingual("確認訊號＋快取管線", "Confirms signal + cache pipeline"),
+			"Confirm broker auth / paper session login": _opsBilingual("確認券商驗證／paper session 登入", "Confirm broker auth / paper session login"),
+			"Gateway up but IBKR session not active": _opsBilingual("Gateway 正常但 IBKR session 未啟動", "Gateway up but IBKR session not active"),
+			"Start IB Gateway / verify host:port": _opsBilingual("啟動 IB Gateway／確認 host:port", "Start IB Gateway / verify host:port"),
+			"Broker path unreachable": _opsBilingual("券商路徑不可達", "Broker path unreachable"),
+			"Refresh recommendation cache": _opsBilingual("重新整理推薦快取", "Refresh recommendation cache"),
+			"Today tab needs cached ranked recs": _opsBilingual("今日分頁需要快取排名推薦", "Today tab needs cached ranked recs"),
+			"Inspect filter funnel / regime gate": _opsBilingual("檢查篩選漏斗／體制閘門", "Inspect filter funnel / regime gate"),
+			"Cycles ran but zero signals": _opsBilingual("已跑 cycle 但零訊號", "Cycles ran but zero signals"),
+			"Monitor positions, alerts, and last successful times": _opsBilingual("監控持倉、警示與上次成功時間", "Monitor positions, alerts, and last successful times"),
+			"Core loop appears healthy": _opsBilingual("核心迴圈看似健康", "Core loop appears healthy"),
+			"Wait for /health mode=full on :8001": _opsBilingual("等待 /health mode=full（:8001）", "Wait for /health mode=full on :8001"),
+			"Full backend runs component probes and engine telemetry": _opsBilingual("完整後端會跑元件探測與引擎遙測", "Full backend runs component probes and engine telemetry"),
+			"Refresh Ops health panel": _opsBilingual("重新整理 Ops 健康面板", "Refresh Ops health panel"),
+			"Probe vs runtime table updates after import completes": _opsBilingual("import 完成後探測 vs 執行時表會更新", "Probe vs runtime table updates after import completes"),
+			"No engine cycle this session": _opsBilingual("本 session 無 engine cycle", "No engine cycle this session"),
+			"No successful engine cycle this session": _opsBilingual("本 session 無成功 engine cycle", "No successful engine cycle this session"),
+			"No engine cycle completed today": _opsBilingual("今日未完成 engine cycle", "No engine cycle completed today"),
+			"No scheduler job confirmed today": _opsBilingual("今日未確認排程工作", "No scheduler job confirmed today"),
+			"Recommendation cache empty": _opsBilingual("推薦快取為空", "Recommendation cache empty"),
+			"Broker gateway reachable but session auth inactive": _opsBilingual("Gateway 可達但 session 驗證未啟動", "Broker gateway reachable but session auth inactive"),
+			"Signal pipeline produced zero signals today": _opsBilingual("訊號管線今日產出零訊號", "Signal pipeline produced zero signals today"),
+			"Broker path not reachable — paper handoff unavailable": _opsBilingual("券商路徑不可達 — paper handoff 不可用", "Broker path not reachable — paper handoff unavailable"),
+			"Backend importing on :8001": _opsBilingual("後端 :8001 匯入中", "Backend importing on :8001"),
+			"Market data probe not confirmed — wait for full API": _opsBilingual("市場資料探測未確認 — 等待完整 API", "Market data probe not confirmed — wait for full API"),
+			"Not available — engine not started this session": _opsBilingual("不可用 — 本 session 引擎未啟動", "Not available — engine not started this session"),
+			"No cycle executed yet": _opsBilingual("尚未執行 cycle", "No cycle executed yet"),
+			"No cache generated yet": _opsBilingual("尚未產生快取", "No cache generated yet"),
+			"— none this session": _opsBilingual("— 本 session 無", "— none this session"),
+			"Not market silence": _opsBilingual("非市場沉寂", "Not market silence"),
+			"RUNNING": _opsBilingual("運行中", "RUNNING"),
+			"STOPPED": _opsBilingual("已停止", "STOPPED"),
+			"TRIPPED": _opsBilingual("已觸發", "TRIPPED"),
+			"CLEAR": _opsBilingual("正常", "CLEAR"),
+			"DRY RUN / PAPER": _opsBilingual("模擬／Paper", "DRY RUN / PAPER"),
+			"LIVE TRADING": _opsBilingual("Live 交易", "LIVE TRADING"),
+			"healthy": _opsBilingual("健康", "healthy"),
+			"degraded": _opsBilingual("降級", "degraded"),
+			"blocked": _opsBilingual("阻擋", "blocked"),
+			"inactive": _opsBilingual("未啟用", "inactive"),
+			"Decision machines aligned — monitor constraints": _opsBilingual("決策機器對齊 — 監控約束", "Decision machines aligned — monitor constraints"),
+			"Mixed machine health — check Ops panel": _opsBilingual("機器健康混合 — 請查 Ops 面板", "Mixed machine health — check Ops panel"),
+		}
+		if (opsCopyMap[t]) return opsCopyMap[t]
+		if (/^(\d+) machines blocked — respect constraints before deploy$/.test(t)) {
+			var mb = t.match(/^(\d+) machines blocked/)
+			return _opsBilingual(mb[1] + " 台機器阻擋 — 部署前請遵守約束", t)
+		}
+		if (/^(\d+) machines degraded — verify facts and process$/.test(t)) {
+			var md = t.match(/^(\d+) machines degraded/)
+			return _opsBilingual(md[1] + " 台機器降級 — 請核實事實與流程", t)
+		}
+		if (/^Scheduler: /.test(t)) {
+			return _opsBilingual("排程：" + t.slice(11), t)
+		}
+		if (/^Market data tier: /.test(t)) {
+			return _opsBilingual("市場資料層級：" + t.slice(18), t)
+		}
+		if (/^Backend crash: /.test(t)) {
+			return _opsBilingual("後端崩潰：" + t.slice(15), t)
+		}
+		if (/^API process up/.test(t) || /^API up/.test(t) || t === "API startup time unavailable") {
+			return localizeOpsMetricReason(t)
+		}
+		if (/^Live regime probe/.test(t) || /^Start engine or run a cycle/.test(t) || /^Run a scan cycle/.test(t) || /^Regime probe/.test(t) || /^Last regime probe/.test(t)) {
+			return localizeOpsMetricReason(t)
+		}
+		if (/^(\d+) cached recommendation/.test(t) || /^Start engine, then run/.test(t) || /^Cycle ran but cache empty/.test(t)) {
+			return localizeOpsMetricReason(t)
+		}
 		return t
+	}
+
+	function localizeOpsMetricReason(t) {
+		var s = String(t || "").trim()
+		if (!s) return ""
+		if (s.indexOf(" · ") > 0 && /[\u4e00-\u9fff]/.test(s)) return s
+		var map = {
+			"Unknown": _opsBilingual("未知", "Unknown"),
+			"API startup time unavailable": _opsBilingual("API 啟動時間不可用", "API startup time unavailable"),
+			"Probe pending": _opsBilingual("探測待執行", "Probe pending"),
+			"No cycle yet": _opsBilingual("尚無 cycle", "No cycle yet"),
+			"Probe failed": _opsBilingual("探測失敗", "Probe failed"),
+			"API shell only — engine not started": _opsBilingual("僅 API shell — 引擎未啟動", "API shell only — engine not started"),
+			"Regime probe unavailable during warmup": _opsBilingual("預熱期間體制探測不可用", "Regime probe unavailable during warmup"),
+			"Live regime probe — engine loop not running": _opsBilingual("Live 體制探測 — engine 迴圈未運行", "Live regime probe — engine loop not running"),
+			"Live regime probe — no scan cycle yet": _opsBilingual("Live 體制探測 — 尚無掃描 cycle", "Live regime probe — no scan cycle yet"),
+			"Last regime probe this session": _opsBilingual("本 session 上次體制探測", "Last regime probe this session"),
+			"Start engine or run a cycle to probe regime path": _opsBilingual("啟動引擎或跑 cycle 以探測體制路徑", "Start engine or run a cycle to probe regime path"),
+			"Run a scan cycle to measure regime latency": _opsBilingual("跑掃描 cycle 以量測體制延遲", "Run a scan cycle to measure regime latency"),
+			"Regime probe unavailable this session": _opsBilingual("本 session 體制探測不可用", "Regime probe unavailable this session"),
+			"Start engine, then run a scan cycle to populate cache": _opsBilingual("啟動引擎後跑掃描 cycle 以填入快取", "Start engine, then run a scan cycle to populate cache"),
+			"Run a scan cycle to generate recommendation cache": _opsBilingual("跑掃描 cycle 以產生推薦快取", "Run a scan cycle to generate recommendation cache"),
+			"Cycle ran but cache empty — inspect signal pipeline": _opsBilingual("已跑 cycle 但快取為空 — 請檢查訊號管線", "Cycle ran but cache empty — inspect signal pipeline"),
+		}
+		if (map[s]) return map[s]
+		if (/^API process up \((.+)\) — trading engine stopped$/.test(s)) {
+			var m1 = s.match(/^API process up \((.+)\) — trading engine stopped$/)
+			return _opsBilingual("API 運行中（" + m1[1] + "）— 交易引擎已停", s)
+		}
+		if (/^API up \((.+)\) — no engine cycles this session yet$/.test(s)) {
+			var m2 = s.match(/^API up \((.+)\) — no engine cycles this session yet$/)
+			return _opsBilingual("API 運行中（" + m2[1] + "）— 本 session 尚無 engine cycle", s)
+		}
+		if (/^API up since /.test(s)) {
+			return _opsBilingual("API 自 " + s.slice(12) + " 起運行", s)
+		}
+		if (/^(\d+) cached recommendation\(s\)$/.test(s)) {
+			var mc = s.match(/^(\d+)/)
+			return _opsBilingual(mc[1] + " 筆快取推薦", s)
+		}
+		return s
+	}
+
+	function localizeOpsDictKey(key) {
+		var k = String(key || "").trim().toLowerCase()
+		var map = {
+			last_engine_error: _opsBilingual("上次引擎錯誤", "last engine error"),
+			last_failed_job: _opsBilingual("上次失敗工作", "last failed job"),
+			last_heartbeat: _opsBilingual("上次心跳", "last heartbeat"),
+			last_cycle: _opsBilingual("上次 cycle", "last cycle"),
+			scheduler_detail: _opsBilingual("排程詳情", "scheduler detail"),
+			last_successful_engine_cycle: _opsBilingual("上次成功 engine cycle", "last successful engine cycle"),
+			last_recommendation_refresh: _opsBilingual("上次推薦更新", "last recommendation refresh"),
+			last_broker_heartbeat: _opsBilingual("上次券商心跳", "last broker heartbeat"),
+			last_paper_order_test: _opsBilingual("上次 paper 下單測試", "last paper order test"),
+			last_ibkr_disconnect: _opsBilingual("上次 IBKR 斷線", "last ibkr disconnect"),
+			last_ibkr_restore: _opsBilingual("上次 IBKR 恢復", "last ibkr restore"),
+			last_scheduler_run: _opsBilingual("上次排程執行", "last scheduler run"),
+			market_data: _opsBilingual("市場資料", "market data"),
+			signal_engine: _opsBilingual("訊號引擎", "signal engine"),
+			execution_mode: _opsBilingual("執行模式", "execution mode"),
+			broker_path: _opsBilingual("券商路徑", "broker path"),
+			portfolio_sync: _opsBilingual("持倉同步", "portfolio sync"),
+		}
+		return map[k] || k.replace(/_/g, " ")
+	}
+
+	function localizeOpsMachineField(field, value) {
+		var f = String(field || "").trim().toLowerCase()
+		var v = String(value || "").trim()
+		if (!v) return ""
+		if (f === "health") return localizeOpsRuntimeText(v)
+		var labelMap = {
+			"Data Integrity": _opsBilingual("資料完整性", "Data Integrity"),
+			"Regime": _opsBilingual("體制", "Regime"),
+			"Playbook": _opsBilingual("策略簿", "Playbook"),
+			"Dossier": _opsBilingual("檔案", "Dossier"),
+			"Portfolio": _opsBilingual("持倉", "Portfolio"),
+			"Execution": _opsBilingual("執行", "Execution"),
+			"Review": _opsBilingual("覆盤", "Review"),
+			"Learning": _opsBilingual("學習", "Learning"),
+		}
+		var constraintMap = {
+			"No action on unknown or stale facts": _opsBilingual("未知或過期事實不得行動", "No action on unknown or stale facts"),
+			"WAIT / NO_TRADE binds all downstream machines": _opsBilingual("WAIT／NO_TRADE 約束所有下游機器", "WAIT / NO_TRADE binds all downstream machines"),
+			"Rank ≠ permission — evidence grade required": _opsBilingual("排名≠許可 — 需證據等級", "Rank ≠ permission — evidence grade required"),
+			"Research-only when process grade C or D": _opsBilingual("流程等級 C/D 時僅研究", "Research-only when process grade C or D"),
+			"Portfolio machine cannot override regime gate": _opsBilingual("持倉機器不得覆寫體制閘門", "Portfolio machine cannot override regime gate"),
+			"No live deploy without tested execution path": _opsBilingual("未測試執行路徑不得 live 部署", "No live deploy without tested execution path"),
+			"Judge process quality independent of P&L": _opsBilingual("獨立於損益評估流程品質", "Judge process quality independent of P&L"),
+			"Every failure must produce a machine update": _opsBilingual("每次失敗須產出機器更新", "Every failure must produce a machine update"),
+		}
+		if (f === "label" && labelMap[v]) return labelMap[v]
+		if (f === "constraint" && constraintMap[v]) return constraintMap[v]
+		return localizeOpsRuntimeText(v)
+	}
+
+	function opsSystemVerdictTitle() { return _opsBilingual("系統裁決", "System verdict") }
+	function opsDecisionMachinesTitle() { return _opsBilingual("決策機器", "Decision machines") }
+	function opsExecutionReadinessTitle() { return _opsBilingual("執行就緒層", "Execution readiness layers") }
+	function opsExecutionReadinessHint() {
+		return _opsBilingual("僅探測狀態顯示灰／琥珀 — 非綠色交易就緒", "Probe-only states shown gray/amber — not green trading-ready")
+	}
+	function opsBlockersTitle() { return _opsBilingual("根因／阻擋", "Root cause / blockers") }
+	function opsNextActionsTitle() { return _opsBilingual("下一步操作", "Next operator actions") }
+	function opsEngineStateTitle() { return _opsBilingual("引擎狀態", "Engine State") }
+	function opsUptimeLatencyTitle() { return _opsBilingual("運行時間與延遲", "Uptime & Latency") }
+	function opsExperimentalModulesTitle() { return _opsBilingual("實驗模組", "Experimental modules") }
+	function opsProbeVerdictNote() {
+		return _opsBilingual("探測 OK ≠ 執行時健康。資本決策前請先看上方探測 vs 執行時表。", "Probe OK ≠ runtime health. Use the probe vs runtime table above before capital.")
+	}
+	function opsMetricLabel(name) {
+		var n = String(name || "").trim().toLowerCase()
+		var map = {
+			uptime: _opsBilingual("運行時間", "Uptime"),
+			"regime latency": _opsBilingual("體制延遲", "Regime Latency"),
+			"cached recs": _opsBilingual("快取推薦", "Cached Recs"),
+			engine: _opsBilingual("引擎", "Engine"),
+			"circuit breaker": _opsBilingual("熔斷器", "Circuit Breaker"),
+			cycles: _opsBilingual("Cycles", "Cycles"),
+			"signals today": _opsBilingual("今日訊號", "Signals Today"),
+		}
+		return map[n] || name
 	}
 
 	function localizeOpsComponentName(name) {
@@ -1084,6 +1317,20 @@
 		localizeOpsAdvancedSectionKey: localizeOpsAdvancedSectionKey,
 		localizeOpsAdvancedSectionLabel: localizeOpsAdvancedSectionLabel,
 		localizeOpsAdvancedSectionDetail: localizeOpsAdvancedSectionDetail,
+		localizeOpsMetricReason: localizeOpsMetricReason,
+		localizeOpsDictKey: localizeOpsDictKey,
+		localizeOpsMachineField: localizeOpsMachineField,
+		opsSystemVerdictTitle: opsSystemVerdictTitle,
+		opsDecisionMachinesTitle: opsDecisionMachinesTitle,
+		opsExecutionReadinessTitle: opsExecutionReadinessTitle,
+		opsExecutionReadinessHint: opsExecutionReadinessHint,
+		opsBlockersTitle: opsBlockersTitle,
+		opsNextActionsTitle: opsNextActionsTitle,
+		opsEngineStateTitle: opsEngineStateTitle,
+		opsUptimeLatencyTitle: opsUptimeLatencyTitle,
+		opsExperimentalModulesTitle: opsExperimentalModulesTitle,
+		opsProbeVerdictNote: opsProbeVerdictNote,
+		opsMetricLabel: opsMetricLabel,
 		pageOperatorSentence: pageOperatorSentence,
 		buildClientSystemState: buildClientSystemState,
 		playbookWhatToMonitorLine: playbookWhatToMonitorLine,
@@ -2316,6 +2563,133 @@
       opsProviderProbeLine(probe){
         const p=this.opsFormatEvidence(probe);
         return p?('探測 · Probe: '+p):'';
+      },
+      _opsH(){ return window.CCHelpers||{}; },
+      opsSystemVerdictText(){
+        const H=this._opsH();
+        const t=this.opsConsole.data?.system_verdict||'';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
+      },
+      opsVerdictDetailText(){
+        const H=this._opsH();
+        const t=this.opsConsole.data?.verdict_detail||'';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
+      },
+      opsBlockerText(b){
+        const H=this._opsH();
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(String(b||'')):String(b||'');
+      },
+      opsNextActionText(na){
+        const H=this._opsH();
+        const t=(na&&na.action)||'';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
+      },
+      opsNextActionWhy(na){
+        const H=this._opsH();
+        const t=(na&&na.why)||'';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
+      },
+      opsExecutionLayerField(row,field){
+        const H=this._opsH();
+        const t=(row&&row[field])||'';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(String(t)):String(t);
+      },
+      opsOperationalEventKey(k){
+        const H=this._opsH();
+        return H.localizeOpsDictKey?H.localizeOpsDictKey(k):String(k||'').replace(/_/g,' ');
+      },
+      opsOperationalEventValue(v){
+        return this.opsFormatEvidence(v);
+      },
+      opsDictKeyLabel(k){
+        const H=this._opsH();
+        return H.localizeOpsDictKey?H.localizeOpsDictKey(k):String(k||'').replace(/_/g,' ');
+      },
+      opsMachineLabel(m){
+        const H=this._opsH();
+        return H.localizeOpsMachineField?H.localizeOpsMachineField('label',m?.label):String(m?.label||'');
+      },
+      opsMachineConstraint(m){
+        const H=this._opsH();
+        return H.localizeOpsMachineField?H.localizeOpsMachineField('constraint',m?.constraint):String(m?.constraint||'');
+      },
+      opsMachineHealthText(m){
+        const H=this._opsH();
+        return H.localizeOpsMachineField?H.localizeOpsMachineField('health',m?.health):String(m?.health||'');
+      },
+      opsMachineHeadlineText(){
+        const H=this._opsH();
+        const t=this.opsConsole.data?.machines_health?.headline||'';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
+      },
+      opsSystemVerdictTitle(){
+        const H=this._opsH();
+        return H.opsSystemVerdictTitle?H.opsSystemVerdictTitle():'系統裁決 · System verdict';
+      },
+      opsDecisionMachinesTitle(){
+        const H=this._opsH();
+        return H.opsDecisionMachinesTitle?H.opsDecisionMachinesTitle():'決策機器 · Decision machines';
+      },
+      opsExecutionReadinessTitle(){
+        const H=this._opsH();
+        return H.opsExecutionReadinessTitle?H.opsExecutionReadinessTitle():'執行就緒層 · Execution readiness layers';
+      },
+      opsExecutionReadinessHint(){
+        const H=this._opsH();
+        return H.opsExecutionReadinessHint?H.opsExecutionReadinessHint():'僅探測狀態顯示灰／琥珀 — 非綠色交易就緒 · Probe-only states shown gray/amber — not green trading-ready';
+      },
+      opsBlockersTitle(){
+        const H=this._opsH();
+        return H.opsBlockersTitle?H.opsBlockersTitle():'根因／阻擋 · Root cause / blockers';
+      },
+      opsNextActionsTitle(){
+        const H=this._opsH();
+        return H.opsNextActionsTitle?H.opsNextActionsTitle():'下一步操作 · Next operator actions';
+      },
+      opsEngineStateTitle(){
+        const H=this._opsH();
+        return H.opsEngineStateTitle?H.opsEngineStateTitle():'引擎狀態 · Engine State';
+      },
+      opsUptimeLatencyTitle(){
+        const H=this._opsH();
+        return H.opsUptimeLatencyTitle?H.opsUptimeLatencyTitle():'運行時間與延遲 · Uptime & Latency';
+      },
+      opsExperimentalModulesTitle(){
+        const H=this._opsH();
+        return H.opsExperimentalModulesTitle?H.opsExperimentalModulesTitle():'實驗模組 · Experimental modules';
+      },
+      opsProbeVerdictNote(){
+        const H=this._opsH();
+        return H.opsProbeVerdictNote?H.opsProbeVerdictNote():'探測 OK ≠ 執行時健康。資本決策前請先看上方探測 vs 執行時表。 · Probe OK ≠ runtime health. Use the probe vs runtime table above before capital.';
+      },
+      opsMetricLabel(name){
+        const H=this._opsH();
+        return H.opsMetricLabel?H.opsMetricLabel(name):name;
+      },
+      opsMetricDisplayText(metricKey,field,fallback){
+        const H=this._opsH();
+        const raw=this.opsConsole.data?.metrics_display?.[metricKey]?.[field]||(field==='display'&&metricKey==='uptime'?this.opsDetail.uptime:'')||fallback||'';
+        if(field==='reason') return H.localizeOpsMetricReason?H.localizeOpsMetricReason(raw):raw;
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(String(raw)):String(raw);
+      },
+      opsEngineRunLabel(){
+        const H=this._opsH();
+        const t=this.ops.running?'RUNNING':'STOPPED';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
+      },
+      opsCircuitBreakerLabel(){
+        const H=this._opsH();
+        const t=this.ops.circuit_breaker?'TRIPPED':'CLEAR';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
+      },
+      opsDryRunLabel(){
+        const H=this._opsH();
+        const t=this.ops.dry_run?'DRY RUN / PAPER':'LIVE TRADING';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
+      },
+      opsLastTimeValue(v){
+        if(!v) return this.opsFormatEvidence('— none this session');
+        return String(v).slice(0,19).replace('T',' ');
       },
       opsProbeRuntimeFallbackRows(){
         const warming=!!(this.opsConsole.data?.degraded||this.opsConsole.data?.diagnostics?.warming_mode||this.healthMode==='loading');
@@ -4048,6 +4422,7 @@
           return CCHelpers.localizeIbkrBracketReason(raw)||'—';
         return raw||'—';
       },
+      ibkrRepairPrimaryLine(){
         if(this.ibkr.readiness?.full_handoff_ready) return 'IBKR 已到 handoff-ready。';
         if(this.ibkrPageBannerShort()) return this.ibkrPageBannerShort();
         return 'IBKR 尚未 ready。';
