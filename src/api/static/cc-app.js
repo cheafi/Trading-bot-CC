@@ -5004,7 +5004,70 @@
         return this.opsRuntime.http_status===500;
       },
       opsHttp500BannerText(){
-        return 'OPS UNAVAILABLE — runtime status endpoint failed (HTTP 500). Probe checks may still pass, but live engine state, cache, and job evidence cannot be trusted until the runtime endpoint recovers.';
+        const H=this._opsH();
+        return H.opsHttp500BannerText?H.opsHttp500BannerText():'OPS UNAVAILABLE — runtime status endpoint failed (HTTP 500).';
+      },
+      opsPaperLiveBoundaryTitle(){
+        const H=this._opsH();
+        return H.opsPaperLiveBoundaryTitle?H.opsPaperLiveBoundaryTitle():'Paper / live boundary';
+      },
+      opsLastSuccessfulTimesTitle(){
+        const H=this._opsH();
+        return H.opsLastSuccessfulTimesTitle?H.opsLastSuccessfulTimesTitle():'Last successful times';
+      },
+      opsOperationalEventsTitle(){
+        const H=this._opsH();
+        return H.opsOperationalEventsTitle?H.opsOperationalEventsTitle():'Operational events';
+      },
+      opsWhyNoSignalsTitle(){
+        const H=this._opsH();
+        return H.opsWhyNoSignalsTitle?H.opsWhyNoSignalsTitle():'Why no signals today?';
+      },
+      opsFailedFreshnessHint(){
+        const H=this._opsH();
+        return H.opsFailedFreshnessHint?H.opsFailedFreshnessHint():'failed_freshness = scanner cache warming, not 7 separate failures.';
+      },
+      opsWhyNoSignalsGateLabel(gate){
+        const H=this._opsH();
+        return H.localizeOpsWhyNoSignalsGate?H.localizeOpsWhyNoSignalsGate(gate):String(gate||'');
+      },
+      opsSignalZeroReasonLabel(r){
+        const H=this._opsH();
+        const t=(r&&r.label)||'';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
+      },
+      opsPhase9EnginesTitle(){
+        const H=this._opsH();
+        return H.opsPhase9EnginesTitle?H.opsPhase9EnginesTitle():'Phase 9 Engines';
+      },
+      opsPhase9LoadFailed(){
+        const H=this._opsH();
+        return H.opsPhase9LoadFailed?H.opsPhase9LoadFailed():'Phase 9 engines failed to load — check server logs';
+      },
+      opsPhase9StatusLabel(loaded){
+        const H=this._opsH();
+        const t=loaded?'LOADED':'OFFLINE';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
+      },
+      opsPhase9ComponentActive(){
+        const H=this._opsH();
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText('Active'):'Active';
+      },
+      opsCacheStatisticsTitle(){
+        const H=this._opsH();
+        return H.opsCacheStatisticsTitle?H.opsCacheStatisticsTitle():'Cache Statistics';
+      },
+      opsCacheStatKeyLabel(k){
+        const H=this._opsH();
+        return H.localizeOpsDictKey?H.localizeOpsDictKey(k):String(k||'').replace(/_/g,' ');
+      },
+      opsSelfLearningEngineTitle(){
+        const H=this._opsH();
+        return H.opsSelfLearningEngineTitle?H.opsSelfLearningEngineTitle():'Self-Learning Engine';
+      },
+      opsSelfLearnLabel(key){
+        const H=this._opsH();
+        return H.opsSelfLearnLabel?H.opsSelfLearnLabel(key):key;
       },
       opsPageIntro(){
         const d=this.opsConsole.data&&this.opsConsole.data.diagnostics;

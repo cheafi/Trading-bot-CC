@@ -7657,7 +7657,7 @@
         <!-- PAPER / LIVE BOUNDARY -->
         <template x-if="opsConsole.data?.execution_boundary">
           <div class="card card-p">
-            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">Paper / live boundary</div>
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)" x-text="opsPaperLiveBoundaryTitle()"></div>
             <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;font-size:10px">
               <template x-for="[k,v] in Object.entries(opsConsole.data.execution_boundary)" :key="k">
                 <div class="p-1.5 rounded" style="background:var(--s2)">
@@ -7672,7 +7672,7 @@
         <!-- LAST SUCCESSFUL TIMES -->
         <template x-if="opsConsole.data?.last_times">
           <div class="card card-p">
-            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">Last successful times</div>
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)" x-text="opsLastSuccessfulTimesTitle()"></div>
             <template x-for="[k,v] in Object.entries(opsConsole.data.last_times)" :key="k">
               <div class="flex justify-between py-0.5 text-[9px]" style="border-bottom:1px solid var(--bd)">
                 <span style="color:var(--t3)" x-text="opsDictKeyLabel(k)"></span>
@@ -7685,7 +7685,7 @@
         <!-- OPERATIONAL EVENTS (priority over notifications) -->
         <template x-if="opsConsole.data?.operational_events">
           <div class="card card-p" style="border-left:3px solid var(--amber)">
-            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">Operational events</div>
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)" x-text="opsOperationalEventsTitle()"></div>
             <template x-for="[k,v] in Object.entries(opsConsole.data.operational_events)" :key="k">
               <div class="flex justify-between py-0.5 text-[9px]" style="border-bottom:1px solid var(--bd)">
                 <span style="color:var(--t3)" x-text="opsOperationalEventKey(k)"></span>
@@ -7698,15 +7698,15 @@
         <!-- WHY NO SIGNALS -->
         <template x-if="(opsConsole.data?.signal_zero_reason||[]).length || (opsConsole.data?.why_no_signals||[]).length">
           <div class="card card-p">
-            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">Why no signals today?</div>
+            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)" x-text="opsWhyNoSignalsTitle()"></div>
             <template x-for="r in (opsConsole.data.signal_zero_reason||[])" :key="r.code">
               <div class="text-[8px] py-0.5" :class="r.severity==='blocker'?'text-red-400':'text-amber-300'">
-                <span x-text="r.label"></span>
+                <span x-text="opsSignalZeroReasonLabel(r)"></span>
               </div>
             </template>
-            <div x-show="opsConsole.data.why_no_signals.some(w=>w.gate==='failed_freshness'&&(w.count||0)>0)" class="text-[8px] mb-1 p-1 rounded" style="background:rgba(251,191,36,.08);color:var(--amber)">failed_freshness = scanner cache warming, not 7 separate failures.</div>
+            <div x-show="opsConsole.data.why_no_signals.some(w=>w.gate==='failed_freshness'&&(w.count||0)>0)" class="text-[8px] mb-1 p-1 rounded" style="background:rgba(251,191,36,.08);color:var(--amber)" x-text="opsFailedFreshnessHint()"></div>
             <template x-for="w in (opsConsole.data.why_no_signals||[])" :key="w.gate">
-              <div class="text-[8px] flex justify-between" :class="(w.count||0)===0&&!w.note?'opacity-50':''"><span x-text="w.gate"></span><span class="mono" x-text="w.count??w.note??''"></span></div>
+              <div class="text-[8px] flex justify-between" :class="(w.count||0)===0&&!w.note?'opacity-50':''"><span x-text="opsWhyNoSignalsGateLabel(w.gate)"></span><span class="mono" x-text="w.count??w.note??''"></span></div>
             </template>
           </div>
         </template>
@@ -7768,23 +7768,23 @@
         <!-- Phase 9 Engine Health -->
         <template x-if="opsDetail.phase9_engines">
           <div class="card card-p">
-            <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">🧠 Phase 9 Engines <span class="pill" :class="opsDetail.phase9_engines.loaded?'pg':'pr'" x-text="opsDetail.phase9_engines.loaded?'LOADED':'OFFLINE'"></span></div>
+            <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">🧠 <span x-text="opsPhase9EnginesTitle()"></span> <span class="pill" :class="opsDetail.phase9_engines.loaded?'pg':'pr'" x-text="opsPhase9StatusLabel(opsDetail.phase9_engines.loaded)"></span></div>
             <template x-for="eng in (opsDetail.phase9_engines.components||[])">
               <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)">
                 <span class="text-[11px]" style="color:var(--t2)" x-text="eng"></span>
-                <div class="flex items-center gap-2"><span class="health-dot health-ok"></span><span class="text-[10px] mono text-green-400">Active</span></div>
+                <div class="flex items-center gap-2"><span class="health-dot health-ok"></span><span class="text-[10px] mono text-green-400" x-text="opsPhase9ComponentActive()"></span></div>
               </div>
             </template>
-            <template x-if="!opsDetail.phase9_engines.loaded"><div class="text-[10px] mt-2" style="color:var(--red)">Phase 9 engines failed to load — check server logs</div></template>
+            <template x-if="!opsDetail.phase9_engines.loaded"><div class="text-[10px] mt-2" style="color:var(--red)" x-text="opsPhase9LoadFailed()"></div></template>
           </div>
         </template>
         <!-- Cache Stats -->
         <template x-if="opsDetail.cache_stats&&Object.keys(opsDetail.cache_stats).length>0">
           <div class="card card-p">
-            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">💾 Cache Statistics</div>
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">💾 <span x-text="opsCacheStatisticsTitle()"></span></div>
             <template x-for="[k,v] in Object.entries(opsDetail.cache_stats)">
               <div class="flex items-center justify-between py-1 text-[11px]" style="border-bottom:1px solid var(--bd)">
-                <span style="color:var(--t2)" x-text="k.replace(/_/g,' ')"></span>
+                <span style="color:var(--t2)" x-text="opsCacheStatKeyLabel(k)"></span>
                 <span class="mono text-white" x-text="typeof v==='number'?v.toLocaleString():v"></span>
               </div>
             </template>
@@ -7806,7 +7806,7 @@
         <!-- Self-Learn Engine Panel (Ops) -->
         <div class="card card-p" style="border-left:3px solid var(--purple)" x-show="opsSectionShowAdvanced() || selfLearn.status">
           <div class="flex items-center justify-between mb-2">
-            <div class="text-[10px] font-bold uppercase" style="color:var(--purple)">🧠 Self-Learning Engine</div>
+            <div class="text-[10px] font-bold uppercase" style="color:var(--purple)">🧠 <span x-text="opsSelfLearningEngineTitle()"></span></div>
             <div class="flex gap-1">
               <button @click="triggerSelfLearn()" class="btn-p text-[9px]" :disabled="selfLearn.triggering"><span x-show="!selfLearn.triggering">▶ Run Cycle</span><span x-show="selfLearn.triggering"><span class="spin"></span></span></button>
             </div>
@@ -7815,9 +7815,9 @@
             <div class="space-y-2">
               <!-- Engine state -->
               <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px">
-                <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)">Enabled</div><div class="text-[10px] font-bold" :class="selfLearn.status.engine_state?.enabled?'text-green-400':'text-red-400'" x-text="selfLearn.status.engine_state?.enabled?'YES':'DISABLED'"></div></div>
-                <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)">Adjustments</div><div class="text-[10px] mono text-white" x-text="selfLearn.status.engine_state?.total_adjustments||0"></div></div>
-                <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)">Trades</div><div class="text-[10px] mono text-white" x-text="selfLearn.status.closed_trades_available||0"></div></div>
+                <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)" x-text="opsSelfLearnLabel('enabled')"></div><div class="text-[10px] font-bold" :class="selfLearn.status.engine_state?.enabled?'text-green-400':'text-red-400'" x-text="selfLearn.status.engine_state?.enabled?'YES':'DISABLED'"></div></div>
+                <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)" x-text="opsSelfLearnLabel('adjustments')"></div><div class="text-[10px] mono text-white" x-text="selfLearn.status.engine_state?.total_adjustments||0"></div></div>
+                <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)" x-text="opsSelfLearnLabel('trades')"></div><div class="text-[10px] mono text-white" x-text="selfLearn.status.closed_trades_available||0"></div></div>
                 <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)">This Cycle</div><div class="text-[10px] mono text-amber-300" x-text="selfLearn.status.engine_state?.adjustments_this_cycle||0"></div></div>
               </div>
               <!-- Regime performance -->

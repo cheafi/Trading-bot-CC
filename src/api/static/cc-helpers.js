@@ -475,6 +475,14 @@
 			"inactive": _opsBilingual("未啟用", "inactive"),
 			"Decision machines aligned — monitor constraints": _opsBilingual("決策機器對齊 — 監控約束", "Decision machines aligned — monitor constraints"),
 			"Mixed machine health — check Ops panel": _opsBilingual("機器健康混合 — 請查 Ops 面板", "Mixed machine health — check Ops panel"),
+			"Engine stopped — no scan cycle today": _opsBilingual("引擎已停 — 今日無掃描 cycle", "Engine stopped — no scan cycle today"),
+			"No engine cycle executed this session": _opsBilingual("本 session 未執行 engine cycle", "No engine cycle executed this session"),
+			"Signal pipeline not executed today": _opsBilingual("今日訊號管線未執行", "Signal pipeline not executed today"),
+			"Recommendation cache empty": _opsBilingual("推薦快取為空", "Recommendation cache empty"),
+			"Candidates evaluated but none passed gates": _opsBilingual("已評估候選但均未過閘", "Candidates evaluated but none passed gates"),
+			"Pipeline ran — scanner selective / regime filters": _opsBilingual("管線已跑 — 掃描選擇性／體制篩選", "Pipeline ran — scanner selective / regime filters"),
+			"Zero signals — root cause not classified": _opsBilingual("零訊號 — 根因未分類", "Zero signals — root cause not classified"),
+			"Phase 9 engines failed to load — check server logs": _opsBilingual("Phase 9 引擎載入失敗 — 請查伺服器日誌", "Phase 9 engines failed to load — check server logs"),
 		}
 		if (opsCopyMap[t]) return opsCopyMap[t]
 		if (/^(\d+) machines blocked — respect constraints before deploy$/.test(t)) {
@@ -627,6 +635,53 @@
 			"signals today": _opsBilingual("今日訊號", "Signals Today"),
 		}
 		return map[n] || name
+	}
+
+
+	function opsHttp500BannerText() {
+		return _opsBilingual(
+			"Ops 不可用 — 執行時狀態端點失敗（HTTP 500）。探測可能仍通過，但在端點恢復前請勿信任 live 引擎狀態、快取與工作證據。",
+			"OPS UNAVAILABLE — runtime status endpoint failed (HTTP 500). Probe checks may still pass, but live engine state, cache, and job evidence cannot be trusted until the runtime endpoint recovers."
+		)
+	}
+	function opsPaperLiveBoundaryTitle() { return _opsBilingual("Paper／Live 邊界", "Paper / live boundary") }
+	function opsLastSuccessfulTimesTitle() { return _opsBilingual("上次成功時間", "Last successful times") }
+	function opsOperationalEventsTitle() { return _opsBilingual("營運事件", "Operational events") }
+	function opsWhyNoSignalsTitle() { return _opsBilingual("今日為何無訊號？", "Why no signals today?") }
+	function opsFailedFreshnessHint() {
+		return _opsBilingual(
+			"failed_freshness = 掃描器快取預熱中，非 7 項獨立失敗。",
+			"failed_freshness = scanner cache warming, not 7 separate failures."
+		)
+	}
+	function opsPhase9EnginesTitle() { return _opsBilingual("Phase 9 引擎", "Phase 9 Engines") }
+	function opsPhase9LoadFailed() {
+		return _opsBilingual("Phase 9 引擎載入失敗 — 請查伺服器日誌", "Phase 9 engines failed to load — check server logs")
+	}
+	function opsCacheStatisticsTitle() { return _opsBilingual("快取統計", "Cache Statistics") }
+	function opsSelfLearningEngineTitle() { return _opsBilingual("自學習引擎", "Self-Learning Engine") }
+	function opsSelfLearnLabel(key) {
+		var k = String(key || "").trim().toLowerCase()
+		var map = {
+			enabled: _opsBilingual("已啟用", "Enabled"),
+			adjustments: _opsBilingual("調整", "Adjustments"),
+			trades: _opsBilingual("交易", "Trades"),
+		}
+		return map[k] || key
+	}
+	function localizeOpsWhyNoSignalsGate(gate) {
+		var g = String(gate || "").trim()
+		if (!g) return ""
+		var codeMap = {
+			no_cycle_run: _opsBilingual("無 cycle 執行", "no cycle run"),
+			pipeline_not_executed: _opsBilingual("管線未執行", "pipeline not executed"),
+			cache_empty: _opsBilingual("快取為空", "cache empty"),
+			candidates_failed_gates: _opsBilingual("候選未過閘", "candidates failed gates"),
+			selective_scanner: _opsBilingual("選擇性掃描", "selective scanner"),
+			unknown: _opsBilingual("未知", "unknown"),
+		}
+		if (codeMap[g]) return codeMap[g]
+		return localizeOpsDictKey(g)
 	}
 
 	function localizeOpsComponentName(name) {
@@ -1331,6 +1386,18 @@
 		opsExperimentalModulesTitle: opsExperimentalModulesTitle,
 		opsProbeVerdictNote: opsProbeVerdictNote,
 		opsMetricLabel: opsMetricLabel,
+		opsHttp500BannerText: opsHttp500BannerText,
+		opsPaperLiveBoundaryTitle: opsPaperLiveBoundaryTitle,
+		opsLastSuccessfulTimesTitle: opsLastSuccessfulTimesTitle,
+		opsOperationalEventsTitle: opsOperationalEventsTitle,
+		opsWhyNoSignalsTitle: opsWhyNoSignalsTitle,
+		opsFailedFreshnessHint: opsFailedFreshnessHint,
+		opsPhase9EnginesTitle: opsPhase9EnginesTitle,
+		opsPhase9LoadFailed: opsPhase9LoadFailed,
+		opsCacheStatisticsTitle: opsCacheStatisticsTitle,
+		opsSelfLearningEngineTitle: opsSelfLearningEngineTitle,
+		opsSelfLearnLabel: opsSelfLearnLabel,
+		localizeOpsWhyNoSignalsGate: localizeOpsWhyNoSignalsGate,
 		pageOperatorSentence: pageOperatorSentence,
 		buildClientSystemState: buildClientSystemState,
 		playbookWhatToMonitorLine: playbookWhatToMonitorLine,
@@ -6381,7 +6448,70 @@
         return this.opsRuntime.http_status===500;
       },
       opsHttp500BannerText(){
-        return 'OPS UNAVAILABLE — runtime status endpoint failed (HTTP 500). Probe checks may still pass, but live engine state, cache, and job evidence cannot be trusted until the runtime endpoint recovers.';
+        const H=this._opsH();
+        return H.opsHttp500BannerText?H.opsHttp500BannerText():'OPS UNAVAILABLE — runtime status endpoint failed (HTTP 500).';
+      },
+      opsPaperLiveBoundaryTitle(){
+        const H=this._opsH();
+        return H.opsPaperLiveBoundaryTitle?H.opsPaperLiveBoundaryTitle():'Paper / live boundary';
+      },
+      opsLastSuccessfulTimesTitle(){
+        const H=this._opsH();
+        return H.opsLastSuccessfulTimesTitle?H.opsLastSuccessfulTimesTitle():'Last successful times';
+      },
+      opsOperationalEventsTitle(){
+        const H=this._opsH();
+        return H.opsOperationalEventsTitle?H.opsOperationalEventsTitle():'Operational events';
+      },
+      opsWhyNoSignalsTitle(){
+        const H=this._opsH();
+        return H.opsWhyNoSignalsTitle?H.opsWhyNoSignalsTitle():'Why no signals today?';
+      },
+      opsFailedFreshnessHint(){
+        const H=this._opsH();
+        return H.opsFailedFreshnessHint?H.opsFailedFreshnessHint():'failed_freshness = scanner cache warming, not 7 separate failures.';
+      },
+      opsWhyNoSignalsGateLabel(gate){
+        const H=this._opsH();
+        return H.localizeOpsWhyNoSignalsGate?H.localizeOpsWhyNoSignalsGate(gate):String(gate||'');
+      },
+      opsSignalZeroReasonLabel(r){
+        const H=this._opsH();
+        const t=(r&&r.label)||'';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
+      },
+      opsPhase9EnginesTitle(){
+        const H=this._opsH();
+        return H.opsPhase9EnginesTitle?H.opsPhase9EnginesTitle():'Phase 9 Engines';
+      },
+      opsPhase9LoadFailed(){
+        const H=this._opsH();
+        return H.opsPhase9LoadFailed?H.opsPhase9LoadFailed():'Phase 9 engines failed to load — check server logs';
+      },
+      opsPhase9StatusLabel(loaded){
+        const H=this._opsH();
+        const t=loaded?'LOADED':'OFFLINE';
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
+      },
+      opsPhase9ComponentActive(){
+        const H=this._opsH();
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText('Active'):'Active';
+      },
+      opsCacheStatisticsTitle(){
+        const H=this._opsH();
+        return H.opsCacheStatisticsTitle?H.opsCacheStatisticsTitle():'Cache Statistics';
+      },
+      opsCacheStatKeyLabel(k){
+        const H=this._opsH();
+        return H.localizeOpsDictKey?H.localizeOpsDictKey(k):String(k||'').replace(/_/g,' ');
+      },
+      opsSelfLearningEngineTitle(){
+        const H=this._opsH();
+        return H.opsSelfLearningEngineTitle?H.opsSelfLearningEngineTitle():'Self-Learning Engine';
+      },
+      opsSelfLearnLabel(key){
+        const H=this._opsH();
+        return H.opsSelfLearnLabel?H.opsSelfLearnLabel(key):key;
       },
       opsPageIntro(){
         const d=this.opsConsole.data&&this.opsConsole.data.diagnostics;
