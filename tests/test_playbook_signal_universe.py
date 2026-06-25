@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from src.engines.sector_pipeline import SectorPipeline
 from src.services.decision_truth_model import (
     _PipelineWrap,
@@ -33,10 +35,73 @@ def test_normalize_brief_row_maps_score_and_levels():
     sig = normalize_brief_row(_sample_brief_row())
     assert sig["ticker"] == "AMD"
     assert sig["score"] >= 8.0
+    assert sig["rs_rank"] >= 85
     assert sig["entry_price"] == 408.46
     assert sig["stop_price"] == 383.88
     assert sig["target_price"] == 457.62
     assert float(sig["risk_reward"]) == 2.0
+
+
+def test_normalize_scan_row_maps_live_scan_shape():
+    from src.services.playbook_signal_universe import normalize_scan_row
+
+    sig = normalize_scan_row(
+        {
+            "ticker": "NVDA",
+            "score": 7.2,
+            "entry_price": 120.0,
+            "stop_price": 110.0,
+            "target_price": 140.0,
+            "risk_reward": 2.0,
+            "vol_ratio": 1.8,
+            "rsi": 58.0,
+            "rs": {"rs_composite": 92.0},
+            "strategy": "momentum",
+        }
+    )
+    assert sig["ticker"] == "NVDA"
+    assert sig["source"] == "live_scan"
+    assert sig["rs_rank"] >= 85
+    assert sig["entry_price"] == 120.0
+
+
+@pytest.mark.asyncio
+async def test_load_playbook_signals_tops_up_below_target(monkeypatch):
+    from src.services.playbook_signal_universe import (
+        PLAYBOOK_SIGNAL_TARGET,
+        load_brief_pipeline_signals,
+        load_playbook_signals,
+    )
+
+    monkeypatch.setattr(
+        "src.services.playbook_signal_universe.load_brief_pipeline_signals",
+        lambda brief=None: load_brief_pipeline_signals(
+            {"actionable": [_sample_brief_row()], "watch": [], "review": []}
+        ),
+    )
+
+    async def _fake_scan(limit: int):
+        rows = [
+            {
+                "ticker": f"T{i}",
+                "score": 6.0 + i * 0.1,
+                "entry_price": 100.0,
+                "stop_price": 95.0,
+                "target_price": 110.0,
+                "risk_reward": 2.0,
+                "vol_ratio": 1.2,
+            }
+            for i in range(min(limit, 30))
+        ]
+        return rows, {}
+
+    signals, meta = await load_playbook_signals(
+        scan_fn=_fake_scan,
+        target=PLAYBOOK_SIGNAL_TARGET,
+    )
+    assert meta["live_scan_used"] is True
+    assert len(signals) >= 2
+    assert meta["merged_count"] == len(signals)
 
 
 def test_raw_brief_without_normalize_scores_avoid():

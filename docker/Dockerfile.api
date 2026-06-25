@@ -40,6 +40,7 @@ RUN groupadd -r cc && useradd -r -g cc -d /app cc
 
 # Copy application code (invalidates only when code changes, not deps)
 COPY --chown=cc:cc src/ src/
+COPY --chown=cc:cc docs/CC_CONSOLIDATED_BRIEFING.md docs/
 COPY --chown=cc:cc config/ config/
 COPY --chown=cc:cc changelog.json ./
 COPY --chown=cc:cc _cc_instant.py ./

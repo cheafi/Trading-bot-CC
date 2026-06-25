@@ -5896,6 +5896,15 @@
       fundsFetchFailedShell(){
         return !!(this.fundMonitor.error&&!this.fundMonitor.data&&!this.fundMonitor.loading);
       },
+      discoveryHasApiCachedLeaders(){
+        const d=this.scannerHub.data||{};
+        return Array.isArray(d.cached_leaders)&&d.cached_leaders.length>0;
+      },
+      discoveryCachedLeadersBannerVisible(){
+        if(this.discoveryHasApiCachedLeaders()) return true;
+        const hub=String(this.scannerHub.data?.hub_status||'').toLowerCase();
+        return hub==='degraded'&&this.discoveryCachedLeadersRows().length>0;
+      },
       discoveryCachedLeadersRows(){
         const d=this.scannerHub.data||{};
         const out=[];
@@ -5906,6 +5915,7 @@
           seen.add(t);
           out.push(typeof row==='object'&&row!==null?{...row,ticker:t,source:source||row.source||'cache'}:{ticker:t,source:source||'cache'});
         };
+        (d.cached_leaders||[]).slice(0,8).forEach(r=>add(r,'brief-cache'));
         (d.merged_top_names||[]).slice(0,8).forEach(r=>add(r,'merged'));
         const intent=d.decision_intent?.LEADERS||{};
         (intent.top_hits||intent.sample||intent.hits||[]).slice(0,8).forEach(r=>add(r,'leaders'));
@@ -5945,7 +5955,8 @@
         return (this.scannerHub.error||this.scannerDiscoveryHasFallbackRows())&&this.discoveryCachedIntentRows('PULLBACKS').length>0;
       },
       discoveryShowCachedLeaders(){
-        return (this.scannerHub.error||this.scannerDiscoveryHasFallbackRows()||this.scannerHub.loading===false&&!this.scannerHub.data)
+        return (this.discoveryCachedLeadersBannerVisible()
+          ||this.scannerHub.error||this.scannerDiscoveryHasFallbackRows()||this.scannerHub.loading===false&&!this.scannerHub.data)
           && this.discoveryCachedLeadersRows().length>0;
       },
       discoveryPageStateVisible(){

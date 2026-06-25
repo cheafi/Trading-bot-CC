@@ -272,16 +272,26 @@ class RSLeaderScanner(BaseScanner):
     def scan(self, signals, regime) -> List[ScannerHit]:
         hits = []
         for sig in signals:
-            rs = sig.get("rs_rank", 50)
-            if rs >= 85:
+            rs = sig.get("rs_rank")
+            if rs is None:
+                raw = sig.get("rs_score", 50)
+                try:
+                    raw_f = float(raw)
+                except (TypeError, ValueError):
+                    raw_f = 50.0
+                rs = raw_f if raw_f > 10 else raw_f * 10
+            rs = float(rs)
+            if rs >= 75:
                 hits.append(
                     ScannerHit(
                         scanner_name=self.name,
                         category=self.category,
                         ticker=sig.get("ticker", ""),
                         score=min(10, rs / 10),
-                        headline=f"RS Leader (rank {rs})",
-                        priority=ScannerPriority.HIGH,
+                        headline=f"RS Leader (rank {rs:.0f})",
+                        priority=(
+                            ScannerPriority.HIGH if rs >= 85 else ScannerPriority.NORMAL
+                        ),
                     )
                 )
         return hits

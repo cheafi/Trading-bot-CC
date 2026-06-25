@@ -481,13 +481,13 @@ async def run_opportunity_scanner(
             spy_close = np.ones(252)
 
     # ── Step 2: Batch-fetch universe (chunked for rate limits) ──────────────
-    chunk_size = 100
+    chunk_size = 120
     chunks = [universe[i : i + chunk_size] for i in range(0, len(universe), chunk_size)]
 
     raw_scores: List[Dict[str, float]] = []
     passed_initial = 0
 
-    sem = asyncio.Semaphore(15)
+    sem = asyncio.Semaphore(20)
 
     async def _download_chunk(chunk_tickers):
         async with sem:
@@ -579,7 +579,7 @@ async def run_opportunity_scanner(
 
     # Fall back to full rs list if pattern filter is too restrictive
     scoring_list = (
-        passed_pattern_list if passed_pattern >= max(10, top_n // 5) else passed_rs_list
+        passed_pattern_list if passed_pattern >= max(5, top_n // 10) else passed_rs_list
     )
 
     # ── Step 5: Normalise components and compute final scores ────────────────

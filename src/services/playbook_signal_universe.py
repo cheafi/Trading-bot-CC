@@ -22,10 +22,10 @@ BRIEF_PIPELINE_SECTIONS: Tuple[str, ...] = (
     "candidates",
 )
 
-# Top up with live scan when brief pool is thin (monitor candidates only).
-PLAYBOOK_MIN_SIGNALS_BEFORE_SCAN = 25
-PLAYBOOK_SIGNAL_TARGET = 80
-PLAYBOOK_LIVE_SCAN_LIMIT = 100
+# Top up with live scan when merged pool is below target (monitor candidates only).
+PLAYBOOK_MIN_SIGNALS_BEFORE_SCAN = 15
+PLAYBOOK_SIGNAL_TARGET = 100
+PLAYBOOK_LIVE_SCAN_LIMIT = 120
 
 
 def normalize_brief_row(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -37,13 +37,16 @@ def normalize_brief_row(row: Dict[str, Any]) -> Dict[str, Any]:
     rs = float(row.get("rs_score") or row.get("score") or 5.0)
     if rs > 10:
         board_score = min(10.0, max(3.0, rs / 10.0))
+        rs_rank = int(min(99, max(1, round(rs))))
     else:
         board_score = min(10.0, max(3.0, rs))
+        rs_rank = int(min(99, max(1, round(rs * 10))))
 
     sig: Dict[str, Any] = {
         "ticker": ticker,
         "score": board_score,
         "rs_score": rs,
+        "rs_rank": int(row.get("rs_rank") or rs_rank),
         "vol_ratio": float(row.get("vol_ratio") or 1.0),
         "atr_pct": row.get("atr_pct"),
         "near_52w_high": bool(row.get("near_52w_high")),
@@ -98,6 +101,87 @@ def normalize_brief_row(row: Dict[str, Any]) -> Dict[str, Any]:
     if rr > 0:
         sig["risk_reward"] = rr
 
+    if row.get("rsi") is not None:
+        try:
+            sig["rsi"] = float(row["rsi"])
+        except (TypeError, ValueError):
+            pass
+    if row.get("strategy"):
+        sig["strategy"] = str(row.get("strategy") or "brief")
+    if row.get("pattern"):
+        sig["pattern"] = str(row.get("pattern") or "watchlist")
+
+    return sig
+
+
+def normalize_scan_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Map live scan recommendations to pipeline-ready signal shape."""
+    ticker = str(row.get("ticker") or row.get("symbol") or "").strip().upper()
+    if not ticker:
+        return {}
+
+    rs_info = row.get("rs") if isinstance(row.get("rs"), dict) else {}
+    rs_composite = float(
+        rs_info.get("rs_composite")
+        or row.get("rs_score")
+        or row.get("relative_strength")
+        or 50.0
+    )
+    board_score = float(row.get("score") or 5.0)
+    if board_score <= 10 and rs_composite > 10:
+        board_score = min(10.0, max(3.0, rs_composite / 10.0))
+
+    entry = row.get("entry_price") or row.get("entry")
+    stop = row.get("stop_price") or row.get("stop")
+    target = row.get("target_price") or row.get("target")
+    rr = parse_ratio(row.get("risk_reward"), 0.0) or 0.0
+
+    sig: Dict[str, Any] = {
+        "ticker": ticker,
+        "score": min(10.0, max(3.0, board_score)),
+        "rs_score": rs_composite,
+        "rs_rank": int(
+            min(
+                99,
+                max(
+                    1,
+                    round(
+                        rs_info.get("rs_rank")
+                        or row.get("rs_rank")
+                        or rs_composite
+                    ),
+                ),
+            )
+        ),
+        "vol_ratio": float(row.get("vol_ratio") or 1.0),
+        "atr_pct": row.get("atr_pct"),
+        "conviction": str(row.get("conviction") or "WATCH").upper(),
+        "strategy": str(row.get("strategy") or "live_scan"),
+        "pattern": str(row.get("pattern") or row.get("strategy") or "scan"),
+        "source": "live_scan",
+    }
+    if row.get("rsi") is not None:
+        try:
+            sig["rsi"] = float(row["rsi"])
+        except (TypeError, ValueError):
+            pass
+    if entry is not None:
+        try:
+            sig["entry_price"] = round(float(entry), 2)
+        except (TypeError, ValueError):
+            pass
+    if stop is not None:
+        try:
+            sig["stop_price"] = round(float(stop), 2)
+        except (TypeError, ValueError):
+            pass
+    if target is not None:
+        try:
+            sig["target_price"] = round(float(target), 2)
+        except (TypeError, ValueError):
+            pass
+    if rr > 0:
+        sig["risk_reward"] = rr
     return sig
 
 
@@ -185,18 +269,27 @@ async def load_playbook_signals(
     meta["brief_count"] = len(brief_signals)
     signals = list(brief_signals)
 
-    if len(signals) < min_before_scan and scan_fn is not None:
+    need_top_up = len(signals) < target
+    if need_top_up and scan_fn is not None:
         try:
             scanned, scan_meta = await scan_fn(scan_limit)
             meta["live_scan_used"] = True
             meta["live_scan_degraded"] = bool(
                 (scan_meta or {}).get("_degraded")
             )
-            live_rows = [r for r in (scanned or []) if isinstance(r, dict)]
+            live_rows = [
+                normalize_scan_row(r)
+                for r in (scanned or [])
+                if isinstance(r, dict)
+            ]
+            live_rows = [r for r in live_rows if r.get("ticker")]
             meta["live_scan_count"] = len(live_rows)
-            signals = merge_pipeline_signals(signals, live_rows, target=target)
+            signals = merge_pipeline_signals(brief_signals, live_rows, target=target)
+            meta["topped_up_from_brief"] = len(brief_signals)
         except Exception as exc:
             meta["live_scan_error"] = str(exc)[:120]
+    elif len(signals) < min_before_scan:
+        meta["live_scan_skipped"] = "scan_fn unavailable"
 
     meta["merged_count"] = len(signals)
     return signals, meta

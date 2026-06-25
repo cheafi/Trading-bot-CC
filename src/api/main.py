@@ -3601,7 +3601,7 @@ _SCAN_CACHE_TTL = 300  # 5 minutes
 # Negative cache: tickers that fail consistently are skipped for 1 hour
 _neg_cache: dict[str, float] = {}  # ticker → timestamp of last failure
 _NEG_CACHE_TTL = 3600  # 1 hour
-_SCAN_BATCH_SIZE = 25  # parallel batch size for scanning
+_SCAN_BATCH_SIZE = 35  # parallel batch size for scanning
 
 
 # ═══════════════════════════════════════════════════════════════════

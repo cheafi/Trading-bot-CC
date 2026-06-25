@@ -25,6 +25,7 @@ services:
     volumes:
       # Live-reload: src/ changes reflect immediately (no rebuild needed)
       - ./src:/app/src:ro,delegated
+      - ./docs:/app/docs:ro,delegated
       - ./_cc_instant.py:/app/_cc_instant.py:ro,delegated
       - ./data:/app/data:delegated
       - ./config:/app/config:ro,delegated

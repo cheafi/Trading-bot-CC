@@ -119,13 +119,16 @@ def _brief_row_to_scanner_signal(row: Dict[str, Any]) -> Dict[str, Any]:
     return normalize_brief_row(row)
 
 
-async def _scanner_signal_universe() -> tuple[List[Dict[str, Any]], str]:
+async def _scanner_signal_universe(
+    *,
+    scan_fn: Callable[..., Any] | None = None,
+) -> tuple[List[Dict[str, Any]], str]:
     """
     Signals for scanner hub — brief first, then RS default pool.
 
     Returns (signals, universe_label).
     """
-    signals = await _real_signals()
+    signals = await _real_signals(scan_fn=scan_fn)
     if signals:
         pooled: List[Dict[str, Any]] = list(signals)
         seen = {
@@ -913,7 +916,7 @@ async def ranked_snapshot(
 @router.get("/ranked")
 async def ranked_opportunities(
     request: Request,
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(40, ge=1, le=100),
     action: str = Query(None, description="Filter by action"),
     sector: str = Query(None, description="Filter by sector bucket"),
     refresh: bool = Query(
@@ -1153,8 +1156,142 @@ async def _scanner_rejection_preview(
         return []
 
 
+def _discovery_brief_leader_rows(*, limit: int = 12) -> List[Dict[str, Any]]:
+    """Research-only brief leaders when live scanner hits are empty."""
+    from src.services.playbook_signal_universe import normalize_brief_row
+
+    try:
+        from src.services.brief_data_service import load_brief  # noqa: PLC0415
+
+        brief = load_brief()
+    except Exception:
+        return []
+
+    rows: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for section in (
+        "actionable",
+        "watch",
+        "review",
+        "monitor",
+        "pilot",
+        "near_miss",
+        "candidates",
+    ):
+        for raw in brief.get(section) or []:
+            if not isinstance(raw, dict):
+                continue
+            sig = normalize_brief_row(raw)
+            ticker = str(sig.get("ticker") or "").upper()
+            if not ticker or ticker in seen:
+                continue
+            seen.add(ticker)
+            rows.append(
+                {
+                    "ticker": ticker,
+                    "overlap": 0,
+                    "scanners": ["brief_cache"],
+                    "categories": ["BRIEF"],
+                    "max_score": round(float(sig.get("score") or 5.0), 1),
+                    "avg_score": round(float(sig.get("score") or 5.0), 1),
+                    "action": "WATCH",
+                    "urgency": "LOW",
+                    "confidence": 0.35,
+                    "regime_alignment": "brief",
+                    "why_flagged": f"Cached brief · {section}",
+                    "status": "cached",
+                    "score_display_mode": "fallback_rank",
+                    "score_source": "brief-cache",
+                    "score_display": "Cached leader",
+                    "score_display_label": "Cached brief · research only",
+                    "research_only": True,
+                    "brief_section": section,
+                }
+            )
+            if len(rows) >= limit:
+                return rows
+    return rows
+
+
+def _enrich_discovery_zero_hits(
+    payload: Dict[str, Any],
+    *,
+    regime: Dict[str, Any],
+    scanner: Any,
+) -> Dict[str, Any]:
+    """Pad Discovery with honest cached brief leaders — no deploy authority."""
+    if int(payload.get("total_hits") or 0) > 0:
+        return payload
+    cached = _discovery_brief_leader_rows(limit=12)
+    if not cached:
+        return payload
+
+    payload = dict(payload)
+    payload["cached_leaders"] = cached
+    payload["hub_status"] = payload.get("hub_status") or "degraded"
+    payload.setdefault(
+        "research_note",
+        "Live scanner produced zero hits — cached brief leaders shown (research only).",
+    )
+    merged = list(payload.get("merged_top_names") or [])
+    seen = {str(r.get("ticker") or "").upper() for r in merged}
+    for row in cached:
+        tk = str(row.get("ticker") or "").upper()
+        if tk and tk not in seen:
+            merged.append(row)
+            seen.add(tk)
+    payload["merged_top_names"] = merged[:40]
+
+    intent = dict(payload.get("decision_intent") or {})
+    leaders = dict(intent.get("LEADERS") or {})
+    if not leaders.get("top_hits"):
+        from src.engines.scanner_matrix import ScannerCategory, ScannerHit, ScannerMatrix as _SM
+
+        top_hits = [
+            _SM.enrich_hit_for_ui(
+                ScannerHit(
+                    scanner_name="brief_cache",
+                    category=ScannerCategory.PATTERN,
+                    ticker=r["ticker"],
+                    score=float(r.get("max_score") or 5.0),
+                    headline=r.get("why_flagged") or "Cached brief leader",
+                    detail="Research only — confirm in Playbook",
+                    metadata={"brief_section": r.get("brief_section")},
+                ),
+                score_display_mode="fallback_rank",
+            )
+            for r in cached[:8]
+        ]
+        leaders = {
+            **leaders,
+            "intent": "LEADERS",
+            "count": len(top_hits),
+            "probe_status": "cached",
+            "regime_note": leaders.get("regime_note")
+            or str(regime.get("trend") or "—"),
+            "empty_why": "Live scan empty — showing cached brief leaders (research only).",
+            "top_hits": top_hits,
+        }
+        intent["LEADERS"] = leaders
+        payload["decision_intent"] = intent
+
+    verdict = dict(payload.get("discovery_verdict") or {})
+    if not verdict.get("best_speculative_name") and cached:
+        verdict["best_speculative_name"] = cached[0]
+        verdict["total_unique_names"] = max(
+            int(verdict.get("total_unique_names") or 0), len(cached)
+        )
+    payload["discovery_verdict"] = verdict
+    diag = dict(payload.get("diagnostics") or {})
+    diag["cached_leader_count"] = len(cached)
+    diag["data_freshness"] = "cached_brief"
+    payload["diagnostics"] = diag
+    return payload
+
+
 @router.get("/scanners")
 async def scanner_hub(
+    request: Request,
     category: str = Query(
         None,
         description="LEADERS/PULLBACKS/BREAKOUTS/FLOW/NO_TRADE",
@@ -1179,8 +1316,9 @@ async def scanner_hub(
     try:
         scanner = _get_scanner()
         regime = await _real_regime()
-        live_signals = await _real_signals()
-        signals, universe_label = await _scanner_signal_universe()
+        scan_fn = getattr(request.app.state, "scan_signals", None)
+        live_signals = await _real_signals(scan_fn=scan_fn)
+        signals, universe_label = await _scanner_signal_universe(scan_fn=scan_fn)
         diagnostic_info = _scanner_hub_diagnostics(
             regime, signals, universe_label=universe_label
         )
@@ -1330,6 +1468,7 @@ async def scanner_hub(
         )
         payload["decision_intent"] = warming["decision_intent"]
         payload["hub_status"] = "warming"
+    payload = _enrich_discovery_zero_hits(payload, regime=regime, scanner=scanner)
     return payload
 
 

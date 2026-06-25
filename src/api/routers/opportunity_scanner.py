@@ -293,22 +293,54 @@ async def opportunity_scanner(
             timeout=_FORCE_SCAN_TIMEOUT_SECONDS,
         )
         data = result.to_dict()
-        _set_cached(key, data)
-        if (
-            str(data.get("engine", "")).lower() == "unknown"
-            or data.get("candidates_ranked", 0) == 0
-        ):
-            logger.warning(
-                "Scanner returned unknown engine or 0 candidates, refusing to serve stale fallback."
-            )
-            raise HTTPException(
-                status_code=503,
-                detail="Scanner failed or matched 0 opportunities. No stale fallbacks permitted.",
-            )
+        if data.get("candidates_ranked", 0) > 0 and str(data.get("engine", "")).lower() != "unknown":
+            _set_cached(key, data)
+            return sanitize_for_json({**data, "cached": False, "stale": False})
 
+        stale = _get_stale_cached(key) or _get_regime_stale_cached(regime)
+        if stale and int(stale.get("candidates_ranked", 0) or 0) > 0:
+            logger.warning(
+                "Scanner returned 0 candidates — serving stale cache for research visibility."
+            )
+            payload = {
+                **_with_candidate_tiers(stale),
+                "cached": True,
+                "stale": True,
+                "warning": "live scan matched 0 — serving stale cache (research only)",
+                "diagnosis": _diagnose_funnel(data.get("filter_funnel", {})),
+            }
+            return sanitize_for_json(payload)
+
+        if str(data.get("engine", "")).lower() == "unknown" or data.get("candidates_ranked", 0) == 0:
+            logger.warning(
+                "Scanner returned unknown engine or 0 candidates with no stale fallback."
+            )
+            payload = {
+                **data,
+                "cached": False,
+                "stale": True,
+                "warning": "live scan produced 0 candidates — no stale cache available",
+                "diagnosis": _diagnose_funnel(data.get("filter_funnel", {})),
+            }
+            return sanitize_for_json(payload)
+
+        _set_cached(key, data)
         return sanitize_for_json({**data, "cached": False, "stale": False})
     except asyncio.TimeoutError:
-        logger.warning("Opportunity scanner timeout, refusing to serve stale fallback.")
+        logger.warning("Opportunity scanner timeout — attempting stale fallback.")
+        stale = _get_stale_cached(key) or _get_regime_stale_cached(regime)
+        if stale:
+            payload = {
+                **_with_candidate_tiers(stale),
+                "cached": True,
+                "stale": True,
+                "warning": "live scan timed out — serving stale cache (research only)",
+            }
+            if int(payload.get("candidates_ranked", 0) or 0) == 0:
+                payload["diagnosis"] = _diagnose_funnel(
+                    payload.get("filter_funnel", {})
+                )
+            return sanitize_for_json(payload)
         raise HTTPException(
             status_code=504,
             detail="Scanner timed out reading market data. Please retry.",

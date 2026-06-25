@@ -4627,6 +4627,7 @@
       <div class="trust-strip">
         <span style="color:var(--blue)">● DISCOVERY</span>
         <span x-text="scannerHub.loading?'Loading…':(scannerDiscoveryHitsLabel()+' · '+scannerUniverseLabel())"></span>
+        <span x-show="discoveryCachedLeadersBannerVisible()" class="pill text-[8px]" style="background:rgba(59,130,246,.15);color:var(--blue)">快取領袖 · Cached leaders (research only)</span>
         <span x-show="scannerPageGateLabel()" class="pill text-[8px]" :class="scannerPageGateClass()" x-text="scannerPageGateLabel()"></span>
         <span x-show="scannerHub.data&&scannerHub.data.diagnostics" class="text-[9px]" :style="(scannerHub.data?.diagnostics?.data_freshness||'')==='live'?'color:var(--green)':'color:var(--amber)'" x-text="(scannerHub.data?.diagnostics?.data_freshness||'—')+' · '+(scannerHub.data?.diagnostics?.source||'playbook')"></span>
       </div>
