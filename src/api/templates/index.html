@@ -7502,43 +7502,40 @@
         </template>
         <template x-if="opsEngineStoppedBanner()">
           <div class="card card-p text-[10px]" style="border-left:4px solid var(--amber);background:rgba(251,191,36,.08);color:var(--amber)">
-            <div class="mb-2" x-text="opsEngineStoppedBanner()"></div>
-            <div class="text-[9px] mb-2" style="color:var(--t2)">Start the trading loop for cycles, cache, and runtime evidence. Or set <code>CC_AUTO_START_ENGINE=1</code> in Docker/env to start on boot.</div>
+            <div class="mb-2" x-text="opsEngineStoppedBannerText()"></div>
+            <div class="text-[9px] mb-2" style="color:var(--t2)" x-text="opsEngineStoppedHelpCopy()"></div>
             <div class="flex gap-2 flex-wrap">
               <button type="button" @click="opsStartEngine()" class="btn-p text-[9px]" :disabled="ops.engineStarting||ops.running">
-                <span x-show="!ops.engineStarting">▶ Start engine</span>
-                <span x-show="ops.engineStarting"><span class="spin"></span> Starting…</span>
+                <span x-show="!ops.engineStarting" x-text="opsStartEngineLabel()"></span>
+                <span x-show="ops.engineStarting"><span class="spin"></span> <span x-text="opsStartEngineLabel()"></span></span>
               </button>
-              <button type="button" class="btn-s text-[8px]" @click="opsPanel='errors';fetchErrorLog()">View Error Log</button>
+              <button type="button" class="btn-s text-[8px]" @click="opsPanel='errors';fetchErrorLog()" x-text="opsViewErrorLogLabel()"></button>
             </div>
           </div>
         </template>
         <template x-if="opsConsole.data?.ibkr && !opsConsole.data.ibkr.connected">
           <div class="card card-p text-[10px]" style="border-left:3px solid var(--blue);background:rgba(59,130,246,.06)">
-            <div class="font-bold mb-1" style="color:var(--t1)">IBKR session not active</div>
-            <div class="text-[9px] mb-2" style="color:var(--t2)" x-text="opsConsole.data.ibkr.gateway_reachable?'Gateway signals present — confirm login on IBKR tab.':'No IB API session yet. Start IB Gateway/TWS, then Connect. Raw TCP probes are disabled (CC_SKIP_IB_INSYNC avoids log spam). '"></div>
+            <div class="font-bold mb-1" style="color:var(--t1)" x-text="opsIbkrSessionInactiveTitle()"></div>
+            <div class="text-[9px] mb-2" style="color:var(--t2)" x-text="opsIbkrSessionNote()"></div>
             <div class="text-[8px] mono mb-2" style="color:var(--t3)" x-text="'Host '+(opsConsole.data.ibkr.host||ibkr.host||((window.CCHelpers&&CCHelpers.ibkrHostPlaceholder)?CCHelpers.ibkrHostPlaceholder(ibkr.docker):'127.0.0.1'))+':'+(opsConsole.data.ibkr.port||(ibkr.mode==='paper'?'7497':'4001'))+' · POST /api/ibkr/connect'"></div>
-            <button type="button" @click="switchTab('ibkr')" class="btn-p text-[9px]">Open IBKR tab → Connect</button>
+            <button type="button" @click="switchTab('ibkr')" class="btn-p text-[9px]" x-text="opsOpenIbkrConnectLabel()"></button>
           </div>
         </template>
         <template x-if="opsCriticalFlags().length && !opsShowHttp500Banner() && !opsEngineStoppedBanner()">
           <div class="card card-p text-[10px]" style="border-left:4px solid var(--amber);background:rgba(251,191,36,.06);color:var(--amber)">
-            Runtime gaps: <span x-text="opsCriticalFlags().join(' · ')"></span>
+            <span x-text="opsCriticalGapsLine()"></span>
           </div>
         </template>
-        <div x-show="ops.cycle_count===0 && opsConsole.data" class="card card-p text-[10px]" style="border-left:3px solid var(--amber);color:var(--amber)">
-          No engine cycle executed this session — uptime and latency below reflect API boot only, not trading loop activity.
+        <div x-show="ops.cycle_count===0 && opsConsole.data" class="card card-p text-[10px]" style="border-left:3px solid var(--amber);color:var(--amber)" x-text="opsNoCycleSessionWarning()">
         </div>
-        <div x-show="(opsConsole.data?.engine?.cached_recommendations||0)===0 && opsConsole.data" class="card card-p text-[10px]" style="border-left:3px solid var(--amber);color:var(--amber)">
-          Recommendation cache empty — Today/Signals boards may show stale or precomputed output.
+        <div x-show="(opsConsole.data?.engine?.cached_recommendations||0)===0 && opsConsole.data" class="card card-p text-[10px]" style="border-left:3px solid var(--amber);color:var(--amber)" x-text="opsNoCacheWarning()">
         </div>
 
         <!-- 2) What this means -->
         <div class="card card-p" style="border-left:3px solid var(--blue)">
-          <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">What this means</div>
+          <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)" x-text="opsWhatThisMeansTitle()"></div>
           <div class="text-[10px] leading-relaxed" style="color:var(--t2)" x-text="opsPageIntro()"></div>
-          <div class="text-[9px] mt-2 p-1.5 rounded" style="background:var(--s2);color:var(--t3)">
-            Board state elsewhere may be cached, fallback, or precomputed — not proof the engine ran this session.
+          <div class="text-[9px] mt-2 p-1.5 rounded" style="background:var(--s2);color:var(--t3)" x-text="opsBoardStateCachedNote()">
           </div>
           <div class="text-[9px] mt-2 font-bold" :class="(ops.signals_today||0)===0?'text-amber-300':'text-green-400'" x-text="opsSignalsTodayNote()"></div>
         </div>
@@ -7548,7 +7545,7 @@
           <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--t3)">探測 vs 執行時證據 · Probe vs runtime evidence</div>
           <div class="text-[8px] mb-2" style="color:var(--t3)">探測 OK = 服務可達 · Probe OK = service reachable。執行時 = 本 session engine 已消費或產出 · Runtime = proof the engine consumed or produced output this session.</div>
           <div x-show="opsConsole.data?.diagnostics?.probe_table_note" class="text-[9px] mb-2 p-1.5 rounded" style="background:var(--s2);color:var(--amber)">
-            <span x-text="opsConsole.data.diagnostics.probe_table_note"></span>
+            <span x-text="opsFormatEvidence(opsConsole.data.diagnostics.probe_table_note)"></span>
             <span x-show="healthMode==='loading'||opsConsole.data?.degraded"> · </span>
             <span x-show="healthMode==='loading'||opsConsole.data?.degraded" style="color:var(--t3)" x-text="'See Recovery runbook above - '+(opsRecoveryGuide().retry[0]||'wait for /health mode=full')"></span>
           </div>
@@ -7706,7 +7703,7 @@
             </template>
             <div x-show="opsConsole.data.why_no_signals.some(w=>w.gate==='failed_freshness'&&(w.count||0)>0)" class="text-[8px] mb-1 p-1 rounded" style="background:rgba(251,191,36,.08);color:var(--amber)" x-text="opsFailedFreshnessHint()"></div>
             <template x-for="w in (opsConsole.data.why_no_signals||[])" :key="w.gate">
-              <div class="text-[8px] flex justify-between" :class="(w.count||0)===0&&!w.note?'opacity-50':''"><span x-text="opsWhyNoSignalsGateLabel(w.gate)"></span><span class="mono" x-text="w.count??w.note??''"></span></div>
+              <div class="text-[8px] flex justify-between" :class="(w.count||0)===0&&!w.note?'opacity-50':''"><span x-text="opsWhyNoSignalsGateLabel(w.gate)"></span><span class="mono" x-text="opsWhyNoSignalsCell(w)"></span></div>
             </template>
           </div>
         </template>
@@ -7726,7 +7723,7 @@
           <template x-if="ops.circuit_breaker_reason"><div style="margin-top:8px;padding:6px 10px;background:rgba(255,92,92,.08);border:1px solid rgba(255,92,92,.2);border-radius:6px;font-size:10px;color:var(--red)" x-text="'⚠ '+ops.circuit_breaker_reason"></div></template>
           <div class="flex items-center gap-2 mt-3">
             <span class="pill" :class="ops.dry_run?'pa':'pr'" x-text="opsDryRunLabel()"></span>
-            <span class="pill pw" x-text="'Trades today: '+(ops.trades_today||0)"></span>
+            <span class="pill pw" x-text="opsTradesTodayPill()"></span>
           </div>
         </div>
 
@@ -7808,17 +7805,17 @@
           <div class="flex items-center justify-between mb-2">
             <div class="text-[10px] font-bold uppercase" style="color:var(--purple)">🧠 <span x-text="opsSelfLearningEngineTitle()"></span></div>
             <div class="flex gap-1">
-              <button @click="triggerSelfLearn()" class="btn-p text-[9px]" :disabled="selfLearn.triggering"><span x-show="!selfLearn.triggering">▶ Run Cycle</span><span x-show="selfLearn.triggering"><span class="spin"></span></span></button>
+              <button @click="triggerSelfLearn()" class="btn-p text-[9px]" :disabled="selfLearn.triggering"><span x-show="!selfLearn.triggering" x-text="opsRunCycleLabel()"></span><span x-show="selfLearn.triggering"><span class="spin"></span></span></button>
             </div>
           </div>
           <template x-if="selfLearn.status">
             <div class="space-y-2">
               <!-- Engine state -->
               <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px">
-                <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)" x-text="opsSelfLearnLabel('enabled')"></div><div class="text-[10px] font-bold" :class="selfLearn.status.engine_state?.enabled?'text-green-400':'text-red-400'" x-text="selfLearn.status.engine_state?.enabled?'YES':'DISABLED'"></div></div>
+                <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)" x-text="opsSelfLearnLabel('enabled')"></div><div class="text-[10px] font-bold" :class="selfLearn.status.engine_state?.enabled?'text-green-400':'text-red-400'" x-text="opsSelfLearnEnabledLabel(selfLearn.status.engine_state?.enabled)"></div></div>
                 <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)" x-text="opsSelfLearnLabel('adjustments')"></div><div class="text-[10px] mono text-white" x-text="selfLearn.status.engine_state?.total_adjustments||0"></div></div>
                 <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)" x-text="opsSelfLearnLabel('trades')"></div><div class="text-[10px] mono text-white" x-text="selfLearn.status.closed_trades_available||0"></div></div>
-                <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)">This Cycle</div><div class="text-[10px] mono text-amber-300" x-text="selfLearn.status.engine_state?.adjustments_this_cycle||0"></div></div>
+                <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)" x-text="opsSelfLearnLabel('this_cycle')"></div><div class="text-[10px] mono text-amber-300" x-text="selfLearn.status.engine_state?.adjustments_this_cycle||0"></div></div>
               </div>
               <!-- Regime performance -->
               <template x-if="selfLearn.status.regime_performance && Object.keys(selfLearn.status.regime_performance).length">

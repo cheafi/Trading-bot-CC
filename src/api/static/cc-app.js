@@ -5069,13 +5069,86 @@
         const H=this._opsH();
         return H.opsSelfLearnLabel?H.opsSelfLearnLabel(key):key;
       },
+      opsWhatThisMeansTitle(){
+        const H=this._opsH();
+        return H.opsWhatThisMeansTitle?H.opsWhatThisMeansTitle():'What this means';
+      },
+      opsBoardStateCachedNote(){
+        const H=this._opsH();
+        return H.opsBoardStateCachedNote?H.opsBoardStateCachedNote():'Board state elsewhere may be cached, fallback, or precomputed — not proof the engine ran this session.';
+      },
+      opsEngineStoppedHelpCopy(){
+        const H=this._opsH();
+        return H.opsEngineStoppedHelpCopy?H.opsEngineStoppedHelpCopy():'Start the trading loop for cycles, cache, and runtime evidence. Or set CC_AUTO_START_ENGINE=1 in Docker/env to start on boot.';
+      },
+      opsStartEngineLabel(){
+        const H=this._opsH();
+        return H.opsStartEngineLabel?H.opsStartEngineLabel(!!this.ops.engineStarting):'▶ Start engine';
+      },
+      opsViewErrorLogLabel(){
+        const H=this._opsH();
+        return H.opsViewErrorLogLabel?H.opsViewErrorLogLabel():'View Error Log';
+      },
+      opsIbkrSessionInactiveTitle(){
+        const H=this._opsH();
+        return H.opsIbkrSessionInactiveTitle?H.opsIbkrSessionInactiveTitle():'IBKR session not active';
+      },
+      opsIbkrSessionNote(){
+        const H=this._opsH();
+        const reachable=!!(this.opsConsole.data?.ibkr?.gateway_reachable);
+        return reachable
+          ?(H.opsIbkrGatewayReachableNote?H.opsIbkrGatewayReachableNote():'Gateway signals present — confirm login on IBKR tab.')
+          :(H.opsIbkrNoSessionNote?H.opsIbkrNoSessionNote():'No IB API session yet. Start IB Gateway/TWS, then Connect. Raw TCP probes are disabled (CC_SKIP_IB_INSYNC avoids log spam). ');
+      },
+      opsOpenIbkrConnectLabel(){
+        const H=this._opsH();
+        return H.opsOpenIbkrConnectLabel?H.opsOpenIbkrConnectLabel():'Open IBKR tab → Connect';
+      },
+      opsCriticalGapsLine(){
+        const H=this._opsH();
+        const flags=this.opsCriticalFlags().map(f=>H.opsCriticalFlagText?H.opsCriticalFlagText(f):f);
+        const prefix=H.opsCriticalGapsPrefix?H.opsCriticalGapsPrefix():'Runtime gaps';
+        return prefix+': '+flags.join(' · ');
+      },
+      opsNoCycleSessionWarning(){
+        const H=this._opsH();
+        return H.opsNoCycleSessionWarning?H.opsNoCycleSessionWarning():'No engine cycle executed this session — uptime and latency below reflect API boot only, not trading loop activity.';
+      },
+      opsNoCacheWarning(){
+        const H=this._opsH();
+        return H.opsNoCacheWarning?H.opsNoCacheWarning():'Recommendation cache empty — Today/Signals boards may show stale or precomputed output.';
+      },
+      opsTradesTodayPill(){
+        const H=this._opsH();
+        return H.opsTradesTodayPill?H.opsTradesTodayPill(this.ops.trades_today||0):('Trades today: '+(this.ops.trades_today||0));
+      },
+      opsRunCycleLabel(){
+        const H=this._opsH();
+        return H.opsRunCycleLabel?H.opsRunCycleLabel():'▶ Run Cycle';
+      },
+      opsSelfLearnEnabledLabel(enabled){
+        const H=this._opsH();
+        return H.opsSelfLearnEnabledLabel?H.opsSelfLearnEnabledLabel(!!enabled):(enabled?'YES':'DISABLED');
+      },
+      opsEngineStoppedBannerText(){
+        const H=this._opsH();
+        const t=this.opsEngineStoppedBanner()||'';
+        return t?(H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t):'';
+      },
+      opsWhyNoSignalsCell(w){
+        const H=this._opsH();
+        return H.opsWhyNoSignalsCell?H.opsWhyNoSignalsCell(w):(w?.count??w?.note??'');
+      },
       opsPageIntro(){
+        const H=this._opsH();
         const d=this.opsConsole.data&&this.opsConsole.data.diagnostics;
         let intro=(d&&d.page_intro)||'Treat this page as a diagnostics surface until fresh runtime evidence exists.';
+        intro=H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(intro):intro;
         if(this.opsShowHttp500Banner()){
           intro=intro.replace(/\.$/,'');
-          if(intro.indexOf('HTTP 500')<0){
-            intro+=' The runtime status path is failing with HTTP 500.';
+          const suffix=H.opsHttp500IntroSuffix?H.opsHttp500IntroSuffix():'The runtime status path is failing with HTTP 500.';
+          if(intro.indexOf('HTTP 500')<0 && intro.indexOf(suffix)<0){
+            intro+=' '+suffix;
           }
           if(!/\.$/.test(intro)) intro+='.';
         }
@@ -5086,8 +5159,10 @@
         return (d&&d.engine_stopped_banner)||null;
       },
       opsSignalsTodayNote(){
+        const H=this._opsH();
         const d=this.opsConsole.data&&this.opsConsole.data.diagnostics;
-        return (d&&d.signals_today_note)||('Signals today: '+(this.ops.signals_today||0));
+        const t=(d&&d.signals_today_note)||('Signals today: '+(this.ops.signals_today||0));
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
       },
       opsCriticalFlags(){
         const d=this.opsConsole.data&&this.opsConsole.data.diagnostics||{};

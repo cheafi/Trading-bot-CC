@@ -483,8 +483,39 @@
 			"Pipeline ran — scanner selective / regime filters": _opsBilingual("管線已跑 — 掃描選擇性／體制篩選", "Pipeline ran — scanner selective / regime filters"),
 			"Zero signals — root cause not classified": _opsBilingual("零訊號 — 根因未分類", "Zero signals — root cause not classified"),
 			"Phase 9 engines failed to load — check server logs": _opsBilingual("Phase 9 引擎載入失敗 — 請查伺服器日誌", "Phase 9 engines failed to load — check server logs"),
+			"LOADED": _opsBilingual("已載入", "LOADED"),
+			"OFFLINE": _opsBilingual("離線", "OFFLINE"),
+			"Treat this page as a diagnostics surface until fresh runtime evidence exists.":
+				_opsBilingual("待有新執行時證據前，請將此頁視為診斷介面。", "Treat this page as a diagnostics surface until fresh runtime evidence exists."),
+			"API warming — engine runtime evidence unavailable. Boards elsewhere may show brief or snapshot fallback only.":
+				_opsBilingual("API 預熱 — 執行時引擎證據不可用。其他分頁可能僅顯示 brief 或 snapshot fallback。", "API warming — engine runtime evidence unavailable. Boards elsewhere may show brief or snapshot fallback only."),
+			"Runtime override active — engine is stopped. Any board state shown elsewhere is cached, fallback, or precomputed output, not fresh engine execution from this session.":
+				_opsBilingual("執行時覆寫生效 — 引擎已停。其他分頁顯示的 board 狀態為快取、fallback 或預先計算，非本 session 新鮮引擎執行。", "Runtime override active — engine is stopped. Any board state shown elsewhere is cached, fallback, or precomputed output, not fresh engine execution from this session."),
+			"Signals today: 0 — API warming — not evidence the market produced zero opportunities.":
+				_opsBilingual("今日訊號：0 — API 預熱 — 非市場零機會的證據。", "Signals today: 0 — API warming — not evidence the market produced zero opportunities."),
+			"Signals today: 0 — Reason: no engine cycle executed this session — not evidence that the market produced zero opportunities.":
+				_opsBilingual("今日訊號：0 — 原因：本 session 未執行 engine cycle — 非市場零機會的證據。", "Signals today: 0 — Reason: no engine cycle executed this session — not evidence that the market produced zero opportunities."),
+			"Backend crash detected — see blockers above.":
+				_opsBilingual("偵測到後端崩潰 — 見上方阻擋項。", "Backend crash detected — see blockers above."),
+			"Warming probes — see Recovery runbook. Do not treat FAIL as final until backend is full.":
+				_opsBilingual("探測預熱中 — 見 Recovery runbook。後端未 full 前勿將 FAIL 視為最終狀態。", "Warming probes — see Recovery runbook. Do not treat FAIL as final until backend is full."),
 		}
 		if (opsCopyMap[t]) return opsCopyMap[t]
+		if (/^Signals today: 0 — pipeline ran \((\d+) cycle\(s\)\) — scanner\/regime filters may have rejected all candidates\.$/.test(t)) {
+			var sc = t.match(/^Signals today: 0 — pipeline ran \((\d+) cycle\(s\)\)/)
+			return _opsBilingual(
+				"今日訊號：0 — 管線已跑（" + sc[1] + " cycle）— 掃描／體制篩選可能拒絕所有候選。",
+				t
+			)
+		}
+		if (/^Signals today: (\d+) — from engine runtime this session\.$/.test(t)) {
+			var st = t.match(/^Signals today: (\d+)/)
+			return _opsBilingual("今日訊號：" + st[1] + " — 來自本 session 引擎執行時。", t)
+		}
+		if (/^Signals today: (\d+)$/.test(t)) {
+			var st2 = t.match(/^Signals today: (\d+)$/)
+			return _opsBilingual("今日訊號：" + st2[1], t)
+		}
 		if (/^(\d+) machines blocked — respect constraints before deploy$/.test(t)) {
 			var mb = t.match(/^(\d+) machines blocked/)
 			return _opsBilingual(mb[1] + " 台機器阻擋 — 部署前請遵守約束", t)
@@ -666,8 +697,82 @@
 			enabled: _opsBilingual("已啟用", "Enabled"),
 			adjustments: _opsBilingual("調整", "Adjustments"),
 			trades: _opsBilingual("交易", "Trades"),
+			this_cycle: _opsBilingual("本 Cycle", "This Cycle"),
 		}
 		return map[k] || key
+	}
+	function opsWhatThisMeansTitle() { return _opsBilingual("這代表什麼", "What this means") }
+	function opsBoardStateCachedNote() {
+		return _opsBilingual(
+			"其他分頁的 board 狀態可能是快取、fallback 或預先計算 — 非本 session engine 已執行的證據。",
+			"Board state elsewhere may be cached, fallback, or precomputed — not proof the engine ran this session."
+		)
+	}
+	function opsEngineStoppedHelpCopy() {
+		return _opsBilingual(
+			"啟動交易迴圈以執行 cycle、快取與執行時證據。或在 Docker/env 設定 CC_AUTO_START_ENGINE=1 於開機啟動。",
+			"Start the trading loop for cycles, cache, and runtime evidence. Or set CC_AUTO_START_ENGINE=1 in Docker/env to start on boot."
+		)
+	}
+	function opsStartEngineLabel(starting) {
+		return starting ? _opsBilingual("啟動中…", "Starting…") : _opsBilingual("▶ 啟動引擎", "▶ Start engine")
+	}
+	function opsViewErrorLogLabel() { return _opsBilingual("檢視錯誤日誌", "View Error Log") }
+	function opsIbkrSessionInactiveTitle() { return _opsBilingual("IBKR session 未啟動", "IBKR session not active") }
+	function opsIbkrGatewayReachableNote() {
+		return _opsBilingual(
+			"Gateway 訊號存在 — 請於 IBKR 分頁確認登入。",
+			"Gateway signals present — confirm login on IBKR tab."
+		)
+	}
+	function opsIbkrNoSessionNote() {
+		return _opsBilingual(
+			"尚無 IB API session。請啟動 IB Gateway/TWS，然後 Connect。已停用 Raw TCP 探測（CC_SKIP_IB_INSYNC 避免日誌刷屏）。",
+			"No IB API session yet. Start IB Gateway/TWS, then Connect. Raw TCP probes are disabled (CC_SKIP_IB_INSYNC avoids log spam)."
+		)
+	}
+	function opsOpenIbkrConnectLabel() { return _opsBilingual("開啟 IBKR 分頁 → Connect", "Open IBKR tab → Connect") }
+	function opsCriticalGapsPrefix() { return _opsBilingual("執行時缺口", "Runtime gaps") }
+	function opsCriticalFlagText(flag) {
+		var map = {
+			"runtime HTTP 500": _opsBilingual("執行時 HTTP 500", "runtime HTTP 500"),
+			"engine stopped": _opsBilingual("引擎已停", "engine stopped"),
+			"0 cycles": _opsBilingual("0 cycles", "0 cycles"),
+			"no cache": _opsBilingual("無快取", "no cache"),
+		}
+		return map[flag] || localizeOpsRuntimeText(flag)
+	}
+	function opsNoCycleSessionWarning() {
+		return _opsBilingual(
+			"本 session 未執行 engine cycle — 下方運行時間與延遲僅反映 API 開機，非交易迴圈活動。",
+			"No engine cycle executed this session — uptime and latency below reflect API boot only, not trading loop activity."
+		)
+	}
+	function opsNoCacheWarning() {
+		return _opsBilingual(
+			"推薦快取為空 — 今日／訊號 board 可能顯示過期或預先計算輸出。",
+			"Recommendation cache empty — Today/Signals boards may show stale or precomputed output."
+		)
+	}
+	function opsTradesTodayPill(count) {
+		var n = count || 0
+		return _opsBilingual("今日交易：" + n, "Trades today: " + n)
+	}
+	function opsRunCycleLabel() { return _opsBilingual("▶ 執行 Cycle", "▶ Run Cycle") }
+	function opsSelfLearnEnabledLabel(enabled) {
+		return enabled ? _opsBilingual("是", "YES") : _opsBilingual("已停用", "DISABLED")
+	}
+	function opsHttp500IntroSuffix() {
+		return _opsBilingual(
+			"執行時狀態路徑回傳 HTTP 500。",
+			"The runtime status path is failing with HTTP 500."
+		)
+	}
+	function opsWhyNoSignalsCell(w) {
+		if (!w) return ""
+		if ((w.count || 0) > 0) return String(w.count)
+		if (w.note) return localizeOpsRuntimeText(w.note)
+		return ""
 	}
 	function localizeOpsWhyNoSignalsGate(gate) {
 		var g = String(gate || "").trim()
@@ -1397,6 +1502,24 @@
 		opsCacheStatisticsTitle: opsCacheStatisticsTitle,
 		opsSelfLearningEngineTitle: opsSelfLearningEngineTitle,
 		opsSelfLearnLabel: opsSelfLearnLabel,
+		opsWhatThisMeansTitle: opsWhatThisMeansTitle,
+		opsBoardStateCachedNote: opsBoardStateCachedNote,
+		opsEngineStoppedHelpCopy: opsEngineStoppedHelpCopy,
+		opsStartEngineLabel: opsStartEngineLabel,
+		opsViewErrorLogLabel: opsViewErrorLogLabel,
+		opsIbkrSessionInactiveTitle: opsIbkrSessionInactiveTitle,
+		opsIbkrGatewayReachableNote: opsIbkrGatewayReachableNote,
+		opsIbkrNoSessionNote: opsIbkrNoSessionNote,
+		opsOpenIbkrConnectLabel: opsOpenIbkrConnectLabel,
+		opsCriticalGapsPrefix: opsCriticalGapsPrefix,
+		opsCriticalFlagText: opsCriticalFlagText,
+		opsNoCycleSessionWarning: opsNoCycleSessionWarning,
+		opsNoCacheWarning: opsNoCacheWarning,
+		opsTradesTodayPill: opsTradesTodayPill,
+		opsRunCycleLabel: opsRunCycleLabel,
+		opsSelfLearnEnabledLabel: opsSelfLearnEnabledLabel,
+		opsHttp500IntroSuffix: opsHttp500IntroSuffix,
+		opsWhyNoSignalsCell: opsWhyNoSignalsCell,
 		localizeOpsWhyNoSignalsGate: localizeOpsWhyNoSignalsGate,
 		pageOperatorSentence: pageOperatorSentence,
 		buildClientSystemState: buildClientSystemState,
@@ -6513,13 +6636,86 @@
         const H=this._opsH();
         return H.opsSelfLearnLabel?H.opsSelfLearnLabel(key):key;
       },
+      opsWhatThisMeansTitle(){
+        const H=this._opsH();
+        return H.opsWhatThisMeansTitle?H.opsWhatThisMeansTitle():'What this means';
+      },
+      opsBoardStateCachedNote(){
+        const H=this._opsH();
+        return H.opsBoardStateCachedNote?H.opsBoardStateCachedNote():'Board state elsewhere may be cached, fallback, or precomputed — not proof the engine ran this session.';
+      },
+      opsEngineStoppedHelpCopy(){
+        const H=this._opsH();
+        return H.opsEngineStoppedHelpCopy?H.opsEngineStoppedHelpCopy():'Start the trading loop for cycles, cache, and runtime evidence. Or set CC_AUTO_START_ENGINE=1 in Docker/env to start on boot.';
+      },
+      opsStartEngineLabel(){
+        const H=this._opsH();
+        return H.opsStartEngineLabel?H.opsStartEngineLabel(!!this.ops.engineStarting):'▶ Start engine';
+      },
+      opsViewErrorLogLabel(){
+        const H=this._opsH();
+        return H.opsViewErrorLogLabel?H.opsViewErrorLogLabel():'View Error Log';
+      },
+      opsIbkrSessionInactiveTitle(){
+        const H=this._opsH();
+        return H.opsIbkrSessionInactiveTitle?H.opsIbkrSessionInactiveTitle():'IBKR session not active';
+      },
+      opsIbkrSessionNote(){
+        const H=this._opsH();
+        const reachable=!!(this.opsConsole.data?.ibkr?.gateway_reachable);
+        return reachable
+          ?(H.opsIbkrGatewayReachableNote?H.opsIbkrGatewayReachableNote():'Gateway signals present — confirm login on IBKR tab.')
+          :(H.opsIbkrNoSessionNote?H.opsIbkrNoSessionNote():'No IB API session yet. Start IB Gateway/TWS, then Connect. Raw TCP probes are disabled (CC_SKIP_IB_INSYNC avoids log spam). ');
+      },
+      opsOpenIbkrConnectLabel(){
+        const H=this._opsH();
+        return H.opsOpenIbkrConnectLabel?H.opsOpenIbkrConnectLabel():'Open IBKR tab → Connect';
+      },
+      opsCriticalGapsLine(){
+        const H=this._opsH();
+        const flags=this.opsCriticalFlags().map(f=>H.opsCriticalFlagText?H.opsCriticalFlagText(f):f);
+        const prefix=H.opsCriticalGapsPrefix?H.opsCriticalGapsPrefix():'Runtime gaps';
+        return prefix+': '+flags.join(' · ');
+      },
+      opsNoCycleSessionWarning(){
+        const H=this._opsH();
+        return H.opsNoCycleSessionWarning?H.opsNoCycleSessionWarning():'No engine cycle executed this session — uptime and latency below reflect API boot only, not trading loop activity.';
+      },
+      opsNoCacheWarning(){
+        const H=this._opsH();
+        return H.opsNoCacheWarning?H.opsNoCacheWarning():'Recommendation cache empty — Today/Signals boards may show stale or precomputed output.';
+      },
+      opsTradesTodayPill(){
+        const H=this._opsH();
+        return H.opsTradesTodayPill?H.opsTradesTodayPill(this.ops.trades_today||0):('Trades today: '+(this.ops.trades_today||0));
+      },
+      opsRunCycleLabel(){
+        const H=this._opsH();
+        return H.opsRunCycleLabel?H.opsRunCycleLabel():'▶ Run Cycle';
+      },
+      opsSelfLearnEnabledLabel(enabled){
+        const H=this._opsH();
+        return H.opsSelfLearnEnabledLabel?H.opsSelfLearnEnabledLabel(!!enabled):(enabled?'YES':'DISABLED');
+      },
+      opsEngineStoppedBannerText(){
+        const H=this._opsH();
+        const t=this.opsEngineStoppedBanner()||'';
+        return t?(H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t):'';
+      },
+      opsWhyNoSignalsCell(w){
+        const H=this._opsH();
+        return H.opsWhyNoSignalsCell?H.opsWhyNoSignalsCell(w):(w?.count??w?.note??'');
+      },
       opsPageIntro(){
+        const H=this._opsH();
         const d=this.opsConsole.data&&this.opsConsole.data.diagnostics;
         let intro=(d&&d.page_intro)||'Treat this page as a diagnostics surface until fresh runtime evidence exists.';
+        intro=H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(intro):intro;
         if(this.opsShowHttp500Banner()){
           intro=intro.replace(/\.$/,'');
-          if(intro.indexOf('HTTP 500')<0){
-            intro+=' The runtime status path is failing with HTTP 500.';
+          const suffix=H.opsHttp500IntroSuffix?H.opsHttp500IntroSuffix():'The runtime status path is failing with HTTP 500.';
+          if(intro.indexOf('HTTP 500')<0 && intro.indexOf(suffix)<0){
+            intro+=' '+suffix;
           }
           if(!/\.$/.test(intro)) intro+='.';
         }
@@ -6530,8 +6726,10 @@
         return (d&&d.engine_stopped_banner)||null;
       },
       opsSignalsTodayNote(){
+        const H=this._opsH();
         const d=this.opsConsole.data&&this.opsConsole.data.diagnostics;
-        return (d&&d.signals_today_note)||('Signals today: '+(this.ops.signals_today||0));
+        const t=(d&&d.signals_today_note)||('Signals today: '+(this.ops.signals_today||0));
+        return H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(t):t;
       },
       opsCriticalFlags(){
         const d=this.opsConsole.data&&this.opsConsole.data.diagnostics||{};
