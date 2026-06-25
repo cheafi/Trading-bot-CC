@@ -296,32 +296,49 @@ def build_pilot_explanations(cr: Any) -> Dict[str, str]:
     }
 
 
+def _brief_monitor_cap(cr: Any, refined: str) -> str:
+    """Brief rows seed the monitor pool — deploy requires council validation."""
+    try:
+        src = str(cr.pipeline.signal.get("source") or "").lower()
+    except Exception:
+        return refined
+    if src != "brief":
+        return refined
+    if refined in _AVOID_ACTIONS or _score(cr) < 5.0:
+        return refined
+    if refined in _TRADE_ACTIONS | _PILOT_ACTIONS:
+        return "WATCH"
+    return refined
+
+
 def refine_action(cr: Any) -> str:
     """
     Strict action taxonomy — downgrade overused PILOT to WATCH.
     """
     act = _action(cr)
     if act in _AVOID_ACTIONS:
-        return act if act != "NO_TRADE" else "AVOID"
+        return _brief_monitor_cap(
+            cr, act if act != "NO_TRADE" else "AVOID"
+        )
     if is_execution_ready(cr):
-        return "TRADE"
+        return _brief_monitor_cap(cr, "TRADE")
     if act in _PILOT_ACTIONS or act == "PILOT":
         if is_pilot_eligible(cr):
-            return "PILOT"
-        return "WATCH"
+            return _brief_monitor_cap(cr, "PILOT")
+        return _brief_monitor_cap(cr, "WATCH")
     if act in _TRADE_ACTIONS:
         if is_pilot_eligible(cr):
-            return "PILOT"
+            return _brief_monitor_cap(cr, "PILOT")
         if _score(cr) >= 5.0:
-            return "WATCH"
-        return "AVOID"
+            return _brief_monitor_cap(cr, "WATCH")
+        return _brief_monitor_cap(cr, "AVOID")
     if act in _WATCH_ACTIONS:
         if _score(cr) < 3.5:
-            return "AVOID"
-        return "WATCH"
+            return _brief_monitor_cap(cr, "AVOID")
+        return _brief_monitor_cap(cr, "WATCH")
     if _score(cr) < 3.5:
-        return "AVOID"
-    return "WATCH"
+        return _brief_monitor_cap(cr, "AVOID")
+    return _brief_monitor_cap(cr, "WATCH")
 
 
 def build_honest_funnel(
