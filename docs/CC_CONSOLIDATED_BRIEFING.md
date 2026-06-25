@@ -1,8 +1,9 @@
 # CC / TradingAI Bot — Consolidated Project Briefing
 
 > **Purpose of this document:** Paste this entire file into ChatGPT (or another advisor) to get informed guidance on architecture, authority boundaries, ops issues, i18n gaps, and next steps.  
+> **Live page (recommended):** [http://localhost:8000/briefing](http://localhost:8000/briefing) — includes this doc plus API result-structure appendix and 10 ChatGPT prompts. Plain text: `/briefing.txt`.  
 > **Product:** CC (Clarity Console) — *Regime-Aware Market Intelligence Platform* (repo name: TradingAI_Bot)  
-> **Version:** 9.0.0 · **Last assembled:** 2026-06-24  
+> **Version:** 9.0.0 · **Last assembled:** 2026-06-25  
 > **No secrets below** — environment variable *names* only.
 
 ---
@@ -227,9 +228,18 @@ Every page exposes NOW / BLOCKER / NEXT ACTION via `operator_state_contract.py`:
 
 ---
 
-## 5. Recent Work Completed (Uncommitted / In Progress)
+## 5. Recent Work Completed
 
-Based on current working tree (not yet committed):
+### Committed (through 8d9ae35)
+
+| Area | What changed |
+|------|--------------|
+| **Ops i18n (8d9ae35)** | Remaining Ops section titles + HTTP 500 banner wired via `CCHelpers` title maps and Alpine wrappers (boundary/times/events/why-no-signals, Phase 9, cache, self-learn) |
+| **Blank page fix (5d660c7)** | CC dashboard gzip/loader hardening; Ops advanced diagnostics i18n extended |
+| **Research ship (7133c26)** | Ops i18n, Discord dispatch, Vibe Agent + research pipeline surfaces end-to-end with tests |
+| **Authority UI (76979b4)** | CC hardening: authority-safe UI + zh-HK copy |
+
+### Earlier / in-progress (may include uncommitted working tree)
 
 | Area | What changed |
 |------|--------------|
@@ -273,7 +283,7 @@ Based on current working tree (not yet committed):
 |-------|--------|
 | **Chinese incomplete** | `cc-i18n.js` only covers static literal labels; dynamic Alpine `x-text` strings often English-only |
 | **Missing data** | WAIT/NO_TRADE days, engine off, or stale brief → empty playbook/deploy lists (often correct, not a bug) |
-| **Ops English strings** | Probe/runtime + advanced diagnostics bilingual. System verdict block, execution readiness layers, decision machines, engine state, uptime/latency labels, experimental modules — client-side via `localizeOpsRuntimeText` maps + `ops*()` Alpine wrappers. Remaining: HTTP 500 banner, some degraded warmup strings outside advanced block. |
+| **Ops English strings** | Probe/runtime + advanced diagnostics + section titles + HTTP 500 banner bilingual (8d9ae35). Remaining: some degraded warmup strings outside Ops, dynamic Alpine `x-text` on non-Ops tabs. |
 | **Flow mock mode** | Flow surface synthetic — "colour only" per guide |
 | **IBKR in Docker dev** | `CC_SKIP_IB_INSYNC=1` — broker features unavailable in dev container |
 
@@ -399,6 +409,8 @@ docker compose -f docker-compose.dev.yml up --build
 | `AGENTS.md` | Agent coding guidance (SettingsView cachedState pattern) |
 | `docs/ARCHITECTURE.md` | Full architecture doc |
 | `docs/CC_CONSOLIDATED_BRIEFING.md` | This file |
+| `src/api/routers/advisor_briefing.py` | Live advisor briefing page at `/briefing` |
+| `src/api/briefing_content.py` | Briefing HTML/text assembler (doc + API shapes) |
 
 ---
 
@@ -408,7 +420,7 @@ docker compose -f docker-compose.dev.yml up --build
 |-----------|---------------------|
 | **Chinese incomplete** | `cc-i18n.js` only translates static literal DOM text (~300 entries). Dynamic content from API (`x-text`, `x-html`) and Ops probe/runtime table remain English. Operator sentences in contract are bilingual; many panel labels are not. |
 | **Missing data** | Common on WAIT/NO_TRADE days, engine-off, stale brief fallback, or pre-warmup — playbook deploy list empty by design. Discovery 0 hits on WAIT day is often correct. Portfolio/broker reconciliation gaps after session. |
-| **Ops English strings** | Probe/runtime + advanced diagnostics bilingual. System verdict, execution layers, decision machines, engine state, uptime/latency, experimental modules now wired via `CCHelpers.localizeOpsRuntimeText` + Alpine wrappers (`opsSystemVerdictText`, `opsExecutionLayerField`, etc.). Remaining: some static section titles outside advanced block, HTTP 500 banner, degraded warmup copy in non-Ops areas. |
+| **Ops English strings** | Probe/runtime + advanced diagnostics + section titles + HTTP 500 banner bilingual (8d9ae35). Remaining: degraded warmup copy in non-Ops areas; dynamic API-driven strings on other tabs. |
 | **Black screen (reported)** | Mitigated via gzip dashboard cache (`cc-dashboard.html.gz`), `_cc_instant.py` chunked reads, `scripts/dev/fix-cc-black-screen.sh` |
 | **Discord not pinging** | Missing `DISCORD_WEBHOOK_URL` or bot 403 — see §6 |
 
@@ -416,17 +428,27 @@ docker compose -f docker-compose.dev.yml up --build
 
 ## 10. Suggested Advisory Prompts for ChatGPT
 
-Copy one of these after pasting this briefing:
+Copy one of these after pasting this briefing (full set of 10 on http://localhost:8000/briefing Appendix C):
 
 1. **Authority audit:** "Given the authority model in §2, review my planned feature [describe feature] and tell me which tab(s) it belongs on, what `PageCapability` flags it needs, and what gates must block it when tradeability is WAIT."
 
 2. **Ops diagnostics:** "My Ops tab shows engine off and insufficient sample on advanced diagnostics. Using §6–7, give me a step-by-step recovery checklist for Docker dev (`cc_api_dev`) including which env vars to verify and which `/health` / `/api/ops` endpoints to hit."
 
-3. **i18n strategy:** "§9 says Chinese is incomplete. Propose a maintainable i18n plan for CC that doesn't break the 14k-line `index.html` tests — should we extend `cc-i18n.js`, move Ops strings server-side, or extract a locale JSON? Prioritize Ops probe/runtime and advanced diagnostics."
+3. **i18n strategy:** "§9 says Chinese is incomplete. Propose a maintainable i18n plan for CC that doesn't break the 14k-line `index.html` tests — should we extend `cc-i18n.js`, move Ops strings server-side, or extract a locale JSON? Prioritize remaining English in degraded warmup copy."
 
 4. **Discord setup:** "I want reliable operator alerts without bot permission issues. Based on §6 and the Discord dispatch architecture, recommend webhook vs bot mode and exact `.env` keys for my setup (macOS Docker dev)."
 
 5. **Research vs deploy boundary:** "I'm building [Vibe Agent rule / Strategy Lab draft / Shadow analysis]. Confirm it cannot grant deploy authority, list the API surfaces involved, and suggest UX copy that makes the research-only boundary obvious to a Chinese-speaking operator."
+
+6. **Architecture review:** "Review the stack in §1 and propose which services should stay synchronous vs async for ranked playbook under 2s p95."
+
+7. **Ops honesty model:** "Explain how probe vs runtime evidence should be presented so operators don't confuse disk-brief OK with engine health."
+
+8. **Performance:** "Propose a polling budget for cc-header, playbook ranked, and ops console without hammering yfinance."
+
+9. **Testing plan:** "Design pytest coverage for SystemState/PageCapability across WAIT, NO_TRADE, and deploy_open with stale data."
+
+10. **IBKR MONITOR ladder:** "When monitoring_only=true but connected=true, what should Playbook and Portfolio show?"
 
 ---
 

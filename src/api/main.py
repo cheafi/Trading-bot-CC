@@ -5825,6 +5825,13 @@ async def macro_intel_page(request: Request):
     return templates.TemplateResponse(request, "macro_intel.html")
 
 
+try:
+    from src.api.routers.advisor_briefing import router as advisor_briefing_router
+
+    app.include_router(advisor_briefing_router)
+except Exception:
+    logger.exception("[Router] Failed to load advisor_briefing router")
+
 
 # v7 API surfaces → src/api/routers/v7_surfaces.py
 
@@ -6251,6 +6258,14 @@ try:
     logger.info("[Router] research_pipeline loaded (%d routes)", len(research_pipeline_router.routes))
 except Exception:
     logger.exception("[Router] Failed to load research_pipeline router")
+
+try:
+    from src.api.routers.guide_briefing import router as guide_briefing_router
+
+    app.include_router(guide_briefing_router)
+    logger.info("[Router] guide_briefing loaded (%d routes)", len(guide_briefing_router.routes))
+except Exception:
+    logger.exception("[Router] Failed to load guide_briefing router")
 
 
 if __name__ == "__main__":
