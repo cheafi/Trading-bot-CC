@@ -7366,7 +7366,7 @@
         <!-- UPDATES / CHANGELOG -->
         <div x-show="opsPanel==='updates'" class="space-y-3">
           <div class="card card-p" style="border-left:3px solid var(--blue)">
-            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--t3)">Platform updates</div>
+            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--t3)" x-text="opsPlatformUpdatesTitle()"></div>
             <div class="text-[10px] leading-relaxed mb-2" style="color:var(--t2)">
               Release notes for CC · Clarity Console. Maintained in <span class="mono text-[9px]">data/changelog.json</span> — not live git history.
             </div>
@@ -7409,7 +7409,7 @@
         <!-- ERROR LOG -->
         <div x-show="opsPanel==='errors'" class="space-y-3">
           <div class="card card-p" style="border-left:3px solid var(--amber)">
-            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--t3)">Session error log</div>
+            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--t3)" x-text="opsSessionErrorLogTitle()"></div>
             <div class="text-[10px] leading-relaxed mb-2" style="color:var(--t2)">
               Captures API failures, engine state, broker events, and dossier timeouts during this API session.
               Informational — optional features like Discord being unconfigured are not logged as errors.
@@ -7469,17 +7469,17 @@
         <div x-show="opsPanel==='health'" class="space-y-3">
         <!-- @cc-partial ops_recovery_runbook -->
         <div class="card card-p" style="border-left:3px solid var(--green)" data-cc="ops-recovery-runbook">
-          <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--t3)">Recovery runbook</div>
+          <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--t3)" x-text="opsRecoveryRunbookTitle()"></div>
           <div class="text-[9px] font-bold text-green-400 mb-0.5">重試 Retry</div>
           <template x-for="ln in opsRecoveryGuide().retry" :key="'ops-retry-'+ln">
             <div class="text-[9px]" style="color:var(--t2)" x-text="'• '+ln"></div>
           </template>
-          <div class="text-[9px] font-bold text-red-400 mt-2 mb-0.5">Blocks capital</div>
+          <div class="text-[9px] font-bold text-red-400 mt-2 mb-0.5" x-text="opsBlocksCapitalTitle()"></div>
           <template x-for="ln in opsRecoveryGuide().blocks_capital" :key="'ops-block-'+ln">
             <div class="text-[9px]" style="color:var(--t2)" x-text="'• '+ln"></div>
           </template>
-          <div x-show="!opsRecoveryGuide().blocks_capital.length" class="text-[9px]" style="color:var(--t3)">No hard blocks flagged from Ops snapshot</div>
-          <div class="text-[9px] font-bold text-amber-300 mt-2 mb-0.5">Safe in degraded mode</div>
+          <div x-show="!opsRecoveryGuide().blocks_capital.length" class="text-[9px]" style="color:var(--t3)" x-text="opsNoHardBlocksCopy()"></div>
+          <div class="text-[9px] font-bold text-amber-300 mt-2 mb-0.5" x-text="opsSafeDegradedTitle()"></div>
           <template x-for="ln in opsRecoveryGuide().safe_degraded" :key="'ops-safe-'+ln">
             <div class="text-[9px]" style="color:var(--t2)" x-text="'• '+ln"></div>
           </template>
@@ -7548,7 +7548,7 @@
           <div x-show="opsConsole.data?.diagnostics?.probe_table_note" class="text-[9px] mb-2 p-1.5 rounded" style="background:var(--s2);color:var(--amber)">
             <span x-text="opsFormatEvidence(opsConsole.data.diagnostics.probe_table_note)"></span>
             <span x-show="healthMode==='loading'||opsConsole.data?.degraded"> · </span>
-            <span x-show="healthMode==='loading'||opsConsole.data?.degraded" style="color:var(--t3)" x-text="'See Recovery runbook above - '+(opsRecoveryGuide().retry[0]||'wait for /health mode=full')"></span>
+            <span x-show="healthMode==='loading'||opsConsole.data?.degraded" style="color:var(--t3)" x-text="opsSeeRecoveryRunbookHint()"></span>
           </div>
           <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:4px;font-size:8px;color:var(--t3);margin-bottom:6px">
             <span>元件 · Component</span><span class="text-center">探測 · Probe</span><span class="text-right">執行時證據 · Runtime evidence</span>
@@ -7587,9 +7587,9 @@
           </template>
           <template x-if="!opsConsole.data?.providers_honest">
             <div class="text-[11px]" style="color:var(--t2)">
-              <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)"><span>Market Data</span><span class="text-amber-300 text-[9px]" x-text="opsProviderRuntimeFallbackLabel(true)"></span></div>
-              <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)"><span>Regime Router</span><span class="text-amber-300 text-[9px]" x-text="opsProviderRuntimeFallbackLabel(true)"></span></div>
-              <div class="flex items-center justify-between py-1"><span>Broker</span><span class="text-amber-300 text-[9px]" x-text="opsProviderRuntimeFallbackLabel(false)"></span></div>
+              <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)"><span x-text="opsComponentLabel('market_data')"></span><span class="text-amber-300 text-[9px]" x-text="opsProviderRuntimeFallbackLabel(true)"></span></div>
+              <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)"><span x-text="opsComponentLabel('regime_router')"></span><span class="text-amber-300 text-[9px]" x-text="opsProviderRuntimeFallbackLabel(true)"></span></div>
+              <div class="flex items-center justify-between py-1"><span x-text="opsComponentLabel('broker')"></span><span class="text-amber-300 text-[9px]" x-text="opsProviderRuntimeFallbackLabel(false)"></span></div>
             </div>
           </template>
         </div>
@@ -7748,8 +7748,8 @@
               <div class="text-[7px] mt-0.5" style="color:var(--t3)" x-text="opsMetricDisplayText('cached_recommendations','reason','')"></div>
             </div>
           </div>
-          <div class="text-[9px] mt-2 mono" style="color:var(--t3)" x-text="opsConsole.data?.startup_time?'Boot: '+opsConsole.data.startup_time.slice(0,19):''"></div>
-          <template x-if="opsConsole.data?.last_times?.last_successful_engine_cycle"><div class="text-[9px] mono" style="color:var(--t3)" x-text="'Last cycle: '+String(opsConsole.data.last_times.last_successful_engine_cycle).slice(0,19)"></div></template>
+          <div class="text-[9px] mt-2 mono" style="color:var(--t3)" x-text="opsBootTimeLine()"></div>
+          <template x-if="opsConsole.data?.last_times?.last_successful_engine_cycle"><div class="text-[9px] mono" style="color:var(--t3)" x-text="opsLastCycleLine()"></div></template>
         </div>
 
         <template x-if="opsConsole.data?.section_states">

@@ -230,10 +230,11 @@ Every page exposes NOW / BLOCKER / NEXT ACTION via `operator_state_contract.py`:
 
 ## 5. Recent Work Completed
 
-### Committed (through 8d9ae35)
+### Committed (through 26400c6)
 
 | Area | What changed |
 |------|--------------|
+| **Screening yield (d066810, 26400c6)** | Live scan top-up when brief-merged monitor pool is thin; `rs_rank` enrichment on brief rows; Discovery returns cached brief leaders on zero-hit scans (degraded banner); brief-sourced pipeline actions capped at **WATCH** until council validates deploy authority |
 | **Ops i18n (8d9ae35)** | Remaining Ops section titles + HTTP 500 banner wired via `CCHelpers` title maps and Alpine wrappers (boundary/times/events/why-no-signals, Phase 9, cache, self-learn) |
 | **Blank page fix (5d660c7)** | CC dashboard gzip/loader hardening; Ops advanced diagnostics i18n extended |
 | **Research ship (7133c26)** | Ops i18n, Discord dispatch, Vibe Agent + research pipeline surfaces end-to-end with tests |
@@ -255,6 +256,15 @@ Every page exposes NOW / BLOCKER / NEXT ACTION via `operator_state_contract.py`:
 | **Playbook intelligence** | `playbook_operator_intelligence`, `playbook_signal_universe`, `playbook_upgrade_ladder` |
 | **CC template build** | `scripts/build-cc-template.mjs`, gzip dashboard cache |
 | **Dev scripts** | `scripts/dev/restart-and-verify-cc.sh`, `fix-cc-black-screen.sh`, `start-cc-offline.sh`, `discord_setup_channel.py` |
+
+### Screening yield (d066810 · 26400c6)
+
+Scanner and playbook monitor pool changes — **deploy authority unchanged**:
+
+- **Live scan top-up** — `playbook_signal_universe.py` merges brief rows first, then tops up from live scan when the monitor pool is below target.
+- **`rs_rank` enrichment** — brief-normalized rows carry RS rank for monitor sorting; scanner matrix batch sizing raised for better hit rate.
+- **Cached brief leaders** — zero-hit Discovery scans fall back to cached brief leaders; UI shows a degraded banner when `hub_status` is degraded.
+- **Brief monitor cap (26400c6)** — brief-sourced rows with strong RS refine to at most **WATCH** in `decision_truth_model.py`; they seed the monitor funnel until council validates deploy authority (no TRADE skip of `watch_qualified_setups`).
 
 ---
 
@@ -283,7 +293,7 @@ Every page exposes NOW / BLOCKER / NEXT ACTION via `operator_state_contract.py`:
 |-------|--------|
 | **Chinese incomplete** | `cc-i18n.js` only covers static literal labels; dynamic Alpine `x-text` strings often English-only |
 | **Missing data** | WAIT/NO_TRADE days, engine off, or stale brief → empty playbook/deploy lists (often correct, not a bug) |
-| **Ops English strings** | Probe/runtime + advanced diagnostics + section titles + HTTP 500 banner bilingual (8d9ae35). Remaining: some degraded warmup strings outside Ops, dynamic Alpine `x-text` on non-Ops tabs. |
+| **Ops English strings** | Probe/runtime + advanced diagnostics + section titles + HTTP 500 banner bilingual (8d9ae35). Recovery runbook titles, changelog/error-log panel headers, provider fallback labels, Boot/Last cycle prefixes wired (latest). Remaining: error-log body copy, changelog entries, some degraded warmup strings outside Ops, dynamic Alpine `x-text` on non-Ops tabs. |
 | **Flow mock mode** | Flow surface synthetic — "colour only" per guide |
 | **IBKR in Docker dev** | `CC_SKIP_IB_INSYNC=1` — broker features unavailable in dev container |
 

@@ -718,6 +718,25 @@
 		return starting ? _opsBilingual("啟動中…", "Starting…") : _opsBilingual("▶ 啟動引擎", "▶ Start engine")
 	}
 	function opsViewErrorLogLabel() { return _opsBilingual("檢視錯誤日誌", "View Error Log") }
+	function opsRecoveryRunbookTitle() { return _opsBilingual("恢復手冊", "Recovery runbook") }
+	function opsBlocksCapitalTitle() { return _opsBilingual("阻擋資金", "Blocks capital") }
+	function opsSafeDegradedTitle() { return _opsBilingual("降級模式可安全操作", "Safe in degraded mode") }
+	function opsNoHardBlocksCopy() {
+		return _opsBilingual("Ops 快照未標記硬性阻擋", "No hard blocks flagged from Ops snapshot")
+	}
+	function opsPlatformUpdatesTitle() { return _opsBilingual("平台更新", "Platform updates") }
+	function opsSessionErrorLogTitle() { return _opsBilingual("Session 錯誤日誌", "Session error log") }
+	function opsSeeRecoveryRunbookPrefix() { return _opsBilingual("見上方恢復手冊", "See Recovery runbook above") }
+	function opsBootTimeLine(iso) {
+		if (!iso) return ""
+		var s = String(iso).slice(0, 19)
+		return _opsBilingual("開機：" + s, "Boot: " + s)
+	}
+	function opsLastCycleLine(iso) {
+		if (!iso) return ""
+		var s = String(iso).slice(0, 19)
+		return _opsBilingual("上次 cycle：" + s, "Last cycle: " + s)
+	}
 	function opsIbkrSessionInactiveTitle() { return _opsBilingual("IBKR session 未啟動", "IBKR session not active") }
 	function opsIbkrGatewayReachableNote() {
 		return _opsBilingual(
@@ -1507,6 +1526,15 @@
 		opsEngineStoppedHelpCopy: opsEngineStoppedHelpCopy,
 		opsStartEngineLabel: opsStartEngineLabel,
 		opsViewErrorLogLabel: opsViewErrorLogLabel,
+		opsRecoveryRunbookTitle: opsRecoveryRunbookTitle,
+		opsBlocksCapitalTitle: opsBlocksCapitalTitle,
+		opsSafeDegradedTitle: opsSafeDegradedTitle,
+		opsNoHardBlocksCopy: opsNoHardBlocksCopy,
+		opsPlatformUpdatesTitle: opsPlatformUpdatesTitle,
+		opsSessionErrorLogTitle: opsSessionErrorLogTitle,
+		opsSeeRecoveryRunbookPrefix: opsSeeRecoveryRunbookPrefix,
+		opsBootTimeLine: opsBootTimeLine,
+		opsLastCycleLine: opsLastCycleLine,
 		opsIbkrSessionInactiveTitle: opsIbkrSessionInactiveTitle,
 		opsIbkrGatewayReachableNote: opsIbkrGatewayReachableNote,
 		opsIbkrNoSessionNote: opsIbkrNoSessionNote,
@@ -6666,6 +6694,45 @@
       opsViewErrorLogLabel(){
         const H=this._opsH();
         return H.opsViewErrorLogLabel?H.opsViewErrorLogLabel():'View Error Log';
+      },
+      opsRecoveryRunbookTitle(){
+        const H=this._opsH();
+        return H.opsRecoveryRunbookTitle?H.opsRecoveryRunbookTitle():'恢復手冊 · Recovery runbook';
+      },
+      opsBlocksCapitalTitle(){
+        const H=this._opsH();
+        return H.opsBlocksCapitalTitle?H.opsBlocksCapitalTitle():'阻擋資金 · Blocks capital';
+      },
+      opsSafeDegradedTitle(){
+        const H=this._opsH();
+        return H.opsSafeDegradedTitle?H.opsSafeDegradedTitle():'降級模式可安全操作 · Safe in degraded mode';
+      },
+      opsNoHardBlocksCopy(){
+        const H=this._opsH();
+        return H.opsNoHardBlocksCopy?H.opsNoHardBlocksCopy():'No hard blocks flagged from Ops snapshot';
+      },
+      opsPlatformUpdatesTitle(){
+        const H=this._opsH();
+        return H.opsPlatformUpdatesTitle?H.opsPlatformUpdatesTitle():'平台更新 · Platform updates';
+      },
+      opsSessionErrorLogTitle(){
+        const H=this._opsH();
+        return H.opsSessionErrorLogTitle?H.opsSessionErrorLogTitle():'Session 錯誤日誌 · Session error log';
+      },
+      opsSeeRecoveryRunbookHint(){
+        const H=this._opsH();
+        const retry=(this.opsRecoveryGuide().retry||[])[0]||'wait for /health mode=full';
+        const prefix=H.opsSeeRecoveryRunbookPrefix?H.opsSeeRecoveryRunbookPrefix():'見上方恢復手冊 · See Recovery runbook above';
+        const hint=H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(retry):retry;
+        return prefix+' — '+hint;
+      },
+      opsBootTimeLine(){
+        const H=this._opsH();
+        return H.opsBootTimeLine?H.opsBootTimeLine(this.opsConsole.data?.startup_time):'';
+      },
+      opsLastCycleLine(){
+        const H=this._opsH();
+        return H.opsLastCycleLine?H.opsLastCycleLine(this.opsConsole.data?.last_times?.last_successful_engine_cycle):'';
       },
       opsIbkrSessionInactiveTitle(){
         const H=this._opsH();

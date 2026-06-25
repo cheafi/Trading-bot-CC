@@ -5100,6 +5100,45 @@
         const H=this._opsH();
         return H.opsViewErrorLogLabel?H.opsViewErrorLogLabel():'View Error Log';
       },
+      opsRecoveryRunbookTitle(){
+        const H=this._opsH();
+        return H.opsRecoveryRunbookTitle?H.opsRecoveryRunbookTitle():'恢復手冊 · Recovery runbook';
+      },
+      opsBlocksCapitalTitle(){
+        const H=this._opsH();
+        return H.opsBlocksCapitalTitle?H.opsBlocksCapitalTitle():'阻擋資金 · Blocks capital';
+      },
+      opsSafeDegradedTitle(){
+        const H=this._opsH();
+        return H.opsSafeDegradedTitle?H.opsSafeDegradedTitle():'降級模式可安全操作 · Safe in degraded mode';
+      },
+      opsNoHardBlocksCopy(){
+        const H=this._opsH();
+        return H.opsNoHardBlocksCopy?H.opsNoHardBlocksCopy():'No hard blocks flagged from Ops snapshot';
+      },
+      opsPlatformUpdatesTitle(){
+        const H=this._opsH();
+        return H.opsPlatformUpdatesTitle?H.opsPlatformUpdatesTitle():'平台更新 · Platform updates';
+      },
+      opsSessionErrorLogTitle(){
+        const H=this._opsH();
+        return H.opsSessionErrorLogTitle?H.opsSessionErrorLogTitle():'Session 錯誤日誌 · Session error log';
+      },
+      opsSeeRecoveryRunbookHint(){
+        const H=this._opsH();
+        const retry=(this.opsRecoveryGuide().retry||[])[0]||'wait for /health mode=full';
+        const prefix=H.opsSeeRecoveryRunbookPrefix?H.opsSeeRecoveryRunbookPrefix():'見上方恢復手冊 · See Recovery runbook above';
+        const hint=H.localizeOpsRuntimeText?H.localizeOpsRuntimeText(retry):retry;
+        return prefix+' — '+hint;
+      },
+      opsBootTimeLine(){
+        const H=this._opsH();
+        return H.opsBootTimeLine?H.opsBootTimeLine(this.opsConsole.data?.startup_time):'';
+      },
+      opsLastCycleLine(){
+        const H=this._opsH();
+        return H.opsLastCycleLine?H.opsLastCycleLine(this.opsConsole.data?.last_times?.last_successful_engine_cycle):'';
+      },
       opsIbkrSessionInactiveTitle(){
         const H=this._opsH();
         return H.opsIbkrSessionInactiveTitle?H.opsIbkrSessionInactiveTitle():'IBKR session not active';
