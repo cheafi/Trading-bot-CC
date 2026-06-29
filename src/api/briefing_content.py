@@ -459,12 +459,34 @@ def _chatgpt_prompts_section() -> str:
 """
 
 
+def _bdr_summary_appendix() -> str:
+    return """
+---
+
+## APPENDIX D — BDR operator decision brief (live)
+
+Auto-generated from live Dashboard / Playbook state — **never hardcodes NO_TRADE**.
+
+| Item | Detail |
+|------|--------|
+| **API** | `GET /api/v7/decision/bdr-summary` |
+| **Embedded** | `bdr_summary` on `GET /api/v7/today` |
+| **Builder** | `src/services/bdr_operator_summary.py` → `build_bdr_operator_summary()` |
+| **UI** | Dashboard (Today) tab — collapsible **BDR 決策摘要 · Decision brief** with Copy |
+
+**Sections (bilingual headers):** Decision · Hard gates · R:R table (top 5) · Plain-English read · What to do now (monitor / do-not-deploy) · Unlock checklist (4 items) · Best concise note.
+
+**Authority:** Summary must not imply deploy when `gates_active` or `tradeability` is WAIT/NO_TRADE. Use `text` field for clipboard export.
+"""
+
+
 def build_briefing_text() -> str:
     """Full plain-text briefing for HTML <pre> or export."""
     parts = [
         _load_consolidated_md().rstrip(),
         _branch_update_section().strip(),
         _result_structures_section().strip(),
+        _bdr_summary_appendix().strip(),
         _chatgpt_prompts_section().strip(),
     ]
     return "\n\n".join(parts) + "\n"

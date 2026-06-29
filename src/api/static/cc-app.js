@@ -95,7 +95,7 @@
       errorLog:{loading:false,error:'',entries:[],total:0,filter:'all'},
       providers:{yfinance:false,regime_router:false,alpaca:{configured:false,connected:false,paper:true}},
       opsDetail:{},
-      today7:{regime:null,top_ranked:[],filter_funnel:null,avoid_list:[],avoid_grouped:null,bucket_quality:[],decision_model:null,decision_hierarchy:null,passive_baseline:null,complexity_challenge:null,restraint:null,surface_authority:null,crisis_regime:null,naval_clarity:null,buffett_clarity:null,index_fund_posture:null,principles_posture:null,todays_decision:null,decision_authority:null,tradeability:'',what_changed:[],event_risks:[],best_family:null,pulse:null,narrative:'',ai_narrative:null,ai_loading:false,ai_provider:'',ai_model:'',ai_error:'',ai_configured:false,ai_setup_hint:'',date:'',trust:{},best_action:null,overlap_warning:null,near_miss:[],no_setup_diagnosis:null,quant_cluster_hints:[],unlock_deploy:null,regime_wait_explanation:[],monitor_triggers:[],sleeve_summary:null,quant_alloc:null,execution_readiness:null,evidence_badges:null,cross_asset_confirmation:null,index_regime_summary:null,regime_strip:null,regime_stack_summary:null,allocator_stance:null,ai_reason_codes:[],score_reconciliation:null,ai_commentary_open:false,avoid_collapsed:true},
+      today7:{regime:null,top_ranked:[],filter_funnel:null,avoid_list:[],avoid_grouped:null,bucket_quality:[],decision_model:null,decision_hierarchy:null,passive_baseline:null,complexity_challenge:null,restraint:null,surface_authority:null,crisis_regime:null,naval_clarity:null,buffett_clarity:null,index_fund_posture:null,principles_posture:null,todays_decision:null,decision_authority:null,bdr_summary:null,tradeability:'',what_changed:[],event_risks:[],best_family:null,pulse:null,narrative:'',ai_narrative:null,ai_loading:false,ai_provider:'',ai_model:'',ai_error:'',ai_configured:false,ai_setup_hint:'',date:'',trust:{},best_action:null,overlap_warning:null,near_miss:[],no_setup_diagnosis:null,quant_cluster_hints:[],unlock_deploy:null,regime_wait_explanation:[],monitor_triggers:[],sleeve_summary:null,quant_alloc:null,execution_readiness:null,evidence_badges:null,cross_asset_confirmation:null,index_regime_summary:null,regime_strip:null,regime_stack_summary:null,allocator_stance:null,ai_reason_codes:[],score_reconciliation:null,ai_commentary_open:false,avoid_collapsed:true},
       btLab:{ticker:'AAPL',strategy:'all',period:'6mo',loading:false,data:null,quantCurve:null,error:'',walkForward:true},
       dosWorkstation:{loading:false,data:null},
       pfScenario:{loading:false,list:[],result:null,selected:''},
@@ -111,6 +111,7 @@
       alerts_history:null,
       showAlertsModal:false,
       uiExpandAll:false,
+      bdrPanelOpen:false,
       brief_status:null,
       brief_regen_loading:false,
       tt:{show:false,ticker:'AAPL',date:new Date(Date.now()-30*86400000).toISOString().slice(0,10),strategy:'all',loading:false,data:null,err:'',result:null},
@@ -4479,6 +4480,27 @@
       uiExpandAllLabel(){
         return this.uiExpandAll?'Collapse all':'Expand all';
       },
+      async copyBdrSummary(){
+        const text=String((this.today7.bdr_summary&&this.today7.bdr_summary.text)||'');
+        if(!text) return;
+        try{
+          if(navigator.clipboard&&navigator.clipboard.writeText){
+            await navigator.clipboard.writeText(text);
+            return;
+          }
+        }catch(e){}
+        try{
+          const ta=document.createElement('textarea');
+          ta.value=text;
+          ta.setAttribute('readonly','');
+          ta.style.position='fixed';
+          ta.style.left='-9999px';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }catch(e){console.warn('copyBdrSummary failed',e);}
+      },
       uiExpandAllFabLabel(){
         return this.uiExpandAll?'收合':'一鍵展開';
       },
@@ -6944,7 +6966,7 @@
         }
       },
       async fetchToday7(){
-        try{const r=await this.ccFetch('/api/v7/today',{retries:2,backoff:500,timeoutMs:15000});if(!r||!r.ok)throw new Error('HTTP '+(r?r.status:'fail'));const d=await r.json();this.captureInstantDegradedBanner(d);if(d&&d.error)throw new Error(String(d.error));if(!d||!d.market_regime)throw new Error('incomplete today payload');this.today7.regime=d.market_regime||null;this.today7.decision_authority=d.decision_authority||null;this.today7.top_ranked=d.top_5||[];this.today7.todays_decision=d.todays_decision||null;this.today7.best_action=d.best_action||null;this.today7.overlap_warning=d.overlap_warning||null;this.today7.near_miss=d.near_miss||[];this.today7.score_reconciliation=d.score_reconciliation||null;this.today7.no_setup_diagnosis=d.no_setup_diagnosis||null;this.today7.quant_cluster_hints=d.quant_cluster_hints||[];this.today7.unlock_deploy=d.unlock_deploy||null;this.today7.regime_wait_explanation=d.regime_wait_explanation||[];this.today7.monitor_triggers=d.monitor_triggers||[];this.today7.sleeve_summary=d.sleeve_summary||null;this.today7.execution_readiness=d.execution_readiness||d.best_action?.execution_readiness||null;this.today7.evidence_badges=d.evidence_badges||null;this.today7.cross_asset_confirmation=d.cross_asset_confirmation||null;this.today7.index_regime_summary=d.index_regime_summary||null;this.today7.regime_strip=d.regime_strip||null;this.today7.regime_stack_summary=d.regime_stack_summary||null;this.today7.allocator_stance=d.allocator_stance||null;this.today7.ai_reason_codes=d.ai_reason_codes||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.decision_model=d.decision_model||null;this.today7.decision_hierarchy=d.decision_hierarchy||null;this.today7.passive_baseline=d.passive_baseline||null;this.today7.complexity_challenge=d.complexity_challenge||null;this.today7.restraint=d.restraint||null;this.today7.surface_authority=d.surface_authority||null;this.today7.crisis_regime=d.crisis_regime||null;this.today7.naval_clarity=d.naval_clarity||null;this.today7.buffett_clarity=d.buffett_clarity||null;this.today7.index_fund_posture=d.index_fund_posture||null;this.today7.principles_posture=d.principles_posture||null;this.today7.avoid_grouped=d.avoid_grouped||null;this.today7.bucket_quality=d.bucket_quality||[];this.today7.avoid_list=(d.avoid_now||[]).length?(d.avoid_now||[]):(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'—',reason:a,category:'regime'}:a);this.today7.tradeability=(d.cc_state&&d.cc_state.tradeability_state&&d.cc_state.tradeability_state.tradeability)||(d.decision_model&&d.decision_model.honest_tradeability)||(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{};this.today7.cc_state=d.cc_state||null;this.today7.system_state=d.system_state||null;this.today7.dashboard_monitors=d.dashboard_monitors||[];this.today7.page_capability=d.page_capability||null;
+        try{const r=await this.ccFetch('/api/v7/today',{retries:2,backoff:500,timeoutMs:15000});if(!r||!r.ok)throw new Error('HTTP '+(r?r.status:'fail'));const d=await r.json();this.captureInstantDegradedBanner(d);if(d&&d.error)throw new Error(String(d.error));if(!d||!d.market_regime)throw new Error('incomplete today payload');this.today7.regime=d.market_regime||null;this.today7.decision_authority=d.decision_authority||null;this.today7.top_ranked=d.top_5||[];this.today7.todays_decision=d.todays_decision||null;this.today7.bdr_summary=d.bdr_summary||null;this.today7.best_action=d.best_action||null;this.today7.overlap_warning=d.overlap_warning||null;this.today7.near_miss=d.near_miss||[];this.today7.score_reconciliation=d.score_reconciliation||null;this.today7.no_setup_diagnosis=d.no_setup_diagnosis||null;this.today7.quant_cluster_hints=d.quant_cluster_hints||[];this.today7.unlock_deploy=d.unlock_deploy||null;this.today7.regime_wait_explanation=d.regime_wait_explanation||[];this.today7.monitor_triggers=d.monitor_triggers||[];this.today7.sleeve_summary=d.sleeve_summary||null;this.today7.execution_readiness=d.execution_readiness||d.best_action?.execution_readiness||null;this.today7.evidence_badges=d.evidence_badges||null;this.today7.cross_asset_confirmation=d.cross_asset_confirmation||null;this.today7.index_regime_summary=d.index_regime_summary||null;this.today7.regime_strip=d.regime_strip||null;this.today7.regime_stack_summary=d.regime_stack_summary||null;this.today7.allocator_stance=d.allocator_stance||null;this.today7.ai_reason_codes=d.ai_reason_codes||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.decision_model=d.decision_model||null;this.today7.decision_hierarchy=d.decision_hierarchy||null;this.today7.passive_baseline=d.passive_baseline||null;this.today7.complexity_challenge=d.complexity_challenge||null;this.today7.restraint=d.restraint||null;this.today7.surface_authority=d.surface_authority||null;this.today7.crisis_regime=d.crisis_regime||null;this.today7.naval_clarity=d.naval_clarity||null;this.today7.buffett_clarity=d.buffett_clarity||null;this.today7.index_fund_posture=d.index_fund_posture||null;this.today7.principles_posture=d.principles_posture||null;this.today7.avoid_grouped=d.avoid_grouped||null;this.today7.bucket_quality=d.bucket_quality||[];this.today7.avoid_list=(d.avoid_now||[]).length?(d.avoid_now||[]):(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'—',reason:a,category:'regime'}:a);this.today7.tradeability=(d.cc_state&&d.cc_state.tradeability_state&&d.cc_state.tradeability_state.tradeability)||(d.decision_model&&d.decision_model.honest_tradeability)||(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{};this.today7.cc_state=d.cc_state||null;this.today7.system_state=d.system_state||null;this.today7.dashboard_monitors=d.dashboard_monitors||[];this.today7.page_capability=d.page_capability||null;
           if(!(this.today7.top_ranked||[]).length&&(d.degraded||d.instant_degraded)){
             this.hydrateToday7FromCache();
             if(!(this.today7.top_ranked||[]).length){

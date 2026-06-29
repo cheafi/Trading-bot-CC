@@ -1496,6 +1496,18 @@ async def today_summary(request: Request):
     payload = attach_system_state(payload)
     payload = attach_page_capability(payload, "today")
     try:
+        from src.services.bdr_operator_summary import build_bdr_from_today_payload
+
+        payload["bdr_summary"] = build_bdr_from_today_payload(
+            payload,
+            ops={
+                "running": eng_running,
+                "breaker": exec_blocked,
+            },
+        )
+    except Exception:
+        logger.debug("bdr_summary build failed", exc_info=True)
+    try:
         from src.services.operator_state_contract import pick_dashboard_monitors, structural_valid_for_monitor
 
         payload["dashboard_monitors"] = pick_dashboard_monitors(
@@ -1535,6 +1547,39 @@ async def today_summary(request: Request):
     except Exception:
         pass
     return payload
+
+
+# ══════════════════════════════════════════════════════════════════════
+# /api/v7/decision/bdr-summary — BDR operator decision brief
+# ══════════════════════════════════════════════════════════════════════
+
+
+@router.get("/api/v7/decision/bdr-summary")
+async def bdr_operator_summary(request: Request):
+    """Auto-generated BDR-style operator brief from live today / playbook state."""
+    today = await today_summary(request)
+    if isinstance(today, dict) and today.get("error"):
+        raise HTTPException(503, today.get("error") or "today payload unavailable")
+    try:
+        from src.api.app_state import get_engine
+        from src.services.runtime_truth import engine_runtime_snapshot
+
+        engine = get_engine(request.app)
+        runtime = engine_runtime_snapshot(engine) if engine else {}
+        ops = {
+            "running": bool(runtime.get("running")),
+            "breaker": bool(runtime.get("circuit_breaker")),
+        }
+    except Exception:
+        ops = {}
+    try:
+        from src.services.bdr_operator_summary import build_bdr_from_today_payload
+
+        summary = build_bdr_from_today_payload(today, ops=ops)
+        return sanitize_for_json(summary)
+    except Exception as exc:
+        logger.warning("bdr-summary failed: %s", exc)
+        raise HTTPException(500, f"BDR summary error: {exc}") from exc
 
 
 # ══════════════════════════════════════════════════════════════════════
