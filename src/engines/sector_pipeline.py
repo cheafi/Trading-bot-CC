@@ -260,16 +260,36 @@ class SectorPipeline:
                     "risk_score": 50,
                 }
 
-        results = []
-        for sig in signals:
-            try:
-                result = self.process(sig, regime)
-                results.append(result)
-            except Exception as e:
-                logger.warning(
-                    "Pipeline error for %s: %s",
-                    sig.get("ticker", "?"), e,
-                )
+        results: List[PipelineResult] = []
+        if len(signals) >= 24:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            max_workers = min(8, max(2, len(signals) // 8))
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                futures = {
+                    pool.submit(self.process, sig, regime): sig for sig in signals
+                }
+                for fut in as_completed(futures):
+                    sig = futures[fut]
+                    try:
+                        results.append(fut.result())
+                    except Exception as e:
+                        logger.warning(
+                            "Pipeline error for %s: %s",
+                            sig.get("ticker", "?"),
+                            e,
+                        )
+        else:
+            for sig in signals:
+                try:
+                    result = self.process(sig, regime)
+                    results.append(result)
+                except Exception as e:
+                    logger.warning(
+                        "Pipeline error for %s: %s",
+                        sig.get("ticker", "?"),
+                        e,
+                    )
 
         # Sort by final score descending
         results.sort(key=lambda r: r.fit.final_score, reverse=True)

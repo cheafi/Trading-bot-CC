@@ -352,11 +352,14 @@ class AbnormalVolumeScanner(BaseScanner):
     name = "abnormal_volume"
     category = ScannerCategory.FLOW
 
+    _RESEARCH_VOL_THRESHOLD = 1.5
+    _DEPLOY_VOL_THRESHOLD = 2.0
+
     def scan(self, signals, regime) -> List[ScannerHit]:
         hits = []
         for sig in signals:
-            vol = sig.get("vol_ratio", 1.0)
-            if vol >= 2.0:
+            vol = float(sig.get("vol_ratio", 1.0) or 1.0)
+            if vol >= self._DEPLOY_VOL_THRESHOLD:
                 hits.append(
                     ScannerHit(
                         scanner_name=self.name,
@@ -369,7 +372,24 @@ class AbnormalVolumeScanner(BaseScanner):
                             if vol > 3
                             else ScannerPriority.NORMAL
                         ),
-                        metadata={"vol_ratio": vol},
+                        metadata={"vol_ratio": vol, "research_only": False},
+                    )
+                )
+            elif vol >= self._RESEARCH_VOL_THRESHOLD:
+                hits.append(
+                    ScannerHit(
+                        scanner_name=self.name,
+                        category=self.category,
+                        ticker=sig.get("ticker", ""),
+                        score=min(7.5, 4.0 + vol * 0.8),
+                        headline=f"Elevated volume {vol:.1f}x (research)",
+                        detail="Research-only flow signal — confirm in Playbook",
+                        priority=ScannerPriority.LOW,
+                        metadata={
+                            "vol_ratio": vol,
+                            "research_only": True,
+                            "surface_authority": "monitor_only",
+                        },
                     )
                 )
         return hits
@@ -1012,6 +1032,16 @@ class ScannerMatrix:
             payload["score_display_label"] = f"Fallback rank · {tier.lower()}"
         else:
             payload["score_display_mode"] = "live"
+        if hit.metadata.get("research_only"):
+            payload["research_only"] = True
+            payload["surface_authority"] = hit.metadata.get(
+                "surface_authority", "monitor_only"
+            )
+            payload["monitor_label"] = "research_only"
+            payload.setdefault(
+                "score_display_label",
+                "Research-only · not deploy-grade",
+            )
         return payload
 
     @staticmethod

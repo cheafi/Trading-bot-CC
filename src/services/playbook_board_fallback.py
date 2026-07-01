@@ -306,7 +306,7 @@ def build_compressed_fallback(
                 "stronger timing, confirmed volume, monitor-pipeline support",
             )
             near_miss.append(nm)
-        if len(near_miss) >= 3:
+        if len(near_miss) >= PLAYBOOK_NEAR_MISS_LIMIT:
             break
     if len(near_miss) < 3:
         for row in review_pool:
@@ -318,7 +318,7 @@ def build_compressed_fallback(
                         "whats_missing": "Passed scan but failed validation gates",
                     }
                 )
-            if len(near_miss) >= 3:
+            if len(near_miss) >= PLAYBOOK_NEAR_MISS_LIMIT:
                 break
 
     all_for_avoid = review_pool + [
@@ -374,7 +374,7 @@ def build_compressed_fallback(
     payload: Dict[str, Any] = {
         "count": len(watch_rows),
         "opportunities": watch_rows,
-        "near_miss": near_miss[:3],
+        "near_miss": near_miss[:PLAYBOOK_NEAR_MISS_LIMIT],
         "avoid_grouped": avoid_grouped,
         "rejection_clusters": rejection_clusters,
         "filter_funnel": funnel,
@@ -471,6 +471,9 @@ def board_has_content(payload: Dict[str, Any]) -> bool:
     return bool(avoid.get("total"))
 
 
+from src.services.playbook_near_miss import PLAYBOOK_NEAR_MISS_LIMIT
+
+
 def supplement_zero_deploy_board(
     payload: Dict[str, Any],
     limit: int = 30,
@@ -508,7 +511,7 @@ def supplement_zero_deploy_board(
                 "Ranked by scan but blocked by deploy gates — monitor for upgrade",
             )
             derived.append(nm)
-            if len(derived) >= 3:
+            if len(derived) >= PLAYBOOK_NEAR_MISS_LIMIT:
                 break
         if derived:
             merged["near_miss"] = derived

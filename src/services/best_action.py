@@ -370,33 +370,14 @@ def enrich_ranked_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         source=source,
         stale=stale,
     )
-    _near_miss_missing = (
-        "stronger timing, confirmed volume follow-through, "
-        "monitor-pipeline support, and execution-ready status"
+    from src.services.playbook_near_miss import (
+        PLAYBOOK_NEAR_MISS_LIMIT,
+        build_playbook_near_miss_rows,
     )
-    _near_miss_horizon = "next 1–3 sessions if conditions improve"
-    payload["near_miss"] = []
-    for o in opps:
-        if _norm_action(o.get("action")) not in _WATCH_ACTIONS:
-            continue
-        if float(o.get("score") or 0) < 6.0 or o.get("execution_ready"):
-            continue
-        nm = dict(o)
-        if not nm.get("whats_missing") and not nm.get("gaps"):
-            nm["whats_missing"] = _near_miss_missing
-        if not nm.get("timing_bucket"):
-            nm["timing_bucket"] = _near_miss_horizon
-        payload["near_miss"].append(nm)
-        if len(payload["near_miss"]) >= 8:
-            break
-    if payload["near_miss"]:
-        payload["near_miss"] = sorted(
-            payload["near_miss"],
-            key=lambda r: (
-                len(r.get("gaps") or []),
-                -float(r.get("net_edge_score") or r.get("score") or 0),
-            ),
-        )[:8]
+
+    payload["near_miss"] = build_playbook_near_miss_rows(
+        opps, limit=PLAYBOOK_NEAR_MISS_LIMIT
+    )
     try:
         from src.services.decision_truth_model import (
             build_avoid_grouped_from_rows,

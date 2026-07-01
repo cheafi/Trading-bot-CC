@@ -293,8 +293,8 @@ def _brief_rs_ranking_fallback(
         :limit
     ]
     return {
-        "count": 0,
-        "rankings": [],
+        "count": len(rows),
+        "rankings": rows,
         "stale_watchlist": rows,
         "sector_rs": [],
         "breakouts": [],
@@ -853,6 +853,47 @@ async def _refresh_ranked_cache(
         logger.warning("Ranked background refresh failed: %s", exc)
     finally:
         _ranked_refreshing.discard(cache_key)
+
+
+async def warm_playbook_discovery_cache(app) -> None:
+    """
+    Prefetch Playbook ranked + RS ranking on API boot so first Discovery/Playbook
+    load is not empty. Does not loosen deploy gates.
+    """
+    scan_fn = getattr(app.state, "scan_signals", None)
+    cache_key = _ranked_cache_key(40, None, None)
+    try:
+        if not _get_ranked_cached(cache_key):
+            response = await asyncio.wait_for(
+                _compute_ranked_live(40, None, None, scan_fn=scan_fn),
+                timeout=_RANKED_LOAD_TIMEOUT_SECONDS + _RANKED_TIMEOUT_SECONDS,
+            )
+            response = _finalize_ranked_response(
+                response, from_live=True, limit=40
+            )
+            _set_ranked_cached(cache_key, response)
+            from src.services.playbook_board_fallback import save_playbook_snapshot
+
+            save_playbook_snapshot(response, cache_key)
+            logger.info(
+                "[Prewarm] Playbook ranked cache: %d opps, %d near-miss",
+                len(response.get("opportunities") or []),
+                len(response.get("near_miss") or []),
+            )
+        app.state.playbook_ranked_cache = _get_ranked_cached(cache_key) or {}
+    except Exception as exc:
+        logger.warning("[Prewarm] Playbook ranked warm failed (non-fatal): %s", exc)
+
+    rs_key = _rs_ranking_cache_key(None, None, 50)
+    if not _get_rs_ranking_cached(rs_key):
+        asyncio.create_task(_refresh_rs_ranking_cache(rs_key, 50, None, None))
+        fb = _brief_rs_ranking_fallback(50, None, None)
+        if fb.get("stale_watchlist"):
+            _set_rs_ranking_cached(rs_key, fb)
+            logger.info(
+                "[Prewarm] RS ranking brief fallback: %d leaders",
+                len(fb.get("stale_watchlist") or []),
+            )
 
 
 # ── Ranked Opportunities ─────────────────────────────────────────────
@@ -1469,6 +1510,22 @@ async def scanner_hub(
         payload["decision_intent"] = warming["decision_intent"]
         payload["hub_status"] = "warming"
     payload = _enrich_discovery_zero_hits(payload, regime=regime, scanner=scanner)
+    from src.services.playbook_near_miss import build_discovery_near_miss_strip
+
+    near_strip = build_discovery_near_miss_strip(payload.get("merged_top_names") or [])
+    payload["near_miss_strip"] = near_strip
+    verdict = dict(payload.get("discovery_verdict") or {})
+    ranked_cache = getattr(request.app.state, "playbook_ranked_cache", None) or {}
+    funnel = ranked_cache.get("filter_funnel") or {}
+    deploy_n = int(
+        funnel.get("deploy_qualified_setups")
+        or funnel.get("execution_ready_setups")
+        or 0
+    )
+    verdict["deploy_qualified"] = deploy_n
+    verdict["merged_top_count"] = len(payload.get("merged_top_names") or [])
+    verdict["near_miss_strip_count"] = len(near_strip)
+    payload["discovery_verdict"] = verdict
     return payload
 
 

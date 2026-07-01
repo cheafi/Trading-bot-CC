@@ -4727,11 +4727,28 @@
         const d=this.scannerHub.data||{};
         const uni=d.universe_size||d.diagnostics?.symbols_scanned||this.scannerHub.universe||0;
         const merged=(d.merged_top_names||[]).length;
+        const deploy=this.discoveryVerdictDeployCount();
         if(this.scannerDiscoveryHasFallbackRows()||this.scannerHub.error) return '掃描即時資料暫不可用';
         if(d&&d.diagnostics&&d.diagnostics.reason_no_hits) return '目前無新的研究候選';
         if(d&&(d.hub_status==='warming'||d.hub_status==='degraded')) return '掃描器暖機中';
-        if(uni>0) return 'Discovery 研究候選池 · '+uni+' scanned · '+merged+' merged';
+        if(uni>0) return 'Discovery 研究候選池 · '+uni+' scanned · '+merged+' merged'+(deploy===0?' · deploy 0':'');
         return 'Discovery 研究候選池';
+      },
+      discoveryVerdictDeployCount(){
+        const v=(this.scannerHub.data||{}).discovery_verdict||{};
+        if(v.deploy_qualified!=null) return Number(v.deploy_qualified)||0;
+        const f=(this.rankedOpps.filter_funnel||{});
+        return Number(f.deploy_qualified_setups??f.execution_ready_setups??0)||0;
+      },
+      discoveryNearMissStripRows(){
+        const d=this.scannerHub.data||{};
+        if((d.near_miss_strip||[]).length) return d.near_miss_strip;
+        const merged=(d.merged_top_names||[]).filter(m=>String(m.action||'').toUpperCase()!=='TRADE').slice(0,8);
+        return merged.map(m=>({...m,monitor_label:'near_miss',research_only:true}));
+      },
+      discoveryNearMissStripVisible(){
+        if(this.discoveryVerdictDeployCount()>0) return false;
+        return this.discoveryNearMissStripRows().length>0;
       },
       discoveryPrimaryBlockerLine(){
         const d=this.scannerHub.data||{};

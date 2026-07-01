@@ -788,6 +788,15 @@ async def _startup_prewarm():
     except Exception as exc:
         logger.warning("[Prewarm] Overview cache fill failed (non-fatal): %s", exc)
 
+    # Warm playbook ranked + RS brief leaders so Discovery first load is populated.
+    try:
+        from src.api.routers.playbook import warm_playbook_discovery_cache
+
+        await warm_playbook_discovery_cache(app)
+        logger.info("[Prewarm] Playbook discovery cache warm complete")
+    except Exception as exc:
+        logger.warning("[Prewarm] Playbook discovery warm failed (non-fatal): %s", exc)
+
     # Warm universe scanner so /api/v7/today is not stuck on empty scan_cache.
     try:
         recs, _scores = await _scan_live_signals(40)

@@ -870,7 +870,7 @@ async def today_summary(request: Request):
     )
 
     top5_tickers = {x["ticker"] for x in top5 if x.get("ticker")}
-    near_miss = build_near_miss_candidates(council_results, top5_tickers, limit=3)
+    near_miss = build_near_miss_candidates(council_results, top5_tickers, limit=8)
     top5, near_miss, used_brief_fallback = merge_brief_board_fallback(
         top5,
         near_miss,

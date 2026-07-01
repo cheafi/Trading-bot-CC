@@ -4807,8 +4807,34 @@
               <div><span style="color:var(--t3)">Best speculative</span><div class="font-bold text-amber-300 mono cursor-pointer" @click="scannerHub.data.discovery_verdict.best_speculative_name&&openDossier(scannerHub.data.discovery_verdict.best_speculative_name.ticker)" x-text="scannerHub.data.discovery_verdict.best_speculative_name?(scannerHub.data.discovery_verdict.best_speculative_name.ticker+' · '+formatFallbackScore(scannerHub.data.discovery_verdict.best_speculative_name)):'—'"></div></div>
               <div><span style="color:var(--t3)">Avoid now</span><div class="font-bold" :class="(scannerHub.data.discovery_verdict.avoid_now_count||0)>0?'text-red-400':'text-white'" x-text="(scannerHub.data.discovery_verdict.avoid_now_count||0)+' risk flags'"></div></div>
               <div class="col-span-2"><span style="color:var(--t3)">Breadth</span><div class="text-white" x-text="scannerHub.data.discovery_verdict.discovery_breadth||'—'"></div></div>
+              <div x-show="discoveryVerdictDeployCount()===0&&(scannerHub.data.discovery_verdict.merged_top_count||0)>0" class="col-span-2 text-[8px]" style="color:var(--t3)">
+                <span x-text="(scannerHub.data.discovery_verdict.merged_top_count||0)+' merged names · deploy 0 — monitor strip below'"></span>
+              </div>
             </div>
           </div>
+          <template x-if="discoveryNearMissStripVisible()">
+            <div class="card mb-3" style="overflow:hidden;border-left:4px solid var(--blue)">
+              <div style="padding:8px 12px;background:var(--s2);border-bottom:1px solid var(--bd)">
+                <span class="text-[10px] font-bold uppercase text-white">Near-miss · monitor only</span>
+                <span class="pill pa text-[7px] ml-2">research_only</span>
+                <span class="pill pw text-[7px] ml-1" x-text="discoveryNearMissStripRows().length+' rows'"></span>
+              </div>
+              <div style="padding:6px 10px">
+                <div class="text-[8px] mb-2" style="color:var(--t2)">Deploy gate closed — speculative / watch names for research. Not deploy-qualified.</div>
+                <template x-for="row in discoveryNearMissStripRows()" :key="'nms-'+row.ticker">
+                  <div class="mb-2 p-2 rounded text-[8px]" style="background:var(--s2);border-left:3px solid var(--amber)">
+                    <div class="flex flex-wrap items-center gap-2 mb-1">
+                      <span class="mono font-bold text-white cursor-pointer" @click="openDossier(row.ticker)" x-text="row.ticker"></span>
+                      <span class="pill pa text-[7px]" x-text="row.monitor_label||'near_miss'"></span>
+                      <span class="pill pw text-[7px]" x-text="row.research_only?'research_only':'watch'"></span>
+                      <span class="pill pb text-[7px]" x-show="row.overlap" x-text="(row.overlap||0)+' scanners'"></span>
+                    </div>
+                    <div style="color:var(--t2)" x-text="row.why_flagged||'—'"></div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
           <template x-if="(scannerHub.data.merged_top_names||[]).length">
             <div class="card mb-3" style="overflow:hidden">
               <div style="padding:8px 12px;background:var(--s2);border-bottom:1px solid var(--bd)">
