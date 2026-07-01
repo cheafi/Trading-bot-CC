@@ -130,7 +130,7 @@ _STATE_COPY: Dict[str, Dict[str, str]] = {
 _SURFACE_WARMUP_LOADING_LINES: Dict[str, str] = {
     "dossier_research": "Live dossier fetch still loading — retry when core panels populate.",
     "backtest_research": "Backtest API still loading — retry Run lab in a few seconds (research-only shell may appear meanwhile).",
-    "funds_research": "Fund lab still loading — sleeve cards refresh when the API is ready.",
+    "funds_research": "Fund Research Lab still loading — sleeve cards refresh when the API is ready.",
     "rejections_diagnostic": "Rejection audit still loading — brief shell may show until the pipeline is ready.",
     "flow_supporting": "Flow API still loading — mock/research shell may appear until live provider connects.",
     "ops_diagnostic": "Ops API still loading — refresh Ops panels in a few seconds.",
@@ -760,8 +760,13 @@ def today_mission_system_blockers(
     brief_fallback: bool = False,
     instant_degraded: bool = False,
     fetch_badge: str = "",
+    system_truth: Optional[Dict[str, Any]] = None,
 ) -> list[str]:
-    """Infrastructure blockers shown on Dashboard mission strip (IBKR, engine, data)."""
+    """Infrastructure blockers — prefer system_truth.reason_codes when present."""
+    if isinstance(system_truth, dict) and system_truth.get("reason_codes"):
+        from src.services.system_truth import mission_blockers_from_truth
+
+        return mission_blockers_from_truth(system_truth)
     out: list[str] = []
     if not ibkr_ready:
         label = str(ibkr_short or "OFFLINE").strip().upper()
@@ -813,18 +818,29 @@ def today_mission_panel(
     top_ranked: Optional[list] = None,
     limit: int = 3,
     system_blockers: Optional[list] = None,
+    system_truth: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Top blockers + monitors from existing today payload (no new API)."""
+    """Top blockers + monitors — mission strip uses system_truth.reason_codes when present."""
     card_gates = today_mission_card_gates(
         risk_blockers=risk_blockers,
         why_not=why_not,
         limit=limit,
     )
-    sys_blk = list(system_blockers or [])
-    blockers: list[str] = []
-    for s in sys_blk + card_gates:
-        if s and s not in blockers:
-            blockers.append(s)
+    truth = system_truth or {}
+    reason_codes = truth.get("reason_codes") or []
+    if reason_codes:
+        from src.services.system_truth import reason_codes_to_copy
+
+        blockers = list(truth.get("reason_copy") or reason_codes_to_copy(reason_codes))[
+            : max(limit, 5)
+        ]
+        sys_blk = blockers[:limit]
+    else:
+        sys_blk = list(system_blockers or [])
+        blockers: list[str] = []
+        for s in sys_blk + card_gates:
+            if s and s not in blockers:
+                blockers.append(s)
     monitors: list[str] = []
     for nm in near_miss or []:
         t = nm.get("ticker") if isinstance(nm, dict) else None
@@ -1193,15 +1209,86 @@ def dossier_trade_plan_note(
     research_only: bool = False,
     levels_blank: bool = False,
 ) -> str:
-    """Trade-plan footnote when structure levels are missing in confirm-only mode."""
+    """Structure snapshot footnote when levels are missing in confirm-only mode."""
     text = str(note or setup_type or "").strip()
     if research_only and levels_blank:
-        return "Live structure unavailable — confirm-only dossier"
+        return "Live structure unavailable — structure review only"
     if levels_blank:
         return "Live structure unavailable"
     if text:
         return text
-    return "Structure-based plan"
+    return "Structure-based reference"
+
+
+def resolve_dossier_mode_for_surface(
+    *,
+    unified_label: str = "",
+    load_phase: str = "full",
+    partial: bool = False,
+    failed_fetch: bool = False,
+    instant_degraded: bool = False,
+    brief_backed: bool = False,
+    research_only: bool = False,
+    has_quote: bool = False,
+    pending_calibration: bool = False,
+    rr_unavailable: bool = False,
+) -> str:
+    from src.services.dossier_mode import resolve_dossier_mode
+
+    return resolve_dossier_mode(
+        unified_label=unified_label,
+        load_phase=load_phase,
+        partial=partial,
+        failed_fetch=failed_fetch,
+        instant_degraded=instant_degraded,
+        brief_backed=brief_backed,
+        research_only=research_only,
+        has_quote=has_quote,
+        pending_calibration=pending_calibration,
+        rr_unavailable=rr_unavailable,
+    )
+
+
+def dossier_confirm_only_strip() -> str:
+    from src.services.dossier_mode import DOSSIER_CONFIRM_ONLY_STRIP
+
+    return DOSSIER_CONFIRM_ONLY_STRIP
+
+
+def dossier_structure_snapshot_title() -> str:
+    from src.services.dossier_mode import STRUCTURE_SNAPSHOT_TITLE
+
+    return STRUCTURE_SNAPSHOT_TITLE
+
+
+def dossier_structure_level_label(field: str, *, mode: str = "structure_review_only") -> str:
+    from src.services.dossier_mode import structure_level_label
+
+    return structure_level_label(field, mode=mode)
+
+
+def dossier_paper_draft_disabled_copy() -> str:
+    from src.services.dossier_mode import PAPER_DRAFT_DISABLED_COPY
+
+    return PAPER_DRAFT_DISABLED_COPY
+
+
+def dossier_monitor_rule_button() -> str:
+    from src.services.dossier_mode import MONITOR_RULE_BUTTON
+
+    return MONITOR_RULE_BUTTON
+
+
+def dossier_monitor_rule_hint() -> str:
+    from src.services.dossier_mode import MONITOR_RULE_HINT
+
+    return MONITOR_RULE_HINT
+
+
+def dossier_lagged_context_note() -> str:
+    from src.services.dossier_mode import LAGGED_CONTEXT_COLLAPSED_NOTE
+
+    return LAGGED_CONTEXT_COLLAPSED_NOTE
 
 
 def ai_reason_code_line(code: Optional[Dict[str, Any]] = None) -> str:
@@ -1242,3 +1329,60 @@ def ai_contradiction_dossier_line(hint: str = "", *, degraded: bool = False) -> 
     if degraded and "MOCK" not in text.upper():
         text = f"{text} — MOCK/DEGRADED"
     return f"{text} — confirm-only, not deploy authority"
+
+
+def typed_freshness_strip_line(truth: Optional[Dict[str, Any]] = None) -> str:
+    """Scoped freshness strip — one line per subsystem, no FRESH+STALE mix."""
+    from src.services.system_truth import typed_freshness_display
+
+    return typed_freshness_display(truth or {})
+
+
+def system_truth_line(truth: Optional[Dict[str, Any]] = None) -> str:
+    """Header / mission parity line — typed freshness display."""
+    from src.services.system_truth import system_truth_line as _line
+
+    return _line(truth)
+
+
+def global_truth_strip(truth: Optional[Dict[str, Any]] = None) -> str:
+    """Canonical scoped freshness strip — no unscoped DATA FRESH/STALE."""
+    from src.services.system_truth import format_global_truth_strip
+
+    t = truth or {}
+    if t.get("truth_strip"):
+        return str(t["truth_strip"])
+    return format_global_truth_strip(t)
+
+
+def operator_block_for_page(
+    truth: Optional[Dict[str, Any]] = None,
+    *,
+    page: str = "dashboard",
+    operator_blocks: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Shared operator block for surface helpers."""
+    from src.services.operator_surface import build_operator_block
+
+    blocks = operator_blocks or {}
+    if page in blocks and isinstance(blocks[page], dict):
+        return blocks[page]
+    if truth and isinstance(truth.get("operator_block"), dict) and page == "dashboard":
+        return truth["operator_block"]
+    return build_operator_block(truth, page)
+
+
+def playbook_qualification_funnel_line(funnel: Optional[Dict[str, Any]] = None) -> str:
+    """Playbook funnel strip — setup-qualified vs deploy-qualified."""
+    f = funnel or {}
+    line = str(f.get("qualification_line") or "").strip()
+    if line:
+        return line
+    from src.services.decision_truth_model import format_qualification_funnel_line
+
+    return format_qualification_funnel_line(
+        setup_qualified=int(f.get("setup_qualified_setups") or f.get("watch_qualified_setups") or 0),
+        trade_qualified=int(f.get("trade_qualified_setups") or 0),
+        execution_qualified=int(f.get("execution_qualified_setups") or 0),
+        deploy_qualified=int(f.get("deploy_qualified_setups") or 0),
+    )

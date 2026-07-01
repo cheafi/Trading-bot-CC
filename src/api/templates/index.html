@@ -131,6 +131,22 @@
       .def-row{display:grid;grid-template-columns:140px 1fr;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px;align-items:start}
       .def-row:last-child{border-bottom:none}
       .def-key{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--green)}
+      #cc-export-print-root{display:none}
+      #cc-export-print-root .cc-export-page{padding:18px 20px;font-size:11px;line-height:1.5;color:#111;background:#fff;page-break-after:always}
+      #cc-export-print-root .cc-export-page:last-child{page-break-after:auto}
+      #cc-export-print-root h1{font-size:16px;font-weight:800;margin:0 0 8px}
+      #cc-export-print-root h2{font-size:12px;font-weight:700;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.4px}
+      #cc-export-print-root table{width:100%;border-collapse:collapse;margin:6px 0 10px;font-size:10px}
+      #cc-export-print-root th,#cc-export-print-root td{border:1px solid #ccc;padding:4px 6px;text-align:left;vertical-align:top}
+      #cc-export-print-root th{width:28%;background:#f3f4f6;font-weight:700}
+      #cc-export-print-root ul{margin:4px 0 8px;padding-left:18px}
+      #cc-export-print-root .cc-export-meta,#cc-export-print-root .cc-export-muted{color:#555;font-size:10px}
+      #cc-export-print-root .cc-export-lead{font-weight:600;margin-bottom:6px}
+      #cc-export-print-root .cc-export-footer{margin-top:16px;padding-top:8px;border-top:1px solid #ccc;font-size:9px;color:#666}
+      @media print{
+        body.cc-export-printing > *:not(#cc-export-print-root){display:none!important}
+        #cc-export-print-root{display:block!important;position:static!important;inset:auto!important}
+      }
     </style>
   </head>
 
@@ -183,15 +199,11 @@
             <span>🛑</span>
             <span>BREAKER</span>
           </button>
-          <!-- ── DATA FRESHNESS PILL (only if stale/critical) ── -->
-          <button x-show="freshness&&freshness.worst_tier&&['STALE','CRITICAL'].includes(freshness.worst_tier)"
-                  @click="fetchFreshness()"
-                  style="display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;font-size:10px;font-weight:700;border:1px solid;cursor:pointer;letter-spacing:.4px"
-                  :style="freshness&&freshness.worst_tier==='CRITICAL'?'background:#7f1d1d;color:#fca5a5;border-color:#ef4444':'background:#3a2a1e;color:#fcd34d;border-color:#b45309'"
-                  :title="freshness?(freshness.streams||[]).map(s=>s.ticker+' '+(s.age_min!=null?s.age_min+'min':'?')+' ('+s.tier+')').join(' · '):''">
-            <span x-text="freshness&&freshness.worst_tier==='CRITICAL'?'⛔':'⚠'"></span>
-            <span x-text="'DATA '+(freshness?freshness.worst_tier:'?')"></span>
-          </button>
+          <!-- ── SCOPED TRUTH (replaces unscoped DATA FRESH/STALE pill) ── -->
+          <span x-show="unifiedTruthStripLine()"
+                  style="display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;font-size:9px;font-weight:600;border:1px solid var(--bd2);color:var(--t2);max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                  :title="unifiedTruthStripLine()"
+                  x-text="unifiedTruthStripLine()"></span>
           <!-- ── POSITION RISK ALERTS PILL (only if any) ── -->
           <button x-show="risk_alerts && risk_alerts.count>0"
                   @click="showAlertsModal=true; fetchRiskAlerts()"
@@ -201,15 +213,15 @@
             <span x-text="risk_alerts&&risk_alerts.by_severity.CRITICAL>0?'🚨':'⚡'"></span>
             <span x-text="'ALERTS '+(risk_alerts?risk_alerts.count:0)"></span>
           </button>
-          <!-- ── BRIEF PILL (only if stale/critical) ── -->
-          <button x-show="brief_status && brief_status.latest && ['STALE','CRITICAL'].includes(brief_status.latest.tier)"
+          <!-- ── BRIEF PILL (stale/critical/expired) ── -->
+          <button x-show="brief_status && brief_status.latest && (brief_status.latest.age_days>2 || ['STALE','CRITICAL'].includes(brief_status.latest.tier))"
                   @click="regenerateBrief()"
                   :disabled="brief_regen_loading"
                   style="display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;font-size:10px;font-weight:700;border:1px solid;cursor:pointer;letter-spacing:.4px"
-                  :style="brief_status?.latest?.tier==='CRITICAL'?'background:#7f1d1d;color:#fca5a5;border-color:#ef4444':'background:#3a2a1e;color:#fcd34d;border-color:#b45309'"
-                  :title="'Morning brief is '+brief_status?.latest?.age_days+'d old ('+brief_status?.latest?.date+') — click to regenerate'">
-            <span x-text="brief_regen_loading?'⏳':(brief_status?.latest?.tier==='CRITICAL'?'⛔':'⚠')"></span>
-            <span x-text="brief_regen_loading?'REGEN…':('BRIEF '+(brief_status?.latest?.age_days||0)+'d')"></span>
+                  :style="brief_status?.latest?.age_days>2?'background:#7f1d1d;color:#fca5a5;border-color:#ef4444':(brief_status?.latest?.tier==='CRITICAL'?'background:#7f1d1d;color:#fca5a5;border-color:#ef4444':'background:#3a2a1e;color:#fcd34d;border-color:#b45309')"
+                  :title="brief_status?.latest?.age_days>2?('Brief expired '+brief_status?.latest?.age_days+'d — not used for ranking'):('Morning brief is '+brief_status?.latest?.age_days+'d old ('+brief_status?.latest?.date+') — click to regenerate')">
+            <span x-text="brief_regen_loading?'⏳':(brief_status?.latest?.age_days>2?'⛔':'⚠')"></span>
+            <span x-text="brief_regen_loading?'REGEN…':(brief_status?.latest?.age_days>2?('BRIEF EXPIRED '+(brief_status?.latest?.age_days||0)+'d'):('BRIEF '+(brief_status?.latest?.age_days||0)+'d'))"></span>
           </button>
           <!-- ── IBKR PILL ── -->
           <button @click="switchTab('ibkr')" style="display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;font-size:10px;font-weight:700;border:none;cursor:pointer;letter-spacing:.4px"
@@ -217,6 +229,14 @@
             :title="ibkrUnifiedLabel()">
             <span style="width:6px;height:6px;border-radius:50%" :style="ibkrPillDotStyle()"></span>
             <span>IBKR · </span><span x-text="ibkrUnifiedShort()"></span>
+          </button>
+          <!-- ── EXPORT REVIEW PDF ── -->
+          <button data-cc="export-review-pdf" @click="exportReviewPdfClick()" :disabled="exportReviewPdfBusy"
+            style="display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;font-size:10px;font-weight:700;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;letter-spacing:.3px"
+            title="One-click review PDF — issues page + all surfaces snapshot for ChatGPT review">
+            <span x-show="!exportReviewPdfBusy">📄</span>
+            <span x-show="exportReviewPdfBusy" class="spin"></span>
+            <span x-text="exportReviewPdfBusy?'Exporting…':'Export review PDF'"></span>
           </button>
           <!-- ── HELP ── -->
           <button @click="tt.show=true" style="background:none;border:1px solid var(--bd);color:var(--t3);padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer" title="Time Travel — replay any date">⏱</button>
@@ -524,7 +544,7 @@
         :class="severityBadgeClass(dataContractFetchStateKey())"
         x-text="sanitizeVisibleText(dataContractStrip().fetch)||'—'"></span>
       <span class="dc-sep">·</span>
-      <span class="text-[9px] font-semibold truncate" style="max-width:280px;color:var(--t1)" x-text="sanitizeVisibleText(dataContractStrip().board)||'—'"></span>
+      <span class="text-[9px] font-semibold truncate mono" style="max-width:520px;color:var(--t1)" x-text="sanitizeVisibleText(dataContractStrip().truth)||'—'"></span>
       <span class="dc-sep">·</span>
       <span class="text-[9px] mono truncate" style="max-width:160px" x-text="sanitizeVisibleText(dataContractStrip().broker)||'—'"></span>
       <span class="dc-sep" x-show="trustProvenanceLine()">·</span>
@@ -644,7 +664,8 @@
 
       <div class="card card-p mx-3 mt-2 mb-2" style="border-left:3px solid var(--blue);padding:8px 12px">
         <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--blue)">Advanced aggregate — not deploy gate</div>
-        <div class="text-[8px]" style="color:var(--t2)">Command aggregates regime, watchlist, and council context — surface authority is <strong>research only</strong>. Sizing and IBKR handoff require Dashboard or Playbook when board tradeability permits.</div>
+        <div class="text-[8px] mb-1" style="color:var(--t2)">Command aggregates regime, watchlist, and council context — surface authority is <strong>research only</strong>. Sizing and IBKR handoff require Dashboard or Playbook when board tradeability permits.</div>
+        <div class="text-[8px] font-semibold text-amber-300" x-show="agentOperatorBlockerLine()" x-text="agentOperatorBlockerLine()"></div>
       </div>
 
       <!-- ── TOP MACRO STRIP ── -->
@@ -879,6 +900,23 @@
                 </div>
               </template>
 
+              <!-- Agent — one blocker line + watch rules (Authority Details collapsed) -->
+              <div class="cc-right-section">
+                <div class="cc-right-label">🤖 Agent</div>
+                <div class="text-[10px] font-semibold mb-1" style="color:var(--amber)" x-text="agentPrimaryBlockerLine()"></div>
+                <div class="text-[9px] mb-1" style="color:var(--t2)" x-text="agentWatchRulesLine()"></div>
+                <details>
+                  <summary class="text-[8px] cursor-pointer" style="color:var(--t3)">Authority Details</summary>
+                  <template x-if="cmd.agent">
+                    <div class="mt-1 text-[9px]" style="color:var(--t2)" x-text="cmd.agent.summary||'—'"></div>
+                  </template>
+                  <template x-if="!cmd.agent && cmd.agentError">
+                    <div class="mt-1 text-[9px]" style="color:var(--red)" x-text="cmd.agentError"></div>
+                  </template>
+                </details>
+              </div>
+
+              <div style="display:none" aria-hidden="true" data-cc="agent-debate-legacy">
               <!-- Agent Debate Trace -->
               <div class="cc-right-section">
                 <div class="cc-right-label">🤖 Agent Debate</div>
@@ -905,6 +943,7 @@
                 <template x-if="!cmd.agent && cmd.agentError">
                   <div style="font-size:10px;color:var(--red)" x-text="cmd.agentError"></div>
                 </template>
+              </div>
               </div>
 
               <!-- Sector context -->
@@ -1009,13 +1048,12 @@
 
     <!-- @cc-partial deploy_surfaces -->
       <div x-show="tab==='today'" data-cc="today-deploy-chrome">
-      <template x-if="tab==='today'&&(todayMissionPanel().system_blockers.length||todayMissionPanel().card_gates.length||todayMissionPanel().monitors.length||todayMissionPanel().quant_cluster_lines.length)">
-        <div data-cc="today-mission-panel" style="padding:4px 12px 0">
+      <template x-if="tab==='today'&&(todayMissionPanel().system_blockers.length||todayMissionPanel().card_gates.length||todayMissionPanel().upgrade_watch.length||todayMissionPanel().avoid_entry.length||todayMissionPanel().quant_cluster_lines.length)">
+        <details data-cc="today-mission-panel" :open="!isWaitDay()" style="padding:4px 12px 0">
+          <summary class="text-[8px] font-bold uppercase cursor-pointer mb-1" style="color:var(--t3);padding:2px 0">Mission panel · expand<span x-show="isWaitDay()" class="text-[7px] font-normal ml-1">(collapsed on WAIT)</span></summary>
           <div class="card card-p" style="padding:8px 10px;border-left:3px solid var(--blue)">
             <div class="text-[9px] font-bold uppercase mb-0.5" style="color:var(--t3)" x-text="todayMissionPanelTitle()"></div>
-            <div x-show="todayMissionWaitSubtitle()" class="text-[8px] mb-1" style="color:var(--t2)" x-text="todayMissionWaitSubtitle()"></div>
-            <div x-show="todayBoardHeroSynthesisLine()" class="text-[8px] mb-1" style="color:var(--t3);line-height:1.45" x-text="todayBoardHeroSynthesisLine()"></div>
-            <div x-show="todayMissionSafeUnlockHint()" class="text-[8px] mb-1" style="color:var(--t3)" x-text="todayMissionSafeUnlockHint()"></div>
+            <div x-show="todayMissionSafeUnlockHint()&&!isWaitDay()" class="text-[8px] mb-1" style="color:var(--t3)" x-text="todayMissionSafeUnlockHint()"></div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[9px]">
               <div>
                 <div class="font-bold text-red-400 mb-0.5" x-text="todayMissionBlockersTitle()"></div>
@@ -1026,15 +1064,19 @@
                   <div style="color:var(--t2)" x-text="'• '+b"></div>
                 </template>
                 <div x-show="!todayMissionPanel().system_blockers.length&&!todayMissionPanel().card_gates.length" style="color:var(--t3)" x-text="todayMissionEmptyBlockersCopy()"></div>
-                <div x-show="todayMissionPanel().system_blockers.length&&!todayMissionPanel().card_gates.length" class="text-[8px] mt-0.5" style="color:var(--t3)" x-text="todayMissionEmptyBlockersCopy()"></div>
               </div>
               <div>
                 <div class="font-bold text-amber-300 mb-0.5" x-text="todayMissionMonitorsLabel()"></div>
                 <div class="text-[8px] mb-0.5" style="color:var(--t3)" x-text="todayMissionMonitorsColumnHint()"></div>
-                <template x-for="m in todayMissionPanel().monitors" :key="'mon-'+m">
-                  <div style="color:var(--t2)" class="mono" x-text="'• '+m"></div>
+                <div x-show="todayMissionPanel().upgrade_watch.length" class="text-[7px] font-bold uppercase mb-0.5" style="color:var(--green)">Upgrade watch · not entry today</div>
+                <template x-for="m in todayMissionPanel().upgrade_watch" :key="'up-'+m.ticker">
+                  <div style="color:var(--t2)" class="mono" x-text="'• '+m.ticker+(m.note?' · '+m.note:'')"></div>
                 </template>
-                <div x-show="!todayMissionPanel().monitors.length" style="color:var(--t3)">—</div>
+                <div x-show="todayMissionPanel().avoid_entry.length" class="text-[7px] font-bold uppercase mt-1 mb-0.5" style="color:var(--red)">Avoid new entry · still on board</div>
+                <template x-for="m in todayMissionPanel().avoid_entry" :key="'av-'+m.ticker">
+                  <div style="color:var(--t2)" class="mono" x-text="'• '+m.ticker+(m.note?' · '+m.note:'')"></div>
+                </template>
+                <div x-show="!todayMissionPanel().upgrade_watch.length&&!todayMissionPanel().avoid_entry.length" style="color:var(--t3)">—</div>
                 <template x-if="todayMissionPanel().quant_cluster_lines.length">
                   <div class="font-bold text-blue-300 mt-1 mb-0.5">Quant clusters (monitor)</div>
                   <template x-for="line in todayMissionPanel().quant_cluster_lines" :key="'qc-'+line">
@@ -1044,40 +1086,81 @@
               </div>
             </div>
           </div>
-        </div>
+        </details>
       </template>
 
-      <template x-if="tab==='today'&&today7.index_regime_summary">
-        <div data-cc="index-regime-strip" style="padding:4px 12px 0">
-          <div class="card card-p" style="padding:6px 10px;border-left:3px solid var(--amber)">
-            <div class="flex flex-wrap items-center gap-2">
-              <span class="pill text-[7px] pa" x-text="today7.regime_strip?.degraded?'MOCK/DEGRADED':'REGIME FILTER'"></span>
-              <span class="text-[9px] font-bold" style="color:var(--t2)" x-text="today7.regime_strip?.posture_label||today7.index_regime_summary?.posture_label||'Index regime'"></span>
-            </div>
-            <div class="text-[8px] mt-0.5" style="color:var(--t3);line-height:1.45" x-text="(window.CCHelpers&&CCHelpers.indexRegimeStripLine)?CCHelpers.indexRegimeStripLine(today7.index_regime_summary,today7.regime_strip):((today7.regime_strip&&today7.regime_strip.line)||today7.index_regime_summary?.strip_line||'')"></div>
+      <template x-if="tab==='today'&&(today7.index_regime_summary||today7.regime_stack_summary||today7.ai_reason_codes?.length)">
+        <details data-cc="index-regime-strip" style="padding:4px 12px 0">
+          <summary class="text-[8px] font-bold uppercase cursor-pointer" style="color:var(--t3);padding:2px 0">Index / regime stack context · expand</summary>
+          <div class="mt-1 space-y-1">
+            <template x-if="today7.index_regime_summary">
+              <div class="card card-p" style="padding:6px 10px;border-left:3px solid var(--amber)">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="pill text-[7px] pa" x-text="today7.regime_strip?.degraded?'MOCK/DEGRADED':'REGIME FILTER'"></span>
+                  <span class="text-[9px] font-bold" style="color:var(--t2)" x-text="today7.regime_strip?.posture_label||today7.index_regime_summary?.posture_label||'Index regime'"></span>
+                </div>
+                <div class="text-[8px] mt-0.5" style="color:var(--t3);line-height:1.45" x-text="(window.CCHelpers&&CCHelpers.indexRegimeStripLine)?CCHelpers.indexRegimeStripLine(today7.index_regime_summary,today7.regime_strip):((today7.regime_strip&&today7.regime_strip.line)||today7.index_regime_summary?.strip_line||'')"></div>
+              </div>
+            </template>
+            <template x-if="today7.regime_stack_summary||today7.ai_reason_codes?.length">
+              <div data-cc="regime-stack-strip" class="card card-p" style="padding:6px 10px;border-left:3px solid var(--blue)">
+                <div class="flex flex-wrap items-center gap-2 mb-0.5">
+                  <span class="pill text-[7px] pb">REGIME STACK</span>
+                  <span class="pill text-[7px] pw">AI EXPLANATORY</span>
+                </div>
+                <div x-show="today7.regime_stack_summary" class="text-[8px] mb-1" style="color:var(--t3);line-height:1.45" x-text="(window.CCHelpers&&CCHelpers.regimeStackStripLine)?CCHelpers.regimeStackStripLine(today7.regime_stack_summary):''"></div>
+                <div x-show="today7.allocator_stance&&today7.allocator_stance.suggestion" class="text-[8px] mb-1" style="color:var(--t3)" x-text="(window.CCHelpers&&CCHelpers.allocatorStanceHint)?CCHelpers.allocatorStanceHint(today7.allocator_stance):''"></div>
+                <div data-cc="ai-reason-codes">
+                <template x-if="today7.ai_reason_codes&&today7.ai_reason_codes.length">
+                  <template x-for="rc in today7.ai_reason_codes.slice(0,3)" :key="'ai-rc-'+rc.code">
+                    <div class="text-[8px]" style="color:var(--t2);line-height:1.4" x-text="'• '+(window.CCHelpers&&CCHelpers.aiReasonCodeLine?CCHelpers.aiReasonCodeLine(rc):rc.message)"></div>
+                  </template>
+                </template>
+                </div>
+                <div x-show="today7.execution_analytics" data-cc="exec-analytics-sample" class="text-[8px] mt-1" style="color:var(--t3);line-height:1.45" x-text="(window.CCHelpers&&CCHelpers.execAnalyticsSample)?CCHelpers.execAnalyticsSample(today7.execution_analytics):''"></div>
+              </div>
+            </template>
           </div>
-        </div>
+        </details>
       </template>
 
-      <template x-if="tab==='today'&&(today7.regime_stack_summary||today7.ai_reason_codes?.length)">
-        <div data-cc="regime-stack-strip" style="padding:4px 12px 0">
-          <div class="card card-p" style="padding:6px 10px;border-left:3px solid var(--blue)">
-            <div class="flex flex-wrap items-center gap-2 mb-0.5">
-              <span class="pill text-[7px] pb">REGIME STACK</span>
-              <span class="pill text-[7px] pw">AI EXPLANATORY</span>
+      <template x-if="tab==='today'&&(today7.cc_os||today7.tracker_wave||today7.safe_automation)">
+        <details data-cc="tracker-wave-strip" :open="!isWaitDay()" style="padding:4px 12px 0">
+          <summary class="text-[8px] font-bold uppercase cursor-pointer" style="color:var(--t3);padding:2px 0">CC operating system · quant / ops support · expand<span x-show="isWaitDay()" class="text-[7px] font-normal ml-1" style="color:var(--t3)">(collapsed on WAIT)</span></summary>
+          <div class="card card-p mt-1" style="padding:6px 10px;border-left:3px solid var(--purple)" data-cc="cc-os-console">
+            <div class="flex flex-wrap items-center gap-2 mb-1">
+              <span class="pill text-[7px] pw font-bold">MONITOR / OPS</span>
+              <span class="pill text-[7px] pb">NOT DEPLOY AUTHORITY</span>
+              <span class="pill text-[7px] pa" x-show="today7.cc_os&&today7.cc_os.degraded">MOCK/DEGRADED</span>
             </div>
-            <div x-show="today7.regime_stack_summary" class="text-[8px] mb-1" style="color:var(--t3);line-height:1.45" x-text="(window.CCHelpers&&CCHelpers.regimeStackStripLine)?CCHelpers.regimeStackStripLine(today7.regime_stack_summary):''"></div>
-            <div x-show="today7.allocator_stance&&today7.allocator_stance.suggestion" class="text-[8px] mb-1" style="color:var(--t3)" x-text="(window.CCHelpers&&CCHelpers.allocatorStanceHint)?CCHelpers.allocatorStanceHint(today7.allocator_stance):''"></div>
-            <div data-cc="ai-reason-codes">
-            <template x-if="today7.ai_reason_codes&&today7.ai_reason_codes.length">
-              <template x-for="rc in today7.ai_reason_codes.slice(0,3)" :key="'ai-rc-'+rc.code">
-                <div class="text-[8px]" style="color:var(--t2);line-height:1.4" x-text="'• '+(window.CCHelpers&&CCHelpers.aiReasonCodeLine?CCHelpers.aiReasonCodeLine(rc):rc.message)"></div>
+            <div class="text-[8px] mb-1 font-semibold" style="color:var(--t2);line-height:1.45" x-text="(window.CCHelpers&&CCHelpers.ccOsOperatorStrip)?CCHelpers.ccOsOperatorStrip(today7.cc_os,today7.tracker_wave):((window.CCHelpers&&CCHelpers.trackerWaveStripLine)?CCHelpers.trackerWaveStripLine(today7.tracker_wave):'')"></div>
+            <div x-show="today7.cc_os&&today7.cc_os.modules&&today7.cc_os.modules.regime_index" data-cc="cc-os-regime-strip" class="text-[8px] mb-1" style="color:var(--t3);line-height:1.45" x-text="(window.CCHelpers&&CCHelpers.ccOsRegimeLine)?CCHelpers.ccOsRegimeLine(today7.cc_os.modules.regime_index):''"></div>
+            <div x-show="today7.cc_os&&today7.cc_os.modules&&today7.cc_os.modules.opportunity_quality" data-cc="cc-os-pipeline-strip" class="text-[8px] mb-1" style="color:var(--t3)" x-text="(window.CCHelpers&&CCHelpers.ccOsPipelineLine)?CCHelpers.ccOsPipelineLine(today7.cc_os.modules.opportunity_quality.pipeline):''"></div>
+            <div x-show="today7.drawdown_sizing||today7.cc_os&&today7.cc_os.modules&&today7.cc_os.modules.capital_control" class="text-[8px] mb-1" style="color:var(--t3)" x-text="(window.CCHelpers&&CCHelpers.ccOsCapitalLine)?CCHelpers.ccOsCapitalLine(today7.cc_os&&today7.cc_os.modules&&today7.cc_os.modules.capital_control,today7.drawdown_sizing):((window.CCHelpers&&CCHelpers.drawdownSizingLine)?CCHelpers.drawdownSizingLine(today7.drawdown_sizing):'')"></div>
+            <div data-cc="exec-analytics-console" x-show="today7.execution_analytics||today7.cc_os&&today7.cc_os.modules&&today7.cc_os.modules.execution" class="text-[8px] mb-1" style="color:var(--t3);line-height:1.45" x-text="(window.CCHelpers&&CCHelpers.ccOsExecutionLine)?CCHelpers.ccOsExecutionLine(today7.cc_os&&today7.cc_os.modules&&today7.cc_os.modules.execution,today7.execution_analytics):((window.CCHelpers&&CCHelpers.execAnalyticsConsoleLine)?CCHelpers.execAnalyticsConsoleLine(today7.execution_analytics):'')"></div>
+            <div x-show="today7.cc_os&&today7.cc_os.modules&&today7.cc_os.modules.portfolio_factor" data-cc="cc-os-portfolio-strip" class="text-[8px] mb-1" style="color:var(--t3)" x-text="(window.CCHelpers&&CCHelpers.ccOsPortfolioLine)?CCHelpers.ccOsPortfolioLine(today7.cc_os.modules.portfolio_factor):''"></div>
+            <div x-show="today7.cc_os&&today7.cc_os.modules&&today7.cc_os.modules.curve_governance" data-cc="cc-os-curve-strip" class="text-[8px] mb-1" style="color:var(--t3)" x-text="(window.CCHelpers&&CCHelpers.ccOsCurveLine)?CCHelpers.ccOsCurveLine(today7.cc_os.modules.curve_governance):''"></div>
+            <div x-show="today7.cc_os&&today7.cc_os.modules&&today7.cc_os.modules.event_intelligence" data-cc="cc-os-event-strip" class="text-[8px] mb-1" style="color:var(--t3)" x-text="(window.CCHelpers&&CCHelpers.ccOsEventLine)?CCHelpers.ccOsEventLine(today7.cc_os.modules.event_intelligence):''"></div>
+            <template x-if="today7.safe_automation&&today7.safe_automation.monitor_upgrade_alerts&&today7.safe_automation.monitor_upgrade_alerts.alerts&&today7.safe_automation.monitor_upgrade_alerts.alerts.length">
+              <div data-cc="monitor-upgrade-alerts" class="text-[8px] pt-1 mt-1" style="border-top:1px dashed var(--bd)">
+                <div class="font-bold text-amber-300 mb-0.5">Upgrade alerts · not deploy</div>
+                <template x-for="a in today7.safe_automation.monitor_upgrade_alerts.alerts.slice(0,2)" :key="'mua-'+a.label">
+                  <div class="text-[7px]" style="color:var(--t3)" x-text="'• '+(a.detail||a.label)"></div>
+                </template>
+              </div>
+            </template>
+            <div x-show="today7.safe_automation&&today7.safe_automation.research_staleness&&today7.safe_automation.research_staleness.stale" data-cc="research-staleness-alert" class="text-[7px] mb-1" style="color:var(--amber)" x-text="(today7.safe_automation.research_staleness.alerts&&today7.safe_automation.research_staleness.alerts[0])||'Research stale — confirm-only'"></div>
+            <template x-if="today7.safe_automation&&today7.safe_automation.daily_briefing">
+              <div data-cc="daily-operator-briefing" class="text-[8px] pt-1 mt-1" style="border-top:1px dashed var(--bd);color:var(--t3);line-height:1.45" x-text="(window.CCHelpers&&CCHelpers.dailyBriefingLine)?CCHelpers.dailyBriefingLine(today7.safe_automation.daily_briefing):''"></div>
+            </template>
+            <template x-if="today7.safe_automation&&today7.safe_automation.near_miss_recheck&&today7.safe_automation.near_miss_recheck.hints&&today7.safe_automation.near_miss_recheck.hints.length">
+              <template x-for="h in today7.safe_automation.near_miss_recheck.hints.slice(0,2)" :key="'recheck-'+h.ticker">
+                <div class="text-[7px]" style="color:var(--t3)" x-text="'• '+h.hint"></div>
               </template>
             </template>
-            </div>
-            <div x-show="today7.execution_analytics" data-cc="exec-analytics-sample" class="text-[8px] mt-1" style="color:var(--t3);line-height:1.45" x-text="(window.CCHelpers&&CCHelpers.execAnalyticsSample)?CCHelpers.execAnalyticsSample(today7.execution_analytics):''"></div>
+            <div x-show="today7.safe_automation&&today7.safe_automation.monitor_queue_aging" class="text-[7px] mt-1" style="color:var(--t3)" x-text="today7.safe_automation.monitor_queue_aging.label||''"></div>
           </div>
-        </div>
+        </details>
       </template>
 
       <!-- ── Ops / IB / Monitor strip (institutional cockpit) ── -->
@@ -1089,18 +1172,32 @@
           <span class="pill text-[7px] pw" :title="today7.evidence_badges.funds?.label" x-text="today7.evidence_badges.funds?.badge"></span>
           <span class="pill text-[7px] pw" :title="today7.evidence_badges.ai?.label" x-text="today7.evidence_badges.ai?.badge"></span>
         </template>
-        <span x-show="freshness&&freshness.worst_tier" class="pill text-[8px]" :class="['STALE','CRITICAL'].includes(freshness.worst_tier)?'pa':'pg'" x-text="'DATA '+freshness.worst_tier"></span>
+        <span x-show="unifiedTruthStripLine()" class="text-[8px] mono truncate" style="max-width:520px;color:var(--t2)" x-text="unifiedTruthStripLine()"></span>
         <span x-show="riskAlertsStripVisible()" class="pill text-[8px] pr" x-text="riskAlertsStripLine()" @click="showAlertsModal=true" style="cursor:pointer"></span>
         <span x-show="portfolioSummaryStripVisible()" class="pill text-[8px] pb" x-text="portfolioSummaryStripLine()"></span>
         <button @click="switchTab('funds')" class="btn-s text-[8px] ml-auto" x-show="(pmStrip.funds||[]).length===0">Load Funds</button>
       </div>
-      <div x-show="tab==='today'&&!ops.running" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="engineOffRecoveryLine()"></div>
-      <div x-show="tab==='today'&&ibkrStateFrom(today7.execution_readiness).level!=='ready'" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="ibkrLoginToReadyHint()"></div>
-      <div x-show="tab==='today'&&todayExecutionReadinessDiagnostic()" class="w-full text-[8px] px-3 pb-1 mono" style="color:var(--t3)" x-text="todayExecutionReadinessDiagnostic()"></div>
+      <div x-show="tab==='today'&&todayOpsRecoveryCompactLine()" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3);line-height:1.45" x-text="todayOpsRecoveryCompactLine()"></div>
       </div>
     <!-- @cc-partial-end deploy_surfaces -->
 
       <div x-show="tab==='today'" data-cc="today-dashboard-body">
+
+      <!-- ── Operator TODAY state (canonical system_truth) ── -->
+      <template x-if="today7.system_truth">
+        <div style="padding:8px 12px 0">
+          <div class="card card-p" style="padding:10px 12px;border-left:3px solid var(--blue);background:rgba(88,166,255,.04)">
+            <div class="flex flex-wrap items-center gap-2 mb-1">
+              <span class="text-[10px] font-bold uppercase" style="color:var(--blue)">今日狀態 · TODAY</span>
+              <span class="pill text-[7px] pa" x-text="today7.system_truth.regime_state||canonicalTradeability()"></span>
+            </div>
+            <div class="text-[9px] font-bold text-white mb-1" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.morningDecisionLine)?CCHelpers.morningDecisionLine(today7):(today7.todays_decision?.morning_decision_line||'')"></div>
+            <div class="text-[8px] mb-1" style="color:var(--t2);line-height:1.45" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStrip)?CCHelpers.scopedFreshnessStrip(today7.system_truth):''"></div>
+            <div class="text-[8px]" style="color:var(--amber)" x-text="today7.system_truth.primary_blocker||''"></div>
+            <div class="text-[8px] mt-1" style="color:var(--t3)" x-show="today7.candidate_counts" x-text="'Scanner '+((today7.candidate_counts||{}).scannerCandidates||0)+' · Watch-qualified '+((today7.candidate_counts||{}).funnelWatchQualified||0)+' · Deploy '+((today7.candidate_counts||{}).deployQualified||0)"></div>
+          </div>
+        </div>
+      </template>
 
       <template x-if="tab==='today'&&(authorityDegradedBanner() || todayUsesBriefFallback() || staleSnapshotContext())">
         <div style="padding:4px 12px 0">
@@ -1740,7 +1837,7 @@
       </template>
 
       <!-- ── Narrative Briefing (hidden when folded into Today's decision) ── -->
-      <template x-if="today7.narrative && !today7.todays_decision">
+      <template x-if="today7.narrative && !today7.todays_decision && !today7.system_truth?.hide_brief_narrative">
         <div style="padding:8px 12px">
           <div class="card card-p" style="padding:12px;border-left:3px solid var(--blue)">
             <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">📋 Morning Briefing · <span x-text="today7.date||new Date().toISOString().slice(0,10)"></span></div>
@@ -1749,57 +1846,35 @@
         </div>
       </template>
 
-            <!-- ── AI Commentary — collapsed by default; narrative only ── -->
-      <div style="padding:0 12px 8px" x-show="today7.regime||today7.ai_narrative">
-        <div class="card card-p" style="padding:8px 12px;border-left:3px solid #8b5cf6">
-          <div class="flex items-center justify-between mb-1 cursor-pointer" @click="today7.ai_commentary_open=!today7.ai_commentary_open">
-            <div class="flex items-center gap-2 flex-wrap">
-              <span style="font-size:12px">✨</span>
-              <span class="text-xs font-bold uppercase" style="color:#a78bfa">AI Commentary</span>
-              <span class="text-[8px]" style="color:var(--t3)">narrative only — explanatory, not authoritative</span>
-              <button class="btn-s text-[8px]" @click.stop="today7.ai_commentary_open=!today7.ai_commentary_open" x-text="today7.ai_commentary_open?'Hide':'Show'"></button>
-              <span x-show="trackRecordGateLine()" style="padding:2px 6px;border-radius:4px;font-size:9px;font-weight:600;background:#3f3f46;color:#fbbf24;font-family:monospace" :title="trackRecordGateLine()" x-text="'⚠ '+trackRecordGateLine()"></span>
-              <template x-if="today7.ai_provider && !['none','error','stub','ready',''].includes(today7.ai_provider)">
-                <span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:#7c3aed;color:#e9d5ff;font-family:monospace" :title="'Provider: '+today7.ai_provider+'  ·  Model: '+(today7.ai_model||'unknown')" x-text="(today7.ai_provider||'').toUpperCase()+(today7.ai_model?' · '+today7.ai_model.split('/').pop().slice(0,32):'')"></span>
-              </template>
-              <template x-if="today7.ai_provider==='stub'">
-                <span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:#3f3f46;color:#d4d4d8" title="Rule-based fallback — configure an LLM for richer prose">RULE-BASED</span>
-              </template>
-              <template x-if="today7.ai_provider==='none'||(!today7.ai_configured&&!today7.ai_provider)">
-                <span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:#3f3f46;color:#a1a1aa">NOT CONFIGURED</span>
-              </template>
-              <template x-if="today7.ai_provider==='loading'||today7.ai_loading">
-                <span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:#422006;color:#fde68a">LOADING</span>
-              </template>
-              <template x-if="today7.ai_provider==='error'&&!today7.ai_loading">
-                <span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:#7f1d1d;color:#fca5a5">ERROR</span>
-              </template>
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
-              <button @click.stop="fetchAINarrative()" class="btn-s text-[10px]" style="padding:2px 6px" :disabled="today7.ai_loading" x-text="aiCommentaryCtaLabel()"></button>
-            </div>
+      <!-- ── Evidence Conflict (default) — collapsed when no valid candidate ── -->
+      <div style="padding:0 12px 8px" x-show="today7.evidence_conflict||today7.regime">
+        <details class="card card-p" style="padding:8px 12px;border-left:3px solid var(--amber)" :open="!(today7.evidence_conflict||{}).collapsed">
+          <summary class="text-xs font-bold uppercase cursor-pointer" style="color:var(--amber)">Evidence conflict · For / Against / Missing</summary>
+          <div class="text-[9px] mt-2 font-bold text-white" x-text="(today7.evidence_conflict||{}).headline||'No valid candidate'"></div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 text-[8px]">
+            <div><div class="font-bold text-green-400 mb-1">For</div><template x-for="ln in ((today7.evidence_conflict||{}).for||[])" :key="'ecf-'+ln"><div style="color:var(--t2)" x-text="'• '+ln"></div></template><div x-show="!((today7.evidence_conflict||{}).for||[]).length" style="color:var(--t3)">—</div></div>
+            <div><div class="font-bold text-red-400 mb-1">Against</div><template x-for="ln in ((today7.evidence_conflict||{}).against||[])" :key="'eca-'+ln"><div style="color:var(--t2)" x-text="'• '+ln"></div></template><div x-show="!((today7.evidence_conflict||{}).against||[]).length" style="color:var(--t3)">—</div></div>
+            <div><div class="font-bold text-amber-300 mb-1">Missing</div><template x-for="ln in ((today7.evidence_conflict||{}).missing||[])" :key="'ecm-'+ln"><div style="color:var(--t2)" x-text="'• '+ln"></div></template></div>
+            <div><div class="font-bold text-blue-300 mb-1">Decision</div><div style="color:var(--t2)" x-text="(today7.evidence_conflict||{}).decision||'Preserve capital'"></div><div class="mt-1" style="color:var(--t3)" x-show="(today7.evidence_conflict||{}).upgrade_trigger" x-text="'Upgrade: '+(today7.evidence_conflict||{}).upgrade_trigger"></div><div style="color:var(--t3)" x-show="(today7.evidence_conflict||{}).invalidation" x-text="'Invalidation: '+(today7.evidence_conflict||{}).invalidation"></div></div>
           </div>
-          <div x-show="today7.ai_commentary_open">
-          <div class="text-[9px] mb-2" style="color:var(--t3);line-height:1.5">This commentary helps interpret the board. It does not change ranking, sizing, validation, or deploy permission — still safe to use as narrative context.</div>
-          <div x-show="trackRecordGateLine()" class="text-[9px] mb-2 p-2 rounded font-bold" style="color:#fbbf24;background:#3f3f46;line-height:1.45" x-text="trackRecordGateLine()"></div>
-          <template x-if="today7.ai_setup_hint && !today7.ai_configured">
-            <div class="text-[9px] mb-2 p-2 rounded" style="color:#fde68a;background:#422006;line-height:1.5" x-text="today7.ai_setup_hint"></div>
-          </template>
-          <template x-if="today7.ai_error&&(today7.ai_provider==='loading'||today7.ai_loading)">
-            <div class="text-[9px] mb-2 p-2 rounded" style="color:#fde68a;background:#422006;line-height:1.5" x-text="today7.ai_error"></div>
-          </template>
-          <template x-if="today7.ai_error&&today7.ai_provider!=='loading'&&!today7.ai_loading">
-            <div class="text-[9px] mb-2 p-2 rounded" style="color:#fca5a5;background:#450a0a;line-height:1.5" x-text="today7.ai_error"></div>
-          </template>
-          <template x-if="today7.ai_narrative">
-            <div class="text-[11px] mt-2" style="color:var(--t1);line-height:1.7;white-space:pre-wrap" x-text="today7.ai_narrative"></div>
-          </template>
-          <template x-if="!today7.ai_narrative && !today7.ai_loading && !today7.ai_error">
-            <div class="text-[10px] mt-2" style="color:var(--t3);font-style:italic" x-text="aiCommentaryEmptyLine()"></div>
-          </template>
-          </div>
-        </div>
+        </details>
       </div>
+
+      <details style="padding:0 12px 8px" x-show="today7.ai_narrative||today7.ai_loading">
+        <summary class="text-[9px] font-bold uppercase cursor-pointer" style="color:#a78bfa">✨ AI Commentary · expand (not authoritative)</summary>
+        <div class="card card-p mt-1" style="padding:8px 12px;border-left:3px solid #8b5cf6">
+          <div class="flex items-center gap-2 flex-wrap mb-2">
+            <button @click.stop="fetchAINarrative()" class="btn-s text-[10px]" :disabled="today7.ai_loading" x-text="aiCommentaryCtaLabel()"></button>
+            <span x-show="trackRecordGateLine()" class="text-[8px] text-amber-300" x-text="trackRecordGateLine()"></span>
+          </div>
+          <template x-if="today7.ai_narrative">
+            <div class="text-[11px]" style="color:var(--t1);line-height:1.7;white-space:pre-wrap" x-text="today7.ai_narrative"></div>
+          </template>
+          <template x-if="!today7.ai_narrative && !today7.ai_loading">
+            <div class="text-[10px]" style="color:var(--t3);font-style:italic" x-text="aiCommentaryEmptyLine()"></div>
+          </template>
+        </div>
+      </details>
 
       <!-- ── 3-Layer Decision Model (macro / opportunity / execution) ── -->
       <template x-if="today7.decision_model && !isWaitDay()">
@@ -1963,6 +2038,8 @@
                   <div class="font-bold text-white" x-text="g.label+' ('+g.count+')'"></div>
                   <div style="color:var(--t2)" x-text="g.tickers.join(', ')"></div>
                   <div style="color:var(--t3)" x-text="g.sample_reason"></div>
+                  <div class="text-[7px] mt-1 text-red-400" x-show="g.repair_condition" x-text="'Repair: '+g.repair_condition"></div>
+                  <div class="text-[7px] text-amber-300" x-show="g.review_trigger" x-text="'Review when: '+g.review_trigger"></div>
                 </div>
               </template>
             </div>
@@ -1972,6 +2049,7 @@
 
       <!-- ── Top Ranked Opportunities ── -->
       <div class="section-hdr" style="margin-top:6px">🏆 Top Opportunities</div>
+      <div x-show="topOpportunitiesEmptyCopy()" style="padding:0 12px 6px" class="text-[9px] font-bold" style="color:var(--amber)" x-text="topOpportunitiesEmptyCopy()"></div>
 
       <!-- ══ Quick Action Strip — "What to buy NOW" ══ -->
       <template x-if="dashboardActionablePicks().length>0 && today7.todays_decision && today7.todays_decision.can_deploy_today">
@@ -2003,10 +2081,10 @@
         </div>
       </template>
 
-      <!-- ── How to Use Guidance ── -->
-      <div style="padding:0 12px 6px">
-        <div style="background:rgba(88,166,255,.06);border:1px solid rgba(88,166,255,.15);border-radius:8px;padding:10px 12px">
-          <div class="text-[9px] font-bold uppercase mb-2" style="color:var(--blue)">📖 How to Read These Cards</div>
+      <!-- ── How to Use Guidance (collapsed by default) ── -->
+      <details style="padding:0 12px 6px" x-show="!isWaitDay()">
+        <summary class="text-[9px] font-bold uppercase cursor-pointer" style="color:var(--blue)">📖 Card guide · expand</summary>
+        <div style="background:rgba(88,166,255,.06);border:1px solid rgba(88,166,255,.15);border-radius:8px;padding:10px 12px;margin-top:6px">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
             <div>
               <div class="text-[8px] font-bold mb-1" style="color:var(--t2)">Action Labels</div>
@@ -2040,11 +2118,11 @@
             </div>
           </div>
         </div>
-      </div>
+      </details>
 
-      <template x-if="today7.top_ranked && today7.top_ranked.length > 0">
+      <template x-if="topOpportunitiesList().length > 0">
         <div style="padding:0 12px;display:flex;flex-direction:column;gap:6px">
-          <template x-for="(opp,idx) in today7.top_ranked">
+          <template x-for="(opp,idx) in topOpportunitiesList()">
             <div class="card" style="cursor:pointer;overflow:hidden;position:relative" @click="openDossier(opp.ticker)">
               <!-- Star/Love/Watchlist buttons -->
               <div style="position:absolute;top:6px;right:10px;z-index:2;display:flex;gap:4px" @click.stop>
@@ -2313,7 +2391,6 @@
           <span x-show="marketStripSnapshotLine()" class="text-[8px] mono" style="color:var(--t3)" x-text="marketStripSnapshotLine()"></span>
           <span x-show="marketStripRenderLine()" class="text-[8px] mono" style="color:var(--t3)" x-text="marketStripRenderLine()"></span>
           <span x-show="marketStrip.fromPulse&&!marketStrip.source" class="pill text-[7px] pw">today pulse</span>
-          <span x-show="marketStripStaleVisible()" class="pill text-[7px] pa font-bold">DATA STALE</span>
           <button type="button" class="btn-s text-[8px]" :class="marketStripStaleVisible()?'':'ml-auto'" :disabled="marketStrip.loading" @click="fetchMarketStrip()">↻ Refresh market data</button>
         </div>
         <template x-if="marketStripStaleVisible()">
@@ -2404,19 +2481,31 @@
         <main x-show="tab==='signals'" class="fade" data-cc="playbook-surface">
       <div class="trust-strip">
         <span :style="sig.mode==='SCAN'?'color:var(--green)':sig.mode==='PAPER'?'color:var(--blue)':sig.mode==='OFFLINE'?'color:var(--red)':'color:var(--green)'" x-text="'● '+(sig.mode||'—')"></span>
-        <span x-text="playbookFunnelLabel(rankedOpps.filter_funnel||today7.filter_funnel, rankedOpps.rows)" :title="'Funnel watch-qualified from filter_funnel — board scan pool is monitor ranking only'"></span>
+        <span x-text="playbookFunnelLabel(rankedOpps.filter_funnel||today7.filter_funnel, rankedOpps.rows)" :title="'Setup-qualified vs deploy-qualified — deploy requires authority'"></span>
         <span class="pill pa text-[8px]" x-show="tab==='signals'" x-text="canonicalRegimeLine()"></span>
+        <span x-show="unifiedTruthStripLine()" class="text-[8px] mono truncate" style="max-width:420px;color:var(--t3)" x-text="unifiedTruthStripLine()"></span>
         <span x-show="playbookBoardModeLabel()" class="pill pa text-[8px]" x-text="playbookBoardModeLabel()"></span>
         <span x-show="rankedOpps.refreshing" class="text-amber-300 text-[9px]">↻ refreshing</span>
         <span x-show="playbookSnapshotLabel()" class="text-[9px]" style="color:var(--t3)" x-text="playbookSnapshotLabel()"></span>
         <span x-show="rankedOpps.source==='scanner'" class="text-amber-400">⚡ via Live Scanner</span>
         <span x-show="playbookUsesBriefFallback()" class="text-amber-400">📄 Brief fallback — confidence is estimated, not calibrated</span>
         <span x-show="playbookBoardWait()&&playbookNearMissUpgradeLine()" class="text-[9px] text-green-400" x-text="playbookNearMissUpgradeLine()"></span>
-        <span x-show="playbookBoardWait()&&todayBoardHeroSynthesisLine()" class="text-[8px] text-amber-300" x-text="todayBoardHeroSynthesisLine()"></span>
+        <span x-show="playbookBoardWait()&&todayBoardHeroSynthesisLine()&&!playbookNoEdgeMode()" class="text-[8px] text-amber-300" x-text="todayBoardHeroSynthesisLine()"></span>
         <span x-text="'As-of: '+(sig.as_of?sig.as_of.slice(0,19):'—')"></span>
         <span x-show="sig.scan_meta" class="text-[9px]" style="color:var(--t3)" x-text="'· calibrated '+(sig.scan_meta?(sig.scan_meta.calibrated_at||sig.scan_meta.last_calibration||sig.scan_meta.model_version||'live'):'—')"></span>
-        <span x-show="sig.data_freshness" class="text-[9px]" :class="(sig.data_freshness?.stale)?'text-amber-300':'text-green-400'" x-text="'· data '+((sig.data_freshness?.stale)?'STALE':'FRESH')"></span>
       </div>
+      <template x-if="playbookNoEdgeMode()">
+        <div class="mx-3 mb-2 p-2 rounded text-[9px] font-bold" style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:var(--amber);line-height:1.55" x-text="playbookNoEdgeLine()"></div>
+      </template>
+      <template x-if="today7.system_truth&&!playbookNoEdgeMode()">
+        <div class="mx-3 mb-2 p-2 rounded text-[8px]" style="background:rgba(88,166,255,.06);border:1px solid rgba(88,166,255,.2);color:var(--t2);line-height:1.5" data-cc="operator-block-playbook">
+          <div class="font-bold text-white mb-0.5" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlock)?(CCHelpers.operatorBlock(today7.system_truth,'playbook',today7.operator_block||{}).now||''):''"></div>
+          <div x-text="unifiedTruthStripLine()"></div>
+        </div>
+      </template>
+      <template x-if="today7.system_truth?.brief_expired_copy">
+        <div class="mx-3 mb-2 p-2 rounded text-[9px]" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--amber)" x-text="today7.system_truth.brief_expired_copy"></div>
+      </template>
       <div class="mx-3 mb-1 px-2 text-[7px]" style="color:var(--t3);line-height:1.55" x-text="playbookLayerDefinitionsNote()"></div>
       <!-- Emergency board — explicit CTA when pipeline unavailable -->
       <template x-if="playbookIsEmergencyBoard()">
@@ -2467,7 +2556,7 @@
         </div>
       </template>
       <!-- Best Action Now (Playbook) -->
-      <template x-if="rankedOpps.bestAction">
+      <template x-if="rankedOpps.bestAction && !playbookNoEdgeMode()">
         <div class="mx-3 mb-2 card card-p" :style="'border-left:4px solid var(--'+(playbookBoardWait()?'amber':'green')+')'">
           <div class="text-[10px] font-bold uppercase mb-1" :style="'color:var(--'+(playbookBoardWait()?'amber':'green')+')'">Best Action Now</div>
           <div class="text-[11px] font-bold text-white mb-1" x-text="playbookBestActionDisplay()"></div>
@@ -2543,7 +2632,7 @@
         </div>
       </template>
       <!-- Near-miss board (Playbook) -->
-      <template x-if="(rankedOpps.near_miss||[]).length">
+      <template x-if="(rankedOpps.near_miss||[]).length && !playbookNoEdgeMode() && !today7.system_truth?.hide_brief_narrative">
         <div style="padding:0 12px 8px">
           <div class="card card-p" style="border-left:3px solid var(--blue)">
             <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--blue)">Near-miss · upgrade layer</div>
@@ -2912,10 +3001,14 @@
           </div>
         </template>
       </div>
-      <!-- Strategy Health (compact when no live evidence) -->
-      <div class="section-hdr" style="margin-top:14px">🏆 Strategy Health</div>
-      <div style="padding:0 12px;margin-bottom:16px">
+      <!-- Strategy Health — research one-liner on Playbook (full lab under More) -->
+      <div class="section-hdr" style="margin-top:14px" x-show="!playbookNoEdgeMode()">🏆 Strategy Health</div>
+      <div style="padding:0 12px;margin-bottom:16px" x-show="!playbookNoEdgeMode()">
         <div class="card card-p">
+          <div class="text-[9px]" style="color:var(--t3);line-height:1.5">Strategy Lab — research-only calibration. Open <button type="button" class="underline" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:9px" @click="switchTab('stratlab')">More → Strategy Lab</button> when live closed-trade evidence exists.</div>
+        </div>
+      </div>
+      <div style="display:none" aria-hidden="true" data-cc="strat-health-legacy-removed">
           <template x-if="stratHealth.loading">
             <div class="text-[9px]" style="color:var(--t3)">Loading strategy health…</div>
           </template>
@@ -3073,7 +3166,32 @@
                 <div class="text-[10px] leading-relaxed" style="color:var(--t1)" x-text="dos.intel.page_summary"></div>
               </div>
             </template>
-            <div x-show="dosDashboardReminderLine()" class="text-[9px] mb-2 p-2 rounded" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--amber);line-height:1.5" x-text="dosDashboardReminderLine()"></div>
+            <div x-show="dossierStructureReviewOnly()" class="text-[9px] mb-2 p-2 rounded pa font-bold" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--amber);line-height:1.5" x-text="dossierConfirmOnlyStrip()"></div>
+            <!-- Confirm-only authority blocks -->
+            <div x-show="dossierStructureReviewOnly()" data-cc="dossier-confirm-only-blocks" class="card card-p mb-2" style="border-left:4px solid var(--amber)">
+              <div class="grid sm:grid-cols-2 gap-2 text-[9px] mb-2">
+                <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">現在 · Now</div><div style="color:var(--t2)" x-text="dosUnified().label+' — '+dosUnified().reason"></div></div>
+                <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">原因 · Why</div><div style="color:var(--t2)" x-text="(dos.intel&&dos.intel.dossier_mode&&dos.intel.dossier_mode.evidence_confidence&&dos.intel.dossier_mode.evidence_confidence.reason)||dosFetchBannerDetail()||'Live dossier incomplete'"></div></div>
+                <div><div class="font-bold uppercase mb-1" style="color:var(--green)">允許 · Use allowed</div><div style="color:var(--t2)" x-text="(dos.intel&&dos.intel.dossier_mode&&dos.intel.dossier_mode.allowed||[]).join(' · ')"></div></div>
+                <div><div class="font-bold uppercase mb-1" style="color:var(--red)">禁止 · Blocked</div><div style="color:var(--t2)" x-text="(dos.intel&&dos.intel.dossier_mode&&dos.intel.dossier_mode.blocked||[]).join(' · ')"></div></div>
+              </div>
+              <div class="text-[9px] mb-2"><div class="font-bold uppercase mb-1" style="color:var(--amber)">缺少內容 · What's missing</div><div style="color:var(--t2)" x-text="dossierMissingDataLine()"></div></div>
+              <div class="text-[9px] p-2 rounded mb-2" style="background:var(--s2)">
+                <div class="font-bold uppercase mb-1" style="color:var(--t3)">Evidence confidence</div>
+                <div class="flex flex-wrap gap-2 text-[8px]">
+                  <span x-text="'Evidence quality: '+dossierEvidenceField('evidence_quality')"></span>
+                  <span x-text="'Calibration: '+dossierEvidenceField('calibration')"></span>
+                  <span x-text="'Use allowed: '+dossierEvidenceField('use_allowed')"></span>
+                </div>
+                <div class="text-[8px] mt-1" style="color:var(--t3)" x-text="'Reason: '+dossierEvidenceField('reason')"></div>
+              </div>
+              <div class="grid sm:grid-cols-2 gap-2 text-[9px]">
+                <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">現有內容 · What exists</div><div style="color:var(--t2)" x-text="dossierConfirmOnlyFourBlocks().exists"></div></div>
+                <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">阻塞原因 · Blocker</div><div style="color:var(--t2)" x-text="dossierConfirmOnlyFourBlocks().blocker"></div></div>
+                <div class="sm:col-span-2"><div class="font-bold uppercase mb-1" style="color:var(--t3)">安全操作 · Safe actions</div><div style="color:var(--t2)" x-text="dossierConfirmOnlyFourBlocks().safe"></div></div>
+              </div>
+              <div class="text-[9px] mt-2 pt-2" style="border-top:1px dashed var(--bd);color:var(--t3)"><span class="font-bold uppercase" style="color:var(--blue)">下一步 · Next</span> · <span x-text="dossierConfirmOnlyNextLine()"></span></div>
+            </div>
             <!-- PM 30-second answer (above fold) -->
             <template x-if="dos.intel&&dos.intel.pm_answer&&dos.intel.pm_answer.thirty_second">
               <div class="card card-p mb-2" style="border:2px solid var(--purple)">
@@ -3092,13 +3210,14 @@
                 </div>
               </div>
             </template>
-            <!-- Opportunity intelligence: insider + institutional (research_only) -->
+            <!-- Opportunity intelligence: insider + institutional (collapsed in confirm-only) -->
             <template x-if="dos.oppIntel&&(dos.oppIntel.insider||dos.oppIntel.institutional)">
-              <div class="card card-p mb-2" data-cc="dossier-opp-intel" style="border-left:4px solid var(--purple)">
-                <div class="flex flex-wrap items-center gap-2 mb-2">
+              <details class="card card-p mb-2" data-cc="dossier-opp-intel" style="border-left:4px solid var(--purple)" :open="!dossierStructureReviewOnly()">
+                <summary class="flex flex-wrap items-center gap-2 cursor-pointer">
                   <div class="text-[9px] font-bold uppercase" style="color:var(--purple)">Opportunity context (lagged)</div>
                   <span class="pill text-[7px] pw font-bold" x-text="(window.CCHelpers&&CCHelpers.opportunityIntelligenceBadge)?CCHelpers.opportunityIntelligenceBadge(dos.oppIntel.insider||dos.oppIntel.institutional):'RESEARCH ONLY'"></span>
-                </div>
+                </summary>
+                <div x-show="dossierStructureReviewOnly()" class="text-[8px] mb-2 italic" style="color:var(--t3)" x-text="dossierLaggedContextNote()"></div>
                 <template x-if="dos.oppIntel.insider">
                   <div class="mb-2 p-2 rounded text-[9px]" style="background:var(--s2)">
                     <div class="font-bold text-white mb-1">Insider · Form 4</div>
@@ -3113,7 +3232,7 @@
                     <div class="text-[8px] mt-1" style="color:var(--t3)" x-text="dos.oppIntel.institutional.lag_copy||'Quarterly lag — sponsorship context only'"></div>
                   </div>
                 </template>
-              </div>
+              </details>
             </template>
             <!-- Decision stack -->
             <template x-if="dos.intel&&dos.intel.decision_stack">
@@ -3328,33 +3447,39 @@
                 <div x-show="dos.intel.index_relative_leadership.ai_contradiction_hint" class="text-[8px] mt-1" style="color:var(--amber)" x-text="(window.CCHelpers&&CCHelpers.aiContradictionDossierLine)?CCHelpers.aiContradictionDossierLine(dos.intel.index_relative_leadership.ai_contradiction_hint,dos.intel.index_relative_leadership.degraded):dos.intel.index_relative_leadership.ai_contradiction_hint"></div>
               </div>
             </template>
-            <!-- Unified Decision Card -->
+            <!-- Structure snapshot / Unified Decision -->
             <div class="card card-p mb-2" :style="'border-left:4px solid var(--'+(dosUnified().color)+')'">
               <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
                 <div class="flex items-center gap-2">
-                  <span class="text-[10px] font-bold uppercase" style="color:var(--t3)">Unified Decision</span>
+                  <span class="text-[10px] font-bold uppercase" style="color:var(--t3)" x-text="dossierStructureReviewOnly()?dossierStructureSnapshotTitle():'Unified Decision'"></span>
                   <span class="pill text-[11px] font-black" :class="dosUnified().pill" x-text="dosUnified().label"></span>
-                  <span x-show="dossierLevelsIndicativeOnly()" class="pill text-[8px] pa font-bold">CONFIRM ONLY</span>
+                  <span x-show="dossierStructureReviewOnly()" class="pill text-[8px] pa font-bold">CONFIRM ONLY</span>
                 </div>
-                <div class="flex flex-wrap gap-2 text-[9px] mono" style="color:var(--t3)">
+                <div x-show="!dossierStructureReviewOnly()" class="flex flex-wrap gap-2 text-[9px] mono" style="color:var(--t3)">
                   <span x-text="dosFormatDecisionConfidence()"></span>
                   <span x-text="dosFormatThesisQuality()"></span>
                 </div>
               </div>
               <div class="text-[10px] mb-2" style="color:var(--t2)" x-text="dosUnified().reason"></div>
-              <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[9px]">
-                <div><div style="color:var(--t3)" x-text="dossierLevelsIndicativeOnly()?'Indicative entry':'Entry zone'"></div><div class="mono" :class="dossierLevelsIndicativeOnly()?'text-amber-300':'text-white'" x-text="dosUnified().entry_zone?('$'+dosUnified().entry_zone[0]+'–$'+dosUnified().entry_zone[1]):'—'"></div></div>
-                <div><div style="color:var(--t3)" x-text="dossierLevelsIndicativeOnly()?'Monitor zone':'Stop'"></div><div class="mono" :class="dossierLevelsIndicativeOnly()?'text-amber-300':'text-red-400'" x-text="dosUnified().stop?'$'+dosUnified().stop:'—'"></div></div>
-                <div><div style="color:var(--t3)" x-text="dossierLevelsIndicativeOnly()?'Indicative targets':'T1 / T2'"></div><div class="mono" :class="dossierLevelsIndicativeOnly()?'text-amber-300':'text-green-400'" x-text="(dosUnified().target_1r&&dosUnified().target_2r)?('$'+dosUnified().target_1r+' / $'+dosUnified().target_2r):'—'"></div></div>
-                <div><div style="color:var(--t3)">R:R</div><div class="mono text-white" x-text="(dosUnified().rr_ratio_display||dosUnified().rr_ratio||'—')"></div></div>
-                <div><div style="color:var(--t3)" x-text="dossierLevelsIndicativeOnly()?'Sizing':'Size @1%'"></div><div class="mono" :class="dossierSizingBlocked()?'text-amber-300':'text-green-400'" x-text="dosSizeDisplay()"></div></div>
+              <div class="grid gap-2 text-[9px]" :class="dossierStructureReviewOnly()?'grid-cols-2 sm:grid-cols-3':'grid-cols-2 sm:grid-cols-5'">
+                <div><div style="color:var(--t3)" x-text="dossierStructureLevelLabel('entry')"></div><div class="mono" :class="dossierStructureReviewOnly()?'text-amber-300':'text-white'" x-text="dosUnified().entry_zone?('$'+dosUnified().entry_zone[0]+'–$'+dosUnified().entry_zone[1]):'—'"></div></div>
+                <div><div style="color:var(--t3)" x-text="dossierStructureLevelLabel('stop')"></div><div class="mono" :class="dossierStructureReviewOnly()?'text-amber-300':'text-red-400'" x-text="dosUnified().stop?'$'+dosUnified().stop:'—'"></div></div>
+                <div><div style="color:var(--t3)" x-text="dossierStructureLevelLabel('target')"></div><div class="mono" :class="dossierStructureReviewOnly()?'text-amber-300':'text-green-400'" x-text="(dosUnified().target_1r&&dosUnified().target_2r)?('$'+dosUnified().target_1r+' / $'+dosUnified().target_2r):'—'"></div></div>
+                <div x-show="!dossierStructureReviewOnly()"><div style="color:var(--t3)">R:R</div><div class="mono text-white" x-text="(dosUnified().rr_ratio_display||dosUnified().rr_ratio||'—')"></div></div>
+                <div x-show="!dossierStructureReviewOnly()"><div style="color:var(--t3)">Size @1%</div><div class="mono" :class="dossierSizingBlocked()?'text-amber-300':'text-green-400'" x-text="dosSizeDisplay()"></div></div>
               </div>
-              <div x-show="dosSizeExplanationVisible()" class="text-[8px] mt-1" style="color:var(--t3)" x-text="dosSizeExplanation()"></div>
-              <div x-show="dossierActionsBlocked()" class="text-[8px] mt-1 pa font-bold" style="line-height:1.45" x-text="dossierActionsBlockedTitle()"></div>
+              <div x-show="!dossierStructureReviewOnly()&&dosSizeExplanationVisible()" class="text-[8px] mt-1" style="color:var(--t3)" x-text="dosSizeExplanation()"></div>
+              <div x-show="dossierStructureReviewOnly()&&dos.intel&&dos.intel.dossier_mode" class="grid sm:grid-cols-3 gap-2 text-[8px] mt-2" style="color:var(--t3)">
+                <div x-show="dos.intel.dossier_mode.source"><span class="font-bold">Source</span> <span x-text="dos.intel.dossier_mode.source"></span></div>
+                <div x-show="dos.intel.dossier_mode.freshness"><span class="font-bold">Freshness</span> <span x-text="dos.intel.dossier_mode.freshness"></span></div>
+                <div><span class="font-bold">Use</span> Use: structure review only</div>
+              </div>
               <div class="flex flex-wrap gap-2 mt-2 pt-2" style="border-top:1px dashed var(--bd)">
-                <button class="btn-s text-[9px]" :disabled="dossierActionsBlocked()" :class="dossierActionsBlocked()?'opacity-50 cursor-not-allowed':''" :title="dossierActionsBlocked()?dossierActionsBlockedTitle():''" @click="dosIbkrSetAlert()">🔔 Set Alert</button>
-                <button class="btn-s text-[9px]" :disabled="dossierActionsBlocked()" :class="dossierActionsBlocked()?'opacity-50 cursor-not-allowed':''" :title="dossierActionsBlocked()?dossierActionsBlockedTitle():''" @click="dosIbkrPaperDraft()">📝 Paper Order Draft</button>
-                <button class="btn-s text-[9px]" @click="openReplayForDossier()">⏱ Replay</button>
+                <button class="btn-s text-[9px]" :disabled="!dossierMonitorRuleAllowed()" :class="!dossierMonitorRuleAllowed()?'opacity-50 cursor-not-allowed':''" :title="dossierMonitorRuleHint()" @click="dosIbkrSetAlert()" x-text="dossierMonitorRuleLabel()"></button>
+                <button x-show="dossierPaperDraftVisible()" class="btn-s text-[9px]" @click="dosIbkrPaperDraft()">📝 Paper Order Draft</button>
+                <div x-show="dossierStructureReviewOnly()&&!dossierPaperDraftVisible()" class="text-[8px] self-center pa font-bold" style="line-height:1.45" x-text="dossierPaperDraftDisabledCopy()"></div>
+                <details x-show="dossierStructureReviewOnly()" class="text-[9px]"><summary class="cursor-pointer" style="color:var(--t3)">⏱ Replay</summary><button class="btn-s text-[9px] mt-1" @click="openReplayForDossier()">Open replay</button></details>
+                <button x-show="!dossierStructureReviewOnly()" class="btn-s text-[9px]" @click="openReplayForDossier()">⏱ Replay</button>
               </div>
             </div>
             <!-- Catalyst strip -->
@@ -3569,25 +3694,25 @@
                   </div>
                 </div>
               </template>
-              <div class="card card-p mt-2">
-                <div class="flex items-center gap-2 mb-1">
-                  <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">Trade plan</div>
-                  <span x-show="dossierLevelsIndicativeOnly()" class="pill text-[8px] pa font-bold">CONFIRM ONLY</span>
-                </div>
+              <details class="card card-p mt-2" :open="!dossierStructureReviewOnly()">
+                <summary class="flex items-center gap-2 cursor-pointer">
+                  <span class="text-[10px] font-bold uppercase" style="color:var(--t3)" x-text="dossierStructureReviewOnly()?dossierStructureSnapshotTitle():'Trade plan'"></span>
+                  <span x-show="dossierStructureReviewOnly()" class="pill text-[8px] pa font-bold">CONFIRM ONLY</span>
+                </summary>
                 <template x-if="(dos.intel&&dos.intel.trade_plan_human)||dosTradePlanRows().length">
-                  <table class="w-full text-[9px]" style="border-collapse:collapse">
+                  <table class="w-full text-[9px] mt-2" style="border-collapse:collapse">
                     <template x-for="row in (dos.intel&&dos.intel.trade_plan_human)||dosTradePlanRows()" :key="row.label">
                       <tr style="border-bottom:1px solid var(--bd)">
                         <td class="py-1 pr-3 font-bold" style="color:var(--t3);width:30%" x-text="row.label"></td>
                         <td class="py-1 mono" style="color:var(--t2)" x-text="row.value"></td>
                       </tr>
                     </template>
-                    <tr><td class="py-1 pr-3 font-bold" style="color:var(--t3)" x-text="dossierLevelsIndicativeOnly()?'Sizing':'Size @1%'"></td><td class="py-1 mono" :class="dossierSizingBlocked()?'text-amber-300':'text-green-400'" x-text="dosSizeDisplay()"></td></tr>
-                    <tr x-show="dosSizeExplanationVisible()"><td class="py-1 pr-3 font-bold" style="color:var(--t3)">Size basis</td><td class="py-1" style="color:var(--t3);font-size:8px" x-text="dosSizeExplanation()"></td></tr>
+                    <tr x-show="!dossierStructureReviewOnly()"><td class="py-1 pr-3 font-bold" style="color:var(--t3)">Size @1%</td><td class="py-1 mono" :class="dossierSizingBlocked()?'text-amber-300':'text-green-400'" x-text="dosSizeDisplay()"></td></tr>
+                    <tr x-show="!dossierStructureReviewOnly()&&dosSizeExplanationVisible()"><td class="py-1 pr-3 font-bold" style="color:var(--t3)">Size basis</td><td class="py-1" style="color:var(--t3);font-size:8px" x-text="dosSizeExplanation()"></td></tr>
                   </table>
                 </template>
-                <div x-show="!(dos.intel&&dos.intel.trade_plan_human)&&!dosTradePlanRows().length" class="text-[9px]" style="color:var(--t3)">Trade plan unavailable — load structure first.</div>
-              </div>
+                <div x-show="!(dos.intel&&dos.intel.trade_plan_human)&&!dosTradePlanRows().length" class="text-[9px] mt-2" style="color:var(--t3)">Structure unavailable — load core first.</div>
+              </details>
               <div x-show="!(dos.intel&&dos.intel.narrative)&&!dosTradePlanRows().length&&!(dos.intel&&dos.intel.trade_plan_human)" class="card card-p text-[9px] text-center py-6" style="color:var(--t3)">Decision narrative unavailable — core dossier may still be loading.</div>
             </div>
 
@@ -3787,6 +3912,22 @@
         </div>
         <div class="text-[8px] mt-2 w-full" style="color:var(--t3)">Load core only — quote, basic technicals, and cached structure; skips extended research panels.</div>
       </div>
+    </main>
+
+    <!-- SURFACE: Strategy Lab (More — research only) -->
+    <main x-show="tab==='stratlab'" class="fade" data-cc="stratlab-surface" style="padding:12px;padding-bottom:40px" x-init="tab==='stratlab' && !stratHealth.data && fetchStrategyHealth()">
+      <div class="card card-p mb-2" style="border-left:3px solid var(--blue)">
+        <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--blue)">Strategy Lab — research only</div>
+        <div class="text-[9px]" style="color:var(--t2);line-height:1.55" x-text="stratLabOneLiner()"></div>
+      </div>
+      <template x-if="stratHealth.data&&stratHealth.data.strategies&&stratHealth.data.strategies.length">
+        <div class="card card-p text-[9px] mono" style="color:var(--t2)">
+          <div class="font-bold mb-1 text-white">Per-strategy window</div>
+          <template x-for="row in stratHealth.data.strategies.slice(0,8)" :key="row.strategy_id">
+            <div class="py-0.5" x-text="row.strategy_id+' · n='+row.n_trades+' · hit '+(row.hit_rate*100).toFixed(0)+'%'"></div>
+          </template>
+        </div>
+      </template>
     </main>
 
     <!-- ═══════════════════════════════════════════════════════ -->
@@ -4071,7 +4212,7 @@
                 <span class="guide-badge pa">WAIT</span>
                 <span class="guide-badge pr">NO_TRADE</span>
               </div>
-              <div style="font-size:11px;color:var(--t2);line-height:1.6">Dashboard tradeability banner + per-card <strong style="color:var(--t1)">execution_ready</strong> flag. WAIT/NO_TRADE days: patience is the active decision.</div>
+              <div style="font-size:11px;color:var(--t2);line-height:1.6">Dashboard tradeability banner + per-card <strong style="color:var(--t1)">execution_ready</strong> flag. WAIT/NO_TRADE: board-level hold.</div>
             </div>
           </div>
           <div style="margin-top:10px;padding:10px 12px;background:var(--s2);border-radius:8px;font-size:11px;color:var(--t2);line-height:1.7">
@@ -4314,7 +4455,7 @@
         <div style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">🛑 When NOT to act — full list</div>
         <div style="display:flex;flex-direction:column;gap:6px;font-size:11px">
           <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Engine OFF</span><span style="color:var(--t2)">Mode pill grey or Ops shows no fresh cycle — decisions stale or absent.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Board gate closed</span><span style="color:var(--t2)">WAIT/NO_TRADE tradeability — patience is the active decision.</span></div>
+          <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Board gate closed</span><span style="color:var(--t2)">WAIT/NO_TRADE tradeability — board-level hold.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Broker not ready</span><span style="color:var(--t2)">LOGIN-only (GATEWAY UP · LOGIN REQUIRED), disconnected, or portfolio/bracket misaligned.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Bracket not ready</span><span style="color:var(--t2)">Card lacks entry/stop or execution_ready flag.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Mock flow</span><span style="color:var(--t2)">Flow surface in synthetic/mock mode — colour only.</span></div>
@@ -5517,7 +5658,7 @@
     <!-- ═══════════════════════════════════════════════════════ -->
     <main x-show="tab==='funds'" class="fade">
       <div class="trust-strip">
-        <span style="color:var(--blue)">● FUND OPERATING CONSOLE</span>
+        <span style="color:var(--blue)">● FUND RESEARCH LAB</span>
         <span x-text="fundBenchmarkLine()"></span>
         <span class="font-bold" x-text="fundRegimeDisplay()"></span>
         <span class="text-[7px]" style="color:var(--amber)" x-show="fundRegimeNote()" x-text="fundRegimeNote()"></span>
@@ -5529,14 +5670,34 @@
 
       <div class="p-3 space-y-3">
         <div class="flex justify-between items-center flex-wrap gap-2">
-          <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">💼 Active Fund Manager</div>
+          <div class="text-[10px] font-bold uppercase" style="color:var(--t3)" x-text="fundMonitor.console?.research_lab_title||fundMonitor.console?.title||'Fund Research Lab'"></div>
           <button @click="fetchFunds();fetchLeaders()" class="btn-s text-[10px]" :disabled="fundMonitor.loading">🔄 Refresh</button>
         </div>
 
-        <!-- INDEX FUND POSTURE (primary — tactical sleeves demoted below) -->
+        <!-- Guardrail + first-screen summary (research default) -->
+        <template x-if="fundMonitor.console?.funds_first_screen">
+          <div class="card card-p text-[8px]" style="border:1px dashed var(--amber);background:rgba(245,158,11,.04)">
+            <div class="font-bold uppercase mb-2" style="color:var(--amber)" x-text="fundMonitor.console.guardrail||fundMonitor.console.funds_first_screen.guardrail"></div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div><span style="color:var(--t3)">NOW</span> <span class="font-bold text-white" x-text="fundMonitor.console.funds_first_screen.now"></span></div>
+              <div><span style="color:var(--t3)">WHY</span> <span style="color:var(--t2)" x-text="fundMonitor.console.funds_first_screen.why"></span></div>
+              <div><span style="color:var(--t3)">CORE INDEX POSTURE</span> <span class="font-bold text-white" x-text="fundMonitor.console.funds_first_screen.core_index_posture"></span></div>
+              <div><span style="color:var(--t3)">LIVE ALLOCATION</span> <span class="font-bold text-amber-300" x-text="fundMonitor.console.funds_first_screen.live_allocation_label"></span></div>
+            </div>
+            <div class="mt-2 pt-2" style="border-top:1px dashed var(--bd)">
+              <div><span style="color:var(--t3)">BEST RESEARCH SLEEVE</span> <span class="font-bold text-white" x-text="fundMonitor.console.funds_first_screen.best_research_sleeve?.headline"></span>
+                <span style="color:var(--t2)" x-text="' · '+fundMonitor.console.funds_first_screen.best_research_sleeve?.label"></span></div>
+              <div class="text-[7px] mt-1" style="color:var(--t3)">Missing validation: <span x-text="(fundMonitor.console.funds_first_screen.best_research_sleeve?.missing_validation||[]).join(' · ')"></span></div>
+              <div class="text-[7px] mt-1" style="color:var(--t2)" x-show="fundMonitor.console.funds_first_screen.theoretical_model_band_note" x-text="fundMonitor.console.funds_first_screen.theoretical_model_band_note"></div>
+              <div class="text-[7px] mt-1"><span style="color:var(--t3)">NEXT</span> <span x-text="(fundMonitor.console.funds_first_screen.next_steps||[]).join(' → ')"></span></div>
+            </div>
+          </div>
+        </template>
+
+        <!-- A · CORE INDEX POSTURE (primary — advisory) -->
         <template x-if="fundMonitor.console?.index_fund_posture">
           <div class="card card-p" style="border:2px solid var(--blue);background:linear-gradient(135deg,rgba(59,130,246,.06),transparent)">
-            <div class="text-[9px] font-bold uppercase mb-2" style="color:var(--blue)">Index · Valuation & 定投 posture</div>
+            <div class="text-[9px] font-bold uppercase mb-2" style="color:var(--blue)">A · Core index posture</div>
             <div class="flex flex-wrap gap-2 items-center mb-2 text-[8px]">
               <span class="pill text-[7px] pg" x-text="fundMonitor.console.index_fund_posture.valuation_zone||'—'"></span>
               <span class="pill text-[7px] pw" x-text="fundMonitor.console.index_fund_posture.action_label||'hold'"></span>
@@ -5547,10 +5708,27 @@
           </div>
         </template>
 
-        <!-- ZONE A: INVESTABLE NOW -->
-        <template x-if="fundMonitor.console?.investable_now">
+        <!-- C · ALLOCATION / EXECUTION LOCK (when research-only) -->
+        <template x-if="fundResearchOnlyMode()">
+          <div class="card card-p text-[8px]" style="border:2px solid var(--red);background:rgba(239,68,68,.04)">
+            <div class="text-[9px] font-bold uppercase mb-2" style="color:var(--red)">C · Allocation / execution lock</div>
+            <div class="text-[8px] mb-2" style="color:var(--t2)">research hypothesis only — no live allocation authority</div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-2">
+              <div><span style="color:var(--t3)">Live eligible capital</span> <span class="font-bold text-white" x-text="(fundMonitor.console?.live_allocation_eligible??0)+'%'"></span></div>
+              <div><span style="color:var(--t3)">Allocation authority</span> <span class="font-bold text-amber-300" x-text="fundMonitor.console?.allocation_authority||'none'"></span></div>
+              <div><span style="color:var(--t3)">Live trades</span> <span class="font-bold" x-text="fundMonitor.console?.funds_mode?.live_trades_count??0"></span></div>
+            </div>
+            <div class="text-[7px]" style="color:var(--t3)" x-show="fundMonitor.console?.allocator_truth_strip?.theoretical_model_band_note" x-text="fundMonitor.console.allocator_truth_strip.theoretical_model_band_note"></div>
+            <div class="text-[7px] mt-1" style="color:var(--t2)">
+              <span style="color:var(--t3)">Blocked:</span> <span x-text="(fundMonitor.console?.funds_mode?.blockers||[]).join(' · ')"></span>
+            </div>
+          </div>
+        </template>
+
+        <!-- Legacy investable zone — hidden in research-only (allocation language leakage) -->
+        <template x-if="fundMonitor.console?.investable_now && !fundResearchOnlyMode()">
           <div class="space-y-2">
-            <div class="text-[9px] font-bold uppercase" style="color:var(--green)">A · Investable now</div>
+            <div class="text-[9px] font-bold uppercase" style="color:var(--green)">Allocation posture</div>
             <div class="card card-p" style="border:2px solid var(--green);background:linear-gradient(135deg,rgba(0,212,170,.05),transparent)">
               <div class="flex flex-wrap gap-2 items-center mb-2 text-[8px]">
                 <span class="font-bold text-white" x-text="fundMonitor.console.investable_now.regime||fundRegimeDisplay()"></span>
@@ -5558,7 +5736,7 @@
                 <span class="pill text-[7px] pr" x-show="fundMonitor.console.investable_now.regime_stale">STALE</span>
                 <span class="text-[7px]" style="color:var(--amber)" x-show="fundMonitor.console.investable_now.regime_stale_note" x-text="fundMonitor.console.investable_now.regime_stale_note"></span>
               </div>
-              <div class="text-[10px] font-bold mb-2 text-amber-300" x-text="'Deploy? '+fmtDisplay(fundMonitor.console.investable_now.deploy_label,'No fully live-validated sleeve')"></div>
+              <div class="text-[10px] font-bold mb-2 text-amber-300" x-text="fundMonitor.console.investable_now.model_stance_label||fundMonitor.console.investable_now.deploy_label"></div>
               <div class="text-[8px] mb-2" style="color:var(--t2)" x-text="fundMonitor.console.investable_now.truth_headline"></div>
             </div>
 
@@ -5569,8 +5747,9 @@
                   <div><span style="color:var(--t3)">Live eligible</span> <span class="font-bold text-white" x-text="fundMonitor.console.allocator_truth_strip.live_eligible_count"></span></div>
                   <div><span style="color:var(--t3)">Research sleeves</span> <span class="font-bold" x-text="fundMonitor.console.allocator_truth_strip.research_sleeve_count"></span></div>
                   <div><span style="color:var(--t3)">Execution ready</span> <span class="font-bold" :class="fundMonitor.console.allocator_truth_strip.execution_ready?'text-green-400':'text-amber-300'" x-text="fundMonitor.console.allocator_truth_strip.execution_ready_label"></span></div>
-                  <div><span style="color:var(--t3)">Allocatable</span> <span class="font-bold text-white" x-text="fundMonitor.console.allocator_truth_strip.current_allocatable"></span></div>
-                  <div><span style="color:var(--t3)">Max capital</span> <span class="font-bold text-amber-300" x-text="fundMonitor.console.allocator_truth_strip.max_capital_allowed"></span></div>
+                  <div><span style="color:var(--t3)">Research fit</span> <span class="font-bold text-white" x-text="fundMonitor.console.allocator_truth_strip.current_research_fit||fundMonitor.console.allocator_truth_strip.current_allocatable"></span></div>
+                  <div><span style="color:var(--t3)">Live eligible capital</span> <span class="font-bold text-amber-300" x-text="(fundMonitor.console.allocator_truth_strip.live_eligible_capital_pct??0)+'%'"></span></div>
+                  <div class="sm:col-span-2" x-show="fundMonitor.console.allocator_truth_strip.theoretical_model_band"><span style="color:var(--t3)">Theoretical model band</span> <span class="font-bold text-amber-300" x-text="fundMonitor.console.allocator_truth_strip.theoretical_model_band"></span></div>
                 </div>
                 <div class="text-[7px] mt-1" style="color:var(--t3)">
                   <div class="font-bold mb-1">Why not more?</div>
@@ -5581,8 +5760,8 @@
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[8px]">
               <div class="card card-p" style="border-left:3px solid var(--green)">
-                <div class="font-bold uppercase mb-1" style="color:var(--green)">Strongest eligible</div>
-                <div class="text-white font-bold" x-text="fundMonitor.console.investable_now.strongest_eligible?.label||'—'"></div>
+                <div class="font-bold uppercase mb-1" style="color:var(--green)">Highest research fit</div>
+                <div class="text-white font-bold" x-text="fundMonitor.console.investable_now.strongest_research_fit?.label||fundMonitor.console.investable_now.strongest_eligible?.label||'—'"></div>
               </div>
               <div class="card card-p" style="border-left:3px solid var(--purple);opacity:0.85">
                 <div class="font-bold uppercase mb-1" style="color:var(--purple)">Strongest research</div>
@@ -5600,14 +5779,14 @@
               </div>
             </template>
 
-            <div class="card card-p text-[8px]" style="border-left:3px solid var(--blue)">
-              <div class="font-bold uppercase mb-1" style="color:var(--blue)">Honest allocation band</div>
+            <div class="card card-p text-[8px]" style="border-left:3px solid var(--blue)" x-show="!fundResearchOnlyMode()">
+              <div class="font-bold uppercase mb-1" style="color:var(--blue)">Research allocation band</div>
               <div class="text-[10px] font-bold text-white mb-1" x-text="fundMonitor.console.investable_now.allocation_headline"></div>
               <template x-for="ln in (fundMonitor.console.investable_now.allocation_lines||[])" :key="ln">
                 <div class="mt-0.5" style="color:var(--t2)" x-text="ln"></div>
               </template>
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 mt-2 pt-2" style="border-top:1px dashed var(--bd)">
-                <div><span style="color:var(--t3)">Max capital allowed</span> <span class="font-bold text-amber-300" x-text="fundAllocationMaxCapital()"></span></div>
+                <div><span style="color:var(--t3)">Theoretical model band</span> <span class="font-bold text-amber-300" x-text="fundAllocationMaxCapital()"></span></div>
                 <div><span style="color:var(--t3)">Execution ready?</span> <span class="font-bold" :class="fundExecutionReadyBool()?'text-green-400':'text-amber-300'" x-text="fundExecutionReadyLabel()"></span></div>
                 <div class="sm:col-span-2" x-show="fundAllocationExecutionState()"><span style="color:var(--t3)">Execution state</span> <span class="font-bold" x-text="fundAllocationExecutionState()"></span></div>
                 <div class="sm:col-span-2" x-show="fundAllocationStatusNote()"><span style="color:var(--t3)">Backend status</span> <span style="color:var(--t2)" x-text="fundAllocationStatusNote()"></span></div>
@@ -5659,21 +5838,22 @@
         </template>
         <span x-show="leadersPanel.error" class="text-[8px] text-red-400" x-text="leadersPanel.error"></span>
 
-        <!-- ZONE B: RESEARCH SLEEVES -->
+        <!-- B · SLEEVE RESEARCH (collapsed by default) -->
         <div class="pt-2 mt-2" style="border-top:2px dashed var(--bd)">
-          <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">B · Research sleeves (secondary)</div>
+          <button type="button" @click="fundMonitor.sleeveResearchOpen=!fundMonitor.sleeveResearchOpen" class="w-full text-left flex justify-between items-center gap-2 mb-1">
+            <span class="text-[9px] font-bold uppercase" style="color:var(--t3)">B · Sleeve research (secondary)</span>
+            <span class="text-[8px]" style="color:var(--t3)" x-text="fundMonitor.sleeveResearchOpen?'▼ collapse':'▶ expand'"></span>
+          </button>
           <div class="text-[8px] mb-2 p-2 rounded" style="background:rgba(0,0,0,.2);color:var(--t3)">
-            Index posture above is primary for ordinary investors. Model backtest sleeves below are research context only — not live track record, not deploy authority vs core 定投.
+            Core index posture above is primary. Model backtest sleeves are research context only — not live track record, not deploy authority.
           </div>
-        </div>
-
-        <!-- Sleeve comparison (middle) -->
+          <div x-show="fundMonitor.sleeveResearchOpen">
         <template x-if="(fundMonitor.console?.comparison_table||[]).length">
           <div class="card card-p overflow-x-auto" style="opacity:0.92">
             <div class="text-[9px] font-bold uppercase mb-2" style="color:var(--t3)">Sleeve comparison</div>
             <table class="w-full text-[8px] mono" style="border-collapse:collapse">
               <thead><tr style="color:var(--t3);text-align:left">
-                <th class="p-1">Sleeve</th><th>Status</th><th>Fit</th><th>20d</th><th>Backtest α</th><th>DD</th><th>Deploy</th><th>Live trades</th>
+                <th class="p-1">Sleeve</th><th>Status</th><th>Fit</th><th>20d</th><th>Backtest α</th><th>DD</th><th>Model stance</th><th>Live trades</th>
               </tr></thead>
               <tbody>
                 <template x-for="row in fundMonitor.console.comparison_table" :key="row.id">
@@ -5684,7 +5864,7 @@
                     <td :class="fundMetricTone(row.recent_20d_pct,row)" x-text="fundMetricPct(row.recent_20d_pct,row,'Metrics pending')"></td>
                     <td style="opacity:0.75;font-size:7px" x-text="fundAlphaDisplay(row)"></td>
                     <td class="text-red-400" x-text="fundDrawdownDisplay(row)"></td>
-                    <td x-text="row.deployability"></td>
+                    <td x-text="row.model_stance_label||fundModelStanceDisplay(row)"></td>
                     <td style="color:var(--t3)" x-text="row.live_trades_count??0"></td>
                   </tr>
                 </template>
@@ -5729,22 +5909,32 @@
                 <div class="grid grid-cols-2 sm:grid-cols-5 gap-1 mb-1">
                   <div><span style="color:var(--t3)">Status</span> <span class="text-white font-bold" x-text="card.gate_status||'—'"></span></div>
                   <div><span style="color:var(--t3)">Fit</span> <span x-text="fundFitDisplay(card)"></span></div>
-                  <div><span style="color:var(--t3)">Deploy</span> <span x-text="card.deployability||'—'"></span></div>
-                  <div><span style="color:var(--t3)">Conviction</span> <span x-text="card.card_zones?.current_state?.conviction||card.manager_box?.conviction||'—'"></span></div>
+                  <div><span style="color:var(--t3)">Model stance</span> <span x-text="card.model_stance_label||fundModelStanceDisplay(card)"></span></div>
+                  <div><span style="color:var(--t3)">Validation confidence</span> <span x-text="fundValidationConfidence(card)"></span></div>
                   <div><span style="color:var(--t3)">Live trades</span> <span x-text="card.evidence_quality?.live_trades_count??0"></span></div>
                 </div>
                 <div style="color:var(--t2)" x-text="card.status_reason"></div>
               </div>
               <div class="mb-2 p-2 rounded text-[8px]" style="background:rgba(0,0,0,.25);border:1px dashed var(--bd);opacity:0.85">
-                <div class="font-bold uppercase mb-1" style="color:var(--t3)">Evidence · model backtest only</div>
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-1 text-[8px] mono">
+                <button type="button" @click="fundToggleBacktestDetails(card.id)" class="w-full text-left flex justify-between items-center gap-2 mb-1">
+                  <span class="font-bold uppercase" style="color:var(--t3)">Backtest quarantine</span>
+                  <span class="text-[7px]" style="color:var(--t3)" x-text="fundShowBacktestDetails(card)?'▼ hide':'▶ details'"></span>
+                </button>
+                <template x-if="!fundShowBacktestDetails(card)">
+                  <div class="text-[7px] leading-relaxed" style="color:var(--t3)">
+                    <template x-for="ln in (card.backtest_quarantine?.summary_lines||['Validation model-only','Live trades 0','Walk-forward missing','Costs unknown','Allocation authority none'])" :key="ln">
+                      <div x-text="ln"></div>
+                    </template>
+                  </div>
+                </template>
+                <div x-show="fundShowBacktestDetails(card)" class="grid grid-cols-2 sm:grid-cols-4 gap-1 text-[8px] mono">
                   <div><span style="color:var(--t3)">Return</span> <span style="opacity:0.8" :class="fundMetricTone(card.fund_return_pct,card)" x-text="fundReturnDisplay(card)"></span></div>
                   <div><span style="color:var(--t3)">α</span> <span style="font-size:7px;opacity:0.75" :class="fundMetricTone(card.excess_return_pct,card)" x-text="fundAlphaDisplay(card)"></span></div>
                   <div><span style="color:var(--t3)">DD</span> <span class="text-red-400" x-text="fundDrawdownDisplay(card)"></span></div>
                   <div><span style="color:var(--t3)">Sharpe</span> <span style="opacity:0.75" x-text="card.sharpe||'—'"></span></div>
                 </div>
                 <div class="text-[7px] mt-1" style="color:var(--t3)" x-text="fundEvidenceWindowLine(card)"></div>
-                <template x-if="(card.equity_curve_60||card.equity_curve_20||[]).length>2">
+                <template x-if="fundShowBacktestDetails(card)&&(card.equity_curve_60||card.equity_curve_20||[]).length>2">
                   <div class="mt-2 flex gap-3 items-end opacity-70">
                     <div>
                       <svg width="100" height="32"><polyline :points="sleeveSparkPoints(card.equity_curve_60||card.equity_curve_20)" fill="none" stroke="var(--t3)" stroke-width="1"/></svg>
@@ -5759,10 +5949,10 @@
                   </div>
                 </template>
               </div>
-              <div class="mb-2 p-2 rounded text-[8px]" style="background:var(--s2);border:1px solid var(--bd)">
-                <div class="font-bold uppercase mb-1" style="color:var(--purple)">Current book</div>
-                <template x-if="(card.target_allocation||[]).length">
-                  <div style="color:var(--t3)">Target:
+              <div class="mb-2 p-2 rounded text-[8px]" style="background:var(--s2);border:1px solid var(--bd)" x-show="!fundResearchOnlyMode()||fundMonitor.sleeveResearchOpen">
+                <div class="font-bold uppercase mb-1" style="color:var(--purple)">Model holdings (hypothetical)</div>
+                <template x-if="!fundResearchOnlyMode()&&(card.target_allocation||[]).length">
+                  <div style="color:var(--t3)">Model weights:
                     <template x-for="ta in card.target_allocation" :key="ta.ticker">
                       <span class="text-white" x-text="ta.ticker+' '+ta.weight_pct+'%'"></span><span> · </span>
                     </template>
@@ -5814,6 +6004,8 @@
         <template x-if="!fundMonitor.loading && (!fundMonitor.data||!(fundMonitor.data.cards||[]).length)">
           <div class="card card-p text-center" style="padding:24px;color:var(--t3)">No fund cards yet. Check market data / brief pipeline.</div>
         </template>
+          </div>
+        </div>
       </div>
     </main>
 
@@ -6659,7 +6851,10 @@
               <div class="mt-2 p-2 rounded text-[9px]" style="background:var(--s2);color:var(--red)" x-text="'❌ '+ibkr.orderError"></div>
             </template>
 
-            <!-- ── WORKING BRACKET PANEL ─ shows armed children before parent fills ── -->
+            <!-- ── WORKING BRACKET / Simulation Drafts when deploy blocked ── -->
+            <template x-if="ibkr.workingBracket || (ibkr.bracketArchive&&ibkr.bracketArchive.length)">
+              <details class="mt-2" :open="!todayDeployBlocked()">
+                <summary class="text-[9px] font-bold uppercase cursor-pointer" style="color:var(--t3)" x-text="todayDeployBlocked()?'Simulation Drafts (deploy blocked)':'Paper Queue'"></summary>
             <template x-if="ibkr.workingBracket">
               <div class="mt-2 p-2 rounded text-[10px]" style="background:#0e2a1a;border:1px solid var(--green)">
                 <div class="flex items-center justify-between mb-1">
@@ -6713,6 +6908,8 @@
                 </div>
               </div>
             </template>
+              </details>
+            </template>
           </div>
         </template>
 
@@ -6738,6 +6935,7 @@
         <span x-show="opsGlobalLoadingLine()" style="color:var(--t3)" x-text="opsGlobalLoadingLine()"></span>
         <span x-show="opsConsole.error && !opsGlobalLoadingLine()" style="color:var(--red)" x-text="opsConsole.error"></span>
         <span x-show="errorLog.entries.length" class="pill pr text-[8px]" x-text="errorLog.entries.length+' log'"></span>
+        <button type="button" data-cc="export-review-pdf" class="btn-s text-[8px] ml-auto" @click="exportReviewPdfClick()" :disabled="exportReviewPdfBusy" x-text="exportReviewPdfBusy?'Exporting…':'Export review PDF'"></button>
       </div>
       <div class="p-3 space-y-3">
         <!-- Ops sub-sections -->
@@ -7613,6 +7811,7 @@
         {id:'ops',icon:'⚙️',label:'Ops'},
         {id:'ibkr',icon:'⚡',label:'IBKR'},
         {id:'btlab',icon:'🧪',label:'Backtest Lab'},
+        {id:'stratlab',icon:'📊',label:'Strategy Lab'},
       ],
 
       showMore:false,
@@ -7639,7 +7838,7 @@
       // To be removed once the corresponding fetch* methods are deleted: factory, benchBT, fundMonitor, pmStrip, tradeIntel, tt, bt
       // Already deleted (true orphans): perfTracker, fundLab, modelFunds, tradeJournal, apiEndpoints, oppScanner, rsData, rsFilter, rejectsData, noTradeData
       benchBT:{period:'5y',benchmark:'SPY',loading:false,data:null,error:''},
-      fundMonitor:{loading:false,data:null,console:null,error:'',lastRefresh:null,autoRefreshTimer:null,benchmark:'SPY',activeFund:null},
+      fundMonitor:{loading:false,data:null,console:null,error:'',lastRefresh:null,autoRefreshTimer:null,benchmark:'SPY',activeFund:null,sleeveResearchOpen:false,backtestDetailsOpen:{}},
       leadersPanel:{loading:false,data:null,error:''},
       pmStrip:{funds:[],lastFetch:0},
       tradeIntel:{loading:false,data:null,error:'',confData:null,mistakesData:null,aiLoading:false,aiError:'',aiReview:null,selectedTradeKey:''},
@@ -7648,6 +7847,7 @@
       opsPanel:'health',
       changelogPanel:{loading:false,loaded:false,error:'',timeout:false,version:'',product:'CC',entries:[]},
       errorLog:{loading:false,error:'',entries:[],total:0,filter:'all'},
+      exportReviewPdfBusy:false,
       providers:{yfinance:false,regime_router:false,alpaca:{configured:false,connected:false,paper:true}},
       opsDetail:{},
       today7:{regime:null,top_ranked:[],filter_funnel:null,avoid_list:[],avoid_grouped:null,bucket_quality:[],decision_model:null,decision_hierarchy:null,passive_baseline:null,complexity_challenge:null,restraint:null,surface_authority:null,crisis_regime:null,naval_clarity:null,buffett_clarity:null,index_fund_posture:null,principles_posture:null,todays_decision:null,decision_authority:null,tradeability:'',what_changed:[],event_risks:[],best_family:null,pulse:null,narrative:'',ai_narrative:null,ai_loading:false,ai_provider:'',ai_model:'',ai_error:'',ai_configured:false,ai_setup_hint:'',date:'',trust:{},best_action:null,overlap_warning:null,near_miss:[],no_setup_diagnosis:null,quant_cluster_hints:[],unlock_deploy:null,regime_wait_explanation:[],monitor_triggers:[],sleeve_summary:null,quant_alloc:null,execution_readiness:null,evidence_badges:null,cross_asset_confirmation:null,index_regime_summary:null,regime_strip:null,regime_stack_summary:null,allocator_stance:null,ai_reason_codes:[],score_reconciliation:null,ai_commentary_open:false,avoid_collapsed:true},
@@ -8247,7 +8447,7 @@
         }
       },
       decisionAuthority(){return this.today7.decision_authority||this.rankedOpps.decision_authority||this.ccHeader.decision_authority||{};},
-      _SURFACE_MODES:{today:'dashboard_core',signals:'playbook_core',scanners:'discovery_research',dossier:'dossier_research','stock-intel':'dossier_research',portfolio:'portfolio_manual',funds:'funds_research',flow:'flow_supporting',rs:'rs_supporting',notrade:'rejections_diagnostic',rejections:'rejections_diagnostic',guide:'guide_reference',ops:'ops_diagnostic',ibkr:'ibkr_execution',btlab:'backtest_research',backtest:'backtest_research',command:'command_research'},
+      _SURFACE_MODES:{today:'dashboard_core',signals:'playbook_core',scanners:'discovery_research',dossier:'dossier_research','stock-intel':'dossier_research',portfolio:'portfolio_manual',funds:'funds_research',flow:'flow_supporting',rs:'rs_supporting',notrade:'rejections_diagnostic',rejections:'rejections_diagnostic',guide:'guide_reference',ops:'ops_diagnostic',ibkr:'ibkr_execution',btlab:'backtest_research',backtest:'backtest_research',stratlab:'backtest_research',command:'command_research'},
       _HEADER_BASE:{
         dashboard_core:{badge:'BOARD GATE',title:'Dashboard — today\'s deploy posture',explanation:'Regime + board gate + deploy posture. This surface may permit sizing when tradeability and execution align.',next_action:'Read tradeability first, then top ranked.'},
         playbook_core:{badge:'DEPLOY BOARD',title:'Playbook — ranked opportunities',explanation:'Ranked board — deploy when board_mode is full and names are execution-ready.',next_action:'Filter to execution-ready rows; cross-check Dashboard gate.'},
@@ -8782,12 +8982,77 @@
         return (this.tab==='today'||this.tab==='signals')&&!this.dataContractDismissed;
       },
       dataContractStrip(){
+        const truth=this.today7.system_truth||{};
+        const typed=(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStrip)
+          ?CCHelpers.scopedFreshnessStrip(truth)
+          :'';
         return {
           fetch:this.dataContractFetchBadge(),
-          board:this.canonicalRegimeLine()||this.canonicalTradeability()||'—',
+          truth:typed||this.unifiedTruthStripLine()||this.canonicalRegimeLine()||'—',
           broker:this.dataContractBrokerShort(),
           dismissible:true,
         };
+      },
+      unifiedTruthStripLine(){
+        const truth=this.today7.system_truth||{};
+        if(truth.truth_strip) return String(truth.truth_strip);
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStrip) return CCHelpers.scopedFreshnessStrip(truth);
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.systemTruthLine) return CCHelpers.systemTruthLine(truth);
+        return '';
+      },
+      todayDeployBlocked(){
+        const truth=this.today7.system_truth||{};
+        return truth.deploy_authority===false;
+      },
+      playbookPrimaryBucket(r, deployAuth, nmSet){
+        const act=String(r?.effective_action||r?.action||'WATCH').toUpperCase();
+        const ticker=String(r?.ticker||'').toUpperCase();
+        if(['AVOID','NO_TRADE','PASS','EXIT','REDUCE','BLOCKED'].includes(act)) return 'Rejected';
+        if(deployAuth && r?.execution_ready && ['TRADE','BUY','BUY_ON_DIP','STRONG_TRADE','TRADE_NOW'].includes(act)) return 'Deploy';
+        if(act==='PILOT') return 'Pilot';
+        if(nmSet.has(ticker)||r?.whats_missing||r?.near_miss) return 'Near-miss';
+        if(['WATCH','WAIT','TRADE','BUY','BUY_ON_DIP'].includes(act)) return 'Watch';
+        const score=Number(r?.score)||0;
+        return score>=6?'Near-miss':'Rejected';
+      },
+      playbookBucketCounts(){
+        const rows=this.playbookVisibleRows();
+        const deployAuth=!!(this.today7.system_truth||{}).deploy_authority;
+        const nm=new Set((this.rankedOpps.near_miss||[]).map(x=>String(x.ticker||'').toUpperCase()));
+        const counts={Deploy:0,Pilot:0,Watch:0,'Near-miss':0,Rejected:0};
+        rows.forEach(r=>{const b=this.playbookPrimaryBucket(r,deployAuth,nm);counts[b]=(counts[b]||0)+1;});
+        return counts;
+      },
+      playbookNoEdgeMode(){
+        const c=this.playbookBucketCounts();
+        const actionable=(c.Deploy||0)+(c.Pilot||0)+(c.Watch||0)+(c['Near-miss']||0);
+        return actionable===0 && (c.Rejected||0)>0;
+      },
+      playbookNoEdgeLine(){
+        const c=this.playbookBucketCounts();
+        return `NO EDGE TODAY · ${c.Deploy||0} Deploy · ${c.Pilot||0} Pilot · ${c.Watch||0} Watch · ${c['Near-miss']||0} Near-miss · Rejected hidden · Best action: do nothing`;
+      },
+      agentPrimaryBlockerLine(){
+        const truth=this.today7.system_truth||{};
+        if(truth.primary_blocker) return String(truth.primary_blocker);
+        const codes=truth.reason_codes||[];
+        if(codes.length&&typeof CCHelpers!=='undefined'&&CCHelpers.systemTruthMissionBlockers){
+          const blk=CCHelpers.systemTruthMissionBlockers({...truth,agent_blocker_compact:true});
+          if(blk.length) return blk[0];
+        }
+        return 'No system blocker flagged';
+      },
+      agentWatchRulesLine(){
+        const rules=(this.aosMonitors.rules||[]).filter(r=>r&&r.enabled!==false);
+        const safe=rules.filter(r=>String(r.severity||'').toLowerCase()!=='high').slice(0,3);
+        if(!safe.length) return 'No safe watch-rule candidates';
+        return 'Suggested watch rules: '+safe.map(r=>r.label||r.rule||r.ticker||'rule').join(' · ');
+      },
+      stratLabOneLiner(){
+        if(this.stratHealth.loading) return 'Loading strategy health — research-only; not deploy authority.';
+        const n=(this.stratHealth.data?.strategies||[]).length;
+        if(!n) return 'Strategy Lab — no live closed-trade sample in window. Calibration and hit-rate remain provisional until evidence accumulates.';
+        return `Strategy Lab — ${n} strateg${n===1?'y':'ies'} with closed-trade evidence in window (research-only).`;
       },
       severityBadgeClass(state){
         if(typeof CCHelpers!=='undefined'&&CCHelpers.severityBadgeClass) return CCHelpers.severityBadgeClass(state);
@@ -9010,6 +9275,48 @@
       todayMissionPanelTitle(){
         return this.isWaitDay()?'Today focus':'Today mission';
       },
+      unifiedTruthStripLine(){
+        const truth=this.today7.system_truth||{};
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.globalTruthStrip)
+          return CCHelpers.globalTruthStrip(truth);
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStrip)
+          return CCHelpers.scopedFreshnessStrip(truth);
+        return truth.truth_strip||truth.typed_freshness_display||'';
+      },
+      dashboardOperatorBlock(){
+        const truth=this.today7.system_truth||{};
+        const blocks=this.today7.operator_block||{};
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlock)
+          return CCHelpers.operatorBlock(truth,'dashboard',blocks);
+        return truth.operator_block||{now:truth.operator_sentence||'',why:truth.primary_blocker||'',allowed:'monitor only',blocked:'deploy',next:'',truth_strip:this.unifiedTruthStripLine(),regime_state:truth.regime_state,deploy_authority:!!truth.deploy_authority,repair_priority:truth.repair_priority||[]};
+      },
+      agentOperatorBlockerLine(){
+        const truth=this.today7.system_truth||{};
+        const blocks=this.today7.operator_block||{};
+        let ob;
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlock)
+          ob=CCHelpers.operatorBlock(truth,'agent',blocks);
+        else ob=(blocks.agent)||{};
+        const line=ob.why||truth.primary_blocker||'';
+        return line?('Blocker: '+line+' — '+String(ob.allowed||'monitor only')):'';
+      },
+      playbookNoEdgeMode(){
+        const rows=this.rankedOpps.rows||[];
+        if(!rows.length) return false;
+        const deploy=rows.filter(r=>String(r.primary_bucket||'').toLowerCase()==='deploy').length;
+        const pilot=rows.filter(r=>String(r.primary_bucket||'').toLowerCase()==='pilot').length;
+        const watch=rows.filter(r=>{const b=String(r.primary_bucket||r.lifecycle_bucket||'').toLowerCase();return b==='watch'||b==='near-miss';}).length;
+        const rejected=rows.filter(r=>String(r.primary_bucket||'').toLowerCase()==='rejected'||['AVOID','NO_TRADE','PASS'].includes(String(r.action||'').toUpperCase())).length;
+        return (deploy+pilot+watch)===0&&rejected>0;
+      },
+      playbookNoEdgeLine(){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.playbookNoEdgeLine)
+          return CCHelpers.playbookNoEdgeLine(this.rankedOpps.rows||[]);
+        return 'NO EDGE TODAY · 0 Deploy · 0 Pilot · 0 Watch · Rejected hidden · Best action: do nothing';
+      },
+      dashboardNoEdgeMode(){
+        return this.playbookNoEdgeMode()||(this.today7.system_truth?.no_edge===true);
+      },
       trustProvenanceLine(){
         const t=this.today7.trust||this.trust||{};
         const src=String(t.source||'market_data_service').replace(/_/g,' ');
@@ -9032,6 +9339,7 @@
           briefFallback:!!(this.todayUsesBriefFallback()||this.pageAuthorityIsDegraded()),
           instantDegraded:!!(this.today7.instant_degraded||this.instantDegradedBannerVisible()),
           fetchBadge:this.dataContractFetchBadge(),
+          systemTruth:this.today7.system_truth||null,
         };
         if(typeof CCHelpers!=='undefined'&&CCHelpers.todayMissionSystemBlockers)
           return CCHelpers.todayMissionSystemBlockers(opts);
@@ -9039,7 +9347,6 @@
         if(!opts.ibkrReady) out.push('IBKR '+String(opts.ibkrShort||'OFFLINE').toUpperCase());
         if(!opts.engineRunning) out.push('ENGINE OFF');
         if(opts.breaker) out.push('EXEC BLOCKED — risk breaker');
-        if(['STALE','CRITICAL'].includes(String(opts.dataTier).toUpperCase())) out.push('DATA '+opts.dataTier);
         if(opts.briefFallback||opts.instantDegraded) out.push('FALLBACK / BRIEF ONLY');
         return out;
       },
@@ -9068,10 +9375,11 @@
         system_blockers.forEach(s=>{if(s&&!blockers.includes(s))blockers.push(s);});
         cardGates.forEach(s=>{if(s&&!blockers.includes(s))blockers.push(s);});
         const monitors=[];
-        const add=t=>{const x=String(t||'').toUpperCase().replace(/[^A-Z0-9.^]/g,'');if(x&&x.length<=8&&!monitors.includes(x))monitors.push(x);};
-        (this.today7.near_miss||[]).forEach(nm=>add(nm.ticker));
-        (this.today7.top_ranked||[]).forEach(r=>add(r.ticker));
-        if(td.best_watch?.ticker) add(td.best_watch.ticker);
+        const add=(t,r)=>{const act=String(this.effectiveCardAction(r)||r?.action||'').toUpperCase();if(['AVOID','NO_TRADE','BLOCKED'].includes(act))return;const x=String(t||'').toUpperCase().replace(/[^A-Z0-9.^]/g,'');if(x&&x.length<=8&&!monitors.includes(x))monitors.push(x);};
+        (this.today7.near_miss||[]).forEach(nm=>add(nm.ticker,nm));
+        (this.today7.top_ranked||[]).forEach(r=>add(r.ticker,r));
+        if(td.best_watch?.ticker) add(td.best_watch.ticker,td.best_watch);
+        if(this.today7.top_monitor?.ticker) add(this.today7.top_monitor.ticker,this.today7.top_monitor);
         return {
           system_blockers:system_blockers.slice(0,5),
           card_gates:cardGates.slice(0,3),
@@ -9083,15 +9391,18 @@
       headerChipGroups(){
         const hs=this.headerSummary();
         const st=this.ibkrStateFrom(this.today7.execution_readiness||{});
-        const dataTier=this.freshness?.worst_tier;
+        const truth=this.today7.system_truth||{};
+        const typed=(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStrip)
+          ?CCHelpers.scopedFreshnessStrip(truth):'';
         const opts={
           authorityChip:this.pageAuthorityIsDegraded()?(this.instantDegradedBannerVisible()?'INSTANT DEGRADED':'MONITOR ONLY'):'',
           tradeability:this.canonicalTradeability(),
           fetchBadge:hs.badge||this.dataContractFetchBadge(),
           ibkrChip:'IBKR '+this.ibkrUnifiedShort(this.today7.execution_readiness),
-          dataChip:dataTier&&['STALE','CRITICAL'].includes(dataTier)?'DATA '+dataTier:'',
+          typedFreshnessChip:typed,
+          dataChip:'',
           modeChip:this.trust?.mode||'',
-          freshnessChip:this.trust?.freshness||'',
+          freshnessChip:'',
           chips:hs.chips||[],
         };
         if(typeof CCHelpers!=='undefined'&&CCHelpers.partitionHeaderChips)
@@ -9289,13 +9600,39 @@
       topMonitorCandidates(limit=3){
         const tickers=[];
         const seen=new Set();
-        const add=(t)=>{const x=String(t||'').toUpperCase().replace(/[^A-Z0-9.^]/g,'');if(!x||x.length>8||seen.has(x))return;seen.add(x);tickers.push(x);};
-        (this.today7.near_miss||[]).forEach(nm=>add(nm.ticker));
-        (this.today7.top_ranked||[]).forEach(r=>add(r.ticker));
-        (this.rankedOpps.rows||[]).forEach(r=>add(r.ticker));
+        const isAvoid=(r)=>{
+          const act=String(this.effectiveCardAction(r)||r?.action||'').toUpperCase();
+          return ['AVOID','NO_TRADE','BLOCKED','PASS','EXIT','REDUCE'].includes(act);
+        };
+        const add=(t,r)=>{if(r&&isAvoid(r))return;const x=String(t||'').toUpperCase().replace(/[^A-Z0-9.^]/g,'');if(!x||x.length>8||seen.has(x))return;seen.add(x);tickers.push(x);};
+        (this.today7.near_miss||[]).forEach(nm=>add(nm.ticker,nm));
+        (this.today7.top_ranked||[]).forEach(r=>add(r.ticker,r));
+        (this.rankedOpps.rows||[]).forEach(r=>add(r.ticker,r));
         const td=this.today7.todays_decision;
-        if(td?.best_watch?.ticker) add(td.best_watch.ticker);
+        if(td?.best_watch?.ticker&&!isAvoid(td.best_watch)) add(td.best_watch.ticker,td.best_watch);
+        const tm=this.today7.top_monitor;
+        if(tm?.ticker&&!isAvoid(tm)) add(tm.ticker,tm);
         return tickers.slice(0,limit);
+      },
+      topOpportunitiesList(){
+        const rows=(this.today7.top_opportunities||this.today7.top_ranked||[]).filter(r=>{
+          const act=String(this.effectiveCardAction(r)||'').toUpperCase();
+          return !['AVOID','NO_TRADE','BLOCKED'].includes(act);
+        });
+        return rows;
+      },
+      topOpportunitiesEmptyCopy(){
+        const cc=this.today7.candidate_counts||{};
+        const w=Number(cc.funnelWatchQualified||cc.playbookWatchQualified)||0;
+        const d=Number(cc.deployQualified)||0;
+        const p=(this.today7.top_ranked||[]).filter(r=>String(this.effectiveCardAction(r)||'').toUpperCase()==='PILOT').length;
+        const nm=(this.today7.near_miss||[]).length;
+        if(this.topOpportunitiesList().length||d>0||p>0||nm>0) return '';
+        return 'No valid opportunities · '+w+' Watch · '+p+' Pilot · '+d+' Deploy · Rejected hidden';
+      },
+      cardIsRejectedOrAvoid(row){
+        const act=String(this.effectiveCardAction(row)||row?.action||'').toUpperCase();
+        return ['AVOID','NO_TRADE','BLOCKED','PASS','EXIT','REDUCE'].includes(act)||String(row?.card_display_mode||'')==='rejected';
       },
       degradedPmMonitorLine(){
         const names=this.topMonitorCandidates(3);
@@ -9476,13 +9813,135 @@
         return 'Often correct on WAIT — monitor funnel, not deploy.';
       },
       dossierLevelsIndicativeOnly(){
-        return this.dossierResearchOnly();
+        return this.dossierStructureReviewOnly();
+      },
+      dossierModeKey(){
+        const intel=this.dos?.intel;
+        if(intel?.dossier_mode_key) return intel.dossier_mode_key;
+        if(intel?.dossier_mode?.mode) return intel.dossier_mode.mode;
+        if(window.CCHelpers&&CCHelpers.resolveDossierMode) return CCHelpers.resolveDossierMode(this._dossierModeOpts());
+        return this.dossierResearchOnlyLegacy()?'structure_review_only':'usable';
+      },
+      _dossierModeOpts(){
+        const intel=this.dos?.intel;
+        const hints=this.surfaceFetchHints?.dossier||{};
+        const trust=this.dos?.data?.trust||{};
+        const trustSrc=String(trust.source||'');
+        const label=String(this.dosUnified().label||intel?.decision_bar?.verdict||'').toUpperCase();
+        const confLine=String(this.dosFormatDecisionConfidence()||intel?.confidence_label||'').toLowerCase();
+        return {
+          mode_key:intel?.dossier_mode_key||intel?.dossier_mode?.mode,
+          unified_label:label,
+          load_phase:intel?.load_phase,
+          partial:!!(intel?.partial||this.dos.status==='partial_loaded'),
+          failed_fetch:this.dos.status==='failed'||!!hints.failed_fetch,
+          instant_degraded:trustSrc.includes('instant-degraded')||!!trust.instant_degraded,
+          brief_backed:trustSrc.toLowerCase().includes('brief')||!!trust.brief_backed,
+          research_only:!!intel?.research_only,
+          has_quote:this.dosQuoteAvailable(),
+          pending_calibration:confLine.includes('pending calibration'),
+          rr_unavailable:this.dossierRrUnavailable(),
+          playbook_watch_plus:['WATCH','PILOT','TRADE','BUY','BUY_ON_DIP','STRONG_TRADE'].includes(label),
+          deploy_blocked:this.isWaitDay()||!this.today7?.todays_decision?.can_deploy_today||this.todayDeployAuthoritySuspended(),
+          broker_online:!this.dashboardBrokerOffline(),
+        };
+      },
+      dossierStructureReviewOnly(){
+        if(window.CCHelpers&&CCHelpers.dossierStructureReviewOnly) return CCHelpers.dossierStructureReviewOnly(this.dossierModeKey());
+        return this.dossierModeKey()==='structure_review_only';
+      },
+      dossierConfirmOnlyStrip(){
+        const block=this.dos?.intel?.dossier_mode;
+        if(block?.confirm_only_strip) return block.confirm_only_strip;
+        if(window.CCHelpers&&CCHelpers.dossierConfirmOnlyStrip) return CCHelpers.dossierConfirmOnlyStrip();
+        return 'Confirm-only: structure review only · no sizing · no handoff';
+      },
+      dossierStructureSnapshotTitle(){
+        const block=this.dos?.intel?.dossier_mode;
+        if(block?.structure_snapshot_title) return block.structure_snapshot_title;
+        if(window.CCHelpers&&CCHelpers.dossierStructureSnapshotTitle) return CCHelpers.dossierStructureSnapshotTitle();
+        return 'Structure snapshot · 結構快照';
+      },
+      dossierStructureLevelLabel(field){
+        if(window.CCHelpers&&CCHelpers.dossierStructureLevelLabel) return CCHelpers.dossierStructureLevelLabel(field,this.dossierModeKey());
+        if(!this.dossierStructureReviewOnly()) return field==='entry'?'Entry zone':field==='stop'?'Stop':field==='target'?'T1 / T2':'R:R';
+        if(field==='entry') return 'Reference level · 參考價位';
+        if(field==='stop') return 'Risk reference · 風險參考';
+        if(field==='target') return 'Upside references · 上行參考';
+        return field;
+      },
+      dossierPaperDraftDisabledCopy(){
+        const block=this.dos?.intel?.dossier_mode;
+        if(block?.paper_draft_disabled_copy) return block.paper_draft_disabled_copy;
+        if(window.CCHelpers&&CCHelpers.dossierPaperDraftDisabledCopy) return CCHelpers.dossierPaperDraftDisabledCopy();
+        return 'Paper draft disabled — live Dossier + Playbook confirmation required.';
+      },
+      dossierMonitorRuleLabel(){
+        const block=this.dos?.intel?.dossier_mode;
+        if(block?.monitor_rule_button) return block.monitor_rule_button;
+        if(window.CCHelpers&&CCHelpers.dossierMonitorRuleButton) return CCHelpers.dossierMonitorRuleButton();
+        return 'Create monitor rule · 建立監察規則';
+      },
+      dossierMonitorRuleHint(){
+        const block=this.dos?.intel?.dossier_mode;
+        if(block?.monitor_rule_hint) return block.monitor_rule_hint;
+        if(window.CCHelpers&&CCHelpers.dossierMonitorRuleHint) return CCHelpers.dossierMonitorRuleHint();
+        return 'Alert only · no sizing · no handoff · requires Playbook confirmation';
+      },
+      dossierLaggedContextNote(){
+        const block=this.dos?.intel?.dossier_mode;
+        if(block?.lagged_context_note) return block.lagged_context_note;
+        if(window.CCHelpers&&CCHelpers.dossierLaggedContextNote) return CCHelpers.dossierLaggedContextNote();
+        return 'Lagged ownership context hidden — not used for confirmation.';
+      },
+      dossierMissingDataLine(){
+        const block=this.dos?.intel?.dossier_mode;
+        const missing=block?.missing_data;
+        if(Array.isArray(missing)&&missing.length) return missing.join(' · ');
+        return '—';
+      },
+      dossierEvidenceField(key){
+        const ec=this.dos?.intel?.dossier_mode?.evidence_confidence||{};
+        return ec[key]||'—';
+      },
+      dossierConfirmOnlyFourBlocks(){
+        if(window.CCHelpers&&CCHelpers.dossierConfirmOnlyFourBlocks){
+          const o=this._dossierModeOpts();
+          return CCHelpers.dossierConfirmOnlyFourBlocks({
+            symbol:this.dos?.data?.symbol,
+            hasIntel:!!this.dos?.intel,
+            hasQuote:o.has_quote,
+            pageSummary:!!(this.dos?.intel?.page_summary),
+            partial:o.partial,
+            pending:o.pending_calibration,
+            rrUnavailable:o.rr_unavailable,
+            confirmOnly:this.dossierStructureReviewOnly(),
+            boardWait:this.isWaitDay(),
+            brokerOffline:!o.broker_online,
+            failedFetch:o.failed_fetch,
+            hasCached:this.dosHasCached&&this.dosHasCached(),
+          });
+        }
+        return {exists:'—',missing:this.dossierMissingDataLine(),blocker:'—',safe:'—'};
+      },
+      dossierConfirmOnlyNextLine(){
+        if(this.dossierStructureReviewOnly()) return 'Retry live fetch · confirm board gate on Dashboard · open Playbook';
+        return 'Review structure and open Playbook when deploy-qualified';
+      },
+      dossierPaperDraftVisible(){
+        if(window.CCHelpers&&CCHelpers.dossierPaperDraftVisible) return CCHelpers.dossierPaperDraftVisible(this._dossierModeOpts());
+        const o=this._dossierModeOpts();
+        return o.mode_key==='usable'||(!o.mode_key&&this.dossierModeKey()==='usable'&&o.playbook_watch_plus&&!o.deploy_blocked&&o.broker_online);
+      },
+      dossierMonitorRuleAllowed(){
+        const mode=this.dossierModeKey();
+        return mode==='structure_review_only'||mode==='usable'||mode==='partial';
       },
       dossierActionsBlocked(){
-        return this.dossierResearchOnly()||this.dossierSizingBlocked();
+        return this.dossierPaperDraftVisible()?false:this.dossierStructureReviewOnly()||this.dossierSizingBlocked();
       },
       dossierActionsBlockedTitle(){
-        if(this.dossierSizingBlockedReason()==='confirm_only') return 'Confirm-only — no IBKR handoff or sizing';
+        if(this.dossierStructureReviewOnly()) return this.dossierConfirmOnlyStrip();
         if(this.dossierSizingBlockedReason()==='partial'||this.dossierSizingBlockedReason()==='failed') return 'Research incomplete — actions blocked';
         return 'Decision-grade research required before handoff';
       },
@@ -9566,7 +10025,7 @@
         const t=this.today7.trust||{};
         return !!(t.stale||tier==='STALE'||tier==='CRITICAL'||this.staleSnapshotContext());
       },
-      dossierResearchOnly(){
+      dossierResearchOnlyLegacy(){
         if(this.dos.loading||this.dos.status==='loading_core'||this.dos.status==='loading_enrichments') return false;
         if(this.dos.status==='failed'||this.dos.status==='stale_fallback') return true;
         const intel=this.dos?.intel;
@@ -9580,6 +10039,10 @@
         if(confLine.includes('pending calibration')) return true;
         if(this.dossierRrUnavailable()) return true;
         return false;
+      },
+      dossierResearchOnly(){
+        const mode=this.dossierModeKey();
+        return mode==='structure_review_only'||mode==='partial'||mode==='unavailable';
       },
       dosShowsDeployLevels(){
         return !this.dossierResearchOnly();
@@ -9964,8 +10427,11 @@
         return Number(scanned)||0;
       },
       playbookFunnelLabel(funnel,rows){
+        const truth=this.today7.system_truth||{};
+        if(truth.qualification_line) return truth.qualification_line;
         const {scanned,watch,deploy}=this.playbookFunnelCounts(funnel,rows);
-        let s=scanned+' scanned · '+watch+' funnel watch-qualified · '+deploy+' deploy-qualified';
+        const deployN=truth.deploy_authority===false?0:deploy;
+        let s=scanned+' scanned · '+watch+' funnel watch-qualified · '+deployN+' deploy-qualified';
         const pool=this.playbookBoardScanPoolCount(funnel,rows);
         if(Number(watch)>0&&pool>Number(watch)) s+=' · '+pool+' board scan pool';
         return s;
@@ -10848,9 +11314,46 @@
         const s=String(c||'');
         return s.toLowerCase().startsWith('fit')?s:'Fit '+s;
       },
+      fundResearchOnlyMode(){
+        const c=this.fundMonitor.console||{};
+        if(c.research_only_mode===true) return true;
+        if((c.live_allocation_eligible??c.funds_mode?.live_allocation_eligible??1)===0) return true;
+        if((c.allocation_authority||c.funds_mode?.allocation_authority)==='none') return true;
+        return false;
+      },
+      fundModelStanceDisplay(card){
+        if(!card) return '—';
+        if(card.model_stance_label) return card.model_stance_label;
+        const d=(card.deployability||'').toUpperCase();
+        if(d==='REDUCE') return 'Model stance: Reduced';
+        if(d==='DEPLOY') return 'Model stance: Active (hypothetical)';
+        if(d==='OFF') return 'Model stance: Off';
+        return card.deployability||'—';
+      },
+      fundValidationConfidence(card){
+        const v=card?.validation_confidence??card?.card_zones?.current_state?.validation_confidence??card?.card_zones?.current_state?.conviction;
+        if(v==null||v==='') return 'pending';
+        const live=card?.evidence_quality?.live_trades_count??0;
+        if(live===0&&String(v).toUpperCase()==='MEDIUM') return 'pending';
+        if(live===0&&String(v).toUpperCase()==='HIGH') return 'pending';
+        return v;
+      },
+      fundShowBacktestDetails(card){
+        const id=card?.id||'';
+        return !!(this.fundMonitor.backtestDetailsOpen||{})[id];
+      },
+      fundToggleBacktestDetails(id){
+        if(!id) return;
+        const open={...(this.fundMonitor.backtestDetailsOpen||{})};
+        open[id]=!open[id];
+        this.fundMonitor.backtestDetailsOpen=open;
+      },
       fundAllocationMaxCapital(){
         const inv=this.fundMonitor.console?.investable_now||{};
         const strip=this.fundMonitor.console?.allocator_truth_strip||{};
+        if(this.fundResearchOnlyMode()){
+          return strip.theoretical_model_band||inv.theoretical_model_band||'—';
+        }
         return inv.max_capital_allowed||strip.max_capital_allowed||'—';
       },
       fundExecutionReadyBool(){
@@ -11246,26 +11749,43 @@
       },
       dosTradePlanNoteValue(){
         const tp=this.dos?.data?.trade_plan||{};
-        const opts={note:tp.note,setup_type:tp.setup_type,research_only:this.dossierResearchOnly(),levels_blank:this.dosTradePlanLevelsBlank()};
+        const opts={note:tp.note,setup_type:tp.setup_type,research_only:this.dossierStructureReviewOnly(),levels_blank:this.dosTradePlanLevelsBlank()};
         if(window.CCHelpers&&CCHelpers.dossierTradePlanNote)return CCHelpers.dossierTradePlanNote(opts);
-        if(opts.research_only&&opts.levels_blank)return 'Live structure unavailable — confirm-only dossier';
+        if(opts.research_only&&opts.levels_blank)return 'Live structure unavailable — structure review only';
         if(opts.levels_blank)return 'Live structure unavailable';
         const note=String(tp.note||tp.setup_type||'').trim();
-        return note||'Structure-based plan';
+        return note||'Structure-based reference';
       },
       dosTradePlanRows(){
         const tp=this.dos?.data?.trade_plan||{};
         const u=this.dosUnified();
+        const opts={
+          ...this._dossierModeOpts(),
+          entry_zone:tp.entry_zone||u.entry_zone,
+          stop:tp.stop||u.stop,
+          target_1r:tp.target_1r||u.target_1r,
+          target_2r:tp.target_2r||u.target_2r,
+          rr_display:u.rr_ratio_display||tp.rr_ratio_label||'—',
+          source:String(this.dos?.data?.trust?.source||''),
+          freshness:String(this.dos?.data?.trust?.as_of||this.dos?.data?.trust?.freshness||''),
+          live_validated:this.dossierModeKey()==='usable'&&!this.dossierRrUnavailable(),
+        };
+        if(window.CCHelpers&&CCHelpers.dossierStructureSnapshotRows){
+          const rows=CCHelpers.dossierStructureSnapshotRows(opts).slice();
+          rows.push({label:'Invalidation',value:String(tp.invalidation||u.invalidation||'—')});
+          rows.push({label:'Note',value:this.dosTradePlanNoteValue()});
+          return rows;
+        }
         const ez=tp.entry_zone||u.entry_zone;
         const fmt=(v)=>v!=null&&v!==''?('$'+v):'—';
         const rows=[
-          {label:'Entry zone',value:ez&&ez.length>=2?('$'+ez[0]+'–$'+ez[1]):'—'},
-          {label:'Stop',value:fmt(tp.stop||u.stop)},
-          {label:'T1 / T2',value:(tp.target_1r||u.target_1r)?('$'+(tp.target_1r||u.target_1r)+' / $'+(tp.target_2r||u.target_2r)):'—'},
-          {label:'R:R',value:u.rr_ratio_display||tp.rr_ratio_label||'—'},
-          {label:'Invalidation',value:String(tp.invalidation||u.invalidation||'—')},
-          {label:'Note',value:this.dosTradePlanNoteValue()},
+          {label:this.dossierStructureLevelLabel('entry'),value:ez&&ez.length>=2?('$'+ez[0]+'–$'+ez[1]):'—'},
+          {label:this.dossierStructureLevelLabel('stop'),value:fmt(tp.stop||u.stop)},
+          {label:this.dossierStructureLevelLabel('target'),value:(tp.target_1r||u.target_1r)?('$'+(tp.target_1r||u.target_1r)+' / $'+(tp.target_2r||u.target_2r)):'—'},
         ];
+        if(!this.dossierStructureReviewOnly()) rows.push({label:'R:R',value:u.rr_ratio_display||tp.rr_ratio_label||'—'});
+        rows.push({label:'Invalidation',value:String(tp.invalidation||u.invalidation||'—')});
+        rows.push({label:'Note',value:this.dosTradePlanNoteValue()});
         return rows;
       },
       dosSizeShares(){
@@ -11504,6 +12024,113 @@
           const state=this.opsInferDegradedState({error:msg});
           this.surfaceFetchHints.ops_error_log={loading:false,error:this.opsDegradedLine(state,msg),unavailable:true};
         }finally{this.errorLog.loading=false}
+      },
+      buildExportReviewSnapshot(){
+        const truth=this.today7.system_truth||{};
+        const funnel=this.rankedOpps.filter_funnel||this.today7.filter_funnel||{};
+        const probeRows=(this.opsConsole.data?.component_evidence||[]).length
+          ?(this.opsConsole.data.component_evidence||[]).map(c=>({
+              name:c.name,
+              probe:c.probe||c.label,
+              runtime:c.runtime_evidence||c.evidence,
+            }))
+          :this.opsProbeRuntimeFallbackRows();
+        const td=this.today7.todays_decision||{};
+        const mission=this.todayMissionPanel();
+        return {
+          generated_at:new Date().toISOString(),
+          system_truth:truth,
+          system_truth_line:(typeof CCHelpers!=='undefined'&&CCHelpers.systemTruthLine)?CCHelpers.systemTruthLine(truth):'',
+          system_blockers:mission.system_blockers||[],
+          filter_funnel:funnel,
+          deploy_authority:!!truth.deploy_authority,
+          qualification:{
+            setup:Number(truth.setup_qualified_count??funnel.watch_qualified_setups??funnel.setup_qualified_setups)||0,
+            deploy:Number(truth.deploy_qualified_count??funnel.deploy_qualified_setups??funnel.execution_ready_setups)||0,
+            line:this.playbookFunnelLabel(funnel,this.rankedOpps.rows),
+          },
+          cc_header:{
+            freshness:this.freshness?.worst_tier||truth.freshness_tier||truth.data_tier||'—',
+            engine:this.ops.running?'ON':'OFF',
+            ibkr:this.ibkrUnifiedShort(this.today7.execution_readiness),
+            breaker:this.cc_status.breaker?'TRIPPED — '+(this.cc_status.breaker_reason||'risk breaker'):'clear',
+            mode:this.cc_status.mode||this.trust?.mode||'—',
+          },
+          cc_mode:this.cc_status.mode,
+          engine_running:!!this.ops.running,
+          breaker:!!this.cc_status.breaker,
+          ibkr_label:this.ibkrUnifiedLabel(this.today7.execution_readiness),
+          data_tier:this.freshness?.worst_tier||'',
+          disconnects:{
+            ibkr_gateway:!!this.cc_status.ibkr_gateway,
+            health_mode:String(this.healthMode||this.healthData?.mode||'').toLowerCase()||'—',
+            instant_degraded:!!(this.today7.instant_degraded||this.instantDegradedBannerVisible()),
+            brief_fallback:!!(this.todayUsesBriefFallback()||this.pageAuthorityIsDegraded()),
+          },
+          error_log:(this.errorLog.entries||[]).slice(0,12).map(e=>({
+            severity:e.severity,
+            source:e.source||e.category,
+            message:e.message||e.detail||e.summary,
+            timestamp:e.timestamp||e.ts||e.time,
+          })),
+          error_log_total:this.errorLog.total||this.errorLog.entries.length||0,
+          error_log_limit:12,
+          probe_rows:probeRows,
+          today:{
+            morning_decision:(typeof CCHelpers!=='undefined'&&CCHelpers.morningDecisionLine)?CCHelpers.morningDecisionLine(this.today7):'',
+            board_message:this.today7.board_message||td.stance_one_liner||'',
+            tradeability:this.canonicalTradeability(),
+            top_ranked:(this.today7.top_ranked||[]).slice(0,5).map(r=>String(r.ticker||r).toUpperCase()+' · '+(r.action||r.verdict||'monitor')),
+            monitors:mission.monitors||[],
+          },
+          playbook:{
+            funnel_label:this.playbookFunnelLabel(funnel,this.rankedOpps.rows),
+            board_message:this.rankedOpps.board_message||this.rankedOpps.emergency?.headline||'',
+            rows:(this.rankedOpps.rows||[]).slice(0,12),
+          },
+          discovery:{data:this.scannerHub.data,error:this.scannerHub.error,loading:!!this.scannerHub.loading},
+          dossier:{
+            ticker:this.dos.ticker,
+            status:this.dos.status,
+            intel:this.dos.intel,
+            data:this.dos.data,
+            summary:this.dos.intel?.decision_bar?.stance_one_liner||this.dos.data?.summary||'',
+          },
+          portfolio:{
+            summary:this.pf.summary?JSON.stringify(this.pf.summary).slice(0,240):'',
+            positions:(this.pf.positions||[]).slice(0,8).map(p=>String(p.ticker||p.symbol||'').toUpperCase()),
+          },
+          ops:{
+            verdict:this.opsConsole.data?.verdict_code||'',
+            intro:this.opsPageIntro?this.opsPageIntro():'',
+            blockers:(this.opsConsole.data?.blockers||[]).slice(0,6),
+          },
+          ibkr:{
+            label:this.ibkrUnifiedLabel(this.today7.execution_readiness),
+            status:this.ibkr.status||this.cc_status.ibkr_health_label||'',
+          },
+          guide:{
+            workflow:'Dashboard → Playbook → Discovery → Dossier → Portfolio / IBKR. Export is monitor-only — not trade authority.',
+          },
+        };
+      },
+      async exportReviewPdfClick(){
+        if(this.exportReviewPdfBusy) return;
+        this.exportReviewPdfBusy=true;
+        try{
+          if(!this.errorLog.entries.length&&!this.errorLog.loading) await this.fetchErrorLog();
+          const snapshot=this.buildExportReviewSnapshot();
+          if(typeof CCHelpers!=='undefined'&&CCHelpers.exportReviewPdf){
+            const res=CCHelpers.exportReviewPdf(snapshot);
+            if(!res||!res.ok) console.warn('[CC export]',res&&res.error?res.error:'export failed');
+          }else{
+            console.warn('[CC export] CCHelpers.exportReviewPdf unavailable');
+          }
+        }catch(e){
+          console.warn('[CC export]',e);
+        }finally{
+          this.exportReviewPdfBusy=false;
+        }
       },
       async fetchLeaders(){
         this.leadersPanel.loading=true;this.leadersPanel.error='';
@@ -13063,7 +13690,7 @@
         }
       },
       async fetchToday7(){
-        try{const r=await this.ccFetch('/api/v7/today',{retries:4,backoff:600});if(!r||!r.ok)throw new Error('HTTP '+(r?r.status:'fail'));const d=await r.json();this.captureInstantDegradedBanner(d);if(d&&d.error)throw new Error(String(d.error));if(!d||!d.market_regime)throw new Error('incomplete today payload');this.today7.regime=d.market_regime||null;this.today7.decision_authority=d.decision_authority||null;this.today7.top_ranked=d.top_5||[];this.today7.todays_decision=d.todays_decision||null;this.today7.best_action=d.best_action||null;this.today7.overlap_warning=d.overlap_warning||null;this.today7.near_miss=d.near_miss||[];this.today7.score_reconciliation=d.score_reconciliation||null;this.today7.no_setup_diagnosis=d.no_setup_diagnosis||null;this.today7.quant_cluster_hints=d.quant_cluster_hints||[];this.today7.unlock_deploy=d.unlock_deploy||null;this.today7.regime_wait_explanation=d.regime_wait_explanation||[];this.today7.monitor_triggers=d.monitor_triggers||[];this.today7.sleeve_summary=d.sleeve_summary||null;this.today7.execution_readiness=d.execution_readiness||d.best_action?.execution_readiness||null;this.today7.evidence_badges=d.evidence_badges||null;this.today7.cross_asset_confirmation=d.cross_asset_confirmation||null;this.today7.index_regime_summary=d.index_regime_summary||null;this.today7.regime_strip=d.regime_strip||null;this.today7.regime_stack_summary=d.regime_stack_summary||null;this.today7.allocator_stance=d.allocator_stance||null;this.today7.ai_reason_codes=d.ai_reason_codes||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.decision_model=d.decision_model||null;this.today7.decision_hierarchy=d.decision_hierarchy||null;this.today7.passive_baseline=d.passive_baseline||null;this.today7.complexity_challenge=d.complexity_challenge||null;this.today7.restraint=d.restraint||null;this.today7.surface_authority=d.surface_authority||null;this.today7.crisis_regime=d.crisis_regime||null;this.today7.naval_clarity=d.naval_clarity||null;this.today7.buffett_clarity=d.buffett_clarity||null;this.today7.index_fund_posture=d.index_fund_posture||null;this.today7.principles_posture=d.principles_posture||null;this.today7.avoid_grouped=d.avoid_grouped||null;this.today7.bucket_quality=d.bucket_quality||[];this.today7.avoid_list=(d.avoid_now||[]).length?(d.avoid_now||[]):(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'—',reason:a,category:'regime'}:a);this.today7.tradeability=(d.decision_model&&d.decision_model.honest_tradeability)||(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{};if(this.isWaitDay()){this.today7.avoid_collapsed=true;this.today7.ai_commentary_open=false;}
+        try{const r=await this.ccFetch('/api/v7/today',{retries:4,backoff:600});if(!r||!r.ok)throw new Error('HTTP '+(r?r.status:'fail'));const d=await r.json();this.captureInstantDegradedBanner(d);if(d&&d.error)throw new Error(String(d.error));if(!d||!d.market_regime)throw new Error('incomplete today payload');this.today7.regime=d.market_regime||null;this.today7.decision_authority=d.decision_authority||null;this.today7.top_ranked=d.top_5||[];this.today7.todays_decision=d.todays_decision||null;this.today7.best_action=d.best_action||null;this.today7.overlap_warning=d.overlap_warning||null;this.today7.near_miss=d.near_miss||[];this.today7.score_reconciliation=d.score_reconciliation||null;this.today7.no_setup_diagnosis=d.no_setup_diagnosis||null;this.today7.quant_cluster_hints=d.quant_cluster_hints||[];this.today7.unlock_deploy=d.unlock_deploy||null;this.today7.regime_wait_explanation=d.regime_wait_explanation||[];this.today7.monitor_triggers=d.monitor_triggers||[];this.today7.sleeve_summary=d.sleeve_summary||null;this.today7.execution_readiness=d.execution_readiness||d.best_action?.execution_readiness||null;this.today7.evidence_badges=d.evidence_badges||null;this.today7.cross_asset_confirmation=d.cross_asset_confirmation||null;this.today7.index_regime_summary=d.index_regime_summary||null;this.today7.regime_strip=d.regime_strip||null;this.today7.regime_stack_summary=d.regime_stack_summary||null;this.today7.allocator_stance=d.allocator_stance||null;this.today7.ai_reason_codes=d.ai_reason_codes||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.decision_model=d.decision_model||null;this.today7.decision_hierarchy=d.decision_hierarchy||null;this.today7.passive_baseline=d.passive_baseline||null;this.today7.complexity_challenge=d.complexity_challenge||null;this.today7.restraint=d.restraint||null;this.today7.surface_authority=d.surface_authority||null;this.today7.crisis_regime=d.crisis_regime||null;this.today7.naval_clarity=d.naval_clarity||null;this.today7.buffett_clarity=d.buffett_clarity||null;this.today7.index_fund_posture=d.index_fund_posture||null;this.today7.principles_posture=d.principles_posture||null;this.today7.avoid_grouped=d.avoid_grouped||null;this.today7.bucket_quality=d.bucket_quality||[];this.today7.avoid_list=(d.avoid_now||[]).length?(d.avoid_now||[]):(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'—',reason:a,category:'regime'}:a);this.today7.tradeability=(d.decision_model&&d.decision_model.honest_tradeability)||(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{};this.today7.system_truth=d.system_truth||null;this.today7.top_monitor=d.top_monitor||null;this.today7.top_opportunities=d.top_opportunities||[];this.today7.candidate_counts=d.candidate_counts||null;this.today7.evidence_conflict=d.evidence_conflict||null;if(this.isWaitDay()){this.today7.avoid_collapsed=true;}
           this.applyPulseToMarketStrip(this.today7.pulse);
           this.saveToday7ToCache(d);
           // DAY-OVER-DAY DIFF — tag NEW vs CARRYOVER vs MOVED
@@ -14125,5 +14752,6 @@
       },
     }}
     </script>
+    <div id="cc-export-print-root" aria-hidden="true"></div>
   </body>
 </html>

@@ -1,4 +1,4 @@
-"""Active fund manager / model fund sleeves — PM-facing cards."""
+"""Fund Research Lab — model fund sleeves (research context, not live allocation)."""
 
 from __future__ import annotations
 
@@ -108,6 +108,7 @@ async def _build_payload(
         regime = market_regime_label.split("·")[0].strip() or regime
 
     execution_readiness: Dict[str, Any] = {}
+    system_truth: Dict[str, Any] = {}
     try:
         from src.api.app_state import get_engine
         from src.services.execution_readiness import build_execution_readiness
@@ -115,6 +116,12 @@ async def _build_payload(
 
         ibkr_st = get_ibkr_service().status()
         engine = get_engine(request.app)
+        portfolio_source = "manual"
+        today_cache = getattr(request.app.state, "today_v7_cache", None)
+        if isinstance(today_cache, dict):
+            er_today = today_cache.get("execution_readiness") or {}
+            portfolio_source = str(er_today.get("portfolio_source") or "manual")
+            system_truth = today_cache.get("system_truth") or {}
         execution_readiness = build_execution_readiness(
             ibkr_connected=bool(ibkr_st.get("connected")),
             ibkr_mode=ibkr_st.get("mode") or "paper",
@@ -122,6 +129,7 @@ async def _build_payload(
             circuit_breaker=bool(getattr(engine, "circuit_breaker_triggered", False))
             if engine
             else False,
+            portfolio_source=portfolio_source,
         )
     except Exception:
         logger.debug("fund-lab execution_readiness failed", exc_info=True)
@@ -144,6 +152,7 @@ async def _build_payload(
         best_action_liner=best_action_liner,
         vix=float(vix_val) if vix_val is not None else None,
         breadth=float(breadth_val) if breadth_val is not None else None,
+        system_truth=system_truth if system_truth else None,
     )
     payload = {
         "regime": console["regime"],

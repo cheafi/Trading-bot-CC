@@ -37,8 +37,10 @@ TERM_BACKWARDATION = "backwardation"
 TERM_UNKNOWN = "unknown"
 
 STRESS_LOW = "low"
+STRESS_NORMAL = "normal"
 STRESS_ELEVATED = "elevated"
-STRESS_HIGH = "high"
+STRESS_HIGH = "stress"
+STRESS_CRISIS = "crisis"
 
 
 def _vix_term_structure(vix: Optional[float], trend: str) -> str:
@@ -58,15 +60,26 @@ def _vix_term_structure(vix: Optional[float], trend: str) -> str:
     return TERM_FLAT
 
 
+def classify_volatility_state(vix: Optional[float]) -> str:
+    """VIX < 14 low | 14–20 normal | 20–28 elevated | 28–35 stress | ≥35 crisis."""
+    from src.services.system_truth import classify_volatility_state as _classify
+
+    return _classify(vix)
+
+
 def _vix_stress_level(vix: Optional[float]) -> str:
     if vix is None:
         return STRESS_ELEVATED
-    v = float(vix)
-    if v < 18:
-        return STRESS_LOW
-    if v < 26:
+    state = classify_volatility_state(vix)
+    if state == "crisis":
+        return STRESS_CRISIS
+    if state == "stress":
+        return STRESS_HIGH
+    if state == "elevated":
         return STRESS_ELEVATED
-    return STRESS_HIGH
+    if state == "normal":
+        return STRESS_NORMAL
+    return STRESS_LOW
 
 
 def build_vol_regime_block(
@@ -188,9 +201,11 @@ def resolve_index_posture(
     if b <= 1.0:
         b *= 100.0
 
-    if not should_trade or tb in ("NO_TRADE", "WAIT") or stress == STRESS_HIGH:
+    if not should_trade or tb in ("NO_TRADE", "WAIT"):
         return POSTURE_NO_TRADE_PRESSURE
-    if stress == STRESS_ELEVATED or b < 42 or cross_asset_alignment == "conflicted":
+    if stress in (STRESS_HIGH, STRESS_CRISIS) or b < 42 or cross_asset_alignment == "conflicted":
+        return POSTURE_STRESSED
+    if stress == STRESS_ELEVATED:
         return POSTURE_STRESSED
     if tb == "SELECTIVE" or b < 55 or cross_asset_alignment == "mixed":
         return POSTURE_SELECTIVE

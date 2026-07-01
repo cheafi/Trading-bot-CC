@@ -1,9 +1,12 @@
-"""Fund Manager Console — allocator / PM / CRO operating layer on model sleeves."""
+"""Fund Research Lab — sleeve research layer on model backtests (not live allocation authority)."""
 
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
+
+FUNDS_RESEARCH_LAB_TITLE = "Fund Research Lab"
+FUNDS_GUARDRAIL = "Funds tab is not an allocation instruction."
 
 # Sleeve risk governance (CRO-visible)
 _SLEEVE_RISK: Dict[str, Dict[str, Any]] = {
@@ -98,6 +101,185 @@ def resolve_fund_regime(
         "today_regime_label": today_label,
         "using_today_fallback": sleeve_unknown and bool(today_label),
     }
+
+
+def _total_live_trades(cards: List[Dict[str, Any]]) -> int:
+    total = 0
+    for c in cards:
+        eq = c.get("evidence_quality") or {}
+        try:
+            total += int(eq.get("live_trades_count") or 0)
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
+def resolve_funds_mode(
+    *,
+    execution_readiness: Optional[Dict[str, Any]] = None,
+    tradeability: str = "",
+    cards: Optional[List[Dict[str, Any]]] = None,
+    system_truth: Optional[Dict[str, Any]] = None,
+    allocation: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Research-only vs allocation authority — driven by broker, sync, live trades, gates."""
+    ex = execution_readiness or {}
+    truth = system_truth or {}
+    card_list = cards or []
+    alloc = allocation or {}
+
+    broker_connected = bool(ex.get("broker_connected"))
+    portfolio_synced = bool(ex.get("portfolio_synced"))
+    portfolio_manual = str(ex.get("portfolio_source") or "manual").lower() == "manual"
+    live_trades = _total_live_trades(card_list)
+    tb = str(tradeability or truth.get("regime_state") or "").upper()
+    regime_no_trade = tb == "NO_TRADE" or str(truth.get("regime_state") or "").upper() == "NO_TRADE"
+    board_closed = str(truth.get("board_gate") or "") == "closed" or regime_no_trade
+    gates_blocked = bool(truth.get("reason_codes")) and not bool(truth.get("deploy_authority"))
+    if truth and "deploy_authority" in truth:
+        gates_blocked = gates_blocked or not bool(truth.get("deploy_authority"))
+    elif regime_no_trade or tb in ("WAIT", "NO_TRADE"):
+        gates_blocked = True
+
+    blockers: List[str] = []
+    if not broker_connected:
+        blockers.append("broker offline")
+    if portfolio_manual or not portfolio_synced:
+        blockers.append("portfolio not synced")
+    if live_trades == 0:
+        blockers.append("no live validation")
+    if regime_no_trade:
+        blockers.append("NO_TRADE")
+    elif tb in ("WAIT", "SELECTIVE"):
+        blockers.append(f"tradeability {tb}")
+    if gates_blocked and "NO_TRADE" not in blockers:
+        blockers.append("gates blocked")
+
+    research_only_mode = bool(blockers)
+    theoretical_band = alloc.get("deployable_capital_range") or alloc.get("theoretical_model_band")
+    live_eligible_pct = 0 if research_only_mode else int(alloc.get("deployable_capital_pct") or 0)
+
+    if research_only_mode:
+        allocation_authority = "none"
+    elif live_trades == 0:
+        allocation_authority = "none"
+    elif broker_connected and portfolio_synced and live_eligible_pct > 0:
+        allocation_authority = "limited"
+    else:
+        allocation_authority = "none"
+
+    return {
+        "research_only_mode": research_only_mode,
+        "live_allocation_eligible": live_eligible_pct,
+        "allocation_authority": allocation_authority,
+        "live_trades_count": live_trades,
+        "theoretical_model_band": theoretical_band,
+        "blockers": blockers,
+        "allocation_execution_locked": research_only_mode,
+        "guardrail": FUNDS_GUARDRAIL,
+    }
+
+
+def build_funds_first_screen(
+    *,
+    funds_mode: Dict[str, Any],
+    index_posture: Optional[Dict[str, Any]] = None,
+    strength_strips: Optional[Dict[str, Any]] = None,
+    cards: Optional[List[Dict[str, Any]]] = None,
+    system_truth: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Default first-screen copy — research posture before sleeve detail."""
+    truth = system_truth or {}
+    posture = index_posture or {}
+    strips = strength_strips or {}
+    card_list = cards or []
+    blockers = funds_mode.get("blockers") or []
+    why = " + ".join(blockers) if blockers else "live validation pending"
+
+    best_research = strips.get("strongest_research") or {}
+    missing_validation: List[str] = ["walk-forward OOS", "transaction costs", "live track record"]
+    if funds_mode.get("live_trades_count", 0) == 0:
+        missing_validation.insert(0, "live trades")
+
+    core_action = (
+        posture.get("action_label")
+        or (posture.get("benchmark_judgment") or {}).get("action_label")
+        or "hold core · no urgent action"
+    )
+
+    return {
+        "now": "Research only · no live allocation",
+        "why": why,
+        "core_index_posture": core_action,
+        "live_allocation_pct": funds_mode.get("live_allocation_eligible", 0),
+        "live_allocation_label": f"{funds_mode.get('live_allocation_eligible', 0)}%",
+        "best_research_sleeve": {
+            "headline": "research hypothesis only",
+            "label": best_research.get("label") or "No sleeve ranked yet",
+            "missing_validation": missing_validation,
+        },
+        "next_steps": ["sync broker", "validate OOS", "apply costs"],
+        "guardrail": FUNDS_GUARDRAIL,
+        "hypothesis_only": bool(funds_mode.get("research_only_mode")),
+        "theoretical_model_band_note": (
+            f"Theoretical model band: {funds_mode.get('theoretical_model_band')} "
+            "if validation later passes"
+            if funds_mode.get("theoretical_model_band") and funds_mode.get("live_allocation_eligible", 0) == 0
+            else None
+        ),
+    }
+
+
+def build_backtest_quarantine(card: Dict[str, Any]) -> Dict[str, Any]:
+    """Collapsed backtest summary — hide α/Sharpe until expanded."""
+    eq = card.get("evidence_quality") or {}
+    live = int(eq.get("live_trades_count") or 0)
+    return {
+        "collapsed_default": True,
+        "validation_model_only": True,
+        "live_trades_count": live,
+        "walk_forward": "missing",
+        "costs": "unknown",
+        "allocation_authority": "none",
+        "summary_lines": [
+            "Validation model-only",
+            f"Live trades {live}",
+            "Walk-forward missing",
+            "Costs unknown",
+            "Allocation authority none",
+        ],
+        "show_alpha_sharpe": False,
+        "fund_return_pct": card.get("fund_return_pct"),
+        "excess_return_pct": card.get("excess_return_pct"),
+        "sharpe": card.get("sharpe"),
+        "max_drawdown_pct": card.get("max_drawdown_pct"),
+    }
+
+
+def _model_stance_label(deployability: str) -> str:
+    """Replace deploy language with model stance labels."""
+    d = (deployability or "").upper()
+    if d == "REDUCE":
+        return "Model stance: Reduced"
+    if d == "DEPLOY":
+        return "Model stance: Active (hypothetical)"
+    if d == "OFF":
+        return "Model stance: Off"
+    if d == "WATCH":
+        return "Model stance: Watch"
+    return f"Model stance: {deployability or 'Neutral'}"
+
+
+def _validation_confidence(card: Dict[str, Any], manager_box: Dict[str, Any]) -> Optional[str]:
+    """No MEDIUM/HIGH conviction when model-only and live trades = 0."""
+    live = int((card.get("evidence_quality") or {}).get("live_trades_count") or 0)
+    tier = str((card.get("evidence_quality") or {}).get("trust_tier") or "research_only")
+    raw = str(manager_box.get("conviction") or "").upper()
+    if live == 0 or tier == "research_only":
+        if raw in ("MEDIUM", "HIGH"):
+            return None
+        return "pending" if not raw or raw == "LOW" else None
+    return manager_box.get("conviction")
 
 
 def _display_text(value: Any, default: str = "—") -> str:
@@ -536,7 +718,7 @@ def build_allocator_decision_strip(
     )
     if tradeability == "NO_TRADE":
         should_deploy = False
-        deploy_label = "No / wait — tradeability NO_TRADE"
+        deploy_label = "No live deploy — tradeability NO_TRADE"
 
     blockers: List[str] = []
     if regime_stale:
@@ -565,8 +747,8 @@ def build_allocator_decision_strip(
         blockers.append("No live-validated sleeve track record — backtest only")
 
     how_much = alloc.get("tactical_mix_label") or alloc.get("marginal_instruction") or (
-        f"Deployable band {alloc.get('deployable_capital_range', deployable_pct)} · "
-        f"net ~{net_exposure}% · cash {alloc.get('cash_reserve_range', str(cash_pct)+'%')}"
+        f"Hypothetical research band {alloc.get('deployable_capital_range', deployable_pct)} · "
+        f"net ~{net_exposure}% if gates reopen · cash {alloc.get('cash_reserve_range', str(cash_pct)+'%')}"
     )
 
     return {
@@ -669,7 +851,16 @@ def build_allocator_truth_strip(
 
     allocatable = "None"
     if best_partial:
-        allocatable = f"{(best_partial.get('display_name') or 'Sleeve').split()[0]} only (partial)"
+        short = (best_partial.get("display_name") or "Sleeve").split()[0]
+        allocatable = f"{short} only (research fit)"
+
+    theoretical_band = (
+        allocator_decision.get("deployable_capital_range")
+        or f"{allocator_decision.get('deployable_capital_pct', 0)}%"
+    )
+    live_eligible_pct = 0
+    if execution_ready and len(live_eligible) > 0:
+        live_eligible_pct = int(allocator_decision.get("deployable_capital_pct") or 0)
 
     return {
         "live_eligible_count": len(live_eligible),
@@ -677,17 +868,25 @@ def build_allocator_truth_strip(
         "execution_ready": execution_ready,
         "execution_ready_label": "Yes" if execution_ready else "No",
         "current_allocatable": allocatable,
-        "max_capital_allowed": allocator_decision.get("deployable_capital_range")
-        or f"{allocator_decision.get('deployable_capital_pct', 0)}%",
+        "current_research_fit": allocatable,
+        "max_capital_allowed": (
+            f"{live_eligible_pct}%"
+            if live_eligible_pct > 0
+            else "0%"
+        ),
+        "live_eligible_capital_pct": live_eligible_pct,
+        "theoretical_model_band": theoretical_band,
+        "max_capital_label": "Theoretical model band (hypothetical)",
         "why_not_more": why_not[:6],
         "headline": (
             "Funds research is promising, but only "
             f"{(best_partial.get('display_name') or 'one sleeve').split()[0] if best_partial else 'no sleeve'} "
-            "is partially allocatable now — and even that is not live-validated."
+            "shows partial research fit now — not live-validated for capital."
             if best_partial
             else "No sleeve is live-validated for capital deployment now."
         ),
         "deploy_label": allocator_decision.get("deploy_capital_label"),
+        "research_hypothesis_only": live_eligible_pct == 0,
     }
 
 
@@ -700,11 +899,11 @@ def build_investable_now_zone(
     execution_readiness: Optional[Dict[str, Any]] = None,
     strength_strips: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Zone A — above-the-fold investable truth (not backtest authority)."""
+    """Zone A — core index posture (advisory; not live deploy authority)."""
     ex = execution_readiness or {}
     strips = strength_strips or {}
     return {
-        "title": "Investable now",
+        "title": "Core index posture",
         "regime": regime_ctx.get("regime_display"),
         "regime_source": regime_ctx.get("regime_source"),
         "regime_stale": bool(regime_ctx.get("regime_stale")),
@@ -712,16 +911,23 @@ def build_investable_now_zone(
         "regime_note": regime_ctx.get("regime_note") or "",
         "deploy_label": allocator_decision.get("deploy_capital_label"),
         "deploy_posture": allocator_decision.get("deploy_posture"),
+        "model_stance_label": _model_stance_label(
+            (allocator_decision.get("deploy_posture") or "").replace("research_weight_only", "REDUCE")
+        ),
         "strongest_eligible": strips.get("strongest_live"),
+        "strongest_research_fit": strips.get("strongest_live"),
         "strongest_research": strips.get("strongest_research"),
         "blocked_sleeves": allocator_decision.get("blocked_sleeves") or [],
         "allocation_headline": allocation.get("headline"),
         "allocation_lines": allocation.get("allocation_lines") or [],
         "max_capital_allowed": allocator_truth.get("max_capital_allowed"),
+        "live_eligible_capital_pct": allocator_truth.get("live_eligible_capital_pct", 0),
+        "theoretical_model_band": allocator_truth.get("theoretical_model_band"),
         "execution_state_label": ex.get("execution_state_label") or ex.get("readiness_label"),
         "execution_ready": allocator_truth.get("execution_ready_label"),
         "truth_headline": allocator_truth.get("headline"),
         "why_not_more": allocator_truth.get("why_not_more") or [],
+        "research_hypothesis_only": allocator_truth.get("research_hypothesis_only", True),
     }
 
 
@@ -731,12 +937,12 @@ def enrich_fund_card(
     *,
     period: str = "1y",
     benchmark_return_pct: float = 0.0,
+    research_only_mode: bool = True,
 ) -> Dict[str, Any]:
-    """Attach active manager operating fields to a model fund card."""
+    """Attach research-lab fields to a model fund card."""
     out = dict(card)
     gs = (card.get("gate_status") or "NO_DATA").upper()
-    out["manager_status"] = gs
-    out["deployability"] = (
+    raw_deploy = (
         "DEPLOY"
         if gs == "ACTIVE"
         else "REDUCE"
@@ -745,6 +951,10 @@ def enrich_fund_card(
         if gs in ("PAUSED", "NO_DATA")
         else "WATCH"
     )
+    out["manager_status"] = gs
+    out["deployability"] = raw_deploy
+    out["deployability_raw"] = raw_deploy
+    out["model_stance_label"] = _model_stance_label(raw_deploy)
     out["status_reason"] = _status_reason(card, regime)
     out["regime_fit_explanation"] = _regime_fit_explanation(
         card.get("id") or "", int(card.get("regime_fit") or 0), regime
@@ -763,6 +973,8 @@ def enrich_fund_card(
         out["upgrade_trigger"] = out.get("next_trigger") or _next_trigger(card, regime)
     out["regime_fit_decomposed"] = decompose_regime_fit(card, regime)
     out["manager_box"] = build_manager_box(out, regime)
+    validation_conf = _validation_confidence(out, out["manager_box"])
+    out["validation_confidence"] = validation_conf
     out["performance_evidence"] = build_performance_evidence(
         out, period=period, benchmark_return_pct=benchmark_return_pct
     )
@@ -798,12 +1010,17 @@ def enrich_fund_card(
         "stop_framework": risk_meta.get("stop_framework"),
     }
     out["allocator_action"] = build_sleeve_allocator_action(out)
+    out["backtest_quarantine"] = build_backtest_quarantine(out)
+    out["research_only_mode"] = research_only_mode
+    out["show_target_holdings"] = not research_only_mode
     out["card_zones"] = {
         "current_state": {
             "status": gs_upper,
             "fit_pct": int(card.get("regime_fit") or 0),
-            "deploy": out.get("deployability"),
-            "conviction": (out.get("manager_box") or {}).get("conviction"),
+            "deploy": out.get("model_stance_label") if research_only_mode else out.get("deployability"),
+            "model_stance": out.get("model_stance_label"),
+            "conviction": validation_conf,
+            "validation_confidence": validation_conf,
             "stance": card.get("stance"),
         },
         "allocator_action": out["allocator_action"],
@@ -813,13 +1030,17 @@ def enrich_fund_card(
             "max_dd_pct": card.get("max_drawdown_pct"),
             "sharpe": card.get("sharpe"),
             "sample_window": out["performance_evidence"].get("period"),
+            "collapsed_default": True,
+            "show_alpha_sharpe": not research_only_mode,
         },
         "current_book": {
+            "title": "Model holdings (hypothetical)",
             "top_holdings": [
                 h.get("ticker") for h in (card.get("holdings") or [])[:5] if h.get("ticker")
             ],
-            "target_weights": out.get("target_allocation") or [],
+            "target_weights": (out.get("target_allocation") or []) if not research_only_mode else [],
             "recent_changes": (out.get("last_rebalance") or {}).get("summary"),
+            "hidden_default": research_only_mode,
         },
     }
     return out
@@ -912,7 +1133,7 @@ def build_allocation_recommendation(
                 "gross_sleeve_weight_pct": gross_in_pool,
                 "deployable_share_pct": deploy_share,
                 "sleeve_share_range": (
-                    f"{sleeve_share_lo}-{sleeve_share_hi}% of deployable"
+                    f"{sleeve_share_lo}-{sleeve_share_hi}% of research pool (hypothetical)"
                     if i == 0 and only_reduced
                     else None
                 ),
@@ -926,45 +1147,45 @@ def build_allocation_recommendation(
     if only_reduced and strongest:
         short = (strongest.get("display_name") or "Sleeve").split()[0]
         tactical_mix = (
-            f"{short} {sleeve_share_lo}-{sleeve_share_hi}% of deployable · "
+            f"Hypothetical mix: {short} {sleeve_share_lo}-{sleeve_share_hi}% of research pool · "
             f"cash {cash_reserve_lo}-{cash_reserve_hi}%"
         )
 
     allocation_lines = [
-        f"Max deployable band: {cap_band['label']} (research / partial — not live-validated)",
+        f"Research allocation band: {cap_band['label']} — hypothetical if live gates reopen",
     ]
     if tactical_mix:
         allocation_lines.append(tactical_mix)
     elif strongest:
         allocation_lines.append(
-            f"{(strongest.get('display_name') or '').split()[0]} "
-            f"{strongest['gross_sleeve_weight_pct']:.0f}% of deployable pool"
+            f"Hypothetical sleeve share: {(strongest.get('display_name') or '').split()[0]} "
+            f"{strongest['gross_sleeve_weight_pct']:.0f}% of research pool"
         )
     allocation_lines.extend(
         [
-            f"Net portfolio exposure: ~{net_exposure}%",
-            f"Cash reserve: {cash_reserve_lo}-{cash_reserve_hi}%",
+            f"Hypothetical net exposure (if gates reopen): ~{net_exposure}%",
+            f"Headroom estimate — cash band: {cash_reserve_lo}-{cash_reserve_hi}%",
         ]
     )
 
     headline = tactical_mix or (
-        f"Research allocation band {cap_band['label']} · "
+        f"Research posture band {cap_band['label']} (not a live capital command) · "
         + " · ".join(
-            f"{w['display_name'].split()[0]} ~{w['deployable_share_pct']:.0f}%"
+            f"{w['display_name'].split()[0]} ~{w['deployable_share_pct']:.0f}% hypothetical"
             for w in weights[:2]
         )
         if weights
-        else "No allocation"
+        else "No research allocation posture"
     )
     marginal = tactical_mix or (
-        f"{(strongest.get('display_name') or '').split()[0]} "
-        f"{sleeve_share_lo}-{sleeve_share_hi}% of deployable · cash {cash_reserve_lo}-{cash_reserve_hi}%"
+        f"Hypothetical: {(strongest.get('display_name') or '').split()[0]} "
+        f"{sleeve_share_lo}-{sleeve_share_hi}% of research pool · cash {cash_reserve_lo}-{cash_reserve_hi}%"
         if strongest and only_reduced
         else (
-            f"Allocate {strongest['gross_sleeve_weight_pct']:.0f}% of deployable to "
+            f"Research model: ~{strongest['gross_sleeve_weight_pct']:.0f}% of hypothetical pool to "
             f"{(strongest.get('display_name') or '').split()[0]}"
             if strongest
-            else "No marginal add — stay in cash"
+            else "No marginal research add — preserve cash posture"
         )
     )
     return {
@@ -1018,6 +1239,7 @@ def build_comparison_table(cards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "recent_20d_pct": recent_20d,
                 "excess_return_pct": c.get("excess_return_pct"),
                 "deployability": c.get("deployability"),
+                "model_stance_label": c.get("model_stance_label") or _model_stance_label(c.get("deployability") or ""),
                 "evidence_badge": (c.get("evidence_quality") or {}).get("badge")
                 or c.get("evidence_badge"),
                 "live_trades_count": (c.get("evidence_quality") or {}).get("live_trades_count", 0),
@@ -1276,8 +1498,9 @@ def build_fund_console_payload(
     best_action_liner: str = "",
     vix: Optional[float] = None,
     breadth: Optional[float] = None,
+    system_truth: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Full fund tab payload — allocator command center."""
+    """Full fund tab payload — research lab with optional allocation lock."""
     regime_ctx = resolve_fund_regime(
         sleeve_regime=regime,
         today_trend=today_trend or market_regime_label.split("·")[0].strip(),
@@ -1288,22 +1511,13 @@ def build_fund_console_payload(
     )
     regime_resolved = regime_ctx["regime"]
     regime_display = regime_ctx["regime_display"]
-    enriched = [
-        enrich_fund_card(
-            c,
-            regime_resolved,
-            period=period,
-            benchmark_return_pct=benchmark_return_pct,
-        )
-        for c in cards
-    ]
     regime_stale = bool(regime_ctx.get("regime_stale"))
     execution = enrich_execution_readiness_for_funds(
         execution_readiness or {},
-        cards=enriched,
+        cards=cards,
     )
     allocation = build_allocation_recommendation(
-        enriched,
+        cards,
         regime_resolved,
         regime_stale=regime_stale,
         execution_ready=str(execution.get("execution_state") or "") in (
@@ -1312,6 +1526,24 @@ def build_fund_console_payload(
         )
         and bool(execution.get("trade_handoff_ready")),
     )
+    funds_mode = resolve_funds_mode(
+        execution_readiness=execution,
+        tradeability=tradeability,
+        cards=cards,
+        system_truth=system_truth,
+        allocation=allocation,
+    )
+    research_only_mode = bool(funds_mode.get("research_only_mode"))
+    enriched = [
+        enrich_fund_card(
+            c,
+            regime_resolved,
+            period=period,
+            benchmark_return_pct=benchmark_return_pct,
+            research_only_mode=research_only_mode,
+        )
+        for c in cards
+    ]
     alloc_weights = allocation.get("weights") or []
     for c in enriched:
         c["_alloc_weights"] = alloc_weights
@@ -1341,6 +1573,14 @@ def build_fund_console_payload(
         execution_readiness=execution,
         regime_stale=regime_stale,
     )
+    if research_only_mode:
+        allocator_truth["live_eligible_capital_pct"] = 0
+        allocator_truth["max_capital_allowed"] = "0%"
+        band = funds_mode.get("theoretical_model_band")
+        if band:
+            allocator_truth["theoretical_model_band_note"] = (
+                f"Theoretical model band: {band} if validation later passes"
+            )
     investable_now = build_investable_now_zone(
         regime_ctx=regime_ctx,
         allocator_decision=allocator_decision,
@@ -1349,7 +1589,22 @@ def build_fund_console_payload(
         execution_readiness=execution,
         strength_strips=strength_strips,
     )
+    funds_first_screen = build_funds_first_screen(
+        funds_mode=funds_mode,
+        index_posture=None,
+        strength_strips=strength_strips,
+        cards=enriched,
+        system_truth=system_truth,
+    )
     console_payload = {
+        "title": FUNDS_RESEARCH_LAB_TITLE,
+        "research_lab_title": FUNDS_RESEARCH_LAB_TITLE,
+        "funds_mode": funds_mode,
+        "funds_first_screen": funds_first_screen,
+        "live_allocation_eligible": funds_mode.get("live_allocation_eligible", 0),
+        "allocation_authority": funds_mode.get("allocation_authority", "none"),
+        "research_only_mode": research_only_mode,
+        "guardrail": FUNDS_GUARDRAIL,
         "regime": regime_resolved,
         "regime_display": regime_display,
         "regime_source": regime_ctx["regime_source"],
@@ -1377,6 +1632,14 @@ def build_fund_console_payload(
         "risk_governance": build_risk_governance(enriched),
         "consensus_matrix": build_consensus_matrix(enriched),
         "strength_strips": strength_strips,
+        "research_lab": {
+            "sleeve_id": (controller or {}).get("id"),
+            "display_name": (controller or {}).get("display_name"),
+            "stance": (controller or {}).get("stance"),
+            "mode": (controller or {}).get("mode"),
+            "controls_capital": bool((controller or {}).get("controls_capital")),
+            "manager_box": (controller or {}).get("manager_box"),
+        },
         "active_manager": {
             "sleeve_id": (controller or {}).get("id"),
             "display_name": (controller or {}).get("display_name"),

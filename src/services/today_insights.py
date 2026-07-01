@@ -153,12 +153,27 @@ def build_regime_wait_explanation(
             lines.append("Scanner found no names above actionable score threshold today.")
     elif not should_trade:
         lines.append("Regime gate is closed — capital preservation overrides individual setups.")
+        from src.services.system_truth import classify_volatility_state
+
+        vol = classify_volatility_state(vix)
+        if vol in ("stress", "crisis"):
+            lines.append(f"VIX {vix:.0f} — {vol} vol; size down or wait for compression.")
+        else:
+            lines.append(
+                "NO_TRADE driven by board / broker / brief gates — not a vol-crisis veto alone."
+            )
     elif trade_count > 0:
         lines.append(f"{trade_count} TRADE-ready name(s) — deploy selectively at 1R.")
     else:
         lines.append(f"Tradeability: {tradeability} — patience is the active decision.")
     if vix > 22:
-        lines.append(f"VIX {vix:.0f} — elevated vol; size down or wait for compression.")
+        from src.services.system_truth import classify_volatility_state
+
+        vol = classify_volatility_state(vix)
+        if vol in ("stress", "crisis"):
+            lines.append(f"VIX {vix:.0f} — {vol} vol; size down or wait for compression.")
+        elif vol == "elevated":
+            lines.append(f"VIX {vix:.0f} — elevated vol; downgrade urgency, not a veto alone.")
     if breadth < 40:
         lines.append(f"Breadth {breadth:.0f}% — narrow participation; leaders only.")
     return lines[:5]
@@ -286,6 +301,7 @@ def build_unlock_deploy(
     watch_qualified_count: int = 0,
     validated_count: Optional[int] = None,
     scan_ranked_count: int = 0,
+    degradation_notes: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Conditions required before full deploy unlocks."""
     from src.services.decision_truth_model import format_board_quality_detail
@@ -330,7 +346,10 @@ def build_unlock_deploy(
             "label": "Board-level quality supports risk",
             "met": board_quality_ok,
             "detail": format_board_quality_detail(
-                wq, scan_ranked=sr, scanner_degraded=scanner_degraded
+                wq,
+                scan_ranked=sr,
+                scanner_degraded=scanner_degraded,
+                degradation_notes=degradation_notes,
             ),
         },
     ]
@@ -649,6 +668,8 @@ def detect_monitor_upgrade_gap_alerts(
     for nm in near_miss or []:
         if not isinstance(nm, dict):
             continue
+        if _is_avoid_action(_row_action(nm)):
+            continue
         ticker = str(nm.get("ticker") or "").upper().strip()
         if not ticker:
             continue
@@ -831,25 +852,26 @@ def build_monitor_triggers(
     ):
         triggers.append(alert)
     if near_miss:
-        nm = near_miss[0]
-        detail = str(nm.get("upgrade_trigger") or "").strip()
-        dist = str(nm.get("distance_to_pass") or "").strip()
-        if dist:
-            detail = f"{detail} · {dist}" if detail else dist
-        if not detail:
-            detail = str(nm.get("whats_missing") or "Monitor upgrade — not deploy")
-        gap_suffix = _near_miss_monitor_gap_suffix(nm)
-        if gap_suffix:
-            detail = f"{detail} · {gap_suffix}" if detail else gap_suffix
-        triggers.append(
-            {
-                "type": "near_miss",
-                "label": f"Upgrade watch: {nm['ticker']}",
-                "detail": detail,
-                "horizon": "intraday",
-                "monitoring_only": True,
-            }
-        )
+        nm = pick_non_avoid_monitor(near_miss)
+        if nm:
+            detail = str(nm.get("upgrade_trigger") or "").strip()
+            dist = str(nm.get("distance_to_pass") or "").strip()
+            if dist:
+                detail = f"{detail} · {dist}" if detail else dist
+            if not detail:
+                detail = str(nm.get("whats_missing") or "Monitor upgrade — not deploy")
+            gap_suffix = _near_miss_monitor_gap_suffix(nm)
+            if gap_suffix:
+                detail = f"{detail} · {gap_suffix}" if detail else gap_suffix
+            triggers.append(
+                {
+                    "type": "near_miss",
+                    "label": f"Upgrade watch: {nm['ticker']}",
+                    "detail": detail,
+                    "horizon": "intraday",
+                    "monitoring_only": True,
+                }
+            )
     leaders = (market_pulse or {}).get("sector_leaders") or []
     if leaders:
         l0 = leaders[0]
@@ -952,6 +974,181 @@ _AVOID_ACTIONS = frozenset({"AVOID", "NO_TRADE", "PASS", "EXIT", "REDUCE"})
 
 def _norm_action(action: Optional[str]) -> str:
     return (action or "WATCH").upper().strip()
+
+
+def _row_action(row: Optional[Dict[str, Any]]) -> str:
+    return (row or {}).get("action") or (row or {}).get("raw_action") or "WATCH"
+
+
+def _is_avoid_action(action: Optional[str]) -> bool:
+    return _norm_action(action) in _AVOID_ACTIONS
+
+
+def filter_valid_opportunities(
+    rows: Optional[List[Dict[str, Any]]],
+) -> List[Dict[str, Any]]:
+    """Exclude AVOID / rejected names from opportunity slots."""
+    out: List[Dict[str, Any]] = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        if _is_avoid_action(_row_action(row)):
+            continue
+        if str(row.get("card_display_mode") or "") == "rejected":
+            continue
+        out.append(row)
+    return out
+
+
+def build_candidate_bucket_counts(
+    *,
+    council_results: Optional[List[Any]] = None,
+    funnel: Optional[Dict[str, Any]] = None,
+    top5: Optional[List[Dict[str, Any]]] = None,
+    near_miss: Optional[List[Dict[str, Any]]] = None,
+    avoid_grouped: Optional[Dict[str, Any]] = None,
+) -> Dict[str, int]:
+    """Explicit scoped funnel counts for dashboard KPI strip."""
+    f = funnel or {}
+    valid_top = filter_valid_opportunities(top5)
+    scanner_n = int(f.get("universe_scanned") or f.get("universe") or 0)
+    if not scanner_n and council_results:
+        scanner_n = len(council_results)
+    return {
+        "scannerCandidates": scanner_n,
+        "funnelWatchQualified": int(
+            f.get("watch_qualified_setups") or f.get("setup_qualified_setups") or 0
+        ),
+        "playbookWatchQualified": len(
+            [r for r in valid_top if _norm_action(_row_action(r)) in _WATCH_ACTIONS | _PILOT_ACTIONS | _TRADE_ACTIONS]
+        ),
+        "deployQualified": int(
+            f.get("deploy_qualified_setups") or f.get("execution_ready_setups") or 0
+        ),
+        "validMonitorCount": len(valid_top),
+        "rejectedHidden": int((avoid_grouped or {}).get("total") or 0),
+        "nearMissCount": len(filter_valid_opportunities(near_miss)),
+    }
+
+
+def build_top_monitor(
+    *,
+    top5: Optional[List[Dict[str, Any]]] = None,
+    near_miss: Optional[List[Dict[str, Any]]] = None,
+    todays_decision: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Canonical top monitor slot — never AVOID."""
+    td = todays_decision or {}
+    pick = pick_non_avoid_monitor(top5) or pick_non_avoid_monitor(near_miss)
+    if not pick and td.get("best_watch"):
+        bw = td["best_watch"]
+        if not _is_avoid_action(bw.get("action")):
+            pick = bw
+    action = _norm_action(_row_action(pick)) if pick else ""
+    if pick and _is_avoid_action(action):
+        pick = None
+    return {
+        "ticker": (pick or {}).get("ticker") or "",
+        "action": action or "NONE",
+        "label": top_monitor_display_label(top5, near_miss=near_miss),
+        "valid": bool(pick),
+    }
+
+
+def build_top_opportunities(
+    top5: Optional[List[Dict[str, Any]]] = None,
+    *,
+    limit: int = 5,
+) -> List[Dict[str, Any]]:
+    """Deploy / pilot / watch opportunities — AVOID excluded, no backfill."""
+    return filter_valid_opportunities(top5)[:limit]
+
+
+def build_evidence_conflict(
+    *,
+    top5: Optional[List[Dict[str, Any]]] = None,
+    near_miss: Optional[List[Dict[str, Any]]] = None,
+    score_reconciliation: Optional[Dict[str, Any]] = None,
+    todays_decision: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Evidence conflict panel — For / Against / Missing / triggers."""
+    valid = filter_valid_opportunities(top5)
+    lead = valid[0] if valid else None
+    sr = score_reconciliation or {}
+    against: List[str] = list(sr.get("contradictions") or [])[:4]
+    for row in (top5 or [])[:5]:
+        if str(row.get("conflict_level") or "").upper() in ("HIGH", "CRITICAL"):
+            tk = str(row.get("ticker") or "").upper()
+            if tk:
+                against.append(f"{tk}: high internal conflict")
+    missing: List[str] = []
+    if lead:
+        expl = lead.get("explanation") or {}
+        wm = expl.get("whats_missing") or lead.get("whats_missing")
+        if wm:
+            missing.append(str(wm) if isinstance(wm, str) else ", ".join(wm))
+        if not lead.get("execution_ready"):
+            missing.append("Execution-ready flag not set")
+    elif near_miss:
+        nm = pick_non_avoid_monitor(near_miss)
+        if nm and nm.get("whats_missing"):
+            missing.append(str(nm.get("whats_missing")))
+    if not valid:
+        missing.append("No valid monitor candidates on board")
+    for_why: List[str] = []
+    if lead:
+        why = lead.get("why_now") or []
+        if isinstance(why, str):
+            for_why.append(why)
+        else:
+            for_why.extend([str(w) for w in why[:3]])
+        if lead.get("upgrade_trigger"):
+            for_why.append(f"Upgrade: {lead['upgrade_trigger']}")
+    td = todays_decision or {}
+    decision = td.get("deploy_label") or td.get("deploy_posture") or "Preserve capital"
+    upgrade_trigger = (lead or {}).get("upgrade_trigger") or (lead or {}).get("explanation", {}).get("upgrade_trigger") or ""
+    invalidation = (lead or {}).get("invalidation") or ""
+    collapsed = not bool(lead)
+    return {
+        "for": for_why[:4],
+        "against": against[:4],
+        "missing": missing[:4],
+        "upgrade_trigger": upgrade_trigger,
+        "invalidation": invalidation,
+        "decision": decision,
+        "collapsed": collapsed,
+        "headline": "No valid candidate — evidence panel collapsed" if collapsed else f"Evidence review: {lead.get('ticker', '—')}",
+    }
+
+
+def pick_non_avoid_monitor(
+    rows: Optional[List[Dict[str, Any]]],
+) -> Optional[Dict[str, Any]]:
+    """First monitor candidate that is not AVOID — mission / opportunity slots."""
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        if not row.get("ticker"):
+            continue
+        if _is_avoid_action(_row_action(row)):
+            continue
+        return row
+    return None
+
+
+def top_monitor_display_label(
+    monitors: Optional[List[Dict[str, Any]]] = None,
+    *,
+    near_miss: Optional[List[Dict[str, Any]]] = None,
+) -> str:
+    """Mission panel headline — never promote AVOID as top monitor."""
+    pick = pick_non_avoid_monitor(monitors) or pick_non_avoid_monitor(near_miss)
+    if not pick:
+        if any(_is_avoid_action(_row_action(r)) for r in (monitors or near_miss or [])):
+            return "No valid monitor candidates"
+        return "Monitors"
+    ticker = str(pick.get("ticker") or "—").upper()
+    return f"Monitor: {ticker}"
 
 
 def _pick_best(
@@ -1071,13 +1268,21 @@ def build_todays_decision(
         best_trade = _pick_best(
             opportunities, _TRADE_ACTIONS, execution_ready_only=True
         )
+    if best_trade and _is_avoid_action(best_trade.get("action")):
+        best_trade = None
     best_pilot = ba.get("best_pilot_now") or _pick_best(opportunities, _PILOT_ACTIONS)
+    if best_pilot and _is_avoid_action(best_pilot.get("action")):
+        best_pilot = None
     best_watch = (
         ba.get("best_watch_upgrade")
         or _pick_best(opportunities, _WATCH_ACTIONS)
-        or (near_miss[0] if near_miss else None)
+        or pick_non_avoid_monitor(near_miss)
         or _pick_best(watch_rows, _WATCH_ACTIONS)
     )
+    if best_watch and _is_avoid_action(best_watch.get("action")):
+        best_watch = pick_non_avoid_monitor(near_miss) or _pick_best(
+            watch_rows, _WATCH_ACTIONS
+        )
 
     has_trade = bool(best_trade) and exec_ready_count >= 1
     has_pilot = bool(best_pilot)
@@ -1186,6 +1391,10 @@ def build_todays_decision(
         "headline": (
             f"{deploy_label} · Best TRADE: {(best_trade or {}).get('ticker') or 'None'}"
             f" · Watch: {(best_watch or {}).get('ticker') or '—'}"
+        ),
+        "top_monitor_label": top_monitor_display_label(
+            monitors=[best_watch] if best_watch else None,
+            near_miss=near_miss,
         ),
     }
 
@@ -1351,10 +1560,14 @@ def merge_brief_board_fallback(
     *,
     scanner_degraded: bool,
     top_limit: int = 5,
+    brief_age_days: Optional[int] = None,
 ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], bool]:
     """Seed WATCH / near-miss rows from morning brief when live scanner is empty."""
     from src.services.cc_live_policy import cc_live_data_only_enabled
+    from src.services.system_truth import BRIEF_EXPIRE_DAYS
 
+    if brief_age_days is not None and brief_age_days > BRIEF_EXPIRE_DAYS:
+        return top5, [], False
     if cc_live_data_only_enabled():
         return top5, near_miss, False
     if top5 or not scanner_degraded:
