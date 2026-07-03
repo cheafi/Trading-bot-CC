@@ -1652,6 +1652,8 @@ def remove_trade_language_when_blocked(text: str, *, blocked: bool = True) -> st
     replacements = (
         ("taking a Pilot entry", "monitor only — pilot blocked"),
         ("pilot entry", "monitor only"),
+        ("half size max", "no sizing — blocked"),
+        ("half size", "no sizing — blocked"),
         ("size at half risk", "no sizing — blocked"),
         ("handoff to IBKR", "no handoff — blocked"),
         ("Deploy gate open", "Deploy authority: Blocked"),
