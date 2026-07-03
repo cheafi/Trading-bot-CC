@@ -39,4 +39,7 @@ def test_build_unified_truth_strip_format():
             "deploy_authority": False,
         }
     )
-    assert strip == "Market: Fresh · Board: Stale · Brief: Expired 21d · Broker: Offline · Authority: Blocked"
+    assert strip == (
+        "Market: Fresh · Board: Stale · Brief: Expired 21d · Broker: Offline · "
+        "Runtime: Unknown · Authority: Blocked"
+    )

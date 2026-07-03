@@ -241,6 +241,37 @@ def _execution_gate(today: Dict[str, Any]) -> str:
     return "blocked"
 
 
+def format_engine_state_display(engine_state: Optional[str] = None) -> str:
+    """Never leak 'undefined' — map unknown engine to operator-safe label."""
+    raw = str(engine_state or "").strip().lower()
+    if not raw or raw == "undefined":
+        return "Unknown"
+    return {
+        "on": "On",
+        "off": "Off",
+        "unknown": "Unknown",
+    }.get(raw, raw.title())
+
+
+def _runtime_freshness_label(runtime_state: str, engine_state: str) -> str:
+    """Scoped Runtime segment for global truth strip."""
+    rs = str(runtime_state or "").lower()
+    eng = str(engine_state or "").lower()
+    if rs in ("warming", "loading"):
+        return "Warming"
+    if rs == "execution_blocked":
+        return "Blocked"
+    if rs == "degraded":
+        return "Degraded"
+    if rs == "unknown" or eng == "unknown" or not eng or eng == "undefined":
+        return "Unknown"
+    if rs == "engine_off" or eng == "off":
+        return "Off"
+    if rs in ("engine_on", "live"):
+        return "Live"
+    return rs.replace("_", " ").title() if rs else "Unknown"
+
+
 def _deploy_authority(
     today: Dict[str, Any],
     *,
@@ -248,6 +279,8 @@ def _deploy_authority(
     execution_gate: str,
     brief_freshness: str,
     market_data_freshness: str,
+    ranked_board_freshness: str = "fresh",
+    broker_freshness: str = "offline",
 ) -> bool:
     auth = today.get("decision_authority") or {}
     if auth.get("authority_level") != "deploy":
@@ -260,8 +293,12 @@ def _deploy_authority(
         return False
     if brief_freshness in ("expired", "fallback"):
         return False
+    if broker_freshness in ("offline", "blocked"):
+        return False
+    if ranked_board_freshness in ("stale", "fallback", "unavailable"):
+        return False
     if market_data_freshness in ("unavailable", "stale") and today.get("scanner_degraded"):
-        pass
+        return False
     if auth.get("source") in ("fallback_brief", "stale_cache"):
         return False
     deploy_n = int((today.get("qualification_levels") or {}).get("deploy_qualified") or 0)
@@ -426,13 +463,18 @@ def _freshness_label(scope: str, val: str, *, brief_age_days: Optional[int] = No
 
 
 def format_global_truth_strip(truth: Dict[str, Any]) -> str:
-    """Scoped freshness strip — e.g. Market: Fresh · Board: Stale · Brief: Expired 21d."""
+    """Scoped freshness strip — e.g. Market: Fresh · Board: Stale · Brief: Expired 21d · Runtime: Warming."""
     age = truth.get("brief_age_days")
+    runtime = truth.get("runtime_freshness") or _runtime_freshness_label(
+        str(truth.get("runtime_state") or ""),
+        str(truth.get("engine_state") or ""),
+    )
     parts = [
         f"Market: {_freshness_label('Market', truth.get('market_data_freshness', 'unavailable'))}",
         f"Board: {_freshness_label('Board', truth.get('ranked_board_freshness', 'unavailable'))}",
         f"Brief: {_freshness_label('Brief', truth.get('brief_freshness', 'unavailable'), brief_age_days=age)}",
         f"Broker: {_freshness_label('Broker', truth.get('broker_freshness', 'offline'))}",
+        f"Runtime: {runtime}",
         f"Authority: {'Open' if truth.get('deploy_authority') else 'Blocked'}",
     ]
     return " · ".join(parts)
@@ -487,6 +529,11 @@ def typed_freshness_display(truth: Dict[str, Any]) -> str:
     parts.append(
         f"Broker: {_freshness_label('Broker', 'offline' if broker == 'offline' else broker)}"
     )
+    runtime = truth.get("runtime_freshness") or _runtime_freshness_label(
+        str(truth.get("runtime_state") or ""),
+        str(truth.get("engine_state") or ""),
+    )
+    parts.append(f"Runtime: {runtime}")
     auth = "Blocked" if not truth.get("deploy_authority") else "Open"
     parts.append(f"Authority: {auth}")
     return " · ".join(parts)
@@ -621,7 +668,20 @@ def resolve_system_truth(
         execution_gate=execution_gate,
         brief_freshness=brief_freshness,
         market_data_freshness=market_data_freshness,
+        ranked_board_freshness=ranked_board_freshness,
+        broker_freshness=broker_freshness,
     )
+    engine_display = format_engine_state_display(engine_state)
+    runtime_freshness = _runtime_freshness_label(runtime_state, engine_state)
+    deploy_authority_label = "open" if deploy_auth else "blocked"
+    tradeability_authority_line = ""
+    if regime_state.upper() == "SELECTIVE" and (
+        ranked_board_freshness in ("stale", "fallback")
+        or market_data_freshness == "stale"
+    ):
+        tradeability_authority_line = (
+            "Tradeability: Selective candidate review only · Deploy authority: Blocked"
+        )
     reason_codes = build_reason_codes(
         market_data_freshness=market_data_freshness,
         ranked_board_freshness=ranked_board_freshness,
@@ -694,6 +754,10 @@ def resolve_system_truth(
         "repair_priority": repair_priority,
         "freshness_tier": freshness_tier,
         "engine_state": engine_state,
+        "engine_state_display": engine_display,
+        "runtime_freshness": runtime_freshness,
+        "deploy_authority_label": deploy_authority_label,
+        "tradeability_authority_line": tradeability_authority_line,
         "broker_state": broker_freshness,
         "deploy_qualified_count": deploy_n,
         "setup_qualified_count": setup_n,

@@ -1,1 +1,0 @@
-The Alpine JS UI spec is applied.

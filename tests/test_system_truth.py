@@ -5,6 +5,7 @@ from __future__ import annotations
 from src.services.system_truth import (
     build_morning_decision_line,
     build_reason_codes,
+    format_engine_state_display,
     format_global_truth_strip,
     format_operator_sentence,
     reason_codes_to_copy,
@@ -141,6 +142,7 @@ def test_format_global_truth_strip_scoped():
     assert "Authority: Blocked" in strip
     assert "DATA FRESH" not in strip
     assert "DATA STALE" not in strip
+    assert "Runtime:" in strip
 
 
 def test_format_operator_sentence_one_line():
@@ -196,3 +198,110 @@ def test_resolve_system_truth_full_output_fields():
         "operator_sentence",
     ):
         assert field in truth, f"missing {field}"
+
+
+def test_format_engine_state_never_undefined():
+    assert format_engine_state_display(None) == "Unknown"
+    assert format_engine_state_display("undefined") == "Unknown"
+    assert format_engine_state_display("on") == "On"
+    rendered = format_global_truth_strip(
+        {
+            "market_data_freshness": "fresh",
+            "ranked_board_freshness": "fresh",
+            "brief_freshness": "fresh",
+            "broker_freshness": "offline",
+            "runtime_state": "unknown",
+            "engine_state": "unknown",
+            "deploy_authority": False,
+        }
+    )
+    assert "undefined" not in rendered.lower()
+    assert "Runtime: Unknown" in rendered
+
+
+def test_global_strip_includes_runtime_and_scoped_labels():
+    strip = format_global_truth_strip(
+        {
+            "market_data_freshness": "stale",
+            "ranked_board_freshness": "fallback",
+            "brief_freshness": "expired",
+            "brief_age_days": 21,
+            "broker_freshness": "offline",
+            "runtime_state": "engine_off",
+            "engine_state": "off",
+            "deploy_authority": False,
+        }
+    )
+    assert "Market: Stale" in strip
+    assert "Board: Fallback" in strip
+    assert "Brief: Expired 21d" in strip
+    assert "Broker: Offline" in strip
+    assert "Runtime:" in strip
+    assert "Authority: Blocked" in strip
+
+
+def test_deploy_qualified_zero_when_broker_offline():
+    truth = resolve_system_truth(
+        {
+            "market_regime": {"tradeability": "TRADE", "should_trade": True},
+            "decision_authority": {
+                "authority_level": "deploy",
+                "gates_active": False,
+                "allows_trade_labels": True,
+                "source": "live",
+            },
+            "qualification_levels": {"deploy_qualified": 3},
+            "execution_ready_count": 2,
+            "execution_readiness": {"broker_connected": False},
+            "top_5": [{"ticker": "X", "action": "TRADE"}],
+        },
+        cc_header={"data_tier": "FRESH"},
+        ops_console={"engine_running": True},
+    )
+    assert truth["deploy_authority"] is False
+    assert truth["deploy_qualified_count"] == 0
+
+
+def test_deploy_qualified_zero_when_board_stale():
+    truth = resolve_system_truth(
+        {
+            "market_regime": {"tradeability": "TRADE", "should_trade": True},
+            "scanner_degraded": True,
+            "decision_authority": {
+                "authority_level": "deploy",
+                "gates_active": False,
+                "allows_trade_labels": True,
+                "source": "live",
+            },
+            "qualification_levels": {"deploy_qualified": 2},
+            "execution_ready_count": 2,
+            "execution_readiness": {"trade_handoff_ready": True, "broker_connected": True},
+            "top_5": [{"ticker": "X", "action": "TRADE"}],
+        },
+        cc_header={"data_tier": "STALE"},
+        ops_console={"engine_running": True},
+    )
+    assert truth["deploy_authority"] is False
+    assert truth["deploy_qualified_count"] == 0
+    assert truth["ranked_board_freshness"] == "stale"
+
+
+def test_selective_stale_tradeability_authority_line():
+    truth = resolve_system_truth(
+        {
+            "market_regime": {"tradeability": "SELECTIVE", "should_trade": True},
+            "trust": {"stale": True, "source": "decision_engine_degraded"},
+            "decision_authority": {
+                "authority_level": "research",
+                "gates_active": True,
+                "allows_trade_labels": False,
+            },
+            "execution_readiness": {},
+            "top_5": [{"ticker": "W", "action": "WATCH"}],
+        },
+        cc_header={"data_tier": "STALE"},
+        ops={},
+    )
+    assert "Selective candidate review only" in truth.get("tradeability_authority_line", "")
+    assert "Deploy authority: Blocked" in truth.get("tradeability_authority_line", "")
+
