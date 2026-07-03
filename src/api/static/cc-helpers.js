@@ -1044,9 +1044,9 @@
 		"Paper draft disabled — live Dossier + Playbook confirmation required."
 	var DOSSIER_MONITOR_RULE_BUTTON = "Create monitor rule · 建立監察規則"
 	var DOSSIER_MONITOR_RULE_HINT =
-		"Alert only · no sizing · no handoff · requires Playbook confirmation"
+		"Alert only · no sizing · no handoff"
 	var DOSSIER_LAGGED_CONTEXT_NOTE =
-		"Lagged ownership context hidden — not used for confirmation."
+		"Lagged / illustrative context · not used for confirmation"
 	var DOSSIER_STRUCTURE_SNAPSHOT_TITLE = "Structure snapshot · 結構快照"
 
 	var DOSSIER_STRUCTURE_LABELS = {
@@ -1061,6 +1061,7 @@
 		var o = opts || {}
 		if (o.mode_key) return String(o.mode_key)
 		if (o.failed_fetch && !o.has_quote) return "unavailable"
+		if (o.load_phase === "core" || o.loading) return "loading"
 		var label = String(o.unified_label || "").toUpperCase()
 		var confirmLabels = [
 			"CONFIRM ONLY",
@@ -1075,10 +1076,93 @@
 			!!o.instant_degraded ||
 			!!o.brief_backed ||
 			!!o.pending_calibration ||
-			!!o.rr_unavailable
+			!!o.rr_unavailable ||
+			!o.has_quote
+		if (!o.has_quote && (o.instant_degraded || !o.brief_backed || o.partial)) {
+			return "unavailable"
+		}
 		if (confirmOnly) return "structure_review_only"
-		if (o.partial || o.load_phase === "core") return "partial"
+		if (o.partial) return "loading"
 		return "usable"
+	}
+
+	function dossierRecoveryMode(mode) {
+		var m = String(mode || "")
+		return (
+			m === "structure_review_only" ||
+			m === "loading" ||
+			m === "unavailable"
+		)
+	}
+
+	function dossierUsableMode(mode) {
+		return String(mode || "") === "usable"
+	}
+
+	function dossierOperatorBlock(mode, payload) {
+		var p = payload || {}
+		var block = p.dossier_operator_block
+		if (block && block.now) return block
+		var dm = p.dossier_mode || {}
+		if (dm.dossier_operator_block && dm.dossier_operator_block.now) {
+			return dm.dossier_operator_block
+		}
+		var sym = String(p.ticker || p.symbol || "").toUpperCase()
+		var m = String(mode || resolveDossierMode(p))
+		var now =
+			m === "unavailable"
+				? (sym ? sym + " · Structure unavailable" : "Structure unavailable")
+				: m === "loading"
+					? (sym ? sym + " · Loading" : "Loading dossier")
+					: sym
+						? sym + " · " + String(p.unified_label || "CONFIRM ONLY")
+						: "CONFIRM ONLY"
+		var why = []
+		if (!p.has_quote) why.push("live quote unavailable")
+		if (!p.brief_backed) why.push("no brief row")
+		if (m === "loading") why.push("backend loading")
+		return {
+			now: now,
+			why: why.length ? why.join(" · ") : "Live dossier incomplete",
+			allowed: ["retry", "load core", "open Playbook"],
+			blocked: [
+				"no trade plan",
+				"no paper draft",
+				"no sizing",
+				"no handoff",
+			],
+			missing_data: dm.missing_data || [],
+			next: "retry live fetch",
+		}
+	}
+
+	function dossierTradePlanVisible(opts) {
+		var o = opts || {}
+		return (
+			resolveDossierMode(o) === "usable" &&
+			!!o.playbook_watch_plus &&
+			!o.deploy_blocked &&
+			!!o.broker_online
+		)
+	}
+
+	function dossierEvidenceStatus(payload) {
+		var p = payload || {}
+		var es = p.evidence_status
+		if (es && es.show != null) return es
+		var dm = p.dossier_mode || {}
+		if (dm.evidence_status) return dm.evidence_status
+		var mode = resolveDossierMode(p)
+		var review = dossierRecoveryMode(mode)
+		return {
+			show: review || !p.has_quote || !p.has_narrative,
+			headline: !p.has_quote ? "Structure unavailable" : "Evidence incomplete",
+			evidence_quality: review ? "Low" : "—",
+			calibration: review ? "Pending" : "—",
+			use_allowed: review ? "structure review only" : "live confirmation",
+			reason: "Live modules missing — no deploy authority",
+			modules_missing: review || !p.has_narrative,
+		}
 	}
 
 	function dossierStructureReviewOnly(mode) {
@@ -2064,6 +2148,11 @@
 		dossierSizingExplanation: dossierSizingExplanation,
 		dossierTradePlanNote: dossierTradePlanNote,
 		resolveDossierMode: resolveDossierMode,
+		dossierRecoveryMode: dossierRecoveryMode,
+		dossierUsableMode: dossierUsableMode,
+		dossierOperatorBlock: dossierOperatorBlock,
+		dossierTradePlanVisible: dossierTradePlanVisible,
+		dossierEvidenceStatus: dossierEvidenceStatus,
 		dossierStructureReviewOnly: dossierStructureReviewOnly,
 		dossierConfirmOnlyStrip: dossierConfirmOnlyStrip,
 		dossierStructureSnapshotTitle: dossierStructureSnapshotTitle,
