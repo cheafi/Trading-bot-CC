@@ -4159,14 +4159,14 @@
             <div style="margin-top:8px">
               <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Capital allowed when</div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;margin-bottom:10px">
-                <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">☑</span><span style="color:var(--t2)"><strong style="color:var(--t1)">Data fresh</strong> — no STALE/CRITICAL; trust strip not synthetic</span></div>
+                <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">☑</span><span style="color:var(--t2)"><strong style="color:var(--t1)">Scoped freshness</strong> — Market/Board/Brief/Broker/Runtime fresh; header shows per-scope labels, not one global pill</span></div>
                 <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">☑</span><span style="color:var(--t2)"><strong style="color:var(--t1)">Engine confirmed</strong> — header + Ops agree; badge alone ≠ fresh cycle</span></div>
                 <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">☑</span><span style="color:var(--t2)"><strong style="color:var(--t1)">IBKR READY</strong> — session active, not LOGIN-only; bracket aligned</span></div>
                 <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">☑</span><span style="color:var(--t2)"><strong style="color:var(--t1)">Board gate open</strong> — not WAIT/NO_TRADE; entry + stop + execution_ready</span></div>
               </div>
               <div style="font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px">Capital blocked when</div>
               <div style="font-size:11px;color:var(--t2);line-height:1.6">
-                Engine OFF/stale · board WAIT/NO_TRADE · IBKR LOGIN-only or disconnected · bracket missing · fallback / confirm-only dossier · research-only / mock surfaces
+                Engine OFF/stale · board WAIT/NO_TRADE · Authority: Blocked · IBKR LOGIN-only or disconnected · bracket missing · fallback / confirm-only dossier (Structure Review Only) · research-only / mock surfaces · no pilot entry
                 <span style="color:var(--t3)"> — full list in Layer 3.</span>
               </div>
             </div>
@@ -4200,14 +4200,14 @@
           <div style="font-size:12px;color:var(--t2);line-height:1.8;margin-bottom:12px">Status is four layers, not just LIVE/PAPER/SYNTHETIC. Check all four before trusting any card:</div>
           <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
             <div style="background:var(--s2);border:1px solid var(--bd);border-radius:8px;padding:10px 12px">
-              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:4px">① Market data status</div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:4px">① Scoped truth strip (header example)</div>
+              <div style="font-size:9px;color:var(--t3);margin-bottom:6px;font-style:italic">Educational example — live header uses Market:/Board:/Brief:/Broker:/Runtime:/Authority: labels.</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t2);line-height:1.5;margin-bottom:6px;padding:8px;background:var(--bg);border-radius:6px;border:1px solid var(--bd)">Market: Fresh · Board: Stale · Brief: Expired 21d · Broker: Offline · Runtime: Stale · Authority: Blocked</div>
               <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
                 <span class="guide-badge pg" style="font-size:9px">REAL_TIME</span>
-                <span class="guide-badge pa" style="font-size:9px">DATA FRESH</span>
-                <span class="guide-badge pa" style="font-size:9px">STALE</span>
                 <span class="guide-badge" style="background:#581c87;color:#d8b4fe;font-size:9px">SYNTHETIC</span>
               </div>
-              <div style="font-size:11px;color:var(--t2);line-height:1.6"><strong style="color:var(--red)">⚠ STALE / CRITICAL / SYNTHETIC</strong> — treat all prices and scores as provisional until DATA FRESH returns.</div>
+              <div style="font-size:11px;color:var(--t2);line-height:1.6"><strong style="color:var(--red)">⚠ Any scope Stale / Expired / Fallback / SYNTHETIC</strong> — treat affected prices and scores as provisional until that scope recovers and <strong style="color:var(--t1)">Authority: Open</strong>.</div>
             </div>
             <div style="background:var(--s2);border:1px solid var(--bd);border-radius:8px;padding:10px 12px">
               <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:4px">② Engine status</div>
@@ -4276,8 +4276,8 @@
                 <span class="guide-badge pg" style="font-size:8px">Core</span>
               </div>
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
-                Ranked signal book with TRADE / PILOT / WATCH / AVOID filters. Legacy name: <em>Ranked</em>. Each row shows action badge, score, entry/stop/target, R:R, and execution_ready when bracket math is complete.
-                <span style="color:var(--amber);display:block;margin-top:4px">As a default operating rule, prefer TRADE + execution_ready for full size; use PILOT for half-size probes; treat WATCH as monitor-only unless Dossier upgrades the verdict.</span>
+                Candidate board (Deploy / Pilot / Watch buckets) — not a trade ticket. Legacy name: <em>Ranked</em>. Each row shows action badge, score, levels, R:R, and execution_ready when bracket math is complete.
+                <span style="color:var(--amber);display:block;margin-top:4px">When <strong style="color:var(--t1)">Authority: Open</strong>, prefer TRADE + execution_ready for full size; PILOT for half-size probes only with deploy authority. When blocked: monitor only — no pilot entry, no sizing, no handoff. WATCH stays monitor-only unless Dossier upgrades with live structure.</span>
               </div>
             </div>
           </div>
@@ -4290,9 +4290,9 @@
                 <span class="guide-badge pg" style="font-size:8px">Core</span>
               </div>
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
-                Per-ticker decision card — confirm before entry. Check in order:<br>
+                Per-ticker decision card — structure confirmation before entry. When deploy authority is blocked: <strong style="color:var(--amber)">Structure Review Only</strong> — no trade plan, no sizing, no handoff. Check in order:<br>
                 <div style="margin:8px 0;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:11px">
-                  <span style="color:var(--green);font-weight:700">Entry Zone</span><span style="color:var(--t2)">Expected clean entry range. Wider zone often means BUY_ON_DIP or PILOT sizing.</span>
+                  <span style="color:var(--green);font-weight:700">Entry Zone</span><span style="color:var(--t2)">Expected clean entry range. Wider zone often means BUY_ON_DIP or reduced size — PILOT half-size only when Authority: Open.</span>
                   <span style="color:var(--red);font-weight:700">Hard Stop</span><span style="color:var(--t2)">Structural exit level. Confirm-only dossier shows <em>No sizing guidance in confirm-only mode</em> — no IBKR handoff until live fetch succeeds.</span>
                   <span style="color:var(--blue);font-weight:700">Target 1 / 2</span><span style="color:var(--t2)">Reward anchors at ~2R and ~3R — guidance, not guaranteed fills.</span>
                   <span style="color:var(--amber);font-weight:700">Factor Chips</span><span style="color:var(--t2)">Green = tailwind, red = headwind. Weigh against regime and Playbook action.</span>
@@ -4428,7 +4428,7 @@
           <div style="display:flex;flex-direction:column;gap:8px">
             <div style="display:flex;gap:10px;align-items:flex-start;font-size:11px">
               <span style="background:var(--green);color:#000;font-weight:800;padding:2px 7px;border-radius:12px;font-size:10px;white-space:nowrap">TRADE 8.7</span>
-              <span style="color:var(--t2);line-height:1.6">Score 8.7/10 with TRADE action. Green border = deploy-grade candidate. PILOT (blue) = half-size probe. WATCH/AVOID = monitor or skip.</span>
+              <span style="color:var(--t2);line-height:1.6">Score 8.7/10 with TRADE action. Green border = deploy-grade candidate when board gate + Authority: Open. PILOT (blue) = half-size probe only with deploy authority. WATCH/AVOID = monitor or skip.</span>
             </div>
             <div style="display:flex;gap:10px;align-items:flex-start;font-size:11px">
               <span style="background:var(--red);color:#fff;font-weight:800;padding:2px 7px;border-radius:12px;font-size:10px;white-space:nowrap">STOP</span>
@@ -4486,7 +4486,7 @@
           <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Mock flow</span><span style="color:var(--t2)">Flow surface in synthetic/mock mode — colour only.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Backtest funds</span><span style="color:var(--t2)">Funds sleeves marked research/backtest — not live capital.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Dossier confirm-only</span><span style="color:var(--t2)">Confirm-only — no IBKR handoff or sizing; levels indicative until live dossier loads.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">No live validation</span><span style="color:var(--t2)">DATA STALE/CRITICAL or SYNTHETIC trust strip.</span></div>
+          <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">No live validation</span><span style="color:var(--t2)">Any scoped strip shows Stale/Expired/Fallback, Broker: Offline, Runtime stale, Authority: Blocked, or SYNTHETIC mode.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--t2);font-weight:700;min-width:120px">Scanner warming</span><span style="color:var(--t2)">Discovery loading or 0 hits on WAIT day — often correct, not a miss.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--t2);font-weight:700;min-width:120px">Manual sync pending</span><span style="color:var(--t2)">Portfolio or broker positions not reconciled after last session.</span></div>
         </div>
@@ -4513,7 +4513,7 @@
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:6px">Playbook Actions</div>
             <div style="display:flex;flex-direction:column;gap:4px;font-size:11px">
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pg" style="font-size:9px;min-width:52px;text-align:center">TRADE</span><span style="color:var(--t2)">Deploy-grade when board gate + execution_ready + fresh context align</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pb" style="font-size:9px;min-width:52px;text-align:center">PILOT</span><span style="color:var(--t2)">Partial edge · half size · stop required</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pb" style="font-size:9px;min-width:52px;text-align:center">PILOT</span><span style="color:var(--t2)">Partial edge · half size only when Authority: Open · stop required · no pilot when blocked</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px;min-width:52px;text-align:center">WATCH</span><span style="color:var(--t2)">Monitor · not ready for full size</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pr" style="font-size:9px;min-width:52px;text-align:center">AVOID</span><span style="color:var(--t2)">Extended or broken · skip new entry</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px;min-width:52px;text-align:center">WAIT</span><span style="color:var(--t2)">Regime gate · sit out new risk</span></div>
@@ -4547,8 +4547,8 @@
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pg" style="font-size:9px">&lt; 14</span><span style="color:var(--t2)">Risk-On · full position sizing</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pb" style="font-size:9px">14–20</span><span style="color:var(--t2)">Normal · standard sizing</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px">20–28</span><span style="color:var(--t2)">Elevated · reduce size 25%</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span style="background:rgba(251,191,36,.15);color:var(--amber);font-size:9px;font-weight:700;padding:2px 6px;border-radius:5px">28–35</span><span style="color:var(--t2)">High · reduce size 50%</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pr" style="font-size:9px">&gt; 35</span><span style="color:var(--t2)">Crisis · NO TRADE circuit breaker</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span style="background:rgba(251,191,36,.15);color:var(--amber);font-size:9px;font-weight:700;padding:2px 6px;border-radius:5px">28–35</span><span style="color:var(--t2)">High · reduce size 50% when deploy authority allows</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pr" style="font-size:9px">&gt; 35</span><span style="color:var(--t2)">Volatility Monitor · elevated stress — Crisis Monitor label only when regime level is crisis · NO TRADE when breaker trips</span></div>
             </div>
           </div>
 
@@ -4580,8 +4580,8 @@
           <template x-for="tab_def in [
             {icon:'📖',id:'guide',label:'Guide',badge:'HERE',bclass:'pa',mode:'Diagnostic',desc:'This page — first in nav'},
             {icon:'🎯',id:'today',label:'Dashboard',badge:'START',bclass:'pg',mode:'Core',desc:'Regime · VIX · tradeability · narrative (legacy: Overview)'},
-            {icon:'📋',id:'signals',label:'Playbook',badge:'TRADE LIST',bclass:'pg',mode:'Core',desc:'Ranked signals · TRADE/PILOT/WATCH (legacy: Ranked)'},
-            {icon:'🔍',id:'dossier',label:'Search / Dossier',badge:'CONFIRM',bclass:'pb',mode:'Core',desc:'Per-ticker verdict · entry/stop/target'},
+            {icon:'📋',id:'signals',label:'Playbook',badge:'TRADE LIST',bclass:'pg',mode:'Core',desc:'Candidate board · Deploy/Pilot/Watch — not a trade ticket (legacy: Ranked)'},
+            {icon:'🔍',id:'dossier',label:'Search / Dossier',badge:'CONFIRM',bclass:'pb',mode:'Core',desc:'Structure confirmation · Structure Review Only when blocked'},
             {icon:'💼',id:'portfolio',label:'Portfolio & Risk',badge:'CAPACITY',bclass:'pb',mode:'Core',desc:'Positions · heat · correlation · REBALANCE'},
             {icon:'🔬',id:'scanners',label:'Discovery',badge:'SCAN',bclass:'pp',mode:'Research-only',desc:'Scanner hub (legacy: Scanners)'},
             {icon:'💼',id:'funds',label:'Funds',badge:'SLEEVES',bclass:'pp',mode:'Research-only',desc:'Sleeve/backtest context'},
