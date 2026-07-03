@@ -204,7 +204,7 @@
             <span>🛑</span>
             <span>BREAKER</span>
           </button>
-          <!-- ── SCOPED TRUTH (replaces unscoped DATA FRESH/STALE pill) ── -->
+          <!-- ── SCOPED TRUTH (per-scope freshness strip) ── -->
           <span x-show="unifiedTruthStripLine()"
                   style="display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;font-size:9px;font-weight:600;border:1px solid var(--bd2);color:var(--t2);max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
                   :title="unifiedTruthStripLine()"
@@ -276,7 +276,7 @@
           </ul>
           <p class="mt-3 mb-2"><strong>Scoped truth strip (header):</strong></p>
           <ul style="padding-left:18px;list-style:disc">
-            <li><strong>Market / Board / Brief / Broker / Runtime / Authority</strong> — each scope has its own freshness; never trust a single DATA FRESH pill.</li>
+            <li><strong>Market / Board / Brief / Broker / Runtime / Authority</strong> — each scope has its own freshness; never trust a single global freshness pill.</li>
             <li><strong>Authority: Blocked</strong> means deploy is off even if cards look actionable.</li>
           </ul>
           <p class="mt-3 mb-2"><strong>Top-bar legend:</strong></p>
@@ -1065,9 +1065,9 @@
     <!-- @cc-partial deploy_surfaces -->
       <div x-show="tab==='today'" data-cc="today-deploy-chrome">
       <template x-if="tab==='today'&&(todayMissionPanel().system_blockers.length||todayMissionPanel().card_gates.length||todayMissionPanel().upgrade_watch.length||todayMissionPanel().avoid_entry.length||todayMissionPanel().quant_cluster_lines.length)">
-        <details data-cc="today-mission-panel" :open="!isWaitDay()" style="padding:4px 12px 0">
-          <summary class="text-[8px] font-bold uppercase cursor-pointer mb-1" style="color:var(--t3);padding:2px 0">Mission panel · expand<span x-show="isWaitDay()" class="text-[7px] font-normal ml-1">(collapsed on WAIT)</span></summary>
-          <div class="card card-p" style="padding:8px 10px;border-left:3px solid var(--blue)">
+        <details data-cc="today-mission-panel" style="padding:4px 12px 0">
+          <summary class="text-[8px] font-bold uppercase cursor-pointer" style="color:var(--t3);padding:2px 0">System blockers · mission details · expand</summary>
+          <div class="card card-p mt-1" style="padding:8px 10px;border-left:3px solid var(--blue)">
             <div class="text-[9px] font-bold uppercase mb-0.5" style="color:var(--t3)" x-text="todayMissionPanelTitle()"></div>
             <div x-show="todayMissionSafeUnlockHint()&&!isWaitDay()" class="text-[8px] mb-1" style="color:var(--t3)" x-text="todayMissionSafeUnlockHint()"></div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[9px]">
@@ -1182,13 +1182,14 @@
       <!-- ── Ops / IB / Monitor strip (institutional cockpit) ── -->
       <div x-show="tab==='today'" data-cc="deploy-status-strip" style="padding:6px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <span class="pill text-[8px]" :class="ibkrStateFrom(today7.execution_readiness).level==='ready'?'pg':ibkrStateFrom(today7.execution_readiness).level==='blocked'?'pr':'pa'" x-text="'IBKR '+ibkrUnifiedShort(today7.execution_readiness)"></span>
-        <span class="pill text-[8px]" :class="cc_status.breaker?'pr':(ops.running?'pg':'pw')" x-text="engineStateHeaderLabel()"></span>
+        <span class="pill text-[8px]" :class="engineStatePillClass()" x-text="engineStateHeaderLabel()"></span>
         <template x-if="today7.evidence_badges">
           <span class="pill text-[7px] pw" :title="today7.evidence_badges.regime?.label" x-text="today7.evidence_badges.regime?.badge"></span>
           <span class="pill text-[7px] pw" :title="today7.evidence_badges.funds?.label" x-text="today7.evidence_badges.funds?.badge"></span>
           <span class="pill text-[7px] pw" :title="today7.evidence_badges.ai?.label" x-text="today7.evidence_badges.ai?.badge"></span>
         </template>
-        <span x-show="unifiedTruthStripLine()" class="text-[8px] mono truncate" style="max-width:520px;color:var(--t2)" x-text="unifiedTruthStripLine()"></span>
+        <span x-show="today7.system_truth" class="pill text-[8px] pa" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStrip)?CCHelpers.scopedFreshnessStrip(today7.system_truth):''"></span>
+        <span x-show="!today7.system_truth" class="pill text-[8px] pa" x-text="'Runtime: Unknown · Authority: Blocked'"></span>
         <span x-show="riskAlertsStripVisible()" class="pill text-[8px] pr" x-text="riskAlertsStripLine()" @click="showAlertsModal=true" style="cursor:pointer"></span>
         <span x-show="portfolioSummaryStripVisible()" class="pill text-[8px] pb" x-text="portfolioSummaryStripLine()"></span>
         <button @click="switchTab('funds')" class="btn-s text-[8px] ml-auto" x-show="(pmStrip.funds||[]).length===0">Load Funds</button>
@@ -1199,18 +1200,19 @@
 
       <div x-show="tab==='today'" data-cc="today-dashboard-body">
 
-      <!-- ── Operator TODAY state (canonical system_truth) ── -->
+      <!-- ── Operator block (canonical NOW/WHY/ALLOWED/BLOCKED/VALID CANDIDATES/NEXT) ── -->
       <template x-if="today7.system_truth">
-        <div style="padding:8px 12px 0">
+        <div style="padding:8px 12px 0" data-cc="operator-block-dashboard">
           <div class="card card-p" style="padding:10px 12px;border-left:3px solid var(--blue);background:rgba(88,166,255,.04)">
-            <div class="flex flex-wrap items-center gap-2 mb-1">
-              <span class="text-[10px] font-bold uppercase" style="color:var(--blue)">今日狀態 · TODAY</span>
-              <span class="pill text-[7px] pa" x-text="today7.system_truth.regime_state||canonicalTradeability()"></span>
+            <div class="grid grid-cols-1 gap-1.5 text-[9px]" style="line-height:1.55">
+              <div><span class="font-bold uppercase mr-1" style="color:var(--blue)">NOW</span><span class="text-white font-semibold" x-text="dashboardOperatorBlock().now"></span><span x-show="dashboardOperatorBlock().secondary" class="pill text-[7px] pa ml-1" x-text="dashboardOperatorBlock().secondary"></span></div>
+              <div><span class="font-bold uppercase mr-1" style="color:var(--amber)">WHY</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().why"></span></div>
+              <div><span class="font-bold uppercase mr-1" style="color:var(--green)">ALLOWED</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().allowed"></span></div>
+              <div x-show="dashboardOperatorBlock().blocked"><span class="font-bold uppercase mr-1" style="color:var(--red)">BLOCKED</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().blocked"></span></div>
+              <div><span class="font-bold uppercase mr-1" style="color:var(--purple)">VALID CANDIDATES</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().valid_candidates"></span><span x-show="today7.top_monitor?.label" class="text-[8px] ml-1" style="color:var(--t3)" x-text="'· '+today7.top_monitor.label"></span></div>
+              <div><span class="font-bold uppercase mr-1" style="color:var(--blue)">NEXT</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().next"></span></div>
             </div>
-            <div class="text-[9px] font-bold text-white mb-1" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.morningDecisionLine)?CCHelpers.morningDecisionLine(today7):(today7.todays_decision?.morning_decision_line||'')"></div>
-            <div class="text-[8px] mb-1" style="color:var(--t2);line-height:1.45" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStrip)?CCHelpers.scopedFreshnessStrip(today7.system_truth):''"></div>
-            <div class="text-[8px]" style="color:var(--amber)" x-text="today7.system_truth.primary_blocker||''"></div>
-            <div class="text-[8px] mt-1" style="color:var(--t3)" x-show="today7.candidate_counts" x-text="'Scanner '+((today7.candidate_counts||{}).scannerCandidates||0)+' · Watch-qualified '+((today7.candidate_counts||{}).funnelWatchQualified||0)+' · Deploy '+((today7.candidate_counts||{}).deployQualified||0)"></div>
+            <div class="text-[8px] mt-2" style="color:var(--t3)" x-text="unifiedTruthStripLine()"></div>
           </div>
         </div>
       </template>
@@ -1256,7 +1258,7 @@
               <span class="pill pb text-[8px]" x-text="canonicalRegimeLine()"></span>
               <template x-if="today7.regime.vix"><span class="pill mono text-[7px]" x-text="'VIX '+today7.regime.vix"></span></template>
               <template x-if="today7.regime.breadth!=null"><span class="pill mono text-[7px]" x-text="'Breadth '+today7.regime.breadth+'%'"></span></template>
-              <span class="text-[8px] ml-auto" style="color:var(--t2)" x-text="(today7.decision_model&&today7.decision_model.guidance)||(today7.tradeability==='WAIT'?'No deploy-grade board — patience is the active decision.':'')"></span>
+              <span class="text-[8px] ml-auto" style="color:var(--t2)" x-text="tradeabilityGuidanceLine()"></span>
             </div>
           </div>
         </div>
@@ -1268,7 +1270,7 @@
           <div class="card card-p" style="padding:8px 10px;border-left:3px solid var(--red)"
             :style="today7.crisis_regime.level==='crisis'?'border-left-color:var(--red)':today7.crisis_regime.level==='elevated'?'border-left-color:var(--amber)':'border-left-color:var(--blue)'">
             <div class="flex flex-wrap items-center gap-2 text-[9px]">
-              <span class="font-bold uppercase" style="color:var(--red)">乱世 · Crisis monitor</span>
+              <span class="font-bold uppercase" :style="today7.crisis_regime.level==='crisis'?'color:var(--red)':'color:var(--blue)'" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.volatilityMonitorLabel)?CCHelpers.volatilityMonitorLabel(today7.crisis_regime):(today7.crisis_regime.monitor_label||'Crisis Monitor')"></span>
               <span class="pill text-[7px]" :class="today7.crisis_regime.deploy_blocked?'pr':'pa'" x-text="today7.crisis_regime.level"></span>
               <span class="mono text-[8px]" style="color:var(--t2)" x-text="today7.crisis_regime.headline"></span>
             </div>
@@ -1444,11 +1446,11 @@
         </div>
       </template>
 
-      <!-- ── Why not deploy + unlock (WAIT / no-deploy days) ── -->
+      <!-- ── Why not deploy (collapsed — operator block owns default) ── -->
       <template x-if="isWaitDay() && today7.no_setup_diagnosis">
         <div style="padding:0 12px 6px;display:grid;gap:6px">
-          <div class="card card-p" style="border-left:3px solid var(--amber)">
-            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--amber)">Why not deploy?</div>
+          <details class="card card-p" style="border-left:3px solid var(--amber)">
+            <summary class="text-[10px] font-bold uppercase cursor-pointer mb-1" style="color:var(--amber)">Why not deploy? · expand</summary>
             <div class="text-[10px] mb-2" style="color:var(--t2);line-height:1.55" x-text="dashboardWhyNotDeployComment()"></div>
             <div class="text-[8px] mb-2" style="color:var(--t3)">
               <span x-text="honestFunnelLabel(today7.filter_funnel, today7.top_ranked)"></span>
@@ -1472,7 +1474,7 @@
                 </template>
               </div>
             </details>
-          </div>
+          </details>
           <template x-if="today7.unlock_deploy">
             <div class="card card-p" style="border-left:3px solid var(--blue)">
               <div class="flex items-center justify-between mb-1">
@@ -1866,7 +1868,7 @@
       <div style="padding:0 12px 8px" x-show="today7.evidence_conflict||today7.regime">
         <details class="card card-p" style="padding:8px 12px;border-left:3px solid var(--amber)" :open="!(today7.evidence_conflict||{}).collapsed">
           <summary class="text-xs font-bold uppercase cursor-pointer" style="color:var(--amber)">Evidence conflict · For / Against / Missing</summary>
-          <div class="text-[9px] mt-2 font-bold text-white" x-text="(today7.evidence_conflict||{}).headline||'No valid candidate'"></div>
+          <div class="text-[9px] mt-2 font-bold text-white" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.evidenceConflictPanel)?CCHelpers.evidenceConflictPanel(today7.evidence_conflict||{}).headline:((today7.evidence_conflict||{}).headline||'No valid candidate')"></div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 text-[8px]">
             <div><div class="font-bold text-green-400 mb-1">For</div><template x-for="ln in ((today7.evidence_conflict||{}).for||[])" :key="'ecf-'+ln"><div style="color:var(--t2)" x-text="'• '+ln"></div></template><div x-show="!((today7.evidence_conflict||{}).for||[]).length" style="color:var(--t3)">—</div></div>
             <div><div class="font-bold text-red-400 mb-1">Against</div><template x-for="ln in ((today7.evidence_conflict||{}).against||[])" :key="'eca-'+ln"><div style="color:var(--t2)" x-text="'• '+ln"></div></template><div x-show="!((today7.evidence_conflict||{}).against||[]).length" style="color:var(--t3)">—</div></div>
@@ -1876,7 +1878,7 @@
         </details>
       </div>
 
-      <details style="padding:0 12px 8px" x-show="today7.ai_narrative||today7.ai_loading">
+      <details style="padding:0 12px 8px;display:none" x-show="false" x-cloak aria-hidden="true">
         <summary class="text-[9px] font-bold uppercase cursor-pointer" style="color:#a78bfa">✨ AI Commentary · expand (not authoritative)</summary>
         <div class="card card-p mt-1" style="padding:8px 12px;border-left:3px solid #8b5cf6">
           <div class="flex items-center gap-2 flex-wrap mb-2">
@@ -1961,7 +1963,7 @@
           <!-- Regime guidance line -->
           <div class="text-[8px] mt-2" style="line-height:1.5;border-top:1px solid rgba(255,255,255,.06);padding-top:6px"
             :style="'color:'+(today7.regime.tradeability==='NO_TRADE'?'var(--red)':today7.regime.tradeability==='WAIT'?'var(--amber)':'var(--t2)')"
-            x-text="(today7.decision_model&&today7.decision_model.guidance)||(today7.tradeability==='STRONG_TRADE'?'Multiple execution-ready names — full size only on A-grade with brackets.':today7.tradeability==='TRADE'?'At least one execution-ready setup — standard 1R sizing.':today7.tradeability==='SELECTIVE'?'Pilot or single-name only — half size, stop required.':today7.tradeability==='WAIT'?'No deploy-grade board — patience is the active decision.':'🛑 Risk-off — no new entries.')">
+            x-text="tradeabilityGuidanceLine()">
           </div>
           <!-- What the indicators mean -->
           <div class="text-[7px] mt-1" style="color:var(--t3);line-height:1.5">
@@ -4200,12 +4202,12 @@
             <div style="background:var(--s2);border:1px solid var(--bd);border-radius:8px;padding:10px 12px">
               <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:4px">① Market data status</div>
               <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
-                <span class="guide-badge pg" style="font-size:9px">Market: Fresh</span>
-                <span class="guide-badge pa" style="font-size:9px">Board: Stale</span>
-                <span class="guide-badge pa" style="font-size:9px">Brief: Expired</span>
-                <span class="guide-badge" style="background:#581c87;color:#d8b4fe;font-size:9px">Runtime: Unknown</span>
+                <span class="guide-badge pg" style="font-size:9px">REAL_TIME</span>
+                <span class="guide-badge pa" style="font-size:9px">DATA FRESH</span>
+                <span class="guide-badge pa" style="font-size:9px">STALE</span>
+                <span class="guide-badge" style="background:#581c87;color:#d8b4fe;font-size:9px">SYNTHETIC</span>
               </div>
-              <div style="font-size:11px;color:var(--t2);line-height:1.6"><strong style="color:var(--red)">⚠ Stale / expired / fallback scopes</strong> — treat rankings as provisional until Market + Board + Brief are fresh and Authority is Open.</div>
+              <div style="font-size:11px;color:var(--t2);line-height:1.6"><strong style="color:var(--red)">⚠ STALE / CRITICAL / SYNTHETIC</strong> — treat all prices and scores as provisional until DATA FRESH returns.</div>
             </div>
             <div style="background:var(--s2);border:1px solid var(--bd);border-radius:8px;padding:10px 12px">
               <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:4px">② Engine status</div>
@@ -4415,7 +4417,7 @@
               <div style="font-size:10px;color:var(--amber);font-weight:700">Research incomplete</div>
             </div>
             <div style="font-size:11px;color:var(--t2);line-height:1.6;margin-bottom:6px">
-              <strong style="color:var(--amber)">Confirm-only mode — no IBKR handoff or sizing guidance</strong><br>
+              <strong style="color:var(--amber)">Confirm-only — no IBKR handoff or sizing</strong><br>
               <span style="color:var(--t3)">No sizing guidance in confirm-only mode · levels indicative until live dossier loads</span>
             </div>
             <div style="display:flex;gap:4px;flex-wrap:wrap">
@@ -4483,7 +4485,7 @@
           <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Bracket not ready</span><span style="color:var(--t2)">Card lacks entry/stop or execution_ready flag.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Mock flow</span><span style="color:var(--t2)">Flow surface in synthetic/mock mode — colour only.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Backtest funds</span><span style="color:var(--t2)">Funds sleeves marked research/backtest — not live capital.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Dossier confirm-only</span><span style="color:var(--t2)">Confirm-only dossier — no IBKR handoff or sizing authority; levels indicative until live dossier loads.</span></div>
+          <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Dossier confirm-only</span><span style="color:var(--t2)">Confirm-only — no IBKR handoff or sizing; levels indicative until live dossier loads.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">No live validation</span><span style="color:var(--t2)">DATA STALE/CRITICAL or SYNTHETIC trust strip.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--t2);font-weight:700;min-width:120px">Scanner warming</span><span style="color:var(--t2)">Discovery loading or 0 hits on WAIT day — often correct, not a miss.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--t2);font-weight:700;min-width:120px">Manual sync pending</span><span style="color:var(--t2)">Portfolio or broker positions not reconciled after last session.</span></div>
@@ -4525,7 +4527,7 @@
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pb" style="font-size:9px">Research-only</span><span style="color:var(--t2)">ANALYSIS ONLY · supporting context</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pw" style="font-size:9px">Diagnostic</span><span style="color:var(--t2)">Health, rejections, ops visibility</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px">Execution-dependent</span><span style="color:var(--t2)">IBKR handoff · LOGIN ≠ READY until session + bracket aligned</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px">CONFIRM ONLY</span><span style="color:var(--t2)">Confirm-only dossier — no IBKR handoff or sizing authority; levels indicative only</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px">CONFIRM ONLY</span><span style="color:var(--t2)">Confirm-only — no IBKR handoff or sizing; levels indicative only</span></div>
             </div>
           </div>
 
@@ -9036,6 +9038,22 @@
         const truth=this.today7.system_truth||{};
         return truth.deploy_authority===false;
       },
+      tradeabilityGuidanceLine(){
+        const blocked=this.todayDeployBlocked();
+        if(blocked) return 'Deploy blocked — monitor only; no sizing, no handoff, no pilot entry.';
+        const dm=this.today7.decision_model;
+        if(dm&&dm.guidance) return String(dm.guidance);
+        const tb=String(this.today7.tradeability||this.today7.regime?.tradeability||'WAIT').toUpperCase();
+        if(tb==='STRONG_TRADE') return 'Multiple execution-ready names — full size only on A-grade with brackets.';
+        if(tb==='TRADE') return 'At least one execution-ready setup — standard 1R sizing.';
+        if(tb==='SELECTIVE'){
+          if(typeof CCHelpers!=='undefined'&&CCHelpers.pilotSizingAllowed&&!CCHelpers.pilotSizingAllowed(this.today7.system_truth||{}))
+            return 'SELECTIVE review only — monitor candidates; no pilot sizing until gates clear.';
+          return 'Pilot or single-name only — half size, stop required.';
+        }
+        if(tb==='WAIT') return 'No deploy-grade board — patience is the active decision.';
+        return '🛑 Risk-off — no new entries.';
+      },
       playbookPrimaryBucket(r, deployAuth, nmSet){
         const act=String(r?.effective_action||r?.action||'WATCH').toUpperCase();
         const ticker=String(r?.ticker||'').toUpperCase();
@@ -9331,6 +9349,13 @@
       },
       engineStateHeaderLabel(){
         if(this.cc_status?.breaker) return 'BREAKER';
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.engineStateHeaderLabel){
+          return CCHelpers.engineStateHeaderLabel({
+            breaker:!!this.cc_status?.breaker,
+            truth:this.today7?.system_truth,
+            ops:{running:this.ops?.running,engineRunning:!!this.ops?.running},
+          });
+        }
         if(typeof CCHelpers!=='undefined'&&CCHelpers.formatEngineState){
           const eng=this.today7?.system_truth?.engine_state;
           if(eng!=null&&String(eng)!=='undefined') return 'ENGINE '+String(CCHelpers.formatEngineState(eng)).toUpperCase();
@@ -9339,12 +9364,21 @@
         if(this.ops?.running===false) return 'ENGINE OFF';
         return 'ENGINE UNKNOWN';
       },
+      engineStatePillClass(){
+        if(this.cc_status?.breaker) return 'pr';
+        const eng=(typeof CCHelpers!=='undefined'&&CCHelpers.resolveEngineState)
+          ?CCHelpers.resolveEngineState(this.today7?.system_truth,{running:this.ops?.running})
+          :(this.today7?.system_truth?.engine_state||'');
+        if(eng==='on') return 'pg';
+        if(eng==='off') return 'pw';
+        return 'pa';
+      },
       dashboardOperatorBlock(){
         const truth=this.today7.system_truth||{};
         const blocks=this.today7.operator_block||{};
         if(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlock)
           return CCHelpers.operatorBlock(truth,'dashboard',blocks);
-        return truth.operator_block||{now:truth.operator_sentence||'',why:truth.primary_blocker||'',allowed:'monitor only',blocked:'deploy',next:'',truth_strip:this.unifiedTruthStripLine(),regime_state:truth.regime_state,deploy_authority:!!truth.deploy_authority,repair_priority:truth.repair_priority||[]};
+        return truth.operator_block||{now:truth.operator_sentence||'',why:truth.primary_blocker||'',allowed:'monitor candidates, create watch rules',blocked:'no sizing, no handoff, no pilot entry',valid_candidates:'',next:'',truth_strip:this.unifiedTruthStripLine(),regime_state:truth.regime_state,deploy_authority:!!truth.deploy_authority,repair_priority:truth.repair_priority||[]};
       },
       agentOperatorBlockerLine(){
         const truth=this.today7.system_truth||{};
@@ -9389,7 +9423,8 @@
         const opts={
           ibkrReady:st.level==='ready'||st.handoff||!!this.cc_status.ibkr_connected,
           ibkrShort:this.ibkrUnifiedShort(this.today7.execution_readiness),
-          engineRunning:!!this.ops.running,
+          engineRunning:(typeof CCHelpers!=='undefined'&&CCHelpers.resolveEngineState)?CCHelpers.resolveEngineState(this.today7.system_truth,{running:this.ops.running})==='on':!!this.ops.running,
+          running:this.ops.running,
           breaker:!!this.cc_status.breaker,
           dataTier:String(this.freshness?.worst_tier||''),
           briefFallback:!!(this.todayUsesBriefFallback()||this.pageAuthorityIsDegraded()),
@@ -9401,7 +9436,9 @@
           return CCHelpers.todayMissionSystemBlockers(opts);
         const out=[];
         if(!opts.ibkrReady) out.push('IBKR '+String(opts.ibkrShort||'OFFLINE').toUpperCase());
-        if(!opts.engineRunning) out.push('ENGINE OFF');
+        const eng=(typeof CCHelpers!=='undefined'&&CCHelpers.resolveEngineState)?CCHelpers.resolveEngineState(opts.systemTruth,{running:opts.running}):'';
+        if(eng==='off') out.push('ENGINE OFF');
+        else if(eng==='unknown') out.push('ENGINE UNKNOWN');
         if(opts.breaker) out.push('EXEC BLOCKED — risk breaker');
         if(opts.briefFallback||opts.instantDegraded) out.push('FALLBACK / BRIEF ONLY');
         return out;
@@ -9661,13 +9698,13 @@
           return ['AVOID','NO_TRADE','BLOCKED','PASS','EXIT','REDUCE'].includes(act);
         };
         const add=(t,r)=>{if(r&&isAvoid(r))return;const x=String(t||'').toUpperCase().replace(/[^A-Z0-9.^]/g,'');if(!x||x.length>8||seen.has(x))return;seen.add(x);tickers.push(x);};
-        (this.today7.near_miss||[]).forEach(nm=>add(nm.ticker,nm));
+        const tm=this.today7.top_monitor;
+        if(tm?.valid&&tm?.ticker&&!isAvoid(tm)) add(tm.ticker,tm);
         (this.today7.top_ranked||[]).forEach(r=>add(r.ticker,r));
+        (this.today7.near_miss||[]).forEach(nm=>add(nm.ticker,nm));
         (this.rankedOpps.rows||[]).forEach(r=>add(r.ticker,r));
         const td=this.today7.todays_decision;
         if(td?.best_watch?.ticker&&!isAvoid(td.best_watch)) add(td.best_watch.ticker,td.best_watch);
-        const tm=this.today7.top_monitor;
-        if(tm?.ticker&&!isAvoid(tm)) add(tm.ticker,tm);
         return tickers.slice(0,limit);
       },
       topOpportunitiesList(){
@@ -9823,10 +9860,16 @@
         return this.formatEvidence(v);
       },
       todayUsesBriefFallback(){
+        const truth=this.today7.system_truth||{};
+        if(truth.brief_expired||String(truth.brief_freshness||'').toLowerCase()==='expired') return false;
+        const age=Number(this.brief_status?.latest?.age_days??truth.brief_age_days??0);
+        if(age>2) return false;
         const da=this.decisionAuthority();
         if(da.source==='fallback_brief'||da.gates?.fallback_brief) return true;
         const t=this.today7.trust||{};
-        return String(t.source||'').toLowerCase().includes('brief')||String(t.reason||'').toLowerCase().includes('fallback');
+        const src=String(t.source||'').toLowerCase();
+        if(src.includes('brief-expired')||src.includes('expired')) return false;
+        return src.includes('brief')&&src.includes('fallback')||String(t.reason||'').toLowerCase().includes('fallback');
       },
       authorityDegradedBanner(){
         const da=this.decisionAuthority();
