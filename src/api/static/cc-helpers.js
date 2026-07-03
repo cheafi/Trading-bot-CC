@@ -305,6 +305,32 @@
 		return "Monitor only — see scoped truth strip"
 	}
 
+	function researchSurfaceBlock(truth, surface, extra) {
+		var t = truth || {}
+		var o = extra || {}
+		var posture = primaryOperatorState(t)
+		var blocker = String(o.blocker || t.primary_blocker || "deploy authority blocked")
+		if (!t.deploy_authority && blocker.toLowerCase().indexOf("deploy") < 0) {
+			blocker = blocker + " · no deploy authority"
+		}
+		var nextMap = {
+			discovery: "promote names to Playbook — scan evidence only",
+			flow: "confirm in Playbook / Dossier — flow is supporting only",
+			funds: "review sleeve research — not live allocation",
+			strategy: "calibrate when closed-trade evidence exists",
+			agent: "use Dashboard + Playbook for deploy gates",
+			shadow: "shadow challengers — no capital impact until promoted",
+		}
+		var surf = String(surface || "research").toLowerCase()
+		return {
+			surface: surf,
+			now: posture.primary || "MONITOR ONLY",
+			blocker: blocker,
+			next: o.next || nextMap[surf] || "monitor only",
+			research_only: !t.deploy_authority,
+		}
+	}
+
 	function operatorBlock(truth, page, operatorBlocks) {
 		var t = truth || {}
 		var p = String(page || "dashboard").toLowerCase()
@@ -2225,6 +2251,7 @@
 		sanitizeBlockedCandidateCopy: sanitizeBlockedCandidateCopy,
 		removeTradeLanguageWhenBlocked: removeTradeLanguageWhenBlocked,
 		executionRepairOneLiner: executionRepairOneLiner,
+		researchSurfaceBlock: researchSurfaceBlock,
 		buildExportIssuesPage: buildExportIssuesPage,
 		buildExportAllSurfacesPage: buildExportAllSurfacesPage,
 		buildExportReviewHtml: buildExportReviewHtml,

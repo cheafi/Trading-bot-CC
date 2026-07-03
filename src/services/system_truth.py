@@ -204,6 +204,136 @@ def _breadth_state(today: Dict[str, Any]) -> str:
     return "narrow"
 
 
+def _surface_freshness(
+    today: Dict[str, Any],
+    cc_header: Dict[str, Any],
+    *,
+    surface_key: str,
+    header_key: str,
+    nested_keys: tuple[str, ...] = ("tier", "data_freshness", "freshness"),
+) -> str:
+    """Typed freshness for research surfaces — flow, fund lab, strategy, agent."""
+    blob = today.get(surface_key) or cc_header.get(header_key) or {}
+    if isinstance(blob, str):
+        tier = blob.upper()
+    elif isinstance(blob, dict):
+        tier = ""
+        for k in nested_keys:
+            if blob.get(k):
+                tier = str(blob.get(k)).upper()
+                break
+        if blob.get("synthetic") or blob.get("mock"):
+            return "mock"
+        if blob.get("degraded") or blob.get("warming"):
+            return "fallback"
+        if blob.get("stale") or blob.get("regime_stale"):
+            return "stale"
+        if blob.get("unavailable"):
+            return "unavailable"
+    else:
+        tier = ""
+    if tier in ("LIVE", "FRESH", "REAL_TIME"):
+        return "fresh"
+    if tier in ("STALE", "DEGRADED"):
+        return "stale"
+    if tier in ("FALLBACK", "MOCK", "SYNTHETIC"):
+        return "fallback" if tier != "MOCK" else "mock"
+    if tier in ("CRITICAL", "EXPIRED", "UNKNOWN"):
+        return "unavailable"
+    if not blob:
+        return "unavailable"
+    return "fresh"
+
+
+def _flow_freshness(today: Dict[str, Any], cc_header: Dict[str, Any]) -> str:
+    flow = today.get("flow_freshness") or today.get("options_flow") or {}
+    if isinstance(flow, dict) and flow.get("count_live", 0) == 0 and flow.get("synthetic"):
+        return "mock"
+    return _surface_freshness(
+        today,
+        cc_header,
+        surface_key="flow_freshness",
+        header_key="flow_freshness",
+        nested_keys=("tier", "data_freshness", "freshness"),
+    )
+
+
+def _fund_lab_freshness(today: Dict[str, Any], cc_header: Dict[str, Any]) -> str:
+    fl = today.get("fund_lab") or cc_header.get("fund_lab") or {}
+    if isinstance(fl, dict):
+        if fl.get("research_only") or fl.get("degraded"):
+            return "fallback"
+        if fl.get("regime_stale"):
+            return "stale"
+    return _surface_freshness(
+        today,
+        cc_header,
+        surface_key="fund_lab",
+        header_key="fund_lab_freshness",
+    )
+
+
+def _strategy_validation_freshness(today: Dict[str, Any], cc_header: Dict[str, Any]) -> str:
+    sh = today.get("strategy_health") or today.get("strategy_validation") or {}
+    if isinstance(sh, dict):
+        n = int(sh.get("n_trades") or sh.get("closed_trade_count") or 0)
+        if n < 1:
+            return "unavailable"
+        tier = str(sh.get("freshness") or sh.get("tier") or sh.get("validation_tier") or "").upper()
+        if tier in ("LIVE", "FRESH", "REAL_TIME"):
+            return "fresh"
+        if tier in ("STALE", "DEGRADED"):
+            return "stale"
+        if sh.get("degraded"):
+            return "fallback"
+        return "fresh"
+    return _surface_freshness(
+        today,
+        cc_header,
+        surface_key="strategy_health",
+        header_key="strategy_validation_freshness",
+        nested_keys=("tier", "freshness", "validation_tier"),
+    )
+
+
+def _agent_rules_freshness(today: Dict[str, Any], cc_header: Dict[str, Any]) -> str:
+    agent = today.get("agent_rules") or today.get("agent") or {}
+    if isinstance(agent, dict):
+        if agent.get("journal_error") or agent.get("error"):
+            return "stale"
+        if not agent.get("summary") and not agent.get("rules_version"):
+            return "unavailable"
+    return _surface_freshness(
+        today,
+        cc_header,
+        surface_key="agent_rules",
+        header_key="agent_rules_freshness",
+        nested_keys=("tier", "freshness", "rules_freshness"),
+    )
+
+
+def _liquidity_regime(today: Dict[str, Any]) -> str:
+    crisis = today.get("crisis_regime") or {}
+    if crisis.get("liquidity_state"):
+        return str(crisis["liquidity_state"])
+    bundle = today.get("liquidity") or {}
+    if bundle.get("liquidity_state"):
+        return str(bundle["liquidity_state"])
+    mr = today.get("market_regime") or {}
+    try:
+        from src.services.liquidity_funding_stress import evaluate_liquidity_funding_stress
+
+        liq = evaluate_liquidity_funding_stress(
+            vix=mr.get("vix"),
+            breadth=mr.get("breadth"),
+            tradeability=str(mr.get("tradeability") or today.get("tradeability") or ""),
+            entropy=mr.get("entropy"),
+        )
+        return str(liq.get("liquidity_state") or liq.get("state") or "calm")
+    except Exception:
+        return "unavailable"
+
+
 def _leadership_state(today: Dict[str, Any]) -> str:
     idx = today.get("index_regime_summary") or {}
     tags = idx.get("factor_regime", {}).get("leadership_tags") or idx.get("leadership_tags") or []
@@ -697,6 +827,12 @@ def resolve_system_truth(
 
     qual = t.get("qualification_levels") or {}
     funnel = t.get("filter_funnel") or {}
+    flow_freshness = _flow_freshness(t, header)
+    fund_lab_freshness = _fund_lab_freshness(t, header)
+    strategy_validation_freshness = _strategy_validation_freshness(t, header)
+    agent_rules_freshness = _agent_rules_freshness(t, header)
+    liquidity_regime = _liquidity_regime(t)
+
     deploy_n = int(qual.get("deploy_qualified") or funnel.get("deploy_qualified_setups") or 0)
     if not deploy_auth:
         deploy_n = 0
@@ -772,7 +908,16 @@ def resolve_system_truth(
             "dossier": dossier_freshness,
             "portfolio": portfolio_freshness,
             "broker": broker_freshness,
+            "flow": flow_freshness,
+            "fund_lab": fund_lab_freshness,
+            "strategy_validation": strategy_validation_freshness,
+            "agent_rules": agent_rules_freshness,
         },
+        "flowFreshness": flow_freshness,
+        "fundLabFreshness": fund_lab_freshness,
+        "strategyValidationFreshness": strategy_validation_freshness,
+        "agentRulesFreshness": agent_rules_freshness,
+        "liquidityRegime": liquidity_regime,
         "timestamp": ts,
     }
     truth_body["typed_freshness_display"] = typed_freshness_display(truth_body)

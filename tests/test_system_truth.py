@@ -158,6 +158,35 @@ def test_format_operator_sentence_one_line():
     assert "monitor only" in sentence
 
 
+def test_resolve_system_truth_extended_surface_freshness():
+    truth = resolve_system_truth(
+        {
+            "market_regime": {"tradeability": "WAIT", "should_trade": True, "vix": 22, "breadth": 38},
+            "flow_freshness": {"tier": "LIVE", "count_live": 2},
+            "fund_lab": {"sync_ts": 1},
+            "strategy_health": {"n_trades": 3, "freshness": "FRESH"},
+            "agent_rules": {"summary": "ok", "rules_version": "v1"},
+            "decision_authority": {"authority_level": "research", "gates_active": True},
+            "execution_readiness": {},
+            "top_5": [{"ticker": "X", "action": "WATCH"}],
+        },
+        cc_header={"data_tier": "FRESH"},
+        ops={},
+    )
+    for field in (
+        "flowFreshness",
+        "fundLabFreshness",
+        "strategyValidationFreshness",
+        "agentRulesFreshness",
+        "liquidityRegime",
+        "operator_sentence",
+    ):
+        assert field in truth, f"missing {field}"
+    assert truth["flowFreshness"] == "fresh"
+    assert truth["strategyValidationFreshness"] == "fresh"
+    assert truth["liquidityRegime"] in ("thin", "calm", "funding_tight", "liquidity_trap", "unavailable")
+
+
 def test_resolve_system_truth_full_output_fields():
     truth = resolve_system_truth(
         {

@@ -6,6 +6,19 @@ from src.services.operator_surface import build_operator_block
 from src.services.system_truth import resolve_system_truth
 
 
+def test_research_surface_block_fields():
+    from src.services.operator_surface import build_research_surface_block
+
+    block = build_research_surface_block(
+        {"deploy_authority": False, "primary_blocker": "Board WAIT"},
+        surface="discovery",
+    )
+    for key in ("now", "blocker", "next", "research_only"):
+        assert key in block
+    assert block["research_only"] is True
+    assert "Playbook" in block["next"]
+
+
 def test_dashboard_operator_block_fields():
     truth = resolve_system_truth(
         {

@@ -680,6 +680,11 @@
 
       <div class="card card-p mx-3 mt-2 mb-2" style="border-left:3px solid var(--blue);padding:8px 12px">
         <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--blue)">Advanced aggregate — not deploy gate</div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[8px] mb-2" x-show="today7.system_truth">
+          <div><span class="font-bold uppercase" style="color:var(--blue)">NOW</span> <span x-text="researchSurfaceBlock('agent').now"></span></div>
+          <div><span class="font-bold uppercase" style="color:var(--red)">BLOCKER</span> <span x-text="researchSurfaceBlock('agent').blocker"></span></div>
+          <div><span class="font-bold uppercase" style="color:var(--green)">NEXT</span> <span x-text="researchSurfaceBlock('agent').next"></span></div>
+        </div>
         <div class="text-[8px] mb-1" style="color:var(--t2)">Command aggregates regime, watchlist, and council context — surface authority is <strong>research only</strong>. Sizing and IBKR handoff require Dashboard or Playbook when board tradeability permits.</div>
         <div class="text-[8px] font-semibold text-amber-300" x-show="agentOperatorBlockerLine()" x-text="agentOperatorBlockerLine()"></div>
       </div>
@@ -1607,42 +1612,27 @@
         </div>
       </template>
 
-      <!-- ── Active fund manager / sleeve (allocator-grade) ── -->
+      <!-- ── Fund research context (dashboard — not allocation authority) ── -->
       <template x-if="(today7.sleeve_summary?.fund_manager || (today7.sleeve_summary?.cards||[]).length) && !isWaitDay()">
         <div style="padding:0 12px 6px">
           <div class="card card-p" style="border-left:3px solid var(--purple)">
-            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--purple)">Active fund manager</div>
+            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--purple)">Fund research context</div>
+            <div class="text-[8px] mb-2" style="color:var(--t3)">Model sleeves — research only · not live allocation authority</div>
             <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[8px] mb-2">
-              <div><div style="color:var(--t3)">Strongest live</div><div class="font-bold text-white" x-text="today7.sleeve_summary.strongest_live?.display_name||'—'"></div></div>
-              <div><div style="color:var(--t3)">Strongest training</div><div class="font-bold text-white" x-text="today7.sleeve_summary.strongest_training?.display_name||'—'"></div></div>
-              <div><div style="color:var(--t3)">Sleeve action now</div><div class="font-bold text-amber-300" x-text="today7.sleeve_summary.fund_manager?.sleeve_action_now||today7.sleeve_summary.fund_manager?.stance||'—'"></div></div>
+              <div><div style="color:var(--t3)">Strongest research</div><div class="font-bold text-white" x-text="today7.sleeve_summary.strongest_training?.display_name||today7.sleeve_summary.strongest_live?.display_name||'—'"></div></div>
+              <div><div style="color:var(--t3)">Model stance</div><div class="font-bold text-amber-300" x-text="today7.sleeve_summary.fund_manager?.sleeve_action_now||today7.sleeve_summary.fund_manager?.stance||'—'"></div></div>
               <div><div style="color:var(--t3)">Evidence</div><div class="font-bold" x-text="today7.sleeve_summary.fund_manager?.evidence_quality||'model_backtest'"></div></div>
-              <div><div style="color:var(--t3)">Risk budget</div><div class="font-bold text-white" x-text="today7.sleeve_summary.fund_manager?.risk_budget||'—'"></div></div>
-              <div><div style="color:var(--t3)">Controls capital</div><div class="font-bold" :class="today7.sleeve_summary.fund_manager?.controls_capital?'text-green-400':'text-amber-300'" x-text="today7.sleeve_summary.fund_manager?.controls_capital?'Yes':'No'"></div></div>
-            </div>
-            <div class="text-[8px] mb-2" style="color:var(--t2)" x-text="today7.sleeve_summary.fund_manager?.allocation_reason||''"></div>
-            <div x-show="today7.quant_alloc&&(window.CCHelpers&&CCHelpers.quantSleeveHint)" class="text-[8px] mb-2" style="color:var(--t3)" x-text="CCHelpers.quantSleeveHint(today7.quant_alloc)"></div>
-            <div class="text-[8px] mb-1" style="color:var(--t2)" x-show="today7.sleeve_summary.fund_manager?.sector_rotation_note" x-text="'Rotation: '+today7.sleeve_summary.fund_manager.sector_rotation_note"></div>
-            <div class="text-[8px] mb-1" style="color:var(--amber)" x-show="today7.sleeve_summary.fund_manager?.leading_sector_implication" x-text="today7.sleeve_summary.fund_manager.leading_sector_implication"></div>
-            <div class="text-[8px] mb-2" x-show="(today7.sleeve_summary.fund_manager?.top_adds||[]).length">
-              <span style="color:var(--t3)">Top adds: </span><span class="text-white font-bold" x-text="(today7.sleeve_summary.fund_manager.top_adds||[]).join(', ')"></span>
-            </div>
-            <div class="text-[8px] mb-2" x-show="today7.sleeve_summary.fund_manager?.activation_trigger" style="color:var(--t3)">
-              Activation: <span class="text-white" x-text="today7.sleeve_summary.fund_manager.activation_trigger"></span>
             </div>
             <div class="flex flex-wrap gap-3 items-center text-[9px] mb-2">
               <span class="font-bold text-white" x-text="today7.sleeve_summary.fund_manager?.active_sleeve_name||today7.sleeve_summary.active_today?.display_name||'—'"></span>
-              <span class="pill text-[7px] pg" x-text="today7.sleeve_summary.fund_manager?.stance||today7.sleeve_summary.active_today?.stance||'—'"></span>
-              <span class="pill text-[7px]" :class="(today7.sleeve_summary.active_today?.gate_status||'')==='ACTIVE'?'pg':(today7.sleeve_summary.active_today?.gate_status||'')==='REDUCED'?'pa':'pr'" x-text="today7.sleeve_summary.active_today?.gate_status||'—'"></span>
-              <span x-text="'Mode '+((today7.sleeve_summary.fund_manager?.mode||today7.sleeve_summary.active_today?.mode||'training').toUpperCase())"></span>
+              <span class="pill text-[7px] pw" x-text="today7.sleeve_summary.fund_manager?.stance||today7.sleeve_summary.active_today?.stance||'—'"></span>
               <span style="color:var(--t3)" x-text="'Regime fit '+((today7.sleeve_summary.fund_manager?.regime_fit||today7.sleeve_summary.active_today?.regime_fit||0))+'%'"></span>
             </div>
+            <div class="text-[8px]" style="color:var(--t2)" x-show="!decisionAuthority().deploy_authority">Live allocation: 0% — broker/sync/validation gates closed · open Fund Research Lab for sleeves</div>
             <template x-for="sl in (today7.sleeve_summary.cards||[]).filter(c=>['REDUCED','PAUSED'].includes((c.gate_status||'').toUpperCase()))" :key="sl.id">
               <div class="mb-2 p-2 rounded text-[8px]" style="background:var(--s2);border-left:3px solid var(--amber)">
                 <div class="font-bold text-white" x-text="sl.display_name+' · '+sl.gate_status"></div>
-                <div style="color:var(--t2)" x-text="sl.status_reason||sl.why_reduced||'Sleeve gated — reduced deploy until evidence improves'"></div>
-                <div class="text-[7px] mt-1" style="color:var(--t3)" x-text="'Deployability: '+(sl.deployability||'—')+' · Re-activate when regime fit ≥55% and gate returns ACTIVE'"></div>
-                <div class="text-[7px] text-blue-300" x-show="sl.top_monitored&&sl.top_monitored.length" x-text="'Watching: '+sl.top_monitored.join(', ')"></div>
+                <div style="color:var(--t2)" x-text="sl.status_reason||sl.why_reduced||'Sleeve gated — research context only until evidence improves'"></div>
               </div>
             </template>
           </div>
@@ -3947,6 +3937,11 @@
     <main x-show="tab==='stratlab'" class="fade" data-cc="stratlab-surface" style="padding:12px;padding-bottom:40px" x-init="tab==='stratlab' && !stratHealth.data && fetchStrategyHealth()">
       <div class="card card-p mb-2" style="border-left:3px solid var(--blue)">
         <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--blue)">Strategy Lab — research only</div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[9px] mb-2" x-show="today7.system_truth">
+          <div><span class="font-bold uppercase" style="color:var(--blue)">NOW</span> <span x-text="researchSurfaceBlock('strategy').now"></span></div>
+          <div><span class="font-bold uppercase" style="color:var(--red)">BLOCKER</span> <span style="color:var(--t2)" x-text="researchSurfaceBlock('strategy').blocker"></span></div>
+          <div><span class="font-bold uppercase" style="color:var(--green)">NEXT</span> <span style="color:var(--t2)" x-text="researchSurfaceBlock('strategy').next"></span></div>
+        </div>
         <div class="text-[9px]" style="color:var(--t2);line-height:1.55" x-text="stratLabOneLiner()"></div>
       </div>
       <template x-if="stratHealth.data&&stratHealth.data.strategies&&stratHealth.data.strategies.length">
@@ -4638,6 +4633,15 @@
         <span x-show="scannerHub.error" style="color:var(--red)" x-text="'⚠ '+scannerHub.error"></span>
       </div>
       <div class="px-3 pb-1 text-[8px]" style="color:var(--t2)" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.discoveryResearchHeaderNote)?CCHelpers.discoveryResearchHeaderNote(canonicalRegimeLine()):'掃描證據 · scan evidence'"></div>
+      <div class="px-3 pb-2" x-show="today7.system_truth">
+        <div class="card card-p text-[8px]" style="border:1px dashed var(--amber);background:rgba(251,191,36,.04)">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div><span class="font-bold uppercase" style="color:var(--blue)">NOW</span> <span class="text-white" x-text="researchSurfaceBlock('discovery').now"></span></div>
+            <div><span class="font-bold uppercase" style="color:var(--red)">BLOCKER</span> <span style="color:var(--t2)" x-text="researchSurfaceBlock('discovery').blocker"></span></div>
+            <div><span class="font-bold uppercase" style="color:var(--green)">NEXT</span> <span style="color:var(--t2)" x-text="researchSurfaceBlock('discovery').next"></span></div>
+          </div>
+        </div>
+      </div>
       <div style="padding:8px 12px">
         <!-- Scanner Hub header — honest scope -->
         <div class="card card-p mb-3" style="border-left:4px solid var(--blue)">
@@ -5710,6 +5714,7 @@
             <div class="font-bold uppercase mb-2" style="color:var(--amber)" x-text="fundMonitor.console.guardrail||fundMonitor.console.funds_first_screen.guardrail"></div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div><span style="color:var(--t3)">NOW</span> <span class="font-bold text-white" x-text="fundMonitor.console.funds_first_screen.now"></span></div>
+              <div><span style="color:var(--t3)">BLOCKER</span> <span style="color:var(--amber)" x-text="fundMonitor.console.funds_first_screen.blocker||fundMonitor.console.funds_first_screen.why"></span></div>
               <div><span style="color:var(--t3)">WHY</span> <span style="color:var(--t2)" x-text="fundMonitor.console.funds_first_screen.why"></span></div>
               <div><span style="color:var(--t3)">CORE INDEX POSTURE</span> <span class="font-bold text-white" x-text="fundMonitor.console.funds_first_screen.core_index_posture"></span></div>
               <div><span style="color:var(--t3)">LIVE ALLOCATION</span> <span class="font-bold text-amber-300" x-text="fundMonitor.console.funds_first_screen.live_allocation_label"></span></div>
@@ -5916,7 +5921,7 @@
                 <span class="text-[14px] font-extrabold text-white" x-text="card.display_name||card.id"></span>
                 <span class="pill text-[7px] pw">Research</span>
                 <span class="pill text-[7px]" x-show="card.stance&&card.stance!=='NEUTRAL'" :class="card.stance==='ATTACK'?'pg':card.stance==='DEFEND'?'pa':'pw'" x-text="card.stance"></span>
-                <span class="pill text-[8px]" x-show="card.gate_status&&!['RESEARCH','NO_DATA'].includes(String(card.gate_status||'').toUpperCase())" :class="card.gate_status==='ACTIVE'?'pg':card.gate_status==='REDUCED'?'pa':'pr'" x-text="card.gate_status"></span>
+                <span class="pill text-[8px]" x-show="card.gate_status&&!['RESEARCH','NO_DATA','REDUCED'].includes(String(card.gate_status||'').toUpperCase())&&!fundResearchOnlyMode()" :class="card.gate_status==='ACTIVE'?'pg':card.gate_status==='REDUCED'?'pa':'pr'" x-text="card.gate_status"></span>
               </div>
               <div class="mb-2 p-2 rounded text-[8px]" style="background:var(--s2);border:1px solid var(--bd)">
                 <div class="font-bold uppercase mb-1" style="color:var(--green)">Current state</div>
@@ -6062,6 +6067,11 @@
         <template x-if="flowResearchOnly()">
           <div class="p-2 rounded text-[9px]" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--amber);line-height:1.55">
             <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--amber)">Flow status</div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2 text-[9px]">
+              <div><span class="font-bold text-white">NOW</span> <span x-text="researchSurfaceBlock('flow').now"></span></div>
+              <div><span class="font-bold text-white">BLOCKER</span> <span x-text="researchSurfaceBlock('flow').blocker"></span></div>
+              <div><span class="font-bold text-white">NEXT</span> <span x-text="researchSurfaceBlock('flow').next"></span></div>
+            </div>
             <div class="space-y-1 text-[9px]">
               <div><span class="font-bold text-white">Authority:</span> <span x-text="flowStatusAuthority()"></span></div>
               <div><span class="font-bold text-white">Source:</span> <span x-text="flowStatusSource()"></span></div>
@@ -6420,7 +6430,10 @@
         <div class="card card-p" data-cc="ibkr-repair-checklist">
           <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">IBKR repair checklist</div>
           <template x-for="step in (typeof CCHelpers!=='undefined'&&CCHelpers.ibkrRepairChecklistSteps?CCHelpers.ibkrRepairChecklistSteps():[])" :key="'ibkr-repair-'+step.key">
-            <div class="text-[8px] py-0.5" style="color:var(--t2)" x-text="step.label+' — '+step.detail"></div>
+            <div class="flex items-start justify-between gap-2 text-[8px] py-0.5" style="color:var(--t2)">
+              <span x-text="step.label+' — '+step.detail"></span>
+              <span class="pill text-[7px] shrink-0" :class="ibkrRepairStepClass(step.key)" x-text="ibkrRepairStepLabel(step.key)"></span>
+            </div>
           </template>
         </div>
 
@@ -9383,6 +9396,33 @@
         if(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlock)
           return CCHelpers.operatorBlock(truth,'dashboard',blocks);
         return truth.operator_block||{now:truth.operator_sentence||'',why:truth.primary_blocker||'',allowed:'monitor candidates, create watch rules',blocked:'no sizing, no handoff, no pilot entry',valid_candidates:'',next:'',truth_strip:this.unifiedTruthStripLine(),regime_state:truth.regime_state,deploy_authority:!!truth.deploy_authority,repair_priority:truth.repair_priority||[]};
+      },
+      researchSurfaceBlock(surface){
+        const truth=this.today7?.system_truth||{};
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.researchSurfaceBlock)
+          return CCHelpers.researchSurfaceBlock(truth,surface);
+        return {now:'MONITOR ONLY',blocker:truth.primary_blocker||'deploy blocked',next:'monitor only'};
+      },
+      ibkrRepairStepState(stepKey){
+        const st={
+          hasIbapi:true,
+          gw:!!(this.ibkr?.diagnostics?.gateway_up||this.ibkr?.gw),
+          apiPortOpen:!!this.ibkr?.api_port_open,
+          hostConfigured:!!this.ibkr?.host,
+          connected:!!this.ibkr?.connected,
+          readinessReady:!!(this.ibkr?.readiness?.ready||this.ibkr?.readiness?.score>=4),
+        };
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.ibkrRepairChecklistState)
+          return CCHelpers.ibkrRepairChecklistState(stepKey,st);
+        return 'unknown';
+      },
+      ibkrRepairStepLabel(stepKey){
+        const s=this.ibkrRepairStepState(stepKey);
+        return s==='done'?'DONE':s==='pending'?'PENDING':'—';
+      },
+      ibkrRepairStepClass(stepKey){
+        const s=this.ibkrRepairStepState(stepKey);
+        return s==='done'?'pg':s==='pending'?'pa':'pw';
       },
       agentOperatorBlockerLine(){
         const truth=this.today7.system_truth||{};
