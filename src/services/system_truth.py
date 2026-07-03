@@ -88,7 +88,7 @@ def _brief_freshness(
     age = brief_age_days
     if age is None:
         age = int((today.get("brief_status") or {}).get("age_days") or 0)
-    if age > BRIEF_EXPIRE_DAYS:
+    if age is not None and int(age) > BRIEF_EXPIRE_DAYS:
         return "expired"
     trust = today.get("trust") or {}
     source = str(trust.get("source") or "").lower()
@@ -110,6 +110,8 @@ def _brief_freshness(
 
 
 def _ranked_board_freshness(today: Dict[str, Any]) -> str:
+    if _brief_freshness(today) == "expired":
+        return "unavailable"
     if today.get("used_brief_fallback"):
         return "fallback"
     if today.get("scanner_degraded"):
@@ -153,14 +155,9 @@ def _broker_freshness(today: Dict[str, Any], cc_header: Dict[str, Any]) -> str:
 
 
 def _engine_state(today: Dict[str, Any], ops: Dict[str, Any]) -> str:
-    er = today.get("execution_readiness") or {}
-    if er.get("engine_running") is True or (er.get("sub_status") or {}).get("engine") == "on":
-        return "on"
-    if ops.get("engine_running") is True:
-        return "on"
-    if er.get("engine_running") is False or ops.get("engine_running") is False:
-        return "off"
-    return "unknown"
+    from src.services.authority_engine import resolve_engine_state
+
+    return resolve_engine_state(today, ops)
 
 
 def _regime_state(today: Dict[str, Any]) -> str:
@@ -354,7 +351,7 @@ def build_reason_codes(
     elif brief_freshness == "stale":
         codes.append("BRIEF_STALE")
 
-    if ranked_board_freshness == "fallback":
+    if ranked_board_freshness == "fallback" and brief_freshness != "expired":
         if "FALLBACK_BRIEF" not in codes:
             codes.append("FALLBACK_BRIEF")
     elif ranked_board_freshness == "stale" and "DATA_STALE" not in codes:

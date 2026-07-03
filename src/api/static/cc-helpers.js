@@ -235,15 +235,11 @@
 				.toUpperCase()
 			out.push(ib.indexOf("IBKR") === 0 ? ib : "IBKR " + ib)
 		}
-		if (!o.engineRunning) {
-			out.push("ENGINE OFF")
-		}
+		var eng = resolveEngineState(truth, o)
+		if (eng === "off") out.push("ENGINE OFF")
+		else if (eng === "unknown") out.push("ENGINE UNKNOWN")
 		if (o.breaker) {
 			out.push("EXEC BLOCKED — risk breaker")
-		}
-		var tier = String(o.dataTier || "").toUpperCase()
-		if (tier === "STALE" || tier === "CRITICAL") {
-			out.push("DATA " + tier)
 		}
 		var fb = String(o.fetchBadge || "").toUpperCase()
 		if (fb === "FALLBACK") {
@@ -316,29 +312,131 @@
 		if (blocks[p] && typeof blocks[p] === "object") return blocks[p]
 		if (p === "dashboard" && t.operator_block && typeof t.operator_block === "object")
 			return t.operator_block
-		var regime = String(t.regime_state || "WAIT").toUpperCase()
+		var posture = primaryOperatorState(t)
 		var deploy = !!t.deploy_authority
 		var why = String(t.primary_blocker || "No edge today — preserve capital")
-		var allowed = deploy ? "deploy selectively" : "monitor only"
-		if (regime === "NO_TRADE") allowed = "monitor only"
+		var allowed = deploy ? "deploy selectively on qualified names" : "monitor candidates, create watch rules"
+		if (!deploy) {
+			var codes = t.reason_copy || []
+			if (codes.length) why = codes.slice(0, 3).join(" + ")
+		}
 		var repair = (t.repair_priority || [])[0] || ""
 		var next = repair
 			? "Repair: " + String(repair).replace(/_/g, " ")
 			: deploy
 				? "Review deploy-qualified on Playbook"
-				: "Monitor only — patience is the active decision"
+				: "monitor only — patience is the active decision"
+		var watchN = Number(t.watch_qualified_count || t.setup_qualified_count) || 0
+		var deployN = deploy ? Number(t.deploy_qualified_count) || 0 : 0
 		return {
 			page: p,
-			now: t.operator_sentence || "",
+			now: posture.now || posture.primary || "",
+			primary: posture.primary || "MONITOR ONLY",
+			secondary: posture.secondary || "",
 			why: why,
 			allowed: allowed,
-			blocked: deploy ? "" : "deploy",
+			blocked: deploy ? "" : "no sizing, no handoff, no pilot entry",
+			valid_candidates: "Watch " + watchN + " · Deploy " + deployN,
 			next: next,
 			truth_strip: globalTruthStrip(t),
-			regime_state: regime,
+			regime_state: String(t.regime_state || "WAIT").toUpperCase(),
 			deploy_authority: deploy,
 			repair_priority: (t.repair_priority || []).slice(0, 5),
 		}
+	}
+
+	function resolveEngineState(truth, ops) {
+		var t = truth || {}
+		var o = ops || {}
+		var er = t.execution_readiness || {}
+		var sub = er.sub_status || {}
+		var signals = []
+		if (er.engine_running === true || sub.engine === "on") signals.push("on")
+		else if (er.engine_running === false || sub.engine === "off") signals.push("off")
+		if (o.engineRunning === true || o.running === true) signals.push("on")
+		else if (o.engineRunning === false || o.running === false) signals.push("off")
+		if (t.engine_state) {
+			var canon = String(t.engine_state).toLowerCase()
+			if (canon === "on" || canon === "off") signals.push(canon)
+		}
+		if (!signals.length) return "unknown"
+		if (signals.indexOf("on") >= 0 && signals.indexOf("off") >= 0) return "unknown"
+		return signals[0]
+	}
+
+	function engineStateHeaderLabel(opts) {
+		var o = opts || {}
+		if (o.breaker) return "BREAKER"
+		var eng = resolveEngineState(o.truth || o.systemTruth, o.ops || o)
+		return "ENGINE " + String(formatEngineState(eng)).toUpperCase()
+	}
+
+	function primaryOperatorState(truth) {
+		var t = truth || {}
+		var regime = String(t.regime_state || "WAIT").toUpperCase()
+		var blocked = t.deploy_authority === false
+		if (blocked) {
+			return {
+				primary: "MONITOR ONLY",
+				secondary: regime !== "NO_TRADE" && regime !== "WAIT" ? regime : "",
+				now: "MONITOR ONLY · Deploy blocked",
+			}
+		}
+		if (regime === "NO_TRADE") {
+			return { primary: "MONITOR ONLY", secondary: "NO_TRADE", now: "MONITOR ONLY · Regime closed" }
+		}
+		return { primary: regime, secondary: "", now: regime }
+	}
+
+	function pilotSizingAllowed(truth, opts) {
+		var t = truth || {}
+		var o = opts || {}
+		if (t.deploy_authority === false) return false
+		if (o.brokerReady === false) return false
+		var broker = String(t.broker_freshness || "").toLowerCase()
+		if (broker === "offline" || broker === "blocked") return false
+		var brief = String(t.brief_freshness || "").toLowerCase()
+		if (brief === "expired" || brief === "fallback" || brief === "stale") return false
+		var market = String(t.market_data_freshness || "").toLowerCase()
+		if (market === "stale" || market === "unavailable") return false
+		var board = String(t.ranked_board_freshness || "").toLowerCase()
+		if (board === "stale" || board === "fallback" || board === "unavailable") return false
+		return true
+	}
+
+	function evidenceConflictPanel(panel) {
+		var p = panel || {}
+		if (p.collapsed) {
+			return {
+				title: "Evidence conflict",
+				headline: p.headline || "No valid candidate — evidence panel collapsed",
+				collapsed: true,
+				for: [],
+				against: p.against || [],
+				missing: p.missing || ["No valid monitor candidates on board"],
+				decision: p.decision || "Preserve capital",
+			}
+		}
+		return {
+			title: "Evidence conflict",
+			headline: p.headline || "Evidence review",
+			collapsed: false,
+			for: p.for || [],
+			against: p.against || [],
+			missing: p.missing || [],
+			decision: p.decision || "Preserve capital",
+			upgrade_trigger: p.upgrade_trigger || "",
+			invalidation: p.invalidation || "",
+		}
+	}
+
+	function volatilityMonitorLabel(crisisRegime) {
+		var c = crisisRegime || {}
+		var level = String(c.level || "").toLowerCase()
+		var state = String(c.state || "").toLowerCase()
+		if (c.monitor_label) return String(c.monitor_label)
+		if (level === "normal" && state === "calm") return "Volatility Monitor"
+		return "Crisis Monitor"
 	}
 
 	function formatEngineState(state) {
@@ -386,9 +484,13 @@
 		return String(text || "")
 			.replace(/taking a Pilot entry/gi, "monitor only — pilot blocked")
 			.replace(/pilot entry/gi, "monitor only")
+			.replace(/half size max/gi, "no sizing — blocked")
+			.replace(/half size/gi, "no sizing — blocked")
 			.replace(/size at half risk/gi, "no sizing — blocked")
 			.replace(/handoff to IBKR/gi, "no handoff — blocked")
 			.replace(/Deploy gate open/gi, "Deploy authority: Blocked")
+			.replace(/\bentry\b/gi, "monitor")
+			.replace(/\bsizing\b/gi, "no sizing")
 	}
 
 	function executionRepairOneLiner(truth) {
@@ -2024,6 +2126,12 @@
 		ibkrRepairChecklistSteps: ibkrRepairChecklistSteps,
 		ibkrRepairChecklistState: ibkrRepairChecklistState,
 		formatEngineState: formatEngineState,
+		resolveEngineState: resolveEngineState,
+		engineStateHeaderLabel: engineStateHeaderLabel,
+		primaryOperatorState: primaryOperatorState,
+		pilotSizingAllowed: pilotSizingAllowed,
+		evidenceConflictPanel: evidenceConflictPanel,
+		volatilityMonitorLabel: volatilityMonitorLabel,
 		runtimeFreshnessLabel: runtimeFreshnessLabel,
 		sanitizeBlockedCandidateCopy: sanitizeBlockedCandidateCopy,
 		removeTradeLanguageWhenBlocked: removeTradeLanguageWhenBlocked,

@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from src.services.system_truth import build_unified_truth_strip, resolve_system_truth, system_truth_line
+
+ROOT = Path(__file__).resolve().parents[1]
+INDEX = ROOT / "src" / "api" / "templates" / "index.html"
+CC_HELPERS = ROOT / "src" / "api" / "static" / "cc-helpers.js"
 
 
 def test_truth_strip_uses_scoped_labels_not_data_stale():
@@ -43,3 +49,18 @@ def test_build_unified_truth_strip_format():
         "Market: Fresh · Board: Stale · Brief: Expired 21d · Broker: Offline · "
         "Runtime: Unknown · Authority: Blocked"
     )
+
+
+def test_index_header_uses_scoped_strip_not_data_fresh_pill():
+    raw = INDEX.read_text(encoding="utf-8")
+    header = raw.split("</header>", 1)[0]
+    assert "DATA FRESH" not in header
+    assert "DATA STALE" not in header
+    assert "scopedFreshnessStrip" in raw or "unifiedTruthStripLine" in raw
+
+
+def test_cc_helpers_strip_avoids_unscoped_data_labels():
+    js = CC_HELPERS.read_text(encoding="utf-8")
+    assert "DATA FRESH" not in js
+    assert "function scopedFreshnessStrip" in js
+
