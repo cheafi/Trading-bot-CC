@@ -3192,30 +3192,25 @@
               </div>
             </template>
             <div x-show="dossierStructureReviewOnly()" class="text-[9px] mb-2 p-2 rounded pa font-bold" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--amber);line-height:1.5" x-text="dossierConfirmOnlyStrip()"></div>
-            <!-- Confirm-only authority blocks -->
-            <div x-show="dossierStructureReviewOnly()" data-cc="dossier-confirm-only-blocks" class="card card-p mb-2" style="border-left:4px solid var(--amber)">
+            <!-- Recovery-first operator blocks -->
+            <div x-show="dossierRecoveryMode()" data-cc="dossier-confirm-only-blocks" class="card card-p mb-2" style="border-left:4px solid var(--amber)">
               <div class="grid sm:grid-cols-2 gap-2 text-[9px] mb-2">
-                <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">現在 · Now</div><div style="color:var(--t2)" x-text="dosUnified().label+' — '+dosUnified().reason"></div></div>
-                <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">原因 · Why</div><div style="color:var(--t2)" x-text="(dos.intel&&dos.intel.dossier_mode&&dos.intel.dossier_mode.evidence_confidence&&dos.intel.dossier_mode.evidence_confidence.reason)||dosFetchBannerDetail()||'Live dossier incomplete'"></div></div>
-                <div><div class="font-bold uppercase mb-1" style="color:var(--green)">允許 · Use allowed</div><div style="color:var(--t2)" x-text="(dos.intel&&dos.intel.dossier_mode&&dos.intel.dossier_mode.allowed||[]).join(' · ')"></div></div>
-                <div><div class="font-bold uppercase mb-1" style="color:var(--red)">禁止 · Blocked</div><div style="color:var(--t2)" x-text="(dos.intel&&dos.intel.dossier_mode&&dos.intel.dossier_mode.blocked||[]).join(' · ')"></div></div>
+                <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">現在 · Now</div><div style="color:var(--t2)" x-text="dossierOperatorBlock().now"></div></div>
+                <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">原因 · Why</div><div style="color:var(--t2)" x-text="dossierOperatorBlock().why"></div></div>
+                <div><div class="font-bold uppercase mb-1" style="color:var(--green)">允許 · Allowed</div><div style="color:var(--t2)" x-text="(dossierOperatorBlock().allowed||[]).join(' · ')"></div></div>
+                <div><div class="font-bold uppercase mb-1" style="color:var(--red)">禁止 · Blocked</div><div style="color:var(--t2)" x-text="(dossierOperatorBlock().blocked||[]).join(' · ')"></div></div>
               </div>
-              <div class="text-[9px] mb-2"><div class="font-bold uppercase mb-1" style="color:var(--amber)">缺少內容 · What's missing</div><div style="color:var(--t2)" x-text="dossierMissingDataLine()"></div></div>
-              <div class="text-[9px] p-2 rounded mb-2" style="background:var(--s2)">
-                <div class="font-bold uppercase mb-1" style="color:var(--t3)">Evidence confidence</div>
+              <div class="text-[9px] mb-2"><div class="font-bold uppercase mb-1" style="color:var(--amber)">缺少內容 · Missing</div><div style="color:var(--t2)" x-text="(dossierOperatorBlock().missing_data||[]).join(', ')||dossierMissingDataLine()"></div></div>
+              <div class="text-[9px] p-2 rounded mb-2" style="background:var(--s2)" x-show="dossierEvidenceStatusVisible()">
+                <div class="font-bold uppercase mb-1" style="color:var(--t3)">Evidence status</div>
                 <div class="flex flex-wrap gap-2 text-[8px]">
-                  <span x-text="'Evidence quality: '+dossierEvidenceField('evidence_quality')"></span>
-                  <span x-text="'Calibration: '+dossierEvidenceField('calibration')"></span>
-                  <span x-text="'Use allowed: '+dossierEvidenceField('use_allowed')"></span>
+                  <span x-text="'Evidence quality: '+dossierEvidenceStatusPanel().evidence_quality"></span>
+                  <span x-text="'Calibration: '+dossierEvidenceStatusPanel().calibration"></span>
+                  <span x-text="'Use allowed: '+dossierEvidenceStatusPanel().use_allowed"></span>
                 </div>
-                <div class="text-[8px] mt-1" style="color:var(--t3)" x-text="'Reason: '+dossierEvidenceField('reason')"></div>
+                <div class="text-[8px] mt-1" style="color:var(--t3)" x-text="dossierEvidenceStatusPanel().reason"></div>
               </div>
-              <div class="grid sm:grid-cols-2 gap-2 text-[9px]">
-                <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">現有內容 · What exists</div><div style="color:var(--t2)" x-text="dossierConfirmOnlyFourBlocks().exists"></div></div>
-                <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">阻塞原因 · Blocker</div><div style="color:var(--t2)" x-text="dossierConfirmOnlyFourBlocks().blocker"></div></div>
-                <div class="sm:col-span-2"><div class="font-bold uppercase mb-1" style="color:var(--t3)">安全操作 · Safe actions</div><div style="color:var(--t2)" x-text="dossierConfirmOnlyFourBlocks().safe"></div></div>
-              </div>
-              <div class="text-[9px] mt-2 pt-2" style="border-top:1px dashed var(--bd);color:var(--t3)"><span class="font-bold uppercase" style="color:var(--blue)">下一步 · Next</span> · <span x-text="dossierConfirmOnlyNextLine()"></span></div>
+              <div class="text-[9px] mt-2 pt-2" style="border-top:1px dashed var(--bd);color:var(--t3)"><span class="font-bold uppercase" style="color:var(--blue)">下一步 · Next</span> · <span x-text="dossierOperatorBlock().next"></span></div>
             </div>
             <!-- PM 30-second answer (above fold) -->
             <template x-if="dos.intel&&dos.intel.pm_answer&&dos.intel.pm_answer.thirty_second">
@@ -3237,12 +3232,12 @@
             </template>
             <!-- Opportunity intelligence: insider + institutional (collapsed in confirm-only) -->
             <template x-if="dos.oppIntel&&(dos.oppIntel.insider||dos.oppIntel.institutional)">
-              <details class="card card-p mb-2" data-cc="dossier-opp-intel" style="border-left:4px solid var(--purple)" :open="!dossierStructureReviewOnly()">
+              <details class="card card-p mb-2" data-cc="dossier-opp-intel" style="border-left:4px solid var(--purple)" :open="dossierUsable()">
                 <summary class="flex flex-wrap items-center gap-2 cursor-pointer">
-                  <div class="text-[9px] font-bold uppercase" style="color:var(--purple)">Opportunity context (lagged)</div>
+                  <div class="text-[9px] font-bold uppercase" style="color:var(--purple)">Lagged / illustrative context</div>
                   <span class="pill text-[7px] pw font-bold" x-text="(window.CCHelpers&&CCHelpers.opportunityIntelligenceBadge)?CCHelpers.opportunityIntelligenceBadge(dos.oppIntel.insider||dos.oppIntel.institutional):'RESEARCH ONLY'"></span>
                 </summary>
-                <div x-show="dossierStructureReviewOnly()" class="text-[8px] mb-2 italic" style="color:var(--t3)" x-text="dossierLaggedContextNote()"></div>
+                <div x-show="dossierRecoveryMode()" class="text-[8px] mb-2 italic" style="color:var(--t3)" x-text="dossierLaggedContextNote()"></div>
                 <template x-if="dos.oppIntel.insider">
                   <div class="mb-2 p-2 rounded text-[9px]" style="background:var(--s2)">
                     <div class="font-bold text-white mb-1">Insider · Form 4</div>
@@ -3476,25 +3471,25 @@
             <div class="card card-p mb-2" :style="'border-left:4px solid var(--'+(dosUnified().color)+')'">
               <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
                 <div class="flex items-center gap-2">
-                  <span class="text-[10px] font-bold uppercase" style="color:var(--t3)" x-text="dossierStructureReviewOnly()?dossierStructureSnapshotTitle():'Unified Decision'"></span>
+                  <span class="text-[10px] font-bold uppercase" style="color:var(--t3)" x-text="dossierUsable()?'Unified Decision':dossierStructureSnapshotTitle()"></span>
                   <span class="pill text-[11px] font-black" :class="dosUnified().pill" x-text="dosUnified().label"></span>
-                  <span x-show="dossierStructureReviewOnly()" class="pill text-[8px] pa font-bold">CONFIRM ONLY</span>
+                  <span x-show="dossierRecoveryMode()" class="pill text-[8px] pa font-bold">CONFIRM ONLY</span>
                 </div>
-                <div x-show="!dossierStructureReviewOnly()" class="flex flex-wrap gap-2 text-[9px] mono" style="color:var(--t3)">
+                <div x-show="dossierUsable()" class="flex flex-wrap gap-2 text-[9px] mono" style="color:var(--t3)">
                   <span x-text="dosFormatDecisionConfidence()"></span>
                   <span x-text="dosFormatThesisQuality()"></span>
                 </div>
               </div>
               <div class="text-[10px] mb-2" style="color:var(--t2)" x-text="dosUnified().reason"></div>
-              <div class="grid gap-2 text-[9px]" :class="dossierStructureReviewOnly()?'grid-cols-2 sm:grid-cols-3':'grid-cols-2 sm:grid-cols-5'">
-                <div><div style="color:var(--t3)" x-text="dossierStructureLevelLabel('entry')"></div><div class="mono" :class="dossierStructureReviewOnly()?'text-amber-300':'text-white'" x-text="dosUnified().entry_zone?('$'+dosUnified().entry_zone[0]+'–$'+dosUnified().entry_zone[1]):'—'"></div></div>
-                <div><div style="color:var(--t3)" x-text="dossierStructureLevelLabel('stop')"></div><div class="mono" :class="dossierStructureReviewOnly()?'text-amber-300':'text-red-400'" x-text="dosUnified().stop?'$'+dosUnified().stop:'—'"></div></div>
-                <div><div style="color:var(--t3)" x-text="dossierStructureLevelLabel('target')"></div><div class="mono" :class="dossierStructureReviewOnly()?'text-amber-300':'text-green-400'" x-text="(dosUnified().target_1r&&dosUnified().target_2r)?('$'+dosUnified().target_1r+' / $'+dosUnified().target_2r):'—'"></div></div>
-                <div x-show="!dossierStructureReviewOnly()"><div style="color:var(--t3)">R:R</div><div class="mono text-white" x-text="(dosUnified().rr_ratio_display||dosUnified().rr_ratio||'—')"></div></div>
-                <div x-show="!dossierStructureReviewOnly()"><div style="color:var(--t3)">Size @1%</div><div class="mono" :class="dossierSizingBlocked()?'text-amber-300':'text-green-400'" x-text="dosSizeDisplay()"></div></div>
+              <div x-show="dossierUsable()" class="grid gap-2 text-[9px] grid-cols-2 sm:grid-cols-5">
+                <div><div style="color:var(--t3)">Entry zone</div><div class="mono text-white" x-text="dosUnified().entry_zone?('$'+dosUnified().entry_zone[0]+'–$'+dosUnified().entry_zone[1]):'—'"></div></div>
+                <div><div style="color:var(--t3)">Stop</div><div class="mono text-red-400" x-text="dosUnified().stop?'$'+dosUnified().stop:'—'"></div></div>
+                <div><div style="color:var(--t3)">T1 / T2</div><div class="mono text-green-400" x-text="(dosUnified().target_1r&&dosUnified().target_2r)?('$'+dosUnified().target_1r+' / $'+dosUnified().target_2r):'—'"></div></div>
+                <div><div style="color:var(--t3)">R:R</div><div class="mono text-white" x-text="(dosUnified().rr_ratio_display||dosUnified().rr_ratio||'—')"></div></div>
+                <div><div style="color:var(--t3)">Size @1%</div><div class="mono" :class="dossierSizingBlocked()?'text-amber-300':'text-green-400'" x-text="dosSizeDisplay()"></div></div>
               </div>
-              <div x-show="!dossierStructureReviewOnly()&&dosSizeExplanationVisible()" class="text-[8px] mt-1" style="color:var(--t3)" x-text="dosSizeExplanation()"></div>
-              <div x-show="dossierStructureReviewOnly()&&dos.intel&&dos.intel.dossier_mode" class="grid sm:grid-cols-3 gap-2 text-[8px] mt-2" style="color:var(--t3)">
+              <div x-show="dossierUsable()&&dosSizeExplanationVisible()" class="text-[8px] mt-1" style="color:var(--t3)" x-text="dosSizeExplanation()"></div>
+              <div x-show="dossierRecoveryMode()&&dos.intel&&dos.intel.dossier_mode" class="grid sm:grid-cols-3 gap-2 text-[8px] mt-2" style="color:var(--t3)">
                 <div x-show="dos.intel.dossier_mode.source"><span class="font-bold">Source</span> <span x-text="dos.intel.dossier_mode.source"></span></div>
                 <div x-show="dos.intel.dossier_mode.freshness"><span class="font-bold">Freshness</span> <span x-text="dos.intel.dossier_mode.freshness"></span></div>
                 <div><span class="font-bold">Use</span> Use: structure review only</div>
@@ -3502,9 +3497,9 @@
               <div class="flex flex-wrap gap-2 mt-2 pt-2" style="border-top:1px dashed var(--bd)">
                 <button class="btn-s text-[9px]" :disabled="!dossierMonitorRuleAllowed()" :class="!dossierMonitorRuleAllowed()?'opacity-50 cursor-not-allowed':''" :title="dossierMonitorRuleHint()" @click="dosIbkrSetAlert()" x-text="dossierMonitorRuleLabel()"></button>
                 <button x-show="dossierPaperDraftVisible()" class="btn-s text-[9px]" @click="dosIbkrPaperDraft()">📝 Paper Order Draft</button>
-                <div x-show="dossierStructureReviewOnly()&&!dossierPaperDraftVisible()" class="text-[8px] self-center pa font-bold" style="line-height:1.45" x-text="dossierPaperDraftDisabledCopy()"></div>
-                <details x-show="dossierStructureReviewOnly()" class="text-[9px]"><summary class="cursor-pointer" style="color:var(--t3)">⏱ Replay</summary><button class="btn-s text-[9px] mt-1" @click="openReplayForDossier()">Open replay</button></details>
-                <button x-show="!dossierStructureReviewOnly()" class="btn-s text-[9px]" @click="openReplayForDossier()">⏱ Replay</button>
+                <div x-show="dossierRecoveryMode()&&!dossierPaperDraftVisible()" class="text-[8px] self-center pa font-bold" style="line-height:1.45" x-text="dossierPaperDraftDisabledCopy()"></div>
+                <details x-show="dossierRecoveryMode()" class="text-[9px]"><summary class="cursor-pointer" style="color:var(--t3)">⏱ Replay</summary><button class="btn-s text-[9px] mt-1" @click="openReplayForDossier()">Open replay</button></details>
+                <button x-show="dossierUsable()" class="btn-s text-[9px]" @click="openReplayForDossier()">⏱ Replay</button>
               </div>
             </div>
             <!-- Catalyst strip -->
@@ -3691,7 +3686,18 @@
             </div>
             <!-- DECISION -->
             <div x-show="dos.subTab==='decision'">
-              <template x-if="dos.intel&&dos.intel.narrative">
+              <template x-if="dossierEvidenceStatusVisible()">
+                <div class="card card-p mb-2" style="border-left:4px solid var(--amber)">
+                  <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--amber)" x-text="dossierEvidenceStatusPanel().headline"></div>
+                  <div class="flex flex-wrap gap-2 text-[8px] mb-1">
+                    <span x-text="'Evidence quality: '+dossierEvidenceStatusPanel().evidence_quality"></span>
+                    <span x-text="'Calibration: '+dossierEvidenceStatusPanel().calibration"></span>
+                    <span x-text="'Use allowed: '+dossierEvidenceStatusPanel().use_allowed"></span>
+                  </div>
+                  <div class="text-[9px]" style="color:var(--t2)" x-text="dossierEvidenceStatusPanel().reason"></div>
+                </div>
+              </template>
+              <template x-if="dossierUsable()&&dos.intel&&dos.intel.narrative">
                 <div class="grid md:grid-cols-3 gap-2">
                   <div class="card card-p">
                     <div class="text-[10px] font-bold uppercase mb-1 text-green-400">Bull case</div>
@@ -3704,7 +3710,6 @@
                   <div class="card card-p">
                     <div class="text-[10px] font-bold uppercase mb-1 text-amber-300">Contradictions</div>
                     <template x-for="c in (dos.intel.narrative.contradictions||[])" :key="c"><div class="text-[9px] mb-1" style="color:var(--t2)" x-text="'⚡ '+c"></div></template>
-                    <div x-show="!(dos.intel.narrative.contradictions||[]).length" class="text-[9px]" style="color:var(--t3)">No major contradictions flagged.</div>
                   </div>
                 </div>
               </template>
@@ -3719,10 +3724,9 @@
                   </div>
                 </div>
               </template>
-              <details class="card card-p mt-2" :open="!dossierStructureReviewOnly()">
+              <details x-show="dossierTradePlanVisible()" class="card card-p mt-2" open>
                 <summary class="flex items-center gap-2 cursor-pointer">
-                  <span class="text-[10px] font-bold uppercase" style="color:var(--t3)" x-text="dossierStructureReviewOnly()?dossierStructureSnapshotTitle():'Trade plan'"></span>
-                  <span x-show="dossierStructureReviewOnly()" class="pill text-[8px] pa font-bold">CONFIRM ONLY</span>
+                  <span class="text-[10px] font-bold uppercase" style="color:var(--t3)">Trade plan</span>
                 </summary>
                 <template x-if="(dos.intel&&dos.intel.trade_plan_human)||dosTradePlanRows().length">
                   <table class="w-full text-[9px] mt-2" style="border-collapse:collapse">
@@ -3732,8 +3736,8 @@
                         <td class="py-1 mono" style="color:var(--t2)" x-text="row.value"></td>
                       </tr>
                     </template>
-                    <tr x-show="!dossierStructureReviewOnly()"><td class="py-1 pr-3 font-bold" style="color:var(--t3)">Size @1%</td><td class="py-1 mono" :class="dossierSizingBlocked()?'text-amber-300':'text-green-400'" x-text="dosSizeDisplay()"></td></tr>
-                    <tr x-show="!dossierStructureReviewOnly()&&dosSizeExplanationVisible()"><td class="py-1 pr-3 font-bold" style="color:var(--t3)">Size basis</td><td class="py-1" style="color:var(--t3);font-size:8px" x-text="dosSizeExplanation()"></td></tr>
+                    <tr><td class="py-1 pr-3 font-bold" style="color:var(--t3)">Size @1%</td><td class="py-1 mono" :class="dossierSizingBlocked()?'text-amber-300':'text-green-400'" x-text="dosSizeDisplay()"></td></tr>
+                    <tr x-show="dosSizeExplanationVisible()"><td class="py-1 pr-3 font-bold" style="color:var(--t3)">Size basis</td><td class="py-1" style="color:var(--t3);font-size:8px" x-text="dosSizeExplanation()"></td></tr>
                   </table>
                 </template>
                 <div x-show="!(dos.intel&&dos.intel.trade_plan_human)&&!dosTradePlanRows().length" class="text-[9px] mt-2" style="color:var(--t3)">Structure unavailable — load core first.</div>
@@ -4417,7 +4421,7 @@
               <div style="font-size:10px;color:var(--amber);font-weight:700">Research incomplete</div>
             </div>
             <div style="font-size:11px;color:var(--t2);line-height:1.6;margin-bottom:6px">
-              <strong style="color:var(--amber)">Confirm-only — no IBKR handoff or sizing</strong><br>
+              <strong style="color:var(--amber)">Structure review only — no deploy authority</strong><br>
               <span style="color:var(--t3)">No sizing guidance in confirm-only mode · levels indicative until live dossier loads</span>
             </div>
             <div style="display:flex;gap:4px;flex-wrap:wrap">
@@ -4485,7 +4489,7 @@
           <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Bracket not ready</span><span style="color:var(--t2)">Card lacks entry/stop or execution_ready flag.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Mock flow</span><span style="color:var(--t2)">Flow surface in synthetic/mock mode — colour only.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Backtest funds</span><span style="color:var(--t2)">Funds sleeves marked research/backtest — not live capital.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Dossier confirm-only</span><span style="color:var(--t2)">Confirm-only — no IBKR handoff or sizing; levels indicative until live dossier loads.</span></div>
+          <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Dossier confirm-only</span><span style="color:var(--t2)">Structure review only — levels indicative until live dossier loads.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">No live validation</span><span style="color:var(--t2)">Any scoped strip shows Stale/Expired/Fallback, Broker: Offline, Runtime stale, Authority: Blocked, or SYNTHETIC mode.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--t2);font-weight:700;min-width:120px">Scanner warming</span><span style="color:var(--t2)">Discovery loading or 0 hits on WAIT day — often correct, not a miss.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--t2);font-weight:700;min-width:120px">Manual sync pending</span><span style="color:var(--t2)">Portfolio or broker positions not reconciled after last session.</span></div>
@@ -4527,7 +4531,7 @@
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pb" style="font-size:9px">Research-only</span><span style="color:var(--t2)">ANALYSIS ONLY · supporting context</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pw" style="font-size:9px">Diagnostic</span><span style="color:var(--t2)">Health, rejections, ops visibility</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px">Execution-dependent</span><span style="color:var(--t2)">IBKR handoff · LOGIN ≠ READY until session + bracket aligned</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px">CONFIRM ONLY</span><span style="color:var(--t2)">Confirm-only — no IBKR handoff or sizing; levels indicative only</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px">CONFIRM ONLY</span><span style="color:var(--t2)">Structure review only — levels indicative only</span></div>
             </div>
           </div>
 
@@ -9949,6 +9953,51 @@
         if(window.CCHelpers&&CCHelpers.dossierStructureReviewOnly) return CCHelpers.dossierStructureReviewOnly(this.dossierModeKey());
         return this.dossierModeKey()==='structure_review_only';
       },
+      dossierUsable(){
+        if(window.CCHelpers&&CCHelpers.dossierUsableMode) return CCHelpers.dossierUsableMode(this.dossierModeKey());
+        return this.dossierModeKey()==='usable';
+      },
+      dossierRecoveryMode(){
+        if(window.CCHelpers&&CCHelpers.dossierRecoveryMode) return CCHelpers.dossierRecoveryMode(this.dossierModeKey());
+        const m=this.dossierModeKey();
+        return m==='structure_review_only'||m==='loading'||m==='unavailable';
+      },
+      dossierOperatorBlock(){
+        const intel=this.dos?.intel;
+        if(intel?.dossier_operator_block) return intel.dossier_operator_block;
+        if(intel?.dossier_mode?.dossier_operator_block) return intel.dossier_mode.dossier_operator_block;
+        if(window.CCHelpers&&CCHelpers.dossierOperatorBlock){
+          const o=this._dossierModeOpts();
+          return CCHelpers.dossierOperatorBlock(this.dossierModeKey(),{
+            ...o,
+            ticker:this.dos?.ticker||this.dos?.data?.symbol,
+            dossier_mode:intel?.dossier_mode,
+            dossier_operator_block:intel?.dossier_operator_block,
+            unified_label:this.dosUnified().label,
+            brief_backed:o.brief_backed,
+          });
+        }
+        return {now:'',why:'',allowed:[],blocked:[],missing_data:[],next:''};
+      },
+      dossierEvidenceStatusPanel(){
+        const intel=this.dos?.intel;
+        if(intel?.evidence_status) return intel.evidence_status;
+        if(intel?.dossier_mode?.evidence_status) return intel.dossier_mode.evidence_status;
+        if(window.CCHelpers&&CCHelpers.dossierEvidenceStatus){
+          const o=this._dossierModeOpts();
+          return CCHelpers.dossierEvidenceStatus({
+            ...o,
+            evidence_status:intel?.evidence_status,
+            dossier_mode:intel?.dossier_mode,
+            has_narrative:!!(intel?.narrative),
+          });
+        }
+        return {headline:'Evidence incomplete',evidence_quality:'Low',calibration:'Pending',use_allowed:'structure review only',reason:'Live modules missing — no deploy authority'};
+      },
+      dossierEvidenceStatusVisible(){
+        const p=this.dossierEvidenceStatusPanel();
+        return !!p.show||this.dossierRecoveryMode()||!this.dosQuoteAvailable();
+      },
       dossierConfirmOnlyStrip(){
         const block=this.dos?.intel?.dossier_mode;
         if(block?.confirm_only_strip) return block.confirm_only_strip;
@@ -9985,13 +10034,13 @@
         const block=this.dos?.intel?.dossier_mode;
         if(block?.monitor_rule_hint) return block.monitor_rule_hint;
         if(window.CCHelpers&&CCHelpers.dossierMonitorRuleHint) return CCHelpers.dossierMonitorRuleHint();
-        return 'Alert only · no sizing · no handoff · requires Playbook confirmation';
+        return 'Alert only · no sizing · no handoff';
       },
       dossierLaggedContextNote(){
         const block=this.dos?.intel?.dossier_mode;
         if(block?.lagged_context_note) return block.lagged_context_note;
         if(window.CCHelpers&&CCHelpers.dossierLaggedContextNote) return CCHelpers.dossierLaggedContextNote();
-        return 'Lagged ownership context hidden — not used for confirmation.';
+        return 'Lagged / illustrative context · not used for confirmation';
       },
       dossierMissingDataLine(){
         const block=this.dos?.intel?.dossier_mode;
@@ -10028,9 +10077,15 @@
         return 'Review structure and open Playbook when deploy-qualified';
       },
       dossierPaperDraftVisible(){
+        if(this.dos?.intel?.hide_paper_draft===true) return false;
         if(window.CCHelpers&&CCHelpers.dossierPaperDraftVisible) return CCHelpers.dossierPaperDraftVisible(this._dossierModeOpts());
         const o=this._dossierModeOpts();
         return o.mode_key==='usable'||(!o.mode_key&&this.dossierModeKey()==='usable'&&o.playbook_watch_plus&&!o.deploy_blocked&&o.broker_online);
+      },
+      dossierTradePlanVisible(){
+        if(this.dos?.intel?.hide_trade_plan===true) return false;
+        if(window.CCHelpers&&CCHelpers.dossierTradePlanVisible) return CCHelpers.dossierTradePlanVisible(this._dossierModeOpts());
+        return this.dossierPaperDraftVisible();
       },
       dossierMonitorRuleAllowed(){
         const mode=this.dossierModeKey();
@@ -10141,7 +10196,7 @@
       },
       dossierResearchOnly(){
         const mode=this.dossierModeKey();
-        return mode==='structure_review_only'||mode==='partial'||mode==='unavailable';
+        return mode==='structure_review_only'||mode==='loading'||mode==='partial'||mode==='unavailable';
       },
       dosShowsDeployLevels(){
         return !this.dossierResearchOnly();
