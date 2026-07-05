@@ -4274,6 +4274,7 @@
             <li><strong style="color:var(--t1)">Don't treat IBKR LOGIN as execution-ready</strong> — GATEWAY UP · LOGIN REQUIRED still blocks handoff · 已登入 Gateway ≠ 可下單</li>
             <li><strong style="color:var(--t1)">Don't treat Discovery / Flow / RS as deploy permission</strong> — research-only surfaces · 掃描結果 ≠ 部署許可</li>
             <li><strong style="color:var(--t1)">Don't treat Backtest Lab as live evidence</strong> — historical simulation, not deployment authority · 回測 ≠ 實盤依據</li>
+            <li><strong style="color:var(--t1)">Don't trade in Time Travel replay</strong> — ⏱ whole-page replay shows historical brief snapshots only; deploy/handoff stay blocked</li>
           </ul>
 
           <details style="margin-top:10px">
@@ -8815,6 +8816,7 @@
       surfaceShowsDecisionChips(mode){return mode==='dashboard_core'||mode==='playbook_core';},
       sanitizeVisibleText(v){
         if(v==null||v==='') return '';
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.sanitizeOperatorDetail) return CCHelpers.sanitizeOperatorDetail(v);
         const s=String(v);
         if(/led',e\);alert\(/i.test(s)||/\[object Object\]/i.test(s)) return s.includes('[object Object]')?'Evidence unavailable':'';
         if(/catch\s*\(\s*\w+\s*\)/i.test(s)&&/alert\s*\(/i.test(s)&&/\}\s*,\s*\}\}/.test(s)) return '';
@@ -11158,6 +11160,7 @@
         return this.playbookFunnelLabel(funnel,rows);
       },
       todayDeployAuthoritySuspended(){
+        if(this.replayModeActive()) return true;
         const da=this.decisionAuthority();
         if(this.pageAuthorityIsDegraded()||this.todayUsesBriefFallback()) return true;
         if(da.authority_level==='suspended'||da.gates_active) return true;
@@ -11835,7 +11838,7 @@
       async fetchCcStatus(){
         try{
           const tabQ=this.tab?('?tab='+encodeURIComponent(this.tab)):'';
-          const r=await fetch('/api/ops/cc-header'+tabQ,{headers:{'X-API-Key':window._apiKey||'dev-secret-local'}});
+          const r=await fetch(this.ccReplayUrl('/api/ops/cc-header'+tabQ),{headers:{'X-API-Key':window._apiKey||'dev-secret-local'}});
           if(r.ok){
             const h=await r.json();
             const eng=h.engine||{};
@@ -14533,19 +14536,19 @@
         try{
           if(!this.rankedOpps.rows.length&&!this.rankedOpps.actionFilter&&!this.rankedOpps.sectorFilter){
             try{
-              const sr=await fetch('/api/v7/playbook/ranked/snapshot?limit=30');
-              if(sr.ok) this.applyRankedPayload(await sr.json(),{fromSnapshot:true});
+              const sr=await this.ccFetch('/api/v7/playbook/ranked/snapshot?limit=30',{retries:2,backoff:500});
+              if(sr&&sr.ok) this.applyRankedPayload(await sr.json(),{fromSnapshot:true});
             }catch(e){console.warn('ranked snapshot hydrate failed',e)}
           }
           let u='/api/v7/playbook/ranked?limit=30';
           if(this.rankedOpps.actionFilter) u+='&action='+this.rankedOpps.actionFilter;
           if(this.rankedOpps.sectorFilter) u+='&sector='+this.rankedOpps.sectorFilter;
           if(opts.refresh) u+='&refresh=true';
-          const r=await fetch(u);
-          if(!r.ok){
-            if(r.status===503){
+          const r=await this.ccFetch(u,{retries:3,backoff:600});
+          if(!r||!r.ok){
+            if(r&&r.status===503){
               try{
-                const sr=await fetch(this.ccReplayUrl('/api/v7/playbook/ranked/snapshot?limit=30'));
+                const sr=await this.ccFetch('/api/v7/playbook/ranked/snapshot?limit=30',{retries:2,backoff:500});
                 if(sr.ok){
                   this.applyRankedPayload(await sr.json(),{fromSnapshot:true});
                   return;
