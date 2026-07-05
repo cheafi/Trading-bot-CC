@@ -14865,8 +14865,8 @@
           const r=await this.ccFetch(u,{retries:3,backoff:600});
           if(!r||!r.ok){
             if(r&&r.status===503){
-              const sr=await fetch(u);
-              if(sr.ok){
+              const sr=await this.ccFetch(u,{retries:2,backoff:500});
+              if(sr&&sr.ok){
                 const d=await sr.json();
                 if(this.scannerHubIsRenderable(d)){
                   this.scannerHub.data=d;this.scannerHub.error='';this.saveScannersToCache(d);
@@ -15324,7 +15324,7 @@
       async fetchCommandBoard(){
         this.cmd.loading=true;this.cmd.error='';
         try{
-          const r=await fetch('/api/watchlist?limit=60');
+          const r=await this.ccFetch('/api/watchlist?limit=60',{retries:2,backoff:500});
           if(!r.ok)throw new Error('HTTP '+r.status);
           const d=await r.json();
           this.cmd.watchlistRows=(d.board||[]).map(row=>({
