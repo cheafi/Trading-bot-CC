@@ -250,6 +250,19 @@
         </div>
       </div>
     </header>
+    <!-- Whole-page Time Travel replay banner -->
+    <div x-show="replayModeActive()" x-cloak
+         style="padding:8px 16px;font-size:11px;font-weight:700;background:#581c87;color:#e9d5ff;border-bottom:1px solid #7e22ce;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <span>
+        <span class="pill text-[8px] pw" style="margin-right:6px">REPLAY</span>
+        <span x-text="'重播模式 · Replay: '+(ccReplayAsOf||'')+' · 全頁歷史狀態（非即時）'"></span>
+        <span x-show="ccReplayNote" class="text-[9px] font-normal" style="color:#d8b4fe;opacity:.9" x-text="' · '+ccReplayNote"></span>
+      </span>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span class="text-[9px] font-normal" style="color:#d8b4fe">Replay mode · 僅供回測檢視 · 不可下單</span>
+        <button @click="exitWholePageReplay()" class="btn-s text-[9px]" style="white-space:nowrap">退出重播 Exit live</button>
+      </div>
+    </div>
     <!-- Execution Repair Console — one-line banner on non-Ops surfaces -->
     <div x-show="executionRepairBannerVisible()" x-cloak
          style="padding:6px 16px;font-size:10px;font-weight:600;background:#3a2a1e;color:#fcd34d;border-bottom:1px solid #b45309;display:flex;align-items:center;justify-content:space-between;gap:12px">
@@ -371,11 +384,35 @@
     <div x-show="tt.show" x-cloak @click.self="tt.show=false" style="position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:20px">
       <div style="max-width:880px;width:100%;max-height:88vh;overflow-y:auto;background:var(--s1);border:1px solid var(--bd2);border-radius:12px;padding:24px">
         <div class="flex items-center justify-between mb-3">
-          <h3 class="text-base font-bold text-white">⏱ Time Travel — Replay any date
-            <span class="text-xs font-normal" style="color:var(--t3)">· What would the system have suggested?</span>
+          <h3 class="text-base font-bold text-white">⏱ Time Travel · 重播任何日期
+            <span class="text-xs font-normal" style="color:var(--t3)">· Whole console historical review</span>
           </h3>
           <button @click="tt.show=false" class="btn-s text-[10px]">✕ Close</button>
         </div>
+        <div class="text-[10px] mb-3" style="color:var(--t2);line-height:1.6">
+          選擇日期後，整個控制台會顯示該日的市場狀態、候選名單與決策（研究用，不可下單）。
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:12px">
+          <button @click="tt.mode='whole'" class="btn-s text-[10px]" :style="tt.mode==='whole'?'border-color:var(--green);color:var(--green)':''">全頁重播 Whole-page</button>
+          <button @click="tt.mode='ticker'" class="btn-s text-[10px]" :style="tt.mode==='ticker'?'border-color:var(--blue);color:var(--blue)':''">單股重播 Single ticker</button>
+        </div>
+        <div x-show="tt.mode==='whole'">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:end">
+            <div>
+              <div style="font-size:10px;color:var(--t3);margin-bottom:2px">Replay date</div>
+              <input x-model="tt.date" type="date" list="cc-replay-dates" @keydown.enter="enterWholePageReplay()" style="background:var(--s2);border:1px solid var(--bd);color:var(--t1);padding:5px 8px;border-radius:4px;font-size:12px">
+              <datalist id="cc-replay-dates">
+                <template x-for="d in (ccReplayDates||[])" :key="d"><option :value="d"></option></template>
+              </datalist>
+            </div>
+            <button @click="enterWholePageReplay()" class="btn-p text-[11px]" :disabled="tt.loading" style="padding:6px 12px;font-weight:700" x-text="tt.loading?'⏳ Loading…':'▶ Enter replay'"></button>
+            <button x-show="replayModeActive()" @click="exitWholePageReplay()" class="btn-s text-[11px]" style="padding:6px 12px">退出重播 Exit live</button>
+          </div>
+          <div x-show="(ccReplayDates||[]).length" class="text-[9px] mb-2" style="color:var(--t3)">
+            Available brief dates: <span class="mono" x-text="(ccReplayDates||[]).slice(0,8).join(' · ')"></span><span x-show="(ccReplayDates||[]).length>8"> …</span>
+          </div>
+        </div>
+        <div x-show="tt.mode==='ticker'">
         <!-- Inputs -->
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:end">
           <div>
@@ -394,6 +431,7 @@
           </div>
           <button @click="runTimeTravel()" class="btn-s text-[11px]" :disabled="tt.loading" style="padding:6px 12px;font-weight:700" x-text="tt.loading?'⏳ Running…':'▶ Run replay'"></button>
           <div style="margin-left:auto;font-size:10px;color:var(--t3)">Causal — no look-ahead</div>
+        </div>
         </div>
         <div x-show="tt.err" style="background:#7f1d1d;color:#fca5a5;padding:8px;border-radius:6px;font-size:11px;margin-bottom:10px" x-text="tt.err"></div>
         <!-- Results -->
@@ -4262,6 +4300,25 @@
             <span class="guide-badge pb" style="font-size:8px">Research-only</span> supports ·
             <span class="guide-badge pw" style="font-size:8px">Diagnostic</span> / <span class="guide-badge pa" style="font-size:8px">Execution-dependent</span> confirms — details in Layer 3.
           </div>
+
+          <div style="margin-top:14px;padding:12px;background:rgba(88,166,255,.06);border:1px solid rgba(88,166,255,.2);border-radius:8px">
+            <div style="font-size:11px;font-weight:800;color:var(--blue);margin-bottom:8px">研究介面快速上手 · Research surfaces</div>
+            <div style="font-size:11px;color:var(--t2);line-height:1.7;margin-bottom:10px">以下三個介面<strong style="color:var(--t1)">只有研究權限</strong>，不會下單、不會調倉。空狀態時看「如何開始」卡片。</div>
+            <div style="display:flex;flex-direction:column;gap:10px;font-size:11px;color:var(--t2);line-height:1.65">
+              <div style="padding:8px 10px;background:var(--s2);border-radius:6px;border-left:3px solid var(--amber)">
+                <strong style="color:var(--t1)">🤖 Agent 盯盤 · Monitor only</strong>（More → Command）<br>
+                輸入一句話建立監察規則，例如「當 KO 跌破 20 日線時提醒我」。可從 Playbook Watch 名單一鍵建立規則。
+              </div>
+              <div style="padding:8px 10px;background:var(--s2);border-radius:6px;border-left:3px solid var(--green)">
+                <strong style="color:var(--t1)">🧪 策略實驗室 · Strategy Lab</strong>（More 選單）<br>
+                輸入策略 ID（如 defensive_pullback）→ 產生研究草稿 → 驗證後轉 Watch 規則 → 到 Playbook 審閱。不具部署權限。
+              </div>
+              <div style="padding:8px 10px;background:var(--s2);border-radius:6px;border-left:3px solid var(--blue)">
+                <strong style="color:var(--t1)">🧾 影子帳戶 · Shadow account</strong>（Ops → Shadow）<br>
+                先匯入 CSV 交易紀錄，或連接 IBKR 歷史成交。可看勝率、持倉時間、過早平倉等行為診斷（研究用）。
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -8045,7 +8102,10 @@
       showAlertsModal:false,
       brief_status:null,
       brief_regen_loading:false,
-      tt:{show:false,ticker:'AAPL',date:new Date(Date.now()-30*86400000).toISOString().slice(0,10),strategy:'all',loading:false,data:null,err:'',result:null},
+      tt:{show:false,mode:'whole',ticker:'AAPL',date:new Date(Date.now()-30*86400000).toISOString().slice(0,10),strategy:'all',loading:false,data:null,err:'',result:null},
+      ccReplayAsOf:null,
+      ccReplayNote:'',
+      ccReplayDates:[],
       exec:{metrics:null},
       risk:{summary:null},
       rl:{thompson:null,featureIC:null},
@@ -8084,6 +8144,7 @@
       ccWatchlist:JSON.parse(localStorage.getItem('ccWatchlist')||'{}'),
       init(){
         this.dataContractDismissed=localStorage.getItem('cc_data_contract_dismissed')==='1';
+        this._hydrateReplayState();
         if(typeof window!=='undefined'){
           window.addEventListener('resize',()=>{this.pmStripChipMenuOpen=false});
         }
@@ -8091,7 +8152,9 @@
         this.fetchHealth();setInterval(()=>this.fetchHealth(),15000);
         // Phase 1 — critical path (avoid burst 503s on cold start)
         this.fetchCcStatus();setInterval(()=>this.fetchCcStatus(),30000);
-        this.fetchToday7();setInterval(()=>this.fetchToday7(),120000);
+        this.fetchReplayDates();
+        if(this.replayModeActive()) this.refreshReplaySurfaces();
+        else this.fetchToday7();setInterval(()=>{if(!this.replayModeActive())this.fetchToday7()},120000);
         setTimeout(()=>this.fetchMarketStrip(),400);
         setInterval(()=>this.fetchMarketStrip(),180000);
         // Signals feed loads on tab switch only (avoids duplicate /api/recommendations traffic)
@@ -8154,13 +8217,105 @@
           this.fetchRiskAlerts();
         }catch(e){}
       },
+      replayModeActive(){return !!(this.ccReplayAsOf&&String(this.ccReplayAsOf).trim());},
+      ccReplayQuery(){
+        if(!this.replayModeActive()) return '';
+        return 'as_of='+encodeURIComponent(this.ccReplayAsOf);
+      },
+      ccReplayUrl(url){
+        const base=String(url||'');
+        const q=this.ccReplayQuery();
+        if(!q) return base;
+        return base+(base.indexOf('?')>=0?'&':'?')+q;
+      },
+      async fetchReplayDates(){
+        try{
+          const r=await fetch('/api/cc/replay/dates',{headers:{'X-API-Key':window._apiKey||'dev-secret-local'}});
+          if(!r.ok) return;
+          const d=await r.json();
+          this.ccReplayDates=Array.isArray(d.dates)?d.dates:[];
+          if(!this.tt.date&&this.ccReplayDates.length) this.tt.date=this.ccReplayDates[0];
+        }catch(e){console.warn('replay dates fetch failed',e)}
+      },
+      openTimeTravel(){
+        this.tt.show=true;
+        this.tt.mode=this.replayModeActive()?'whole':(this.tt.mode||'whole');
+        this.tt.err='';
+        if(!this.ccReplayDates.length) this.fetchReplayDates();
+        if(this.replayModeActive()) this.tt.date=this.ccReplayAsOf;
+      },
+      _persistReplayState(){
+        try{
+          if(this.replayModeActive()){
+            localStorage.setItem('cc_replay_as_of',this.ccReplayAsOf);
+            if(this.ccReplayNote) localStorage.setItem('cc_replay_note',this.ccReplayNote);
+            else localStorage.removeItem('cc_replay_note');
+          }else{
+            localStorage.removeItem('cc_replay_as_of');
+            localStorage.removeItem('cc_replay_note');
+          }
+        }catch(e){}
+      },
+      _hydrateReplayState(){
+        try{
+          const saved=localStorage.getItem('cc_replay_as_of');
+          if(saved&&/^\d{4}-\d{2}-\d{2}$/.test(saved)){
+            this.ccReplayAsOf=saved;
+            this.ccReplayNote=localStorage.getItem('cc_replay_note')||'';
+          }
+        }catch(e){}
+      },
+      async enterWholePageReplay(){
+        const dt=(this.tt.date||'').trim();
+        if(!dt){this.tt.err='Date required (YYYY-MM-DD)';return;}
+        this.tt.err='';this.tt.loading=true;
+        try{
+          const r=await fetch('/api/cc/replay/status?as_of='+encodeURIComponent(dt),{headers:{'X-API-Key':window._apiKey||'dev-secret-local'}});
+          if(!r.ok){
+            let msg='該日期無快照 — 請選擇有 Brief 的日期';
+            try{
+              const j=await r.json();
+              const detail=j.detail||j;
+              if(typeof detail==='string') msg=detail;
+              else if(detail&&detail.error) msg=detail.error;
+              if(detail&&Array.isArray(detail.available_dates)&&detail.available_dates.length){
+                this.ccReplayDates=detail.available_dates;
+                msg+=' · Available: '+detail.available_dates.slice(0,6).join(', ');
+              }
+            }catch(_e){}
+            this.tt.err=msg;return;
+          }
+          const st=await r.json();
+          this.ccReplayAsOf=st.replay_as_of||dt;
+          this.ccReplayNote=st.replay_note||'';
+          this._persistReplayState();
+          this.tt.show=false;
+          await this.refreshReplaySurfaces();
+        }catch(e){this.tt.err=this.formatReplayError(e.message)}
+        finally{this.tt.loading=false}
+      },
+      async exitWholePageReplay(){
+        this.ccReplayAsOf=null;
+        this.ccReplayNote='';
+        this._persistReplayState();
+        this.tt.show=false;
+        await this.fetchCcStatus();
+        await this.fetchToday7();
+        if(this.tab==='signals') await this.fetchRanked({refresh:true});
+      },
+      async refreshReplaySurfaces(){
+        await this.fetchCcStatus();
+        await this.fetchToday7();
+        await this.fetchRanked({refresh:true,force:true});
+      },
       openReplayForDossier(){
         // Pre-fill Time-Travel modal with current dossier ticker, defaulting to 30 days ago.
         const tk=(this.dos?.ticker||'').trim().toUpperCase();
         if(!tk){alert('No ticker selected in dossier');return;}
         const d=new Date();d.setDate(d.getDate()-30);
+        this.tt.mode='ticker';
         this.tt.ticker=tk;
-        this.tt.date=d.toISOString().slice(0,10);
+        this.tt.date=this.replayModeActive()?this.ccReplayAsOf:d.toISOString().slice(0,10);
         this.tt.strategy='all';
         this.tt.data=null;this.tt.err='';
         this.tt.show=true;
@@ -8214,7 +8369,8 @@
         }catch(e){alert('Rotate error: '+e.message)}
       },
       async ccFetch(url, opts={}){
-        if(opts.json||opts.normalize) return this.ccFetchJson(url, opts);
+        const replayUrl=this.ccReplayUrl(url);
+        if(opts.json||opts.normalize) return this.ccFetchJson(replayUrl, opts);
         const tries=opts.retries??3;
         const backoff=opts.backoff??700;
         const timeoutMs=opts.timeoutMs??0;
@@ -9552,6 +9708,143 @@
         if(typeof CCHelpers!=='undefined'&&CCHelpers.researchSurfaceBlock)
           return CCHelpers.researchSurfaceBlock(truth,surface);
         return {now:'MONITOR ONLY',blocker:truth.primary_blocker||'deploy blocked',next:'monitor only'};
+      },
+      researchGettingStartedCtx(){
+        const {watch}=this.playbookFunnelCounts(this.today7.filter_funnel,null);
+        const watchRows=(this.rankedOpps.rows||[]).filter(r=>{
+          const b=String(r.primary_bucket||r.lifecycle_bucket||'').toLowerCase();
+          return b==='watch'||b==='near-miss';
+        });
+        const watchCandidates=Math.max(Number(watch)||0,watchRows.length,(this.today7.near_miss||[]).length);
+        const truth=this.today7.system_truth||{};
+        const fetchBadge=String(this.dataContractFetchBadge()||'').toUpperCase();
+        const boardStale=!!(truth.board_stale||truth.brief_stale||['STALE','FALLBACK','FETCH FAILED'].includes(fetchBadge));
+        const brokerOffline=!this.ibkr?.connected&&!this.ibkr?.session_usable&&this.dataContractBrokerShort()==='OFFLINE';
+        return {watchCandidates,boardStale,brokerOffline};
+      },
+      researchGettingStarted(surface){
+        const ctx=this.researchGettingStartedCtx();
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.researchGettingStarted)
+          return CCHelpers.researchGettingStarted(surface,ctx);
+        return {title:'如何開始 · Getting started',badge:'Research only',now:'',copy:'',blocker:'',next:'',nextButton:'Refresh',examples:[],steps:[]};
+      },
+      agentGettingStartedVisible(){
+        if(this.tab!=='command'&&this.tab!=='today') return false;
+        if(this.aosMonitors.loading) return false;
+        return !((this.aosMonitors.rules||[]).filter(r=>r&&r.enabled!==false).length);
+      },
+      agentMonitorFillExample(text){
+        this.agentMonitor.prompt=String(text||'');
+        this.showExportToast('已填入範例 — 可修改後建立規則');
+      },
+      agentPlaybookWatchTickers(){
+        const out=new Set();
+        const add=t=>{const x=String(t||'').toUpperCase().replace(/[^A-Z0-9.]/g,'');if(x&&x.length<=8)out.add(x);};
+        (this.today7.near_miss||[]).forEach(nm=>add(nm.ticker));
+        (this.rankedOpps.near_miss||[]).forEach(nm=>add(nm.ticker));
+        (this.rankedOpps.rows||[]).forEach(r=>{
+          const b=String(r.primary_bucket||r.lifecycle_bucket||'').toLowerCase();
+          if(b==='watch'||b==='near-miss') add(r.ticker);
+        });
+        return Array.from(out);
+      },
+      async submitAgentMonitorPrompt(){
+        const text=String(this.agentMonitor.prompt||'').trim();
+        if(!text){this.showExportToast('請輸入監察條件');return;}
+        this.agentMonitor.submitting=true;
+        try{
+          const m=text.match(/\b([A-Z]{1,5})\b/);
+          const ticker=m?m[1]:'';
+          const body={label:text.slice(0,80),ticker,class:'stock',rule_type:'thesis_drift',severity:'medium',enabled:true};
+          const r=await fetch('/api/v7/monitors',{method:'POST',headers:{'Content-Type':'application/json','X-API-Key':window._apiKey||'dev-secret-local'},body:JSON.stringify(body)});
+          if(!r.ok) throw new Error('HTTP '+r.status);
+          this.agentMonitor.prompt='';
+          await this.fetchAosMonitors();
+          this.showExportToast('已建立監察規則 — 僅提醒，不會下單');
+        }catch(e){
+          this.showExportToast('建立規則失敗 — '+e.message);
+        }finally{this.agentMonitor.submitting=false;}
+      },
+      async agentCreateRulesFromPlaybook(){
+        const tickers=this.agentPlaybookWatchTickers();
+        if(!tickers.length){
+          this.showExportToast('Playbook 尚無 Watch 候選 — 正在刷新…');
+          await this.fetchRanked({refresh:true});
+          return;
+        }
+        this.agentMonitor.submitting=true;
+        try{
+          let n=0;
+          for(const t of tickers.slice(0,5)){
+            const body={label:'Watch '+t+' — Playbook candidate',ticker:t,class:'stock',rule_type:'thesis_drift',severity:'medium',enabled:true};
+            const r=await fetch('/api/v7/monitors',{method:'POST',headers:{'Content-Type':'application/json','X-API-Key':window._apiKey||'dev-secret-local'},body:JSON.stringify(body)});
+            if(r.ok) n++;
+          }
+          await this.fetchAosMonitors();
+          this.showExportToast('已從 Playbook 建立 '+n+' 條監察規則');
+        }catch(e){
+          this.showExportToast('建立規則失敗 — '+e.message);
+        }finally{this.agentMonitor.submitting=false;}
+      },
+      stratLabGettingStartedVisible(){
+        if(this.stratHealth.loading) return false;
+        const n=(this.stratHealth.data?.strategies||[]).length;
+        return !n&&!this.stratLabDraft.draftId;
+      },
+      generateStratLabDraft(){
+        const sid=String(this.stratLabDraft.strategyId||'').trim().toLowerCase().replace(/[^a-z0-9_]/g,'');
+        if(!sid){this.showExportToast('請輸入或選擇策略 ID');return;}
+        this.stratLabDraft.generating=true;
+        this.stratLabDraft.strategyId=sid;
+        this.stratLabDraft.draftId='draft_'+sid+'_'+Date.now().toString(36).slice(-6);
+        this.stratLabDraft.generating=false;
+        this.showExportToast('研究草稿已建立 — 驗證後到 Playbook 審閱（無部署權限）');
+      },
+      shadowGettingStartedVisible(){
+        const abActive=(this.selfLearn.ab?.active||[]).length;
+        const ledgerN=Number(this.ledgerView.stats?.count||0);
+        const expN=(this.selfLearn.ledger?.entries||[]).length;
+        return !abActive&&!ledgerN&&!expN;
+      },
+      async importShadowTradesCsv(ev){
+        const file=ev?.target?.files?.[0];
+        if(!file) return;
+        this.shadowImport.busy=true;
+        try{
+          const text=await file.text();
+          const lines=text.trim().split(/\r?\n/).filter(Boolean);
+          if(lines.length<2) throw new Error('CSV 需要標題列與至少一筆交易');
+          const headers=lines[0].split(',').map(h=>h.trim().toLowerCase());
+          const idx=k=>headers.indexOf(k);
+          let imported=0;
+          for(let i=1;i<lines.length;i++){
+            const cols=lines[i].split(',').map(c=>c.trim());
+            const ticker=(cols[idx('ticker')]||'').toUpperCase();
+            const entry=parseFloat(cols[idx('entry_price')]);
+            const exit=parseFloat(cols[idx('exit_price')]);
+            if(!ticker||!entry||!exit) continue;
+            const body={
+              ticker,
+              direction:(cols[idx('direction')]||'LONG').toUpperCase(),
+              entry_price:entry,
+              exit_price:exit,
+              entry_time:cols[idx('entry_time')]||'',
+              exit_time:cols[idx('exit_time')]||'',
+              strategy_id:cols[idx('strategy_id')]||'shadow_import',
+              source:'csv_import',
+            };
+            const r=await fetch('/api/ledger/close-trade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+            if(r.ok) imported++;
+          }
+          if(!imported) throw new Error('無法解析 CSV 列 — 請檢查欄位格式');
+          await this.fetchLedgerView(true);
+          this.showExportToast('已匯入 '+imported+' 筆交易紀錄 — 研究用診斷');
+        }catch(e){
+          this.showExportToast('匯入失敗 — '+e.message);
+        }finally{
+          this.shadowImport.busy=false;
+          if(ev?.target) ev.target.value='';
+        }
       },
       ibkrRepairStepState(stepKey){
         const st=(typeof CCHelpers!=='undefined'&&CCHelpers.ibkrBuildRepairChecklistState)
@@ -14242,7 +14535,7 @@
           if(!r.ok){
             if(r.status===503){
               try{
-                const sr=await fetch('/api/v7/playbook/ranked/snapshot?limit=30');
+                const sr=await fetch(this.ccReplayUrl('/api/v7/playbook/ranked/snapshot?limit=30'));
                 if(sr.ok){
                   this.applyRankedPayload(await sr.json(),{fromSnapshot:true});
                   return;
