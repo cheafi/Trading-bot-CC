@@ -29,7 +29,39 @@ logger = logging.getLogger(__name__)
 DISCOVERY_SHORTLIST_CAP = 30
 DISCOVERY_QUALIFIED_WATCH_CAP = 10
 DISCOVERY_HIGH_PRIORITY_CAP = 5
+DISCOVERY_SHORTLIST_CAP_EXPANDED = 50
+DISCOVERY_QUALIFIED_WATCH_CAP_EXPANDED = 20
+DISCOVERY_HIGH_PRIORITY_CAP_EXPANDED = 8
 _DEBUG_ONLY_SCANNERS = frozenset({"similar_pattern"})
+
+
+def discovery_funnel_caps(*, expanded: bool = False) -> Dict[str, int]:
+    """Return active funnel caps — expanded only when env + fresh ranked board."""
+    if expanded:
+        return {
+            "shortlist": DISCOVERY_SHORTLIST_CAP_EXPANDED,
+            "qualified_watch": DISCOVERY_QUALIFIED_WATCH_CAP_EXPANDED,
+            "high_priority": DISCOVERY_HIGH_PRIORITY_CAP_EXPANDED,
+        }
+    return {
+        "shortlist": DISCOVERY_SHORTLIST_CAP,
+        "qualified_watch": DISCOVERY_QUALIFIED_WATCH_CAP,
+        "high_priority": DISCOVERY_HIGH_PRIORITY_CAP,
+    }
+
+
+def resolve_discovery_funnel_caps(*, ranked_board_fresh: bool = True) -> Dict[str, int]:
+    """
+    CC_SCAN_UNIVERSE_MODE=expanded widens funnel caps (50/20/8) only when
+    ranked board is fresh — never on stale/fallback boards.
+    """
+    import os
+
+    mode = os.environ.get("CC_SCAN_UNIVERSE_MODE", "").strip().lower()
+    expanded = mode == "expanded" and bool(ranked_board_fresh)
+    caps = discovery_funnel_caps(expanded=expanded)
+    caps["expanded_mode"] = int(expanded)
+    return caps
 
 
 # ── Scanner Category ─────────────────────────────────────────────────
@@ -1146,10 +1178,15 @@ class ScannerMatrix:
         *,
         universe_size: int = 0,
         score_display_mode: str = "live",
+        ranked_board_fresh: bool = True,
     ) -> Dict[str, Any]:
         """
         Cross-scanner overlap ranking and discovery verdict for Discovery tab.
         """
+        caps = resolve_discovery_funnel_caps(ranked_board_fresh=ranked_board_fresh)
+        shortlist_cap = int(caps["shortlist"])
+        watch_cap = int(caps["qualified_watch"])
+        priority_cap = int(caps["high_priority"])
         regime_label = str(regime.get("label") or regime.get("regime") or "—")
         by_ticker: Dict[str, Dict[str, Any]] = {}
         scanner_totals: Dict[str, int] = {}
@@ -1254,13 +1291,13 @@ class ScannerMatrix:
             m
             for m in merged_top_names
             if m.get("urgency") in ("URGENT", "HIGH") and m.get("action") != "AVOID"
-        ][:DISCOVERY_HIGH_PRIORITY_CAP]
+        ][:priority_cap]
         qualified_watch = [
             m
             for m in merged_top_names
             if m.get("action") in ("TRADE", "WATCH") and m not in high_priority
-        ][:DISCOVERY_QUALIFIED_WATCH_CAP]
-        merged_top_names = merged_top_names[:DISCOVERY_SHORTLIST_CAP]
+        ][:watch_cap]
+        merged_top_names = merged_top_names[:shortlist_cap]
 
         best_scanner_today: Optional[str] = None
         if scanner_totals:
@@ -1312,9 +1349,10 @@ class ScannerMatrix:
             "discovery_verdict": discovery_verdict,
             "scanner_overlap": scanner_overlap,
             "funnel_caps": {
-                "shortlist": DISCOVERY_SHORTLIST_CAP,
-                "qualified_watch": DISCOVERY_QUALIFIED_WATCH_CAP,
-                "high_priority": DISCOVERY_HIGH_PRIORITY_CAP,
+                "shortlist": shortlist_cap,
+                "qualified_watch": watch_cap,
+                "high_priority": priority_cap,
+                "expanded_mode": caps.get("expanded_mode", 0),
                 "shortlist_count": len(merged_top_names),
                 "qualified_watch_count": len(qualified_watch),
                 "high_priority_count": len(high_priority),

@@ -205,14 +205,33 @@ def _has_levels(cr: Any) -> bool:
         return False
 
 
+def _council_deploy_score_min() -> float:
+    from src.services.cc_perf_cache import env_float
+
+    return env_float("CC_COUNCIL_DEPLOY_SCORE_MIN", 7.5)
+
+
+def _council_deploy_conf_min() -> float:
+    from src.services.cc_perf_cache import env_float
+
+    return env_float("CC_COUNCIL_DEPLOY_CONF_MIN", 0.60)
+
+
+def _council_deploy_rr_min() -> float:
+    from src.services.cc_perf_cache import env_float
+
+    return env_float("CC_COUNCIL_DEPLOY_RR_MIN", 2.0)
+
+
 def is_execution_ready(cr: Any) -> bool:
     """Fully deployable: TRADE-grade with levels, R:R, and confidence."""
     act = _action(cr)
     if act not in _TRADE_ACTIONS:
         return False
-    if _score(cr) < 7.5 or _conf(cr) < 0.60:
+    if _score(cr) < _council_deploy_score_min() or _conf(cr) < _council_deploy_conf_min():
         return False
-    if _rr(cr) > 0 and _rr(cr) < 2.0:
+    rr_min = _council_deploy_rr_min()
+    if _rr(cr) > 0 and _rr(cr) < rr_min:
         return False
     return _has_levels(cr)
 

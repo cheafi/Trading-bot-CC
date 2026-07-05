@@ -16,6 +16,68 @@ logger = logging.getLogger(__name__)
 _TODAY_SCAN_TIMEOUT = 3.0
 
 
+async def _fetch_market_pulse(request: Request) -> Dict[str, Any]:
+    """Indices + sector leaders/laggards (bounded parallel history fetches)."""
+    market_pulse: Dict[str, Any] = {}
+    try:
+        _LIVE_INDICES = request.app.state.live_indices
+        _LIVE_SECTORS = request.app.state.live_sectors
+        mds = request.app.state.market_data
+
+        async def _fetch_idx(sym, name):
+            try:
+                hist = await mds.get_history(sym, period="5d", interval="1d")
+                if hist is not None and len(hist) >= 2:
+                    c = "Close" if "Close" in hist.columns else "close"
+                    cur = float(hist[c].iloc[-1])
+                    prev = float(hist[c].iloc[-2])
+                    chg = round((cur / prev - 1) * 100, 2)
+                    return {
+                        "symbol": sym,
+                        "name": name,
+                        "price": round(cur, 2),
+                        "change_pct": chg,
+                    }
+            except Exception:
+                pass
+            return None
+
+        async def _fetch_sec(sym, name):
+            try:
+                hist = await mds.get_history(sym, period="5d", interval="1d")
+                if hist is not None and len(hist) >= 2:
+                    c = "Close" if "Close" in hist.columns else "close"
+                    cur = float(hist[c].iloc[-1])
+                    prev = float(hist[c].iloc[-2])
+                    chg = round((cur / prev - 1) * 100, 2)
+                    return {"symbol": sym, "name": name, "change_pct": chg}
+            except Exception:
+                pass
+            return None
+
+        idx_results, sec_results = await asyncio.wait_for(
+            asyncio.gather(
+                asyncio.gather(*[_fetch_idx(sym, name) for sym, name in _LIVE_INDICES]),
+                asyncio.gather(
+                    *[_fetch_sec(sym, name) for sym, name in _LIVE_SECTORS[:6]]
+                ),
+            ),
+            timeout=2.5,
+        )
+        idx_data = [r for r in idx_results if r]
+        sec_data = sorted(
+            [r for r in sec_results if r], key=lambda x: x["change_pct"], reverse=True
+        )
+        market_pulse = {
+            "indices": idx_data,
+            "sector_leaders": sec_data[:3],
+            "sector_laggards": (sec_data[-3:][::-1] if len(sec_data) > 3 else []),
+        }
+    except Exception as exc:
+        logger.debug("Market pulse unavailable: %s", exc)
+    return market_pulse
+
+
 @dataclass
 class TodaySideContext:
     equity_dd_pct: Optional[float]
@@ -137,8 +199,11 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
     )
     from src.services.regime_service import get_regime as _fetch_regime
 
-    # 1. Market Regime
-    regime_state = await _fetch_regime(request)
+    # 1. Market Regime + pulse (independent I/O — run in parallel)
+    regime_state, market_pulse = await asyncio.gather(
+        _fetch_regime(request),
+        _fetch_market_pulse(request),
+    )
     regime_label = getattr(regime_state, "regime", "NEUTRAL")
     should_trade = getattr(regime_state, "should_trade", True)
     confidence = getattr(regime_state, "confidence", 0.5)
@@ -181,72 +246,7 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         else ("RISK_OFF" if regime_label == "RISK_OFF" else "NEUTRAL")
     )
 
-    # 2. Market pulse — fetch indices/sectors from live endpoint
-    market_pulse = {}
-    try:
-        _LIVE_INDICES = request.app.state.live_indices
-        _LIVE_SECTORS = request.app.state.live_sectors
-
-        mds = request.app.state.market_data
-        # Quick lookup from cache if available — fetch all in parallel
-        idx_data = []
-        sec_data = []
-
-        async def _fetch_idx(sym, name):
-            try:
-                hist = await mds.get_history(sym, period="5d", interval="1d")
-                if hist is not None and len(hist) >= 2:
-                    c = "Close" if "Close" in hist.columns else "close"
-                    cur = float(hist[c].iloc[-1])
-                    prev = float(hist[c].iloc[-2])
-                    chg = round((cur / prev - 1) * 100, 2)
-                    return {
-                        "symbol": sym,
-                        "name": name,
-                        "price": round(cur, 2),
-                        "change_pct": chg,
-                    }
-            except Exception:
-                pass
-            return None
-
-        async def _fetch_sec(sym, name):
-            try:
-                hist = await mds.get_history(sym, period="5d", interval="1d")
-                if hist is not None and len(hist) >= 2:
-                    c = "Close" if "Close" in hist.columns else "close"
-                    cur = float(hist[c].iloc[-1])
-                    prev = float(hist[c].iloc[-2])
-                    chg = round((cur / prev - 1) * 100, 2)
-                    return {"symbol": sym, "name": name, "change_pct": chg}
-            except Exception:
-                pass
-            return None
-
-        import asyncio as _aio
-
-        idx_results, sec_results = await _aio.wait_for(
-            _aio.gather(
-                _aio.gather(*[_fetch_idx(sym, name) for sym, name in _LIVE_INDICES]),
-                _aio.gather(
-                    *[_fetch_sec(sym, name) for sym, name in _LIVE_SECTORS[:6]]
-                ),
-            ),
-            timeout=2.5,
-        )
-        idx_data = [r for r in idx_results if r]
-        sec_data = sorted(
-            [r for r in sec_results if r], key=lambda x: x["change_pct"], reverse=True
-        )
-        market_pulse = {
-            "indices": idx_data,
-            "sector_leaders": sec_data[:3],
-            "sector_laggards": (sec_data[-3:][::-1] if len(sec_data) > 3 else []),
-        }
-    except Exception as exc:
-        logger.debug("Market pulse unavailable: %s", exc)
-
-    # 3. Scanner cache (app.state.scan_cache aliases module _scan_cache from lifespan)
+    # 2. Market pulse already fetched alongside regime (app.state.scan_cache aliases module _scan_cache from lifespan)
     from src.services.cc_live_policy import (
         build_live_unavailable_today_payload,
         cc_live_data_only_enabled,
@@ -888,19 +888,31 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         ),
     )
     from src.services.index_regime import build_index_regime_for_today
+    from src.services.passive_baseline import build_passive_baseline_for_today
 
-    index_regime_summary = await build_index_regime_for_today(
-        request,
-        market_regime={
-            "trend": trend_label,
-            "vix": round(vix_val, 1),
-            "breadth": round(breadth * 100),
-            "should_trade": should_trade,
-            "tradeability": tradeability,
-            "volatility": vol_label,
-        },
-        cross_asset=cross_asset_confirmation,
-        funnel=funnel,
+    pf_holdings = side_ctx.pf_holdings
+    pf_count = side_ctx.pf_count
+    pf_local_only = side_ctx.pf_local_only
+    index_regime_summary, passive_baseline = await asyncio.gather(
+        build_index_regime_for_today(
+            request,
+            market_regime={
+                "trend": trend_label,
+                "vix": round(vix_val, 1),
+                "breadth": round(breadth * 100),
+                "should_trade": should_trade,
+                "tradeability": tradeability,
+                "volatility": vol_label,
+            },
+            cross_asset=cross_asset_confirmation,
+            funnel=funnel,
+        ),
+        build_passive_baseline_for_today(
+            opportunities=all_opps_for_action,
+            deployable_count=execution_ready_count,
+            position_count=pf_count,
+            local_only=pf_local_only,
+        ),
     )
     regime_strip = {
         "line": index_regime_summary.get("strip_line") or index_regime_summary.get("summary"),
@@ -1021,7 +1033,6 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
     from src.services.decision_hierarchy import hierarchy_for_dashboard
     from src.services.decision_quality_naval import naval_clarity_strip_for_today
     from src.services.index_fund_judgment import index_fund_posture_strip_for_today
-    from src.services.passive_baseline import build_passive_baseline_for_today
     from src.services.principles_engine import principles_posture_for_today
     from src.services.score_families import complexity_verdict
     from src.services.surface_authority import authority_strip_for_today
@@ -1112,15 +1123,6 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         deployable_count=execution_ready_count,
         net_edge=best_net,
         tradeability=tradeability,
-    )
-    pf_holdings = side_ctx.pf_holdings
-    pf_count = side_ctx.pf_count
-    pf_local_only = side_ctx.pf_local_only
-    passive_baseline = await build_passive_baseline_for_today(
-        opportunities=all_opps_for_action,
-        deployable_count=execution_ready_count,
-        position_count=pf_count,
-        local_only=pf_local_only,
     )
     surface_authority = authority_strip_for_today(
         tradeability=decision_model.get("honest_tradeability") or tradeability,
@@ -1355,12 +1357,21 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         "truth_strip": system_truth.get("truth_strip") or "",
     }
     from src.services.opportunity_quality import build_opportunity_status
+    from src.services.options_availability import batch_options_availability
 
+    deploy_blocked = not bool(system_truth.get("deploy_authority"))
+    options_signals = batch_options_availability(
+        valid_top5 + list(near_miss or []),
+        deploy_blocked=deploy_blocked,
+        limit=5,
+    )
     opportunity_status = build_opportunity_status(
         system_truth,
         candidates=valid_top5,
         near_miss=near_miss if not brief_expired or live_board_available else [],
         unlock_deploy=unlock_deploy,
+        sector_leaders=market_pulse.get("sector_leaders"),
+        options_signals=options_signals,
     )
     todays_decision = {
         **todays_decision,
