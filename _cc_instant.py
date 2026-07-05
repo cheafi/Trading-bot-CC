@@ -36,6 +36,9 @@ TEMPLATE_BYTES = TEMPLATE.encode()
 TEMPLATE_GZIP = gzip.compress(TEMPLATE_BYTES)
 _backend_ready = False
 _start = time.time()
+_PROXY_JSON_CACHE: dict[str, tuple[float, bytes]] = {}
+_PROXY_JSON_TTL = float(os.environ.get("CC_INSTANT_PROXY_TTL", "20"))
+_TODAY_PROXY_TTL = float(os.environ.get("CC_INSTANT_TODAY_TTL", "25"))
 _SNAPSHOT_PATH = Path("data/market_overview_last_good.json")
 _BRIEF_GLOB = Path("data")
 _RANKED_SNAPSHOT_PATH = Path("data/cache/playbook_ranked_snapshot.json")
@@ -91,6 +94,36 @@ def _maybe_stamp_degraded_body(body: bytes) -> bytes:
         if not stamped.get("instant_degraded"):
             return body
     return json.dumps(stamped).encode()
+
+
+def _proxy_cache_ttl(path_only: str) -> float:
+    if path_only == "/api/v7/today":
+        return _TODAY_PROXY_TTL
+    if path_only in ("/api/ops/cc-header", "/api/v7/playbook/ranked"):
+        return _PROXY_JSON_TTL
+    return 0.0
+
+
+def _proxy_cache_get(path_only: str) -> bytes | None:
+    ttl = _proxy_cache_ttl(path_only)
+    if ttl <= 0:
+        return None
+    entry = _PROXY_JSON_CACHE.get(path_only)
+    if not entry:
+        return None
+    ts, body = entry
+    if (time.time() - ts) > ttl:
+        return None
+    return body
+
+
+def _proxy_cache_put(path_only: str, body: bytes, *, status: int = 200) -> None:
+    if status != 200 or not body:
+        return
+    ttl = _proxy_cache_ttl(path_only)
+    if ttl <= 0:
+        return
+    _PROXY_JSON_CACHE[path_only] = (time.time(), body)
 
 
 def _proxy_timeout(path: str) -> int:
@@ -1994,6 +2027,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path_only = self.path.split("?", 1)[0]
         degrade_reason = "backend importing — full API still loading"
 
+        cached_proxy = _proxy_cache_get(path_only)
+        if cached_proxy is not None and path_only in (
+            "/api/v7/today",
+            "/api/ops/cc-header",
+            "/api/v7/playbook/ranked",
+        ):
+            self._send_json(cached_proxy)
+            return
+
         if _mark_backend_ready():
             if self._proxy():
                 return
@@ -2086,6 +2128,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "/api/ibkr/"
             ):
                 return False
+            path_only = self.path.split("?", 1)[0]
+            if status == 200 and "application/json" in ct.lower():
+                _proxy_cache_put(path_only, data, status=status)
             self.send_response(status)
             self.send_header("Content-Type", ct)
             self._cors_headers()

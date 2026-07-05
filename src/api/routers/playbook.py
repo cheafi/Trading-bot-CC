@@ -36,6 +36,7 @@ _RANKED_LOAD_TIMEOUT_SECONDS = 15.0
 _RANKED_TIMEOUT_SECONDS = 30.0
 _ranked_cache: Dict[str, Dict[str, Any]] = {}
 _ranked_refreshing: set[str] = set()
+_RANKED_CACHE_TTL = 120.0  # seconds — env CC_RANKED_CACHE_TTL
 _FLOW_CACHE_TTL = 10 * 60
 _FLOW_LOAD_TIMEOUT_SECONDS = 2.5
 _flow_cache: Dict[str, Any] = {"ts": 0.0, "data": None}
@@ -160,6 +161,12 @@ def _get_scanner():
     return ScannerMatrix()
 
 
+def _ranked_cache_ttl() -> float:
+    from src.services.cc_perf_cache import env_float
+
+    return env_float("CC_RANKED_CACHE_TTL", _RANKED_CACHE_TTL)
+
+
 def _ranked_cache_key(limit: int, action: str | None, sector: str | None) -> str:
     return f"{limit}:{(action or '').upper()}:{(sector or '').upper()}"
 
@@ -169,11 +176,12 @@ def _get_ranked_cached(key: str, *, allow_stale: bool = False) -> Dict[str, Any]
     if not entry:
         return None
     age = time.time() - entry["ts"]
-    if allow_stale or age < _RANKED_CACHE_TTL:
+    ttl = _ranked_cache_ttl()
+    if allow_stale or age < ttl:
         return {
             **entry["data"],
             "cached": True,
-            "stale": age >= _RANKED_CACHE_TTL,
+            "stale": age >= ttl,
             "age_seconds": int(age),
         }
     return None

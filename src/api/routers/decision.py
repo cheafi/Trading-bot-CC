@@ -37,9 +37,15 @@ _learning_loop_instance = None
 _meta_instance = None
 _today_cache: Optional[Dict[str, Any]] = None
 _today_cache_ts: float = 0.0
+_today_cache_fp: str = ""
 _today_lock = asyncio.Lock()
-_TODAY_CACHE_TTL = 90.0
 _TODAY_SCAN_TIMEOUT = 3.0
+
+
+def _today_cache_ttl() -> float:
+    from src.services.cc_perf_cache import env_float
+
+    return env_float("CC_TODAY_CACHE_TTL", 90.0)
 
 
 def _stale_today_payload(reason: str) -> Dict[str, Any]:
@@ -358,25 +364,40 @@ async def today_summary(
                 detail=replay_snapshot_error_detail(exc),
             ) from exc
 
-    global _today_cache, _today_cache_ts
+    from src.services.cc_perf_cache import json_cache_response, today_cache_fingerprint
+
+    global _today_cache, _today_cache_ts, _today_cache_fp
     now_ts = time.time()
-    if _today_cache and now_ts - _today_cache_ts < _TODAY_CACHE_TTL:
+    ttl = _today_cache_ttl()
+    fp = today_cache_fingerprint(request)
+    if (
+        _today_cache
+        and now_ts - _today_cache_ts < ttl
+        and _today_cache_fp == fp
+    ):
         trust = _today_cache.get("trust") or {}
         if trust.get("stale") and _scan_cache_has_recs(request):
             _today_cache = None
             _today_cache_ts = 0.0
+            _today_cache_fp = ""
         else:
-            return _today_cache
+            return json_cache_response(_today_cache, request)
     if _today_lock.locked():
         cached = _cached_today_payload("fresh scan already running")
         if cached:
-            return cached
-        return _stale_today_payload("fresh scan already running")
+            return json_cache_response(cached, request, max_age=5)
+        stale = _stale_today_payload("fresh scan already running")
+        return json_cache_response(stale, request, max_age=0)
 
     async with _today_lock:
         now_ts = time.time()
-        if _today_cache and now_ts - _today_cache_ts < _TODAY_CACHE_TTL:
-            return _today_cache
+        fp = today_cache_fingerprint(request)
+        if (
+            _today_cache
+            and now_ts - _today_cache_ts < ttl
+            and _today_cache_fp == fp
+        ):
+            return json_cache_response(_today_cache, request)
 
         from src.services.today_payload_builder import build_today_payload
 
@@ -384,14 +405,17 @@ async def today_summary(
         if cache_ok:
             _today_cache = payload
             _today_cache_ts = time.time()
+            _today_cache_fp = fp
         else:
             _today_cache = None
             _today_cache_ts = 0.0
+            _today_cache_fp = ""
         try:
             request.app.state.today_v7_cache = payload
         except Exception:
             pass
-        return payload
+        max_age = 30 if cache_ok else 0
+        return json_cache_response(payload, request, max_age=max_age)
 
 # ══════════════════════════════════════════════════════════════════════
 # /api/v7/opportunities — Full Ranked Board

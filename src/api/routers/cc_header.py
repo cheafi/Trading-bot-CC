@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time as _time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -12,11 +13,13 @@ from src.api.app_state import get_engine
 from src.api.deps import optional_api_key, sanitize_for_json
 from src.api.routers.brief_regenerate import _latest_brief
 from src.core.config import get_settings
+from src.services.cc_perf_cache import cc_header_cache_key, env_float, json_cache_response
 from src.services.ibkr_service import get_ibkr_service
 from src.services.surface_authority import header_summary_for_tab, resolve_surface_mode
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["ops"])
+_CC_HEADER_CACHE_TTL = env_float("CC_HEADER_CACHE_TTL", 30.0)
 
 
 async def _provider_components(
@@ -149,6 +152,16 @@ async def cc_header(
     _=optional_api_key,
 ):
     """Aggregate status for CC top bar (mode, data, brief, alerts, IBKR)."""
+    cache_key = cc_header_cache_key(tab)
+    now_mono = _time.monotonic()
+    if not as_of:
+        store = getattr(request.app.state, "cc_header_cache", None) or {}
+        entry = store.get(cache_key)
+        if entry and (now_mono - float(entry.get("ts") or 0)) < _CC_HEADER_CACHE_TTL:
+            cached_payload = entry.get("payload")
+            if isinstance(cached_payload, dict):
+                return json_cache_response(cached_payload, request, max_age=15)
+
     from src.services.data_freshness_service import freshness_report
 
     now = datetime.now(timezone.utc)
@@ -326,4 +339,10 @@ async def cc_header(
             ) from exc
         payload.update(overlay)
         payload["header_summary"] = overlay.get("degraded_banner")
-    return payload
+    if not as_of:
+        store = getattr(request.app.state, "cc_header_cache", None) or {}
+        if not isinstance(store, dict):
+            store = {}
+        store[cache_key] = {"payload": payload, "ts": now_mono}
+        request.app.state.cc_header_cache = store
+    return json_cache_response(payload, request, max_age=15)

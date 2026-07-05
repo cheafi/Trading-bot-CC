@@ -3574,7 +3574,12 @@ _MAX_SIGNALS_PER_SECTOR = RISK.max_correlated_names  # default 3
 
 _scan_cache: dict = {"recs": [], "scores": {}, "ts": 0.0}
 _scan_lock = asyncio.Lock()
-_SCAN_CACHE_TTL = 300  # 5 minutes
+
+
+def _scan_cache_ttl() -> float:
+    from src.services.cc_perf_cache import env_float
+
+    return env_float("CC_SCAN_CACHE_TTL", 300.0)
 
 # Negative cache: tickers that fail consistently are skipped for 1 hour
 _neg_cache: dict[str, float] = {}  # ticker → timestamp of last failure
@@ -3835,7 +3840,7 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
     import numpy as np
 
     now = _t.time()
-    if _scan_cache["recs"] and (now - _scan_cache["ts"]) < _SCAN_CACHE_TTL:
+    if _scan_cache["recs"] and (now - _scan_cache["ts"]) < _scan_cache_ttl():
         return _scan_cache["recs"][:limit], _scan_cache["scores"]
 
     # One universe scan at a time — concurrent scans were starving market_data/yfinance.
@@ -3850,7 +3855,7 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
 
     async with _scan_lock:
         now = _t.time()
-        if _scan_cache["recs"] and (now - _scan_cache["ts"]) < _SCAN_CACHE_TTL:
+        if _scan_cache["recs"] and (now - _scan_cache["ts"]) < _scan_cache_ttl():
             return _scan_cache["recs"][:limit], _scan_cache["scores"]
 
         mds = app.state.market_data
@@ -4491,7 +4496,7 @@ async def get_recommendations(limit: int = Query(10, ge=1, le=50)):
                     "tickers_checked": tickers_checked,
                     "signals_found": len(scanned),
                     "strategies": ["momentum", "breakout", "swing", "mean_reversion"],
-                    "cache_ttl_sec": _SCAN_CACHE_TTL,
+                    "cache_ttl_sec": _scan_cache_ttl(),
                 }
                 if scanned:
                     cached_recs = scanned
