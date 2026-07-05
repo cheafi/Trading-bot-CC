@@ -79,6 +79,12 @@ def test_cc_os_details_collapsed_on_wait():
     assert ':open="!isWaitDay()"' in INDEX_HTML
 
 
+def test_opportunity_status_panel_in_dashboard():
+    assert 'data-cc="opportunity-status-panel"' in INDEX_HTML
+    assert "opportunityStatusCollapsed" in INDEX_HTML
+    assert "機會狀態 · Opportunity Status" in INDEX_HTML
+
+
 def test_fetch_scanners_uses_cc_fetch_json():
     start = INDEX_HTML.find("async fetchScanners(cat)")
     end = INDEX_HTML.find("tabAuthorityAlias(t){")
@@ -105,6 +111,8 @@ def test_today_payload_includes_cc_os_and_authority_keys():
         "build_decision_authority",
         '"decision_authority"',
         '"trust"',
+        "build_opportunity_status",
+        '"opportunity_status": opportunity_status',
     ):
         assert needle in TODAY_BUILDER, f"missing {needle}"
 

@@ -658,7 +658,8 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
 
     top5_tickers = {x["ticker"] for x in top5 if x.get("ticker")}
     near_miss = build_near_miss_candidates(council_results, top5_tickers, limit=3)
-    if brief_expired:
+    live_board_available = not scanner_degraded and bool(top5 or near_miss)
+    if brief_expired and not live_board_available:
         near_miss = []
     top5, near_miss, used_brief_fallback = merge_brief_board_fallback(
         top5,
@@ -668,14 +669,21 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
     )
     if brief_expired:
         used_brief_fallback = False
-        if brief_age_days > 0:
+        if live_board_available:
+            narrative = (
+                f"Brief expired {brief_age_days}d — live scanner board active. "
+                "Brief narrative excluded; monitor watch candidates until deploy gates unlock."
+            )
+            if not scanner_reason:
+                scanner_reason = f"Brief expired {brief_age_days}d — using live scanner"
+        elif brief_age_days > 0:
             scanner_reason = scanner_reason or (
                 f"Brief expired {brief_age_days}d — not used for ranking"
             )
-        narrative = (
-            f"Brief expired {brief_age_days}d — not used for ranking. "
-            "No valid candidates. Best action: preserve capital."
-        )
+            narrative = (
+                f"Brief expired {brief_age_days}d — not used for ranking. "
+                "No valid candidates. Best action: preserve capital."
+            )
     elif used_brief_fallback:
         top5_tickers = {x["ticker"] for x in top5 if x.get("ticker")}
         funnel = {
@@ -1252,20 +1260,20 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
     )
     evidence_conflict = build_evidence_conflict(
         top5=valid_top5,
-        near_miss=near_miss if not brief_expired else [],
+        near_miss=near_miss if not brief_expired or live_board_available else [],
         score_reconciliation=score_reconciliation,
         todays_decision=todays_decision,
     )
     top_monitor = build_top_monitor(
         top5=valid_top5,
-        near_miss=near_miss if not brief_expired else [],
+        near_miss=near_miss if not brief_expired or live_board_available else [],
         todays_decision=todays_decision,
     )
     candidate_counts = build_candidate_bucket_counts(
         council_results=council_results,
         funnel=funnel,
         top5=valid_top5,
-        near_miss=near_miss if not brief_expired else [],
+        near_miss=near_miss if not brief_expired or live_board_available else [],
         avoid_grouped=avoid_grouped,
     )
 
@@ -1346,6 +1354,14 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         "operator_block": operator_block.get("dashboard"),
         "truth_strip": system_truth.get("truth_strip") or "",
     }
+    from src.services.opportunity_quality import build_opportunity_status
+
+    opportunity_status = build_opportunity_status(
+        system_truth,
+        candidates=valid_top5,
+        near_miss=near_miss if not brief_expired or live_board_available else [],
+        unlock_deploy=unlock_deploy,
+    )
     todays_decision = {
         **todays_decision,
         "morning_decision_line": system_truth.get("morning_decision_line"),
@@ -1397,6 +1413,7 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         "near_miss": near_miss,
         "no_setup_diagnosis": no_setup_diagnosis,
         "unlock_deploy": unlock_deploy,
+        "opportunity_status": opportunity_status,
         "regime_wait_explanation": regime_wait_explanation,
         "monitor_triggers": monitor_triggers,
         "quant_cluster_hints": quant_cluster_hints,
