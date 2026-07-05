@@ -37,6 +37,7 @@ def test_deploy_open_allows_queue_expansion_signal():
             },
             "qualification_levels": {"deploy_qualified": 1},
             "execution_ready_count": 1,
+            "top_5": [{"ticker": "NVDA", "action": "TRADE"}],
             "execution_readiness": {"trade_handoff_ready": True, "broker_connected": True},
         },
         cc_header={"data_tier": "FRESH"},
