@@ -619,17 +619,17 @@
 		}
 		parts.push("複核路徑見下方清單")
 		var body = parts.length ? parts.join(" · ") : "監察排名 · gate context"
-		return "僅監察 · monitor only — " + body + " · 本頁不授權交易"
+		return "MONITOR ONLY · 僅監察 — " + body + " · 本頁不可下單、不可部署"
 	}
 
 	var AUTHORITY_COPY = {
-		no_trade_authority: "本頁不授權交易 · No trade authority here",
-		monitor_item: "監察候選 · monitor item",
-		research_item: "研究候選 · research item",
+		no_trade_authority: "本頁不可下單 · No trade authority here",
+		monitor_item: "監察候選（不可部署）· monitor item",
+		research_item: "研究候選（僅供觀察）· research item",
 		upgrade_condition: "升級條件 · upgrade condition",
 		review_path: "複核路徑 · review path",
 		scan_evidence: "掃描證據 · scan evidence",
-		playbook_review: "可送交 Playbook 複核 · Playbook review path",
+		playbook_review: "送 Playbook 複核 · Playbook review path",
 	}
 
 	function authorityNoTradeLine() {
@@ -643,34 +643,35 @@
 			return "今日禁止新倉 · No new risk today"
 		}
 		if (o.confirmOnly) {
-			return "僅複核模式 · Confirm-only research"
+			return "僅結構複核 · Confirm-only — structure review only"
 		}
 		if (o.degraded || o.researchOnly) {
-			return "降級研究面 · Degraded research surface"
+			return "研究面已降級 · Degraded research surface"
 		}
-		return "今日不可部署 · No deploy today"
+		return "今日狀態：禁止部署 · No deploy today"
 	}
 
 	function authorityBlockedBlockerLine(opts) {
 		var o = opts || {}
 		var parts = []
-		if (o.primaryBlocker) parts.push(String(o.primaryBlocker))
+		if (o.primaryBlocker) parts.push(localizeOperatorWhy(String(o.primaryBlocker)))
 		if (o.brokerOffline) parts.push("IBKR 未就緒 · broker offline")
 		if (o.deployQualified === 0 && o.deployQualified != null) {
 			parts.push("0 筆通過部署門檻 · 0 deploy-qualified")
 		}
-		if (o.briefFallback) parts.push("備援簡報板 · brief fallback")
-		if (o.execBlocked) parts.push("執行阻斷 · exec blocked")
+		if (o.briefFallback) parts.push("簡報備援看板 · brief fallback")
+		if (o.execBlocked) parts.push("執行已阻斷 · exec blocked")
 		if (o.gatedRegime && o.regimeState && o.regimeState !== o.effectiveState) {
 			parts.push(
 				"體制 " +
 					String(o.regimeState) +
 					" 已閘為 " +
-					String(o.effectiveState || "WAIT")
+					String(o.effectiveState || "WAIT") +
+					" · regime gated"
 			)
 		}
 		if (!parts.length) {
-			parts.push("尚未滿足升級條件 · upgrade conditions not met")
+			parts.push("升級條件未滿足 · upgrade conditions not met")
 		}
 		return parts.join(" · ")
 	}
@@ -681,13 +682,13 @@
 			return AUTHORITY_COPY.playbook_review
 		}
 		if (o.surface === "dossier" && o.confirmOnly) {
-			return "載入完整檔案後再複核 · Load live dossier, then review on Dashboard"
+			return "先載入 live 檔案，再回 Dashboard 複核 · Load live dossier, then review on Dashboard"
 		}
 		if (o.surface === "ibkr") {
 			return "依 IBKR 修復清單逐步連線 · Follow IBKR repair checklist"
 		}
 		if (o.brokerOffline) {
-			return "開啟 IBKR 分頁修復連線 · Open IBKR tab — connect before handoff"
+			return "開啟 IBKR 分頁完成連線 · Open IBKR tab — connect before handoff"
 		}
 		if (o.topSymbol) {
 			return (
@@ -726,7 +727,7 @@
 		var r = row || {}
 		var act = String(r.action || "WATCH").toUpperCase()
 		if (["AVOID", "NO_TRADE", "BLOCKED"].indexOf(act) >= 0) {
-			return "迴避背景 · avoid context"
+			return "迴避參考 · avoid context"
 		}
 		if (["TRADE", "BUY", "BUY_ON_DIP", "STRONG_TRADE"].indexOf(act) >= 0) {
 			return AUTHORITY_COPY.research_item
@@ -745,7 +746,7 @@
 	}
 
 	function discoveryVerdictSpeculativeLabel() {
-		return "頂部研究候選 · top research item"
+		return "頂部研究候選（非交易指令）· top research item"
 	}
 
 	function discoveryVerdictConfirmedLabel(opts) {
@@ -753,6 +754,96 @@
 		if (o.fallback) return "備援監察樣本 · fallback monitor sample"
 		if (o.briefFallback) return "簡報備援樣本 · brief fallback sample"
 		return "多掃描器重合 · multi-scanner overlap"
+	}
+
+	var DOSSIER_MISSING_ZH = {
+		quote: "即時報價",
+		technicals: "技術面模組",
+		peers: "同業比較",
+		options: "期權鏈",
+		catalysts: "催化劑",
+		risk: "風險模組",
+		"Playbook deploy permission": "Playbook 部署權限",
+	}
+
+	var DOSSIER_ACTION_ZH = {
+		retry: "重試即時擷取",
+		"load core": "載入核心模組",
+		"open Playbook": "開啟 Playbook 複核",
+		"no trade plan": "不可建立交易計劃",
+		"no paper draft": "不可紙上模擬",
+		"no sizing": "不可定倉",
+		"no handoff": "不可交接 IBKR",
+		"retry live fetch": "重試即時擷取",
+		"review structure and open Playbook when deploy-qualified":
+			"複核結構，合格後再開 Playbook",
+	}
+
+	function dossierMissingDataLabels(missing) {
+		return (missing || []).map(function (item) {
+			var key = String(item || "").trim()
+			return DOSSIER_MISSING_ZH[key] || key
+		})
+	}
+
+	function localizeDossierActions(items) {
+		return (items || []).map(function (item) {
+			var key = String(item || "").trim()
+			var zh = DOSSIER_ACTION_ZH[key]
+			return zh ? bilingualLine(zh, key) : key
+		})
+	}
+
+	function localizeDossierWhy(why) {
+		var raw = String(why || "").trim()
+		if (!raw) return raw
+		return raw
+			.split(/\s*·\s*/)
+			.map(function (part) {
+				var p = String(part || "").trim()
+				if (p === "live quote unavailable") {
+					return bilingualLine("等待即時報價 — 請按「重試」或先開啟 Playbook", p)
+				}
+				if (p === "no brief row") return bilingualLine("缺少簡報列", p)
+				if (p === "backend loading") return bilingualLine("後端載入中", p)
+				if (p === "instant-degraded") return bilingualLine("即時面已降級", p)
+				if (p === "Live dossier incomplete") {
+					return bilingualLine("live 檔案不完整 — 僅供結構確認", p)
+				}
+				return p
+			})
+			.join(" · ")
+	}
+
+	function localizeDossierNow(now, mode, sym, label) {
+		var raw = String(now || "").trim()
+		if (raw.indexOf("Structure unavailable") >= 0) {
+			return sym
+				? sym + " · 結構不可用 · Structure unavailable"
+				: "結構不可用 · Structure unavailable"
+		}
+		if (raw.indexOf("Loading") >= 0) {
+			return sym ? sym + " · 載入中 · Loading" : "載入中 · Loading dossier"
+		}
+		if (mode === "structure_review_only" || raw.indexOf("CONFIRM ONLY") >= 0) {
+			return sym
+				? sym + " · Confirm-only · 僅結構確認"
+				: "Confirm-only · 僅結構確認"
+		}
+		return raw
+	}
+
+	function localizeDossierOperatorBlock(block, mode) {
+		var b = block || {}
+		var sym = String(b.ticker || "").toUpperCase()
+		return {
+			now: localizeDossierNow(b.now, mode, sym, b.unified_label),
+			why: localizeDossierWhy(b.why),
+			allowed: localizeDossierActions(b.allowed),
+			blocked: localizeDossierActions(b.blocked),
+			missing_data: dossierMissingDataLabels(b.missing_data),
+			next: localizeOperatorNext(b.next || "retry live fetch"),
+		}
 	}
 
 	function dossierConfirmOnlyFourBlocks(opts) {
@@ -767,17 +858,17 @@
 		if (o.partial) missing.push("部分模組")
 		if (o.pending) missing.push("待校準信心度")
 		if (o.rrUnavailable) missing.push("R:R 未確認")
-		if (!missing.length && o.confirmOnly) missing.push("需 live fetch 才授權複核")
+		if (!missing.length && o.confirmOnly) missing.push("需 live fetch 才可複核")
 		var blockers = []
-		if (o.confirmOnly) blockers.push("CONFIRM ONLY — 本頁不授權交易")
-		if (o.boardWait) blockers.push("Dashboard WAIT — 無部署權限")
-		if (o.brokerOffline) blockers.push("IBKR 未就緒")
-		if (o.failedFetch) blockers.push("擷取失敗 — 僅快取研究")
-		if (!blockers.length) blockers.push("研究面 — 非交易觸發")
+		if (o.confirmOnly) blockers.push("Confirm-only · 僅結構確認，不可下單")
+		if (o.boardWait) blockers.push("Dashboard WAIT · 無部署權限")
+		if (o.brokerOffline) blockers.push("IBKR 未就緒 · 不可交接")
+		if (o.failedFetch) blockers.push("擷取失敗 · 僅快取研究")
+		if (!blockers.length) blockers.push("研究面 · 非交易觸發")
 		var safe = []
 		safe.push("閱讀研究檔與升級條件")
 		safe.push("回 Dashboard 確認體制")
-		if (o.hasCached) safe.push("Use cached dossier（仍為 confirm-only）")
+		if (o.hasCached) safe.push("可用快取檔（仍為 confirm-only）")
 		safe.push(AUTHORITY_COPY.playbook_review)
 		return {
 			exists: exists.length ? exists.join(" · ") : "—",
@@ -819,23 +910,84 @@
 		]
 	}
 
+	function ibkrBuildRepairChecklistState(ibkr) {
+		var ib = ibkr || {}
+		var health = ib.health || {}
+		var diag = ib.diagnostics || {}
+		var read = ib.readiness || {}
+		var crit = {}
+		var rows = read.critical_rows || []
+		for (var i = 0; i < rows.length; i++) {
+			if (rows[i] && rows[i].key) crit[rows[i].key] = rows[i].state
+		}
+		var hasIbapi = ib.ibapi_available !== false && diag.ibapi_available !== false
+		if (ib.ibapi_available === false || diag.ibapi_available === false) hasIbapi = false
+		else if (ib.ibapi_available === true || diag.ibapi_available === true) hasIbapi = true
+		var gw = !!(ib.gateway_reachable || diag.gateway_reachable || ib.gw)
+		var apiPortOpen = !!(ib.api_port_open || diag.api_port_open)
+		var connected = !!(ib.connected || ib.session_usable)
+		var accountLoaded =
+			!!ib.account_loaded ||
+			crit.account === "ready" ||
+			health.account_status === "ok" ||
+			!!(ib.account && (ib.account.account || ib.account.net_liquidation != null))
+		var positionsLoaded =
+			crit.positions === "ready" ||
+			(Array.isArray(ib.positions) && ib.positions.length > 0 && connected)
+		var bracketReady =
+			!!read.full_handoff_ready ||
+			read.bracket_status === "ready" ||
+			health.handoff_status === "ready"
+		return {
+			hasIbapi: hasIbapi,
+			gw: gw,
+			apiPortOpen: apiPortOpen,
+			hostConfigured: !!(ib.host || diag.host),
+			connected: connected,
+			accountLoaded: accountLoaded,
+			positionsLoaded: positionsLoaded,
+			bracketReady: bracketReady,
+			sessionStatus: String(health.session_status || diag.session_status || ""),
+		}
+	}
+
 	function ibkrRepairChecklistState(stepKey, ibkrState) {
 		var st = ibkrState || {}
 		var key = String(stepKey || "")
 		if (key === "ibapi") {
 			return st.hasIbapi === false ? "pending" : st.hasIbapi ? "done" : "unknown"
 		}
-		if (key === "tws") return st.gw ? "done" : "pending"
-		if (key === "socket") return st.apiPortOpen ? "done" : st.gw ? "pending" : "pending"
+		if (key === "tws") return st.gw || st.apiPortOpen ? "done" : "pending"
+		if (key === "socket") {
+			if (st.apiPortOpen) return "done"
+			if (st.gw || st.sessionStatus === "connected") return "pending"
+			return "pending"
+		}
 		if (key === "host") return st.hostConfigured ? "done" : "pending"
-		if (key === "connect") return st.connected ? "done" : st.gw ? "pending" : "pending"
+		if (key === "connect") return st.connected ? "done" : st.gw || st.apiPortOpen ? "pending" : "pending"
 		if (key === "verify") {
-			return st.accountLoaded && st.positionsLoaded ? "done" : st.connected ? "pending" : "pending"
+			if (st.accountLoaded && st.positionsLoaded) return "done"
+			if (st.accountLoaded || st.connected) return "pending"
+			return "pending"
 		}
 		if (key === "bracket") {
 			return st.bracketReady ? "done" : st.connected ? "pending" : "pending"
 		}
 		return "unknown"
+	}
+
+	function signalFamilyHealthLine(payload) {
+		var p = payload || {}
+		var sample = Number(p.sample_size != null ? p.sample_size : p.total_trades)
+		var hit = p.hit_rate != null ? p.hit_rate : p.win_rate
+		if (!isFinite(sample) || sample < 1) {
+			return "Uncalibrated · heuristic only"
+		}
+		var hitPct =
+			hit != null && isFinite(Number(hit))
+				? (Number(hit) * (Number(hit) <= 1 ? 100 : 1)).toFixed(0) + "%"
+				: "—"
+		return "n=" + sample + " · hit " + hitPct + " (read-only scaffold)"
 	}
 
 	/** PM strip / trust strip chip tiers — primary authority first, context second. */
@@ -1065,14 +1217,14 @@
 	}
 
 	var DOSSIER_CONFIRM_ONLY_STRIP =
-		"Confirm-only: structure review only · no sizing · no handoff"
+		"Confirm-only · 僅結構確認：無入場價、無止損、無倉位 · no sizing · no handoff"
 	var DOSSIER_PAPER_DRAFT_DISABLED =
-		"Paper draft disabled — live Dossier + Playbook confirmation required."
+		"Paper draft disabled · 紙上模擬已關閉 — 需 live Dossier + Playbook 確認後才可模擬"
 	var DOSSIER_MONITOR_RULE_BUTTON = "Create monitor rule · 建立監察規則"
 	var DOSSIER_MONITOR_RULE_HINT =
-		"Alert only · no sizing · no handoff"
+		"Alert only · 僅提醒，不可定倉、不可交接 · no sizing · no handoff"
 	var DOSSIER_LAGGED_CONTEXT_NOTE =
-		"Lagged / illustrative context · not used for confirmation"
+		"Lagged / illustrative context · 滯後參考，不用於結構確認 · not used for confirmation"
 	var DOSSIER_STRUCTURE_SNAPSHOT_TITLE = "Structure snapshot · 結構快照"
 
 	var DOSSIER_STRUCTURE_LABELS = {
@@ -1128,10 +1280,10 @@
 	function dossierOperatorBlock(mode, payload) {
 		var p = payload || {}
 		var block = p.dossier_operator_block
-		if (block && block.now) return block
+		if (block && block.now) return localizeDossierOperatorBlock(block, mode)
 		var dm = p.dossier_mode || {}
 		if (dm.dossier_operator_block && dm.dossier_operator_block.now) {
-			return dm.dossier_operator_block
+			return localizeDossierOperatorBlock(dm.dossier_operator_block, mode)
 		}
 		var sym = String(p.ticker || p.symbol || "").toUpperCase()
 		var m = String(mode || resolveDossierMode(p))
@@ -1147,7 +1299,7 @@
 		if (!p.has_quote) why.push("live quote unavailable")
 		if (!p.brief_backed) why.push("no brief row")
 		if (m === "loading") why.push("backend loading")
-		return {
+		var block = {
 			now: now,
 			why: why.length ? why.join(" · ") : "Live dossier incomplete",
 			allowed: ["retry", "load core", "open Playbook"],
@@ -1160,6 +1312,7 @@
 			missing_data: dm.missing_data || [],
 			next: "retry live fetch",
 		}
+		return localizeDossierOperatorBlock(block, m)
 	}
 
 	function dossierTradePlanVisible(opts) {
@@ -1561,21 +1714,84 @@
 		var o = opts || {}
 		var mode = String(o.healthMode || "").toLowerCase()
 		if (mode === "loading" || String(o.ccMode || "").toUpperCase() === "LOADING") {
-			return (
-				"Safe now: monitor queue, Guide checklist, dossier core-only — " +
-				"wait for backend import + /health mode=full before sizing or IBKR handoff"
+			return bilingualLine(
+				"現可：查看監察清單、Guide 檢查表、Dossier 核心模組 — 等 /health mode=full 後才可定倉或交接 IBKR",
+				"Safe now: monitor queue, Guide checklist, dossier core-only — wait for backend import + /health mode=full before sizing or IBKR handoff"
 			)
 		}
 		if (o.fetchFailed || o.instantDegraded) {
-			return (
-				"Safe now: Guide, monitors, dossier core-only — " +
-				"retry when fetch badges clear; no deploy from fallback"
+			return bilingualLine(
+				"現可：Guide、監察、Dossier 核心 — 等 fetch 徽章恢復；備援不可部署",
+				"Safe now: Guide, monitors, dossier core-only — retry when fetch badges clear; no deploy from fallback"
 			)
 		}
 		if (o.waitDay) {
-			return "Safe now: upgrade-watch queue · Discovery · Playbook ranking"
+			return bilingualLine(
+				"現可：升級監察清單 · Discovery · Playbook 排名",
+				"Safe now: upgrade-watch queue · Discovery · Playbook ranking"
+			)
 		}
 		return ""
+	}
+
+	function tradeabilityGuidanceLine(opts) {
+		var o = opts || {}
+		if (o.blocked) {
+			return bilingualLine(
+				"禁止部署 — 僅監察；不可定倉、不可交接、不可試單",
+				"Deploy blocked — monitor only; no sizing, no handoff, no pilot entry."
+			)
+		}
+		var tb = String(o.tradeability || "WAIT").toUpperCase()
+		if (tb === "STRONG_TRADE") {
+			return bilingualLine(
+				"多筆可執行 — 僅 A 級且 bracket 就緒才可滿倉",
+				"Multiple execution-ready names — full size only on A-grade with brackets."
+			)
+		}
+		if (tb === "TRADE") {
+			return bilingualLine(
+				"至少一筆可執行 — 標準 1R 定倉",
+				"At least one execution-ready setup — standard 1R sizing."
+			)
+		}
+		if (tb === "SELECTIVE") {
+			if (o.pilotBlocked) {
+				return bilingualLine(
+					"候選審閱：選擇性（僅供觀察，不可部署）— 門檻未清前不可試單",
+					"SELECTIVE review only — monitor candidates; no pilot sizing until gates clear."
+				)
+			}
+			return bilingualLine(
+				"僅試單或單一標的 — 半倉，必須設止損",
+				"Pilot or single-name only — half size, stop required."
+			)
+		}
+		if (tb === "WAIT") {
+			return bilingualLine(
+				"無部署級看板 — 耐心即是決策",
+				"No deploy-grade board — patience is the active decision."
+			)
+		}
+		return bilingualLine("風險關閉 — 禁止新倉", "Risk-off — no new entries.")
+	}
+
+	function dashboardWaitTopComment(opts) {
+		var o = opts || {}
+		if (o.compact) {
+			return o.brokerOffline
+				? "WAIT · 僅監察，勿強行部署；IBKR 離線 · monitor, don't force"
+				: "WAIT · 僅監察，勿強行部署 · monitor, don't force"
+		}
+		var s =
+			"WAIT · 今日不可滿倉部署。看板有監察級標的，但尚未通過 thesis + 時機 + R:R + 執行全堆疊。" +
+			"今日任務是監察，不是強行入場。"
+		if (o.brokerOffline) {
+			s += " IBKR 離線，執行不可用，無標的取得部署權限。"
+		} else {
+			s += " 尚無標的取得部署權限。"
+		}
+		return s
 	}
 
 	var WORKSTATION_PANEL_TITLES = {
@@ -2157,6 +2373,9 @@
 		playbookWhatToMonitorLine: playbookWhatToMonitorLine,
 		partitionHeaderChips: partitionHeaderChips,
 		operatorLoadingSafeLine: operatorLoadingSafeLine,
+		tradeabilityGuidanceLine: tradeabilityGuidanceLine,
+		dashboardWaitTopComment: dashboardWaitTopComment,
+		dossierMissingDataLabels: dossierMissingDataLabels,
 		routeAbortRecoveryHint: routeAbortRecoveryHint,
 		staleRefreshRecoveryLine: staleRefreshRecoveryLine,
 		engineOffRecoveryLine: engineOffRecoveryLine,
@@ -2239,7 +2458,9 @@
 		discoveryVerdictConfirmedLabel: discoveryVerdictConfirmedLabel,
 		dossierConfirmOnlyFourBlocks: dossierConfirmOnlyFourBlocks,
 		ibkrRepairChecklistSteps: ibkrRepairChecklistSteps,
+		ibkrBuildRepairChecklistState: ibkrBuildRepairChecklistState,
 		ibkrRepairChecklistState: ibkrRepairChecklistState,
+		signalFamilyHealthLine: signalFamilyHealthLine,
 		formatEngineState: formatEngineState,
 		resolveEngineState: resolveEngineState,
 		engineStateHeaderLabel: engineStateHeaderLabel,

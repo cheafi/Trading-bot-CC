@@ -11,18 +11,18 @@ CONFIRM_ONLY_LABELS = frozenset(
 )
 
 DOSSIER_CONFIRM_ONLY_STRIP = (
-    "Confirm-only: structure review only · no sizing · no handoff"
+    "Confirm-only · 僅結構確認：無入場價、無止損、無倉位 · no sizing · no handoff"
 )
 
 PAPER_DRAFT_DISABLED_COPY = (
-    "Paper draft disabled — live Dossier + Playbook confirmation required."
+    "Paper draft disabled · 紙上模擬已關閉 — 需 live Dossier + Playbook 確認後才可模擬"
 )
 
 MONITOR_RULE_BUTTON = "Create monitor rule · 建立監察規則"
-MONITOR_RULE_HINT = "Alert only · no sizing · no handoff"
+MONITOR_RULE_HINT = "Alert only · 僅提醒，不可定倉、不可交接 · no sizing · no handoff"
 
 LAGGED_CONTEXT_COLLAPSED_NOTE = (
-    "Lagged / illustrative context · not used for confirmation"
+    "Lagged / illustrative context · 滯後參考，不用於結構確認 · not used for confirmation"
 )
 
 STRUCTURE_SNAPSHOT_TITLE = "Structure snapshot · 結構快照"

@@ -19,6 +19,25 @@ def test_research_surface_block_fields():
     assert "Playbook" in block["next"]
 
 
+def test_research_surface_shadow_surface():
+    from src.services.operator_surface import build_research_surface_block
+
+    block = build_research_surface_block(
+        {"deploy_authority": False, "primary_blocker": "Board WAIT"},
+        surface="shadow",
+    )
+    assert block["surface"] == "shadow"
+    assert "capital" in block["next"].lower() or "promoted" in block["next"].lower()
+    assert block["research_only"] is True
+
+
+def test_research_surface_strategy_details_collapsed_flag():
+    from src.services.operator_surface import build_research_surface_block
+
+    block = build_research_surface_block(surface="strategy")
+    assert block.get("details_collapsed") is True
+
+
 def test_dashboard_operator_block_fields():
     truth = resolve_system_truth(
         {

@@ -64,6 +64,40 @@ def test_ibkr_repair_checklist_has_state_pills():
     )[0]
     assert "ibkr-repair-checklist" in ibkr
     assert "ibkrRepairStepLabel" in ibkr
+    assert "ibkrBuildRepairChecklistState" in INDEX_HTML.read_text(encoding="utf-8")
+
+
+def test_shadow_research_block_now_blocker_next():
+    raw = INDEX_HTML.read_text(encoding="utf-8")
+    shadow = raw.split('data-cc="shadow-surface"')[1].split("Experiment History")[0]
+    assert "researchSurfaceBlock('shadow')" in shadow
+    assert "BLOCKER" in shadow
+    assert "NEXT" in shadow
+
+
+def test_stratlab_details_collapsed_by_default():
+    stratlab = INDEX_HTML.read_text(encoding="utf-8").split("data-cc=\"stratlab-surface\"")[1].split(
+        "data-cc=\"btlab-surface\""
+    )[0]
+    assert 'data-cc="stratlab-details"' in stratlab
+    assert "<details" in stratlab
+    assert "researchSurfaceBlock('strategy')" in stratlab
+
+
+def test_signal_family_health_panel_on_playbook():
+    playbook = INDEX_HTML.read_text(encoding="utf-8").split('data-cc="playbook-surface"')[1].split(
+        "data-cc=\"strat-health-legacy-removed\""
+    )[0]
+    assert 'data-cc="signal-family-health"' in playbook
+    assert "signalFamilyHealthLine()" in playbook
+    assert "Uncalibrated" in INDEX_HTML.read_text(encoding="utf-8") or "heuristic" in playbook
+
+
+def test_cc_helpers_ibkr_repair_state_builder():
+    js = CC_HELPERS.read_text(encoding="utf-8")
+    assert "function ibkrBuildRepairChecklistState" in js
+    assert "ibkrBuildRepairChecklistState: ibkrBuildRepairChecklistState" in js
+    assert "function signalFamilyHealthLine" in js
 
 
 def test_funds_first_screen_blocker_field():

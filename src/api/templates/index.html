@@ -1210,12 +1210,12 @@
         <div style="padding:8px 12px 0" data-cc="operator-block-dashboard">
           <div class="card card-p" style="padding:10px 12px;border-left:3px solid var(--blue);background:rgba(88,166,255,.04)">
             <div class="grid grid-cols-1 gap-1.5 text-[9px]" style="line-height:1.55">
-              <div><span class="font-bold uppercase mr-1" style="color:var(--blue)">NOW</span><span class="text-white font-semibold" x-text="dashboardOperatorBlock().now"></span><span x-show="dashboardOperatorBlock().secondary" class="pill text-[7px] pa ml-1" x-text="dashboardOperatorBlock().secondary"></span></div>
-              <div><span class="font-bold uppercase mr-1" style="color:var(--amber)">WHY</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().why"></span></div>
-              <div><span class="font-bold uppercase mr-1" style="color:var(--green)">ALLOWED</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().allowed"></span></div>
-              <div x-show="dashboardOperatorBlock().blocked"><span class="font-bold uppercase mr-1" style="color:var(--red)">BLOCKED</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().blocked"></span></div>
-              <div><span class="font-bold uppercase mr-1" style="color:var(--purple)">VALID CANDIDATES</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().valid_candidates"></span><span x-show="today7.top_monitor?.label" class="text-[8px] ml-1" style="color:var(--t3)" x-text="'· '+today7.top_monitor.label"></span></div>
-              <div><span class="font-bold uppercase mr-1" style="color:var(--blue)">NEXT</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().next"></span></div>
+              <div><span class="font-bold uppercase mr-1" style="color:var(--blue)">現在 · Now</span><span class="text-white font-semibold" x-text="dashboardOperatorBlock().now"></span><span x-show="dashboardOperatorBlock().secondary" class="pill text-[7px] pa ml-1" x-text="dashboardOperatorBlock().secondary"></span></div>
+              <div><span class="font-bold uppercase mr-1" style="color:var(--amber)">原因 · Why</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().why"></span></div>
+              <div><span class="font-bold uppercase mr-1" style="color:var(--green)">可做 · Allowed</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().allowed"></span></div>
+              <div x-show="dashboardOperatorBlock().blocked"><span class="font-bold uppercase mr-1" style="color:var(--red)">禁止 · Blocked</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().blocked"></span></div>
+              <div><span class="font-bold uppercase mr-1" style="color:var(--purple)">候選 · Valid</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().valid_candidates"></span><span x-show="today7.top_monitor?.label" class="text-[8px] ml-1" style="color:var(--t3)" x-text="'· '+today7.top_monitor.label"></span></div>
+              <div><span class="font-bold uppercase mr-1" style="color:var(--blue)">下一步 · Next</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().next"></span></div>
             </div>
             <div class="text-[8px] mt-2" style="color:var(--t3)" x-text="unifiedTruthStripLine()"></div>
           </div>
@@ -3022,6 +3022,11 @@
         <div class="card card-p">
           <div class="text-[9px]" style="color:var(--t3);line-height:1.5">Strategy Lab — research-only calibration. Open <button type="button" class="underline" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:9px" @click="switchTab('stratlab')">More → Strategy Lab</button> when live closed-trade evidence exists.</div>
         </div>
+        <details class="card card-p mt-2" data-cc="signal-family-health" style="border-left:3px solid var(--purple)">
+          <summary class="text-[9px] font-bold uppercase cursor-pointer select-none" style="color:var(--purple)">Signal family health · read-only</summary>
+          <div class="text-[9px] mt-2" style="color:var(--t2);line-height:1.55" x-text="signalFamilyHealthLine()"></div>
+          <div class="text-[8px] mt-1" style="color:var(--t3)">Learning loop scaffold — no capital path wiring.</div>
+        </details>
       </div>
       <div style="display:none" aria-hidden="true" data-cc="strat-health-legacy-removed">
           <template x-if="stratHealth.loading">
@@ -3944,14 +3949,20 @@
         </div>
         <div class="text-[9px]" style="color:var(--t2);line-height:1.55" x-text="stratLabOneLiner()"></div>
       </div>
-      <template x-if="stratHealth.data&&stratHealth.data.strategies&&stratHealth.data.strategies.length">
-        <div class="card card-p text-[9px] mono" style="color:var(--t2)">
-          <div class="font-bold mb-1 text-white">Per-strategy window</div>
+      <details class="card card-p text-[9px] mono" style="color:var(--t2)" data-cc="stratlab-details">
+        <summary class="font-bold text-white cursor-pointer select-none">Details · per-strategy window</summary>
+        <template x-if="stratHealth.loading">
+          <div class="text-[9px] py-2" style="color:var(--t3)">Loading strategy health…</div>
+        </template>
+        <template x-if="!stratHealth.loading&&(!stratHealth.data||!stratHealth.data.strategies||!stratHealth.data.strategies.length)">
+          <div class="text-[9px] py-2" style="color:var(--t3)">No closed-trade sample in window — calibration remains provisional.</div>
+        </template>
+        <template x-if="!stratHealth.loading&&stratHealth.data&&stratHealth.data.strategies&&stratHealth.data.strategies.length">
           <template x-for="row in stratHealth.data.strategies.slice(0,8)" :key="row.strategy_id">
-            <div class="py-0.5" x-text="row.strategy_id+' · n='+row.n_trades+' · hit '+(row.hit_rate*100).toFixed(0)+'%'"></div>
+            <div class="py-0.5" x-text="row.strategy_id+' · n='+row.n_trades+' · hit '+(row.hit_rate*100).toFixed(0)+'% · Sharpe '+row.sharpe_trade.toFixed(2)+' · '+row.status"></div>
           </template>
-        </div>
-      </template>
+        </template>
+      </details>
     </main>
 
     <!-- ═══════════════════════════════════════════════════════ -->
@@ -7560,7 +7571,13 @@
               </div>
 
               <!-- A/B Shadow Harness (Sprint 98) -->
-              <div class="mt-2 p-2 rounded" style="background:var(--s2)">
+              <div class="mt-2 p-2 rounded" style="background:var(--s2)" data-cc="shadow-surface">
+                <div class="text-[9px] font-bold uppercase mb-1.5" style="color:var(--blue)">Shadow — research only</div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[8px] mb-2" x-show="today7.system_truth">
+                  <div><span class="font-bold uppercase" style="color:var(--blue)">NOW</span> <span x-text="researchSurfaceBlock('shadow').now"></span></div>
+                  <div><span class="font-bold uppercase" style="color:var(--red)">BLOCKER</span> <span style="color:var(--t2)" x-text="researchSurfaceBlock('shadow').blocker"></span></div>
+                  <div><span class="font-bold uppercase" style="color:var(--green)">NEXT</span> <span style="color:var(--t2)" x-text="researchSurfaceBlock('shadow').next"></span></div>
+                </div>
                 <div class="flex items-center justify-between mb-1.5">
                   <div class="text-[9px] font-bold uppercase" style="color:var(--t3)">🔬 A/B Shadow</div>
                   <div class="flex gap-1">
@@ -7911,6 +7928,7 @@
       opps:[],oppsSort:'score',
       selfLearn:{status:null,triggering:false,lastResult:'',calibration:null,calibBuckets:null,ab:null,ledger:null,lastAutoSchedule:null,feedback:null},
       stratHealth:{loading:false,data:null,window:30,err:''},
+      signalFamilyHealth:{loading:false,data:null,err:''},
       histVar:{loading:false,data:null,err:'',last_run:0},
       freshness:null,
       risk_alerts:null,
@@ -9057,14 +9075,19 @@
       },
       tradeabilityGuidanceLine(){
         const blocked=this.todayDeployBlocked();
+        const tb=String(this.today7.tradeability||this.today7.regime?.tradeability||'WAIT').toUpperCase();
+        const pilotBlocked=typeof CCHelpers!=='undefined'&&CCHelpers.pilotSizingAllowed&&!CCHelpers.pilotSizingAllowed(this.today7.system_truth||{});
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.tradeabilityGuidanceLine){
+          const line=CCHelpers.tradeabilityGuidanceLine({blocked,tradeability:tb,pilotBlocked});
+          if(line) return line;
+        }
         if(blocked) return 'Deploy blocked — monitor only; no sizing, no handoff, no pilot entry.';
         const dm=this.today7.decision_model;
         if(dm&&dm.guidance) return String(dm.guidance);
-        const tb=String(this.today7.tradeability||this.today7.regime?.tradeability||'WAIT').toUpperCase();
         if(tb==='STRONG_TRADE') return 'Multiple execution-ready names — full size only on A-grade with brackets.';
         if(tb==='TRADE') return 'At least one execution-ready setup — standard 1R sizing.';
         if(tb==='SELECTIVE'){
-          if(typeof CCHelpers!=='undefined'&&CCHelpers.pilotSizingAllowed&&!CCHelpers.pilotSizingAllowed(this.today7.system_truth||{}))
+          if(pilotBlocked)
             return 'SELECTIVE review only — monitor candidates; no pilot sizing until gates clear.';
           return 'Pilot or single-name only — half size, stop required.';
         }
@@ -9120,6 +9143,24 @@
         const n=(this.stratHealth.data?.strategies||[]).length;
         if(!n) return 'Strategy Lab — no live closed-trade sample in window. Calibration and hit-rate remain provisional until evidence accumulates.';
         return `Strategy Lab — ${n} strateg${n===1?'y':'ies'} with closed-trade evidence in window (research-only).`;
+      },
+      signalFamilyHealthLine(){
+        const d=this.signalFamilyHealth?.data;
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.signalFamilyHealthLine)
+          return CCHelpers.signalFamilyHealthLine(d||{});
+        const sample=Number(d?.total_trades||d?.sample_size||0);
+        if(!sample) return 'Uncalibrated · heuristic only';
+        const hit=d?.win_rate!=null?(d.win_rate*100).toFixed(0)+'%':'—';
+        return `n=${sample} · hit ${hit}`;
+      },
+      async fetchSignalFamilyHealth(){
+        this.signalFamilyHealth.loading=true;this.signalFamilyHealth.err='';
+        try{
+          const r=await fetch('/api/v6/learning-loop');
+          if(!r.ok){this.signalFamilyHealth.data=null;this.signalFamilyHealth.err='HTTP '+r.status;return;}
+          this.signalFamilyHealth.data=await r.json();
+        }catch(e){this.signalFamilyHealth.data=null;this.signalFamilyHealth.err=e.message;}
+        finally{this.signalFamilyHealth.loading=false}
       },
       severityBadgeClass(state){
         if(typeof CCHelpers!=='undefined'&&CCHelpers.severityBadgeClass) return CCHelpers.severityBadgeClass(state);
@@ -9404,14 +9445,18 @@
         return {now:'MONITOR ONLY',blocker:truth.primary_blocker||'deploy blocked',next:'monitor only'};
       },
       ibkrRepairStepState(stepKey){
-        const st={
-          hasIbapi:true,
-          gw:!!(this.ibkr?.diagnostics?.gateway_up||this.ibkr?.gw),
-          apiPortOpen:!!this.ibkr?.api_port_open,
-          hostConfigured:!!this.ibkr?.host,
-          connected:!!this.ibkr?.connected,
-          readinessReady:!!(this.ibkr?.readiness?.ready||this.ibkr?.readiness?.score>=4),
-        };
+        const st=(typeof CCHelpers!=='undefined'&&CCHelpers.ibkrBuildRepairChecklistState)
+          ?CCHelpers.ibkrBuildRepairChecklistState(this.ibkr)
+          :{
+            hasIbapi:this.ibkr?.ibapi_available!==false,
+            gw:!!(this.ibkr?.gateway_reachable||this.ibkr?.api_port_open),
+            apiPortOpen:!!this.ibkr?.api_port_open,
+            hostConfigured:!!this.ibkr?.host,
+            connected:!!(this.ibkr?.connected||this.ibkr?.session_usable),
+            accountLoaded:!!(this.ibkr?.account_loaded||this.ibkr?.health?.account_status==='ok'),
+            positionsLoaded:!!((this.ibkr?.positions||[]).length),
+            bracketReady:!!(this.ibkr?.readiness?.full_handoff_ready||this.ibkr?.health?.handoff_status==='ready'),
+          };
         if(typeof CCHelpers!=='undefined'&&CCHelpers.ibkrRepairChecklistState)
           return CCHelpers.ibkrRepairChecklistState(stepKey,st);
         return 'unknown';
@@ -9614,6 +9659,8 @@
         this.ibkr.diagnosis=d.diagnosis||null;
         this.ibkr.gateway_reachable=!!d.gateway_reachable;
         this.ibkr.api_port_open=!!d.api_port_open;
+        if(typeof d.ibapi_available==='boolean')this.ibkr.ibapi_available=!!d.ibapi_available;
+        if(typeof d.account_loaded==='boolean')this.ibkr.account_loaded=!!d.account_loaded;
         if(typeof d.docker==='boolean')this.ibkr.docker=!!d.docker;
         this.ibkr.host=(window.CCHelpers&&CCHelpers.ibkrSyncHostFromStatus)
           ?CCHelpers.ibkrSyncHostFromStatus(d.host||this.ibkr.host,!!d.docker)
@@ -10004,11 +10051,14 @@
       },
       dossierOperatorBlock(){
         const intel=this.dos?.intel;
-        if(intel?.dossier_operator_block) return intel.dossier_operator_block;
-        if(intel?.dossier_mode?.dossier_operator_block) return intel.dossier_mode.dossier_operator_block;
+        const mode=this.dossierModeKey();
+        const raw=intel?.dossier_operator_block||intel?.dossier_mode?.dossier_operator_block;
+        if(raw&&window.CCHelpers&&CCHelpers.dossierOperatorBlock){
+          return CCHelpers.dossierOperatorBlock(mode,{...this._dossierModeOpts(),ticker:this.dos?.ticker||this.dos?.data?.symbol,dossier_mode:intel?.dossier_mode,dossier_operator_block:raw,unified_label:this.dosUnified().label,brief_backed:this._dossierModeOpts().brief_backed});
+        }
         if(window.CCHelpers&&CCHelpers.dossierOperatorBlock){
           const o=this._dossierModeOpts();
-          return CCHelpers.dossierOperatorBlock(this.dossierModeKey(),{
+          return CCHelpers.dossierOperatorBlock(mode,{
             ...o,
             ticker:this.dos?.ticker||this.dos?.data?.symbol,
             dossier_mode:intel?.dossier_mode,
@@ -10042,7 +10092,7 @@
         const block=this.dos?.intel?.dossier_mode;
         if(block?.confirm_only_strip) return block.confirm_only_strip;
         if(window.CCHelpers&&CCHelpers.dossierConfirmOnlyStrip) return CCHelpers.dossierConfirmOnlyStrip();
-        return 'Confirm-only: structure review only · no sizing · no handoff';
+        return 'Confirm-only · 僅結構確認：無入場價、無止損、無倉位 · no sizing · no handoff';
       },
       dossierStructureSnapshotTitle(){
         const block=this.dos?.intel?.dossier_mode;
@@ -10062,7 +10112,7 @@
         const block=this.dos?.intel?.dossier_mode;
         if(block?.paper_draft_disabled_copy) return block.paper_draft_disabled_copy;
         if(window.CCHelpers&&CCHelpers.dossierPaperDraftDisabledCopy) return CCHelpers.dossierPaperDraftDisabledCopy();
-        return 'Paper draft disabled — live Dossier + Playbook confirmation required.';
+        return 'Paper draft disabled · 紙上模擬已關閉 — 需 live Dossier + Playbook 確認後才可模擬';
       },
       dossierMonitorRuleLabel(){
         const block=this.dos?.intel?.dossier_mode;
@@ -10074,18 +10124,22 @@
         const block=this.dos?.intel?.dossier_mode;
         if(block?.monitor_rule_hint) return block.monitor_rule_hint;
         if(window.CCHelpers&&CCHelpers.dossierMonitorRuleHint) return CCHelpers.dossierMonitorRuleHint();
-        return 'Alert only · no sizing · no handoff';
+        return 'Alert only · 僅提醒，不可定倉、不可交接 · no sizing · no handoff';
       },
       dossierLaggedContextNote(){
         const block=this.dos?.intel?.dossier_mode;
         if(block?.lagged_context_note) return block.lagged_context_note;
         if(window.CCHelpers&&CCHelpers.dossierLaggedContextNote) return CCHelpers.dossierLaggedContextNote();
-        return 'Lagged / illustrative context · not used for confirmation';
+        return 'Lagged / illustrative context · 滯後參考，不用於結構確認 · not used for confirmation';
       },
       dossierMissingDataLine(){
         const block=this.dos?.intel?.dossier_mode;
         const missing=block?.missing_data;
-        if(Array.isArray(missing)&&missing.length) return missing.join(' · ');
+        if(Array.isArray(missing)&&missing.length){
+          if(window.CCHelpers&&CCHelpers.dossierMissingDataLabels)
+            return CCHelpers.dossierMissingDataLabels(missing).join(' · ');
+          return missing.join(' · ');
+        }
         return '—';
       },
       dossierEvidenceField(key){
@@ -10889,13 +10943,16 @@
         return st.level!=='ready'&&!st.handoff;
       },
       dashboardWaitTopComment(compact){
+        const opts={compact:!!compact,brokerOffline:this.dashboardBrokerOffline()};
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.dashboardWaitTopComment)
+          return CCHelpers.dashboardWaitTopComment(opts);
         let s='WAIT — no full-size deployment today. The board is producing watch-quality names, but none currently clear the full thesis + timing + R:R + execution stack. Treat today as a monitoring session, not a forcing session.';
-        if(this.dashboardBrokerOffline()){
+        if(opts.brokerOffline){
           s+=' Broker is offline, execution is unavailable, and no setup has earned deploy authority.';
         }else{
           s+=' No setup has earned deploy authority yet.';
         }
-        if(compact) return 'WAIT — monitor, don\'t force. No full deploy today'+(this.dashboardBrokerOffline()?'; broker offline.':'.');
+        if(compact) return 'WAIT — monitor, don\'t force. No full deploy today'+(opts.brokerOffline?'; broker offline.':'.');
         return s;
       },
       dashboardWhyNotDeployComment(){
@@ -11637,7 +11694,7 @@
         this.ccHeader.header_summary=null;
         this.fetchCcStatus();
         if(t==='today'){this.fetchToday7();this.fetchMarketStrip();}
-        if(t==='signals'){this.hydrateRankedFromCache();this.fetchSignals();this.fetchRanked();if(!this._signalsPoll){this._signalsPoll=setInterval(()=>{if(this.tab==='signals')this.fetchSignals()},60000)}}
+        if(t==='signals'){this.hydrateRankedFromCache();this.fetchSignals();this.fetchRanked();this.fetchSignalFamilyHealth();if(!this._signalsPoll){this._signalsPoll=setInterval(()=>{if(this.tab==='signals')this.fetchSignals()},60000)}}
         if(t==='scanners'){this.hydrateScannersFromCache();this.fetchScanners();}
         if(t==='portfolio'){this.fetchPortfolio();}
         if(t==='dossier'){
