@@ -77,7 +77,9 @@ def test_build_compressed_fallback_from_brief():
     payload = build_compressed_fallback(30, brief=SAMPLE_BRIEF)
     assert payload["board_mode"] == BOARD_MODE_COMPRESSED
     assert len(payload["opportunities"]) >= 1
-    assert len(payload["opportunities"]) <= 5
+    from src.services.cc_display_constants import CC_TOP_MONITOR_COUNT
+
+    assert len(payload["opportunities"]) <= CC_TOP_MONITOR_COUNT
     assert len(payload["near_miss"]) <= 3
     assert payload["rejection_clusters"]
     assert payload["unlock_deploy"]["unlocked"] is False

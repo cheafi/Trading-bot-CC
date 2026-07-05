@@ -5,6 +5,8 @@
 ;(function (global) {
 	"use strict"
 
+	var CC_TOP_MONITOR_COUNT = 10
+
 	var SEVERITY_BADGE_CLASS = {
 		failed_fetch: "pr",
 		failed_fetch_fallback: "pr",
@@ -1435,7 +1437,7 @@
 	var DOSSIER_PAPER_DRAFT_DISABLED =
 		"Paper draft disabled · 紙上模擬已關閉 — 需 live Dossier + Playbook 確認後才可模擬"
 	var DOSSIER_MONITOR_RULE_BUTTON = "Create monitor rule · 建立監察規則"
-	var DOSSIER_MONITOR_RULE_HINT = "Alert only · 僅提醒，不可定倉、不可交接 · no sizing · no handoff"
+	var DOSSIER_MONITOR_RULE_HINT = "Alert only · 僅提醒 — 不定倉、不交接券商 · no sizing · no handoff"
 	var DOSSIER_LAGGED_CONTEXT_NOTE =
 		"Lagged / illustrative context · 滯後參考，不用於結構確認 · not used for confirmation"
 	var DOSSIER_STRUCTURE_SNAPSHOT_TITLE = "Structure snapshot · 結構快照"
@@ -2548,6 +2550,7 @@
 	}
 
 	global.CCHelpers = {
+		CC_TOP_MONITOR_COUNT: CC_TOP_MONITOR_COUNT,
 		severityBadgeClass: severityBadgeClass,
 		surfaceWarmupLoadingLine: surfaceWarmupLoadingLine,
 		warmupStatusLine: warmupStatusLine,

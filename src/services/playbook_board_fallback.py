@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from src.services.cc_display_constants import CC_TOP_MONITOR_COUNT
+
 import json
 import logging
 import os
@@ -300,7 +302,7 @@ def build_compressed_fallback(
     watch_pool.sort(key=lambda r: float(r.get("score") or 0), reverse=True)
     review_pool.sort(key=lambda r: float(r.get("score") or 0), reverse=True)
 
-    watch_limit = min(5, max(3, limit // 6 or 5))
+    watch_limit = min(CC_TOP_MONITOR_COUNT, max(3, limit // 6 or CC_TOP_MONITOR_COUNT))
     watch_rows = watch_pool[:watch_limit]
     near_miss = []
     for row in watch_pool[watch_limit : watch_limit + 8]:

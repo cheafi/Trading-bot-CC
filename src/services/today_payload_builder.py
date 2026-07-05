@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.services.cc_display_constants import CC_TOP_MONITOR_COUNT
 import asyncio
 import logging
 from dataclasses import dataclass
@@ -436,7 +437,7 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
                 sector_laggards=sector_laggards,
             )
         )
-        if len(top5) >= 5:
+        if len(top5) >= CC_TOP_MONITOR_COUNT:
             break
 
     from src.services.decision_truth_model import build_runner_up_comparison
@@ -666,6 +667,7 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         near_miss,
         scanner_degraded=scanner_degraded,
         brief_age_days=brief_age_days,
+        top_limit=CC_TOP_MONITOR_COUNT,
     )
     if brief_expired:
         used_brief_fallback = False
@@ -1255,7 +1257,7 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         funnel=funnel,
     )
 
-    valid_top5 = build_top_opportunities(top5)
+    valid_top5 = build_top_opportunities(top5, limit=CC_TOP_MONITOR_COUNT)
     score_reconciliation = _build_score_reconciliation_for_today(
         valid_top5,
         cross_asset=cross_asset_confirmation,
@@ -1363,7 +1365,7 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
     options_signals = batch_options_availability(
         valid_top5 + list(near_miss or []),
         deploy_blocked=deploy_blocked,
-        limit=5,
+        limit=CC_TOP_MONITOR_COUNT,
     )
     opportunity_status = build_opportunity_status(
         system_truth,

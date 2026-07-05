@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from src.services.cc_display_constants import CC_TOP_MONITOR_COUNT
 from src.services.playbook_truth import assign_primary_bucket, bucket_rows, is_no_edge_mode
 
 BUCKET_DEPLOY = "Deploy"
@@ -42,7 +43,7 @@ def filter_rejected_from_top_slots(
     rows: Optional[List[Dict[str, Any]]],
     *,
     deploy_authority: bool = False,
-    limit: int = 5,
+    limit: int = CC_TOP_MONITOR_COUNT,
 ) -> List[Dict[str, Any]]:
     buckets = bucket_rows(rows, deploy_authority=deploy_authority)
     out: List[Dict[str, Any]] = []

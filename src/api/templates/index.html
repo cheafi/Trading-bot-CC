@@ -281,7 +281,7 @@
         <div class="text-xs" style="color:var(--t2);line-height:1.7">
           <p class="mb-2"><strong>Core 5 workflow:</strong></p>
           <ul style="padding-left:18px;list-style:disc">
-            <li><strong>Dashboard</strong> — start here every morning. Regime + top 5 ranked + AI narrative.</li>
+            <li><strong>Dashboard</strong> — start here every morning. Regime + top 10 ranked + AI narrative.</li>
             <li><strong>Playbook</strong> — candidate board (Deploy/Pilot/Watch buckets), not a trade ticket.</li>
             <li><strong>Discovery</strong> — scan evidence only; research candidates, no deploy authority.</li>
             <li><strong>Portfolio &amp; Risk</strong> — current book, alerts, heat, correlation, drawdown.</li>
@@ -2220,7 +2220,7 @@
             <div class="text-[8px]" style="color:var(--t3);line-height:1.6">
               ✅ <strong style="color:var(--t1)">Full TRADE</strong> when: board-ranked score ≥8, thesis+timing ≥65%, R:R ≥2.5, execution-ready flag on card<br>
               🔵 <strong style="color:var(--t1)">PILOT</strong> when: partial edge with stop — half size only; card shows why_pilot<br>
-              ⏸ <strong style="color:var(--t1)">Watch</strong> when: ranked #1–5 but below TRADE bar (score 6–8 or timing/R:R gap)<br>
+              ⏸ <strong style="color:var(--t1)">Watch</strong> when: ranked #1–10 but below TRADE bar (score 6–8 or timing/R:R gap)<br>
               🛑 <strong style="color:var(--t1)">Skip</strong> when: regime NO_TRADE/WAIT or laggard + weak data<br>
               📊 <strong style="color:var(--t1)">Historical Win Rate</strong> shown when ≥10 similar past trades exist — use as extra confirmation
             </div>
@@ -10012,7 +10012,7 @@
           system_blockers:system_blockers.slice(0,5),
           card_gates:cardGates.slice(0,3),
           blockers:blockers.slice(0,5),
-          monitors:monitors.slice(0,3),
+          monitors:monitors.slice(0,(typeof CCHelpers!=='undefined'&&CCHelpers.CC_TOP_MONITOR_COUNT)||10),
           quant_cluster_lines:this.todayMissionQuantClusterLines(),
         };
       },
@@ -10227,7 +10227,7 @@
         const n=row.strength!=null?row.strength:(row.score!=null?row.score:null);
         return 'Score '+(n!=null?n:'—');
       },
-      topMonitorCandidates(limit=3){
+      topMonitorCandidates(limit=(typeof CCHelpers!=='undefined'&&CCHelpers.CC_TOP_MONITOR_COUNT)||10){
         const tickers=[];
         const seen=new Set();
         const isAvoid=(r)=>{
@@ -10265,7 +10265,7 @@
         return ['AVOID','NO_TRADE','BLOCKED','PASS','EXIT','REDUCE'].includes(act)||String(row?.card_display_mode||'')==='rejected';
       },
       degradedPmMonitorLine(){
-        const names=this.topMonitorCandidates(3);
+        const names=this.topMonitorCandidates((typeof CCHelpers!=='undefined'&&CCHelpers.CC_TOP_MONITOR_COUNT)||10);
         return names.length?'Top monitor candidates '+names.join('/'):'Top monitor candidates —';
       },
       pmDecisionTickerLine(){
@@ -12804,7 +12804,7 @@
             morning_decision:(typeof CCHelpers!=='undefined'&&CCHelpers.morningDecisionLine)?CCHelpers.morningDecisionLine(this.today7):'',
             board_message:this.today7.board_message||td.stance_one_liner||'',
             tradeability:this.canonicalTradeability(),
-            top_ranked:(this.today7.top_ranked||[]).slice(0,5).map(r=>String(r.ticker||r).toUpperCase()+' · '+(r.action||r.verdict||'monitor')),
+            top_ranked:(this.today7.top_ranked||[]).slice(0,(typeof CCHelpers!=='undefined'&&CCHelpers.CC_TOP_MONITOR_COUNT)||10).map(r=>String(r.ticker||r).toUpperCase()+' · '+(r.action||r.verdict||'monitor')),
             monitors:mission.monitors||[],
           },
           playbook:{

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Set
 
+from src.services.cc_display_constants import CC_TOP_MONITOR_COUNT
+
 
 _AVOID_CATEGORIES = (
     "regime",
@@ -1058,7 +1060,7 @@ def build_top_monitor(
 def build_top_opportunities(
     top5: Optional[List[Dict[str, Any]]] = None,
     *,
-    limit: int = 5,
+    limit: int = CC_TOP_MONITOR_COUNT,
 ) -> List[Dict[str, Any]]:
     """Deploy / pilot / watch opportunities — AVOID excluded, no backfill."""
     return filter_valid_opportunities(top5)[:limit]
@@ -1076,7 +1078,7 @@ def build_evidence_conflict(
     lead = valid[0] if valid else None
     sr = score_reconciliation or {}
     against: List[str] = list(sr.get("contradictions") or [])[:4]
-    for row in (top5 or [])[:5]:
+    for row in (top5 or [])[:CC_TOP_MONITOR_COUNT]:
         if str(row.get("conflict_level") or "").upper() in ("HIGH", "CRITICAL"):
             tk = str(row.get("ticker") or "").upper()
             if tk:
@@ -1559,7 +1561,7 @@ def merge_brief_board_fallback(
     near_miss: List[Dict[str, Any]],
     *,
     scanner_degraded: bool,
-    top_limit: int = 5,
+    top_limit: int = CC_TOP_MONITOR_COUNT,
     brief_age_days: Optional[int] = None,
 ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], bool]:
     """Seed WATCH / near-miss rows from morning brief when live scanner is empty."""

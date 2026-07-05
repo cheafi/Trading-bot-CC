@@ -7,6 +7,8 @@ stub evaluators only.
 
 from __future__ import annotations
 
+from src.services.cc_display_constants import CC_TOP_MONITOR_COUNT
+
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -108,7 +110,7 @@ def build_grade_calibration(
     Heuristic-only when uncalibrated; does not inflate deploy authority.
     """
     t = dict(truth or {})
-    rows = list(candidates or [])[:5]
+    rows = list(candidates or [])[:CC_TOP_MONITOR_COUNT]
     samples = [_row_sample_size(r) for r in rows]
     qualities = [_row_data_quality_pct(r) for r in rows if _row_data_quality_pct(r) > 0]
     avg_quality = round(sum(qualities) / len(qualities), 0) if qualities else None
@@ -525,7 +527,7 @@ def build_opportunity_status(
         "options_research_label_zh": "期權研究可查閱" if deploy_blocked else "期權背景",
         "sector_rotation_watchlist": sector_watch,
         "sector_rotation_watchlist_zh": "板塊輪動研究名單",
-        "ranked_opportunities": ranked[:5],
+        "ranked_opportunities": ranked[:CC_TOP_MONITOR_COUNT],
         "ai_opportunity_brief": brief,
         "grade_calibration": grade_cal,
         "deploy_blocker_diagnosis": diagnosis,

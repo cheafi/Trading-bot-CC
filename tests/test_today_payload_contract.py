@@ -138,3 +138,14 @@ def test_fund_manager_research_only_badge():
 def test_today_skips_inline_fund_lab_preload():
     """Today must not block on fund-lab build — lazy-load via Funds tab."""
     assert "_build_payload" not in TODAY_BUILDER
+
+
+def test_cc_top_monitor_display_count():
+    """Dashboard valid candidates / top watch list capped at CC_TOP_MONITOR_COUNT."""
+    from src.services.cc_display_constants import CC_TOP_MONITOR_COUNT
+
+    assert CC_TOP_MONITOR_COUNT == 10
+    assert "CC_TOP_MONITOR_COUNT" in TODAY_BUILDER
+    assert "len(top5) >= CC_TOP_MONITOR_COUNT" in TODAY_BUILDER
+    assert "CC_TOP_MONITOR_COUNT" in CC_HELPERS
+    assert "CC_TOP_MONITOR_COUNT = 10" in (ROOT / "src/services/cc_display_constants.py").read_text(encoding="utf-8")

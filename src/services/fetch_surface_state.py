@@ -7,6 +7,8 @@ so every tab renders consistent degraded UX.
 
 from __future__ import annotations
 
+from src.services.cc_display_constants import CC_TOP_MONITOR_COUNT
+
 from typing import Any, Dict, Optional
 
 STATE_LOADING = "loading"
@@ -858,10 +860,10 @@ def today_mission_panel(
         "system_blockers": sys_blk[:limit],
         "card_gates": card_gates,
         "blockers": blockers[: max(limit, 5)],
-        "monitors": monitors[:limit],
+        "monitors": monitors[:CC_TOP_MONITOR_COUNT],
         "near_miss_count": len(near_miss or []),
         "monitors_label": today_mission_monitors_label(
-            monitors[:limit],
+            monitors[:CC_TOP_MONITOR_COUNT],
             near_miss_count=len(near_miss or []),
         ),
     }
