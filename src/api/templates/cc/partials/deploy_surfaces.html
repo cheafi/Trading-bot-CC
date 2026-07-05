@@ -1,7 +1,7 @@
       <div x-show="tab==='today'" data-cc="today-deploy-chrome">
       <template x-if="tab==='today'&&(todayMissionPanel().system_blockers.length||todayMissionPanel().card_gates.length||todayMissionPanel().upgrade_watch.length||todayMissionPanel().avoid_entry.length||todayMissionPanel().quant_cluster_lines.length)">
         <details data-cc="today-mission-panel" style="padding:4px 12px 0">
-          <summary class="text-[8px] font-bold uppercase cursor-pointer" style="color:var(--t3);padding:2px 0">System blockers · mission details · expand</summary>
+          <summary class="text-[8px] font-bold uppercase cursor-pointer" style="color:var(--t3);padding:2px 0">系統阻斷 · 任務細節 · 展開 · System blockers · mission details · expand</summary>
           <div class="card card-p mt-1" style="padding:8px 10px;border-left:3px solid var(--blue)">
             <div class="text-[9px] font-bold uppercase mb-0.5" style="color:var(--t3)" x-text="todayMissionPanelTitle()"></div>
             <div x-show="todayMissionSafeUnlockHint()&&!isWaitDay()" class="text-[8px] mb-1" style="color:var(--t3)" x-text="todayMissionSafeUnlockHint()"></div>
@@ -19,17 +19,17 @@
               <div>
                 <div class="font-bold text-amber-300 mb-0.5" x-text="todayMissionMonitorsLabel()"></div>
                 <div class="text-[8px] mb-0.5" style="color:var(--t3)" x-text="todayMissionMonitorsColumnHint()"></div>
-                <div x-show="todayMissionPanel().upgrade_watch.length" class="text-[7px] font-bold uppercase mb-0.5" style="color:var(--green)">Upgrade watch · not entry today</div>
+                <div x-show="todayMissionPanel().upgrade_watch.length" class="text-[7px] font-bold uppercase mb-0.5" style="color:var(--green)">升級監察 · 今日不入場 · Upgrade watch · not entry today</div>
                 <template x-for="m in todayMissionPanel().upgrade_watch" :key="'up-'+m.ticker">
                   <div style="color:var(--t2)" class="mono" x-text="'• '+m.ticker+(m.note?' · '+m.note:'')"></div>
                 </template>
-                <div x-show="todayMissionPanel().avoid_entry.length" class="text-[7px] font-bold uppercase mt-1 mb-0.5" style="color:var(--red)">Avoid new entry · still on board</div>
+                <div x-show="todayMissionPanel().avoid_entry.length" class="text-[7px] font-bold uppercase mt-1 mb-0.5" style="color:var(--red)">避免新倉 · 仍在板上 · Avoid new entry · still on board</div>
                 <template x-for="m in todayMissionPanel().avoid_entry" :key="'av-'+m.ticker">
                   <div style="color:var(--t2)" class="mono" x-text="'• '+m.ticker+(m.note?' · '+m.note:'')"></div>
                 </template>
                 <div x-show="!todayMissionPanel().upgrade_watch.length&&!todayMissionPanel().avoid_entry.length" style="color:var(--t3)">—</div>
                 <template x-if="todayMissionPanel().quant_cluster_lines.length">
-                  <div class="font-bold text-blue-300 mt-1 mb-0.5">Quant clusters (monitor)</div>
+                  <div class="font-bold text-blue-300 mt-1 mb-0.5">量化群組（監察）· Quant clusters (monitor)</div>
                   <template x-for="line in todayMissionPanel().quant_cluster_lines" :key="'qc-'+line">
                     <div class="text-[8px]" style="color:var(--t3);line-height:1.4" x-text="'• '+line"></div>
                   </template>
@@ -123,8 +123,8 @@
           <span class="pill text-[7px] pw" :title="today7.evidence_badges.funds?.label" x-text="today7.evidence_badges.funds?.badge"></span>
           <span class="pill text-[7px] pw" :title="today7.evidence_badges.ai?.label" x-text="today7.evidence_badges.ai?.badge"></span>
         </template>
-        <span x-show="today7.system_truth" class="pill text-[8px] pa" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStrip)?CCHelpers.scopedFreshnessStrip(today7.system_truth):''"></span>
-        <span x-show="!today7.system_truth" class="pill text-[8px] pa" x-text="'Runtime: Unknown · Authority: Blocked'"></span>
+        <span x-show="today7.system_truth" class="pill text-[8px] pa" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStripLocalized)?CCHelpers.scopedFreshnessStripLocalized(today7.system_truth):((typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStrip)?CCHelpers.scopedFreshnessStrip(today7.system_truth):'')"></span>
+        <span x-show="!today7.system_truth" class="pill text-[8px] pa" x-text="'Runtime: Unknown · 運行：未知 · Authority: Blocked · 權限：禁止'"></span>
         <span x-show="riskAlertsStripVisible()" class="pill text-[8px] pr" x-text="riskAlertsStripLine()" @click="showAlertsModal=true" style="cursor:pointer"></span>
         <span x-show="portfolioSummaryStripVisible()" class="pill text-[8px] pb" x-text="portfolioSummaryStripLine()"></span>
         <button @click="switchTab('funds')" class="btn-s text-[8px] ml-auto" x-show="(pmStrip.funds||[]).length===0">Load Funds</button>

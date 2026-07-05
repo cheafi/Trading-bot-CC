@@ -2,22 +2,22 @@
       <!-- Hero -->
       <div class="guide-hero" style="position:relative;overflow:hidden;margin-bottom:20px">
         <div style="position:absolute;right:20px;top:20px;font-size:64px;opacity:.07;line-height:1">📊</div>
-        <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:6px">CC · Clarity Console — Operator Guide</div>
-        <div style="font-size:20px;font-weight:800;color:var(--t1);margin-bottom:8px;line-height:1.3">How to use this platform</div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:6px">CC · Clarity Console — 操作員指南 · Operator Guide</div>
+        <div style="font-size:20px;font-weight:800;color:var(--t1);margin-bottom:8px;line-height:1.3">如何使用本平台 · How to use this platform</div>
         <div style="font-size:12px;color:var(--t2);line-height:1.7;max-width:520px">
-          <strong style="color:var(--t1)">Layer 1</strong> (~30s quick start) · <strong style="color:var(--t1)">Layer 2</strong> (read the UI) · <strong style="color:var(--t1)">Layer 3</strong> (glossary). Reference only — open Dashboard for live board posture.
+          <strong style="color:var(--t1)">第一層 Layer 1</strong>（約 30 秒快速上手）· <strong style="color:var(--t1)">第二層 Layer 2</strong>（讀懂介面）· <strong style="color:var(--t1)">第三層 Layer 3</strong>（術語表）。僅供參考 — 即時狀態請開 Dashboard。
         </div>
         <div style="margin-top:12px;padding:10px 12px;background:rgba(0,212,170,.06);border:1px solid rgba(0,212,170,.22);border-radius:8px;font-size:11px;color:var(--t2);line-height:1.65;max-width:560px">
           <div style="font-size:10px;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">操作員速查 · Operator quick read</div>
           <div><strong style="color:var(--t1)">現在 · Now</strong> — 今日狀態（例：MONITOR ONLY · 僅監察 · 禁止部署）</div>
           <div><strong style="color:var(--t1)">原因 · Why</strong> — 為何被擋（例：IBKR 離線、看板 WAIT、0 筆 deploy-qualified）</div>
           <div><strong style="color:var(--t1)">可做 · Allowed</strong> — 刷新看板、建立監察規則、開 Playbook 複核</div>
-          <div><strong style="color:var(--t1)">禁止 · Blocked</strong> — 不可定倉、不可交接 IBKR、不可紙上模擬</div>
+          <div><strong style="color:var(--t1)">禁止 · Blocked</strong> — 不定倉、不交接券商、不可試探倉</div>
           <div><strong style="color:var(--t1)">下一步 · Next</strong> — 先做一件事（例：修復 IBKR → 再刷新看板）</div>
           <div style="margin-top:8px;font-size:10px;color:var(--t3)">Playbook = 候選名單（非交易指令）· Dossier confirm-only = 結構確認（非交易計劃）· Funds = 研究模式（非配置指令）</div>
         </div>
         <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
-          <button @click="localStorage.setItem('cc_guide_seen','1');switchTab('today')" class="btn-p" style="font-size:13px;padding:10px 24px">🚀 Open Dashboard</button>
+          <button @click="localStorage.setItem('cc_guide_seen','1');switchTab('today')" class="btn-p" style="font-size:13px;padding:10px 24px">🚀 開啟 Dashboard · Open Dashboard</button>
           <button @click="localStorage.removeItem('cc_guide_seen')" style="background:none;border:none;color:var(--t3);font-size:11px;cursor:pointer;text-decoration:underline">Reset first-visit flag</button>
         </div>
       </div>
@@ -133,7 +133,7 @@
             <div style="font-size:11px;color:var(--t2);line-height:1.7;margin-bottom:10px">以下三個介面<strong style="color:var(--t1)">只有研究權限</strong>，不會下單、不會調倉。空狀態時看「如何開始」卡片。</div>
             <div style="display:flex;flex-direction:column;gap:10px;font-size:11px;color:var(--t2);line-height:1.65">
               <div style="padding:8px 10px;background:var(--s2);border-radius:6px;border-left:3px solid var(--amber)">
-                <strong style="color:var(--t1)">🤖 Agent 盯盤 · Monitor only</strong>（More → Command）<br>
+                <strong style="color:var(--t1)">🤖 Agent 盯盤 · 僅監察 · Monitor only</strong>（More → Command）<br>
                 輸入一句話建立監察規則，例如「當 KO 跌破 20 日線時提醒我」。可從 Playbook Watch 名單一鍵建立規則。
               </div>
               <div style="padding:8px 10px;background:var(--s2);border-radius:6px;border-left:3px solid var(--green)">
@@ -580,6 +580,6 @@
 
       <!-- Bottom CTA -->
       <div style="text-align:center;padding:20px 0 8px">
-        <button @click="localStorage.setItem('cc_guide_seen','1');switchTab('today')" class="btn-p" style="font-size:14px;padding:12px 32px">🚀 Open Dashboard</button>
-        <div style="font-size:11px;color:var(--t3);margin-top:10px">Return here anytime: 📖 Guide tab (first in nav)</div>
+        <button @click="localStorage.setItem('cc_guide_seen','1');switchTab('today')" class="btn-p" style="font-size:14px;padding:12px 32px">🚀 開啟 Dashboard · Open Dashboard</button>
+        <div style="font-size:11px;color:var(--t3);margin-top:10px">隨時回來：📖 Guide 分頁（導覽列第一個）· Return here anytime: 📖 Guide tab (first in nav)</div>
       </div>

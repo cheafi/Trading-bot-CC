@@ -19,7 +19,7 @@ PAPER_DRAFT_DISABLED_COPY = (
 )
 
 MONITOR_RULE_BUTTON = "Create monitor rule · 建立監察規則"
-MONITOR_RULE_HINT = "Alert only · 僅提醒，不可定倉、不可交接 · no sizing · no handoff"
+MONITOR_RULE_HINT = "Alert only · 僅提醒 — 不定倉、不交接券商 · no sizing · no handoff"
 
 LAGGED_CONTEXT_COLLAPSED_NOTE = (
     "Lagged / illustrative context · 滯後參考，不用於結構確認 · not used for confirmation"

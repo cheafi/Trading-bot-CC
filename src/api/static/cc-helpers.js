@@ -115,10 +115,10 @@
 		var n = (monitors || []).length
 		var nm = Number(nearMissCount) || 0
 		var wq = Number(watchQualified)
-		if (!n && !nm) return "Monitors"
-		var prefix = n && (isNaN(wq) || wq === 0) ? "Fallback monitors" : "Monitors"
+		if (!n && !nm) return bilingualLine("監察清單", "Monitors")
+		var prefix = n && (isNaN(wq) || wq === 0) ? bilingualLine("備援監察", "Fallback monitors") : bilingualLine("監察清單", "Monitors")
 		var base = n ? prefix + " (" + n + ")" : prefix
-		return nm ? base + " · " + nm + " near-miss" : base
+		return nm ? base + " · " + nm + " " + bilingualLine("筆近失", "near-miss") : base
 	}
 
 	/** Clarifies monitor vs near-miss vs deploy — attention routing without tradability. */
@@ -257,7 +257,7 @@
 				out.push("FALLBACK / BRIEF ONLY")
 			}
 		}
-		return out
+		return out.map(localizeMissionBlocker)
 	}
 
 	function systemTruthMissionBlockers(truth) {
@@ -302,9 +302,9 @@
 
 	function globalTruthStrip(truth) {
 		var t = truth || {}
-		if (t.truth_strip) return String(t.truth_strip)
-		if (typeof scopedFreshnessStrip === "function") return scopedFreshnessStrip(t)
-		return "Monitor only — see scoped truth strip"
+		if (t.truth_strip) return localizeScopedFreshnessStrip(String(t.truth_strip))
+		if (typeof scopedFreshnessStrip === "function") return scopedFreshnessStripLocalized(t)
+		return bilingualLine("僅監察 — 請查看上方狀態列", "Monitor only — see scoped truth strip")
 	}
 
 	function researchSurfaceBlock(truth, surface, extra) {
@@ -350,7 +350,7 @@
 			return {
 				surface: "agent",
 				title: "如何開始 · Getting started",
-				badge: "Agent 盯盤 · Monitor only",
+				badge: "Agent 盯盤 · 僅監察 · Monitor only",
 				now: "用一句話建立監察規則 — 不會下單或調倉 · Describe a watch condition — no orders or sizing",
 				copy: "輸入一句話描述你想監察的條件。Agent 只建立監察規則，不會下單或調倉。",
 				placeholder: "例如：當 KO 跌破 20 日線時提醒我…",
@@ -584,6 +584,99 @@
 		return zh || en || ""
 	}
 
+	var FRESHNESS_SCOPE_ZH = {
+		Market: "市場",
+		Board: "看板",
+		Brief: "晨報",
+		Broker: "券商",
+		Runtime: "運行",
+		Authority: "權限",
+	}
+
+	var FRESHNESS_STATE_ZH = {
+		Fresh: "新鮮",
+		Stale: "過期",
+		Expired: "已失效",
+		Fallback: "備援",
+		Offline: "離線",
+		Unavailable: "不可用",
+		Open: "開放",
+		Blocked: "禁止",
+		Unknown: "未知",
+	}
+
+	function localizeFreshnessState(state) {
+		var raw = String(state || "").trim()
+		if (!raw) return raw
+		var expired = raw.match(/^Expired\s+(\d+d)$/i)
+		if (expired) return bilingualLine("已失效 " + expired[1], raw)
+		var zh = FRESHNESS_STATE_ZH[raw]
+		return zh ? bilingualLine(zh, raw) : raw
+	}
+
+	function localizeScopedFreshnessStrip(line) {
+		var raw = String(line || "").trim()
+		if (!raw) return raw
+		return raw
+			.split(/\s*·\s*/)
+			.map(function (part) {
+				var m = part.match(/^([A-Za-z]+):\s*(.+)$/)
+				if (!m) return part
+				var scope = m[1]
+				var state = String(m[2] || "").trim()
+				var zhScope = FRESHNESS_SCOPE_ZH[scope] || scope
+				return scope + ": " + state + " · " + zhScope + "：" + localizeFreshnessState(state)
+			})
+			.join(" · ")
+	}
+
+	function scopedFreshnessStripLocalized(truth) {
+		return localizeScopedFreshnessStrip(scopedFreshnessStrip(truth))
+	}
+
+	var MISSION_BLOCKER_ZH = {
+		"FALLBACK / BRIEF ONLY": "備援 / 僅簡報 — 不可部署",
+		"BRIEF EXPIRED — not used for ranking": "晨報已失效 — 不用於排名",
+		"BRIEF STALE": "晨報過期 — 敘述僅供參考",
+		"Market: Stale": "市場資料過期 — 刷新後再定倉",
+		"MARKET DATA UNAVAILABLE": "缺少即時報價",
+		"BOARD STALE": "看板過期 — 刷新看板",
+		"NO VALID BOARD": "無有效看板 — 今日不做",
+		"DATA DEGRADED": "資料已降級",
+		"ENGINE OFF": "引擎關閉 — 僅用預算看板",
+		"ENGINE UNKNOWN": "引擎狀態不明",
+		"IBKR OFFLINE": "IBKR 離線 — 不可交接",
+		"EXEC BLOCKED — risk breaker": "執行阻斷 — 熔斷中",
+		"BOARD WAIT — no deploy": "看板 WAIT — 僅監察，禁止部署",
+		"RESEARCH ONLY — board gate": "僅研究 — 看板門檻關閉",
+		"AUTHORITY SUSPENDED": "部署權限已暫停",
+		"REGIME WAIT": "體制 WAIT — 等待確認",
+		"REGIME NO TRADE": "體制禁止交易",
+		"0 deploy-qualified — gates not met": "0 筆可部署 — 門檻未過",
+		"FETCH FAILED — not decision-grade": "擷取失敗 — 不可作決策依據",
+	}
+
+	function localizeMissionBlocker(label) {
+		var raw = String(label || "").trim()
+		if (!raw) return raw
+		if (raw.indexOf("IBKR") === 0) {
+			var tail = raw.replace(/^IBKR\s*/i, "").trim()
+			if (tail === "OFFLINE" || tail === "LOGIN" || tail === "DISCONNECTED") {
+				return bilingualLine("IBKR " + (tail === "LOGIN" ? "需登入" : "離線") + " — 不可交接", raw)
+			}
+		}
+		var zh = MISSION_BLOCKER_ZH[raw]
+		return zh ? bilingualLine(zh, raw) : raw
+	}
+
+	function localizeMissionBlockerList(items) {
+		return (items || []).map(localizeMissionBlocker)
+	}
+
+	function systemTruthMissionBlockersLocalized(truth) {
+		return localizeMissionBlockerList(systemTruthMissionBlockers(truth))
+	}
+
 	var OPERATOR_WHY_ZH = {
 		"Regime gate closed — no new risk": "體制關閉 — 今日禁止新倉",
 		"Board WAIT — monitor only, no deploy": "看板 WAIT — 僅監察，不可部署",
@@ -673,7 +766,7 @@
 		var raw = String(blocked || "").trim()
 		if (!raw) return raw
 		if (raw === "no sizing, no handoff, no pilot entry") {
-			return bilingualLine("不可定倉、不可交接 IBKR、不可試單", raw)
+			return bilingualLine("不定倉、不交接券商、不可試探倉", raw)
 		}
 		return raw
 	}
@@ -929,20 +1022,20 @@
 	function todayMissionBlockersTitle(opts) {
 		var o = opts || {}
 		if (o.waitDay && o.hasSystem) {
-			return "System blockers · gate flags"
+			return bilingualLine("系統阻斷 · 門檻標記", "System blockers · gate flags")
 		}
 		if (o.waitDay) {
-			return "Gate flags"
+			return bilingualLine("門檻標記", "Gate flags")
 		}
-		return o.hasSystem ? "System blockers" : "Blockers"
+		return o.hasSystem ? bilingualLine("系統阻斷", "System blockers") : bilingualLine("阻斷項", "Blockers")
 	}
 
 	function todayMissionEmptyBlockersCopy(opts) {
 		var o = opts || {}
 		if ((o.systemBlockers || []).length && !(o.cardGates || []).length) {
-			return "No card-level gate flags"
+			return bilingualLine("無卡片級門檻標記", "No card-level gate flags")
 		}
-		return "None flagged"
+		return bilingualLine("無標記", "None flagged")
 	}
 
 	/** Playbook WAIT-day monitor guidance — operator-facing, no deploy authority. */
@@ -1487,7 +1580,7 @@
 		return "RESEARCH ONLY"
 	}
 
-	var DOSSIER_CONFIRM_ONLY_SIZING = "No sizing guidance in confirm-only mode"
+	var DOSSIER_CONFIRM_ONLY_SIZING = "Confirm-only 不定倉 · No sizing guidance in confirm-only mode"
 
 	function dossierQuoteAvailable(data) {
 		var d = data || {}
@@ -2096,6 +2189,33 @@
 		return s
 	}
 
+
+	function playbookCardGateLine(status, detail) {
+		var su = String(status || "WATCH").toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim()
+		var d = String(detail || "").trim()
+		if (!d) {
+			if (su === "BLOCKED") return bilingualLine("禁止部署 — 門檻未齊", "Deploy blocked — gates incomplete")
+			if (su === "AVOID" || su === "NO TRADE") return bilingualLine("避免 — 不可部署", "Avoid — not deploy-ready")
+			return String(status || "WATCH").replace(/_/g, " ") + " — " + bilingualLine("僅監察", "monitor only")
+		}
+		d = d.replace(/^(AVOID|BLOCKED|WATCH|NO_TRADE|PILOT|FALLBACK WATCH)\s*[·\-\—:\u2014]\s*/i, "").trim()
+		if (su === "BLOCKED") return bilingualLine("禁止部署 — " + d, "Deploy blocked — " + d)
+		if (su === "AVOID" || su === "NO TRADE") return bilingualLine("避免 — " + d, "Avoid — " + d)
+		return String(status || "WATCH").replace(/_/g, " ") + " — " + d
+	}
+
+	function localizeHeaderSurface(copy) {
+		return copy || {}
+	}
+
+	function localizeFetchStateCopy(copy) {
+		return copy || {}
+	}
+
+	function surfaceEmptyStateCopy(kind) {
+		return { headline: "", detail: "", badge: kind || "", cta: "" }
+	}
+
 	var WORKSTATION_PANEL_TITLES = {
 		quote: "Quote",
 		chart: "Chart",
@@ -2683,7 +2803,16 @@
 		globalTruthStrip: globalTruthStrip,
 		operatorBlock: operatorBlock,
 		scopedFreshnessStrip: scopedFreshnessStrip,
+		scopedFreshnessStripLocalized: scopedFreshnessStripLocalized,
+		localizeScopedFreshnessStrip: localizeScopedFreshnessStrip,
+		localizeMissionBlocker: localizeMissionBlocker,
+		localizeMissionBlockerList: localizeMissionBlockerList,
 		systemTruthMissionBlockers: systemTruthMissionBlockers,
+		systemTruthMissionBlockersLocalized: systemTruthMissionBlockersLocalized,
+		playbookCardGateLine: playbookCardGateLine,
+		localizeHeaderSurface: localizeHeaderSurface,
+		localizeFetchStateCopy: localizeFetchStateCopy,
+		surfaceEmptyStateCopy: surfaceEmptyStateCopy,
 		morningDecisionLine: morningDecisionLine,
 		qualificationCountLine: qualificationCountLine,
 		playbookQualificationFunnelLine: playbookQualificationFunnelLine,
