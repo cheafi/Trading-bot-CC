@@ -1298,6 +1298,30 @@
         </div>
       </template>
 
+      <!-- ── Opportunity Status (no-edge clarity) ── -->
+      <template x-if="today7.opportunity_status && !opportunityStatusCollapsed()">
+        <div style="padding:4px 12px 0" data-cc="opportunity-status-panel">
+          <div class="card card-p" style="padding:10px 12px;border-left:3px solid var(--purple);background:rgba(167,139,250,.05)">
+            <div class="text-[9px] font-bold uppercase mb-1.5" style="color:var(--purple)">機會狀態 · Opportunity Status</div>
+            <div class="text-[9px] mb-1"><span class="font-bold mr-1" style="color:var(--t2)">Edge today:</span><span class="text-white font-semibold" x-text="today7.opportunity_status.edge_today"></span><span class="text-[8px] ml-1" style="color:var(--t3)" x-text="'('+today7.opportunity_status.edge_today_zh+')'"></span></div>
+            <div class="text-[9px] mb-1" x-show="(today7.opportunity_status.blockers||[]).length"><span class="font-bold mr-1" style="color:var(--amber)">Why · <span x-text="today7.opportunity_status.blockers_headline_zh"></span>:</span><span style="color:var(--t2)" x-text="(today7.opportunity_status.blockers||[]).join(' · ')"></span></div>
+            <div class="text-[9px] mb-1" x-show="(today7.opportunity_status.upgrade_triggers||[]).length"><span class="font-bold mr-1" style="color:var(--green)">Upgrade · <span x-text="today7.opportunity_status.upgrade_triggers_zh"></span>:</span><span style="color:var(--t2)" x-text="(today7.opportunity_status.upgrade_triggers||[]).join(' → ')"></span></div>
+            <template x-if="(today7.opportunity_status.closest_candidates||[]).length">
+              <div class="text-[9px] mt-1 pt-1" style="border-top:1px solid rgba(255,255,255,.06)">
+                <span class="font-bold mr-1" style="color:var(--blue)">Closest · <span x-text="today7.opportunity_status.closest_candidates_zh"></span>:</span>
+                <template x-for="cc in (today7.opportunity_status.closest_candidates||[]).slice(0,3)" :key="cc.ticker">
+                  <div class="text-[8px] mt-0.5" style="color:var(--t2);line-height:1.45">
+                    <span class="font-bold text-white" x-text="cc.ticker"></span>
+                    <span x-text="' ('+cc.structure+', blocked: '+cc.blocked+')'"></span>
+                    <span class="block text-[7px]" style="color:var(--t3)" x-text="'↑ '+cc.upgrade_trigger"></span>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
       <template x-if="tab==='today'&&(authorityDegradedBanner() || todayUsesBriefFallback() || staleSnapshotContext())">
         <div style="padding:4px 12px 0">
           <div class="p-2 rounded text-[9px]" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.28);color:var(--amber);line-height:1.55">
@@ -4274,18 +4298,7 @@
             <li><strong style="color:var(--t1)">Don't treat IBKR LOGIN as execution-ready</strong> — GATEWAY UP · LOGIN REQUIRED still blocks handoff · 已登入 Gateway ≠ 可下單</li>
             <li><strong style="color:var(--t1)">Don't treat Discovery / Flow / RS as deploy permission</strong> — research-only surfaces · 掃描結果 ≠ 部署許可</li>
             <li><strong style="color:var(--t1)">Don't treat Backtest Lab as live evidence</strong> — historical simulation, not deployment authority · 回測 ≠ 實盤依據</li>
-            <li><strong style="color:var(--t1)">Don't trade in Time Travel replay</strong> — ⏱ whole-page replay shows historical brief snapshots only; deploy/handoff stay blocked</li>
           </ul>
-
-          <details style="margin-top:10px">
-            <summary style="font-size:11px;font-weight:700;color:var(--purple);cursor:pointer;padding:4px 0">⏱ Time Travel · 重播任何日期</summary>
-            <div style="margin-top:8px;font-size:11px;color:var(--t2);line-height:1.65">
-              Header <strong style="color:var(--t1)">⏱</strong> opens whole-console replay — pick a date with a Morning Brief snapshot and click <em>Enter replay</em>.
-              Dashboard, Playbook, and the header truth strip reload from that day's brief (research/backtest only).
-              <strong style="color:var(--amber)">Deploy, sizing, and IBKR handoff are blocked</strong> while the purple replay banner is visible.
-              Use <em>單股重播 Single ticker</em> inside the modal for causal per-ticker dossier-style replay without changing the whole page.
-            </div>
-          </details>
 
           <details style="margin-top:4px">
             <summary style="font-size:11px;font-weight:700;color:var(--t1);cursor:pointer;padding:4px 0">When capital is allowed / blocked</summary>
@@ -9134,6 +9147,7 @@
         };
       },
       pageAuthorityMode(){
+        if(this.replayModeActive()) return 'diagnostic';
         if(this.tab==='guide') return 'guide_reference';
         const surface=this.pageSurface();
         if(!this.surfaceShowsDecisionChips(surface)) return surface;
@@ -9714,6 +9728,14 @@
         if(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlock)
           return CCHelpers.operatorBlock(truth,'dashboard',blocks);
         return truth.operator_block||{now:truth.operator_sentence||'',why:truth.primary_blocker||'',allowed:'monitor candidates, create watch rules',blocked:'no sizing, no handoff, no pilot entry',valid_candidates:'',next:'',truth_strip:this.unifiedTruthStripLine(),regime_state:truth.regime_state,deploy_authority:!!truth.deploy_authority,repair_priority:truth.repair_priority||[]};
+      },
+      opportunityStatusCollapsed(){
+        const os=this.today7?.opportunity_status;
+        if(!os) return true;
+        if(os.collapsed===true) return true;
+        const deploy=Number(os.calibration?.deploy_qualified||0);
+        const watch=Number(os.calibration?.watch_qualified||0);
+        return deploy>0&&watch>7;
       },
       researchSurfaceBlock(surface){
         const truth=this.today7?.system_truth||{};
@@ -14536,28 +14558,28 @@
         try{
           if(!this.rankedOpps.rows.length&&!this.rankedOpps.actionFilter&&!this.rankedOpps.sectorFilter){
             try{
-              const sr=await this.ccFetch('/api/v7/playbook/ranked/snapshot?limit=30',{retries:2,backoff:500});
-              if(sr&&sr.ok) this.applyRankedPayload(await sr.json(),{fromSnapshot:true});
+              const sr=await this.ccFetchJson('/api/v7/playbook/ranked/snapshot?limit=30',{tab:'signals',retries:2,backoff:500});
+              if(sr.ok) this.applyRankedPayload(sr.data,{fromSnapshot:true});
             }catch(e){console.warn('ranked snapshot hydrate failed',e)}
           }
           let u='/api/v7/playbook/ranked?limit=30';
           if(this.rankedOpps.actionFilter) u+='&action='+this.rankedOpps.actionFilter;
           if(this.rankedOpps.sectorFilter) u+='&sector='+this.rankedOpps.sectorFilter;
           if(opts.refresh) u+='&refresh=true';
-          const r=await this.ccFetch(u,{retries:3,backoff:600});
-          if(!r||!r.ok){
-            if(r&&r.status===503){
+          const jr=await this.ccFetchJson(u,{tab:'signals',retries:3,backoff:600});
+          if(!jr.ok){
+            if(jr.status===503){
               try{
-                const sr=await this.ccFetch('/api/v7/playbook/ranked/snapshot?limit=30',{retries:2,backoff:500});
+                const sr=await this.ccFetchJson('/api/v7/playbook/ranked/snapshot?limit=30',{tab:'signals',retries:2,backoff:500});
                 if(sr.ok){
-                  this.applyRankedPayload(await sr.json(),{fromSnapshot:true});
+                  this.applyRankedPayload(sr.data,{fromSnapshot:true});
                   return;
                 }
               }catch(e2){console.warn('ranked snapshot fallback failed',e2)}
             }
-            throw new Error('HTTP '+r.status);
+            throw new Error(jr.error||'HTTP '+(jr.status||'fail'));
           }
-          this.applyRankedPayload(await r.json());
+          this.applyRankedPayload(jr.data);
           this.rankedOpps.fetch_failed=false;
           this.surfaceFetchHints.signals={...(this.surfaceFetchHints.signals||{}),failed_fetch:false,error:''};
           if(!this.rankedOpps.rows.length&&!this.rankedOpps.actionFilter&&!this.rankedOpps.sectorFilter&&!this.playbookIsEmergencyBoard()){
@@ -14862,12 +14884,12 @@
         try{
           let u='/api/v7/playbook/scanners';
           if(cat) u+='?category='+encodeURIComponent(cat);
-          const r=await this.ccFetch(u,{retries:3,backoff:600});
-          if(!r||!r.ok){
-            if(r&&r.status===503){
-              const sr=await this.ccFetch(u,{retries:2,backoff:500});
-              if(sr&&sr.ok){
-                const d=await sr.json();
+          const jr=await this.ccFetchJson(u,{tab,retries:3,backoff:600});
+          if(!jr.ok){
+            if(jr.status===503){
+              const sr=await this.ccFetchJson(u,{tab,retries:2,backoff:500});
+              if(sr.ok){
+                const d=sr.data;
                 if(this.scannerHubIsRenderable(d)){
                   this.scannerHub.data=d;this.scannerHub.error='';this.saveScannersToCache(d);
                   this.surfaceFetchHints[tab]={loading:false,error:'',fallback:this.scannerUsesBriefFallback(),research_only:true};
@@ -14875,9 +14897,9 @@
                 }
               }
             }
-            throw new Error('HTTP '+(r?r.status:'fail'));
+            throw new Error(jr.error||'HTTP '+(jr.status||'fail'));
           }
-          const d=await r.json();
+          const d=jr.data;
           if(!this.scannerHubIsRenderable(d)) throw new Error(d.error||'incomplete scanner payload');
           this.scannerHub.data=d;
           if(d.diagnostics&&!d.diagnostics.source) d.diagnostics.source='playbook';
@@ -15324,9 +15346,9 @@
       async fetchCommandBoard(){
         this.cmd.loading=true;this.cmd.error='';
         try{
-          const r=await this.ccFetch('/api/watchlist?limit=60',{retries:2,backoff:500});
-          if(!r.ok)throw new Error('HTTP '+r.status);
-          const d=await r.json();
+          const jr=await this.ccFetchJson('/api/watchlist?limit=60',{tab:'command',retries:2,backoff:500});
+          if(!jr.ok)throw new Error(jr.error||'HTTP '+(jr.status||'fail'));
+          const d=jr.data;
           this.cmd.watchlistRows=(d.board||[]).map(row=>({
             ticker:row.ticker,
             action:row.action,

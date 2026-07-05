@@ -16,6 +16,7 @@ from src.services.surface_authority import (
 )
 
 _INDEX_HTML = Path(__file__).resolve().parents[1] / "src" / "api" / "templates" / "index.html"
+_GUIDE_HTML = Path(__file__).resolve().parents[1] / "src" / "api" / "templates" / "cc" / "partials" / "guide.html"
 
 
 def test_guide_tab_resolves_suspended_authority():
@@ -108,21 +109,21 @@ def test_guide_layer1_usability_polish():
 
 def test_guide_signal_card_degraded_examples():
     """Layer 2 signal card section shows ideal + degraded illustrative examples."""
-    html = _INDEX_HTML.read_text(encoding="utf-8")
+    html = _GUIDE_HTML.read_text(encoding="utf-8")
     assert "Reading a signal card" in html
     assert "Illustrative examples only" in html
     assert "Ideal — deploy-grade" in html
     assert "Degraded — fallback watch" in html
     assert "FALLBACK WATCH" in html
     assert "Degraded — confirm-only dossier" in html
-    assert "Confirm-only — no IBKR handoff or sizing" in html
+    assert "Confirm-only · 僅結構確認" in html
     assert "No sizing guidance in confirm-only mode" in html
 
 
 def test_guide_copy_aligned_with_product_wording():
     """Guide copy matches live Command, Dossier, IBKR, Backtest Lab surfaces."""
-    html = _INDEX_HTML.read_text(encoding="utf-8")
+    html = _GUIDE_HTML.read_text(encoding="utf-8")
     assert "advanced aggregate — not deploy gate" in html.lower()
     assert "GATEWAY UP · LOGIN REQUIRED" in html
     assert "backtest research only; not deployment authority" in html.lower()
-    assert "Confirm-only — no IBKR handoff or sizing" in html
+    assert "Confirm-only · 僅結構確認" in html
