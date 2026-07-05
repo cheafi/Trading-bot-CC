@@ -7,6 +7,15 @@
         <div style="font-size:12px;color:var(--t2);line-height:1.7;max-width:520px">
           <strong style="color:var(--t1)">Layer 1</strong> (~30s quick start) · <strong style="color:var(--t1)">Layer 2</strong> (read the UI) · <strong style="color:var(--t1)">Layer 3</strong> (glossary). Reference only — open Dashboard for live board posture.
         </div>
+        <div style="margin-top:12px;padding:10px 12px;background:rgba(0,212,170,.06);border:1px solid rgba(0,212,170,.22);border-radius:8px;font-size:11px;color:var(--t2);line-height:1.65;max-width:560px">
+          <div style="font-size:10px;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">操作員速查 · Operator quick read</div>
+          <div><strong style="color:var(--t1)">現在 · Now</strong> — 今日狀態（例：MONITOR ONLY · 僅監察 · 禁止部署）</div>
+          <div><strong style="color:var(--t1)">原因 · Why</strong> — 為何被擋（例：IBKR 離線、看板 WAIT、0 筆 deploy-qualified）</div>
+          <div><strong style="color:var(--t1)">可做 · Allowed</strong> — 刷新看板、建立監察規則、開 Playbook 複核</div>
+          <div><strong style="color:var(--t1)">禁止 · Blocked</strong> — 不可定倉、不可交接 IBKR、不可紙上模擬</div>
+          <div><strong style="color:var(--t1)">下一步 · Next</strong> — 先做一件事（例：修復 IBKR → 再刷新看板）</div>
+          <div style="margin-top:8px;font-size:10px;color:var(--t3)">Playbook = 候選名單（非交易指令）· Dossier confirm-only = 結構確認（非交易計劃）· Funds = 研究模式（非配置指令）</div>
+        </div>
         <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
           <button @click="localStorage.setItem('cc_guide_seen','1');switchTab('today')" class="btn-p" style="font-size:13px;padding:10px 24px">🚀 Open Dashboard</button>
           <button @click="localStorage.removeItem('cc_guide_seen')" style="background:none;border:none;color:var(--t3);font-size:11px;cursor:pointer;text-decoration:underline">Reset first-visit flag</button>
@@ -79,19 +88,19 @@
           <div class="guide-operator-checklist" x-show="operatorChecklistVisible()" id="cc-operator-checklist">
             <div style="font-size:11px;font-weight:800;color:var(--green);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">Operator checklist</div>
             <ul style="font-size:11px;color:var(--t2);line-height:1.65;padding-left:16px;margin:0 0 8px">
-              <li><strong style="color:var(--t1)">Page gate beats card rank</strong> — WAIT/NO_TRADE caps deploy surfaces</li>
-              <li><strong style="color:var(--t1)">Research ≠ permission</strong> — Discovery, Flow, Funds, RS inform only</li>
-              <li><strong style="color:var(--t1)">Dashboard first</strong> — live board posture; Guide is reference only</li>
+              <li><strong style="color:var(--t1)">Page gate beats card rank</strong> — WAIT/NO_TRADE caps deploy surfaces · 頁面門檻優先於卡片排名</li>
+              <li><strong style="color:var(--t1)">Research ≠ permission</strong> — Discovery, Flow, Funds, RS inform only · 研究 ≠ 可部署</li>
+              <li><strong style="color:var(--t1)">Dashboard first</strong> — live board posture; Guide is reference only · 先看 Dashboard 今日狀態</li>
             </ul>
             <button type="button" @click="dismissOperatorChecklist()" class="btn-s text-[9px]">Got it — hide until reset</button>
           </div>
 
           <div style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Most common mistakes</div>
           <ul style="font-size:11px;color:var(--t2);line-height:1.65;padding-left:16px;margin:0 0 12px">
-            <li><strong style="color:var(--t1)">Don't size from fallback cards</strong> — FALLBACK WATCH / brief fallback = monitor-only</li>
-            <li><strong style="color:var(--t1)">Don't treat IBKR LOGIN as execution-ready</strong> — GATEWAY UP · LOGIN REQUIRED still blocks handoff</li>
-            <li><strong style="color:var(--t1)">Don't treat Discovery / Flow / RS as deploy permission</strong> — research-only surfaces</li>
-            <li><strong style="color:var(--t1)">Don't treat Backtest Lab as live evidence</strong> — historical simulation, not deployment authority</li>
+            <li><strong style="color:var(--t1)">Don't size from fallback cards</strong> — FALLBACK WATCH / brief fallback = monitor-only · 備援卡片不可定倉</li>
+            <li><strong style="color:var(--t1)">Don't treat IBKR LOGIN as execution-ready</strong> — GATEWAY UP · LOGIN REQUIRED still blocks handoff · 已登入 Gateway ≠ 可下單</li>
+            <li><strong style="color:var(--t1)">Don't treat Discovery / Flow / RS as deploy permission</strong> — research-only surfaces · 掃描結果 ≠ 部署許可</li>
+            <li><strong style="color:var(--t1)">Don't treat Backtest Lab as live evidence</strong> — historical simulation, not deployment authority · 回測 ≠ 實盤依據</li>
           </ul>
 
           <details style="margin-top:4px">
@@ -357,7 +366,7 @@
               <div style="font-size:10px;color:var(--amber);font-weight:700">Research incomplete</div>
             </div>
             <div style="font-size:11px;color:var(--t2);line-height:1.6;margin-bottom:6px">
-              <strong style="color:var(--amber)">Confirm-only — no IBKR handoff or sizing</strong><br>
+              <strong style="color:var(--amber)">Confirm-only · 僅結構確認：無入場價、無止損、無倉位</strong><br>
               <span style="color:var(--t3)">No sizing guidance in confirm-only mode · levels indicative until live dossier loads</span>
             </div>
             <div style="display:flex;gap:4px;flex-wrap:wrap">
@@ -425,7 +434,7 @@
           <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Bracket not ready</span><span style="color:var(--t2)">Card lacks entry/stop or execution_ready flag.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Mock flow</span><span style="color:var(--t2)">Flow surface in synthetic/mock mode — colour only.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Backtest funds</span><span style="color:var(--t2)">Funds sleeves marked research/backtest — not live capital.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Dossier confirm-only</span><span style="color:var(--t2)">Confirm-only — no IBKR handoff or sizing; levels indicative until live dossier loads.</span></div>
+          <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Dossier confirm-only</span><span style="color:var(--t2)">Confirm-only · 僅結構確認 — 價位僅供參考，live 載入前不可定倉或交接 IBKR。</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">No live validation</span><span style="color:var(--t2)">Any scoped strip shows Stale/Expired/Fallback, Broker: Offline, Runtime stale, Authority: Blocked, or SYNTHETIC mode.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--t2);font-weight:700;min-width:120px">Scanner warming</span><span style="color:var(--t2)">Discovery loading or 0 hits on WAIT day — often correct, not a miss.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--t2);font-weight:700;min-width:120px">Manual sync pending</span><span style="color:var(--t2)">Portfolio or broker positions not reconciled after last session.</span></div>
@@ -467,7 +476,7 @@
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pb" style="font-size:9px">Research-only</span><span style="color:var(--t2)">ANALYSIS ONLY · supporting context</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pw" style="font-size:9px">Diagnostic</span><span style="color:var(--t2)">Health, rejections, ops visibility</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px">Execution-dependent</span><span style="color:var(--t2)">IBKR handoff · LOGIN ≠ READY until session + bracket aligned</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px">CONFIRM ONLY</span><span style="color:var(--t2)">Confirm-only — no IBKR handoff or sizing; levels indicative only</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px">CONFIRM ONLY</span><span style="color:var(--t2)">Confirm-only · 僅結構確認 — 價位僅供參考，不可定倉</span></div>
             </div>
           </div>
 

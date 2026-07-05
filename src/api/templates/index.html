@@ -244,7 +244,7 @@
             <span x-text="exportReviewPdfBusy?'Exporting…':'Export review PDF'"></span>
           </button>
           <!-- ── HELP ── -->
-          <button @click="tt.show=true" style="background:none;border:1px solid var(--bd);color:var(--t3);padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer" title="Time Travel — replay any date">⏱</button>
+          <button @click="openTimeTravel()" style="background:none;border:1px solid var(--bd);color:var(--t3);padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer" title="⏱ Time Travel · 重播任何日期">⏱</button>
           <button @click="showGuideModal=true" style="background:none;border:1px solid var(--bd);color:var(--t3);padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer" title="Guide / Help">?</button>
           <div class="text-sm mono" style="color:var(--t2)" x-text="clock"></div>
         </div>
@@ -467,8 +467,11 @@
           </div>
           <div style="font-size:10px;color:var(--t3);margin-top:8px;padding-top:8px;border-top:1px solid var(--bd)" x-text="(tt.data?.trust?.note||'')+ ' · bars_before='+tt.data?.bars_before+' bars_after='+tt.data?.bars_after"></div>
         </div>
-        <div x-show="!tt.data && !tt.loading && !tt.err" style="color:var(--t3);font-size:11px;padding:20px;text-align:center">
+        <div x-show="!tt.data && !tt.loading && !tt.err && tt.mode==='ticker'" style="color:var(--t3);font-size:11px;padding:20px;text-align:center">
           Pick a ticker + date → see regime, expert-council vote, final action, and actual forward returns from that day.
+        </div>
+        <div x-show="!tt.loading && !tt.err && tt.mode==='whole' && !replayModeActive()" style="color:var(--t3);font-size:11px;padding:20px;text-align:center">
+          Pick a date → Enter replay loads Dashboard + Playbook + header from that day's Morning Brief snapshot.
         </div>
       </div>
     </div>
@@ -676,7 +679,7 @@
     <!-- ═══════════════════════════════════════════════════════ -->
     <!-- COMMAND CENTER — Terminal layout                       -->
     <!-- ═══════════════════════════════════════════════════════ -->
-    <div x-show="tab==='command'" class="fade" style="overflow:hidden">
+    <div x-show="tab==='command'" class="fade" style="overflow:hidden" x-init="tab==='command' && fetchAosMonitors()">
 
       <div class="card card-p mx-3 mt-2 mb-2" style="border-left:3px solid var(--blue);padding:8px 12px">
         <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--blue)">Advanced aggregate — not deploy gate</div>
@@ -750,6 +753,41 @@
           </template>
         </div>
       </template>
+
+      <!-- ── Agent 盯盤 — getting started + rule input ── -->
+      <div style="padding:6px 12px" data-cc="agent-getting-started">
+        <div class="card card-p mb-2" x-show="agentGettingStartedVisible()" style="border-left:3px solid var(--blue)">
+          <div class="text-[10px] font-bold mb-1" style="color:var(--blue)" x-text="researchGettingStarted('agent').title"></div>
+          <div class="text-[8px] font-bold uppercase mb-2" style="color:var(--t3)" x-text="researchGettingStarted('agent').badge"></div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[8px] mb-2">
+            <div><span class="font-bold uppercase" style="color:var(--blue)">NOW</span> <span x-text="researchGettingStarted('agent').now"></span></div>
+            <div x-show="researchGettingStarted('agent').blocker"><span class="font-bold uppercase" style="color:var(--red)">BLOCKER</span> <span class="text-amber-300" x-text="researchGettingStarted('agent').blocker"></span></div>
+            <div><span class="font-bold uppercase" style="color:var(--green)">NEXT</span> <span x-text="researchGettingStarted('agent').next"></span></div>
+          </div>
+          <div class="text-[9px] mb-2" style="color:var(--t2);line-height:1.55" x-text="researchGettingStarted('agent').copy"></div>
+          <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--t3)">你可以這樣輸入 · Try typing</div>
+          <div class="flex flex-wrap gap-1 mb-2">
+            <template x-for="ex in researchGettingStarted('agent').examples" :key="ex.text">
+              <button type="button" class="pill pb text-[8px] cursor-pointer" style="border:none" :title="ex.hint" @click="agentMonitorFillExample(ex.text)" x-text="ex.text"></button>
+            </template>
+          </div>
+          <div class="flex flex-wrap gap-2 items-center">
+            <input x-model="agentMonitor.prompt" class="flex-1 min-w-[200px] rounded px-2 py-1 text-[10px]" style="background:var(--s2);border:1px solid var(--bd);color:var(--t1)" :placeholder="researchGettingStarted('agent').placeholder" @keydown.enter.prevent="submitAgentMonitorPrompt()">
+            <button class="btn-p text-[9px]" :disabled="agentMonitor.submitting" @click="submitAgentMonitorPrompt()" x-text="agentMonitor.submitting?'…':'建立規則'"></button>
+            <button class="btn-s text-[9px]" @click="agentCreateRulesFromPlaybook()" x-text="researchGettingStarted('agent').nextButton"></button>
+          </div>
+        </div>
+        <div class="card card-p" x-show="!agentGettingStartedVisible()" style="border-left:3px solid var(--amber)">
+          <div class="flex flex-wrap justify-between items-center gap-2 mb-2">
+            <div class="text-[10px] font-bold uppercase" style="color:var(--amber)">🤖 Agent 盯盤 · Monitor only</div>
+            <span class="text-[8px]" style="color:var(--t3)" x-text="(aosMonitors.rules||[]).length+' rules'"></span>
+          </div>
+          <div class="flex flex-wrap gap-2 items-center">
+            <input x-model="agentMonitor.prompt" class="flex-1 min-w-[200px] rounded px-2 py-1 text-[10px]" style="background:var(--s2);border:1px solid var(--bd);color:var(--t1)" :placeholder="researchGettingStarted('agent').placeholder" @keydown.enter.prevent="submitAgentMonitorPrompt()">
+            <button class="btn-p text-[9px]" :disabled="agentMonitor.submitting" @click="submitAgentMonitorPrompt()" x-text="agentMonitor.submitting?'…':'+ 規則'"></button>
+          </div>
+        </div>
+      </div>
 
       <!-- ── 3-COLUMN BODY ── -->
       <div class="cc-body">
@@ -3949,6 +3987,33 @@
         </div>
         <div class="text-[9px]" style="color:var(--t2);line-height:1.55" x-text="stratLabOneLiner()"></div>
       </div>
+      <div class="card card-p mb-2" x-show="stratLabGettingStartedVisible()" data-cc="stratlab-getting-started" style="border-left:3px solid var(--green)">
+        <div class="text-[10px] font-bold mb-1" style="color:var(--green)" x-text="researchGettingStarted('strategy').title"></div>
+        <div class="text-[8px] font-bold uppercase mb-2" style="color:var(--t3)" x-text="researchGettingStarted('strategy').badge"></div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[8px] mb-2">
+          <div><span class="font-bold uppercase" style="color:var(--blue)">NOW</span> <span x-text="researchGettingStarted('strategy').now"></span></div>
+          <div x-show="researchGettingStarted('strategy').blocker"><span class="font-bold uppercase" style="color:var(--red)">BLOCKER</span> <span class="text-amber-300" x-text="researchGettingStarted('strategy').blocker"></span></div>
+          <div><span class="font-bold uppercase" style="color:var(--green)">NEXT</span> <span style="color:var(--t2)" x-text="researchGettingStarted('strategy').next"></span></div>
+        </div>
+        <div class="text-[9px] mb-2" style="color:var(--t2);line-height:1.55" x-text="researchGettingStarted('strategy').copy"></div>
+        <ol class="text-[9px] mb-2 pl-4" style="color:var(--t2);line-height:1.65;list-style:decimal">
+          <template x-for="(step,i) in researchGettingStarted('strategy').steps" :key="'sl-'+i">
+            <li x-text="step"></li>
+          </template>
+        </ol>
+        <div class="flex flex-wrap gap-1 mb-2">
+          <template x-for="sid in researchGettingStarted('strategy').examples" :key="sid">
+            <button type="button" class="pill pb text-[8px] mono cursor-pointer" style="border:none" @click="stratLabDraft.strategyId=sid" x-text="sid"></button>
+          </template>
+        </div>
+        <div class="flex flex-wrap gap-2 items-center">
+          <input x-model="stratLabDraft.strategyId" class="flex-1 min-w-[180px] rounded px-2 py-1 text-[10px] mono" style="background:var(--s2);border:1px solid var(--bd);color:var(--t1)" :placeholder="researchGettingStarted('strategy').placeholder" @keydown.enter.prevent="generateStratLabDraft()">
+          <button class="btn-p text-[9px]" :disabled="stratLabDraft.generating" @click="generateStratLabDraft()" x-text="stratLabDraft.generating?'…':researchGettingStarted('strategy').nextButton"></button>
+        </div>
+        <div x-show="stratLabDraft.draftId" class="text-[8px] mt-2 p-2 rounded" style="background:var(--s2);color:var(--t2)">
+          草稿已建立 · Draft <span class="mono text-white" x-text="stratLabDraft.draftId"></span> — 驗證後到 Playbook 審閱候選（研究用，無部署權限）
+        </div>
+      </div>
       <details class="card card-p text-[9px] mono" style="color:var(--t2)" data-cc="stratlab-details">
         <summary class="font-bold text-white cursor-pointer select-none">Details · per-strategy window</summary>
         <template x-if="stratHealth.loading">
@@ -4077,6 +4142,15 @@
         <div style="font-size:12px;color:var(--t2);line-height:1.7;max-width:520px">
           <strong style="color:var(--t1)">Layer 1</strong> (~30s quick start) · <strong style="color:var(--t1)">Layer 2</strong> (read the UI) · <strong style="color:var(--t1)">Layer 3</strong> (glossary). Reference only — open Dashboard for live board posture.
         </div>
+        <div style="margin-top:12px;padding:10px 12px;background:rgba(0,212,170,.06);border:1px solid rgba(0,212,170,.22);border-radius:8px;font-size:11px;color:var(--t2);line-height:1.65;max-width:560px">
+          <div style="font-size:10px;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">操作員速查 · Operator quick read</div>
+          <div><strong style="color:var(--t1)">現在 · Now</strong> — 今日狀態（例：MONITOR ONLY · 僅監察 · 禁止部署）</div>
+          <div><strong style="color:var(--t1)">原因 · Why</strong> — 為何被擋（例：IBKR 離線、看板 WAIT、0 筆 deploy-qualified）</div>
+          <div><strong style="color:var(--t1)">可做 · Allowed</strong> — 刷新看板、建立監察規則、開 Playbook 複核</div>
+          <div><strong style="color:var(--t1)">禁止 · Blocked</strong> — 不可定倉、不可交接 IBKR、不可紙上模擬</div>
+          <div><strong style="color:var(--t1)">下一步 · Next</strong> — 先做一件事（例：修復 IBKR → 再刷新看板）</div>
+          <div style="margin-top:8px;font-size:10px;color:var(--t3)">Playbook = 候選名單（非交易指令）· Dossier confirm-only = 結構確認（非交易計劃）· Funds = 研究模式（非配置指令）</div>
+        </div>
         <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
           <button @click="localStorage.setItem('cc_guide_seen','1');switchTab('today')" class="btn-p" style="font-size:13px;padding:10px 24px">🚀 Open Dashboard</button>
           <button @click="localStorage.removeItem('cc_guide_seen')" style="background:none;border:none;color:var(--t3);font-size:11px;cursor:pointer;text-decoration:underline">Reset first-visit flag</button>
@@ -4149,19 +4223,19 @@
           <div class="guide-operator-checklist" x-show="operatorChecklistVisible()" id="cc-operator-checklist">
             <div style="font-size:11px;font-weight:800;color:var(--green);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">Operator checklist</div>
             <ul style="font-size:11px;color:var(--t2);line-height:1.65;padding-left:16px;margin:0 0 8px">
-              <li><strong style="color:var(--t1)">Page gate beats card rank</strong> — WAIT/NO_TRADE caps deploy surfaces</li>
-              <li><strong style="color:var(--t1)">Research ≠ permission</strong> — Discovery, Flow, Funds, RS inform only</li>
-              <li><strong style="color:var(--t1)">Dashboard first</strong> — live board posture; Guide is reference only</li>
+              <li><strong style="color:var(--t1)">Page gate beats card rank</strong> — WAIT/NO_TRADE caps deploy surfaces · 頁面門檻優先於卡片排名</li>
+              <li><strong style="color:var(--t1)">Research ≠ permission</strong> — Discovery, Flow, Funds, RS inform only · 研究 ≠ 可部署</li>
+              <li><strong style="color:var(--t1)">Dashboard first</strong> — live board posture; Guide is reference only · 先看 Dashboard 今日狀態</li>
             </ul>
             <button type="button" @click="dismissOperatorChecklist()" class="btn-s text-[9px]">Got it — hide until reset</button>
           </div>
 
           <div style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Most common mistakes</div>
           <ul style="font-size:11px;color:var(--t2);line-height:1.65;padding-left:16px;margin:0 0 12px">
-            <li><strong style="color:var(--t1)">Don't size from fallback cards</strong> — FALLBACK WATCH / brief fallback = monitor-only</li>
-            <li><strong style="color:var(--t1)">Don't treat IBKR LOGIN as execution-ready</strong> — GATEWAY UP · LOGIN REQUIRED still blocks handoff</li>
-            <li><strong style="color:var(--t1)">Don't treat Discovery / Flow / RS as deploy permission</strong> — research-only surfaces</li>
-            <li><strong style="color:var(--t1)">Don't treat Backtest Lab as live evidence</strong> — historical simulation, not deployment authority</li>
+            <li><strong style="color:var(--t1)">Don't size from fallback cards</strong> — FALLBACK WATCH / brief fallback = monitor-only · 備援卡片不可定倉</li>
+            <li><strong style="color:var(--t1)">Don't treat IBKR LOGIN as execution-ready</strong> — GATEWAY UP · LOGIN REQUIRED still blocks handoff · 已登入 Gateway ≠ 可下單</li>
+            <li><strong style="color:var(--t1)">Don't treat Discovery / Flow / RS as deploy permission</strong> — research-only surfaces · 掃描結果 ≠ 部署許可</li>
+            <li><strong style="color:var(--t1)">Don't treat Backtest Lab as live evidence</strong> — historical simulation, not deployment authority · 回測 ≠ 實盤依據</li>
           </ul>
 
           <details style="margin-top:4px">
@@ -4427,7 +4501,7 @@
               <div style="font-size:10px;color:var(--amber);font-weight:700">Research incomplete</div>
             </div>
             <div style="font-size:11px;color:var(--t2);line-height:1.6;margin-bottom:6px">
-              <strong style="color:var(--amber)">Structure review only — no deploy authority</strong><br>
+              <strong style="color:var(--amber)">Confirm-only · 僅結構確認：無入場價、無止損、無倉位</strong><br>
               <span style="color:var(--t3)">No sizing guidance in confirm-only mode · levels indicative until live dossier loads</span>
             </div>
             <div style="display:flex;gap:4px;flex-wrap:wrap">
@@ -4495,7 +4569,7 @@
           <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Bracket not ready</span><span style="color:var(--t2)">Card lacks entry/stop or execution_ready flag.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Mock flow</span><span style="color:var(--t2)">Flow surface in synthetic/mock mode — colour only.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Backtest funds</span><span style="color:var(--t2)">Funds sleeves marked research/backtest — not live capital.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Dossier confirm-only</span><span style="color:var(--t2)">Structure review only — levels indicative until live dossier loads.</span></div>
+          <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Dossier confirm-only</span><span style="color:var(--t2)">Confirm-only · 僅結構確認 — 價位僅供參考，live 載入前不可定倉或交接 IBKR。</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">No live validation</span><span style="color:var(--t2)">Any scoped strip shows Stale/Expired/Fallback, Broker: Offline, Runtime stale, Authority: Blocked, or SYNTHETIC mode.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--t2);font-weight:700;min-width:120px">Scanner warming</span><span style="color:var(--t2)">Discovery loading or 0 hits on WAIT day — often correct, not a miss.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--t2);font-weight:700;min-width:120px">Manual sync pending</span><span style="color:var(--t2)">Portfolio or broker positions not reconciled after last session.</span></div>
@@ -4537,7 +4611,7 @@
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pb" style="font-size:9px">Research-only</span><span style="color:var(--t2)">ANALYSIS ONLY · supporting context</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pw" style="font-size:9px">Diagnostic</span><span style="color:var(--t2)">Health, rejections, ops visibility</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px">Execution-dependent</span><span style="color:var(--t2)">IBKR handoff · LOGIN ≠ READY until session + bracket aligned</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px">CONFIRM ONLY</span><span style="color:var(--t2)">Structure review only — levels indicative only</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px">CONFIRM ONLY</span><span style="color:var(--t2)">Confirm-only · 僅結構確認 — 價位僅供參考，不可定倉</span></div>
             </div>
           </div>
 
@@ -7603,7 +7677,39 @@
                   </div>
                 </template>
                 <template x-if="!selfLearn.ab || !selfLearn.ab.active || !selfLearn.ab.active.length">
-                  <div class="text-[8px]" style="color:var(--t3)">No active shadow challengers.</div>
+                  <div data-cc="shadow-getting-started">
+                    <template x-if="shadowGettingStartedVisible()">
+                      <div class="p-2 rounded mb-2" style="background:rgba(88,166,255,.06);border:1px solid rgba(88,166,255,.2)">
+                        <div class="text-[9px] font-bold mb-1" style="color:var(--blue)" x-text="researchGettingStarted('shadow').title"></div>
+                        <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--t3)" x-text="researchGettingStarted('shadow').badge"></div>
+                        <div class="grid grid-cols-1 gap-1 text-[8px] mb-1">
+                          <div><span class="font-bold uppercase" style="color:var(--blue)">NOW</span> <span x-text="researchGettingStarted('shadow').now"></span></div>
+                          <div x-show="researchGettingStarted('shadow').blocker"><span class="font-bold uppercase" style="color:var(--red)">BLOCKER</span> <span class="text-amber-300" x-text="researchGettingStarted('shadow').blocker"></span></div>
+                          <div><span class="font-bold uppercase" style="color:var(--green)">NEXT</span> <span style="color:var(--t2)" x-text="researchGettingStarted('shadow').next"></span></div>
+                        </div>
+                        <div class="text-[8px] mb-1" style="color:var(--t2);line-height:1.55" x-text="researchGettingStarted('shadow').copy"></div>
+                        <ol class="text-[8px] mb-1 pl-4" style="color:var(--t2);line-height:1.55;list-style:decimal">
+                          <template x-for="(step,i) in researchGettingStarted('shadow').steps" :key="'sh-'+i">
+                            <li x-text="step"></li>
+                          </template>
+                        </ol>
+                        <div class="text-[8px] mb-2" style="color:var(--t3)">你會看到：<span style="color:var(--t2)" x-text="researchGettingStarted('shadow').outcomes"></span></div>
+                        <div class="flex flex-wrap gap-1 mb-1">
+                          <button type="button" class="btn-p text-[8px]" :disabled="shadowImport.busy" @click="$refs.shadowCsvInput.click()" x-text="shadowImport.busy?'匯入中…':researchGettingStarted('shadow').nextButton"></button>
+                          <input type="file" accept=".csv,text/csv" x-ref="shadowCsvInput" class="hidden" @change="importShadowTradesCsv($event)">
+                          <button type="button" class="btn-s text-[8px]" @click="switchTab('ibkr')" x-show="researchGettingStarted('shadow').blocker">連接 IBKR</button>
+                        </div>
+                        <details class="text-[7px]" style="color:var(--t3)">
+                          <summary class="cursor-pointer select-none" style="color:var(--t2)" x-text="researchGettingStarted('shadow').formatButton"></summary>
+                          <div class="mt-1 mono p-1 rounded" style="background:var(--s3);line-height:1.5">
+                            <div x-text="researchGettingStarted('shadow').csvColumns"></div>
+                            <div class="text-amber-300 mt-1" x-text="researchGettingStarted('shadow').csvExample"></div>
+                          </div>
+                        </details>
+                      </div>
+                    </template>
+                    <div class="text-[8px]" style="color:var(--t3)" x-show="!shadowGettingStartedVisible()">No active shadow challengers.</div>
+                  </div>
                 </template>
                 <!-- Experiment Ledger (Sprint 111) -->
                 <template x-if="selfLearn.ledger && selfLearn.ledger.entries && selfLearn.ledger.entries.length">
@@ -7897,6 +8003,9 @@
       pfEquity:null,pfEquityLoading:false,
       platformExtras:{catalyst:null,pmMemo:null,loading:false},
       aosMonitors:{rules:[],alerts:[],loading:false},
+      agentMonitor:{prompt:'',submitting:false},
+      stratLabDraft:{strategyId:'',draftId:'',generating:false},
+      shadowImport:{busy:false},
       ledgerView:{loading:false,loaded:false,rows:[],stats:null,filterStrategy:'',filterDirection:'',filterTicker:'',expanded:false},
       factory:{loading:false,ticker:'SPY',period:'2y',mode:'demo',result:null,detail:null,showDetail:false,sortBy:'score'},
       brief:{loading:false,data:null},

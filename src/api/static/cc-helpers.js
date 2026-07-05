@@ -331,13 +331,97 @@
 		}
 	}
 
+	/** Getting-started copy for research surfaces — Agent / Strategy Lab / Shadow. */
+	function researchGettingStarted(surface, ctx) {
+		var o = ctx || {}
+		var surf = String(surface || "").toLowerCase()
+		var watchN = Number(o.watchCandidates) || 0
+		var boardStale = !!o.boardStale
+		var brokerOffline = !!o.brokerOffline
+		var systemBlocker = ""
+		if (boardStale) {
+			systemBlocker = "盤面資料過舊 — 請先刷新 Playbook · Board data stale — refresh Playbook first"
+		} else if (brokerOffline && surf === "shadow") {
+			systemBlocker = "目前 IBKR 離線 — 可先用 CSV 匯入 · IBKR offline — use CSV import first"
+		}
+		if (surf === "agent") {
+			return {
+				surface: "agent",
+				title: "如何開始 · Getting started",
+				badge: "Agent 盯盤 · Monitor only",
+				now: "用一句話建立監察規則 — 不會下單或調倉 · Describe a watch condition — no orders or sizing",
+				copy: "輸入一句話描述你想監察的條件。Agent 只建立監察規則，不會下單或調倉。",
+				placeholder: "例如：當 KO 跌破 20 日線時提醒我…",
+				examples: [
+					{ text: "當 KO 跌破 20 日線時提醒我", hint: "price alert" },
+					{ text: "監察 XLP 成交量異常", hint: "volume watch" },
+					{ text: "每日開盤前摘要 Watch 名單", hint: "overnight brief" },
+					{ text: "當 VIX > 25 時降低關注度", hint: "calm-down guardrail" },
+				],
+				blocker: systemBlocker,
+				next: watchN > 0 ? "從 Playbook Watch 名單建立第一條規則" : "先刷新 Playbook，再建立監察規則",
+				nextButton: watchN > 0 ? "從 Playbook Watch 名單建立規則" : "先刷新 Playbook",
+				watchCandidates: watchN,
+			}
+		}
+		if (surf === "strategy") {
+			return {
+				surface: "strategy",
+				title: "如何開始 · Getting started",
+				badge: "策略實驗室 · Strategy Lab",
+				now: "研究策略假設，不具部署權限 · Research strategy hypotheses — no deploy authority",
+				copy: "策略實驗室用於研究假設，不具部署權限。",
+				placeholder: "輸入策略 ID 或從下方範例選擇…",
+				steps: [
+					"選擇或輸入策略名稱（例：defensive_pullback）",
+					"產生研究草稿",
+					"驗證後轉為 Watch 規則",
+					"到 Playbook 審閱候選",
+				],
+				examples: ["defensive_pullback", "rs_leader", "squeeze_breakout"],
+				blocker: systemBlocker,
+				next: "輸入策略 ID，點擊「產生研究草稿」開始",
+				nextButton: "產生研究草稿",
+			}
+		}
+		if (surf === "shadow") {
+			return {
+				surface: "shadow",
+				title: "如何開始 · Getting started",
+				badge: "影子帳戶 · Shadow account",
+				now: "匯入交易紀錄以診斷行為 · Import trades to diagnose behavior — research only",
+				copy: "影子帳戶用於行為診斷，需先匯入交易紀錄。",
+				steps: ["匯入 CSV 交易紀錄，或", "連接 IBKR 歷史成交（當 broker 就緒時）"],
+				outcomes: "勝率、持倉時間、過早平倉等（研究用）",
+				csvColumns: "ticker,direction,entry_price,exit_price,entry_time,exit_time,strategy_id",
+				csvExample: "AAPL,LONG,180.50,185.20,2025-01-15,2025-01-22,defensive_pullback",
+				blocker: systemBlocker,
+				next: "匯入第一筆交易紀錄，或連接 IBKR 後同步歷史成交",
+				nextButton: "匯入交易紀錄",
+				formatButton: "查看匯入格式說明",
+			}
+		}
+		return {
+			surface: surf,
+			title: "如何開始 · Getting started",
+			badge: "Research only",
+			now: "Monitor only — no deploy authority",
+			copy: "",
+			blocker: systemBlocker,
+			next: "Refresh when API badges clear",
+			nextButton: "Refresh",
+			examples: [],
+			steps: [],
+		}
+	}
+
 	function operatorBlock(truth, page, operatorBlocks) {
 		var t = truth || {}
 		var p = String(page || "dashboard").toLowerCase()
 		var blocks = operatorBlocks || t.operator_blocks || {}
-		if (blocks[p] && typeof blocks[p] === "object") return blocks[p]
+		if (blocks[p] && typeof blocks[p] === "object") return localizeOperatorBlock(blocks[p])
 		if (p === "dashboard" && t.operator_block && typeof t.operator_block === "object")
-			return t.operator_block
+			return localizeOperatorBlock(t.operator_block)
 		var posture = primaryOperatorState(t)
 		var deploy = !!t.deploy_authority
 		var why = String(t.primary_blocker || "No edge today — preserve capital")
@@ -354,7 +438,7 @@
 				: "monitor only — patience is the active decision"
 		var watchN = Number(t.watch_qualified_count || t.setup_qualified_count) || 0
 		var deployN = deploy ? Number(t.deploy_qualified_count) || 0 : 0
-		return {
+		return localizeOperatorBlock({
 			page: p,
 			now: posture.now || posture.primary || "",
 			primary: posture.primary || "MONITOR ONLY",
@@ -368,7 +452,7 @@
 			regime_state: String(t.regime_state || "WAIT").toUpperCase(),
 			deploy_authority: deploy,
 			repair_priority: (t.repair_priority || []).slice(0, 5),
-		}
+		})
 	}
 
 	function resolveEngineState(truth, ops) {
@@ -412,6 +496,135 @@
 			return { primary: "MONITOR ONLY", secondary: "NO_TRADE", now: "MONITOR ONLY · Regime closed" }
 		}
 		return { primary: regime, secondary: "", now: regime }
+	}
+
+	function bilingualLine(zh, en) {
+		if (zh && en) return zh + " · " + en
+		return zh || en || ""
+	}
+
+	var OPERATOR_WHY_ZH = {
+		"Regime gate closed — no new risk": "體制關閉 — 今日禁止新倉",
+		"Board WAIT — monitor only, no deploy": "看板 WAIT — 僅監察，不可部署",
+		"Board closed — preserve capital": "看板關閉 — 保留資金，不做新倉",
+		"Market data unavailable — refresh before sizing": "缺少即時報價 — 刷新後再定倉",
+		"Market data stale — rankings may not reflect live tape": "報價過期 — 排名可能非即時",
+		"Ranked board stale — not execution-grade": "排名看板過期 — 不可作執行依據",
+		"No valid ranked board — do nothing": "無有效看板 — 今日不做",
+		"Brief expired — not used for ranking": "簡報過期 — 不用於排名",
+		"Brief stale — confirm before using narrative": "簡報過期 — 敘述僅供參考",
+		"Brief fallback — not execution-grade board": "簡報備援 — 非執行級看板",
+		"Engine OFF — precomputed board only": "引擎關閉 — 僅用預算看板",
+		"IBKR offline — no handoff": "IBKR 離線 — 不可交接",
+		"Execution blocked — breaker or bracket": "執行阻斷 — 熔斷或 bracket 未就緒",
+		"No deploy-qualified setups": "無通過部署門檻的標的",
+		"No edge today — preserve capital": "今日無優勢 — 保留資金",
+	}
+
+	var OPERATOR_NEXT_ZH = {
+		"repair IBKR / open Repair Console": "修復 IBKR 連線 — 開啟修復清單",
+		"refresh board / regenerate brief": "刷新看板 — 重新產生簡報",
+		"refresh board / wait for live ranked load": "刷新看板 — 等待 live 排名載入",
+		"start engine on Ops": "至 Ops 啟動引擎",
+		"review deploy-qualified on Playbook": "至 Playbook 複核可部署標的",
+		"monitor only — patience is the active decision": "僅監察 — 耐心即是決策",
+	}
+
+	function localizeOperatorWhy(why) {
+		var raw = String(why || "").trim()
+		if (!raw) return raw
+		return raw
+			.split(/\s*\+\s*/)
+			.map(function (part) {
+				var p = String(part || "").trim()
+				var zh = OPERATOR_WHY_ZH[p]
+				return zh ? bilingualLine(zh, p) : p
+			})
+			.join(" · ")
+	}
+
+	function localizeOperatorNext(next) {
+		var raw = String(next || "").trim()
+		if (!raw) return raw
+		if (raw.indexOf("Repair: ") === 0) {
+			var task = raw.slice(8).replace(/_/g, " ")
+			return bilingualLine("修復：" + task, raw)
+		}
+		var zh = OPERATOR_NEXT_ZH[raw]
+		return zh ? bilingualLine(zh, raw) : raw
+	}
+
+	function localizeOperatorNow(now, secondary) {
+		var raw = String(now || "").trim()
+		if (raw === "MONITOR ONLY · Deploy blocked") {
+			return "MONITOR ONLY · 僅監察 · 禁止部署"
+		}
+		if (raw === "MONITOR ONLY · Regime closed") {
+			return "MONITOR ONLY · 僅監察 · 體制關閉"
+		}
+		if (raw === "SELECTIVE") {
+			return "SELECTIVE · 選擇性（僅供觀察，不可部署）"
+		}
+		if (raw === "WAIT") {
+			return "WAIT · 等待（僅監察）"
+		}
+		if (raw === "NO_TRADE") {
+			return "NO_TRADE · 禁止交易"
+		}
+		if (secondary && raw.indexOf(secondary) >= 0 && raw.indexOf("MONITOR ONLY") >= 0) {
+			return raw + " · 次級體制 " + secondary
+		}
+		return raw
+	}
+
+	function localizeOperatorAllowed(allowed) {
+		var raw = String(allowed || "").trim()
+		if (raw === "monitor candidates, create watch rules") {
+			return bilingualLine("刷新看板、建立監察規則", raw)
+		}
+		if (raw === "deploy selectively on qualified names") {
+			return bilingualLine("僅在合格標的上選擇性部署", raw)
+		}
+		return raw
+	}
+
+	function localizeOperatorBlocked(blocked) {
+		var raw = String(blocked || "").trim()
+		if (!raw) return raw
+		if (raw === "no sizing, no handoff, no pilot entry") {
+			return bilingualLine("不可定倉、不可交接 IBKR、不可試單", raw)
+		}
+		return raw
+	}
+
+	function localizeValidCandidates(line) {
+		var raw = String(line || "").trim()
+		var m = raw.match(/^Watch\s+(\d+)\s*·\s*Deploy\s+(\d+)$/i)
+		if (m) {
+			return "監察 " + m[1] + " 筆 · 可部署 " + m[2] + " 筆 · Watch " + m[1] + " · Deploy " + m[2]
+		}
+		return raw
+	}
+
+	function localizeOperatorBlock(block) {
+		var b = block || {}
+		return {
+			page: b.page,
+			now: localizeOperatorNow(b.now, b.secondary),
+			primary: b.primary,
+			secondary: b.secondary,
+			why: localizeOperatorWhy(b.why),
+			allowed: localizeOperatorAllowed(b.allowed),
+			blocked: localizeOperatorBlocked(b.blocked),
+			valid_candidates: localizeValidCandidates(b.valid_candidates),
+			next: localizeOperatorNext(b.next),
+			truth_strip: b.truth_strip,
+			regime_state: b.regime_state,
+			deploy_authority: b.deploy_authority,
+			repair_priority: b.repair_priority,
+			blocker: b.blocker,
+			agent_blocker_compact: b.agent_blocker_compact,
+		}
 	}
 
 	function pilotSizingAllowed(truth, opts) {
@@ -496,13 +709,7 @@
 		var ticker = String(r.ticker || "—").toUpperCase()
 		var bucket = r.primary_bucket || r.lifecycle_bucket || "Watch"
 		var reason = o.blocker || r.blocker || "no pilot entry — deploy authority blocked"
-		return (
-			ticker +
-			" · " +
-			bucket +
-			" candidate · State: monitor only · Blocked: " +
-			reason
-		)
+		return ticker + " · " + bucket + " candidate · State: monitor only · Blocked: " + reason
 	}
 
 	function removeTradeLanguageWhenBlocked(text, blocked) {
@@ -663,11 +870,7 @@
 		if (o.execBlocked) parts.push("執行已阻斷 · exec blocked")
 		if (o.gatedRegime && o.regimeState && o.regimeState !== o.effectiveState) {
 			parts.push(
-				"體制 " +
-					String(o.regimeState) +
-					" 已閘為 " +
-					String(o.effectiveState || "WAIT") +
-					" · regime gated"
+				"體制 " + String(o.regimeState) + " 已閘為 " + String(o.effectiveState || "WAIT") + " · regime gated",
 			)
 		}
 		if (!parts.length) {
@@ -775,8 +978,7 @@
 		"no sizing": "不可定倉",
 		"no handoff": "不可交接 IBKR",
 		"retry live fetch": "重試即時擷取",
-		"review structure and open Playbook when deploy-qualified":
-			"複核結構，合格後再開 Playbook",
+		"review structure and open Playbook when deploy-qualified": "複核結構，合格後再開 Playbook",
 	}
 
 	function dossierMissingDataLabels(missing) {
@@ -818,17 +1020,13 @@
 	function localizeDossierNow(now, mode, sym, label) {
 		var raw = String(now || "").trim()
 		if (raw.indexOf("Structure unavailable") >= 0) {
-			return sym
-				? sym + " · 結構不可用 · Structure unavailable"
-				: "結構不可用 · Structure unavailable"
+			return sym ? sym + " · 結構不可用 · Structure unavailable" : "結構不可用 · Structure unavailable"
 		}
 		if (raw.indexOf("Loading") >= 0) {
 			return sym ? sym + " · 載入中 · Loading" : "載入中 · Loading dossier"
 		}
 		if (mode === "structure_review_only" || raw.indexOf("CONFIRM ONLY") >= 0) {
-			return sym
-				? sym + " · Confirm-only · 僅結構確認"
-				: "Confirm-only · 僅結構確認"
+			return sym ? sym + " · Confirm-only · 僅結構確認" : "Confirm-only · 僅結構確認"
 		}
 		return raw
 	}
@@ -932,12 +1130,9 @@
 			health.account_status === "ok" ||
 			!!(ib.account && (ib.account.account || ib.account.net_liquidation != null))
 		var positionsLoaded =
-			crit.positions === "ready" ||
-			(Array.isArray(ib.positions) && ib.positions.length > 0 && connected)
+			crit.positions === "ready" || (Array.isArray(ib.positions) && ib.positions.length > 0 && connected)
 		var bracketReady =
-			!!read.full_handoff_ready ||
-			read.bracket_status === "ready" ||
-			health.handoff_status === "ready"
+			!!read.full_handoff_ready || read.bracket_status === "ready" || health.handoff_status === "ready"
 		return {
 			hasIbapi: hasIbapi,
 			gw: gw,
@@ -984,9 +1179,7 @@
 			return "Uncalibrated · heuristic only"
 		}
 		var hitPct =
-			hit != null && isFinite(Number(hit))
-				? (Number(hit) * (Number(hit) <= 1 ? 100 : 1)).toFixed(0) + "%"
-				: "—"
+			hit != null && isFinite(Number(hit)) ? (Number(hit) * (Number(hit) <= 1 ? 100 : 1)).toFixed(0) + "%" : "—"
 		return "n=" + sample + " · hit " + hitPct + " (read-only scaffold)"
 	}
 
@@ -1216,13 +1409,11 @@
 		return "Structure-based reference"
 	}
 
-	var DOSSIER_CONFIRM_ONLY_STRIP =
-		"Confirm-only · 僅結構確認：無入場價、無止損、無倉位 · no sizing · no handoff"
+	var DOSSIER_CONFIRM_ONLY_STRIP = "Confirm-only · 僅結構確認：無入場價、無止損、無倉位 · no sizing · no handoff"
 	var DOSSIER_PAPER_DRAFT_DISABLED =
 		"Paper draft disabled · 紙上模擬已關閉 — 需 live Dossier + Playbook 確認後才可模擬"
 	var DOSSIER_MONITOR_RULE_BUTTON = "Create monitor rule · 建立監察規則"
-	var DOSSIER_MONITOR_RULE_HINT =
-		"Alert only · 僅提醒，不可定倉、不可交接 · no sizing · no handoff"
+	var DOSSIER_MONITOR_RULE_HINT = "Alert only · 僅提醒，不可定倉、不可交接 · no sizing · no handoff"
 	var DOSSIER_LAGGED_CONTEXT_NOTE =
 		"Lagged / illustrative context · 滯後參考，不用於結構確認 · not used for confirmation"
 	var DOSSIER_STRUCTURE_SNAPSHOT_TITLE = "Structure snapshot · 結構快照"
@@ -1241,13 +1432,7 @@
 		if (o.failed_fetch && !o.has_quote) return "unavailable"
 		if (o.load_phase === "core" || o.loading) return "loading"
 		var label = String(o.unified_label || "").toUpperCase()
-		var confirmLabels = [
-			"CONFIRM ONLY",
-			"RESEARCH ONLY",
-			"REFERENCE ONLY",
-			"WATCH ONLY",
-			"PASS",
-		]
+		var confirmLabels = ["CONFIRM ONLY", "RESEARCH ONLY", "REFERENCE ONLY", "WATCH ONLY", "PASS"]
 		var confirmOnly =
 			confirmLabels.indexOf(label) >= 0 ||
 			!!o.research_only ||
@@ -1266,11 +1451,7 @@
 
 	function dossierRecoveryMode(mode) {
 		var m = String(mode || "")
-		return (
-			m === "structure_review_only" ||
-			m === "loading" ||
-			m === "unavailable"
-		)
+		return m === "structure_review_only" || m === "loading" || m === "unavailable"
 	}
 
 	function dossierUsableMode(mode) {
@@ -1289,9 +1470,13 @@
 		var m = String(mode || resolveDossierMode(p))
 		var now =
 			m === "unavailable"
-				? (sym ? sym + " · Structure unavailable" : "Structure unavailable")
+				? sym
+					? sym + " · Structure unavailable"
+					: "Structure unavailable"
 				: m === "loading"
-					? (sym ? sym + " · Loading" : "Loading dossier")
+					? sym
+						? sym + " · Loading"
+						: "Loading dossier"
 					: sym
 						? sym + " · " + String(p.unified_label || "CONFIRM ONLY")
 						: "CONFIRM ONLY"
@@ -1303,12 +1488,7 @@
 			now: now,
 			why: why.length ? why.join(" · ") : "Live dossier incomplete",
 			allowed: ["retry", "load core", "open Playbook"],
-			blocked: [
-				"no trade plan",
-				"no paper draft",
-				"no sizing",
-				"no handoff",
-			],
+			blocked: ["no trade plan", "no paper draft", "no sizing", "no handoff"],
 			missing_data: dm.missing_data || [],
 			next: "retry live fetch",
 		}
@@ -1317,12 +1497,7 @@
 
 	function dossierTradePlanVisible(opts) {
 		var o = opts || {}
-		return (
-			resolveDossierMode(o) === "usable" &&
-			!!o.playbook_watch_plus &&
-			!o.deploy_blocked &&
-			!!o.broker_online
-		)
+		return resolveDossierMode(o) === "usable" && !!o.playbook_watch_plus && !o.deploy_blocked && !!o.broker_online
 	}
 
 	function dossierEvidenceStatus(payload) {
@@ -1380,12 +1555,7 @@
 
 	function dossierPaperDraftVisible(opts) {
 		var o = opts || {}
-		return (
-			resolveDossierMode(o) === "usable" &&
-			!!o.playbook_watch_plus &&
-			!o.deploy_blocked &&
-			!!o.broker_online
-		)
+		return resolveDossierMode(o) === "usable" && !!o.playbook_watch_plus && !o.deploy_blocked && !!o.broker_online
 	}
 
 	function dossierStructureSnapshotRows(opts) {
@@ -1396,8 +1566,7 @@
 		var fmt = function (v) {
 			return v != null && v !== "" ? "$" + v : "—"
 		}
-		var entry =
-			ez && ez.length >= 2 ? "$" + ez[0] + "–$" + ez[1] : "—"
+		var entry = ez && ez.length >= 2 ? "$" + ez[0] + "–$" + ez[1] : "—"
 		var rows = [
 			{ label: dossierStructureLevelLabel("entry", mode), value: entry },
 			{ label: dossierStructureLevelLabel("stop", mode), value: fmt(o.stop) },
@@ -1716,19 +1885,19 @@
 		if (mode === "loading" || String(o.ccMode || "").toUpperCase() === "LOADING") {
 			return bilingualLine(
 				"現可：查看監察清單、Guide 檢查表、Dossier 核心模組 — 等 /health mode=full 後才可定倉或交接 IBKR",
-				"Safe now: monitor queue, Guide checklist, dossier core-only — wait for backend import + /health mode=full before sizing or IBKR handoff"
+				"Safe now: monitor queue, Guide checklist, dossier core-only — wait for backend import + /health mode=full before sizing or IBKR handoff",
 			)
 		}
 		if (o.fetchFailed || o.instantDegraded) {
 			return bilingualLine(
 				"現可：Guide、監察、Dossier 核心 — 等 fetch 徽章恢復；備援不可部署",
-				"Safe now: Guide, monitors, dossier core-only — retry when fetch badges clear; no deploy from fallback"
+				"Safe now: Guide, monitors, dossier core-only — retry when fetch badges clear; no deploy from fallback",
 			)
 		}
 		if (o.waitDay) {
 			return bilingualLine(
 				"現可：升級監察清單 · Discovery · Playbook 排名",
-				"Safe now: upgrade-watch queue · Discovery · Playbook ranking"
+				"Safe now: upgrade-watch queue · Discovery · Playbook ranking",
 			)
 		}
 		return ""
@@ -1739,38 +1908,38 @@
 		if (o.blocked) {
 			return bilingualLine(
 				"禁止部署 — 僅監察；不可定倉、不可交接、不可試單",
-				"Deploy blocked — monitor only; no sizing, no handoff, no pilot entry."
+				"Deploy blocked — monitor only; no sizing, no handoff, no pilot entry.",
 			)
 		}
 		var tb = String(o.tradeability || "WAIT").toUpperCase()
 		if (tb === "STRONG_TRADE") {
 			return bilingualLine(
 				"多筆可執行 — 僅 A 級且 bracket 就緒才可滿倉",
-				"Multiple execution-ready names — full size only on A-grade with brackets."
+				"Multiple execution-ready names — full size only on A-grade with brackets.",
 			)
 		}
 		if (tb === "TRADE") {
 			return bilingualLine(
 				"至少一筆可執行 — 標準 1R 定倉",
-				"At least one execution-ready setup — standard 1R sizing."
+				"At least one execution-ready setup — standard 1R sizing.",
 			)
 		}
 		if (tb === "SELECTIVE") {
 			if (o.pilotBlocked) {
 				return bilingualLine(
 					"候選審閱：選擇性（僅供觀察，不可部署）— 門檻未清前不可試單",
-					"SELECTIVE review only — monitor candidates; no pilot sizing until gates clear."
+					"SELECTIVE review only — monitor candidates; no pilot sizing until gates clear.",
 				)
 			}
 			return bilingualLine(
 				"僅試單或單一標的 — 半倉，必須設止損",
-				"Pilot or single-name only — half size, stop required."
+				"Pilot or single-name only — half size, stop required.",
 			)
 		}
 		if (tb === "WAIT") {
 			return bilingualLine(
 				"無部署級看板 — 耐心即是決策",
-				"No deploy-grade board — patience is the active decision."
+				"No deploy-grade board — patience is the active decision.",
 			)
 		}
 		return bilingualLine("風險關閉 — 禁止新倉", "Risk-off — no new entries.")
@@ -1804,7 +1973,9 @@
 	}
 
 	function workstationPanelKey(key) {
-		return String(key || "").replace(/^\d+_/, "").replace(/_/g, " ")
+		return String(key || "")
+			.replace(/^\d+_/, "")
+			.replace(/_/g, " ")
 	}
 
 	function workstationPanelTitle(key) {
@@ -1920,7 +2091,7 @@
 						escapeExportHtml(truncateExportText(r.source || r.category || "—", 40)) +
 						"</td><td>" +
 						escapeExportHtml(sanitizeOperatorDetail(r.message || r.detail || r.summary || "—")) +
-						"</td><td class=\"mono\">" +
+						'</td><td class="mono">' +
 						escapeExportHtml(truncateExportText(r.timestamp || r.ts || r.time || "—", 24)) +
 						"</td></tr>"
 					)
@@ -1936,11 +2107,7 @@
 			var r = row || {}
 			var probe = String(r.probe || r.label || "").toUpperCase()
 			var runtime = String(r.runtime || r.runtime_evidence || r.evidence || "").toUpperCase()
-			return (
-				probe.indexOf("FAIL") >= 0 ||
-				runtime.indexOf("FAIL") >= 0 ||
-				runtime.indexOf("UNAVAILABLE") >= 0
-			)
+			return probe.indexOf("FAIL") >= 0 || runtime.indexOf("FAIL") >= 0 || runtime.indexOf("UNAVAILABLE") >= 0
 		})
 		var show = flagged.length ? flagged : list
 		if (!show.length) {
@@ -1958,7 +2125,9 @@
 						"</td><td>" +
 						escapeExportHtml(r.probe || r.label || "—") +
 						"</td><td>" +
-						escapeExportHtml(truncateExportText(r.runtime || r.runtime_evidence || r.evidence || "—", 120)) +
+						escapeExportHtml(
+							truncateExportText(r.runtime || r.runtime_evidence || r.evidence || "—", 120),
+						) +
 						"</td></tr>"
 					)
 				})
@@ -1995,7 +2164,9 @@
 		var setupCount = qual ? qual.setup : Number(funnel.watch_qualified_setups || funnel.setup_qualified_setups) || 0
 		var deployCount = qual
 			? qual.deploy
-			: Number(funnel.deploy_qualified_setups || funnel.execution_ready_setups) || Number(truth.deploy_qualified_count) || 0
+			: Number(funnel.deploy_qualified_setups || funnel.execution_ready_setups) ||
+				Number(truth.deploy_qualified_count) ||
+				0
 		var qualLine =
 			(qual && qual.line) ||
 			(typeof qualificationCountLine === "function"
@@ -2035,7 +2206,9 @@
 			"<h2>Disconnect / degraded states</h2>" +
 			"<table><tbody>" +
 			"<tr><th>IBKR gateway</th><td>" +
-			escapeExportHtml(disconnects.ibkr_gateway != null ? (disconnects.ibkr_gateway ? "reachable" : "offline") : "—") +
+			escapeExportHtml(
+				disconnects.ibkr_gateway != null ? (disconnects.ibkr_gateway ? "reachable" : "offline") : "—",
+			) +
 			"</td></tr>" +
 			"<tr><th>API health mode</th><td>" +
 			escapeExportHtml(disconnects.health_mode || "—") +
@@ -2049,7 +2222,12 @@
 			"</tbody></table>" +
 			"<h2>Error log summary</h2>" +
 			'<p class="cc-export-muted">' +
-			escapeExportHtml(String(s.error_log_total || 0) + " buffered · showing last " + String((s.error_log || []).length) + " entries") +
+			escapeExportHtml(
+				String(s.error_log_total || 0) +
+					" buffered · showing last " +
+					String((s.error_log || []).length) +
+					" entries",
+			) +
 			"</p>" +
 			exportErrorLogRows(s.error_log, s.error_log_limit) +
 			"<h2>Ops probe vs runtime (FAIL / UNAVAILABLE)</h2>" +
@@ -2152,7 +2330,9 @@
 			return '<div class="cc-export-muted">No dossier ticker loaded — structure: quote · regime · confirm-only blocks · sizing template.</div>'
 		}
 		var blocks =
-			typeof dossierConfirmOnlyFourBlocks === "function" ? dossierConfirmOnlyFourBlocks(d.intel || d.data || {}) : null
+			typeof dossierConfirmOnlyFourBlocks === "function"
+				? dossierConfirmOnlyFourBlocks(d.intel || d.data || {})
+				: null
 		var html =
 			"<p><strong>" +
 			escapeExportHtml(String(d.ticker).toUpperCase()) +
@@ -2180,7 +2360,12 @@
 		} else {
 			html +=
 				'<div class="cc-export-muted">' +
-				escapeExportHtml(truncateExportText(d.summary || d.note || "Dossier condensed — open tab for full workstation.", 320)) +
+				escapeExportHtml(
+					truncateExportText(
+						d.summary || d.note || "Dossier condensed — open tab for full workstation.",
+						320,
+					),
+				) +
 				"</div>"
 		}
 		return html
@@ -2473,6 +2658,7 @@
 		removeTradeLanguageWhenBlocked: removeTradeLanguageWhenBlocked,
 		executionRepairOneLiner: executionRepairOneLiner,
 		researchSurfaceBlock: researchSurfaceBlock,
+		researchGettingStarted: researchGettingStarted,
 		buildExportIssuesPage: buildExportIssuesPage,
 		buildExportAllSurfacesPage: buildExportAllSurfacesPage,
 		buildExportReviewHtml: buildExportReviewHtml,
