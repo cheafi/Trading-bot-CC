@@ -85,6 +85,12 @@ def test_opportunity_status_panel_in_dashboard():
     assert "機會狀態 · Opportunity Status" in INDEX_HTML
 
 
+def test_actionable_today_panel_in_dashboard():
+    assert 'data-cc="actionable-today-panel"' in INDEX_HTML
+    assert "today7.actionable_today" in INDEX_HTML
+    assert "sizingPillClass" in INDEX_HTML
+
+
 def test_fetch_scanners_uses_cc_fetch_json():
     start = INDEX_HTML.find("async fetchScanners(cat)")
     end = INDEX_HTML.find("tabAuthorityAlias(t){")
@@ -113,6 +119,10 @@ def test_today_payload_includes_cc_os_and_authority_keys():
         '"trust"',
         "build_opportunity_status",
         '"opportunity_status": opportunity_status',
+        "build_actionable_today",
+        '"actionable_today": actionable_today',
+        "attach_sizing_to_rows",
+        "position_sizing",
     ):
         assert needle in TODAY_BUILDER, f"missing {needle}"
 

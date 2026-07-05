@@ -1313,6 +1313,9 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         "execution_readiness": execution_readiness,
         "qualification_levels": qualification_levels,
         "execution_ready_count": execution_ready_count,
+        "pilot_eligible_count": int(
+            pilot_ready_count or funnel.get("pilot_eligible_setups") or 0
+        ),
         "todays_decision": todays_decision,
         "scanner_degraded": scanner_degraded,
     }
@@ -1361,7 +1364,15 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
     from src.services.opportunity_quality import build_opportunity_status
     from src.services.options_availability import batch_options_availability
 
-    deploy_blocked = not bool(system_truth.get("deploy_authority"))
+    deploy_blocked = str(system_truth.get("deploy_authority_tier") or "") != "allowed"
+    from src.services.cc_daily_trading import build_actionable_today
+
+    actionable_today = build_actionable_today(
+        valid_top5 + list(near_miss or []),
+        system_truth=system_truth,
+        near_miss=near_miss if not brief_expired or live_board_available else [],
+        limit=3,
+    )
     options_signals = batch_options_availability(
         valid_top5 + list(near_miss or []),
         deploy_blocked=deploy_blocked,
@@ -1375,6 +1386,10 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         sector_leaders=market_pulse.get("sector_leaders"),
         options_signals=options_signals,
     )
+    from src.services.position_sizing import attach_sizing_to_rows
+
+    valid_top5 = attach_sizing_to_rows(valid_top5, system_truth)
+
     todays_decision = {
         **todays_decision,
         "morning_decision_line": system_truth.get("morning_decision_line"),
@@ -1465,6 +1480,7 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         "score_reconciliation": score_reconciliation,
         "decision_authority": decision_authority,
         "system_truth": system_truth,
+        "actionable_today": actionable_today,
         "operator_block": operator_block,
         "qualification_levels": qualification_levels,
         "trust": {

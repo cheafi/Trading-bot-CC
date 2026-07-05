@@ -1322,6 +1322,42 @@
         </div>
       </template>
 
+
+      <!-- Actionable Today (confidence sizing) -->
+      <template x-if="today7.actionable_today && !today7.actionable_today.empty && (today7.actionable_today.cards||[]).length">
+        <div style="padding:4px 12px 0" data-cc="actionable-today-panel">
+          <div class="card card-p" style="padding:10px 12px;border-left:3px solid var(--green);background:rgba(0,212,170,.04)">
+            <div class="flex flex-wrap items-center gap-2 mb-2">
+              <span class="text-[9px] font-bold uppercase" style="color:var(--green)" x-text="today7.actionable_today.title||'Actionable Today'"></span>
+              <span class="pill text-[7px] pa" x-show="today7.actionable_today.paper_only_badge">Paper only</span>
+              <span class="pill text-[7px] pr" x-show="today7.actionable_today.broker_offline">IBKR offline</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px;margin-top:8px">
+              <template x-for="card in (today7.actionable_today.cards||[])" :key="card.ticker">
+                <div class="p-2 rounded cursor-pointer" style="background:var(--s2);border:1px solid var(--bd)" @click="openDossier(card.ticker)">
+                  <div class="flex items-center gap-2 mb-1">
+                    <span class="text-[12px] font-extrabold mono text-white" x-text="card.ticker"></span>
+                    <span class="pill text-[7px] font-bold" :class="card.action_label==='PILOT'?'pb':'pg'" x-text="card.action_label||card.action"></span>
+                    <span class="pill text-[7px] pw" x-show="card.sizing && (card.sizing.action==='wait'||card.sizing.action==='monitor_only')">Wait</span>
+                  </div>
+                  <template x-if="card.sizing && !sizingBlockedForDisplay(card.sizing)">
+                    <div class="text-[8px] mono" :class="sizingPillClass(card.sizing)" x-text="'Sizing: '+card.sizing.size_label+(card.sizing.confidence_band?' ('+sizingBandLabel(card.sizing.confidence_band)+')':'')"></div>
+                    <div class="text-[7px] mt-0.5" style="color:var(--t3);line-height:1.4" x-text="'Rationale: '+card.sizing.rationale"></div>
+                  </template>
+                  <template x-if="card.sizing && sizingBlockedForDisplay(card.sizing)">
+                    <div class="text-[8px] text-gray-400" x-text="card.sizing.size_label"></div>
+                  </template>
+                  <div class="text-[7px] mono mt-1" style="color:var(--t2)" x-show="card.entry_zone">
+                    <span x-text="card.entry_zone"></span>
+                    <span x-show="card.risk_reward_label && card.risk_reward_label!=='—'"> · <span x-text="card.risk_reward_label"></span>R</span>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+      </template>
+
       <template x-if="tab==='today'&&(authorityDegradedBanner() || todayUsesBriefFallback() || staleSnapshotContext())">
         <div style="padding:4px 12px 0">
           <div class="p-2 rounded text-[9px]" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.28);color:var(--amber);line-height:1.55">
@@ -2271,6 +2307,11 @@
                   x-text="cardReferenceBanner(opp)||opp.action_reason||opp.action_rationale||''">
                 </div>
 
+                <template x-if="opp.sizing && !sizingBlockedForDisplay(opp.sizing)">
+                  <div class="text-[8px] mb-2 mono" :class="sizingPillClass(opp.sizing)" x-text="'Sizing: '+opp.sizing.size_label+(opp.sizing.confidence_band?' ('+sizingBandLabel(opp.sizing.confidence_band)+')':'')"></div>
+                  <div class="text-[7px] mb-2" style="color:var(--t3);line-height:1.4" x-text="'Rationale: '+opp.sizing.rationale"></div>
+                </template>
+
                 <!-- Row 2: Confidence 4-bar breakdown -->
                 <template x-if="opp.confidence||opp.thesis_conf||opp.final_conf||opp.confidence_breakdown">
                   <div style="margin:6px 0 4px">
@@ -2950,7 +2991,12 @@
                     </span>
                   </template>
                   <!-- Sprint 109: suggested size pill — shown when entry + stop available -->
-                  <template x-if="r.entry_price&&r.stop_price&&r.entry_price>r.stop_price">
+                  <template x-if="playbookDailySizingVisible(r)">
+                    <span class="pill text-[7px] mono" :class="playbookSizingPillClass(r.sizing)"
+                      :title="r.sizing.rationale||'Confidence-based sizing suggestion'"
+                      x-text="r.sizing.size_label"></span>
+                  </template>
+                  <template x-if="!playbookDailySizingVisible(r)&&r.entry_price&&r.stop_price&&r.entry_price>r.stop_price">
                     <span class="pill pw text-[7px] mono"
                       x-text="'📐 '+(Math.min(10,Math.max(0.1,(0.01/(Math.abs(r.entry_price-r.stop_price)/r.entry_price)*100))).toFixed(1))+'%'"
                       title="Suggested position size (1R fixed-risk base)">
@@ -10287,6 +10333,35 @@
           const act=String(this.effectiveCardAction(o)||'').toUpperCase();
           return o.execution_ready&&['TRADE','BUY','BUY_ON_DIP','STRONG_TRADE'].includes(act);
         });
+      },
+      sizingPillClass(sizing){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.sizingPillClass) return CCHelpers.sizingPillClass(sizing);
+        const a=String(sizing?.action||'').toLowerCase();
+        if(a==='full') return 'text-green-400';
+        if(a==='half') return 'text-amber-300';
+        return 'text-gray-400';
+      },
+      sizingBandLabel(band){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.sizingBandLabel) return CCHelpers.sizingBandLabel(band);
+        const m={high:'High confidence',medium:'Medium confidence',low:'Low confidence',very_low:'Wait'};
+        return m[String(band||'').toLowerCase()]||'';
+      },
+      sizingBlockedForDisplay(sizing){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.sizingBlockedForDisplay) return CCHelpers.sizingBlockedForDisplay(sizing);
+        const a=String(sizing?.action||'').toLowerCase();
+        return a==='monitor_only'||((sizing?.size_pct||0)<=0&&a==='wait');
+      },
+      playbookDailySizingVisible(r){
+        const truth=this.today7.system_truth||{};
+        if(!truth.daily_trading_mode&&!this.today7.actionable_today) return false;
+        const act=String(this.effectiveCardAction(r)||'').toUpperCase();
+        return ['TRADE','BUY','BUY_ON_DIP','PILOT','STRONG_TRADE','TRADE_NOW'].includes(act)&&!!r.sizing;
+      },
+      playbookSizingPillClass(sizing){
+        const a=String(sizing?.action||'').toLowerCase();
+        if(a==='full') return 'pg';
+        if(a==='half') return 'pa';
+        return 'pw';
       },
       instantDegradedBannerLine(){
         if(this.instantDegradedBanner) return this.instantDegradedBanner;

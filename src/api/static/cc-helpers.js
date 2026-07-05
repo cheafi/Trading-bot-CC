@@ -425,7 +425,9 @@
 		if (p === "dashboard" && t.operator_block && typeof t.operator_block === "object")
 			return localizeOperatorBlock(t.operator_block)
 		var posture = primaryOperatorState(t)
-		var deploy = !!t.deploy_authority
+		var tier = String(t.deploy_authority_tier || t.deployAuthority || "").toLowerCase()
+		if (!tier) tier = t.deploy_authority === true ? "allowed" : "blocked"
+		var deploy = tier === "allowed" && !!t.deploy_authority
 		var why = String(t.primary_blocker || "No edge today — preserve capital")
 		var allowed = deploy ? "deploy selectively on qualified names" : "monitor candidates, create watch rules"
 		if (!deploy) {
@@ -437,22 +439,81 @@
 			? "Repair: " + String(repair).replace(/_/g, " ")
 			: deploy
 				? "Review deploy-qualified on Playbook"
-				: "monitor only — patience is the active decision"
+				: tier === "paper_only"
+					? "review paper simulation drafts on Playbook — no live handoff"
+					: tier === "pilot_only"
+						? "review Pilot bucket on Playbook — half size when broker ready"
+						: "monitor only — patience is the active decision"
 		var watchN = Number(t.watch_qualified_count || t.setup_qualified_count) || 0
+		var tradeN = Number(t.trade_qualified_count) || 0
+		var execN = Number(t.execution_qualified_count) || 0
 		var deployN = deploy ? Number(t.deploy_qualified_count) || 0 : 0
+		var paperN = Number(t.paper_qualified_count) || 0
+		var pilotN = Number(t.pilot_eligible_count) || 0
+		var validLine = t.qualification_counts_line || ""
+		if (!validLine) {
+			if (tier === "paper_only" && paperN > 0) {
+				validLine =
+					"Setup-qualified: " +
+					watchN +
+					" · Trade-qualified: " +
+					tradeN +
+					" · Execution-qualified: " +
+					execN +
+					" · Paper-qualified: " +
+					paperN
+			} else if (tier === "pilot_only" && pilotN > 0) {
+				validLine =
+					"Setup-qualified: " +
+					watchN +
+					" · Trade-qualified: " +
+					tradeN +
+					" · Pilot: " +
+					pilotN +
+					" · Execution-qualified: " +
+					execN
+			} else {
+				validLine =
+					"Setup-qualified: " +
+					watchN +
+					" · Trade-qualified: " +
+					tradeN +
+					" · Execution-qualified: " +
+					execN +
+					" · Deploy-qualified: " +
+					deployN
+			}
+		}
 		return localizeOperatorBlock({
 			page: p,
 			now: posture.now || posture.primary || "",
 			primary: posture.primary || "MONITOR ONLY",
 			secondary: posture.secondary || "",
 			why: why,
-			allowed: allowed,
-			blocked: deploy ? "" : "no sizing, no handoff, no pilot entry",
-			valid_candidates: "Watch " + watchN + " · Deploy " + deployN,
+			allowed:
+				tier === "paper_only"
+					? "paper simulation drafts — no live IBKR handoff"
+					: tier === "pilot_only"
+						? "pilot probe on B+ setups — half size when broker ready"
+						: deploy
+							? "deploy selectively on qualified names"
+							: "monitor candidates, create watch rules",
+			blocked:
+				tier === "paper_only"
+					? "no live handoff while broker offline"
+					: tier === "pilot_only"
+						? "no full-size deploy until execution-ready"
+						: deploy
+							? ""
+							: "no sizing, no handoff, no pilot entry",
+			valid_candidates: validLine || "Watch " + watchN + " · Deploy " + deployN,
 			next: next,
 			truth_strip: globalTruthStrip(t),
 			regime_state: String(t.regime_state || "WAIT").toUpperCase(),
 			deploy_authority: deploy,
+			deploy_authority_tier: tier,
+			paper_deploy_available: tier === "paper_only",
+			daily_use_zh: t.daily_use_zh || "",
 			repair_priority: (t.repair_priority || []).slice(0, 5),
 		})
 	}
@@ -750,6 +811,36 @@
 			.replace(/\bsizing\b/gi, "no sizing")
 	}
 
+
+	function sizingPillClass(sizing) {
+		var a = String((sizing || {}).action || "").toLowerCase()
+		if (a === "full") return "text-green-400"
+		if (a === "half") return "text-amber-300"
+		return "text-gray-400"
+	}
+
+	function sizingBandLabel(band) {
+		var m = { high: "High confidence", medium: "Medium confidence", low: "Low confidence", very_low: "Wait" }
+		return m[String(band || "").toLowerCase()] || ""
+	}
+
+	function sizingBlockedForDisplay(sizing) {
+		var s = sizing || {}
+		var a = String(s.action || "").toLowerCase()
+		return a === "monitor_only" || ((Number(s.size_pct) || 0) <= 0 && a === "wait")
+	}
+
+	function sanitizeSizingForBlocked(sizing, blocked) {
+		if (!blocked) return sizing || {}
+		return {
+			action: "monitor_only",
+			size_pct: 0,
+			size_label: "Wait · 僅監察",
+			confidence_band: (sizing || {}).confidence_band || "low",
+			rationale: "不可部署 · 僅監察，不定倉 · Deploy blocked — monitor only",
+			sanitized: true,
+		}
+	}
 	function executionRepairOneLiner(truth) {
 		var t = truth || {}
 		var broker = String(t.broker_freshness || "").toLowerCase()
@@ -2647,6 +2738,10 @@
 		opportunityQualityPill: opportunityQualityPill,
 		opportunityQualityPillClass: opportunityQualityPillClass,
 		sanitizeOperatorDetail: sanitizeOperatorDetail,
+		sizingPillClass: sizingPillClass,
+		sizingBandLabel: sizingBandLabel,
+		sizingBlockedForDisplay: sizingBlockedForDisplay,
+		sanitizeSizingForBlocked: sanitizeSizingForBlocked,
 		dailyBriefingLine: dailyBriefingLine,
 		regimeStackStripLine: regimeStackStripLine,
 		allocatorStanceHint: allocatorStanceHint,

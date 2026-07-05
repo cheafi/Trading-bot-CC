@@ -449,6 +449,27 @@ def _finalize_ranked_response(
         )
     except Exception:
         pass
+    try:
+        from src.services.cc_daily_trading import is_daily_trading_mode
+        from src.services.position_sizing import attach_sizing_to_rows
+
+        if is_daily_trading_mode():
+            truth = data.get("system_truth") or {}
+            if not truth and data.get("surface_authority"):
+                sa = data.get("surface_authority") or {}
+                truth = {
+                    "deploy_authority": sa.get("deploy_authority"),
+                    "deploy_authority_tier": sa.get("deploy_authority_tier")
+                    or ("allowed" if sa.get("deploy_authority") else "blocked"),
+                }
+            opps = attach_sizing_to_rows(
+                data.get("opportunities") or [],
+                truth,
+                trade_pilot_only=True,
+            )
+            data["opportunities"] = opps
+    except Exception:
+        pass
     return data
 
 
