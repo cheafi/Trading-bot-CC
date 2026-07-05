@@ -1781,7 +1781,9 @@
 
 	function dossierPaperDraftVisible(opts) {
 		var o = opts || {}
-		return resolveDossierMode(o) === "usable" && !!o.playbook_watch_plus && !o.deploy_blocked && !!o.broker_online
+		var mode = resolveDossierMode(o)
+		if (o.paper_deploy_available && mode !== "unavailable") return true
+		return mode === "usable" && !!o.playbook_watch_plus && !o.deploy_blocked && !!o.broker_online
 	}
 
 	function dossierStructureSnapshotRows(opts) {

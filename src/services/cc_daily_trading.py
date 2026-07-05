@@ -10,7 +10,6 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, List, Optional
 
-from src.services.cc_perf_cache import env_float
 from src.utils.numeric_parse import parse_ratio
 
 TIER_ALLOWED = "allowed"
@@ -25,6 +24,16 @@ _STRICT_RR = 2.0
 _DAILY_SCORE = 7.0
 _DAILY_CONF = 0.55
 _DAILY_RR = 1.8
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
 
 _PILOT_GRADES = frozenset({"B+", "B"})
 _DISPLAY_GRADES = frozenset({"A+", "A", "A-", "B+", "B"})
@@ -112,14 +121,12 @@ def is_actionable_today_row(
         return True
     if is_daily_pilot_row(row, regime_state=regime_state):
         return True
-    try:
-        from src.services.qualification_levels import _row_trade_qualified
-
-        if _row_trade_qualified(row):
-            return True
-    except Exception:
-        pass
     if act in _TRADE_ACTIONS and is_trade_display_qualified(row, regime_state=regime_state):
+        return True
+    thesis = float(row.get("thesis_conf") or row.get("final_conf") or 0)
+    timing = float(row.get("timing_conf") or row.get("final_conf") or 0)
+    score = _row_score(row)
+    if score >= 6.5 and (thesis >= 0.55 or timing >= 0.50) and act in _TRADE_ACTIONS.union({"PILOT"}):
         return True
     return is_trade_display_qualified(row, regime_state=regime_state)
 
@@ -332,15 +339,15 @@ def council_deploy_rr_default() -> float:
 
 
 def council_deploy_score_min() -> float:
-    return env_float("CC_COUNCIL_DEPLOY_SCORE_MIN", council_deploy_score_default())
+    return _env_float("CC_COUNCIL_DEPLOY_SCORE_MIN", council_deploy_score_default())
 
 
 def council_deploy_conf_min() -> float:
-    return env_float("CC_COUNCIL_DEPLOY_CONF_MIN", council_deploy_conf_default())
+    return _env_float("CC_COUNCIL_DEPLOY_CONF_MIN", council_deploy_conf_default())
 
 
 def council_deploy_rr_min() -> float:
-    return env_float("CC_COUNCIL_DEPLOY_RR_MIN", council_deploy_rr_default())
+    return _env_float("CC_COUNCIL_DEPLOY_RR_MIN", council_deploy_rr_default())
 
 
 def board_data_blocks_deploy(

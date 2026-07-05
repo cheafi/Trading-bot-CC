@@ -45,6 +45,9 @@ done
 sleep 1
 
 cd /Users/chantszwai/Documents/GitHub/TradingAI_Bot-main
+export CC_DAILY_TRADING_MODE=1
+export CC_DEFAULT_AUTHORITY=paper_first
+export CC_TOP_MONITOR_COUNT=10
 nohup venv/bin/python3 -u _cc_instant.py >> /tmp/cc_server.log 2>&1 &
 echo "PID=$!"
 sleep 5

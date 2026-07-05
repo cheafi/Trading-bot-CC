@@ -6,9 +6,18 @@ Wired into /api/v7/today actionable_today[] and Playbook trade/pilot rows in dai
 
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.services.cc_perf_cache import env_float
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
 from src.services.opportunity_quality import _row_data_quality_pct, _row_sample_size
 
 ACTION_FULL = "full"
@@ -32,7 +41,7 @@ def _deploy_tier(truth: Dict[str, Any]) -> str:
 
 
 def _full_pct() -> float:
-    return env_float("CC_MAX_POSITION_PCT", 0.01)
+    return _env_float("CC_MAX_POSITION_PCT", 0.01)
 
 
 def _pct_label(pct: float, suffix: str) -> str:

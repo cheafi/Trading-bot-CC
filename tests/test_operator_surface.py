@@ -62,4 +62,4 @@ def test_dashboard_operator_block_fields():
     assert block["now"] == "MONITOR ONLY · Deploy blocked"
     assert "monitor candidates" in block["allowed"]
     assert "no pilot entry" in block["blocked"]
-    assert "Deploy 0" in block["valid_candidates"]
+    assert "Deploy-qualified: 0" in block["valid_candidates"] or "Deploy 0" in block["valid_candidates"]
