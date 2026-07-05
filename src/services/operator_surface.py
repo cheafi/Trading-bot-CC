@@ -73,6 +73,9 @@ def build_operator_block(
         "truth_strip": t.get("truth_strip") or t.get("typed_freshness_display") or "",
         "regime_state": str(t.get("regime_state") or "WAIT").upper(),
         "deploy_authority": bool(t.get("deploy_authority")),
+        "deploy_authority_tier": str(t.get("deploy_authority_tier") or ""),
+        "paper_deploy_available": bool(t.get("paper_deploy_available")),
+        "daily_use_zh": str(t.get("daily_use_zh") or ""),
         "repair_priority": list(t.get("repair_priority") or [])[:5],
     }
     if page == "agent":

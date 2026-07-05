@@ -348,13 +348,23 @@ def _leadership_state(today: Dict[str, Any]) -> str:
     return "mixed"
 
 
-def _board_gate(today: Dict[str, Any]) -> str:
+def _board_gate(
+    today: Dict[str, Any],
+    *,
+    brief_freshness: str = "fresh",
+    ranked_board_freshness: str = "fresh",
+    market_data_freshness: str = "fresh",
+) -> str:
+    from src.services.cc_daily_trading import resolve_board_gate
+
     regime = _regime_state(today)
-    if regime == "NO_TRADE":
-        return "closed"
-    if regime in ("WAIT", "SELECTIVE"):
-        return "wait"
-    return "open"
+    return resolve_board_gate(
+        regime,
+        brief_freshness=brief_freshness,
+        ranked_board_freshness=ranked_board_freshness,
+        market_data_freshness=market_data_freshness,
+        scanner_degraded=bool(today.get("scanner_degraded")),
+    )
 
 
 def _execution_gate(today: Dict[str, Any]) -> str:
@@ -409,6 +419,8 @@ def _deploy_authority(
     ranked_board_freshness: str = "fresh",
     broker_freshness: str = "offline",
 ) -> bool:
+    from src.services.cc_daily_trading import is_daily_trading_mode
+
     auth = today.get("decision_authority") or {}
     if auth.get("authority_level") != "deploy":
         return False
@@ -416,7 +428,9 @@ def _deploy_authority(
         return False
     if not auth.get("allows_trade_labels"):
         return False
-    if board_gate in ("closed", "wait"):
+    if board_gate == "closed":
+        return False
+    if board_gate == "wait" and not is_daily_trading_mode():
         return False
     if brief_freshness in ("expired", "fallback"):
         return False
@@ -432,13 +446,17 @@ def _deploy_authority(
     exec_n = int(
         today.get("execution_ready_count")
         or (today.get("filter_funnel") or {}).get("execution_ready_setups")
+        or (today.get("qualification_levels") or {}).get("execution_qualified")
         or 0
     )
     if deploy_n < 1 and exec_n < 1:
         return False
-    return board_gate == "open" or (
-        board_gate == "wait"
-        and exec_n >= 1
+    if board_gate == "open":
+        return True
+    if board_gate == "selective" and is_daily_trading_mode():
+        return exec_n >= 1 and execution_gate == "ready" and not auth.get("gates_active")
+    return board_gate == "wait" and (
+        exec_n >= 1
         and execution_gate == "ready"
         and not auth.get("gates_active")
     )
@@ -464,6 +482,8 @@ def build_reason_codes(
 
     if regime_state == "NO_TRADE":
         codes.append("REGIME_NO_TRADE")
+    elif board_gate == "selective":
+        codes.append("BOARD_SELECTIVE")
     elif board_gate == "wait":
         codes.append("BOARD_WAIT")
     elif board_gate == "closed":
@@ -787,7 +807,12 @@ def resolve_system_truth(
     volatility_state = _volatility_state(t)
     breadth_state = _breadth_state(t)
     leadership_state = _leadership_state(t)
-    board_gate = _board_gate(t)
+    board_gate = _board_gate(
+        t,
+        brief_freshness=brief_freshness,
+        ranked_board_freshness=ranked_board_freshness,
+        market_data_freshness=market_data_freshness,
+    )
     execution_gate = _execution_gate(t)
     deploy_auth = _deploy_authority(
         t,
@@ -798,9 +823,50 @@ def resolve_system_truth(
         ranked_board_freshness=ranked_board_freshness,
         broker_freshness=broker_freshness,
     )
+
+    qual = t.get("qualification_levels") or {}
+    funnel = t.get("filter_funnel") or {}
+    trade_n_pre = int(
+        qual.get("trade_qualified")
+        or funnel.get("trade_qualified_setups")
+        or qual.get("deploy_qualified")
+        or 0
+    )
+    exec_n_pre = int(
+        qual.get("execution_qualified")
+        or t.get("execution_ready_count")
+        or funnel.get("execution_ready_setups")
+        or 0
+    )
+    from src.services.cc_daily_trading import (
+        format_qualification_counts,
+        is_daily_trading_mode,
+        resolve_deploy_authority_tier,
+        tier_operator_copy,
+    )
+
+    deploy_tier = resolve_deploy_authority_tier(
+        t,
+        board_gate=board_gate,
+        execution_gate=execution_gate,
+        brief_freshness=brief_freshness,
+        ranked_board_freshness=ranked_board_freshness,
+        broker_freshness=broker_freshness,
+        market_data_freshness=market_data_freshness,
+        regime_state=regime_state,
+        trade_qualified=trade_n_pre,
+        execution_qualified=exec_n_pre,
+        live_deploy_allowed=deploy_auth,
+    )
+    tier_copy = tier_operator_copy(
+        deploy_tier,
+        broker_offline=broker_freshness in ("offline", "blocked"),
+    )
     engine_display = format_engine_state_display(engine_state)
     runtime_freshness = _runtime_freshness_label(runtime_state, engine_state)
-    deploy_authority_label = "open" if deploy_auth else "blocked"
+    deploy_authority_label = (
+        "open" if deploy_auth else ("paper" if deploy_tier == "paper_only" else "blocked")
+    )
     tradeability_authority_line = ""
     if regime_state.upper() == "SELECTIVE" and (
         ranked_board_freshness in ("stale", "fallback")
@@ -827,19 +893,20 @@ def resolve_system_truth(
 
     qual = t.get("qualification_levels") or {}
     funnel = t.get("filter_funnel") or {}
+    setup_n = int(qual.get("setup_qualified") or qual.get("watch_qualified") or funnel.get("watch_qualified_setups") or 0)
+    trade_n = int(qual.get("trade_qualified") or trade_n_pre)
+    exec_n = int(qual.get("execution_qualified") or exec_n_pre)
+    deploy_n = int(qual.get("deploy_qualified") or funnel.get("deploy_qualified_setups") or 0)
+    if not deploy_auth:
+        deploy_n = 0
+    paper_n = trade_n if deploy_tier == "paper_only" else 0
+    watch_n = int(qual.get("watch_qualified") or setup_n)
+    pilot_n = int(t.get("pilot_eligible_count") or funnel.get("pilot_eligible_setups") or 0)
     flow_freshness = _flow_freshness(t, header)
     fund_lab_freshness = _fund_lab_freshness(t, header)
     strategy_validation_freshness = _strategy_validation_freshness(t, header)
     agent_rules_freshness = _agent_rules_freshness(t, header)
     liquidity_regime = _liquidity_regime(t)
-
-    deploy_n = int(qual.get("deploy_qualified") or funnel.get("deploy_qualified_setups") or 0)
-    if not deploy_auth:
-        deploy_n = 0
-    watch_n = int(qual.get("watch_qualified") or qual.get("setup_qualified") or funnel.get("watch_qualified_setups") or 0)
-    setup_n = int(qual.get("setup_qualified") or watch_n)
-    trade_n = int(qual.get("trade_qualified") or 0)
-    exec_n = int(qual.get("execution_qualified") or 0)
 
     from src.services.playbook_truth import format_playbook_qualification_line
 
@@ -850,6 +917,14 @@ def resolve_system_truth(
         deploy_qualified=deploy_n,
         deploy_authority=deploy_auth,
         regime_state=regime_state,
+    )
+    qualification_counts_line = format_qualification_counts(
+        setup_qualified=setup_n,
+        trade_qualified=trade_n,
+        execution_qualified=exec_n,
+        deploy_qualified=deploy_n,
+        paper_qualified=paper_n,
+        tier=deploy_tier,
     )
     brief_expired = brief_freshness == "expired"
     brief_expired_copy = (
@@ -881,6 +956,16 @@ def resolve_system_truth(
         "board_gate": board_gate,
         "execution_gate": execution_gate,
         "deploy_authority": deploy_auth,
+        "deploy_authority_tier": deploy_tier,
+        "deployAuthority": deploy_tier,
+        "paper_deploy_available": deploy_tier == "paper_only",
+        "pilot_probe_available": deploy_tier in ("pilot_only", "allowed"),
+        "daily_trading_mode": is_daily_trading_mode(),
+        "paper_qualified_count": paper_n,
+        "pilot_eligible_count": pilot_n,
+        "qualification_counts_line": qualification_counts_line,
+        "daily_use_zh": tier_copy.get("daily_zh", "今日：僅監察"),
+        "operator_tier_now": tier_copy.get("now", ""),
         "reason_codes": reason_codes,
         "reason_copy": reason_copy,
         "primary_blocker": primary_blocker,

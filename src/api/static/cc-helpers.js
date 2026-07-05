@@ -547,18 +547,36 @@
 	function primaryOperatorState(truth) {
 		var t = truth || {}
 		var regime = String(t.regime_state || "WAIT").toUpperCase()
-		var blocked = t.deploy_authority === false
-		if (blocked) {
+		var tier = String(t.deploy_authority_tier || t.deployAuthority || "").toLowerCase()
+		if (!tier) tier = t.deploy_authority === true ? "allowed" : "blocked"
+		if (tier === "allowed") {
+			if (regime === "NO_TRADE") {
+				return { primary: "MONITOR ONLY", secondary: "NO_TRADE", now: "MONITOR ONLY · Regime closed" }
+			}
+			return { primary: regime, secondary: "", now: t.operator_tier_now || regime }
+		}
+		if (tier === "paper_only") {
 			return {
-				primary: "MONITOR ONLY",
+				primary: "PAPER DEPLOY",
 				secondary: regime !== "NO_TRADE" && regime !== "WAIT" ? regime : "",
-				now: "MONITOR ONLY · Deploy blocked",
+				now: t.operator_tier_now || "Paper deploy available · IBKR offline",
+			}
+		}
+		if (tier === "pilot_only") {
+			return {
+				primary: "PILOT",
+				secondary: regime !== "NO_TRADE" && regime !== "WAIT" ? regime : "",
+				now: t.operator_tier_now || "Pilot probe allowed — half size when broker ready",
 			}
 		}
 		if (regime === "NO_TRADE") {
 			return { primary: "MONITOR ONLY", secondary: "NO_TRADE", now: "MONITOR ONLY · Regime closed" }
 		}
-		return { primary: regime, secondary: "", now: regime }
+		return {
+			primary: "MONITOR ONLY",
+			secondary: regime !== "NO_TRADE" && regime !== "WAIT" ? regime : "",
+			now: t.operator_tier_now || "MONITOR ONLY · Deploy blocked",
+		}
 	}
 
 	function bilingualLine(zh, en) {

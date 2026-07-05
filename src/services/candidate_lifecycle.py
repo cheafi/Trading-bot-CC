@@ -24,10 +24,16 @@ def bucket_candidate(
     *,
     deploy_authority: bool = False,
     near_miss: bool = False,
+    regime_state: str = "WAIT",
 ) -> str:
     if row.get("archived"):
         return BUCKET_ARCHIVED
-    return assign_primary_bucket(row, deploy_authority=deploy_authority, near_miss=near_miss)
+    return assign_primary_bucket(
+        row,
+        deploy_authority=deploy_authority,
+        near_miss=near_miss,
+        regime_state=regime_state,
+    )
 
 
 def enforce_bucket_exclusivity(
@@ -35,8 +41,14 @@ def enforce_bucket_exclusivity(
     *,
     deploy_authority: bool = False,
     near_miss_tickers: Optional[set[str]] = None,
+    regime_state: str = "WAIT",
 ) -> Dict[str, List[Dict[str, Any]]]:
-    return bucket_rows(rows, deploy_authority=deploy_authority, near_miss_tickers=near_miss_tickers)
+    return bucket_rows(
+        rows,
+        deploy_authority=deploy_authority,
+        near_miss_tickers=near_miss_tickers,
+        regime_state=regime_state,
+    )
 
 
 def filter_rejected_from_top_slots(

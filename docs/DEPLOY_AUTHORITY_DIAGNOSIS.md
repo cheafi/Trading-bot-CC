@@ -23,12 +23,23 @@ Deploy authority requires **all** of:
 
 ## Council thresholds (`decision_truth_model.is_execution_ready`)
 
-- Score min: `CC_COUNCIL_DEPLOY_SCORE_MIN` (default **7.5**)
-- Confidence min: `CC_COUNCIL_DEPLOY_CONF_MIN` (default **0.60**)
-- R:R min: `CC_COUNCIL_DEPLOY_RR_MIN` (default **2.0**)
+- Score min: `CC_COUNCIL_DEPLOY_SCORE_MIN` (daily default **7.0**, strict **7.5**)
+- Confidence min: `CC_COUNCIL_DEPLOY_CONF_MIN` (daily default **0.55**, strict **0.60**)
+- R:R min: `CC_COUNCIL_DEPLOY_RR_MIN` (daily default **1.8**, strict **2.0**)
 - Requires entry/stop/target levels
 
-Lowering defaults without env flags would fake deploy authority — do not.
+## Daily trading mode (`CC_DAILY_TRADING_MODE=1`, default ON in dev)
+
+When board is fresh (not fallback/expired):
+
+| Tier | When | Operator copy |
+|------|------|---------------|
+| `allowed` | execution-qualified ≥1 + broker ready | Deploy available · 可部署 |
+| `paper_only` | trade-qualified ≥1 + broker offline | Paper deploy · 紙上可試 |
+| `pilot_only` | B+ pilot-eligible, broker may be offline | Pilot probe · half size when broker ready |
+| `blocked` | stale board, NO_TRADE, or no qualified names | 僅監察 |
+
+`deploy_authority` boolean remains **live-only** — paper path never enables IBKR handoff.
 
 ## Universe expansion
 

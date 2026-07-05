@@ -206,21 +206,21 @@ def _has_levels(cr: Any) -> bool:
 
 
 def _council_deploy_score_min() -> float:
-    from src.services.cc_perf_cache import env_float
+    from src.services.cc_daily_trading import council_deploy_score_min
 
-    return env_float("CC_COUNCIL_DEPLOY_SCORE_MIN", 7.5)
+    return council_deploy_score_min()
 
 
 def _council_deploy_conf_min() -> float:
-    from src.services.cc_perf_cache import env_float
+    from src.services.cc_daily_trading import council_deploy_conf_min
 
-    return env_float("CC_COUNCIL_DEPLOY_CONF_MIN", 0.60)
+    return council_deploy_conf_min()
 
 
 def _council_deploy_rr_min() -> float:
-    from src.services.cc_perf_cache import env_float
+    from src.services.cc_daily_trading import council_deploy_rr_min
 
-    return env_float("CC_COUNCIL_DEPLOY_RR_MIN", 2.0)
+    return council_deploy_rr_min()
 
 
 def is_execution_ready(cr: Any) -> bool:

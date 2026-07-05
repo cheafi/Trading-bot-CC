@@ -21,6 +21,8 @@ def assign_primary_bucket(
     *,
     deploy_authority: bool = False,
     near_miss: bool = False,
+    regime_state: str = "WAIT",
+    daily_mode: Optional[bool] = None,
 ) -> str:
     """One primary bucket per candidate — Deploy|Pilot|Watch|Near-miss|Rejected."""
     act = str(row.get("effective_action") or row.get("action") or "WATCH").upper()
@@ -28,8 +30,23 @@ def assign_primary_bucket(
         return "Rejected"
     if deploy_authority and bool(row.get("execution_ready")) and act in _TRADE:
         return "Deploy"
+    if daily_mode is None:
+        try:
+            from src.services.cc_daily_trading import is_daily_trading_mode
+
+            daily_mode = is_daily_trading_mode()
+        except Exception:
+            daily_mode = False
     if act in _PILOT:
         return "Pilot"
+    if daily_mode:
+        try:
+            from src.services.cc_daily_trading import is_daily_pilot_row
+
+            if is_daily_pilot_row(row, regime_state=regime_state):
+                return "Pilot"
+        except Exception:
+            pass
     if near_miss or bool(row.get("near_miss")) or bool(row.get("whats_missing")):
         return "Near-miss"
     if act in _WATCH or act in _TRADE:
@@ -48,6 +65,8 @@ def bucket_rows(
     *,
     deploy_authority: bool = False,
     near_miss_tickers: Optional[set[str]] = None,
+    regime_state: str = "WAIT",
+    daily_mode: Optional[bool] = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """Partition rows into mutually exclusive primary buckets."""
     nm = {str(t).upper() for t in (near_miss_tickers or set())}
@@ -58,6 +77,8 @@ def bucket_rows(
             row,
             deploy_authority=deploy_authority,
             near_miss=ticker in nm,
+            regime_state=regime_state,
+            daily_mode=daily_mode,
         )
         tagged = {**row, "primary_bucket": bucket}
         out[bucket].append(tagged)
