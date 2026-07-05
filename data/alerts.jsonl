@@ -1,0 +1,59 @@
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "3 stream(s) CRITICAL; worst SPY age 4173.6min", "value": 4173.6, "ts": "2026-05-25T01:33:35.410308Z"}
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "3 stream(s) CRITICAL; worst SPY age 4179.5min", "value": 4179.5, "ts": "2026-05-25T01:39:27.494589Z"}
+{"ticker": "NVDA", "kind": "CONCENTRATION", "severity": "WARN", "msg": "NVDA is 100.0% of gross book (>25%)", "value": 100.0, "ts": "2026-05-25T06:58:42.899383Z"}
+{"ticker": "NVDA", "kind": "CONCENTRATION", "severity": "WARN", "msg": "NVDA is 100.0% of gross book (>25%)", "value": 100.0, "ts": "2026-05-25T07:59:00.209382Z"}
+{"ticker": "NVDA", "kind": "CONCENTRATION", "severity": "WARN", "msg": "NVDA is 100.0% of gross book (>25%)", "value": 100.0, "ts": "2026-05-25T08:59:54.001280Z"}
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst SPY age 4892.8min", "value": 4892.8, "ts": "2026-05-25T13:32:45.783533Z"}
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst SPY age 4963.1min", "value": 4963.1, "ts": "2026-05-25T14:43:05.518565Z"}
+{"ticker": "QQQ", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst QQQ age 4994.4min", "value": 4994.4, "ts": "2026-05-25T15:14:21.427679Z"}
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst SPY age 5023.1min", "value": 5023.1, "ts": "2026-05-25T15:43:08.482705Z"}
+{"ticker": "QQQ", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst QQQ age 5079.9min", "value": 5079.9, "ts": "2026-05-25T16:39:53.505117Z"}
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst SPY age 5083.1min", "value": 5083.1, "ts": "2026-05-25T16:43:08.547746Z"}
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst SPY age 5143.3min", "value": 5143.3, "ts": "2026-05-25T17:43:16.903175Z"}
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst SPY age 5203.6min", "value": 5203.6, "ts": "2026-05-25T18:43:38.488009Z"}
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst SPY age 5276.1min", "value": 5276.1, "ts": "2026-05-25T19:56:03.596433Z"}
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst SPY age 5520.1min", "value": 5520.1, "ts": "2026-05-26T00:00:08.557257Z"}
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst SPY age 5580.3min", "value": 5580.3, "ts": "2026-05-26T01:00:20.354814Z"}
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst SPY age 5640.4min", "value": 5640.4, "ts": "2026-05-26T02:00:25.455609Z"}
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst SPY age 5700.4min", "value": 5700.4, "ts": "2026-05-26T03:00:25.797210Z"}
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst SPY age 5743.9min", "value": 5743.9, "ts": "2026-05-26T03:43:55.788963Z"}
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst SPY age 5746.4min", "value": 5746.4, "ts": "2026-05-26T03:46:25.859474Z"}
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst SPY age 5747.4min", "value": 5747.4, "ts": "2026-05-26T03:47:25.847922Z"}
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst SPY age 5943.2min", "value": 5943.2, "ts": "2026-05-26T07:03:10.512128Z"}
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst SPY age 6003.2min", "value": 6003.2, "ts": "2026-05-26T08:03:13.311761Z"}
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst SPY age 6085.1min", "value": 6085.1, "ts": "2026-05-26T09:25:07.510658Z"}
+{"ticker": "QQQ", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst QQQ age 6131.1min", "value": 6131.1, "ts": "2026-05-26T10:11:05.032823Z"}
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst SPY age 6145.5min", "value": 6145.5, "ts": "2026-05-26T10:25:30.824356Z"}
+{"ticker": "NVDA", "kind": "STOP_BREACH", "severity": "CRITICAL", "msg": "NVDA LONG 211.14 crossed stop 213.75", "value": -1.22, "ts": "2026-05-30T08:00:05.162629Z"}
+{"ticker": "NVDA", "kind": "UNREAL_DRAWDOWN", "severity": "WARN", "msg": "NVDA unrealised -6.2%", "value": -6.16, "ts": "2026-05-30T08:00:05.162629Z"}
+{"ticker": "NVDA", "kind": "CONCENTRATION", "severity": "WARN", "msg": "NVDA is 100.0% of gross book (>25%)", "value": 100.0, "ts": "2026-05-30T08:00:05.162629Z"}
+{"ticker": "NVDA", "kind": "STOP_BREACH", "severity": "CRITICAL", "msg": "NVDA LONG 211.14 crossed stop 213.75", "value": -1.22, "ts": "2026-05-30T09:00:08.720529Z"}
+{"ticker": "NVDA", "kind": "UNREAL_DRAWDOWN", "severity": "WARN", "msg": "NVDA unrealised -6.2%", "value": -6.16, "ts": "2026-05-30T09:00:08.720529Z"}
+{"ticker": "NVDA", "kind": "CONCENTRATION", "severity": "WARN", "msg": "NVDA is 100.0% of gross book (>25%)", "value": 100.0, "ts": "2026-05-30T09:00:08.720529Z"}
+{"ticker": "NVDA", "kind": "STOP_BREACH", "severity": "CRITICAL", "msg": "NVDA LONG 211.14 crossed stop 213.75", "value": -1.22, "ts": "2026-05-30T10:00:15.083145Z"}
+{"ticker": "NVDA", "kind": "UNREAL_DRAWDOWN", "severity": "WARN", "msg": "NVDA unrealised -6.2%", "value": -6.16, "ts": "2026-05-30T10:00:15.083145Z"}
+{"ticker": "NVDA", "kind": "CONCENTRATION", "severity": "WARN", "msg": "NVDA is 100.0% of gross book (>25%)", "value": 100.0, "ts": "2026-05-30T10:00:15.083145Z"}
+{"ticker": "NVDA", "kind": "STOP_BREACH", "severity": "CRITICAL", "msg": "NVDA LONG 211.14 crossed stop 213.75", "value": -1.22, "ts": "2026-05-30T11:01:54.736926Z"}
+{"ticker": "NVDA", "kind": "UNREAL_DRAWDOWN", "severity": "WARN", "msg": "NVDA unrealised -6.2%", "value": -6.16, "ts": "2026-05-30T11:01:54.736926Z"}
+{"ticker": "NVDA", "kind": "CONCENTRATION", "severity": "WARN", "msg": "NVDA is 100.0% of gross book (>25%)", "value": 100.0, "ts": "2026-05-30T11:01:54.736926Z"}
+{"ticker": "NVDA", "kind": "STOP_BREACH", "severity": "CRITICAL", "msg": "NVDA LONG 211.14 crossed stop 213.75", "value": -1.22, "ts": "2026-05-30T12:20:25.713243Z"}
+{"ticker": "NVDA", "kind": "UNREAL_DRAWDOWN", "severity": "WARN", "msg": "NVDA unrealised -6.2%", "value": -6.16, "ts": "2026-05-30T12:20:25.713243Z"}
+{"ticker": "NVDA", "kind": "CONCENTRATION", "severity": "WARN", "msg": "NVDA is 100.0% of gross book (>25%)", "value": 100.0, "ts": "2026-05-30T12:20:25.713243Z"}
+{"ticker": "NVDA", "kind": "STOP_BREACH", "severity": "CRITICAL", "msg": "NVDA LONG 211.14 crossed stop 213.75", "value": -1.22, "ts": "2026-05-30T13:42:33.926752Z"}
+{"ticker": "NVDA", "kind": "UNREAL_DRAWDOWN", "severity": "WARN", "msg": "NVDA unrealised -6.2%", "value": -6.16, "ts": "2026-05-30T13:42:33.926752Z"}
+{"ticker": "NVDA", "kind": "CONCENTRATION", "severity": "WARN", "msg": "NVDA is 100.0% of gross book (>25%)", "value": 100.0, "ts": "2026-05-30T13:42:33.926752Z"}
+{"ticker": "NVDA", "kind": "STOP_BREACH", "severity": "CRITICAL", "msg": "NVDA LONG 211.14 crossed stop 213.75", "value": -1.22, "ts": "2026-05-30T14:42:50.769025Z"}
+{"ticker": "NVDA", "kind": "UNREAL_DRAWDOWN", "severity": "WARN", "msg": "NVDA unrealised -6.2%", "value": -6.16, "ts": "2026-05-30T14:42:50.769025Z"}
+{"ticker": "NVDA", "kind": "CONCENTRATION", "severity": "WARN", "msg": "NVDA is 100.0% of gross book (>25%)", "value": 100.0, "ts": "2026-05-30T14:42:50.769025Z"}
+{"ticker": "NVDA", "kind": "STOP_BREACH", "severity": "CRITICAL", "msg": "NVDA LONG 211.14 crossed stop 213.75", "value": -1.22, "ts": "2026-05-30T15:43:40.796836Z"}
+{"ticker": "NVDA", "kind": "UNREAL_DRAWDOWN", "severity": "WARN", "msg": "NVDA unrealised -6.2%", "value": -6.16, "ts": "2026-05-30T15:43:40.796836Z"}
+{"ticker": "NVDA", "kind": "CONCENTRATION", "severity": "WARN", "msg": "NVDA is 100.0% of gross book (>25%)", "value": 100.0, "ts": "2026-05-30T15:43:40.796836Z"}
+{"ticker": "NVDA", "kind": "STOP_BREACH", "severity": "CRITICAL", "msg": "NVDA LONG 211.14 crossed stop 213.75", "value": -1.22, "ts": "2026-05-31T06:06:00.192615Z"}
+{"ticker": "NVDA", "kind": "UNREAL_DRAWDOWN", "severity": "WARN", "msg": "NVDA unrealised -6.2%", "value": -6.16, "ts": "2026-05-31T06:06:00.192615Z"}
+{"ticker": "NVDA", "kind": "CONCENTRATION", "severity": "WARN", "msg": "NVDA is 100.0% of gross book (>25%)", "value": 100.0, "ts": "2026-05-31T06:06:00.192615Z"}
+{"ticker": "NVDA", "kind": "STOP_BREACH", "severity": "CRITICAL", "msg": "NVDA LONG 211.14 crossed stop 213.75", "value": -1.22, "ts": "2026-05-31T07:06:19.659070Z"}
+{"ticker": "NVDA", "kind": "UNREAL_DRAWDOWN", "severity": "WARN", "msg": "NVDA unrealised -6.2%", "value": -6.16, "ts": "2026-05-31T07:06:19.659070Z"}
+{"ticker": "NVDA", "kind": "CONCENTRATION", "severity": "WARN", "msg": "NVDA is 100.0% of gross book (>25%)", "value": 100.0, "ts": "2026-05-31T07:06:19.659070Z"}
+{"ticker": "NVDA", "kind": "STOP_BREACH", "severity": "CRITICAL", "msg": "NVDA LONG 211.14 crossed stop 213.75", "value": -1.22, "ts": "2026-05-31T08:06:42.127352Z"}
+{"ticker": "NVDA", "kind": "UNREAL_DRAWDOWN", "severity": "WARN", "msg": "NVDA unrealised -6.2%", "value": -6.16, "ts": "2026-05-31T08:06:42.127352Z"}
+{"ticker": "NVDA", "kind": "CONCENTRATION", "severity": "WARN", "msg": "NVDA is 100.0% of gross book (>25%)", "value": 100.0, "ts": "2026-05-31T08:06:42.127352Z"}

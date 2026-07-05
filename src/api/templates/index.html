@@ -4276,6 +4276,16 @@
             <li><strong style="color:var(--t1)">Don't treat Backtest Lab as live evidence</strong> — historical simulation, not deployment authority · 回測 ≠ 實盤依據</li>
           </ul>
 
+          <details style="margin-top:10px">
+            <summary style="font-size:11px;font-weight:700;color:var(--purple);cursor:pointer;padding:4px 0">⏱ Time Travel · 重播任何日期</summary>
+            <div style="margin-top:8px;font-size:11px;color:var(--t2);line-height:1.65">
+              Header <strong style="color:var(--t1)">⏱</strong> opens whole-console replay — pick a date with a Morning Brief snapshot and click <em>Enter replay</em>.
+              Dashboard, Playbook, and the header truth strip reload from that day's brief (research/backtest only).
+              <strong style="color:var(--amber)">Deploy, sizing, and IBKR handoff are blocked</strong> while the purple replay banner is visible.
+              Use <em>單股重播 Single ticker</em> inside the modal for causal per-ticker dossier-style replay without changing the whole page.
+            </div>
+          </details>
+
           <details style="margin-top:4px">
             <summary style="font-size:11px;font-weight:700;color:var(--t1);cursor:pointer;padding:4px 0">When capital is allowed / blocked</summary>
             <div style="margin-top:8px">
@@ -8385,7 +8395,7 @@
               if(timeoutMs>0) timer=setTimeout(()=>ctrl.abort(),timeoutMs);
               if(extSignal) extSignal.addEventListener('abort',()=>ctrl.abort(),{once:true});
               try{
-                const r=await fetch(url, init);
+                const r=await fetch(replayUrl, init);
                 if(timer) clearTimeout(timer);
                 if((r.status===503||r.status===502)&&i<tries-1){
                   await new Promise(res=>setTimeout(res,backoff*(i+1)));
@@ -8397,7 +8407,7 @@
                 if(i===tries-1) throw e;
               }
             }else{
-              const r=await fetch(url, init);
+              const r=await fetch(replayUrl, init);
               if((r.status===503||r.status===502)&&i<tries-1){
                 await new Promise(res=>setTimeout(res,backoff*(i+1)));
                 continue;
@@ -14574,6 +14584,7 @@
       },
       applyRankedPayload(d,meta={}){
         if(!d||typeof d!=='object') return;
+        if(d.replay_mode&&d.replay_as_of){this.ccReplayAsOf=d.replay_as_of;this.ccReplayNote=d.replay_note||'';this._persistReplayState();}
         this.captureInstantDegradedBanner(d);
         if(d.degraded_banner) this.rankedOpps.degraded_banner=d.degraded_banner;
         if(d.instant_degraded) this.rankedOpps.instant_degraded=true;

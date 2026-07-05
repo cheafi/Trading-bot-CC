@@ -1,0 +1,6 @@
+== SCANNER UI FIX SUMMARY ==
+
+- The summary count on the KPI cards `scannerSummaryCount()` handles top_hits now.
+- Category grids iterate correctly over [catName, summary] instead of nested hits directly.
+- Handled undefined variables in UI when no hits exist.
+

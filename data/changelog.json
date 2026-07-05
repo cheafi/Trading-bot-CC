@@ -1,0 +1,49 @@
+{
+	"version": "9.0.0",
+	"updated": "2026-05-31",
+	"product": "CC — Clarity Console",
+	"entries": [
+		{
+			"date": "2026-05-31",
+			"title": "Ops Updates & Error Log",
+			"summary": "New Ops sub-panels for platform changelog and a session-scoped error log. Changelog loads from repo data with timeout fallback; errors capture API, engine, broker, and dossier failures in plain English.",
+			"surfaces": ["Ops", "More menu"]
+		},
+		{
+			"date": "2026-05-30",
+			"title": "Honest operator gates",
+			"summary": "Probe OK is separated from runtime evidence across Dashboard, Playbook, and Ops. Boards may show cached or precomputed output when the engine has not run this session — capital decisions require fresh runtime proof.",
+			"surfaces": ["Dashboard", "Playbook", "Ops", "Portfolio"]
+		},
+		{
+			"date": "2026-05-29",
+			"title": "Random Walk guardrails",
+			"summary": "Passive baseline and complexity challenge strips on Today explain when active management is unlikely to beat buy-and-hold after costs. Deploy gates respect net-edge after turnover and spread burden.",
+			"surfaces": ["Dashboard", "Playbook"]
+		},
+		{
+			"date": "2026-05-28",
+			"title": "IBKR health matrix",
+			"summary": "Broker status distinguishes gateway reachable, session active, market-data farms, and handoff readiness — not a single green/red connected flag. Partial degraded states are labeled honestly.",
+			"surfaces": ["IBKR", "Ops", "Portfolio"]
+		},
+		{
+			"date": "2026-05-27",
+			"title": "Decision hierarchy & surface authority",
+			"summary": "Five-level binding hierarchy (page gate → execution) blocks full deploy when tradeability is WAIT or execution readiness is incomplete. Research surfaces cannot override capital gates.",
+			"surfaces": ["Dashboard", "Command", "Dossier"]
+		},
+		{
+			"date": "2026-05-26",
+			"title": "Discord notifications demoted",
+			"summary": "Discord is optional operator colour — unconfigured webhooks no longer surface as errors. Notification events remain in Ops as informational context only.",
+			"surfaces": ["Ops"]
+		},
+		{
+			"date": "2026-05-25",
+			"title": "Stock intel fast path",
+			"summary": "Dossier supports lite core load plus async enrichments to reduce cold-start timeouts. Failures are logged with suggested retry actions in the Error Log.",
+			"surfaces": ["Dossier", "Search"]
+		}
+	]
+}

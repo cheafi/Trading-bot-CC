@@ -1,0 +1,520 @@
+0: 0 | tab==='ops'" class="fade">
+1: 1 | <div class="trust-strip">
+2: 1 | <span :style="opsDetail.trust?'color:var(--blue)':'color:var(--blue)'" x-text="'● '+(opsDetail.trust?opsDetail.trust.mode:'SYSTEM')"></span>
+3: 1 | <span x-text="opsDetail.version?'v'+opsDetail.version:'—'"></span>
+4: 1 | <span x-text="opsDetail.trust?'As-of: '+opsDetail.trust.as_of.slice(0,19):'Polled: '+new Date().toISOString().slice(0,19)"></span>
+5: 0 | </div>
+6: 1 | <div class="p-3 space-y-3">
+7: 1 | <!-- System Verdict -->
+8: 2 | <div class="card card-p mb-3" style="border-left: 3px solid var(--red);" x-show="!ops.running">
+9: 2 | <div class="text-[14px] font-bold text-red-400 mb-1">NOT READY FOR LIVE USE</div>
+10: 2 | <div class="text-[10px] text-white">Engine stopped; no signal cycle; no execution data; calibration unavailable.</div>
+11: 1 | </div>
+12: 1 | <!-- Next Actions -->
+13: 2 | <div class="card card-p mb-3" style="border-left: 3px solid var(--amber);" x-show="!ops.running">
+14: 2 | <div class="text-[12px] font-bold text-amber-300 mb-1">⚡ Next Operator Actions</div>
+15: 2 | <ol class="text-[10px] text-white pl-4 list-decimal">
+16: 2 | <li>Start engine</li><li>Verify scheduler</li><li>Run cycle</li><li>Check signal starvation report</li>
+17: 2 | </ol>
+18: 1 | </div>
+19: 1 | <!-- Legend -->
+20: 2 | <div class="card card-p mb-3" style="background:var(--s2)">
+21: 2 | <div class="text-[11px] font-bold text-blue-400 mb-1">Live vs Paper Semantic Legend</div>
+22: 3 | <div class="text-[10px] text-white leading-relaxed">
+23: 3 | <span class="font-bold">Real-Time</span> indicates Data feeds are active.<br>
+24: 3 | <span class="font-bold">LIVE TRADING</span> means Execution is active.<br>
+25: 3 | <span class="font-bold">Currently:</span> Paper Execution Only.
+26: 2 | </div>
+27: 1 | </div>
+28: 2 | <div class="card card-p">
+29: 3 | <div class="flex items-center justify-between mb-3">
+30: 3 | <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">⚙️ Engine State</div>
+31: 3 | <button @click="fetchHealth()" class="btn-s text-[10px]">🔄 Refresh</button>
+32: 2 | </div>
+33: 3 | <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
+34: 3 | <div class="card card-p" style="text-align:center"><div class="text-[20px]" x-text="ops.running?'🟢':'🔴'"></div><div class="text-[10px] font-bold" :class="ops.running?'text-green-400':'text-red-400'" x-text="ops.running?'RUNNING':'STOPPED'"></div><div class="kpi-lbl">Engine</div></div>
+35: 3 | <div class="card card-p" style="text-align:center"><div class="text-[20px]" x-text="ops.circuit_breaker?'🛑':'✅'"></div><div class="text-[10px] font-bold" :class="ops.circuit_breaker?'text-red-400':'text-green-400'" x-text="ops.circuit_breaker?'TRIPPED':'CLEAR'"></div><div class="kpi-lbl">Circuit Breaker</div></div>
+36: 3 | <div class="card card-p" style="text-align:center"><div class="kpi-val mono text-white" x-text="ops.cycle_count||0"></div><div class="kpi-lbl">Cycles</div></div>
+37: 3 | <div class="card card-p" style="text-align:center"><div class="kpi-val mono text-white" x-text="ops.signals_today||0"></div><div class="kpi-lbl">Signals Today</div></div>
+38: 2 | </div>
+39: 3 | <div class="mt-3 p-2 rounded col-span-2 text-left" style="background:var(--s2); border:1px solid var(--bd);" x-show="!ops.running || ops.signals_today === 0">
+40: 3 | <div class="text-[10px] font-bold mb-1" style="color:var(--t2)">Why No Action Today?</div>
+41: 4 | <div class="flex gap-2 text-[9px]" style="color:var(--t3)">
+42: 4 | <div class="p-1 rounded bg-black/30">Failed R:R <span class="mono text-white ml-1">...</span></div>
+43: 4 | <div class="p-1 rounded bg-black/30">Failed Limits <span class="mono text-white ml-1">...</span></div>
+44: 4 | <div class="p-1 rounded bg-black/30">Regime Blocked <span class="mono text-white ml-1">Yes</span></div>
+45: 3 | </div>
+46: 2 | </div>
+47: 2 | <template x-if="ops.circuit_breaker_reason"><div style="margin-top:8px;padding:6px 10px;background:rgba(255,92,92,.08);border:1px solid rgba(255,92,92,.2);border-radius:6px;font-size:10px;color:var(--red)" x-text="'⚠ '+ops.circuit_breaker_reason"></div></template>
+48: 3 | <div class="flex items-center gap-2 mt-3">
+49: 3 | <span class="pill" :class="ops.dry_run?'pa':'pg'" x-text="ops.dry_run?'DRY RUN / PAPER':'LIVE TRADING'"></span>
+50: 3 | <span class="pill pw" x-text="'Trades today: '+(ops.trades_today||0)"></span>
+51: 2 | </div>
+52: 1 | </div>
+53: 1 | <!-- Uptime + Latency -->
+54: 2 | <div class="card card-p">
+55: 2 | <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">⏱ Uptime & Latency</div>
+56: 3 | <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;font-size:12px">
+57: 3 | <div><div class="text-[10px]" style="color:var(--t3)">Uptime</div><div class="font-bold mono text-white" x-text="opsDetail.uptime||'—'"></div></div>
+58: 3 | <div><div class="text-[10px]" style="color:var(--t3)">Regime Latency</div><div class="font-bold mono" :class="(opsDetail.latency&&opsDetail.latency.regime_ms||0)<500?'text-green-400':(opsDetail.latency&&opsDetail.latency.regime_ms||0)<2000?'text-amber-300':'text-red-400'" x-text="opsDetail.latency?opsDetail.latency.regime_ms+'ms':'—'"></div></div>
+59: 3 | <div><div class="text-[10px]" style="color:var(--t3)">Cached Recs</div><div class="font-bold mono text-white" x-text="opsDetail.engine?opsDetail.engine.cached_recommendations||0:'—'"></div></div>
+60: 2 | </div>
+61: 2 | <div class="text-[9px] mt-2 mono" style="color:var(--t3)" x-text="opsDetail.startup_time?'Boot: '+opsDetail.startup_time.slice(0,19):''"></div>
+62: 2 | <template x-if="opsDetail.engine&&opsDetail.engine.last_cycle"><div class="text-[9px] mono" style="color:var(--t3)" x-text="'Last cycle: '+opsDetail.engine.last_cycle"></div></template>
+63: 1 | </div>
+64: 1 | <!-- Component Health -->
+65: 2 | <div class="card card-p">
+66: 2 | <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">🔧 Component Health</div>
+67: 2 | <template x-for="[name,ok] in Object.entries(ops.components||{})">
+68: 3 | <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)">
+69: 3 | <span class="text-[11px]" x-text="name.replace(/_/g,' ')"></span>
+70: 3 | <div class="flex items-center gap-2"><span class="health-dot" :class="ok?'health-ok':'health-err'"></span><span class="text-[10px] mono" :class="ok?'text-green-400':'text-red-400'" x-text="ok?'OK':'FAIL'"></span></div>
+71: 2 | </div>
+72: 2 | </template>
+73: 1 | </div>
+74: 1 | <!-- Data Providers -->
+75: 2 | <div class="card card-p">
+76: 2 | <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📡 Data Providers</div>
+77: 3 | <div class="text-[11px]" style="color:var(--t2)">
+78: 3 | <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)"><span>Market Data (yfinance)</span><span :class="live?'text-green-400':'text-red-400'" x-text="live?'Connected':'Disconnected'"></span></div>
+79: 3 | <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)"><span>Regime Router</span><span :class="ops.components?.regime_router?'text-green-400':'text-red-400'" x-text="ops.components?.regime_router?'Active':'Down'"></span></div>
+80: 3 | <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)"><span>Broker (Alpaca)</span><span :class="ops.components?.broker?'text-green-400':'text-amber-300'" x-text="ops.components?.broker?'Connected':'Paper Only'"></span></div>
+81: 2 | </div>
+82: 1 | </div>
+83: 1 | <!-- Phase 9 Engine Health -->
+84: 1 | <template x-if="opsDetail.phase9_engines">
+85: 2 | <div class="card card-p">
+86: 2 | <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">🧠 Phase 9 Engines <span class="pill" :class="opsDetail.phase9_engines.loaded?'pg':'pr'" x-text="opsDetail.phase9_engines.loaded?'LOADED':'OFFLINE'"></span></div>
+87: 2 | <template x-for="eng in (opsDetail.phase9_engines.components||[])">
+88: 3 | <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)">
+89: 3 | <span class="text-[11px]" style="color:var(--t2)" x-text="eng"></span>
+90: 3 | <div class="flex items-center gap-2"><span class="health-dot health-ok"></span><span class="text-[10px] mono text-green-400">Active</span></div>
+91: 2 | </div>
+92: 2 | </template>
+93: 2 | <template x-if="!opsDetail.phase9_engines.loaded"><div class="text-[10px] mt-2" style="color:var(--red)">Phase 9 engines failed to load — check server logs</div></template>
+94: 1 | </div>
+95: 1 | </template>
+96: 1 | <!-- Cache Stats -->
+97: 1 | <template x-if="opsDetail.cache_stats&&Object.keys(opsDetail.cache_stats).length>0">
+98: 2 | <div class="card card-p">
+99: 2 | <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">💾 Cache Statistics</div>
+100: 2 | <template x-for="[k,v] in Object.entries(opsDetail.cache_stats)">
+101: 3 | <div class="flex items-center justify-between py-1 text-[11px]" style="border-bottom:1px solid var(--bd)">
+102: 3 | <span style="color:var(--t2)" x-text="k.replace(/_/g,' ')"></span>
+103: 3 | <span class="mono text-white" x-text="typeof v==='number'?v.toLocaleString():v"></span>
+104: 2 | </div>
+105: 2 | </template>
+106: 1 | </div>
+107: 1 | </template>
+108: 1 | 
+109: 1 | <!-- Self-Learn Engine Panel (Ops) -->
+110: 2 | <div class="card card-p" style="border-left:3px solid var(--purple)">
+111: 3 | <div class="flex items-center justify-between mb-2">
+112: 3 | <div class="text-[10px] font-bold uppercase" style="color:var(--purple)">🧠 Self-Learning Engine</div>
+113: 4 | <div class="flex gap-1">
+114: 4 | <button @click="fetchSelfLearnStatus()" class="btn-s text-[9px]">Refresh</button>
+115: 4 | <button @click="triggerSelfLearn()" class="btn-p text-[9px]" :disabled="selfLearn.triggering"><span x-show="!selfLearn.triggering">▶ Run Cycle</span><span x-show="selfLearn.triggering"><span class="spin"></span></span></button>
+116: 3 | </div>
+117: 2 | </div>
+118: 2 | <template x-if="selfLearn.status">
+119: 3 | <div class="space-y-2">
+120: 3 | <!-- Engine state -->
+121: 4 | <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px">
+122: 4 | <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)">Enabled</div><div class="text-[10px] font-bold" :class="selfLearn.status.engine_state?.enabled?'text-amber-300':'text-red-400'" x-text="selfLearn.status.engine_state?.enabled?(selfLearn.status.closed_trades_available?'YES':'Learning framework present; not yet validated'):'DISABLED'"></div></div>
+123: 4 | <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)">Adjustments</div><div class="text-[10px] mono text-white" x-text="selfLearn.status.engine_state?.total_adjustments||0"></div></div>
+124: 4 | <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)">Trades</div><div class="text-[10px] mono text-white" x-text="selfLearn.status.closed_trades_available||0"></div></div>
+125: 4 | <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)">This Cycle</div><div class="text-[10px] mono text-amber-300" x-text="selfLearn.status.engine_state?.adjustments_this_cycle||0"></div></div>
+126: 3 | </div>
+127: 3 | <!-- Regime performance -->
+128: 3 | <template x-if="selfLearn.status.regime_performance && Object.keys(selfLearn.status.regime_performance).length">
+129: 4 | <div>
+130: 4 | <div class="text-[9px] mb-1" style="color:var(--t3)">Regime Win-Rates</div>
+131: 5 | <div class="flex gap-2 flex-wrap">
+132: 5 | <template x-for="(v,regime) in selfLearn.status.regime_performance" :key="regime">
+133: 6 | <div class="px-2 py-1 rounded text-[9px]" style="background:var(--s2)">
+134: 6 | <span class="font-bold" style="color:var(--t1)" x-text="regime"></span>
+135: 6 | <span class="mono ml-1" :class="(v.win_rate||0)>=0.55?'text-green-400':'text-amber-300'" x-text="Math.round((v.win_rate||0)*100)+'%'"></span>
+136: 6 | <span class="mono" style="color:var(--t3)" x-text="' n='+v.sample"></span>
+137: 5 | </div>
+138: 5 | </template>
+139: 4 | </div>
+140: 3 | </div>
+141: 3 | </template>
+142: 3 | <!-- Fund weights -->
+143: 3 | <template x-if="selfLearn.status.fund_weights">
+144: 4 | <div>
+145: 4 | <div class="text-[9px] mb-1" style="color:var(--t3)">Sharpe-Tuned Fund Weights</div>
+146: 5 | <div class="flex gap-2 flex-wrap">
+147: 5 | <template x-for="(w,fund) in selfLearn.status.fund_weights" :key="fund">
+148: 6 | <div class="flex items-center gap-1 px-2 py-1 rounded text-[9px]" style="background:var(--s2)">
+149: 6 | <span x-text="fundIcon(fund)" style="font-size:10px"></span>
+150: 6 | <span class="mono" style="color:var(--t1)" x-text="Math.round(w*100)+'%'"></span>
+151: 6 | <div class="h-1 rounded" style="width:30px;background:var(--bd)"><div class="h-1 rounded" :style="'width:'+Math.round(w*100)+'%;background:'+fundColor(fund)"></div></div>
+152: 5 | </div>
+153: 5 | </template>
+154: 4 | </div>
+155: 3 | </div>
+156: 3 | </template>
+157: 3 | <!-- Recent audit log -->
+158: 3 | <template x-if="selfLearn.status.engine_state?.recent_adjustments?.length">
+159: 4 | <div>
+160: 4 | <div class="text-[9px] mb-1" style="color:var(--t3)">Recent Adjustments</div>
+161: 5 | <div class="space-y-1">
+162: 5 | <template x-for="adj in (selfLearn.status.engine_state.recent_adjustments||[]).slice(-3)" :key="adj.timestamp">
+163: 5 | <div class="text-[9px] mono" style="color:var(--t2)" x-text="adj.parameter+': '+adj.old_value+' → '+adj.new_value+' ('+adj.reason?.slice(0,50)+')'"></div>
+164: 5 | </template>
+165: 4 | </div>
+166: 3 | </div>
+167: 3 | </template>
+168: 3 | <template x-if="selfLearn.lastResult">
+169: 3 | <div class="text-[9px] mono" style="color:var(--t3)" x-text="selfLearn.lastResult"></div>
+170: 3 | </template>
+171: 3 | 
+172: 3 | <!-- Calibration Drift (Sprint 98 / Sprint 102) -->
+173: 3 | <template x-if="selfLearn.status && !selfLearn.status.closed_trades_available"><div class="mt-3 p-2 rounded text-center text-[10px] italic" style="background:var(--s2);color:var(--t3)">📐 Calibration (Brier) — Not enough evidence yet / INSUFFICIENT SAMPLE</div></template>
+174: 4 | <div class="mt-3 p-2 rounded" style="background:var(--s2)" x-show="selfLearn.status && selfLearn.status.closed_trades_available > 0">
+175: 5 | <div class="flex items-center justify-between mb-1.5">
+176: 5 | <div class="text-[9px] font-bold uppercase" style="color:var(--t3)">📐 Calibration (Brier)</div>
+177: 5 | <button @click="fetchCalibration()" class="btn-s text-[8px]">Refresh</button>
+178: 4 | </div>
+179: 4 | <template x-if="selfLearn.calibration">
+180: 5 | <div>
+181: 6 | <div class="grid grid-cols-4 gap-1">
+182: 6 | <div class="p-1 rounded" style="background:var(--s3)"><div class="text-[7px]" style="color:var(--t3)">Brier</div><div class="text-[9px] mono text-white" x-text="selfLearn.calibration.brier_score != null ? selfLearn.calibration.brier_score.toFixed(4) : '—'"></div></div>
+183: 6 | <div class="p-1 rounded" style="background:var(--s3)"><div class="text-[7px]" style="color:var(--t3)">Baseline</div><div class="text-[9px] mono text-white" x-text="selfLearn.calibration.baseline_brier != null ? selfLearn.calibration.baseline_brier.toFixed(4) : '—'"></div></div>
+184: 6 | <div class="p-1 rounded" style="background:var(--s3)"><div class="text-[7px]" style="color:var(--t3)">Drift</div><div class="text-[9px] mono" :class="selfLearn.calibration.drift > 0.05 ? 'text-red-400' : 'text-green-400'" x-text="selfLearn.calibration.drift != null ? (selfLearn.calibration.drift >= 0 ? '+' : '') + selfLearn.calibration.drift.toFixed(4) : '—'"></div></div>
+185: 6 | <div class="p-1 rounded" style="background:var(--s3)"><div class="text-[7px]" style="color:var(--t3)">Status</div><div class="text-[9px] font-bold" :class="selfLearn.calibration.alert ? 'text-red-400' : 'text-green-400'" x-text="selfLearn.calibration.alert ? '⚠ DRIFT' : '✓ OK'"></div></div>
+186: 5 | </div>
+187: 5 | <!-- Per-strategy Brier decomposition (Sprint 102) -->
+188: 5 | <template x-if="selfLearn.calibration.by_strategy && Object.keys(selfLearn.calibration.by_strategy).length">
+189: 6 | <div class="mt-1.5">
+190: 6 | <div class="text-[7px] mb-1" style="color:var(--t3)">By Strategy</div>
+191: 7 | <div class="space-y-0.5">
+192: 7 | <template x-for="(v, strat) in selfLearn.calibration.by_strategy" :key="strat">
+193: 8 | <div class="flex items-center justify-between px-1 py-0.5 rounded" style="background:var(--s3)">
+194: 8 | <span class="text-[7px] mono" style="color:var(--t2)" x-text="strat"></span>
+195: 8 | <span class="text-[7px] mono" :class="v.brier_score != null && v.brier_score > 0.20 ? 'text-red-400' : 'text-green-400'" x-text="v.brier_score != null ? v.brier_score.toFixed(4) + ' (n=' + v.window + ')' : '—'"></span>
+196: 7 | </div>
+197: 7 | </template>
+198: 6 | </div>
+199: 5 | </div>
+200: 5 | </template>
+201: 5 | <!-- Sprint 110: Confidence Bucket Reliability Table -->
+202: 5 | <template x-if="selfLearn.calibBuckets && selfLearn.calibBuckets.buckets">
+203: 6 | <div class="mt-2">
+204: 7 | <div class="flex items-center justify-between mb-1">
+205: 7 | <span class="text-[7px] font-bold" style="color:var(--t3)">Reliability Diagram</span>
+206: 7 | <span class="text-[7px]" style="color:var(--t3)" x-text="'n='+selfLearn.calibBuckets.total_records+(selfLearn.calibBuckets.ece!=null?' · ECE='+selfLearn.calibBuckets.ece.toFixed(3):'')"></span>
+207: 6 | </div>
+208: 7 | <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1.5fr;gap:1px 3px;margin-bottom:2px">
+209: 7 | <span class="text-[6px]" style="color:var(--t3)">Bucket</span>
+210: 7 | <span class="text-[6px]" style="color:var(--t3)">n</span>
+211: 7 | <span class="text-[6px]" style="color:var(--t3)">Hit%</span>
+212: 7 | <span class="text-[6px]" style="color:var(--t3)">Fwd%</span>
+213: 7 | <span class="text-[6px]" style="color:var(--t3)">MAE%</span>
+214: 7 | <span class="text-[6px]" style="color:var(--t3)">Calib</span>
+215: 6 | </div>
+216: 6 | <template x-for="b in selfLearn.calibBuckets.buckets" :key="b.bucket">
+217: 7 | <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1.5fr;gap:1px 3px;padding:1px 0;border-top:1px solid var(--s3)">
+218: 7 | <span class="text-[7px] mono" style="color:var(--t2)" x-text="b.bucket+'%'"></span>
+219: 7 | <span class="text-[7px] mono" style="color:var(--t2)" x-text="b.n||'—'"></span>
+220: 7 | <span class="text-[7px] mono" :class="b.hit_rate!=null?(b.hit_rate>=b.midpoint_conf?'text-green-400':'text-red-400'):'text-gray-500'" x-text="b.hit_rate!=null?(b.hit_rate*100).toFixed(0)+'%':'—'"></span>
+221: 7 | <span class="text-[7px] mono" :class="b.avg_forward_return_pct!=null?(b.avg_forward_return_pct>=0?'text-green-400':'text-red-400'):'text-gray-500'" x-text="b.avg_forward_return_pct!=null?(b.avg_forward_return_pct>=0?'+':'')+b.avg_forward_return_pct.toFixed(2):'—'"></span>
+222: 7 | <span class="text-[7px] mono text-amber-400" x-text="b.avg_mae_pct!=null?b.avg_mae_pct.toFixed(2)+'%':'—'"></span>
+223: 7 | <span class="text-[7px] font-bold" :class="b.calibrated==='good'?'text-green-400':b.calibrated==='fair'?'text-amber-400':b.calibrated==='poor'?'text-red-400':'text-gray-500'" x-text="b.calibrated||'need n≥5'"></span>
+224: 6 | </div>
+225: 6 | </template>
+226: 5 | </div>
+227: 5 | </template>
+228: 4 | </div>
+229: 4 | </template>
+230: 4 | <template x-if="!selfLearn.calibration">
+231: 4 | <div class="text-[8px]" style="color:var(--t3)">Click Refresh to load.</div>
+232: 4 | </template>
+233: 3 | </div>
+234: 3 | 
+235: 3 | <!-- A/B Shadow Harness (Sprint 98) -->
+236: 4 | <div class="mt-2 p-2 rounded" style="background:var(--s2)" x-show="selfLearn.status && selfLearn.status.closed_trades_available > 0">
+237: 5 | <div class="flex items-center justify-between mb-1.5">
+238: 5 | <div class="text-[9px] font-bold uppercase" style="color:var(--t3)">🔬 A/B Shadow</div>
+239: 6 | <div class="flex gap-1">
+240: 6 | <button @click="autoScheduleExperiments()" class="btn-s text-[8px] bg-indigo-900/40 hover:bg-indigo-700/60" title="Auto-schedule A/B challengers for out-of-band regimes">⚡ Auto-Schedule</button>
+241: 6 | <button @click="fetchABStatus()" class="btn-s text-[8px]">Refresh</button>
+242: 5 | </div>
+243: 4 | </div>
+244: 4 | <template x-if="selfLearn.lastAutoSchedule">
+245: 5 | <div class="text-[7px] mb-1.5 px-1 py-0.5 rounded" style="background:var(--s3);color:var(--t3)">
+246: 5 | Last auto-schedule: <span class="text-indigo-300 mono" x-text="selfLearn.lastAutoSchedule.total_proposed"></span> proposed · <span x-text="(selfLearn.lastAutoSchedule.run_at||'').slice(0,16).replace('T',' ')"></span>
+247: 4 | </div>
+248: 4 | </template>
+249: 4 | <template x-if="selfLearn.ab && selfLearn.ab.active && selfLearn.ab.active.length">
+250: 5 | <div>
+251: 5 | <div class="text-[8px] mb-1" style="color:var(--t3)">Active challengers: <span class="text-amber-300" x-text="selfLearn.ab.active.join(', ')"></span></div>
+252: 5 | <template x-for="(c, param) in selfLearn.ab.challengers" :key="param">
+253: 6 | <div x-show="c.status === 'shadow'" class="flex items-center justify-between py-0.5" style="border-top:1px solid var(--bd)">
+254: 6 | <span class="mono text-[8px] text-white" x-text="param"></span>
+255: 6 | <span class="mono text-[8px] text-amber-300" x-text="c.value"></span>
+256: 6 | <span class="text-[7px]" style="color:var(--t3)" x-text="`${c.shadow_wins||0}/${c.shadow_trades||0} wins · ${c.days_tracked||0}d`"></span>
+257: 6 | <button @click="evaluateAB(param)" class="btn-s text-[7px]">Evaluate</button>
+258: 5 | </div>
+259: 5 | </template>
+260: 4 | </div>
+261: 4 | </template>
+262: 4 | <template x-if="!selfLearn.ab || !selfLearn.ab.active || !selfLearn.ab.active.length">
+263: 4 | <div class="text-[8px]" style="color:var(--t3)">No active shadow challengers.</div>
+264: 4 | </template>
+265: 4 | <!-- Experiment Ledger (Sprint 111) -->
+266: 4 | <template x-if="selfLearn.ledger && selfLearn.ledger.entries && selfLearn.ledger.entries.length">
+267: 4 | <details class="mt-2">
+268: 4 | <summary class="text-[8px] cursor-pointer select-none" style="color:var(--t3)">📋 Experiment History (<span x-text="selfLearn.ledger.total"></span>)</summary>
+269: 5 | <div class="mt-1 overflow-x-auto">
+270: 5 | <table class="w-full text-[7px]" style="border-collapse:collapse">
+271: 5 | <thead>
+272: 5 | <tr style="color:var(--t3);border-bottom:1px solid var(--bd)">
+273: 5 | <th class="text-left pr-1">Param</th>
+274: 5 | <th class="text-right pr-1">Baseline</th>
+275: 5 | <th class="text-right pr-1">Challenger</th>
+276: 5 | <th class="text-right pr-1">Win%</th>
+277: 5 | <th class="text-right pr-1">Trades</th>
+278: 5 | <th class="text-left pr-1">Status</th>
+279: 5 | <th class="text-left">Date</th>
+280: 5 | </tr>
+281: 5 | </thead>
+282: 5 | <tbody>
+283: 5 | <template x-for="(e,i) in selfLearn.ledger.entries" :key="i">
+284: 5 | <tr style="border-bottom:1px solid var(--bd)" class="hover:bg-white/5">
+285: 5 | <td class="mono pr-1 text-white" x-text="e.param||'—'"></td>
+286: 5 | <td class="mono pr-1 text-right" style="color:var(--t3)" x-text="e.baseline_value!=null?Number(e.baseline_value).toFixed(3):'—'"></td>
+287: 5 | <td class="mono pr-1 text-right text-amber-300" x-text="e.challenger_value!=null?Number(e.challenger_value).toFixed(3):'—'"></td>
+288: 5 | <td class="mono pr-1 text-right" :class="e.shadow_win_rate>=0.52?'text-green-400':e.shadow_win_rate!=null?'text-red-400':'text-gray-400'" x-text="e.shadow_win_rate!=null?(e.shadow_win_rate*100).toFixed(0)+'%':'—'"></td>
+289: 5 | <td class="mono pr-1 text-right" style="color:var(--t3)" x-text="e.shadow_trades||0"></td>
+290: 5 | <td class="pr-1" :class="e.status==='promoted'?'text-green-400':e.status==='discarded'?'text-red-400':'text-amber-300'" x-text="e.status||'—'"></td>
+291: 5 | <td style="color:var(--t3)" x-text="e.decided_at?(e.decided_at||'').slice(0,10):e.date?(e.date||'').slice(0,10):'—'"></td>
+292: 5 | </tr>
+293: 5 | </template>
+294: 5 | </tbody>
+295: 5 | </table>
+296: 4 | </div>
+297: 4 | </details>
+298: 4 | </template>
+299: 3 | </div>
+300: 2 | </div>
+301: 2 | </template>
+302: 2 | <template x-if="!selfLearn.status">
+303: 2 | <div class="text-[9px]" style="color:var(--t3)">Click Refresh to load engine state.</div>
+304: 2 | </template>
+305: 1 | </div>
+306: 1 | 
+307: 1 | <!-- Feedback Pipeline (Sprint 113) -->
+308: 2 | <div class="card card-p">
+309: 3 | <div class="flex items-center justify-between mb-2">
+310: 3 | <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">🔄 Feedback Pipeline</div>
+311: 3 | <button @click="fetchFeedbackStats()" class="btn-s text-[9px]">Refresh</button>
+312: 2 | </div>
+313: 2 | <template x-if="selfLearn.feedback">
+314: 3 | <div>
+315: 4 | <div class="grid grid-cols-2 gap-1 mb-1.5">
+316: 5 | <div class="p-1.5 rounded text-center" style="background:var(--s2)">
+317: 5 | <div class="text-[7px]" style="color:var(--t3)">Trades Processed</div>
+318: 5 | <div class="text-[11px] font-bold text-white mono" x-text="selfLearn.feedback.total_processed??0"></div>
+319: 4 | </div>
+320: 5 | <div class="p-1.5 rounded text-center" style="background:var(--s2)">
+321: 5 | <div class="text-[7px]" style="color:var(--t3)">Brier Alerts</div>
+322: 5 | <div class="text-[11px] font-bold mono" :class="(selfLearn.feedback.brier_alerts||0)>0?'text-amber-300':'text-green-400'" x-text="selfLearn.feedback.brier_alerts??0"></div>
+323: 4 | </div>
+324: 3 | </div>
+325: 4 | <div class="grid grid-cols-2 gap-1 mb-1">
+326: 5 | <div class="p-1.5 rounded text-center" style="background:var(--s2)">
+327: 5 | <div class="text-[7px]" style="color:var(--t3)">Active Shadows</div>
+328: 5 | <div class="text-[11px] font-bold text-amber-300 mono" x-text="selfLearn.feedback.active_shadow_count??0"></div>
+329: 4 | </div>
+330: 5 | <div class="p-1.5 rounded text-center" style="background:var(--s2)">
+331: 5 | <div class="text-[7px]" style="color:var(--t3)">Last Run</div>
+332: 5 | <div class="text-[8px] mono" style="color:var(--t3)" x-text="selfLearn.feedback.last_processed_at?(selfLearn.feedback.last_processed_at||'').slice(0,10):'—'"></div>
+333: 4 | </div>
+334: 3 | </div>
+335: 3 | <template x-if="selfLearn.feedback.active_shadow_params && selfLearn.feedback.active_shadow_params.length">
+336: 3 | <div class="text-[7px]" style="color:var(--t3)">Shadowing: <span class="text-amber-300" x-text="selfLearn.feedback.active_shadow_params.join(', ')"></span></div>
+337: 3 | </template>
+338: 2 | </div>
+339: 2 | </template>
+340: 2 | <template x-if="!selfLearn.feedback">
+341: 2 | <div class="text-[9px]" style="color:var(--t3)">Click Refresh to load pipeline stats.</div>
+342: 2 | </template>
+343: 1 | </div>
+344: 1 | 
+345: 1 | <!-- Portfolio Risk Guard (Sprint 100) -->
+346: 2 | <div class="card card-p">
+347: 3 | <div class="flex items-center justify-between mb-2">
+348: 3 | <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">🛡 Portfolio Risk</div>
+349: 3 | <button @click="fetchRiskSummary()" class="btn-s text-[9px]">Refresh</button>
+350: 2 | </div>
+351: 2 | <template x-if="risk.summary">
+352: 3 | <div>
+353: 4 | <div class="grid grid-cols-4 gap-1 mb-2">
+354: 5 | <div class="p-1.5 rounded text-center" style="background:var(--s2)">
+355: 5 | <div class="text-[7px]" style="color:var(--t3)">Gates</div>
+356: 5 | <div class="text-[10px] font-bold" :class="risk.summary.all_gates_ok?'text-green-400':'text-red-400'" x-text="risk.summary.all_gates_ok?'✓ ALL OK':'⚠ BREACH'"></div>
+357: 4 | </div>
+358: 5 | <div class="p-1.5 rounded text-center" style="background:var(--s2)">
+359: 5 | <div class="text-[7px]" style="color:var(--t3)">Positions</div>
+360: 5 | <div class="text-[10px] mono" :class="risk.summary.gates?.positions_ok?'text-white':'text-red-400'" x-text="(risk.summary.open_positions??0)+' / '+(risk.summary.max_positions??10)"></div>
+361: 4 | </div>
+362: 5 | <div class="p-1.5 rounded text-center" style="background:var(--s2)">
+363: 5 | <div class="text-[7px]" style="color:var(--t3)">VaR (1d)</div>
+364: 5 | <div class="text-[10px] mono" :class="risk.summary.gates?.var_ok?'text-green-400':'text-red-400'" x-text="risk.summary.total_var_usd!=null?'$'+risk.summary.total_var_usd.toFixed(0):'—'"></div>
+365: 4 | </div>
+366: 5 | <div class="p-1.5 rounded text-center" style="background:var(--s2)">
+367: 5 | <div class="text-[7px]" style="color:var(--t3)">Concentration</div>
+368: 5 | <div class="text-[10px] font-bold mono" :class="{'text-green-400':['A','B'].includes(risk.summary.concentration_grade),'text-amber-300':risk.summary.concentration_grade==='C','text-red-400':risk.summary.concentration_grade==='D','text-white':!['A','B','C','D'].includes(risk.summary.concentration_grade)}" x-text="risk.summary.concentration_grade??'—'"></div>
+369: 4 | </div>
+370: 3 | </div>
+371: 3 | <div class="text-[8px]" style="color:var(--t3)">VaR Budget: <span class="text-white mono" x-text="risk.summary.var_budget_usd!=null?'$'+risk.summary.var_budget_usd.toFixed(0):'—'"></span></div>
+372: 2 | </div>
+373: 2 | </template>
+374: 2 | <template x-if="!risk.summary">
+375: 2 | <div class="text-[9px]" style="color:var(--t3)">Click Refresh to load risk gates.</div>
+376: 2 | </template>
+377: 1 | </div>
+378: 1 | 
+379: 1 | <!-- Execution Quality (Sprint 99) -->
+380: 2 | <div class="card card-p">
+381: 3 | <div class="flex items-center justify-between mb-2">
+382: 3 | <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">⚡ Execution Quality</div>
+383: 3 | <button @click="fetchExecMetrics()" class="btn-s text-[9px]">Refresh</button>
+384: 2 | </div>
+385: 2 | <template x-if="exec.metrics">
+386: 3 | <div>
+387: 4 | <div class="grid grid-cols-5 gap-1 mb-2">
+388: 4 | <div class="p-1.5 rounded text-center" style="background:var(--s2)"><div class="text-[7px]" style="color:var(--t3)">Fills (30d)</div><div class="text-[10px] mono text-white" x-text="exec.metrics.fills??'—'"></div></div>
+389: 4 | <div class="p-1.5 rounded text-center" style="background:var(--s2)"><div class="text-[7px]" style="color:var(--t3)">Avg Slip</div><div class="text-[10px] mono" :class="(exec.metrics.avg_slippage_bps??0)>5?'text-red-400':'text-green-400'" x-text="exec.metrics.avg_slippage_bps!=null?exec.metrics.avg_slippage_bps.toFixed(1)+'bps':'—'"></div></div>
+390: 4 | <div class="p-1.5 rounded text-center" style="background:var(--s2)"><div class="text-[7px]" style="color:var(--t3)">Median Slip</div><div class="text-[10px] mono text-white" x-text="exec.metrics.median_slippage_bps!=null?exec.metrics.median_slippage_bps.toFixed(1)+'bps':'—'"></div></div>
+391: 4 | <div class="p-1.5 rounded text-center" style="background:var(--s2)"><div class="text-[7px]" style="color:var(--t3)">p95 Slip</div><div class="text-[10px] mono" :class="(exec.metrics.p95_slippage_bps??0)>15?'text-amber-400':'text-white'" x-text="exec.metrics.p95_slippage_bps!=null?exec.metrics.p95_slippage_bps.toFixed(1)+'bps':'—'"></div></div>
+392: 4 | <div class="p-1.5 rounded text-center" style="background:var(--s2)"><div class="text-[7px]" style="color:var(--t3)">% Fav</div><div class="text-[10px] mono text-green-400" x-text="exec.metrics.pct_favourable!=null?exec.metrics.pct_favourable.toFixed(1)+'%':'—'"></div></div>
+393: 3 | </div>
+394: 3 | <div class="text-[8px]" style="color:var(--t3)">Total Commission: <span class="text-white mono" x-text="exec.metrics.total_commission_usd!=null?'$'+exec.metrics.total_commission_usd.toFixed(2):'—'"></span></div>
+395: 3 | <template x-if="exec.metrics.by_strategy && Object.keys(exec.metrics.by_strategy).length">
+396: 4 | <div class="mt-1 flex gap-2 flex-wrap">
+397: 4 | <template x-for="(v,strat) in exec.metrics.by_strategy" :key="strat">
+398: 4 | <div class="text-[8px] mono px-1.5 py-0.5 rounded" style="background:var(--s3);color:var(--t2)" x-text="strat+': '+v.avg_slippage_bps.toFixed(1)+'bps ('+v.count+')'"></div>
+399: 4 | </template>
+400: 3 | </div>
+401: 3 | </template>
+402: 2 | </div>
+403: 2 | </template>
+404: 2 | <template x-if="!exec.metrics">
+405: 2 | <div class="text-[9px]" style="color:var(--t3)">Click Refresh to load execution metrics.</div>
+406: 2 | </template>
+407: 1 | </div>
+408: 1 | 
+409: 1 | <!-- Thompson RL Sizing (Sprint 103) -->
+410: 1 | <template x-if="selfLearn.status && !selfLearn.status.closed_trades_available"><div class="card card-p text-center text-[10px] italic" style="color:var(--t3)">🎰 Thompson Sizing — Not enough evidence yet / INSUFFICIENT SAMPLE</div></template>
+411: 2 | <div class="card card-p" x-show="selfLearn.status && selfLearn.status.closed_trades_available > 0">
+412: 3 | <div class="flex items-center justify-between mb-2">
+413: 3 | <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">🎰 Thompson Sizing</div>
+414: 3 | <button @click="fetchThompson()" class="btn-s text-[9px]">Refresh</button>
+415: 2 | </div>
+416: 2 | <template x-if="rl.thompson">
+417: 3 | <div>
+418: 3 | <template x-if="rl.thompson.best_arm">
+419: 4 | <div class="mb-1.5 px-1.5 py-1 rounded" style="background:var(--s2)">
+420: 4 | <span class="text-[7px]" style="color:var(--t3)">Best Arm: </span>
+421: 4 | <span class="text-[9px] mono text-green-400" x-text="rl.thompson.best_arm.key"></span>
+422: 4 | <span class="text-[8px] mono text-white ml-1" x-text="'×' + (rl.thompson.best_arm.mean_multiplier??'—').toFixed ? rl.thompson.best_arm.mean_multiplier.toFixed(2) : rl.thompson.best_arm.mean_multiplier"></span>
+423: 3 | </div>
+424: 3 | </template>
+425: 4 | <div class="space-y-0.5" style="max-height:120px;overflow-y:auto">
+426: 4 | <template x-for="arm in (rl.thompson.arms||[])" :key="arm.key">
+427: 5 | <div class="flex items-center justify-between px-1.5 py-0.5 rounded text-[8px]" style="background:var(--s2)">
+428: 5 | <span class="mono" style="color:var(--t2)" x-text="arm.key"></span>
+429: 5 | <span class="mono text-white" x-text="'α' + arm.alpha.toFixed(1) + ' β' + arm.beta.toFixed(1)"></span>
+430: 5 | <span class="mono" :class="arm.win_rate >= 0.5 ? 'text-green-400' : 'text-red-400'" x-text="(arm.win_rate*100).toFixed(0)+'% (n='+arm.n_total+')'"></span>
+431: 4 | </div>
+432: 4 | </template>
+433: 3 | </div>
+434: 3 | <template x-if="!rl.thompson.arms || rl.thompson.arms.length===0">
+435: 3 | <div class="text-[8px]" style="color:var(--t3)">No arms yet — record trade outcomes to begin.</div>
+436: 3 | </template>
+437: 2 | </div>
+438: 2 | </template>
+439: 2 | <template x-if="!rl.thompson">
+440: 2 | <div class="text-[9px]" style="color:var(--t3)">Click Refresh to load Thompson arms.</div>
+441: 2 | </template>
+442: 1 | </div>
+443: 1 | 
+444: 1 | <!-- Feature IC Decay (Sprint 103) -->
+445: 1 | <template x-if="selfLearn.status && !selfLearn.status.closed_trades_available"><div class="card card-p text-center text-[10px] italic" style="color:var(--t3)">📉 Feature IC Decay — Not enough evidence yet / INSUFFICIENT SAMPLE</div></template>
+446: 2 | <div class="card card-p" x-show="selfLearn.status && selfLearn.status.closed_trades_available > 0">
+447: 3 | <div class="flex items-center justify-between mb-2">
+448: 3 | <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">📉 Feature IC Decay</div>
+449: 3 | <button @click="fetchFeatureIC()" class="btn-s text-[9px]">Refresh</button>
+450: 2 | </div>
+451: 2 | <template x-if="rl.featureIC">
+452: 3 | <div>
+453: 4 | <div class="flex items-center gap-2 mb-1.5">
+454: 4 | <div class="px-1.5 py-0.5 rounded text-[8px] font-bold" :class="rl.featureIC.status==='decay_detected'?'bg-red-900 text-red-300':'bg-green-900 text-green-300'" x-text="rl.featureIC.status==='decay_detected'?'⚠ DECAY':'✓ OK'"></div>
+455: 4 | <span class="text-[8px]" style="color:var(--t3)" x-text="(rl.featureIC.alerts||[]).length + ' alert(s)'"></span>
+456: 3 | </div>
+457: 4 | <div class="space-y-0.5">
+458: 4 | <template x-for="(feat, key) in (rl.featureIC.features||{})" :key="key">
+459: 5 | <div class="flex items-center justify-between px-1.5 py-0.5 rounded text-[8px]" :style="feat.alert ? 'background:#3b1515' : 'background:var(--s2)'">
+460: 5 | <span class="mono" style="color:var(--t2)" x-text="key"></span>
+461: 5 | <span class="mono" :class="feat.alert ? 'text-red-400' : 'text-white'" x-text="feat.latest_ic != null ? feat.latest_ic.toFixed(3) : '—'"></span>
+462: 5 | <span class="mono text-[7px]" :class="feat.alert ? 'text-red-400' : 'text-gray-400'" x-text="feat.alert ? '↓'+feat.decay.toFixed(3) : 'n='+feat.n"></span>
+463: 4 | </div>
+464: 4 | </template>
+465: 3 | </div>
+466: 2 | </div>
+467: 2 | </template>
+468: 2 | <template x-if="!rl.featureIC">
+469: 2 | <div class="text-[9px]" style="color:var(--t3)">Click Refresh to load feature IC.</div>
+470: 2 | </template>
+471: 1 | </div>
+472: 1 | 
+473: 1 | <!-- Notification Events (Sprint 106) -->
+474: 2 | <div class="card card-p">
+475: 3 | <div class="flex items-center justify-between mb-2">
+476: 3 | <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">🔔 Notification Events</div>
+477: 4 | <div class="flex items-center gap-2">
+478: 4 | <span class="text-[9px]" :style="notifyLog.discord_configured?'color:var(--green)':'color:var(--t3)'" x-text="notifyLog.discord_configured?'Discord ✓':'Discord unconfigured'"></span>
+479: 4 | <button @click="fetchNotifyLog()" class="btn-s text-[9px]">Refresh</button>
+480: 3 | </div>
+481: 2 | </div>
+482: 2 | <template x-if="!notifyLog.events || notifyLog.events.length===0">
+483: 2 | <div class="text-[9px]" style="color:var(--t3)">No alert events yet.</div>
+484: 2 | </template>
+485: 3 | <div style="max-height:200px;overflow-y:auto">
+486: 3 | <template x-for="(ev,i) in (notifyLog.events||[])" :key="ev.ts+i">
+487: 4 | <div class="flex items-start gap-2 py-1" style="border-bottom:1px solid var(--bd)">
+488: 4 | <span class="mono text-[8px] shrink-0 mt-px" style="color:var(--t3)" x-text="(ev.ts||'').slice(11,19)+' UTC'"></span>
+489: 4 | <span class="pill text-[8px] shrink-0"
+490: 4 | :style="ev.severity==='critical'?'background:rgba(255,68,68,.15);color:#ff4444':ev.severity==='warning'?'background:rgba(255,140,0,.15);color:#ff8c00':'background:rgba(88,101,242,.15);color:#5865f2'"
+491: 4 | x-text="ev.severity||'info'"></span>
+492: 4 | <span class="text-[9px]" style="color:var(--t2)" x-text="ev.title||ev.event_type||'—'"></span>
+493: 3 | </div>
+494: 3 | </template>
+495: 2 | </div>
+496: 1 | </div>
+497: 1 | 
+498: 2 | <div class="card card-p">
+499: 3 | <div class="flex items-center justify-between mb-3">
+500: 3 | <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">📋 What's New</div>
+501: 3 | <button @click="fetchChangelog()" class="btn-s text-[10px]">🔄 Refresh</button>
+502: 2 | </div>
+503: 2 | <template x-if="changelog.length===0">
+504: 2 | <div class="text-[10px]" style="color:var(--t3)">Loading changelog...</div>
+505: 2 | </template>
+506: 3 | <div style="max-height:300px;overflow-y:auto">
+507: 3 | <template x-for="(c,i) in changelog" :key="c.hash">
+508: 4 | <div class="flex items-start gap-2 py-1" style="border-bottom:1px solid var(--bd)">
+509: 4 | <span class="mono text-[9px] shrink-0 mt-px" style="color:var(--blue)" x-text="c.hash"></span>
+510: 4 | <span class="text-[10px]" :style="i===0?'color:var(--green);font-weight:600':'color:var(--t2)'" x-text="c.message"></span>
+511: 4 | <span x-show="i===0" class="pill pg text-[8px] shrink-0">LATEST</span>
+512: 3 | </div>
+513: 3 | </template>
+514: 2 | </div>
+515: 1 | </div>
+516: 0 | </div>
+517: 0 | </main>
+518: 0 | <!-- ═══════════════════════════════════════════════════════ -->
+519: 0 | <main x-show="

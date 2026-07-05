@@ -1,0 +1,21 @@
+# Notification service dependencies
+-r base.txt
+
+# Discord (primary interface)
+discord.py>=2.3.2
+
+# WhatsApp via Twilio (optional)
+# twilio>=8.10.3
+
+# Telegram — DEPRECATED: Discord is the primary interface.
+# python-telegram-bot is no longer required.
+# python-telegram-bot>=20.7
+
+# Slack (planned — not yet wired)
+# slack-sdk>=3.26.1
+
+# Email (planned — not yet wired)
+# sendgrid>=6.11.0
+
+# OpenAI for message formatting
+openai>=1.6.1

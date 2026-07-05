@@ -1,0 +1,101 @@
+    </main>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- SURFACE 7: OPERATOR CONSOLE                            -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <main x-show="tab==='ops'" class="fade">
+      <div class="trust-strip">
+        <span :style="opsDetail.trust?'color:var(--blue)':'color:var(--blue)'" x-text="'● '+(opsDetail.trust?opsDetail.trust.mode:'SYSTEM')"></span>
+        <span x-text="opsDetail.version?'v'+opsDetail.version:'—'"></span>
+        <span x-text="opsDetail.trust?'As-of: '+opsDetail.trust.as_of.slice(0,19):'Polled: '+new Date().toISOString().slice(0,19)"></span>
+      </div>
+      <div class="p-3 space-y-3">
+        <div class="card card-p">
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">⚙️ Engine State</div>
+            <button @click="fetchHealth()" class="btn-s text-[10px]">🔄 Refresh</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
+            <div class="card card-p" style="text-align:center"><div class="text-[20px]" x-text="ops.running?'🟢':'🔴'"></div><div class="text-[10px] font-bold" :class="ops.running?'text-green-400':'text-red-400'" x-text="ops.running?'RUNNING':'STOPPED'"></div><div class="kpi-lbl">Engine</div></div>
+            <div class="card card-p" style="text-align:center"><div class="text-[20px]" x-text="ops.circuit_breaker?'🛑':'✅'"></div><div class="text-[10px] font-bold" :class="ops.circuit_breaker?'text-red-400':'text-green-400'" x-text="ops.circuit_breaker?'TRIPPED':'CLEAR'"></div><div class="kpi-lbl">Circuit Breaker</div></div>
+            <div class="card card-p" style="text-align:center"><div class="kpi-val mono text-white" x-text="ops.cycle_count||0"></div><div class="kpi-lbl">Cycles</div></div>
+            <div class="card card-p" style="text-align:center"><div class="kpi-val mono text-white" x-text="ops.signals_today||0"></div><div class="kpi-lbl">Signals Today</div></div>
+          </div>
+          <template x-if="ops.circuit_breaker_reason"><div style="margin-top:8px;padding:6px 10px;background:rgba(255,92,92,.08);border:1px solid rgba(255,92,92,.2);border-radius:6px;font-size:10px;color:var(--red)" x-text="'⚠ '+ops.circuit_breaker_reason"></div></template>
+          <div class="flex items-center gap-2 mt-3">
+            <span class="pill" :class="ops.dry_run?'pa':'pg'" x-text="ops.dry_run?'DRY RUN / PAPER':'LIVE TRADING'"></span>
+            <span class="pill pw" x-text="'Trades today: '+(ops.trades_today||0)"></span>
+          </div>
+        </div>
+        <!-- Uptime + Latency -->
+        <div class="card card-p">
+          <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">⏱ Uptime & Latency</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;font-size:12px">
+            <div><div class="text-[10px]" style="color:var(--t3)">Uptime</div><div class="font-bold mono text-white" x-text="opsDetail.uptime||'—'"></div></div>
+            <div><div class="text-[10px]" style="color:var(--t3)">Regime Latency</div><div class="font-bold mono" :class="(opsDetail.latency&&opsDetail.latency.regime_ms||0)<500?'text-green-400':(opsDetail.latency&&opsDetail.latency.regime_ms||0)<2000?'text-amber-300':'text-red-400'" x-text="opsDetail.latency?opsDetail.latency.regime_ms+'ms':'—'"></div></div>
+            <div><div class="text-[10px]" style="color:var(--t3)">Cached Recs</div><div class="font-bold mono text-white" x-text="opsDetail.engine?opsDetail.engine.cached_recommendations||0:'—'"></div></div>
+          </div>
+          <div class="text-[9px] mt-2 mono" style="color:var(--t3)" x-text="opsDetail.startup_time?'Boot: '+opsDetail.startup_time.slice(0,19):''"></div>
+          <template x-if="opsDetail.engine&&opsDetail.engine.last_cycle"><div class="text-[9px] mono" style="color:var(--t3)" x-text="'Last cycle: '+opsDetail.engine.last_cycle"></div></template>
+        </div>
+        <!-- Component Health -->
+        <div class="card card-p">
+          <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">🔧 Component Health</div>
+          <template x-for="[name,ok] in Object.entries(ops.components||{})">
+            <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)">
+              <span class="text-[11px]" x-text="name.replace(/_/g,' ')"></span>
+              <div class="flex items-center gap-2"><span class="health-dot" :class="ok?'health-ok':'health-err'"></span><span class="text-[10px] mono" :class="ok?'text-green-400':'text-red-400'" x-text="ok?'OK':'FAIL'"></span></div>
+            </div>
+          </template>
+        </div>
+        <!-- Data Providers -->
+        <div class="card card-p">
+          <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">📡 Data Providers</div>
+          <div class="text-[11px]" style="color:var(--t2)">
+            <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)"><span>Market Data (yfinance)</span><span :class="live?'text-green-400':'text-red-400'" x-text="live?'Connected':'Disconnected'"></span></div>
+            <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)"><span>Regime Router</span><span :class="ops.components?.regime_router?'text-green-400':'text-red-400'" x-text="ops.components?.regime_router?'Active':'Down'"></span></div>
+            <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)"><span>Broker (Alpaca)</span><span :class="ops.components?.broker?'text-green-400':'text-amber-300'" x-text="ops.components?.broker?'Connected':'Paper Only'"></span></div>
+          </div>
+        </div>
+        <!-- Phase 9 Engine Health -->
+        <template x-if="opsDetail.phase9_engines">
+          <div class="card card-p">
+            <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">🧠 Phase 9 Engines <span class="pill" :class="opsDetail.phase9_engines.loaded?'pg':'pr'" x-text="opsDetail.phase9_engines.loaded?'LOADED':'OFFLINE'"></span></div>
+            <template x-for="eng in (opsDetail.phase9_engines.components||[])">
+              <div class="flex items-center justify-between py-1" style="border-bottom:1px solid var(--bd)">
+                <span class="text-[11px]" style="color:var(--t2)" x-text="eng"></span>
+                <div class="flex items-center gap-2"><span class="health-dot health-ok"></span><span class="text-[10px] mono text-green-400">Active</span></div>
+              </div>
+            </template>
+            <template x-if="!opsDetail.phase9_engines.loaded"><div class="text-[10px] mt-2" style="color:var(--red)">Phase 9 engines failed to load — check server logs</div></template>
+          </div>
+        </template>
+        <!-- Cache Stats -->
+        <template x-if="opsDetail.cache_stats&&Object.keys(opsDetail.cache_stats).length>0">
+          <div class="card card-p">
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">💾 Cache Statistics</div>
+            <template x-for="[k,v] in Object.entries(opsDetail.cache_stats)">
+              <div class="flex items-center justify-between py-1 text-[11px]" style="border-bottom:1px solid var(--bd)">
+                <span style="color:var(--t2)" x-text="k.replace(/_/g,' ')"></span>
+                <span class="mono text-white" x-text="typeof v==='number'?v.toLocaleString():v"></span>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- Self-Learn Engine Panel (Ops) -->
+        <div class="card card-p" style="border-left:3px solid var(--purple)">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-[10px] font-bold uppercase" style="color:var(--purple)">🧠 Self-Learning Engine</div>
+            <div class="flex gap-1">
+              <button @click="fetchSelfLearnStatus()" class="btn-s text-[9px]">Refresh</button>
+              <button @click="triggerSelfLearn()" class="btn-p text-[9px]" :disabled="selfLearn.triggering"><span x-show="!selfLearn.triggering">▶ Run Cycle</span><span x-show="selfLearn.triggering"><span class="spin"></span></span></button>
+            </div>
+          </div>
+          <template x-if="selfLearn.status">
+            <div class="space-y-2">
+              <!-- Engine state -->
+              <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px">
+                <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)">Enabled</div><div class="text-[10px] font-bold" :class="selfLearn.status.engine_state?.enabled?'text-green-400':'text-red-400'" x-text="selfLearn.status.engine_state?.enabled?'YES':'DISABLED'"></div></div>
+                <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)">Adjustments</div><div class="text-[10px] mono text-white" x-text="selfLearn.status.engine_state?.total_adjustments||0"></div></div>
+                <div class="p-1.5 rounded" style="background:var(--s2)"><div class="text-[8px]" style="color:var(--t3)">Trades</div><div class="text-[10px] mono text-white" x-text="selfLearn.status.closed_trades_available||0"></div></div>

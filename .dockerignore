@@ -1,0 +1,156 @@
+# git
+.git
+
+# build artifacts
+bin/
+dist/
+**/dist/
+out/
+**/out/
+src/webview-ui/
+
+# dependencies
+node_modules/
+**/node_modules/
+
+# testing
+coverage/
+**/.vscode-test/
+**/mock/
+
+# devtools
+knip.json
+.husky/
+
+# monorepo
+.turbo/
+**/.turbo/
+
+# next.js
+**/.next/
+.vercel
+
+# Ignore common development files
+node_modules
+.git
+.gitignore
+.dockerignore
+.env*
+.vscode
+.idea
+
+# Ignore build artifacts
+dist
+build
+*.log
+*.tmp
+.cache
+coverage
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore test files
+__tests__
+*.test.js
+*.spec.js
+*.test.ts
+*.spec.ts
+
+# Ignore development config files
+.eslintrc*
+.prettierrc*
+
+# Ignore most directories except what we need for the build
+apps/
+evals/
+webview-ui/node_modules
+src/node_modules
+
+# Keep essential files for the build
+!README.md
+!CHANGELOG.md
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!scripts/bootstrap.mjs
+!apps/web-evals/
+!apps/cli/
+!src/
+!webview-ui/
+!packages/evals/.docker/entrypoints/runner.sh
+!packages/build/
+!packages/config-eslint/
+!packages/config-typescript/
+!packages/core/
+!packages/evals/
+!packages/ipc/
+!packages/telemetry/
+!packages/types/
+!packages/vscode-shim/
+!packages/cloud/
+!locales/
+
+# ── Heavy monorepo dirs NOT needed by Dockerfile.api ──────────────────────
+packages/
+locales/
+patches/
+releases/
+schemas/
+scripts/
+models/
+webview-ui/
+
+# ── Python / Trading-bot specific ─────────────────────────────────────────
+
+# Virtual environments — never needed in image (deps installed via pip)
+venv/
+.venv/
+env/
+.env/
+
+# Python bytecode — regenerated at runtime, bloats build context
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyc
+
+# Test files — not needed in production image
+test_*.py
+tests/
+*_test.py
+
+# Data directory — mounted as volume in dev, not baked into image
+# (see docker-compose.dev.yml volumes: ./data:/app/data)
+data/
+
+# Backup / scratch directories
+backup_untracked/
+plans/
+docs/
+
+# Jupyter / notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# Coverage / profiling
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# macOS artifacts
+.DS_Store
+
+# Log files
+*.log
+logs/
+
+# Secrets / local env overrides
+.env.local
+.env.*.local
+secrets/

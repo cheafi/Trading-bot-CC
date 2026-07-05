@@ -630,6 +630,7 @@
 	function pilotSizingAllowed(truth, opts) {
 		var t = truth || {}
 		var o = opts || {}
+		if (t.replay_mode || o.replayMode) return false
 		if (t.deploy_authority === false) return false
 		if (o.brokerReady === false) return false
 		var broker = String(t.broker_freshness || "").toLowerCase()
@@ -641,6 +642,27 @@
 		var board = String(t.ranked_board_freshness || "").toLowerCase()
 		if (board === "stale" || board === "fallback" || board === "unavailable") return false
 		return true
+	}
+
+	function replayModeActive(asOf) {
+		return !!String(asOf || "").trim()
+	}
+
+	function replayDeployBlocked(opts) {
+		var o = opts || {}
+		return (
+			replayModeActive(o.replayAsOf) ||
+			o.deployAuthority === false ||
+			(o.truth && o.truth.deploy_authority === false)
+		)
+	}
+
+	function replayBannerLine(opts) {
+		var o = opts || {}
+		if (!replayModeActive(o.replayAsOf)) return ""
+		var line = "重播模式 · Replay: " + o.replayAsOf + " · 全頁歷史狀態（非即時）"
+		if (o.replayNote) line += " · " + o.replayNote
+		return line
 	}
 
 	function evidenceConflictPanel(panel) {
@@ -2651,6 +2673,9 @@
 		engineStateHeaderLabel: engineStateHeaderLabel,
 		primaryOperatorState: primaryOperatorState,
 		pilotSizingAllowed: pilotSizingAllowed,
+		replayModeActive: replayModeActive,
+		replayDeployBlocked: replayDeployBlocked,
+		replayBannerLine: replayBannerLine,
 		evidenceConflictPanel: evidenceConflictPanel,
 		volatilityMonitorLabel: volatilityMonitorLabel,
 		runtimeFreshnessLabel: runtimeFreshnessLabel,
