@@ -8163,6 +8163,12 @@
       instantDegradedBanner:'',
       instantDegradedDismissed:false,
       ac:{query:'',results:[],show:false,target:'',selIdx:-1,timer:null},
+      _ccPageHidden:false,
+      _ccLastTodayFetch:0,
+      _ccTodayFetchMinMs:30000,
+      _ccLastCcHeaderFetch:0,
+      _ccCcHeaderFetchMinMs:15000,
+      _ccRefreshInflight:{},
       ccStarred:JSON.parse(localStorage.getItem('ccStarred')||'{}'),
       ccLoved:JSON.parse(localStorage.getItem('ccLoved')||'{}'),
       ccWatchlist:JSON.parse(localStorage.getItem('ccWatchlist')||'{}'),
@@ -8171,14 +8177,18 @@
         this._hydrateReplayState();
         if(typeof window!=='undefined'){
           window.addEventListener('resize',()=>{this.pmStripChipMenuOpen=false});
+          document.addEventListener('visibilitychange',()=>{this._ccPageHidden=!!document.hidden});
+          this._ccPageHidden=!!document.hidden;
         }
         this.tick();setInterval(()=>this.tick(),1000);
         this.fetchHealth();setInterval(()=>this.fetchHealth(),15000);
         // Phase 1 — critical path (avoid burst 503s on cold start)
-        this.fetchCcStatus();setInterval(()=>this.fetchCcStatus(),30000);
+        this.fetchCcStatus();setInterval(()=>{if(!this._ccPageHidden)this.fetchCcStatus()},30000);
+        setInterval(()=>{if(this._ccPageHidden)this.fetchCcStatus({force:true})},120000);
         this.fetchReplayDates();
         if(this.replayModeActive()) this.refreshReplaySurfaces();
-        else this.fetchToday7();setInterval(()=>{if(!this.replayModeActive())this.fetchToday7()},120000);
+        else this.fetchToday7();setInterval(()=>{if(!this.replayModeActive()&&!this._ccPageHidden)this.fetchToday7()},120000);
+        setInterval(()=>{if(!this.replayModeActive()&&this._ccPageHidden)this.fetchToday7({force:true})},300000);
         setTimeout(()=>this.fetchMarketStrip(),400);
         setInterval(()=>this.fetchMarketStrip(),180000);
         // Signals feed loads on tab switch only (avoids duplicate /api/recommendations traffic)
@@ -11857,7 +11867,31 @@
         };
       },
       async fetchCcHeader(){return this.fetchCcStatus();},
-      async fetchCcStatus(){
+      ccShouldSkipTodayRefresh(force){
+        if(force) return false;
+        if(this.replayModeActive()) return false;
+        const age=Date.now()-(this._ccLastTodayFetch||0);
+        return age<this._ccTodayFetchMinMs&&!!(this.today7.regime||this.today7.top_ranked?.length);
+      },
+      ccShouldSkipCcHeaderRefresh(force){
+        if(force) return false;
+        if(this.replayModeActive()) return false;
+        const age=Date.now()-(this._ccLastCcHeaderFetch||0);
+        return age<this._ccCcHeaderFetchMinMs&&!!this.cc_status.last_fetch;
+      },
+      ccDeployBlockedFresh(){
+        if(!this.todayDeployBlocked()) return false;
+        const age=Date.now()-(this._ccLastTodayFetch||0);
+        return age<120000&&!!(this.today7.regime||this.rankedOpps.rows?.length);
+      },
+      async fetchCcStatus(opts={}){
+        if(!opts.force&&this.ccShouldSkipCcHeaderRefresh()) return;
+        if(this._ccRefreshInflight.ccHeader) return this._ccRefreshInflight.ccHeader;
+        this._ccRefreshInflight.ccHeader=this._fetchCcStatusCore(opts);
+        try{return await this._ccRefreshInflight.ccHeader;}
+        finally{delete this._ccRefreshInflight.ccHeader;}
+      },
+      async _fetchCcStatusCore(opts={}){
         try{
           const tabQ=this.tab?('?tab='+encodeURIComponent(this.tab)):'';
           const r=await fetch(this.ccReplayUrl('/api/ops/cc-header'+tabQ),{headers:{'X-API-Key':window._apiKey||'dev-secret-local'}});
@@ -11896,6 +11930,7 @@
             this.live=!!(this.ops.components.market_data||h.providers?.yfinance);
             this.trust={mode:h.trust_mode||'PAPER',source:'cc-header',as_of:h.as_of};
             this.cc_status.last_fetch=Date.now();
+            this._ccLastCcHeaderFetch=Date.now();
             return;
           }
         }catch(e){/* fall through to legacy polls */}
@@ -11927,6 +11962,7 @@
           }
         }catch(e){}
         this.cc_status.last_fetch=Date.now();
+        this._ccLastCcHeaderFetch=Date.now();
       },
       tick(){this.clock=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'})},
       toggleStar(ticker){this.ccStarred[ticker]=!this.ccStarred[ticker];localStorage.setItem('ccStarred',JSON.stringify(this.ccStarred))},
@@ -12130,7 +12166,7 @@
         this.tab=t;
         this.ccHeader.header_summary=null;
         this.fetchCcStatus();
-        if(t==='today'){this.fetchToday7();this.fetchMarketStrip();}
+        if(t==='today'){if(!this.ccShouldSkipTodayRefresh())this.fetchToday7();this.fetchMarketStrip();}
         if(t==='signals'){this.hydrateRankedFromCache();this.fetchSignals();this.fetchRanked();this.fetchSignalFamilyHealth();if(!this._signalsPoll){this._signalsPoll=setInterval(()=>{if(this.tab==='signals')this.fetchSignals()},60000)}}
         if(t==='scanners'){this.hydrateScannersFromCache();this.fetchScanners();}
         if(t==='portfolio'){this.fetchPortfolio();}
@@ -14404,7 +14440,14 @@
           this.marketStrip.loading=false;
         }
       },
-      async fetchToday7(){
+      async fetchToday7(opts={}){
+        if(!opts.force&&this.ccShouldSkipTodayRefresh()) return;
+        if(this._ccRefreshInflight.today) return this._ccRefreshInflight.today;
+        this._ccRefreshInflight.today=this._fetchToday7Core(opts);
+        try{return await this._ccRefreshInflight.today;}
+        finally{delete this._ccRefreshInflight.today;}
+      },
+      async _fetchToday7Core(opts={}){
         try{const r=await this.ccFetch('/api/v7/today',{retries:4,backoff:600});if(!r||!r.ok)throw new Error('HTTP '+(r?r.status:'fail'));const d=await r.json();this.captureInstantDegradedBanner(d);if(d&&d.error)throw new Error(String(d.error));if(!d||!d.market_regime)throw new Error('incomplete today payload');this.today7.regime=d.market_regime||null;this.today7.decision_authority=d.decision_authority||null;this.today7.top_ranked=d.top_5||[];this.today7.todays_decision=d.todays_decision||null;this.today7.best_action=d.best_action||null;this.today7.overlap_warning=d.overlap_warning||null;this.today7.near_miss=d.near_miss||[];this.today7.score_reconciliation=d.score_reconciliation||null;this.today7.no_setup_diagnosis=d.no_setup_diagnosis||null;this.today7.quant_cluster_hints=d.quant_cluster_hints||[];this.today7.unlock_deploy=d.unlock_deploy||null;this.today7.regime_wait_explanation=d.regime_wait_explanation||[];this.today7.monitor_triggers=d.monitor_triggers||[];this.today7.sleeve_summary=d.sleeve_summary||null;this.today7.execution_readiness=d.execution_readiness||d.best_action?.execution_readiness||null;this.today7.evidence_badges=d.evidence_badges||null;this.today7.cross_asset_confirmation=d.cross_asset_confirmation||null;this.today7.index_regime_summary=d.index_regime_summary||null;this.today7.regime_strip=d.regime_strip||null;this.today7.regime_stack_summary=d.regime_stack_summary||null;this.today7.allocator_stance=d.allocator_stance||null;this.today7.ai_reason_codes=d.ai_reason_codes||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.decision_model=d.decision_model||null;this.today7.decision_hierarchy=d.decision_hierarchy||null;this.today7.passive_baseline=d.passive_baseline||null;this.today7.complexity_challenge=d.complexity_challenge||null;this.today7.restraint=d.restraint||null;this.today7.surface_authority=d.surface_authority||null;this.today7.crisis_regime=d.crisis_regime||null;this.today7.naval_clarity=d.naval_clarity||null;this.today7.buffett_clarity=d.buffett_clarity||null;this.today7.index_fund_posture=d.index_fund_posture||null;this.today7.principles_posture=d.principles_posture||null;this.today7.avoid_grouped=d.avoid_grouped||null;this.today7.bucket_quality=d.bucket_quality||[];this.today7.avoid_list=(d.avoid_now||[]).length?(d.avoid_now||[]):(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'—',reason:a,category:'regime'}:a);this.today7.tradeability=(d.decision_model&&d.decision_model.honest_tradeability)||(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{};this.today7.system_truth=d.system_truth||null;this.today7.top_monitor=d.top_monitor||null;this.today7.top_opportunities=d.top_opportunities||[];this.today7.candidate_counts=d.candidate_counts||null;this.today7.evidence_conflict=d.evidence_conflict||null;if(this.isWaitDay()){this.today7.avoid_collapsed=true;}
           this.applyPulseToMarketStrip(this.today7.pulse);
           this.saveToday7ToCache(d);
@@ -14430,6 +14473,7 @@
             }
           }catch(e){console.warn('dod diff failed',e)}
           this.buildDecisionHubFromToday(d);
+          this._ccLastTodayFetch=Date.now();
           if(this.today7.top_ranked.length)setTimeout(()=>this.loadSparklines(this.today7.top_ranked),200);
           if(!(this.pmStrip.funds||[]).length)this.fetchFunds();
           try{
@@ -14551,6 +14595,9 @@
         }
       },
       async fetchRanked(opts={}){
+        if(!opts.refresh&&!opts.force&&this.ccDeployBlockedFresh()&&(this.rankedOpps.rows||[]).length){
+          return;
+        }
         const hadRows=(this.rankedOpps.rows||[]).length>0;
         if(!hadRows) this.hydrateRankedFromCache();
         this.rankedOpps.loading=!(this.rankedOpps.rows||[]).length;
