@@ -1354,6 +1354,18 @@ async def build_portfolio_decision(request) -> Dict[str, Any]:
 
     today = getattr(request.app.state, "today_v7_cache", None) or {}
     regime = today.get("market_regime") or {}
+    system_truth = today.get("system_truth") or {}
+    if not system_truth:
+        try:
+            from src.services.system_truth import resolve_system_truth
+
+            system_truth = resolve_system_truth(
+                today,
+                cc_header=getattr(request.app.state, "cc_header_cache", None) or {},
+                ops_console=getattr(request.app.state, "ops_console_cache", None) or {},
+            )
+        except Exception:
+            system_truth = {}
 
     allocation_rows = build_allocation_monitor(positions)
     attribution = build_return_attribution(positions)
@@ -1401,6 +1413,24 @@ async def build_portfolio_decision(request) -> Dict[str, Any]:
         execution=execution,
         positions=positions,
         updated_at=summary.get("updated_at"),
+    )
+
+    from src.services.portfolio_risk_mode import (
+        build_portfolio_operator_block,
+        resolve_portfolio_risk_mode,
+        sanitize_portfolio_action_copy,
+    )
+
+    portfolio_mode = resolve_portfolio_risk_mode(
+        positions=positions,
+        source=source,
+        execution_readiness=execution,
+        ibkr_linkage=ibkr_linkage,
+        system_truth=system_truth,
+    )
+    portfolio_operator_block = build_portfolio_operator_block(
+        system_truth,
+        portfolio_mode=portfolio_mode,
     )
 
     action_needed = build_action_needed(
@@ -1478,9 +1508,19 @@ async def build_portfolio_decision(request) -> Dict[str, Any]:
     rebalance_panel = build_rebalance_panel(allocation_rows)
     sleeve_monitor = build_sleeve_monitor(fund_console)
     sleeve_strip = build_sleeve_strip(sleeve_monitor)
+    recommended_action = allocator_summary.get("recommended_action")
+    if not portfolio_mode.get("capital_action_queue_enabled"):
+        recommended_action = sanitize_portfolio_action_copy(
+            recommended_action or "Risk review only — no capital actions",
+            portfolio_mode=portfolio_mode,
+        )
     portfolio_verdict = {
-        "verdict": decision_bar.get("verdict") or allocator_summary.get("stance"),
-        "best_action_now": allocator_summary.get("recommended_action"),
+        "verdict": (
+            "RISK REVIEW"
+            if portfolio_mode.get("risk_review_only")
+            else decision_bar.get("verdict") or allocator_summary.get("stance")
+        ),
+        "best_action_now": recommended_action,
         "why": [
             x
             for x in [
@@ -1560,8 +1600,26 @@ async def build_portfolio_decision(request) -> Dict[str, Any]:
         or "Survival first — liquidity and heat before new risk",
     }
 
+    if not portfolio_mode.get("capital_action_queue_enabled"):
+        portfolio_action_now = {
+            **portfolio_action_now,
+            "best_action": sanitize_portfolio_action_copy(
+                portfolio_action_now.get("best_action") or recommended_action,
+                portfolio_mode=portfolio_mode,
+            ),
+            "capital_action_queue_enabled": False,
+            "capital_queue_note": portfolio_mode.get("capital_queue_note"),
+        }
+    else:
+        portfolio_action_now = {
+            **portfolio_action_now,
+            "capital_action_queue_enabled": True,
+        }
+
     return {
         "as_of": datetime.now(timezone.utc).isoformat() + "Z",
+        "portfolio_mode": portfolio_mode,
+        "portfolio_operator_block": portfolio_operator_block,
         "critical_risk_event": critical_risk_event,
         "do_now": do_now,
         "risk_state": risk_state,

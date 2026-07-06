@@ -239,6 +239,7 @@
 		}
 		var eng = resolveEngineState(truth, o)
 		if (eng === "off") out.push("ENGINE OFF")
+		else if (eng === "conflict") out.push("RUNTIME CONFLICT")
 		else if (eng === "unknown") out.push("ENGINE UNKNOWN")
 		if (o.breaker) {
 			out.push("EXEC BLOCKED — risk breaker")
@@ -274,6 +275,7 @@
 			NO_VALID_BOARD: "NO VALID BOARD",
 			DATA_DEGRADED: "DATA DEGRADED",
 			ENGINE_OFF: "ENGINE OFF",
+			ENGINE_CONFLICT: "RUNTIME CONFLICT",
 			IBKR_OFFLINE: "IBKR OFFLINE",
 			BROKER_OFFLINE: "IBKR OFFLINE",
 			EXEC_BLOCKED: "EXEC BLOCKED — risk breaker",
@@ -287,7 +289,7 @@
 		var out = []
 		for (var i = 0; i < codes.length && out.length < 6; i++) {
 			var code = String(codes[i] || "")
-			if (code === "ENGINE_OFF" && (eng === "on" || eng === "unknown")) continue
+			if (code === "ENGINE_OFF" && (eng === "on" || eng === "conflict" || eng === "unknown")) continue
 			if (code === "FALLBACK_BRIEF" && String(t.brief_freshness || "").toLowerCase() === "expired") continue
 			var label = labels[code] || code.replace(/_/g, " ")
 			if (out.indexOf(label) < 0) out.push(label)
@@ -698,6 +700,52 @@
 		}
 	}
 
+	function portfolioRiskPageState(payload) {
+		var p = payload || {}
+		if (p.portfolio_mode && p.portfolio_operator_block) {
+			return {
+				mode: p.portfolio_mode.mode || "unavailable",
+				portfolio_mode: p.portfolio_mode,
+				operator_block: p.portfolio_operator_block,
+				capital_action_queue_enabled: !!p.portfolio_mode.capital_action_queue_enabled,
+				risk_review_only: !!p.portfolio_mode.risk_review_only,
+			}
+		}
+		var pm = p.portfolio_mode || {}
+		var block = p.portfolio_operator_block || {}
+		return {
+			mode: pm.mode || "unavailable",
+			portfolio_mode: pm,
+			operator_block: block,
+			capital_action_queue_enabled: !!pm.capital_action_queue_enabled,
+			risk_review_only: !!pm.risk_review_only,
+		}
+	}
+
+	function portfolioOperatorBlock(payload) {
+		var page = portfolioRiskPageState(payload)
+		var block = page.operator_block || {}
+		if (block.now) return block
+		var pm = page.portfolio_mode || {}
+		return {
+			now: pm.risk_review_only ? "Risk review only" : "MONITOR ONLY",
+			why: (pm.blockers || []).join(" · ") || "broker truth unavailable",
+			allowed: "risk review, stop coverage, concentration diagnostics",
+			blocked: "no sizing · no handoff · no deploy from portfolio capacity",
+			validation: "",
+			next: pm.broker_truth ? "review risk cockpit" : "repair IBKR / reconcile local book",
+			details_collapsed: true,
+			portfolio_mode: pm.mode || "unavailable",
+			risk_capacity_authority: pm.risk_capacity_authority || "none",
+			capital_action_queue_enabled: !!pm.capital_action_queue_enabled,
+		}
+	}
+
+	function portfolioCapitalActionsEnabled(payload) {
+		var page = portfolioRiskPageState(payload)
+		return !!page.capital_action_queue_enabled && !page.risk_review_only
+	}
+
 	function operatorBlock(truth, page, operatorBlocks) {
 		var t = truth || {}
 		var p = String(page || "dashboard").toLowerCase()
@@ -804,6 +852,32 @@
 		})
 	}
 
+	function deployAuthorityTier(truth) {
+		var t = truth || {}
+		var tier = String(t.deploy_authority_tier || t.deployAuthority || "").toLowerCase()
+		if (tier !== "allowed" && tier !== "paper_only" && tier !== "pilot_only" && tier !== "blocked") {
+			tier = t.deploy_authority === true ? "allowed" : "blocked"
+		}
+		if (tier === "allowed" && t.deploy_authority === false) tier = "blocked"
+		var broker = String(t.broker_freshness || "").toLowerCase()
+		if (tier === "allowed" && (broker === "offline" || broker === "blocked" || broker === "stale")) {
+			tier = "blocked"
+		}
+		var boardGate = String(t.board_gate || "").toLowerCase()
+		if (tier === "allowed" && (boardGate === "wait" || boardGate === "closed")) tier = "blocked"
+		var brief = String(t.brief_freshness || "").toLowerCase()
+		var briefAge = Number(t.brief_age_days)
+		if (
+			tier === "allowed" &&
+			(t.brief_expired === true || brief === "expired" || (!isNaN(briefAge) && briefAge > 2))
+		) {
+			tier = "blocked"
+		}
+		if (tier === "allowed" && t.gates_active === true) tier = "blocked"
+		if (tier === "allowed" && t.allows_trade_labels === false) tier = "blocked"
+		return tier
+	}
+
 	function resolveEngineState(truth, ops) {
 		var t = truth || {}
 		var o = ops || {}
@@ -816,18 +890,18 @@
 		else if (o.engineRunning === false || o.running === false) signals.push("off")
 		if (t.engine_state) {
 			var canon = String(t.engine_state).toLowerCase()
-			if (canon === "on" || canon === "off") signals.push(canon)
+			if (canon === "on" || canon === "off" || canon === "conflict") signals.push(canon)
 		}
 		if (!signals.length) return "unknown"
-		if (signals.indexOf("on") >= 0 && signals.indexOf("off") >= 0) return "unknown"
+		if (signals.indexOf("on") >= 0 && signals.indexOf("off") >= 0) return "conflict"
 		var state = signals[0]
 		var codes = (truth && truth.reason_codes) || []
 		if (state === "on" && codes.indexOf("ENGINE_OFF") >= 0 && (o.running === true || o.engineRunning === true)) {
-			return "unknown"
+			return "conflict"
 		}
-		var er = (truth && truth.execution_readiness) || {}
-		if (state === "on" && er.engine_running === false && (o.running === true || o.engineRunning === true)) {
-			return "unknown"
+		var er2 = (truth && truth.execution_readiness) || {}
+		if (state === "on" && er2.engine_running === false && (o.running === true || o.engineRunning === true)) {
+			return "conflict"
 		}
 		return state
 	}
@@ -836,14 +910,14 @@
 		var o = opts || {}
 		if (o.breaker) return "BREAKER"
 		var eng = resolveEngineState(o.truth || o.systemTruth, o.ops || o)
+		if (eng === "conflict") return "Runtime: Conflict"
 		return "ENGINE " + String(formatEngineState(eng)).toUpperCase()
 	}
 
 	function primaryOperatorState(truth) {
 		var t = truth || {}
 		var regime = String(t.regime_state || "WAIT").toUpperCase()
-		var tier = String(t.deploy_authority_tier || t.deployAuthority || "").toLowerCase()
-		if (!tier) tier = t.deploy_authority === true ? "allowed" : "blocked"
+		var tier = deployAuthorityTier(t)
 		if (tier === "allowed") {
 			if (regime === "NO_TRADE") {
 				return { primary: "MONITOR ONLY", secondary: "NO_TRADE", now: "MONITOR ONLY · Regime closed" }
@@ -879,14 +953,66 @@
 		return posture.primary || "MONITOR ONLY"
 	}
 
-	function primaryOperatorStateLine(truth) {
+	function runtimePrimaryStateLine(truth) {
 		return todayPrimaryStateLine(truth)
+	}
+
+	function primaryOperatorStateLine(truth) {
+		return runtimePrimaryStateLine(truth)
+	}
+
+	function runtimeSecondaryRegimeLine(truth, fallbackTb) {
+		return regimeSecondaryLine(truth, fallbackTb)
 	}
 
 	function regimeSecondaryLine(truth, fallbackTb) {
 		var posture = primaryOperatorState(truth || {})
 		if (posture.secondary) return posture.secondary
-		return String(fallbackTb || (truth && truth.regime_state) || "WAIT").toUpperCase()
+		var fb = String(fallbackTb || (truth && truth.regime_state) || "WAIT").toUpperCase()
+		var primary = String(posture.primary || "").toUpperCase()
+		if (fb && fb !== primary && fb !== "MONITOR ONLY") return fb
+		return ""
+	}
+
+	function briefExpiredOperatorLine(truth) {
+		var t = truth || {}
+		var age = t.brief_age_days
+		if (t.brief_expired === true || String(t.brief_freshness || "").toLowerCase() === "expired") {
+			return age != null && !isNaN(Number(age)) && Number(age) > 0
+				? "Brief expired " + Number(age) + "d"
+				: "Brief expired"
+		}
+		if (age != null && !isNaN(Number(age)) && Number(age) > 2) {
+			return "Brief expired " + Number(age) + "d"
+		}
+		return ""
+	}
+
+	function safeRenderText(text, context) {
+		var ctx = context || {}
+		var raw = String(text == null ? "" : text).trim()
+		if (!raw) return ""
+		var truth = ctx.truth || ctx.system_truth || {}
+		var blocked =
+			ctx.blocked === true ||
+			ctx.deployAuthority === false ||
+			truth.deploy_authority === false ||
+			deployAuthorityTier(truth) === "blocked"
+		var expiredLine = briefExpiredOperatorLine(truth)
+		if (expiredLine) {
+			raw = raw
+				.replace(/brief[\s-]?fallback/gi, expiredLine)
+				.replace(/fallback[\s-]?brief/gi, expiredLine)
+		}
+		if (blocked) {
+			raw = removeSizingLanguageWhenBlocked(removeTradeLanguageWhenBlocked(raw, true), true)
+		}
+		raw = raw
+			.replace(/Deploy gate open/gi, "Deploy authority: Blocked")
+			.replace(/gates open/gi, "gates blocked")
+			.replace(/BOARD POSTURE TRADE/gi, "BOARD POSTURE MONITOR ONLY")
+			.replace(/Current:\s*TRADE/gi, "Current: MONITOR ONLY")
+		return sanitizeOperatorDetail(raw)
 	}
 
 	function topMonitorLabels(today7) {
@@ -919,10 +1045,11 @@
 				"",
 		)
 		if (briefExpired || o.briefFallback) {
-			raw = raw.replace(/brief[\s-]?fallback/gi, "brief expired — excluded from ranking")
-			if (!raw) raw = "Reference plan only — brief expired — monitor only"
+			var expiredLine = briefExpiredOperatorLine(truth)
+			raw = raw.replace(/brief[\s-]?fallback/gi, expiredLine || "brief expired — excluded from ranking")
+			if (!raw) raw = (expiredLine || "Brief expired") + " — reference plan only — monitor only"
 		}
-		return raw
+		return safeRenderText(raw, { truth: truth, blocked: blocked, deployAuthority: !blocked })
 	}
 
 	function briefFreshnessStripState(truth) {
@@ -1232,6 +1359,7 @@
 	function formatEngineState(state) {
 		if (state == null || state === "" || String(state) === "undefined") return "Unknown"
 		var s = String(state).toLowerCase()
+		if (s === "conflict") return "Conflict"
 		if (s === "on") return "On"
 		if (s === "off") return "Off"
 		if (s === "unknown") return "Unknown"
@@ -1242,13 +1370,14 @@
 		var t = truth || {}
 		if (t.runtime_freshness) return String(t.runtime_freshness)
 		var rs = String(t.runtime_state || "").toLowerCase()
-		var eng = String(t.engine_state || "").toLowerCase()
+		var eng = resolveEngineState(t, {})
+		if (eng === "conflict") return "Conflict"
 		if (rs === "warming" || rs === "loading") return "Warming"
 		if (rs === "execution_blocked") return "Blocked"
 		if (rs === "degraded") return "Degraded"
-		if (rs === "unknown" || eng === "unknown" || !eng || eng === "undefined") return "Unknown"
+		if (rs === "unknown" || eng === "unknown") return "Unknown"
 		if (rs === "engine_off" || eng === "off") return "Off"
-		if (rs === "engine_on" || rs === "live") return "Live"
+		if (rs === "engine_on" || rs === "live" || eng === "on") return "Live"
 		return rs ? rs.charAt(0).toUpperCase() + rs.slice(1) : "Unknown"
 	}
 
@@ -1439,15 +1568,27 @@
 			if (String(truth.deploy_authority_tier || "").toLowerCase() === "paper_only") authority = "PAPER_ONLY"
 		}
 		var blocked = authority === "BLOCKED"
-		var posture = blocked ? "MONITOR ONLY" : authority === "PAPER_ONLY" ? "PAPER DEPLOY" : String(truth.regime_state || "WAIT").toUpperCase()
-		if (blocked && posture === "TRADE") posture = "MONITOR ONLY"
+		var posture = blocked
+			? "MONITOR ONLY"
+			: authority === "PAPER_ONLY"
+				? "PAPER DEPLOY"
+				: String(truth.regime_state || "WAIT").toUpperCase()
+		if (blocked) posture = "MONITOR ONLY"
+		var povPosture = String(pov.posture || "").toUpperCase()
+		if (blocked && (povPosture === "TRADE" || povPosture === "SELECTIVE" || povPosture === "STRONG_TRADE")) {
+			povPosture = "MONITOR ONLY"
+		}
+		if (!blocked && povPosture) posture = povPosture
 		return {
 			authority: authority,
 			blocked: blocked,
 			posture: posture,
-			truth_strip: pov.truth_strip || truth.truth_strip || globalTruthStrip(truth),
+			truth_strip: safeRenderText(pov.truth_strip || truth.truth_strip || globalTruthStrip(truth), {
+				truth: truth,
+				blocked: blocked,
+			}),
 			qualification_line: playbookQualificationLine(truth, p.filter_funnel),
-			best_action: pov.best_action || "",
+			best_action: safeRenderText(pov.best_action || "", { truth: truth, blocked: blocked }),
 			next: pov.next || [],
 			no_valid_monitors: !!pov.no_valid_monitors,
 			simulation_drafts_collapsed: !!pov.simulation_drafts_collapsed,
@@ -2737,12 +2878,65 @@
 		return String(status || "WATCH").replace(/_/g, " ") + " — " + d
 	}
 
+	var HEADER_SURFACE_ZH = {
+		"Monitor only": "僅監察",
+		"Deploy blocked": "禁止部署",
+		"Research only": "僅研究",
+		"Loading": "載入中",
+		"Degraded board": "看板已降級",
+		"Fallback board": "備援看板",
+	}
+
+	function localizeHeaderLine(line) {
+		var raw = String(line || "").trim()
+		if (!raw) return raw
+		var zh = HEADER_SURFACE_ZH[raw]
+		return zh ? bilingualLine(zh, raw) : raw
+	}
+
 	function localizeHeaderSurface(copy) {
-		return copy || {}
+		var c = copy || {}
+		return {
+			surface_mode: c.surface_mode,
+			badge: c.badge,
+			title: localizeHeaderLine(c.title),
+			subtitle: localizeHeaderLine(c.subtitle),
+			explanation: localizeHeaderLine(c.explanation),
+			next_action: localizeHeaderLine(c.next_action),
+			fetch_state: c.fetch_state,
+			show_decision_chips: c.show_decision_chips,
+			show_regime_strip: c.show_regime_strip,
+			chips: c.chips,
+			authority_badge: c.authority_badge,
+		}
+	}
+
+	var FETCH_STATE_ZH = {
+		"API still loading": "API 載入中",
+		"failed_fetch": "擷取失敗",
+		stale: "資料過期",
+		loading: "載入中",
 	}
 
 	function localizeFetchStateCopy(copy) {
-		return copy || {}
+		var c = copy || {}
+		var out = {}
+		for (var k in c) out[k] = c[k]
+		var exp = String(c.explanation || "").trim()
+		if (!exp) return out
+		for (var key in FETCH_STATE_ZH) {
+			if (exp.indexOf(key) >= 0) {
+				out.explanation = bilingualLine(FETCH_STATE_ZH[key], exp)
+				return out
+			}
+		}
+		return out
+	}
+
+	function exportAllLabel(busy) {
+		return busy
+			? bilingualLine("匯出中…", "Exporting…")
+			: bilingualLine("一鍵匯出全介面", "Export All Pages")
 	}
 
 	function surfaceEmptyStateCopy(kind) {
@@ -3345,6 +3539,7 @@
 		playbookCardGateLine: playbookCardGateLine,
 		localizeHeaderSurface: localizeHeaderSurface,
 		localizeFetchStateCopy: localizeFetchStateCopy,
+		exportAllLabel: exportAllLabel,
 		surfaceEmptyStateCopy: surfaceEmptyStateCopy,
 		morningDecisionLine: morningDecisionLine,
 		qualificationCountLine: qualificationCountLine,
@@ -3458,8 +3653,13 @@
 		engineStateHeaderLabel: engineStateHeaderLabel,
 		primaryOperatorState: primaryOperatorState,
 		todayPrimaryStateLine: todayPrimaryStateLine,
+		runtimePrimaryStateLine: runtimePrimaryStateLine,
 		primaryOperatorStateLine: primaryOperatorStateLine,
 		regimeSecondaryLine: regimeSecondaryLine,
+		runtimeSecondaryRegimeLine: runtimeSecondaryRegimeLine,
+		deployAuthorityTier: deployAuthorityTier,
+		briefExpiredOperatorLine: briefExpiredOperatorLine,
+		safeRenderText: safeRenderText,
 		topMonitorLabels: topMonitorLabels,
 		cardDisplayReason: cardDisplayReason,
 		briefFreshnessStripState: briefFreshnessStripState,
@@ -3484,6 +3684,9 @@
 		agentMaxOneBlockerLine: agentMaxOneBlockerLine,
 		agentSuggestedRules: agentSuggestedRules,
 		agentPageState: agentPageState,
+		portfolioRiskPageState: portfolioRiskPageState,
+		portfolioOperatorBlock: portfolioOperatorBlock,
+		portfolioCapitalActionsEnabled: portfolioCapitalActionsEnabled,
 		strategyLabPageState: strategyLabPageState,
 		strategyLabActionEnabled: strategyLabActionEnabled,
 		strategyLabActionReason: strategyLabActionReason,
