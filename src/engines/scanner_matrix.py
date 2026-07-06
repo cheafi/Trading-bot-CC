@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 logger = logging.getLogger(__name__)
 
 # Discovery funnel caps — PM review P0 (no fake precision from 3000-hit scanners)
-DISCOVERY_SHORTLIST_CAP = 30
+DISCOVERY_SHORTLIST_CAP = 10
 DISCOVERY_QUALIFIED_WATCH_CAP = 10
 DISCOVERY_HIGH_PRIORITY_CAP = 5
 DISCOVERY_SHORTLIST_CAP_EXPANDED = 50

@@ -14,7 +14,7 @@ from src.engines.scanner_matrix import (
 
 
 def test_discovery_funnel_cap_constants():
-    assert DISCOVERY_SHORTLIST_CAP == 30
+    assert DISCOVERY_SHORTLIST_CAP == 10
     assert DISCOVERY_QUALIFIED_WATCH_CAP == 10
     assert DISCOVERY_HIGH_PRIORITY_CAP == 5
 
