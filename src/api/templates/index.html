@@ -6340,28 +6340,25 @@
         <span x-show="flowPanel.decision?.freshness?.as_of" class="mono text-[8px]" style="color:var(--t3)" x-text="'Updated '+(flowPanel.decision.freshness.as_of||'').slice(0,19)"></span>
         <span x-show="flowPanel.error" style="color:var(--red)" x-text="flowPanel.error"></span>
       </div>
-      <div class="p-3 space-y-3" :style="flowOverlayPanelStyle()">
-        <template x-if="flowOverlayDegraded()">
-          <div class="card card-p mb-2" style="border:1px solid rgba(251,191,36,.45);background:rgba(251,191,36,.1);padding:10px">
-            <div class="text-[10px] font-bold uppercase" style="color:var(--amber)" x-text="flowOverlayDegradedShort()+' ? overlay degraded'"></div>
-            <div class="text-[8px] mt-1" style="color:var(--t2);line-height:1.45" x-text="flowOverlaySummaryLine()||flowStatusSummary()"></div>
-          </div>
-        </template>
-        <template x-if="flowResearchOnly()">
-          <div class="p-2 rounded text-[9px]" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--amber);line-height:1.55">
-            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--amber)">Flow status</div>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2 text-[9px]">
-              <div><span class="font-bold text-white">NOW</span> <span x-text="researchSurfaceBlock('flow').now"></span></div>
-              <div><span class="font-bold text-white">BLOCKER</span> <span x-text="researchSurfaceBlock('flow').blocker"></span></div>
-              <div><span class="font-bold text-white">NEXT</span> <span x-text="researchSurfaceBlock('flow').next"></span></div>
+      <div class="p-3 space-y-3">
+        <div class="pb-2" x-show="today7.system_truth">
+          <div class="card card-p text-[8px]" style="border:1px dashed var(--amber);background:rgba(251,191,36,.04)">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div><span class="font-bold uppercase" style="color:var(--blue)">NOW</span> <span class="text-white" x-text="researchSurfaceBlock('flow').now"></span></div>
+              <div><span class="font-bold uppercase" style="color:var(--red)">BLOCKER</span> <span style="color:var(--t2)" x-text="researchSurfaceBlock('flow').blocker"></span></div>
+              <div><span class="font-bold uppercase" style="color:var(--green)">NEXT</span> <span style="color:var(--t2)" x-text="researchSurfaceBlock('flow').next"></span></div>
             </div>
-            <div class="space-y-1 text-[9px]">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2 text-[8px]">
               <div><span class="font-bold text-white">Authority:</span> <span x-text="flowStatusAuthority()"></span></div>
               <div><span class="font-bold text-white">Source:</span> <span x-text="flowStatusSource()"></span></div>
               <div><span class="font-bold text-white">Actionability:</span> <span x-text="flowStatusActionability()"></span></div>
             </div>
-            <p x-show="flowOverlaySummaryLine()" class="mt-2 text-[9px]" style="color:var(--t2);line-height:1.5" x-text="flowOverlaySummaryLine()"></p>
-            <p x-show="!flowOverlaySummaryLine()" class="mt-2 text-[9px]" style="color:var(--t2);line-height:1.5" x-text="flowStatusSummary()"></p>
+          </div>
+        </div>
+        <template x-if="flowOverlayDegraded()">
+          <div class="card card-p mb-2" style="border:1px solid rgba(251,191,36,.45);background:rgba(251,191,36,.1);padding:10px">
+            <div class="text-[10px] font-bold uppercase" style="color:var(--amber)" x-text="flowOverlayDegradedShort()+' ? overlay degraded'"></div>
+            <div class="text-[8px] mt-1" style="color:var(--t2);line-height:1.45" x-text="flowOverlaySummaryLine()||flowStatusSummary()"></div>
           </div>
         </template>
         <template x-if="flowPanel.decision?.regime">
@@ -6383,6 +6380,13 @@
         </div>
         <template x-if="flowPanel.loading && !flowPanel.decision">
           <div class="card card-p text-center" style="padding:24px;color:var(--t3)"><span class="spin"></span> Scanning unusual flow?</div>
+        </template>
+        <template x-if="!flowPanel.loading && !flowPanel.decision && !flowPanel.error">
+          <div class="card card-p text-[8px]" style="color:var(--t2);line-height:1.45;border:1px dashed var(--bd)">
+            <div class="font-bold text-white mb-1">No flow payload yet</div>
+            <div x-text="researchSurfaceBlock('flow').next"></div>
+            <button @click="fetchFlow()" class="btn-s text-[9px] mt-2">Run live scan</button>
+          </div>
         </template>
         <template x-if="(flowPanel.decision?.actionable_top3||[]).length">
           <div class="card card-p" style="border-left:3px solid var(--green)">
@@ -10511,8 +10515,7 @@
         return pct+'%';
       },
       flowOverlayPanelStyle(){
-        if(!this.flowOverlayDegraded()) return '';
-        return 'opacity:0.58;filter:saturate(0.72)';
+        return '';
       },
       formatFallbackScore(row){
         const r=row||{};
@@ -12617,7 +12620,7 @@
           else{this.dos.status='idle_no_query';this.dos.error='';this.dos.loading=false;}
         }
         if(t==='funds'){this.fetchFunds();this.fetchLeaders();}
-        if(t==='flow'){if(!this.today7.regime)this.fetchToday7();this.fetchFlow();}
+        if(t==='flow'){if(!this.today7.regime||!this.today7.system_truth)this.fetchToday7();this.fetchFlow();}
         if(t==='rs'){this.fetchRs();}
         if(t==='notrade'){this.fetchRejections();}
         if(t==='command'){this.initAgentCommandTab();}
@@ -15500,10 +15503,10 @@
       flowShowConfirmationWarning(){
         const d=this.flowPanel?.decision;
         if(!d) return false;
-        return !!(d.freshness?.synthetic||!(d.count_live||0)||this.flowNotCalibrated());
+        return !!(d.freshness?.synthetic||!(d.count_live||0));
       },
       flowResearchOnly(){
-        return this.flowShowConfirmationWarning();
+        return true;
       },
       flowStatusAuthority(){
         return 'Confirmation only ? no deploy authority';
@@ -15523,8 +15526,7 @@
         const d=this.flowPanel?.decision;
         if(d?.freshness?.synthetic) return 'Fallback only';
         if(!(d?.count_live||0)) return 'No live overlay';
-        if(this.flowNotCalibrated()) return 'Unavailable';
-        return 'Unavailable';
+        return 'Overlay degraded';
       },
       flowRegimeSupportLine(){
         const d=this.flowPanel?.decision;
