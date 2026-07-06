@@ -9,8 +9,8 @@
         </div>
         <div style="margin-top:12px;padding:10px 12px;background:rgba(0,212,170,.06);border:1px solid rgba(0,212,170,.22);border-radius:8px;font-size:11px;color:var(--t2);line-height:1.65;max-width:560px">
           <div style="font-size:10px;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">操作員速查 · Operator quick read</div>
-          <div><strong style="color:var(--t1)">現在 · Now</strong> — 今日狀態（例：MONITOR ONLY · 僅監察 · 禁止部署）</div>
-          <div><strong style="color:var(--t1)">原因 · Why</strong> — 為何被擋（例：IBKR 離線、看板 WAIT、0 筆 deploy-qualified）</div>
+          <div><strong style="color:var(--t1)">現在 · Now</strong> — 今日狀態（例：<strong style="color:var(--t1)">MONITOR ONLY · Deploy blocked</strong>）</div>
+          <div><strong style="color:var(--t1)">原因 · Why</strong> — 為何被擋（例：Board stale · Brief expired 26d · IBKR offline · Runtime conflict）</div>
           <div><strong style="color:var(--t1)">可做 · Allowed</strong> — 刷新看板、建立監察規則、開 Playbook 複核</div>
           <div><strong style="color:var(--t1)">禁止 · Blocked</strong> — 不定倉、不交接券商、不可試探倉</div>
           <div><strong style="color:var(--t1)">下一步 · Next</strong> — 先做一件事（例：修復 IBKR → 再刷新看板）</div>
@@ -97,7 +97,7 @@
 
           <div style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Most common mistakes</div>
           <ul style="font-size:11px;color:var(--t2);line-height:1.65;padding-left:16px;margin:0 0 12px">
-            <li><strong style="color:var(--t1)">Don't size from fallback cards</strong> — FALLBACK WATCH / brief fallback = monitor-only · 備援卡片不可定倉</li>
+            <li><strong style="color:var(--t1)">Don't size from fallback cards</strong> — FALLBACK WATCH / Brief expired = monitor-only · 備援或過期簡報不可定倉</li>
             <li><strong style="color:var(--t1)">Don't treat IBKR LOGIN as execution-ready</strong> — GATEWAY UP · LOGIN REQUIRED still blocks handoff · 已登入 Gateway ≠ 可下單</li>
             <li><strong style="color:var(--t1)">Don't treat Discovery / Flow / RS as deploy permission</strong> — research-only surfaces · 掃描結果 ≠ 部署許可</li>
             <li><strong style="color:var(--t1)">Don't treat Backtest Lab as live evidence</strong> — historical simulation, not deployment authority · 回測 ≠ 實盤依據</li>
@@ -231,7 +231,7 @@
                 <span style="font-size:9px;background:rgba(0,212,170,.1);color:var(--green);padding:2px 6px;border-radius:4px;font-weight:700">START HERE</span>
               </div>
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
-                Morning posture: regime, VIX, breadth, tradeability (WAIT/TRADE/NO_TRADE), best TRADE/WATCH/PILOT, execution readiness, and AI narrative. Legacy name: <em>Overview</em>. Pre-market brief content may appear here — there is no separate Brief tab in primary nav.
+                Morning posture: <strong style="color:var(--t1)">MONITOR ONLY</strong> primary when deploy blocked; regime (WAIT/SELECTIVE/TRADE) is secondary context only. Execution readiness, scoped freshness (Market/Board/Brief/Broker/Runtime/Authority), and operator block (Now/Why/Allowed/Blocked/Next). Legacy name: <em>Overview</em>.
               </div>
             </div>
           </div>
@@ -245,7 +245,7 @@
               </div>
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
                 Candidate board (Deploy / Pilot / Watch buckets) — not a trade ticket. Legacy name: <em>Ranked</em>. Each row shows action badge, score, levels, R:R, and execution_ready when bracket math is complete.
-                <span style="color:var(--amber);display:block;margin-top:4px">When <strong style="color:var(--t1)">Authority: Open</strong>, prefer TRADE + execution_ready for full size; PILOT for half-size probes only with deploy authority. When blocked: monitor only — no pilot entry, no sizing, no handoff. WATCH stays monitor-only unless Dossier upgrades with live structure.</span>
+                <span style="color:var(--amber);display:block;margin-top:4px">When <strong style="color:var(--t1)">Authority: Open</strong>, deploy-qualified cards may show executable levels. When blocked: <strong style="color:var(--t1)">MONITOR ONLY</strong> — no pilot entry, no sizing, no handoff; structure levels collapse under “Structure reference only”.</span>
               </div>
             </div>
           </div>
@@ -260,7 +260,7 @@
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
                 Per-ticker structure review surface — confirm levels before any deploy path. When deploy authority is blocked: <strong style="color:var(--amber)">Structure Review Only</strong> — no trade plan, no sizing, no handoff. Check in order:<br>
                 <div style="margin:8px 0;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:11px">
-                  <span style="color:var(--green);font-weight:700">Entry Zone</span><span style="color:var(--t2)">Expected clean entry range. Wider zone often means BUY_ON_DIP or reduced size — PILOT half-size only when Authority: Open.</span>
+                  <span style="color:var(--green);font-weight:700">Entry Zone</span><span style="color:var(--t2)">Expected clean entry range when deploy authority is open. When blocked, levels are reference-only inside collapsed structure notes — not sizing guidance.</span>
                   <span style="color:var(--red);font-weight:700">Hard Stop</span><span style="color:var(--t2)">Structural exit level. Confirm-only dossier shows <em>No sizing guidance in confirm-only mode</em> — no IBKR handoff until live fetch succeeds.</span>
                   <span style="color:var(--blue);font-weight:700">Target 1 / 2</span><span style="color:var(--t2)">Reward anchors at ~2R and ~3R — guidance, not guaranteed fills.</span>
                   <span style="color:var(--amber);font-weight:700">Factor Chips</span><span style="color:var(--t2)">Green = tailwind, red = headwind. Weigh against regime and Playbook action.</span>
@@ -396,7 +396,7 @@
           <div style="display:flex;flex-direction:column;gap:8px">
             <div style="display:flex;gap:10px;align-items:flex-start;font-size:11px">
               <span style="background:var(--green);color:#000;font-weight:800;padding:2px 7px;border-radius:12px;font-size:10px;white-space:nowrap">TRADE 8.7</span>
-              <span style="color:var(--t2);line-height:1.6">Score 8.7/10 with TRADE action. Green border = deploy-grade candidate when board gate + Authority: Open. PILOT (blue) = half-size probe only with deploy authority. WATCH/AVOID = monitor or skip.</span>
+              <span style="color:var(--t2);line-height:1.6">Score 8.7/10 with WATCH action when deploy blocked. Green border = deploy-grade candidate only when board gate + Authority: Open. PILOT/TRADE labels on blocked days are review-only — not permission.</span>
             </div>
             <div style="display:flex;gap:10px;align-items:flex-start;font-size:11px">
               <span style="background:var(--red);color:#fff;font-weight:800;padding:2px 7px;border-radius:12px;font-size:10px;white-space:nowrap">STOP</span>
@@ -481,7 +481,7 @@
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:6px">Playbook Actions</div>
             <div style="display:flex;flex-direction:column;gap:4px;font-size:11px">
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pg" style="font-size:9px;min-width:52px;text-align:center">TRADE</span><span style="color:var(--t2)">Deploy-grade when board gate + execution_ready + fresh context align</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pb" style="font-size:9px;min-width:52px;text-align:center">PILOT</span><span style="color:var(--t2)">Partial edge · half size only when Authority: Open · stop required · no pilot when blocked</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pb" style="font-size:9px;min-width:52px;text-align:center">WATCH</span><span style="color:var(--t2)">Monitor candidate · review-only when Authority: Blocked · no deploy</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px;min-width:52px;text-align:center">WATCH</span><span style="color:var(--t2)">Monitor · not ready for full size</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pr" style="font-size:9px;min-width:52px;text-align:center">AVOID</span><span style="color:var(--t2)">Extended or broken · skip new entry</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px;min-width:52px;text-align:center">WAIT</span><span style="color:var(--t2)">Regime gate · sit out new risk</span></div>

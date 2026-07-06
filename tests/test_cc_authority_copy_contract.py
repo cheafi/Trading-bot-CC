@@ -15,7 +15,7 @@ def test_dashboard_primary_not_selective_when_blocked():
     html = raw.read_text(encoding="utf-8", errors="replace")
     assert 'trust-strip-tier-primary' in html
     primary = html.split('trust-strip-tier-primary', 1)[1].split("</div>", 1)[0]
-    assert "todayPrimaryStateLine()" in primary
+    assert "todayPrimaryStateLine()" in primary or "runtimePrimaryStateLine()" in primary
     assert 'x-text="today7.tradeability' not in primary
 
 

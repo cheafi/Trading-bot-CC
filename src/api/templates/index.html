@@ -527,8 +527,8 @@
         <span x-show="pageAuthorityIsDegraded()&&!instantDegradedBannerVisible()&&!todayPaperDeployAvailable()" style="padding:2px 8px;border-radius:4px;font-weight:700;font-size:10px;letter-spacing:.5px;background:#422006;color:#fde68a;border:1px solid #b45309">MONITOR ONLY</span>
         <span style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700"
           :style="todayPrimaryStatePillStyle()"
-          x-text="todayPrimaryStateLine()"></span>
-        <span x-show="todayPrimaryRegimeSecondary()" class="pill text-[7px] pa" x-text="todayPrimaryRegimeSecondary()"></span>
+          x-text="runtimePrimaryStateLine()"></span>
+        <span x-show="runtimeSecondaryRegimeLine()" class="pill text-[7px] pa" data-role="secondary-regime" x-text="runtimeSecondaryRegimeLine()"></span>
         <span x-show="headerSummary().badge" class="pill text-[7px] font-bold" :class="severityBadgeClass(headerSummary().fetch_state)" x-text="sanitizeVisibleText(headerSummary().badge)"></span>
         <span x-show="cc_status.breaker" class="pill text-[7px] pr font-bold">EXEC BLOCKED</span>
       </div>
@@ -1280,7 +1280,7 @@
       <!-- ?? Ops / IB / Monitor strip (institutional cockpit) ?? -->
       <div x-show="tab==='today'" data-cc="deploy-status-strip" style="padding:6px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <span class="pill text-[8px]" :class="ibkrStateFrom(today7.execution_readiness).level==='ready'?'pg':ibkrStateFrom(today7.execution_readiness).level==='blocked'?'pr':'pa'" x-text="'IBKR '+ibkrUnifiedShort(today7.execution_readiness)"></span>
-        <span class="pill text-[8px]" :class="engineStatePillClass()" x-text="engineStateHeaderLabel()"></span>
+        <span class="pill text-[8px]" :class="engineStatePillClass()" x-text="engineStateHeaderLabel()" title="Runtime: Conflict when engine truth and Ops disagree"></span>
         <template x-if="today7.evidence_badges">
           <span class="pill text-[7px] pw" :title="today7.evidence_badges.regime?.label" x-text="today7.evidence_badges.regime?.badge"></span>
           <span class="pill text-[7px] pw" :title="today7.evidence_badges.funds?.label" x-text="today7.evidence_badges.funds?.badge"></span>
@@ -1977,13 +1977,16 @@
                   </template>
                 </div>
               </template>
-              <template x-if="!cardShowsDeployLevels(today7.top_ranked[0])&&(today7.top_ranked[0].entry_price||today7.top_ranked[0].stop_price)">
-                <div class="flex gap-4 text-[10px] mono" style="color:var(--t2)">
-                  <template x-if="today7.top_ranked[0].entry_price"><span>Indicative entry <strong class="text-white">$<span x-text="Number(today7.top_ranked[0].entry_price).toFixed(2)"></span></strong></span></template>
-                  <template x-if="today7.top_ranked[0].target_price"><span>Indicative target <strong class="text-amber-300">$<span x-text="Number(today7.top_ranked[0].target_price).toFixed(2)"></span></strong></span></template>
-                  <template x-if="today7.top_ranked[0].stop_price"><span>Monitor zone <strong class="text-amber-300">$<span x-text="Number(today7.top_ranked[0].stop_price).toFixed(2)"></span></strong></span></template>
-                  <span>R:R <strong class="text-amber-300" x-text="today7.top_ranked[0].risk_reward?parseRR(today7.top_ranked[0].risk_reward).toFixed(1):'?'"></strong></span>
-                </div>
+              <template x-if="!cardShowsDeployLevels(today7.top_ranked[0])&&cardShowsStructureReference(today7.top_ranked[0])">
+                <details class="text-[9px]" style="color:var(--t3)">
+                  <summary>Structure reference only</summary>
+                  <div class="flex gap-4 text-[10px] mono mt-1" style="color:var(--t2)">
+                    <template x-if="today7.top_ranked[0].entry_price"><span>Ref entry $<span x-text="Number(today7.top_ranked[0].entry_price).toFixed(2)"></span></span></template>
+                    <template x-if="today7.top_ranked[0].target_price"><span>Ref target $<span x-text="Number(today7.top_ranked[0].target_price).toFixed(2)"></span></span></template>
+                    <template x-if="today7.top_ranked[0].stop_price"><span>Ref zone $<span x-text="Number(today7.top_ranked[0].stop_price).toFixed(2)"></span></span></template>
+                    <span x-show="today7.top_ranked[0].risk_reward">R:R <span x-text="today7.top_ranked[0].risk_reward?parseRR(today7.top_ranked[0].risk_reward).toFixed(1):'?'"></span></span>
+                  </div>
+                </details>
               </template>
               <template x-if="today7.top_ranked[0].why_now">
                 <div class="text-[10px] mt-2" style="color:var(--green);line-height:1.5" x-text="'? '+(Array.isArray(today7.top_ranked[0].why_now)?today7.top_ranked[0].why_now.join(' ? '):today7.top_ranked[0].why_now)"></div>
@@ -2697,7 +2700,7 @@
           <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Truth</div><div x-text="safeRenderText(playbookOperatorView().truth_strip)"></div></div>
           <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Qualification</div><div x-text="safeRenderText(playbookQualificationDisplay())"></div></div>
           <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Best action</div><div class="font-semibold text-white" x-text="safeRenderText(playbookOperatorView().best_action||playbookBestActionDisplay())"></div></div>
-          <div class="sm:col-span-2"><div class="font-bold uppercase mb-1" style="color:var(--t3)">Next</div><div x-text="(playbookOperatorView().next||[]).join(' ? ')"></div></div>
+          <div class="sm:col-span-2"><div class="font-bold uppercase mb-1" style="color:var(--t3)">Next</div><div x-text="(playbookOperatorView().next||[]).map(n=>safeRenderText(n)).join(' ? ')"></div></div>
         </div>
         <div x-show="playbookNoValidMonitors()" class="mt-2 p-1.5 rounded text-[9px] font-bold" style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:var(--amber)">NO VALID MONITOR CANDIDATES</div>
       </div>
@@ -2705,7 +2708,7 @@
         <div class="mx-3 mb-2 p-2 rounded text-[9px] font-bold" style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:var(--amber);line-height:1.55" x-text="playbookNoEdgeLine()"></div>
       </template>
       <template x-if="today7.system_truth?.brief_expired_copy">
-        <div class="mx-3 mb-2 p-2 rounded text-[9px]" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--amber)" x-text="today7.system_truth.brief_expired_copy"></div>
+        <div class="mx-3 mb-2 p-2 rounded text-[9px]" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--amber)" x-text="safeRenderText(today7.system_truth.brief_expired_copy)"></div>
       </template>
       <div class="mx-3 mb-1 px-2 text-[7px]" style="color:var(--t3);line-height:1.55" x-text="playbookLayerDefinitionsNote()"></div>
       <!-- Emergency board ? explicit CTA when pipeline unavailable -->
@@ -3085,14 +3088,22 @@
                 <!-- Price row -->
                 <template x-if="r.entry_price||r.target_price||r.stop_price">
                   <div class="flex gap-4 text-[9px] mono mt-1" style="color:var(--t2)">
-                    <template x-if="cardShowsDeployLevels(r)&&r.entry_price"><span>Entry <strong class="text-white">$<span x-text="Number(r.entry_price).toFixed(2)"></span></strong></span></template>
-                    <template x-if="cardShowsDeployLevels(r)&&r.target_price"><span>Target <strong class="text-green-400">$<span x-text="Number(r.target_price).toFixed(2)"></span></strong></span></template>
-                    <template x-if="cardShowsDeployLevels(r)&&r.stop_price"><span>Stop <strong class="text-red-400">$<span x-text="Number(r.stop_price).toFixed(2)"></span></strong></span></template>
-                    <template x-if="!cardShowsDeployLevels(r)&&r.entry_price"><span>Indicative entry <strong class="text-amber-300">$<span x-text="Number(r.entry_price).toFixed(2)"></span></strong></span></template>
-                    <template x-if="!cardShowsDeployLevels(r)&&r.target_price"><span>Indicative target <strong class="text-amber-300">$<span x-text="Number(r.target_price).toFixed(2)"></span></strong></span></template>
-                    <template x-if="!cardShowsDeployLevels(r)&&r.stop_price"><span>Monitor zone <strong class="text-amber-300">$<span x-text="Number(r.stop_price).toFixed(2)"></span></strong></span></template>
-                    <template x-if="r.risk_reward"><span>R:R <strong :class="cardShowsDeployLevels(r)?'text-white':'text-amber-300'" x-text="parseRR(r.risk_reward).toFixed(1)"></strong></span></template>
-                    <span x-show="!cardShowsDeployLevels(r)" class="pill pa text-[7px]">CONFIRM ONLY</span>
+                    <template x-if="cardShowsDeployLevels(r)">
+                      <template x-if="r.entry_price"><span>Entry <strong class="text-white">$<span x-text="Number(r.entry_price).toFixed(2)"></span></strong></span></template>
+                      <template x-if="r.target_price"><span>Target <strong class="text-green-400">$<span x-text="Number(r.target_price).toFixed(2)"></span></strong></span></template>
+                      <template x-if="r.stop_price"><span>Stop <strong class="text-red-400">$<span x-text="Number(r.stop_price).toFixed(2)"></span></strong></span></template>
+                      <span x-show="r.risk_reward">R:R <strong class="text-white" x-text="parseRR(r.risk_reward).toFixed(1)"></strong></span>
+                    </template>
+                    <details x-show="cardShowsStructureReference(r)" class="text-[8px]" style="color:var(--t3)">
+                      <summary>Structure reference only</summary>
+                      <div class="flex gap-3 mt-1">
+                        <template x-if="r.entry_price"><span>Ref entry $<span x-text="Number(r.entry_price).toFixed(2)"></span></span></template>
+                        <template x-if="r.target_price"><span>Ref target $<span x-text="Number(r.target_price).toFixed(2)"></span></span></template>
+                        <template x-if="r.stop_price"><span>Ref zone $<span x-text="Number(r.stop_price).toFixed(2)"></span></span></template>
+                        <span x-show="r.risk_reward">R:R <span x-text="parseRR(r.risk_reward).toFixed(1)"></span></span>
+                      </div>
+                    </details>
+                    <span x-show="!cardShowsDeployLevels(r)&&!cardShowsStructureReference(r)" class="pill pa text-[7px]">CONFIRM ONLY</span>
                   </div>
                 </template>
                 <!-- Phase 9: Structure ? Entry Quality ? Fundamentals ? Earnings ? RS -->
@@ -3203,10 +3214,21 @@
                   <span class="pill text-[8px] font-bold ml-auto" :class="effectiveCardActionClass(r)" x-text="effectiveCardAction(r)"></span>
                 </div>
                 <div class="flex gap-4 text-[9px] mono mt-1" style="color:var(--t2)">
-                  <template x-if="r.entry_price"><span><span x-text="cardShowsDeployLevels(r)?'Entry':'Indicative entry'"></span> <strong :class="cardShowsDeployLevels(r)?'text-white':'text-amber-300'">$<span x-text="Number(r.entry_price).toFixed(2)"></span></strong></span></template>
-                  <template x-if="r.target_price"><span><span x-text="cardShowsDeployLevels(r)?'Target':'Indicative target'"></span> <strong :class="cardShowsDeployLevels(r)?'text-green-400':'text-amber-300'">$<span x-text="Number(r.target_price).toFixed(2)"></span></strong></span></template>
-                  <template x-if="r.stop_price"><span><span x-text="cardShowsDeployLevels(r)?'Stop':'Monitor zone'"></span> <strong :class="cardShowsDeployLevels(r)?'text-red-400':'text-amber-300'">$<span x-text="Number(r.stop_price).toFixed(2)"></span></strong></span></template>
-                  <span>R:R <strong class="text-white" x-text="parseRR(r.risk_reward||0).toFixed(1)"></strong></span>
+                  <template x-if="cardShowsDeployLevels(r)">
+                    <template x-if="r.entry_price"><span>Entry <strong class="text-white">$<span x-text="Number(r.entry_price).toFixed(2)"></span></strong></span></template>
+                    <template x-if="r.target_price"><span>Target <strong class="text-green-400">$<span x-text="Number(r.target_price).toFixed(2)"></span></strong></span></template>
+                    <template x-if="r.stop_price"><span>Stop <strong class="text-red-400">$<span x-text="Number(r.stop_price).toFixed(2)"></span></strong></span></template>
+                    <span x-show="r.risk_reward">R:R <strong class="text-white" x-text="parseRR(r.risk_reward||0).toFixed(1)"></strong></span>
+                  </template>
+                  <details x-show="cardShowsStructureReference(r)" class="text-[8px]" style="color:var(--t3)">
+                    <summary>Structure reference only</summary>
+                    <div class="flex gap-3 mt-1">
+                      <template x-if="r.entry_price"><span>Ref entry $<span x-text="Number(r.entry_price).toFixed(2)"></span></span></template>
+                      <template x-if="r.target_price"><span>Ref target $<span x-text="Number(r.target_price).toFixed(2)"></span></span></template>
+                      <template x-if="r.stop_price"><span>Ref zone $<span x-text="Number(r.stop_price).toFixed(2)"></span></span></template>
+                      <span x-show="r.risk_reward">R:R <span x-text="parseRR(r.risk_reward||0).toFixed(1)"></span></span>
+                    </div>
+                  </details>
                 </div>
                 <div class="text-[9px] mt-1" style="color:var(--t2);line-height:1.4" x-show="cardActionGuidanceLine(r)" x-text="cardActionGuidanceLine(r)"></div>
                 <template x-if="r.why_now&&(Array.isArray(r.why_now)?r.why_now.length:r.why_now)">
@@ -4342,8 +4364,8 @@
         </div>
         <div style="margin-top:12px;padding:10px 12px;background:rgba(0,212,170,.06);border:1px solid rgba(0,212,170,.22);border-radius:8px;font-size:11px;color:var(--t2);line-height:1.65;max-width:560px">
           <div style="font-size:10px;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">????? ? Operator quick read</div>
-          <div><strong style="color:var(--t1)">?? ? Now</strong> ? ???????MONITOR ONLY ? ??? ? ?????</div>
-          <div><strong style="color:var(--t1)">?? ? Why</strong> ? ???????IBKR ????? WAIT?0 ? deploy-qualified?</div>
+          <div><strong style="color:var(--t1)">?? ? Now</strong> ? ???????<strong style="color:var(--t1)">MONITOR ONLY ? Deploy blocked</strong>?</div>
+          <div><strong style="color:var(--t1)">?? ? Why</strong> ? ???????Board stale ? Brief expired 26d ? IBKR offline ? Runtime conflict?</div>
           <div><strong style="color:var(--t1)">?? ? Allowed</strong> ? ????????????? Playbook ??</div>
           <div><strong style="color:var(--t1)">?? ? Blocked</strong> ? ???????????????</div>
           <div><strong style="color:var(--t1)">??? ? Next</strong> ? ?????????? IBKR ? ??????</div>
@@ -4564,7 +4586,7 @@
                 <span style="font-size:9px;background:rgba(0,212,170,.1);color:var(--green);padding:2px 6px;border-radius:4px;font-weight:700">START HERE</span>
               </div>
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
-                Morning posture: regime, VIX, breadth, tradeability (WAIT/TRADE/NO_TRADE), best TRADE/WATCH/PILOT, execution readiness, and AI narrative. Legacy name: <em>Overview</em>. Pre-market brief content may appear here ? there is no separate Brief tab in primary nav.
+                Morning posture: <strong style="color:var(--t1)">MONITOR ONLY</strong> primary when deploy blocked; regime (WAIT/SELECTIVE/TRADE) is secondary context only. Execution readiness, scoped freshness (Market/Board/Brief/Broker/Runtime/Authority), and operator block (Now/Why/Allowed/Blocked/Next). Legacy name: <em>Overview</em>.
               </div>
             </div>
           </div>
@@ -4578,7 +4600,7 @@
               </div>
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
                 Candidate board (Deploy / Pilot / Watch buckets) ? not a trade ticket. Legacy name: <em>Ranked</em>. Each row shows action badge, score, levels, R:R, and execution_ready when bracket math is complete.
-                <span style="color:var(--amber);display:block;margin-top:4px">When <strong style="color:var(--t1)">Authority: Open</strong>, prefer TRADE + execution_ready for full size; PILOT for half-size probes only with deploy authority. When blocked: monitor only ? no pilot entry, no sizing, no handoff. WATCH stays monitor-only unless Dossier upgrades with live structure.</span>
+                <span style="color:var(--amber);display:block;margin-top:4px">When <strong style="color:var(--t1)">Authority: Open</strong>, deploy-qualified cards may show executable levels. When blocked: <strong style="color:var(--t1)">MONITOR ONLY</strong> ? no pilot entry, no sizing, no handoff; structure levels collapse under ?Structure reference only?.</span>
               </div>
             </div>
           </div>
@@ -4593,7 +4615,7 @@
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
                 Per-ticker structure review surface ? confirm levels before any deploy path. When deploy authority is blocked: <strong style="color:var(--amber)">Structure Review Only</strong> ? no trade plan, no sizing, no handoff. Check in order:<br>
                 <div style="margin:8px 0;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:11px">
-                  <span style="color:var(--green);font-weight:700">Entry Zone</span><span style="color:var(--t2)">Expected clean entry range. Wider zone often means BUY_ON_DIP or reduced size ? PILOT half-size only when Authority: Open.</span>
+                  <span style="color:var(--green);font-weight:700">Entry Zone</span><span style="color:var(--t2)">Expected clean entry range when deploy authority is open. When blocked, levels are reference-only inside collapsed structure notes ? not sizing guidance.</span>
                   <span style="color:var(--red);font-weight:700">Hard Stop</span><span style="color:var(--t2)">Structural exit level. Confirm-only dossier shows <em>No sizing guidance in confirm-only mode</em> ? no IBKR handoff until live fetch succeeds.</span>
                   <span style="color:var(--blue);font-weight:700">Target 1 / 2</span><span style="color:var(--t2)">Reward anchors at ~2R and ~3R ? guidance, not guaranteed fills.</span>
                   <span style="color:var(--amber);font-weight:700">Factor Chips</span><span style="color:var(--t2)">Green = tailwind, red = headwind. Weigh against regime and Playbook action.</span>
@@ -4729,7 +4751,7 @@
           <div style="display:flex;flex-direction:column;gap:8px">
             <div style="display:flex;gap:10px;align-items:flex-start;font-size:11px">
               <span style="background:var(--green);color:#000;font-weight:800;padding:2px 7px;border-radius:12px;font-size:10px;white-space:nowrap">TRADE 8.7</span>
-              <span style="color:var(--t2);line-height:1.6">Score 8.7/10 with TRADE action. Green border = deploy-grade candidate when board gate + Authority: Open. PILOT (blue) = half-size probe only with deploy authority. WATCH/AVOID = monitor or skip.</span>
+              <span style="color:var(--t2);line-height:1.6">Score 8.7/10 with WATCH action when deploy blocked. Green border = deploy-grade candidate only when board gate + Authority: Open. PILOT/TRADE labels on blocked days are review-only ? not permission.</span>
             </div>
             <div style="display:flex;gap:10px;align-items:flex-start;font-size:11px">
               <span style="background:var(--red);color:#fff;font-weight:800;padding:2px 7px;border-radius:12px;font-size:10px;white-space:nowrap">STOP</span>
@@ -4814,7 +4836,7 @@
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:6px">Playbook Actions</div>
             <div style="display:flex;flex-direction:column;gap:4px;font-size:11px">
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pg" style="font-size:9px;min-width:52px;text-align:center">TRADE</span><span style="color:var(--t2)">Deploy-grade when board gate + execution_ready + fresh context align</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pb" style="font-size:9px;min-width:52px;text-align:center">PILOT</span><span style="color:var(--t2)">Partial edge ? half size only when Authority: Open ? stop required ? no pilot when blocked</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pb" style="font-size:9px;min-width:52px;text-align:center">WATCH</span><span style="color:var(--t2)">Monitor candidate ? review-only when Authority: Blocked ? no deploy</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px;min-width:52px;text-align:center">WATCH</span><span style="color:var(--t2)">Monitor ? not ready for full size</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pr" style="font-size:9px;min-width:52px;text-align:center">AVOID</span><span style="color:var(--t2)">Extended or broken ? skip new entry</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px;min-width:52px;text-align:center">WAIT</span><span style="color:var(--t2)">Regime gate ? sit out new risk</span></div>
@@ -8999,6 +9021,7 @@
         const m=this._SURFACE_MODES||{};
         return m[this.tab]||'discovery_research';
       },
+      surfaceShowsDecisionChips(mode){return mode==='dashboard_core'||mode==='playbook_core';},
       safeRenderText(text,context){
         const ctx=context||{};
         const truth=ctx.truth||this.today7?.system_truth||{};
@@ -9007,6 +9030,7 @@
           return CCHelpers.safeRenderText(text,merged);
         return this.sanitizeVisibleText(text);
       },
+      sanitizeVisibleText(v){
         if(v==null||v==='') return '';
         const blocked=this.todayDeployBlocked()||this.pageAuthorityIsDegraded();
         const truth=this.today7?.system_truth||{};
@@ -9280,9 +9304,9 @@
         // Avoid repeating the same title twice (title + subtitle).
         // Only show a subtitle when it adds new information.
         const subtitle=(this.surfaceShowsDecisionChips(mode)&&!this.discoveryHeaderMode()&&this.decisionHub)
-          ? this.canonicalRegimeLine()
+          ? this.runtimeRegimeDisplayLine()
           : (mode==='discovery_research'
-            ? ('Research-only ? '+this.canonicalRegimeLine())
+            ? ('Research-only ? '+this.runtimeRegimeDisplayLine())
             : '');
         const showChips=this.surfaceShowsDecisionChips(mode)&&!this.discoveryHeaderMode()&&!!this.decisionHub&&['ok','stale','fallback'].includes(fetchState);
         let badge=mode==='guide_reference'?base.badge:(fetchBadges[fetchState]||base.badge);
@@ -10345,6 +10369,7 @@
         if(!opts.ibkrReady) out.push('IBKR '+String(opts.ibkrShort||'OFFLINE').toUpperCase());
         const eng=(typeof CCHelpers!=='undefined'&&CCHelpers.resolveEngineState)?CCHelpers.resolveEngineState(opts.systemTruth,{running:opts.running}):'';
         if(eng==='off') out.push('ENGINE OFF');
+        else if(eng==='conflict') out.push('RUNTIME CONFLICT');
         else if(eng==='unknown') out.push('ENGINE UNKNOWN');
         if(opts.breaker) out.push('EXEC BLOCKED ? risk breaker');
         if(opts.briefFallback||opts.instantDegraded) out.push('FALLBACK / BRIEF ONLY');
@@ -10394,9 +10419,10 @@
         const truth=this.today7.system_truth||{};
         const typed=(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStripLocalized)
           ?CCHelpers.scopedFreshnessStripLocalized(truth):((typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStrip)?CCHelpers.scopedFreshnessStrip(truth):'');
+        const blocked=this.pageAuthorityIsDegraded()||this.todayDeployBlocked();
         const opts={
-          authorityChip:this.pageAuthorityIsDegraded()?(this.instantDegradedBannerVisible()?'INSTANT DEGRADED':'MONITOR ONLY'):'',
-          tradeability:this.canonicalTradeability(),
+          authorityChip:blocked?(this.instantDegradedBannerVisible()?'INSTANT DEGRADED':'MONITOR ONLY'):'',
+          tradeability:blocked?this.runtimeSecondaryRegimeLine():this.canonicalTradeability(),
           fetchBadge:hs.badge||this.dataContractFetchBadge(),
           ibkrChip:'IBKR '+this.ibkrUnifiedShort(this.today7.execution_readiness),
           typedFreshnessChip:typed,
@@ -11486,11 +11512,30 @@
         ).toUpperCase();
       },
       todayPrimaryStateLine(){
+        return this.runtimePrimaryStateLine();
+      },
+      runtimePrimaryStateLine(){
         const truth=this.today7.system_truth||{};
-        if(typeof CCHelpers!=='undefined'&&CCHelpers.todayPrimaryStateLine)
-          return CCHelpers.todayPrimaryStateLine(truth);
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.runtimePrimaryStateLine)
+          return CCHelpers.runtimePrimaryStateLine(truth);
         if(this.pageAuthorityIsDegraded()) return 'MONITOR ONLY';
         return this.canonicalTradeability();
+      },
+      runtimeSecondaryRegimeLine(){
+        const truth=this.today7.system_truth||{};
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.runtimeSecondaryRegimeLine){
+          const sec=CCHelpers.runtimeSecondaryRegimeLine(truth,this.canonicalTradeability());
+          if(sec&&sec!==this.runtimePrimaryStateLine()) return sec;
+        }
+        return this.todayPrimaryRegimeSecondary();
+      },
+      runtimeRegimeDisplayLine(){
+        if(this.pageAuthorityIsDegraded()||this.todayDeployBlocked()){
+          const sec=this.runtimeSecondaryRegimeLine();
+          if(sec) return sec;
+          return 'MONITOR ONLY';
+        }
+        return this.canonicalRegimeLine();
       },
       todayPrimaryRegimeSecondary(){
         const truth=this.today7.system_truth||{};
@@ -12049,10 +12094,13 @@
         return 'Ranked for monitoring, not for deployment. Current board state remains WAIT until at least one setup becomes execution-ready and clears full-quality thresholds.';
       },
       playbookBestActionDisplay(){
+        let raw='';
         if(this.playbookBoardWait()&&(this.playbookBrokerOffline()||this.playbookDeployableCount()<1||this.playbookUsesBriefFallback())){
-          return 'WAIT ? no deploy-qualified setups and no broker handoff. Monitor near-misses, queue alerts, and only consider pilot entries after manual confirmation.';
+          raw='WAIT ? no deploy-qualified setups and no broker handoff. Monitor near-misses, queue alerts, and review watch candidates only when authority opens.';
+        }else{
+          raw=this.rankedOpps.bestAction?.stance_one_liner||'';
         }
-        return this.rankedOpps.bestAction?.stance_one_liner||'';
+        return this.safeRenderText(raw,{blocked:this.todayDeployBlocked()||this.pageAuthorityIsDegraded()});
       },
       playbookDecisionConfidenceDisplay(){
         const ba=this.rankedOpps.bestAction;
