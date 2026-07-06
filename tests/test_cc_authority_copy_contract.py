@@ -7,6 +7,18 @@ from src.services.operator_surface import build_operator_block
 from src.services.system_truth import resolve_system_truth
 
 
+def test_dashboard_primary_not_selective_when_blocked():
+    """Runtime UI contract: trust-strip primary must not show SELECTIVE when deploy blocked."""
+    from pathlib import Path
+
+    raw = Path(__file__).resolve().parents[1] / "src" / "api" / "templates" / "index.html"
+    html = raw.read_text(encoding="utf-8", errors="replace")
+    assert 'trust-strip-tier-primary' in html
+    primary = html.split('trust-strip-tier-primary', 1)[1].split("</div>", 1)[0]
+    assert "todayPrimaryStateLine()" in primary
+    assert 'x-text="today7.tradeability' not in primary
+
+
 def test_deploy_blocked_primary_is_monitor_only_not_selective():
     truth = resolve_system_truth(
         {

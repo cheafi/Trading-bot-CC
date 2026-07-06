@@ -526,8 +526,9 @@
         <span x-show="todayPaperDeployAvailable()&&!instantDegradedBannerVisible()" style="padding:2px 8px;border-radius:4px;font-weight:700;font-size:10px;letter-spacing:.5px;background:#0e2a1a;color:#6ee7b7;border:1px solid #059669">PAPER DEPLOY ? ????</span>
         <span x-show="pageAuthorityIsDegraded()&&!instantDegradedBannerVisible()&&!todayPaperDeployAvailable()" style="padding:2px 8px;border-radius:4px;font-weight:700;font-size:10px;letter-spacing:.5px;background:#422006;color:#fde68a;border:1px solid #b45309">MONITOR ONLY</span>
         <span style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700"
-          :style="({STRONG_TRADE:'background:#065f46;color:#6ee7b7',TRADE:'background:#065f46;color:#6ee7b7',SELECTIVE:'background:#713f12;color:#fde68a',WAIT:'background:#713f12;color:#fde68a',NO_TRADE:'background:#7f1d1d;color:#fca5a5'})[today7.tradeability]||'background:var(--s3);color:var(--t3)'"
-          x-text="today7.tradeability||'?'"></span>
+          :style="todayPrimaryStatePillStyle()"
+          x-text="todayPrimaryStateLine()"></span>
+        <span x-show="todayPrimaryRegimeSecondary()" class="pill text-[7px] pa" x-text="todayPrimaryRegimeSecondary()"></span>
         <span x-show="headerSummary().badge" class="pill text-[7px] font-bold" :class="severityBadgeClass(headerSummary().fetch_state)" x-text="sanitizeVisibleText(headerSummary().badge)"></span>
         <span x-show="cc_status.breaker" class="pill text-[7px] pr font-bold">EXEC BLOCKED</span>
       </div>
@@ -541,7 +542,7 @@
             :style="trust.freshness==='REAL_TIME'?'background:#22c55e':trust.freshness==='DELAYED'?'background:#f59e0b':'background:#ef4444'"></span>
           <span x-text="trust.freshness||'REAL_TIME'"></span>
         </span>
-        <span x-show="freshness&&freshness.worst_tier&&['STALE','CRITICAL'].includes(freshness.worst_tier)" class="pill pa text-[7px] font-bold" x-text="'DATA '+freshness.worst_tier"></span>
+        <span x-show="freshness&&freshness.worst_tier&&['STALE','CRITICAL'].includes(freshness.worst_tier)&&!today7.system_truth" class="pill pa text-[7px] font-bold" x-text="'DATA '+freshness.worst_tier"></span>
         <span x-text="trust.as_of?'? '+((Date.now()-new Date(trust.as_of).getTime())/1000|0)+'s ago':''" style="color:var(--t3)"></span>
         <span class="flex items-center gap-1" x-show="today7.regime">
           <span style="color:var(--t3)">Conf</span>
@@ -747,7 +748,7 @@
       <div class="cc-macro-strip">
         <div class="cc-macro-chip">
           <span class="lbl">Regime</span>
-          <span class="val" :style="'color:'+(today7.tradeability==='NO_TRADE'?'var(--red)':today7.tradeability==='WAIT'?'var(--amber)':'var(--green)')" x-text="today7.tradeability||'?'"></span>
+          <span class="val" :style="todayPrimaryStatePillStyle()" x-text="todayPrimaryStateLine()"></span>
         </div>
         <div class="cc-macro-chip">
           <span class="lbl">Trend</span>
@@ -1306,7 +1307,7 @@
               <div><span class="font-bold uppercase mr-1" style="color:var(--amber)">?? ? Why</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().why"></span></div>
               <div><span class="font-bold uppercase mr-1" style="color:var(--green)">?? ? Allowed</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().allowed"></span></div>
               <div x-show="dashboardOperatorBlock().blocked"><span class="font-bold uppercase mr-1" style="color:var(--red)">?? ? Blocked</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().blocked"></span></div>
-              <div><span class="font-bold uppercase mr-1" style="color:var(--purple)">VALID CANDIDATES</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().valid_candidates"></span><span x-show="today7.top_monitor?.label" class="text-[8px] ml-1" style="color:var(--t3)" x-text="'? '+today7.top_monitor.label"></span></div>
+              <div><span class="font-bold uppercase mr-1" style="color:var(--purple)">VALID CANDIDATES</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().valid_candidates"></span><span x-show="topMonitorLabelsLine()" class="text-[8px] ml-1" style="color:var(--t3)" x-text="'? '+topMonitorLabelsLine()"></span></div>
               <div><span class="font-bold uppercase mr-1" style="color:var(--blue)">??? ? Next</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().next"></span></div>
             </div>
             <div class="text-[8px] mt-2" style="color:var(--t3)" x-text="unifiedTruthStripLine()"></div>
@@ -1558,7 +1559,7 @@
       <!-- ?? Decision hierarchy L1?L5 (collapsible) ?? -->
       <template x-if="today7.decision_hierarchy && today7.decision_hierarchy.levels">
         <div style="padding:0 12px 6px">
-          <details class="card card-p" style="padding:8px 10px;border-left:3px solid var(--purple)">
+          <details class="card card-p" style="padding:8px 10px;border-left:3px solid var(--purple)" :open="!todayDeployBlocked()">
             <summary class="text-[9px] font-bold uppercase cursor-pointer" style="color:var(--purple)">
               Decision hierarchy ? L<span x-text="today7.decision_hierarchy.binding_level"></span> binding
             </summary>
@@ -1870,7 +1871,7 @@
           <div class="card card-p" style="border-left:4px solid var(--green)">
             <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
               <div class="text-[10px] font-bold uppercase" style="color:var(--green)">Best Action Now</div>
-              <span class="pill text-[8px]" :class="today7.tradeability==='NO_TRADE'?'pr':today7.tradeability==='WAIT'?'pa':'pg'" x-text="today7.tradeability||'?'"></span>
+              <span class="pill text-[8px]" :class="todayPrimaryStatePillClass()" x-text="todayPrimaryRegimeSecondary()||todayPrimaryStateLine()"></span>
             </div>
             <div class="text-[12px] font-bold text-white mb-2" x-text="today7.best_action.stance_one_liner"></div>
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[9px] mb-2">
@@ -2050,7 +2051,7 @@
       </details>
 
       <!-- ?? 3-Layer Decision Model (macro / opportunity / execution) ?? -->
-      <template x-if="today7.decision_model && !isWaitDay()">
+      <template x-if="today7.decision_model && !isWaitDay() && !todayDeployBlocked()">
         <div style="margin:4px 12px;padding:10px 12px;border-radius:10px;border:1px solid var(--bd);background:var(--s1)">
           <div class="text-[9px] font-bold uppercase mb-2" style="color:var(--green)">Decision model ? 3 layers</div>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[9px]">
@@ -2077,7 +2078,7 @@
               <span class="pill pb text-[7px]" x-text="'?? '+(today7.regime.trend||'?')"></span>
               <span class="pill mono text-[7px]" x-text="'VIX '+(today7.regime.vix||'?')"></span>
               <span class="pill mono text-[7px]" x-text="'Breadth '+(today7.regime.breadth!=null?today7.regime.breadth+'%':'?')"></span>
-              <span class="pill text-[7px]" :class="today7.tradeability==='NO_TRADE'?'pr':today7.tradeability==='WAIT'?'pa':'pg'" x-text="(today7.tradeability||'?').replace(/_/g,' ')"></span>
+              <span class="pill text-[7px]" :class="todayPrimaryStatePillClass()" x-text="(todayPrimaryRegimeSecondary()||todayPrimaryStateLine()).replace(/_/g,' ')"></span>
               <span x-show="today7.best_family" class="pill pw text-[7px]" x-text="'Lead: '+today7.best_family"></span>
             </div>
           </template>
@@ -2101,11 +2102,10 @@
       </template>
 
       <!-- ?? Regime Action Banner (compact when 3-layer model shown) ?? -->
-      <template x-if="today7.regime && !today7.decision_model && !isWaitDay()">
+      <template x-if="today7.regime && !today7.decision_model && !isWaitDay() && !todayDeployBlocked()">
         <div :style="'margin:4px 12px;padding:12px 14px;border-radius:10px;border:1px solid '+(today7.tradeability==='NO_TRADE'?'rgba(255,92,92,.3)':today7.tradeability==='WAIT'?'rgba(251,191,36,.25)':'rgba(0,212,170,.25)')+';background:linear-gradient(135deg,'+(today7.tradeability==='NO_TRADE'?'rgba(255,92,92,.06),rgba(255,92,92,.02)':today7.tradeability==='WAIT'?'rgba(251,191,36,.06),rgba(251,191,36,.02)':'rgba(0,212,170,.06),rgba(0,212,170,.02)')+')'">
           <div class="flex items-center gap-2 mb-1">
-            <span style="font-size:16px" x-text="today7.tradeability==='NO_TRADE'?'??':today7.tradeability==='WAIT'?'??':today7.tradeability==='STRONG_TRADE'?'??':'?'"></span>
-            <span class="text-[12px] font-bold" :style="'color:var(--'+(today7.tradeability==='NO_TRADE'?'red':today7.tradeability==='WAIT'?'amber':'green')+')'" x-text="today7.tradeability==='STRONG_TRADE'?'STRONG TRADE DAY':today7.tradeability==='TRADE'?'TRADE DAY':today7.tradeability==='SELECTIVE'?'SELECTIVE ONLY':today7.tradeability||'?'"></span>
+            <span class="text-[12px] font-bold" :style="todayPrimaryStatePillStyle()" x-text="todayPrimaryStateLine()"></span>
             <span class="pill mono text-[8px] ml-auto" :class="today7.regime.score>=60?'pg':today7.regime.score>=40?'pa':'pr'" x-text="'Score '+today7.regime.score"></span>
           </div>
           <div class="flex gap-2 mt-1 flex-wrap">
@@ -2221,8 +2221,9 @@
       </template>
 
       <!-- ?? Top Ranked Opportunities ?? -->
-      <div class="section-hdr" style="margin-top:6px">?? Top Opportunities</div>
-      <div x-show="topOpportunitiesEmptyCopy()" style="padding:0 12px 6px" class="text-[9px] font-bold" style="color:var(--amber)" x-text="topOpportunitiesEmptyCopy()"></div>
+      <details style="padding:0 12px" :open="!todayDeployBlocked()">
+        <summary class="section-hdr cursor-pointer" style="margin-top:6px;list-style:none">?? Top Opportunities</summary>
+      <div x-show="topOpportunitiesEmptyCopy()" style="padding:0 0 6px" class="text-[9px] font-bold" style="color:var(--amber)" x-text="topOpportunitiesEmptyCopy()"></div>
 
       <!-- ?? Quick Action Strip ? "What to buy NOW" ?? -->
       <template x-if="dashboardActionablePicks().length>0 && today7.todays_decision && today7.todays_decision.can_deploy_today">
@@ -2492,6 +2493,7 @@
           </template>
         </div>
       </template>
+      </details>
       <template x-if="dashboardHasNoBoardData()">
         <div style="padding:0 12px"><div class="card card-p" style="padding:20px;text-align:center">
           <div style="font-size:28px;margin-bottom:8px" x-text="dashboardEmptyState().kind==='WAIT_DAY_OK'?'??':'??'"></div>
@@ -3110,6 +3112,7 @@
                   </div>
                 </template>
                 <!-- Why now / Why not -->
+                <div class="text-[9px] mt-1" style="color:var(--t2);line-height:1.4" x-show="cardActionGuidanceLine(r)" x-text="cardActionGuidanceLine(r)"></div>
                 <template x-if="r.why_now&&(Array.isArray(r.why_now)?r.why_now.length:r.why_now)">
                   <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'? '+(Array.isArray(r.why_now)?r.why_now.join(' ? '):r.why_now)"></div>
                 </template>
@@ -3188,6 +3191,7 @@
                   <template x-if="r.stop_price"><span><span x-text="cardShowsDeployLevels(r)?'Stop':'Monitor zone'"></span> <strong :class="cardShowsDeployLevels(r)?'text-red-400':'text-amber-300'">$<span x-text="Number(r.stop_price).toFixed(2)"></span></strong></span></template>
                   <span>R:R <strong class="text-white" x-text="parseRR(r.risk_reward||0).toFixed(1)"></strong></span>
                 </div>
+                <div class="text-[9px] mt-1" style="color:var(--t2);line-height:1.4" x-show="cardActionGuidanceLine(r)" x-text="cardActionGuidanceLine(r)"></div>
                 <template x-if="r.why_now&&(Array.isArray(r.why_now)?r.why_now.length:r.why_now)">
                   <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'? '+(Array.isArray(r.why_now)?r.why_now.join(' ? '):r.why_now)"></div>
                 </template>
@@ -11140,9 +11144,17 @@
         if(!opp) return '';
         const banner=this.cardReferenceBanner(opp);
         if(banner) return banner;
-        const blocked=this.todayDeployBlocked();
+        const blocked=this.todayDeployBlocked()||this.pageAuthorityIsDegraded();
         if(blocked){
           const block=this.dashboardOperatorBlock();
+          if(typeof CCHelpers!=='undefined'&&CCHelpers.cardDisplayReason){
+            return CCHelpers.cardDisplayReason(opp,{
+              blocked:true,
+              deployAuthority:false,
+              blocker:block.blocked||'deploy authority blocked',
+              truth:this.today7.system_truth||{},
+            });
+          }
           if(typeof CCHelpers!=='undefined'&&CCHelpers.sanitizeBlockedCandidateCopy){
             return CCHelpers.sanitizeBlockedCandidateCopy(opp,{
               blocked:true,
@@ -11157,6 +11169,8 @@
             return CCHelpers.removeTradeLanguageWhenBlocked(raw,true);
           return raw;
         }
+        if(this.todayUsesBriefFallback()||this.cardIsFallbackRow(opp)||(this.today7.system_truth||{}).brief_expired)
+          return 'Reference plan only ? brief expired or fallback ? monitor only';
         return String(opp.action_reason||opp.action_rationale||'');
       },
       cardExecutionGrade(opp){
@@ -11404,6 +11418,53 @@
           || this.rankedOpps.bestAction?.tradeability
           || 'WAIT'
         ).toUpperCase();
+      },
+      todayPrimaryStateLine(){
+        const truth=this.today7.system_truth||{};
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.todayPrimaryStateLine)
+          return CCHelpers.todayPrimaryStateLine(truth);
+        if(this.pageAuthorityIsDegraded()) return 'MONITOR ONLY';
+        return this.canonicalTradeability();
+      },
+      todayPrimaryRegimeSecondary(){
+        const truth=this.today7.system_truth||{};
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.regimeSecondaryLine){
+          const sec=CCHelpers.regimeSecondaryLine(truth,this.canonicalTradeability());
+          if(sec&&sec!==this.todayPrimaryStateLine()) return sec;
+        }
+        const primary=this.todayPrimaryStateLine();
+        const tb=this.canonicalTradeability();
+        if(primary!=='MONITOR ONLY'&&primary!=='PAPER DEPLOY'&&primary!=='PILOT'&&tb&&tb!==primary) return tb;
+        if(primary==='MONITOR ONLY'&&tb&&tb!=='MONITOR ONLY') return tb;
+        return '';
+      },
+      todayPrimaryStatePillStyle(){
+        const primary=String(this.todayPrimaryStateLine()||'').toUpperCase();
+        const map={
+          'MONITOR ONLY':'background:#422006;color:#fde68a',
+          'PAPER DEPLOY':'background:#0e2a1a;color:#6ee7b7',
+          'PILOT':'background:#1e3a5f;color:#93c5fd',
+          STRONG_TRADE:'background:#065f46;color:#6ee7b7',
+          TRADE:'background:#065f46;color:#6ee7b7',
+          SELECTIVE:'background:#713f12;color:#fde68a',
+          WAIT:'background:#713f12;color:#fde68a',
+          NO_TRADE:'background:#7f1d1d;color:#fca5a5',
+        };
+        return map[primary]||map[this.canonicalTradeability()]||'background:var(--s3);color:var(--t3)';
+      },
+      todayPrimaryStatePillClass(){
+        const primary=String(this.todayPrimaryStateLine()||'').toUpperCase();
+        if(primary==='NO_TRADE') return 'pr';
+        if(primary==='MONITOR ONLY'||primary==='WAIT'||primary==='SELECTIVE') return 'pa';
+        if(primary==='PILOT') return 'pb';
+        return 'pg';
+      },
+      topMonitorLabelsLine(){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.topMonitorLabels){
+          const labels=CCHelpers.topMonitorLabels(this.today7);
+          if(labels.length) return labels.join(' ? ');
+        }
+        return this.today7.top_monitor?.label||'';
       },
       canonicalRegimeTrend(){
         const td=this.today7.todays_decision;
@@ -12041,7 +12102,7 @@
       playbookCardDisclaimer(){
         if(!this.playbookBoardWait()) return '';
         if(this.playbookUsesBriefFallback()&&this.playbookBrokerOffline()){
-          return 'Card action reflects research ranking, not live execution permission. Board gate remains WAIT ? brief fallback and broker offline.';
+          return 'Card action reflects research ranking, not live execution permission. Board gate remains WAIT ? brief expired/sample board and broker offline.';
         }
         return 'Research TRADE, not live TRADE. Board gate remains WAIT.';
       },

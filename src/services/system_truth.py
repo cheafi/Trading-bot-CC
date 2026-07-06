@@ -794,6 +794,12 @@ def resolve_system_truth(
 
     market_data_freshness = _market_freshness(t, header)
     brief_freshness = _brief_freshness(t, brief_age_days=brief_age_days)
+    brief_expired = brief_freshness == "expired"
+    brief_expired_copy = (
+        f"Brief expired {int(brief_age_days or (t.get('brief_status') or {}).get('age_days') or 0)}d — excluded from ranking and narrative."
+        if brief_expired
+        else ""
+    )
     ranked_board_freshness = _ranked_board_freshness(t)
     dossier_freshness = _dossier_freshness(header)
     portfolio_freshness = _portfolio_freshness(header)
@@ -888,6 +894,24 @@ def resolve_system_truth(
         today=t,
     )
     reason_copy = reason_codes_to_copy(reason_codes)
+    if brief_expired:
+        reason_copy = [
+            c
+            for c in reason_copy
+            if "fallback" not in str(c).lower() or "expired" in str(c).lower()
+        ]
+        if brief_expired_copy:
+            if "BRIEF_EXPIRED" in reason_codes:
+                reason_copy = [brief_expired_copy] + [
+                    c for c in reason_copy if "Brief expired" not in c
+                ]
+            elif not reason_copy:
+                reason_copy = [brief_expired_copy]
+    if engine_state == "on" and "ENGINE_OFF" in reason_codes and o.get("engine_running") is True:
+        engine_state = "unknown"
+        engine_display = format_engine_state_display(engine_state)
+        runtime_state = _runtime_state(t, o, engine_state)
+        runtime_freshness = _runtime_freshness_label(runtime_state, engine_state)
     primary_blocker = _primary_blocker(reason_codes, reason_copy)
     repair_priority = _repair_priority(reason_codes)
 
@@ -931,12 +955,6 @@ def resolve_system_truth(
         deploy_qualified=deploy_n,
         paper_qualified=paper_n,
         tier=deploy_tier,
-    )
-    brief_expired = brief_freshness == "expired"
-    brief_expired_copy = (
-        f"Brief expired {int(brief_age_days or (t.get('brief_status') or {}).get('age_days') or 0)}d — excluded from ranking and narrative."
-        if brief_expired
-        else ""
     )
 
     td = t.get("todays_decision") or {}

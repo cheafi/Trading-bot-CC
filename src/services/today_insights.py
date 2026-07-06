@@ -1335,6 +1335,13 @@ def build_todays_decision(
         execution_ready=exec_ready_count,
     )
 
+    auth = decision_authority or {}
+    deploy_authority_blocked = bool(
+        auth.get("gates_active")
+        or not auth.get("allows_trade_labels", True)
+        or auth.get("authority_level") not in (None, "deploy", "")
+    )
+
     can_deploy = posture in ("TRADE", "SCALE") and should_trade and has_trade
     deploy_label = {
         "AVOID": "Do not deploy",
@@ -1344,8 +1351,13 @@ def build_todays_decision(
         "TRADE": "Deploy selectively — A-grade at 1R",
         "SCALE": "Scale selectively — multiple execution-ready",
     }.get(posture, "Wait")
+    if deploy_authority_blocked:
+        deploy_label = "Monitor only — deploy blocked"
+        posture = "WATCH"
+        can_deploy = False
     if day_state == "PILOT_WATCH_DAY" and posture in ("WATCH", "PILOT", "WAIT"):
-        deploy_label = "Pilot / watch day — no full-size deploy"
+        if not deploy_authority_blocked:
+            deploy_label = "Pilot / watch day — no full-size deploy"
     elif day_state == "NO_TRADE_DAY":
         deploy_label = "No-trade day — patience is the decision"
     hero_label = {
@@ -1632,7 +1644,10 @@ def merge_brief_board_fallback(
             "action": "WATCH",
             "raw_action": row.get("action") or "WATCH",
             "action_reason": (
-                "Morning brief fallback — reference plan only · indicative levels · "
+                "Brief expired — reference plan only · indicative levels · "
+                "monitor zone · no deploy authority"
+                if brief_age_days is not None and brief_age_days > BRIEF_EXPIRE_DAYS
+                else "Morning brief sample — reference plan only · indicative levels · "
                 "monitor zone · no deploy authority"
             ),
             "why_now": [why] if isinstance(why, str) and why else (why or []),

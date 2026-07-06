@@ -263,6 +263,7 @@
 	function systemTruthMissionBlockers(truth) {
 		var t = truth || {}
 		var codes = t.reason_codes || []
+		var eng = resolveEngineState(t, {})
 		var labels = {
 			FALLBACK_BRIEF: "FALLBACK / BRIEF ONLY",
 			BRIEF_EXPIRED: "BRIEF EXPIRED — not used for ranking",
@@ -286,6 +287,8 @@
 		var out = []
 		for (var i = 0; i < codes.length && out.length < 6; i++) {
 			var code = String(codes[i] || "")
+			if (code === "ENGINE_OFF" && (eng === "on" || eng === "unknown")) continue
+			if (code === "FALLBACK_BRIEF" && String(t.brief_freshness || "").toLowerCase() === "expired") continue
 			var label = labels[code] || code.replace(/_/g, " ")
 			if (out.indexOf(label) < 0) out.push(label)
 		}
@@ -713,6 +716,7 @@
 			if (codes.length) why = codes.slice(0, 3).join(" + ")
 		}
 		var repair = (t.repair_priority || [])[0] || ""
+		var pilotOk = pilotSizingAllowed(t)
 		var next = repair
 			? "Repair: " + String(repair).replace(/_/g, " ")
 			: deploy
@@ -720,7 +724,9 @@
 				: tier === "paper_only"
 					? "review paper simulation drafts on Playbook — no live handoff"
 					: tier === "pilot_only"
-						? "review Pilot bucket on Playbook — half size when broker ready"
+						? pilotOk
+							? "review Pilot bucket on Playbook — half size when broker ready"
+							: "review Pilot bucket on Playbook — monitor only until broker ready"
 						: "monitor only — patience is the active decision"
 		var watchN = Number(t.watch_qualified_count || t.setup_qualified_count) || 0
 		var tradeN = Number(t.trade_qualified_count) || 0
@@ -772,7 +778,9 @@
 				tier === "paper_only"
 					? "paper simulation drafts — no live IBKR handoff"
 					: tier === "pilot_only"
-						? "pilot probe on B+ setups — half size when broker ready"
+						? pilotOk
+							? "pilot probe on B+ setups — half size when broker ready"
+							: "pilot review only — PILOT/WATCH labels are review-only"
 						: deploy
 							? "deploy selectively on qualified names"
 							: "monitor candidates, create watch rules",
@@ -812,7 +820,16 @@
 		}
 		if (!signals.length) return "unknown"
 		if (signals.indexOf("on") >= 0 && signals.indexOf("off") >= 0) return "unknown"
-		return signals[0]
+		var state = signals[0]
+		var codes = (truth && truth.reason_codes) || []
+		if (state === "on" && codes.indexOf("ENGINE_OFF") >= 0 && (o.running === true || o.engineRunning === true)) {
+			return "unknown"
+		}
+		var er = (truth && truth.execution_readiness) || {}
+		if (state === "on" && er.engine_running === false && (o.running === true || o.engineRunning === true)) {
+			return "unknown"
+		}
+		return state
 	}
 
 	function engineStateHeaderLabel(opts) {
@@ -855,6 +872,67 @@
 			secondary: regime !== "NO_TRADE" && regime !== "WAIT" ? regime : "",
 			now: t.operator_tier_now || "MONITOR ONLY · Deploy blocked",
 		}
+	}
+
+	function todayPrimaryStateLine(truth) {
+		var posture = primaryOperatorState(truth || {})
+		return posture.primary || "MONITOR ONLY"
+	}
+
+	function primaryOperatorStateLine(truth) {
+		return todayPrimaryStateLine(truth)
+	}
+
+	function regimeSecondaryLine(truth, fallbackTb) {
+		var posture = primaryOperatorState(truth || {})
+		if (posture.secondary) return posture.secondary
+		return String(fallbackTb || (truth && truth.regime_state) || "WAIT").toUpperCase()
+	}
+
+	function topMonitorLabels(today7) {
+		var t = today7 || {}
+		if (Array.isArray(t.top_monitor_labels) && t.top_monitor_labels.length) {
+			return t.top_monitor_labels
+		}
+		if (t.top_monitor && t.top_monitor.label) return [t.top_monitor.label]
+		return []
+	}
+
+	function cardDisplayReason(row, opts) {
+		var o = opts || {}
+		var truth = o.truth || {}
+		var blocked =
+			o.blocked === true ||
+			o.deployAuthority === false ||
+			(truth && truth.deploy_authority === false)
+		var briefExpired =
+			truth.brief_expired === true ||
+			String(truth.brief_freshness || "").toLowerCase() === "expired" ||
+			(truth.brief_age_days != null && Number(truth.brief_age_days) > 2)
+		if (blocked) return sanitizeBlockedCandidateCopy(row, o)
+		var raw = String(
+			row.display_copy ||
+				row.summary ||
+				row.action_reason ||
+				row.why_now ||
+				row.action_rationale ||
+				"",
+		)
+		if (briefExpired || o.briefFallback) {
+			raw = raw.replace(/brief[\s-]?fallback/gi, "brief expired — excluded from ranking")
+			if (!raw) raw = "Reference plan only — brief expired — monitor only"
+		}
+		return raw
+	}
+
+	function briefFreshnessStripState(truth) {
+		var t = truth || {}
+		var brief = String(t.brief_freshness || "").toLowerCase()
+		var age = t.brief_age_days
+		if (brief === "expired" || (age != null && Number(age) > 2)) {
+			return age != null ? "expired" : "expired"
+		}
+		return t.brief_freshness
 	}
 
 	function bilingualLine(zh, en) {
@@ -1271,9 +1349,13 @@
 		if (t.typed_freshness_display) return String(t.typed_freshness_display)
 		if (t.truth_strip) return String(t.truth_strip)
 		var age = t.brief_age_days
+		var briefState = briefFreshnessStripState(t)
 		function label(scope, state) {
 			var s = String(state || "unknown").toLowerCase()
 			if (scope === "Brief" && s === "expired" && age != null) return "Expired " + age + "d"
+			if (scope === "Brief" && (s === "expired" || (age != null && Number(age) > 2))) {
+				return age != null ? "Expired " + age + "d" : "Expired"
+			}
 			if (scope === "Broker" && (s === "unavailable" || s === "offline")) return "Offline"
 			if (s === "fresh") return "Fresh"
 			if (s === "stale") return "Stale"
@@ -1285,7 +1367,7 @@
 		var parts = []
 		parts.push("Market: " + label("Market", t.market_data_freshness))
 		parts.push("Board: " + label("Board", t.ranked_board_freshness))
-		parts.push("Brief: " + label("Brief", t.brief_freshness))
+		parts.push("Brief: " + label("Brief", briefState))
 		parts.push("Broker: " + label("Broker", t.broker_freshness))
 		parts.push("Runtime: " + runtimeFreshnessLabel(t))
 		parts.push("Authority: " + (t.deploy_authority ? "Open" : "Blocked"))
@@ -1469,7 +1551,15 @@
 		if (o.deployQualified === 0 && o.deployQualified != null) {
 			parts.push("0 筆通過部署門檻 · 0 deploy-qualified")
 		}
-		if (o.briefFallback) parts.push("簡報備援看板 · brief fallback")
+		if (o.briefExpired || (o.briefAgeDays != null && Number(o.briefAgeDays) > 2)) {
+			parts.push(
+				"晨報已失效 " +
+					(o.briefAgeDays != null ? o.briefAgeDays + "d" : "") +
+					" · Brief expired — excluded from ranking",
+			)
+		} else if (o.briefFallback) {
+			parts.push("簡報備援樣本 · brief sample only")
+		}
 		if (o.execBlocked) parts.push("執行已阻斷 · exec blocked")
 		if (o.gatedRegime && o.regimeState && o.regimeState !== o.effectiveState) {
 			parts.push(
@@ -1558,7 +1648,7 @@
 	function discoveryVerdictConfirmedLabel(opts) {
 		var o = opts || {}
 		if (o.fallback) return "備援監察樣本 · fallback monitor sample"
-		if (o.briefFallback) return "簡報備援樣本 · brief fallback sample"
+		if (o.briefFallback) return "簡報備援樣本 · brief sample only"
 		return "多掃描器重合 · multi-scanner overlap"
 	}
 
@@ -3367,6 +3457,12 @@
 		resolveEngineState: resolveEngineState,
 		engineStateHeaderLabel: engineStateHeaderLabel,
 		primaryOperatorState: primaryOperatorState,
+		todayPrimaryStateLine: todayPrimaryStateLine,
+		primaryOperatorStateLine: primaryOperatorStateLine,
+		regimeSecondaryLine: regimeSecondaryLine,
+		topMonitorLabels: topMonitorLabels,
+		cardDisplayReason: cardDisplayReason,
+		briefFreshnessStripState: briefFreshnessStripState,
 		pilotSizingAllowed: pilotSizingAllowed,
 		replayModeActive: replayModeActive,
 		replayDeployBlocked: replayDeployBlocked,

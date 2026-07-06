@@ -44,6 +44,30 @@ _CAPITAL_STANCE_LABELS = {
 }
 
 
+def _sanitize_copy(
+    text: str,
+    *,
+    deploy_blocked: bool = False,
+    brief_expired: bool = False,
+    stale: bool = False,
+    source: str = "",
+) -> str:
+    try:
+        from src.services.copy_safety import sanitize_for_render
+
+        return sanitize_for_render(
+            text,
+            {
+                "deploy_blocked": deploy_blocked,
+                "blocked": deploy_blocked,
+                "brief_expired": brief_expired or stale,
+                "brief_freshness": "expired" if brief_expired else ("fallback" if "fallback" in (source or "") else "fresh"),
+            },
+        )
+    except Exception:
+        return text
+
+
 def _decision_confidence_label(quality: str, detail: str) -> str:
     q = (quality or "low").lower()
     tier = {"high": "High", "medium": "Medium", "low": "Low"}.get(q, "Low")
@@ -59,13 +83,13 @@ def _evidence_quality(
     if stale or "fallback" in (source or ""):
         return (
             "low",
-            "Fallback / stale-context board — rankings lack normal deploy authority",
+            "Stale board context — rankings lack deploy authority",
         )
     if not opportunities:
         return "low", "No deploy-qualified setups in pipeline"
     badges = [str(o.get("evidence_badge") or "") for o in opportunities[:5]]
     if any("stale" in b for b in badges):
-        return "low", "Stale brief fallback"
+        return "low", "Stale brief context — not used for deploy decisions"
     avg_data = sum(float(o.get("data_conf") or 0.5) for o in opportunities[:5]) / min(
         5, len(opportunities)
     )
@@ -108,8 +132,14 @@ def _capital_stance(
     *,
     execution_ready_count: int,
     pilot_count: int,
+    deploy_blocked: bool = False,
 ) -> tuple[str, str]:
     tradeability = (tradeability or "WAIT").upper()
+    if deploy_blocked:
+        return (
+            "hold_cash",
+            "Monitor only — deploy blocked; PILOT/WATCH labels are review-only.",
+        )
     if not should_trade or tradeability == "NO_TRADE":
         return "hold_cash", "Regime gate closed — protect capital, no new risk."
     if execution_ready_count >= 1 and tradeability in ("STRONG_TRADE", "TRADE"):
@@ -145,6 +175,8 @@ def build_best_action(
     source: str = "",
     stale: bool = False,
     as_of: Optional[str] = None,
+    deploy_blocked: bool = False,
+    brief_expired: bool = False,
 ) -> Dict[str, Any]:
     """Derive sticky Best Action Now payload from ranked opportunities."""
     tradeability = (tradeability or "WAIT").upper()
@@ -216,6 +248,7 @@ def build_best_action(
         should_trade,
         execution_ready_count=execution_ready_count,
         pilot_count=pilot_count,
+        deploy_blocked=deploy_blocked or stale or "fallback" in (source or "").lower(),
     )
 
     eq, eq_label = _evidence_quality(opportunities, source=source, stale=stale)
@@ -252,7 +285,13 @@ def build_best_action(
         "risk_posture": _CAPITAL_STANCE_LABELS.get(
             capital_stance, capital_stance.replace("_", " ").title()
         ),
-        "stance_one_liner": stance_liner,
+        "stance_one_liner": _sanitize_copy(
+            stance_liner,
+            deploy_blocked=deploy_blocked,
+            brief_expired=brief_expired,
+            stale=stale,
+            source=source,
+        ),
         "best_trade_now": best_trade,
         "best_pilot_now": best_pilot,
         "best_watch_upgrade": best_watch,
@@ -261,9 +300,24 @@ def build_best_action(
         "execution_ready_count": execution_ready_count,
         "pilot_count": pilot_count,
         "evidence_quality": eq,
-        "evidence_label": eq_label,
+        "evidence_label": _sanitize_copy(
+            eq_label,
+            deploy_blocked=deploy_blocked,
+            brief_expired=brief_expired,
+            stale=stale,
+            source=source,
+        ),
         "decision_confidence": eq,
-        "decision_confidence_label": _decision_confidence_label(eq, eq_label),
+        "decision_confidence_label": _decision_confidence_label(
+            eq,
+            _sanitize_copy(
+                eq_label,
+                deploy_blocked=deploy_blocked,
+                brief_expired=brief_expired,
+                stale=stale,
+                source=source,
+            ),
+        ),
         "execution_readiness": exec_ready,
         "regime_label": regime_label,
         "tradeability": tradeability,
@@ -394,6 +448,8 @@ def enrich_ranked_payload(
         ibkr_mode=ibkr_mode,
         source=source,
         stale=stale,
+        deploy_blocked=not ibkr_on or stale or fallback_brief,
+        brief_expired=bool(payload.get("brief_expired")),
     )
     _near_miss_missing = (
         "stronger timing, confirmed volume follow-through, "

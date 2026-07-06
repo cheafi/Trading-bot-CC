@@ -68,6 +68,25 @@ class ExplanationEngine:
             signal, sector, fit, confidence
         )
         ex.better_alternative = self._suggest_alternative(signal, sector, decision)
+        return self._sanitize_explanation(ex, signal)
+
+    def _sanitize_explanation(self, ex: Explanation, sig: Dict) -> Explanation:
+        try:
+            from src.services.copy_safety import sanitize_for_render
+
+            ctx = sig.get("_copy_context") or {}
+            ex.why_now = sanitize_for_render(ex.why_now, ctx)
+            ex.why_not_stronger = sanitize_for_render(ex.why_not_stronger, ctx)
+            ex.invalidation = sanitize_for_render(ex.invalidation, ctx)
+            ex.better_alternative = sanitize_for_render(ex.better_alternative, ctx)
+            ex.key_evidence = [
+                sanitize_for_render(e, ctx) for e in ex.key_evidence if e
+            ]
+            ex.key_contradiction = [
+                sanitize_for_render(c, ctx) for c in ex.key_contradiction if c
+            ]
+        except Exception:
+            pass
         return ex
 
     def _build_why_now(

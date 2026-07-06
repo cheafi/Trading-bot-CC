@@ -19,6 +19,17 @@ def test_system_truth_engine_unknown_on_conflict():
     assert truth["engine_state_display"] == "Unknown"
 
 
+def test_resolve_engine_state_unknown_when_ops_on_and_reason_engine_off():
+    state = resolve_engine_state(
+        {
+            "execution_readiness": {"engine_running": True},
+            "reason_codes": ["ENGINE_OFF"],
+        },
+        {"engine_running": True},
+    )
+    assert state == "unknown"
+
+
 def test_resolve_engine_state_no_dual_on_off_labels():
     labels = set()
     for er, ops in (

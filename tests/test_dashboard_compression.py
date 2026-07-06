@@ -27,7 +27,7 @@ def test_evidence_conflict_open_with_candidate():
 
 
 def test_dashboard_has_single_operator_block_summary():
-    raw = INDEX.read_text(encoding="utf-8")
+    raw = INDEX.read_text(encoding="utf-8", errors="replace")
     assert raw.count('data-cc="operator-block-dashboard"') == 1
     assert "VALID CANDIDATES" in raw
     assert raw.count("Why not deploy?") >= 1

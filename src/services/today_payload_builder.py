@@ -1410,6 +1410,17 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
     from src.services.position_sizing import attach_sizing_to_rows
 
     valid_top5 = attach_sizing_to_rows(valid_top5, system_truth)
+    from src.services.copy_safety import sanitize_rows
+
+    copy_ctx = {
+        "system_truth": system_truth,
+        "deploy_blocked": deploy_blocked,
+        "blocked": deploy_blocked,
+        "brief_expired": brief_expired,
+        "brief_freshness": system_truth.get("brief_freshness"),
+        "brief_age_days": system_truth.get("brief_age_days"),
+    }
+    valid_top5 = sanitize_rows(valid_top5, context=copy_ctx)
 
     todays_decision = {
         **todays_decision,

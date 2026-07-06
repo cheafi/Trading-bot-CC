@@ -31,7 +31,14 @@ def resolve_engine_state(
         return "unknown"
     if "on" in signals and "off" in signals:
         return "unknown"
-    return signals[0]
+    state = signals[0]
+    codes = t.get("reason_codes") or []
+    if state == "on" and "ENGINE_OFF" in codes and o.get("engine_running") is True:
+        return "unknown"
+    er = t.get("execution_readiness") or {}
+    if state == "on" and er.get("engine_running") is False and o.get("engine_running") is True:
+        return "unknown"
+    return state
 
 
 def deploy_authority_tier(truth: Optional[Dict[str, Any]] = None) -> str:
@@ -167,8 +174,10 @@ def next_action(truth: Dict[str, Any]) -> str:
     if tier == "paper_only":
         return "review paper simulation drafts on Playbook — no live handoff"
     if tier == "pilot_only":
-        if "BROKER_OFFLINE" in repair:
-            return "repair IBKR for pilot sizing — half size when ready"
+        if not pilot_sizing_allowed(truth):
+            if "BROKER_OFFLINE" in repair:
+                return "repair IBKR before pilot review — no sizing while blocked"
+            return "review Pilot bucket on Playbook — monitor only until broker ready"
         return "review Pilot bucket on Playbook — half size when broker ready"
     if "BROKER_OFFLINE" in repair:
         return "repair IBKR / open Repair Console"
@@ -229,5 +238,7 @@ def allowed_line(truth: Dict[str, Any]) -> str:
     if tier == "paper_only":
         return "paper simulation drafts — no live IBKR handoff"
     if tier == "pilot_only":
-        return "pilot probe on B+ setups — half size when broker ready"
+        if pilot_sizing_allowed(truth):
+            return "pilot probe on B+ setups — half size when broker ready"
+        return "pilot review only — PILOT/WATCH labels are review-only"
     return "monitor candidates, create watch rules"

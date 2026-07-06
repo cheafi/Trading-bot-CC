@@ -52,7 +52,7 @@ def test_build_unified_truth_strip_format():
 
 
 def test_index_header_uses_scoped_strip_not_data_fresh_pill():
-    raw = INDEX.read_text(encoding="utf-8")
+    raw = INDEX.read_text(encoding="utf-8", errors="replace")
     header = raw.split("</header>", 1)[0]
     assert "DATA FRESH" not in header
     assert "DATA STALE" not in header
