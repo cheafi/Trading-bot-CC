@@ -196,3 +196,18 @@ def test_format_qualification_never_gate_open():
         board_gate="wait",
     )
     assert "gate open" not in line.lower()
+
+
+def test_index_playbook_no_brief_fallback_when_expired():
+    """Template + JS must not surface 'brief fallback' on Playbook when brief expired."""
+    from pathlib import Path
+
+    blob = Path(__file__).resolve().parents[1].joinpath(
+        "src/api/templates/index.html"
+    ).read_text(encoding="utf-8", errors="replace")
+    start = blob.index('data-cc="playbook-surface"')
+    end = blob.index('x-show="tab===\'dossier\'"', start)
+    playbook = blob[start:end]
+    assert "playbookBriefExpired" in blob
+    assert "Brief fallback" not in playbook
+    assert "brief fallback" not in playbook.lower()

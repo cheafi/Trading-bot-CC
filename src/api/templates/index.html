@@ -2668,7 +2668,7 @@
         <span x-show="rankedOpps.refreshing" class="text-amber-300 text-[9px]">? refreshing</span>
         <span x-show="playbookSnapshotLabel()" class="text-[9px]" style="color:var(--t3)" x-text="playbookSnapshotLabel()"></span>
         <span x-show="rankedOpps.source==='scanner'" class="text-amber-400">? via Live Scanner</span>
-        <span x-show="playbookUsesBriefFallback()" class="text-amber-400">?? Brief fallback ? confidence is estimated, not calibrated</span>
+        <span x-show="playbookBriefExpired()" class="text-amber-400" x-text="playbookBriefExpiredLine()"></span>
         <span x-show="playbookBoardWait()&&playbookNearMissUpgradeLine()" class="text-[9px] text-green-400" x-text="playbookNearMissUpgradeLine()"></span>
         <span x-show="playbookBoardWait()&&todayBoardHeroSynthesisLine()&&!playbookNoEdgeMode()" class="text-[8px] text-amber-300" x-text="todayBoardHeroSynthesisLine()"></span>
         <span x-text="'As-of: '+(sig.as_of?sig.as_of.slice(0,19):'?')"></span>
@@ -2680,7 +2680,7 @@
           <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Truth</div><div x-text="playbookOperatorView().truth_strip"></div></div>
           <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Qualification</div><div x-text="playbookQualificationDisplay()"></div></div>
           <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Best action</div><div class="font-semibold text-white" x-text="playbookOperatorView().best_action||playbookBestActionDisplay()"></div></div>
-          <div class="sm:col-span-2"><div class="font-bold uppercase mb-1" style="color:var(--t3)">Next</div><div x-text="(playbookOperatorView().next||[]).join(' ? ')"></div></div>
+          <div class="sm:col-span-2"><div class="font-bold uppercase mb-1" style="color:var(--t3)">Next</div><div x-text="(playbookOperatorView().next||[]).join(' · ')"></div></div>
         </div>
         <div x-show="playbookNoValidMonitors()" class="mt-2 p-1.5 rounded text-[9px] font-bold" style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:var(--amber)">NO VALID MONITOR CANDIDATES</div>
       </div>
@@ -3395,12 +3395,12 @@
             <!-- Recovery-first operator blocks -->
             <div x-show="dossierRecoveryMode()" data-cc="dossier-confirm-only-blocks" class="card card-p mb-2" style="border-left:4px solid var(--amber)">
               <div class="grid sm:grid-cols-2 gap-2 text-[9px] mb-2">
-                <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">?? ? Now</div><div style="color:var(--t2)" x-text="dossierOperatorBlock().now"></div></div>
-                <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">?? ? Why</div><div style="color:var(--t2)" x-text="dossierOperatorBlock().why"></div></div>
-                <div><div class="font-bold uppercase mb-1" style="color:var(--green)">?? ? Allowed</div><div style="color:var(--t2)" x-text="(dossierOperatorBlock().allowed||[]).join(' ? ')"></div></div>
-                <div><div class="font-bold uppercase mb-1" style="color:var(--red)">?? ? Blocked</div><div style="color:var(--t2)" x-text="(dossierOperatorBlock().blocked||[]).join(' ? ')"></div></div>
+                <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">現在 · Now</div><div style="color:var(--t2)" x-text="dossierOperatorBlock().now"></div></div>
+                <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">原因 · Why</div><div style="color:var(--t2)" x-text="dossierOperatorBlock().why"></div></div>
+                <div><div class="font-bold uppercase mb-1" style="color:var(--green)">允許 · Allowed</div><div style="color:var(--t2)" x-text="(dossierOperatorBlock().allowed||[]).join(' · ')"></div></div>
+                <div><div class="font-bold uppercase mb-1" style="color:var(--red)">禁止 · Blocked</div><div style="color:var(--t2)" x-text="(dossierOperatorBlock().blocked||[]).join(' · ')"></div></div>
               </div>
-              <div class="text-[9px] mb-2"><div class="font-bold uppercase mb-1" style="color:var(--amber)">???? ? Missing</div><div style="color:var(--t2)" x-text="(dossierOperatorBlock().missing_data||[]).join(', ')||dossierMissingDataLine()"></div></div>
+              <div class="text-[9px] mb-2"><div class="font-bold uppercase mb-1" style="color:var(--amber)">缺少內容 · Missing</div><div style="color:var(--t2)" x-text="(dossierOperatorBlock().missing_data||[]).join(', ')||dossierMissingDataLine()"></div></div>
               <div class="text-[9px] p-2 rounded mb-2" style="background:var(--s2)" x-show="dossierEvidenceStatusVisible()">
                 <div class="font-bold uppercase mb-1" style="color:var(--t3)">Evidence status</div>
                 <div class="flex flex-wrap gap-2 text-[8px]">
@@ -3410,7 +3410,7 @@
                 </div>
                 <div class="text-[8px] mt-1" style="color:var(--t3)" x-text="dossierEvidenceStatusPanel().reason"></div>
               </div>
-              <div class="text-[9px] mt-2 pt-2" style="border-top:1px dashed var(--bd);color:var(--t3)"><span class="font-bold uppercase" style="color:var(--blue)">??? ? Next</span> ? <span x-text="dossierOperatorBlock().next"></span></div>
+              <div class="text-[9px] mt-2 pt-2" style="border-top:1px dashed var(--bd);color:var(--t3)"><span class="font-bold uppercase" style="color:var(--blue)">下一步 · Next</span> · <span x-text="dossierOperatorBlock().next"></span></div>
             </div>
             <!-- PM 30-second answer (above fold) -->
             <template x-if="dos.intel&&dos.intel.pm_answer&&dos.intel.pm_answer.thirty_second">
@@ -4574,7 +4574,7 @@
                 <span class="guide-badge pg" style="font-size:8px">Core</span>
               </div>
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
-                Per-ticker decision card — structure confirmation before entry. When deploy authority is blocked: <strong style="color:var(--amber)">Structure Review Only</strong> — no trade plan, no sizing, no handoff. Check in order:<br>
+                Per-ticker structure review surface — confirm levels before any deploy path. When deploy authority is blocked: <strong style="color:var(--amber)">Structure Review Only</strong> — no trade plan, no sizing, no handoff. Check in order:<br>
                 <div style="margin:8px 0;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:11px">
                   <span style="color:var(--green);font-weight:700">Entry Zone</span><span style="color:var(--t2)">Expected clean entry range. Wider zone often means BUY_ON_DIP or reduced size — PILOT half-size only when Authority: Open.</span>
                   <span style="color:var(--red);font-weight:700">Hard Stop</span><span style="color:var(--t2)">Structural exit level. Confirm-only dossier shows <em>No sizing guidance in confirm-only mode</em> — no IBKR handoff until live fetch succeeds.</span>
@@ -4864,7 +4864,7 @@
           <template x-for="tab_def in [
             {icon:'📖',id:'guide',label:'Guide',badge:'HERE',bclass:'pa',mode:'Diagnostic',desc:'This page — first in nav'},
             {icon:'🎯',id:'today',label:'Dashboard',badge:'START',bclass:'pg',mode:'Core',desc:'Regime · VIX · tradeability · narrative (legacy: Overview)'},
-            {icon:'📋',id:'signals',label:'Playbook',badge:'TRADE LIST',bclass:'pg',mode:'Core',desc:'Candidate board · Deploy/Pilot/Watch — not a trade ticket (legacy: Ranked)'},
+            {icon:'📋',id:'signals',label:'Playbook',badge:'BOARD',bclass:'pg',mode:'Core',desc:'Candidate buckets · Deploy/Pilot/Watch — review path, not a trade ticket (legacy: Ranked)'},
             {icon:'🔍',id:'dossier',label:'Search / Dossier',badge:'CONFIRM',bclass:'pb',mode:'Core',desc:'Structure confirmation · Structure Review Only when blocked'},
             {icon:'💼',id:'portfolio',label:'Portfolio & Risk',badge:'CAPACITY',bclass:'pb',mode:'Core',desc:'Positions · heat · correlation · REBALANCE'},
             {icon:'🔬',id:'scanners',label:'Discovery',badge:'SCAN',bclass:'pp',mode:'Research-only',desc:'Scanner hub (legacy: Scanners)'},
@@ -6015,7 +6015,7 @@
         <!-- A ? CORE INDEX POSTURE (primary ? advisory) -->
         <template x-if="fundMonitor.console?.index_fund_posture">
           <div class="card card-p" style="border:2px solid var(--blue);background:linear-gradient(135deg,rgba(59,130,246,.06),transparent)">
-            <div class="text-[9px] font-bold uppercase mb-2" style="color:var(--blue)">A ? Core index posture</div>
+            <div class="text-[9px] font-bold uppercase mb-2" style="color:var(--blue)">A · Core index posture</div>
             <div class="flex flex-wrap gap-2 items-center mb-2 text-[8px]">
               <span class="pill text-[7px] pg" x-text="fundMonitor.console.index_fund_posture.valuation_zone||'?'"></span>
               <span class="pill text-[7px] pw" x-text="fundMonitor.console.index_fund_posture.action_label||'hold'"></span>
@@ -6159,7 +6159,7 @@
         <!-- B ? SLEEVE RESEARCH (collapsed by default) -->
         <div class="pt-2 mt-2" style="border-top:2px dashed var(--bd)">
           <button type="button" @click="fundMonitor.sleeveResearchOpen=!fundMonitor.sleeveResearchOpen" class="w-full text-left flex justify-between items-center gap-2 mb-1">
-            <span class="text-[9px] font-bold uppercase" style="color:var(--t3)">B ? Sleeve research (secondary)</span>
+            <span class="text-[9px] font-bold uppercase" style="color:var(--t3)">B · Sleeve research (secondary)</span>
             <span class="text-[8px]" style="color:var(--t3)" x-text="fundMonitor.sleeveResearchOpen?'? collapse':'? expand'"></span>
           </button>
           <div class="text-[8px] mb-2 p-2 rounded" style="background:rgba(0,0,0,.2);color:var(--t3)">
@@ -10884,45 +10884,45 @@
         const block=this.dos?.intel?.dossier_mode;
         if(block?.confirm_only_strip) return block.confirm_only_strip;
         if(window.CCHelpers&&CCHelpers.dossierConfirmOnlyStrip) return CCHelpers.dossierConfirmOnlyStrip();
-        return 'Confirm-only ? ?????????????????? ? no sizing ? no handoff';
+        return 'Confirm-only · 僅結構確認：無入場價、無止損、無倉位 · no sizing · no handoff';
       },
       dossierStructureSnapshotTitle(){
         const block=this.dos?.intel?.dossier_mode;
         if(block?.structure_snapshot_title) return block.structure_snapshot_title;
         if(window.CCHelpers&&CCHelpers.dossierStructureSnapshotTitle) return CCHelpers.dossierStructureSnapshotTitle();
-        return 'Structure snapshot ? ????';
+        return 'Structure snapshot · 結構快照';
       },
       dossierStructureLevelLabel(field){
         if(window.CCHelpers&&CCHelpers.dossierStructureLevelLabel) return CCHelpers.dossierStructureLevelLabel(field,this.dossierModeKey());
         if(!this.dossierStructureReviewOnly()) return field==='entry'?'Entry zone':field==='stop'?'Stop':field==='target'?'T1 / T2':'R:R';
-        if(field==='entry') return 'Reference level ? ????';
-        if(field==='stop') return 'Risk reference ? ????';
-        if(field==='target') return 'Upside references ? ????';
+        if(field==='entry') return 'Reference level · 參考價位';
+        if(field==='stop') return 'Risk reference · 風險參考';
+        if(field==='target') return 'Upside references · 上行參考';
         return field;
       },
       dossierPaperDraftDisabledCopy(){
         const block=this.dos?.intel?.dossier_mode;
         if(block?.paper_draft_disabled_copy) return block.paper_draft_disabled_copy;
         if(window.CCHelpers&&CCHelpers.dossierPaperDraftDisabledCopy) return CCHelpers.dossierPaperDraftDisabledCopy();
-        return 'Paper draft disabled ? ??????? ? ? live Dossier + Playbook ???????';
+        return 'Paper draft disabled · 紙上模擬已關閉 — 需 live Dossier + Playbook 確認後才可模擬';
       },
       dossierMonitorRuleLabel(){
         const block=this.dos?.intel?.dossier_mode;
         if(block?.monitor_rule_button) return block.monitor_rule_button;
         if(window.CCHelpers&&CCHelpers.dossierMonitorRuleButton) return CCHelpers.dossierMonitorRuleButton();
-        return 'Create monitor rule ? ??????';
+        return 'Create monitor rule · 建立監察規則';
       },
       dossierMonitorRuleHint(){
         const block=this.dos?.intel?.dossier_mode;
         if(block?.monitor_rule_hint) return block.monitor_rule_hint;
         if(window.CCHelpers&&CCHelpers.dossierMonitorRuleHint) return CCHelpers.dossierMonitorRuleHint();
-        return 'Alert only ? ??? ? ????????? ? no sizing ? no handoff';
+        return 'Alert only · 僅提醒 — 不定倉、不交接券商 · no sizing · no handoff';
       },
       dossierLaggedContextNote(){
         const block=this.dos?.intel?.dossier_mode;
         if(block?.lagged_context_note) return block.lagged_context_note;
         if(window.CCHelpers&&CCHelpers.dossierLaggedContextNote) return CCHelpers.dossierLaggedContextNote();
-        return 'Lagged / illustrative context ? ???????????? ? not used for confirmation';
+        return 'Lagged / illustrative context · 滯後參考，不用於結構確認 · not used for confirmation';
       },
       dossierMissingDataLine(){
         const block=this.dos?.intel?.dossier_mode;
@@ -11879,6 +11879,18 @@
         const warn=String(this.rankedOpps.warning||'').toLowerCase();
         return warn.includes('fallback')||warn.includes('brief')||warn.includes('compressed');
       },
+      playbookBriefExpired(){
+        const t=this.today7?.system_truth||{};
+        const age=t.brief_age_days;
+        if(age!=null&&Number(age)>2) return true;
+        return String(t.brief_freshness||'').toLowerCase()==='expired'||!!t.brief_expired;
+      },
+      playbookBriefExpiredLine(){
+        const t=this.today7?.system_truth||{};
+        const age=Number(t.brief_age_days||0);
+        if(age>0) return 'Brief expired '+age+'d';
+        return 'Brief expired';
+      },
       playbookIsCompressedFallback(){
         return String(this.rankedOpps.board_mode||'').toLowerCase()==='compressed_fallback';
       },
@@ -11889,7 +11901,7 @@
         if(this.rankedOpps.board_mode_label) return this.rankedOpps.board_mode_label;
         const m=String(this.rankedOpps.board_mode||'').toLowerCase();
         if(m==='emergency') return 'Board unavailable';
-        if(m==='compressed_fallback'||this.playbookUsesBriefFallback()) return 'Fallback board';
+        if(this.playbookBriefExpired()) return this.playbookBriefExpiredLine(); if(m==='compressed_fallback'||this.playbookUsesBriefFallback()) return 'Brief sample board';
         if(this.rankedOpps.cached||this.rankedOpps.stale||this.playbookSnapshotLabel()) return 'Snapshot board';
         if(m==='full_live') return 'Live board';
         if(this.playbookBoardWait()||this.playbookDeployableCount()<1) return 'Degraded board view';
@@ -11950,7 +11962,7 @@
         const parts=['Rankings show attention priority, not deploy permission.'];
         if(this.playbookBrokerOffline()) parts.push('IBKR offline ? no handoff.');
         else if(this.playbookDeployableCount()<1) parts.push('0 deploy-qualified.');
-        if(this.playbookUsesBriefFallback()) parts.push('Brief fallback board ? uncalibrated ranks.');
+        if(this.playbookBriefExpired()) parts.push(this.playbookBriefExpiredLine()+' — excluded from ranking.');
         return parts.join(' ');
       },
       playbookRankingsDisclaimer(){
@@ -11978,7 +11990,7 @@
       playbookDecisionConfidenceDisplay(){
         const ba=this.rankedOpps.bestAction;
         if(this.playbookBoardWait()&&(this.playbookUsesBriefFallback()||ba?.data_freshness==='STALE'||String(ba?.evidence_quality||'').toLowerCase()==='low')){
-          return 'Uncalibrated fallback ? rank ? deploy permission';
+          return 'Brief expired — rank is monitor context only';
         }
         return ba?.decision_confidence_label||ba?.evidence_label||'';
       },

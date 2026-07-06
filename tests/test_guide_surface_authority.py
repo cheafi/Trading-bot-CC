@@ -127,3 +127,6 @@ def test_guide_copy_aligned_with_product_wording():
     assert "GATEWAY UP · LOGIN REQUIRED" in html
     assert "backtest research only; not deployment authority" in html.lower()
     assert "Confirm-only · 僅結構確認" in html
+    assert "TRADE LIST" not in html
+    assert "decision card" not in html.lower()
+    assert "structure review surface" in html.lower()

@@ -258,7 +258,7 @@
                 <span class="guide-badge pg" style="font-size:8px">Core</span>
               </div>
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
-                Per-ticker decision card — structure confirmation before entry. When deploy authority is blocked: <strong style="color:var(--amber)">Structure Review Only</strong> — no trade plan, no sizing, no handoff. Check in order:<br>
+                Per-ticker structure review surface — confirm levels before any deploy path. When deploy authority is blocked: <strong style="color:var(--amber)">Structure Review Only</strong> — no trade plan, no sizing, no handoff. Check in order:<br>
                 <div style="margin:8px 0;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:11px">
                   <span style="color:var(--green);font-weight:700">Entry Zone</span><span style="color:var(--t2)">Expected clean entry range. Wider zone often means BUY_ON_DIP or reduced size — PILOT half-size only when Authority: Open.</span>
                   <span style="color:var(--red);font-weight:700">Hard Stop</span><span style="color:var(--t2)">Structural exit level. Confirm-only dossier shows <em>No sizing guidance in confirm-only mode</em> — no IBKR handoff until live fetch succeeds.</span>
@@ -548,7 +548,7 @@
           <template x-for="tab_def in [
             {icon:'📖',id:'guide',label:'Guide',badge:'HERE',bclass:'pa',mode:'Diagnostic',desc:'This page — first in nav'},
             {icon:'🎯',id:'today',label:'Dashboard',badge:'START',bclass:'pg',mode:'Core',desc:'Regime · VIX · tradeability · narrative (legacy: Overview)'},
-            {icon:'📋',id:'signals',label:'Playbook',badge:'TRADE LIST',bclass:'pg',mode:'Core',desc:'Candidate board · Deploy/Pilot/Watch — not a trade ticket (legacy: Ranked)'},
+            {icon:'📋',id:'signals',label:'Playbook',badge:'BOARD',bclass:'pg',mode:'Core',desc:'Candidate buckets · Deploy/Pilot/Watch — review path, not a trade ticket (legacy: Ranked)'},
             {icon:'🔍',id:'dossier',label:'Search / Dossier',badge:'CONFIRM',bclass:'pb',mode:'Core',desc:'Structure confirmation · Structure Review Only when blocked'},
             {icon:'💼',id:'portfolio',label:'Portfolio & Risk',badge:'CAPACITY',bclass:'pb',mode:'Core',desc:'Positions · heat · correlation · REBALANCE'},
             {icon:'🔬',id:'scanners',label:'Discovery',badge:'SCAN',bclass:'pp',mode:'Research-only',desc:'Scanner hub (legacy: Scanners)'},
