@@ -718,17 +718,29 @@
     <!-- ??????????????????????????????????????????????????????? -->
     <!-- COMMAND CENTER ? Terminal layout                       -->
     <!-- ??????????????????????????????????????????????????????? -->
-    <div x-show="tab==='command'" class="fade" style="overflow:hidden" x-init="tab==='command' && fetchAosMonitors()">
+    <div x-show="tab==='command'" class="fade" style="overflow:hidden" x-init="tab==='command' && initAgentCommandTab()">
 
-      <div class="card card-p mx-3 mt-2 mb-2" style="border-left:3px solid var(--blue);padding:8px 12px">
-        <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--blue)">Advanced aggregate ? not deploy gate</div>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[8px] mb-2" x-show="today7.system_truth">
-          <div><span class="font-bold uppercase" style="color:var(--blue)">NOW</span> <span x-text="researchSurfaceBlock('agent').now"></span></div>
-          <div><span class="font-bold uppercase" style="color:var(--red)">BLOCKER</span> <span x-text="researchSurfaceBlock('agent').blocker"></span></div>
-          <div><span class="font-bold uppercase" style="color:var(--green)">NEXT</span> <span x-text="researchSurfaceBlock('agent').next"></span></div>
+      <div class="card card-p mx-3 mt-2 mb-2" style="border-left:3px solid var(--blue);padding:8px 12px" data-cc="agent-page-default">
+        <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--blue)">Agent ? Monitor copilot</div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-[8px] mb-2">
+          <div><span class="font-bold uppercase" style="color:var(--blue)">NOW</span> <span x-text="agentPageState().now"></span></div>
+          <div><span class="font-bold uppercase" style="color:var(--amber)">WHY</span> <span x-text="agentPageState().why"></span></div>
+          <div><span class="font-bold uppercase" style="color:var(--green)">ALLOWED</span> <span x-text="agentPageState().allowed"></span></div>
+          <div><span class="font-bold uppercase" style="color:var(--red)">BLOCKED</span> <span x-text="agentPageState().blocked"></span></div>
+          <div><span class="font-bold uppercase" style="color:var(--blue)">RULES</span> <span x-text="agentRulesSummaryLine()"></span></div>
+          <div><span class="font-bold uppercase" style="color:var(--green)">NEXT</span> <span x-text="agentPageState().next"></span></div>
         </div>
-        <div class="text-[8px] mb-1" style="color:var(--t2)">Command aggregates regime, watchlist, and council context ? surface authority is <strong>research only</strong>. Sizing and IBKR handoff require Dashboard or Playbook when board tradeability permits.</div>
-        <div class="text-[8px] font-semibold text-amber-300" x-show="agentOperatorBlockerLine()" x-text="agentOperatorBlockerLine()"></div>
+        <div class="text-[8px] mb-1" style="color:var(--t2)" x-text="agentBriefLabelLine()"></div>
+        <div class="text-[8px] font-semibold text-amber-300 mb-1" x-show="agentMaxOneBlockerLine()" x-text="agentMaxOneBlockerLine()"></div>
+        <div class="text-[8px] mb-2" style="color:var(--t2)">
+          <span class="font-bold uppercase" style="color:var(--t3)">Suggested rules</span>
+          <span x-text="agentSuggestedRulesLine()"></span>
+        </div>
+        <details>
+          <summary class="text-[8px] cursor-pointer mb-1" style="color:var(--t3)">Degraded status note</summary>
+          <div class="text-[8px] text-amber-300" x-show="agentPageState().degraded_status_note" x-text="agentPageState().degraded_status_note"></div>
+          <div class="text-[8px]" style="color:var(--t3)" x-show="!agentPageState().degraded_status_note">No degraded note ? active monitor copilot.</div>
+        </details>
       </div>
 
       <!-- ?? TOP MACRO STRIP ?? -->
@@ -827,8 +839,10 @@
           <div class="flex flex-wrap gap-2 items-center">
             <input x-model="agentMonitor.prompt" class="flex-1 min-w-[200px] rounded px-2 py-1 text-[10px]" style="background:var(--s2);border:1px solid var(--bd);color:var(--t1)" :placeholder="researchGettingStarted('agent').placeholder" @keydown.enter.prevent="submitAgentMonitorPrompt()">
             <button class="btn-p text-[9px]" :disabled="agentMonitor.submitting" @click="submitAgentMonitorPrompt()" x-text="agentMonitor.submitting?'?':'+ ??'"></button>
+            <button class="btn-s text-[9px]" @click="testAgentAuthorityGuardrail()" x-text="agentPageState().authority_guardrail_label||'Test authority guardrail'"></button>
           </div>
         </div>
+        </details>
       </div>
 
       <!-- ?? 3-COLUMN BODY ?? -->
@@ -1001,13 +1015,15 @@
                 </div>
               </template>
 
-              <!-- Agent ? one blocker line + watch rules (Authority Details collapsed) -->
-              <div class="cc-right-section">
+              <!-- Agent ? default monitor copilot (authority collapsed) -->
+              <div class="cc-right-section" data-cc="agent-monitor-default">
                 <div class="cc-right-label">?? Agent</div>
-                <div class="text-[10px] font-semibold mb-1" style="color:var(--amber)" x-text="agentPrimaryBlockerLine()"></div>
-                <div class="text-[9px] mb-1" style="color:var(--t2)" x-text="agentWatchRulesLine()"></div>
+                <div class="text-[9px] mb-1" style="color:var(--t2)"><span class="font-bold uppercase" style="color:var(--blue)">NOW</span> <span x-text="agentPageState().now"></span></div>
+                <div class="text-[9px] mb-1" style="color:var(--t2)"><span class="font-bold uppercase" style="color:var(--amber)">WHY</span> <span x-text="agentPageState().why"></span></div>
+                <div class="text-[9px] font-semibold mb-1" style="color:var(--amber)" x-show="agentMaxOneBlockerLine()" x-text="agentMaxOneBlockerLine()"></div>
+                <div class="text-[9px] mb-1" style="color:var(--t2)" x-text="agentSuggestedRulesLine()"></div>
                 <details>
-                  <summary class="text-[8px] cursor-pointer" style="color:var(--t3)">Authority Details</summary>
+                  <summary class="text-[8px] cursor-pointer" style="color:var(--t3)">Authority details</summary>
                   <template x-if="cmd.agent">
                     <div class="mt-1 text-[9px]" style="color:var(--t2)" x-text="cmd.agent.summary||'?'"></div>
                   </template>
@@ -9631,20 +9647,75 @@
         return `NO EDGE TODAY ? ${c.Deploy||0} Deploy ? ${c.Pilot||0} Pilot ? ${c.Watch||0} Watch ? ${c['Near-miss']||0} Near-miss ? Rejected hidden ? Best action: do nothing`;
       },
       agentPrimaryBlockerLine(){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.agentMaxOneBlockerLine)
+          return CCHelpers.agentMaxOneBlockerLine(this.today7.system_truth||{});
         const truth=this.today7.system_truth||{};
-        if(truth.primary_blocker) return String(truth.primary_blocker);
-        const codes=truth.reason_codes||[];
-        if(codes.length&&typeof CCHelpers!=='undefined'&&CCHelpers.systemTruthMissionBlockers){
-          const blk=CCHelpers.systemTruthMissionBlockers({...truth,agent_blocker_compact:true});
-          if(blk.length) return blk[0];
-        }
-        return 'No system blocker flagged';
+        return truth.primary_blocker?String(truth.primary_blocker):'';
+      },
+      agentMaxOneBlockerLine(){
+        const line=this.agentPrimaryBlockerLine();
+        return line?('Blocker: '+line):'';
+      },
+      agentPageStatePayload(){
+        const rules=(this.aosMonitors.rules||[]).filter(r=>r&&r.enabled!==false);
+        const watch=this.agentPlaybookWatchTickers().map(t=>({ticker:t,action:'WATCH'}));
+        return {
+          system_truth:this.today7.system_truth||{},
+          agent_page_state:this.today7.agent_page_state||null,
+          watch_candidates:watch,
+          near_miss:this.today7.near_miss||[],
+          rules,
+        };
+      },
+      agentPageState(){
+        const payload=this.agentPageStatePayload();
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.agentPageState)
+          return CCHelpers.agentPageState(payload);
+        return {now:'MONITOR ONLY ? Agent degraded',why:'',allowed:'monitor candidates, create watch rules',blocked:'no sizing, no handoff, no pilot entry',rules:[],suggested_rules:[],suggested_rules_reason:'No safe rule candidates',next:'',mode:'degraded_monitor',brief_label:'',degraded_status_note:'',authority_guardrail_label:'Test authority guardrail'};
+      },
+      agentBriefLabelLine(){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.agentBriefLabel)
+          return CCHelpers.agentBriefLabel(this.today7.system_truth||{});
+        return this.agentPageState().brief_label||'';
+      },
+      agentRulesSummaryLine(){
+        const n=(this.aosMonitors.rules||[]).filter(r=>r&&r.enabled!==false).length;
+        const state=this.agentPageState();
+        if(n) return n+' active watch rule'+(n===1?'':'s')+' ? alert only';
+        return '0 active rules ? '+String(state.suggested_rules_reason||'no safe rule candidates');
+      },
+      agentSuggestedRulesLine(){
+        const state=this.agentPageState();
+        const rules=state.suggested_rules||[];
+        if(rules.length) return rules.map(r=>r.trigger||r.ticker||'rule').join(' ? ');
+        return String(state.suggested_rules_reason||'No safe rule candidates');
       },
       agentWatchRulesLine(){
-        const rules=(this.aosMonitors.rules||[]).filter(r=>r&&r.enabled!==false);
-        const safe=rules.filter(r=>String(r.severity||'').toLowerCase()!=='high').slice(0,3);
-        if(!safe.length) return 'No safe watch-rule candidates';
-        return 'Suggested watch rules: '+safe.map(r=>r.label||r.rule||r.ticker||'rule').join(' ? ');
+        return this.agentSuggestedRulesLine();
+      },
+      async initAgentCommandTab(){
+        await Promise.all([this.fetchAosMonitors(),this.fetchToday7()]);
+        await this.fetchCommandBoard();
+        this.seedAgentAuditJournal();
+      },
+      seedAgentAuditJournal(){
+        if(this.cmd.agentAuditSeeded) return;
+        const seeded=(this.today7.agent_audit_journal||[]).slice();
+        const existing=(this.cmd.agentJournal||[]).slice();
+        const merged=[...seeded];
+        existing.forEach(e=>{
+          const key=String(e.message||e.ticker||'')+String(e.detail||e.final_action||'');
+          if(!merged.some(m=>String(m.message||'')+String(m.detail||'')===key)) merged.push(e);
+        });
+        this.cmd.agentJournal=merged.slice(0,12);
+        this.cmd.agentAuditSeeded=true;
+      },
+      testAgentAuthorityGuardrail(){
+        const state=this.agentPageState();
+        const msg='PASS ? Agent cannot deploy, size, or hand off to IBKR';
+        const entry={ts:new Date().toISOString(),category:'guardrail_test',message:state.authority_guardrail_label||'Test authority guardrail',detail:msg,authority_effect:'none'};
+        this.cmd.agentJournal=[entry,...this.cmd.agentJournal].slice(0,12);
+        this.showExportToast(msg);
       },
       stratLabOneLiner(){
         const page=this.strategyLabPageState();
@@ -12476,7 +12547,7 @@
         if(t==='flow'){if(!this.today7.regime)this.fetchToday7();this.fetchFlow();}
         if(t==='rs'){this.fetchRs();}
         if(t==='notrade'){this.fetchRejections();}
-        if(t==='command'){this.fetchCommandBoard();}
+        if(t==='command'){this.initAgentCommandTab();}
         if(t==='ops'){this.fetchCcStatus();this.fetchOpsRuntime();this.fetchOpsConsole();this.fetchChangelog();this.fetchErrorLog();this.fetchNotifyLog();}
         if(t==='ibkr'){this.ibkrRefreshAll();}
         if(t==='btlab'&&!this.btLab.data&&!this.btLab.loading){/* user clicks Run lab */}

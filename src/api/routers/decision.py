@@ -417,6 +417,46 @@ async def today_summary(
         max_age = 30 if cache_ok else 0
         return json_cache_response(payload, request, max_age=max_age)
 
+
+@router.get("/api/agent/state")
+async def agent_state(request: Request):
+    """Agent monitoring copilot state — watch rules only, no deploy authority."""
+    from src.api.deps import sanitize_for_json
+    from src.services.agent_mode import (
+        build_agent_audit_journal_on_load,
+        build_agent_page_state,
+    )
+
+    payload = getattr(request.app.state, "today_v7_cache", None) or _today_cache or {}
+    truth = payload.get("system_truth") or {}
+    if payload.get("agent_page_state"):
+        return sanitize_for_json(
+            {
+                "agent_page_state": payload["agent_page_state"],
+                "agent_audit_journal": payload.get("agent_audit_journal") or [],
+                "system_truth": truth,
+            }
+        )
+    watch = [
+        r
+        for r in (payload.get("top_5") or [])
+        if isinstance(r, dict)
+    ]
+    near = [r for r in (payload.get("near_miss") or []) if isinstance(r, dict)]
+    page = build_agent_page_state(truth, watch, near)
+    journal = build_agent_audit_journal_on_load(
+        truth,
+        page,
+        rules_count=int(page.get("rules_count") or 0),
+    )
+    return sanitize_for_json(
+        {
+            "agent_page_state": page,
+            "agent_audit_journal": journal,
+            "system_truth": truth,
+        }
+    )
+
 # ══════════════════════════════════════════════════════════════════════
 # /api/v7/opportunities — Full Ranked Board
 # ══════════════════════════════════════════════════════════════════════
