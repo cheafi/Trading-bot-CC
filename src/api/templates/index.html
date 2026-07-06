@@ -235,13 +235,13 @@
             <span style="width:6px;height:6px;border-radius:50%" :style="ibkrPillDotStyle()"></span>
             <span>IBKR ? </span><span x-text="ibkrUnifiedShort()"></span>
           </button>
-          <!-- ?? EXPORT REVIEW PDF ?? -->
+          <!-- EXPORT ALL PAGES -->
           <button data-cc="export-review-pdf" @click="exportReviewPdfClick()" :disabled="exportReviewPdfBusy"
-            style="display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;font-size:10px;font-weight:700;border:1px solid var(--bd2);background:var(--s2);color:var(--t1);cursor:pointer;letter-spacing:.3px"
-            title="One-click review PDF ? issues page + all surfaces snapshot for ChatGPT review">
-            <span x-show="!exportReviewPdfBusy">??</span>
+            style="display:flex;align-items:center;gap:4px;padding:4px 12px;border-radius:6px;font-size:10px;font-weight:700;border:1px solid var(--green);background:rgba(16,185,129,.12);color:var(--green);cursor:pointer;letter-spacing:.3px"
+            title="One-click export all pages (issues + surfaces PDF)">
+            <span x-show="!exportReviewPdfBusy">PDF</span>
             <span x-show="exportReviewPdfBusy" class="spin"></span>
-            <span x-text="exportReviewPdfBusy?'Exporting?':'Export review PDF'"></span>
+            <span x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.exportAllLabel)?CCHelpers.exportAllLabel(exportReviewPdfBusy):(exportReviewPdfBusy?'Exporting?':'Export All Pages')"></span>
           </button>
           <!-- ?? HELP ?? -->
           <button @click="openTimeTravel()" style="background:none;border:1px solid var(--bd);color:var(--t3);padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer" title="? Time Travel ? ??????">?</button>
@@ -542,7 +542,7 @@
             :style="trust.freshness==='REAL_TIME'?'background:#22c55e':trust.freshness==='DELAYED'?'background:#f59e0b':'background:#ef4444'"></span>
           <span x-text="trust.freshness||'REAL_TIME'"></span>
         </span>
-        <span x-show="freshness&&freshness.worst_tier&&['STALE','CRITICAL'].includes(freshness.worst_tier)&&!today7.system_truth" class="pill pa text-[7px] font-bold" x-text="'DATA '+freshness.worst_tier"></span>
+        <span x-show="freshness&&freshness.worst_tier&&['STALE','CRITICAL'].includes(freshness.worst_tier)&&!today7.system_truth&&!today7.regime" class="pill pa text-[7px] font-bold" x-text="'DATA '+freshness.worst_tier"></span>
         <span x-text="trust.as_of?'? '+((Date.now()-new Date(trust.as_of).getTime())/1000|0)+'s ago':''" style="color:var(--t3)"></span>
         <span class="flex items-center gap-1" x-show="today7.regime">
           <span style="color:var(--t3)">Conf</span>
@@ -648,7 +648,7 @@
         <template x-if="headerSummary().show_regime_strip">
           <div style="display:flex;align-items:center;gap:6px">
             <span style="font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--t3)">Regime</span>
-            <span style="font-size:11px;font-weight:700" :style="'color:'+(canonicalTradeability()==='NO_TRADE'?'var(--red)':canonicalTradeability()==='WAIT'?'var(--amber)':'var(--green)')" x-text="canonicalRegimeLine()"></span>
+            <span style="font-size:11px;font-weight:700" :style="'color:'+(canonicalTradeability()==='NO_TRADE'?'var(--red)':canonicalTradeability()==='WAIT'?'var(--amber)':'var(--green)')" x-text="runtimeRegimeDisplayLine()"></span>
           </div>
         </template>
         <div style="width:1px;height:18px;background:var(--bd);flex-shrink:0" x-show="headerSummary().show_regime_strip"></div>
@@ -1300,8 +1300,8 @@
 
       <div x-show="today7.loading && !today7.regime" class="card card-p m-3 p-6 text-center" style="color:var(--t3)">
         <div class="spin" style="margin:0 auto 12px;width:24px;height:24px;border:2px solid var(--bd2);border-top-color:var(--green);border-radius:50%"></div>
-        <div class="text-[11px] font-bold text-white">????? ? Loading dashboard?</div>
-        <div class="text-[9px] mt-1">???????? ? cached snapshot shown when available</div>
+        <div class="text-[11px] font-bold text-white" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.dashboardLoadingHeadline)?CCHelpers.dashboardLoadingHeadline():'Loading dashboard?'"></div>
+        <div class="text-[9px] mt-1" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.dashboardLoadingHint)?CCHelpers.dashboardLoadingHint():'cached snapshot shown when available'"></div>
       </div>
 
       <div x-show="!today7.loading || today7.regime">
@@ -1311,12 +1311,12 @@
         <div style="padding:8px 12px 0" data-cc="operator-block-dashboard">
           <div class="card card-p" style="padding:10px 12px;border-left:3px solid var(--blue);background:rgba(88,166,255,.04)">
             <div class="grid grid-cols-1 gap-1.5 text-[9px]" style="line-height:1.55">
-              <div><span class="font-bold uppercase mr-1" style="color:var(--blue)">?? ? Now</span><span class="text-white font-semibold" x-text="dashboardOperatorBlock().now"></span><span x-show="dashboardOperatorBlock().secondary" class="pill text-[7px] pa ml-1" x-text="dashboardOperatorBlock().secondary"></span></div>
-              <div><span class="font-bold uppercase mr-1" style="color:var(--amber)">?? ? Why</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().why"></span></div>
-              <div><span class="font-bold uppercase mr-1" style="color:var(--green)">?? ? Allowed</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().allowed"></span></div>
-              <div x-show="dashboardOperatorBlock().blocked"><span class="font-bold uppercase mr-1" style="color:var(--red)">?? ? Blocked</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().blocked"></span></div>
-              <div><span class="font-bold uppercase mr-1" style="color:var(--purple)">VALID CANDIDATES</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().valid_candidates"></span><span x-show="topMonitorLabelsLine()" class="text-[8px] ml-1" style="color:var(--t3)" x-text="'? '+topMonitorLabelsLine()"></span></div>
-              <div><span class="font-bold uppercase mr-1" style="color:var(--blue)">??? ? Next</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().next"></span></div>
+              <div><span class="font-bold uppercase mr-1" style="color:var(--blue)" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlockChromeLabel)?CCHelpers.operatorBlockChromeLabel('now'):'Now'"></span><span class="text-white font-semibold" x-text="dashboardOperatorBlock().now"></span><span x-show="dashboardOperatorBlock().secondary" class="pill text-[7px] pa ml-1" x-text="dashboardOperatorBlock().secondary"></span></div>
+              <div><span class="font-bold uppercase mr-1" style="color:var(--amber)" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlockChromeLabel)?CCHelpers.operatorBlockChromeLabel('why'):'Why'"></span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().why"></span></div>
+              <div><span class="font-bold uppercase mr-1" style="color:var(--green)" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlockChromeLabel)?CCHelpers.operatorBlockChromeLabel('allowed'):'Allowed'"></span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().allowed"></span></div>
+              <div x-show="dashboardOperatorBlock().blocked"><span class="font-bold uppercase mr-1" style="color:var(--red)" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlockChromeLabel)?CCHelpers.operatorBlockChromeLabel('blocked'):'Blocked'"></span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().blocked"></span></div>
+              <div><span class="font-bold uppercase mr-1" style="color:var(--purple)" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlockChromeLabel)?CCHelpers.operatorBlockChromeLabel('valid'):'Valid candidates'"></span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().valid_candidates"></span><span x-show="topMonitorLabelsLine()" class="text-[8px] ml-1" style="color:var(--t3)" x-text="'? '+topMonitorLabelsLine()"></span></div>
+              <div><span class="font-bold uppercase mr-1" style="color:var(--blue)" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlockChromeLabel)?CCHelpers.operatorBlockChromeLabel('next'):'Next'"></span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().next"></span></div>
             </div>
             <div class="text-[8px] mt-2" style="color:var(--t3)" x-text="unifiedTruthStripLine()"></div>
           </div>
@@ -2335,7 +2335,7 @@
                   <template x-if="opp.entry_price&&opp.stop_price"><span class="pill pw text-[7px] mono" :title="'Risk to stop: '+(Math.abs((opp.entry_price-opp.stop_price)/opp.entry_price*100)).toFixed(2)+'% ? 1R sizing'">?<span x-text="Math.abs((opp.entry_price-opp.stop_price)/opp.entry_price*100).toFixed(1)"></span>% 1R</span></template>
                   <!-- Action badge with tooltip-style label -->
                   <span class="pill text-[8px] font-bold ml-auto" :class="effectiveCardActionClass(opp)"
-                    :title="opp.action_reason||(effectiveCardAction(opp)==='WATCH'?'Monitor ? not deploy authority':effectiveCardAction(opp)==='FALLBACK CANDIDATE'?'Brief fallback candidate only':'Card label capped by board gates')"
+                    :title="safeRenderText(opp.action_reason||'',{blocked:cardBlockedForDisplay(opp)})||(effectiveCardAction(opp)==='WATCH'?'Monitor ? not deploy authority':effectiveCardAction(opp)==='FALLBACK CANDIDATE'?'Brief expired ? monitor only':'Card label capped by board gates')"
                     x-text="effectiveCardAction(opp)"></span>
                 </div>
 
@@ -2434,13 +2434,21 @@
                 </div>
                 <!-- Price row -->
                 <div class="flex gap-4 text-[9px] mono mt-1" style="color:var(--t2)">
-                  <template x-if="cardShowsDeployLevels(opp)&&opp.entry_price"><span>Entry <strong class="text-white">$<span x-text="Number(opp.entry_price).toFixed(2)"></span></strong></span></template>
-                  <template x-if="cardShowsDeployLevels(opp)&&opp.target_price"><span>Target <strong class="text-green-400">$<span x-text="Number(opp.target_price).toFixed(2)"></span></strong></span></template>
-                  <template x-if="cardShowsDeployLevels(opp)&&opp.stop_price"><span>Stop <strong class="text-red-400">$<span x-text="Number(opp.stop_price).toFixed(2)"></span></strong></span></template>
-                  <template x-if="!cardShowsDeployLevels(opp)&&opp.entry_price"><span>Indicative entry <strong class="text-amber-300">$<span x-text="Number(opp.entry_price).toFixed(2)"></span></strong></span></template>
-                  <template x-if="!cardShowsDeployLevels(opp)&&opp.target_price"><span>Indicative target <strong class="text-amber-300">$<span x-text="Number(opp.target_price).toFixed(2)"></span></strong></span></template>
-                  <template x-if="!cardShowsDeployLevels(opp)&&opp.stop_price"><span>Monitor zone <strong class="text-amber-300">$<span x-text="Number(opp.stop_price).toFixed(2)"></span></strong></span></template>
-                  <span>R:R <strong :class="cardShowsDeployLevels(opp)?'text-white':'text-amber-300'" x-text="opp.risk_reward?parseRR(opp.risk_reward).toFixed(1):'?'"></strong></span>
+                  <template x-if="cardShowsDeployLevels(opp)">
+                    <template x-if="opp.entry_price"><span>Entry <strong class="text-white">$<span x-text="Number(opp.entry_price).toFixed(2)"></span></strong></span></template>
+                    <template x-if="opp.target_price"><span>Target <strong class="text-green-400">$<span x-text="Number(opp.target_price).toFixed(2)"></span></strong></span></template>
+                    <template x-if="opp.stop_price"><span>Stop <strong class="text-red-400">$<span x-text="Number(opp.stop_price).toFixed(2)"></span></strong></span></template>
+                    <span x-show="opp.risk_reward">R:R <strong class="text-white" x-text="opp.risk_reward?parseRR(opp.risk_reward).toFixed(1):'?'"></strong></span>
+                  </template>
+                  <details x-show="cardShowsStructureReference(opp)" class="text-[8px]" style="color:var(--t3)">
+                    <summary>Structure reference only</summary>
+                    <div class="flex gap-3 mt-1">
+                      <template x-if="opp.entry_price"><span>Ref entry $<span x-text="Number(opp.entry_price).toFixed(2)"></span></span></template>
+                      <template x-if="opp.target_price"><span>Ref target $<span x-text="Number(opp.target_price).toFixed(2)"></span></span></template>
+                      <template x-if="opp.stop_price"><span>Ref zone $<span x-text="Number(opp.stop_price).toFixed(2)"></span></span></template>
+                      <span x-show="opp.risk_reward">R:R <span x-text="opp.risk_reward?parseRR(opp.risk_reward).toFixed(1):'?'"></span></span>
+                    </div>
+                  </details>
                 </div>
                 <!-- Why now -->
                 <template x-if="opp.why_now&&(Array.isArray(opp.why_now)?opp.why_now.length:opp.why_now)">
@@ -2685,10 +2693,10 @@
       </div>
       <div class="mx-3 mb-2 p-2 rounded text-[8px]" data-cc="playbook-authority-strip" x-show="playbookAuthorityStripVisible()" style="background:rgba(88,166,255,.06);border:1px solid rgba(88,166,255,.2);color:var(--t2);line-height:1.5">
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Authority</div><div class="font-bold text-white" x-text="playbookOperatorView().authority"></div><div class="text-[7px] mt-0.5" x-text="playbookOperatorView().posture"></div></div>
-          <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Truth</div><div x-text="playbookOperatorView().truth_strip"></div></div>
-          <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Qualification</div><div x-text="playbookQualificationDisplay()"></div></div>
-          <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Best action</div><div class="font-semibold text-white" x-text="playbookOperatorView().best_action||playbookBestActionDisplay()"></div></div>
+          <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Authority</div><div class="font-bold text-white" x-text="playbookOperatorView().authority"></div><div class="text-[7px] mt-0.5" data-role="secondary-regime" x-text="safeRenderText(playbookOperatorView().posture)"></div></div>
+          <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Truth</div><div x-text="safeRenderText(playbookOperatorView().truth_strip)"></div></div>
+          <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Qualification</div><div x-text="safeRenderText(playbookQualificationDisplay())"></div></div>
+          <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Best action</div><div class="font-semibold text-white" x-text="safeRenderText(playbookOperatorView().best_action||playbookBestActionDisplay())"></div></div>
           <div class="sm:col-span-2"><div class="font-bold uppercase mb-1" style="color:var(--t3)">Next</div><div x-text="(playbookOperatorView().next||[]).join(' ? ')"></div></div>
         </div>
         <div x-show="playbookNoValidMonitors()" class="mt-2 p-1.5 rounded text-[9px] font-bold" style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:var(--amber)">NO VALID MONITOR CANDIDATES</div>
@@ -4422,7 +4430,7 @@
 
           <div style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Most common mistakes</div>
           <ul style="font-size:11px;color:var(--t2);line-height:1.65;padding-left:16px;margin:0 0 12px">
-            <li><strong style="color:var(--t1)">Don't size from fallback cards</strong> ? FALLBACK WATCH / brief fallback = monitor-only ? ????????</li>
+            <li><strong style="color:var(--t1)">Don't size from fallback cards</strong> ? FALLBACK WATCH / Brief expired = monitor-only ? ???????????</li>
             <li><strong style="color:var(--t1)">Don't treat IBKR LOGIN as execution-ready</strong> ? GATEWAY UP ? LOGIN REQUIRED still blocks handoff ? ??? Gateway ? ???</li>
             <li><strong style="color:var(--t1)">Don't treat Discovery / Flow / RS as deploy permission</strong> ? research-only surfaces ? ???? ? ????</li>
             <li><strong style="color:var(--t1)">Don't treat Backtest Lab as live evidence</strong> ? historical simulation, not deployment authority ? ?? ? ????</li>
@@ -7293,7 +7301,7 @@
         <span x-show="opsGlobalLoadingLine()" style="color:var(--t3)" x-text="opsGlobalLoadingLine()"></span>
         <span x-show="opsConsole.error && !opsGlobalLoadingLine()" style="color:var(--red)" x-text="opsConsole.error"></span>
         <span x-show="errorLog.entries.length" class="pill pr text-[8px]" x-text="errorLog.entries.length+' log'"></span>
-        <button type="button" data-cc="export-review-pdf" class="btn-s text-[8px] ml-auto" @click="exportReviewPdfClick()" :disabled="exportReviewPdfBusy" x-text="exportReviewPdfBusy?'Exporting?':'Export review PDF'"></button>
+        <button type="button" data-cc="export-review-pdf" class="btn-s text-[8px] ml-auto" style="border-color:var(--green);color:var(--green)" @click="exportReviewPdfClick()" :disabled="exportReviewPdfBusy" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.exportAllLabel)?CCHelpers.exportAllLabel(exportReviewPdfBusy):(exportReviewPdfBusy?'Exporting?':'Export All Pages')"></button>
       </div>
       <div class="p-3 space-y-3">
         <!-- Ops sub-sections -->
@@ -8551,9 +8559,15 @@
         const tries=opts.retries??3;
         const backoff=opts.backoff??700;
         const timeoutMs=opts.timeoutMs??0;
+        const method=String((opts.init||{}).method||'GET').toUpperCase();
+        const etagKey=replayUrl.split('?')[0];
+        const cacheable=method==='GET'&&(/\/api\/v7\/today$/.test(etagKey)||/\/api\/ops\/cc-header/.test(etagKey));
         for(let i=0;i<tries;i++){
           try{
             const init={...(opts.init||{})};
+            const hdrs={...(init.headers||{})};
+            if(cacheable&&this._ccEtagStore[etagKey]) hdrs['If-None-Match']=this._ccEtagStore[etagKey];
+            init.headers=hdrs;
             const extSignal=init.signal;
             if(timeoutMs>0||extSignal){
               const ctrl=new AbortController();
@@ -8564,6 +8578,9 @@
               try{
                 const r=await fetch(replayUrl, init);
                 if(timer) clearTimeout(timer);
+                if(r.status===304&&cacheable){r.notModified=true;return r;}
+                const etag=r.headers.get('ETag');
+                if(etag&&cacheable&&r.ok) this._ccEtagStore[etagKey]=etag;
                 if((r.status===503||r.status===502)&&i<tries-1){
                   await new Promise(res=>setTimeout(res,backoff*(i+1)));
                   continue;
@@ -8575,6 +8592,9 @@
               }
             }else{
               const r=await fetch(replayUrl, init);
+              if(r.status===304&&cacheable){r.notModified=true;return r;}
+              const etag=r.headers.get('ETag');
+              if(etag&&cacheable&&r.ok) this._ccEtagStore[etagKey]=etag;
               if((r.status===503||r.status===502)&&i<tries-1){
                 await new Promise(res=>setTimeout(res,backoff*(i+1)));
                 continue;
@@ -8979,9 +8999,19 @@
         const m=this._SURFACE_MODES||{};
         return m[this.tab]||'discovery_research';
       },
-      surfaceShowsDecisionChips(mode){return mode==='dashboard_core'||mode==='playbook_core';},
-      sanitizeVisibleText(v){
+      safeRenderText(text,context){
+        const ctx=context||{};
+        const truth=ctx.truth||this.today7?.system_truth||{};
+        const merged={...ctx,truth};
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.safeRenderText)
+          return CCHelpers.safeRenderText(text,merged);
+        return this.sanitizeVisibleText(text);
+      },
         if(v==null||v==='') return '';
+        const blocked=this.todayDeployBlocked()||this.pageAuthorityIsDegraded();
+        const truth=this.today7?.system_truth||{};
+        if(blocked&&typeof CCHelpers!=='undefined'&&CCHelpers.safeRenderText)
+          return CCHelpers.safeRenderText(v,{truth,blocked:true,deployAuthority:false});
         if(typeof CCHelpers!=='undefined'&&CCHelpers.sanitizeOperatorDetail) return CCHelpers.sanitizeOperatorDetail(v);
         const s=String(v);
         if(/led',e\);alert\(/i.test(s)||/\[object Object\]/i.test(s)) return s.includes('[object Object]')?'Evidence unavailable':'';
@@ -11203,9 +11233,11 @@
             return CCHelpers.removeTradeLanguageWhenBlocked(raw,true);
           return raw;
         }
-        if(this.todayUsesBriefFallback()||this.cardIsFallbackRow(opp)||(this.today7.system_truth||{}).brief_expired)
-          return 'Reference plan only ? brief expired or fallback ? monitor only';
-        return String(opp.action_reason||opp.action_rationale||'');
+        if(this.todayUsesBriefFallback()||this.cardIsFallbackRow(opp)||(this.today7.system_truth||{}).brief_expired){
+          const expired=(typeof CCHelpers!=='undefined'&&CCHelpers.briefExpiredOperatorLine)?CCHelpers.briefExpiredOperatorLine(this.today7.system_truth||{}):'';
+          return 'Reference plan only ? '+(expired||'brief expired')+' ? monitor only';
+        }
+        return this.safeRenderText(opp.action_reason||opp.action_rationale||'',{blocked:false});
       },
       cardExecutionGrade(opp){
         if(!opp) return '?';
@@ -11932,7 +11964,7 @@
         return String(this.rankedOpps.board_mode||'').toLowerCase()==='emergency';
       },
       playbookBoardModeLabel(){
-        if(this.rankedOpps.board_mode_label) return this.rankedOpps.board_mode_label;
+        if(this.rankedOpps.board_mode_label) return this.safeRenderText(this.rankedOpps.board_mode_label);
         const m=String(this.rankedOpps.board_mode||'').toLowerCase();
         if(m==='emergency') return 'Board unavailable';
         if(this.playbookBriefExpired()) return this.playbookBriefExpiredLine(); if(m==='compressed_fallback'||this.playbookUsesBriefFallback()) return 'Brief sample board';
@@ -11953,6 +11985,7 @@
         return st.level!=='ready'&&!st.handoff;
       },
       playbookDeployableCount(){
+        if(this.todayDeployBlocked()) return 0;
         const f=this.rankedOpps.filter_funnel||this.today7.filter_funnel||{};
         return this.playbookFunnelCounts(f,null).deploy;
       },
@@ -13344,25 +13377,25 @@
       async exportReviewPdfClick(){
         if(this.exportReviewPdfBusy) return;
         this.exportReviewPdfBusy=true;
-        this.showExportToast('???? PDF? · Preparing PDF?');
+        this.showExportToast('???? PDF? ? Preparing PDF?');
         try{
           if(!this.errorLog.entries.length&&!this.errorLog.loading) await this.fetchErrorLog();
           const snapshot=this.buildExportReviewSnapshot();
           if(typeof CCHelpers!=='undefined'&&CCHelpers.exportReviewPdf){
             const res=await CCHelpers.exportReviewPdf(snapshot);
             if(res&&res.ok){
-              this.showExportToast('Downloaded '+(res.filename||'cc-review.pdf'));
+              this.showExportToast('??? ? Downloaded '+(res.filename||'cc-review.pdf'));
             }else{
               console.warn('[CC export]',res&&res.error?res.error:'export failed');
-              this.showExportToast('PDF export failed');
+              this.showExportToast('PDF ???? ? PDF export failed');
             }
           }else{
             console.warn('[CC export] CCHelpers.exportReviewPdf unavailable');
-            this.showExportToast('PDF export unavailable');
+            this.showExportToast('PDF ????? ? PDF export unavailable');
           }
         }catch(e){
           console.warn('[CC export]',e);
-          this.showExportToast('PDF export failed');
+          this.showExportToast('PDF ???? ? PDF export failed');
         }finally{
           this.exportReviewPdfBusy=false;
         }
@@ -14932,7 +14965,17 @@
         finally{delete this._ccRefreshInflight.today;}
       },
       async _fetchToday7Core(opts={}){
-        try{const r=await this.ccFetch('/api/v7/today',{retries:4,backoff:600});if(!r||!r.ok)throw new Error('HTTP '+(r?r.status:'fail'));const d=await r.json();this.captureInstantDegradedBanner(d);if(d&&d.error)throw new Error(String(d.error));if(!d||!d.market_regime)throw new Error('incomplete today payload');this.today7.regime=d.market_regime||null;this.today7.decision_authority=d.decision_authority||null;this.today7.top_ranked=d.top_5||[];this.today7.todays_decision=d.todays_decision||null;this.today7.best_action=d.best_action||null;this.today7.overlap_warning=d.overlap_warning||null;this.today7.near_miss=d.near_miss||[];this.today7.score_reconciliation=d.score_reconciliation||null;this.today7.no_setup_diagnosis=d.no_setup_diagnosis||null;this.today7.quant_cluster_hints=d.quant_cluster_hints||[];this.today7.unlock_deploy=d.unlock_deploy||null;this.today7.regime_wait_explanation=d.regime_wait_explanation||[];this.today7.monitor_triggers=d.monitor_triggers||[];this.today7.sleeve_summary=d.sleeve_summary||null;this.today7.execution_readiness=d.execution_readiness||d.best_action?.execution_readiness||null;this.today7.evidence_badges=d.evidence_badges||null;this.today7.cross_asset_confirmation=d.cross_asset_confirmation||null;this.today7.index_regime_summary=d.index_regime_summary||null;this.today7.regime_strip=d.regime_strip||null;this.today7.regime_stack_summary=d.regime_stack_summary||null;this.today7.allocator_stance=d.allocator_stance||null;this.today7.ai_reason_codes=d.ai_reason_codes||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.decision_model=d.decision_model||null;this.today7.decision_hierarchy=d.decision_hierarchy||null;this.today7.passive_baseline=d.passive_baseline||null;this.today7.complexity_challenge=d.complexity_challenge||null;this.today7.restraint=d.restraint||null;this.today7.surface_authority=d.surface_authority||null;this.today7.crisis_regime=d.crisis_regime||null;this.today7.naval_clarity=d.naval_clarity||null;this.today7.buffett_clarity=d.buffett_clarity||null;this.today7.index_fund_posture=d.index_fund_posture||null;this.today7.principles_posture=d.principles_posture||null;this.today7.avoid_grouped=d.avoid_grouped||null;this.today7.bucket_quality=d.bucket_quality||[];this.today7.avoid_list=(d.avoid_now||[]).length?(d.avoid_now||[]):(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'?',reason:a,category:'regime'}:a);this.today7.tradeability=(d.decision_model&&d.decision_model.honest_tradeability)||(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{};this.today7.system_truth=d.system_truth||null;this.today7.actionable_today=d.actionable_today||null;this.today7.opportunity_status=d.opportunity_status||null;this.today7.operator_block=d.operator_block||null;this.today7.agent_page_state=d.agent_page_state||null;this.today7.agent_audit_journal=d.agent_audit_journal||[];this.today7.monitor_display_limit=d.monitor_display_limit||((typeof CCHelpers!=='undefined'&&CCHelpers.CC_TOP_MONITOR_COUNT)||10);this.today7.top_monitor=d.top_monitor||null;this.today7.top_opportunities=d.top_opportunities||[];this.today7.candidate_counts=d.candidate_counts||null;this.today7.evidence_conflict=d.evidence_conflict||null;if(this.isWaitDay()){this.today7.avoid_collapsed=true;}
+        if(!opts.force&&!opts.refresh&&this.today7.regime) this.today7.loading=false;
+        else if(!this.today7.regime) this.today7.loading=true;
+        try{
+          const r=await this.ccFetch('/api/v7/today',{retries:4,backoff:600});
+          if(r&&r.notModified&&this._ccTodayBodyCache){
+            this.captureInstantDegradedBanner(this._ccTodayBodyCache);
+            this.today7.loading=false;
+            return;
+          }
+          if(!r||!r.ok)throw new Error('HTTP '+(r?r.status:'fail'));
+          const d=await r.json();this._ccTodayBodyCache=d;this.captureInstantDegradedBanner(d);if(d&&d.error)throw new Error(String(d.error));if(!d||!d.market_regime)throw new Error('incomplete today payload');this.today7.regime=d.market_regime||null;this.today7.decision_authority=d.decision_authority||null;this.today7.top_ranked=d.top_5||[];this.today7.todays_decision=d.todays_decision||null;this.today7.best_action=d.best_action||null;this.today7.overlap_warning=d.overlap_warning||null;this.today7.near_miss=d.near_miss||[];this.today7.score_reconciliation=d.score_reconciliation||null;this.today7.no_setup_diagnosis=d.no_setup_diagnosis||null;this.today7.quant_cluster_hints=d.quant_cluster_hints||[];this.today7.unlock_deploy=d.unlock_deploy||null;this.today7.regime_wait_explanation=d.regime_wait_explanation||[];this.today7.monitor_triggers=d.monitor_triggers||[];this.today7.sleeve_summary=d.sleeve_summary||null;this.today7.execution_readiness=d.execution_readiness||d.best_action?.execution_readiness||null;this.today7.evidence_badges=d.evidence_badges||null;this.today7.cross_asset_confirmation=d.cross_asset_confirmation||null;this.today7.index_regime_summary=d.index_regime_summary||null;this.today7.regime_strip=d.regime_strip||null;this.today7.regime_stack_summary=d.regime_stack_summary||null;this.today7.allocator_stance=d.allocator_stance||null;this.today7.ai_reason_codes=d.ai_reason_codes||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.decision_model=d.decision_model||null;this.today7.decision_hierarchy=d.decision_hierarchy||null;this.today7.passive_baseline=d.passive_baseline||null;this.today7.complexity_challenge=d.complexity_challenge||null;this.today7.restraint=d.restraint||null;this.today7.surface_authority=d.surface_authority||null;this.today7.crisis_regime=d.crisis_regime||null;this.today7.naval_clarity=d.naval_clarity||null;this.today7.buffett_clarity=d.buffett_clarity||null;this.today7.index_fund_posture=d.index_fund_posture||null;this.today7.principles_posture=d.principles_posture||null;this.today7.avoid_grouped=d.avoid_grouped||null;this.today7.bucket_quality=d.bucket_quality||[];this.today7.avoid_list=(d.avoid_now||[]).length?(d.avoid_now||[]):(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'?',reason:a,category:'regime'}:a);this.today7.tradeability=(d.decision_model&&d.decision_model.honest_tradeability)||(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{};this.today7.system_truth=d.system_truth||null;this.today7.actionable_today=d.actionable_today||null;this.today7.opportunity_status=d.opportunity_status||null;this.today7.operator_block=d.operator_block||null;this.today7.agent_page_state=d.agent_page_state||null;this.today7.agent_audit_journal=d.agent_audit_journal||[];this.today7.monitor_display_limit=d.monitor_display_limit||((typeof CCHelpers!=='undefined'&&CCHelpers.CC_TOP_MONITOR_COUNT)||10);this.today7.top_monitor=d.top_monitor||null;this.today7.top_opportunities=d.top_opportunities||[];this.today7.candidate_counts=d.candidate_counts||null;this.today7.evidence_conflict=d.evidence_conflict||null;if(this.isWaitDay()){this.today7.avoid_collapsed=true;}
           this.applyPulseToMarketStrip(this.today7.pulse);
           this.saveToday7ToCache(d);
           // DAY-OVER-DAY DIFF ? tag NEW vs CARRYOVER vs MOVED
@@ -14983,7 +15026,9 @@
           this.today7.filter_funnel=d.filter_funnel||null;
           this.today7.date=d.date||'';
           this.today7.trust={...(d.trust||{}),stale:true,source:'local-cache'};
+          this._ccTodayBodyCache=d;
           this.applyPulseToMarketStrip(this.today7.pulse);
+          this.today7.loading=false;
         }catch(err){console.warn('today7 cache hydrate failed',err)}
       },
       saveToday7ToCache(d){
@@ -16043,10 +16088,10 @@
     }}
     </script>
     <div id="cc-export-toast" class="cc-export-toast" x-show="exportToast.visible" x-cloak x-transition.opacity x-text="exportToast.message"></div>
-    <button type="button" data-cc="export-review-pdf-fab" class="cc-export-fab" @click="exportReviewPdfClick()" :disabled="exportReviewPdfBusy" title="One-click review PDF ? issues + all surfaces">
-      <span x-show="!exportReviewPdfBusy">??</span>
+    <button type="button" data-cc="export-review-pdf-fab" class="cc-export-fab" @click="exportReviewPdfClick()" :disabled="exportReviewPdfBusy" title="??????? ? Export all pages (issues + surfaces PDF)">
+      <span x-show="!exportReviewPdfBusy">PDF</span>
       <span x-show="exportReviewPdfBusy" class="spin"></span>
-      <span x-text="exportReviewPdfBusy?'Exporting?':'Export all'"></span>
+      <span x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.exportAllLabel)?CCHelpers.exportAllLabel(exportReviewPdfBusy):(exportReviewPdfBusy?'Exporting?':'Export All Pages')"></span>
     </button>
     <div id="cc-export-print-root" aria-hidden="true"></div>
   </body>

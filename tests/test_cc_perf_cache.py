@@ -23,6 +23,8 @@ def test_today_endpoint_uses_fingerprint_and_cache_headers():
     assert "today_cache_fingerprint" in DECISION_SRC
     assert "json_cache_response" in DECISION_SRC
     assert "_today_cache_fp" in DECISION_SRC
+    assert "CC_INSTANT_TODAY_TTL" in DECISION_SRC
+    assert "_instant_today_ttl" in DECISION_SRC
 
 
 def test_cc_header_uses_response_cache():

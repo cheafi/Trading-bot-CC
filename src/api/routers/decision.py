@@ -48,6 +48,12 @@ def _today_cache_ttl() -> float:
     return env_float("CC_TODAY_CACHE_TTL", 90.0)
 
 
+def _instant_today_ttl() -> int:
+    from src.services.cc_perf_cache import env_int
+
+    return env_int("CC_INSTANT_TODAY_TTL", 300)
+
+
 def _stale_today_payload(reason: str) -> Dict[str, Any]:
     now = datetime.now(timezone.utc)
     return {
@@ -385,7 +391,9 @@ async def today_summary(
     if _today_lock.locked():
         cached = _cached_today_payload("fresh scan already running")
         if cached:
-            return json_cache_response(cached, request, max_age=5)
+            return json_cache_response(
+                cached, request, max_age=_instant_today_ttl()
+            )
         stale = _stale_today_payload("fresh scan already running")
         return json_cache_response(stale, request, max_age=0)
 

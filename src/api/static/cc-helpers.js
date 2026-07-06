@@ -287,9 +287,13 @@
 			NO_DEPLOY_QUALIFIED: "0 deploy-qualified — gates not met",
 		}
 		var out = []
+		if (eng === "conflict" && out.indexOf("RUNTIME CONFLICT") < 0) {
+			out.push("RUNTIME CONFLICT")
+		}
 		for (var i = 0; i < codes.length && out.length < 6; i++) {
 			var code = String(codes[i] || "")
 			if (code === "ENGINE_OFF" && (eng === "on" || eng === "conflict" || eng === "unknown")) continue
+			if (code === "ENGINE_OFF" && eng === "conflict") continue
 			if (code === "FALLBACK_BRIEF" && String(t.brief_freshness || "").toLowerCase() === "expired") continue
 			var label = labels[code] || code.replace(/_/g, " ")
 			if (out.indexOf(label) < 0) out.push(label)
@@ -1475,8 +1479,19 @@
 
 	function scopedFreshnessStrip(truth) {
 		var t = truth || {}
-		if (t.typed_freshness_display) return String(t.typed_freshness_display)
-		if (t.truth_strip) return String(t.truth_strip)
+		var eng = resolveEngineState(t, {})
+		if (eng !== "conflict" && t.typed_freshness_display) {
+			return safeRenderText(String(t.typed_freshness_display), {
+				truth: t,
+				blocked: t.deploy_authority === false,
+			})
+		}
+		if (eng !== "conflict" && t.truth_strip) {
+			return safeRenderText(String(t.truth_strip), {
+				truth: t,
+				blocked: t.deploy_authority === false,
+			})
+		}
 		var age = t.brief_age_days
 		var briefState = briefFreshnessStripState(t)
 		function label(scope, state) {
@@ -1500,7 +1515,10 @@
 		parts.push("Broker: " + label("Broker", t.broker_freshness))
 		parts.push("Runtime: " + runtimeFreshnessLabel(t))
 		parts.push("Authority: " + (t.deploy_authority ? "Open" : "Blocked"))
-		return parts.join(" · ")
+		return safeRenderText(parts.join(" · "), {
+			truth: t,
+			blocked: t.deploy_authority === false,
+		})
 	}
 
 	function morningDecisionLine(today) {
@@ -2087,11 +2105,19 @@
 		var primary = []
 		var secondary = []
 		var infra = []
+		var blockedAuthority =
+			!!o.authorityChip &&
+			/^(MONITOR ONLY|INSTANT DEGRADED|AUTHORITY BLOCKED)$/i.test(String(o.authorityChip))
 		if (o.authorityChip) {
 			primary.push({ label: o.authorityChip, class: "authority", tier: "primary" })
 		}
 		if (o.tradeability) {
-			primary.push({ label: String(o.tradeability), class: "tradeability", tier: "primary" })
+			var tb = String(o.tradeability)
+			if (blockedAuthority) {
+				secondary.push({ label: tb, class: "tradeability", tier: "secondary" })
+			} else {
+				primary.push({ label: tb, class: "tradeability", tier: "primary" })
+			}
 		}
 		if (o.fetchBadge) {
 			infra.push({ label: String(o.fetchBadge), class: "fetch", tier: "infra" })
@@ -2939,6 +2965,26 @@
 			: bilingualLine("一鍵匯出全介面", "Export All Pages")
 	}
 
+	function operatorBlockChromeLabel(key) {
+		var labels = {
+			now: bilingualLine("現在", "Now"),
+			why: bilingualLine("原因", "Why"),
+			allowed: bilingualLine("允許", "Allowed"),
+			blocked: bilingualLine("禁止", "Blocked"),
+			valid: bilingualLine("有效候選", "Valid"),
+			next: bilingualLine("下一步", "Next"),
+		}
+		return labels[String(key || "").toLowerCase()] || String(key || "")
+	}
+
+	function dashboardLoadingHeadline() {
+		return bilingualLine("載入看板中", "Loading dashboard…")
+	}
+
+	function dashboardLoadingHint() {
+		return bilingualLine("快取快照會先顯示", "cached snapshot shown when available")
+	}
+
 	function surfaceEmptyStateCopy(kind) {
 		return { headline: "", detail: "", badge: kind || "", cta: "" }
 	}
@@ -3540,6 +3586,9 @@
 		localizeHeaderSurface: localizeHeaderSurface,
 		localizeFetchStateCopy: localizeFetchStateCopy,
 		exportAllLabel: exportAllLabel,
+		operatorBlockChromeLabel: operatorBlockChromeLabel,
+		dashboardLoadingHeadline: dashboardLoadingHeadline,
+		dashboardLoadingHint: dashboardLoadingHint,
 		surfaceEmptyStateCopy: surfaceEmptyStateCopy,
 		morningDecisionLine: morningDecisionLine,
 		qualificationCountLine: qualificationCountLine,

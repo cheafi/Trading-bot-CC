@@ -1,4 +1,10 @@
-"""Shared CC performance helpers — cache fingerprints and HTTP cache headers."""
+"""Shared CC performance helpers — cache fingerprints and HTTP cache headers.
+
+Environment variables (server):
+  CC_TODAY_CACHE_TTL      — seconds to reuse in-memory /api/v7/today payload (default 90)
+  CC_INSTANT_TODAY_TTL    — max-age for stale today while a fresh scan is in-flight (default 300)
+  CC_HEADER_CACHE_TTL     — seconds for /api/ops/cc-header in-process cache (default 30)
+"""
 
 from __future__ import annotations
 
