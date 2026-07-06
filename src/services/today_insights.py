@@ -1040,19 +1040,38 @@ def build_top_monitor(
     todays_decision: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Canonical top monitor slot — never AVOID."""
+    from src.services.fetch_surface_state import build_top_monitor_labels
+
     td = todays_decision or {}
-    pick = pick_non_avoid_monitor(top5) or pick_non_avoid_monitor(near_miss)
+    valid_top = filter_valid_opportunities(top5)
+    lead = valid_top[0] if valid_top else None
+    nm_pick = pick_non_avoid_monitor(near_miss)
+    pick = lead or nm_pick
     if not pick and td.get("best_watch"):
         bw = td["best_watch"]
         if not _is_avoid_action(bw.get("action")):
             pick = bw
+            if not lead:
+                lead = bw
     action = _norm_action(_row_action(pick)) if pick else ""
     if pick and _is_avoid_action(action):
         pick = None
+    labels = build_top_monitor_labels(
+        watch_ticker=str((lead or {}).get("ticker") or (td.get("best_watch") or {}).get("ticker") or ""),
+        upgrade_ticker=str((nm_pick or {}).get("ticker") or ""),
+        trigger=str(
+            (nm_pick or lead or {}).get("upgrade_trigger")
+            or ((nm_pick or lead or {}).get("explanation") or {}).get("upgrade_trigger")
+            or ""
+        ),
+    )
     return {
         "ticker": (pick or {}).get("ticker") or "",
         "action": action or "NONE",
-        "label": top_monitor_display_label(top5, near_miss=near_miss),
+        "label": labels.get("label") or top_monitor_display_label(top5, near_miss=near_miss),
+        "top_watch_candidate": labels.get("top_watch_candidate", ""),
+        "closest_upgrade": labels.get("closest_upgrade", ""),
+        "top_promotion_trigger": labels.get("top_promotion_trigger", ""),
         "valid": bool(pick),
     }
 
@@ -1144,13 +1163,25 @@ def top_monitor_display_label(
     near_miss: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     """Mission panel headline — never promote AVOID as top monitor."""
-    pick = pick_non_avoid_monitor(monitors) or pick_non_avoid_monitor(near_miss)
-    if not pick:
-        if any(_is_avoid_action(_row_action(r)) for r in (monitors or near_miss or [])):
-            return "No valid monitor candidates"
-        return "Monitors"
-    ticker = str(pick.get("ticker") or "—").upper()
-    return f"Monitor: {ticker}"
+    from src.services.fetch_surface_state import build_top_monitor_labels
+
+    valid = filter_valid_opportunities(monitors)
+    lead = valid[0] if valid else None
+    nm_pick = pick_non_avoid_monitor(near_miss)
+    labels = build_top_monitor_labels(
+        watch_ticker=str((lead or {}).get("ticker") or ""),
+        upgrade_ticker=str((nm_pick or {}).get("ticker") or ""),
+        trigger=str(
+            (nm_pick or lead or {}).get("upgrade_trigger")
+            or ((nm_pick or {}).get("explanation") or {}).get("upgrade_trigger")
+            or ""
+        ),
+    )
+    if labels.get("label"):
+        return labels["label"]
+    if any(_is_avoid_action(_row_action(r)) for r in (monitors or near_miss or [])):
+        return "No valid monitor candidates"
+    return "Monitors"
 
 
 def _pick_best(

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from src.services.cc_display_constants import CC_TOP_MONITOR_COUNT
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 STATE_LOADING = "loading"
 STATE_FAILED_FETCH = "failed_fetch"
@@ -1628,6 +1628,46 @@ def build_export_review_html(snapshot: Optional[Dict[str, Any]] = None) -> str:
     return build_export_issues_page(snapshot) + build_export_all_surfaces_page(snapshot)
 
 
+def top_watch_candidate_label(ticker: str = "") -> str:
+    """#1 watch row — never 'Top monitor EXC vs XLP'."""
+    return f"Top watch candidate: {str(ticker or '—').upper()}"
+
+
+def closest_upgrade_label(ticker: str = "") -> str:
+    return f"Closest upgrade: {str(ticker or '—').upper()}"
+
+
+def top_promotion_trigger_label(ticker: str = "", trigger: str = "") -> str:
+    tk = str(ticker or "—").upper()
+    trig = str(trigger or "upgrade conditions").strip()
+    return f"Top promotion trigger: {tk} — {trig}"
+
+
+def build_top_monitor_labels(
+    *,
+    watch_ticker: str = "",
+    upgrade_ticker: str = "",
+    trigger: str = "",
+) -> Dict[str, str]:
+    """Canonical monitor slot labels for dashboard operator block."""
+    watch = str(watch_ticker or "").upper()
+    upgrade = str(upgrade_ticker or "").upper()
+    trig = str(trigger or "").strip()
+    labels: Dict[str, str] = {}
+    if watch:
+        labels["top_watch_candidate"] = top_watch_candidate_label(watch)
+    if upgrade and upgrade != watch:
+        labels["closest_upgrade"] = closest_upgrade_label(upgrade)
+    if trig and (upgrade or watch):
+        labels["top_promotion_trigger"] = top_promotion_trigger_label(upgrade or watch, trig)
+    labels["label"] = (
+        labels.get("top_watch_candidate")
+        or labels.get("closest_upgrade")
+        or "Monitors"
+    )
+    return labels
+
+
 def sanitize_blocked_candidate_copy(
     row: Optional[Dict[str, Any]] = None,
     *,
@@ -1654,13 +1694,30 @@ def remove_trade_language_when_blocked(text: str, *, blocked: bool = True) -> st
     replacements = (
         ("taking a Pilot entry", "monitor only — pilot blocked"),
         ("pilot entry", "monitor only"),
-        ("half size max", "no sizing — blocked"),
-        ("half size", "no sizing — blocked"),
-        ("size at half risk", "no sizing — blocked"),
+        ("half size max", "PILOT/WATCH labels are review-only"),
+        ("half size", "PILOT/WATCH labels are review-only"),
+        ("size at half risk", "PILOT/WATCH labels are review-only"),
         ("handoff to IBKR", "no handoff — blocked"),
         ("Deploy gate open", "Deploy authority: Blocked"),
     )
     for src, dst in replacements:
+        out = out.replace(src, dst)
+        out = out.replace(src.lower(), dst)
+    return out
+
+
+def remove_sizing_language_when_blocked(text: str, *, blocked: bool = True) -> str:
+    """Strip sizing / half-size language when deploy authority is blocked."""
+    out = remove_trade_language_when_blocked(text, blocked=blocked)
+    if not blocked:
+        return out
+    for src, dst in (
+        ("half size max", "PILOT/WATCH labels are review-only"),
+        ("half size", "PILOT/WATCH labels are review-only"),
+        ("full size", "no sizing — blocked"),
+        ("1R sizing", "no sizing — blocked"),
+        ("standard 1R sizing", "PILOT/WATCH labels are review-only"),
+    ):
         out = out.replace(src, dst)
         out = out.replace(src.lower(), dst)
     return out

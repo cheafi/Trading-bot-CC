@@ -1361,6 +1361,27 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         "operator_block": operator_block.get("dashboard"),
         "truth_strip": system_truth.get("truth_strip") or "",
     }
+    from src.services.agent_mode import (
+        build_agent_audit_journal_on_load,
+        build_agent_page_state,
+    )
+
+    watch_pool = [
+        r
+        for r in (valid_top5 or [])
+        if str(r.get("action") or r.get("effective_action") or "WATCH").upper()
+        not in ("AVOID", "NO_TRADE", "BLOCKED", "EXIT", "REDUCE")
+    ]
+    agent_page_state = build_agent_page_state(
+        system_truth,
+        watch_pool,
+        near_miss if not brief_expired or live_board_available else [],
+    )
+    agent_audit_journal = build_agent_audit_journal_on_load(
+        system_truth,
+        agent_page_state,
+        rules_count=int(agent_page_state.get("rules_count") or 0),
+    )
     from src.services.opportunity_quality import build_opportunity_status
     from src.services.options_availability import batch_options_availability
 
@@ -1395,6 +1416,15 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         "morning_decision_line": system_truth.get("morning_decision_line"),
         "system_reason_codes": system_truth.get("reason_codes"),
     }
+
+    from src.services.playbook_truth import build_playbook_operator_view
+
+    playbook_operator_view = build_playbook_operator_view(
+        system_truth,
+        valid_top5,
+        near_miss_rows=near_miss if not brief_expired or live_board_available else [],
+        best_action=todays_decision.get("best_action"),
+    )
 
     payload = {
         "date": now.strftime("%Y-%m-%d"),
@@ -1480,8 +1510,12 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         "score_reconciliation": score_reconciliation,
         "decision_authority": decision_authority,
         "system_truth": system_truth,
+        "strategy_lab_page": strategy_lab_page,
         "actionable_today": actionable_today,
         "operator_block": operator_block,
+        "playbook_operator_view": playbook_operator_view,
+        "agent_page_state": agent_page_state,
+        "agent_audit_journal": agent_audit_journal,
         "qualification_levels": qualification_levels,
         "trust": {
             "mode": "LIVE" if should_trade else "PAPER",

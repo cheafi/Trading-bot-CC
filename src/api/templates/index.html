@@ -793,8 +793,10 @@
         </div>
       </template>
 
-      <!-- ?? Agent ?? ? getting started + rule input ?? -->
+      <!-- ?? Agent ?? ? getting started + rule input (collapsed) ?? -->
       <div style="padding:6px 12px" data-cc="agent-getting-started">
+        <details>
+          <summary class="text-[9px] font-bold uppercase cursor-pointer mb-2" style="color:var(--blue)">Intent inbox ? rule builder</summary>
         <div class="card card-p mb-2" x-show="agentGettingStartedVisible()" style="border-left:3px solid var(--blue)">
           <div class="text-[10px] font-bold mb-1" style="color:var(--blue)" x-text="researchGettingStarted('agent').title"></div>
           <div class="text-[8px] font-bold uppercase mb-2" style="color:var(--t3)" x-text="researchGettingStarted('agent').badge"></div>
@@ -814,6 +816,7 @@
             <input x-model="agentMonitor.prompt" class="flex-1 min-w-[200px] rounded px-2 py-1 text-[10px]" style="background:var(--s2);border:1px solid var(--bd);color:var(--t1)" :placeholder="researchGettingStarted('agent').placeholder" @keydown.enter.prevent="submitAgentMonitorPrompt()">
             <button class="btn-p text-[9px]" :disabled="agentMonitor.submitting" @click="submitAgentMonitorPrompt()" x-text="agentMonitor.submitting?'?':'????'"></button>
             <button class="btn-s text-[9px]" @click="agentCreateRulesFromPlaybook()" x-text="researchGettingStarted('agent').nextButton"></button>
+            <button class="btn-s text-[9px]" @click="testAgentAuthorityGuardrail()" x-text="agentPageState().authority_guardrail_label||'Test authority guardrail'"></button>
           </div>
         </div>
         <div class="card card-p" x-show="!agentGettingStartedVisible()" style="border-left:3px solid var(--amber)">
@@ -1082,31 +1085,27 @@
                 </div>
               </template>
 
-              <!-- Recent Agent Journal -->
-              <div class="cc-right-section">
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-                  <div class="cc-right-label">?? Agent Journal</div>
-                  </div>
+              <!-- Recent Agent Journal (collapsed) -->
+              <details class="cc-right-section">
+                <summary class="cc-right-label cursor-pointer">?? Agent Journal</summary>
                 <template x-if="cmd.agentJournal.length===0">
-                  <div style="font-size:10px;color:var(--t3)">No persisted agent runs yet.</div>
+                  <div style="font-size:10px;color:var(--t3)">No audit journal entries yet.</div>
                 </template>
                 <template x-for="j in cmd.agentJournal.slice().reverse().slice(0,6)">
-                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--bd)">
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--bd)">
                     <div style="font-size:10px;color:var(--t2)">
-                      <span class="mono" style="color:var(--t1)" x-text="j.ticker||'?'"></span>
-                      <span style="color:var(--t3)"> ? </span>
-                      <span x-text="j.final_action||j.decision_tier||'?'"></span>
+                      <span class="mono" style="color:var(--t1)" x-text="j.message||j.ticker||'?'"></span>
+                      <span style="color:var(--t3)" x-show="j.detail"> ? </span>
+                      <span x-text="j.detail||''"></span>
                     </div>
-                    <div style="font-size:9px;color:var(--t3)" x-text="j.regime_gate||j.regime||'?'"></div>
+                    <div style="font-size:9px;color:var(--t3)" x-text="j.category||j.regime_gate||j.regime||'?'"></div>
                   </div>
                 </template>
-              </div>
+              </details>
 
-              <!-- Agent Reliability (IC/IR) -->
-              <div class="cc-right-section">
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-                  <div class="cc-right-label">?? Agent Reliability</div>
-                  </div>
+              <!-- Agent Reliability (collapsed) -->
+              <details class="cc-right-section">
+                <summary class="cc-right-label cursor-pointer">?? Agent Reliability</summary>
                 <template x-if="cmd.agentReliabilityLoading">
                   <div style="font-size:10px;color:var(--t3)"><span class="spin"></span> Loading reliability?</div>
                 </template>
@@ -1128,7 +1127,7 @@
                 <template x-if="!cmd.agentReliabilityLoading && cmd.agentReliability && (!cmd.agentReliability.resolved_samples || cmd.agentReliability.resolved_samples===0)">
                   <div style="font-size:10px;color:var(--t3)">No resolved outcomes yet. Reliability appears after outcome labeling.</div>
                 </template>
-              </div>
+              </details>
             </div>
           </template>
           <template x-if="!cmd.decision">
@@ -1291,7 +1290,7 @@
               <div><span class="font-bold uppercase mr-1" style="color:var(--amber)">?? ? Why</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().why"></span></div>
               <div><span class="font-bold uppercase mr-1" style="color:var(--green)">?? ? Allowed</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().allowed"></span></div>
               <div x-show="dashboardOperatorBlock().blocked"><span class="font-bold uppercase mr-1" style="color:var(--red)">?? ? Blocked</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().blocked"></span></div>
-              <div><span class="font-bold uppercase mr-1" style="color:var(--purple)">???? ? Valid</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().valid_candidates"></span><span x-show="today7.top_monitor?.label" class="text-[8px] ml-1" style="color:var(--t3)" x-text="'? '+today7.top_monitor.label"></span></div>
+              <div><span class="font-bold uppercase mr-1" style="color:var(--purple)">VALID CANDIDATES</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().valid_candidates"></span><span x-show="today7.top_monitor?.label" class="text-[8px] ml-1" style="color:var(--t3)" x-text="'? '+today7.top_monitor.label"></span></div>
               <div><span class="font-bold uppercase mr-1" style="color:var(--blue)">??? ? Next</span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().next"></span></div>
             </div>
             <div class="text-[8px] mt-2" style="color:var(--t3)" x-text="unifiedTruthStripLine()"></div>
@@ -1299,11 +1298,11 @@
         </div>
       </template>
 
-      <!-- 機會狀態 · Opportunity Status (no-edge clarity) -->
+      <!-- ???? ? Opportunity Status (no-edge clarity) -->
       <template x-if="today7.opportunity_status && !opportunityStatusCollapsed()">
         <div style="padding:4px 12px 0" data-cc="opportunity-status-panel">
           <div class="card card-p" style="padding:10px 12px;border-left:3px solid var(--purple);background:rgba(167,139,250,.05)">
-            <div class="text-[9px] font-bold uppercase mb-1.5" style="color:var(--purple)">機會狀態 · Opportunity Status</div>
+            <div class="text-[9px] font-bold uppercase mb-1.5" style="color:var(--purple)">???? ? Opportunity Status</div>
             <div class="text-[9px] mb-1"><span class="font-bold mr-1" style="color:var(--t2)">Edge today:</span><span class="text-white font-semibold" x-text="today7.opportunity_status.edge_today"></span><span class="text-[8px] ml-1" style="color:var(--t3)" x-text="'('+today7.opportunity_status.edge_today_zh+')'"></span></div>
             <div class="text-[9px] mb-1" x-show="(today7.opportunity_status.blockers||[]).length"><span class="font-bold mr-1" style="color:var(--amber)">?? ? Why ? <span x-text="today7.opportunity_status.blockers_headline_zh"></span>:</span><span style="color:var(--t2)" x-text="(today7.opportunity_status.blockers||[]).join(' ? ')"></span></div>
             <div class="text-[9px] mb-1" x-show="(today7.opportunity_status.upgrade_triggers||[]).length"><span class="font-bold mr-1" style="color:var(--green)">???? ? Upgrade ? <span x-text="today7.opportunity_status.upgrade_triggers_zh"></span>:</span><span style="color:var(--t2)" x-text="(today7.opportunity_status.upgrade_triggers||[]).join(' ? ')"></span></div>
@@ -1324,7 +1323,7 @@
       </template>
 
 
-      <!-- 今日可執行 · Actionable Today -->
+      <!-- ????? ? Actionable Today -->
       <template x-if="today7.actionable_today && !today7.actionable_today.empty && (today7.actionable_today.cards||[]).length">
         <div style="padding:4px 12px 0" data-cc="actionable-today-panel">
           <div class="card card-p" style="padding:10px 12px;border-left:3px solid var(--green);background:rgba(0,212,170,.04)">
@@ -1631,9 +1630,9 @@
             </details>
           </details>
           <template x-if="today7.unlock_deploy">
-            <div class="card card-p" style="border-left:3px solid var(--blue)">
-              <div class="flex items-center justify-between mb-1">
-                <div class="text-[10px] font-bold uppercase" style="color:var(--blue)">Unlock deploy</div>
+            <details class="card card-p" style="border-left:3px solid var(--blue)">
+              <summary class="text-[10px] font-bold uppercase cursor-pointer mb-1" style="color:var(--blue)">Unlock deploy ? expand</summary>
+              <div class="flex items-center justify-between mb-1 mt-1">
                 <span class="pill text-[8px]" :class="today7.unlock_deploy.unlocked?'pg':'pa'" x-text="today7.unlock_deploy.unlocked?'UNLOCKED':'LOCKED'"></span>
               </div>
               <div class="text-[9px] mb-2" style="color:var(--t2);line-height:1.55" x-show="today7.unlock_deploy.intro" x-text="today7.unlock_deploy.intro"></div>
@@ -1651,7 +1650,7 @@
                   <span style="color:var(--t3)" x-text="playbookUnlockConditionDetail(c)"></span>
                 </div>
               </template>
-            </div>
+            </details>
           </template>
           <template x-if="(today7.near_miss||[]).length || today7.todays_decision?.best_watch">
             <div class="card card-p" style="border-left:3px solid var(--green)">
@@ -2318,7 +2317,7 @@
                 <!-- Action guidance line -->
                 <div class="text-[9px] mb-2" style="line-height:1.4"
                   :style="'color:'+(cardReferenceBanner(opp)?'var(--amber)':(['TRADE','BUY','BUY_ON_DIP'].includes(String(effectiveCardAction(opp)).toUpperCase())?'var(--green)':['AVOID','NO_TRADE','BLOCKED'].includes(String(effectiveCardAction(opp)).toUpperCase())?'var(--red)':'var(--amber)'))"
-                  x-text="cardReferenceBanner(opp)||opp.action_reason||opp.action_rationale||''">
+                  x-text="cardActionGuidanceLine(opp)">
                 </div>
 
                 <template x-if="opp.sizing && !sizingBlockedForDisplay(opp.sizing)">
@@ -2658,20 +2657,17 @@
         <span x-show="sig.scan_meta" class="text-[9px]" style="color:var(--t3)" x-text="'? calibrated '+(sig.scan_meta?(sig.scan_meta.calibrated_at||sig.scan_meta.last_calibration||sig.scan_meta.model_version||'live'):'?')"></span>
       </div>
       <div class="mx-3 mb-2 p-2 rounded text-[8px]" data-cc="playbook-authority-strip" x-show="playbookAuthorityStripVisible()" style="background:rgba(88,166,255,.06);border:1px solid rgba(88,166,255,.2);color:var(--t2);line-height:1.5">
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">?? ? Now</div><div x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlock)?(CCHelpers.operatorBlock(today7.system_truth,'playbook',today7.operator_block||{}).now||''):''"></div></div>
-          <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">?? ? Blocker</div><div x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlock)?(CCHelpers.operatorBlock(today7.system_truth,'playbook',today7.operator_block||{}).why||''):''"></div></div>
-          <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">??? ? Next</div><div x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlock)?(CCHelpers.operatorBlock(today7.system_truth,'playbook',today7.operator_block||{}).next||''):''"></div></div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Authority</div><div class="font-bold text-white" x-text="playbookOperatorView().authority"></div><div class="text-[7px] mt-0.5" x-text="playbookOperatorView().posture"></div></div>
+          <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Truth</div><div x-text="playbookOperatorView().truth_strip"></div></div>
+          <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Qualification</div><div x-text="playbookQualificationDisplay()"></div></div>
+          <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Best action</div><div class="font-semibold text-white" x-text="playbookOperatorView().best_action||playbookBestActionDisplay()"></div></div>
+          <div class="sm:col-span-2"><div class="font-bold uppercase mb-1" style="color:var(--t3)">Next</div><div x-text="(playbookOperatorView().next||[]).join(' ? ')"></div></div>
         </div>
+        <div x-show="playbookNoValidMonitors()" class="mt-2 p-1.5 rounded text-[9px] font-bold" style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:var(--amber)">NO VALID MONITOR CANDIDATES</div>
       </div>
       <template x-if="playbookNoEdgeMode()">
         <div class="mx-3 mb-2 p-2 rounded text-[9px] font-bold" style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:var(--amber);line-height:1.55" x-text="playbookNoEdgeLine()"></div>
-      </template>
-      <template x-if="today7.system_truth&&!playbookNoEdgeMode()">
-        <div class="mx-3 mb-2 p-2 rounded text-[8px]" style="background:rgba(88,166,255,.06);border:1px solid rgba(88,166,255,.2);color:var(--t2);line-height:1.5" data-cc="operator-block-playbook">
-          <div class="font-bold text-white mb-0.5" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlock)?(CCHelpers.operatorBlock(today7.system_truth,'playbook',today7.operator_block||{}).now||''):''"></div>
-          <div x-text="unifiedTruthStripLine()"></div>
-        </div>
       </template>
       <template x-if="today7.system_truth?.brief_expired_copy">
         <div class="mx-3 mb-2 p-2 rounded text-[9px]" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--amber)" x-text="today7.system_truth.brief_expired_copy"></div>
@@ -2699,8 +2695,8 @@
           </details>
         </div>
       </template>
-      <!-- Board-level gate comment (Playbook) -->
-      <template x-if="playbookBoardWait() || playbookUsesBriefFallback() || playbookDeployableCount()<1">
+      <!-- Board-level gate comment (Playbook) ? collapsed secondary -->
+      <template x-if="false && (playbookBoardWait() || playbookUsesBriefFallback() || playbookDeployableCount()<1)">
         <div class="mx-3 mb-2 p-2 rounded text-[9px]" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--amber);line-height:1.55">
           <div class="text-[10px] font-bold uppercase mb-0.5" style="color:var(--amber)">Board decision</div>
           <div class="text-[8px] mb-1 font-semibold" x-text="playbookWaitDayIntro()"></div>
@@ -2725,8 +2721,8 @@
           <div>Even if some cards rank as TRADE on fallback scoring, page-level regime / validation / broker conditions currently block full deployment. Respect the page-level gate over individual card labels.</div>
         </div>
       </template>
-      <!-- Best Action Now (Playbook) -->
-      <template x-if="rankedOpps.bestAction && !playbookNoEdgeMode()">
+      <!-- Best Action Now (Playbook) ? shown in authority strip -->
+      <template x-if="false && rankedOpps.bestAction && !playbookNoEdgeMode()">
         <div class="mx-3 mb-2 card card-p" :style="'border-left:4px solid var(--'+(playbookBoardWait()?'amber':'green')+')'">
           <div class="text-[10px] font-bold uppercase mb-1" :style="'color:var(--'+(playbookBoardWait()?'amber':'green')+')'">Best Action Now</div>
           <div class="text-[11px] font-bold text-white mb-1" x-text="playbookBestActionDisplay()"></div>
@@ -2786,7 +2782,8 @@
         </div>
       </template>
       <!-- Deploy unlock conditions (compressed / WAIT) -->
-      <template x-if="rankedOpps.unlock_deploy && (playbookIsCompressedFallback() || playbookBoardWait())">
+      <!-- Deploy unlock conditions ? collapsed secondary -->
+      <template x-if="false && rankedOpps.unlock_deploy && (playbookIsCompressedFallback() || playbookBoardWait())">
         <div style="padding:0 12px 8px">
           <div class="card card-p" style="border-left:3px solid var(--amber)">
             <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--amber)">Deploy unlock conditions</div>
@@ -2801,8 +2798,8 @@
           </div>
         </div>
       </template>
-      <!-- Near-miss board (Playbook) -->
-      <template x-if="(rankedOpps.near_miss||[]).length && !playbookNoEdgeMode() && !today7.system_truth?.hide_brief_narrative">
+      <!-- Near-miss board ? consolidated into primary buckets -->
+      <template x-if="false && (rankedOpps.near_miss||[]).length && !playbookNoEdgeMode() && !today7.system_truth?.hide_brief_narrative">
         <div style="padding:0 12px 8px">
           <div class="card card-p" style="border-left:3px solid var(--blue)">
             <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--blue)">Near-miss ? upgrade layer</div>
@@ -2841,18 +2838,43 @@
           </div>
         </div>
       </template>
-      <!-- Ranked Cards -->
+      <!-- Ranked Cards ? single primary bucket sections -->
       <div style="padding:0 12px;display:flex;flex-direction:column;gap:6px">
-        <template x-if="playbookDisplayRows().length>0">
+        <template x-for="bucket in ['deploy','pilot','watch','near_miss']" :key="'pb-'+bucket">
+          <template x-if="playbookBucketRows(bucket).length && !(playbookNoValidMonitors() && (bucket==='watch'||bucket==='near_miss'))">
+            <div class="mb-1">
+              <div class="text-[10px] font-bold uppercase" style="color:var(--amber)" x-text="bucket==='deploy'?'Deploy':bucket==='pilot'?'Pilot':bucket==='watch'?'Watch':bucket==='near_miss'?'Near-miss':bucket"></div>
+            </div>
+            <template x-for="(r, idx) in playbookBucketRows(bucket)" :key="bucket+'-'+r.ticker">
+              <div class="card" style="cursor:pointer;overflow:hidden" @click="openDossier(r.ticker)">
+                <div style="padding:10px 12px">
+                  <div class="flex items-center gap-2 mb-1 flex-wrap">
+                    <span class="text-[13px] font-extrabold mono text-white" x-text="r.ticker||'?'"></span>
+                    <template x-for="tag in (r.playbook_tags||[])" :key="r.ticker+'-'+tag">
+                      <span class="pill pw text-[7px]" x-text="tag"></span>
+                    </template>
+                    <span class="pill text-[8px] font-bold ml-auto" :class="effectiveCardActionClass(r)" x-text="playbookEffectiveCardAction(r)"></span>
+                  </div>
+                  <div class="text-[8px] p-2 mb-1 rounded" style="background:var(--s2);line-height:1.5">
+                    <div class="text-amber-300" x-text="playbookCardGateLine(r)"></div>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </template>
+        </template>
+        <details x-show="(playbookOperatorView().buckets?.rejected_count||0)>0" class="mb-2">
+          <summary class="text-[9px] font-bold uppercase cursor-pointer" style="color:var(--red)">Rejected (<span x-text="playbookOperatorView().buckets?.rejected_count||0"></span>)</summary>
+        </details>
+        <template x-if="playbookAllBucketRows().length===0 && playbookDisplayRows().length>0">
           <div class="mb-1">
-            <div class="text-[10px] font-bold uppercase" style="color:var(--amber)">Monitor ranking</div>
-            <div class="text-[8px]" style="color:var(--t2);line-height:1.45" x-text="playbookLayerDefinitions().monitor_ranking"></div>
+            <div class="text-[10px] font-bold uppercase" style="color:var(--amber)">Candidate buckets</div>
           </div>
         </template>
         <template x-if="playbookBoardWait() && playbookDisplayRows().length>0">
           <div class="p-2 rounded text-[9px] mb-1" style="background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.2);color:var(--t2);line-height:1.55" x-text="playbookRankingsDisclaimer()"></div>
         </template>
-        <template x-if="playbookDisplayRows().length>0">
+        <template x-if="playbookAllBucketRows().length===0 && playbookDisplayRows().length>0">
           <template x-for="(r, idx) in playbookDisplayRows()">
             <div class="card" style="cursor:pointer;overflow:hidden" :style="(r.rr_below_trade_threshold||rrBelowTradeGate(r.risk_reward))?'opacity:.72;border:1px solid rgba(255,255,255,.06)':''" @click="openDossier(r.ticker)">
               <div :style="'height:3px;background:var(--'+(['TRADE','BUY'].includes(String(effectiveCardAction(r)).toUpperCase())?'green':effectiveCardAction(r)==='PILOT'?'blue':['NO_TRADE','AVOID','BLOCKED'].includes(String(effectiveCardAction(r)).toUpperCase())?'red':'amber')+')'"></div>
@@ -2868,7 +2890,7 @@
                   <template x-if="r.sector_type"><span class="pill pp text-[7px]" x-text="r.sector_type"></span></template>
                   <template x-if="r.grade"><span class="pill mono text-[8px]" :class="r.grade==='A'?'pg':r.grade==='B'?'pa':'pr'" x-text="'Grade '+r.grade"></span></template>
                   <span x-show="flowPlaybookCrossBadge(r.ticker)" class="pill pb text-[7px]" title="Flow confirms ticker on live overlay ? supporting only, not a deploy trigger">Flow confirm</span>
-                  <span class="pill text-[8px] font-bold ml-auto" x-show="!playbookUseCompactCards(r)" :class="effectiveCardActionClass(r)" x-text="effectiveCardAction(r)"></span>
+                  <span class="pill text-[8px] font-bold ml-auto" x-show="!playbookUseCompactCards(r)" :class="effectiveCardActionClass(r)" x-text="playbookEffectiveCardAction(r)"></span>
                 </div>
                 <template x-if="playbookSymbolComment(r, idx) && !playbookUseCompactCards(r)">
                   <div class="text-[8px] p-2 mb-1 rounded" style="background:rgba(88,166,255,.08);border-left:2px solid var(--blue);color:var(--t2);line-height:1.45" x-text="playbookSymbolComment(r, idx)"></div>
@@ -3177,9 +3199,10 @@
           </div>
         </template>
       </div>
-      <!-- Strategy Health ? research one-liner on Playbook (full lab under More) -->
-      <div class="section-hdr" style="margin-top:14px" x-show="!playbookNoEdgeMode()">?? Strategy Health</div>
-      <div style="padding:0 12px;margin-bottom:16px" x-show="!playbookNoEdgeMode()">
+      <!-- Strategy Health ? collapsed secondary -->
+      <details class="section-hdr" style="margin-top:14px">
+      <summary class="text-[10px] font-bold uppercase cursor-pointer" style="color:var(--t3)">Strategy Health (collapsed)</summary>
+      <div style="padding:0 12px;margin-bottom:16px">
         <div class="card card-p">
           <div class="text-[9px]" style="color:var(--t3);line-height:1.5">Strategy Lab ? research-only calibration. Open <button type="button" class="underline" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:9px" @click="switchTab('stratlab')">More ? Strategy Lab</button> when live closed-trade evidence exists.</div>
         </div>
@@ -3290,6 +3313,7 @@
           </template>
         </div>
       </div>
+      </details>
     </main>
 
     <!-- ??????????????????????????????????????????????????????? -->
@@ -4101,14 +4125,28 @@
 
     <!-- SURFACE: Strategy Lab (More ? research only) -->
     <main x-show="tab==='stratlab'" class="fade" data-cc="stratlab-surface" style="padding:12px;padding-bottom:40px" x-init="tab==='stratlab' && !stratHealth.data && fetchStrategyHealth()">
-      <div class="card card-p mb-2" style="border-left:3px solid var(--blue)">
-        <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--blue)">Strategy Lab ? research only</div>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[9px] mb-2" x-show="today7.system_truth">
-          <div><span class="font-bold uppercase" style="color:var(--blue)">NOW</span> <span x-text="researchSurfaceBlock('strategy').now"></span></div>
-          <div><span class="font-bold uppercase" style="color:var(--red)">BLOCKER</span> <span style="color:var(--t2)" x-text="researchSurfaceBlock('strategy').blocker"></span></div>
-          <div><span class="font-bold uppercase" style="color:var(--green)">NEXT</span> <span style="color:var(--t2)" x-text="researchSurfaceBlock('strategy').next"></span></div>
+      <div class="card card-p mb-2" style="border-left:3px solid var(--blue)" data-cc="stratlab-authority">
+        <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--blue)" x-text="strategyLabPageState().now"></div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[9px] mb-2">
+          <div><span class="font-bold uppercase" style="color:var(--amber)">WHY</span> <span style="color:var(--t2)" x-text="strategyLabPageState().why"></span></div>
+          <div><span class="font-bold uppercase" style="color:var(--green)">ALLOWED</span> <span style="color:var(--t2)" x-text="strategyLabPageState().allowed"></span></div>
+          <div x-show="strategyLabPageState().blocked"><span class="font-bold uppercase" style="color:var(--red)">BLOCKED</span> <span style="color:var(--t2)" x-text="strategyLabPageState().blocked"></span></div>
+          <div><span class="font-bold uppercase" style="color:var(--blue)">NEXT</span> <span style="color:var(--t2)" x-text="strategyLabPageState().next"></span></div>
         </div>
-        <div class="text-[9px]" style="color:var(--t2);line-height:1.55" x-text="stratLabOneLiner()"></div>
+        <div class="text-[9px] mb-2 p-2 rounded" style="background:var(--s2);color:var(--t2);line-height:1.55">
+          <span class="font-bold uppercase" style="color:var(--purple)">VALIDATION STATUS</span>
+          <span x-text="strategyLabValidationSummary()"></span>
+        </div>
+        <div class="text-[8px] mb-2" style="color:var(--t3)" x-text="'Brief: '+strategyLabPageState().brief_line"></div>
+        <div class="flex flex-wrap gap-2 mb-2">
+          <button class="btn-p text-[9px]" :disabled="stratLabDraft.generating||!strategyLabActionEnabled('generate_draft')" :title="strategyLabActionReason('generate_draft')" @click="generateStratLabDraft()">Generate offline draft</button>
+          <button class="btn-s text-[9px]" :disabled="!strategyLabActionEnabled('save_draft')||!stratLabDraft.draftId" :title="strategyLabActionReason('save_draft')" @click="saveStratLabDraft()">Save draft</button>
+          <button class="btn-s text-[9px]" :disabled="!strategyLabActionEnabled('refresh_context')" :title="strategyLabActionReason('refresh_context')" @click="refreshStratLabContext()">Refresh context</button>
+          <button class="btn-s text-[9px]" :disabled="!strategyLabActionEnabled('run_validation')" :title="strategyLabActionReason('run_validation')">Run validation</button>
+          <button class="btn-s text-[9px]" :disabled="!strategyLabActionEnabled('committee_review')" :title="strategyLabActionReason('committee_review')">Committee review</button>
+          <button class="btn-s text-[9px]" :disabled="!strategyLabActionEnabled('export_pine')" :title="strategyLabActionReason('export_pine')">Export Pine</button>
+          <button class="btn-s text-[9px]" :disabled="!strategyLabActionEnabled('send_playbook')" :title="strategyLabActionReason('send_playbook')">Send to Playbook review</button>
+        </div>
       </div>
       <div class="card card-p mb-2" x-show="stratLabGettingStartedVisible()" data-cc="stratlab-getting-started" style="border-left:3px solid var(--green)">
         <div class="text-[10px] font-bold mb-1" style="color:var(--green)" x-text="researchGettingStarted('strategy').title"></div>
@@ -4131,7 +4169,7 @@
         </div>
         <div class="flex flex-wrap gap-2 items-center">
           <input x-model="stratLabDraft.strategyId" class="flex-1 min-w-[180px] rounded px-2 py-1 text-[10px] mono" style="background:var(--s2);border:1px solid var(--bd);color:var(--t1)" :placeholder="researchGettingStarted('strategy').placeholder" @keydown.enter.prevent="generateStratLabDraft()">
-          <button class="btn-p text-[9px]" :disabled="stratLabDraft.generating" @click="generateStratLabDraft()" x-text="stratLabDraft.generating?'?':researchGettingStarted('strategy').nextButton"></button>
+          <button class="btn-p text-[9px]" :disabled="stratLabDraft.generating||!strategyLabActionEnabled('generate_draft')" :title="strategyLabActionReason('generate_draft')" @click="generateStratLabDraft()" x-text="stratLabDraft.generating?'?':researchGettingStarted('strategy').nextButton"></button>
         </div>
         <div x-show="stratLabDraft.draftId" class="text-[8px] mt-2 p-2 rounded" style="background:var(--s2);color:var(--t2)">
           ????? ? Draft <span class="mono text-white" x-text="stratLabDraft.draftId"></span> ? ???? Playbook ???????????????
@@ -4850,7 +4888,7 @@
     <!-- ??????????????????????????????????????????????????????? -->
     <main x-show="tab==='scanners'" class="fade" data-cc="discovery-surface" x-init="hydrateScannersFromCache();$watch('tab',v=>{if(v==='scanners'){hydrateScannersFromCache();if(!scannerHub.loading)fetchScanners()}})">
       <div class="trust-strip">
-        <span style="color:var(--blue)">? DISCOVERY</span>
+        <span style="color:var(--blue)">DISCOVERY ? Research Funnel</span>
         <span class="pill text-[8px] pw">Research-only</span>
         <span class="pill pa text-[8px]" x-show="scannerDiscoveryHasFallbackRows()" x-text="'FETCH FAILED'"></span>
         <span x-text="scannerHub.loading?'Loading?':(scannerDiscoveryHitsLabel()+' ? '+scannerUniverseLabel())"></span>
@@ -4910,55 +4948,52 @@
         <template x-if="scannerHub.loading">
           <div class="card card-p" style="text-align:center;padding:30px"><span class="spin"></span> Scanning?</div>
         </template>
-        <!-- Discovery verdict + merged board (full hub) -->
-        <template x-if="!scannerHub.loading&&scannerHub.data&&!scannerHub.category&&scannerHub.data.discovery_verdict">
-          <div class="card mb-3" style="border-left:4px solid var(--green);overflow:hidden">
+        <!-- Research funnel (default visible) -->
+        <template x-if="!scannerHub.loading&&scannerHub.data&&!scannerHub.category&&(scannerHub.data.discovery_operator_view||scannerHub.data.discovery_verdict)">
+          <div class="card mb-3" style="border-left:4px solid var(--blue);overflow:hidden">
             <div style="padding:8px 12px;background:var(--s2);border-bottom:1px solid var(--bd)">
-              <span class="text-[10px] font-bold uppercase text-white">Discovery Verdict</span>
+              <span class="text-[10px] font-bold uppercase text-white">DISCOVERY ? Research Funnel</span>
+              <span class="pill pw text-[8px] ml-2">Research-only</span>
               <span class="pill pa text-[8px] ml-2" x-text="discoveryVerdictQualityLabel()"></span>
             </div>
-            <div class="grid grid-cols-2 gap-2 p-3 text-[9px]" style="color:var(--t2)">
-              <div><span style="color:var(--t3)">Best scanner today</span><div class="font-bold text-white mono" x-text="(scannerHub.data.discovery_verdict.best_scanner_today||'?').replace(/_/g,' ')+' ('+(scannerHub.data.discovery_verdict.best_scanner_hits||0)+')'"></div></div>
-              <div><span style="color:var(--t3)" x-text="discoveryVerdictConfirmedLabel()"></span><div class="font-bold text-green-400 mono cursor-pointer" @click="scannerHub.data.discovery_verdict.best_confirmed_name&&openDossier(scannerHub.data.discovery_verdict.best_confirmed_name.ticker)" x-text="scannerHub.data.discovery_verdict.best_confirmed_name?scannerHub.data.discovery_verdict.best_confirmed_name.ticker+' ? '+scannerHub.data.discovery_verdict.best_confirmed_name.overlap+' scanners':'?'"></div></div>
-              <div><span style="color:var(--t3)" x-text="discoveryVerdictSpeculativeLabel()"></span><div class="font-bold text-amber-300 mono cursor-pointer" @click="scannerHub.data.discovery_verdict.best_speculative_name&&openDossier(scannerHub.data.discovery_verdict.best_speculative_name.ticker)" x-text="scannerHub.data.discovery_verdict.best_speculative_name?(scannerHub.data.discovery_verdict.best_speculative_name.ticker+' ? '+formatFallbackScore(scannerHub.data.discovery_verdict.best_speculative_name)):'?'"></div></div>
-              <div><span style="color:var(--t3)">Avoid now</span><div class="font-bold" :class="(scannerHub.data.discovery_verdict.avoid_now_count||0)>0?'text-red-400':'text-white'" x-text="(scannerHub.data.discovery_verdict.avoid_now_count||0)+' risk flags'"></div></div>
-              <div class="col-span-2"><span style="color:var(--t3)">Breadth</span><div class="text-white" x-text="scannerHub.data.discovery_verdict.discovery_breadth||'?'"></div></div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 text-[9px]" style="color:var(--t2)">
+              <div><span class="font-bold uppercase" style="color:var(--blue)">NOW</span> <span class="text-white" x-text="discoveryFunnelPanel().now"></span></div>
+              <div><span class="font-bold uppercase" style="color:var(--amber)">WHY</span> <span x-text="discoveryFunnelPanel().why"></span></div>
+              <div><span class="font-bold uppercase" style="color:var(--green)">FUNNEL</span> <span x-text="discoveryFunnelPanel().funnel_line"></span></div>
+              <div><span class="font-bold uppercase" style="color:var(--purple)">BEST ACTION</span> <span class="text-white" x-text="discoveryFunnelPanel().best_action"></span></div>
+            </div>
+            <div class="px-3 pb-3">
+              <div class="text-[8px] font-bold uppercase mb-2" style="color:var(--green)">SHORTLIST (max 10)</div>
+              <template x-if="discoveryShortlistRows().length===0">
+                <div class="text-[10px] p-2 rounded" style="background:var(--s1);color:var(--t2)" x-text="discoveryFunnelPanel().now"></div>
+              </template>
+              <template x-for="m in discoveryShortlistRows()" :key="'shortlist-'+m.ticker">
+                <div class="mb-2 p-2 rounded text-[8px]" style="background:var(--s2);border-left:3px solid var(--green)">
+                  <div class="flex flex-wrap items-center gap-2 mb-1">
+                    <span class="mono font-bold text-white cursor-pointer" @click="openDossier(m.ticker)" x-text="m.ticker"></span>
+                    <span class="pill pw text-[7px]" x-text="discoveryRowLabel('action')"></span>
+                    <span class="pill pw text-[7px]" x-text="discoveryScoreDisplayFor(m)"></span>
+                    <span class="pill pw text-[7px]" x-text="discoveryConfidenceDisplayFor(m)"></span>
+                  </div>
+                  <div style="color:var(--t2)" x-text="m.why_surfaced||m.why_flagged||m.headline||m.reason||'?'"></div>
+                  <div class="flex flex-wrap gap-1 mt-1">
+                    <button class="btn-s text-[7px]" @click="openDossier(m.ticker)" x-text="discoveryRowLabel('dossier')"></button>
+                    <button class="btn-s text-[7px]" @click="switchTab('signals');fetchRanked()" x-text="discoveryRowLabel('playbook')"></button>
+                    <button class="btn-s text-[7px]" :disabled="!m.monitor_rule_enabled" @click="m.monitor_rule_enabled&&toggleWatchlist(m.ticker)" x-text="discoveryRowLabel('monitor')"></button>
+                  </div>
+                </div>
+              </template>
             </div>
           </div>
-          <template x-if="(scannerHub.data.merged_top_names||[]).length">
-            <div class="card mb-3" style="overflow:hidden">
-              <div style="padding:8px 12px;background:var(--s2);border-bottom:1px solid var(--bd)">
-                <span class="text-[10px] font-bold uppercase text-white">Merged Top Names</span>
-                <span class="pill pg text-[8px] ml-2" x-text="(scannerHub.data.merged_top_names||[]).length+' ranked'"></span>
-              </div>
-              <div style="padding:6px 10px">
-                <template x-for="m in (scannerHub.data.merged_top_names||[]).slice(0,12)" :key="'merged-'+m.ticker">
-                  <div class="mb-2 p-2 rounded text-[8px]" style="background:var(--s2);border-left:3px solid var(--blue)">
-                    <div class="flex flex-wrap items-center gap-2 mb-1">
-                      <span class="mono font-bold text-white cursor-pointer" @click="openDossier(m.ticker)" x-text="m.ticker"></span>
-                      <span class="pill pb text-[7px]" x-text="m.overlap+' scanners'"></span>
-                      <span class="pill mono text-[7px]" :class="m.action==='TRADE'?'pg':m.action==='AVOID'?'pr':'pa'" x-text="m.action"></span>
-                      <span class="pill pw text-[7px]" x-text="m.urgency"></span>
-                      <span class="pill pw text-[7px]" x-text="discoveryConfidenceLine(m)"></span>
-                    </div>
-                    <div style="color:var(--t3)" x-text="(m.scanners||[]).join(' ? ')"></div>
-                    <div style="color:var(--t2)" x-text="m.why_flagged||'?'"></div>
-                    <div class="text-[7px] mt-0.5" style="color:var(--t3)"><span style="color:var(--t2)">Alignment</span> ? <span x-text="scannerRowAlignmentLine(m)"></span></div>
-                    <div class="flex flex-wrap gap-1 mt-1">
-                      <button class="btn-s text-[7px]" @click="openDossier(m.ticker)">Dossier</button>
-                      <button class="btn-s text-[7px]" @click="switchTab('signals');fetchRanked()">Playbook</button>
-                      <button class="btn-s text-[7px]" @click="toggleWatchlist(m.ticker)">Watch</button>
-                    </div>
-                  </div>
-                </template>
-              </div>
-            </div>
-          </template>
         </template>
-        <!-- Results: All categories ? Tier 1 active / Tier 2 empty pills -->
+        <!-- Collapsed: raw scanner hits / debug -->
         <template x-if="!scannerHub.loading&&scannerHub.data&&scannerHub.data.scanners&&!scannerHub.category">
-          <div class="space-y-3">
-            <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--green)">Tier 1 ? Active discovery</div>
+          <details class="card mb-3" style="overflow:hidden" :open="!discoveryHideRawHits()">
+            <summary class="text-[9px] font-bold uppercase cursor-pointer" style="padding:8px 12px;background:var(--s2);border-bottom:1px solid var(--bd);color:var(--t3)">
+              Raw scanner hits ? similar-pattern cluster ? debug
+              <span class="pill pw text-[7px] ml-2" x-show="discoveryHideRawHits()" x-text="'hidden ? 0 strict passed'"></span>
+            </summary>
+            <div class="space-y-3 p-2" x-show="!discoveryHideRawHits()">
             <template x-for="catName in scannerCategoriesWithHits()" :key="catName">
               <div class="card" style="overflow:hidden">
                 <div style="padding:8px 12px;background:var(--s2);border-bottom:1px solid var(--bd)">
@@ -4980,19 +5015,19 @@
                           <div class="flex flex-wrap items-center gap-2 mb-1">
                             <span class="mono font-bold text-white cursor-pointer" @click="openDossier(h.ticker)" x-text="h.ticker||'?'"></span>
                             <span class="pill pb text-[7px]" x-text="h.signal_source||h.scanner||scanName"></span>
-                            <span class="pill mono text-[7px]" :class="(h.score_display_mode==='fallback_rank')?'pa':((h.strength||h.score||0)>=7?'pg':'pa')" x-text="scannerScoreLabel(h)"></span>
+                            <span class="pill mono text-[7px]" :class="(h.score_display_mode==='fallback_rank')?'pa':'pw'" x-text="discoveryScoreDisplayFor(h)"></span>
                             <span class="pill pw text-[7px]" x-text="h.freshness||'live'"></span>
-                            <span class="pill pw text-[7px]" x-text="(h.status||'monitor')+' ? '+(h.urgency||'NORMAL')"></span>
-                            <span class="pill pw text-[7px]" x-text="discoveryConfidenceLine(h)"></span>
+                            <span class="pill pw text-[7px]" x-text="discoveryRowLabel('action')+' ? '+(h.urgency||'NORMAL')"></span>
+                            <span class="pill pw text-[7px]" x-text="discoveryConfidenceDisplayFor(h)"></span>
                             <span x-show="portfolioHasTicker(h.ticker)" class="pill pb text-[7px]">IN BOOK</span>
                           </div>
                           <div style="color:var(--t2)" x-text="h.why_surfaced||h.headline||h.reason||'?'"></div>
                           <div x-show="h.risk_note" class="text-amber-300 mt-0.5" x-text="'? '+h.risk_note"></div>
                           <div class="text-green-400 mt-0.5" x-text="'? '+(h.next_action||'Review')"></div>
                           <div class="flex flex-wrap gap-1 mt-1">
-                            <button class="btn-s text-[7px]" @click="openDossier(h.ticker)">Dossier</button>
-                            <button class="btn-s text-[7px]" @click="switchTab('signals');fetchRanked()">Playbook</button>
-                            <button class="btn-s text-[7px]" @click="toggleWatchlist(h.ticker)">Watch</button>
+                            <button class="btn-s text-[7px]" @click="openDossier(h.ticker)" x-text="discoveryRowLabel('dossier')"></button>
+                            <button class="btn-s text-[7px]" @click="switchTab('signals');fetchRanked()" x-text="discoveryRowLabel('playbook')"></button>
+                            <button class="btn-s text-[7px]" :disabled="!h.monitor_rule_enabled" @click="h.monitor_rule_enabled&&toggleWatchlist(h.ticker)" x-text="discoveryRowLabel('monitor')"></button>
                           </div>
                         </div>
                       </template>
@@ -5026,7 +5061,8 @@
                 </div>
               </template>
             </template>
-          </div>
+            </div>
+          </details>
         </template>
         <!-- Results: Single category -->
         <template x-if="!scannerHub.loading&&scannerHub.data&&scannerHub.data.hits!==undefined&&(scannerHub.category||scannerHub.data.category)">
@@ -5062,17 +5098,17 @@
                   <div class="flex flex-wrap items-center gap-2 mb-1">
                     <span class="mono font-bold text-white cursor-pointer" @click="openDossier(h.ticker)" x-text="h.ticker||'?'"></span>
                     <span class="pill pb text-[7px]" x-text="h.signal_source||h.scanner||'?'"></span>
-                    <span class="pill mono text-[7px]" :class="(h.score_display_mode==='fallback_rank')?'pa':((h.strength||h.score||0)>=7?'pg':'pa')" x-text="scannerScoreLabel(h)"></span>
+                    <span class="pill mono text-[7px]" :class="(h.score_display_mode==='fallback_rank')?'pa':'pw'" x-text="discoveryScoreDisplayFor(h)"></span>
                     <span class="pill pw text-[7px]" x-text="h.freshness||'live'"></span>
                     <span class="pill mono text-[8px] ml-auto" :class="(h.severity||'INFO')==='WARNING'?'pa':(h.severity||'INFO')==='CRITICAL'?'pr':'pw'" x-text="h.severity||'INFO'"></span>
                   </div>
                   <div style="color:var(--t2)" x-text="h.why_surfaced||h.headline||h.reason||''"></div>
                   <div x-show="h.risk_note" class="text-amber-300" x-text="'? '+h.risk_note"></div>
-                  <div class="text-green-400" x-text="'? '+(h.next_action||'Open dossier')"></div>
+                  <div class="text-green-400" x-text="'? '+(h.next_action||'Review Dossier')"></div>
                   <div class="flex flex-wrap gap-1 mt-1">
-                    <button class="btn-s text-[7px]" @click="openDossier(h.ticker)">Dossier 360</button>
-                    <button class="btn-s text-[7px]" @click="switchTab('signals');fetchRanked()">Playbook</button>
-                    <button class="btn-s text-[7px]" @click="toggleWatchlist(h.ticker)">Watch</button>
+                    <button class="btn-s text-[7px]" @click="openDossier(h.ticker)" x-text="discoveryRowLabel('dossier')"></button>
+                    <button class="btn-s text-[7px]" @click="switchTab('signals');fetchRanked()" x-text="discoveryRowLabel('playbook')"></button>
+                    <button class="btn-s text-[7px]" :disabled="!h.monitor_rule_enabled" @click="h.monitor_rule_enabled&&toggleWatchlist(h.ticker)" x-text="discoveryRowLabel('monitor')"></button>
                   </div>
                 </div>
               </template>
@@ -7130,7 +7166,7 @@
 
             <!-- ?? WORKING BRACKET / Simulation Drafts when deploy blocked ?? -->
             <template x-if="ibkr.workingBracket || (ibkr.bracketArchive&&ibkr.bracketArchive.length)">
-              <details class="mt-2" :open="!todayDeployBlocked()">
+              <details class="mt-2" x-show="playbookPaperQueueVisible()" :open="!todayDeployBlocked()">
                 <summary class="text-[9px] font-bold uppercase cursor-pointer" style="color:var(--t3)" x-text="paperQueueSummaryLabel()"></summary>
             <template x-if="ibkr.workingBracket">
               <div class="mt-2 p-2 rounded text-[10px]" style="background:#0e2a1a;border:1px solid var(--green)">
@@ -8146,7 +8182,7 @@
       platformExtras:{catalyst:null,pmMemo:null,loading:false},
       aosMonitors:{rules:[],alerts:[],loading:false},
       agentMonitor:{prompt:'',submitting:false},
-      stratLabDraft:{strategyId:'',draftId:'',generating:false},
+      stratLabDraft:{strategyId:'',draftId:'',generating:false,saved:false},
       shadowImport:{busy:false},
       ledgerView:{loading:false,loaded:false,rows:[],stats:null,filterStrategy:'',filterDirection:'',filterTicker:'',expanded:false},
       factory:{loading:false,ticker:'SPY',period:'2y',mode:'demo',result:null,detail:null,showDetail:false,sortBy:'score'},
@@ -8209,6 +8245,7 @@
         agent:null,
         agentError:'',
         agentJournal:[],
+        agentAuditSeeded:false,
         agentReliability:null,
         agentReliabilityError:'',
         agentReliabilityLoading:false,
@@ -9450,9 +9487,70 @@
       },
       paperDeployAvailable(){ return this.todayPaperDeployAvailable(); },
       paperQueueSummaryLabel(){
-        if(this.todayPaperDeployAvailable()) return '????? ? Paper actions today';
         if(this.todayLiveDeployBlocked()) return 'Simulation Drafts (deploy blocked)';
-        return 'Paper Queue';
+        if(this.todayPaperDeployAvailable()) return 'Simulation Drafts';
+        return 'Simulation Drafts';
+      },
+      playbookOperatorPayload(){
+        return {
+          system_truth: this.today7.system_truth||{},
+          playbook_operator_view: this.rankedOpps.playbook_operator_view||this.today7.playbook_operator_view||null,
+          filter_funnel: this.rankedOpps.filter_funnel||this.today7.filter_funnel||{},
+        };
+      },
+      playbookOperatorView(){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.playbookAuthorityView)
+          return CCHelpers.playbookAuthorityView(this.playbookOperatorPayload());
+        const truth=this.today7.system_truth||{};
+        return {
+          authority: truth.deploy_authority?'ALLOWED':'BLOCKED',
+          blocked: !truth.deploy_authority,
+          posture: truth.deploy_authority?String(truth.regime_state||'WAIT').toUpperCase():'MONITOR ONLY',
+          truth_strip: truth.truth_strip||'',
+          qualification_line: truth.qualification_line||'',
+          best_action: '',
+          next: [],
+          no_valid_monitors: false,
+          simulation_drafts_collapsed: !truth.deploy_authority,
+          buckets: {},
+        };
+      },
+      playbookAuthorityStripVisible(){ return this.tab==='signals'; },
+      playbookQualificationDisplay(){
+        const pov=this.playbookOperatorView();
+        if(pov.qualification_line) return pov.qualification_line;
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.playbookQualificationLine)
+          return CCHelpers.playbookQualificationLine(this.today7.system_truth||{}, this.rankedOpps.filter_funnel);
+        return this.today7.system_truth?.qualification_line||'';
+      },
+      playbookBucketRows(key){
+        const pov=this.playbookOperatorView();
+        const buckets=pov.buckets||{};
+        return buckets[key]||[];
+      },
+      playbookAllBucketRows(){
+        const keys=['deploy','pilot','watch','near_miss'];
+        const out=[];
+        keys.forEach(k=>{
+          (this.playbookBucketRows(k)||[]).forEach(r=>out.push({...r,_bucket:k}));
+        });
+        if(out.length) return out;
+        return (this.playbookDisplayRows()||[]).map(r=>({...r,_bucket:'watch'}));
+      },
+      playbookNoValidMonitors(){
+        const pov=this.playbookOperatorView();
+        return !!pov.no_valid_monitors;
+      },
+      playbookPaperQueueVisible(){
+        const pov=this.playbookOperatorView();
+        if(pov.simulation_drafts_collapsed||pov.blocked) return false;
+        return !!(this.ibkr.workingBracket||(this.ibkr.bracketArchive&&this.ibkr.bracketArchive.length));
+      },
+      playbookEffectiveCardAction(r){
+        const pov=this.playbookOperatorView();
+        const raw=String(this.effectiveCardAction(r)||r.action||'WATCH').toUpperCase();
+        if(pov.blocked&&['TRADE','BUY','BUY_ON_DIP','STRONG_TRADE','TRADE_NOW'].includes(raw)) return 'WATCH';
+        return raw;
       },
       playbookPaperActionVisible(r){
         if(!r||!r.ticker) return false;
@@ -9491,14 +9589,14 @@
           const line=CCHelpers.tradeabilityGuidanceLine({blocked,tradeability:tb,pilotBlocked});
           if(line) return line;
         }
-        if(blocked) return 'Deploy blocked ? monitor only; no sizing, no handoff, no pilot entry.';
+        if(blocked) return 'PILOT/WATCH labels are review-only ? deploy blocked.';
         const dm=this.today7.decision_model;
         if(dm&&dm.guidance) return String(dm.guidance);
         if(tb==='STRONG_TRADE') return 'Multiple execution-ready names ? full size only on A-grade with brackets.';
         if(tb==='TRADE') return 'At least one execution-ready setup ? standard 1R sizing.';
         if(tb==='SELECTIVE'){
-          if(pilotBlocked)
-            return 'SELECTIVE review only ? monitor candidates; no pilot sizing until gates clear.';
+          if(pilotBlocked||blocked)
+            return 'SELECTIVE review only ? monitor candidates; PILOT/WATCH labels are review-only.';
           return 'Pilot or single-name only ? half size, stop required.';
         }
         if(tb==='WAIT') return 'No deploy-grade board ? patience is the active decision.';
@@ -9549,10 +9647,51 @@
         return 'Suggested watch rules: '+safe.map(r=>r.label||r.rule||r.ticker||'rule').join(' ? ');
       },
       stratLabOneLiner(){
+        const page=this.strategyLabPageState();
+        if(page&&page.mode==='offline_draft_only') return page.now+' ? '+String(page.brief_line||'');
         if(this.stratHealth.loading) return 'Loading strategy health ? research-only; not deploy authority.';
         const n=(this.stratHealth.data?.strategies||[]).length;
         if(!n) return 'Strategy Lab ? no live closed-trade sample in window. Calibration and hit-rate remain provisional until evidence accumulates.';
         return `Strategy Lab ? ${n} strateg${n===1?'y':'ies'} with closed-trade evidence in window (research-only).`;
+      },
+      strategyLabPayload(){
+        return {system_truth:this.today7?.system_truth||{},strategy_lab_page:this.today7?.strategy_lab_page};
+      },
+      strategyLabPageState(){
+        const payload=this.strategyLabPayload();
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.strategyLabPageState)
+          return CCHelpers.strategyLabPageState(payload);
+        return {now:'RESEARCH ONLY ? Offline draft sandbox',why:'',allowed:'',blocked:'',next:'',mode:'offline_draft_only',brief_line:''};
+      },
+      strategyLabValidationSummary(){
+        const payload=this.strategyLabPayload();
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.strategyLabValidationSummary)
+          return CCHelpers.strategyLabValidationSummary(payload);
+        return '';
+      },
+      strategyLabActionEnabled(action){
+        const payload=this.strategyLabPayload();
+        const mode=this.strategyLabPageState().mode;
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.strategyLabActionEnabled)
+          return CCHelpers.strategyLabActionEnabled(action,mode,payload);
+        return ['generate_draft','save_draft','refresh_context'].includes(String(action||''));
+      },
+      strategyLabActionReason(action){
+        const payload=this.strategyLabPayload();
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.strategyLabActionReason)
+          return CCHelpers.strategyLabActionReason(action,payload);
+        return this.strategyLabActionEnabled(action)?'':'Offline draft only ? action blocked';
+      },
+      saveStratLabDraft(){
+        if(!this.stratLabDraft.draftId){this.showExportToast('Generate a draft first');return;}
+        if(!this.strategyLabActionEnabled('save_draft')){this.showExportToast(this.strategyLabActionReason('save_draft'));return;}
+        this.stratLabDraft.saved=true;
+        this.showExportToast('Draft saved locally ? not Playbook promotion');
+      },
+      async refreshStratLabContext(){
+        if(!this.strategyLabActionEnabled('refresh_context')){this.showExportToast(this.strategyLabActionReason('refresh_context'));return;}
+        await Promise.all([this.fetchToday7({refresh:true}),this.fetchStrategyHealth()]);
+        this.showExportToast('Strategy Lab context refreshed');
       },
       signalFamilyHealthLine(){
         const d=this.signalFamilyHealth?.data;
@@ -9830,8 +9969,6 @@
           const eng=this.today7?.system_truth?.engine_state;
           if(eng!=null&&String(eng)!=='undefined') return 'ENGINE '+String(CCHelpers.formatEngineState(eng)).toUpperCase();
         }
-        if(this.ops?.running===true) return 'ENGINE ON';
-        if(this.ops?.running===false) return 'ENGINE OFF';
         return 'ENGINE UNKNOWN';
       },
       engineStatePillClass(){
@@ -10027,14 +10164,7 @@
         return s==='done'?'pg':s==='pending'?'pa':'pw';
       },
       agentOperatorBlockerLine(){
-        const truth=this.today7.system_truth||{};
-        const blocks=this.today7.operator_block||{};
-        let ob;
-        if(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlock)
-          ob=CCHelpers.operatorBlock(truth,'agent',blocks);
-        else ob=(blocks.agent)||{};
-        const line=ob.why||truth.primary_blocker||'';
-        return line?('Blocker: '+line+' ? '+String(ob.allowed||'monitor only')):'';
+        return this.agentMaxOneBlockerLine();
       },
       playbookNoEdgeMode(){
         const rows=this.rankedOpps.rows||[];
@@ -10934,6 +11064,29 @@
       cardReferenceBanner(opp){
         if(!this.cardIsFallbackRow(opp)&&!this.pageAuthorityIsDegraded()) return '';
         return 'Reference plan only ? Indicative levels only ? Monitor zone ? No deploy authority';
+      },
+      cardActionGuidanceLine(opp){
+        if(!opp) return '';
+        const banner=this.cardReferenceBanner(opp);
+        if(banner) return banner;
+        const blocked=this.todayDeployBlocked();
+        if(blocked){
+          const block=this.dashboardOperatorBlock();
+          if(typeof CCHelpers!=='undefined'&&CCHelpers.sanitizeBlockedCandidateCopy){
+            return CCHelpers.sanitizeBlockedCandidateCopy(opp,{
+              blocked:true,
+              deployAuthority:false,
+              blocker:block.blocked||'deploy authority blocked',
+            });
+          }
+          let raw=String(opp.action_reason||opp.action_rationale||'');
+          if(typeof CCHelpers!=='undefined'&&CCHelpers.removeSizingLanguageWhenBlocked)
+            return CCHelpers.removeSizingLanguageWhenBlocked(raw,true);
+          if(typeof CCHelpers!=='undefined'&&CCHelpers.removeTradeLanguageWhenBlocked)
+            return CCHelpers.removeTradeLanguageWhenBlocked(raw,true);
+          return raw;
+        }
+        return String(opp.action_reason||opp.action_rationale||'');
       },
       cardExecutionGrade(opp){
         if(!opp) return '?';
@@ -14593,7 +14746,7 @@
         finally{delete this._ccRefreshInflight.today;}
       },
       async _fetchToday7Core(opts={}){
-        try{const r=await this.ccFetch('/api/v7/today',{retries:4,backoff:600});if(!r||!r.ok)throw new Error('HTTP '+(r?r.status:'fail'));const d=await r.json();this.captureInstantDegradedBanner(d);if(d&&d.error)throw new Error(String(d.error));if(!d||!d.market_regime)throw new Error('incomplete today payload');this.today7.regime=d.market_regime||null;this.today7.decision_authority=d.decision_authority||null;this.today7.top_ranked=d.top_5||[];this.today7.todays_decision=d.todays_decision||null;this.today7.best_action=d.best_action||null;this.today7.overlap_warning=d.overlap_warning||null;this.today7.near_miss=d.near_miss||[];this.today7.score_reconciliation=d.score_reconciliation||null;this.today7.no_setup_diagnosis=d.no_setup_diagnosis||null;this.today7.quant_cluster_hints=d.quant_cluster_hints||[];this.today7.unlock_deploy=d.unlock_deploy||null;this.today7.regime_wait_explanation=d.regime_wait_explanation||[];this.today7.monitor_triggers=d.monitor_triggers||[];this.today7.sleeve_summary=d.sleeve_summary||null;this.today7.execution_readiness=d.execution_readiness||d.best_action?.execution_readiness||null;this.today7.evidence_badges=d.evidence_badges||null;this.today7.cross_asset_confirmation=d.cross_asset_confirmation||null;this.today7.index_regime_summary=d.index_regime_summary||null;this.today7.regime_strip=d.regime_strip||null;this.today7.regime_stack_summary=d.regime_stack_summary||null;this.today7.allocator_stance=d.allocator_stance||null;this.today7.ai_reason_codes=d.ai_reason_codes||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.decision_model=d.decision_model||null;this.today7.decision_hierarchy=d.decision_hierarchy||null;this.today7.passive_baseline=d.passive_baseline||null;this.today7.complexity_challenge=d.complexity_challenge||null;this.today7.restraint=d.restraint||null;this.today7.surface_authority=d.surface_authority||null;this.today7.crisis_regime=d.crisis_regime||null;this.today7.naval_clarity=d.naval_clarity||null;this.today7.buffett_clarity=d.buffett_clarity||null;this.today7.index_fund_posture=d.index_fund_posture||null;this.today7.principles_posture=d.principles_posture||null;this.today7.avoid_grouped=d.avoid_grouped||null;this.today7.bucket_quality=d.bucket_quality||[];this.today7.avoid_list=(d.avoid_now||[]).length?(d.avoid_now||[]):(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'?',reason:a,category:'regime'}:a);this.today7.tradeability=(d.decision_model&&d.decision_model.honest_tradeability)||(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{};this.today7.system_truth=d.system_truth||null;this.today7.actionable_today=d.actionable_today||null;this.today7.opportunity_status=d.opportunity_status||null;this.today7.operator_block=d.operator_block||null;this.today7.monitor_display_limit=d.monitor_display_limit||((typeof CCHelpers!=='undefined'&&CCHelpers.CC_TOP_MONITOR_COUNT)||10);this.today7.top_monitor=d.top_monitor||null;this.today7.top_opportunities=d.top_opportunities||[];this.today7.candidate_counts=d.candidate_counts||null;this.today7.evidence_conflict=d.evidence_conflict||null;if(this.isWaitDay()){this.today7.avoid_collapsed=true;}
+        try{const r=await this.ccFetch('/api/v7/today',{retries:4,backoff:600});if(!r||!r.ok)throw new Error('HTTP '+(r?r.status:'fail'));const d=await r.json();this.captureInstantDegradedBanner(d);if(d&&d.error)throw new Error(String(d.error));if(!d||!d.market_regime)throw new Error('incomplete today payload');this.today7.regime=d.market_regime||null;this.today7.decision_authority=d.decision_authority||null;this.today7.top_ranked=d.top_5||[];this.today7.todays_decision=d.todays_decision||null;this.today7.best_action=d.best_action||null;this.today7.overlap_warning=d.overlap_warning||null;this.today7.near_miss=d.near_miss||[];this.today7.score_reconciliation=d.score_reconciliation||null;this.today7.no_setup_diagnosis=d.no_setup_diagnosis||null;this.today7.quant_cluster_hints=d.quant_cluster_hints||[];this.today7.unlock_deploy=d.unlock_deploy||null;this.today7.regime_wait_explanation=d.regime_wait_explanation||[];this.today7.monitor_triggers=d.monitor_triggers||[];this.today7.sleeve_summary=d.sleeve_summary||null;this.today7.execution_readiness=d.execution_readiness||d.best_action?.execution_readiness||null;this.today7.evidence_badges=d.evidence_badges||null;this.today7.cross_asset_confirmation=d.cross_asset_confirmation||null;this.today7.index_regime_summary=d.index_regime_summary||null;this.today7.regime_strip=d.regime_strip||null;this.today7.regime_stack_summary=d.regime_stack_summary||null;this.today7.allocator_stance=d.allocator_stance||null;this.today7.ai_reason_codes=d.ai_reason_codes||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.decision_model=d.decision_model||null;this.today7.decision_hierarchy=d.decision_hierarchy||null;this.today7.passive_baseline=d.passive_baseline||null;this.today7.complexity_challenge=d.complexity_challenge||null;this.today7.restraint=d.restraint||null;this.today7.surface_authority=d.surface_authority||null;this.today7.crisis_regime=d.crisis_regime||null;this.today7.naval_clarity=d.naval_clarity||null;this.today7.buffett_clarity=d.buffett_clarity||null;this.today7.index_fund_posture=d.index_fund_posture||null;this.today7.principles_posture=d.principles_posture||null;this.today7.avoid_grouped=d.avoid_grouped||null;this.today7.bucket_quality=d.bucket_quality||[];this.today7.avoid_list=(d.avoid_now||[]).length?(d.avoid_now||[]):(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'?',reason:a,category:'regime'}:a);this.today7.tradeability=(d.decision_model&&d.decision_model.honest_tradeability)||(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{};this.today7.system_truth=d.system_truth||null;this.today7.actionable_today=d.actionable_today||null;this.today7.opportunity_status=d.opportunity_status||null;this.today7.operator_block=d.operator_block||null;this.today7.agent_page_state=d.agent_page_state||null;this.today7.agent_audit_journal=d.agent_audit_journal||[];this.today7.monitor_display_limit=d.monitor_display_limit||((typeof CCHelpers!=='undefined'&&CCHelpers.CC_TOP_MONITOR_COUNT)||10);this.today7.top_monitor=d.top_monitor||null;this.today7.top_opportunities=d.top_opportunities||[];this.today7.candidate_counts=d.candidate_counts||null;this.today7.evidence_conflict=d.evidence_conflict||null;if(this.isWaitDay()){this.today7.avoid_collapsed=true;}
           this.applyPulseToMarketStrip(this.today7.pulse);
           this.saveToday7ToCache(d);
           // DAY-OVER-DAY DIFF ? tag NEW vs CARRYOVER vs MOVED
@@ -14619,6 +14772,7 @@
           }catch(e){console.warn('dod diff failed',e)}
           this.buildDecisionHubFromToday(d);
           this._ccLastTodayFetch=Date.now();
+          if(this.tab==='command') this.seedAgentAuditJournal();
           this.maybeAutoRefreshStaleBoard();
           if(this.today7.top_ranked.length)setTimeout(()=>this.loadSparklines(this.today7.top_ranked),200);
           if(!(this.pmStrip.funds||[]).length)this.fetchFunds();
@@ -14846,6 +15000,10 @@
         this.rankedOpps.surface_authority=d.surface_authority||null;
         this.rankedOpps.degraded_banner=d.degraded_banner||'';
         this.rankedOpps.instant_degraded=!!d.instant_degraded;
+        this.rankedOpps.playbook_operator_view=d.playbook_operator_view||null;
+        if(d.playbook_operator_view&&!this.today7.playbook_operator_view){
+          this.today7.playbook_operator_view=d.playbook_operator_view;
+        }
         this.captureInstantDegradedBanner(d);
         if(d.decision_authority) this.rankedOpps.decision_authority=d.decision_authority;
         if(d.avoid_collapsed_default||this.isWaitDay()||this.playbookIsCompressedFallback()) this.rankedOpps.avoid_collapsed=true;
@@ -15022,16 +15180,54 @@
       discoveryConfidenceLabel(row){
         const r=row||{};
         if(String(r.score_display_mode||'')==='fallback_rank'||this.scannerUsesBriefFallback()||this.scannerDiscoveryHasFallbackRows()){
-          return 'estimated confidence';
+          return 'Confidence: heuristic';
         }
-        return 'conf';
+        return 'Confidence';
       },
       discoveryConfidenceLine(row){
         const r=row||{};
-        if(r.confidence==null||r.confidence==='') return '';
+        if(r.confidence_display) return r.confidence_display;
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.discoveryConfidenceDisplay){
+          const cal=r.metadata&&r.metadata.calibration_n!=null?{sample_size:r.metadata.calibration_n}:r.calibration_n;
+          return CCHelpers.discoveryConfidenceDisplay(r.confidence,cal);
+        }
+        if(String(r.score_display_mode||'')==='fallback_rank'||this.scannerUsesBriefFallback()||this.scannerDiscoveryHasFallbackRows()){
+          return 'Confidence: heuristic ? Calibration: insufficient';
+        }
+        if(r.confidence==null||r.confidence==='') return 'Confidence: heuristic ? Calibration: insufficient';
         const pct=Math.round(Number(r.confidence||0)*100);
-        if(!Number.isFinite(pct)||pct<=0) return '';
-        return this.discoveryConfidenceLabel(r)+' '+pct+'%';
+        if(!Number.isFinite(pct)||pct<=0) return 'Confidence: heuristic ? Calibration: insufficient';
+        return 'Confidence: '+pct+'% ? Calibration: sufficient';
+      },
+      discoveryFunnelPanel(){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.discoveryFunnelView){
+          return CCHelpers.discoveryFunnelView(this.scannerHub.data||{});
+        }
+        return {mode:'research_only',now:'No validated research candidates',why:'',funnel:{},funnel_line:'',best_action:'Send to Playbook Review',shortlist:[],hide_raw_hits:true,strict_passed_count:0};
+      },
+      discoveryHideRawHits(){
+        return !!this.discoveryFunnelPanel().hide_raw_hits;
+      },
+      discoveryShortlistRows(){
+        return this.discoveryFunnelPanel().shortlist||[];
+      },
+      discoveryRowLabel(key){
+        const mode=this.discoveryFunnelPanel().mode;
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.discoveryRowLabels){
+          return CCHelpers.discoveryRowLabels(mode)[key]||key;
+        }
+        return key;
+      },
+      discoveryScoreDisplayFor(row){
+        const r=row||{};
+        if(r.score_display) return r.score_display;
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.discoveryScoreDisplay){
+          return CCHelpers.discoveryScoreDisplay(r.strength!=null?r.strength:r.score);
+        }
+        return this.scannerScoreLabel(r);
+      },
+      discoveryConfidenceDisplayFor(row){
+        return this.discoveryConfidenceLine(row||{});
       },
       portfolioHasTicker(tk){
         if(!tk) return false;

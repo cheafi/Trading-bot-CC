@@ -470,6 +470,42 @@ def _finalize_ranked_response(
             data["opportunities"] = opps
     except Exception:
         pass
+    try:
+        from src.services.playbook_truth import build_playbook_operator_view
+        from src.services.system_truth import resolve_system_truth
+
+        truth = data.get("system_truth")
+        if not truth:
+            mr = data.get("market_regime") or {}
+            truth = resolve_system_truth(
+                {
+                    "market_regime": mr,
+                    "qualification_levels": {
+                        "setup_qualified": funnel.get("watch_qualified_setups"),
+                        "trade_qualified": funnel.get("trade_qualified_setups"),
+                        "execution_qualified": funnel.get("execution_ready_setups"),
+                        "deploy_qualified": funnel.get("deploy_qualified_setups"),
+                    },
+                    "filter_funnel": funnel,
+                    "execution_ready_count": funnel.get("execution_ready_setups"),
+                    "execution_readiness": (data.get("best_action") or {}).get(
+                        "execution_readiness"
+                    )
+                    or {},
+                    "top_5": data.get("opportunities") or [],
+                },
+                cc_header={},
+                ops_console={},
+            )
+        pov = build_playbook_operator_view(
+            truth,
+            data.get("opportunities") or [],
+            near_miss_rows=data.get("near_miss") or [],
+            best_action=data.get("best_action"),
+        )
+        data["playbook_operator_view"] = pov
+    except Exception:
+        pass
     return data
 
 
@@ -1321,6 +1357,15 @@ async def scanner_hub(
         spec["priority_tier"] = tier
         spec["score_display"] = tier
         discovery_verdict = {**discovery_verdict, "best_speculative_name": spec}
+    tradeability = str(
+        regime.get("tradeability") or regime.get("regime_tradeability") or ""
+    ).upper()
+    discovery_truth = {
+        "deploy_authority": False,
+        "allows_trade_labels": False,
+        "regime_state": tradeability or "WAIT",
+        "authority_level": "research",
+    }
     payload = {
         "scanners": grouped,
         "category_summary": summary,
@@ -1359,7 +1404,9 @@ async def scanner_hub(
         )
         payload["decision_intent"] = warming["decision_intent"]
         payload["hub_status"] = "warming"
-    return payload
+    from src.services.discovery_funnel import attach_discovery_operator_view  # noqa: PLC0415
+
+    return attach_discovery_operator_view(payload, discovery_truth)
 
 
 # ── VCP Intelligence ─────────────────────────────────────────────────

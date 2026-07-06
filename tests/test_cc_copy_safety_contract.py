@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from src.services.fetch_surface_state import (
     execution_repair_one_liner,
+    remove_sizing_language_when_blocked,
     remove_trade_language_when_blocked,
     sanitize_blocked_candidate_copy,
 )
@@ -34,7 +35,13 @@ def test_remove_trade_language_when_blocked():
 def test_remove_trade_language_half_size_when_blocked():
     cleaned = remove_trade_language_when_blocked("Pilot only — half size, stop required", blocked=True)
     assert "half size" not in cleaned
-    assert "no sizing" in cleaned.lower()
+    assert "review-only" in cleaned.lower()
+
+
+def test_remove_sizing_language_when_blocked():
+    cleaned = remove_sizing_language_when_blocked("Pilot only — half size max", blocked=True)
+    assert "half size" not in cleaned
+    assert "review-only" in cleaned.lower()
 
 
 def test_execution_repair_one_liner_broker_offline():

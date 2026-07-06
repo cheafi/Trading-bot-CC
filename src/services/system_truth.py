@@ -496,7 +496,7 @@ def build_reason_codes(
 
     if brief_freshness == "expired":
         codes.append("BRIEF_EXPIRED")
-    elif brief_freshness == "fallback":
+    elif brief_freshness == "fallback" and brief_freshness != "expired":
         codes.append("FALLBACK_BRIEF")
     elif brief_freshness == "stale":
         codes.append("BRIEF_STALE")
@@ -549,7 +549,7 @@ def reason_codes_to_copy(codes: List[str]) -> List[str]:
         "DATA_STALE": "Market data stale — rankings may not reflect live tape",
         "BOARD_STALE": "Ranked board stale — not execution-grade",
         "NO_VALID_BOARD": "No valid ranked board — do nothing",
-        "BRIEF_EXPIRED": "Brief expired — not used for ranking",
+        "BRIEF_EXPIRED": "Brief expired — excluded from ranking",
         "BRIEF_STALE": "Brief stale — confirm before using narrative",
         "FALLBACK_BRIEF": "Brief fallback — not execution-grade board",
         "ENGINE_OFF": "Engine OFF — precomputed board only",
@@ -897,6 +897,11 @@ def resolve_system_truth(
     trade_n = int(qual.get("trade_qualified") or trade_n_pre)
     exec_n = int(qual.get("execution_qualified") or exec_n_pre)
     deploy_n = int(qual.get("deploy_qualified") or funnel.get("deploy_qualified_setups") or 0)
+    if broker_freshness in ("offline", "blocked", "stale"):
+        exec_n = 0
+        deploy_n = 0
+    if board_gate in ("wait", "closed"):
+        deploy_n = 0
     if not deploy_auth:
         deploy_n = 0
     paper_n = trade_n if deploy_tier == "paper_only" else 0
@@ -917,6 +922,7 @@ def resolve_system_truth(
         deploy_qualified=deploy_n,
         deploy_authority=deploy_auth,
         regime_state=regime_state,
+        board_gate=board_gate,
     )
     qualification_counts_line = format_qualification_counts(
         setup_qualified=setup_n,
@@ -1011,4 +1017,7 @@ def resolve_system_truth(
     truth_body["morning_decision_line"] = build_morning_decision_line(
         truth_body, best_candidate=str(best)
     )
+    for passthrough in ("strategy_lab_validation", "strategy_validation"):
+        if t.get(passthrough):
+            truth_body[passthrough] = t[passthrough]
     return truth_body

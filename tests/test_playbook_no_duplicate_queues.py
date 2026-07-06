@@ -13,7 +13,7 @@ def test_no_ticker_in_multiple_primary_buckets():
         {"ticker": "DDD", "action": "WATCH", "score": 6.5, "whats_missing": "timing"},
         {"ticker": "EEE", "action": "AVOID"},
     ]
-    buckets = bucket_rows(rows, deploy_authority=True, near_miss_tickers={"DDD"})
+    buckets = bucket_rows(rows, deploy_authority=True, near_miss_tickers={"DDD"}, daily_mode=False)
     seen: set[str] = set()
     for bucket, items in buckets.items():
         for row in items:
@@ -30,7 +30,7 @@ def test_each_ticker_appears_in_exactly_one_bucket():
         {"ticker": "QQQ", "action": "PILOT"},
         {"ticker": "IWM", "action": "WATCH", "score": 8.0},
     ]
-    buckets = bucket_rows(rows, deploy_authority=True)
+    buckets = bucket_rows(rows, deploy_authority=True, daily_mode=False)
     ticker_to_bucket: dict[str, str] = {}
     for bucket, items in buckets.items():
         for row in items:

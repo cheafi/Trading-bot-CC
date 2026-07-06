@@ -9,7 +9,12 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from src.services.cc_display_constants import CC_TOP_MONITOR_COUNT
-from src.services.playbook_truth import assign_primary_bucket, bucket_rows, is_no_edge_mode
+from src.services.playbook_truth import (
+    assign_primary_bucket,
+    bucket_rows,
+    enforce_single_primary_bucket as _enforce_single_primary_bucket,
+    is_no_edge_mode,
+)
 
 BUCKET_DEPLOY = "Deploy"
 BUCKET_PILOT = "Pilot"
@@ -34,6 +39,13 @@ def bucket_candidate(
         near_miss=near_miss,
         regime_state=regime_state,
     )
+
+
+def enforce_single_primary_bucket(
+    buckets: Dict[str, List[Dict[str, Any]]],
+) -> Dict[str, List[Dict[str, Any]]]:
+    """One ticker — one primary bucket (delegates to playbook_truth)."""
+    return _enforce_single_primary_bucket(buckets)
 
 
 def enforce_bucket_exclusivity(
