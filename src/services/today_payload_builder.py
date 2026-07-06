@@ -1425,6 +1425,9 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         near_miss_rows=near_miss if not brief_expired or live_board_available else [],
         best_action=todays_decision.get("best_action"),
     )
+    from src.services.strategy_lab_mode import build_strategy_lab_page_state
+
+    strategy_lab_page = build_strategy_lab_page_state(system_truth)
 
     payload = {
         "date": now.strftime("%Y-%m-%d"),
