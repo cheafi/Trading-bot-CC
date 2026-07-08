@@ -62,5 +62,27 @@ def test_index_header_uses_scoped_strip_not_data_fresh_pill():
 def test_cc_helpers_strip_avoids_unscoped_data_labels():
     js = CC_HELPERS.read_text(encoding="utf-8")
     assert "DATA FRESH" not in js
+    assert "DATA STALE" not in js
     assert "function scopedFreshnessStrip" in js
+    assert "function shellTruthViewModel" in js
+    assert "ENGINE ON" not in js
+
+
+def test_shell_truth_vm_no_data_fresh_stale_contradiction():
+    truth = resolve_system_truth(
+        {
+            "trust": {"stale": True, "source": "decision_engine_degraded"},
+            "market_regime": {"tradeability": "WAIT", "should_trade": True},
+            "decision_authority": {"authority_level": "research", "gates_active": True},
+            "execution_readiness": {"engine_running": True},
+            "qualification_levels": {"setup_qualified": 2, "deploy_qualified": 0},
+        },
+        cc_header={"data_tier": "STALE"},
+        ops_console={"engine_running": True},
+    )
+    strip = truth["typed_freshness_display"]
+    assert "DATA STALE" not in strip
+    assert "DATA FRESH" not in strip
+    assert "Market:" in strip
+    assert "Board:" in strip
 

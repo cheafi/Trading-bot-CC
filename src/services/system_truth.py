@@ -796,7 +796,7 @@ def resolve_system_truth(
     brief_freshness = _brief_freshness(t, brief_age_days=brief_age_days)
     brief_expired = brief_freshness == "expired"
     brief_expired_copy = (
-        f"Brief expired {int(brief_age_days or (t.get('brief_status') or {}).get('age_days') or 0)}d — excluded from ranking and narrative."
+        f"Brief expired {int(brief_age_days or (t.get('brief_status') or {}).get('age_days') or 0)}d — excluded from Discovery ranking context."
         if brief_expired
         else ""
     )

@@ -36,6 +36,188 @@ _RESEARCH_REPLACEMENTS = (
 )
 
 
+def _discovery_scope_title(state: str, *, brief_age_days: Optional[int] = None) -> str:
+    """Human title for scoped freshness — never unscoped live/stale."""
+    s = str(state or "unknown").lower()
+    if s == "expired" or (brief_age_days is not None and int(brief_age_days) > 2):
+        age = int(brief_age_days or 0)
+        return f"Expired {age}d" if age > 0 else "Expired"
+    if s in ("offline", "unavailable"):
+        return "Offline"
+    if s == "blocked":
+        return "Blocked"
+    if s == "wait":
+        return "WAIT"
+    if s == "fresh":
+        return "Fresh"
+    if s == "stale":
+        return "Stale"
+    if s == "live":
+        return "Live"
+    if s == "warming":
+        return "Warming"
+    if s == "degraded":
+        return "Degraded"
+    if s == "ready":
+        return "Ready"
+    if s == "partial":
+        return "Partial"
+    return s.replace("_", " ").title() if s else "Unknown"
+
+
+def _discovery_scanner_run_label(diagnostics: Optional[Dict[str, Any]]) -> str:
+    diag = diagnostics or {}
+    freshness = str(diag.get("data_freshness") or diag.get("scanner_run_freshness") or "unknown").lower()
+    hub = str(diag.get("hub_status") or "").lower()
+    if hub in ("warming", "degraded"):
+        return f"Scanner run: {_discovery_scope_title(hub)}"
+    return f"Scanner run: {_discovery_scope_title(freshness)}"
+
+
+def build_discovery_why(truth: Optional[Dict[str, Any]]) -> str:
+    """Scoped blockers — Board WAIT · broker offline · brief expired 27d."""
+    t = truth or {}
+    parts: List[str] = []
+    board_gate = str(t.get("board_gate") or "").lower()
+    regime = str(t.get("regime_state") or t.get("effective_state") or "").upper()
+    if board_gate == "wait" or regime == "WAIT":
+        parts.append("Board WAIT")
+    elif board_gate:
+        parts.append(f"Board {board_gate.upper()}")
+    elif regime and regime not in ("ACTIVE", "TRADE", "SELECTIVE"):
+        parts.append(f"Board {regime}")
+
+    broker = str(t.get("broker_freshness") or "").lower()
+    if broker in ("offline", "blocked"):
+        parts.append("broker offline")
+
+    brief_age = t.get("brief_age_days")
+    brief = str(t.get("brief_freshness") or "").lower()
+    if brief == "expired" or t.get("brief_expired") or (
+        brief_age is not None and int(brief_age) > 2
+    ):
+        age = int(brief_age or 0)
+        parts.append(f"brief expired {age}d" if age > 0 else "brief expired")
+
+    market = str(t.get("market_data_freshness") or "").lower()
+    if market == "stale" and "Board" not in " ".join(parts):
+        parts.append("market data stale")
+
+    if not t.get("deploy_authority"):
+        if not any("deploy" in p.lower() for p in parts):
+            parts.append("deploy authority blocked")
+
+    return " · ".join(parts) if parts else "scan evidence only — not deploy authority"
+
+
+def build_discovery_status_line(
+    truth: Optional[Dict[str, Any]] = None,
+    *,
+    scanner_diagnostics: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Scoped STATUS: Scanner run Live · Board Blocked · Brief Expired 27d · Broker Offline."""
+    t = truth or {}
+    parts: List[str] = [_discovery_scanner_run_label(scanner_diagnostics)]
+
+    board = str(t.get("ranked_board_freshness") or "").lower()
+    board_gate = str(t.get("board_gate") or "").lower()
+    if board_gate == "wait":
+        parts.append("Board WAIT")
+    elif board in ("stale", "fallback", "unavailable") or board_gate in ("closed", "blocked"):
+        parts.append(f"Board {_discovery_scope_title(board or board_gate or 'blocked')}")
+    elif board == "fresh":
+        parts.append("Board Fresh")
+
+    brief_age = t.get("brief_age_days")
+    brief = str(t.get("brief_freshness") or "").lower()
+    if brief == "expired" or t.get("brief_expired") or (
+        brief_age is not None and int(brief_age) > 2
+    ):
+        parts.append(f"Brief {_discovery_scope_title('expired', brief_age_days=brief_age)}")
+    elif brief and brief != "fresh":
+        parts.append(f"Brief {_discovery_scope_title(brief, brief_age_days=brief_age)}")
+
+    broker = str(t.get("broker_freshness") or "").lower()
+    if broker:
+        parts.append(f"Broker {_discovery_scope_title(broker)}")
+
+    if not t.get("deploy_authority"):
+        parts.append("Deploy authority: None")
+
+    return " · ".join(parts)
+
+
+def build_discovery_panel(
+    funnel: Dict[str, Any],
+    truth: Optional[Dict[str, Any]] = None,
+    *,
+    scanner_diagnostics: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Canonical Discovery operator panel — scoped freshness, zero-hit safe copy."""
+    t = truth or {}
+    mode = resolve_discovery_mode(t)
+    counts = funnel.get("funnel_counts") or {}
+    strict = int(funnel.get("strict_passed_count") or counts.get("regime") or 0)
+    shortlist_n = int(counts.get("shortlist") or len(funnel.get("review_shortlist") or []))
+    deploy_n = len(funnel.get("deploy_candidates") or []) if mode == "usable" else 0
+    raw_n = int(counts.get("raw") or 0)
+    hits_n = raw_n
+
+    now = "Research-only · deploy blocked" if mode == "research_only" else "Research funnel active"
+    why = build_discovery_why(t)
+    funnel_line = (
+        f"Raw {raw_n} / hits {hits_n} / strict {strict} / "
+        f"shortlist {shortlist_n} / deploy {deploy_n}"
+    )
+    status_line = build_discovery_status_line(t, scanner_diagnostics=scanner_diagnostics)
+
+    if strict == 0:
+        headline = "No validated research candidates"
+        subtitle = (
+            "Research funnel only. Names go to Playbook review only after strict filters pass."
+        )
+        best_action = "No new research candidates. Refresh Dashboard + Playbook."
+    else:
+        headline = (
+            f"{shortlist_n} validated research candidates · "
+            f"{mode.replace('_', ' ')}"
+        )
+        subtitle = "Research funnel only. Names go to Playbook review only after strict filters pass."
+        best_action = (
+            "Send to Playbook Review"
+            if mode == "research_only"
+            else "Review shortlist in Playbook"
+        )
+
+    brief_age = t.get("brief_age_days")
+    brief_expired = (
+        t.get("brief_expired")
+        or str(t.get("brief_freshness") or "").lower() == "expired"
+        or (brief_age is not None and int(brief_age) > 2)
+    )
+    brief_note = ""
+    if brief_expired:
+        age = int(brief_age or 0)
+        brief_note = (
+            f"Brief expired {age}d — excluded from Discovery ranking context"
+            if age > 0
+            else "Brief expired — excluded from Discovery ranking context"
+        )
+
+    return {
+        "mode": mode,
+        "now": now,
+        "why": why,
+        "funnel_line": funnel_line,
+        "status_line": status_line,
+        "best_action": best_action,
+        "headline": headline,
+        "subtitle": subtitle,
+        "brief_expired_note": brief_note,
+        "deploy_authority_label": "None" if not t.get("deploy_authority") else "Open",
+    }
+
+
 def resolve_discovery_mode(truth: Optional[Dict[str, Any]]) -> str:
     """research_only when deploy blocked or authority suspended."""
     t = truth or {}
@@ -278,22 +460,24 @@ def build_discovery_verdict(
         if count > best_count:
             best_count = count
             best_family = name
+    panel = build_discovery_panel(
+        {
+            "funnel_counts": funnel.get("funnel_counts") or {},
+            "strict_passed_count": strict_passed,
+            "review_shortlist": shortlist,
+            "deploy_candidates": funnel.get("deploy_candidates") or [],
+        },
+        t,
+    )
     if strict_passed == 0:
-        default_sentence = (
-            "No validated research candidates — scan evidence only; "
-            "promote via Playbook review."
-        )
-        next_action = "Send to Playbook Review"
+        default_sentence = panel["headline"]
+        next_action = panel["best_action"]
     else:
         default_sentence = (
             f"{len(shortlist)} validated research candidates · "
             f"best family {best_family or '—'} · {mode.replace('_', ' ')}"
         )
-        next_action = (
-            "Send to Playbook Review"
-            if mode == "research_only"
-            else "Review shortlist in Playbook"
-        )
+        next_action = panel["best_action"]
     return {
         "shortlist_count": len(shortlist),
         "strict_passed_count": strict_passed,
@@ -301,6 +485,13 @@ def build_discovery_verdict(
         "best_family_count": best_count,
         "next_action": next_action,
         "default_sentence": default_sentence,
+        "subtitle": panel["subtitle"],
+        "status_line": panel["status_line"],
+        "why": panel["why"],
+        "now": panel["now"],
+        "funnel_line": panel["funnel_line"],
+        "best_action": panel["best_action"],
+        "brief_expired_note": panel["brief_expired_note"],
         "mode": mode,
         "hide_raw_hits": strict_passed == 0,
     }
@@ -413,10 +604,13 @@ def attach_discovery_operator_view(
         )
 
     funnel = build_discovery_funnel(raw_hits, truth)
+    diagnostics = payload.get("diagnostics") if isinstance(payload.get("diagnostics"), dict) else {}
+    panel = build_discovery_panel(funnel, truth, scanner_diagnostics=diagnostics)
     out = dict(payload)
-    out["discovery_operator_view"] = funnel
+    out["discovery_operator_view"] = {**funnel, "panel": panel}
     out["discovery_verdict"] = {
         **(payload.get("discovery_verdict") or {}),
         **(funnel.get("verdict") or {}),
+        **panel,
     }
     return out

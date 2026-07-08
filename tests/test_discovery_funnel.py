@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from src.services.authority_engine import primary_operator_state
 from src.services.discovery_funnel import (
+    attach_discovery_operator_view,
     build_discovery_funnel,
+    build_discovery_panel,
     build_discovery_verdict,
+    build_discovery_status_line,
+    build_discovery_why,
     build_research_shortlist,
     calibrate_discovery_score,
     collapse_broad_clusters,
@@ -134,3 +138,67 @@ def test_verdict_default_sentence_when_zero_strict_passed():
     funnel = build_discovery_funnel([], _research_truth())
     verdict = build_discovery_verdict(funnel, _research_truth())
     assert "No validated research candidates" in verdict["default_sentence"]
+    assert verdict["best_action"] == "No new research candidates. Refresh Dashboard + Playbook."
+    assert "Send to Playbook Review" not in verdict["best_action"]
+    assert "brief fallback" not in verdict["default_sentence"].lower()
+
+
+def test_discovery_status_scoped_freshness_labels():
+    truth = {
+        "deploy_authority": False,
+        "board_gate": "wait",
+        "regime_state": "WAIT",
+        "broker_freshness": "offline",
+        "brief_freshness": "expired",
+        "brief_age_days": 27,
+        "brief_expired": True,
+        "ranked_board_freshness": "stale",
+    }
+    panel = build_discovery_panel(
+        {"funnel_counts": {"raw": 3000, "shortlist": 0, "regime": 0}, "strict_passed_count": 0},
+        truth,
+        scanner_diagnostics={"data_freshness": "live"},
+    )
+    assert panel["now"] == "Research-only · deploy blocked"
+    assert "Board WAIT" in panel["why"]
+    assert "brief expired 27d" in panel["why"]
+    assert "Raw 3000" in panel["funnel_line"]
+    assert "Scanner run: Live" in panel["status_line"]
+    assert "Brief Expired 27d" in panel["status_line"]
+    assert "Broker Offline" in panel["status_line"]
+    assert "brief fallback" not in panel["status_line"].lower()
+
+
+def test_discovery_why_no_brief_fallback_language():
+    truth = {
+        "brief_freshness": "expired",
+        "brief_age_days": 27,
+        "brief_expired": True,
+        "deploy_authority": False,
+    }
+    why = build_discovery_why(truth)
+    assert "brief expired 27d" in why
+    assert "fallback" not in why.lower()
+
+
+def test_discovery_status_line_never_says_freshness_live():
+    line = build_discovery_status_line(
+        {"deploy_authority": False, "broker_freshness": "offline"},
+        scanner_diagnostics={"data_freshness": "live"},
+    )
+    assert "Freshness: live" not in line
+    assert "Scanner run: Live" in line
+
+
+def test_attach_discovery_operator_view_includes_panel():
+    payload = attach_discovery_operator_view(
+        {
+            "scanners": {},
+            "diagnostics": {"data_freshness": "live"},
+        },
+        _research_truth(),
+    )
+    view = payload["discovery_operator_view"]
+    assert view.get("panel")
+    assert "Scanner run: Live" in view["panel"]["status_line"]
+    assert "brief fallback" not in str(payload["discovery_verdict"]).lower()

@@ -1405,7 +1405,11 @@ def build_todays_decision(
         exec_label = f"{exec_label} · {(ex.get('paper_or_live') or 'paper').upper()}"
 
     if decision_authority and decision_authority.get("source") == "fallback_brief":
-        deploy_label = "Brief fallback — informational watch only"
+        age = int(decision_authority.get("brief_age_days") or 0)
+        if age > 2:
+            deploy_label = f"Brief expired {age}d — excluded from ranking context"
+        else:
+            deploy_label = "Monitor only — brief-backed board, not execution-grade"
         can_deploy = False
 
     return {

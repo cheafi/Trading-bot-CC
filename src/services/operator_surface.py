@@ -38,12 +38,34 @@ def build_research_surface_block(
         "shadow": "shadow challengers — no capital impact until promoted",
     }
     surf = str(surface or "research").lower()
+    now = posture.get("now") or posture.get("primary") or "MONITOR ONLY"
+    if surf == "discovery":
+        now = (
+            "Research-only · deploy blocked"
+            if not t.get("deploy_authority")
+            else "Research funnel active"
+        )
+    brief_age = t.get("brief_age_days")
+    brief_expired = (
+        t.get("brief_expired")
+        or str(t.get("brief_freshness") or "").lower() == "expired"
+        or (brief_age is not None and int(brief_age) > 2)
+    )
+    if brief_expired:
+        age = int(brief_age or 0)
+        expired_note = (
+            f"Brief expired {age}d — excluded from Discovery ranking context"
+            if age > 0
+            else "Brief expired — excluded from Discovery ranking context"
+        )
+        if "brief" not in blocker.lower():
+            blocker = f"{blocker} · {expired_note}" if blocker else expired_note
     nxt = extra_next or surface_next.get(surf, "monitor only")
     if not extra_next and t.get("deploy_authority"):
         nxt = next_action(t)
     return {
-        "surface": str(surface or "research").lower(),
-        "now": posture.get("primary") or "MONITOR ONLY",
+        "surface": surf,
+        "now": now,
         "blocker": blocker,
         "next": nxt,
         "details_collapsed": True,
