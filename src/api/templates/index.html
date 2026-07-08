@@ -205,10 +205,10 @@
             <span>BREAKER</span>
           </button>
           <!-- ?? SCOPED TRUTH (per-scope freshness strip) ?? -->
-          <span x-show="unifiedTruthStripLine()"
+          <span x-show="shellTruthVM().scopedStrip"
                   style="display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;font-size:9px;font-weight:600;border:1px solid var(--bd2);color:var(--t2);max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-                  :title="(typeof CCHelpers!=='undefined'&&CCHelpers.localizeScopedFreshnessStrip)?CCHelpers.localizeScopedFreshnessStrip(unifiedTruthStripLine()):unifiedTruthStripLine()"
-                  x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStripLocalized&&today7.system_truth)?CCHelpers.scopedFreshnessStripLocalized(today7.system_truth):(typeof CCHelpers!=='undefined'&&CCHelpers.localizeScopedFreshnessStrip)?CCHelpers.localizeScopedFreshnessStrip(unifiedTruthStripLine()):unifiedTruthStripLine()"></span>
+                  :title="(typeof CCHelpers!=='undefined'&&CCHelpers.localizeScopedFreshnessStrip)?CCHelpers.localizeScopedFreshnessStrip(shellTruthVM().scopedStrip):shellTruthVM().scopedStrip"
+                  x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStripLocalized&&today7.system_truth)?CCHelpers.scopedFreshnessStripLocalized(today7.system_truth):(typeof CCHelpers!=='undefined'&&CCHelpers.localizeScopedFreshnessStrip)?CCHelpers.localizeScopedFreshnessStrip(shellTruthVM().scopedStrip):shellTruthVM().scopedStrip"></span>
           <!-- ?? POSITION RISK ALERTS PILL (only if any) ?? -->
           <button x-show="risk_alerts && risk_alerts.count>0"
                   @click="showAlertsModal=true; fetchRiskAlerts()"
@@ -537,12 +537,15 @@
           :style="({LIVE:'background:#065f46;color:#6ee7b7',PAPER:'background:#1e3a5f;color:#93c5fd',BACKTEST:'background:#713f12;color:#fde68a',SYNTHETIC:'background:#581c87;color:#d8b4fe'})[trust.mode||'LIVE']||'background:#065f46;color:#6ee7b7'"
           x-text="trust.mode||'LIVE'"></span>
         <span x-text="trust.source||'engine'"></span>
-        <span class="flex items-center gap-1">
+        <span class="flex items-center gap-1" x-show="today7.system_truth">
+          <span class="text-[8px] mono truncate" style="max-width:200px;color:var(--t3)" x-text="shellTruthVM().marketLabel"></span>
+        </span>
+        <span class="flex items-center gap-1" x-show="!today7.system_truth">
           <span style="width:5px;height:5px;border-radius:50%;display:inline-block"
             :style="trust.freshness==='REAL_TIME'?'background:#22c55e':trust.freshness==='DELAYED'?'background:#f59e0b':'background:#ef4444'"></span>
           <span x-text="trust.freshness||'REAL_TIME'"></span>
         </span>
-        <span x-show="freshness&&freshness.worst_tier&&['STALE','CRITICAL'].includes(freshness.worst_tier)&&!today7.system_truth&&!today7.regime" class="pill pa text-[7px] font-bold" x-text="'DATA '+freshness.worst_tier"></span>
+        <span x-show="today7.system_truth" class="text-[8px] mono truncate" style="max-width:280px;color:var(--t3)" x-text="shellTruthVM().briefLabel"></span>
         <span x-text="trust.as_of?'? '+((Date.now()-new Date(trust.as_of).getTime())/1000|0)+'s ago':''" style="color:var(--t3)"></span>
         <span class="flex items-center gap-1" x-show="today7.regime">
           <span style="color:var(--t3)">Conf</span>
@@ -577,7 +580,7 @@
     </div>
 
     <!-- @cc-partial degraded_banners -->
-    <!-- ?????? INSTANT DEGRADED BANNER (under nav ? dismissible) ?????? -->
+    <!-- ══════ INSTANT DEGRADED BANNER (under nav — dismissible) ══════ -->
     <div data-cc="instant-degraded-banner" x-show="instantDegradedBannerVisible()" x-cloak style="background:linear-gradient(90deg,#422006,#1c1917);border-bottom:1px solid #b45309;padding:8px 14px;display:flex;align-items:flex-start;gap:10px">
       <span style="padding:3px 8px;border-radius:4px;font-weight:800;font-size:10px;letter-spacing:.5px;background:#7f1d1d;color:#fde68a;border:1px solid #ef4444;flex-shrink:0">INSTANT DEGRADED</span>
       <div style="flex:1;min-width:0">
@@ -590,7 +593,7 @@
     <div data-cc="warmup-context-strip" x-show="warmupContextStripVisible()" x-cloak
       style="background:var(--s0);border-bottom:1px solid var(--bd);padding:4px 12px;font-size:9px;line-height:1.45;color:var(--t2)">
       <span x-show="warmupStatusLine()" class="font-bold" style="color:var(--amber)" x-text="warmupStatusLine()"></span>
-      <span x-show="warmupStatusLine()&&warmupUpgradeQueue()" class="mx-1" style="color:var(--t3)">?</span>
+      <span x-show="warmupStatusLine()&&warmupUpgradeQueue()" class="mx-1" style="color:var(--t3)">·</span>
       <span x-show="warmupUpgradeQueue()" x-text="warmupUpgradeQueue()"></span>
       <span x-show="loadingSessionRecoveryLine()" class="block mt-0.5" style="color:var(--t3)" x-text="loadingSessionRecoveryLine()"></span>
       <span x-show="operatorLoadingSafeLine()" class="block mt-0.5" style="color:var(--t2)" x-text="operatorLoadingSafeLine()"></span>
@@ -1164,7 +1167,7 @@
       <div x-show="tab==='today'" data-cc="today-deploy-chrome">
       <template x-if="tab==='today'&&(todayMissionPanel().system_blockers.length||todayMissionPanel().card_gates.length||todayMissionPanel().upgrade_watch.length||todayMissionPanel().avoid_entry.length||todayMissionPanel().quant_cluster_lines.length)">
         <details data-cc="today-mission-panel" style="padding:4px 12px 0">
-          <summary class="text-[8px] font-bold uppercase cursor-pointer" style="color:var(--t3);padding:2px 0">???? ? ???? ? ?? ? System blockers ? mission details ? expand</summary>
+          <summary class="text-[8px] font-bold uppercase cursor-pointer" style="color:var(--t3);padding:2px 0">系統阻斷 · 任務細節 · 展開 · System blockers · mission details · expand</summary>
           <div class="card card-p mt-1" style="padding:8px 10px;border-left:3px solid var(--blue)">
             <div class="text-[9px] font-bold uppercase mb-0.5" style="color:var(--t3)" x-text="todayMissionPanelTitle()"></div>
             <div x-show="todayMissionSafeUnlockHint()&&!isWaitDay()" class="text-[8px] mb-1" style="color:var(--t3)" x-text="todayMissionSafeUnlockHint()"></div>
@@ -1172,29 +1175,29 @@
               <div>
                 <div class="font-bold text-red-400 mb-0.5" x-text="todayMissionBlockersTitle()"></div>
                 <template x-for="b in todayMissionPanel().system_blockers" :key="'sys-'+b">
-                  <div class="font-semibold" style="color:var(--amber)" x-text="'? '+b"></div>
+                  <div class="font-semibold" style="color:var(--amber)" x-text="'• '+b"></div>
                 </template>
                 <template x-for="b in todayMissionPanel().card_gates" :key="'gate-'+b">
-                  <div style="color:var(--t2)" x-text="'? '+b"></div>
+                  <div style="color:var(--t2)" x-text="'• '+b"></div>
                 </template>
                 <div x-show="!todayMissionPanel().system_blockers.length&&!todayMissionPanel().card_gates.length" style="color:var(--t3)" x-text="todayMissionEmptyBlockersCopy()"></div>
               </div>
               <div>
                 <div class="font-bold text-amber-300 mb-0.5" x-text="todayMissionMonitorsLabel()"></div>
                 <div class="text-[8px] mb-0.5" style="color:var(--t3)" x-text="todayMissionMonitorsColumnHint()"></div>
-                <div x-show="todayMissionPanel().upgrade_watch.length" class="text-[7px] font-bold uppercase mb-0.5" style="color:var(--green)">???? ? ????? ? Upgrade watch ? not entry today</div>
+                <div x-show="todayMissionPanel().upgrade_watch.length" class="text-[7px] font-bold uppercase mb-0.5" style="color:var(--green)">升級監察 · 今日不入場 · Upgrade watch · not entry today</div>
                 <template x-for="m in todayMissionPanel().upgrade_watch" :key="'up-'+m.ticker">
-                  <div style="color:var(--t2)" class="mono" x-text="'? '+m.ticker+(m.note?' ? '+m.note:'')"></div>
+                  <div style="color:var(--t2)" class="mono" x-text="'• '+m.ticker+(m.note?' · '+m.note:'')"></div>
                 </template>
-                <div x-show="todayMissionPanel().avoid_entry.length" class="text-[7px] font-bold uppercase mt-1 mb-0.5" style="color:var(--red)">???? ? ???? ? Avoid new entry ? still on board</div>
+                <div x-show="todayMissionPanel().avoid_entry.length" class="text-[7px] font-bold uppercase mt-1 mb-0.5" style="color:var(--red)">避免新倉 · 仍在板上 · Avoid new entry · still on board</div>
                 <template x-for="m in todayMissionPanel().avoid_entry" :key="'av-'+m.ticker">
-                  <div style="color:var(--t2)" class="mono" x-text="'? '+m.ticker+(m.note?' ? '+m.note:'')"></div>
+                  <div style="color:var(--t2)" class="mono" x-text="'• '+m.ticker+(m.note?' · '+m.note:'')"></div>
                 </template>
-                <div x-show="!todayMissionPanel().upgrade_watch.length&&!todayMissionPanel().avoid_entry.length" style="color:var(--t3)">?</div>
+                <div x-show="!todayMissionPanel().upgrade_watch.length&&!todayMissionPanel().avoid_entry.length" style="color:var(--t3)">—</div>
                 <template x-if="todayMissionPanel().quant_cluster_lines.length">
-                  <div class="font-bold text-blue-300 mt-1 mb-0.5">????????? Quant clusters (monitor)</div>
+                  <div class="font-bold text-blue-300 mt-1 mb-0.5">量化群組（監察）· Quant clusters (monitor)</div>
                   <template x-for="line in todayMissionPanel().quant_cluster_lines" :key="'qc-'+line">
-                    <div class="text-[8px]" style="color:var(--t3);line-height:1.4" x-text="'? '+line"></div>
+                    <div class="text-[8px]" style="color:var(--t3);line-height:1.4" x-text="'• '+line"></div>
                   </template>
                 </template>
               </div>
@@ -1205,7 +1208,7 @@
 
       <template x-if="tab==='today'&&(today7.index_regime_summary||today7.regime_stack_summary||today7.ai_reason_codes?.length)">
         <details data-cc="index-regime-strip" style="padding:4px 12px 0">
-          <summary class="text-[8px] font-bold uppercase cursor-pointer" style="color:var(--t3);padding:2px 0">Index / regime stack context ? expand</summary>
+          <summary class="text-[8px] font-bold uppercase cursor-pointer" style="color:var(--t3);padding:2px 0">Index / regime stack context · expand</summary>
           <div class="mt-1 space-y-1">
             <template x-if="today7.index_regime_summary">
               <div class="card card-p" style="padding:6px 10px;border-left:3px solid var(--amber)">
@@ -1227,7 +1230,7 @@
                 <div data-cc="ai-reason-codes">
                 <template x-if="today7.ai_reason_codes&&today7.ai_reason_codes.length">
                   <template x-for="rc in today7.ai_reason_codes.slice(0,3)" :key="'ai-rc-'+rc.code">
-                    <div class="text-[8px]" style="color:var(--t2);line-height:1.4" x-text="'? '+(window.CCHelpers&&CCHelpers.aiReasonCodeLine?CCHelpers.aiReasonCodeLine(rc):rc.message)"></div>
+                    <div class="text-[8px]" style="color:var(--t2);line-height:1.4" x-text="'• '+(window.CCHelpers&&CCHelpers.aiReasonCodeLine?CCHelpers.aiReasonCodeLine(rc):rc.message)"></div>
                   </template>
                 </template>
                 </div>
@@ -1240,7 +1243,7 @@
 
       <template x-if="tab==='today'&&(today7.cc_os||today7.tracker_wave||today7.safe_automation)">
         <details data-cc="tracker-wave-strip" :open="!isWaitDay()" style="padding:4px 12px 0">
-          <summary class="text-[8px] font-bold uppercase cursor-pointer" style="color:var(--t3);padding:2px 0">CC operating system ? quant / ops support ? expand<span x-show="isWaitDay()" class="text-[7px] font-normal ml-1" style="color:var(--t3)">(collapsed on WAIT)</span></summary>
+          <summary class="text-[8px] font-bold uppercase cursor-pointer" style="color:var(--t3);padding:2px 0">CC operating system · quant / ops support · expand<span x-show="isWaitDay()" class="text-[7px] font-normal ml-1" style="color:var(--t3)">(collapsed on WAIT)</span></summary>
           <div class="card card-p mt-1" style="padding:6px 10px;border-left:3px solid var(--purple)" data-cc="cc-os-console">
             <div class="flex flex-wrap items-center gap-2 mb-1">
               <span class="pill text-[7px] pw font-bold">MONITOR / OPS</span>
@@ -1257,19 +1260,19 @@
             <div x-show="today7.cc_os&&today7.cc_os.modules&&today7.cc_os.modules.event_intelligence" data-cc="cc-os-event-strip" class="text-[8px] mb-1" style="color:var(--t3)" x-text="(window.CCHelpers&&CCHelpers.ccOsEventLine)?CCHelpers.ccOsEventLine(today7.cc_os.modules.event_intelligence):''"></div>
             <template x-if="today7.safe_automation&&today7.safe_automation.monitor_upgrade_alerts&&today7.safe_automation.monitor_upgrade_alerts.alerts&&today7.safe_automation.monitor_upgrade_alerts.alerts.length">
               <div data-cc="monitor-upgrade-alerts" class="text-[8px] pt-1 mt-1" style="border-top:1px dashed var(--bd)">
-                <div class="font-bold text-amber-300 mb-0.5">Upgrade alerts ? not deploy</div>
+                <div class="font-bold text-amber-300 mb-0.5">Upgrade alerts · not deploy</div>
                 <template x-for="a in today7.safe_automation.monitor_upgrade_alerts.alerts.slice(0,2)" :key="'mua-'+a.label">
-                  <div class="text-[7px]" style="color:var(--t3)" x-text="'? '+(a.detail||a.label)"></div>
+                  <div class="text-[7px]" style="color:var(--t3)" x-text="'• '+(a.detail||a.label)"></div>
                 </template>
               </div>
             </template>
-            <div x-show="today7.safe_automation&&today7.safe_automation.research_staleness&&today7.safe_automation.research_staleness.stale" data-cc="research-staleness-alert" class="text-[7px] mb-1" style="color:var(--amber)" x-text="(today7.safe_automation.research_staleness.alerts&&today7.safe_automation.research_staleness.alerts[0])||'Research stale ? confirm-only'"></div>
+            <div x-show="today7.safe_automation&&today7.safe_automation.research_staleness&&today7.safe_automation.research_staleness.stale" data-cc="research-staleness-alert" class="text-[7px] mb-1" style="color:var(--amber)" x-text="(today7.safe_automation.research_staleness.alerts&&today7.safe_automation.research_staleness.alerts[0])||'Research stale — confirm-only'"></div>
             <template x-if="today7.safe_automation&&today7.safe_automation.daily_briefing">
               <div data-cc="daily-operator-briefing" class="text-[8px] pt-1 mt-1" style="border-top:1px dashed var(--bd);color:var(--t3);line-height:1.45" x-text="(window.CCHelpers&&CCHelpers.dailyBriefingLine)?CCHelpers.dailyBriefingLine(today7.safe_automation.daily_briefing):''"></div>
             </template>
             <template x-if="today7.safe_automation&&today7.safe_automation.near_miss_recheck&&today7.safe_automation.near_miss_recheck.hints&&today7.safe_automation.near_miss_recheck.hints.length">
               <template x-for="h in today7.safe_automation.near_miss_recheck.hints.slice(0,2)" :key="'recheck-'+h.ticker">
-                <div class="text-[7px]" style="color:var(--t3)" x-text="'? '+h.hint"></div>
+                <div class="text-[7px]" style="color:var(--t3)" x-text="'• '+h.hint"></div>
               </template>
             </template>
             <div x-show="today7.safe_automation&&today7.safe_automation.monitor_queue_aging" class="text-[7px] mt-1" style="color:var(--t3)" x-text="today7.safe_automation.monitor_queue_aging.label||''"></div>
@@ -1277,17 +1280,17 @@
         </details>
       </template>
 
-      <!-- ?? Ops / IB / Monitor strip (institutional cockpit) ?? -->
+      <!-- ── Ops / IB / Monitor strip (institutional cockpit) ── -->
       <div x-show="tab==='today'" data-cc="deploy-status-strip" style="padding:6px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <span class="pill text-[8px]" :class="ibkrStateFrom(today7.execution_readiness).level==='ready'?'pg':ibkrStateFrom(today7.execution_readiness).level==='blocked'?'pr':'pa'" x-text="'IBKR '+ibkrUnifiedShort(today7.execution_readiness)"></span>
-        <span class="pill text-[8px]" :class="engineStatePillClass()" x-text="engineStateHeaderLabel()" title="Runtime: Conflict when engine truth and Ops disagree"></span>
+        <span class="pill text-[8px]" :class="engineStatePillClass()" x-text="shellTruthVM().engineHeaderLabel" title="Runtime: Conflict when engine truth and Ops disagree"></span>
         <template x-if="today7.evidence_badges">
           <span class="pill text-[7px] pw" :title="today7.evidence_badges.regime?.label" x-text="today7.evidence_badges.regime?.badge"></span>
           <span class="pill text-[7px] pw" :title="today7.evidence_badges.funds?.label" x-text="today7.evidence_badges.funds?.badge"></span>
           <span class="pill text-[7px] pw" :title="today7.evidence_badges.ai?.label" x-text="today7.evidence_badges.ai?.badge"></span>
         </template>
-        <span x-show="today7.system_truth" class="pill text-[8px] pa" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStripLocalized)?CCHelpers.scopedFreshnessStripLocalized(today7.system_truth):((typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStrip)?CCHelpers.scopedFreshnessStrip(today7.system_truth):'')"></span>
-        <span x-show="!today7.system_truth" class="pill text-[8px] pa" x-text="'Runtime: Unknown ? ????? ? Authority: Blocked ? ?????'"></span>
+        <span x-show="shellTruthVM().scopedStrip" class="pill text-[8px] pa" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStripLocalized&&today7.system_truth)?CCHelpers.scopedFreshnessStripLocalized(today7.system_truth):shellTruthVM().scopedStrip"></span>
+        <span x-show="!today7.system_truth" class="pill text-[8px] pa" x-text="'Runtime: Unknown · 運行：未知 · Authority: Blocked · 權限：禁止'"></span>
         <span x-show="riskAlertsStripVisible()" class="pill text-[8px] pr" x-text="riskAlertsStripLine()" @click="showAlertsModal=true" style="cursor:pointer"></span>
         <span x-show="portfolioSummaryStripVisible()" class="pill text-[8px] pb" x-text="portfolioSummaryStripLine()"></span>
         <button @click="switchTab('funds')" class="btn-s text-[8px] ml-auto" x-show="(pmStrip.funds||[]).length===0">Load Funds</button>
@@ -1396,11 +1399,11 @@
         </div>
       </template>
 
-      <template x-if="tab==='today'&&(authorityDegradedBanner() || todayUsesBriefFallback() || staleSnapshotContext())">
+      <template x-if="tab==='today'&&(authorityDegradedBanner() || shellTruthVM().briefExpiredLine || staleSnapshotContext())">
         <div style="padding:4px 12px 0">
           <div class="p-2 rounded text-[9px]" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.28);color:var(--amber);line-height:1.55">
-            <span class="pill pa text-[7px] font-bold mr-1" x-text="todayUsesBriefFallback()?'FALLBACK / BRIEF ONLY':(staleSnapshotContext()?'HISTORICAL SNAPSHOT':'DEGRADED')"></span>
-            <span x-text="authorityDegradedBanner()||(todayUsesBriefFallback()?'Fallback board: informational only ? live scanner unavailable':staleSnapshotContext())"></span>
+            <span class="pill pa text-[7px] font-bold mr-1" x-text="shellTruthVM().briefExpiredLine||(staleSnapshotContext()?'HISTORICAL SNAPSHOT':'DEGRADED')"></span>
+            <span x-text="authorityDegradedBanner()||(shellTruthVM().briefExpiredLine?('Board context stale — '+shellTruthVM().briefExpiredLine):staleSnapshotContext())"></span>
             <span x-show="decisionAuthority().data_source_mismatch" class="block mt-1 text-red-400" x-text="'Data source mismatch: '+(decisionAuthority().data_source_mismatch_detail||'counters may not match active board source')"></span>
           </div>
         </div>
@@ -1429,9 +1432,9 @@
       </template>
 
       <!-- ?? Regime strip (WAIT-day above-fold) ?? -->
-      <template x-if="today7.regime">
-        <div style="padding:4px 12px 0">
-          <div class="card card-p" style="padding:8px 10px;border-left:3px solid var(--amber)">
+      <details x-show="today7.regime" :open="!dashboardShellCompressed()" style="padding:4px 12px 0">
+        <summary class="text-[8px] font-bold uppercase cursor-pointer" style="color:var(--t3);padding:2px 0">Regime snapshot ? expand</summary>
+        <div class="card card-p mt-1" style="padding:8px 10px;border-left:3px solid var(--amber)">
             <div class="flex flex-wrap items-center gap-2 text-[9px]">
               <span class="font-bold uppercase" style="color:var(--amber)">Regime</span>
               <span class="pill pb text-[8px]" x-text="canonicalRegimeLine()"></span>
@@ -1440,8 +1443,7 @@
               <span class="text-[8px] ml-auto" style="color:var(--t2)" x-text="tradeabilityGuidanceLine()"></span>
             </div>
           </div>
-        </div>
-      </template>
+      </details>
 
       <!-- ?? Crisis / ?? regime strip ?? -->
       <template x-if="today7.crisis_regime">
@@ -1449,7 +1451,7 @@
           <div class="card card-p" style="padding:8px 10px;border-left:3px solid var(--red)"
             :style="today7.crisis_regime.level==='crisis'?'border-left-color:var(--red)':today7.crisis_regime.level==='elevated'?'border-left-color:var(--amber)':'border-left-color:var(--blue)'">
             <div class="flex flex-wrap items-center gap-2 text-[9px]">
-              <span class="font-bold uppercase" :style="today7.crisis_regime.level==='crisis'?'color:var(--red)':'color:var(--blue)'" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.volatilityMonitorLabel)?CCHelpers.volatilityMonitorLabel(today7.crisis_regime):(today7.crisis_regime.monitor_label||'Crisis Monitor')"></span>
+              <span class="font-bold uppercase" :style="today7.crisis_regime.level==='crisis'?'color:var(--red)':'color:var(--blue)'" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.volatilityMonitorLabel)?CCHelpers.volatilityMonitorLabel(today7.crisis_regime):(today7.crisis_regime.monitor_label||(today7.crisis_regime.level==='crisis'?'Crisis Monitor':'Volatility Monitor'))"></span>
               <span class="pill text-[7px]" :class="today7.crisis_regime.deploy_blocked?'pr':'pa'" x-text="today7.crisis_regime.level"></span>
               <span class="mono text-[8px]" style="color:var(--t2)" x-text="today7.crisis_regime.headline"></span>
             </div>
@@ -2033,7 +2035,7 @@
 
       <!-- ?? Evidence Conflict (default) ? collapsed when no valid candidate ?? -->
       <div style="padding:0 12px 8px" x-show="today7.evidence_conflict||today7.regime">
-        <details class="card card-p" style="padding:8px 12px;border-left:3px solid var(--amber)" :open="!(today7.evidence_conflict||{}).collapsed">
+        <details class="card card-p" style="padding:8px 12px;border-left:3px solid var(--amber)" :open="!dashboardShellCompressed() && !(today7.evidence_conflict||{}).collapsed">
           <summary class="text-xs font-bold uppercase cursor-pointer" style="color:var(--amber)">Evidence conflict ? For / Against / Missing</summary>
           <div class="text-[9px] mt-2 font-bold text-white" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.evidenceConflictPanel)?CCHelpers.evidenceConflictPanel(today7.evidence_conflict||{}).headline:((today7.evidence_conflict||{}).headline||'No valid candidate')"></div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 text-[8px]">
@@ -2296,7 +2298,7 @@
             <div class="text-[8px] font-bold mb-1" style="color:var(--t2)">Decision Rules</div>
             <div class="text-[8px]" style="color:var(--t3);line-height:1.6">
               ? <strong style="color:var(--t1)">Full TRADE</strong> when: board-ranked score ?8, thesis+timing ?65%, R:R ?2.5, execution-ready flag on card<br>
-              ?? <strong style="color:var(--t1)">PILOT</strong> when: partial edge with stop ? half size only; card shows why_pilot<br>
+              ?? <strong style="color:var(--t1)">PILOT</strong> when: partial edge with stop ? review-only until deploy authority opens; card shows why_pilot<br>
               ? <strong style="color:var(--t1)">Watch</strong> when: ranked #1?10 but below TRADE bar (score 6?8 or timing/R:R gap)<br>
               ?? <strong style="color:var(--t1)">Skip</strong> when: regime NO_TRADE/WAIT or laggard + weak data<br>
               ?? <strong style="color:var(--t1)">Historical Win Rate</strong> shown when ?10 similar past trades exist ? use as extra confirmation
@@ -2577,8 +2579,8 @@
         </div>
       </template>
 
-      <!-- ?? Quick Market Strip (collapsed) ?? -->
-      <details style="margin:12px 12px 16px" @toggle="$event.target.open && !indices.length && !marketStrip.loading && fetchMarketStrip()">
+      <!-- ?? Quick Market Strip (collapsed when deploy blocked) ?? -->
+      <details style="margin:12px 12px 16px" :open="!dashboardShellCompressed()" @toggle="$event.target.open && !indices.length && !marketStrip.loading && fetchMarketStrip()">
         <summary class="text-[10px] font-bold flex items-center gap-2" style="color:var(--t3);cursor:pointer">
           <span>?? Market Data</span>
           <span x-show="marketStrip.loading" class="pill text-[7px] pw">Loading?</span>
@@ -2681,9 +2683,9 @@
         <main x-show="tab==='signals'" class="fade" data-cc="playbook-surface">
       <div class="trust-strip">
         <span :style="sig.mode==='SCAN'?'color:var(--green)':sig.mode==='PAPER'?'color:var(--blue)':sig.mode==='OFFLINE'?'color:var(--red)':'color:var(--green)'" x-text="'? '+(sig.mode||'?')"></span>
-        <span x-text="playbookFunnelLabel(rankedOpps.filter_funnel||today7.filter_funnel, rankedOpps.rows)" :title="'Setup-qualified vs deploy-qualified ? deploy requires authority'"></span>
-        <span class="pill pa text-[8px]" x-show="tab==='signals'" x-text="canonicalRegimeLine()"></span>
-        <span x-show="unifiedTruthStripLine()" class="text-[8px] mono truncate" style="max-width:420px;color:var(--t3)" x-text="unifiedTruthStripLine()"></span>
+        <span x-text="safeRenderText(playbookQualificationDisplay())" :title="'Setup-qualified vs deploy-qualified — deploy requires authority'"></span>
+        <span class="pill pa text-[8px]" x-show="tab==='signals'" x-text="safeRenderText(playbookRegimeDisplayLine())"></span>
+        <span x-show="playbookOperatorView().truth_strip" class="text-[8px] mono truncate" style="max-width:420px;color:var(--t3)" x-text="safeRenderText(playbookOperatorView().truth_strip)"></span>
         <span x-show="playbookBoardModeLabel()" class="pill pa text-[8px]" x-text="playbookBoardModeLabel()"></span>
         <span x-show="rankedOpps.refreshing" class="text-amber-300 text-[9px]">? refreshing</span>
         <span x-show="playbookSnapshotLabel()" class="text-[9px]" style="color:var(--t3)" x-text="playbookSnapshotLabel()"></span>
@@ -2786,7 +2788,9 @@
         </div>
       </template>
       <!-- Action/Sector Filters -->
-      <div style="padding:6px 12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <details :open="!playbookOperatorView().blocked" style="padding:6px 12px">
+      <summary class="text-[9px] font-bold uppercase cursor-pointer mb-1" style="color:var(--t3)" x-show="playbookOperatorView().blocked">Filters (collapsed — deploy blocked)</summary>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
         <span class="text-[9px] font-bold" style="color:var(--t3)">Action:</span>
         <template x-for="a in ['','TRADE','PILOT','WATCH','AVOID']">
           <button class="pill pw text-[8px]" :class="rankedOpps.actionFilter===a?'pg':''" @click="rankedOpps.actionFilter=a;fetchRanked()" x-text="a||'All'"></button>
@@ -2796,11 +2800,12 @@
           <button class="pill pw text-[7px]" :class="rankedOpps.sectorFilter===s?'pp':''" @click="rankedOpps.sectorFilter=s;fetchRanked()" x-text="s?s.replace(/_/g,' '):'All'"></button>
         </template>
       </div>
-      <!-- Rejection clusters (fallback ? shown before expanded avoid list) -->
+      </details>
+      <!-- Rejection clusters (fallback — shown before expanded avoid list) -->
       <template x-if="(rankedOpps.rejection_clusters||[]).length">
         <div style="padding:0 12px 8px">
           <div class="card card-p" style="border-left:3px solid var(--red)">
-            <details :open="!playbookBoardWait()">
+            <details :open="!playbookOperatorView().blocked">
             <summary class="text-[10px] font-bold uppercase cursor-pointer mb-1" style="color:var(--red)">Rejection clusters <span x-show="playbookBoardWait()" class="text-[8px] font-normal" style="color:var(--t3)">(collapsed on WAIT)</span></summary>
             <div class="text-[8px] mb-2" style="color:var(--t2);line-height:1.45" x-show="!playbookBoardWait()">Audit layer ? deploy gate blockers by theme. Diagnosis only.</div>
             <div class="text-[8px] mb-2" style="color:var(--t3);line-height:1.45" x-show="playbookBoardWait()">Expand for blocker themes ? not watchlist priority.</div>
@@ -2904,15 +2909,16 @@
         <details x-show="(playbookOperatorView().buckets?.rejected_count||0)>0" class="mb-2">
           <summary class="text-[9px] font-bold uppercase cursor-pointer" style="color:var(--red)">Rejected (<span x-text="playbookOperatorView().buckets?.rejected_count||0"></span>)</summary>
         </details>
-        <template x-if="playbookAllBucketRows().length===0 && playbookDisplayRows().length>0">
+        <template x-if="playbookLegacyRowsVisible()">
           <div class="mb-1">
             <div class="text-[10px] font-bold uppercase" style="color:var(--amber)">Candidate buckets</div>
           </div>
         </template>
-        <template x-if="playbookBoardWait() && playbookDisplayRows().length>0">
+        <template x-if="playbookBoardWait() && playbookDisplayRows().length>0 && !playbookAllBucketRows().length">
           <div class="p-2 rounded text-[9px] mb-1" style="background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.2);color:var(--t2);line-height:1.55" x-text="playbookRankingsDisclaimer()"></div>
         </template>
-        <template x-if="playbookAllBucketRows().length===0 && playbookDisplayRows().length>0">
+        <details x-show="playbookLegacyRowsVisible()" :open="false">
+        <template x-if="playbookLegacyRowsVisible()">
           <template x-for="(r, idx) in playbookDisplayRows()">
             <div class="card" style="cursor:pointer;overflow:hidden" :style="(r.rr_below_trade_threshold||rrBelowTradeGate(r.risk_reward))?'opacity:.72;border:1px solid rgba(255,255,255,.06)':''" @click="openDossier(r.ticker)">
               <div :style="'height:3px;background:var(--'+(['TRADE','BUY'].includes(String(effectiveCardAction(r)).toUpperCase())?'green':effectiveCardAction(r)==='PILOT'?'blue':['NO_TRADE','AVOID','BLOCKED'].includes(String(effectiveCardAction(r)).toUpperCase())?'red':'amber')+')'"></div>
@@ -3197,6 +3203,7 @@
             </div>
           </template>
         </template>
+        </details>
         <!-- Fallback to legacy opps ? FALLBACK WATCH grades only when ranked board empty -->
         <template x-if="playbookOppsFallbackVisible()">
           <div class="card card-p mx-3 mb-2 text-[9px]" style="border-left:3px solid var(--amber);color:var(--amber)">
@@ -4356,86 +4363,86 @@
 
       <!-- Hero -->
       <div class="guide-hero" style="position:relative;overflow:hidden;margin-bottom:20px">
-        <div style="position:absolute;right:20px;top:20px;font-size:64px;opacity:.07;line-height:1">??</div>
-        <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:6px">CC ? Clarity Console ? ????? ? Operator Guide</div>
-        <div style="font-size:20px;font-weight:800;color:var(--t1);margin-bottom:8px;line-height:1.3">??????? ? How to use this platform</div>
+        <div style="position:absolute;right:20px;top:20px;font-size:64px;opacity:.07;line-height:1">📊</div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:6px">CC · Clarity Console — 操作員指南 · Operator Guide</div>
+        <div style="font-size:20px;font-weight:800;color:var(--t1);margin-bottom:8px;line-height:1.3">如何使用本平台 · How to use this platform</div>
         <div style="font-size:12px;color:var(--t2);line-height:1.7;max-width:520px">
-          <strong style="color:var(--t1)">??? Layer 1</strong>?? 30 ??????? <strong style="color:var(--t1)">??? Layer 2</strong>??????? <strong style="color:var(--t1)">??? Layer 3</strong>?????????? ? ?????? Dashboard?
+          <strong style="color:var(--t1)">第一層 Layer 1</strong>（約 30 秒快速上手）· <strong style="color:var(--t1)">第二層 Layer 2</strong>（讀懂介面）· <strong style="color:var(--t1)">第三層 Layer 3</strong>（術語表）。僅供參考 — 即時狀態請開 Dashboard。
         </div>
         <div style="margin-top:12px;padding:10px 12px;background:rgba(0,212,170,.06);border:1px solid rgba(0,212,170,.22);border-radius:8px;font-size:11px;color:var(--t2);line-height:1.65;max-width:560px">
-          <div style="font-size:10px;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">????? ? Operator quick read</div>
-          <div><strong style="color:var(--t1)">?? ? Now</strong> ? ???????<strong style="color:var(--t1)">MONITOR ONLY ? Deploy blocked</strong>?</div>
-          <div><strong style="color:var(--t1)">?? ? Why</strong> ? ???????Board stale ? Brief expired 26d ? IBKR offline ? Runtime conflict?</div>
-          <div><strong style="color:var(--t1)">?? ? Allowed</strong> ? ????????????? Playbook ??</div>
-          <div><strong style="color:var(--t1)">?? ? Blocked</strong> ? ???????????????</div>
-          <div><strong style="color:var(--t1)">??? ? Next</strong> ? ?????????? IBKR ? ??????</div>
-          <div style="margin-top:8px;font-size:10px;color:var(--t3)">Playbook = ???????????? Dossier confirm-only = ???????????? Funds = ???????????</div>
+          <div style="font-size:10px;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">操作員速查 · Operator quick read</div>
+          <div><strong style="color:var(--t1)">現在 · Now</strong> — 今日狀態（例：<strong style="color:var(--t1)">MONITOR ONLY · Deploy blocked</strong>）</div>
+          <div><strong style="color:var(--t1)">原因 · Why</strong> — 為何被擋（例：Board stale · Brief expired 26d · IBKR offline · Runtime conflict）</div>
+          <div><strong style="color:var(--t1)">可做 · Allowed</strong> — 刷新看板、建立監察規則、開 Playbook 複核</div>
+          <div><strong style="color:var(--t1)">禁止 · Blocked</strong> — 不定倉、不交接券商、不可試探倉</div>
+          <div><strong style="color:var(--t1)">下一步 · Next</strong> — 先做一件事（例：修復 IBKR → 再刷新看板）</div>
+          <div style="margin-top:8px;font-size:10px;color:var(--t3)">Playbook = 候選名單（非交易指令）· Dossier confirm-only = 結構確認（非交易計劃）· Funds = 研究模式（非配置指令）</div>
         </div>
         <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
-          <button @click="localStorage.setItem('cc_guide_seen','1');switchTab('today')" class="btn-p" style="font-size:13px;padding:10px 24px">?? ?? Dashboard ? Open Dashboard</button>
+          <button @click="localStorage.setItem('cc_guide_seen','1');switchTab('today')" class="btn-p" style="font-size:13px;padding:10px 24px">🚀 開啟 Dashboard · Open Dashboard</button>
           <button @click="localStorage.removeItem('cc_guide_seen')" style="background:none;border:none;color:var(--t3);font-size:11px;cursor:pointer;text-decoration:underline">Reset first-visit flag</button>
         </div>
       </div>
 
-      <!-- ?? CURRENT BUILD REALITY CHECK (collapsible) ?? -->
+      <!-- ══ CURRENT BUILD REALITY CHECK (collapsible) ══ -->
       <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--amber)">
         <summary style="padding:10px 16px;background:rgba(251,191,36,.06);display:flex;align-items:center;gap:8px">
-          <span style="font-size:16px">??</span>
+          <span style="font-size:16px">⚠️</span>
           <span class="guide-layer-hdr" style="color:var(--amber)">Current Build Reality Check</span>
           <span style="font-size:10px;color:var(--t3);margin-left:auto">Expand</span>
         </summary>
         <div style="padding:14px 16px;font-size:12px;color:var(--t2);line-height:1.75">
           Platform state varies: <strong style="color:var(--t1)">live</strong>, <strong style="color:var(--t1)">fallback</strong>, <strong style="color:var(--t1)">mock</strong>, <strong style="color:var(--t1)">partial-sync</strong>, or <strong style="color:var(--t1)">diagnostics-first</strong>.
           <div style="margin-top:10px;font-size:11px;display:flex;flex-direction:column;gap:4px">
-            <div>? <strong style="color:var(--t1)">Ranked</strong> ? deployable ? <strong style="color:var(--t1)">Connected</strong> ? execution-ready</div>
-            <div>? <strong style="color:var(--t1)">Broker truth</strong> may differ from local research book</div>
-            <div>? <strong style="color:var(--t1)">Probe health</strong> ? runtime health ? <strong style="color:var(--t1)">Research</strong> ? trade permission</div>
+            <div>• <strong style="color:var(--t1)">Ranked</strong> ≠ deployable · <strong style="color:var(--t1)">Connected</strong> ≠ execution-ready</div>
+            <div>• <strong style="color:var(--t1)">Broker truth</strong> may differ from local research book</div>
+            <div>• <strong style="color:var(--t1)">Probe health</strong> ≠ runtime health · <strong style="color:var(--t1)">Research</strong> ≠ trade permission</div>
           </div>
         </div>
       </details>
 
-      <!-- ?? RANDOM WALK ? GLOBAL PRINCIPLES (collapsible) ?? -->
+      <!-- ══ RANDOM WALK — GLOBAL PRINCIPLES (collapsible) ══ -->
       <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--purple)">
         <summary style="padding:10px 16px;background:rgba(168,85,247,.06);display:flex;align-items:center;gap:8px">
-          <span style="font-size:16px">??</span>
-          <span class="guide-layer-hdr" style="color:var(--purple)">Random Walk ? Global Principles (8)</span>
+          <span style="font-size:16px">📘</span>
+          <span class="guide-layer-hdr" style="color:var(--purple)">Random Walk — Global Principles (8)</span>
           <span style="font-size:10px;color:var(--t3);margin-left:auto">Expand</span>
         </summary>
         <div style="padding:14px 16px;font-size:11px;color:var(--t2);line-height:1.75">
-          <div style="font-size:10px;color:var(--t3);margin-bottom:10px">Constitution layer ? apply on every surface (Dashboard, Playbook, Dossier, Portfolio, Funds). Read net edge after cost; humility labels are supportive, not excuses to trade.</div>
+          <div style="font-size:10px;color:var(--t3);margin-bottom:10px">Constitution layer — apply on every surface (Dashboard, Playbook, Dossier, Portfolio, Funds). Read net edge after cost; humility labels are supportive, not excuses to trade.</div>
           <div style="display:flex;flex-direction:column;gap:8px">
-            <div><strong style="color:var(--t1)">1.</strong> Markets are noisy in the short run ? favor regime and process over daily noise.</div>
-            <div><strong style="color:var(--t1)">2.</strong> Page-level regime overrides single-name temptation ? board gate beats a pretty card.</div>
-            <div><strong style="color:var(--t1)">3.</strong> Research relevance does not equal deploy permission ? Discovery/Flow/Funds/RS inform only.</div>
-            <div><strong style="color:var(--t1)">4.</strong> Cost-adjusted edge matters more than raw signal strength ? read Raw ? Net after cost.</div>
-            <div><strong style="color:var(--t1)">5.</strong> Portfolio construction matters more than isolated ideas ? correlated stories are one bet.</div>
-            <div><strong style="color:var(--t1)">6.</strong> Cash is a valid allocation ? patience when edge is unclear is risk management.</div>
-            <div><strong style="color:var(--t1)">7.</strong> Avoid overconfidence in forecasting ? scenarios and invalidation beat point predictions.</div>
-            <div><strong style="color:var(--t1)">8.</strong> Bubble conditions require extra skepticism ? crowding and extension need explicit discount.</div>
+            <div><strong style="color:var(--t1)">1.</strong> Markets are noisy in the short run — favor regime and process over daily noise.</div>
+            <div><strong style="color:var(--t1)">2.</strong> Page-level regime overrides single-name temptation — board gate beats a pretty card.</div>
+            <div><strong style="color:var(--t1)">3.</strong> Research relevance does not equal deploy permission — Discovery/Flow/Funds/RS inform only.</div>
+            <div><strong style="color:var(--t1)">4.</strong> Cost-adjusted edge matters more than raw signal strength — read Raw · Net after cost.</div>
+            <div><strong style="color:var(--t1)">5.</strong> Portfolio construction matters more than isolated ideas — correlated stories are one bet.</div>
+            <div><strong style="color:var(--t1)">6.</strong> Cash is a valid allocation — patience when edge is unclear is risk management.</div>
+            <div><strong style="color:var(--t1)">7.</strong> Avoid overconfidence in forecasting — scenarios and invalidation beat point predictions.</div>
+            <div><strong style="color:var(--t1)">8.</strong> Bubble conditions require extra skepticism — crowding and extension need explicit discount.</div>
           </div>
           <div style="margin-top:12px;padding:10px 12px;background:var(--s2);border-radius:8px;font-size:10px;color:var(--t3)">
-            <strong style="color:var(--t2)">Humility labels:</strong> supportive only ? likely priced in ? evidence incomplete ? monitoring only ? not enough advantage over passive baseline ? research signal only ? narrative-rich, evidence-light ? cost drag may erase weak edge ? high structure, low predictive certainty
+            <strong style="color:var(--t2)">Humility labels:</strong> supportive only · likely priced in · evidence incomplete · monitoring only · not enough advantage over passive baseline · research signal only · narrative-rich, evidence-light · cost drag may erase weak edge · high structure, low predictive certainty
           </div>
           <div style="margin-top:10px;padding:10px 12px;background:rgba(20,184,166,.06);border:1px solid rgba(20,184,166,.22);border-radius:8px;font-size:10px;color:var(--t2);line-height:1.65">
             <strong style="color:var(--teal,#14b8a6)">Naval principles (signal-light):</strong>
-            specific knowledge beats borrowed conviction ? preserve mental bandwidth ? suppress false urgency ?
-            process leverage over labor churn ? compounding patience when board says WAIT ?
+            specific knowledge beats borrowed conviction · preserve mental bandwidth · suppress false urgency ·
+            process leverage over labor churn · compounding patience when board says WAIT —
             see <code style="font-size:9px">docs/NAVAL_ALMANAC_UPGRADE.md</code>
           </div>
           <div style="margin-top:10px;padding:10px 12px;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.22);border-radius:8px;font-size:10px;color:var(--t2);line-height:1.65">
             <strong style="color:var(--amber)">Buffett principles (owner judgment):</strong>
-            understand the business ? economic quality and moat ? honest capital allocation ?
-            stay inside circle of competence ? patience when board says WAIT ?
+            understand the business · economic quality and moat · honest capital allocation ·
+            stay inside circle of competence · patience when board says WAIT —
             see <code style="font-size:9px">docs/BUFFETT_BIOGRAPHY_UPGRADE.md</code>
           </div>
         </div>
       </details>
 
-      <!-- ?? LAYER 1 ? QUICK START (30 sec) ?? -->
+      <!-- ══ LAYER 1 — QUICK START (30 sec) ══ -->
       <div class="card" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--green)">
         <div style="padding:12px 16px;background:var(--s2);border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:8px">
-          <span style="font-size:18px">?</span>
-          <span class="guide-layer-hdr" style="color:var(--green)">Layer 1 ? Quick Start</span>
+          <span style="font-size:18px">⚡</span>
+          <span class="guide-layer-hdr" style="color:var(--green)">Layer 1 — Quick Start</span>
           <span style="font-size:10px;color:var(--t3);margin-left:auto;font-weight:600">~30 seconds</span>
         </div>
         <div style="padding:14px 16px">
@@ -4443,19 +4450,19 @@
           <div class="guide-operator-checklist" x-show="operatorChecklistVisible()" id="cc-operator-checklist">
             <div style="font-size:11px;font-weight:800;color:var(--green);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">Operator checklist</div>
             <ul style="font-size:11px;color:var(--t2);line-height:1.65;padding-left:16px;margin:0 0 8px">
-              <li><strong style="color:var(--t1)">Page gate beats card rank</strong> ? WAIT/NO_TRADE caps deploy surfaces ? ???????????</li>
-              <li><strong style="color:var(--t1)">Research ? permission</strong> ? Discovery, Flow, Funds, RS inform only ? ?? ? ???</li>
-              <li><strong style="color:var(--t1)">Dashboard first</strong> ? live board posture; Guide is reference only ? ?? Dashboard ????</li>
+              <li><strong style="color:var(--t1)">Page gate beats card rank</strong> — WAIT/NO_TRADE caps deploy surfaces · 頁面門檻優先於卡片排名</li>
+              <li><strong style="color:var(--t1)">Research ≠ permission</strong> — Discovery, Flow, Funds, RS inform only · 研究 ≠ 可部署</li>
+              <li><strong style="color:var(--t1)">Dashboard first</strong> — live board posture; Guide is reference only · 先看 Dashboard 今日狀態</li>
             </ul>
-            <button type="button" @click="dismissOperatorChecklist()" class="btn-s text-[9px]">Got it ? hide until reset</button>
+            <button type="button" @click="dismissOperatorChecklist()" class="btn-s text-[9px]">Got it — hide until reset</button>
           </div>
 
           <div style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Most common mistakes</div>
           <ul style="font-size:11px;color:var(--t2);line-height:1.65;padding-left:16px;margin:0 0 12px">
-            <li><strong style="color:var(--t1)">Don't size from fallback cards</strong> ? FALLBACK WATCH / Brief expired = monitor-only ? ???????????</li>
-            <li><strong style="color:var(--t1)">Don't treat IBKR LOGIN as execution-ready</strong> ? GATEWAY UP ? LOGIN REQUIRED still blocks handoff ? ??? Gateway ? ???</li>
-            <li><strong style="color:var(--t1)">Don't treat Discovery / Flow / RS as deploy permission</strong> ? research-only surfaces ? ???? ? ????</li>
-            <li><strong style="color:var(--t1)">Don't treat Backtest Lab as live evidence</strong> ? historical simulation, not deployment authority ? ?? ? ????</li>
+            <li><strong style="color:var(--t1)">Don't size from fallback cards</strong> — FALLBACK WATCH / Brief expired = monitor-only · 備援或過期簡報不可定倉</li>
+            <li><strong style="color:var(--t1)">Don't treat IBKR LOGIN as execution-ready</strong> — GATEWAY UP · LOGIN REQUIRED still blocks handoff · 已登入 Gateway ≠ 可下單</li>
+            <li><strong style="color:var(--t1)">Don't treat Discovery / Flow / RS as deploy permission</strong> — research-only surfaces · 掃描結果 ≠ 部署許可</li>
+            <li><strong style="color:var(--t1)">Don't treat Backtest Lab as live evidence</strong> — historical simulation, not deployment authority · 回測 ≠ 實盤依據</li>
           </ul>
 
           <details style="margin-top:4px">
@@ -4463,52 +4470,52 @@
             <div style="margin-top:8px">
               <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Capital allowed when</div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;margin-bottom:10px">
-                <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">?</span><span style="color:var(--t2)"><strong style="color:var(--t1)">Scoped freshness</strong> ? Market/Board/Brief/Broker/Runtime fresh; header shows per-scope labels, not one global pill</span></div>
-                <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">?</span><span style="color:var(--t2)"><strong style="color:var(--t1)">Engine confirmed</strong> ? header + Ops agree; badge alone ? fresh cycle</span></div>
-                <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">?</span><span style="color:var(--t2)"><strong style="color:var(--t1)">IBKR READY</strong> ? session active, not LOGIN-only; bracket aligned</span></div>
-                <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">?</span><span style="color:var(--t2)"><strong style="color:var(--t1)">Board gate open</strong> ? not WAIT/NO_TRADE; entry + stop + execution_ready</span></div>
+                <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">☑</span><span style="color:var(--t2)"><strong style="color:var(--t1)">Scoped freshness</strong> — Market/Board/Brief/Broker/Runtime fresh; header shows per-scope labels, not one global pill</span></div>
+                <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">☑</span><span style="color:var(--t2)"><strong style="color:var(--t1)">Engine confirmed</strong> — header + Ops agree; badge alone ≠ fresh cycle</span></div>
+                <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">☑</span><span style="color:var(--t2)"><strong style="color:var(--t1)">IBKR READY</strong> — session active, not LOGIN-only; bracket aligned</span></div>
+                <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">☑</span><span style="color:var(--t2)"><strong style="color:var(--t1)">Board gate open</strong> — not WAIT/NO_TRADE; entry + stop + execution_ready</span></div>
               </div>
               <div style="font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px">Capital blocked when</div>
               <div style="font-size:11px;color:var(--t2);line-height:1.6">
-                Engine OFF/stale ? board WAIT/NO_TRADE ? Authority: Blocked ? IBKR LOGIN-only or disconnected ? bracket missing ? fallback / confirm-only dossier (Structure Review Only) ? research-only / mock surfaces ? no pilot entry
-                <span style="color:var(--t3)"> ? full list in Layer 3.</span>
+                Engine OFF/stale · board WAIT/NO_TRADE · Authority: Blocked · IBKR LOGIN-only or disconnected · bracket missing · fallback / confirm-only dossier (Structure Review Only) · research-only / mock surfaces · no pilot entry
+                <span style="color:var(--t3)"> — full list in Layer 3.</span>
               </div>
             </div>
           </details>
 
           <div style="font-size:10px;color:var(--t3);line-height:1.6;padding-top:10px;margin-top:10px;border-top:1px solid var(--bd)">
             <strong style="color:var(--t2)">Surfaces:</strong>
-            <span class="guide-badge pg" style="font-size:8px">Core</span> decides ?
-            <span class="guide-badge pb" style="font-size:8px">Research-only</span> supports ?
-            <span class="guide-badge pw" style="font-size:8px">Diagnostic</span> / <span class="guide-badge pa" style="font-size:8px">Execution-dependent</span> confirms ? details in Layer 3.
+            <span class="guide-badge pg" style="font-size:8px">Core</span> decides ·
+            <span class="guide-badge pb" style="font-size:8px">Research-only</span> supports ·
+            <span class="guide-badge pw" style="font-size:8px">Diagnostic</span> / <span class="guide-badge pa" style="font-size:8px">Execution-dependent</span> confirms — details in Layer 3.
           </div>
 
           <div style="margin-top:14px;padding:12px;background:rgba(88,166,255,.06);border:1px solid rgba(88,166,255,.2);border-radius:8px">
-            <div style="font-size:11px;font-weight:800;color:var(--blue);margin-bottom:8px">???????? ? Research surfaces</div>
-            <div style="font-size:11px;color:var(--t2);line-height:1.7;margin-bottom:10px">??????<strong style="color:var(--t1)">??????</strong>?????????????????????????</div>
+            <div style="font-size:11px;font-weight:800;color:var(--blue);margin-bottom:8px">研究介面快速上手 · Research surfaces</div>
+            <div style="font-size:11px;color:var(--t2);line-height:1.7;margin-bottom:10px">以下三個介面<strong style="color:var(--t1)">只有研究權限</strong>，不會下單、不會調倉。空狀態時看「如何開始」卡片。</div>
             <div style="display:flex;flex-direction:column;gap:10px;font-size:11px;color:var(--t2);line-height:1.65">
               <div style="padding:8px 10px;background:var(--s2);border-radius:6px;border-left:3px solid var(--amber)">
-                <strong style="color:var(--t1)">?? Agent ?? ? ??? ? Monitor only</strong>?More ? Command?<br>
-                ???????????????? KO ?? 20 ?????????? Playbook Watch ?????????
+                <strong style="color:var(--t1)">🤖 Agent 盯盤 · 僅監察 · Monitor only</strong>（More → Command）<br>
+                輸入一句話建立監察規則，例如「當 KO 跌破 20 日線時提醒我」。可從 Playbook Watch 名單一鍵建立規則。
               </div>
               <div style="padding:8px 10px;background:var(--s2);border-radius:6px;border-left:3px solid var(--green)">
-                <strong style="color:var(--t1)">?? ????? ? Strategy Lab</strong>?More ???<br>
-                ???? ID?? defensive_pullback?? ?????? ? ???? Watch ?? ? ? Playbook ??????????
+                <strong style="color:var(--t1)">🧪 策略實驗室 · Strategy Lab</strong>（More 選單）<br>
+                輸入策略 ID（如 defensive_pullback）→ 產生研究草稿 → 驗證後轉 Watch 規則 → 到 Playbook 審閱。不具部署權限。
               </div>
               <div style="padding:8px 10px;background:var(--s2);border-radius:6px;border-left:3px solid var(--blue)">
-                <strong style="color:var(--t1)">?? ???? ? Shadow account</strong>?Ops ? Shadow?<br>
-                ??? CSV ???????? IBKR ??????????????????????????????
+                <strong style="color:var(--t1)">🧾 影子帳戶 · Shadow account</strong>（Ops → Shadow）<br>
+                先匯入 CSV 交易紀錄，或連接 IBKR 歷史成交。可看勝率、持倉時間、過早平倉等行為診斷（研究用）。
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- ?? LAYER 2 ? HOW TO READ THE PLATFORM ?? -->
+      <!-- ══ LAYER 2 — HOW TO READ THE PLATFORM ══ -->
       <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--blue)">
         <summary style="padding:12px 16px;background:var(--s2);display:flex;align-items:center;gap:8px">
-          <span style="font-size:18px">??</span>
-          <span class="guide-layer-hdr" style="color:var(--t1)">Layer 2 ? How to Read the Platform</span>
+          <span style="font-size:18px">📖</span>
+          <span class="guide-layer-hdr" style="color:var(--t1)">Layer 2 — How to Read the Platform</span>
           <span style="font-size:10px;color:var(--t3);margin-left:auto">Expand</span>
         </summary>
         <div style="padding:0">
@@ -4516,24 +4523,24 @@
       <!-- Header bar (4 layers) -->
       <div style="border-bottom:1px solid var(--bd)">
         <div style="padding:10px 16px;display:flex;align-items:center;gap:8px">
-          <span style="font-size:14px">??</span>
-          <span style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px">Header bar ? 4 layers</span>
+          <span style="font-size:14px">🔝</span>
+          <span style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px">Header bar — 4 layers</span>
         </div>
         <div style="padding:14px 16px">
           <div style="font-size:12px;color:var(--t2);line-height:1.8;margin-bottom:12px">Status is four layers, not just LIVE/PAPER/SYNTHETIC. Check all four before trusting any card:</div>
           <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
             <div style="background:var(--s2);border:1px solid var(--bd);border-radius:8px;padding:10px 12px">
-              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:4px">? Scoped truth strip (header example)</div>
-              <div style="font-size:9px;color:var(--t3);margin-bottom:6px;font-style:italic">Educational example ? live header uses Market:/Board:/Brief:/Broker:/Runtime:/Authority: labels.</div>
-              <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t2);line-height:1.5;margin-bottom:6px;padding:8px;background:var(--bg);border-radius:6px;border:1px solid var(--bd)">Market: Fresh ? Board: Stale ? Brief: Expired 21d ? Broker: Offline ? Runtime: Stale ? Authority: Blocked</div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:4px">① Scoped truth strip (header example)</div>
+              <div style="font-size:9px;color:var(--t3);margin-bottom:6px;font-style:italic">Educational example — live header uses Market:/Board:/Brief:/Broker:/Runtime:/Authority: labels.</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t2);line-height:1.5;margin-bottom:6px;padding:8px;background:var(--bg);border-radius:6px;border:1px solid var(--bd)">Market: Fresh · Board: Stale · Brief: Expired 21d · Broker: Offline · Runtime: Stale · Authority: Blocked</div>
               <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
                 <span class="guide-badge pg" style="font-size:9px">REAL_TIME</span>
                 <span class="guide-badge" style="background:#581c87;color:#d8b4fe;font-size:9px">SYNTHETIC</span>
               </div>
-              <div style="font-size:11px;color:var(--t2);line-height:1.6"><strong style="color:var(--red)">? Any scope Stale / Expired / Fallback / SYNTHETIC</strong> ? treat affected prices and scores as provisional until that scope recovers and <strong style="color:var(--t1)">Authority: Open</strong>.</div>
+              <div style="font-size:11px;color:var(--t2);line-height:1.6"><strong style="color:var(--red)">⚠ Any scope Stale / Expired / Fallback / SYNTHETIC</strong> — treat affected prices and scores as provisional until that scope recovers and <strong style="color:var(--t1)">Authority: Open</strong>.</div>
             </div>
             <div style="background:var(--s2);border:1px solid var(--bd);border-radius:8px;padding:10px 12px">
-              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:4px">? Engine status</div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:4px">② Engine status</div>
               <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
                 <span class="guide-badge pg" style="font-size:9px">LIVE</span>
                 <span class="guide-badge pb" style="font-size:9px">PAPER</span>
@@ -4543,16 +4550,16 @@
               <div style="font-size:11px;color:var(--t2);line-height:1.6">Confirm in <strong style="color:var(--t1)">header and Ops</strong> when freshness matters. LIVE/PAPER badge alone is not always proof a fresh runtime cycle completed. OFF = stale decisions. BREAKER blocks new entries.</div>
             </div>
             <div style="background:var(--s2);border:1px solid var(--bd);border-radius:8px;padding:10px 12px">
-              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:4px">? Broker status</div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:4px">③ Broker status</div>
               <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
                 <span class="guide-badge pg" style="font-size:9px">READY</span>
                 <span class="guide-badge pb" style="font-size:9px">PAPER</span>
                 <span class="guide-badge pr" style="font-size:9px">DISCONNECTED</span>
               </div>
-              <div style="font-size:11px;color:var(--t2);line-height:1.6">Gateway may show <strong style="color:var(--amber)">LOGIN</strong> or <strong style="color:var(--t1)">GATEWAY UP ? LOGIN REQUIRED</strong> ? transport up, session not active. Execution-ready requires READY + account + bracket alignment, not Connect alone.</div>
+              <div style="font-size:11px;color:var(--t2);line-height:1.6">Gateway may show <strong style="color:var(--amber)">LOGIN</strong> or <strong style="color:var(--t1)">GATEWAY UP · LOGIN REQUIRED</strong> — transport up, session not active. Execution-ready requires READY + account + bracket alignment, not Connect alone.</div>
             </div>
             <div style="background:var(--s2);border:1px solid var(--bd);border-radius:8px;padding:10px 12px">
-              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:4px">? Execution readiness</div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:4px">④ Execution readiness</div>
               <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
                 <span class="guide-badge pg">STRONG_TRADE</span>
                 <span class="guide-badge pg">TRADE</span>
@@ -4572,7 +4579,7 @@
       <!-- Core workflow -->
       <div style="border-bottom:1px solid var(--bd)">
         <div style="padding:10px 16px;display:flex;align-items:center;gap:8px">
-          <span style="font-size:14px">??</span>
+          <span style="font-size:14px">🗓</span>
           <span style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px">Core workflow (current nav names)</span>
         </div>
         <div style="padding:14px 16px">
@@ -4581,7 +4588,7 @@
             <div class="guide-num">1</div>
             <div style="flex:1">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-                <span style="font-size:13px;font-weight:700;color:var(--t1)">?? Dashboard</span>
+                <span style="font-size:13px;font-weight:700;color:var(--t1)">🎯 Dashboard</span>
                 <span class="guide-badge pg" style="font-size:8px">Core</span>
                 <span style="font-size:9px;background:rgba(0,212,170,.1);color:var(--green);padding:2px 6px;border-radius:4px;font-weight:700">START HERE</span>
               </div>
@@ -4595,12 +4602,12 @@
             <div class="guide-num">2</div>
             <div style="flex:1">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-                <span style="font-size:13px;font-weight:700;color:var(--t1)">?? Playbook</span>
+                <span style="font-size:13px;font-weight:700;color:var(--t1)">📋 Playbook</span>
                 <span class="guide-badge pg" style="font-size:8px">Core</span>
               </div>
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
-                Candidate board (Deploy / Pilot / Watch buckets) ? not a trade ticket. Legacy name: <em>Ranked</em>. Each row shows action badge, score, levels, R:R, and execution_ready when bracket math is complete.
-                <span style="color:var(--amber);display:block;margin-top:4px">When <strong style="color:var(--t1)">Authority: Open</strong>, deploy-qualified cards may show executable levels. When blocked: <strong style="color:var(--t1)">MONITOR ONLY</strong> ? no pilot entry, no sizing, no handoff; structure levels collapse under ?Structure reference only?.</span>
+                Candidate board (Deploy / Pilot / Watch buckets) — not a trade ticket. Legacy name: <em>Ranked</em>. Each row shows action badge, score, levels, R:R, and execution_ready when bracket math is complete.
+                <span style="color:var(--amber);display:block;margin-top:4px">When <strong style="color:var(--t1)">Authority: Open</strong>, deploy-qualified cards may show executable levels. When blocked: <strong style="color:var(--t1)">MONITOR ONLY</strong> — no pilot entry, no sizing, no handoff; structure levels collapse under “Structure reference only”.</span>
               </div>
             </div>
           </div>
@@ -4609,18 +4616,18 @@
             <div class="guide-num">3</div>
             <div style="flex:1">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-                <span style="font-size:13px;font-weight:700;color:var(--t1)">?? Search / Dossier</span>
+                <span style="font-size:13px;font-weight:700;color:var(--t1)">🔍 Search / Dossier</span>
                 <span class="guide-badge pg" style="font-size:8px">Core</span>
               </div>
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
-                Per-ticker structure review surface ? confirm levels before any deploy path. When deploy authority is blocked: <strong style="color:var(--amber)">Structure Review Only</strong> ? no trade plan, no sizing, no handoff. Check in order:<br>
+                Per-ticker structure review surface — confirm levels before any deploy path. When deploy authority is blocked: <strong style="color:var(--amber)">Structure Review Only</strong> — no trade plan, no sizing, no handoff. Check in order:<br>
                 <div style="margin:8px 0;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:11px">
-                  <span style="color:var(--green);font-weight:700">Entry Zone</span><span style="color:var(--t2)">Expected clean entry range when deploy authority is open. When blocked, levels are reference-only inside collapsed structure notes ? not sizing guidance.</span>
-                  <span style="color:var(--red);font-weight:700">Hard Stop</span><span style="color:var(--t2)">Structural exit level. Confirm-only dossier shows <em>No sizing guidance in confirm-only mode</em> ? no IBKR handoff until live fetch succeeds.</span>
-                  <span style="color:var(--blue);font-weight:700">Target 1 / 2</span><span style="color:var(--t2)">Reward anchors at ~2R and ~3R ? guidance, not guaranteed fills.</span>
+                  <span style="color:var(--green);font-weight:700">Entry Zone</span><span style="color:var(--t2)">Expected clean entry range when deploy authority is open. When blocked, levels are reference-only inside collapsed structure notes — not sizing guidance.</span>
+                  <span style="color:var(--red);font-weight:700">Hard Stop</span><span style="color:var(--t2)">Structural exit level. Confirm-only dossier shows <em>No sizing guidance in confirm-only mode</em> — no IBKR handoff until live fetch succeeds.</span>
+                  <span style="color:var(--blue);font-weight:700">Target 1 / 2</span><span style="color:var(--t2)">Reward anchors at ~2R and ~3R — guidance, not guaranteed fills.</span>
                   <span style="color:var(--amber);font-weight:700">Factor Chips</span><span style="color:var(--t2)">Green = tailwind, red = headwind. Weigh against regime and Playbook action.</span>
                   <span style="color:var(--purple);font-weight:700">Sector Peers</span><span style="color:var(--t2)">Peer confirmation adds context; absence is not auto-reject.</span>
-                  <span style="color:var(--t2);font-weight:700">Why Now</span><span style="color:var(--t2)">AI thesis ? supporting narrative, not a standalone trigger.</span>
+                  <span style="color:var(--t2);font-weight:700">Why Now</span><span style="color:var(--t2)">AI thesis — supporting narrative, not a standalone trigger.</span>
                 </div>
               </div>
             </div>
@@ -4630,11 +4637,11 @@
             <div class="guide-num">4</div>
             <div style="flex:1">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-                <span style="font-size:13px;font-weight:700;color:var(--t1)">?? Portfolio &amp; Risk</span>
+                <span style="font-size:13px;font-weight:700;color:var(--t1)">💼 Portfolio &amp; Risk</span>
                 <span class="guide-badge pg" style="font-size:8px">Core</span>
               </div>
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
-                Capacity check before adding risk: open positions, sector exposure, correlation, heat gauge, drawdown alerts. Legacy name: <em>Portfolio</em>. REBALANCE suggestions here are advisory ? confirm against Playbook and broker state.
+                Capacity check before adding risk: open positions, sector exposure, correlation, heat gauge, drawdown alerts. Legacy name: <em>Portfolio</em>. REBALANCE suggestions here are advisory — confirm against Playbook and broker state.
               </div>
             </div>
           </div>
@@ -4643,7 +4650,7 @@
             <div class="guide-num">5</div>
             <div style="flex:1">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-                <span style="font-size:13px;font-weight:700;color:var(--t1)">?? Discovery</span>
+                <span style="font-size:13px;font-weight:700;color:var(--t1)">🔬 Discovery</span>
                 <span class="guide-badge pb" style="font-size:8px">Research-only</span>
               </div>
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
@@ -4656,17 +4663,17 @@
             <div class="guide-num">6</div>
             <div style="flex:1">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-                <span style="font-size:13px;font-weight:700;color:var(--t1)">? More menu ? as needed</span>
+                <span style="font-size:13px;font-weight:700;color:var(--t1)">⋯ More menu — as needed</span>
                 <span class="guide-badge pw" style="font-size:8px">Conditional</span>
               </div>
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
-                <strong style="color:var(--t1)">Funds</strong> <span class="guide-badge pb" style="font-size:8px">Research-only</span> ? sleeve/backtest context, not live order source<br>
-                <strong style="color:var(--t1)">Flow</strong> <span class="guide-badge pb" style="font-size:8px">Research-only</span> ? options/dark-pool colour; mock flow is non-decision<br>
-                <strong style="color:var(--t1)">RS</strong> <span class="guide-badge pb" style="font-size:8px">Research-only</span> ? relative strength context vs SPY<br>
-                <strong style="color:var(--t1)">Rejections</strong> <span class="guide-badge pw" style="font-size:8px">Diagnostic</span> ? why names failed gates<br>
-                <strong style="color:var(--t1)">Command</strong> <span class="guide-badge pb" style="font-size:8px">Research-only</span> ? advanced aggregate ? not deploy gate; use Dashboard + Playbook for deploy authority<br>
-                <strong style="color:var(--t1)">IBKR</strong> <span class="guide-badge pa" style="font-size:8px">Execution-dependent</span> ? LOGIN ? READY ? handoff only when session active + bracket aligned<br>
-                <strong style="color:var(--t1)">Ops</strong> <span class="guide-badge pw" style="font-size:8px">Diagnostic</span> ? engine health, updates, error log
+                <strong style="color:var(--t1)">Funds</strong> <span class="guide-badge pb" style="font-size:8px">Research-only</span> · sleeve/backtest context, not live order source<br>
+                <strong style="color:var(--t1)">Flow</strong> <span class="guide-badge pb" style="font-size:8px">Research-only</span> · options/dark-pool colour; mock flow is non-decision<br>
+                <strong style="color:var(--t1)">RS</strong> <span class="guide-badge pb" style="font-size:8px">Research-only</span> · relative strength context vs SPY<br>
+                <strong style="color:var(--t1)">Rejections</strong> <span class="guide-badge pw" style="font-size:8px">Diagnostic</span> · why names failed gates<br>
+                <strong style="color:var(--t1)">Command</strong> <span class="guide-badge pb" style="font-size:8px">Research-only</span> · advanced aggregate — not deploy gate; use Dashboard + Playbook for deploy authority<br>
+                <strong style="color:var(--t1)">IBKR</strong> <span class="guide-badge pa" style="font-size:8px">Execution-dependent</span> · LOGIN ≠ READY — handoff only when session active + bracket aligned<br>
+                <strong style="color:var(--t1)">Ops</strong> <span class="guide-badge pw" style="font-size:8px">Diagnostic</span> · engine health, updates, error log
               </div>
             </div>
           </div>
@@ -4677,13 +4684,13 @@
       <!-- Reading a signal card -->
       <div>
         <div style="padding:10px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--bd)">
-          <span style="font-size:14px">??</span>
+          <span style="font-size:14px">🃏</span>
           <span style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px">Reading a signal card</span>
         </div>
         <div style="padding:14px 16px">
-          <div style="font-size:10px;color:var(--t3);margin-bottom:10px;font-style:italic">Illustrative examples only ? reference surface, not live board data.</div>
+          <div style="font-size:10px;color:var(--t3);margin-bottom:10px;font-style:italic">Illustrative examples only — reference surface, not live board data.</div>
           <!-- Ideal signal card -->
-          <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Ideal ? deploy-grade (when board gate open)</div>
+          <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Ideal — deploy-grade (when board gate open)</div>
           <div style="background:var(--s2);border:1px solid rgba(0,212,170,.3);border-radius:8px;padding:12px;margin-bottom:14px;border-left:3px solid var(--green)">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
               <div style="display:flex;align-items:center;gap:8px">
@@ -4707,7 +4714,7 @@
             </div>
           </div>
           <!-- Degraded: fallback watch -->
-          <div style="font-size:10px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Degraded ? fallback watch (monitor-only)</div>
+          <div style="font-size:10px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Degraded — fallback watch (monitor-only)</div>
           <div style="background:var(--s2);border:1px solid rgba(251,191,36,.35);border-radius:8px;padding:12px;margin-bottom:14px;border-left:3px solid var(--amber);opacity:.95">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -4720,17 +4727,17 @@
             <div style="height:6px;background:var(--bd);border-radius:3px;margin-bottom:10px;overflow:hidden"><div style="height:100%;width:62%;background:var(--amber);border-radius:3px"></div></div>
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:11px;margin-bottom:8px">
               <div style="background:var(--bg);border-radius:5px;padding:6px;text-align:center"><div style="color:var(--t3);font-size:9px;margin-bottom:2px">ENTRY</div><div style="font-family:'JetBrains Mono',monospace;color:var(--t3);font-weight:700">indicative</div></div>
-              <div style="background:var(--bg);border-radius:5px;padding:6px;text-align:center"><div style="color:var(--t3);font-size:9px;margin-bottom:2px">STOP</div><div style="font-family:'JetBrains Mono',monospace;color:var(--t3);font-weight:700">?</div></div>
-              <div style="background:var(--bg);border-radius:5px;padding:6px;text-align:center"><div style="color:var(--t3);font-size:9px;margin-bottom:2px">TARGET</div><div style="font-family:'JetBrains Mono',monospace;color:var(--t3);font-weight:700">?</div></div>
+              <div style="background:var(--bg);border-radius:5px;padding:6px;text-align:center"><div style="color:var(--t3);font-size:9px;margin-bottom:2px">STOP</div><div style="font-family:'JetBrains Mono',monospace;color:var(--t3);font-weight:700">—</div></div>
+              <div style="background:var(--bg);border-radius:5px;padding:6px;text-align:center"><div style="color:var(--t3);font-size:9px;margin-bottom:2px">TARGET</div><div style="font-family:'JetBrains Mono',monospace;color:var(--t3);font-weight:700">—</div></div>
             </div>
             <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
-              <span style="background:rgba(251,191,36,.12);color:var(--amber);font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">Sizing suspended in fallback mode</span>
+              <span style="background:rgba(251,191,36,.12);color:var(--amber);font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">Sizing blocked — deploy authority off</span>
               <span style="background:rgba(127,29,29,.2);color:#fca5a5;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">no execution_ready</span>
             </div>
-            <div style="font-size:10px;color:var(--amber);line-height:1.5">Ranked for monitoring, not deployment ? confirm in Playbook when live API recovers.</div>
+            <div style="font-size:10px;color:var(--amber);line-height:1.5">Ranked for monitoring, not deployment — confirm in Playbook when live API recovers.</div>
           </div>
           <!-- Degraded: confirm-only dossier -->
-          <div style="font-size:10px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Degraded ? confirm-only dossier</div>
+          <div style="font-size:10px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Degraded — confirm-only dossier</div>
           <div style="background:var(--s2);border:1px solid rgba(251,191,36,.35);border-radius:8px;padding:12px;margin-bottom:14px;border-left:3px solid var(--amber);opacity:.95">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -4740,8 +4747,8 @@
               <div style="font-size:10px;color:var(--amber);font-weight:700">Research incomplete</div>
             </div>
             <div style="font-size:11px;color:var(--t2);line-height:1.6;margin-bottom:6px">
-              <strong style="color:var(--amber)">Confirm-only ? ??????????????????</strong><br>
-              <span style="color:var(--t3)">No sizing guidance in confirm-only mode ? levels indicative until live dossier loads</span>
+              <strong style="color:var(--amber)">Confirm-only · 僅結構確認：無入場價、無止損、無倉位</strong><br>
+              <span style="color:var(--t3)">No sizing guidance in confirm-only mode · levels indicative until live dossier loads</span>
             </div>
             <div style="display:flex;gap:4px;flex-wrap:wrap">
               <span style="background:rgba(251,191,36,.12);color:var(--amber);font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">Use cached dossier (confirm-only)</span>
@@ -4751,15 +4758,15 @@
           <div style="display:flex;flex-direction:column;gap:8px">
             <div style="display:flex;gap:10px;align-items:flex-start;font-size:11px">
               <span style="background:var(--green);color:#000;font-weight:800;padding:2px 7px;border-radius:12px;font-size:10px;white-space:nowrap">TRADE 8.7</span>
-              <span style="color:var(--t2);line-height:1.6">Score 8.7/10 with WATCH action when deploy blocked. Green border = deploy-grade candidate only when board gate + Authority: Open. PILOT/TRADE labels on blocked days are review-only ? not permission.</span>
+              <span style="color:var(--t2);line-height:1.6">Score 8.7/10 with WATCH action when deploy blocked. Green border = deploy-grade candidate only when board gate + Authority: Open. PILOT/TRADE labels on blocked days are review-only — not permission.</span>
             </div>
             <div style="display:flex;gap:10px;align-items:flex-start;font-size:11px">
               <span style="background:var(--red);color:#fff;font-weight:800;padding:2px 7px;border-radius:12px;font-size:10px;white-space:nowrap">STOP</span>
-              <span style="color:var(--t2);line-height:1.6">$127.20 is the engine's structural stop anchor. Risk = entry ? stop = 1R. As a default operating rule, plan exits around this level ? your broker bracket may differ slightly.</span>
+              <span style="color:var(--t2);line-height:1.6">$127.20 is the engine's structural stop anchor. Risk = entry − stop = 1R. As a default operating rule, plan exits around this level — your broker bracket may differ slightly.</span>
             </div>
             <div style="display:flex;gap:10px;align-items:flex-start;font-size:11px">
               <span style="background:var(--amber);color:#000;font-weight:800;padding:2px 7px;border-radius:12px;font-size:10px;white-space:nowrap">R:R</span>
-              <span style="color:var(--t2);line-height:1.6">Reward-to-risk ratio shown on card. Platform typically favours ?2.5 for full TRADE and ?2.0 for WATCH ? thresholds vary by regime and timing confidence, not a fixed law.</span>
+              <span style="color:var(--t2);line-height:1.6">Reward-to-risk ratio shown on card. Platform typically favours ≥2.5 for full TRADE and ≥2.0 for WATCH — thresholds vary by regime and timing confidence, not a fixed law.</span>
             </div>
             <div style="display:flex;gap:10px;align-items:flex-start;font-size:11px">
               <span style="background:rgba(59,130,246,.2);color:var(--blue);font-weight:800;padding:2px 7px;border-radius:12px;font-size:10px;white-space:nowrap">READY</span>
@@ -4772,62 +4779,62 @@
         </div>
       </details>
 
-      <!-- ?? LAYER 3 ? REFERENCE MANUAL ?? -->
+      <!-- ══ LAYER 3 — REFERENCE MANUAL ══ -->
       <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--t3)">
         <summary style="padding:12px 16px;background:var(--s2);display:flex;align-items:center;gap:8px">
-          <span style="font-size:18px">??</span>
-          <span class="guide-layer-hdr" style="color:var(--t3)">Layer 3 ? Reference Manual</span>
+          <span style="font-size:18px">📚</span>
+          <span class="guide-layer-hdr" style="color:var(--t3)">Layer 3 — Reference Manual</span>
           <span style="font-size:10px;color:var(--t3);margin-left:auto">Expand</span>
         </summary>
         <div style="padding:0">
 
       <div style="padding:14px 16px;border-bottom:1px solid var(--bd)">
-        <div style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">?? Three surface types</div>
+        <div style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">🗂 Three surface types</div>
         <div style="display:grid;grid-template-columns:1fr;gap:10px">
           <div style="background:var(--s2);border:1px solid rgba(0,212,170,.25);border-radius:8px;padding:10px 12px">
             <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:4px">Core decision <span class="guide-badge pg" style="font-size:8px;margin-left:4px">Core</span></div>
-            <div style="font-size:11px;color:var(--t2);line-height:1.7"><strong style="color:var(--t1)">Dashboard</strong> ? <strong style="color:var(--t1)">Playbook</strong> ? <strong style="color:var(--t1)">Portfolio &amp; Risk</strong> ? <strong style="color:var(--t1)">Search / Dossier</strong> ? deploy/no-deploy, sizing, per-ticker verdicts.</div>
+            <div style="font-size:11px;color:var(--t2);line-height:1.7"><strong style="color:var(--t1)">Dashboard</strong> · <strong style="color:var(--t1)">Playbook</strong> · <strong style="color:var(--t1)">Portfolio &amp; Risk</strong> · <strong style="color:var(--t1)">Search / Dossier</strong> — deploy/no-deploy, sizing, per-ticker verdicts.</div>
           </div>
           <div style="background:var(--s2);border:1px solid rgba(59,130,246,.25);border-radius:8px;padding:10px 12px">
             <div style="font-size:11px;font-weight:700;color:var(--blue);margin-bottom:4px">Research / supporting <span class="guide-badge pb" style="font-size:8px;margin-left:4px">Research-only</span></div>
-            <div style="font-size:11px;color:var(--t2);line-height:1.7"><strong style="color:var(--t1)">Discovery</strong> ? <strong style="color:var(--t1)">Funds</strong> ? <strong style="color:var(--t1)">Flow</strong> ? <strong style="color:var(--t1)">RS</strong> ? idea generation and context; not trade permission alone.</div>
+            <div style="font-size:11px;color:var(--t2);line-height:1.7"><strong style="color:var(--t1)">Discovery</strong> · <strong style="color:var(--t1)">Funds</strong> · <strong style="color:var(--t1)">Flow</strong> · <strong style="color:var(--t1)">RS</strong> — idea generation and context; not trade permission alone.</div>
           </div>
           <div style="background:var(--s2);border:1px solid rgba(161,161,170,.25);border-radius:8px;padding:10px 12px">
             <div style="font-size:11px;font-weight:700;color:var(--t3);margin-bottom:4px">Diagnostic / execution <span class="guide-badge pw" style="font-size:8px;margin-left:4px">Diagnostic</span> <span class="guide-badge pa" style="font-size:8px">Execution-dependent</span></div>
-            <div style="font-size:11px;color:var(--t2);line-height:1.7"><strong style="color:var(--t1)">IBKR</strong> ? <strong style="color:var(--t1)">Ops</strong> ? <strong style="color:var(--t1)">Rejections</strong> ? <strong style="color:var(--t1)">Guide</strong> ? handoff, health/jobs, blocker audit. Ops confirms runtime; IBKR required for live sends.</div>
+            <div style="font-size:11px;color:var(--t2);line-height:1.7"><strong style="color:var(--t1)">IBKR</strong> · <strong style="color:var(--t1)">Ops</strong> · <strong style="color:var(--t1)">Rejections</strong> · <strong style="color:var(--t1)">Guide</strong> — handoff, health/jobs, blocker audit. Ops confirms runtime; IBKR required for live sends.</div>
           </div>
         </div>
       </div>
 
       <div style="padding:14px 16px;border-bottom:1px solid var(--bd)">
-        <div style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">?? When NOT to act ? full list</div>
+        <div style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">🛑 When NOT to act — full list</div>
         <div style="display:flex;flex-direction:column;gap:6px;font-size:11px">
-          <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Engine OFF</span><span style="color:var(--t2)">Mode pill grey or Ops shows no fresh cycle ? decisions stale or absent.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Board gate closed</span><span style="color:var(--t2)">WAIT/NO_TRADE tradeability ? board-level hold.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Broker not ready</span><span style="color:var(--t2)">LOGIN-only (GATEWAY UP ? LOGIN REQUIRED), disconnected, or portfolio/bracket misaligned.</span></div>
+          <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Engine OFF</span><span style="color:var(--t2)">Mode pill grey or Ops shows no fresh cycle — decisions stale or absent.</span></div>
+          <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Board gate closed</span><span style="color:var(--t2)">WAIT/NO_TRADE tradeability — board-level hold.</span></div>
+          <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Broker not ready</span><span style="color:var(--t2)">LOGIN-only (GATEWAY UP · LOGIN REQUIRED), disconnected, or portfolio/bracket misaligned.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Bracket not ready</span><span style="color:var(--t2)">Card lacks entry/stop or execution_ready flag.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Mock flow</span><span style="color:var(--t2)">Flow surface in synthetic/mock mode ? colour only.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Backtest funds</span><span style="color:var(--t2)">Funds sleeves marked research/backtest ? not live capital.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Dossier confirm-only</span><span style="color:var(--t2)">Confirm-only ? ????? ? ???????live ?????????? IBKR?</span></div>
+          <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Mock flow</span><span style="color:var(--t2)">Flow surface in synthetic/mock mode — colour only.</span></div>
+          <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Backtest funds</span><span style="color:var(--t2)">Funds sleeves marked research/backtest — not live capital.</span></div>
+          <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Dossier confirm-only</span><span style="color:var(--t2)">Confirm-only · 僅結構確認 — 價位僅供參考，live 載入前不可定倉或交接 IBKR。</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">No live validation</span><span style="color:var(--t2)">Any scoped strip shows Stale/Expired/Fallback, Broker: Offline, Runtime stale, Authority: Blocked, or SYNTHETIC mode.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--t2);font-weight:700;min-width:120px">Scanner warming</span><span style="color:var(--t2)">Discovery loading or 0 hits on WAIT day ? often correct, not a miss.</span></div>
+          <div style="display:flex;gap:8px"><span style="color:var(--t2);font-weight:700;min-width:120px">Scanner warming</span><span style="color:var(--t2)">Discovery loading or 0 hits on WAIT day — often correct, not a miss.</span></div>
           <div style="display:flex;gap:8px"><span style="color:var(--t2);font-weight:700;min-width:120px">Manual sync pending</span><span style="color:var(--t2)">Portfolio or broker positions not reconciled after last session.</span></div>
         </div>
       </div>
 
       <div style="padding:14px 16px;border-bottom:1px solid var(--bd);font-size:11px;color:var(--t2);line-height:1.8">
-        <div style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">?? Non-decision triggers (context only)</div>
+        <div style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">💬 Non-decision triggers (context only)</div>
         These inform judgment but <strong style="color:var(--t1)">do not</strong> justify an entry alone:<br>
-        ? <strong style="color:var(--t1)">AI commentary</strong> ? Dashboard narrative and Dossier "Why Now"<br>
-        ? <strong style="color:var(--t1)">Mock / synthetic flow</strong> ? options prints without live validation<br>
-        ? <strong style="color:var(--t1)">Insider / 13F filings</strong> ? lagged supporting intel in Dossier<br>
-        ? <strong style="color:var(--t1)">Funds / Backtest Lab</strong> ? backtest research only; not deployment authority<br>
-        ? <strong style="color:var(--t1)">RS leaderboard alone</strong> ? must align with Playbook action, regime, and board gate
+        • <strong style="color:var(--t1)">AI commentary</strong> — Dashboard narrative and Dossier "Why Now"<br>
+        • <strong style="color:var(--t1)">Mock / synthetic flow</strong> — options prints without live validation<br>
+        • <strong style="color:var(--t1)">Insider / 13F filings</strong> — lagged supporting intel in Dossier<br>
+        • <strong style="color:var(--t1)">Funds / Backtest Lab</strong> — backtest research only; not deployment authority<br>
+        • <strong style="color:var(--t1)">RS leaderboard alone</strong> — must align with Playbook action, regime, and board gate
       </div>
 
       <div style="border-bottom:1px solid var(--bd)">
         <div style="padding:10px 16px;display:flex;align-items:center;gap:8px">
-          <span style="font-size:14px">??</span>
+          <span style="font-size:14px">🏷</span>
           <span style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px">Colour &amp; badge glossary</span>
         </div>
         <div style="padding:14px 16px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -4836,10 +4843,10 @@
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:6px">Playbook Actions</div>
             <div style="display:flex;flex-direction:column;gap:4px;font-size:11px">
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pg" style="font-size:9px;min-width:52px;text-align:center">TRADE</span><span style="color:var(--t2)">Deploy-grade when board gate + execution_ready + fresh context align</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pb" style="font-size:9px;min-width:52px;text-align:center">WATCH</span><span style="color:var(--t2)">Monitor candidate ? review-only when Authority: Blocked ? no deploy</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px;min-width:52px;text-align:center">WATCH</span><span style="color:var(--t2)">Monitor ? not ready for full size</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pr" style="font-size:9px;min-width:52px;text-align:center">AVOID</span><span style="color:var(--t2)">Extended or broken ? skip new entry</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px;min-width:52px;text-align:center">WAIT</span><span style="color:var(--t2)">Regime gate ? sit out new risk</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pb" style="font-size:9px;min-width:52px;text-align:center">WATCH</span><span style="color:var(--t2)">Monitor candidate · review-only when Authority: Blocked · no deploy</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px;min-width:52px;text-align:center">WATCH</span><span style="color:var(--t2)">Monitor · not ready for full size</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pr" style="font-size:9px;min-width:52px;text-align:center">AVOID</span><span style="color:var(--t2)">Extended or broken · skip new entry</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px;min-width:52px;text-align:center">WAIT</span><span style="color:var(--t2)">Regime gate · sit out new risk</span></div>
             </div>
           </div>
 
@@ -4847,31 +4854,31 @@
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:6px">Surface Mode Tags</div>
             <div style="display:flex;flex-direction:column;gap:4px;font-size:11px">
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pg" style="font-size:9px">Core</span><span style="color:var(--t2)">Can drive deploy/no-deploy</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pb" style="font-size:9px">Research-only</span><span style="color:var(--t2)">ANALYSIS ONLY ? supporting context</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pb" style="font-size:9px">Research-only</span><span style="color:var(--t2)">ANALYSIS ONLY · supporting context</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pw" style="font-size:9px">Diagnostic</span><span style="color:var(--t2)">Health, rejections, ops visibility</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px">Execution-dependent</span><span style="color:var(--t2)">IBKR handoff ? LOGIN ? READY until session + bracket aligned</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px">CONFIRM ONLY</span><span style="color:var(--t2)">Confirm-only ? ????? ? ???????????</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px">Execution-dependent</span><span style="color:var(--t2)">IBKR handoff · LOGIN ≠ READY until session + bracket aligned</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px">CONFIRM ONLY</span><span style="color:var(--t2)">Confirm-only · 僅結構確認 — 價位僅供參考，不可定倉</span></div>
             </div>
           </div>
 
           <div style="border:1px solid var(--bd);border-radius:8px;padding:10px 12px">
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:6px">Action Badges (card level)</div>
             <div style="display:flex;flex-direction:column;gap:4px;font-size:11px">
-              <div style="display:flex;align-items:center;gap:8px"><span style="background:#065f46;color:#6ee7b7;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">BUY</span><span style="color:var(--t2)">Setup triggered ? entry zone active now</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span style="background:#065f46;color:#6ee7b7;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">BUY</span><span style="color:var(--t2)">Setup triggered · entry zone active now</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span style="background:#1e3a5f;color:#93c5fd;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">BUY_ON_DIP</span><span style="color:var(--t2)">Good setup, wait for pullback to zone</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span style="background:rgba(251,191,36,.12);color:var(--amber);font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">WATCH</span><span style="color:var(--t2)">Setup forming but not triggered yet</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span style="background:rgba(255,92,92,.12);color:var(--red);font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">REBALANCE</span><span style="color:var(--t2)">Portfolio advisory ? not a new-entry signal</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span style="background:rgba(255,92,92,.12);color:var(--red);font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">REBALANCE</span><span style="color:var(--t2)">Portfolio advisory · not a new-entry signal</span></div>
             </div>
           </div>
 
           <div style="border:1px solid var(--bd);border-radius:8px;padding:10px 12px">
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:6px">VIX Colour Scale</div>
             <div style="display:flex;flex-direction:column;gap:4px;font-size:11px">
-              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pg" style="font-size:9px">&lt; 14</span><span style="color:var(--t2)">Risk-On ? full position sizing</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pb" style="font-size:9px">14?20</span><span style="color:var(--t2)">Normal ? standard sizing</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px">20?28</span><span style="color:var(--t2)">Elevated ? reduce size 25%</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span style="background:rgba(251,191,36,.15);color:var(--amber);font-size:9px;font-weight:700;padding:2px 6px;border-radius:5px">28?35</span><span style="color:var(--t2)">High ? reduce size 50% when deploy authority allows</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pr" style="font-size:9px">&gt; 35</span><span style="color:var(--t2)">Volatility Monitor ? elevated stress ? Crisis Monitor label only when regime level is crisis ? NO TRADE when breaker trips</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pg" style="font-size:9px">&lt; 14</span><span style="color:var(--t2)">Risk-On · full position sizing</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pb" style="font-size:9px">14–20</span><span style="color:var(--t2)">Normal · standard sizing</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px">20–28</span><span style="color:var(--t2)">Elevated · reduce size 25%</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span style="background:rgba(251,191,36,.15);color:var(--amber);font-size:9px;font-weight:700;padding:2px 6px;border-radius:5px">28–35</span><span style="color:var(--t2)">High · reduce size 50% when deploy authority allows</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pr" style="font-size:9px">&gt; 35</span><span style="color:var(--t2)">Volatility Monitor · elevated stress — Crisis Monitor label only when regime level is crisis · NO TRADE when breaker trips</span></div>
             </div>
           </div>
 
@@ -4880,15 +4887,15 @@
             <div style="display:flex;flex-direction:column;gap:4px;font-size:11px">
               <div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:var(--green);display:inline-block"></span><span style="color:var(--t2)">All systems operational</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:var(--amber);display:inline-block"></span><span style="color:var(--t2)">Degraded / slow / partial data</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:var(--red);display:inline-block"></span><span style="color:var(--t2)">Service down ? signals may be stale</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:var(--red);display:inline-block"></span><span style="color:var(--t2)">Service down · signals may be stale</span></div>
             </div>
           </div>
 
           <div style="border:1px solid var(--bd);border-radius:8px;padding:10px 12px">
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:6px">Factor Chips (Dossier)</div>
             <div style="display:flex;flex-direction:column;gap:4px;font-size:11px">
-              <div style="display:flex;align-items:center;gap:8px"><span style="background:rgba(0,212,170,.1);color:var(--green);font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">Above 50MA ?</span><span style="color:var(--t2)">Positive factor ? works for the trade</span></div>
-              <div style="display:flex;align-items:center;gap:8px"><span style="background:rgba(255,92,92,.1);color:var(--red);font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">High Vol ?</span><span style="color:var(--t2)">Negative factor ? works against it</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span style="background:rgba(0,212,170,.1);color:var(--green);font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">Above 50MA ✓</span><span style="color:var(--t2)">Positive factor — works for the trade</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span style="background:rgba(255,92,92,.1);color:var(--red);font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">High Vol ✗</span><span style="color:var(--t2)">Negative factor — works against it</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span style="background:rgba(230,237,243,.06);color:var(--t3);font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">Neutral</span><span style="color:var(--t2)">No directional signal from this factor</span></div>
             </div>
           </div>
@@ -4898,22 +4905,22 @@
 
       <!-- Tab navigation -->
       <div style="padding:14px 16px">
-        <div style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">?? Tab navigation ? click to jump</div>
+        <div style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">🗺 Tab navigation — click to jump</div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
           <template x-for="tab_def in [
-            {icon:'??',id:'guide',label:'Guide',badge:'HERE',bclass:'pa',mode:'Diagnostic',desc:'This page ? first in nav'},
-            {icon:'??',id:'today',label:'Dashboard',badge:'START',bclass:'pg',mode:'Core',desc:'Regime ? VIX ? tradeability ? narrative (legacy: Overview)'},
-            {icon:'??',id:'signals',label:'Playbook',badge:'BOARD',bclass:'pg',mode:'Core',desc:'Candidate buckets ? Deploy/Pilot/Watch ? review path, not a trade ticket (legacy: Ranked)'},
-            {icon:'??',id:'dossier',label:'Search / Dossier',badge:'CONFIRM',bclass:'pb',mode:'Core',desc:'Structure confirmation ? Structure Review Only when blocked'},
-            {icon:'??',id:'portfolio',label:'Portfolio & Risk',badge:'CAPACITY',bclass:'pb',mode:'Core',desc:'Positions ? heat ? correlation ? REBALANCE'},
-            {icon:'??',id:'scanners',label:'Discovery',badge:'SCAN',bclass:'pp',mode:'Research-only',desc:'Scanner hub (legacy: Scanners)'},
-            {icon:'??',id:'funds',label:'Funds',badge:'SLEEVES',bclass:'pp',mode:'Research-only',desc:'Sleeve/backtest context'},
-            {icon:'??',id:'flow',label:'Flow',badge:'FLOW',bclass:'pp',mode:'Research-only',desc:'Options/dark pool ? mock = non-decision'},
-            {icon:'??',id:'rs',label:'RS',badge:'CONTEXT',bclass:'pb',mode:'Research-only',desc:'Relative strength vs SPY'},
-            {icon:'??',id:'notrade',label:'Rejections',badge:'WHY NOT',bclass:'pw',mode:'Diagnostic',desc:'Blocker audit log ? More menu'},
-            {icon:'??',id:'command',label:'Command',badge:'ADVANCED',bclass:'pw',mode:'Research-only',desc:'Advanced aggregate ? not deploy gate ? More menu'},
-            {icon:'?',id:'ibkr',label:'IBKR',badge:'EXEC',bclass:'pa',mode:'Execution-dependent',desc:'LOGIN ? READY handoff ? More menu'},
-            {icon:'??',id:'ops',label:'Ops',badge:'HEALTH',bclass:'pw',mode:'Diagnostic',desc:'Engine ? updates ? error log ? More menu'}
+            {icon:'📖',id:'guide',label:'Guide',badge:'HERE',bclass:'pa',mode:'Diagnostic',desc:'This page — first in nav'},
+            {icon:'🎯',id:'today',label:'Dashboard',badge:'START',bclass:'pg',mode:'Core',desc:'Regime · VIX · tradeability · narrative (legacy: Overview)'},
+            {icon:'📋',id:'signals',label:'Playbook',badge:'BOARD',bclass:'pg',mode:'Core',desc:'Candidate buckets · Deploy/Pilot/Watch — review path, not a trade ticket (legacy: Ranked)'},
+            {icon:'🔍',id:'dossier',label:'Search / Dossier',badge:'CONFIRM',bclass:'pb',mode:'Core',desc:'Structure confirmation · Structure Review Only when blocked'},
+            {icon:'💼',id:'portfolio',label:'Portfolio & Risk',badge:'CAPACITY',bclass:'pb',mode:'Core',desc:'Positions · heat · correlation · REBALANCE'},
+            {icon:'🔬',id:'scanners',label:'Discovery',badge:'SCAN',bclass:'pp',mode:'Research-only',desc:'Scanner hub (legacy: Scanners)'},
+            {icon:'💼',id:'funds',label:'Funds',badge:'SLEEVES',bclass:'pp',mode:'Research-only',desc:'Sleeve/backtest context'},
+            {icon:'💧',id:'flow',label:'Flow',badge:'FLOW',bclass:'pp',mode:'Research-only',desc:'Options/dark pool · mock = non-decision'},
+            {icon:'📈',id:'rs',label:'RS',badge:'CONTEXT',bclass:'pb',mode:'Research-only',desc:'Relative strength vs SPY'},
+            {icon:'🚫',id:'notrade',label:'Rejections',badge:'WHY NOT',bclass:'pw',mode:'Diagnostic',desc:'Blocker audit log · More menu'},
+            {icon:'🖥',id:'command',label:'Command',badge:'ADVANCED',bclass:'pw',mode:'Research-only',desc:'Advanced aggregate — not deploy gate · More menu'},
+            {icon:'⚡',id:'ibkr',label:'IBKR',badge:'EXEC',bclass:'pa',mode:'Execution-dependent',desc:'LOGIN → READY handoff · More menu'},
+            {icon:'⚙️',id:'ops',label:'Ops',badge:'HEALTH',bclass:'pw',mode:'Diagnostic',desc:'Engine · updates · error log · More menu'}
           ]">
             <div style="border:1px solid var(--bd);border-radius:8px;padding:10px;cursor:pointer;transition:.15s"
               @mouseenter="$el.style.borderColor='var(--green)'"
@@ -4935,8 +4942,8 @@
 
       <!-- Bottom CTA -->
       <div style="text-align:center;padding:20px 0 8px">
-        <button @click="localStorage.setItem('cc_guide_seen','1');switchTab('today')" class="btn-p" style="font-size:14px;padding:12px 32px">?? ?? Dashboard ? Open Dashboard</button>
-        <div style="font-size:11px;color:var(--t3);margin-top:10px">??????? Guide ??????????? Return here anytime: ?? Guide tab (first in nav)</div>
+        <button @click="localStorage.setItem('cc_guide_seen','1');switchTab('today')" class="btn-p" style="font-size:14px;padding:12px 32px">🚀 開啟 Dashboard · Open Dashboard</button>
+        <div style="font-size:11px;color:var(--t3);margin-top:10px">隨時回來：📖 Guide 分頁（導覽列第一個）· Return here anytime: 📖 Guide tab (first in nav)</div>
       </div>
     <!-- @cc-partial-end guide -->
 
@@ -4950,10 +4957,10 @@
         <span style="color:var(--blue)">DISCOVERY ? Research Funnel</span>
         <span class="pill text-[8px] pw">Research-only</span>
         <span class="pill pa text-[8px]" x-show="scannerDiscoveryHasFallbackRows()" x-text="'FETCH FAILED'"></span>
-        <span x-text="scannerHub.loading?'Loading?':(scannerDiscoveryHitsLabel()+' ? '+scannerUniverseLabel())"></span>
+        <span x-text="scannerHub.refreshing?'Refreshing…':(scannerHub.loading?'Loading…':(scannerDiscoveryHitsLabel()+' · '+scannerUniverseLabel()))"></span>
         <span x-show="scannerDiscoveryFetchHintLine()" class="text-[9px] text-amber-300" x-text="scannerDiscoveryFetchHintLine()"></span>
         <span x-show="scannerPageGateLabel()" class="pill text-[8px]" :class="scannerPageGateClass()" x-text="scannerPageGateLabel()"></span>
-        <span x-show="scannerHub.data&&scannerHub.data.diagnostics" class="text-[9px]" :style="(scannerHub.data.diagnostics.data_freshness||'')==='live'?'color:var(--green)':'color:var(--amber)'" x-text="(scannerHub.data.diagnostics.data_freshness||'?')+' ? '+(scannerHub.data.diagnostics.source||'playbook')"></span>
+        <span x-show="scannerHub.data&&scannerHub.data.diagnostics" class="text-[9px]" style="color:var(--t3)" x-text="discoveryScannerRunLabel()"></span>
         <span x-show="scannerHub.error" style="color:var(--red)" x-text="'? '+scannerHub.error"></span>
       </div>
       <div class="px-3 pb-1 text-[8px]" style="color:var(--t2)" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.discoveryResearchHeaderNote)?CCHelpers.discoveryResearchHeaderNote(canonicalRegimeLine()):'???? ? scan evidence'"></div>
@@ -5003,10 +5010,11 @@
             <button class="pill text-[9px]" :class="scannerHub.category===cat?'pg':'pw'" @click="fetchScanners(cat)" x-text="scannerCategoryLabel(cat)"></button>
           </template>
         </div>
-        <!-- Loading -->
-        <template x-if="scannerHub.loading">
-          <div class="card card-p" style="text-align:center;padding:30px"><span class="spin"></span> Scanning?</div>
+        <!-- Loading (only when no cached shell) -->
+        <template x-if="scannerHub.loading&&!scannerHub.data">
+          <div class="card card-p" style="text-align:center;padding:30px"><span class="spin"></span> Scanning…</div>
         </template>
+        <div x-show="scannerHub.refreshing&&scannerHub.data" class="text-[8px] mb-2 px-2 py-1 rounded" style="background:rgba(88,166,255,.08);color:var(--blue);border:1px solid rgba(88,166,255,.2)">Refreshing scanner results…</div>
         <!-- Research funnel (default visible) -->
         <template x-if="!scannerHub.loading&&scannerHub.data&&!scannerHub.category&&(scannerHub.data.discovery_operator_view||scannerHub.data.discovery_verdict)">
           <div class="card mb-3" style="border-left:4px solid var(--blue);overflow:hidden">
@@ -5019,12 +5027,22 @@
               <div><span class="font-bold uppercase" style="color:var(--blue)">NOW</span> <span class="text-white" x-text="discoveryFunnelPanel().now"></span></div>
               <div><span class="font-bold uppercase" style="color:var(--amber)">WHY</span> <span x-text="discoveryFunnelPanel().why"></span></div>
               <div><span class="font-bold uppercase" style="color:var(--green)">FUNNEL</span> <span x-text="discoveryFunnelPanel().funnel_line"></span></div>
-              <div><span class="font-bold uppercase" style="color:var(--purple)">BEST ACTION</span> <span class="text-white" x-text="discoveryFunnelPanel().best_action"></span></div>
+              <div class="sm:col-span-2"><span class="font-bold uppercase" style="color:var(--purple)">STATUS</span> <span x-text="discoveryFunnelPanel().status_line"></span></div>
+              <div class="sm:col-span-2"><span class="font-bold uppercase" style="color:var(--blue)">BEST ACTION</span> <span class="text-white" x-text="discoveryFunnelPanel().best_action"></span></div>
+            </div>
+            <div x-show="discoveryFunnelPanel().brief_expired_note" class="px-3 pb-1 text-[8px]" style="color:var(--amber)" x-text="discoveryFunnelPanel().brief_expired_note"></div>
+            <div x-show="discoveryFunnelPanel().subtitle" class="px-3 pb-2 text-[8px]" style="color:var(--t3)" x-text="discoveryFunnelPanel().subtitle"></div>
+            <div class="px-3 pb-2 text-[8px] flex flex-wrap gap-3" style="color:var(--t3)">
+              <span x-text="'Avoid Now scanner flags: '+(scannerAvoidNowCount())"></span>
+              <span>Pipeline rejects: see Rejections</span>
             </div>
             <div class="px-3 pb-3">
               <div class="text-[8px] font-bold uppercase mb-2" style="color:var(--green)">SHORTLIST (max 10)</div>
               <template x-if="discoveryShortlistRows().length===0">
-                <div class="text-[10px] p-2 rounded" style="background:var(--s1);color:var(--t2)" x-text="discoveryFunnelPanel().now"></div>
+                <div class="text-[10px] p-2 rounded" style="background:var(--s1);color:var(--t2)">
+                  <div class="font-bold text-white" x-text="discoveryFunnelPanel().now"></div>
+                  <div class="mt-1" x-text="discoveryFunnelPanel().subtitle"></div>
+                </div>
               </template>
               <template x-for="m in discoveryShortlistRows()" :key="'shortlist-'+m.ticker">
                 <div class="mb-2 p-2 rounded text-[8px]" style="background:var(--s2);border-left:3px solid var(--green)">
@@ -5075,7 +5093,7 @@
                             <span class="mono font-bold text-white cursor-pointer" @click="openDossier(h.ticker)" x-text="h.ticker||'?'"></span>
                             <span class="pill pb text-[7px]" x-text="h.signal_source||h.scanner||scanName"></span>
                             <span class="pill mono text-[7px]" :class="(h.score_display_mode==='fallback_rank')?'pa':'pw'" x-text="discoveryScoreDisplayFor(h)"></span>
-                            <span class="pill pw text-[7px]" x-text="h.freshness||'live'"></span>
+                            <span class="pill pw text-[7px]" x-text="discoveryRowFreshnessFor(h)"></span>
                             <span class="pill pw text-[7px]" x-text="discoveryRowLabel('action')+' ? '+(h.urgency||'NORMAL')"></span>
                             <span class="pill pw text-[7px]" x-text="discoveryConfidenceDisplayFor(h)"></span>
                             <span x-show="portfolioHasTicker(h.ticker)" class="pill pb text-[7px]">IN BOOK</span>
@@ -5158,7 +5176,7 @@
                     <span class="mono font-bold text-white cursor-pointer" @click="openDossier(h.ticker)" x-text="h.ticker||'?'"></span>
                     <span class="pill pb text-[7px]" x-text="h.signal_source||h.scanner||'?'"></span>
                     <span class="pill mono text-[7px]" :class="(h.score_display_mode==='fallback_rank')?'pa':'pw'" x-text="discoveryScoreDisplayFor(h)"></span>
-                    <span class="pill pw text-[7px]" x-text="h.freshness||'live'"></span>
+                    <span class="pill pw text-[7px]" x-text="discoveryRowFreshnessFor(h)"></span>
                     <span class="pill mono text-[8px] ml-auto" :class="(h.severity||'INFO')==='WARNING'?'pa':(h.severity||'INFO')==='CRITICAL'?'pr':'pw'" x-text="h.severity||'INFO'"></span>
                   </div>
                   <div style="color:var(--t2)" x-text="h.why_surfaced||h.headline||h.reason||''"></div>
@@ -5224,11 +5242,10 @@
     <main x-show="tab==='portfolio'" class="fade" x-init="$watch('tab',v=>{if(v==='portfolio'){fetchPortfolio();fetchPortfolioDecision();fetchPortfolioEquity()}})">
       <div class="trust-strip">
         <span :style="pfBrokerSource().pillClass" x-text="'? '+pfBrokerSource().pill"></span>
+        <span x-text="pfRiskVM().bookScopeLabel"></span>
+        <span x-text="pfRiskVM().brokerScopeLabel"></span>
         <span x-text="portfolioSummaryPositionsLabel()"></span>
         <span x-text="portfolioSummaryValueShortLine()"></span>
-        <span x-show="pfDecision&&pfDecision.ibkr_linkage" class="text-[9px]" style="color:var(--t3)" x-text="'Sync '+(pfDecision.ibkr_linkage.last_sync||'?')"></span>
-        <span x-show="pfDecision&&pfDecision.ibkr_linkage&&pfDecision.ibkr_linkage.unsynced_count>0" class="text-[9px]" style="color:var(--amber)" x-text="pfDecision.ibkr_linkage.unsynced_count+' local-only'"></span>
-        <span x-show="pfDecision&&pfDecision.ibkr_linkage" class="text-[9px]" :style="pfDecision.ibkr_linkage.broker_truth?'color:var(--green)':'color:var(--amber)'" x-text="pfDecision.ibkr_linkage.local_model_note"></span>
         <span x-show="pfDecision&&pfDecision.portfolio_mode&&pfDecision.portfolio_mode.demo_watermark" class="pill text-[7px] pw">DEMO SAMPLE</span>
         <span x-show="pfDecision&&pfDecision.portfolio_mode" class="pill text-[7px]" :class="pfDecision.portfolio_mode.risk_review_only?'pa':'pb'" x-text="pfDecision.portfolio_mode.book_label||'Portfolio'"></span>
       </div>
@@ -5238,7 +5255,8 @@
           <div class="text-[9px] mb-1" style="color:var(--t2)"><span style="color:var(--t3)">WHY:</span> <span x-text="pfDecision.portfolio_operator_block.why||'?'"></span></div>
           <div class="text-[9px] mb-1" style="color:var(--t2)"><span style="color:var(--t3)">ALLOWED:</span> <span x-text="pfDecision.portfolio_operator_block.allowed||'risk review'"></span></div>
           <div class="text-[9px] mb-1 text-red-300"><span style="color:var(--t3)">BLOCKED:</span> <span x-text="pfDecision.portfolio_operator_block.blocked||'no capital actions'"></span></div>
-          <div class="text-[9px] mb-1" style="color:var(--t2)" x-show="pfDecision.portfolio_operator_block.validation"><span style="color:var(--t3)">VALIDATION:</span> <span x-text="pfDecision.portfolio_operator_block.validation"></span></div>
+          <div class="text-[9px] mb-1" style="color:var(--t2)"><span style="color:var(--t3)">BOOK:</span> <span x-text="pfRiskVM().bookScopeLabel"></span></div>
+          <div class="text-[9px] mb-1" style="color:var(--t2)" x-show="!pfRiskVM().defaultDetailsCollapsed && pfDecision.portfolio_operator_block.validation"><span style="color:var(--t3)">VALIDATION:</span> <span x-text="pfDecision.portfolio_operator_block.validation"></span></div>
           <div class="text-[9px]" style="color:var(--blue)"><span style="color:var(--t3)">NEXT:</span> <span x-text="pfDecision.portfolio_operator_block.next||'reconcile broker'"></span></div>
         </div>
       </template>
@@ -5247,22 +5265,25 @@
         <template x-if="pfDecisionLoading&&!pfDecision">
           <div class="card card-p text-center py-4"><span class="spin"></span> <span class="text-[10px]" style="color:var(--t3)">Loading portfolio decision?</span></div>
         </template>
-        <!-- 1 ? CRITICAL RISK EVENT -->
-        <template x-if="pfDecision&&pfDecision.critical_risk_event&&pfDecision.critical_risk_event.active">
+        <!-- Critical risk strip (confirmed breach with exposure only) -->
+        <template x-if="pfRiskVM().showCriticalRiskEvent">
           <div class="card card-p mb-2" style="border-left:4px solid var(--red);background:rgba(255,92,92,.06)">
             <div class="text-[10px] font-bold uppercase mb-1 text-red-400" x-text="pfDecision.critical_risk_event.headline"></div>
             <div class="text-[10px] leading-relaxed" style="color:var(--t2)" x-text="pfDecision.critical_risk_event.message"></div>
           </div>
         </template>
-        <!-- Broker offline / local-only strip -->
-        <template x-if="pfDecision&&pfDecision.ibkr_linkage&&!pfDecision.ibkr_linkage.broker_truth">
-          <div class="card card-p mb-2 py-2 px-3" style="border:1px solid var(--red);background:rgba(255,92,92,.08)">
-            <div class="text-[10px] font-bold uppercase text-red-400 mb-1">Execution truth not confirmed</div>
-            <div class="text-[9px] leading-relaxed text-red-300" x-text="pfDecision.ibkr_linkage.broker_offline_banner||pfDecision.ibkr_linkage.local_only_banner"></div>
+        <!-- Broker truth unavailable — risk review only (not a critical breach) -->
+        <template x-if="pfRiskVM().brokerTruthBannerActive">
+          <div class="card card-p mb-2 py-2 px-3" style="border:1px solid var(--amber);background:rgba(251,191,36,.06)">
+            <div class="text-[10px] font-bold uppercase text-amber-300 mb-1" x-text="pfRiskVM().brokerTruthBanner"></div>
+            <div class="text-[9px] leading-relaxed" style="color:var(--t2)">Capital actions, sleeve allocation, and deploy sizing stay disabled until broker sync confirms holdings.</div>
           </div>
         </template>
+        <details class="mb-2" :open="!pfRiskVM().defaultDetailsCollapsed">
+          <summary class="text-[9px] font-bold uppercase cursor-pointer mb-2" style="color:var(--t3)" x-text="pfRiskVM().defaultDetailsCollapsed?'Portfolio details (collapsed — risk review only)':'Portfolio details'"></summary>
+          <div class="space-y-3">
         <!-- Core + satellite architecture -->
-        <template x-if="pfDecision&&pfDecision.core_satellite">
+        <template x-if="pfDecision&&pfDecision.core_satellite&&!pfRiskVM().collapseAllocationBands">
           <div class="card card-p mb-2" style="border-left:3px solid var(--purple)">
             <div class="flex flex-wrap items-center gap-2 mb-2">
               <span class="text-[10px] font-bold uppercase" style="color:var(--purple)" x-text="pfDecision.core_satellite.headline"></span>
@@ -5424,7 +5445,7 @@
             <div class="text-[8px] mt-1" style="color:var(--t3)" x-text="'Restore when: '+(pfQuantSizing.sizing.restore_when||'?')"></div>
           </div>
         </template>
-        <template x-if="pfDecision&&pfDecision.operating_discipline">
+        <template x-if="pfDecision&&pfDecision.operating_discipline&&!pfRiskVM().collapseOperatingDiscipline">
           <div class="card card-p mb-2" style="border-left:3px solid var(--blue)">
             <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--blue)">Operating discipline</div>
             <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[8px]">
@@ -5523,7 +5544,7 @@
             <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--amber)">Book equity curve</div>
             <div class="text-[9px]" style="color:var(--t3)" x-text="pfEquity.note||'No holdings ? add positions or sync IBKR'"></div>
             <span class="pill text-[7px] pw mt-1" x-text="pfEquity.evidence&&pfEquity.evidence.label||'?'"></span>
-            <button type="button" class="btn-s text-[9px] mt-2" @click="seedDemoPortfolio()" :disabled="pf.loading">Seed demo book</button>
+            <button type="button" class="btn-s text-[9px] mt-2" @click="seedDemoPortfolio()" :disabled="pf.loading" x-show="pfRiskVM().showDemoToolsDefault">Seed demo book</button>
           </div>
         </template>
         <template x-if="pfEquity&&pfEquity.has_series&&(pfEquity.equity_curve||[]).length&&!pfDemoteResearch()">
@@ -5622,14 +5643,13 @@
           </template>
         </div>
         <template x-if="pfDecision&&(pfDecision.sleeve_monitor||[]).length">
-          <div class="card card-p mb-2">
+          <details class="card card-p mb-2" :open="pfRiskVM().showSleeveResearchDefault">
+            <summary class="text-[10px] font-bold uppercase mb-2 cursor-pointer" style="color:var(--t3)">Sleeve Research <span class="pill text-[6px] pa ml-1">research only</span></summary>
             <template x-if="pfDecision.critical_risk_event&&pfDecision.critical_risk_event.collapse_sleeves">
-              <div class="text-[9px] mb-2 p-2 rounded text-amber-300" style="background:var(--s2)" x-text="pfDecision.critical_risk_event.sleeve_collapse_note||'Sleeve research available below ? current position risk takes priority'"></div>
+              <div class="text-[9px] mb-2 p-2 rounded text-amber-300" style="background:var(--s2)" x-text="pfDecision.critical_risk_event.sleeve_collapse_note||'Sleeve research — current position risk takes priority'"></div>
             </template>
-            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">Active sleeves</div>
-            <div :style="(pfDecision.critical_risk_event&&pfDecision.critical_risk_event.collapse_sleeves)?'max-height:120px;overflow:hidden;opacity:0.5':''">
             <template x-if="pfDecision.sleeve_strip">
-              <div class="flex flex-wrap gap-2 mb-2 text-[8px]">
+              <div class="flex flex-wrap gap-2 mb-2 text-[8px]" x-show="pfRiskVM().showSleeveResearchDefault">
                 <span x-show="pfDecision.sleeve_strip.strongest" class="pill pg" x-text="'Strongest now ? '+(pfDecision.sleeve_strip.strongest?.name||'?')"></span>
                 <span x-show="pfDecision.sleeve_strip.safest" class="pill pb" x-text="'Best evidence ? '+(pfDecision.sleeve_strip.safest?.name||'?')"></span>
                 <span x-show="pfDecision.sleeve_strip.not_investable" class="pill pr" x-text="'Not investable ? '+(pfDecision.sleeve_strip.not_investable?.name||'?')"></span>
@@ -5646,40 +5666,35 @@
                 <div class="text-[8px]" style="color:var(--t2)" x-text="'Why now: '+(s.why_now||'?')"></div>
                 <div x-show="s.why_not_full_size" class="text-[8px] text-amber-300" x-text="'Not full size: '+s.why_not_full_size"></div>
                 <div x-show="s.blocker" class="text-[8px] text-red-400" x-text="'Blocker: '+s.blocker"></div>
-                <div class="flex flex-wrap gap-x-3 gap-y-1 mt-1" style="color:var(--t3)">
-                  <span x-text="'Risk budget '+(s.risk_budget_pct!=null?s.risk_budget_pct+'%':'?')"></span>
+                <div class="flex flex-wrap gap-x-3 gap-y-1 mt-1" style="color:var(--t3)" x-show="pfRiskVM().showSleeveResearchDefault">
                   <span x-text="'Best regime '+s.best_regime"></span>
                   <span x-text="'Trades '+s.live_trade_count"></span>
                 </div>
               </div>
             </template>
-          </div>
+          </details>
         </template>
-        <template x-if="pfDecision&&pfDecision.sleeve_research_collapsed&&(pfDecision.sleeve_monitor||[]).length">
-          <div class="card card-p mb-2" style="border-style:dashed;opacity:0.85">
-            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--t3)">Active sleeves</div>
-            <div class="text-[9px] text-amber-300" x-text="pfDecision.sleeve_collapse_note||pfDecision.critical_risk_event?.sleeve_collapse_note||'Sleeve research available below ? current position risk takes priority'"></div>
           </div>
-        </template>
+        </details>
         <!-- Header + Add button -->
         <div class="flex justify-between items-center">
           <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">?? My Portfolio</div>
           <div class="flex gap-2">
             <button @click="fetchPortfolio()" class="btn-s text-[10px]" :disabled="pf.loading">??</button>
-            <button @click="pf.showAdd=!pf.showAdd" class="btn-s text-[10px]" style="background:var(--green);color:#0d1117;font-weight:700">+ Add Position</button>
+            <button @click="pf.showAdd=!pf.showAdd" class="btn-s text-[10px]" style="background:var(--green);color:#0d1117;font-weight:700" x-text="'+ '+pfRiskVM().manualAddLabel"></button>
           </div>
         </div>
         <!-- Add Position Form -->
         <template x-if="pf.showAdd">
           <div class="card card-p" style="border:1px solid var(--green)">
-            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--green)">Add Position</div>
-            <div class="text-[9px] mb-3" style="color:var(--t3);line-height:1.4">Quick add mode: enter ticker, shares, and entry price only. The system will auto-calculate value, P&amp;L, weight, sector exposure, and allocation drift. Stops and targets are optional advanced fields used for full risk and heat calculations.</div>
+            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--green)" x-text="pfRiskVM().manualAddLabel"></div>
+            <div class="text-[9px] mb-3" style="color:var(--t3);line-height:1.4">Manual placeholder — ticker, shares, and entry price only. Not broker truth until sync. Stops and targets are optional advanced fields.</div>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
               <div><label class="text-[9px]" style="color:var(--t3)">Ticker <span style="color:var(--red)">*</span></label><input x-model="pf.addTicker" class="w-full rounded px-2 py-1 text-[11px] mono uppercase" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)" placeholder="AAPL"></div>
               <div><label class="text-[9px]" style="color:var(--t3)">Shares <span style="color:var(--red)">*</span></label><input x-model.number="pf.addShares" type="number" min="0" step="any" class="w-full rounded px-2 py-1 text-[11px] mono" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)" placeholder="100"></div>
               <div><label class="text-[9px]" style="color:var(--t3)">Entry Price <span style="color:var(--red)">*</span></label><input x-model.number="pf.addEntry" type="number" min="0" step="0.01" class="w-full rounded px-2 py-1 text-[11px] mono" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)" placeholder="150.00"></div>
             </div>
-            <div class="mt-2">
+            <div class="mt-2" x-show="pfRiskVM().capitalActionEnabled">
               <button type="button" @click="pf.showAdvanced=!pf.showAdvanced" class="text-[9px] font-bold" style="color:var(--t3);text-decoration:underline;background:none;border:none;cursor:pointer;padding:0" x-text="pf.showAdvanced?'? Hide advanced fields':'? Advanced fields (stop, targets, notes)'"></button>
             </div>
             <template x-if="pf.showAdvanced">
@@ -5707,7 +5722,7 @@
               <div class="mt-2 text-[9px] text-green-400" x-text="pf.addSuccess"></div>
             </template>
             <div class="flex gap-2 mt-3">
-              <button @click="addPosition()" class="btn-s text-[10px] font-bold" style="background:var(--green);color:#0d1117" :disabled="pf.corrPreview&&pf.corrPreview.blocked">Add Position</button>
+              <button @click="addPosition()" class="btn-s text-[10px] font-bold" style="background:var(--green);color:#0d1117" :disabled="pf.corrPreview&&pf.corrPreview.blocked" x-text="pfRiskVM().manualAddLabel"></button>
               <button @click="checkCorrelation();" class="btn-s text-[10px]" :disabled="!pf.addTicker">?? Check Correlation</button>
               <button @click="resetAddPositionForm()" class="btn-s text-[10px]">Cancel</button>
             </div>
@@ -5807,9 +5822,14 @@
               Add stop/target later if you want full risk metrics.
             </div>
             <div class="flex gap-2 justify-center mt-4">
-              <button @click="pf.showAdd=true" class="btn-s text-[11px] font-bold" style="background:var(--green);color:#0d1117">+ Add Position</button>
-              <button @click="seedDemoPortfolio()" :disabled="pf.loading" class="btn-s text-[11px]" style="background:#1e3a2e;color:#86efac;border:1px solid #16a34a">Seed Demo Book</button>
+              <button @click="pf.showAdd=true" class="btn-s text-[11px] font-bold" style="background:var(--green);color:#0d1117" x-text="'+ '+pfRiskVM().manualAddLabel"></button>
             </div>
+            <details class="mt-4 text-left" :open="pfRiskVM().showDemoToolsDefault">
+              <summary class="text-[9px] font-bold uppercase cursor-pointer" style="color:var(--t3)">Demo tools</summary>
+              <div class="flex gap-2 justify-center mt-2">
+                <button @click="seedDemoPortfolio()" :disabled="pf.loading" class="btn-s text-[11px]" style="background:#1e3a2e;color:#86efac;border:1px solid #16a34a">Seed demo book</button>
+              </div>
+            </details>
           </div>
         </template>
         <template x-for="pos in pfSortedPositions()" :key="pos.ticker">
@@ -5902,23 +5922,22 @@
         </template>
       </div>
 
-      <!-- ?? Closed-Trade Ledger (Sprint N) ? read-only view of data/closed_trades.jsonl ?? -->
-      <div class="card" style="margin-top:14px" x-init="$watch('tab',v=>{if(v==='portfolio'&&!ledgerView.loaded)fetchLedgerView()})">
-        <div class="flex items-center gap-2 mb-2">
-          <span style="font-size:13px;font-weight:700">?? Closed-Trade Ledger</span>
+      <!-- Historical Journal — learning only, not broker truth -->
+      <details class="card" style="margin-top:14px" :open="pfRiskVM().showHistoricalJournalDefault" x-init="$watch('tab',v=>{if(v==='portfolio'&&!ledgerView.loaded)fetchLedgerView()})">
+        <summary class="flex items-center gap-2 mb-2 cursor-pointer list-none">
+          <span style="font-size:13px;font-weight:700">Historical Journal</span>
+          <span class="pill text-[7px] pa">learning only</span>
           <span x-show="ledgerView.stats" class="text-[10px]" style="color:var(--t3)" x-text="'? '+(ledgerView.stats?.count||0)+' trades'"></span>
-          <template x-if="ledgerView.stats?.aggregate_metrics_available!==false && ledgerView.stats?.data_quality?.aggregate_metrics_available!==false">
-            <span x-show="ledgerView.stats?.count>0" class="text-[10px]" :style="(ledgerView.stats?.total_pnl_pct||0)>=0?'color:var(--green)':'color:var(--red)'" x-text="'? ? '+(ledgerView.stats?.total_pnl_pct>=0?'+':'')+Number(ledgerView.stats?.total_pnl_pct||0).toFixed(1)+'%'"></span>
-            <span x-show="ledgerView.stats?.count>0" class="text-[10px]" style="color:var(--t3)" x-text="'? Win '+Number(ledgerView.stats?.win_rate_pct||0).toFixed(0)+'% ? PF '+(ledgerView.stats?.profit_factor!=null?Number(ledgerView.stats.profit_factor).toFixed(2):'?')"></span>
-          </template>
-          <span x-show="ledgerView.stats && (ledgerView.stats.aggregate_metrics_available===false || ledgerView.stats.data_quality?.aggregate_metrics_available===false)" class="text-[10px] pill pa" x-text="ledgerView.stats.data_quality?.label||'AGGREGATE METRICS UNAVAILABLE'"></span>
-          <span x-show="ledgerView.stats?.data_quality && !ledgerView.stats.data_quality.complete && ledgerView.stats.aggregate_metrics_available!==false" class="text-[10px] pill pa" x-text="ledgerView.stats.data_quality.label"></span>
-          <button @click="fetchLedgerView(true)" class="btn-s text-[10px] ml-auto" :disabled="ledgerView.loading">??</button>
-          <button @click="ledgerView.expanded=!ledgerView.expanded" class="btn-s text-[10px]" x-text="ledgerView.expanded?'? Hide':'? Show '+(ledgerView.rows?.length||0)+' rows'"></button>
-        </div>
+          <span class="text-[9px] ml-1" style="color:var(--t3)" x-text="pfRiskVM().historicalJournalNote"></span>
+          <button @click.prevent="fetchLedgerView(true)" class="btn-s text-[10px] ml-auto" :disabled="ledgerView.loading">??</button>
+        </summary>
+        <div class="mt-2">
+          <div class="flex items-center gap-2 mb-2">
+            <button @click="ledgerView.expanded=!ledgerView.expanded" class="btn-s text-[10px]" x-text="ledgerView.expanded?'? Hide details':'? Show details ('+(ledgerView.rows?.length||0)+' rows)'"></button>
+          </div>
 
-        <!-- Stats grid (always visible when stats present) -->
-        <div x-show="ledgerView.stats?.count>0 && ledgerView.stats?.aggregate_metrics_available!==false && ledgerView.stats?.data_quality?.aggregate_metrics_available!==false" class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
+        <!-- Stats grid (hidden unless expanded) -->
+        <div x-show="ledgerView.expanded && ledgerView.stats?.count>0 && ledgerView.stats?.aggregate_metrics_available!==false && ledgerView.stats?.data_quality?.aggregate_metrics_available!==false" class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
           <div style="background:var(--s1);border:1px solid var(--bd2);border-radius:6px;padding:6px 8px">
             <div class="text-[9px]" style="color:var(--t3)">Avg R-multiple</div>
             <div class="text-[12px] font-bold" :style="(ledgerView.stats?.avg_r_multiple||0)>=0?'color:var(--green)':'color:var(--red)'" x-text="(ledgerView.stats?.avg_r_multiple>=0?'+':'')+Number(ledgerView.stats?.avg_r_multiple||0).toFixed(2)+'R'"></div>
@@ -5989,8 +6008,9 @@
           </div>
           <div x-show="(ledgerView.rows||[]).length>=200" class="text-[9px] mt-1" style="color:var(--t3)">? Showing first 200 rows ? refine filters to see more.</div>
         </div>
-        <div x-show="!ledgerView.loaded && !ledgerView.loading" class="text-[10px]" style="color:var(--t3)">Click ?? to load closed-trade history.</div>
-      </div>
+        <div x-show="!ledgerView.loaded && !ledgerView.loading" class="text-[10px]" style="color:var(--t3)">Click refresh to load historical journal (learning only — not broker truth).</div>
+        </div>
+      </details>
     </main>
 
     <!-- ??????????????????????????????????????????????????????? -->
@@ -6048,8 +6068,9 @@
             <div class="font-bold uppercase mb-2" style="color:var(--amber)" x-text="fundMonitor.console.guardrail||fundMonitor.console.funds_first_screen.guardrail"></div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div><span style="color:var(--t3)">NOW</span> <span class="font-bold text-white" x-text="fundMonitor.console.funds_first_screen.now"></span></div>
-              <div><span style="color:var(--t3)">BLOCKER</span> <span style="color:var(--amber)" x-text="fundMonitor.console.funds_first_screen.blocker||fundMonitor.console.funds_first_screen.why"></span></div>
               <div><span style="color:var(--t3)">WHY</span> <span style="color:var(--t2)" x-text="fundMonitor.console.funds_first_screen.why"></span></div>
+              <div><span style="color:var(--green)">ALLOWED</span> <span style="color:var(--t2)" x-text="fundMonitor.console.funds_first_screen.allowed||'sleeve research only'"></span></div>
+              <div><span style="color:var(--red)">BLOCKED</span> <span style="color:var(--amber)" x-text="fundMonitor.console.funds_first_screen.blocked||fundMonitor.console.funds_first_screen.blocker||fundMonitor.console.funds_first_screen.why"></span></div>
               <div><span style="color:var(--t3)">CORE INDEX POSTURE</span> <span class="font-bold text-white" x-text="fundMonitor.console.funds_first_screen.core_index_posture"></span></div>
               <div><span style="color:var(--t3)">LIVE ALLOCATION</span> <span class="font-bold text-amber-300" x-text="fundMonitor.console.funds_first_screen.live_allocation_label"></span></div>
             </div>
@@ -6066,7 +6087,7 @@
         <!-- A ? CORE INDEX POSTURE (primary ? advisory) -->
         <template x-if="fundMonitor.console?.index_fund_posture">
           <div class="card card-p" style="border:2px solid var(--blue);background:linear-gradient(135deg,rgba(59,130,246,.06),transparent)">
-            <div class="text-[9px] font-bold uppercase mb-2" style="color:var(--blue)">A ? Core index posture</div>
+            <div class="text-[9px] font-bold uppercase mb-2" style="color:var(--blue)">A · Core index posture</div>
             <div class="flex flex-wrap gap-2 items-center mb-2 text-[8px]">
               <span class="pill text-[7px] pg" x-text="fundMonitor.console.index_fund_posture.valuation_zone||'?'"></span>
               <span class="pill text-[7px] pw" x-text="fundMonitor.console.index_fund_posture.action_label||'hold'"></span>
@@ -6210,7 +6231,7 @@
         <!-- B ? SLEEVE RESEARCH (collapsed by default) -->
         <div class="pt-2 mt-2" style="border-top:2px dashed var(--bd)">
           <button type="button" @click="fundMonitor.sleeveResearchOpen=!fundMonitor.sleeveResearchOpen" class="w-full text-left flex justify-between items-center gap-2 mb-1">
-            <span class="text-[9px] font-bold uppercase" style="color:var(--t3)">B ? Sleeve research (secondary)</span>
+            <span class="text-[9px] font-bold uppercase" style="color:var(--t3)">B · Sleeve research (secondary)</span>
             <span class="text-[8px]" style="color:var(--t3)" x-text="fundMonitor.sleeveResearchOpen?'? collapse':'? expand'"></span>
           </button>
           <div class="text-[8px] mb-2 p-2 rounded" style="background:rgba(0,0,0,.2);color:var(--t3)">
@@ -7442,16 +7463,16 @@
           <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--t3)">Recovery runbook</div>
           <div class="text-[9px] font-bold text-green-400 mb-0.5">Retry</div>
           <template x-for="ln in opsRecoveryGuide().retry" :key="'ops-retry-'+ln">
-            <div class="text-[9px]" style="color:var(--t2)" x-text="'? '+ln"></div>
+            <div class="text-[9px]" style="color:var(--t2)" x-text="'• '+ln"></div>
           </template>
           <div class="text-[9px] font-bold text-red-400 mt-2 mb-0.5">Blocks capital</div>
           <template x-for="ln in opsRecoveryGuide().blocks_capital" :key="'ops-block-'+ln">
-            <div class="text-[9px]" style="color:var(--t2)" x-text="'? '+ln"></div>
+            <div class="text-[9px]" style="color:var(--t2)" x-text="'• '+ln"></div>
           </template>
           <div x-show="!opsRecoveryGuide().blocks_capital.length" class="text-[9px]" style="color:var(--t3)">No hard blocks flagged from Ops snapshot</div>
           <div class="text-[9px] font-bold text-amber-300 mt-2 mb-0.5">Safe in degraded mode</div>
           <template x-for="ln in opsRecoveryGuide().safe_degraded" :key="'ops-safe-'+ln">
-            <div class="text-[9px]" style="color:var(--t2)" x-text="'? '+ln"></div>
+            <div class="text-[9px]" style="color:var(--t2)" x-text="'• '+ln"></div>
           </template>
         </div>
     <!-- @cc-partial-end ops_recovery_runbook -->
@@ -8205,10 +8226,10 @@
     <nav style="position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--bd);padding:6px 0 max(env(safe-area-inset-bottom),6px);z-index:50">
       <div class="flex justify-around max-w-lg mx-auto">
         <a href="#" data-cc-nav="guide" @click.prevent="switchTab('guide')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='guide'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">??</span>Guide</a>
-        <a href="#" data-cc-nav="today" @click.prevent="switchTab('today')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='today'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">??</span>Overview</a>
-        <a href="#" data-cc-nav="signals" @click.prevent="switchTab('signals')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='signals'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">??</span>Ranked</a>
-        <a href="#" data-cc-nav="scanners" @click.prevent="switchTab('scanners')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='scanners'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">??</span>Scan</a>
-        <a href="#" data-cc-nav="portfolio" @click.prevent="switchTab('portfolio')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='portfolio'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">??</span>Book</a>
+        <a href="#" data-cc-nav="today" @click.prevent="switchTab('today')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='today'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">??</span>Dashboard</a>
+        <a href="#" data-cc-nav="signals" @click.prevent="switchTab('signals')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='signals'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">??</span>Playbook</a>
+        <a href="#" data-cc-nav="scanners" @click.prevent="switchTab('scanners')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='scanners'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">??</span>Discovery</a>
+        <a href="#" data-cc-nav="portfolio" @click.prevent="switchTab('portfolio')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='portfolio'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">??</span>Portfolio</a>
         <a href="#" data-cc-nav="ibkr" @click.prevent="switchTab('ibkr')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='ibkr'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">?</span>IBKR</a>
         <a href="#" data-cc-nav="dossier" @click.prevent="switchTab('dossier')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='dossier'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">??</span>Dossier</a>
         <a href="#" data-cc-nav="ops" @click.prevent="switchTab('ops')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='ops'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">??</span>Ops</a>
@@ -8306,7 +8327,7 @@
       risk:{summary:null},
       rl:{thompson:null,featureIC:null},
       notifyLog:{events:[],discord_configured:false,loading:false,loaded:false},
-      scannerHub:{loading:false,data:null,category:null,duration_ms:0,last_run:null,universe:0,error:''},
+      scannerHub:{loading:false,refreshing:false,data:null,category:null,duration_ms:0,last_run:null,universe:0,error:''},
       rankedOpps:{loading:false,refreshing:false,fetch_failed:false,rows:[],actionFilter:'',sectorFilter:'',source:'playbook',board_mode:'',board_mode_label:'',board_message:'',board_explanation:'',snapshot_timestamp:'',rejection_clusters:[],rejection_clusters_note:'',unlock_deploy:null,emergency:null,bestAction:null,decision_authority:null,overlapWarning:null,warning:'',avoid_grouped:null,bucket_quality:[],near_miss:[],avoid_collapsed:true,filter_funnel:null,degraded_banner:'',instant_degraded:false},
       flowPanel:{loading:false,data:null,radar:null,decision:null,error:''},
       opsConsole:{loading:false,data:null,error:''},
@@ -8348,6 +8369,10 @@
       init(){
         this.dataContractDismissed=localStorage.getItem('cc_data_contract_dismissed')==='1';
         this._hydrateReplayState();
+        // Instant paint from local cache before any network fetch
+        this.hydrateRankedFromCache();
+        this.hydrateToday7FromCache();
+        this.hydrateScannersFromCache();
         if(typeof window!=='undefined'){
           window.addEventListener('resize',()=>{this.pmStripChipMenuOpen=false});
           document.addEventListener('visibilitychange',()=>{this._ccPageHidden=!!document.hidden});
@@ -8380,9 +8405,6 @@
         // Morning brief freshness check (every 5 min ? cheap, just stats a file)
         this.fetchBriefStatus();setInterval(()=>this.fetchBriefStatus(),300000);
         if(!localStorage.getItem('cc_guide_seen')){this.showGuideModal=true;localStorage.setItem('cc_guide_seen','1')}
-        this.hydrateRankedFromCache();
-        this.hydrateToday7FromCache();
-        this.hydrateScannersFromCache();
         try{this.instantDegradedDismissed=sessionStorage.getItem('cc_instant_degraded_dismissed')==='1';}catch(e){}
       },
       async fetchStrategyHealth(){
@@ -9192,8 +9214,14 @@
           empty:!!hints.empty,
         };
         if(this.surfaceShowsDecisionChips(mode)&&strip){
-          ctx.deploy_label=strip.deploy_reduce_wait||'';
-          ctx.best_idea_ticker=(strip.best_idea_now&&strip.best_idea_now.ticker)||'';
+          const pov=this.tab==='signals'?this.playbookOperatorView():null;
+          if(pov&&pov.blocked){
+            ctx.deploy_label='WAIT';
+            ctx.tradeability=this.runtimeSecondaryRegimeLine()||'WAIT';
+          }else{
+            ctx.deploy_label=strip.deploy_reduce_wait||'';
+            ctx.best_idea_ticker=(strip.best_idea_now&&strip.best_idea_now.ticker)||'';
+          }
           ctx.avoid_count=(strip.avoid_now||[]).length;
         }
         if(mode==='dossier_research'&&this.dos.ticker) ctx.ticker=this.dos.ticker;
@@ -9550,24 +9578,45 @@
         return (this.tab==='today'||this.tab==='signals')&&!this.dataContractDismissed;
       },
       dataContractStrip(){
-        const truth=this.today7.system_truth||{};
-        const typed=(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStripLocalized)
-          ?CCHelpers.scopedFreshnessStripLocalized(truth)
-          :((typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStrip)?CCHelpers.scopedFreshnessStrip(truth):'');
+        const vm=this.shellTruthVM();
         return {
           fetch:this.dataContractFetchBadge(),
-          truth:typed||this.unifiedTruthStripLine()||this.canonicalRegimeLine()||'?',
+          truth:vm.scopedStrip||this.unifiedTruthStripLine()||'?',
           broker:this.dataContractBrokerShort(),
           dismissible:true,
         };
       },
-      unifiedTruthStripLine(){
+      shellTruthVM(){
+        const opts={
+          ops:{running:this.ops?.running,engineRunning:!!this.ops?.running,breaker:!!this.cc_status?.breaker},
+          breaker:!!this.cc_status?.breaker,
+        };
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.shellTruthViewModel)
+          return CCHelpers.shellTruthViewModel(this.today7,opts);
         const truth=this.today7.system_truth||{};
-        if(truth.truth_strip) return String(truth.truth_strip);
-        if(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStripLocalized) return CCHelpers.scopedFreshnessStripLocalized(truth);
-        if(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStrip) return CCHelpers.scopedFreshnessStrip(truth);
-        if(typeof CCHelpers!=='undefined'&&CCHelpers.systemTruthLine) return CCHelpers.systemTruthLine(truth);
-        return '';
+        return {
+          scopedStrip:truth.truth_strip||truth.typed_freshness_display||'',
+          primaryLine:this.runtimePrimaryStateLine(),
+          secondaryLine:this.runtimeSecondaryRegimeLine(),
+          engineHeaderLabel:'ENGINE UNKNOWN',
+          briefExpiredLine:'',
+          deployBlocked:this.todayDeployBlocked(),
+          blockerLine:'',
+        };
+      },
+      dashboardShellCompressed(){
+        const vm=this.shellTruthVM();
+        return !!(vm.deployBlocked||this.pageAuthorityIsDegraded()||this.todayDeployBlocked());
+      },
+      unifiedTruthStripLine(){
+        const vm=this.shellTruthVM();
+        if(vm.scopedStrip) return vm.scopedStrip;
+        const truth=this.today7.system_truth||{};
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.globalTruthStrip)
+          return CCHelpers.globalTruthStrip(truth);
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStripLocalized)
+          return CCHelpers.scopedFreshnessStripLocalized(truth);
+        return truth.truth_strip||truth.typed_freshness_display||'';
       },
       todayDeployBlocked(){
         const truth=this.today7.system_truth||{};
@@ -9595,26 +9644,43 @@
           system_truth: this.today7.system_truth||{},
           playbook_operator_view: this.rankedOpps.playbook_operator_view||this.today7.playbook_operator_view||null,
           filter_funnel: this.rankedOpps.filter_funnel||this.today7.filter_funnel||{},
+          ranked_rows: this.rankedOpps.rows||[],
+          near_miss: this.rankedOpps.near_miss||this.today7.near_miss||[],
+          ops: {running: this.ops?.running},
         };
       },
       playbookOperatorView(){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.playbookAuthorityViewModel)
+          return CCHelpers.playbookAuthorityViewModel(this.today7,{rankedOpps:this.rankedOpps,ops:{running:this.ops?.running}});
         if(typeof CCHelpers!=='undefined'&&CCHelpers.playbookAuthorityView)
           return CCHelpers.playbookAuthorityView(this.playbookOperatorPayload());
         const truth=this.today7.system_truth||{};
+        const tier=String(truth.deploy_authority_tier||'').toLowerCase();
+        const paperOnly=tier==='paper_only';
+        const blocked=truth.deploy_authority!==true&&tier!=='paper_only'&&tier!=='pilot_only';
+        const authority=truth.deploy_authority?'ALLOWED':(paperOnly?'PAPER_ONLY':'BLOCKED');
         return {
-          authority: truth.deploy_authority?'ALLOWED':'BLOCKED',
-          blocked: !truth.deploy_authority,
-          posture: truth.deploy_authority?String(truth.regime_state||'WAIT').toUpperCase():'MONITOR ONLY',
+          authority,
+          blocked,
+          posture: blocked?'MONITOR ONLY':(paperOnly?'PAPER DEPLOY':String(truth.regime_state||'WAIT').toUpperCase()),
           truth_strip: truth.truth_strip||'',
           qualification_line: truth.qualification_line||'',
           best_action: '',
           next: [],
           no_valid_monitors: false,
-          simulation_drafts_collapsed: !truth.deploy_authority,
+          simulation_drafts_collapsed: blocked,
           buckets: {},
         };
       },
       playbookAuthorityStripVisible(){ return this.tab==='signals'; },
+      playbookRegimeDisplayLine(){
+        const pov=this.playbookOperatorView();
+        if(pov.blocked){
+          const sec=pov.secondaryPosture||this.runtimeSecondaryRegimeLine();
+          return sec?('MONITOR ONLY · '+sec):'MONITOR ONLY';
+        }
+        return this.canonicalRegimeLine();
+      },
       playbookQualificationDisplay(){
         const pov=this.playbookOperatorView();
         if(pov.qualification_line) return pov.qualification_line;
@@ -9633,8 +9699,12 @@
         keys.forEach(k=>{
           (this.playbookBucketRows(k)||[]).forEach(r=>out.push({...r,_bucket:k}));
         });
-        if(out.length) return out;
-        return (this.playbookDisplayRows()||[]).map(r=>({...r,_bucket:'watch'}));
+        return out;
+      },
+      playbookLegacyRowsVisible(){
+        if(this.playbookAllBucketRows().length>0) return false;
+        if(this.playbookOperatorView().blocked) return false;
+        return (this.playbookDisplayRows()||[]).length>0;
       },
       playbookNoValidMonitors(){
         const pov=this.playbookOperatorView();
@@ -9696,7 +9766,9 @@
         if(tb==='SELECTIVE'){
           if(pilotBlocked||blocked)
             return 'SELECTIVE review only ? monitor candidates; PILOT/WATCH labels are review-only.';
-          return 'Pilot or single-name only ? half size, stop required.';
+          if(typeof CCHelpers!=='undefined'&&CCHelpers.tradeabilityGuidanceLine)
+            return CCHelpers.tradeabilityGuidanceLine({blocked:false,tradeability:tb,pilotBlocked});
+          return 'Pilot or single-name only ? half size when deploy authority open; stop required.';
         }
         if(tb==='WAIT') return 'No deploy-grade board ? patience is the active decision.';
         return '?? Risk-off ? no new entries.';
@@ -10086,15 +10158,18 @@
       todayMissionPanelTitle(){
         return this.isWaitDay()?'Today focus':'Today mission';
       },
-      unifiedTruthStripLine(){
-        const truth=this.today7.system_truth||{};
-        if(typeof CCHelpers!=='undefined'&&CCHelpers.globalTruthStrip)
-          return CCHelpers.globalTruthStrip(truth);
-        if(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStripLocalized)
-          return CCHelpers.scopedFreshnessStripLocalized(truth);
-        if(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStrip)
-          return CCHelpers.scopedFreshnessStrip(truth);
-        return truth.truth_strip||truth.typed_freshness_display||'';
+      engineStateHeaderLabel(){
+        const vm=this.shellTruthVM();
+        if(vm.engineHeaderLabel) return vm.engineHeaderLabel;
+        if(this.cc_status?.breaker) return 'BREAKER';
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.engineStateHeaderLabel){
+          return CCHelpers.engineStateHeaderLabel({
+            breaker:!!this.cc_status?.breaker,
+            truth:this.today7?.system_truth,
+            ops:{running:this.ops?.running,engineRunning:!!this.ops?.running},
+          });
+        }
+        return 'Runtime: Unknown';
       },
       executionRepairBannerVisible(){
         if(this.tab==='ops'||this.tab==='ibkr') return false;
@@ -10105,25 +10180,12 @@
         return broker==='offline'||broker==='blocked'||String(truth.execution_gate||'').toLowerCase()==='blocked';
       },
       executionRepairBannerLine(){
+        const vm=this.shellTruthVM();
+        if(vm.repairLine) return vm.repairLine;
         const truth=this.today7?.system_truth||{};
         if(typeof CCHelpers!=='undefined'&&CCHelpers.executionRepairOneLiner)
           return CCHelpers.executionRepairOneLiner(truth);
         return 'Execution blocked: broker offline. Open Repair Console.';
-      },
-      engineStateHeaderLabel(){
-        if(this.cc_status?.breaker) return 'BREAKER';
-        if(typeof CCHelpers!=='undefined'&&CCHelpers.engineStateHeaderLabel){
-          return CCHelpers.engineStateHeaderLabel({
-            breaker:!!this.cc_status?.breaker,
-            truth:this.today7?.system_truth,
-            ops:{running:this.ops?.running,engineRunning:!!this.ops?.running},
-          });
-        }
-        if(typeof CCHelpers!=='undefined'&&CCHelpers.formatEngineState){
-          const eng=this.today7?.system_truth?.engine_state;
-          if(eng!=null&&String(eng)!=='undefined') return 'ENGINE '+String(CCHelpers.formatEngineState(eng)).toUpperCase();
-        }
-        return 'ENGINE UNKNOWN';
       },
       engineStatePillClass(){
         if(this.cc_status?.breaker) return 'pr';
@@ -10354,25 +10416,25 @@
         const opts={
           ibkrReady:st.level==='ready'||st.handoff||!!this.cc_status.ibkr_connected,
           ibkrShort:this.ibkrUnifiedShort(this.today7.execution_readiness),
-          engineRunning:(typeof CCHelpers!=='undefined'&&CCHelpers.resolveEngineState)?CCHelpers.resolveEngineState(this.today7.system_truth,{running:this.ops.running})==='on':!!this.ops.running,
           running:this.ops.running,
           breaker:!!this.cc_status.breaker,
-          dataTier:String(this.freshness?.worst_tier||''),
-          briefFallback:!!(this.todayUsesBriefFallback()||this.pageAuthorityIsDegraded()),
-          instantDegraded:!!(this.today7.instant_degraded||this.instantDegradedBannerVisible()),
           fetchBadge:this.dataContractFetchBadge(),
           systemTruth:this.today7.system_truth||null,
         };
         if(typeof CCHelpers!=='undefined'&&CCHelpers.todayMissionSystemBlockers)
           return CCHelpers.todayMissionSystemBlockers(opts);
+        const vm=this.shellTruthVM();
+        if(vm.blockerLine) return vm.blockerLine.split(' · ').filter(Boolean);
         const out=[];
         if(!opts.ibkrReady) out.push('IBKR '+String(opts.ibkrShort||'OFFLINE').toUpperCase());
-        const eng=(typeof CCHelpers!=='undefined'&&CCHelpers.resolveEngineState)?CCHelpers.resolveEngineState(opts.systemTruth,{running:opts.running}):'';
-        if(eng==='off') out.push('ENGINE OFF');
-        else if(eng==='conflict') out.push('RUNTIME CONFLICT');
+        const eng=(typeof CCHelpers!=='undefined'&&CCHelpers.resolveEngineState)
+          ?CCHelpers.resolveEngineState(opts.systemTruth,{running:opts.running}):'';
+        if(eng==='conflict') out.push('RUNTIME CONFLICT');
+        else if(eng==='off') out.push('ENGINE OFF');
         else if(eng==='unknown') out.push('ENGINE UNKNOWN');
         if(opts.breaker) out.push('EXEC BLOCKED ? risk breaker');
-        if(opts.briefFallback||opts.instantDegraded) out.push('FALLBACK / BRIEF ONLY');
+        const expired=vm.briefExpiredLine||'';
+        if(expired) out.push(expired);
         return out;
       },
       todayMissionBlockersTitle(){
@@ -10415,17 +10477,14 @@
       },
       headerChipGroups(){
         const hs=this.headerSummary();
-        const st=this.ibkrStateFrom(this.today7.execution_readiness||{});
-        const truth=this.today7.system_truth||{};
-        const typed=(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStripLocalized)
-          ?CCHelpers.scopedFreshnessStripLocalized(truth):((typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStrip)?CCHelpers.scopedFreshnessStrip(truth):'');
+        const vm=this.shellTruthVM();
         const blocked=this.pageAuthorityIsDegraded()||this.todayDeployBlocked();
         const opts={
-          authorityChip:blocked?(this.instantDegradedBannerVisible()?'INSTANT DEGRADED':'MONITOR ONLY'):'',
-          tradeability:blocked?this.runtimeSecondaryRegimeLine():this.canonicalTradeability(),
+          authorityChip:blocked?(this.instantDegradedBannerVisible()?'INSTANT DEGRADED':vm.primaryLine||'MONITOR ONLY'):'',
+          tradeability:blocked?(vm.secondaryLine||this.runtimeSecondaryRegimeLine()):this.canonicalTradeability(),
           fetchBadge:hs.badge||this.dataContractFetchBadge(),
           ibkrChip:'IBKR '+this.ibkrUnifiedShort(this.today7.execution_readiness),
-          typedFreshnessChip:typed,
+          typedFreshnessChip:vm.scopedStrip||'',
           dataChip:'',
           modeChip:this.trust?.mode||'',
           freshnessChip:'',
@@ -10835,11 +10894,13 @@
         return src.includes('brief')&&src.includes('fallback')||String(t.reason||'').toLowerCase().includes('fallback');
       },
       authorityDegradedBanner(){
+        const vm=this.shellTruthVM();
+        if(vm.briefExpiredLine) return vm.briefExpiredLine+' — excluded from ranking context';
         const da=this.decisionAuthority();
         const dc=da.degraded_copy||{};
         const stale=this.staleSnapshotContext();
         if(!da.degraded&&!this.todayUsesBriefFallback()&&!stale) return '';
-        const parts=[dc.system_mode==='degraded'?'System mode: degraded':null,dc.decision_authority_line||null,stale||dc.fallback_board_line||null].filter(Boolean);
+        const parts=[dc.system_mode==='degraded'?'System mode: degraded':null,dc.decision_authority_line||null,stale||null].filter(Boolean);
         return parts.join(' ? ');
       },
       staleSnapshotContext(){
@@ -10965,7 +11026,7 @@
         const block=this.dos?.intel?.dossier_mode;
         if(block?.confirm_only_strip) return block.confirm_only_strip;
         if(window.CCHelpers&&CCHelpers.dossierConfirmOnlyStrip) return CCHelpers.dossierConfirmOnlyStrip();
-        return 'Confirm-only ? ?????????????????? ? no sizing ? no handoff';
+        return 'Confirm-only · 僅結構確認：無入場價、無止損、無倉位 · no sizing · no handoff';
       },
       dossierStructureSnapshotTitle(){
         const block=this.dos?.intel?.dossier_mode;
@@ -10991,13 +11052,13 @@
         const block=this.dos?.intel?.dossier_mode;
         if(block?.monitor_rule_button) return block.monitor_rule_button;
         if(window.CCHelpers&&CCHelpers.dossierMonitorRuleButton) return CCHelpers.dossierMonitorRuleButton();
-        return 'Create monitor rule ? ??????';
+        return 'Create monitor rule · 建立監察規則';
       },
       dossierMonitorRuleHint(){
         const block=this.dos?.intel?.dossier_mode;
         if(block?.monitor_rule_hint) return block.monitor_rule_hint;
         if(window.CCHelpers&&CCHelpers.dossierMonitorRuleHint) return CCHelpers.dossierMonitorRuleHint();
-        return 'Alert only ? ??? ? ????????? ? no sizing ? no handoff';
+        return 'Alert only · 僅提醒 — 不定倉、不交接券商 · no sizing · no handoff';
       },
       dossierLaggedContextNote(){
         const block=this.dos?.intel?.dossier_mode;
@@ -11222,13 +11283,17 @@
       },
       cardSizingNote(opp){
         if(!opp) return '';
-        if(this.pageAuthorityIsDegraded()||this.todayUsesBriefFallback()||this.cardIsFallbackRow(opp)) return 'Sizing suspended in fallback mode';
+        if(this.cardBlockedForDisplay(opp)||this.pageAuthorityIsDegraded()){
+          const expired=this.shellTruthVM().briefExpiredLine;
+          return expired?('Sizing blocked — '+expired):'Sizing blocked — deploy authority off';
+        }
         if(opp.entry_price&&opp.stop_price&&opp.entry_price>opp.stop_price&&!this.cardShowsExecutableSizing(opp)) return 'Indicative sizing only';
         return '';
       },
       cardReferenceBanner(opp){
         if(!this.cardIsFallbackRow(opp)&&!this.pageAuthorityIsDegraded()) return '';
-        return 'Reference plan only ? Indicative levels only ? Monitor zone ? No deploy authority';
+        const expired=this.shellTruthVM().briefExpiredLine;
+        return expired?('Reference only — '+expired+' — monitor zone'):'Reference only — monitor zone — no deploy authority';
       },
       cardActionGuidanceLine(opp){
         if(!opp) return '';
@@ -11658,10 +11723,11 @@
         return Number(scanned)||0;
       },
       playbookFunnelLabel(funnel,rows){
+        const pov=this.playbookOperatorView();
+        if(pov.qualification_line) return pov.qualification_line;
         const truth=this.today7.system_truth||{};
-        if(truth.qualification_line) return truth.qualification_line;
         const {scanned,watch,deploy}=this.playbookFunnelCounts(funnel,rows);
-        const deployN=truth.deploy_authority===false?0:deploy;
+        const deployN=pov.deployQualified!=null?pov.deployQualified:(truth.deploy_authority===false?0:deploy);
         let s=scanned+' scanned ? '+watch+' funnel watch-qualified ? '+deployN+' deploy-qualified';
         const pool=this.playbookBoardScanPoolCount(funnel,rows);
         if(Number(watch)>0&&pool>Number(watch)) s+=' ? '+pool+' board scan pool';
@@ -11700,7 +11766,8 @@
         return raw
           .replace(/\b(\d+)\s+validated\b/gi,(m,n)=>n+' scan-ranked (not watch-qualified)')
           .replace(/\bboard-ranked\s*\(watch-qualified\)/gi,'watch-qualified')
-          .replace(/\bvalidated\b/gi,'scan-ranked');
+          .replace(/\bvalidated\b/gi,'scan-ranked')
+          .replace(/Current:\s*TRADE/gi,'Current: MONITOR ONLY');
       },
       playbookClosestUpgradeLabel(){
         if(this.playbookBoardWait()||this.playbookBrokerOffline()||this.playbookDeployQualifiedCount()<1){
@@ -11709,8 +11776,10 @@
         return 'Closest to upgrade';
       },
       playbookDeployQualifiedCount(){
+        const pov=this.playbookOperatorView();
+        if(pov.deployQualified!=null) return pov.deployQualified;
         const {deploy}=this.playbookFunnelCounts(this.rankedOpps.filter_funnel||this.today7.filter_funnel,null);
-        return deploy;
+        return this.today7.system_truth?.deploy_authority===false?0:deploy;
       },
       playbookRejectionClustersNote(){
         const note=this.rankedOpps.rejection_clusters_note||'';
@@ -12873,17 +12942,43 @@
         const cd=this.pfDecision&&this.pfDecision.curve_diagnostics;
         return !!(cd&&cd.stats_reliable===true);
       },
+      pfRiskVM(){
+        const opts={pfDecision:this.pfDecision,positions:(this.pf&&this.pf.positions)||[]};
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.portfolioRiskViewModel)
+          return CCHelpers.portfolioRiskViewModel(this.today7,opts);
+        const pm=(this.pfDecision&&this.pfDecision.portfolio_mode)||{};
+        const review=!!(pm.risk_review_only||!pm.capital_action_queue_enabled);
+        return{
+          mode:pm.mode||'unavailable',
+          riskCapacityAuthority:review?'none':(pm.risk_capacity_authority||'none'),
+          capitalActionEnabled:!!pm.capital_action_queue_enabled&&!pm.risk_review_only,
+          sleeveAuthority:review?'research_only':'live',
+          liveAllocationEligibility:review?'0%':'100%',
+          showSleeveResearchDefault:!review,
+          showDemoToolsDefault:false,
+          showHistoricalJournalDefault:false,
+          defaultDetailsCollapsed:review,
+          showCriticalRiskEvent:!!(this.pfDecision&&this.pfDecision.critical_risk_event&&this.pfDecision.critical_risk_event.active),
+          brokerTruthBannerActive:review&&!((this.pfDecision&&this.pfDecision.critical_risk_event&&this.pfDecision.critical_risk_event.active)),
+          brokerTruthBanner:'Broker truth unavailable · Risk review only until sync',
+          historicalJournalNote:'Learning only · not broker truth',
+          bookScopeLabel:pm.book_label?'Book · '+pm.book_label:'Book · Unavailable',
+          brokerScopeLabel:'Broker · Offline',
+          scopedTruthStrip:(pm.book_label||'Portfolio')+' · Broker offline',
+          collapseAllocationBands:review,
+          collapseOperatingDiscipline:review,
+          manualAddLabel:'Add manual placeholder',
+          riskReviewOnly:review,
+        };
+      },
       pfDemoteResearch(){
-        const cre=this.pfDecision&&this.pfDecision.critical_risk_event;
-        const pm=this.pfDecision&&this.pfDecision.portfolio_mode;
-        if(pm&&(pm.risk_review_only||!pm.capital_action_queue_enabled))return true;
-        return !!(cre&&cre.active);
+        const vm=this.pfRiskVM();
+        if(vm.riskReviewOnly||!vm.capitalActionEnabled)return true;
+        return !!vm.showCriticalRiskEvent;
       },
       pfCapitalActionsEnabled(){
-        const pm=this.pfDecision&&this.pfDecision.portfolio_mode;
-        if(pm)return !!pm.capital_action_queue_enabled&&!pm.risk_review_only;
-        if(window.CCHelpers&&CCHelpers.portfolioCapitalActionsEnabled)return CCHelpers.portfolioCapitalActionsEnabled(this.pfDecision||{});
-        return false;
+        const vm=this.pfRiskVM();
+        return !!vm.capitalActionEnabled&&!vm.riskReviewOnly;
       },
       pfPosRisk(pos){
         const px=pos.current_price||pos.entry_price||pos.avg_cost||0;
@@ -13828,13 +13923,21 @@
             finishAdd(d,d.position);
             return;
           }
-          if(r&&(r.status===503||r.status>=500)){
+          if(r&&(r.status===503||r.status>=500||r.status===405||r.status===404)){
             const pos=this.applyLocalPortfolioAdd(body);
-            finishAdd({message:'Saved locally ? Broker sync unavailable',broker_sync:'unavailable'},pos);
+            finishAdd({message:'Saved locally — manual placeholder (broker sync unavailable)',broker_sync:'unavailable'},pos);
             return;
           }
           const err=r?await r.json().catch(()=>({})):{};
-          this.pf.addError=err.detail||('Failed to add position (HTTP '+(r?r.status:'fail')+')');
+          const detail=String(err.detail||'');
+          if(/method not allowed/i.test(detail)||r?.status===405){
+            const pos=this.applyLocalPortfolioAdd(body);
+            if(pos){
+              finishAdd({message:'Saved locally — manual placeholder (broker sync unavailable)',broker_sync:'unavailable'},pos);
+              return;
+            }
+          }
+          this.pf.addError=detail?detail.replace(/method not allowed/i,'Broker sync unavailable — saved as manual placeholder only'):('Could not add placeholder (HTTP '+(r?r.status:'fail')+')');
         }catch(e){
           const pos=this.applyLocalPortfolioAdd(body);
           if(pos){
@@ -15053,11 +15156,13 @@
           this.maybeAutoRefreshStaleBoard();
           if(this.today7.top_ranked.length)setTimeout(()=>this.loadSparklines(this.today7.top_ranked),200);
           if(!(this.pmStrip.funds||[]).length)this.fetchFunds();
-          try{
-            const qa=await this.ccFetchJson('/api/v7/quant/sleeve-allocation',{tab:'today',retries:1,backoff:400});
-            if(qa.ok)this.today7.quant_alloc=qa.data;
-          }catch(e){console.warn('quant sleeve-allocation',e)}
+          setTimeout(()=>{
+            this.ccFetchJson('/api/v7/quant/sleeve-allocation',{tab:'today',retries:1,backoff:400})
+              .then(qa=>{if(qa&&qa.ok)this.today7.quant_alloc=qa.data;})
+              .catch(e=>console.warn('quant sleeve-allocation',e));
+          },150);
         }catch(e){console.warn('v7/today fetch failed',e);this.today7.trust={...(this.today7.trust||{}),stale:true,reason:String(e.message||e).slice(0,140)};this.hydrateToday7FromCache()}
+        finally{this.today7.loading=false;}
       },
       hydrateToday7FromCache(){
         try{
@@ -15480,9 +15585,27 @@
       },
       discoveryFunnelPanel(){
         if(typeof CCHelpers!=='undefined'&&CCHelpers.discoveryFunnelView){
-          return CCHelpers.discoveryFunnelView(this.scannerHub.data||{});
+          return CCHelpers.discoveryFunnelView(this.scannerHub.data||{},this.today7.system_truth||{});
         }
-        return {mode:'research_only',now:'No validated research candidates',why:'',funnel:{},funnel_line:'',best_action:'Send to Playbook Review',shortlist:[],hide_raw_hits:true,strict_passed_count:0};
+        return {mode:'research_only',now:'Research-only · deploy blocked',why:'',funnel:{},funnel_line:'',status_line:'',subtitle:'Research funnel only. Names go to Playbook review only after strict filters pass.',best_action:'No new research candidates. Refresh Dashboard + Playbook.',shortlist:[],hide_raw_hits:true,strict_passed_count:0,brief_expired_note:''};
+      },
+      discoveryScannerRunLabel(){
+        const d=(this.scannerHub.data&&this.scannerHub.data.diagnostics)||{};
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.discoveryScannerRunLabel)
+          return CCHelpers.discoveryScannerRunLabel(d);
+        return 'Scanner run: Unknown';
+      },
+      discoveryRowFreshnessFor(row){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.discoveryRowFreshnessLabel)
+          return CCHelpers.discoveryRowFreshnessLabel(row,this.today7.system_truth||{});
+        return this.discoveryScannerRunLabel();
+      },
+      scannerAvoidNowCount(){
+        const d=this.scannerHub.data||{};
+        const intent=d.decision_intent&&d.decision_intent.NO_TRADE;
+        if(intent&&intent.count!=null) return Number(intent.count)||0;
+        const flags=(this.today7&&this.today7.avoid_now)||[];
+        return Array.isArray(flags)?flags.length:0;
       },
       discoveryHideRawHits(){
         return !!this.discoveryFunnelPanel().hide_raw_hits;
@@ -15546,8 +15669,13 @@
       },
       async fetchScanners(cat){
         const tab='scanners';
-        this.scannerHub.loading=true;this.scannerHub.category=cat||null;this.scannerHub.error='';
-        this.surfaceFetchHints[tab]={...(this.surfaceFetchHints[tab]||{}),loading:true,error:''};
+        const hadData=this.scannerHubIsRenderable(this.scannerHub.data);
+        if(!hadData) this.hydrateScannersFromCache();
+        const shellReady=this.scannerHubIsRenderable(this.scannerHub.data);
+        if(shellReady) this.scannerHub.refreshing=true;
+        else this.scannerHub.loading=true;
+        this.scannerHub.category=cat||null;this.scannerHub.error='';
+        this.surfaceFetchHints[tab]={...(this.surfaceFetchHints[tab]||{}),loading:!shellReady,error:''};
         const _t0=performance.now();
         try{
           let u='/api/v7/playbook/scanners';
@@ -15591,7 +15719,7 @@
             research_only:true,
           };
         }
-        finally{this.scannerHub.duration_ms=Math.round(performance.now()-_t0);this.scannerHub.last_run=new Date().toISOString();this.scannerHub.loading=false}
+        finally{this.scannerHub.duration_ms=Math.round(performance.now()-_t0);this.scannerHub.last_run=new Date().toISOString();this.scannerHub.loading=false;this.scannerHub.refreshing=false}
       },
 
       tabAuthorityAlias(t){

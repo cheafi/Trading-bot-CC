@@ -116,7 +116,10 @@
 		var nm = Number(nearMissCount) || 0
 		var wq = Number(watchQualified)
 		if (!n && !nm) return bilingualLine("監察清單", "Monitors")
-		var prefix = n && (isNaN(wq) || wq === 0) ? bilingualLine("備援監察", "Fallback monitors") : bilingualLine("監察清單", "Monitors")
+		var prefix =
+			n && (isNaN(wq) || wq === 0)
+				? bilingualLine("備援監察", "Fallback monitors")
+				: bilingualLine("監察清單", "Monitors")
 		var base = n ? prefix + " (" + n + ")" : prefix
 		return nm ? base + " · " + nm + " " + bilingualLine("筆近失", "near-miss") : base
 	}
@@ -227,8 +230,8 @@
 	function todayMissionSystemBlockers(opts) {
 		var o = opts || {}
 		var truth = o.systemTruth || o.system_truth
-		if (truth && (truth.reason_codes || []).length) {
-			return systemTruthMissionBlockers(truth)
+		if (truth && ((truth.reason_codes || []).length || truth.primary_blocker)) {
+			return systemTruthMissionBlockers(truth).map(localizeMissionBlocker)
 		}
 		var out = []
 		if (!o.ibkrReady) {
@@ -238,26 +241,18 @@
 			out.push(ib.indexOf("IBKR") === 0 ? ib : "IBKR " + ib)
 		}
 		var eng = resolveEngineState(truth, o)
-		if (eng === "off") out.push("ENGINE OFF")
-		else if (eng === "conflict") out.push("RUNTIME CONFLICT")
+		if (eng === "conflict") out.push("RUNTIME CONFLICT")
+		else if (eng === "off") out.push("ENGINE OFF")
 		else if (eng === "unknown") out.push("ENGINE UNKNOWN")
 		if (o.breaker) {
 			out.push("EXEC BLOCKED — risk breaker")
 		}
 		var fb = String(o.fetchBadge || "").toUpperCase()
-		if (fb === "FALLBACK") {
-			out.push("FALLBACK / BRIEF ONLY")
-		} else if (fb === "FETCH FAILED") {
+		if (fb === "FETCH FAILED") {
 			out.push("FETCH FAILED — not decision-grade")
 		}
-		if (o.briefFallback || o.instantDegraded) {
-			var hasFb = out.some(function (x) {
-				return x.indexOf("FALLBACK") >= 0 || x.indexOf("BRIEF") >= 0
-			})
-			if (!hasFb) {
-				out.push("FALLBACK / BRIEF ONLY")
-			}
-		}
+		var expired = briefExpiredOperatorLine(truth || {})
+		if (expired && out.indexOf(expired) < 0) out.push(expired)
 		return out.map(localizeMissionBlocker)
 	}
 
@@ -311,9 +306,8 @@
 
 	function globalTruthStrip(truth) {
 		var t = truth || {}
-		if (t.truth_strip) return localizeScopedFreshnessStrip(String(t.truth_strip))
-		if (typeof scopedFreshnessStrip === "function") return scopedFreshnessStripLocalized(t)
-		return bilingualLine("僅監察 — 請查看上方狀態列", "Monitor only — see scoped truth strip")
+		var vm = shellTruthViewModel({ system_truth: t }, {})
+		return localizeScopedFreshnessStrip(safeRenderText(vm.scopedStrip, { truth: t, blocked: vm.deployBlocked }))
 	}
 
 	function researchSurfaceBlock(truth, surface, extra) {
@@ -369,12 +363,12 @@
 		var mode = "offline_draft_only"
 		var briefAge = Number(truth.brief_age_days || 0)
 		var briefExpired = briefAge > 2 || String(truth.brief_freshness || "").toLowerCase() === "expired"
-		var dataStale = ["stale", "unavailable", "fallback", "expired"].indexOf(
-			String(truth.market_data_freshness || "").toLowerCase()
-		) >= 0
-		var boardStale = ["stale", "fallback", "unavailable"].indexOf(
-			String(truth.ranked_board_freshness || "").toLowerCase()
-		) >= 0
+		var dataStale =
+			["stale", "unavailable", "fallback", "expired"].indexOf(
+				String(truth.market_data_freshness || "").toLowerCase(),
+			) >= 0
+		var boardStale =
+			["stale", "fallback", "unavailable"].indexOf(String(truth.ranked_board_freshness || "").toLowerCase()) >= 0
 		var brokerOffline = ["offline", "blocked"].indexOf(String(truth.broker_freshness || "").toLowerCase()) >= 0
 		if (!(briefExpired || dataStale || boardStale || brokerOffline)) {
 			mode = "validation_ready"
@@ -456,19 +450,22 @@
 				!briefExpired,
 				briefExpired
 					? "Expired " + briefAge + "d — excluded from strategy context"
-					: "Fresh — included in strategy context"
+					: "Fresh — included in strategy context",
 			),
 			board: gate(boardFresh, boardFresh ? "Fresh" : "Stale — promotion blocked"),
 			broker: gate(brokerOk, brokerOk ? "Ready" : "Offline — no handoff"),
-			backtest: gate(flag(["backtest", "backtest_passed"]), flag(["backtest", "backtest_passed"]) ? "Passed" : "Pending"),
+			backtest: gate(
+				flag(["backtest", "backtest_passed"]),
+				flag(["backtest", "backtest_passed"]) ? "Passed" : "Pending",
+			),
 			walk_forward: gate(
 				flag(["walk_forward", "walk_forward_passed"]),
-				flag(["walk_forward", "walk_forward_passed"]) ? "Passed" : "Pending"
+				flag(["walk_forward", "walk_forward_passed"]) ? "Passed" : "Pending",
 			),
 			costs: gate(flag(["costs", "costs_passed"]), flag(["costs", "costs_passed"]) ? "Passed" : "Pending"),
 			calibration: gate(
 				flag(["calibration", "calibration_passed"]),
-				flag(["calibration", "calibration_passed"]) ? "Ready" : "Provisional"
+				flag(["calibration", "calibration_passed"]) ? "Ready" : "Provisional",
 			),
 			authority: {
 				deploy: deployAllowed,
@@ -485,10 +482,12 @@
 		var page = strategyLabPageState(payload || {})
 		var vs = page.validation_status || strategyLabValidationStatus(payload && payload.system_truth)
 		var parts = []
-		;["live_data", "brief", "board", "broker", "backtest", "walk_forward", "costs", "calibration"].forEach(function (k) {
-			var row = vs[k] || {}
-			if (row.label) parts.push(k.replace("_", " ") + ": " + row.label)
-		})
+		;["live_data", "brief", "board", "broker", "backtest", "walk_forward", "costs", "calibration"].forEach(
+			function (k) {
+				var row = vs[k] || {}
+				if (row.label) parts.push(k.replace("_", " ") + ": " + row.label)
+			},
+		)
 		return parts.join(" · ")
 	}
 
@@ -673,8 +672,7 @@
 			if (excludeExpiredBriefFromAgent(truth)) parts.push(agentBriefLabel(truth))
 			if (tier !== "allowed") parts.push("Deploy authority blocked — sizing and handoff disabled")
 			degradedNote =
-				"Degraded Status Note: " +
-				(parts.length ? parts.join(" · ") : "System degraded — monitor-only copilot")
+				"Degraded Status Note: " + (parts.length ? parts.join(" · ") : "System degraded — monitor-only copilot")
 		}
 		return {
 			now: now,
@@ -748,6 +746,74 @@
 	function portfolioCapitalActionsEnabled(payload) {
 		var page = portfolioRiskPageState(payload)
 		return !!page.capital_action_queue_enabled && !page.risk_review_only
+	}
+
+	function portfolioRiskViewModel(today7, portfolio) {
+		var t7 = today7 || {}
+		var pf = portfolio || {}
+		var decision = pf.pfDecision || pf.decision || pf
+		var pm = decision.portfolio_mode || {}
+		var vm = decision.portfolio_risk_view_model || {}
+		var link = decision.ibkr_linkage || {}
+		var cre = decision.critical_risk_event || {}
+		var positions = pf.positions || pf.holdings || []
+		var reviewOnly = !!(pm.risk_review_only || vm.risk_review_only || !pm.capital_action_queue_enabled)
+		var capitalEnabled = !!(vm.capital_action_enabled != null
+			? vm.capital_action_enabled
+			: pm.capital_action_queue_enabled && !pm.risk_review_only)
+		var brokerTruth = !!(pm.broker_truth || link.broker_truth || vm.broker_truth)
+		var brokerOffline = !(pm.broker_connected || link.broker_connected)
+		var showCritical = !!(vm.show_critical_risk_event != null ? vm.show_critical_risk_event : cre.active)
+		var brokerBanner =
+			vm.broker_truth_banner ||
+			(showCritical
+				? null
+				: reviewOnly || !brokerTruth || brokerOffline
+					? "Broker truth unavailable · Risk review only until sync"
+					: null)
+		return {
+			mode: vm.mode || pm.mode || "unavailable",
+			riskCapacityAuthority:
+				vm.risk_capacity_authority || (reviewOnly ? "none" : pm.risk_capacity_authority || "none"),
+			capitalActionEnabled: capitalEnabled,
+			sleeveAuthority: vm.sleeve_authority || (reviewOnly ? "research_only" : "live"),
+			liveAllocationEligibility:
+				(vm.live_allocation_eligibility_pct != null
+					? vm.live_allocation_eligibility_pct
+					: reviewOnly
+						? 0
+						: 100) + "%",
+			showSleeveResearchDefault: !!(vm.show_sleeve_research_default != null
+				? vm.show_sleeve_research_default
+				: !reviewOnly && capitalEnabled),
+			showDemoToolsDefault: !!(vm.show_demo_tools_default != null ? vm.show_demo_tools_default : false),
+			showHistoricalJournalDefault: !!(vm.show_historical_journal_default != null
+				? vm.show_historical_journal_default
+				: false),
+			defaultDetailsCollapsed: !!(vm.default_details_collapsed != null
+				? vm.default_details_collapsed
+				: reviewOnly || !capitalEnabled),
+			showCriticalRiskEvent: showCritical,
+			brokerTruthBannerActive: !!(vm.broker_truth_banner_active != null
+				? vm.broker_truth_banner_active
+				: brokerBanner && !showCritical),
+			brokerTruthBanner: brokerBanner,
+			historicalJournalNote: vm.historical_journal_note || "Learning only · not broker truth",
+			bookScopeLabel: vm.book_scope_label || (pm.book_label ? "Book · " + pm.book_label : "Book · Unavailable"),
+			brokerScopeLabel: vm.broker_scope_label || (brokerTruth ? "Broker · Synced" : "Broker · Offline"),
+			scopedTruthStrip:
+				vm.scoped_truth_strip ||
+				(pm.book_label || "Portfolio") + " · " + (brokerTruth ? "Broker synced" : "Broker offline"),
+			collapseAllocationBands: !!(vm.collapse_allocation_bands != null
+				? vm.collapse_allocation_bands
+				: reviewOnly || !brokerTruth || !positions.length),
+			collapseOperatingDiscipline: !!(vm.collapse_operating_discipline != null
+				? vm.collapse_operating_discipline
+				: reviewOnly),
+			manualAddLabel: vm.manual_add_label || "Add manual placeholder",
+			riskReviewOnly: reviewOnly,
+			operatorBlock: portfolioOperatorBlock(decision),
+		}
 	}
 
 	function operatorBlock(truth, page, operatorBlocks) {
@@ -910,12 +976,16 @@
 		return state
 	}
 
-	function engineStateHeaderLabel(opts) {
+	function runtimeEngineHeaderLabel(opts) {
 		var o = opts || {}
 		if (o.breaker) return "BREAKER"
 		var eng = resolveEngineState(o.truth || o.systemTruth, o.ops || o)
 		if (eng === "conflict") return "Runtime: Conflict"
-		return "ENGINE " + String(formatEngineState(eng)).toUpperCase()
+		return "Runtime: " + formatEngineState(eng)
+	}
+
+	function engineStateHeaderLabel(opts) {
+		return runtimeEngineHeaderLabel(opts)
 	}
 
 	function primaryOperatorState(truth) {
@@ -1007,6 +1077,10 @@
 			raw = raw
 				.replace(/brief[\s-]?fallback/gi, expiredLine)
 				.replace(/fallback[\s-]?brief/gi, expiredLine)
+				.replace(/FALLBACK\s*\/\s*BRIEF\sONLY/gi, expiredLine)
+				.replace(/fallback mode/gi, expiredLine)
+				.replace(/BRIEF ONLY/gi, expiredLine)
+				.replace(/Sizing suspended in fallback mode/gi, "Sizing blocked — " + expiredLine)
 		}
 		if (blocked) {
 			raw = removeSizingLanguageWhenBlocked(removeTradeLanguageWhenBlocked(raw, true), true)
@@ -1016,6 +1090,8 @@
 			.replace(/gates open/gi, "gates blocked")
 			.replace(/BOARD POSTURE TRADE/gi, "BOARD POSTURE MONITOR ONLY")
 			.replace(/Current:\s*TRADE/gi, "Current: MONITOR ONLY")
+			.replace(/ENGINE\s+undefined/gi, "Runtime: Unknown")
+			.replace(/Runtime:\s*undefined/gi, "Runtime: Unknown")
 		return sanitizeOperatorDetail(raw)
 	}
 
@@ -1031,22 +1107,14 @@
 	function cardDisplayReason(row, opts) {
 		var o = opts || {}
 		var truth = o.truth || {}
-		var blocked =
-			o.blocked === true ||
-			o.deployAuthority === false ||
-			(truth && truth.deploy_authority === false)
+		var blocked = o.blocked === true || o.deployAuthority === false || (truth && truth.deploy_authority === false)
 		var briefExpired =
 			truth.brief_expired === true ||
 			String(truth.brief_freshness || "").toLowerCase() === "expired" ||
 			(truth.brief_age_days != null && Number(truth.brief_age_days) > 2)
 		if (blocked) return sanitizeBlockedCandidateCopy(row, o)
 		var raw = String(
-			row.display_copy ||
-				row.summary ||
-				row.action_reason ||
-				row.why_now ||
-				row.action_rationale ||
-				"",
+			row.display_copy || row.summary || row.action_reason || row.why_now || row.action_rationale || "",
 		)
 		if (briefExpired || o.briefFallback) {
 			var expiredLine = briefExpiredOperatorLine(truth)
@@ -1060,8 +1128,11 @@
 		var t = truth || {}
 		var brief = String(t.brief_freshness || "").toLowerCase()
 		var age = t.brief_age_days
-		if (brief === "expired" || (age != null && Number(age) > 2)) {
-			return age != null ? "expired" : "expired"
+		if (brief === "expired" || t.brief_expired || (age != null && Number(age) > 2)) {
+			return "expired"
+		}
+		if (age != null && Number(age) > 2) {
+			return "expired"
 		}
 		return t.brief_freshness
 	}
@@ -1385,6 +1456,98 @@
 		return rs ? rs.charAt(0).toUpperCase() + rs.slice(1) : "Unknown"
 	}
 
+	function _shellScopeFreshnessLabel(scope, state, briefAgeDays) {
+		var s = String(state || "unknown").toLowerCase()
+		if (scope === "Brief" && (s === "expired" || (briefAgeDays != null && Number(briefAgeDays) > 2))) {
+			return briefAgeDays != null && !isNaN(Number(briefAgeDays)) && Number(briefAgeDays) > 0
+				? "Expired " + Number(briefAgeDays) + "d"
+				: "Expired"
+		}
+		if (scope === "Broker" && (s === "unavailable" || s === "offline")) return "Offline"
+		if (s === "fresh") return "Fresh"
+		if (s === "stale") return "Stale"
+		if (s === "expired") return "Expired"
+		if (s === "fallback") return "Fallback"
+		if (s === "unavailable") return "Unavailable"
+		return s.charAt(0).toUpperCase() + s.slice(1)
+	}
+
+	/** Canonical global shell truth — one view model for header/strips/blockers. */
+	function shellTruthViewModel(today7, opts) {
+		var t7 = today7 || {}
+		var o = opts || {}
+		var truth = t7.system_truth || {}
+		var ops = o.ops || {}
+		var briefAge =
+			truth.brief_age_days != null
+				? truth.brief_age_days
+				: t7.brief_status && t7.brief_status.latest
+					? t7.brief_status.latest.age_days
+					: null
+		var briefState = briefFreshnessStripState(truth)
+		var eng = resolveEngineState(truth, ops)
+		var posture = primaryOperatorState(truth)
+		var tier = deployAuthorityTier(truth)
+		var blocked = tier === "blocked" || truth.deploy_authority === false
+
+		var marketLabel = "Market: " + _shellScopeFreshnessLabel("Market", truth.market_data_freshness)
+		var boardLabel = "Board: " + _shellScopeFreshnessLabel("Board", truth.ranked_board_freshness)
+		var briefLabel = "Brief: " + _shellScopeFreshnessLabel("Brief", briefState, briefAge)
+		var brokerLabel = "Broker: " + _shellScopeFreshnessLabel("Broker", truth.broker_freshness)
+		var runtimeLabel = "Runtime: " + (eng === "conflict" ? "Conflict" : runtimeFreshnessLabel(truth))
+		var authorityLabel = "Authority: " + (truth.deploy_authority ? "Open" : "Blocked")
+
+		var primaryLine = posture.primary || "MONITOR ONLY"
+		var secondaryLine =
+			posture.secondary ||
+			regimeSecondaryLine(truth, t7.tradeability || (t7.regime && t7.regime.tradeability)) ||
+			""
+		if (blocked && primaryLine === "MONITOR ONLY" && !String(posture.now || "").includes("Deploy blocked")) {
+			primaryLine = "MONITOR ONLY · Deploy blocked"
+		} else if (posture.now) {
+			primaryLine = posture.now
+		}
+
+		var blockers = systemTruthMissionBlockers(truth)
+		if (!blockers.length && eng === "conflict") blockers = ["RUNTIME CONFLICT"]
+		var blockerLine = blockers.slice(0, 3).join(" · ")
+		var repairLine = executionRepairOneLiner(truth) || ""
+
+		var scopedStrip = [marketLabel, boardLabel, briefLabel, brokerLabel, runtimeLabel, authorityLabel].join(" · ")
+		if (truth.typed_freshness_display && eng !== "conflict") {
+			scopedStrip = String(truth.typed_freshness_display)
+		} else if (truth.truth_strip && eng !== "conflict") {
+			scopedStrip = String(truth.truth_strip)
+		}
+
+		return {
+			marketLabel: marketLabel,
+			boardLabel: boardLabel,
+			briefLabel: briefLabel,
+			brokerLabel: brokerLabel,
+			runtimeLabel: runtimeLabel,
+			authorityLabel: authorityLabel,
+			primaryLine: primaryLine,
+			secondaryLine: secondaryLine,
+			blockerLine: blockerLine,
+			repairLine: repairLine,
+			scopedStrip: scopedStrip,
+			engineState: eng,
+			engineHeaderLabel:
+				o.breaker || (ops && ops.breaker) ? "BREAKER" : runtimeEngineHeaderLabel({ truth: truth, ops: ops }),
+			deployBlocked: blocked,
+			briefExpiredLine: briefExpiredOperatorLine(truth),
+		}
+	}
+
+	function shellTruthScopedStrip(today7, opts) {
+		var vm = shellTruthViewModel(today7, opts)
+		return safeRenderText(vm.scopedStrip, {
+			truth: (today7 && today7.system_truth) || {},
+			blocked: vm.deployBlocked,
+		})
+	}
+
 	function sanitizeBlockedCandidateCopy(row, opts) {
 		var o = opts || {}
 		var r = row || {}
@@ -1436,7 +1599,6 @@
 		return "Top promotion trigger: " + tk + " — " + trig
 	}
 
-
 	function sizingPillClass(sizing) {
 		var a = String((sizing || {}).action || "").toLowerCase()
 		if (a === "full") return "text-green-400"
@@ -1478,47 +1640,7 @@
 	}
 
 	function scopedFreshnessStrip(truth) {
-		var t = truth || {}
-		var eng = resolveEngineState(t, {})
-		if (eng !== "conflict" && t.typed_freshness_display) {
-			return safeRenderText(String(t.typed_freshness_display), {
-				truth: t,
-				blocked: t.deploy_authority === false,
-			})
-		}
-		if (eng !== "conflict" && t.truth_strip) {
-			return safeRenderText(String(t.truth_strip), {
-				truth: t,
-				blocked: t.deploy_authority === false,
-			})
-		}
-		var age = t.brief_age_days
-		var briefState = briefFreshnessStripState(t)
-		function label(scope, state) {
-			var s = String(state || "unknown").toLowerCase()
-			if (scope === "Brief" && s === "expired" && age != null) return "Expired " + age + "d"
-			if (scope === "Brief" && (s === "expired" || (age != null && Number(age) > 2))) {
-				return age != null ? "Expired " + age + "d" : "Expired"
-			}
-			if (scope === "Broker" && (s === "unavailable" || s === "offline")) return "Offline"
-			if (s === "fresh") return "Fresh"
-			if (s === "stale") return "Stale"
-			if (s === "expired") return "Expired"
-			if (s === "fallback") return "Fallback"
-			if (s === "unavailable") return "Unavailable"
-			return s.charAt(0).toUpperCase() + s.slice(1)
-		}
-		var parts = []
-		parts.push("Market: " + label("Market", t.market_data_freshness))
-		parts.push("Board: " + label("Board", t.ranked_board_freshness))
-		parts.push("Brief: " + label("Brief", briefState))
-		parts.push("Broker: " + label("Broker", t.broker_freshness))
-		parts.push("Runtime: " + runtimeFreshnessLabel(t))
-		parts.push("Authority: " + (t.deploy_authority ? "Open" : "Blocked"))
-		return safeRenderText(parts.join(" · "), {
-			truth: t,
-			blocked: t.deploy_authority === false,
-		})
+		return shellTruthScopedStrip({ system_truth: truth || {} }, {})
 	}
 
 	function morningDecisionLine(today) {
@@ -1541,17 +1663,19 @@
 	function playbookQualificationFunnelLine(funnel, truth) {
 		var f = funnel || {}
 		var t = truth || {}
-		if (t.qualification_line) return String(t.qualification_line)
-		if (f.qualification_line) return String(f.qualification_line)
+		var blocked = t.deploy_authority === false || deployAuthorityTier(t) === "blocked"
+		if (!blocked && t.qualification_line) return String(t.qualification_line)
+		if (!blocked && f.qualification_line) return String(f.qualification_line)
 		return playbookQualificationLine(t, f)
 	}
 
 	function playbookQualificationLine(truth, funnel) {
 		var t = truth || {}
+		var blocked = t.deploy_authority === false || deployAuthorityTier(t) === "blocked"
 		var pov = t.playbook_operator_view || {}
-		if (pov.qualification_line) return String(pov.qualification_line)
+		if (!blocked && pov.qualification_line) return String(pov.qualification_line)
 		var q = pov.qualification || {}
-		var setup = Number(q.setup != null ? q.setup : (t.setup_qualified_count || t.watch_qualified_count)) || 0
+		var setup = Number(q.setup != null ? q.setup : t.setup_qualified_count || t.watch_qualified_count) || 0
 		var trade = Number(q.trade != null ? q.trade : t.trade_qualified_count) || 0
 		var execution = Number(q.execution != null ? q.execution : t.execution_qualified_count) || 0
 		var deploy = Number(q.deploy != null ? q.deploy : t.deploy_qualified_count) || 0
@@ -1561,7 +1685,10 @@
 			execution = 0
 			deploy = 0
 		}
-		if (String(t.board_gate || "").toLowerCase() === "wait" || String(t.board_gate || "").toLowerCase() === "closed") {
+		if (
+			String(t.board_gate || "").toLowerCase() === "wait" ||
+			String(t.board_gate || "").toLowerCase() === "closed"
+		) {
 			deploy = 0
 		}
 		var parts = []
@@ -1576,42 +1703,229 @@
 		return line
 	}
 
-	function playbookAuthorityView(payload) {
-		var p = payload || {}
-		var truth = p.system_truth || p.today7 && p.today7.system_truth || {}
-		var pov = p.playbook_operator_view || truth.playbook_operator_view || {}
+	var _PLAYBOOK_AVOID = { AVOID: 1, NO_TRADE: 1, PASS: 1, EXIT: 1, REDUCE: 1, BLOCKED: 1 }
+	var _PLAYBOOK_TRADE = {
+		TRADE: 1,
+		BUY: 1,
+		BUY_ON_DIP: 1,
+		STRONG_TRADE: 1,
+		TRADE_NOW: 1,
+	}
+	var _PLAYBOOK_PILOT = { PILOT: 1 }
+	var _PLAYBOOK_WATCH = { WATCH: 1, WAIT: 1, WATCH_TRIGGER: 1 }
+
+	function assignPlaybookPrimaryBucket(row, deployAuth, nmSet, regimeState) {
+		var act = String((row && (row.effective_action || row.action)) || "WATCH").toUpperCase()
+		var ticker = String((row && row.ticker) || "").toUpperCase()
+		if (_PLAYBOOK_AVOID[act]) return "Rejected"
+		if (deployAuth && row && row.execution_ready && _PLAYBOOK_TRADE[act]) return "Deploy"
+		if (_PLAYBOOK_PILOT[act]) return "Pilot"
+		if ((nmSet && nmSet[ticker]) || (row && (row.whats_missing || row.near_miss))) return "Near-miss"
+		if (_PLAYBOOK_WATCH[act] || _PLAYBOOK_TRADE[act]) return "Watch"
+		var score = Number((row && row.score) || 0) || 0
+		if (score >= 6) return "Near-miss"
+		return "Rejected"
+	}
+
+	function secondaryPlaybookTags(row, deployAuth) {
+		var tags = []
+		var explicit = (row && (row.playbook_tags || row.secondary_tags)) || []
+		if (explicit && explicit.length) {
+			explicit.forEach(function (t) {
+				if (t) tags.push(String(t))
+			})
+		}
+		if (row && (row.fastest_improving || row.improvement_rank === 1)) tags.push("fastest_improving")
+		if (row && (row.rr_improving || row.risk_reward_improving)) tags.push("rr_improving")
+		if (row && (row.sector_leader || String(row.leader || "").toUpperCase() === "SECTOR_LEADER")) {
+			tags.push("sector_leader")
+		}
+		var act = String((row && (row.effective_action || row.action)) || "").toUpperCase()
+		if (!deployAuth && _PLAYBOOK_TRADE[act] && Number((row && row.score) || 0) >= 7) {
+			tags.push("high_conviction_blocked")
+		}
+		var seen = {}
+		var out = []
+		tags.forEach(function (tag) {
+			var key = String(tag || "")
+				.trim()
+				.toLowerCase()
+			if (key && !seen[key]) {
+				seen[key] = true
+				out.push(key)
+			}
+		})
+		return out
+	}
+
+	function buildPlaybookBuckets(rows, nearMiss, deployAuth, regimeState) {
+		var nmSet = {}
+		;(nearMiss || []).forEach(function (r) {
+			var t = String((r && r.ticker) || "").toUpperCase()
+			if (t) nmSet[t] = true
+		})
+		var merged = (rows || []).slice()
+		var seen = {}
+		merged.forEach(function (r) {
+			seen[String((r && r.ticker) || "").toUpperCase()] = true
+		})
+		;(nearMiss || []).forEach(function (row) {
+			var t = String((row && row.ticker) || "").toUpperCase()
+			if (t && !seen[t]) {
+				merged.push(Object.assign({}, row, { near_miss: true }))
+				seen[t] = true
+			}
+		})
+		var prio = { Deploy: 0, Pilot: 1, Watch: 2, "Near-miss": 3, Rejected: 4 }
+		var winner = {}
+		merged.forEach(function (row) {
+			var bucket = assignPlaybookPrimaryBucket(row, deployAuth, nmSet, regimeState)
+			var ticker = String((row && row.ticker) || "").toUpperCase()
+			if (!ticker) return
+			var p = prio[bucket]
+			var prev = winner[ticker]
+			if (!prev || p < prev.prio) {
+				winner[ticker] = {
+					prio: p,
+					row: row,
+					bucket: bucket,
+				}
+			}
+		})
+		var buckets = {
+			deploy: [],
+			pilot: [],
+			watch: [],
+			near_miss: [],
+			rejected_count: 0,
+		}
+		Object.keys(winner).forEach(function (ticker) {
+			var w = winner[ticker]
+			var key = w.bucket === "Near-miss" ? "near_miss" : String(w.bucket || "Rejected").toLowerCase()
+			if (key === "rejected") {
+				buckets.rejected_count += 1
+				return
+			}
+			if (!buckets[key]) return
+			buckets[key].push(
+				Object.assign({}, w.row, {
+					primary_bucket: w.bucket,
+					playbook_tags: secondaryPlaybookTags(w.row, deployAuth),
+				}),
+			)
+		})
+		return buckets
+	}
+
+	function playbookBucketsPopulated(buckets) {
+		var b = buckets || {}
+		return (
+			(b.deploy && b.deploy.length) ||
+			(b.pilot && b.pilot.length) ||
+			(b.watch && b.watch.length) ||
+			(b.near_miss && b.near_miss.length) ||
+			Number(b.rejected_count || 0) > 0
+		)
+	}
+
+	/** Canonical Playbook authority view — system_truth + buckets + scoped qualification. */
+	function playbookAuthorityViewModel(today7, opts) {
+		var t7 = today7 || {}
+		var o = opts || {}
+		var ranked = o.rankedOpps || {}
+		var truth = t7.system_truth || {}
+		var pov = ranked.playbook_operator_view || t7.playbook_operator_view || truth.playbook_operator_view || {}
+		var funnel = ranked.filter_funnel || t7.filter_funnel || {}
+		var rows = ranked.rows || o.ranked_rows || []
+		var nearMiss = ranked.near_miss || t7.near_miss || []
+		var tier = deployAuthorityTier(truth)
 		var authority = String(pov.authority || "").toUpperCase()
 		if (!authority) {
-			authority = truth.deploy_authority ? "ALLOWED" : "BLOCKED"
-			if (String(truth.deploy_authority_tier || "").toLowerCase() === "paper_only") authority = "PAPER_ONLY"
+			if (tier === "allowed" && truth.deploy_authority) authority = "ALLOWED"
+			else if (tier === "paper_only") authority = "PAPER_ONLY"
+			else if (tier === "pilot_only") authority = "PILOT"
+			else authority = "BLOCKED"
 		}
-		var blocked = authority === "BLOCKED"
-		var posture = blocked
-			? "MONITOR ONLY"
-			: authority === "PAPER_ONLY"
-				? "PAPER DEPLOY"
-				: String(truth.regime_state || "WAIT").toUpperCase()
-		if (blocked) posture = "MONITOR ONLY"
-		var povPosture = String(pov.posture || "").toUpperCase()
-		if (blocked && (povPosture === "TRADE" || povPosture === "SELECTIVE" || povPosture === "STRONG_TRADE")) {
-			povPosture = "MONITOR ONLY"
+		var blocked =
+			authority === "BLOCKED" ||
+			(truth.deploy_authority === false && tier !== "paper_only" && tier !== "pilot_only")
+		var deployGateOpen = !blocked && truth.deploy_authority === true
+		var postureState = primaryOperatorState(truth)
+		var boardPosture = blocked ? "MONITOR ONLY" : String(postureState.primary || "MONITOR ONLY")
+		var secondaryPosture = blocked ? String(postureState.secondary || truth.regime_state || "").toUpperCase() : ""
+		if (blocked && (boardPosture === "TRADE" || boardPosture === "SELECTIVE" || boardPosture === "STRONG_TRADE")) {
+			boardPosture = "MONITOR ONLY"
 		}
-		if (!blocked && povPosture) posture = povPosture
+		var deployAuth = deployGateOpen
+		var buckets = pov.buckets || {}
+		if (!playbookBucketsPopulated(buckets) && (rows.length || nearMiss.length)) {
+			buckets = buildPlaybookBuckets(
+				rows,
+				nearMiss,
+				deployAuth,
+				String(truth.regime_state || "WAIT").toUpperCase(),
+			)
+		}
+		var watchCount = (buckets.watch || []).length
+		var nearCount = (buckets.near_miss || []).length
+		var noMonitors = watchCount === 0 && nearCount === 0
+		var qual = pov.qualification || {}
+		var setupQualified =
+			Number(qual.setup != null ? qual.setup : truth.setup_qualified_count || truth.watch_qualified_count) || 0
+		var deployQualified = deployGateOpen
+			? Number(qual.deploy != null ? qual.deploy : truth.deploy_qualified_count) || 0
+			: 0
+		var qualificationLine = playbookQualificationLine(truth, funnel)
+		var bestAction = pov.best_action || ""
+		if (!bestAction && blocked) {
+			bestAction = noMonitors ? "do nothing — preserve capital" : "monitor only — patience is the active decision"
+		}
+		var next = pov.next || []
+		if (!next.length && noMonitors) {
+			next = ["No valid monitor candidates — refresh board or wait for setup"]
+		}
+		var eng = resolveEngineState(truth, o.ops || {})
 		return {
 			authority: authority,
 			blocked: blocked,
-			posture: posture,
+			posture: boardPosture,
+			boardPosture: boardPosture,
+			secondaryPosture: secondaryPosture,
+			deployGateOpen: deployGateOpen,
+			deployQualified: deployQualified,
+			setupQualified: setupQualified,
 			truth_strip: safeRenderText(pov.truth_strip || truth.truth_strip || globalTruthStrip(truth), {
 				truth: truth,
 				blocked: blocked,
 			}),
-			qualification_line: playbookQualificationLine(truth, p.filter_funnel),
-			best_action: safeRenderText(pov.best_action || "", { truth: truth, blocked: blocked }),
-			next: pov.next || [],
-			no_valid_monitors: !!pov.no_valid_monitors,
-			simulation_drafts_collapsed: !!pov.simulation_drafts_collapsed,
-			buckets: pov.buckets || {},
+			qualification_line: qualificationLine,
+			best_action: safeRenderText(bestAction, { truth: truth, blocked: blocked }),
+			next: next,
+			no_valid_monitors: noMonitors,
+			simulation_drafts_collapsed: blocked || !!pov.simulation_drafts_collapsed,
+			buckets: buckets,
+			engineState: eng,
+			engineLabel: eng === "conflict" ? "Conflict" : formatEngineState(eng),
 		}
+	}
+
+	function playbookAuthorityView(payload) {
+		var p = payload || {}
+		var today7 = {
+			system_truth: p.system_truth || (p.today7 && p.today7.system_truth) || {},
+			playbook_operator_view: p.playbook_operator_view,
+			filter_funnel: p.filter_funnel,
+			near_miss: p.near_miss,
+		}
+		return playbookAuthorityViewModel(today7, {
+			rankedOpps: {
+				rows: p.ranked_rows || [],
+				near_miss: p.near_miss || [],
+				filter_funnel: p.filter_funnel,
+				playbook_operator_view: p.playbook_operator_view,
+			},
+			ops: p.ops || {},
+		})
 	}
 
 	function playbookNoEdgeLine(rows) {
@@ -1811,30 +2125,110 @@
 		return "多掃描器重合 · multi-scanner overlap"
 	}
 
-	function discoveryFunnelView(payload) {
+	function discoveryScannerRunLabel(diagnostics) {
+		var d = diagnostics || {}
+		var freshness = String(d.data_freshness || d.scanner_run_freshness || "unknown").toLowerCase()
+		var hub = String(d.hub_status || "").toLowerCase()
+		if (hub === "warming" || hub === "degraded") {
+			return "Scanner run: " + hub.charAt(0).toUpperCase() + hub.slice(1)
+		}
+		if (freshness === "live") return "Scanner run: Live"
+		if (freshness === "stale") return "Scanner run: Stale"
+		if (freshness === "warming") return "Scanner run: Warming"
+		return "Scanner run: " + (freshness.charAt(0).toUpperCase() + freshness.slice(1))
+	}
+
+	function discoveryStatusLine(truth, diagnostics) {
+		var t = truth || {}
+		var panel = (diagnostics && diagnostics.discovery_panel) || {}
+		if (panel.status_line) return String(panel.status_line)
+		var parts = [discoveryScannerRunLabel(diagnostics)]
+		var board = String(t.ranked_board_freshness || "").toLowerCase()
+		var boardGate = String(t.board_gate || "").toLowerCase()
+		if (boardGate === "wait") parts.push("Board WAIT")
+		else if (board === "stale" || board === "fallback" || board === "unavailable") {
+			parts.push("Board " + (board.charAt(0).toUpperCase() + board.slice(1)))
+		} else if (board === "fresh") parts.push("Board Fresh")
+		var age = t.brief_age_days
+		var brief = String(t.brief_freshness || "").toLowerCase()
+		if (brief === "expired" || t.brief_expired || (age != null && Number(age) > 2)) {
+			parts.push(age != null && Number(age) > 2 ? "Brief Expired " + Number(age) + "d" : "Brief Expired")
+		}
+		var broker = String(t.broker_freshness || "").toLowerCase()
+		if (broker) {
+			parts.push(
+				broker === "offline" || broker === "blocked"
+					? "Broker Offline"
+					: "Broker " + broker.charAt(0).toUpperCase() + broker.slice(1),
+			)
+		}
+		if (!t.deploy_authority) parts.push("Deploy authority: None")
+		return parts.join(" · ")
+	}
+
+	function discoveryRowFreshnessLabel(hit, truth) {
+		var h = hit || {}
+		if (h.scanner_run_freshness) return "Scanner run: " + String(h.scanner_run_freshness)
+		if (h.freshness_scope) return String(h.freshness_scope)
+		var t = truth || {}
+		return discoveryScannerRunLabel({ data_freshness: h.freshness || "live" })
+	}
+
+	function discoveryFunnelView(payload, truth) {
 		var p = payload || {}
 		var funnel = p.discovery_operator_view || {}
 		var verdict = funnel.verdict || p.discovery_verdict || {}
+		var panel = funnel.panel || verdict || {}
 		var counts = funnel.funnel_counts || {}
-		return {
-			mode: funnel.mode || verdict.mode || "research_only",
-			now: verdict.default_sentence || funnel.empty_message || "No validated research candidates",
-			why:
-				verdict.best_family != null
-					? "Best family: " + String(verdict.best_family).replace(/_/g, " ")
-					: "Scan evidence only — not deploy authority",
-			funnel: counts,
-			funnel_line:
+		var t = truth || p.system_truth || {}
+		var diagnostics = p.diagnostics || {}
+		var strict = Number(funnel.strict_passed_count || verdict.strict_passed_count || counts.regime || 0)
+		var now =
+			panel.now ||
+			verdict.now ||
+			(strict === 0
+				? "Research-only · deploy blocked"
+				: verdict.default_sentence || funnel.empty_message || "No validated research candidates")
+		var why =
+			panel.why ||
+			verdict.why ||
+			(verdict.best_family != null
+				? "Best family: " + String(verdict.best_family).replace(/_/g, " ")
+				: "Scan evidence only — not deploy authority")
+		var funnelLine =
+			panel.funnel_line ||
+			verdict.funnel_line ||
+			"Raw " +
 				(counts.raw || 0) +
-				" raw → " +
-				(counts.regime || 0) +
-				" regime · " +
+				" / hits " +
+				(counts.raw || 0) +
+				" / strict " +
+				strict +
+				" / shortlist " +
 				(counts.shortlist || 0) +
-				" shortlist",
-			best_action: verdict.next_action || "Send to Playbook Review",
+				" / deploy " +
+				(strict > 0 && panel.mode === "usable" ? counts.shortlist || 0 : 0)
+		var bestAction =
+			panel.best_action ||
+			verdict.best_action ||
+			verdict.next_action ||
+			(strict === 0 ? "No new research candidates. Refresh Dashboard + Playbook." : "Send to Playbook Review")
+		return {
+			mode: funnel.mode || verdict.mode || panel.mode || "research_only",
+			now: now,
+			why: why,
+			funnel: counts,
+			funnel_line: funnelLine,
+			status_line: panel.status_line || verdict.status_line || discoveryStatusLine(t, diagnostics),
+			subtitle:
+				panel.subtitle ||
+				verdict.subtitle ||
+				"Research funnel only. Names go to Playbook review only after strict filters pass.",
+			brief_expired_note: panel.brief_expired_note || verdict.brief_expired_note || "",
+			best_action: bestAction,
 			shortlist: (funnel.review_shortlist || []).slice(0, 10),
 			hide_raw_hits: !!(funnel.hide_raw_hits || verdict.hide_raw_hits),
-			strict_passed_count: Number(funnel.strict_passed_count || verdict.strict_passed_count || 0),
+			strict_passed_count: strict,
 			raw_hits: funnel.raw_hits || [],
 		}
 	}
@@ -1862,9 +2256,7 @@
 
 	function discoveryConfidenceDisplay(conf, calibration) {
 		var sample =
-			calibration && calibration.sample_size != null
-				? Number(calibration.sample_size)
-				: Number(calibration)
+			calibration && calibration.sample_size != null ? Number(calibration.sample_size) : Number(calibration)
 		var hasCal = Number.isFinite(sample) && sample >= 30
 		if (!hasCal) return "Confidence: heuristic · Calibration: insufficient"
 		var val = Number(conf)
@@ -2106,8 +2498,7 @@
 		var secondary = []
 		var infra = []
 		var blockedAuthority =
-			!!o.authorityChip &&
-			/^(MONITOR ONLY|INSTANT DEGRADED|AUTHORITY BLOCKED)$/i.test(String(o.authorityChip))
+			!!o.authorityChip && /^(MONITOR ONLY|INSTANT DEGRADED|AUTHORITY BLOCKED)$/i.test(String(o.authorityChip))
 		if (o.authorityChip) {
 			primary.push({ label: o.authorityChip, class: "authority", tier: "primary" })
 		}
@@ -2218,7 +2609,7 @@
 			return "Blocked: IBKR handoff · Safe: dossier core-only · monitor queue"
 		}
 		if (!o.engineRunning) {
-			return "Blocked: new cycle sizing · Safe: Guide · monitors until engine ON"
+			return "Blocked: new cycle sizing · Safe: Guide · monitors until runtime live"
 		}
 		return ""
 	}
@@ -2889,9 +3280,11 @@
 		return s
 	}
 
-
 	function playbookCardGateLine(status, detail) {
-		var su = String(status || "WATCH").toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim()
+		var su = String(status || "WATCH")
+			.toUpperCase()
+			.replace(/[^A-Z0-9]+/g, " ")
+			.trim()
 		var d = String(detail || "").trim()
 		if (!d) {
 			if (su === "BLOCKED") return bilingualLine("禁止部署 — 門檻未齊", "Deploy blocked — gates incomplete")
@@ -2908,7 +3301,7 @@
 		"Monitor only": "僅監察",
 		"Deploy blocked": "禁止部署",
 		"Research only": "僅研究",
-		"Loading": "載入中",
+		Loading: "載入中",
 		"Degraded board": "看板已降級",
 		"Fallback board": "備援看板",
 	}
@@ -2939,7 +3332,7 @@
 
 	var FETCH_STATE_ZH = {
 		"API still loading": "API 載入中",
-		"failed_fetch": "擷取失敗",
+		failed_fetch: "擷取失敗",
 		stale: "資料過期",
 		loading: "載入中",
 	}
@@ -2960,9 +3353,7 @@
 	}
 
 	function exportAllLabel(busy) {
-		return busy
-			? bilingualLine("匯出中…", "Exporting…")
-			: bilingualLine("一鍵匯出全介面", "Export All Pages")
+		return busy ? bilingualLine("匯出中…", "Exporting…") : bilingualLine("一鍵匯出全介面", "Export All Pages")
 	}
 
 	function operatorBlockChromeLabel(key) {
@@ -3594,7 +3985,9 @@
 		qualificationCountLine: qualificationCountLine,
 		playbookQualificationFunnelLine: playbookQualificationFunnelLine,
 		playbookQualificationLine: playbookQualificationLine,
+		playbookAuthorityViewModel: playbookAuthorityViewModel,
 		playbookAuthorityView: playbookAuthorityView,
+		buildPlaybookBuckets: buildPlaybookBuckets,
 		playbookNoEdgeLine: playbookNoEdgeLine,
 		todayMissionBlockersTitle: todayMissionBlockersTitle,
 		todayMissionEmptyBlockersCopy: todayMissionEmptyBlockersCopy,
@@ -3689,6 +4082,10 @@
 		discoveryVerdictSpeculativeLabel: discoveryVerdictSpeculativeLabel,
 		discoveryVerdictConfirmedLabel: discoveryVerdictConfirmedLabel,
 		discoveryFunnelView: discoveryFunnelView,
+		discoveryStatusLine: discoveryStatusLine,
+		discoveryScannerRunLabel: discoveryScannerRunLabel,
+		discoveryRowFreshnessLabel: discoveryRowFreshnessLabel,
+		runtimeEngineHeaderLabel: runtimeEngineHeaderLabel,
 		discoveryRowLabels: discoveryRowLabels,
 		discoveryScoreDisplay: discoveryScoreDisplay,
 		discoveryConfidenceDisplay: discoveryConfidenceDisplay,
@@ -3719,6 +4116,8 @@
 		evidenceConflictPanel: evidenceConflictPanel,
 		volatilityMonitorLabel: volatilityMonitorLabel,
 		runtimeFreshnessLabel: runtimeFreshnessLabel,
+		shellTruthViewModel: shellTruthViewModel,
+		shellTruthScopedStrip: shellTruthScopedStrip,
 		sanitizeBlockedCandidateCopy: sanitizeBlockedCandidateCopy,
 		removeTradeLanguageWhenBlocked: removeTradeLanguageWhenBlocked,
 		removeSizingLanguageWhenBlocked: removeSizingLanguageWhenBlocked,
@@ -3736,6 +4135,7 @@
 		portfolioRiskPageState: portfolioRiskPageState,
 		portfolioOperatorBlock: portfolioOperatorBlock,
 		portfolioCapitalActionsEnabled: portfolioCapitalActionsEnabled,
+		portfolioRiskViewModel: portfolioRiskViewModel,
 		strategyLabPageState: strategyLabPageState,
 		strategyLabActionEnabled: strategyLabActionEnabled,
 		strategyLabActionReason: strategyLabActionReason,

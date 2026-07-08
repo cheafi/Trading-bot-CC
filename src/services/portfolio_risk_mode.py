@@ -30,8 +30,12 @@ _MANUAL_SOURCES = frozenset({"manual", "local", ""})
 
 RISK_REVIEW_ONLY = "Risk review only — no deploy authority from portfolio capacity"
 BROKER_TRUTH_UNAVAILABLE = "Broker truth unavailable — reconcile before capital actions"
+BROKER_TRUTH_REVIEW_ONLY = (
+    "Broker truth unavailable · Risk review only until sync"
+)
 CAPITAL_QUEUE_DISABLED = "Capital action queue disabled — risk review only"
 DEMO_BOOK_LABEL = "Demo / sample book — illustrative only, not broker truth"
+HISTORICAL_JOURNAL_NOTE = "Learning only · not broker truth"
 
 
 def _book_source(source: str) -> str:
@@ -143,6 +147,83 @@ def resolve_portfolio_risk_mode(
             CAPITAL_QUEUE_DISABLED if not capital_action_queue_enabled else None
         ),
         "demo_watermark": mode == "demo_sample",
+    }
+
+
+def build_portfolio_risk_view_model(
+    portfolio_mode: Optional[Dict[str, Any]] = None,
+    *,
+    positions: Optional[List[Dict[str, Any]]] = None,
+    ibkr_linkage: Optional[Dict[str, Any]] = None,
+    critical_risk_event: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """UI contract for Portfolio tab — capacity, sleeves, demo tools, compression."""
+    pm = dict(portfolio_mode or {})
+    link = dict(ibkr_linkage or {})
+    pos = list(positions or [])
+    cre = dict(critical_risk_event or {})
+
+    mode = pm.get("mode") or "unavailable"
+    review_only = bool(pm.get("risk_review_only"))
+    capital_enabled = bool(pm.get("capital_action_queue_enabled"))
+    broker_truth = bool(pm.get("broker_truth") or link.get("broker_truth"))
+    broker_connected = bool(pm.get("broker_connected") or link.get("broker_connected"))
+    broker_offline = not broker_connected
+    local_only = link.get("sync_quality") == "local_only" or mode == "manual_book"
+    no_positions = len(pos) == 0
+
+    risk_capacity_authority = (
+        pm.get("risk_capacity_authority") or "none"
+        if review_only or not capital_enabled
+        else "full"
+    )
+    sleeve_authority = "research_only" if review_only else "live"
+    live_eligibility = 0 if review_only else 100
+
+    show_critical = bool(cre.get("active"))
+    broker_truth_banner_active = (
+        not broker_truth or broker_offline or local_only or mode in ("manual_book", "unavailable")
+    ) and not show_critical
+
+    book_scope = {
+        "broker_synced_live": "Book · Broker-synced",
+        "manual_book": "Book · Local-only",
+        "demo_sample": "Book · Demo sample",
+        "unavailable": "Book · Unavailable",
+    }.get(mode, "Book · Unavailable")
+    broker_scope = (
+        "Broker · Synced"
+        if broker_truth and broker_connected
+        else "Broker · Offline"
+        if broker_offline
+        else "Broker · Not confirmed"
+    )
+
+    return {
+        "mode": mode,
+        "risk_capacity_authority": risk_capacity_authority,
+        "capital_action_enabled": capital_enabled and not review_only,
+        "sleeve_authority": sleeve_authority,
+        "live_allocation_eligibility_pct": live_eligibility,
+        "show_sleeve_research_default": not review_only and capital_enabled,
+        "show_demo_tools_default": False,
+        "show_historical_journal_default": False,
+        "default_details_collapsed": review_only or not capital_enabled,
+        "show_critical_risk_event": show_critical,
+        "broker_truth_banner_active": broker_truth_banner_active,
+        "broker_truth_banner": (
+            BROKER_TRUTH_REVIEW_ONLY
+            if broker_truth_banner_active
+            else None
+        ),
+        "historical_journal_note": HISTORICAL_JOURNAL_NOTE,
+        "book_scope_label": book_scope,
+        "broker_scope_label": broker_scope,
+        "scoped_truth_strip": f"{book_scope} · {broker_scope}",
+        "collapse_allocation_bands": review_only or not broker_truth or no_positions,
+        "collapse_operating_discipline": review_only,
+        "manual_add_label": "Add manual placeholder",
+        "risk_review_only": review_only,
     }
 
 

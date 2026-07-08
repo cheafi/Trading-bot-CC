@@ -955,22 +955,21 @@ def build_critical_risk_event(
     allocation_rows: List[Dict[str, Any]],
     top_concentration_pct: float = 0.0,
 ) -> Dict[str, Any]:
-    """Dynamic CRITICAL RISK EVENT strip for portfolio tab."""
+    """Dynamic CRITICAL RISK EVENT strip — confirmed breaches with exposure only."""
     n = len(positions)
     breached = heat.get("stop_breached_tickers") or []
     local_only = ibkr_linkage.get("sync_quality") == "local_only"
-    broker_truth = bool(ibkr_linkage.get("broker_truth"))
     broker_offline = not bool(ibkr_linkage.get("broker_connected"))
     top_ticker = allocation_rows[0]["asset"] if allocation_rows else None
     if not top_ticker and positions:
         top_ticker = positions[0].get("ticker")
 
     issue_parts: List[str] = []
-    if n == 1 and top_ticker and local_only:
+    if n == 1 and top_ticker and local_only and top_concentration_pct >= 50:
         issue_parts.append(f"concentrated in a single local-only {top_ticker} position")
     elif top_concentration_pct >= 99 and n == 1 and top_ticker:
         issue_parts.append(f"concentrated in a single {top_ticker} position")
-    elif top_concentration_pct > _MAX_SINGLE_PCT * 100 and top_ticker:
+    elif top_concentration_pct > _MAX_SINGLE_PCT * 100 and top_ticker and n > 0:
         issue_parts.append(
             f"{top_ticker} at {top_concentration_pct:.0f}% exceeds the {_MAX_SINGLE_PCT * 100:.0f}% cap"
         )
@@ -981,19 +980,21 @@ def build_critical_risk_event(
             issue_parts.append(
                 "stops have already been breached on " + ", ".join(breached)
             )
-    if broker_offline:
-        issue_parts.append("broker is offline — execution truth not confirmed")
-    elif local_only or not broker_truth:
-        issue_parts.append("broker truth is not synced")
 
-    has_critical = bool(
+    has_exposure_breach = bool(
         breached
-        or local_only
-        or broker_offline
-        or (top_concentration_pct >= 99 and n == 1)
-        or any(r.get("priority") == "critical" for r in allocation_rows)
+        or (n > 0 and top_concentration_pct >= 99 and top_ticker)
+        or (
+            n > 0
+            and top_concentration_pct > _MAX_SINGLE_PCT * 100
+            and top_ticker
+        )
+        or (
+            n > 0
+            and any(r.get("priority") == "critical" for r in allocation_rows)
+        )
     )
-    if not has_critical:
+    if not has_exposure_breach:
         return {"active": False, "collapse_sleeves": False}
 
     if issue_parts:
@@ -1015,8 +1016,7 @@ def build_critical_risk_event(
     collapse_sleeves = (
         bool(breached)
         or top_concentration_pct >= 50
-        or local_only
-        or broker_offline
+        or (local_only and n > 0)
     )
     return {
         "active": True,
@@ -1417,6 +1417,7 @@ async def build_portfolio_decision(request) -> Dict[str, Any]:
 
     from src.services.portfolio_risk_mode import (
         build_portfolio_operator_block,
+        build_portfolio_risk_view_model,
         resolve_portfolio_risk_mode,
         sanitize_portfolio_action_copy,
     )
@@ -1547,6 +1548,12 @@ async def build_portfolio_decision(request) -> Dict[str, Any]:
         allocation_rows=allocation_rows,
         top_concentration_pct=top_pct,
     )
+    portfolio_risk_view_model = build_portfolio_risk_view_model(
+        portfolio_mode,
+        positions=positions,
+        ibkr_linkage=ibkr_linkage,
+        critical_risk_event=critical_risk_event,
+    )
     do_now = build_do_now(action_needed, heat, ibkr_linkage, allocation_rows)
     risk_state = build_risk_state(
         positions=positions,
@@ -1619,6 +1626,7 @@ async def build_portfolio_decision(request) -> Dict[str, Any]:
     return {
         "as_of": datetime.now(timezone.utc).isoformat() + "Z",
         "portfolio_mode": portfolio_mode,
+        "portfolio_risk_view_model": portfolio_risk_view_model,
         "portfolio_operator_block": portfolio_operator_block,
         "critical_risk_event": critical_risk_event,
         "do_now": do_now,
@@ -1626,7 +1634,10 @@ async def build_portfolio_decision(request) -> Dict[str, Any]:
         "allocation_monitor_note": _ALLOC_MONITOR_COPY if any(
             float(r.get("excess_pct") or 0) > 0 for r in allocation_rows
         ) else None,
-        "sleeve_research_collapsed": critical_risk_event.get("collapse_sleeves"),
+        "sleeve_research_collapsed": (
+            portfolio_risk_view_model.get("default_details_collapsed")
+            or critical_risk_event.get("collapse_sleeves")
+        ),
         "sleeve_collapse_note": critical_risk_event.get("sleeve_collapse_note"),
         "portfolio_action_now": portfolio_action_now,
         "operating_discipline": operating_discipline,

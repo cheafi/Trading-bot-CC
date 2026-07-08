@@ -7,6 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = ROOT / "src" / "api" / "templates" / "index.html"
+HELPERS = ROOT / "src" / "api" / "static" / "cc-helpers.js"
 
 
 def test_resolve_portfolio_mode_manual_book_broker_offline():
@@ -125,3 +126,74 @@ def test_build_portfolio_decision_includes_portfolio_mode(monkeypatch=None):
     blob = json.dumps({"portfolio_mode": mode})
     assert "capital_action_queue_enabled" in blob
     assert "false" in blob.lower()
+
+
+def test_portfolio_risk_view_model_broker_offline_defaults():
+    from src.services.portfolio_risk_mode import (
+        build_portfolio_risk_view_model,
+        resolve_portfolio_risk_mode,
+    )
+
+    pm = resolve_portfolio_risk_mode(
+        positions=[],
+        source="manual",
+        execution_readiness={"broker_connected": False, "portfolio_synced": False},
+        ibkr_linkage={"broker_truth": False, "broker_connected": False},
+        system_truth={"deploy_authority": False},
+    )
+    vm = build_portfolio_risk_view_model(
+        pm,
+        positions=[],
+        ibkr_linkage={"broker_truth": False, "broker_connected": False},
+        critical_risk_event={"active": False},
+    )
+    assert vm["risk_capacity_authority"] == "none"
+    assert vm["capital_action_enabled"] is False
+    assert vm["sleeve_authority"] == "research_only"
+    assert vm["live_allocation_eligibility_pct"] == 0
+    assert vm["show_sleeve_research_default"] is False
+    assert vm["show_demo_tools_default"] is False
+    assert vm["show_historical_journal_default"] is False
+    assert vm["default_details_collapsed"] is True
+    assert vm["broker_truth_banner_active"] is True
+    assert "Risk review only until sync" in (vm["broker_truth_banner"] or "")
+
+
+def test_critical_risk_event_not_active_broker_offline_only():
+    from src.services.portfolio_decision_console import (
+        build_critical_risk_event,
+        build_ibkr_linkage,
+    )
+
+    linkage = build_ibkr_linkage(
+        source="manual",
+        execution={"broker_connected": False, "mode": "manual"},
+        positions=[],
+    )
+    event = build_critical_risk_event(
+        positions=[],
+        heat={"stop_breached_tickers": []},
+        ibkr_linkage=linkage,
+        allocation_rows=[],
+        top_concentration_pct=0.0,
+    )
+    assert event["active"] is False
+
+
+def test_portfolio_template_risk_review_contract():
+    text = INDEX_HTML.read_text(encoding="utf-8")
+    portfolio = text.split("tab==='portfolio'", 1)[1].split("<!-- SURFACE 4:", 1)[0]
+    assert "pfRiskVM()" in portfolio
+    assert "portfolioRiskViewModel" in HELPERS.read_text(encoding="utf-8")
+    assert "Historical Journal" in portfolio
+    assert "Sleeve Research" in portfolio
+    assert "Broker truth unavailable" in portfolio
+    # Default collapsed posture — banned in default-visible bindings
+    assert 'x-text="pfRiskVM().manualAddLabel"' in portfolio
+    banned_default = [
+        "Active sleeves",
+        "Seed Demo Book",
+        "Closed-Trade Ledger",
+    ]
+    for phrase in banned_default:
+        assert phrase not in portfolio, f"banned default copy: {phrase}"

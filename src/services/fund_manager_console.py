@@ -207,9 +207,22 @@ def build_funds_first_screen(
         or "hold core · no urgent action"
     )
 
+    research_only = bool(funds_mode.get("research_only_mode"))
+    allowed = (
+        "sleeve research, regime context, hypothetical holdings review"
+        if research_only
+        else "model sleeve review when validation passes"
+    )
+    blocked = (
+        "live allocation, deploy handoff, allocatable capital bands"
+        if research_only
+        else "live allocation until broker + validation clear"
+    )
     return {
         "now": "Research only · no live allocation",
         "why": why,
+        "allowed": allowed,
+        "blocked": blocked,
         "blocker": why if blockers else "live validation pending — allocation authority none",
         "core_index_posture": core_action,
         "live_allocation_pct": funds_mode.get("live_allocation_eligible", 0),
