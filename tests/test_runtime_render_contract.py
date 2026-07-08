@@ -43,7 +43,7 @@ RUNTIME_REQUIRED = [
     "dashboardShellCompressed()",
     "discoveryScannerRunLabel",
     "discoveryFunnelPanel().status_line",
-    "runtimeEngineHeaderLabel",
+    "shellTruthVM().engineHeaderLabel",
 ]
 
 

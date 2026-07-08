@@ -226,7 +226,8 @@ def test_blocked_fixture_deploy_qualified_zero_in_viewmodel():
         cc_header={},
         ops_console={"engine_running": False},
     )
-    assert truth["qualification_levels"]["deploy_qualified"] == 2
+    # resolve_system_truth zeroes deploy counts when blocked — raw payload not echoed
+    assert truth.get("qualification_levels") is None
     assert truth["deploy_qualified_count"] == 0
     pov = build_playbook_operator_view(
         truth,
