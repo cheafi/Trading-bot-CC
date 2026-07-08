@@ -198,6 +198,61 @@ def test_format_qualification_never_gate_open():
     assert "gate open" not in line.lower()
 
 
+def test_blocked_fixture_deploy_qualified_zero_in_viewmodel():
+    """Raw payload may carry deploy_qualified=2 — rendered view must show 0."""
+    from src.services.playbook_truth import build_playbook_operator_view
+
+    truth = resolve_system_truth(
+        {
+            "market_regime": {"tradeability": "TRADE", "should_trade": True},
+            "decision_authority": {
+                "authority_level": "deploy",
+                "gates_active": True,
+                "allows_trade_labels": False,
+            },
+            "qualification_levels": {
+                "setup_qualified": 3,
+                "trade_qualified": 2,
+                "execution_qualified": 2,
+                "deploy_qualified": 2,
+            },
+            "execution_ready_count": 2,
+            "execution_readiness": {"broker_connected": False},
+            "top_5": [
+                {"ticker": "AAA", "action": "TRADE", "execution_ready": True},
+                {"ticker": "BBB", "action": "WATCH", "score": 7.0},
+            ],
+        },
+        cc_header={},
+        ops_console={"engine_running": False},
+    )
+    assert truth["qualification_levels"]["deploy_qualified"] == 2
+    assert truth["deploy_qualified_count"] == 0
+    pov = build_playbook_operator_view(
+        truth,
+        [{"ticker": "AAA", "action": "TRADE", "execution_ready": True}],
+        near_miss_rows=[{"ticker": "BBB", "action": "WATCH", "score": 7.0}],
+    )
+    assert pov["authority"] == "BLOCKED"
+    assert pov["qualification"]["deploy"] == 0
+    assert "2 deploy-qualified" not in pov["qualification_line"]
+    assert "0 deploy-qualified" in pov["qualification_line"]
+    assert pov["no_valid_monitors"] is False
+    assert len(pov["buckets"]["watch"]) + len(pov["buckets"]["near_miss"]) >= 1
+
+
+def test_no_valid_monitors_only_when_both_empty():
+    pov = build_playbook_operator_view(
+        resolve_system_truth(
+            {"market_regime": {"tradeability": "WAIT"}, "top_5": []},
+            cc_header={},
+            ops_console={},
+        ),
+        [{"ticker": "X", "action": "WATCH", "score": 6.5}],
+    )
+    assert pov["no_valid_monitors"] is False
+
+
 def test_index_playbook_no_brief_fallback_when_expired():
     """Template + JS must not surface 'brief fallback' on Playbook when brief expired."""
     from pathlib import Path

@@ -117,13 +117,13 @@
       <!-- ── Ops / IB / Monitor strip (institutional cockpit) ── -->
       <div x-show="tab==='today'" data-cc="deploy-status-strip" style="padding:6px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <span class="pill text-[8px]" :class="ibkrStateFrom(today7.execution_readiness).level==='ready'?'pg':ibkrStateFrom(today7.execution_readiness).level==='blocked'?'pr':'pa'" x-text="'IBKR '+ibkrUnifiedShort(today7.execution_readiness)"></span>
-        <span class="pill text-[8px]" :class="engineStatePillClass()" x-text="engineStateHeaderLabel()"></span>
+        <span class="pill text-[8px]" :class="engineStatePillClass()" x-text="shellTruthVM().engineHeaderLabel" title="Runtime: Conflict when engine truth and Ops disagree"></span>
         <template x-if="today7.evidence_badges">
           <span class="pill text-[7px] pw" :title="today7.evidence_badges.regime?.label" x-text="today7.evidence_badges.regime?.badge"></span>
           <span class="pill text-[7px] pw" :title="today7.evidence_badges.funds?.label" x-text="today7.evidence_badges.funds?.badge"></span>
           <span class="pill text-[7px] pw" :title="today7.evidence_badges.ai?.label" x-text="today7.evidence_badges.ai?.badge"></span>
         </template>
-        <span x-show="today7.system_truth" class="pill text-[8px] pa" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStripLocalized)?CCHelpers.scopedFreshnessStripLocalized(today7.system_truth):((typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStrip)?CCHelpers.scopedFreshnessStrip(today7.system_truth):'')"></span>
+        <span x-show="shellTruthVM().scopedStrip" class="pill text-[8px] pa" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStripLocalized&&today7.system_truth)?CCHelpers.scopedFreshnessStripLocalized(today7.system_truth):shellTruthVM().scopedStrip"></span>
         <span x-show="!today7.system_truth" class="pill text-[8px] pa" x-text="'Runtime: Unknown · 運行：未知 · Authority: Blocked · 權限：禁止'"></span>
         <span x-show="riskAlertsStripVisible()" class="pill text-[8px] pr" x-text="riskAlertsStripLine()" @click="showAlertsModal=true" style="cursor:pointer"></span>
         <span x-show="portfolioSummaryStripVisible()" class="pill text-[8px] pb" x-text="portfolioSummaryStripLine()"></span>
