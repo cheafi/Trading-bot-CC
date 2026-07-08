@@ -43,6 +43,8 @@ _flow_cache: Dict[str, Any] = {"ts": 0.0, "data": None}
 _RS_RANKING_CACHE_TTL = 5 * 60
 _rs_ranking_cache: Dict[str, Dict[str, Any]] = {}
 _rs_ranking_refreshing: set[str] = set()
+_scanner_hub_cache: Dict[str, Dict[str, Any]] = {}
+_scanner_hub_lock = asyncio.Lock()
 
 
 # ── Real data access ─────────────────────────────────────────────────
@@ -73,8 +75,49 @@ async def _real_regime() -> Dict[str, Any]:
         }
 
 
-async def _real_signals() -> List[Dict[str, Any]]:
-    """Get real signals — uses BriefDataService (no import from main.py)."""
+def _scanner_hub_cache_ttl() -> float:
+    from src.services.cc_perf_cache import env_float
+
+    return env_float("CC_SCAN_CACHE_TTL", 300.0)
+
+
+def _scanner_hub_cache_key(category: str | None) -> str:
+    return (category or "").strip().upper() or "_ALL"
+
+
+def _scan_rec_to_signal(rec: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize live scan_cache rec for scanner_matrix heuristics."""
+    ticker = rec.get("ticker") or rec.get("symbol")
+    if not ticker:
+        return {}
+    score_raw = float(rec.get("score") or 5.0)
+    return {
+        "ticker": ticker,
+        "score": min(10.0, max(3.0, score_raw / 10.0 if score_raw > 10 else score_raw)),
+        "rs_score": rec.get("rs", {}).get("rs_composite") if isinstance(rec.get("rs"), dict) else score_raw,
+        "vol_ratio": float(rec.get("vol_ratio") or 1.0),
+        "atr_pct": rec.get("atr_pct"),
+        "near_52w_high": bool(rec.get("near_52w_high")),
+        "conviction": str(rec.get("action_state", {}).get("action") or "WATCH").upper(),
+        "strategy": rec.get("strategy") or "scanner",
+        "pattern": rec.get("pattern") or rec.get("strategy") or "live",
+        "entry_price": rec.get("entry_price"),
+        "stop_price": rec.get("stop_price"),
+        "target_price": rec.get("target_price"),
+        "risk_reward": rec.get("risk_reward"),
+        "rsi": rec.get("rsi"),
+        "sector": rec.get("sector"),
+    }
+
+
+async def _real_signals(request: Request | None = None) -> List[Dict[str, Any]]:
+    """Live scan cache first, then morning brief rows."""
+    if request is not None:
+        scan_cache = getattr(request.app.state, "scan_cache", None) or {}
+        recs = list(scan_cache.get("recs") or [])
+        if recs:
+            signals = [_scan_rec_to_signal(r) for r in recs]
+            return [s for s in signals if s]
     try:
         from src.services.brief_data_service import load_brief  # noqa: PLC0415
 
@@ -109,14 +152,21 @@ def _brief_row_to_scanner_signal(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-async def _scanner_signal_universe() -> tuple[List[Dict[str, Any]], str]:
+async def _scanner_signal_universe(
+    request: Request | None = None,
+) -> tuple[List[Dict[str, Any]], str]:
     """
-    Signals for scanner hub — brief first, then RS default pool.
+    Signals for scanner hub — live scan cache, brief, then RS default pool.
 
     Returns (signals, universe_label).
     """
-    signals = await _real_signals()
+    signals = await _real_signals(request)
     if signals:
+        scan_cache = (
+            getattr(request.app.state, "scan_cache", None) or {} if request else {}
+        )
+        if scan_cache.get("recs"):
+            return signals, "live_scanner"
         label = "watchlist" if len(signals) <= 50 else "broad_universe"
         return signals, label
 
@@ -1217,6 +1267,7 @@ async def _scanner_rejection_preview(
 
 @router.get("/scanners")
 async def scanner_hub(
+    request: Request,
     category: str = Query(
         None,
         description="LEADERS/PULLBACKS/BREAKOUTS/FLOW/NO_TRADE",
@@ -1232,7 +1283,46 @@ async def scanner_hub(
         ScannerCategory,
         ScannerMatrix as _SM,
     )
+    from src.services.cc_perf_cache import json_cache_response
 
+    cache_key = _scanner_hub_cache_key(category)
+    ttl = _scanner_hub_cache_ttl()
+    now = time.time()
+    cached_entry = _scanner_hub_cache.get(cache_key)
+    if cached_entry and now - cached_entry["ts"] < ttl:
+        payload = dict(cached_entry["data"])
+        payload["cached"] = True
+        payload["age_seconds"] = int(now - cached_entry["ts"])
+        return json_cache_response(payload, request, max_age=int(ttl))
+
+    if _scanner_hub_lock.locked() and cached_entry:
+        payload = dict(cached_entry["data"])
+        payload["cached"] = True
+        payload["stale"] = True
+        payload["refreshing"] = True
+        return json_cache_response(payload, request, max_age=0)
+
+    async with _scanner_hub_lock:
+        now = time.time()
+        cached_entry = _scanner_hub_cache.get(cache_key)
+        if cached_entry and now - cached_entry["ts"] < ttl:
+            payload = dict(cached_entry["data"])
+            payload["cached"] = True
+            return json_cache_response(payload, request, max_age=int(ttl))
+
+        payload = await _build_scanner_hub_payload(request, category, _SM, DECISION_INTENT_ORDER, ScannerCategory)
+        _scanner_hub_cache[cache_key] = {"data": payload, "ts": time.time()}
+        return json_cache_response(payload, request, max_age=int(ttl))
+
+
+async def _build_scanner_hub_payload(
+    request: Request,
+    category: str | None,
+    _SM: Any,
+    DECISION_INTENT_ORDER: tuple,
+    ScannerCategory: Any,
+) -> Dict[str, Any]:
+    """Assemble scanner hub payload (cache miss path)."""
     research_note = (
         "Decision-intent scanners are research/supporting unless Playbook confirms. "
         "Page gate (WAIT/NO_TRADE) outranks scanner rank — zero hits can be correct."
@@ -1241,19 +1331,23 @@ async def scanner_hub(
     try:
         scanner = _get_scanner()
         regime = await _real_regime()
-        live_signals = await _real_signals()
-        signals, universe_label = await _scanner_signal_universe()
+        live_signals = await _real_signals(request)
+        signals, universe_label = await _scanner_signal_universe(request)
         diagnostic_info = _scanner_hub_diagnostics(
             regime, signals, universe_label=universe_label
         )
         score_display_mode = (
-            "fallback_rank"
-            if (
-                not live_signals
-                or universe_label == "synthetic_default"
-                or diagnostic_info.get("data_freshness") == "synthetic"
+            "live"
+            if universe_label == "live_scanner"
+            else (
+                "fallback_rank"
+                if (
+                    not live_signals
+                    or universe_label == "synthetic_default"
+                    or diagnostic_info.get("data_freshness") == "synthetic"
+                )
+                else "live"
             )
-            else "live"
         )
         intent_summary = scanner.build_decision_intent_summary(signals, regime)
     except Exception as exc:

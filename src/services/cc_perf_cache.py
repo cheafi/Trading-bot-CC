@@ -4,6 +4,9 @@ Environment variables (server):
   CC_TODAY_CACHE_TTL      — seconds to reuse in-memory /api/v7/today payload (default 90)
   CC_INSTANT_TODAY_TTL    — max-age for stale today while a fresh scan is in-flight (default 300)
   CC_HEADER_CACHE_TTL     — seconds for /api/ops/cc-header in-process cache (default 30)
+  CC_SCAN_CACHE_TTL       — seconds for universe scan + Discovery hub cache (default 300)
+  CC_SCAN_UNIVERSE_MODE   — expanded widens discovery funnel caps when board is fresh
+  CC_INSTANT_PROXY_TTL    — instant-server proxy TTL for cc-header/ranked (default 20)
 """
 
 from __future__ import annotations

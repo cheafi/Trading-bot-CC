@@ -32,9 +32,22 @@ def test_cc_header_uses_response_cache():
     assert "json_cache_response" in CC_HEADER_SRC
 
 
+def test_scanner_hub_uses_scan_cache_ttl():
+    playbook_src = (ROOT / "src/api/routers/playbook.py").read_text(encoding="utf-8")
+    assert "CC_SCAN_CACHE_TTL" in playbook_src
+    assert "_scanner_hub_cache" in playbook_src
+    assert "_scan_rec_to_signal" in playbook_src
+    assert "live_scanner" in playbook_src
+
+
 def test_today_cache_fingerprint_composes_scan_brief_ibkr_engine():
-  """Contract: fingerprint includes scanner, brief, broker, engine segments."""
-  assert "scan_cache.get('ts'" in PERF_CACHE_SRC
-  assert "_latest_brief" in PERF_CACHE_SRC
-  assert "get_ibkr_service" in PERF_CACHE_SRC
-  assert "get_engine" in PERF_CACHE_SRC
+    """Contract: fingerprint includes scanner, brief, broker, engine segments."""
+    assert "scan_cache.get('ts'" in PERF_CACHE_SRC
+    assert "_latest_brief" in PERF_CACHE_SRC
+    assert "get_ibkr_service" in PERF_CACHE_SRC
+    assert "get_engine" in PERF_CACHE_SRC
+
+
+def test_cc_perf_cache_documents_scan_env():
+    assert "CC_SCAN_CACHE_TTL" in PERF_CACHE_SRC
+    assert "CC_SCAN_UNIVERSE_MODE" in PERF_CACHE_SRC

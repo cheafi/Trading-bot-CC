@@ -278,20 +278,21 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
                 scanner_degraded = False
                 scanner_reason = ""
             else:
+                # Kick engine cycle in background — never block /api/v7/today on a full scan.
                 try:
                     from src.api.app_state import get_engine
 
                     engine = get_engine(request.app)
                     if engine and not bool(getattr(engine, "_running", False)):
-                        await asyncio.wait_for(engine.run_one_cycle(), timeout=30.0)
-                        scan_cache = getattr(request.app.state, "scan_cache", None) or {}
-                        scanned = list(scan_cache.get("recs", []))[:50]
-                        scores = dict(scan_cache.get("scores", {}) or {})
-                        if scanned:
-                            scanner_degraded = False
-                            scanner_reason = ""
+                        asyncio.create_task(engine.run_one_cycle())
                 except Exception as exc:
-                    logger.debug("live-only engine cycle failed: %s", exc)
+                    logger.debug("live-only engine cycle kick failed: %s", exc)
+                scan_fn = getattr(request.app.state, "scan_signals", None)
+                if scan_fn:
+                    try:
+                        asyncio.create_task(scan_fn(50))
+                    except Exception as exc:
+                        logger.debug("background scan_signals kick failed: %s", exc)
         except Exception as exc:
             logger.debug("live-only scan_signals failed: %s", exc)
 
