@@ -1526,14 +1526,18 @@
               <span class="mono text-[8px]" style="color:var(--t2)" x-text="today7.decision_quality.banner"></span>
             </summary>
             <div class="text-[8px] mt-2" style="color:var(--t2);line-height:1.5">
-              <span x-show="today7.decision_quality.metrics.sample_size&lt;5">Learning mode — not enough live forward outcomes for calibration.</span>
-              <span x-show="today7.decision_quality.metrics.sample_size>=5" x-text="'Forward outcome study · n='+today7.decision_quality.metrics.sample_size"></span>
+              <span x-show="today7.decision_quality.metrics.learning_mode">Learning mode — not enough live forward outcomes for calibration.</span>
+              <span x-show="!today7.decision_quality.metrics.learning_mode" x-text="'Forward outcome study · n='+today7.decision_quality.metrics.sample_size"></span>
             </div>
             <div class="flex flex-wrap gap-1 mt-1.5 text-[7px]">
+              <span class="pill pw" x-show="today7.decision_quality.metrics.journal_events_n!=null" x-text="'journal '+today7.decision_quality.metrics.journal_events_n"></span>
+              <span class="pill pw" x-show="today7.decision_quality.metrics.forward_outcomes_n!=null" x-text="'outcomes '+today7.decision_quality.metrics.forward_outcomes_n"></span>
+              <span class="pill pa" x-show="today7.decision_quality.metrics.no_edge_samples_n!=null" x-text="'no-edge n='+today7.decision_quality.metrics.no_edge_samples_n"></span>
               <span class="pill pw" x-show="today7.decision_quality.metrics.avoided_loss_count!=null" x-text="'avoided loss '+today7.decision_quality.metrics.avoided_loss_count"></span>
               <span class="pill pa" x-show="today7.decision_quality.metrics.no_edge_days_protected" x-text="'cash protected'"></span>
-              <span class="pill pb" x-show="today7.decision_quality.metrics.best_validated_family" x-text="'best '+today7.decision_quality.metrics.best_validated_family"></span>
+              <span class="pill pb" x-show="today7.decision_quality.metrics.best_validated_family" x-text="'useful '+today7.decision_quality.metrics.best_validated_family"></span>
               <span class="pill pr" x-show="today7.decision_quality.metrics.noisy_family" x-text="'noisy '+today7.decision_quality.metrics.noisy_family"></span>
+              <span class="pill pa" x-show="today7.decision_quality.governor_adjustment" x-text="'gov '+today7.decision_quality.governor_adjustment"></span>
               <span class="pill pw" x-text="'authority effect: none'"></span>
             </div>
             <template x-if="(today7.decision_quality.top_ranked_by_quality||[]).length">

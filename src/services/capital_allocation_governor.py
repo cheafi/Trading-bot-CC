@@ -40,6 +40,8 @@ def evaluate_capital_allocation(
     correlation_cluster: float = 0.0,
     false_deploy_rate: float = 0.0,
     recent_error_rate: float = 0.0,
+    no_edge_quality: Optional[str] = None,
+    signal_confidence: Optional[str] = None,
     vix: Optional[float] = None,
     sample_size: int = 0,
 ) -> Dict[str, Any]:
@@ -57,6 +59,9 @@ def evaluate_capital_allocation(
     deploy_n = int(t.get("deploy_qualified_count") or 0)
     dd = _float(drawdown_pct, _float(t.get("equity_dd_pct")))
     reasons: List[str] = []
+    learning_reasons: List[str] = []
+    risk_mode_adjustment: Optional[str] = None
+    requires_human_review = False
     mode = "monitor_only"
 
     if manual_book:
@@ -113,8 +118,35 @@ def evaluate_capital_allocation(
     if sample_size < 8:
         max_new_risk = min(max_new_risk, 0.2)
         reasons.append("LOW_SAMPLE_SIZE")
+        learning_reasons.append("LOW_SAMPLE_SIZE")
     if false_deploy_rate > 0.15:
         max_new_risk = min(max_new_risk, 0.25)
+        learning_reasons.append("FALSE_DEPLOY_ELEVATED")
+        risk_mode_adjustment = "tighten"
+    if false_deploy_rate > 0.25:
+        risk_mode_adjustment = "tighten"
+        learning_reasons.append("HIGH_FALSE_DEPLOY_RATE")
+    if recent_error_rate > 0.2:
+        max_new_risk = min(max_new_risk, 0.2)
+        learning_reasons.append("RECENT_ERROR_ELEVATED")
+        risk_mode_adjustment = "tighten"
+    neq = str(no_edge_quality or "").lower()
+    if neq == "too_conservative":
+        requires_human_review = True
+        learning_reasons.append("NO_EDGE_TOO_CONSERVATIVE")
+    elif neq == "noisy":
+        learning_reasons.append("NO_EDGE_NOISY")
+    elif neq == "good_avoidance":
+        learning_reasons.append("NO_EDGE_GOOD_AVOIDANCE")
+    sig_conf = str(signal_confidence or "").lower()
+    if sig_conf == "insufficient":
+        max_new_risk = min(max_new_risk, 0.2)
+        learning_reasons.append("SIGNAL_CONFIDENCE_LOW")
+    elif sig_conf == "harmful":
+        max_new_risk = min(max_new_risk, 0.15)
+        risk_mode_adjustment = "tighten"
+        learning_reasons.append("SIGNAL_FAMILY_HARMFUL")
+        requires_human_review = True
     if correlation_cluster > 0.5:
         max_new_risk = min(max_new_risk, 0.3)
     if vix is not None and float(vix) > 28:
@@ -142,6 +174,10 @@ def evaluate_capital_allocation(
     elif mode == "no_capital":
         repair = "Connect broker or sync live book before sizing"
 
+    learning_adjustment_reason = (
+        "; ".join(learning_reasons[:4]) if learning_reasons else None
+    )
+
     return {
         "capital_mode": mode,
         "max_new_risk_pct": round(max_new_risk, 2),
@@ -158,4 +194,14 @@ def evaluate_capital_allocation(
         "may_authorize_deploy": False,
         "authority_note": "Capital governor is advisory — page authority gates deploy",
         "cash_valid": mode in ("monitor_only", "repair_only", "no_capital") or deploy_n < 1,
+        "learning_adjustment_reason": learning_adjustment_reason,
+        "risk_mode_adjustment": risk_mode_adjustment,
+        "requires_human_review": requires_human_review,
+        "learning_feedback": {
+            "false_deploy_rate": round(false_deploy_rate, 3) if false_deploy_rate else None,
+            "no_edge_quality": no_edge_quality,
+            "signal_confidence": signal_confidence,
+            "sample_size": sample_size,
+            "never_auto_loosen": True,
+        },
     }

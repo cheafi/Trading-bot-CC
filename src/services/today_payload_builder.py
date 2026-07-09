@@ -1410,11 +1410,10 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
     )
     from src.services.capital_allocation_governor import evaluate_capital_allocation
     from src.services.decision_journal import build_journal_batch
-    from src.services.forward_outcome_tracker import (
-        build_forward_outcome_study,
-        build_no_edge_outcome_tracking,
-        summarize_forward_outcomes,
-    )
+    from src.services.decision_journal_store import get_decision_journal_store
+    from src.services.forward_outcome_backfill import get_forward_outcome_store
+    from src.services.no_edge_tracker import build_no_edge_outcome_tracking, get_no_edge_tracker
+    from src.services.signal_attribution_store import get_signal_attribution_store
     from src.services.opportunity_quality_engine import (
         attach_quality_to_rows,
         build_decision_quality_dashboard,
@@ -1429,25 +1428,46 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
     )
 
     session_id = now.strftime("%Y%m%d")
+    journal_store = get_decision_journal_store()
     journal_batch = build_journal_batch(
         truth=system_truth,
         candidates=valid_top5,
         near_miss=near_miss if not brief_expired or live_board_available else [],
         surface="dashboard",
         session_id=session_id,
+        persist=True,
+        store=journal_store,
     )
-    forward_studies = [
-        build_forward_outcome_study(evt)
-        for evt in (journal_batch.get("events") or [])[:10]
-    ]
-    forward_summary = summarize_forward_outcomes(forward_studies)
+    outcome_store = get_forward_outcome_store()
+    forward_summary = outcome_store.summarize()
+    attribution_store = get_signal_attribution_store()
+    store_calibrations = attribution_store.get_all_calibrations()
     family_attrs = [
-        attribute_families_for_row(row, truth=system_truth)
+        attribute_families_for_row(
+            row,
+            truth=system_truth,
+            store_calibration=store_calibrations,
+        )
         for row in (valid_top5 or [])[:CC_TOP_MONITOR_COUNT]
     ]
-    family_health = summarize_family_health(family_attrs)
+    family_health = summarize_family_health(
+        family_attrs,
+        store_summary=attribution_store.summarize(),
+    )
     rule_summary = summarize_rules(build_rules_from_agent_state(agent_page_state))
-    no_edge_tracking = build_no_edge_outcome_tracking(truth=system_truth)
+    no_edge_tracker = get_no_edge_tracker()
+    no_edge_tracking = build_no_edge_outcome_tracking(
+        truth=system_truth,
+        tracker=no_edge_tracker,
+        session_id=session_id,
+        persist=int(system_truth.get("deploy_qualified_count") or 0) < 1,
+    )
+    false_deploy = float(forward_summary.get("false_deploy_rate") or 0)
+    signal_confidence = "insufficient"
+    if family_health.get("harmful_families"):
+        signal_confidence = "harmful"
+    elif not family_health.get("learning_mode"):
+        signal_confidence = "moderate"
     capital_allocation = evaluate_capital_allocation(
         truth=system_truth,
         portfolio_context={
@@ -1457,6 +1477,9 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         drawdown_pct=side_ctx.equity_dd_pct,
         vix=vix_val,
         sample_size=int(forward_summary.get("sample_size") or 0),
+        false_deploy_rate=false_deploy,
+        no_edge_quality=no_edge_tracking.get("quality_label"),
+        signal_confidence=signal_confidence,
         sector_concentration=float(
             (sleeve_summary or {}).get("sector_concentration") or 0
         ),
@@ -1471,6 +1494,8 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         capital=capital_allocation,
         rule_summary=rule_summary,
         no_edge_tracking=no_edge_tracking,
+        journal_store_summary=journal_store.summary(),
+        outcome_store_summary=forward_summary,
     )
     valid_top5 = attach_quality_to_rows(valid_top5, truth=system_truth, surface="playbook")
     from src.services.position_sizing import attach_sizing_to_rows

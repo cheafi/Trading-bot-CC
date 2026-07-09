@@ -305,8 +305,10 @@ def build_journal_batch(
     surface: str = "dashboard",
     session_id: str = "",
     limit: int = 20,
+    persist: bool = False,
+    store: Optional[Any] = None,
 ) -> Dict[str, Any]:
-    """Build journal events for today payload — does not persist to disk."""
+    """Build journal events for today payload; optionally persist to store."""
     journal = DecisionJournalService()
     t = dict(truth or {})
     deploy_n = int(t.get("deploy_qualified_count") or 0)
@@ -324,9 +326,20 @@ def build_journal_batch(
             )
         )
 
-    return {
+    result = {
         "events": journal.recent(limit=limit),
         "summary": journal.summary(),
         "evidence_only": True,
         "authority_effect": "none",
     }
+    if persist:
+        from src.services.decision_journal_store import (
+            get_decision_journal_store,
+            persist_journal_batch,
+        )
+
+        st = store or get_decision_journal_store()
+        persist_result = persist_journal_batch(result, session_id=session_id, store=st)
+        result["persisted"] = persist_result
+        result["store_summary"] = st.summary()
+    return result

@@ -198,16 +198,31 @@ def attribute_families_for_row(
     *,
     truth: Optional[Dict[str, Any]] = None,
     calibration: Optional[Dict[str, Any]] = None,
+    store_calibration: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     cal = dict(calibration or {})
+    store_cal = dict(store_calibration or {})
     ev = row.get("setup_evidence") or row.get("evidence") or {}
-    sample = int(ev.get("sample_size") or cal.get("n_closed") or 0)
-    fwd_mean = _float_or_none(ev.get("avg_r") or cal.get("forward_r_mean"))
-    fp = _float_or_none(cal.get("false_positive_rate"))
-    live_cal = bool(cal.get("live_calibration") or ev.get("calibrated"))
     active = extract_active_families(row, truth=truth)
-    return [
-        attribute_family(
+    results: List[Dict[str, Any]] = []
+    for fam in active:
+        fam_store = store_cal.get(fam) or {}
+        sample = int(
+            fam_store.get("sample_size")
+            or ev.get("sample_size")
+            or cal.get("n_closed")
+            or 0
+        )
+        fwd_mean = _float_or_none(
+            fam_store.get("forward_r_mean") or ev.get("avg_r") or cal.get("forward_r_mean")
+        )
+        fp = _float_or_none(fam_store.get("false_positive_rate") or cal.get("false_positive_rate"))
+        live_cal = bool(
+            fam_store.get("live_calibration")
+            or cal.get("live_calibration")
+            or ev.get("calibrated")
+        )
+        attr = attribute_family(
             fam,
             row=row,
             truth=truth,
@@ -217,12 +232,25 @@ def attribute_families_for_row(
             false_positive_rate=fp,
             live_calibration=live_cal and fam == "options_flow",
         )
-        for fam in active
-    ]
+        if fam_store.get("status"):
+            store_status = str(fam_store["status"])
+            status_map = {
+                "useful": "validated",
+                "harmful": "noisy",
+                "learning": "unvalidated",
+            }
+            attr["status"] = status_map.get(store_status, store_status)
+            attr["store_status"] = store_status
+            attr["evidence_source"] = fam_store.get("evidence_source", "live_forward")
+            attr["learning_mode"] = bool(fam_store.get("learning_mode", sample < MIN_VALIDATED_SAMPLE))
+        results.append(attr)
+    return results
 
 
 def summarize_family_health(
     attributions: List[List[Dict[str, Any]]],
+    *,
+    store_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Dashboard-level family health — sample required before validated label."""
     counts: Dict[str, Dict[str, int]] = {}
@@ -232,23 +260,32 @@ def summarize_family_health(
             st = str(a.get("status") or "unvalidated")
             counts.setdefault(fam, {})
             counts[fam][st] = counts[fam].get(st, 0) + 1
-    best_validated = ""
-    noisiest = ""
-    for fam, sts in counts.items():
-        if sts.get("validated", 0) > 0 and not best_validated:
-            best_validated = fam
-        if sts.get("noisy", 0) > 0:
-            noisiest = fam
-    total_n = sum(
+    ss = dict(store_summary or {})
+    best_validated = ss.get("best_validated_family") or ""
+    noisiest = ss.get("noisy_family") or ""
+    if not best_validated:
+        for fam, sts in counts.items():
+            if sts.get("validated", 0) > 0 and not best_validated:
+                best_validated = fam
+    if not noisiest:
+        for fam, sts in counts.items():
+            if sts.get("noisy", 0) > 0:
+                noisiest = fam
+    total_n = int(ss.get("aggregate_sample_size") or 0) or sum(
         int(a.get("sample_size") or 0)
         for group in (attributions or [])
         for a in (group or [])
     )
     return {
-        "families_tracked": len(counts),
+        "families_tracked": ss.get("families_tracked") or len(counts),
         "best_validated_family": best_validated or None,
         "noisy_family": noisiest or None,
+        "useful_families": ss.get("useful_families") or [],
+        "noisy_families": ss.get("noisy_families") or [],
+        "harmful_families": ss.get("harmful_families") or [],
         "aggregate_sample_size": total_n,
         "learning_mode": total_n < MIN_VALIDATED_SAMPLE,
+        "evidence_source": ss.get("evidence_source", "live_forward"),
         "may_authorize_deploy": False,
+        "authority_effect": "none",
     }

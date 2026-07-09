@@ -335,14 +335,22 @@ def build_decision_quality_dashboard(
     capital: Optional[Dict[str, Any]] = None,
     rule_summary: Optional[Dict[str, Any]] = None,
     no_edge_tracking: Optional[Dict[str, Any]] = None,
+    journal_store_summary: Optional[Dict[str, Any]] = None,
+    outcome_store_summary: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Compact Dashboard decision_quality block."""
     t = dict(truth or {})
     fwd = dict(forward_summary or {})
     fh = dict(family_health or {})
     cap = dict(capital or {})
+    ne = dict(no_edge_tracking or {})
+    js = dict(journal_store_summary or {})
+    os_ = dict(outcome_store_summary or fwd)
     n = int(fwd.get("sample_size") or 0)
     agg_n = int(fh.get("aggregate_sample_size") or 0)
+    journal_n = int(js.get("total") or (journal or {}).get("summary", {}).get("total") or 0)
+    outcome_n = int(os_.get("total_outcomes") or os_.get("distinct_events") or 0)
+    no_edge_n = int(ne.get("no_edge_samples") or 0)
     learning = n < 5 and agg_n < MIN_VALIDATED_SAMPLE
     state = "learning"
     if n >= MIN_VALIDATED_SAMPLE:
@@ -354,6 +362,8 @@ def build_decision_quality_dashboard(
         for e in (journal or {}).get("events") or []
         if e.get("event_type") == "DEPLOY_CANDIDATE"
     ][-20:]
+    useful_families = fh.get("useful_families") or []
+    noisy_families = fh.get("noisy_families") or []
     return {
         "title": "Decision Quality",
         "state": state,
@@ -371,18 +381,29 @@ def build_decision_quality_dashboard(
         ),
         "metrics": {
             "deploy_candidates_tracked": len(deploy_events),
-            "forward_r_5d": fwd.get("avg_forward_r_5d"),
+            "journal_events_n": journal_n,
+            "forward_outcomes_n": outcome_n,
+            "no_edge_samples_n": no_edge_n,
+            "forward_r_5d": fwd.get("avg_forward_r_5d") if n >= 5 else None,
             "watch_to_deploy_conversion": fwd.get("watch_to_deploy_conversion"),
-            "false_deploy_rate": fwd.get("false_deploy_rate"),
+            "false_deploy_rate": fwd.get("false_deploy_rate") if n >= 5 else None,
             "avoided_loss_count": fwd.get("avoided_loss_count"),
             "no_edge_days_protected": 1 if int(t.get("deploy_qualified_count") or 0) < 1 else 0,
             "best_validated_family": fh.get("best_validated_family"),
             "noisy_family": fh.get("noisy_family"),
+            "useful_families": useful_families[:3],
+            "noisy_families": noisy_families[:3],
             "sample_size": max(n, agg_n),
+            "learning_mode": learning,
+            "outcome_source": fwd.get("outcome_source", "forward_outcome_backfill"),
+            "authority_effect": "none",
         },
         "capital_mode": cap.get("capital_mode"),
         "capital_deploy_allowed": bool(cap.get("deploy_allowed")),
-        "no_edge_quality": (no_edge_tracking or {}).get("quality_label"),
+        "governor_adjustment": cap.get("learning_adjustment_reason"),
+        "risk_mode_adjustment": cap.get("risk_mode_adjustment"),
+        "requires_human_review": bool(cap.get("requires_human_review")),
+        "no_edge_quality": ne.get("quality_label"),
         "rule_learning": rule_summary or {},
         "top_ranked_by_quality": rank_by_decision_quality(
             (candidates or []) + list(near_miss or []),
