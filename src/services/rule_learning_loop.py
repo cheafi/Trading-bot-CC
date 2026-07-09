@@ -22,6 +22,7 @@ AGENT_SUGGESTIONS: tuple[str, ...] = (
     "tighten",
     "mute",
     "retire",
+    "collect_more_samples",
     "convert_to_playbook_review",
 )
 
@@ -51,6 +52,7 @@ class RuleRecord:
         d["may_authorize_deploy"] = False
         d["may_size"] = False
         d["may_handoff"] = False
+        d["authority_effect"] = "none"
         return d
 
 
@@ -129,6 +131,66 @@ def summarize_rules(
         "agent_may_handoff": False,
         "authority_effect": "none",
     }
+
+
+def apply_alpha_review_to_rules(
+    *,
+    rule_summary: Optional[Dict[str, Any]] = None,
+    review_status: str = "learning",
+    sample_size: int = 0,
+    min_sample: int = 12,
+    overfit_pass: bool = False,
+    cost_adj_positive: bool = False,
+) -> List[Dict[str, Any]]:
+    """Map Alpha Review evidence into rule suggestions — advisory only."""
+    summary = dict(rule_summary or {})
+    records = [evaluate_rule(rule_from_dict(r)) for r in (summary.get("rules") or [])]
+    actions: List[Dict[str, Any]] = []
+
+    thin_evidence = sample_size < min_sample or not overfit_pass
+    if thin_evidence:
+        for rule in records:
+            if rule.triggers < _MIN_TRIGGERS:
+                rule.agent_suggestion = "collect_more_samples"
+                rule.notes = "Alpha Review: thin evidence — collect more samples"
+            actions.append(rule.to_dict())
+        if not records:
+            actions.append(
+                {
+                    "rule_id": "alpha-review-evidence",
+                    "name": "Alpha review evidence gate",
+                    "agent_suggestion": "collect_more_samples",
+                    "notes": "Insufficient sample or overfit pass for rule promotion",
+                    "may_authorize_deploy": False,
+                    "authority_effect": "none",
+                }
+            )
+        elif actions and actions[0].get("authority_effect") is None:
+            actions[0]["authority_effect"] = "none"
+            actions[0]["may_authorize_deploy"] = False
+        return actions[:12]
+
+    for rule in records:
+        if review_status in ("deteriorating", "needs_human_review", "mixed"):
+            if rule.agent_suggestion == "keep":
+                rule.agent_suggestion = "tighten"
+                rule.notes = "Alpha Review deteriorating/mixed — suggest tighten"
+        elif review_status == "improving" and rule.status == "useful":
+            rule.agent_suggestion = "convert_to_playbook_review"
+            rule.notes = "Alpha Review improving — playbook review only"
+        elif not cost_adj_positive and rule.agent_suggestion == "convert_to_playbook_review":
+            rule.agent_suggestion = "collect_more_samples"
+            rule.notes = "Cost-adj expectancy not positive — hold promotion"
+        actions.append(rule.to_dict())
+
+    for noisy in (summary.get("suggest_retire") or [])[:3]:
+        row = dict(noisy)
+        row["agent_suggestion"] = row.get("agent_suggestion") or "retire"
+        row["authority_effect"] = "none"
+        row["may_authorize_deploy"] = False
+        actions.append(row)
+
+    return actions[:12]
 
 
 def build_rules_from_agent_state(

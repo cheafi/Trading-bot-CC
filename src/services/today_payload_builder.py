@@ -1554,6 +1554,32 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         "can_loosen_automatically": capital_allocation.get("can_loosen_automatically", False),
         "authority_effect": "none",
     }
+    from src.services.alpha_quality_store import get_alpha_quality_store
+    from src.services.alpha_review_service import (
+        alpha_review_summary_for_dashboard,
+        build_alpha_review,
+    )
+
+    alpha_review = build_alpha_review(
+        alpha_snapshots=get_alpha_quality_store().load_snapshots(limit=40),
+        alpha_quality_report=alpha_quality,
+        baselines=alpha_quality.get("baseline_comparison"),
+        overfit={
+            "overfit_risk": alpha_quality.get("overfit_risk", "medium"),
+            "reason_codes": alpha_quality.get("overfit_reason_codes", []),
+            "allow_green_ui": alpha_quality.get("allow_green_ui", False),
+            "allow_validated_label": alpha_quality.get("allow_green_ui", False),
+        },
+        missed_opportunity=alpha_quality.get("missed_opportunity_review"),
+        no_edge_tracking=no_edge_tracking,
+        attribution=attribution_store.summarize(),
+        stage_transitions=oi_transitions,
+        rule_summary=rule_summary,
+        governor_qa=alpha_quality["governor_qa"],
+        window_days=20,
+        persist=True,
+        supersede_prior=True,
+    )
     decision_quality = build_decision_quality_dashboard(
         truth=system_truth,
         candidates=valid_top5,
@@ -1567,6 +1593,7 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         journal_store_summary=journal_store.summary(),
         outcome_store_summary=forward_summary,
         alpha_quality=alpha_quality,
+        alpha_review=alpha_review_summary_for_dashboard(alpha_review),
     )
     valid_top5 = attach_quality_to_rows(valid_top5, truth=system_truth, surface="playbook")
     from src.services.position_sizing import attach_sizing_to_rows

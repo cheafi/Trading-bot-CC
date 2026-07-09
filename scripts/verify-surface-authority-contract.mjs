@@ -175,6 +175,12 @@ const alphaQualityChunk = (() => {
   const end = index.indexOf('</details>', start);
   return index.slice(start, end > start ? end + 10 : start + 2000);
 })();
+const alphaReviewChunk = (() => {
+  const start = index.indexOf('data-cc="alpha-review-panel"');
+  if (start < 0) return '';
+  const end = index.indexOf('</details>', start);
+  return index.slice(start, end > start ? end + 10 : start + 2500);
+})();
 if (!decisionQualityChunk.includes('data-cc="decision-quality-panel"')) {
   errors.push('[Dashboard] missing decision-quality-panel marker');
 }
@@ -192,6 +198,29 @@ if (/validated/i.test(alphaQualityChunk) && !/learning/i.test(alphaQualityChunk)
 }
 if (!/allow_green_ui/.test(alphaQualityChunk)) {
   errors.push('[Dashboard] Alpha QA: missing overfit green UI guard');
+}
+if (!alphaReviewChunk.includes('data-cc="alpha-review-panel"')) {
+  errors.push('[Dashboard] Alpha Review must live inside collapsed Alpha Quality details');
+}
+if (!/:open="false"/.test(alphaReviewChunk)) {
+  errors.push('[Dashboard] Alpha Review must default collapsed');
+}
+if (/@click.*deploy|data-cc-nav="deploy"|Deploy now/i.test(alphaReviewChunk)) {
+  errors.push('[Dashboard] Alpha Review UI must not expose deploy actions');
+}
+if (/auto.?loosen/i.test(alphaReviewChunk)) {
+  errors.push('[Dashboard] Alpha Review: banned auto-loosen copy');
+}
+if (!/authority effect:\s*none/i.test(alphaReviewChunk)) {
+  errors.push('[Dashboard] Alpha Review must declare authority effect none');
+}
+try {
+  const arItems = readFileSync(join(root, 'src/services/alpha_review_items.py'), 'utf8');
+  if (!/deploy/.test(arItems) || !/auto_loosen/.test(arItems)) {
+    errors.push('[Alpha Review] review items must block deploy and auto_loosen');
+  }
+} catch (e) {
+  errors.push(`[Alpha Review] items source read failed: ${e.message}`);
 }
 try {
   const govSrc = readFileSync(join(root, 'src/services/capital_allocation_governor.py'), 'utf8');

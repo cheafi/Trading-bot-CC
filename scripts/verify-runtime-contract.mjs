@@ -21,6 +21,7 @@ const gates = {
   'DOSSIER CONFIRM ONLY': [],
   'PORTFOLIO RISK REVIEW': [],
   'ALPHA QUALITY CONTRACT': [],
+  'ALPHA REVIEW CONTRACT': [],
 };
 
 function fail(gate, msg) {
@@ -80,6 +81,12 @@ const alphaQualityChunk = (() => {
   if (start < 0) return '';
   const end = index.indexOf('</details>', start);
   return index.slice(start, end > start ? end + 10 : start + 2000);
+})();
+const alphaReviewChunk = (() => {
+  const start = index.indexOf('data-cc="alpha-review-panel"');
+  if (start < 0) return '';
+  const end = index.indexOf('</details>', start);
+  return index.slice(start, end > start ? end + 10 : start + 2500);
 })();
 
 // ── RUNTIME CONTRACT ──
@@ -252,6 +259,56 @@ try {
   }
 } catch (e) {
   fail('ALPHA QUALITY CONTRACT', `opportunity_quality_engine check failed: ${e.message}`);
+}
+
+// ── ALPHA REVIEW CONTRACT ──
+if (!/data-cc="alpha-review-panel"/.test(index)) {
+  fail('ALPHA REVIEW CONTRACT', 'Dashboard: missing collapsed ALPHA REVIEW panel inside Alpha Quality');
+}
+if (!/ALPHA REVIEW/.test(alphaReviewChunk)) {
+  fail('ALPHA REVIEW CONTRACT', 'Dashboard: missing ALPHA REVIEW section label');
+}
+if (!/:open="false"/.test(alphaReviewChunk)) {
+  fail('ALPHA REVIEW CONTRACT', 'Alpha Review: must remain collapsed by default');
+}
+ban('ALPHA REVIEW CONTRACT', alphaReviewChunk, /@click.*deploy|data-cc-nav="deploy"|Deploy now/i, 'Alpha Review: banned deploy action in review UI');
+ban('ALPHA REVIEW CONTRACT', alphaReviewChunk, /auto.?loosen/i, 'Alpha Review: banned auto-loosen in review UI');
+ban('ALPHA REVIEW CONTRACT', alphaReviewChunk, /may_authorize_deploy\s*:\s*true/i, 'Alpha Review: banned may_authorize_deploy true');
+if (!/authority effect:\s*none/i.test(alphaReviewChunk)) {
+  fail('ALPHA REVIEW CONTRACT', 'Alpha Review: missing authority effect none');
+}
+if (!/human review/i.test(alphaReviewChunk)) {
+  fail('ALPHA REVIEW CONTRACT', 'Alpha Review: missing human review count display');
+}
+try {
+  const arSrc = readFileSync(join(root, 'src/services/alpha_review_service.py'), 'utf8');
+  if (!/authority_effect\s*=\s*["']none["']/.test(arSrc) && !/"authority_effect":\s*"none"/.test(arSrc)) {
+    fail('ALPHA REVIEW CONTRACT', 'alpha_review_service: must set authority_effect none');
+  }
+  if (!/may_authorize_deploy/.test(arSrc)) {
+    fail('ALPHA REVIEW CONTRACT', 'alpha_review_service: missing may_authorize_deploy guard');
+  }
+  if (/successful/.test(arSrc) && !/cost_adj_positive|overfit_pass|min_sample/.test(arSrc)) {
+    fail('ALPHA REVIEW CONTRACT', 'Alpha Review: no successful without sample + cost-adj + overfit pass');
+  }
+} catch (e) {
+  fail('ALPHA REVIEW CONTRACT', `alpha_review_service check failed: ${e.message}`);
+}
+try {
+  const itemsSrc = readFileSync(join(root, 'src/services/alpha_review_items.py'), 'utf8');
+  if (!/BLOCKED_ACTIONS/.test(itemsSrc) || !/deploy/.test(itemsSrc) || !/auto_loosen/.test(itemsSrc)) {
+    fail('ALPHA REVIEW CONTRACT', 'alpha_review_items: must block deploy and auto_loosen');
+  }
+} catch (e) {
+  fail('ALPHA REVIEW CONTRACT', `alpha_review_items check failed: ${e.message}`);
+}
+try {
+  const oqeSrc2 = readFileSync(join(root, 'src/services/opportunity_quality_engine.py'), 'utf8');
+  if (!/alpha_review/.test(oqeSrc2)) {
+    fail('ALPHA REVIEW CONTRACT', 'Decision quality dashboard: missing alpha_review wiring');
+  }
+} catch (e) {
+  fail('ALPHA REVIEW CONTRACT', `opportunity_quality_engine alpha_review check failed: ${e.message}`);
 }
 
 const allErrors = Object.values(gates).flat();

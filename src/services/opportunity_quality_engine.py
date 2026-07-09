@@ -348,6 +348,7 @@ def build_decision_quality_dashboard(
     journal_store_summary: Optional[Dict[str, Any]] = None,
     outcome_store_summary: Optional[Dict[str, Any]] = None,
     alpha_quality: Optional[Dict[str, Any]] = None,
+    alpha_review: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Compact Dashboard decision_quality block."""
     t = dict(truth or {})
@@ -376,6 +377,7 @@ def build_decision_quality_dashboard(
     useful_families = fh.get("useful_families") or []
     noisy_families = fh.get("noisy_families") or []
     aq = dict(alpha_quality or {})
+    ar = dict(alpha_review or {})
     return {
         "title": "Decision Quality",
         "state": state,
@@ -433,4 +435,5 @@ def build_decision_quality_dashboard(
             "no_fake_precision": True,
         },
         "alpha_quality": aq if aq else None,
+        "alpha_review": ar if ar else None,
     }

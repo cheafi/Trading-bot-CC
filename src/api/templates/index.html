@@ -1563,6 +1563,49 @@
                 </div>
                 <div class="text-[7px] mt-1" style="color:var(--t3)" x-show="today7.decision_quality.alpha_quality.learning_mode">Learning mode — no precise lift or success labels until sample threshold met.</div>
                 <div class="text-[7px] mt-1" style="color:var(--t3)" x-show="today7.decision_quality.alpha_quality.overfit_risk!=='low'">Overfit guard active — success labels capped at promising/learning.</div>
+                <template x-if="today7.decision_quality.alpha_review">
+                  <details data-cc="alpha-review-panel" class="mt-2 pt-1" style="border-top:1px solid rgba(255,255,255,.04)" :open="false">
+                    <summary class="text-[8px] font-bold cursor-pointer flex flex-wrap gap-1 items-center" style="color:var(--teal,#14b8a6)">
+                      <span>ALPHA REVIEW</span>
+                      <span class="pill pw text-[7px]" x-text="today7.decision_quality.alpha_review.status_label||'learning'"></span>
+                      <span class="pill pw text-[7px]" x-text="'evidence '+(today7.decision_quality.alpha_review.evidence_level||'learning')"></span>
+                      <span class="pill pr text-[7px]" x-show="(today7.decision_quality.alpha_review.human_review_count||0)>0" x-text="'human review '+(today7.decision_quality.alpha_review.human_review_count||0)"></span>
+                      <span class="pill pw text-[7px]">authority effect: none</span>
+                    </summary>
+                    <div class="text-[7px] mt-1" style="color:var(--t3)" x-show="(today7.decision_quality.alpha_review.what_improved||[]).length">
+                      <span class="font-bold text-green-400">Improved:</span>
+                      <template x-for="(imp,i) in (today7.decision_quality.alpha_review.what_improved||[])" :key="'ar-imp-'+i">
+                        <span class="ml-1" x-text="imp"></span>
+                      </template>
+                    </div>
+                    <div class="text-[7px] mt-1" style="color:var(--t3)" x-show="(today7.decision_quality.alpha_review.what_deteriorated||[]).length">
+                      <span class="font-bold text-amber-300">Deteriorated:</span>
+                      <template x-for="(det,i) in (today7.decision_quality.alpha_review.what_deteriorated||[])" :key="'ar-det-'+i">
+                        <span class="ml-1" x-text="det"></span>
+                      </template>
+                    </div>
+                    <template x-if="(today7.decision_quality.alpha_review.top_items||[]).length">
+                      <div class="text-[7px] mt-1" style="color:var(--t3)">
+                        <span class="font-bold text-white">Top items:</span>
+                        <template x-for="(ti,i) in (today7.decision_quality.alpha_review.top_items||[]).slice(0,3)" :key="'ar-ti-'+i">
+                          <span class="ml-1" x-text="ti.title+' · '+ti.recommended_action"></span>
+                        </template>
+                      </div>
+                    </template>
+                    <div class="text-[7px] mt-1" style="color:var(--t3)" x-show="today7.decision_quality.alpha_review.governor_review&&today7.decision_quality.alpha_review.governor_review.qa_adjustment">
+                      <span class="font-bold text-white">Governor review:</span>
+                      <span class="ml-1" x-text="today7.decision_quality.alpha_review.governor_review.qa_adjustment"></span>
+                    </div>
+                    <template x-if="(today7.decision_quality.alpha_review.next_actions||[]).length">
+                      <div class="text-[7px] mt-1" style="color:var(--t3)">
+                        <span class="font-bold text-white">Next actions:</span>
+                        <template x-for="(na,i) in (today7.decision_quality.alpha_review.next_actions||[]).slice(0,4)" :key="'ar-na-'+i">
+                          <div class="ml-1" x-text="'→ '+na"></div>
+                        </template>
+                      </div>
+                    </template>
+                  </details>
+                </template>
               </details>
             </template>
           </details>
@@ -7439,6 +7482,7 @@
           <button type="button" class="btn-s text-[9px]" :class="opsPanel==='health'?'btn-p':''" @click="opsPanel='health'">💚 Health</button>
           <button type="button" class="btn-s text-[9px]" :class="opsPanel==='updates'?'btn-p':''" @click="opsPanel='updates';fetchChangelog()">📋 Updates</button>
           <button type="button" class="btn-s text-[9px]" :class="opsPanel==='errors'?'btn-p':''" @click="opsPanel='errors';fetchErrorLog()">🧾 Error Log</button>
+          <button type="button" class="btn-s text-[9px]" :class="opsPanel==='alpha_review'?'btn-p':''" @click="opsPanel='alpha_review'">🔬 Alpha Review</button>
         </div>
 
         <!-- UPDATES / CHANGELOG -->
@@ -7481,6 +7525,34 @@
                 </template>
               </div>
             </div>
+          </template>
+        </div>
+
+        <!-- ALPHA REVIEW DIAGNOSTIC (no deploy buttons) -->
+        <div x-show="opsPanel==='alpha_review'" class="space-y-3" data-cc="ops-alpha-review-panel">
+          <div class="card card-p" style="border-left:3px solid var(--teal,#14b8a6)">
+            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--teal,#14b8a6)">Alpha Review diagnostic</div>
+            <div class="text-[10px] leading-relaxed mb-2" style="color:var(--t2)">
+              Advisory review loop on Alpha QA snapshots. Audit trail only — no deploy authority, no auto-loosen, no threshold changes.
+            </div>
+            <div class="flex flex-wrap gap-1 text-[8px]">
+              <span class="pill pw" x-text="'status '+(today7.decision_quality?.alpha_review?.status_label||'learning')"></span>
+              <span class="pill pw" x-text="'evidence '+(today7.decision_quality?.alpha_review?.evidence_level||'learning')"></span>
+              <span class="pill pr" x-show="(today7.decision_quality?.alpha_review?.human_review_count||0)>0" x-text="'human review '+(today7.decision_quality?.alpha_review?.human_review_count||0)"></span>
+              <span class="pill pw">authority effect: none</span>
+            </div>
+          </div>
+          <template x-if="today7.decision_quality?.alpha_review">
+            <div class="card card-p text-[9px]" style="color:var(--t2)">
+              <div class="font-bold text-white mb-1">Next actions (advisory)</div>
+              <template x-for="(na,i) in (today7.decision_quality.alpha_review.next_actions||[])" :key="'ops-ar-'+i">
+                <div class="py-0.5" x-text="'→ '+na"></div>
+              </template>
+              <div class="text-[8px] mt-2" style="color:var(--t3)">Run <span class="mono">scripts/generate-alpha-review.py</span> for persisted report.</div>
+            </div>
+          </template>
+          <template x-if="!today7.decision_quality?.alpha_review">
+            <div class="card card-p text-[10px]" style="color:var(--t3)">Alpha Review summary unavailable — load Dashboard /api/v7/today first.</div>
           </template>
         </div>
 
