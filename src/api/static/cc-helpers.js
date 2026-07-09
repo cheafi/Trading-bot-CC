@@ -2491,6 +2491,26 @@
 		return "n=" + sample + " · hit " + hitPct + " (read-only scaffold)"
 	}
 
+	function playbookQualityChipsLine(row, truth) {
+		var r = row || {}
+		var qc = r.quality_chip
+		if (qc && qc.chips) return qc
+		var n = 0
+		var ev = r.setup_evidence || r.evidence || {}
+		if (ev.sample_size != null) n = Number(ev.sample_size)
+		var rr = r.risk_reward || r.rr_ratio
+		var erDisp = n < 5 ? "learning" : rr != null ? "~" + Number(rr).toFixed(1) + "R" : "learning"
+		var conflict = !!(r.evidence_conflict || r.regime_conflict)
+		var blocked = truth && !truth.deploy_authority
+		var action = blocked ? "monitor" : "review"
+		var chips = ["E[R] " + erDisp, "n=" + n]
+		if (conflict) chips.push("conflict")
+		else if (n < 5) chips.push("learning")
+		else chips.push("unvalidated")
+		chips.push(action)
+		return { chips: chips, not_permission: true, learning: n < 5, conflict: conflict }
+	}
+
 	/** PM strip / trust strip chip tiers — primary authority first, context second. */
 	function partitionHeaderChips(chips, opts) {
 		var o = opts || {}
@@ -4094,6 +4114,7 @@
 		ibkrBuildRepairChecklistState: ibkrBuildRepairChecklistState,
 		ibkrRepairChecklistState: ibkrRepairChecklistState,
 		signalFamilyHealthLine: signalFamilyHealthLine,
+		playbookQualityChipsLine: playbookQualityChipsLine,
 		formatEngineState: formatEngineState,
 		resolveEngineState: resolveEngineState,
 		engineStateHeaderLabel: engineStateHeaderLabel,

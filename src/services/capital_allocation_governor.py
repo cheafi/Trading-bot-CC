@@ -1,0 +1,161 @@
+"""
+Capital Allocation Governor — decide when capital should remain idle.
+
+Capital mode cannot override page authority. Broker offline => no_capital or
+paper_only. Manual/demo book => no_capital.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional
+
+CAPITAL_MODES: tuple[str, ...] = (
+    "no_capital",
+    "repair_only",
+    "monitor_only",
+    "paper_only",
+    "pilot_review",
+    "selective_deploy",
+    "normal_deploy",
+    "de_risk",
+)
+
+
+def _float(v: Any, default: float = 0.0) -> float:
+    try:
+        return float(v) if v is not None else default
+    except (TypeError, ValueError):
+        return default
+
+
+def evaluate_capital_allocation(
+    *,
+    truth: Optional[Dict[str, Any]] = None,
+    opportunity_quality: Optional[Dict[str, Any]] = None,
+    portfolio_context: Optional[Dict[str, Any]] = None,
+    drawdown_pct: Optional[float] = None,
+    dd_budget_pct: float = 15.0,
+    open_r: float = 0.0,
+    sector_concentration: float = 0.0,
+    correlation_cluster: float = 0.0,
+    false_deploy_rate: float = 0.0,
+    recent_error_rate: float = 0.0,
+    vix: Optional[float] = None,
+    sample_size: int = 0,
+) -> Dict[str, Any]:
+    """
+    Evaluate capital mode and risk limits — advisory only, cannot override authority.
+    """
+    t = dict(truth or {})
+    pf = dict(portfolio_context or {})
+    oq = dict(opportunity_quality or {})
+    er = t.get("execution_readiness") or {}
+    broker_connected = bool(er.get("broker_connected"))
+    handoff_ready = bool(er.get("trade_handoff_ready"))
+    manual_book = bool(pf.get("local_only") or pf.get("manual_only") or t.get("portfolio_local_only"))
+    deploy_authority = bool(t.get("deploy_authority"))
+    deploy_n = int(t.get("deploy_qualified_count") or 0)
+    dd = _float(drawdown_pct, _float(t.get("equity_dd_pct")))
+    reasons: List[str] = []
+    mode = "monitor_only"
+
+    if manual_book:
+        mode = "no_capital"
+        reasons.append("MANUAL_DEMO_BOOK")
+    elif not broker_connected:
+        mode = "paper_only" if deploy_authority else "no_capital"
+        reasons.append("BROKER_OFFLINE")
+    elif dd >= dd_budget_pct:
+        mode = "de_risk"
+        reasons.append("DRAWDOWN_BREACH")
+    elif not deploy_authority or deploy_n < 1:
+        mode = "monitor_only"
+        reasons.append("NO_EDGE_TODAY")
+    elif str(t.get("runtime_state") or "").lower() in ("degraded", "critical"):
+        mode = "repair_only"
+        reasons.append("RUNTIME_DEGRADED")
+    elif false_deploy_rate > 0.25:
+        mode = "pilot_review"
+        reasons.append("HIGH_FALSE_DEPLOY_RATE")
+    elif correlation_cluster > 0.65 or sector_concentration > 0.45:
+        mode = "selective_deploy"
+        reasons.append("CONCENTRATION_CLUSTER")
+    elif deploy_authority and handoff_ready and deploy_n >= 1:
+        mode = "normal_deploy" if dd < dd_budget_pct * 0.5 else "selective_deploy"
+    else:
+        mode = "paper_only"
+        reasons.append("HANDOFF_NOT_READY")
+
+    max_new_risk = 0.5
+    max_position_risk = 0.25
+    gross_limit = 1.0
+    if mode == "no_capital":
+        max_new_risk = 0.0
+        max_position_risk = 0.0
+        gross_limit = 0.0
+    elif mode == "de_risk":
+        max_new_risk = 0.15
+        max_position_risk = 0.1
+        gross_limit = 0.6
+    elif mode in ("monitor_only", "repair_only"):
+        max_new_risk = 0.0
+        max_position_risk = 0.0
+    elif mode == "paper_only":
+        max_new_risk = 0.1
+        max_position_risk = 0.05
+    elif mode == "pilot_review":
+        max_new_risk = 0.2
+        max_position_risk = 0.1
+    elif mode == "selective_deploy":
+        max_new_risk = 0.35
+        max_position_risk = 0.15
+
+    if sample_size < 8:
+        max_new_risk = min(max_new_risk, 0.2)
+        reasons.append("LOW_SAMPLE_SIZE")
+    if false_deploy_rate > 0.15:
+        max_new_risk = min(max_new_risk, 0.25)
+    if correlation_cluster > 0.5:
+        max_new_risk = min(max_new_risk, 0.3)
+    if vix is not None and float(vix) > 28:
+        max_new_risk = min(max_new_risk, 0.25)
+        reasons.append("VOL_ELEVATED")
+    if open_r > 3.0:
+        max_new_risk = min(max_new_risk, 0.2)
+        reasons.append("OPEN_R_ELEVATED")
+
+    cash_floor = 0.15 if mode in ("selective_deploy", "pilot_review") else 0.25
+    if mode in ("no_capital", "monitor_only", "repair_only"):
+        cash_floor = 1.0
+
+    deploy_allowed = deploy_authority and mode in (
+        "selective_deploy",
+        "normal_deploy",
+        "pilot_review",
+        "paper_only",
+    )
+    sizing_allowed = deploy_allowed and mode not in ("monitor_only", "repair_only", "no_capital")
+
+    repair = str(t.get("primary_blocker") or "Restore broker + board + deploy path")
+    if mode == "de_risk":
+        repair = "Reduce open risk — drawdown budget breached"
+    elif mode == "no_capital":
+        repair = "Connect broker or sync live book before sizing"
+
+    return {
+        "capital_mode": mode,
+        "max_new_risk_pct": round(max_new_risk, 2),
+        "max_position_risk_pct": round(max_position_risk, 2),
+        "gross_exposure_limit": round(gross_limit, 2),
+        "sector_limit": round(0.35 if sector_concentration > 0.35 else 0.5, 2),
+        "correlation_limit": round(0.5 if correlation_cluster > 0.5 else 0.65, 2),
+        "cash_floor": round(cash_floor, 2),
+        "deploy_allowed": deploy_allowed,
+        "sizing_allowed": sizing_allowed,
+        "reason_codes": reasons[:6],
+        "next_repair_action": repair,
+        "cannot_override_authority": True,
+        "may_authorize_deploy": False,
+        "authority_note": "Capital governor is advisory — page authority gates deploy",
+        "cash_valid": mode in ("monitor_only", "repair_only", "no_capital") or deploy_n < 1,
+    }

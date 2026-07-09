@@ -1408,6 +1408,71 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         sector_leaders=market_pulse.get("sector_leaders"),
         options_signals=options_signals,
     )
+    from src.services.capital_allocation_governor import evaluate_capital_allocation
+    from src.services.decision_journal import build_journal_batch
+    from src.services.forward_outcome_tracker import (
+        build_forward_outcome_study,
+        build_no_edge_outcome_tracking,
+        summarize_forward_outcomes,
+    )
+    from src.services.opportunity_quality_engine import (
+        attach_quality_to_rows,
+        build_decision_quality_dashboard,
+    )
+    from src.services.rule_learning_loop import (
+        build_rules_from_agent_state,
+        summarize_rules,
+    )
+    from src.services.signal_family_attribution import (
+        attribute_families_for_row,
+        summarize_family_health,
+    )
+
+    session_id = now.strftime("%Y%m%d")
+    journal_batch = build_journal_batch(
+        truth=system_truth,
+        candidates=valid_top5,
+        near_miss=near_miss if not brief_expired or live_board_available else [],
+        surface="dashboard",
+        session_id=session_id,
+    )
+    forward_studies = [
+        build_forward_outcome_study(evt)
+        for evt in (journal_batch.get("events") or [])[:10]
+    ]
+    forward_summary = summarize_forward_outcomes(forward_studies)
+    family_attrs = [
+        attribute_families_for_row(row, truth=system_truth)
+        for row in (valid_top5 or [])[:CC_TOP_MONITOR_COUNT]
+    ]
+    family_health = summarize_family_health(family_attrs)
+    rule_summary = summarize_rules(build_rules_from_agent_state(agent_page_state))
+    no_edge_tracking = build_no_edge_outcome_tracking(truth=system_truth)
+    capital_allocation = evaluate_capital_allocation(
+        truth=system_truth,
+        portfolio_context={
+            "local_only": pf_local_only,
+            "holdings_count": pf_count,
+        },
+        drawdown_pct=side_ctx.equity_dd_pct,
+        vix=vix_val,
+        sample_size=int(forward_summary.get("sample_size") or 0),
+        sector_concentration=float(
+            (sleeve_summary or {}).get("sector_concentration") or 0
+        ),
+    )
+    decision_quality = build_decision_quality_dashboard(
+        truth=system_truth,
+        candidates=valid_top5,
+        near_miss=near_miss if not brief_expired or live_board_available else [],
+        journal=journal_batch,
+        forward_summary=forward_summary,
+        family_health=family_health,
+        capital=capital_allocation,
+        rule_summary=rule_summary,
+        no_edge_tracking=no_edge_tracking,
+    )
+    valid_top5 = attach_quality_to_rows(valid_top5, truth=system_truth, surface="playbook")
     from src.services.position_sizing import attach_sizing_to_rows
 
     valid_top5 = attach_sizing_to_rows(valid_top5, system_truth)
@@ -1487,6 +1552,12 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         "no_setup_diagnosis": no_setup_diagnosis,
         "unlock_deploy": unlock_deploy,
         "opportunity_status": opportunity_status,
+        "decision_quality": decision_quality,
+        "decision_journal": journal_batch,
+        "forward_outcome_summary": forward_summary,
+        "capital_allocation": capital_allocation,
+        "signal_family_health": family_health,
+        "rule_learning": rule_summary,
         "regime_wait_explanation": regime_wait_explanation,
         "monitor_triggers": monitor_triggers,
         "quant_cluster_hints": quant_cluster_hints,
