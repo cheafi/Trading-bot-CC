@@ -44,6 +44,10 @@ def evaluate_capital_allocation(
     signal_confidence: Optional[str] = None,
     vix: Optional[float] = None,
     sample_size: int = 0,
+    alpha_quality_status: Optional[str] = None,
+    false_positive_rate: float = 0.0,
+    overfit_risk: Optional[str] = None,
+    missed_opportunity_review: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Evaluate capital mode and risk limits — advisory only, cannot override authority.
@@ -60,8 +64,11 @@ def evaluate_capital_allocation(
     dd = _float(drawdown_pct, _float(t.get("equity_dd_pct")))
     reasons: List[str] = []
     learning_reasons: List[str] = []
+    qa_reason_codes: List[str] = []
     risk_mode_adjustment: Optional[str] = None
+    qa_adjustment: Optional[str] = None
     requires_human_review = False
+    human_review_suggested = False
     mode = "monitor_only"
 
     if manual_book:
@@ -156,6 +163,42 @@ def evaluate_capital_allocation(
         max_new_risk = min(max_new_risk, 0.2)
         reasons.append("OPEN_R_ELEVATED")
 
+    fp_rate = false_positive_rate if false_positive_rate > 0 else false_deploy_rate
+    aq_status = str(alpha_quality_status or "").lower()
+    of_risk = str(overfit_risk or "").lower()
+    missed = dict(missed_opportunity_review or {})
+
+    if aq_status in ("noisy", "deteriorating"):
+        max_new_risk = min(max_new_risk, 0.2)
+        qa_adjustment = "tighten"
+        qa_reason_codes.append(f"ALPHA_QA_{aq_status.upper()}")
+        learning_reasons.append(f"ALPHA_QA_{aq_status.upper()}")
+    elif aq_status == "insufficient_data":
+        max_new_risk = min(max_new_risk, 0.25)
+        qa_reason_codes.append("ALPHA_QA_INSUFFICIENT_DATA")
+        learning_reasons.append("ALPHA_QA_INSUFFICIENT_DATA")
+    if fp_rate > 0.2:
+        max_new_risk = min(max_new_risk, 0.2)
+        qa_adjustment = "tighten"
+        qa_reason_codes.append("QA_FALSE_POSITIVE_ELEVATED")
+        learning_reasons.append("QA_FALSE_POSITIVE_ELEVATED")
+    if of_risk == "high":
+        max_new_risk = min(max_new_risk, 0.15)
+        qa_adjustment = "tighten"
+        qa_reason_codes.append("QA_OVERFIT_HIGH")
+        learning_reasons.append("QA_OVERFIT_HIGH")
+        human_review_suggested = True
+    elif of_risk == "medium":
+        max_new_risk = min(max_new_risk, 0.25)
+        qa_reason_codes.append("QA_OVERFIT_MEDIUM")
+        learning_reasons.append("QA_OVERFIT_MEDIUM")
+    if missed.get("too_conservative_count", 0) > 0:
+        human_review_suggested = True
+        qa_reason_codes.append("QA_MISSED_OPPORTUNITY_REVIEW")
+        learning_reasons.append("QA_MISSED_OPPORTUNITY_REVIEW")
+    if human_review_suggested:
+        requires_human_review = True
+
     cash_floor = 0.15 if mode in ("selective_deploy", "pilot_review") else 0.25
     if mode in ("no_capital", "monitor_only", "repair_only"):
         cash_floor = 1.0
@@ -204,4 +247,11 @@ def evaluate_capital_allocation(
             "sample_size": sample_size,
             "never_auto_loosen": True,
         },
+        "qa_adjustment": qa_adjustment,
+        "qa_reason_codes": qa_reason_codes[:6],
+        "human_review_suggested": human_review_suggested,
+        "can_loosen_automatically": False,
+        "alpha_quality_status": alpha_quality_status,
+        "overfit_risk": overfit_risk,
+        "false_positive_rate": round(fp_rate, 3) if fp_rate else None,
     }

@@ -20,6 +20,7 @@ const gates = {
   'PLAYBOOK AUTHORITY': [],
   'DOSSIER CONFIRM ONLY': [],
   'PORTFOLIO RISK REVIEW': [],
+  'ALPHA QUALITY CONTRACT': [],
 };
 
 function fail(gate, msg) {
@@ -67,6 +68,18 @@ const dossierChunk = (() => {
   if (start < 0) return '';
   const end = index.indexOf('<!-- SURFACE', start + 20);
   return index.slice(start, end > start ? end : start + 12000);
+})();
+const decisionQualityChunk = (() => {
+  const start = index.indexOf('data-cc="decision-quality-panel"');
+  if (start < 0) return '';
+  const end = index.indexOf('<!-- ── Naval clarity strip', start);
+  return index.slice(start, end > start ? end : start + 4000);
+})();
+const alphaQualityChunk = (() => {
+  const start = index.indexOf('data-cc="alpha-quality-panel"');
+  if (start < 0) return '';
+  const end = index.indexOf('</details>', start);
+  return index.slice(start, end > start ? end + 10 : start + 2000);
 })();
 
 // ── RUNTIME CONTRACT ──
@@ -191,6 +204,54 @@ if (!/Broker truth unavailable/.test(portfolioChunk)) {
 }
 if (!/portfolioRiskViewModel/.test(helpers)) {
   fail('PORTFOLIO RISK REVIEW', 'cc-helpers: missing portfolioRiskViewModel');
+}
+
+// ── ALPHA QUALITY CONTRACT ──
+if (!/data-cc="alpha-quality-panel"/.test(index)) {
+  fail('ALPHA QUALITY CONTRACT', 'Dashboard: missing collapsed ALPHA QUALITY panel inside Decision Quality');
+}
+if (!/ALPHA QUALITY/.test(alphaQualityChunk)) {
+  fail('ALPHA QUALITY CONTRACT', 'Dashboard: missing ALPHA QUALITY section label');
+}
+if (!/:open="false"/.test(decisionQualityChunk)) {
+  fail('ALPHA QUALITY CONTRACT', 'Decision Quality: must remain collapsed by default');
+}
+ban('ALPHA QUALITY CONTRACT', alphaQualityChunk, /may_authorize_deploy\s*:\s*true/i, 'Alpha QA: banned may_authorize_deploy true');
+ban('ALPHA QUALITY CONTRACT', alphaQualityChunk, /authority_effect\s*:\s*['"]promote/i, 'Alpha QA: banned authority promotion');
+ban('ALPHA QUALITY CONTRACT', alphaQualityChunk, /validated/i, 'Alpha QA: banned validated label without sample guard in UI');
+if (!/authority effect:\s*none/i.test(alphaQualityChunk)) {
+  fail('ALPHA QUALITY CONTRACT', 'Alpha QA: missing authority effect none');
+}
+if (!/learning/i.test(alphaQualityChunk)) {
+  fail('ALPHA QUALITY CONTRACT', 'Alpha QA: missing learning mode fallback');
+}
+if (!/overfit/i.test(alphaQualityChunk)) {
+  fail('ALPHA QUALITY CONTRACT', 'Alpha QA: missing overfit risk display');
+}
+if (!/allow_green_ui/.test(alphaQualityChunk)) {
+  fail('ALPHA QUALITY CONTRACT', 'Alpha QA: missing overfit green UI guard');
+}
+try {
+  const govSrc = readFileSync(join(root, 'src/services/capital_allocation_governor.py'), 'utf8');
+  if (!/can_loosen_automatically[\s\S]{0,40}False/.test(govSrc)) {
+    fail('ALPHA QUALITY CONTRACT', 'Governor: can_loosen_automatically must be false');
+  }
+  if (!/qa_adjustment/.test(govSrc)) {
+    fail('ALPHA QUALITY CONTRACT', 'Governor: missing qa_adjustment output');
+  }
+} catch (e) {
+  fail('ALPHA QUALITY CONTRACT', `Governor source check failed: ${e.message}`);
+}
+try {
+  const oqeSrc = readFileSync(join(root, 'src/services/opportunity_quality_engine.py'), 'utf8');
+  if (!/alpha_quality/.test(oqeSrc)) {
+    fail('ALPHA QUALITY CONTRACT', 'Decision quality dashboard: missing alpha_quality wiring');
+  }
+  if (/state\s*=\s*["']validated["']/.test(oqeSrc) && !/MIN_VALIDATED_SAMPLE|sample_size|n\s*>=/.test(oqeSrc)) {
+    fail('ALPHA QUALITY CONTRACT', 'Decision quality: validated without sample guard');
+  }
+} catch (e) {
+  fail('ALPHA QUALITY CONTRACT', `opportunity_quality_engine check failed: ${e.message}`);
 }
 
 const allErrors = Object.values(gates).flat();

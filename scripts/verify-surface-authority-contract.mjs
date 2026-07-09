@@ -167,6 +167,52 @@ for (const phrase of globalBanned) {
   }
 }
 
+// Alpha QA collapsed inside Decision Quality only — no deploy authority from QA
+const decisionQualityChunk = surfaceChunk('data-cc="decision-quality-panel"', '<!-- ── Naval clarity strip');
+const alphaQualityChunk = (() => {
+  const start = index.indexOf('data-cc="alpha-quality-panel"');
+  if (start < 0) return '';
+  const end = index.indexOf('</details>', start);
+  return index.slice(start, end > start ? end + 10 : start + 2000);
+})();
+if (!decisionQualityChunk.includes('data-cc="decision-quality-panel"')) {
+  errors.push('[Dashboard] missing decision-quality-panel marker');
+}
+if (!alphaQualityChunk.includes('data-cc="alpha-quality-panel"')) {
+  errors.push('[Dashboard] Alpha QA must live inside collapsed Decision Quality details');
+}
+if (!/:open="false"/.test(decisionQualityChunk)) {
+  errors.push('[Dashboard] Decision Quality must default collapsed');
+}
+if (/may_authorize_deploy/i.test(alphaQualityChunk) && !/authority effect:\s*none/i.test(alphaQualityChunk)) {
+  errors.push('[Dashboard] Alpha QA must declare authority effect none');
+}
+if (/validated/i.test(alphaQualityChunk) && !/learning/i.test(alphaQualityChunk)) {
+  errors.push('[Dashboard] Alpha QA: no validated without learning/sample guard');
+}
+if (!/allow_green_ui/.test(alphaQualityChunk)) {
+  errors.push('[Dashboard] Alpha QA: missing overfit green UI guard');
+}
+try {
+  const govSrc = readFileSync(join(root, 'src/services/capital_allocation_governor.py'), 'utf8');
+  if (!/can_loosen_automatically[\s\S]{0,40}False/.test(govSrc)) {
+    errors.push('[Governor] QA can_loosen_automatically must be false');
+  }
+  if (/may_authorize_deploy\s*=\s*True/.test(govSrc)) {
+    errors.push('[Governor] QA must not authorize deploy');
+  }
+} catch (e) {
+  errors.push(`[Governor] source read failed: ${e.message}`);
+}
+try {
+  const ofSrc = readFileSync(join(root, 'src/services/overfit_guard.py'), 'utf8');
+  if (!/label_cap/.test(ofSrc) || !/promising|learning/.test(ofSrc)) {
+    errors.push('[Overfit] must cap success labels at promising/learning');
+  }
+} catch (e) {
+  errors.push(`[Overfit] source read failed: ${e.message}`);
+}
+
 // Optional live API check
 let apiNote = 'skipped (server down)';
 try {

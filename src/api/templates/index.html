@@ -1548,6 +1548,23 @@
                 </template>
               </div>
             </template>
+            <template x-if="today7.decision_quality.alpha_quality">
+              <details class="mt-2 pt-1" style="border-top:1px solid rgba(255,255,255,.06)" :open="false" data-cc="alpha-quality-panel">
+                <summary class="text-[8px] font-bold cursor-pointer" style="color:var(--purple,#a78bfa)">ALPHA QUALITY · evidence only · authority effect: none</summary>
+                <div class="flex flex-wrap gap-1 mt-1.5 text-[7px]">
+                  <span class="pill pw" x-text="'n='+(today7.decision_quality.alpha_quality.sample_size||0)"></span>
+                  <span class="pill pw" x-text="'OI lift '+(today7.decision_quality.alpha_quality.oi_lift_display||'learning')"></span>
+                  <span class="pill pw" x-text="'cost-adj '+(today7.decision_quality.alpha_quality.cost_adj_expectancy_display||'learning')"></span>
+                  <span class="pill pw" x-text="'conversion '+(today7.decision_quality.alpha_quality.conversion_quality||'learning')"></span>
+                  <span class="pill" :class="(today7.decision_quality.alpha_quality.overfit_risk==='low'&&today7.decision_quality.alpha_quality.allow_green_ui)?'pg':'pa'" x-text="'overfit '+today7.decision_quality.alpha_quality.overfit_risk"></span>
+                  <span class="pill pa" x-show="today7.decision_quality.alpha_quality.governor_qa&&today7.decision_quality.alpha_quality.governor_qa.qa_adjustment" x-text="'gov QA '+today7.decision_quality.alpha_quality.governor_qa.qa_adjustment"></span>
+                  <span class="pill pr" x-show="today7.decision_quality.alpha_quality.governor_qa&&today7.decision_quality.alpha_quality.governor_qa.human_review_suggested" x-text="'human review'"></span>
+                  <span class="pill pw" x-text="today7.decision_quality.alpha_quality.status_label||'learning'"></span>
+                </div>
+                <div class="text-[7px] mt-1" style="color:var(--t3)" x-show="today7.decision_quality.alpha_quality.learning_mode">Learning mode — no precise lift or success labels until sample threshold met.</div>
+                <div class="text-[7px] mt-1" style="color:var(--t3)" x-show="today7.decision_quality.alpha_quality.overfit_risk!=='low'">Overfit guard active — success labels capped at promising/learning.</div>
+              </details>
+            </template>
           </details>
         </div>
       </template>
