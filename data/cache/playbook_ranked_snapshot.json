@@ -1,7 +1,7 @@
 {
 	"30::": {
-		"ts": 1783562696.842391,
-		"saved_at": "2026-07-09T02:04:56.842384Z",
+		"ts": 1783577740.1258943,
+		"saved_at": "2026-07-09T06:15:40.125872Z",
 		"data": {
 			"count": 30,
 			"opportunities": [
@@ -4265,7 +4265,7 @@
 				"data_mode": "regime_filter",
 				"degraded": true,
 				"source": "index-regime-proxy",
-				"as_of": "2026-07-09T02:04:56.838066+00:00Z",
+				"as_of": "2026-07-09T06:15:40.116016+00:00Z",
 				"provenance": {
 					"label": "Index regime filter",
 					"lag_disclosure": "VIX/breadth/factor proxies \u2014 regime filter only",
@@ -4437,7 +4437,7 @@
 				"regime_label": "",
 				"tradeability": "WAIT",
 				"data_freshness": "FRESH",
-				"as_of": "2026-07-09T02:04:56.839168+00:00Z"
+				"as_of": "2026-07-09T06:15:40.117606+00:00Z"
 			},
 			"near_miss": [
 				{
@@ -4872,7 +4872,7 @@
 					"deploy_line": "0/1 execution-ready"
 				}
 			],
-			"snapshot_timestamp": "2026-07-09T02:04:56.842384Z",
+			"snapshot_timestamp": "2026-07-09T06:15:40.125872Z",
 			"board_message": "WAIT day \u2014 no deployable setups; showing top monitor candidates from live scan.",
 			"surface_authority": {
 				"tab": "playbook",
