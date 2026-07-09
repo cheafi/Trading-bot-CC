@@ -1497,6 +1497,22 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         journal_store_summary=journal_store.summary(),
         outcome_store_summary=forward_summary,
     )
+    from src.services.opportunity_intake import build_opportunity_intelligence_block
+
+    discovery_hits_for_oie: List[Dict[str, Any]] = []
+    for row in near_miss if not brief_expired or live_board_available else []:
+        discovery_hits_for_oie.append({**row, "bucket": "near_miss"})
+    opportunity_intelligence = build_opportunity_intelligence_block(
+        truth=system_truth,
+        discovery_hits=discovery_hits_for_oie,
+        playbook_rows=valid_top5,
+        near_miss_rows=near_miss if not brief_expired or live_board_available else [],
+        forward_summary=forward_summary,
+        attribution_calibrations=store_calibrations,
+        no_edge_tracking=no_edge_tracking,
+        session_id=session_id,
+        persist=True,
+    )
     valid_top5 = attach_quality_to_rows(valid_top5, truth=system_truth, surface="playbook")
     from src.services.position_sizing import attach_sizing_to_rows
 
@@ -1578,6 +1594,7 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         "unlock_deploy": unlock_deploy,
         "opportunity_status": opportunity_status,
         "decision_quality": decision_quality,
+        "opportunity_intelligence": opportunity_intelligence,
         "decision_journal": journal_batch,
         "forward_outcome_summary": forward_summary,
         "capital_allocation": capital_allocation,

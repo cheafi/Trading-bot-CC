@@ -606,8 +606,26 @@ def attach_discovery_operator_view(
     funnel = build_discovery_funnel(raw_hits, truth)
     diagnostics = payload.get("diagnostics") if isinstance(payload.get("diagnostics"), dict) else {}
     panel = build_discovery_panel(funnel, truth, scanner_diagnostics=diagnostics)
+    from src.services.opportunity_intake import build_opportunity_intelligence_block
+
+    session_id = ""
+    if truth:
+        session_id = str(truth.get("session_id") or "")
+    if not session_id:
+        from datetime import datetime, timezone
+
+        session_id = datetime.now(timezone.utc).strftime("%Y%m%d")
+    opportunity_intelligence = build_opportunity_intelligence_block(
+        truth=truth,
+        discovery_hits=funnel.get("review_shortlist") or [],
+        playbook_rows=[],
+        near_miss_rows=[],
+        session_id=session_id,
+        persist=True,
+    )
     out = dict(payload)
     out["discovery_operator_view"] = {**funnel, "panel": panel}
+    out["opportunity_intelligence"] = opportunity_intelligence
     out["discovery_verdict"] = {
         **(payload.get("discovery_verdict") or {}),
         **(funnel.get("verdict") or {}),

@@ -2230,6 +2230,21 @@
 			hide_raw_hits: !!(funnel.hide_raw_hits || verdict.hide_raw_hits),
 			strict_passed_count: strict,
 			raw_hits: funnel.raw_hits || [],
+			opportunity_intelligence: p.opportunity_intelligence || {},
+		}
+	}
+
+	function discoveryOpportunityIntelView(oi) {
+		var block = oi || {}
+		var counts = block.counts || {}
+		return {
+			visible: !!(counts.total || block.by_stage),
+			total: Number(counts.total || 0),
+			best_theme: block.best_theme || "",
+			best_action: String(block.best_action || "monitor").replace(/_/g, " "),
+			candidate_chips: (block.candidate_chips || []).slice(0, 8),
+			note: block.research_note || "Evidence study — not deploy permission",
+			learning_mode: !!block.learning_mode,
 		}
 	}
 
@@ -2500,15 +2515,29 @@
 		if (ev.sample_size != null) n = Number(ev.sample_size)
 		var rr = r.risk_reward || r.rr_ratio
 		var erDisp = n < 5 ? "learning" : rr != null ? "~" + Number(rr).toFixed(1) + "R" : "learning"
+		var oie = r.opportunity_intel || r.opportunity_intelligence || {}
+		var grade = oie.evidence_grade || r.evidence_grade || "ungraded"
+		var pattern = oie.pattern_status || r.pattern_status || "unvalidated"
 		var conflict = !!(r.evidence_conflict || r.regime_conflict)
 		var blocked = truth && !truth.deploy_authority
 		var action = blocked ? "monitor" : "review"
-		var chips = ["E[R] " + erDisp, "n=" + n]
+		var chips = ["grade " + grade, "ROI " + erDisp, "n=" + n]
 		if (conflict) chips.push("conflict")
+		else if (pattern === "successful_pattern" || pattern === "promising_pattern")
+			chips.push(pattern.replace(/_/g, " "))
 		else if (n < 5) chips.push("learning")
 		else chips.push("unvalidated")
 		chips.push(action)
-		return { chips: chips, not_permission: true, learning: n < 5, conflict: conflict }
+		return {
+			chips: chips,
+			not_permission: true,
+			learning: n < 5,
+			conflict: conflict,
+			evidence_grade: grade,
+			roi_range: erDisp,
+			pattern_status: pattern,
+			advanced_evidence_collapsed: true,
+		}
 	}
 
 	/** PM strip / trust strip chip tiers — primary authority first, context second. */
@@ -4102,6 +4131,7 @@
 		discoveryVerdictSpeculativeLabel: discoveryVerdictSpeculativeLabel,
 		discoveryVerdictConfirmedLabel: discoveryVerdictConfirmedLabel,
 		discoveryFunnelView: discoveryFunnelView,
+		discoveryOpportunityIntelView: discoveryOpportunityIntelView,
 		discoveryStatusLine: discoveryStatusLine,
 		discoveryScannerRunLabel: discoveryScannerRunLabel,
 		discoveryRowFreshnessLabel: discoveryRowFreshnessLabel,

@@ -248,6 +248,7 @@ def build_playbook_quality_chip(
     q = quality or evaluate_opportunity_quality(row)
     n = int(q.get("sample_size") or 0)
     r_disp = (q.get("expected_r") or {}).get("display") or "learning"
+    roi_range = (q.get("expected_r") or {}).get("display") or "learning"
     fam_status = "learning"
     families = q.get("signal_families") or []
     if families:
@@ -261,9 +262,14 @@ def build_playbook_quality_chip(
         else:
             fam_status = "unvalidated"
     action = str(q.get("recommended_action") or "monitor")
-    labels = [f"E[R] {r_disp}", f"n={n}"]
+    oie = row.get("opportunity_intel") or row.get("opportunity_intelligence") or {}
+    evidence_grade = str(oie.get("evidence_grade") or row.get("evidence_grade") or "ungraded")
+    pattern_status = str(oie.get("pattern_status") or row.get("pattern_status") or fam_status)
+    labels = [f"grade {evidence_grade}", f"ROI {roi_range}", f"n={n}"]
     if q.get("evidence_conflict"):
         labels.append("conflict")
+    elif pattern_status in ("successful_pattern", "promising_pattern"):
+        labels.append(pattern_status.replace("_", " "))
     elif fam_status == "learning":
         labels.append("learning")
     else:
@@ -274,6 +280,9 @@ def build_playbook_quality_chip(
     return {
         "chips": labels,
         "expected_r_display": r_disp,
+        "roi_range": roi_range,
+        "evidence_grade": evidence_grade,
+        "pattern_status": pattern_status,
         "sample_size": n,
         "family_status": fam_status,
         "cost_adjusted": q.get("cost_adjusted_pass"),
@@ -282,6 +291,7 @@ def build_playbook_quality_chip(
         "learning": n < 5,
         "conflict": bool(q.get("evidence_conflict")),
         "not_permission": True,
+        "advanced_evidence_collapsed": True,
     }
 
 

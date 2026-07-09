@@ -2943,6 +2943,10 @@
                       <span class="pill text-[6px] pw" x-text="chip" :title="'Quality chip — not deploy permission'"></span>
                     </template>
                   </div>
+                  <details x-show="r.quality_chip?.advanced_evidence_collapsed" class="mt-1">
+                    <summary class="text-[7px] cursor-pointer" style="color:var(--t3)">Advanced evidence</summary>
+                    <div class="text-[7px] mt-1" style="color:var(--t3)" x-text="'grade '+(r.quality_chip?.evidence_grade||'ungraded')+' · ROI '+(r.quality_chip?.roi_range||'learning')+' · pattern '+(r.quality_chip?.pattern_status||'unvalidated')"></div>
+                  </details>
                 </div>
               </div>
             </template>
@@ -5089,6 +5093,18 @@
             <div class="px-3 pb-2 text-[8px] flex flex-wrap gap-3" style="color:var(--t3)">
               <span x-text="'Avoid Now scanner flags: '+(scannerAvoidNowCount())"></span>
               <span>Pipeline rejects: see Rejections</span>
+            </div>
+            <div x-show="discoveryOpportunityIntel().visible" class="px-3 pb-2">
+              <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--purple)">Opportunity Intelligence</div>
+              <div class="text-[8px] p-2 rounded flex flex-wrap gap-2" style="background:var(--s1);color:var(--t2)">
+                <span class="pill pw text-[7px]" x-text="'total: '+(discoveryOpportunityIntel().total||0)"></span>
+                <span class="pill pw text-[7px]" x-show="discoveryOpportunityIntel().best_theme" x-text="'theme: '+discoveryOpportunityIntel().best_theme"></span>
+                <span class="pill pa text-[7px]" x-text="'action: '+discoveryOpportunityIntel().best_action"></span>
+                <template x-for="chip in (discoveryOpportunityIntel().candidate_chips||[])" :key="'oi-'+chip">
+                  <span class="pill pw text-[6px]" x-text="chip"></span>
+                </template>
+              </div>
+              <div class="text-[7px] mt-1" style="color:var(--t3)" x-text="discoveryOpportunityIntel().note"></div>
             </div>
             <div class="px-3 pb-3">
               <div class="text-[8px] font-bold uppercase mb-2" style="color:var(--green)">SHORTLIST (max 10)</div>
@@ -15648,6 +15664,13 @@
           return CCHelpers.discoveryFunnelView(this.scannerHub.data||{},this.today7.system_truth||{});
         }
         return {mode:'research_only',now:'Research-only · deploy blocked',why:'',funnel:{},funnel_line:'',status_line:'',subtitle:'Research funnel only. Names go to Playbook review only after strict filters pass.',best_action:'No new research candidates. Refresh Dashboard + Playbook.',shortlist:[],hide_raw_hits:true,strict_passed_count:0,brief_expired_note:''};
+      },
+      discoveryOpportunityIntel(){
+        const d=this.scannerHub.data||{};
+        const oi=d.opportunity_intelligence||this.today7?.opportunity_intelligence||{};
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.discoveryOpportunityIntelView)
+          return CCHelpers.discoveryOpportunityIntelView(oi);
+        return {visible:!!oi.counts,total:oi.counts?.total||0,best_theme:oi.best_theme||'',best_action:oi.best_action||'monitor',candidate_chips:oi.candidate_chips||[],note:oi.research_note||'Evidence study — not deploy permission'};
       },
       discoveryScannerRunLabel(){
         const d=(this.scannerHub.data&&this.scannerHub.data.diagnostics)||{};
