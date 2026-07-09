@@ -146,6 +146,26 @@ Sprint history in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## Operator Decision OS — Merge Checklist
+
+Before merging surface/authority changes on `sprint99-fund-productization`:
+
+```bash
+node scripts/build-cc-template.mjs --check
+node scripts/verify-runtime-contract.mjs
+node scripts/verify-surface-authority-contract.mjs
+python -m pytest tests/test_surface_authority_contract.py tests/test_guide_surface_authority.py tests/test_runtime_render_contract.py -q
+```
+
+- [ ] `guide.html` partial rebuilt into `index.html`
+- [ ] 16 surfaces in `src/services/surface_authority_contract.py`
+- [ ] No banned phrases in live runtime bindings (guide illustrations whitelisted)
+- [ ] PILOT ≠ half-size default; Dossier = structure confirmation only
+
+Docs: [OPERATOR_DECISION_OS.md](docs/OPERATOR_DECISION_OS.md) · [SURFACE_AUTHORITY_CONTRACT.md](docs/SURFACE_AUTHORITY_CONTRACT.md) · [DAILY_OPERATOR_FLOW.md](docs/DAILY_OPERATOR_FLOW.md)
+
+---
+
 ## ⚠️ Disclaimer
 
 This software is for **educational and research purposes only**. It does not constitute financial advice. Past performance of any algorithmic strategy does not guarantee future results. Always paper-trade before risking real capital.

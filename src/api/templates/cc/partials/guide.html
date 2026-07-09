@@ -255,10 +255,10 @@
             <div style="flex:1">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
                 <span style="font-size:13px;font-weight:700;color:var(--t1)">🔍 Search / Dossier</span>
-                <span class="guide-badge pg" style="font-size:8px">Core</span>
+                <span class="guide-badge pa" style="font-size:8px">CONFIRM ONLY</span>
               </div>
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
-                Per-ticker structure review surface — confirm levels before any deploy path. When deploy authority is blocked: <strong style="color:var(--amber)">Structure Review Only</strong> — no trade plan, no sizing, no handoff. Check in order:<br>
+                Per-ticker <strong style="color:var(--t1)">structure review surface</strong> — structure confirmation only, not a deploy verdict. When deploy authority is blocked: <strong style="color:var(--amber)">Structure Review Only</strong> — no trade plan, no sizing, no handoff. Check in order:<br>
                 <div style="margin:8px 0;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:11px">
                   <span style="color:var(--green);font-weight:700">Entry Zone</span><span style="color:var(--t2)">Expected clean entry range when deploy authority is open. When blocked, levels are reference-only inside collapsed structure notes — not sizing guidance.</span>
                   <span style="color:var(--red);font-weight:700">Hard Stop</span><span style="color:var(--t2)">Structural exit level. Confirm-only dossier shows <em>No sizing guidance in confirm-only mode</em> — no IBKR handoff until live fetch succeeds.</span>
@@ -430,8 +430,12 @@
         <div style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">🗂 Three surface types</div>
         <div style="display:grid;grid-template-columns:1fr;gap:10px">
           <div style="background:var(--s2);border:1px solid rgba(0,212,170,.25);border-radius:8px;padding:10px 12px">
-            <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:4px">Core decision <span class="guide-badge pg" style="font-size:8px;margin-left:4px">Core</span></div>
-            <div style="font-size:11px;color:var(--t2);line-height:1.7"><strong style="color:var(--t1)">Dashboard</strong> · <strong style="color:var(--t1)">Playbook</strong> · <strong style="color:var(--t1)">Portfolio &amp; Risk</strong> · <strong style="color:var(--t1)">Search / Dossier</strong> — deploy/no-deploy, sizing, per-ticker verdicts.</div>
+            <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:4px">Deploy surfaces <span class="guide-badge pg" style="font-size:8px;margin-left:4px">Core</span></div>
+            <div style="font-size:11px;color:var(--t2);line-height:1.7"><strong style="color:var(--t1)">Dashboard</strong> · <strong style="color:var(--t1)">Playbook</strong> · <strong style="color:var(--t1)">Portfolio &amp; Risk</strong> — deploy/no-deploy and sizing when board gate + authority align.</div>
+          </div>
+          <div style="background:var(--s2);border:1px solid rgba(251,191,36,.25);border-radius:8px;padding:10px 12px">
+            <div style="font-size:11px;font-weight:700;color:var(--amber);margin-bottom:4px">Confirm surfaces <span class="guide-badge pa" style="font-size:8px;margin-left:4px">CONFIRM ONLY</span></div>
+            <div style="font-size:11px;color:var(--t2);line-height:1.7"><strong style="color:var(--t1)">Search / Dossier</strong> — structure confirmation only; not a deploy verdict; no standalone deploy permission.</div>
           </div>
           <div style="background:var(--s2);border:1px solid rgba(59,130,246,.25);border-radius:8px;padding:10px 12px">
             <div style="font-size:11px;font-weight:700;color:var(--blue);margin-bottom:4px">Research / supporting <span class="guide-badge pb" style="font-size:8px;margin-left:4px">Research-only</span></div>
@@ -481,6 +485,7 @@
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:6px">Playbook Actions</div>
             <div style="display:flex;flex-direction:column;gap:4px;font-size:11px">
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pg" style="font-size:9px;min-width:52px;text-align:center">TRADE</span><span style="color:var(--t2)">Deploy-grade when board gate + execution_ready + fresh context align</span></div>
+              <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px;min-width:52px;text-align:center">PILOT</span><span style="color:var(--t2)">Review candidate until authority opens — not half-size default; half size only when pilot_sizing_allowed</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pb" style="font-size:9px;min-width:52px;text-align:center">WATCH</span><span style="color:var(--t2)">Monitor candidate · review-only when Authority: Blocked · no deploy</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pa" style="font-size:9px;min-width:52px;text-align:center">WATCH</span><span style="color:var(--t2)">Monitor · not ready for full size</span></div>
               <div style="display:flex;align-items:center;gap:8px"><span class="guide-badge pr" style="font-size:9px;min-width:52px;text-align:center">AVOID</span><span style="color:var(--t2)">Extended or broken · skip new entry</span></div>
@@ -549,8 +554,8 @@
             {icon:'📖',id:'guide',label:'Guide',badge:'HERE',bclass:'pa',mode:'Diagnostic',desc:'This page — first in nav'},
             {icon:'🎯',id:'today',label:'Dashboard',badge:'START',bclass:'pg',mode:'Core',desc:'Regime · VIX · tradeability · narrative (legacy: Overview)'},
             {icon:'📋',id:'signals',label:'Playbook',badge:'BOARD',bclass:'pg',mode:'Core',desc:'Candidate buckets · Deploy/Pilot/Watch — review path, not a trade ticket (legacy: Ranked)'},
-            {icon:'🔍',id:'dossier',label:'Search / Dossier',badge:'CONFIRM',bclass:'pb',mode:'Core',desc:'Structure confirmation · Structure Review Only when blocked'},
-            {icon:'💼',id:'portfolio',label:'Portfolio & Risk',badge:'CAPACITY',bclass:'pb',mode:'Core',desc:'Positions · heat · correlation · REBALANCE'},
+            {icon:'🔍',id:'dossier',label:'Search / Dossier',badge:'CONFIRM',bclass:'pa',mode:'Confirm-only',desc:'Structure confirmation · Structure Review Only when blocked'},
+            {icon:'💼',id:'portfolio',label:'Portfolio & Risk',badge:'CAPACITY',bclass:'pg',mode:'Core',desc:'Positions · heat · correlation · REBALANCE'},
             {icon:'🔬',id:'scanners',label:'Discovery',badge:'SCAN',bclass:'pp',mode:'Research-only',desc:'Scanner hub (legacy: Scanners)'},
             {icon:'💼',id:'funds',label:'Funds',badge:'SLEEVES',bclass:'pp',mode:'Research-only',desc:'Sleeve/backtest context'},
             {icon:'💧',id:'flow',label:'Flow',badge:'FLOW',bclass:'pp',mode:'Research-only',desc:'Options/dark pool · mock = non-decision'},
@@ -558,7 +563,9 @@
             {icon:'🚫',id:'notrade',label:'Rejections',badge:'WHY NOT',bclass:'pw',mode:'Diagnostic',desc:'Blocker audit log · More menu'},
             {icon:'🖥',id:'command',label:'Command',badge:'ADVANCED',bclass:'pw',mode:'Research-only',desc:'Advanced aggregate — not deploy gate · More menu'},
             {icon:'⚡',id:'ibkr',label:'IBKR',badge:'EXEC',bclass:'pa',mode:'Execution-dependent',desc:'LOGIN → READY handoff · More menu'},
-            {icon:'⚙️',id:'ops',label:'Ops',badge:'HEALTH',bclass:'pw',mode:'Diagnostic',desc:'Engine · updates · error log · More menu'}
+            {icon:'⚙️',id:'ops',label:'Ops',badge:'HEALTH',bclass:'pw',mode:'Diagnostic',desc:'Engine · updates · error log · More menu'},
+            {icon:'🧪',id:'btlab',label:'Backtest Lab',badge:'RESEARCH',bclass:'pb',mode:'Research-only',desc:'Walk-forward research — not deployment authority · More menu'},
+            {icon:'📊',id:'stratlab',label:'Strategy Lab',badge:'CALIBRATE',bclass:'pb',mode:'Research-only',desc:'Offline draft + validation — not deploy authority · More menu'}
           ]">
             <div style="border:1px solid var(--bd);border-radius:8px;padding:10px;cursor:pointer;transition:.15s"
               @mouseenter="$el.style.borderColor='var(--green)'"

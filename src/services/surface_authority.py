@@ -118,6 +118,11 @@ TAB_SURFACE_MAP: Dict[str, Dict[str, str]] = {
         "default_authority": AUTHORITY_RESEARCH,
         "short": "Walk-forward research — not live track record",
     },
+    "stratlab": {
+        "surface": "Strategy Lab",
+        "default_authority": AUTHORITY_RESEARCH,
+        "short": "Strategy calibration — research only, not deploy authority",
+    },
     "guide": {
         "surface": "Guide",
         "default_authority": AUTHORITY_SUSPENDED,
@@ -284,6 +289,7 @@ SURFACE_MODES: Dict[str, str] = {
     "ibkr": "ibkr_execution",
     "btlab": "backtest_research",
     "backtest": "backtest_research",
+    "stratlab": "strategy_lab_research",
     "command": "command_research",
 }
 
@@ -377,6 +383,12 @@ _HEADER_BASE: Dict[str, Dict[str, str]] = {
         "title": "Backtest Lab — walk-forward research",
         "explanation": "Walk-forward and attribution research — backtest ≠ live track record.",
         "next_action": "Treat unstable walk-forward as lower trust, not higher conviction.",
+    },
+    "strategy_lab_research": {
+        "badge": "RESEARCH ONLY",
+        "title": "Strategy Lab — calibration sandbox",
+        "explanation": "Offline draft and validation research — not deployment authority.",
+        "next_action": "Repair live data before validation; board gate still required for promotion.",
     },
 }
 
