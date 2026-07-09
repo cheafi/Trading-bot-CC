@@ -72,7 +72,7 @@
       .health-ok{background:var(--green)}
       .health-warn{background:var(--amber)}
       .health-err{background:var(--red)}
-      /* ?? Command Center terminal layout ?? */
+      /* ── Command Center terminal layout ── */
       .cc-macro-strip{display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--s2);border-bottom:1px solid var(--bd);font-family:'JetBrains Mono',monospace;font-size:11px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
       .cc-macro-strip::-webkit-scrollbar{display:none}
       .cc-macro-chip{display:flex;align-items:center;gap:4px;padding:3px 8px;border-radius:4px;background:rgba(255,255,255,.05);border:1px solid var(--bd);white-space:nowrap}
@@ -111,7 +111,7 @@
       .cc-right-text{font-size:11px;color:var(--t1);line-height:1.6}
       .cc-contra{display:flex;align-items:flex-start;gap:6px;padding:4px 0;font-size:10px;color:var(--amber);line-height:1.5}
       .cc-peer-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:4px;background:var(--s2);border:1px solid var(--bd);font-size:10px;font-weight:600;margin:2px;cursor:pointer}
-      /* ?? Guide / Onboarding ?? */
+      /* ── Guide / Onboarding ── */
       .guide-hero{background:linear-gradient(135deg,rgba(0,212,170,.08),rgba(88,166,255,.08));border:1px solid rgba(0,212,170,.2);border-radius:12px;padding:24px;margin-bottom:16px}
       .guide-step{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--bd)}
       .guide-step:last-child{border-bottom:none}
@@ -175,7 +175,7 @@
             <p style="margin-bottom:12px"><strong>You assume all risk.</strong> Always do your own research. Never invest money you cannot afford to lose. Consult a licensed financial advisor before making investment decisions.</p>
             <p style="font-size:10px;color:var(--t3)">By clicking "I Understand" you acknowledge these risks and limitations.</p>
           </div>
-          <button @click="disclaimerAccepted=true;localStorage.setItem('cc_disclaimer_ok','1')" class="btn-p" style="width:100%;padding:12px;font-size:14px">? I Understand ? Proceed</button>
+          <button @click="disclaimerAccepted=true;localStorage.setItem('cc_disclaimer_ok','1')" class="btn-p" style="width:100%;padding:12px;font-size:14px">✓ I Understand · Proceed</button>
         </div>
       </div>
     </template>
@@ -244,8 +244,8 @@
             <span x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.exportAllLabel)?CCHelpers.exportAllLabel(exportReviewPdfBusy):(exportReviewPdfBusy?'Exporting…':'Export All Pages')"></span>
           </button>
           <!-- ── HELP ── -->
-          <button @click="openTimeTravel()" style="background:none;border:1px solid var(--bd);color:var(--t3);padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer" title="⏪ Time Travel · 全介面回放">?</button>
-          <button @click="showGuideModal=true" style="background:none;border:1px solid var(--bd);color:var(--t3);padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer" title="操作指南 · Guide / Help">?</button>
+          <button @click="openTimeTravel()" style="background:none;border:1px solid var(--bd);color:var(--t3);padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer" title="⏪ Time Travel · 全介面回放">⏪</button>
+          <button @click="showGuideModal=true" style="background:none;border:1px solid var(--bd);color:var(--t3);padding:3px 8px;border-radius:6px;font-size:11px;cursor:pointer" title="操作指南 · Guide / Help">📖</button>
           <div class="text-sm mono" style="color:var(--t2)" x-text="clock"></div>
         </div>
       </div>
@@ -306,17 +306,17 @@
     <div x-show="showAlertsModal" x-cloak @click.self="showAlertsModal=false" style="position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:20px">
       <div style="max-width:720px;width:100%;max-height:80vh;overflow-y:auto;background:var(--s1);border:1px solid var(--bd2);border-radius:12px;padding:24px">
         <div class="flex items-center justify-between mb-3">
-          <h3 class="text-base font-bold text-white">? Position Risk Alerts
+          <h3 class="text-base font-bold text-white">⚠ Position Risk Alerts
             <span x-show="risk_alerts" class="text-xs font-normal" style="color:var(--t3)" x-text="'· '+(risk_alerts?.positions_scanned||0)+' positions scanned · '+(risk_alerts?.generated_at||'').slice(11,19)+'Z'"></span>
           </h3>
           <div style="display:flex;gap:6px">
-            <button @click="fetchRiskAlerts()" class="btn-s text-[10px]">? Refresh</button>
+            <button @click="fetchRiskAlerts()" class="btn-s text-[10px]">↻ Refresh</button>
             <button @click="showAlertsModal=false" class="btn-s text-[10px]">✕ Close</button>
           </div>
         </div>
         <div class="text-xs" style="color:var(--t2);line-height:1.5">
           <div x-show="!risk_alerts||risk_alerts.count===0" style="padding:24px;text-align:center;color:var(--t3)">
-            ? No active risk alerts. <span x-show="!risk_alerts">Loading?</span>
+            ✓ No active risk alerts. <span x-show="!risk_alerts">Loading…</span>
           </div>
           <div x-show="risk_alerts&&risk_alerts.count>0">
             <div style="display:flex;gap:8px;margin-bottom:10px;font-size:11px">
@@ -352,9 +352,9 @@
           <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--bd)">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
               <strong style="color:var(--t2);font-size:11px">📜 Persisted history</strong>
-              <button @click="fetchAlertsHistory()" class="btn-s text-[10px]">? Load</button>
+              <button @click="fetchAlertsHistory()" class="btn-s text-[10px]">↻ Load</button>
               <button @click="clearAlertDedupe()" class="btn-s text-[10px]" title="Allow next scan to re-push HIGH/CRITICAL to Discord">🔁 Reset Dedupe</button>
-              <button @click="rotateAlerts()" class="btn-s text-[10px]" title="Trim alerts.jsonl to last 5000 rows; archives older rows to .bak">? Rotate</button>
+              <button @click="rotateAlerts()" class="btn-s text-[10px]" title="Trim alerts.jsonl to last 5000 rows; archives older rows to .bak">🔄 Rotate</button>
               <span x-show="alerts_history" class="text-[10px]" style="color:var(--t3)" x-text="'('+(alerts_history?.count||0)+' rows, last '+alerts_history?.limit+')'"></span>
             </div>
             <div x-show="alerts_history && alerts_history.rows.length>0" style="max-height:200px;overflow-y:auto">
@@ -390,7 +390,7 @@
           <button @click="tt.show=false" class="btn-s text-[10px]">✕ Close</button>
         </div>
         <div class="text-[10px] mb-3" style="color:var(--t2);line-height:1.6">
-          ????????????????????????????????????????
+          選擇回放日期 · 載入該日 Morning Brief 快照 · Dashboard + Playbook + 標頭同步切換 · Pick a date to replay the whole console from that day's brief.
         </div>
         <div style="display:flex;gap:6px;margin-bottom:12px">
           <button @click="tt.mode='whole'" class="btn-s text-[10px]" :style="tt.mode==='whole'?'border-color:var(--green);color:var(--green)':''">🌐 Whole-page</button>
@@ -405,11 +405,11 @@
                 <template x-for="d in (ccReplayDates||[])" :key="d"><option :value="d"></option></template>
               </datalist>
             </div>
-            <button @click="enterWholePageReplay()" class="btn-p text-[11px]" :disabled="tt.loading" style="padding:6px 12px;font-weight:700" x-text="tt.loading?'? Loading?':'? Enter replay'"></button>
+            <button @click="enterWholePageReplay()" class="btn-p text-[11px]" :disabled="tt.loading" style="padding:6px 12px;font-weight:700" x-text="tt.loading?'⏳ Loading…':'⏪ Enter replay'"></button>
             <button x-show="replayModeActive()" @click="exitWholePageReplay()" class="btn-s text-[11px]" style="padding:6px 12px">⏩ 回到即時 · Exit live</button>
           </div>
           <div x-show="(ccReplayDates||[]).length" class="text-[9px] mb-2" style="color:var(--t3)">
-            Available brief dates: <span class="mono" x-text="(ccReplayDates||[]).slice(0,8).join(' ? ')"></span><span x-show="(ccReplayDates||[]).length>8"> ?</span>
+            Available brief dates: <span class="mono" x-text="(ccReplayDates||[]).slice(0,8).join(' · ')"></span><span x-show="(ccReplayDates||[]).length>8"> …</span>
           </div>
         </div>
         <div x-show="tt.mode==='ticker'">
@@ -429,7 +429,7 @@
               <option value="all">all</option><option value="momentum">momentum</option><option value="breakout">breakout</option><option value="swing">swing</option><option value="mean_reversion">mean_reversion</option>
             </select>
           </div>
-          <button @click="runTimeTravel()" class="btn-s text-[11px]" :disabled="tt.loading" style="padding:6px 12px;font-weight:700" x-text="tt.loading?'? Running?':'? Run replay'"></button>
+          <button @click="runTimeTravel()" class="btn-s text-[11px]" :disabled="tt.loading" style="padding:6px 12px;font-weight:700" x-text="tt.loading?'⏳ Running…':'▶ Run replay'"></button>
           <div style="margin-left:auto;font-size:10px;color:var(--t3)">Causal — no look-ahead</div>
         </div>
         </div>
@@ -496,7 +496,7 @@
           </div>
           <!-- Strategy signals -->
           <div x-show="tt.data?.strategy_signals && Object.keys(tt.data.strategy_signals).length>0" style="margin-bottom:10px">
-            <div style="font-size:11px;font-weight:700;color:var(--t2);margin-bottom:4px">? Strategy signals</div>
+            <div style="font-size:11px;font-weight:700;color:var(--t2);margin-bottom:4px">📊 Strategy signals</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
               <template x-for="(v,k) in (tt.data?.strategy_signals||{})" :key="k">
                 <span style="font-size:10px;padding:3px 8px;border-radius:4px;background:var(--s2);color:var(--t2)" x-text="k+': '+(v?.action||v)"></span>
@@ -506,10 +506,10 @@
           <div style="font-size:10px;color:var(--t3);margin-top:8px;padding-top:8px;border-top:1px solid var(--bd)" x-text="(tt.data?.trust?.note||'')+ ' · bars_before='+tt.data?.bars_before+' bars_after='+tt.data?.bars_after"></div>
         </div>
         <div x-show="!tt.data && !tt.loading && !tt.err && tt.mode==='ticker'" style="color:var(--t3);font-size:11px;padding:20px;text-align:center">
-          Pick a ticker + date ? see regime, expert-council vote, final action, and actual forward returns from that day.
+          Pick a ticker + date · see regime, expert-council vote, final action, and actual forward returns from that day.
         </div>
         <div x-show="!tt.loading && !tt.err && tt.mode==='whole' && !replayModeActive()" style="color:var(--t3);font-size:11px;padding:20px;text-align:center">
-          Pick a date ? Enter replay loads Dashboard + Playbook + header from that day's Morning Brief snapshot.
+          Pick a date · Enter replay loads Dashboard + Playbook + header from that day's Morning Brief snapshot.
         </div>
       </div>
     </div>
@@ -546,7 +546,7 @@
           <span x-text="trust.freshness||'REAL_TIME'"></span>
         </span>
         <span x-show="today7.system_truth" class="text-[8px] mono truncate" style="max-width:280px;color:var(--t3)" x-text="shellTruthVM().briefLabel"></span>
-        <span x-text="trust.as_of?'? '+((Date.now()-new Date(trust.as_of).getTime())/1000|0)+'s ago':''" style="color:var(--t3)"></span>
+        <span x-text="trust.as_of?'🕐 '+((Date.now()-new Date(trust.as_of).getTime())/1000|0)+'s ago':''" style="color:var(--t3)"></span>
         <span class="flex items-center gap-1" x-show="today7.regime">
           <span style="color:var(--t3)">Conf</span>
           <span style="width:40px;height:5px;background:var(--s3);border-radius:3px;display:inline-block;overflow:hidden">
@@ -557,14 +557,14 @@
         </span>
       </div>
       <span x-show="instantDegradedBannerVisible()" class="text-[9px] font-bold truncate w-full" style="color:#fde68a;max-width:100%" x-text="instantDegradedBannerLine()"></span>
-      <span x-show="today7.trust?.ai_powered" style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:#7c3aed;color:#e9d5ff;margin-left:auto">? AI</span>
+      <span x-show="today7.trust?.ai_powered" style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:#7c3aed;color:#e9d5ff;margin-left:auto">✨ AI</span>
     </div>
 
     <!-- ══════ ERROR / LOADING BANNER ══════ -->
     <div x-show="apiError" x-cloak :style="apiError.startsWith('ℹ')?'background:#1e3a5f;border:1px solid #3b82f6;border-radius:8px;margin:6px 12px;padding:8px 12px;display:flex;align-items:center;justify-content:space-between':apiError.startsWith('?')?'background:#422006;border:1px solid #f59e0b;border-radius:8px;margin:6px 12px;padding:8px 12px;display:flex;align-items:center;justify-content:space-between':'background:#7f1d1d;border:1px solid #ef4444;border-radius:8px;margin:6px 12px;padding:8px 12px;display:flex;align-items:center;justify-content:space-between'">
       <span :style="apiError.startsWith('ℹ')?'color:#93c5fd;font-size:11px':apiError.startsWith('⚠')?'color:#fde68a;font-size:11px':'color:#fca5a5;font-size:11px'" x-text="apiError"></span>
       <div style="display:flex;gap:6px;align-items:center">
-        <span x-show="apiError.startsWith('?')" style="color:#fde68a;font-size:11px;opacity:.7" x-text="'Uptime: '+(healthData?.uptime_seconds?Math.round(healthData.uptime_seconds)+'s':'?')"></span>
+        <span x-show="apiError.startsWith('⚠')" style="color:#fde68a;font-size:11px;opacity:.7" x-text="'Uptime: '+(healthData?.uptime_seconds?Math.round(healthData.uptime_seconds)+'s':'—')"></span>
         </div>
     </div>
 
@@ -681,7 +681,7 @@
           </template>
         </div>
         <div class="pm-strip-chip-menu" x-show="pmStripUseChipMenu()" @click.outside="pmStripChipMenuOpen=false">
-          <button type="button" class="btn-s text-[8px]" @click="pmStripChipMenuToggle()" :aria-expanded="pmStripChipMenuOpen">Status ?</button>
+          <button type="button" class="btn-s text-[8px]" @click="pmStripChipMenuToggle()" :aria-expanded="pmStripChipMenuOpen">Status ▾</button>
           <div class="pm-strip-chip-drop" x-show="pmStripChipMenuOpen" x-cloak>
             <div x-show="!(headerSummary().chips||[]).length && !(headerSummary().show_decision_chips && today7.todays_decision)" class="text-[8px] px-1 py-1" style="color:var(--t3);max-width:220px;line-height:1.4" x-text="sanitizeVisibleText(headerSummary().explanation)||'No extra status chips — see badge and title above.'"></div>
             <template x-for="chip in (headerSummary().chips||[])" :key="'menu-'+chip.label">
@@ -702,7 +702,7 @@
               <button type="button" class="pill pa text-[7px] cursor-pointer" style="border:none"
                 :title="eventRiskTooltip(r)"
                 @click="openEventRiskDossier(r)"
-                x-text="'? '+eventRiskLabel(r)"></button>
+                x-text="'📅 '+eventRiskLabel(r)"></button>
             </template>
           </div>
         </template>
@@ -725,7 +725,7 @@
     <div x-show="tab==='command'" class="fade" style="overflow:hidden" x-init="tab==='command' && initAgentCommandTab()">
 
       <div class="card card-p mx-3 mt-2 mb-2" style="border-left:3px solid var(--blue);padding:8px 12px" data-cc="agent-page-default">
-        <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--blue)">Agent ? Monitor copilot</div>
+        <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--blue)">Agent · Monitor copilot</div>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-[8px] mb-2">
           <div><span class="font-bold uppercase" style="color:var(--blue)">NOW</span> <span x-text="agentPageState().now"></span></div>
           <div><span class="font-bold uppercase" style="color:var(--amber)">WHY</span> <span x-text="agentPageState().why"></span></div>
@@ -743,7 +743,7 @@
         <details>
           <summary class="text-[8px] cursor-pointer mb-1" style="color:var(--t3)">Degraded status note</summary>
           <div class="text-[8px] text-amber-300" x-show="agentPageState().degraded_status_note" x-text="agentPageState().degraded_status_note"></div>
-          <div class="text-[8px]" style="color:var(--t3)" x-show="!agentPageState().degraded_status_note">No degraded note ? active monitor copilot.</div>
+          <div class="text-[8px]" style="color:var(--t3)" x-show="!agentPageState().degraded_status_note">No degraded note · active monitor copilot.</div>
         </details>
       </div>
 
@@ -787,15 +787,15 @@
       <template x-if="today7.regime && today7.regime.synthetic">
         <div style="padding:4px 12px">
           <div style="background:#78350f;border:1px solid #d97706;border-radius:8px;padding:7px 14px;display:flex;align-items:center;gap:8px">
-            <span style="font-size:13px">??</span>
-            <span style="color:#fbbf24;font-size:11px;font-weight:600">? SYNTHETIC ? Regime data is synthetic. Real market data unavailable. Signals may be unreliable.</span>
+            <span style="font-size:13px">⚠️</span>
+            <span style="color:#fbbf24;font-size:11px;font-weight:600">⚠ SYNTHETIC · Regime data is synthetic. Real market data unavailable. Signals may be unreliable.</span>
           </div>
         </div>
       </template>
 
       <!-- Quick PM routines -->
       <div style="padding:6px 12px;display:flex;flex-wrap:gap:6px;border-bottom:1px solid var(--bd)">
-        <button class="btn-s text-[9px]" @click="fetchToday7();switchTab('today')">? Morning briefing</button>
+        <button class="btn-s text-[9px]" @click="fetchToday7();switchTab('today')">📰 Morning briefing</button>
         <button class="btn-s text-[9px]" @click="fetchPortfolioDecision();switchTab('portfolio')">💼 Portfolio risk</button>
         <button class="btn-s text-[9px]" @click="fetchCatalystCalendar()">📅 Catalysts</button>
         <button class="btn-s text-[9px]" @click="runPmMemo('portfolio')">📝 PM memo</button>
@@ -812,7 +812,7 @@
       <!-- ── Agent ── — getting started + rule input (collapsed) ── -->
       <div style="padding:6px 12px" data-cc="agent-getting-started">
         <details>
-          <summary class="text-[9px] font-bold uppercase cursor-pointer mb-2" style="color:var(--blue)">Intent inbox ? rule builder</summary>
+          <summary class="text-[9px] font-bold uppercase cursor-pointer mb-2" style="color:var(--blue)">Intent inbox · rule builder</summary>
         <div class="card card-p mb-2" x-show="agentGettingStartedVisible()" style="border-left:3px solid var(--blue)">
           <div class="text-[10px] font-bold mb-1" style="color:var(--blue)" x-text="researchGettingStarted('agent').title"></div>
           <div class="text-[8px] font-bold uppercase mb-2" style="color:var(--t3)" x-text="researchGettingStarted('agent').badge"></div>
@@ -837,7 +837,7 @@
         </div>
         <div class="card card-p" x-show="!agentGettingStartedVisible()" style="border-left:3px solid var(--amber)">
           <div class="flex flex-wrap justify-between items-center gap-2 mb-2">
-            <div class="text-[10px] font-bold uppercase" style="color:var(--amber)">?? Agent ?? ? Monitor only</div>
+            <div class="text-[10px] font-bold uppercase" style="color:var(--amber)">🤖 Agent · 監察 · Monitor only</div>
             <span class="text-[8px]" style="color:var(--t3)" x-text="(aosMonitors.rules||[]).length+' rules'"></span>
           </div>
           <div class="flex flex-wrap gap-2 items-center">
@@ -856,10 +856,10 @@
         <div class="cc-left">
           <div class="cc-section" style="display:flex;justify-content:space-between;align-items:center">
             <span>📋 Setup Queue</span>
-            <button @click="fetchCommandBoard()" class="btn-s text-[8px]">?</button>
+            <button @click="fetchCommandBoard()" class="btn-s text-[8px]">↻</button>
           </div>
           <template x-if="cmd.loading">
-            <div style="padding:20px;text-align:center;color:var(--t3);font-size:11px"><span class="spin"></span> Loading decisions?</div>
+            <div style="padding:20px;text-align:center;color:var(--t3);font-size:11px"><span class="spin"></span> Loading decisions…</div>
           </template>
           <template x-if="!cmd.loading && cmd.watchlistRows.length===0">
             <div style="padding:16px;font-size:11px;color:var(--t3)">No setups. Ensure brief data is loaded.</div>
@@ -886,13 +886,13 @@
           <!-- Starred watchlist section -->
           <template x-if="Object.keys(ccStarred).filter(t=>ccStarred[t]).length>0">
             <div>
-              <div class="cc-section" style="margin-top:8px">? Starred</div>
+              <div class="cc-section" style="margin-top:8px">⭐ Starred</div>
               <template x-for="ticker in Object.keys(ccStarred).filter(t=>ccStarred[t])">
                 <div class="cc-ticker-row" :class="cmd.activeTicker===ticker?'active':''"
                      @click="fetchDecision(ticker)">
                   <div class="cc-sym" x-text="ticker"></div>
                   <div style="flex:1"></div>
-                  <button @click.stop="toggleStar(ticker)" style="background:none;border:none;color:var(--amber);cursor:pointer;font-size:11px">?</button>
+                  <button @click.stop="toggleStar(ticker)" style="background:none;border:none;color:var(--amber);cursor:pointer;font-size:11px">★</button>
                 </div>
               </template>
             </div>
@@ -906,7 +906,7 @@
             <div style="padding:40px;text-align:center;color:var(--t3)">
               <div style="font-size:32px;margin-bottom:12px">🖥</div>
               <div style="font-size:13px">Select a ticker from the left rail</div>
-              <div style="font-size:11px;margin-top:6px">or click ? Refresh to load your watchlist</div>
+              <div style="font-size:11px;margin-top:6px">or click ↻ Refresh to load your watchlist</div>
             </div>
           </template>
 
@@ -925,7 +925,7 @@
                   <span class="pill pb" style="font-size:10px" x-text="'🌍 '+cmd.decision.macro_regime"></span>
                   <span class="pill" :class="cmd.decision.rs_state==='CONFIRMED_LEADER'?'pg':cmd.decision.rs_state==='EMERGING'?'pb':cmd.decision.rs_state==='FADING'||cmd.decision.rs_state==='BROKEN'?'pr':'pw'" style="font-size:10px" x-text="'RS: '+cmd.decision.rs_state"></span>
                   <span class="pill pw" style="font-size:10px" x-text="'Leadership: '+cmd.decision.leadership"></span>
-                  <template x-if="cmd.decision.synthetic"><span class="pill pa" style="font-size:9px">? SYNTHETIC</span></template>
+                  <template x-if="cmd.decision.synthetic"><span class="pill pa" style="font-size:9px">⚠ SYNTHETIC</span></template>
                 </div>
               </div>
 
@@ -999,7 +999,7 @@
             <div>
               <!-- Why Now -->
               <div class="cc-right-section">
-                <div class="cc-right-label">? Why Now</div>
+                <div class="cc-right-label">💡 Why Now</div>
                 <div class="cc-right-text" x-text="cmd.decision.why_now||'—'"></div>
               </div>
 
@@ -1012,9 +1012,9 @@
               <!-- Contradictions -->
               <template x-if="cmd.decision.contradictions&&cmd.decision.contradictions.length>0">
                 <div class="cc-right-section">
-                  <div class="cc-right-label">? Contradictions</div>
+                  <div class="cc-right-label">⚖ Contradictions</div>
                   <template x-for="c in cmd.decision.contradictions">
-                    <div class="cc-contra"><span>?</span><span x-text="c"></span></div>
+                    <div class="cc-contra"><span>⚠</span><span x-text="c"></span></div>
                   </template>
                 </div>
               </template>
@@ -1054,7 +1054,7 @@
                       <div style="font-size:10px;color:var(--t3)">No critical objections.</div>
                     </template>
                     <template x-for="n in (cmd.agent.agents?.critic?.notes||[])">
-                      <div class="cc-contra"><span>?</span><span x-text="n"></span></div>
+                      <div class="cc-contra"><span>⚠</span><span x-text="n"></span></div>
                     </template>
                     <div style="font-size:10px;color:var(--t3);margin-top:6px">Council agreement: <span style="color:var(--t1)" x-text="(((cmd.agent.council?.agreement_ratio)||0)*100).toFixed(0)+'%'"></span></div>
                     <div style="font-size:10px;color:var(--t3)">Dominant risk: <span style="color:var(--amber)" x-text="cmd.agent.council?.dominant_risk||'—'"></span></div>
@@ -1107,7 +1107,7 @@
 
               <!-- Recent Agent Journal (collapsed) -->
               <details class="cc-right-section">
-                <summary class="cc-right-label cursor-pointer">?? Agent Journal</summary>
+                <summary class="cc-right-label cursor-pointer">📝 Agent Journal</summary>
                 <template x-if="cmd.agentJournal.length===0">
                   <div style="font-size:10px;color:var(--t3)">No audit journal entries yet.</div>
                 </template>
@@ -1125,9 +1125,9 @@
 
               <!-- Agent Reliability (collapsed) -->
               <details class="cc-right-section">
-                <summary class="cc-right-label cursor-pointer">?? Agent Reliability</summary>
+                <summary class="cc-right-label cursor-pointer">📊 Agent Reliability</summary>
                 <template x-if="cmd.agentReliabilityLoading">
-                  <div style="font-size:10px;color:var(--t3)"><span class="spin"></span> Loading reliability?</div>
+                  <div style="font-size:10px;color:var(--t3)"><span class="spin"></span> Loading reliability…</div>
                 </template>
                 <template x-if="!cmd.agentReliabilityLoading && cmd.agentReliabilityError">
                   <div style="font-size:10px;color:var(--red)" x-text="cmd.agentReliabilityError"></div>
@@ -1318,7 +1318,7 @@
               <div><span class="font-bold uppercase mr-1" style="color:var(--amber)" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlockChromeLabel)?CCHelpers.operatorBlockChromeLabel('why'):'Why'"></span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().why"></span></div>
               <div><span class="font-bold uppercase mr-1" style="color:var(--green)" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlockChromeLabel)?CCHelpers.operatorBlockChromeLabel('allowed'):'Allowed'"></span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().allowed"></span></div>
               <div x-show="dashboardOperatorBlock().blocked"><span class="font-bold uppercase mr-1" style="color:var(--red)" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlockChromeLabel)?CCHelpers.operatorBlockChromeLabel('blocked'):'Blocked'"></span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().blocked"></span></div>
-              <div><span class="font-bold uppercase mr-1" style="color:var(--purple)" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlockChromeLabel)?CCHelpers.operatorBlockChromeLabel('valid'):'Valid candidates'"></span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().valid_candidates"></span><span x-show="topMonitorLabelsLine()" class="text-[8px] ml-1" style="color:var(--t3)" x-text="'? '+topMonitorLabelsLine()"></span></div>
+              <div><span class="font-bold uppercase mr-1" style="color:var(--purple)" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlockChromeLabel)?CCHelpers.operatorBlockChromeLabel('valid'):'Valid candidates'"></span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().valid_candidates"></span><span x-show="topMonitorLabelsLine()" class="text-[8px] ml-1" style="color:var(--t3)" x-text="'· '+topMonitorLabelsLine()"></span></div>
               <div><span class="font-bold uppercase mr-1" style="color:var(--blue)" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.operatorBlockChromeLabel)?CCHelpers.operatorBlockChromeLabel('next'):'Next'"></span><span style="color:var(--t2)" x-text="dashboardOperatorBlock().next"></span></div>
             </div>
             <div class="text-[8px] mt-2" style="color:var(--t3)" x-text="unifiedTruthStripLine()"></div>
@@ -1332,8 +1332,8 @@
           <div class="card card-p" style="padding:10px 12px;border-left:3px solid var(--purple);background:rgba(167,139,250,.05)">
             <div class="text-[9px] font-bold uppercase mb-1.5" style="color:var(--purple)">機會狀態 · Opportunity Status</div>
             <div class="text-[9px] mb-1"><span class="font-bold mr-1" style="color:var(--t2)">Edge today:</span><span class="text-white font-semibold" x-text="today7.opportunity_status.edge_today"></span><span class="text-[8px] ml-1" style="color:var(--t3)" x-text="'('+today7.opportunity_status.edge_today_zh+')'"></span></div>
-            <div class="text-[9px] mb-1" x-show="(today7.opportunity_status.blockers||[]).length"><span class="font-bold mr-1" style="color:var(--amber)">原因 · Why · <span x-text="today7.opportunity_status.blockers_headline_zh"></span>:</span><span style="color:var(--t2)" x-text="(today7.opportunity_status.blockers||[]).join(' ? ')"></span></div>
-            <div class="text-[9px] mb-1" x-show="(today7.opportunity_status.upgrade_triggers||[]).length"><span class="font-bold mr-1" style="color:var(--green)">升級條件 · Upgrade · <span x-text="today7.opportunity_status.upgrade_triggers_zh"></span>:</span><span style="color:var(--t2)" x-text="(today7.opportunity_status.upgrade_triggers||[]).join(' ? ')"></span></div>
+            <div class="text-[9px] mb-1" x-show="(today7.opportunity_status.blockers||[]).length"><span class="font-bold mr-1" style="color:var(--amber)">原因 · Why · <span x-text="today7.opportunity_status.blockers_headline_zh"></span>:</span><span style="color:var(--t2)" x-text="(today7.opportunity_status.blockers||[]).join(' · ')"></span></div>
+            <div class="text-[9px] mb-1" x-show="(today7.opportunity_status.upgrade_triggers||[]).length"><span class="font-bold mr-1" style="color:var(--green)">升級條件 · Upgrade · <span x-text="today7.opportunity_status.upgrade_triggers_zh"></span>:</span><span style="color:var(--t2)" x-text="(today7.opportunity_status.upgrade_triggers||[]).join(' · ')"></span></div>
             <template x-if="(today7.opportunity_status.closest_candidates||[]).length">
               <div class="text-[9px] mt-1 pt-1" style="border-top:1px solid rgba(255,255,255,.06)">
                 <span class="font-bold mr-1" style="color:var(--blue)">Closest · <span x-text="today7.opportunity_status.closest_candidates_zh"></span>:</span>
@@ -1341,7 +1341,7 @@
                   <div class="text-[8px] mt-0.5" style="color:var(--t2);line-height:1.45">
                     <span class="font-bold text-white" x-text="cc.ticker"></span>
                     <span x-text="' ('+cc.structure+', blocked: '+cc.blocked+')'"></span>
-                    <span class="block text-[7px]" style="color:var(--t3)" x-text="'? '+cc.upgrade_trigger"></span>
+                    <span class="block text-[7px]" style="color:var(--t3)" x-text="'→ '+cc.upgrade_trigger"></span>
                   </div>
                 </template>
               </div>
@@ -1374,7 +1374,7 @@
                   </template>
                   <div class="text-[7px] mono mt-1" style="color:var(--t2)">
                     <span x-text="card.entry_zone"></span>
-                    <span x-show="card.stop_price"> ? Stop $<span x-text="Number(card.stop_price).toFixed(2)"></span></span>
+                    <span x-show="card.stop_price"> · Stop $<span x-text="Number(card.stop_price).toFixed(2)"></span></span>
                     <span x-show="card.risk_reward_label && card.risk_reward_label!=='—'"> · <span x-text="card.risk_reward_label"></span>R</span>
                   </div>
                   <div class="flex flex-wrap gap-1 mt-2">
@@ -1433,7 +1433,7 @@
 
       <!-- ── Regime strip (WAIT-day above-fold) ── -->
       <details x-show="today7.regime" :open="!dashboardShellCompressed()" style="padding:4px 12px 0">
-        <summary class="text-[8px] font-bold uppercase cursor-pointer" style="color:var(--t3);padding:2px 0">Regime snapshot ? expand</summary>
+        <summary class="text-[8px] font-bold uppercase cursor-pointer" style="color:var(--t3);padding:2px 0">Regime snapshot · expand</summary>
         <div class="card card-p mt-1" style="padding:8px 10px;border-left:3px solid var(--amber)">
             <div class="flex flex-wrap items-center gap-2 text-[9px]">
               <span class="font-bold uppercase" style="color:var(--amber)">Regime</span>
@@ -1646,7 +1646,7 @@
               <template x-if="(today7.todays_decision.why_not_aggressive||[]).length">
                 <div class="mt-2 pt-2" style="border-top:1px dashed var(--bd)">
                   <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--amber)">Why not more aggressive?</div>
-                  <template x-for="ln in today7.todays_decision.why_not_aggressive" :key="ln"><div class="text-[8px]" style="color:var(--t2)" x-text="'? '+ln"></div></template>
+                  <template x-for="ln in today7.todays_decision.why_not_aggressive" :key="ln"><div class="text-[8px]" style="color:var(--t2)" x-text="'• '+ln"></div></template>
                 </div>
               </template>
               <template x-if="(today7.todays_decision.risk_blockers||[]).length">
@@ -1695,22 +1695,22 @@
           </details>
           <template x-if="today7.unlock_deploy">
             <details class="card card-p" style="border-left:3px solid var(--blue)">
-              <summary class="text-[10px] font-bold uppercase cursor-pointer mb-1" style="color:var(--blue)">Unlock deploy ? expand</summary>
+              <summary class="text-[10px] font-bold uppercase cursor-pointer mb-1" style="color:var(--blue)">Unlock deploy · expand</summary>
               <div class="flex items-center justify-between mb-1 mt-1">
                 <span class="pill text-[8px]" :class="today7.unlock_deploy.unlocked?'pg':'pa'" x-text="today7.unlock_deploy.unlocked?'UNLOCKED':'LOCKED'"></span>
               </div>
               <div class="text-[9px] mb-2" style="color:var(--t2);line-height:1.55" x-show="today7.unlock_deploy.intro" x-text="today7.unlock_deploy.intro"></div>
               <div class="text-[9px] mb-2" style="color:var(--t2);line-height:1.55" x-show="!today7.unlock_deploy.intro">
                 Unlock deploy requires all 4 conditions together:
-                <div class="mt-1">? Tradeability improves to SELECTIVE+</div>
-                <div>? At least 1 deploy-qualified setup exists</div>
-                <div>? Broker handoff is live</div>
-                <div>? Board-level quality supports risk (?1 watch-qualified name on fresh data)</div>
+                <div class="mt-1">● Tradeability improves to SELECTIVE+</div>
+                <div>● At least 1 deploy-qualified setup exists</div>
+                <div>● Broker handoff is live</div>
+                <div>● Board-level quality supports risk (≥1 watch-qualified name on fresh data)</div>
               </div>
               <div class="text-[8px] mb-2 font-bold" style="color:var(--amber)" x-text="today7.unlock_deploy.summary||dashboardUnlockDeployStatus()"></div>
               <template x-for="c in (today7.unlock_deploy.conditions||[])" :key="c.key">
                 <div class="flex justify-between text-[8px] py-0.5" style="border-bottom:1px dotted var(--bd)">
-                  <span :class="c.met?'text-green-400':'text-amber-300'" x-text="(c.met?'? ':'? ')+c.label"></span>
+                  <span :class="c.met?'text-green-400':'text-amber-300'" x-text="(c.met?'✓ ':'○ ')+c.label"></span>
                   <span style="color:var(--t3)" x-text="playbookUnlockConditionDetail(c)"></span>
                 </div>
               </template>
@@ -1816,10 +1816,10 @@
               </template>
             </div>
             <template x-if="(today7.cross_asset_confirmation.confirms||[]).length">
-              <div class="text-[8px] text-green-400" x-text="'? '+today7.cross_asset_confirmation.confirms.join(' ? ')"></div>
+              <div class="text-[8px] text-green-400" x-text="'? '+today7.cross_asset_confirmation.confirms.join(' · ')"></div>
             </template>
             <template x-if="(today7.cross_asset_confirmation.conflicts||[]).length">
-              <div class="text-[8px] text-amber-300 mt-1" x-text="'? '+today7.cross_asset_confirmation.conflicts.join(' ? ')"></div>
+              <div class="text-[8px] text-amber-300 mt-1" x-text="'? '+today7.cross_asset_confirmation.conflicts.join(' · ')"></div>
             </template>
           </div>
         </div>
@@ -1931,7 +1931,7 @@
             <template x-if="(today7.regime_wait_explanation||[]).length">
               <div class="mt-2 pt-2" style="border-top:1px dashed var(--bd)">
                 <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--amber)">Why WAIT in an uptrend?</div>
-                <template x-for="ln in today7.regime_wait_explanation" :key="ln"><div class="text-[8px]" style="color:var(--t2)" x-text="'? '+ln"></div></template>
+                <template x-for="ln in today7.regime_wait_explanation" :key="ln"><div class="text-[8px]" style="color:var(--t2)" x-text="'• '+ln"></div></template>
               </div>
             </template>
           </div>
@@ -1974,7 +1974,7 @@
                   <div class="text-[8px] text-amber-300" x-text="'Missing: '+(nm.whats_missing||(nm.gaps||[]).join(', '))"></div>
                   <div class="text-[8px]" style="color:var(--t3)" x-text="'Horizon: '+(nm.timing_bucket||'—')+' · '+nm.distance_to_pass"></div>
                   <div class="text-[8px] text-red-400" x-show="nm.invalidation_price" x-text="'Invalidation $'+Number(nm.invalidation_price).toFixed(2)"></div>
-                  <div class="text-[8px] text-green-400" x-text="'? '+nm.upgrade_trigger"></div>
+                  <div class="text-[8px] text-green-400" x-text="'→ '+nm.upgrade_trigger"></div>
                 </div>
               </template>
             </div>
@@ -2028,10 +2028,10 @@
                 </details>
               </template>
               <template x-if="today7.top_ranked[0].why_now">
-                <div class="text-[10px] mt-2" style="color:var(--green);line-height:1.5" x-text="'? '+(Array.isArray(today7.top_ranked[0].why_now)?today7.top_ranked[0].why_now.join(' ? '):today7.top_ranked[0].why_now)"></div>
+                <div class="text-[10px] mt-2" style="color:var(--green);line-height:1.5" x-text="'✓ '+(Array.isArray(today7.top_ranked[0].why_now)?today7.top_ranked[0].why_now.join(' · '):today7.top_ranked[0].why_now)"></div>
               </template>
               <template x-if="today7.top_ranked[0].invalidation">
-                <div class="text-[10px] mt-1" style="color:var(--red);line-height:1.4" x-text="'? Invalidation: '+today7.top_ranked[0].invalidation"></div>
+                <div class="text-[10px] mt-1" style="color:var(--red);line-height:1.4" x-text="'✕ Invalidation: '+today7.top_ranked[0].invalidation"></div>
               </template>
             </div>
           </div>
@@ -2042,7 +2042,7 @@
       <template x-if="today7.regime && today7.regime.synthetic">
         <div style="padding:6px 12px">
           <div style="background:#78350f;border:1px solid #d97706;border-radius:8px;padding:8px 14px;display:flex;align-items:center;gap:8px">
-            <span style="font-size:14px">??</span>
+            <span style="font-size:14px">⚠️</span>
             <span style="color:#fbbf24;font-size:11px;font-weight:600">Regime data is synthetic — real market data unavailable. Signals may be unreliable.</span>
           </div>
         </div>
@@ -2076,16 +2076,16 @@
           <summary class="text-xs font-bold uppercase cursor-pointer" style="color:var(--amber)">Evidence conflict · For / Against / Missing</summary>
           <div class="text-[9px] mt-2 font-bold text-white" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.evidenceConflictPanel)?CCHelpers.evidenceConflictPanel(today7.evidence_conflict||{}).headline:((today7.evidence_conflict||{}).headline||'No valid candidate')"></div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 text-[8px]">
-            <div><div class="font-bold text-green-400 mb-1">For</div><template x-for="ln in ((today7.evidence_conflict||{}).for||[])" :key="'ecf-'+ln"><div style="color:var(--t2)" x-text="'? '+ln"></div></template><div x-show="!((today7.evidence_conflict||{}).for||[]).length" style="color:var(--t3)">?</div></div>
-            <div><div class="font-bold text-red-400 mb-1">Against</div><template x-for="ln in ((today7.evidence_conflict||{}).against||[])" :key="'eca-'+ln"><div style="color:var(--t2)" x-text="'? '+ln"></div></template><div x-show="!((today7.evidence_conflict||{}).against||[]).length" style="color:var(--t3)">?</div></div>
-            <div><div class="font-bold text-amber-300 mb-1">Missing</div><template x-for="ln in ((today7.evidence_conflict||{}).missing||[])" :key="'ecm-'+ln"><div style="color:var(--t2)" x-text="'? '+ln"></div></template></div>
+            <div><div class="font-bold text-green-400 mb-1">For</div><template x-for="ln in ((today7.evidence_conflict||{}).for||[])" :key="'ecf-'+ln"><div style="color:var(--t2)" x-text="'• '+ln"></div></template><div x-show="!((today7.evidence_conflict||{}).for||[]).length" style="color:var(--t3)">?</div></div>
+            <div><div class="font-bold text-red-400 mb-1">Against</div><template x-for="ln in ((today7.evidence_conflict||{}).against||[])" :key="'eca-'+ln"><div style="color:var(--t2)" x-text="'• '+ln"></div></template><div x-show="!((today7.evidence_conflict||{}).against||[]).length" style="color:var(--t3)">?</div></div>
+            <div><div class="font-bold text-amber-300 mb-1">Missing</div><template x-for="ln in ((today7.evidence_conflict||{}).missing||[])" :key="'ecm-'+ln"><div style="color:var(--t2)" x-text="'• '+ln"></div></template></div>
             <div><div class="font-bold text-blue-300 mb-1">Decision</div><div style="color:var(--t2)" x-text="(today7.evidence_conflict||{}).decision||'Preserve capital'"></div><div class="mt-1" style="color:var(--t3)" x-show="(today7.evidence_conflict||{}).upgrade_trigger" x-text="'Upgrade: '+(today7.evidence_conflict||{}).upgrade_trigger"></div><div style="color:var(--t3)" x-show="(today7.evidence_conflict||{}).invalidation" x-text="'Invalidation: '+(today7.evidence_conflict||{}).invalidation"></div></div>
           </div>
         </details>
       </div>
 
       <details style="padding:0 12px 8px;display:none" x-show="false" x-cloak aria-hidden="true">
-        <summary class="text-[9px] font-bold uppercase cursor-pointer" style="color:#a78bfa">? AI Commentary ? expand (not authoritative)</summary>
+        <summary class="text-[9px] font-bold uppercase cursor-pointer" style="color:#a78bfa">✨ AI Commentary · expand (not authoritative)</summary>
         <div class="card card-p mt-1" style="padding:8px 12px;border-left:3px solid #8b5cf6">
           <div class="flex items-center gap-2 flex-wrap mb-2">
             <button @click.stop="fetchAINarrative()" class="btn-s text-[10px]" :disabled="today7.ai_loading" x-text="aiCommentaryCtaLabel()"></button>
@@ -2183,9 +2183,9 @@
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px 12px">
         <template x-if="today7.what_changed && today7.what_changed.length > 0">
           <div class="card card-p" style="padding:10px;border-left:3px solid var(--blue)">
-            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--blue)">? What Changed</div>
+            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--blue)">📈 What Changed</div>
             <template x-for="c in today7.what_changed">
-              <div class="text-[9px] py-0.5" style="color:var(--t2);line-height:1.3" x-text="'? '+c"></div>
+              <div class="text-[9px] py-0.5" style="color:var(--t2);line-height:1.3" x-text="'• '+c"></div>
             </template>
           </div>
         </template>
@@ -2197,7 +2197,7 @@
               <button type="button" class="text-[9px] py-0.5 block w-full text-left" style="color:var(--red);line-height:1.3;background:none;border:none;cursor:pointer"
                 :title="eventRiskTooltip(e)"
                 @click="openEventRiskDossier(e)"
-                x-text="'? '+eventRiskLabel(e)"></button>
+                x-text="'📅 '+eventRiskLabel(e)"></button>
             </template>
           </div>
         </template>
@@ -2272,7 +2272,7 @@
 
       <!-- ── Top Ranked Opportunities ── -->
       <details style="padding:0 12px" :open="!todayDeployBlocked()">
-        <summary class="section-hdr cursor-pointer" style="margin-top:6px;list-style:none">?? Top Opportunities</summary>
+        <summary class="section-hdr cursor-pointer" style="margin-top:6px;list-style:none">🎯 Top Opportunities</summary>
       <div x-show="topOpportunitiesEmptyCopy()" style="padding:0 0 6px" class="text-[9px] font-bold" style="color:var(--amber)" x-text="topOpportunitiesEmptyCopy()"></div>
 
       <!-- ── Quick Action Strip — "What to buy NOW" ── -->
@@ -2313,11 +2313,11 @@
             <div>
               <div class="text-[8px] font-bold mb-1" style="color:var(--t2)">Action Labels</div>
               <div class="text-[8px]" style="color:var(--t3);line-height:1.6">
-                <span style="color:var(--green)">?</span> <strong style="color:var(--t1)">BUY</strong> ? Enter now, setup is ready<br>
-                <span style="color:var(--green)">?</span> <strong style="color:var(--t1)">BUY_ON_DIP</strong> ? Good setup, wait for pullback<br>
-                <span style="color:var(--amber)">?</span> <strong style="color:var(--t1)">WATCH</strong> ? Monitor, not ready yet<br>
-                <span style="color:var(--amber)">?</span> <strong style="color:var(--t1)">WAIT</strong> ? Regime unfavorable, sit out<br>
-                <span style="color:var(--red)">?</span> <strong style="color:var(--t1)">AVOID</strong> ? Extended or broken setup
+                <span style="color:var(--green)">●</span> <strong style="color:var(--t1)">BUY</strong> · Enter now, setup is ready<br>
+                <span style="color:var(--green)">?</span> <strong style="color:var(--t1)">BUY_ON_DIP</strong> · Good setup, wait for pullback<br>
+                <span style="color:var(--amber)">●</span> <strong style="color:var(--t1)">WATCH</strong> · Monitor, not ready yet<br>
+                <span style="color:var(--amber)">?</span> <strong style="color:var(--t1)">WAIT</strong> · Regime unfavorable, sit out<br>
+                <span style="color:var(--red)">●</span> <strong style="color:var(--t1)">AVOID</strong> · Extended or broken setup
               </div>
             </div>
             <div>
@@ -2327,18 +2327,18 @@
                 <strong style="color:var(--t1)">Timing</strong> — Is now the right time to enter?<br>
                 <strong style="color:var(--t1)">Exec</strong> — Can you fill cleanly at this price?<br>
                 <strong style="color:var(--t1)">Data</strong> — How fresh/reliable is the signal?<br>
-                <span style="color:var(--green)">Green ?70%</span> ? <span style="color:var(--amber)">Amber ?50%</span> ? <span style="color:var(--red)">Red &lt;50%</span>
+                <span style="color:var(--green)">Green ≥70%</span> · <span style="color:var(--amber)">Amber ≥50%</span> · <span style="color:var(--red)">Red &lt;50%</span>
               </div>
             </div>
           </div>
           <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(88,166,255,.1)">
             <div class="text-[8px] font-bold mb-1" style="color:var(--t2)">Decision Rules</div>
             <div class="text-[8px]" style="color:var(--t3);line-height:1.6">
-              ? <strong style="color:var(--t1)">Full TRADE</strong> when: board-ranked score ?8, thesis+timing ?65%, R:R ?2.5, execution-ready flag on card<br>
-              ?? <strong style="color:var(--t1)">PILOT</strong> when: partial edge with stop ? review-only until deploy authority opens; card shows why_pilot<br>
-              ? <strong style="color:var(--t1)">Watch</strong> when: ranked #1?10 but below TRADE bar (score 6?8 or timing/R:R gap)<br>
+              ● <strong style="color:var(--t1)">Full TRADE</strong> when: board-ranked score ≥8, thesis+timing ≥65%, R:R ≥2.5, execution-ready flag on card<br>
+              🧪 <strong style="color:var(--t1)">PILOT</strong> when: partial edge with stop · review-only until deploy authority opens; card shows why_pilot<br>
+              ● <strong style="color:var(--t1)">Watch</strong> when: ranked #1–10 but below TRADE bar (score 6–8 or timing/R:R gap)<br>
               🛑 <strong style="color:var(--t1)">Skip</strong> when: regime NO_TRADE/WAIT or laggard + weak data<br>
-              ?? <strong style="color:var(--t1)">Historical Win Rate</strong> shown when ?10 similar past trades exist ? use as extra confirmation
+              📊 <strong style="color:var(--t1)">Historical Win Rate</strong> shown when ≥10 similar past trades exist · use as extra confirmation
             </div>
           </div>
         </div>
@@ -2350,8 +2350,8 @@
             <div class="card" style="cursor:pointer;overflow:hidden;position:relative" @click="openDossier(opp.ticker)">
               <!-- Star/Love/Watchlist buttons -->
               <div style="position:absolute;top:6px;right:10px;z-index:2;display:flex;gap:4px" @click.stop>
-                <button :class="'btn-s text-[12px] px-1 py-0.5 '+(ccStarred[opp.ticker]?'text-yellow-400':'text-gray-400')" title="Star (favorite)" @click="toggleStar(opp.ticker)">?</button>
-                <button :class="'btn-s text-[12px] px-1 py-0.5 '+(ccLoved[opp.ticker]?'text-pink-400':'text-gray-400')" title="Love (high conviction)" @click="toggleLove(opp.ticker)">?</button>
+                <button :class="'btn-s text-[12px] px-1 py-0.5 '+(ccStarred[opp.ticker]?'text-yellow-400':'text-gray-400')" title="Star (favorite)" @click="toggleStar(opp.ticker)">★</button>
+                <button :class="'btn-s text-[12px] px-1 py-0.5 '+(ccLoved[opp.ticker]?'text-pink-400':'text-gray-400')" title="Love (high conviction)" @click="toggleLove(opp.ticker)">♥</button>
                 <button :class="'btn-s text-[12px] px-1 py-0.5 '+(ccWatchlist[opp.ticker]?'text-blue-400':'text-gray-400')" title="Add to Watchlist" @click="toggleWatchlist(opp.ticker)">👁</button>
               </div>
               <!-- Action color bar -->
@@ -2433,20 +2433,20 @@
                 <template x-if="(opp.rank_explain||[]).length">
                   <div class="text-[8px] px-2 py-1 mb-1 rounded" style="background:var(--s2);border-left:2px solid var(--blue)">
                     <div class="font-bold uppercase mb-0.5" style="color:var(--blue)">Why ranked here</div>
-                    <template x-for="ln in (opp.rank_explain||[]).slice(0,3)" :key="ln"><div style="color:var(--t2)" x-text="'? '+ln"></div></template>
+                    <template x-for="ln in (opp.rank_explain||[]).slice(0,3)" :key="ln"><div style="color:var(--t2)" x-text="'• '+ln"></div></template>
                   </div>
                 </template>
                 <template x-if="opp.sector_alignment_label">
                   <div class="text-[7px] mb-1" :class="opp.sector_alignment==='aligned'?'text-green-400':opp.sector_alignment==='misaligned'?'text-red-400':'text-amber-300'" x-text="'Sector: '+opp.sector_alignment_label"></div>
                 </template>
                 <template x-if="(opp.confidence_breakdown?.thesis||opp.thesis_conf||0)>=0.65&&(opp.confidence_breakdown?.timing||opp.timing_conf||0)<0.45">
-                  <div class="text-[8px] px-2 py-1" style="background:rgba(251,191,36,.08);border-radius:4px;color:var(--amber);margin-bottom:4px">?? Strong thesis, weak timing ? wait for better entry before acting</div>
+                  <div class="text-[8px] px-2 py-1" style="background:rgba(251,191,36,.08);border-radius:4px;color:var(--amber);margin-bottom:4px">⚠ Strong thesis, weak timing · wait for better entry before acting</div>
                 </template>
                 <template x-if="(opp.confidence_breakdown?.timing||opp.timing_conf||0)>=0.65&&(opp.confidence_breakdown?.thesis||opp.thesis_conf||0)<0.45">
-                  <div class="text-[8px] px-2 py-1" style="background:rgba(255,92,92,.08);border-radius:4px;color:var(--red);margin-bottom:4px">?? Good timing but weak thesis ? low conviction, size down or skip</div>
+                  <div class="text-[8px] px-2 py-1" style="background:rgba(255,92,92,.08);border-radius:4px;color:var(--red);margin-bottom:4px">⚠ Good timing but weak thesis · low conviction, size down or skip</div>
                 </template>
                 <template x-if="(opp.confidence_breakdown?.execution||opp.exec_conf||0)<0.4&&(opp.confidence_breakdown?.thesis||opp.thesis_conf||0)>=0.6&&(opp.confidence_breakdown?.timing||opp.timing_conf||0)>=0.5">
-                  <div class="text-[8px] px-2 py-1" style="background:rgba(251,191,36,.08);border-radius:4px;color:var(--amber);margin-bottom:4px">?? Good setup but execution risk high ? use limit orders, reduce size by 50%</div>
+                  <div class="text-[8px] px-2 py-1" style="background:rgba(251,191,36,.08);border-radius:4px;color:var(--amber);margin-bottom:4px">⚠ Good setup but execution risk high · use limit orders, reduce size by 50%</div>
                 </template>
                 <!-- Row 3: Conflict + Stage + Leader -->
                 <div class="flex gap-2 flex-wrap text-[8px]" style="margin-bottom:4px">
@@ -2464,13 +2464,13 @@
                   <template x-if="opp.structure&&opp.structure.is_extended"><span class="pill pr text-[7px]" x-text="'🚨 Extended '+Math.round((opp.structure.extension_pct||0)*100)+'%'"></span></template>
                   <template x-if="opp.structure&&opp.structure.is_near_support"><span class="pill pg text-[7px]">🟢 Near Support</span></template>
                   <template x-if="opp.structure&&opp.structure.is_at_resistance"><span class="pill pr text-[7px]">🟡 At Resistance</span></template>
-                  <template x-if="opp.structure&&opp.structure.volume_confirms"><span class="pill pg text-[7px]">?? Vol?</span></template>
+                  <template x-if="opp.structure&&opp.structure.volume_confirms"><span class="pill pg text-[7px]">📈 Vol✓</span></template>
                   <template x-if="opp.structure&&opp.structure.volume_exhaustion"><span class="pill pr text-[7px]">📊 Vol Exhaustion</span></template>
                   <template x-if="opp.structure&&opp.structure.breakout_quality"><span class="pill text-[7px]" :class="opp.structure.breakout_quality==='proper'?'pg':opp.structure.breakout_quality==='early'?'pa':'pr'" x-text="'🚀 BQ:'+opp.structure.breakout_quality"></span></template>
                   <template x-if="opp.entry_quality&&opp.entry_quality.verdict"><span class="pill text-[7px]" :class="opp.entry_quality.verdict==='PASS'?'pg':opp.entry_quality.verdict==='REJECT'?'pr':'pa'" x-text="'🎯'+opp.entry_quality.verdict"></span></template>
                   <template x-if="opp.fundamentals&&opp.fundamentals.quality"><span class="pill pb text-[7px]" x-text="'💎Q'+opp.fundamentals.quality"></span></template>
                   <template x-if="opp.fundamentals&&opp.fundamentals.moat"><span class="pill pg text-[7px]">🏰Moat</span></template>
-                  <template x-if="opp.earnings&&opp.earnings.in_blackout"><span class="pill pr text-[7px]">??ER Blackout</span></template>
+                  <template x-if="opp.earnings&&opp.earnings.in_blackout"><span class="pill pr text-[7px]">📅 ER Blackout</span></template>
                   <template x-if="opp.earnings&&opp.earnings.days_to_earnings!=null&&opp.earnings.days_to_earnings<=7&&!opp.earnings.in_blackout"><span class="pill pa text-[7px]" x-text="'📅ER '+opp.earnings.days_to_earnings+'d'"></span></template>
                   <template x-if="opp.portfolio_gate&&!opp.portfolio_gate.allowed"><span class="pill pr text-[7px]">?Gate</span></template>
                 </div>
@@ -2494,11 +2494,11 @@
                 </div>
                 <!-- Why now -->
                 <template x-if="opp.why_now&&(Array.isArray(opp.why_now)?opp.why_now.length:opp.why_now)">
-                  <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'? '+(Array.isArray(opp.why_now)?opp.why_now.join(' ? '):opp.why_now)"></div>
+                  <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'? '+(Array.isArray(opp.why_now)?opp.why_now.join(' · '):opp.why_now)"></div>
                 </template>
                 <!-- Why not -->
                 <template x-if="opp.why_not&&(Array.isArray(opp.why_not)?opp.why_not.length:opp.why_not)">
-                  <div class="text-[9px]" style="color:var(--amber);line-height:1.4" x-text="'⚠ '+(Array.isArray(opp.why_not)?opp.why_not.join(' ? '):opp.why_not)"></div>
+                  <div class="text-[9px]" style="color:var(--amber);line-height:1.4" x-text="'⚠ '+(Array.isArray(opp.why_not)?opp.why_not.join(' · '):opp.why_not)"></div>
                 </template>
                 <!-- Invalidation -->
                 <template x-if="opp.invalidation">
@@ -2577,7 +2577,7 @@
         <div class="card card-p" style="border-left:3px solid var(--blue)">
           <div class="flex justify-between items-center mb-2">
             <div class="text-[10px] font-bold uppercase" style="color:var(--blue)">Alert center</div>
-            <button @click="fetchAosMonitors()" class="btn-s text-[8px]" :disabled="aosMonitors.loading">?</button>
+            <button @click="fetchAosMonitors()" class="btn-s text-[8px]" :disabled="aosMonitors.loading">↻</button>
           </div>
           <template x-if="(aosMonitors.alerts||[]).length">
             <template x-for="al in aosMonitors.alerts.slice(0,4)" :key="al.id||al.what_changed">
@@ -2620,7 +2620,7 @@
       <details style="margin:12px 12px 16px" :open="!dashboardShellCompressed()" @toggle="$event.target.open && !indices.length && !marketStrip.loading && fetchMarketStrip()">
         <summary class="text-[10px] font-bold flex items-center gap-2" style="color:var(--t3);cursor:pointer">
           <span>📈 Market Data</span>
-          <span x-show="marketStrip.loading" class="pill text-[7px] pw">Loading?</span>
+          <span x-show="marketStrip.loading" class="pill text-[7px] pw">Loading…</span>
           <span x-show="marketStrip.error&&!marketStrip.loading" class="pill text-[7px] pa" x-text="'? '+marketStrip.error.slice(0,28)"></span>
           <span x-show="!marketStrip.loading&&!marketStrip.error&&indices.length" class="pill text-[7px] pg" x-text="indices.length+' live'"></span>
         </summary>
@@ -2635,7 +2635,7 @@
           <div data-cc="market-strip-stale" class="card card-p mt-2 mb-2" style="padding:10px;border:1px solid rgba(251,191,36,.35);background:rgba(251,191,36,.06)">
             <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--amber)">Market data — snapshot / stale</div>
             <template x-for="ln in marketStripStaleDowngradeLines()" :key="ln">
-              <div class="text-[8px] py-0.5" style="color:var(--t2)" x-text="'? '+ln"></div>
+              <div class="text-[8px] py-0.5" style="color:var(--t2)" x-text="'• '+ln"></div>
             </template>
             <div class="text-[8px] mt-1 mono" style="color:var(--t3)" x-show="marketStripStaleSnapshotLine()" x-text="marketStripStaleSnapshotLine()"></div>
             <div class="text-[8px] mono" style="color:var(--t3)" x-show="marketStripStaleRenderLine()" x-text="marketStripStaleRenderLine()"></div>
@@ -2739,7 +2739,7 @@
           <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Truth</div><div x-text="safeRenderText(playbookOperatorView().truth_strip)"></div></div>
           <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Qualification</div><div x-text="safeRenderText(playbookQualificationDisplay())"></div></div>
           <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">Best action</div><div class="font-semibold text-white" x-text="safeRenderText(playbookOperatorView().best_action||playbookBestActionDisplay())"></div></div>
-          <div class="sm:col-span-2"><div class="font-bold uppercase mb-1" style="color:var(--t3)">Next</div><div x-text="(playbookOperatorView().next||[]).map(n=>safeRenderText(n)).join(' ? ')"></div></div>
+          <div class="sm:col-span-2"><div class="font-bold uppercase mb-1" style="color:var(--t3)">Next</div><div x-text="(playbookOperatorView().next||[]).map(n=>safeRenderText(n)).join(' · ')"></div></div>
         </div>
         <div x-show="playbookNoValidMonitors()" class="mt-2 p-1.5 rounded text-[9px] font-bold" style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:var(--amber)">NO VALID MONITOR CANDIDATES</div>
       </div>
@@ -2812,7 +2812,7 @@
           </div>
           <div class="text-[8px] mt-1" style="color:var(--t3)"><span class="font-bold">Decision confidence</span> · <span x-text="playbookDecisionConfidenceDisplay()"></span></div>
           <template x-if="rankedOpps.overlapWarning&&rankedOpps.overlapWarning.warnings&&rankedOpps.overlapWarning.warnings.length">
-            <div class="text-[8px] mt-1 text-amber-300" x-text="'? '+rankedOpps.overlapWarning.warnings.join(' ? ')"></div>
+            <div class="text-[8px] mt-1 text-amber-300" x-text="'? '+rankedOpps.overlapWarning.warnings.join(' · ')"></div>
           </template>
           <div x-show="rankedOpps.warning" class="text-[8px] mt-1 text-amber-300" x-text="rankedOpps.warning"></div>
         </div>
@@ -2870,7 +2870,7 @@
             <div class="text-[8px] mb-2" style="color:var(--t2);line-height:1.45" x-text="playbookBoardWait()?'All four must clear together — see checklist:':(rankedOpps.unlock_deploy.intro||dashboardUnlockDeployIntro())"></div>
             <template x-for="c in (rankedOpps.unlock_deploy.conditions||[])" :key="c.key">
               <div class="flex justify-between text-[8px] mb-1 p-1 rounded" style="background:var(--s2)">
-                <span :class="c.met?'text-green-400':'text-amber-300'" x-text="(c.met?'? ':'? ')+c.label"></span>
+                <span :class="c.met?'text-green-400':'text-amber-300'" x-text="(c.met?'✓ ':'○ ')+c.label"></span>
                 <span style="color:var(--t3)" x-text="playbookUnlockConditionDetail(c)"></span>
               </div>
             </template>
@@ -3093,17 +3093,17 @@
                 <template x-if="(r.rank_explain||[]).length">
                   <div class="text-[8px] px-2 py-1 mb-1 rounded" style="background:var(--s2);border-left:2px solid var(--blue)">
                     <div class="font-bold uppercase mb-0.5" style="color:var(--blue)">Why ranked here</div>
-                    <template x-for="ln in (r.rank_explain||[]).slice(0,3)" :key="ln"><div style="color:var(--t2)" x-text="'? '+ln"></div></template>
+                    <template x-for="ln in (r.rank_explain||[]).slice(0,3)" :key="ln"><div style="color:var(--t2)" x-text="'• '+ln"></div></template>
                   </div>
                 </template>
                 <template x-if="r.sector_alignment_label">
                   <div class="text-[7px] mb-1" :class="r.sector_alignment==='aligned'?'text-green-400':r.sector_alignment==='misaligned'?'text-red-400':'text-amber-300'" x-text="'Sector: '+r.sector_alignment_label"></div>
                 </template>
                 <template x-if="(r.thesis_conf||0)>=0.65&&(r.timing_conf||0)<0.45">
-                  <div class="text-[8px] px-2 py-1" style="background:rgba(251,191,36,.08);border-radius:4px;color:var(--amber);margin-bottom:2px">?? Strong thesis, weak timing ? wait for pullback</div>
+                  <div class="text-[8px] px-2 py-1" style="background:rgba(251,191,36,.08);border-radius:4px;color:var(--amber);margin-bottom:2px">⚠ Strong thesis, weak timing · wait for pullback</div>
                 </template>
                 <template x-if="(r.timing_conf||0)>=0.65&&(r.thesis_conf||0)<0.45">
-                  <div class="text-[8px] px-2 py-1" style="background:rgba(255,92,92,.08);border-radius:4px;color:var(--red);margin-bottom:2px">?? Good timing, weak thesis ? low conviction</div>
+                  <div class="text-[8px] px-2 py-1" style="background:rgba(255,92,92,.08);border-radius:4px;color:var(--red);margin-bottom:2px">⚠ Good timing, weak thesis · low conviction</div>
                 </template>
                 <!-- Meta row -->
                 <div class="flex gap-2 flex-wrap text-[8px]" style="color:var(--t3)">
@@ -3171,12 +3171,12 @@
                   <template x-if="r.structure&&r.structure.is_extended"><span class="pill pr text-[7px]" x-text="'🚨 Extended '+Math.round((r.structure.extension_pct||0)*100)+'%'"></span></template>
                   <template x-if="r.structure&&r.structure.is_near_support"><span class="pill pg text-[7px]">🟢 Near Support</span></template>
                   <template x-if="r.structure&&r.structure.is_at_resistance"><span class="pill pr text-[7px]">🟡 At Resistance</span></template>
-                  <template x-if="r.structure&&r.structure.volume_confirms"><span class="pill pg text-[7px]">?? Vol?</span></template>
+                  <template x-if="r.structure&&r.structure.volume_confirms"><span class="pill pg text-[7px]">📈 Vol✓</span></template>
                   <template x-if="r.structure&&r.structure.volume_exhaustion"><span class="pill pr text-[7px]">📊 Vol Exhaustion</span></template>
                   <template x-if="r.entry_quality&&r.entry_quality.verdict"><span class="pill text-[7px]" :class="r.entry_quality.verdict==='PASS'?'pg':r.entry_quality.verdict==='REJECT'?'pr':'pa'" x-text="'🎯 '+r.entry_quality.verdict"></span></template>
                   <template x-if="r.fundamentals&&r.fundamentals.quality"><span class="pill text-[7px]" :class="r.fundamentals.quality>=70?'pg':r.fundamentals.quality>=50?'pa':'pr'" x-text="'💎Q'+r.fundamentals.quality"></span></template>
                   <template x-if="r.fundamentals&&r.fundamentals.moat"><span class="pill pg text-[7px]">🏰 Moat</span></template>
-                  <template x-if="r.earnings&&r.earnings.in_blackout"><span class="pill pr text-[7px]">?? Earnings Blackout</span></template>
+                  <template x-if="r.earnings&&r.earnings.in_blackout"><span class="pill pr text-[7px]">📅 Earnings Blackout</span></template>
                   <template x-if="r.earnings&&r.earnings.days_to_earnings!=null&&r.earnings.days_to_earnings<=7&&!r.earnings.in_blackout"><span class="pill pa text-[7px]" x-text="'📅 ER in '+r.earnings.days_to_earnings+'d'"></span></template>
                   <template x-if="r.portfolio_gate&&!r.portfolio_gate.allowed"><span class="pill pr text-[7px]">🚫 Gate Blocked</span></template>
                 </div>
@@ -3199,10 +3199,10 @@
                 <!-- Why now / Why not -->
                 <div class="text-[9px] mt-1" style="color:var(--t2);line-height:1.4" x-show="cardActionGuidanceLine(r)" x-text="cardActionGuidanceLine(r)"></div>
                 <template x-if="r.why_now&&(Array.isArray(r.why_now)?r.why_now.length:r.why_now)">
-                  <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'? '+(Array.isArray(r.why_now)?r.why_now.join(' ? '):r.why_now)"></div>
+                  <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'? '+(Array.isArray(r.why_now)?r.why_now.join(' · '):r.why_now)"></div>
                 </template>
                 <template x-if="r.why_not&&!playbookSymbolWhyNotFullTrade(r)&&(Array.isArray(r.why_not)?r.why_not.length:r.why_not)">
-                  <div class="text-[9px]" style="color:var(--amber);line-height:1.4" x-text="'⚠ '+(Array.isArray(r.why_not)?r.why_not.join(' ? '):r.why_not)"></div>
+                  <div class="text-[9px]" style="color:var(--amber);line-height:1.4" x-text="'⚠ '+(Array.isArray(r.why_not)?r.why_not.join(' · '):r.why_not)"></div>
                 </template>
                 <template x-if="r.invalidation">
                   <div class="text-[9px]" style="color:var(--red);line-height:1.3" x-text="'? '+r.invalidation"></div>
@@ -3290,7 +3290,7 @@
                 </div>
                 <div class="text-[9px] mt-1" style="color:var(--t2);line-height:1.4" x-show="cardActionGuidanceLine(r)" x-text="cardActionGuidanceLine(r)"></div>
                 <template x-if="r.why_now&&(Array.isArray(r.why_now)?r.why_now.length:r.why_now)">
-                  <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'? '+(Array.isArray(r.why_now)?r.why_now.join(' ? '):r.why_now)"></div>
+                  <div class="text-[9px] mt-1" style="color:var(--green);line-height:1.4" x-text="'? '+(Array.isArray(r.why_now)?r.why_now.join(' · '):r.why_now)"></div>
                 </template>
               </div>
             </div>
@@ -3331,7 +3331,7 @@
       </div>
       <div style="display:none" aria-hidden="true" data-cc="strat-health-legacy-removed">
           <template x-if="stratHealth.loading">
-            <div class="text-[9px]" style="color:var(--t3)">Loading strategy health?</div>
+            <div class="text-[9px]" style="color:var(--t3)">Loading strategy health…</div>
           </template>
           <template x-if="!stratHealth.loading&&(!stratHealth.data||!stratHealth.data.strategies||stratHealth.data.strategies.length===0)">
             <div class="text-[10px] py-2" style="color:var(--t3);line-height:1.5">Strategy health unavailable — no meaningful live closed-trade sample in the active window. Treat all score calibration, hit-rate expectation, and card confidence as provisional until live evidence accumulates.</div>
@@ -3355,11 +3355,11 @@
                   <option :value="90">90d</option>
                   <option :value="0">All-time</option>
                 </select>
-                <button @click="fetchStrategyHealth()" class="btn-s text-[9px]">?</button>
+                <button @click="fetchStrategyHealth()" class="btn-s text-[9px]">↻</button>
               </div>
             </div>
             <template x-if="stratHealth.loading">
-              <div class="text-[9px]" style="color:var(--t3)">Loading?</div>
+              <div class="text-[9px]" style="color:var(--t3)">Loading…</div>
             </template>
             <template x-if="!stratHealth.loading&&stratHealth.data&&stratHealth.data.strategies&&stratHealth.data.strategies.length===0">
               <div class="text-[9px]" style="color:var(--t3)">No closed trades in window.</div>
@@ -3448,7 +3448,7 @@
       <div class="p-3">
         <div class="flex gap-2 mb-3">
           <div class="ac-wrap flex-1">
-            <input type="text" x-model="dos.ticker" @input="acInput(dos.ticker,'dos')" @keydown="acKey($event)" @keydown.enter="if(ac.selIdx<0){ac.show=false;fetchDossier()}" @blur="setTimeout(()=>ac.show=false,200)" @focus="if(dos.ticker)acInput(dos.ticker,'dos')" placeholder="Search ticker or company? (e.g. AAPL, ??)" style="text-transform:uppercase" autocomplete="off" />
+            <input type="text" x-model="dos.ticker" @input="acInput(dos.ticker,'dos')" @keydown="acKey($event)" @keydown.enter="if(ac.selIdx<0){ac.show=false;fetchDossier()}" @blur="setTimeout(()=>ac.show=false,200)" @focus="if(dos.ticker)acInput(dos.ticker,'dos')" placeholder="Search ticker or company name (e.g. AAPL, 苹果)" style="text-transform:uppercase" autocomplete="off" />
             <div class="ac-drop" x-show="ac.show&&ac.target==='dos'">
               <template x-for="(item,idx) in ac.results">
                 <div class="ac-item" :class="idx===ac.selIdx?'ac-sel':''" @mousedown.prevent="acSelect(item)">
@@ -3471,8 +3471,8 @@
               <div class="flex items-center gap-2 min-w-0">
                 <div class="text-lg font-bold text-white mono" x-text="dos.data.symbol"></div>
                 <div style="display:flex;gap:4px" @click.stop>
-                  <button :class="'btn-s text-[14px] px-1 py-0.5 '+(ccStarred[dos.data.symbol]?'text-yellow-400':'text-gray-400')" @click="toggleStar(dos.data.symbol)">?</button>
-                  <button :class="'btn-s text-[14px] px-1 py-0.5 '+(ccLoved[dos.data.symbol]?'text-pink-400':'text-gray-400')" @click="toggleLove(dos.data.symbol)">?</button>
+                  <button :class="'btn-s text-[14px] px-1 py-0.5 '+(ccStarred[dos.data.symbol]?'text-yellow-400':'text-gray-400')" @click="toggleStar(dos.data.symbol)">★</button>
+                  <button :class="'btn-s text-[14px] px-1 py-0.5 '+(ccLoved[dos.data.symbol]?'text-pink-400':'text-gray-400')" @click="toggleLove(dos.data.symbol)">♥</button>
                   <button :class="'btn-s text-[14px] px-1 py-0.5 '+(ccWatchlist[dos.data.symbol]?'text-blue-400':'text-gray-400')" @click="toggleWatchlist(dos.data.symbol)">👁</button>
                 </div>
                 <span class="pill" :class="dosQuoteToneClass()" x-text="dosChangePctDisplay()"></span>
@@ -3494,8 +3494,8 @@
               <div class="grid sm:grid-cols-2 gap-2 text-[9px] mb-2">
                 <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">現在 · Now</div><div style="color:var(--t2)" x-text="dossierOperatorBlock().now"></div></div>
                 <div><div class="font-bold uppercase mb-1" style="color:var(--t3)">原因 · Why</div><div style="color:var(--t2)" x-text="dossierOperatorBlock().why"></div></div>
-                <div><div class="font-bold uppercase mb-1" style="color:var(--green)">允許 · Allowed</div><div style="color:var(--t2)" x-text="(dossierOperatorBlock().allowed||[]).join(' ? ')"></div></div>
-                <div><div class="font-bold uppercase mb-1" style="color:var(--red)">禁止 · Blocked</div><div style="color:var(--t2)" x-text="(dossierOperatorBlock().blocked||[]).join(' ? ')"></div></div>
+                <div><div class="font-bold uppercase mb-1" style="color:var(--green)">允許 · Allowed</div><div style="color:var(--t2)" x-text="(dossierOperatorBlock().allowed||[]).join(' · ')"></div></div>
+                <div><div class="font-bold uppercase mb-1" style="color:var(--red)">禁止 · Blocked</div><div style="color:var(--t2)" x-text="(dossierOperatorBlock().blocked||[]).join(' · ')"></div></div>
               </div>
               <div class="text-[9px] mb-2"><div class="font-bold uppercase mb-1" style="color:var(--amber)">缺少資料 · Missing</div><div style="color:var(--t2)" x-text="(dossierOperatorBlock().missing_data||[]).join(', ')||dossierMissingDataLine()"></div></div>
               <div class="text-[9px] p-2 rounded mb-2" style="background:var(--s2)" x-show="dossierEvidenceStatusVisible()">
@@ -4006,7 +4006,7 @@
                   </div>
                   <div class="card card-p">
                     <div class="text-[10px] font-bold uppercase mb-1 text-amber-300">Contradictions</div>
-                    <template x-for="c in (dos.intel.narrative.contradictions||[])" :key="c"><div class="text-[9px] mb-1" style="color:var(--t2)" x-text="'? '+c"></div></template>
+                    <template x-for="c in (dos.intel.narrative.contradictions||[])" :key="c"><div class="text-[9px] mb-1" style="color:var(--t2)" x-text="'• '+c"></div></template>
                   </div>
                 </div>
               </template>
@@ -4286,16 +4286,16 @@
         </div>
         <div class="flex flex-wrap gap-2 items-center">
           <input x-model="stratLabDraft.strategyId" class="flex-1 min-w-[180px] rounded px-2 py-1 text-[10px] mono" style="background:var(--s2);border:1px solid var(--bd);color:var(--t1)" :placeholder="researchGettingStarted('strategy').placeholder" @keydown.enter.prevent="generateStratLabDraft()">
-          <button class="btn-p text-[9px]" :disabled="stratLabDraft.generating||!strategyLabActionEnabled('generate_draft')" :title="strategyLabActionReason('generate_draft')" @click="generateStratLabDraft()" x-text="stratLabDraft.generating?'?':researchGettingStarted('strategy').nextButton"></button>
+          <button class="btn-p text-[9px]" :disabled="stratLabDraft.generating||!strategyLabActionEnabled('generate_draft')" :title="strategyLabActionReason('generate_draft')" @click="generateStratLabDraft()" x-text="stratLabDraft.generating?'⏳':researchGettingStarted('strategy').nextButton"></button>
         </div>
         <div x-show="stratLabDraft.draftId" class="text-[8px] mt-2 p-2 rounded" style="background:var(--s2);color:var(--t2)">
-          ????? ? Draft <span class="mono text-white" x-text="stratLabDraft.draftId"></span> ? ???? Playbook ???????????????
+          草稿已建立 · Draft <span class="mono text-white" x-text="stratLabDraft.draftId"></span> · 尚未同步 Playbook · not yet promoted
         </div>
       </div>
       <details class="card card-p text-[9px] mono" style="color:var(--t2)" data-cc="stratlab-details">
         <summary class="font-bold text-white cursor-pointer select-none">Details · per-strategy window</summary>
         <template x-if="stratHealth.loading">
-          <div class="text-[9px] py-2" style="color:var(--t3)">Loading strategy health?</div>
+          <div class="text-[9px] py-2" style="color:var(--t3)">Loading strategy health…</div>
         </template>
         <template x-if="!stratHealth.loading&&(!stratHealth.data||!stratHealth.data.strategies||!stratHealth.data.strategies.length)">
           <div class="text-[9px] py-2" style="color:var(--t3)">No closed-trade sample in window — calibration remains provisional.</div>
@@ -5137,15 +5137,15 @@
         <template x-if="!scannerHub.loading&&scannerHub.data&&scannerHub.data.scanners&&!scannerHub.category">
           <details class="card mb-3" style="overflow:hidden" :open="!discoveryHideRawHits()">
             <summary class="text-[9px] font-bold uppercase cursor-pointer" style="padding:8px 12px;background:var(--s2);border-bottom:1px solid var(--bd);color:var(--t3)">
-              Raw scanner hits ? similar-pattern cluster ? debug
-              <span class="pill pw text-[7px] ml-2" x-show="discoveryHideRawHits()" x-text="'hidden ? 0 strict passed'"></span>
+              Raw scanner hits · similar-pattern cluster · debug
+              <span class="pill pw text-[7px] ml-2" x-show="discoveryHideRawHits()" x-text="'hidden · 0 strict passed'"></span>
             </summary>
             <div class="space-y-3 p-2" x-show="!discoveryHideRawHits()">
             <template x-for="catName in scannerCategoriesWithHits()" :key="catName">
               <div class="card" style="overflow:hidden">
                 <div style="padding:8px 12px;background:var(--s2);border-bottom:1px solid var(--bd)">
                   <div class="flex items-center gap-2">
-                    <span class="text-[10px]" x-text="catName==='FLOW'?'💧':catName==='VALIDATION'?'✓':catName==='PATTERN'?'📐':catName==='SECTOR'?'??':catName==='RISK'?'?':'??'"></span>
+                    <span class="text-[10px]" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.signalCategoryIcon)?CCHelpers.signalCategoryIcon(catName):(catName==='FLOW'?'💧':catName==='VALIDATION'?'✓':catName==='PATTERN'?'📐':catName==='SECTOR'?'🏭':catName==='RISK'?'⚠':'📦')"></span>
                     <span class="text-[10px] font-bold uppercase text-white" x-text="scannerCategoryLabel(catName)"></span>
                     <span class="pill pg text-[8px] ml-auto" x-text="scannerHitsLabel(scannerHub.data.category_summary&&scannerHub.data.category_summary[catName])"></span>
                   </div>
@@ -5922,7 +5922,7 @@
                 </div>
                 <div class="flex gap-1">
                   <button @click="openDossier(pos.ticker)" class="btn-s text-[8px]">📊</button>
-                  <button @click="removePosition(pos.ticker)" class="btn-s text-[8px]" style="color:var(--red)">?</button>
+                  <button @click="removePosition(pos.ticker)" class="btn-s text-[8px]" style="color:var(--red)">✕</button>
                 </div>
               </div>
               <!-- Price info -->
@@ -5999,11 +5999,11 @@
           <span class="pill text-[7px] pa">learning only</span>
           <span x-show="ledgerView.stats" class="text-[10px]" style="color:var(--t3)" x-text="'· '+(ledgerView.stats?.count||0)+' trades'"></span>
           <span class="text-[9px] ml-1" style="color:var(--t3)" x-text="pfRiskVM().historicalJournalNote"></span>
-          <button @click.prevent="fetchLedgerView(true)" class="btn-s text-[10px] ml-auto" :disabled="ledgerView.loading">??</button>
+          <button @click.prevent="fetchLedgerView(true)" class="btn-s text-[10px] ml-auto" :disabled="ledgerView.loading">↻</button>
         </summary>
         <div class="mt-2">
           <div class="flex items-center gap-2 mb-2">
-            <button @click="ledgerView.expanded=!ledgerView.expanded" class="btn-s text-[10px]" x-text="ledgerView.expanded?'? Hide details':'? Show details ('+(ledgerView.rows?.length||0)+' rows)'"></button>
+            <button @click="ledgerView.expanded=!ledgerView.expanded" class="btn-s text-[10px]" x-text="ledgerView.expanded?'▾ Hide details':'▸ Show details ('+(ledgerView.rows?.length||0)+' rows)'"></button>
           </div>
 
         <!-- Stats grid (hidden unless expanded) -->
@@ -6149,7 +6149,7 @@
                 <span style="color:var(--t2)" x-text="' · '+fundMonitor.console.funds_first_screen.best_research_sleeve?.label"></span></div>
               <div class="text-[7px] mt-1" style="color:var(--t3)">Missing validation: <span x-text="(fundMonitor.console.funds_first_screen.best_research_sleeve?.missing_validation||[]).join(' · ')"></span></div>
               <div class="text-[7px] mt-1" style="color:var(--t2)" x-show="fundMonitor.console.funds_first_screen.theoretical_model_band_note" x-text="fundMonitor.console.funds_first_screen.theoretical_model_band_note"></div>
-              <div class="text-[7px] mt-1"><span style="color:var(--t3)">NEXT</span> <span x-text="(fundMonitor.console.funds_first_screen.next_steps||[]).join(' ? ')"></span></div>
+              <div class="text-[7px] mt-1"><span style="color:var(--t3)">NEXT</span> <span x-text="(fundMonitor.console.funds_first_screen.next_steps||[]).join(' · ')"></span></div>
             </div>
           </div>
         </template>
@@ -6876,7 +6876,7 @@
             <button @click="ibkrFetchStatus({scrollToSession:true})" class="btn text-[9px]" :disabled="ibkr.loading||ibkr.statusLoading">🔄 Refresh</button>
           </div>
           <div x-show="ibkr.statusFetchError" class="text-[9px] mb-2 p-2 rounded leading-relaxed" style="background:rgba(127,29,29,.35);color:#fecaca;border-left:2px solid var(--red)" x-text="ibkr.statusFetchError"></div>
-          <div class="text-[10px] font-bold mb-1 leading-snug" style="color:var(--t1)" x-text="ibkr.statusLoading?'Checking broker status?':ibkrPageBannerShort()"></div>
+          <div class="text-[10px] font-bold mb-1 leading-snug" style="color:var(--t1)" x-text="ibkr.statusLoading?'Checking broker status…':ibkrPageBannerShort()"></div>
           <div class="text-[9px] mb-2 leading-relaxed" style="color:var(--t2)" x-show="ibkrPageBannerFull()&&!ibkrNeedsConnectCta()" x-text="ibkrPageBannerFull()"></div>
           <template x-if="ibkr.diagnosis&&ibkr.diagnosis.hint">
             <div class="text-[9px] mb-2 p-2 rounded leading-relaxed" style="background:var(--s2);color:var(--amber);border-left:2px solid var(--amber)">
@@ -7419,7 +7419,7 @@
       <div class="p-3 space-y-3">
         <!-- Ops sub-sections -->
         <div class="flex gap-1 flex-wrap">
-          <button type="button" class="btn-s text-[9px]" :class="opsPanel==='health'?'btn-p':''" @click="opsPanel='health'">?? Health</button>
+          <button type="button" class="btn-s text-[9px]" :class="opsPanel==='health'?'btn-p':''" @click="opsPanel='health'">💚 Health</button>
           <button type="button" class="btn-s text-[9px]" :class="opsPanel==='updates'?'btn-p':''" @click="opsPanel='updates';fetchChangelog()">📋 Updates</button>
           <button type="button" class="btn-s text-[9px]" :class="opsPanel==='errors'?'btn-p':''" @click="opsPanel='errors';fetchErrorLog()">🧾 Error Log</button>
         </div>
@@ -7776,7 +7776,7 @@
         <!-- ENGINE STATE -->
         <div class="card card-p">
           <div class="flex items-center justify-between mb-3">
-            <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">?? Engine State</div>
+            <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">⚙ Engine State</div>
           </div>
           <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
             <div class="card card-p" style="text-align:center"><div class="text-[20px]" x-text="ops.running?'🟡':'🔴'"></div><div class="text-[10px] font-bold" :class="ops.running?'text-amber-300':'text-red-400'" x-text="ops.running?'RUNNING':'STOPPED'"></div><div class="kpi-lbl">Engine</div></div>
@@ -8041,7 +8041,7 @@
                         <div class="flex flex-wrap gap-1 mb-1">
                           <button type="button" class="btn-p text-[8px]" :disabled="shadowImport.busy" @click="$refs.shadowCsvInput.click()" x-text="shadowImport.busy?'匯入中…':researchGettingStarted('shadow').nextButton"></button>
                           <input type="file" accept=".csv,text/csv" x-ref="shadowCsvInput" class="hidden" @change="importShadowTradesCsv($event)">
-                          <button type="button" class="btn-s text-[8px]" @click="switchTab('ibkr')" x-show="researchGettingStarted('shadow').blocker">?? IBKR</button>
+                          <button type="button" class="btn-s text-[8px]" @click="switchTab('ibkr')" x-show="researchGettingStarted('shadow').blocker">⚡ IBKR</button>
                         </div>
                         <details class="text-[7px]" style="color:var(--t3)">
                           <summary class="cursor-pointer select-none" style="color:var(--t2)" x-text="researchGettingStarted('shadow').formatButton"></summary>
@@ -8207,7 +8207,7 @@
                 <div class="mb-1.5 px-1.5 py-1 rounded" style="background:var(--s2)">
                   <span class="text-[7px]" style="color:var(--t3)">Best Arm: </span>
                   <span class="text-[9px] mono text-green-400" x-text="rl.thompson.best_arm.key"></span>
-                  <span class="text-[8px] mono text-white ml-1" x-text="'?' + (rl.thompson.best_arm.mean_multiplier??'?').toFixed ? rl.thompson.best_arm.mean_multiplier.toFixed(2) : rl.thompson.best_arm.mean_multiplier"></span>
+                  <span class="text-[8px] mono text-white ml-1" x-text="'×' + (rl.thompson.best_arm.mean_multiplier??'—').toFixed ? rl.thompson.best_arm.mean_multiplier.toFixed(2) : rl.thompson.best_arm.mean_multiplier"></span>
                 </div>
               </template>
               <div class="space-y-0.5" style="max-height:120px;overflow-y:auto">
@@ -8354,7 +8354,7 @@
       factory:{loading:false,ticker:'SPY',period:'2y',mode:'demo',result:null,detail:null,showDetail:false,sortBy:'score'},
       brief:{loading:false,data:null},
       bt:{ticker:'AAPL',strategy:'all',period:'5y',loading:false,result:null},
-      // ?? DEAD-CODE WARNING (no UI binding, kept only because JS methods still reference them) ??
+      // ── DEAD-CODE WARNING (no UI binding, kept only because JS methods still reference them) ──
       // To be removed once the corresponding fetch* methods are deleted: factory, benchBT, fundMonitor, pmStrip, tradeIntel, tt, bt
       // Already deleted (true orphans): perfTracker, fundLab, modelFunds, tradeJournal, apiEndpoints, oppScanner, rsData, rsFilter, rejectsData, noTradeData
       benchBT:{period:'5y',benchmark:'SPY',loading:false,data:null,error:''},
@@ -8571,7 +8571,7 @@
         try{
           const r=await fetch('/api/cc/replay/status?as_of='+encodeURIComponent(dt),{headers:{'X-API-Key':window._apiKey||'dev-secret-local'}});
           if(!r.ok){
-            let msg='?????? ? ???? Brief ???';
+            let msg=(typeof CCHelpers!=='undefined'&&CCHelpers.replayBriefMissingError)?CCHelpers.replayBriefMissingError():'No Morning Brief snapshot for that date';
             try{
               const j=await r.json();
               const detail=j.detail||j;
@@ -9227,7 +9227,7 @@
         }
         return '';
       },
-      opsPanelLoadingShort(){return 'Loading?'},
+      opsPanelLoadingShort(){return 'Loading…'},
       opsUpdatesPanelTitle(){
         if(this.changelogPanel?.loading) return 'Loading';
         if(!this.changelogPanel?.error) return '';
@@ -9912,7 +9912,7 @@
       agentSuggestedRulesLine(){
         const state=this.agentPageState();
         const rules=state.suggested_rules||[];
-        if(rules.length) return rules.map(r=>r.trigger||r.ticker||'rule').join(' ? ');
+        if(rules.length) return rules.map(r=>r.trigger||r.ticker||'rule').join(' · ');
         return String(state.suggested_rules_reason||'No safe rule candidates');
       },
       agentWatchRulesLine(){
@@ -10383,7 +10383,7 @@
         this.stratLabDraft.strategyId=sid;
         this.stratLabDraft.draftId='draft_'+sid+'_'+Date.now().toString(36).slice(-6);
         this.stratLabDraft.generating=false;
-        this.showExportToast('??????? ? ???? Playbook ?????????');
+        this.showExportToast((typeof CCHelpers!=='undefined'&&CCHelpers.stratLabDraftCreatedToast)?CCHelpers.stratLabDraftCreatedToast():'Draft created · not yet synced to Playbook');
       },
       shadowGettingStartedVisible(){
         const abActive=(this.selfLearn.ab?.active||[]).length;
@@ -10398,7 +10398,7 @@
         try{
           const text=await file.text();
           const lines=text.trim().split(/\r?\n/).filter(Boolean);
-          if(lines.length<2) throw new Error('CSV ????????????');
+          if(lines.length<2) throw new Error((typeof CCHelpers!=='undefined'&&CCHelpers.shadowCsvEmptyError)?CCHelpers.shadowCsvEmptyError():'CSV needs headers and at least one row');
           const headers=lines[0].split(',').map(h=>h.trim().toLowerCase());
           const idx=k=>headers.indexOf(k);
           let imported=0;
@@ -10421,9 +10421,9 @@
             const r=await fetch('/api/ledger/close-trade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
             if(r.ok) imported++;
           }
-          if(!imported) throw new Error('???? CSV ? ? ???????');
+          if(!imported) throw new Error((typeof CCHelpers!=='undefined'&&CCHelpers.shadowCsvImportEmptyError)?CCHelpers.shadowCsvImportEmptyError():'No valid CSV rows to import');
           await this.fetchLedgerView(true);
-          this.showExportToast('??? '+imported+' ????? ? ?????');
+          this.showExportToast((typeof CCHelpers!=='undefined'&&CCHelpers.shadowImportSuccessToast)?CCHelpers.shadowImportSuccessToast(imported):('Imported '+imported+' trades'));
         }catch(e){
           this.showExportToast('匯入失敗 · '+e.message);
         }finally{
@@ -11108,21 +11108,21 @@
         const block=this.dos?.intel?.dossier_mode;
         if(block?.structure_snapshot_title) return block.structure_snapshot_title;
         if(window.CCHelpers&&CCHelpers.dossierStructureSnapshotTitle) return CCHelpers.dossierStructureSnapshotTitle();
-        return 'Structure snapshot ? ????';
+        return 'Structure snapshot · 結構快照';
       },
       dossierStructureLevelLabel(field){
         if(window.CCHelpers&&CCHelpers.dossierStructureLevelLabel) return CCHelpers.dossierStructureLevelLabel(field,this.dossierModeKey());
         if(!this.dossierStructureReviewOnly()) return field==='entry'?'Entry zone':field==='stop'?'Stop':field==='target'?'T1 / T2':'R:R';
-        if(field==='entry') return 'Reference level ? ????';
-        if(field==='stop') return 'Risk reference ? ????';
-        if(field==='target') return 'Upside references ? ????';
+        if(field==='entry') return 'Reference level · 參考價位';
+        if(field==='stop') return 'Risk reference · 風險參考';
+        if(field==='target') return 'Upside references · 上行參考';
         return field;
       },
       dossierPaperDraftDisabledCopy(){
         const block=this.dos?.intel?.dossier_mode;
         if(block?.paper_draft_disabled_copy) return block.paper_draft_disabled_copy;
         if(window.CCHelpers&&CCHelpers.dossierPaperDraftDisabledCopy) return CCHelpers.dossierPaperDraftDisabledCopy();
-        return 'Paper draft disabled ? ??????? ? ? live Dossier + Playbook ???????';
+        return 'Paper draft disabled · 紙上模擬已關閉 — 需 live Dossier + Playbook 確認後才可模擬';
       },
       dossierMonitorRuleLabel(){
         const block=this.dos?.intel?.dossier_mode;
@@ -11714,7 +11714,7 @@
       topMonitorLabelsLine(){
         if(typeof CCHelpers!=='undefined'&&CCHelpers.topMonitorLabels){
           const labels=CCHelpers.topMonitorLabels(this.today7);
-          if(labels.length) return labels.join(' ? ');
+          if(labels.length) return labels.join(' · ');
         }
         return this.today7.top_monitor?.label||'';
       },
@@ -12715,7 +12715,7 @@
       fundBenchmarkLine(){
         const d=this.fundMonitor.data;
         const bm=this.fundMonitor.benchmark||d?.benchmark||'SPY';
-        if(!d) return 'Loading?';
+        if(!d) return 'Loading…';
         if(this.fundPayloadDegraded()||d.benchmark_return_pct==null) return 'Benchmark '+bm+' — unavailable or pending';
         return 'Benchmark '+bm+' ('+d.benchmark_return_pct+'%)';
       },
@@ -13661,7 +13661,7 @@
           this.pf.alerts=d.alerts||[];
           this.pf.summary=d.summary||null;
           this.pf.source='manual';
-          // ?? IBKR auto-sync: when broker is connected, broker positions become canonical ??
+          // ── IBKR auto-sync: when broker is connected, broker positions become canonical ──
           // Manual entries are kept as overlay (e.g. for stop/target metadata) but counts/equity reflect IBKR
           try{
             if(this.cc_status&&this.cc_status.ibkr_connected){
@@ -14024,7 +14024,7 @@
           console.warn('Add position error:',e);
         }
       },
-      // ?? Correlation guard: warn (>0.6) / block (>0.7) when adding correlated names ??
+      // ── Correlation guard: warn (>0.6) / block (>0.7) when adding correlated names ──
       // Uses per-ticker history vs each existing position; fallbacks to sector overlap if API unavailable
       async checkCorrelation(){
         const t=(this.pf.addTicker||'').toUpperCase().trim();
@@ -14587,7 +14587,7 @@
         if(!this.bt.ticker)return;this.bt.loading=true;this.bt.result=null;
         try{const u='/api/live/backtest?ticker='+encodeURIComponent(this.bt.ticker)+'&strategy='+this.bt.strategy+'&period='+this.bt.period;const r=await this.ccFetch(u,{method:'POST',retries:2,backoff:600});if(!r||!r.ok){let msg='Failed';try{const e=await r.json();msg=e.detail||e.error||msg;}catch(_x){}throw new Error(msg)}const data=await r.json();if(data.degraded){alert('API warming up — backtest shell only. Retry when health mode is full.');}this.bt.result=data;this.$nextTick(()=>this.renderBTEquityChart())}catch(e){alert('Error: '+this.surfaceFetchErrorLine(e.message,'backtest'))}finally{this.bt.loading=false}
       },
-      // ?? 24/7 Fund Monitor (sprint89) ??????????????????????????????????????
+      // ── 24/7 Fund Monitor (sprint89) ──
       startFundMonitor(){
         // stop any existing timer first
         if(this.fundMonitor.autoRefreshTimer){clearInterval(this.fundMonitor.autoRefreshTimer);this.fundMonitor.autoRefreshTimer=null}
@@ -14768,7 +14768,7 @@
         finally{this.ibkr.loading=false}
       },
 
-      // ?? BRACKET ORDER (parent + stop + target, OCA) ?????????????????????????
+      // ── BRACKET ORDER (parent + stop + target, OCA) ──
       ibkrBracketSummary(){
         const f=this.ibkr.orderForm;
         const e=Number(f.limitPrice)||0, s=Number(f.stopPrice)||0, t=Number(f.targetPrice)||0;
@@ -14819,7 +14819,7 @@
         const risk=f.action==='BUY'?(entry||target)-stop:stop-(entry||target);
         const reward=f.action==='BUY'?target-(entry||stop):(entry||stop)-target;
         const rr=risk>0?(reward/risk).toFixed(2):'?';
-        // ?? Pre-trade slippage gate (BLOCK on illiquid; WARN on costly) ??
+        // ── Pre-trade slippage gate (BLOCK on illiquid; WARN on costly) ──
         let slipVerdict=null, slipReasonsText='';
         try{
           const refPx=entry||target||stop||0;
@@ -14913,7 +14913,7 @@
         finally{this.ibkr.loading=false}
       },
 
-      // ?? Bracket live polling + cancel ??????????????????????????????????????
+      // ── Bracket live polling + cancel ──
       ibkrStartBracketPoll(){
         if(this._bracketPollTimer){clearInterval(this._bracketPollTimer);this._bracketPollTimer=null}
         // Immediate refresh, then every 5s
@@ -14997,10 +14997,10 @@
         this.ibkr.workingBracket=null;
       },
 
-      fundIcon(name){return name==='FUND_ALPHA'?'??':name==='FUND_PENDA'?'??':name==='FUND_MACRO'?'??':'??'},
+      fundIcon(name){return (typeof CCHelpers!=='undefined'&&CCHelpers.fundIcon)?CCHelpers.fundIcon(name):(name==='FUND_ALPHA'?'🟢':name==='FUND_PENDA'?'🔵':name==='FUND_MACRO'?'🟣':'📦')},
       fundColor(name){return name==='FUND_ALPHA'?'var(--green)':name==='FUND_PENDA'?'var(--blue)':name==='FUND_MACRO'?'var(--purple)':'var(--orange)'},
 
-      // ?? Playbook ? IBKR bracket helper ?????????????????????????????????????
+      // ── Playbook → IBKR bracket helper ──
       // Pre-fills the order ticket using the Playbook card's R-based size, then
       // switches to the IBKR tab. PM still has to confirm — no silent submission.
       sendPlaybookToIbkr(r){
@@ -15029,7 +15029,7 @@
         this.ibkr.orderForm._suggestedStop = stop || null;
         this.ibkr.orderForm._suggestedTarget = Number(r.target_price)||null;
         this.ibkr.orderForm._suggestedRR = r.risk_reward||null;
-        // Auto-enable bracket if both stop + target are available ? close alpha?execution loop
+        // Auto-enable bracket if both stop + target are available · close alpha→execution loop
         if (stop>0 && Number(r.target_price)>0) {
           this.ibkr.orderForm.stopPrice = stop;
           this.ibkr.orderForm.targetPrice = Number(r.target_price);
@@ -15038,11 +15038,11 @@
         this.tab = 'ibkr';
       },
 
-      // ?? PM Strip (model funds mini-cards, refreshed lazily) ????????????????
+      // ── PM Strip (model funds mini-cards, refreshed lazily) ──
 
-      // ?? Model Funds (productized fund cards) ??????????????????????????????
+      // ── Model Funds (productized fund cards) ──
 
-      // ?? Trade Intelligence ????????????????????????????????????????????????
+      // ── Trade Intelligence ──
 
       async selectTradeIntelTrade(t){
         if(!t)return;
@@ -15888,7 +15888,7 @@
         return this.flowPanelCount();
       },
       aiCommentaryCtaLabel(){
-        if(this.today7.ai_loading) return 'Loading?';
+        if(this.today7.ai_loading) return 'Loading…';
         return this.today7.ai_narrative?'Regenerate':'Generate';
       },
       aiCommentaryEmptyLine(){

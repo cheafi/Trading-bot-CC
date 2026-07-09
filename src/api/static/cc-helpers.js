@@ -3425,6 +3425,48 @@
 		return bilingualLine("快取快照會先顯示", "cached snapshot shown when available")
 	}
 
+	function fundIcon(name) {
+		var n = String(name || "")
+		if (n === "FUND_ALPHA") return "🟢"
+		if (n === "FUND_PENDA") return "🔵"
+		if (n === "FUND_MACRO") return "🟣"
+		return "📦"
+	}
+
+	function signalCategoryIcon(catName) {
+		var c = String(catName || "")
+		if (c === "FLOW") return "💧"
+		if (c === "VALIDATION") return "✓"
+		if (c === "PATTERN") return "📐"
+		if (c === "SECTOR") return "🏭"
+		if (c === "RISK") return "⚠"
+		return "📦"
+	}
+
+	function replayBriefMissingError() {
+		return bilingualLine("該日 Brief 快照不存在", "No Morning Brief snapshot for that date")
+	}
+
+	function stratLabDraftCreatedToast() {
+		return bilingualLine("草稿已建立 · 尚未同步 Playbook", "Draft created · not yet synced to Playbook")
+	}
+
+	function stratLabDraftBannerHtml() {
+		return bilingualLine("草稿已建立 · Draft", "Draft saved · sync to Playbook when ready")
+	}
+
+	function shadowCsvEmptyError() {
+		return bilingualLine("CSV 需含標題列與至少一筆", "CSV needs headers and at least one row")
+	}
+
+	function shadowCsvImportEmptyError() {
+		return bilingualLine("無有效 CSV 列可匯入", "No valid CSV rows to import")
+	}
+
+	function shadowImportSuccessToast(n) {
+		return bilingualLine("已匯入 " + n + " 筆", "Imported " + n + " trades")
+	}
+
 	function surfaceEmptyStateCopy(kind) {
 		return { headline: "", detail: "", badge: kind || "", cta: "" }
 	}
@@ -4029,6 +4071,14 @@
 		operatorBlockChromeLabel: operatorBlockChromeLabel,
 		dashboardLoadingHeadline: dashboardLoadingHeadline,
 		dashboardLoadingHint: dashboardLoadingHint,
+		fundIcon: fundIcon,
+		signalCategoryIcon: signalCategoryIcon,
+		replayBriefMissingError: replayBriefMissingError,
+		stratLabDraftCreatedToast: stratLabDraftCreatedToast,
+		stratLabDraftBannerHtml: stratLabDraftBannerHtml,
+		shadowCsvEmptyError: shadowCsvEmptyError,
+		shadowCsvImportEmptyError: shadowCsvImportEmptyError,
+		shadowImportSuccessToast: shadowImportSuccessToast,
 		surfaceEmptyStateCopy: surfaceEmptyStateCopy,
 		morningDecisionLine: morningDecisionLine,
 		qualificationCountLine: qualificationCountLine,
