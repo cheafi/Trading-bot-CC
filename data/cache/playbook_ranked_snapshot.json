@@ -1,7 +1,7 @@
 {
 	"30::": {
-		"ts": 1780905749.0837348,
-		"saved_at": "2026-06-08T08:02:29.083722Z",
+		"ts": 1783562696.842391,
+		"saved_at": "2026-07-09T02:04:56.842384Z",
 		"data": {
 			"count": 30,
 			"opportunities": [
@@ -82,6 +82,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -96,7 +104,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "COST",
@@ -124,19 +132,14 @@
 						"index_leadership": "lag",
 						"summary": "COST: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "PANW",
@@ -215,6 +218,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -229,7 +240,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "PANW",
@@ -257,19 +268,14 @@
 						"index_leadership": "lag",
 						"summary": "PANW: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "JPM",
@@ -348,6 +354,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -362,7 +376,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "JPM",
@@ -390,19 +404,14 @@
 						"index_leadership": "lag",
 						"summary": "JPM: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "NET",
@@ -481,6 +490,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -495,7 +512,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "NET",
@@ -523,19 +540,14 @@
 						"index_leadership": "lag",
 						"summary": "NET: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "AMZN",
@@ -614,6 +626,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -628,7 +648,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "AMZN",
@@ -656,19 +676,14 @@
 						"index_leadership": "lag",
 						"summary": "AMZN: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "GOOGL",
@@ -747,6 +762,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -761,7 +784,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "GOOGL",
@@ -789,19 +812,14 @@
 						"index_leadership": "lag",
 						"summary": "GOOGL: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "ORCL",
@@ -880,6 +898,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -894,7 +920,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "ORCL",
@@ -922,19 +948,14 @@
 						"index_leadership": "lag",
 						"summary": "ORCL: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "MSFT",
@@ -1013,6 +1034,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -1027,7 +1056,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "MSFT",
@@ -1055,19 +1084,14 @@
 						"index_leadership": "lag",
 						"summary": "MSFT: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "AAPL",
@@ -1146,6 +1170,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -1160,7 +1192,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "AAPL",
@@ -1188,19 +1220,14 @@
 						"index_leadership": "lag",
 						"summary": "AAPL: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "ADBE",
@@ -1279,6 +1306,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -1293,7 +1328,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "ADBE",
@@ -1321,19 +1356,14 @@
 						"index_leadership": "lag",
 						"summary": "ADBE: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "META",
@@ -1412,6 +1442,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -1426,7 +1464,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "META",
@@ -1454,19 +1492,14 @@
 						"index_leadership": "lag",
 						"summary": "META: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "INTU",
@@ -1545,6 +1578,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -1559,7 +1600,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "INTU",
@@ -1587,19 +1628,14 @@
 						"index_leadership": "lag",
 						"summary": "INTU: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "LRCX",
@@ -1678,6 +1714,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -1692,7 +1736,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "LRCX",
@@ -1720,19 +1764,14 @@
 						"index_leadership": "lag",
 						"summary": "LRCX: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "V",
@@ -1811,6 +1850,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -1825,7 +1872,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "V",
@@ -1853,19 +1900,14 @@
 						"index_leadership": "lag",
 						"summary": "V: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "TSLA",
@@ -1944,6 +1986,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -1958,7 +2008,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "TSLA",
@@ -1986,19 +2036,14 @@
 						"index_leadership": "lag",
 						"summary": "TSLA: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "CRM",
@@ -2077,6 +2122,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -2091,7 +2144,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "CRM",
@@ -2119,19 +2172,14 @@
 						"index_leadership": "lag",
 						"summary": "CRM: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "AVGO",
@@ -2210,6 +2258,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -2224,7 +2280,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "AVGO",
@@ -2252,19 +2308,14 @@
 						"index_leadership": "lag",
 						"summary": "AVGO: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "NVDA",
@@ -2343,6 +2394,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -2357,7 +2416,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "NVDA",
@@ -2385,19 +2444,14 @@
 						"index_leadership": "lag",
 						"summary": "NVDA: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "ZS",
@@ -2476,6 +2530,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -2490,7 +2552,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "ZS",
@@ -2518,19 +2580,14 @@
 						"index_leadership": "lag",
 						"summary": "ZS: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "KLAC",
@@ -2609,6 +2666,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -2623,7 +2688,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "KLAC",
@@ -2651,19 +2716,14 @@
 						"index_leadership": "lag",
 						"summary": "KLAC: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "AMAT",
@@ -2742,6 +2802,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -2756,7 +2824,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "AMAT",
@@ -2784,19 +2852,14 @@
 						"index_leadership": "lag",
 						"summary": "AMAT: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "MA",
@@ -2881,6 +2944,14 @@
 						"fit_score": 4.7,
 						"reason": "Higher validated score (4.8 vs 4.7) \u00b7 Sector fit: HIGH GROWTH vs CYCLICAL"
 					},
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -2895,7 +2966,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "MA",
@@ -2923,19 +2994,14 @@
 						"index_leadership": "lag",
 						"summary": "MA: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "MS",
@@ -3014,6 +3080,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.7,
 					"gross_edge_score": 4.7,
 					"net_deploy_score": 4.3,
@@ -3028,7 +3102,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "MS",
@@ -3056,19 +3130,14 @@
 						"index_leadership": "lag",
 						"summary": "MS: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.7 \u00b7 Net 4.3 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "CVX",
@@ -3147,6 +3216,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.7,
 					"gross_edge_score": 4.7,
 					"net_deploy_score": 4.3,
@@ -3161,7 +3238,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "CVX",
@@ -3189,19 +3266,14 @@
 						"index_leadership": "lag",
 						"summary": "CVX: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.7 \u00b7 Net 4.3 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "BLK",
@@ -3280,6 +3352,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.7,
 					"gross_edge_score": 4.7,
 					"net_deploy_score": 4.3,
@@ -3294,7 +3374,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "BLK",
@@ -3322,19 +3402,14 @@
 						"index_leadership": "lag",
 						"summary": "BLK: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.7 \u00b7 Net 4.3 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "GS",
@@ -3413,6 +3488,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.7,
 					"gross_edge_score": 4.7,
 					"net_deploy_score": 4.3,
@@ -3427,7 +3510,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "GS",
@@ -3455,19 +3538,14 @@
 						"index_leadership": "lag",
 						"summary": "GS: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.7 \u00b7 Net 4.3 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "FCX",
@@ -3546,6 +3624,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.7,
 					"gross_edge_score": 4.7,
 					"net_deploy_score": 4.3,
@@ -3560,7 +3646,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "FCX",
@@ -3588,19 +3674,14 @@
 						"index_leadership": "lag",
 						"summary": "FCX: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.7 \u00b7 Net 4.3 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "XOM",
@@ -3679,6 +3760,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.7,
 					"gross_edge_score": 4.7,
 					"net_deploy_score": 4.3,
@@ -3693,7 +3782,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "XOM",
@@ -3721,19 +3810,14 @@
 						"index_leadership": "lag",
 						"summary": "XOM: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.7 \u00b7 Net 4.3 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "NEM",
@@ -3812,6 +3896,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.7,
 					"gross_edge_score": 4.7,
 					"net_deploy_score": 4.3,
@@ -3826,7 +3918,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "NEM",
@@ -3854,19 +3946,14 @@
 						"index_leadership": "lag",
 						"summary": "NEM: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.7 \u00b7 Net 4.3 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				},
 				{
 					"ticker": "SNOW",
@@ -3945,6 +4032,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.7,
 					"gross_edge_score": 4.7,
 					"net_deploy_score": 4.3,
@@ -3959,7 +4054,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "SNOW",
@@ -3987,19 +4082,14 @@
 						"index_leadership": "lag",
 						"summary": "SNOW: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					}
+					"net_edge_display": "Raw 4.7 \u00b7 Net 4.3 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false
 				}
 			],
 			"cached": false,
@@ -4018,6 +4108,9 @@
 				"near_miss_setups": 3,
 				"avoid_filtered_setups": 50,
 				"watch_setups": 0,
+				"setup_qualified_setups": 0,
+				"trade_qualified_setups": 0,
+				"execution_qualified_setups": 0,
 				"watch_qualified_setups": 0,
 				"deploy_qualified_setups": 0,
 				"universe": 50,
@@ -4025,7 +4118,8 @@
 				"score_above_6": 0,
 				"actionable_above_7": 0,
 				"high_conviction_above_8": 0,
-				"note": "Scanned = universe evaluated \u00b7 Watch-qualified = monitor / near-miss pool \u00b7 Deploy-qualified = execution-ready \u00b7 Near-miss = upgrade layer (not deploy) \u00b7 Monitor ranking = priority only, not permission."
+				"note": "Scanned = universe \u00b7 Setup-qualified = monitor pool \u00b7 Trade-qualified = thesis+timing \u00b7 Execution-qualified = card-ready \u00b7 Deploy-qualified = all gates pass \u00b7 Near-miss = upgrade layer (not deploy).",
+				"qualification_line": "0 deploy-qualified"
 			},
 			"avoid_grouped": {
 				"total": 30,
@@ -4099,6 +4193,7 @@
 				}
 			],
 			"rejection_clusters_note": "Cluster counts (50) group by blocker theme; 30 names in the filtered list \u2014 themes can overlap.",
+			"market_regime": { "trend": "SIDEWAYS", "should_trade": true, "vix": 18.0 },
 			"unlock_deploy": {
 				"unlocked": false,
 				"conditions": [
@@ -4136,13 +4231,41 @@
 				"summary": "Current status: board present, deploy absent.",
 				"intro": "Unlock deploy requires all 4 conditions together: tradeability SELECTIVE+, \u22651 deploy-qualified setup, live broker handoff, and \u22651 watch-qualified name on fresh data (scan-ranked alone does not qualify)."
 			},
+			"decision_authority": {
+				"source": "live",
+				"authority_level": "research",
+				"gates": {
+					"regime_wait": true,
+					"engine_off": false,
+					"data_stale": false,
+					"broker_offline": true,
+					"exec_blocked": false,
+					"scanner_loading": false,
+					"fallback_brief": false
+				},
+				"gates_active": true,
+				"effective_action_max": "RESEARCH",
+				"allows_trade_labels": false,
+				"degraded": true,
+				"degraded_copy": {
+					"system_mode": "degraded",
+					"decision_authority_line": "Decision authority: research-only",
+					"fallback_board_line": "",
+					"stale_snapshot_lines": []
+				},
+				"data_source_mismatch": false,
+				"data_source_mismatch_detail": "",
+				"counter_source": "live",
+				"council_count": null,
+				"deploy_ideas_count": 0
+			},
 			"index_regime_summary": {
 				"signal_type": "index_regime",
 				"authority_ceiling": "research_only",
 				"data_mode": "regime_filter",
 				"degraded": true,
 				"source": "index-regime-proxy",
-				"as_of": "2026-06-08T08:02:29.060888+00:00Z",
+				"as_of": "2026-07-09T02:04:56.838066+00:00Z",
 				"provenance": {
 					"label": "Index regime filter",
 					"lag_disclosure": "VIX/breadth/factor proxies \u2014 regime filter only",
@@ -4216,7 +4339,7 @@
 			"best_action": {
 				"capital_stance": "hold_cash",
 				"risk_posture": "Hold cash",
-				"stance_one_liner": "WAIT \u2014 no deploy-qualified setups and no broker handoff. Monitor near-misses, queue alerts, and only consider pilot entries after manual confirmation.",
+				"stance_one_liner": "Monitor only \u2014 deploy blocked; PILOT/WATCH labels are review-only.",
 				"best_trade_now": null,
 				"best_pilot_now": null,
 				"best_watch_upgrade": null,
@@ -4287,8 +4410,8 @@
 						"ib_handshake_started": false,
 						"ib_handshake_completed": false,
 						"ib_api_ready": false,
-						"connect_attempt_source": "ibkr_page",
-						"last_failed_handshake_at": "2026-06-08T03:19:17Z",
+						"connect_attempt_source": null,
+						"last_failed_handshake_at": null,
 						"failed_handshake_count_1m": 0
 					},
 					"health_label": "Broker offline \u2014 monitoring unavailable",
@@ -4314,7 +4437,7 @@
 				"regime_label": "",
 				"tradeability": "WAIT",
 				"data_freshness": "FRESH",
-				"as_of": "2026-06-08T08:02:29.065199+00:00Z"
+				"as_of": "2026-07-09T02:04:56.839168+00:00Z"
 			},
 			"near_miss": [
 				{
@@ -4394,6 +4517,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -4408,7 +4539,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "COST",
@@ -4436,19 +4567,14 @@
 						"index_leadership": "lag",
 						"summary": "COST: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					},
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false,
 					"whats_missing": "Ranked by scan but blocked by deploy gates \u2014 monitor for upgrade"
 				},
 				{
@@ -4528,6 +4654,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -4542,7 +4676,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "PANW",
@@ -4570,19 +4704,14 @@
 						"index_leadership": "lag",
 						"summary": "PANW: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					},
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false,
 					"whats_missing": "Ranked by scan but blocked by deploy gates \u2014 monitor for upgrade"
 				},
 				{
@@ -4662,6 +4791,14 @@
 						"fallback_only": false
 					},
 					"confidence_unavailable": false,
+					"confidence_fallback_only": false,
+					"effective_action": "AVOID",
+					"effective_grade": "AVOID",
+					"decision_authority": {
+						"source": "live",
+						"effective_action_max": "RESEARCH",
+						"allows_trade_labels": false
+					},
 					"raw_score": 4.8,
 					"gross_edge_score": 4.8,
 					"net_deploy_score": 4.4,
@@ -4676,7 +4813,7 @@
 					"cost_rank_label": "monitor_only",
 					"cost_rank_display": "Insufficient edge after cost \u2014 monitor / near-miss only",
 					"may_override_wait": false,
-					"cost_rank_blocked_on_wait": false,
+					"cost_rank_blocked_on_wait": true,
 					"index_leadership": "lag",
 					"index_leadership_detail": {
 						"ticker": "JPM",
@@ -4704,19 +4841,14 @@
 						"index_leadership": "lag",
 						"summary": "JPM: SPY unknown \u00b7 QQQ unknown \u00b7 sector unknown \u2014 MOCK/DEGRADED"
 					},
-					"regime_fit": "stressed_filter",
+					"regime_fit": "wait_filter",
 					"execution_fit": "monitor",
 					"liquidity_fit": "ok",
 					"regime_intel_monitor_only": true,
 					"may_authorize_deploy": false,
-					"confidence_fallback_only": false,
-					"effective_action": "AVOID",
-					"effective_grade": "AVOID",
-					"decision_authority": {
-						"source": "live",
-						"effective_action_max": "RESEARCH",
-						"allows_trade_labels": false
-					},
+					"net_edge_display": "Raw 4.8 \u00b7 Net 4.4 after cost",
+					"ai_explanatory_only": true,
+					"deploy_from_ai_alone": false,
 					"whats_missing": "Ranked by scan but blocked by deploy gates \u2014 monitor for upgrade"
 				}
 			],
@@ -4740,35 +4872,7 @@
 					"deploy_line": "0/1 execution-ready"
 				}
 			],
-			"decision_authority": {
-				"source": "live",
-				"authority_level": "research",
-				"gates": {
-					"regime_wait": true,
-					"engine_off": false,
-					"data_stale": false,
-					"broker_offline": true,
-					"exec_blocked": false,
-					"scanner_loading": false,
-					"fallback_brief": false
-				},
-				"gates_active": true,
-				"effective_action_max": "RESEARCH",
-				"allows_trade_labels": false,
-				"degraded": true,
-				"degraded_copy": {
-					"system_mode": "degraded",
-					"decision_authority_line": "Decision authority: research-only",
-					"fallback_board_line": "",
-					"stale_snapshot_lines": []
-				},
-				"data_source_mismatch": false,
-				"data_source_mismatch_detail": "",
-				"counter_source": "live",
-				"council_count": null,
-				"deploy_ideas_count": 0
-			},
-			"snapshot_timestamp": "2026-06-08T08:02:29.083722Z",
+			"snapshot_timestamp": "2026-07-09T02:04:56.842384Z",
 			"board_message": "WAIT day \u2014 no deployable setups; showing top monitor candidates from live scan.",
 			"surface_authority": {
 				"tab": "playbook",
@@ -4801,6 +4905,24 @@
 				"divergent_tickers": [],
 				"contradictions": [],
 				"council_scanner_divergence": false
+			},
+			"playbook_operator_view": {
+				"authority": "BLOCKED",
+				"truth_strip": "Market: Fresh \u00b7 Board: Fresh \u00b7 Brief: Fresh \u00b7 Broker: Offline \u00b7 Runtime: Off \u00b7 Authority: Blocked",
+				"qualification": { "setup": 0, "trade": 0, "execution": 0, "deploy": 0 },
+				"qualification_line": "0 deploy-qualified",
+				"buckets": { "deploy": [], "pilot": [], "watch": [], "near_miss": [], "rejected_count": 30 },
+				"best_action": "do nothing \u2014 preserve capital",
+				"next": [
+					"repair IBKR / open Repair Console",
+					"No valid monitor candidates \u2014 refresh board or wait for setup",
+					"Broker Offline",
+					"Engine Off"
+				],
+				"no_valid_monitors": true,
+				"simulation_drafts_collapsed": true,
+				"no_edge": true,
+				"counts": { "Deploy": 0, "Pilot": 0, "Watch": 0, "Near-miss": 0, "Rejected": 30 }
 			}
 		}
 	}
