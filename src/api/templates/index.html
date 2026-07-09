@@ -612,7 +612,7 @@
       <span class="dc-sep" x-show="trustProvenanceLine()">·</span>
       <span x-show="trustProvenanceLine()" class="text-[8px] mono truncate" style="max-width:200px;color:var(--t3)" x-text="trustProvenanceLine()"></span>
       <button type="button" @click="dismissDataContract()" title="Dismiss"
-        style="margin-left:auto;background:none;border:none;color:var(--t3);cursor:pointer;font-size:11px;padding:2px 6px">?</button>
+        style="margin-left:auto;background:none;border:none;color:var(--t3);cursor:pointer;font-size:11px;padding:2px 6px">✕</button>
     </div>
 
     <!-- ────── Surface authority — current tab + peer surfaces (non-Guide only) ────── -->
@@ -2374,10 +2374,10 @@
                   <!-- Position conflict: already in book? -->
                   <template x-if="(pf?.positions||[]).find(p=>(p.ticker||p.symbol)===opp.ticker)"><span class="pill pb text-[7px] font-bold" title="You already hold this name — adding here increases concentration">📊 IN BOOK</span></template>
                   <!-- R-multiple risk per share -->
-                  <template x-if="opp.entry_price&&opp.stop_price"><span class="pill pw text-[7px] mono" :title="'Risk to stop: '+(Math.abs((opp.entry_price-opp.stop_price)/opp.entry_price*100)).toFixed(2)+'% ? 1R sizing'">?<span x-text="Math.abs((opp.entry_price-opp.stop_price)/opp.entry_price*100).toFixed(1)"></span>% 1R</span></template>
+                  <template x-if="opp.entry_price&&opp.stop_price"><span class="pill pw text-[7px] mono" :title="'Risk to stop: '+(Math.abs((opp.entry_price-opp.stop_price)/opp.entry_price*100)).toFixed(2)+'% · 1R sizing'">·<span x-text="Math.abs((opp.entry_price-opp.stop_price)/opp.entry_price*100).toFixed(1)"></span>% 1R</span></template>
                   <!-- Action badge with tooltip-style label -->
                   <span class="pill text-[8px] font-bold ml-auto" :class="effectiveCardActionClass(opp)"
-                    :title="safeRenderText(opp.action_reason||'',{blocked:cardBlockedForDisplay(opp)})||(effectiveCardAction(opp)==='WATCH'?'Monitor ? not deploy authority':effectiveCardAction(opp)==='FALLBACK CANDIDATE'?'Brief expired ? monitor only':'Card label capped by board gates')"
+                    :title="safeRenderText(opp.action_reason||'',{blocked:cardBlockedForDisplay(opp)})||(effectiveCardAction(opp)==='WATCH'?'Monitor · not deploy authority':effectiveCardAction(opp)==='FALLBACK CANDIDATE'?'Brief expired · monitor only':'Card label capped by board gates')"
                     x-text="effectiveCardAction(opp)"></span>
                 </div>
 
@@ -3381,7 +3381,7 @@
                     <div class="text-right" :class="row.avg_r>0.3?'text-green-400':row.avg_r>0?'text-amber-300':'text-red-400'" x-text="(row.avg_r>=0?'+':'')+row.avg_r.toFixed(2)+'R'"></div>
                     <div class="text-right" :class="row.sharpe_trade>=1?'text-green-400':row.sharpe_trade>=0?'text-amber-300':'text-red-400'" :title="'Annualized: '+row.sharpe_annualized" x-text="row.sharpe_trade.toFixed(2)"></div>
                     <div class="text-right" :class="row.sortino_trade>=1.3?'text-green-400':row.sortino_trade>=0?'text-amber-300':'text-red-400'" :title="'Annualized: '+row.sortino_annualized+' · Downside-only deviation'" x-text="row.sortino_trade!=null?row.sortino_trade.toFixed(2):'—'"></div>
-                    <div class="text-right" :class="row.profit_factor>=1.5?'text-green-400':row.profit_factor>=1?'text-amber-300':'text-red-400'" :title="'? wins / |? losses| ? capped at 99.99'" x-text="row.profit_factor!=null?row.profit_factor.toFixed(2):'?'"></div>
+                    <div class="text-right" :class="row.profit_factor>=1.5?'text-green-400':row.profit_factor>=1?'text-amber-300':'text-red-400'" :title="'Σ wins / |Σ losses| · capped at 99.99'" x-text="row.profit_factor!=null?row.profit_factor.toFixed(2):'?'"></div>
                     <div class="text-right" :class="row.max_drawdown_r>-0.5?'text-green-400':row.max_drawdown_r>-2?'text-amber-300':'text-red-400'" :title="'Peak-to-trough in R units'" x-text="row.max_drawdown_r!=null?row.max_drawdown_r.toFixed(2)+'R':'—'"></div>
                     <div class="text-right" :title="'Cumulative R curve (n='+(row.equity_curve_r?row.equity_curve_r.length:0)+' trades)'">
                       <template x-if="row.equity_curve_r&&row.equity_curve_r.length>=2">
@@ -5834,9 +5834,9 @@
                 <div class="text-[8px]" style="color:var(--t3)">Estimated 1-day 95% VaR
                   <span class="ml-1 px-1 rounded mono" style="font-size:7px;letter-spacing:.2px;text-transform:none"
                         :style="pfRisk().var95Quality==='historical'?'background:#0f2e1a;color:#4ade80;border:1px solid #16a34a':(pfRisk().var95Quality==='position-vol'?'background:#1e3a2e;color:#86efac;border:1px solid #16a34a':'background:#3a2a1e;color:#fcd34d;border:1px solid #b45309')"
-                        :title="pfRisk().var95Quality==='historical'?('Historical-sim ? 5th-pctile of real portfolio daily returns ? '+(pfRisk().var95Sample||0)+' aligned trading days' + (pfRisk().var95Warning?' ? '+pfRisk().var95Warning:'')):(pfRisk().var95Quality==='position-vol'?'Parametric ? 1.65? ? per-position vol from spark':'Parametric ? 1.65? ? default 2% vol estimate (no live data)')"
+                        :title="pfRisk().var95Quality==='historical'?('Historical-sim · 5th-pctile of real portfolio daily returns · '+(pfRisk().var95Sample||0)+' aligned trading days' + (pfRisk().var95Warning?' · '+pfRisk().var95Warning:'')):(pfRisk().var95Quality==='position-vol'?'Parametric · 1.65σ · per-position vol from spark':'Parametric · 1.65σ · default 2% vol estimate (no live data)')"
                         x-text="pfVar95MethodBadge()"></span>
-                  <button @click="fetchHistVar()" :disabled="histVar.loading" class="ml-1 text-[7px]" style="color:var(--t3);text-decoration:underline" title="Recompute historical VaR from 1y real returns">?</button>
+                  <button @click="fetchHistVar()" :disabled="histVar.loading" class="ml-1 text-[7px]" style="color:var(--t3);text-decoration:underline" title="Recompute historical VaR from 1y real returns">↻</button>
                 </div>
                 <div class="mono font-bold text-[12px] text-amber-300" x-text="'$'+pfRisk().var95.toLocaleString()"></div>
                 <div class="text-[8px]" style="color:var(--t3)" x-text="(pfRisk().var95Pct).toFixed(2)+'% of equity'"></div>
@@ -7341,9 +7341,9 @@
                     <span class="text-[8px] ml-1 mono" style="color:var(--t3)" x-text="ibkr.workingBracket.pollAge?'live '+ibkr.workingBracket.pollAge+'s':'(no live poll)'"></span>
                   </span>
                   <div class="flex gap-1">
-                    <button @click="ibkrPollBracket()" class="btn-s text-[9px]" title="Refresh status from broker">?</button>
-                    <button @click="ibkrCancelBracket()" class="btn-s text-[9px]" style="background:var(--red);color:white" title="Cancel all 3 legs at broker">? Cancel</button>
-                    <button @click="ibkrDismissBracket()" class="btn-s text-[9px]" title="Hide panel (does not cancel)">?</button>
+                    <button @click="ibkrPollBracket()" class="btn-s text-[9px]" title="Refresh status from broker">↻</button>
+                    <button @click="ibkrCancelBracket()" class="btn-s text-[9px]" style="background:var(--red);color:white" title="Cancel all 3 legs at broker">✕ Cancel</button>
+                    <button @click="ibkrDismissBracket()" class="btn-s text-[9px]" title="Hide panel (does not cancel)">▾</button>
                   </div>
                 </div>
                 <div class="grid grid-cols-3 gap-1 text-[9px] mono">
