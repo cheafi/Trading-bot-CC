@@ -560,8 +560,13 @@ def build_alpha_review(
     return report
 
 
-def alpha_review_summary_for_dashboard(report: Dict[str, Any]) -> Dict[str, Any]:
+def alpha_review_summary_for_dashboard(
+    report: Dict[str, Any],
+    *,
+    threshold_governance: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """Compact summary for decision_quality payload."""
+    tg = threshold_governance or {}
     return {
         "status": report.get("status", "learning"),
         "status_label": report.get("status_label", "learning"),
@@ -572,6 +577,7 @@ def alpha_review_summary_for_dashboard(report: Dict[str, Any]) -> Dict[str, Any]
         "top_items": (report.get("review_items") or [])[:3],
         "governor_review": report.get("governor_review") or {},
         "next_actions": (report.get("next_actions") or [])[:4],
+        "threshold_review_line": tg.get("status_line"),
         "collapsed": True,
         "authority_effect": "none",
         "may_authorize_deploy": False,

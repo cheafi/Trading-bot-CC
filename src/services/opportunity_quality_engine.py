@@ -349,6 +349,7 @@ def build_decision_quality_dashboard(
     outcome_store_summary: Optional[Dict[str, Any]] = None,
     alpha_quality: Optional[Dict[str, Any]] = None,
     alpha_review: Optional[Dict[str, Any]] = None,
+    threshold_governance: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Compact Dashboard decision_quality block."""
     t = dict(truth or {})
@@ -378,6 +379,7 @@ def build_decision_quality_dashboard(
     noisy_families = fh.get("noisy_families") or []
     aq = dict(alpha_quality or {})
     ar = dict(alpha_review or {})
+    tg = dict(threshold_governance or {})
     return {
         "title": "Decision Quality",
         "state": state,
@@ -436,4 +438,5 @@ def build_decision_quality_dashboard(
         },
         "alpha_quality": aq if aq else None,
         "alpha_review": ar if ar else None,
+        "threshold_governance": tg if tg else None,
     }

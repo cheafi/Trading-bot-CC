@@ -1580,6 +1580,19 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         persist=True,
         supersede_prior=True,
     )
+    from src.services.threshold_proposal_service import (
+        build_threshold_proposals,
+        threshold_governance_summary_for_dashboard,
+    )
+
+    threshold_batch = build_threshold_proposals(
+        alpha_review=alpha_review,
+        alpha_quality=alpha_quality,
+        governor_qa=alpha_quality["governor_qa"],
+        persist=True,
+    )
+    threshold_governance = threshold_governance_summary_for_dashboard()
+    threshold_governance["latest_batch_count"] = threshold_batch.get("count", 0)
     decision_quality = build_decision_quality_dashboard(
         truth=system_truth,
         candidates=valid_top5,
@@ -1593,7 +1606,10 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         journal_store_summary=journal_store.summary(),
         outcome_store_summary=forward_summary,
         alpha_quality=alpha_quality,
-        alpha_review=alpha_review_summary_for_dashboard(alpha_review),
+        alpha_review=alpha_review_summary_for_dashboard(
+            alpha_review, threshold_governance=threshold_governance
+        ),
+        threshold_governance=threshold_governance,
     )
     valid_top5 = attach_quality_to_rows(valid_top5, truth=system_truth, surface="playbook")
     from src.services.position_sizing import attach_sizing_to_rows

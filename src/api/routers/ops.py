@@ -7,6 +7,7 @@ import logging
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, Query, Request
+from pydantic import BaseModel, Field
 
 from src.api.app_state import get_engine
 from src.api.deps import sanitize_for_json, verify_api_key
@@ -155,3 +156,63 @@ async def ops_engine_stop(request: Request, _: bool = Depends(verify_api_key)):
 async def ops_engine_run_cycle(request: Request, _: bool = Depends(verify_api_key)):
     """Run one scan cycle on demand (dev helper when loop is not running)."""
     return sanitize_for_json(await _run_engine_cycle_once(request.app))
+
+
+class ThresholdGovActionBody(BaseModel):
+    proposal_id: str = Field(..., min_length=1)
+    reviewer: str = Field(..., min_length=1)
+    rationale: str = Field(..., min_length=1)
+
+
+@router.get("/threshold-governance/proposals")
+async def ops_threshold_proposals(limit: int = Query(50, ge=1, le=200)):
+    """List threshold governance proposals (diagnostic)."""
+    from src.services.threshold_governance_store import get_threshold_governance_store
+
+    store = get_threshold_governance_store()
+    return sanitize_for_json(
+        {
+            "open": store.open_proposals()[:limit],
+            "shadow": store.shadow_proposals()[:limit],
+            "summary": store.summary(),
+            "authority_effect": "none",
+            "may_authorize_deploy": False,
+        }
+    )
+
+
+def _threshold_action(action: str, body: ThresholdGovActionBody) -> Dict[str, Any]:
+    from src.services.threshold_approval_workflow import (
+        acknowledge_proposal,
+        approve_for_shadow,
+        defer_proposal,
+        reject_proposal,
+        request_more_samples,
+    )
+
+    mapping = {
+        "acknowledge": acknowledge_proposal,
+        "approve_shadow": approve_for_shadow,
+        "reject": reject_proposal,
+        "defer": defer_proposal,
+        "more_samples": request_more_samples,
+    }
+    fn = mapping.get(action)
+    if not fn:
+        return {"ok": False, "error": f"unknown action: {action}"}
+    return fn(
+        body.proposal_id,
+        reviewer=body.reviewer,
+        rationale=body.rationale,
+    )
+
+
+@router.post("/threshold-governance/{action}")
+async def ops_threshold_governance_action(
+    action: str,
+    body: ThresholdGovActionBody,
+    _: bool = Depends(verify_api_key),
+):
+    """Threshold governance workflow actions — audit only, no live auto-loosen."""
+    result = _threshold_action(action, body)
+    return sanitize_for_json({**result, "may_authorize_deploy": False, "authority_effect": "none"})

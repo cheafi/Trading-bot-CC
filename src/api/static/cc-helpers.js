@@ -1205,7 +1205,7 @@
 		"ENGINE UNKNOWN": "引擎狀態不明",
 		"IBKR OFFLINE": "IBKR 離線 — 不可交接",
 		"EXEC BLOCKED — risk breaker": "執行阻斷 — 熔斷中",
-		"BOARD WAIT — no deploy": "看板 WAIT — 僅監察，禁止部署",
+		"BOARD WAIT — no deploy": "看板 WAIT — 僅監控，部署封鎖",
 		"RESEARCH ONLY — board gate": "僅研究 — 看板門檻關閉",
 		"AUTHORITY SUSPENDED": "部署權限已暫停",
 		"REGIME WAIT": "體制 WAIT — 等待確認",
@@ -1237,7 +1237,7 @@
 
 	var OPERATOR_WHY_ZH = {
 		"Regime gate closed — no new risk": "體制關閉 — 今日禁止新倉",
-		"Board WAIT — monitor only, no deploy": "看板 WAIT — 僅監察，不可部署",
+		"Board WAIT — monitor only, no deploy": "看板 WAIT — 僅監控，部署封鎖",
 		"Board closed — preserve capital": "看板關閉 — 保留資金，不做新倉",
 		"Market data unavailable — refresh before sizing": "缺少即時報價 — 刷新後再定倉",
 		"Market data stale — rankings may not reflect live tape": "報價過期 — 排名可能非即時",
@@ -1289,16 +1289,19 @@
 	function localizeOperatorNow(now, secondary) {
 		var raw = String(now || "").trim()
 		if (raw === "MONITOR ONLY · Deploy blocked") {
-			return "MONITOR ONLY · 僅監察 · 禁止部署"
+			return "MONITOR ONLY · 僅監控 · 部署封鎖"
 		}
 		if (raw === "MONITOR ONLY · Regime closed") {
-			return "MONITOR ONLY · 僅監察 · 體制關閉"
+			return "MONITOR ONLY · 僅監控 · 體制關閉"
+		}
+		if (raw === "Risk review only") {
+			return bilingualLine("風險檢視", "Risk review only")
 		}
 		if (raw === "SELECTIVE") {
-			return "SELECTIVE · 選擇性（僅供觀察，不可部署）"
+			return "SELECTIVE · 選擇性（僅供研究，部署封鎖）"
 		}
 		if (raw === "WAIT") {
-			return "WAIT · 等待（僅監察）"
+			return "WAIT · 等待（僅監控）"
 		}
 		if (raw === "NO_TRADE") {
 			return "NO_TRADE · 禁止交易"
@@ -1312,7 +1315,10 @@
 	function localizeOperatorAllowed(allowed) {
 		var raw = String(allowed || "").trim()
 		if (raw === "monitor candidates, create watch rules") {
-			return bilingualLine("刷新看板、建立監察規則", raw)
+			return bilingualLine("刷新看板、建立監控規則", raw)
+		}
+		if (raw === "risk review, stop coverage, concentration diagnostics") {
+			return bilingualLine("風險檢視、止損覆蓋、集中度診斷", raw)
 		}
 		if (raw === "deploy selectively on qualified names") {
 			return bilingualLine("僅在合格標的上選擇性部署", raw)
@@ -1325,6 +1331,9 @@
 		if (!raw) return raw
 		if (raw === "no sizing, no handoff, no pilot entry") {
 			return bilingualLine("不定倉、不交接券商、不可試探倉", raw)
+		}
+		if (raw === "no sizing · no handoff · no deploy from portfolio capacity") {
+			return bilingualLine("不定倉、不交接券商、組合層不可部署", raw)
 		}
 		return raw
 	}
@@ -1984,13 +1993,13 @@
 		}
 		parts.push("複核路徑見下方清單")
 		var body = parts.length ? parts.join(" · ") : "監察排名 · gate context"
-		return "MONITOR ONLY · 僅監察 — " + body + " · 本頁不可下單、不可部署"
+		return "MONITOR ONLY · 僅監控 — " + body + " · 本頁不可下單、部署封鎖"
 	}
 
 	var AUTHORITY_COPY = {
 		no_trade_authority: "本頁不可下單 · No trade authority here",
-		monitor_item: "監察候選（不可部署）· monitor item",
-		research_item: "研究候選（僅供觀察）· research item",
+		monitor_item: "監控候選（部署封鎖）· monitor item",
+		research_item: "研究候選（僅供研究）· research item",
 		upgrade_condition: "升級條件 · upgrade condition",
 		review_path: "複核路徑 · review path",
 		scan_evidence: "掃描證據 · scan evidence",
@@ -2008,12 +2017,12 @@
 			return "今日禁止新倉 · No new risk today"
 		}
 		if (o.confirmOnly) {
-			return "僅結構複核 · Confirm-only — structure review only"
+			return bilingualLine("僅結構確認", "Confirm-only — structure review only")
 		}
 		if (o.degraded || o.researchOnly) {
 			return "研究面已降級 · Degraded research surface"
 		}
-		return "今日狀態：禁止部署 · No deploy today"
+		return "今日狀態：部署封鎖 · No deploy today"
 	}
 
 	function authorityBlockedBlockerLine(opts) {
@@ -3273,7 +3282,7 @@
 		var o = opts || {}
 		if (o.blocked) {
 			return bilingualLine(
-				"禁止部署 — PILOT/WATCH 標籤僅供審閱",
+				"部署封鎖 — PILOT/WATCH 標籤僅供審閱",
 				"PILOT/WATCH labels are review-only — deploy blocked.",
 			)
 		}
@@ -3336,20 +3345,20 @@
 			.trim()
 		var d = String(detail || "").trim()
 		if (!d) {
-			if (su === "BLOCKED") return bilingualLine("禁止部署 — 門檻未齊", "Deploy blocked — gates incomplete")
+			if (su === "BLOCKED") return bilingualLine("部署封鎖 — 門檻未齊", "Deploy blocked — gates incomplete")
 			if (su === "AVOID" || su === "NO TRADE") return bilingualLine("避免 — 不可部署", "Avoid — not deploy-ready")
 			return String(status || "WATCH").replace(/_/g, " ") + " — " + bilingualLine("僅監察", "monitor only")
 		}
 		d = d.replace(/^(AVOID|BLOCKED|WATCH|NO_TRADE|PILOT|FALLBACK WATCH)\s*[·\-\—:\u2014]\s*/i, "").trim()
-		if (su === "BLOCKED") return bilingualLine("禁止部署 — " + d, "Deploy blocked — " + d)
+		if (su === "BLOCKED") return bilingualLine("部署封鎖 — " + d, "Deploy blocked — " + d)
 		if (su === "AVOID" || su === "NO TRADE") return bilingualLine("避免 — " + d, "Avoid — " + d)
 		return String(status || "WATCH").replace(/_/g, " ") + " — " + d
 	}
 
 	var HEADER_SURFACE_ZH = {
-		"Monitor only": "僅監察",
-		"Deploy blocked": "禁止部署",
-		"Research only": "僅研究",
+		"Monitor only": "僅監控",
+		"Deploy blocked": "部署封鎖",
+		"Research only": "僅供研究",
 		Loading: "載入中",
 		"Degraded board": "看板已降級",
 		"Fallback board": "備援看板",
@@ -3405,6 +3414,107 @@
 		return busy ? bilingualLine("匯出中…", "Exporting…") : bilingualLine("一鍵匯出全介面", "Export All Pages")
 	}
 
+	function navTabLabel(tabId) {
+		var map = {
+			guide: bilingualLine("指南", "Guide"),
+			today: bilingualLine("總覽", "Dashboard"),
+			signals: bilingualLine("PM 看板", "Playbook"),
+			scanners: bilingualLine("掃描", "Discovery"),
+			portfolio: bilingualLine("組合", "Portfolio"),
+			dossier: bilingualLine("檔案", "Dossier"),
+		}
+		return map[String(tabId || "").toLowerCase()] || String(tabId || "")
+	}
+
+	function discoveryFunnelHeader() {
+		return bilingualLine("研究漏斗", "Research Funnel")
+	}
+
+	function portfolioRiskHeader() {
+		return bilingualLine("風險檢視", "Risk Review")
+	}
+
+	function playbookSurfaceTitle() {
+		return bilingualLine("PM 看板", "Playbook Board")
+	}
+
+	function decisionQualityHeader() {
+		return bilingualLine("決策品質", "Decision Quality")
+	}
+
+	function alphaQualityCollapsedHeader() {
+		return (
+			bilingualLine("Alpha 品質", "ALPHA QUALITY") +
+			" · " +
+			bilingualLine("僅供研究", "evidence only") +
+			" · authority effect: none"
+		)
+	}
+
+	function alphaReviewCollapsedHeader() {
+		return bilingualLine("Alpha 複核", "ALPHA REVIEW")
+	}
+
+	function portfolioOperatorBlockLocalized(block) {
+		var b = block || {}
+		return localizeOperatorBlock({
+			now: b.now,
+			why: b.why,
+			allowed: b.allowed,
+			blocked: b.blocked,
+			next: b.next,
+		})
+	}
+
+	function discoveryFunnelPanelLocalized(panel) {
+		var p = panel || {}
+		return {
+			now: localizeOperatorNow(p.now),
+			why: localizeOperatorWhy(p.why),
+			funnel_line: p.funnel_line,
+			status_line: localizeDiscoveryStatusLine(p.status_line),
+			best_action: p.best_action,
+			subtitle: p.subtitle,
+			brief_expired_note: p.brief_expired_note,
+		}
+	}
+
+	function localizeDiscoveryStatusLine(line) {
+		var raw = String(line || "").trim()
+		if (!raw) return raw
+		return raw
+			.replace(/Deploy authority: None/g, bilingualLine("部署權限：無", "Deploy authority: None"))
+			.replace(/Board WAIT/g, bilingualLine("看板 WAIT", "Board WAIT"))
+			.replace(/Board Fresh/g, bilingualLine("看板新鮮", "Board Fresh"))
+			.replace(/Board Stale/g, bilingualLine("看板過期", "Board Stale"))
+			.replace(/Broker Offline/g, bilingualLine("券商離線", "Broker Offline"))
+			.replace(/Scanner run: Live/g, bilingualLine("掃描執行：即時", "Scanner run: Live"))
+			.replace(/Scanner run: Stale/g, bilingualLine("掃描執行：過期", "Scanner run: Stale"))
+			.replace(/Scanner run: Warming/g, bilingualLine("掃描執行：預熱中", "Scanner run: Warming"))
+	}
+
+	function playbookAuthorityStripLabels() {
+		return {
+			authority: bilingualLine("權限", "Authority"),
+			truth: bilingualLine("真相帶", "Truth"),
+			qualification: bilingualLine("資格", "Qualification"),
+			best_action: bilingualLine("最佳行動", "Best action"),
+			next: bilingualLine("下一步", "Next"),
+		}
+	}
+
+	function discoveryOperatorChromeLabel(key) {
+		var map = {
+			now: bilingualLine("現在", "Now"),
+			blocker: bilingualLine("阻斷", "Blocker"),
+			next: bilingualLine("下一步", "Next"),
+			funnel: bilingualLine("漏斗", "Funnel"),
+			status: bilingualLine("狀態", "Status"),
+			best_action: bilingualLine("最佳行動", "Best action"),
+		}
+		return map[String(key || "").toLowerCase()] || String(key || "")
+	}
+
 	function operatorBlockChromeLabel(key) {
 		var labels = {
 			now: bilingualLine("現在", "Now"),
@@ -3423,6 +3533,60 @@
 
 	function dashboardLoadingHint() {
 		return bilingualLine("快取快照會先顯示", "cached snapshot shown when available")
+	}
+
+	function dashboardPrefixIcon(kind) {
+		var map = {
+			bullet: "•",
+			risk_blocker: "⛔",
+			upgrade: "→",
+			confirm: "✓",
+			conflict: "⚠",
+			why_now: "✓",
+			invalidation: "✕",
+			reason_against: "✗",
+			pre_mortem: "⚠",
+			why_wait: "⏳",
+			timing: "⏱",
+			error: "⚠",
+			empty: "—",
+			conflict_level: "⚖",
+		}
+		return map[String(kind || "").toLowerCase()] || "•"
+	}
+
+	function dashboardOperatorLabels() {
+		return {
+			sector_leaders: bilingualLine("領漲板塊", "📈 Sector Leaders"),
+			sector_laggards: bilingualLine("領跌板塊", "📉 Sector Laggards"),
+			refresh_market: bilingualLine("重新整理市場", "↻ Refresh market data"),
+			retry_sectors: bilingualLine("重試板塊", "↻ Retry sectors"),
+		}
+	}
+
+	function dashboardPillIcons() {
+		return {
+			new: "✨ NEW",
+			up: "↑",
+			down: "↓",
+			gate: "⛔ Gate",
+		}
+	}
+
+	function dashboardRsPillLabel(rs) {
+		var r = rs || {}
+		var slope = Number(r.rs_slope || 0)
+		var arrow = slope > 0 ? " ↑" : slope < 0 ? " ↓" : ""
+		return "📈 RS " + Math.round(Number(r.rs_composite || 0)) + arrow
+	}
+
+	function dashboardOppDiffBadge(diff, move) {
+		var d = String(diff || "").toUpperCase()
+		if (d === "NEW") return dashboardPillIcons().new
+		var m = Number(move || 0)
+		if (d === "UP" && m > 0) return dashboardPillIcons().up + m
+		if (d === "DOWN" && m < 0) return dashboardPillIcons().down + Math.abs(m)
+		return ""
 	}
 
 	function fundIcon(name) {
@@ -4068,9 +4232,26 @@
 		localizeHeaderSurface: localizeHeaderSurface,
 		localizeFetchStateCopy: localizeFetchStateCopy,
 		exportAllLabel: exportAllLabel,
+		navTabLabel: navTabLabel,
+		discoveryFunnelHeader: discoveryFunnelHeader,
+		portfolioRiskHeader: portfolioRiskHeader,
+		playbookSurfaceTitle: playbookSurfaceTitle,
+		playbookAuthorityStripLabels: playbookAuthorityStripLabels,
+		discoveryOperatorChromeLabel: discoveryOperatorChromeLabel,
+		decisionQualityHeader: decisionQualityHeader,
+		alphaQualityCollapsedHeader: alphaQualityCollapsedHeader,
+		alphaReviewCollapsedHeader: alphaReviewCollapsedHeader,
+		portfolioOperatorBlockLocalized: portfolioOperatorBlockLocalized,
+		discoveryFunnelPanelLocalized: discoveryFunnelPanelLocalized,
+		localizeDiscoveryStatusLine: localizeDiscoveryStatusLine,
 		operatorBlockChromeLabel: operatorBlockChromeLabel,
 		dashboardLoadingHeadline: dashboardLoadingHeadline,
 		dashboardLoadingHint: dashboardLoadingHint,
+		dashboardPrefixIcon: dashboardPrefixIcon,
+		dashboardOperatorLabels: dashboardOperatorLabels,
+		dashboardPillIcons: dashboardPillIcons,
+		dashboardRsPillLabel: dashboardRsPillLabel,
+		dashboardOppDiffBadge: dashboardOppDiffBadge,
 		fundIcon: fundIcon,
 		signalCategoryIcon: signalCategoryIcon,
 		replayBriefMissingError: replayBriefMissingError,
@@ -4207,6 +4388,7 @@
 		deployAuthorityTier: deployAuthorityTier,
 		briefExpiredOperatorLine: briefExpiredOperatorLine,
 		safeRenderText: safeRenderText,
+		bilingualLine: bilingualLine,
 		topMonitorLabels: topMonitorLabels,
 		cardDisplayReason: cardDisplayReason,
 		briefFreshnessStripState: briefFreshnessStripState,

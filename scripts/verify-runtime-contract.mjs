@@ -22,6 +22,7 @@ const gates = {
   'PORTFOLIO RISK REVIEW': [],
   'ALPHA QUALITY CONTRACT': [],
   'ALPHA REVIEW CONTRACT': [],
+  'THRESHOLD GOVERNANCE CONTRACT': [],
 };
 
 function fail(gate, msg) {
@@ -88,8 +89,46 @@ const alphaReviewChunk = (() => {
   const end = index.indexOf('</details>', start);
   return index.slice(start, end > start ? end + 10 : start + 2500);
 })();
+const thresholdGovChunk = (() => {
+  const start = index.indexOf('data-cc="ops-threshold-governance-panel"');
+  if (start < 0) return '';
+  const end = index.indexOf('</details>', start);
+  return index.slice(start, end > start ? end + 10 : start + 3500);
+})();
+const dashboardChunk = (() => {
+  const start = index.indexOf('data-cc="today-surface"');
+  if (start < 0) return '';
+  const end = index.indexOf('<!-- SURFACE: OPPORTUNITY SCANNER', start);
+  return index.slice(start, end > start ? end : undefined);
+})();
+
+function scanVisibleUtf8Corruption(chunk, gate, label) {
+  if (!chunk) return;
+  const lines = chunk.split('\n');
+  for (const line of lines) {
+    if (/x-text="'[?] /.test(line)) {
+      fail(gate, `${label}: corrupted x-text prefix ${line.trim().slice(0, 100)}`);
+    }
+    const xtextMatches = line.matchAll(/x-text="([^"]*)"/g);
+    for (const m of xtextMatches) {
+      const expr = m[1];
+      if (/['"][?][?]/.test(expr) || /[?][?]['"]/.test(expr)) {
+        fail(gate, `${label}: x-text literal ?? ${line.trim().slice(0, 100)}`);
+      }
+    }
+    if (/>\?\?[^?<]/.test(line)) {
+      fail(gate, `${label}: visible ?? ${line.trim().slice(0, 100)}`);
+    }
+    if (/>\? [A-Za-z]/.test(line) && !/Can you fill cleanly/.test(line)) {
+      fail(gate, `${label}: corrupted visible label ${line.trim().slice(0, 100)}`);
+    }
+  }
+}
 
 // ── RUNTIME CONTRACT ──
+scanVisibleUtf8Corruption(dashboardChunk, 'RUNTIME CONTRACT', 'Dashboard');
+ban('RUNTIME CONTRACT', dashboardChunk, /x-text="'[?] /, 'Dashboard: corrupted UTF-8 prefix in x-text');
+ban('RUNTIME CONTRACT', dashboardChunk, />\?\?[^?<]/, 'Dashboard: visible ?? in markup');
 ban('RUNTIME CONTRACT', discoveryChunk, /Freshness:\s*live/i, 'Discovery: unscoped "Freshness: live"');
 ban('RUNTIME CONTRACT', discoveryChunk, /h\.freshness\|\|'live'/i, 'Discovery: raw h.freshness||live pill');
 ban('RUNTIME CONTRACT', discoveryChunk, /brief fallback/i, 'Discovery: brief fallback copy');
@@ -217,7 +256,7 @@ if (!/portfolioRiskViewModel/.test(helpers)) {
 if (!/data-cc="alpha-quality-panel"/.test(index)) {
   fail('ALPHA QUALITY CONTRACT', 'Dashboard: missing collapsed ALPHA QUALITY panel inside Decision Quality');
 }
-if (!/ALPHA QUALITY/.test(alphaQualityChunk)) {
+if (!/ALPHA QUALITY/i.test(alphaQualityChunk)) {
   fail('ALPHA QUALITY CONTRACT', 'Dashboard: missing ALPHA QUALITY section label');
 }
 if (!/:open="false"/.test(decisionQualityChunk)) {
@@ -265,7 +304,7 @@ try {
 if (!/data-cc="alpha-review-panel"/.test(index)) {
   fail('ALPHA REVIEW CONTRACT', 'Dashboard: missing collapsed ALPHA REVIEW panel inside Alpha Quality');
 }
-if (!/ALPHA REVIEW/.test(alphaReviewChunk)) {
+if (!/ALPHA REVIEW/i.test(alphaReviewChunk)) {
   fail('ALPHA REVIEW CONTRACT', 'Dashboard: missing ALPHA REVIEW section label');
 }
 if (!/:open="false"/.test(alphaReviewChunk)) {
@@ -309,6 +348,48 @@ try {
   }
 } catch (e) {
   fail('ALPHA REVIEW CONTRACT', `opportunity_quality_engine alpha_review check failed: ${e.message}`);
+}
+
+// ── THRESHOLD GOVERNANCE CONTRACT ──
+if (!/data-cc="ops-threshold-governance-panel"/.test(index)) {
+  fail('THRESHOLD GOVERNANCE CONTRACT', 'Ops: missing collapsed Threshold Governance diagnostic panel');
+}
+if (!/:open="false"/.test(thresholdGovChunk)) {
+  fail('THRESHOLD GOVERNANCE CONTRACT', 'Threshold Governance: must remain collapsed by default');
+}
+ban('THRESHOLD GOVERNANCE CONTRACT', thresholdGovChunk, /@click.*deploy|promote_to_live|Deploy now/i, 'Threshold Governance: banned deploy/promote live in Ops UI');
+ban('THRESHOLD GOVERNANCE CONTRACT', thresholdGovChunk, /auto.?loosen/i, 'Threshold Governance: banned auto-loosen in Ops UI');
+ban('THRESHOLD GOVERNANCE CONTRACT', dashboardChunk, /threshold.*control|loosen.*threshold|@click.*threshold/i, 'Dashboard: banned threshold controls on research surface');
+ban('THRESHOLD GOVERNANCE CONTRACT', discoveryChunk, /threshold.*control|loosen.*threshold|@click.*threshold/i, 'Discovery: banned threshold controls on research surface');
+if (!/Threshold Review:/.test(alphaReviewChunk) && !/threshold_review_line/.test(alphaReviewChunk)) {
+  fail('THRESHOLD GOVERNANCE CONTRACT', 'Dashboard Alpha Review: missing compact Threshold Review status line');
+}
+if (!/no live changes/i.test(thresholdGovChunk)) {
+  fail('THRESHOLD GOVERNANCE CONTRACT', 'Ops Threshold Governance: missing no live changes copy');
+}
+try {
+  const regSrc = readFileSync(join(root, 'src/services/threshold_registry.py'), 'utf8');
+  if (!/can_auto_loosen\s*=\s*False/.test(regSrc)) {
+    fail('THRESHOLD GOVERNANCE CONTRACT', 'threshold_registry: can_auto_loosen must be false globally');
+  }
+} catch (e) {
+  fail('THRESHOLD GOVERNANCE CONTRACT', `threshold_registry check failed: ${e.message}`);
+}
+try {
+  const propSrc = readFileSync(join(root, 'src/services/threshold_proposal_service.py'), 'utf8');
+  if (!/can_auto_loosen/.test(propSrc) || !/no_live_changes/.test(propSrc)) {
+    fail('THRESHOLD GOVERNANCE CONTRACT', 'threshold_proposal_service: missing auto-loosen / no-live guards');
+  }
+} catch (e) {
+  fail('THRESHOLD GOVERNANCE CONTRACT', `threshold_proposal_service check failed: ${e.message}`);
+}
+try {
+  const oqeSrc3 = readFileSync(join(root, 'src/services/opportunity_quality_engine.py'), 'utf8');
+  if (!/threshold_governance/.test(oqeSrc3)) {
+    fail('THRESHOLD GOVERNANCE CONTRACT', 'Decision quality dashboard: missing threshold_governance wiring');
+  }
+} catch (e) {
+  fail('THRESHOLD GOVERNANCE CONTRACT', `opportunity_quality_engine threshold_governance check failed: ${e.message}`);
 }
 
 const allErrors = Object.values(gates).flat();

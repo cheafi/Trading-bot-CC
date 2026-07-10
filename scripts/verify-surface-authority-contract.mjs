@@ -181,6 +181,7 @@ const alphaReviewChunk = (() => {
   const end = index.indexOf('</details>', start);
   return index.slice(start, end > start ? end + 10 : start + 2500);
 })();
+const discoveryChunk = surfaceChunk('data-cc="discovery-surface"', '<!-- SURFACE:');
 if (!decisionQualityChunk.includes('data-cc="decision-quality-panel"')) {
   errors.push('[Dashboard] missing decision-quality-panel marker');
 }
@@ -240,6 +241,44 @@ try {
   }
 } catch (e) {
   errors.push(`[Overfit] source read failed: ${e.message}`);
+}
+
+// Threshold Governance — diagnostic only, no research-surface controls
+const opsThresholdChunk = (() => {
+  const start = index.indexOf('data-cc="ops-threshold-governance-panel"');
+  if (start < 0) return '';
+  const end = index.indexOf('<!-- ERROR LOG -->', start);
+  return index.slice(start, end > start ? end : start + 4000);
+})();
+if (!opsThresholdChunk.includes('data-cc="ops-threshold-governance-panel"')) {
+  errors.push('[Ops] Threshold Governance diagnostic panel missing');
+}
+if (!/:open="false"/.test(opsThresholdChunk)) {
+  errors.push('[Ops] Threshold Governance must default collapsed');
+}
+if (/@click.*deploy|promote_to_live|Deploy now/i.test(opsThresholdChunk)) {
+  errors.push('[Ops] Threshold Governance: banned deploy/promote actions');
+}
+if (/auto.?loosen/i.test(opsThresholdChunk)) {
+  errors.push('[Ops] Threshold Governance: banned auto-loosen copy');
+}
+if (!/threshold_review_line|Threshold Review:/.test(alphaReviewChunk)) {
+  errors.push('[Dashboard] Alpha Review: missing compact Threshold Review status line');
+}
+if (/threshold.*control|loosen.*threshold|@click.*threshold/i.test(discoveryChunk)) {
+  errors.push('[Discovery] banned threshold controls on research surface');
+}
+try {
+  const regSrc = readFileSync(join(root, 'src/services/threshold_registry.py'), 'utf8');
+  if (!/can_auto_loosen\s*=\s*False/.test(regSrc)) {
+    errors.push('[Threshold Registry] can_auto_loosen must be false globally');
+  }
+  const idCount = (regSrc.match(/^\s+"[a-z]+\.[a-z_]+": _def\(/gm) || []).length;
+  if (idCount < 16) {
+    errors.push(`[Threshold Registry] expected 16 threshold IDs, found ${idCount}`);
+  }
+} catch (e) {
+  errors.push(`[Threshold Registry] source read failed: ${e.message}`);
 }
 
 // Optional live API check
