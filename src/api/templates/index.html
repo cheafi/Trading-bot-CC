@@ -13639,10 +13639,22 @@
           :this.opsProbeRuntimeFallbackRows();
         const td=this.today7.todays_decision||{};
         const mission=this.todayMissionPanel();
+        const dashOp=this.dashboardOperatorBlock();
+        const playbookOp=this.playbookOperatorView();
+        const discoveryFunnel=this.discoveryFunnelPanel();
+        const pfRisk=this.pfRiskVM();
+        const pfOp=(this.pfDecision&&this.pfDecision.portfolio_operator_block)||pfRisk.operatorBlock||{};
+        const scopedStrip=(typeof CCHelpers!=='undefined'&&CCHelpers.scopedFreshnessStripLocalized&&truth)
+          ?CCHelpers.scopedFreshnessStripLocalized(truth)
+          :((typeof CCHelpers!=='undefined'&&CCHelpers.localizeScopedFreshnessStrip)
+            ?CCHelpers.localizeScopedFreshnessStrip(this.shellTruthVM().scopedStrip)
+            :this.shellTruthVM().scopedStrip);
         return {
           generated_at:new Date().toISOString(),
           system_truth:truth,
           system_truth_line:(typeof CCHelpers!=='undefined'&&CCHelpers.systemTruthLine)?CCHelpers.systemTruthLine(truth):'',
+          scoped_freshness_strip:scopedStrip||'',
+          dashboard_operator:dashOp,
           system_blockers:mission.system_blockers||[],
           filter_funnel:funnel,
           deploy_authority:!!truth.deploy_authority,
@@ -13685,11 +13697,20 @@
             top_ranked:(this.today7.top_ranked||[]).slice(0,(typeof CCHelpers!=='undefined'&&CCHelpers.CC_TOP_MONITOR_COUNT)||10).map(r=>String(r.ticker||r).toUpperCase()+' · '+(r.action||r.verdict||'monitor')),
             monitors:mission.monitors||[],
           },
+          playbook_operator:{
+            authority:playbookOp.authority||'',
+            truth_strip:playbookOp.truth_strip||'',
+            qualification_line:playbookOp.qualification_line||this.playbookQualificationDisplay(),
+            best_action:playbookOp.best_action||this.playbookBestActionDisplay?.()||'',
+            next:playbookOp.next||[],
+            blocked:!!playbookOp.blocked,
+          },
           playbook:{
             funnel_label:this.playbookFunnelLabel(funnel,this.rankedOpps.rows),
             board_message:this.rankedOpps.board_message||this.rankedOpps.emergency?.headline||'',
             rows:(this.rankedOpps.rows||[]).slice(0,12),
           },
+          discovery_funnel:discoveryFunnel,
           discovery:{data:this.scannerHub.data,error:this.scannerHub.error,loading:!!this.scannerHub.loading},
           dossier:{
             ticker:this.dos.ticker,
@@ -13697,6 +13718,16 @@
             intel:this.dos.intel,
             data:this.dos.data,
             summary:this.dos.intel?.decision_bar?.stance_one_liner||this.dos.data?.summary||'',
+          },
+          portfolio_risk:{
+            now:pfOp.now||pfRisk.operatorBlock?.now||'',
+            why:pfOp.why||pfRisk.operatorBlock?.why||'',
+            allowed:pfOp.allowed||pfRisk.operatorBlock?.allowed||'',
+            blocked:pfOp.blocked||pfRisk.operatorBlock?.blocked||'',
+            next:pfOp.next||pfRisk.operatorBlock?.next||'',
+            scoped_truth_strip:pfRisk.scopedTruthStrip||'',
+            mode:pfRisk.mode||'',
+            risk_review_only:!!pfRisk.riskReviewOnly,
           },
           portfolio:{
             summary:this.pf.summary?JSON.stringify(this.pf.summary).slice(0,240):'',
@@ -13727,6 +13758,14 @@
           guide:{
             workflow:'Dashboard ? Playbook ? Discovery ? Dossier ? Portfolio / IBKR. Export is monitor-only ? not trade authority.',
           },
+          today7_snapshot:{
+            date:this.today7.date||'',
+            regime:this.today7.regime||null,
+            filter_funnel:this.today7.filter_funnel||null,
+            top_ranked:(this.today7.top_ranked||[]).slice(0,10),
+            system_truth:truth,
+            trust:this.today7.trust||{},
+          },
         };
       },
       showExportToast(message){
@@ -13738,17 +13777,51 @@
       async exportReviewPdfClick(){
         if(this.exportReviewPdfBusy) return;
         this.exportReviewPdfBusy=true;
-        this.showExportToast('📄 準備 PDF 中… · Preparing PDF…');
+        this.showExportToast('📄 準備匯出中… · Preparing export…');
         try{
+          if(!Object.keys(this.today7.system_truth||{}).length){
+            this.hydrateToday7FromCache();
+            if(typeof this.fetchToday7==='function') await this.fetchToday7({force:true});
+          }
           if(!this.errorLog.entries.length&&!this.errorLog.loading) await this.fetchErrorLog();
           const snapshot=this.buildExportReviewSnapshot();
+          const hasContent=(typeof CCHelpers!=='undefined'&&CCHelpers.exportSnapshotHasContent)
+            ?CCHelpers.exportSnapshotHasContent(snapshot)
+            :!!Object.keys(snapshot.system_truth||{}).length;
+          if(!hasContent){
+            console.warn('[CC export] empty snapshot — today7 may not be loaded');
+            if(typeof CCHelpers!=='undefined'&&CCHelpers.exportReviewJsonDownload){
+              const fb=await CCHelpers.exportReviewJsonDownload(snapshot);
+              if(fb&&fb.ok){
+                this.showExportToast('⚠ 資料不足，已匯出 JSON · Sparse data — downloaded JSON');
+                return;
+              }
+            }
+            this.showExportToast('匯出為空 · Export empty — refresh Dashboard and retry');
+            return;
+          }
           if(typeof CCHelpers!=='undefined'&&CCHelpers.exportReviewPdf){
             const res=await CCHelpers.exportReviewPdf(snapshot);
             if(res&&res.ok){
-              this.showExportToast('✓ 已下載 · Downloaded '+(res.filename||'cc-review.pdf'));
+              const fmt=res.format==='json'?'JSON (PDF fallback)':(res.format||'PDF');
+              this.showExportToast('✓ 已下載 · Downloaded '+(res.filename||'cc-review')+' · '+fmt);
             }else{
               console.warn('[CC export]',res&&res.error?res.error:'export failed');
+              if(typeof CCHelpers!=='undefined'&&CCHelpers.exportReviewJsonDownload){
+                const fb=await CCHelpers.exportReviewJsonDownload(snapshot);
+                if(fb&&fb.ok){
+                  this.showExportToast('⚠ PDF 失敗，已匯出 JSON · PDF failed — downloaded JSON');
+                  return;
+                }
+              }
               this.showExportToast('PDF 匯出失敗 · PDF export failed');
+            }
+          }else if(typeof CCHelpers!=='undefined'&&CCHelpers.exportReviewJsonDownload){
+            const fb=await CCHelpers.exportReviewJsonDownload(snapshot);
+            if(fb&&fb.ok){
+              this.showExportToast('✓ 已下載 JSON · Downloaded '+(fb.filename||'cc-review.json'));
+            }else{
+              this.showExportToast('匯出不可用 · Export unavailable');
             }
           }else{
             console.warn('[CC export] CCHelpers.exportReviewPdf unavailable');

@@ -2243,17 +2243,40 @@
 		}
 	}
 
-	function discoveryOpportunityIntelView(oi) {
+	function discoveryOpportunityIntelView(oi, opts) {
 		var block = oi || {}
+		var o = opts || {}
 		var counts = block.counts || {}
+		var blocked = o.deployBlocked !== false && (o.deployBlocked || o.blocked || o.authorityBlocked)
+		var chips = (block.candidate_chips || []).slice(0, 8)
+		if (!chips.length && block.by_stage) {
+			for (var stage in block.by_stage) {
+				if (!Object.prototype.hasOwnProperty.call(block.by_stage, stage)) continue
+				chips.push(String(stage).replace(/_/g, " ") + " n=" + Number(block.by_stage[stage] || 0))
+			}
+		}
+		var bestAction = String(block.best_action || "send to Playbook review").replace(/_/g, " ")
+		if (/deploy|execute|trade now|size/i.test(bestAction)) {
+			bestAction = "send to Playbook review"
+		}
+		var note =
+			block.research_note ||
+			(block.learning_mode
+				? "Learning mode — evidence study only"
+				: "Evidence study — not deploy permission")
+		if (blocked) {
+			note = "Research only · deploy authority unavailable · " + note
+		}
 		return {
-			visible: !!(counts.total || block.by_stage),
+			visible: !!(counts.total || block.by_stage || chips.length),
 			total: Number(counts.total || 0),
 			best_theme: block.best_theme || "",
-			best_action: String(block.best_action || "monitor").replace(/_/g, " "),
-			candidate_chips: (block.candidate_chips || []).slice(0, 8),
-			note: block.research_note || "Evidence study — not deploy permission",
+			best_action: bestAction,
+			candidate_chips: chips,
+			note: note,
 			learning_mode: !!block.learning_mode,
+			research_only: true,
+			blocked: !!blocked,
 		}
 	}
 
@@ -3455,6 +3478,64 @@
 		return bilingualLine("Alpha 複核", "ALPHA REVIEW")
 	}
 
+	function thresholdReviewCollapsedHeader() {
+		return (
+			bilingualLine("門檻複核", "THRESHOLD REVIEW") +
+			" · " +
+			bilingualLine("僅複核", "review only") +
+			" · authority effect: none"
+		)
+	}
+
+	function exportGuideWorkflowLine() {
+		return "Dashboard → Playbook → Discovery → Dossier → Portfolio / IBKR. Export is monitor-only — not trade authority."
+	}
+
+	function opsDiagnosticLastRunLines(opsData, today7) {
+		var ops = opsData || {}
+		var t7 = today7 || {}
+		var dq = t7.decision_quality || {}
+		var fmt = function (raw) {
+			if (!raw) return "Not run yet"
+			try {
+				var d = new Date(raw)
+				if (isNaN(d.getTime())) return String(raw)
+				return d.toISOString().replace("T", " ").slice(0, 19) + " UTC"
+			} catch (_e) {
+				return String(raw)
+			}
+		}
+		return [
+			{ key: "backfill", label: "Forward outcome backfill", at: fmt(ops.last_backfill_at || dq.metrics?.last_backfill_at) },
+			{ key: "evaluate", label: "Alpha QA evaluate", at: fmt(ops.last_alpha_qa_at || dq.alpha_quality?.evaluated_at) },
+			{ key: "review", label: "Alpha Review", at: fmt(ops.last_alpha_review_at || dq.alpha_review?.generated_at) },
+			{ key: "propose", label: "Threshold propose", at: fmt(ops.last_threshold_propose_at || dq.threshold_governance?.last_propose_at) },
+			{ key: "verifiers", label: "Contract verifiers", at: fmt(ops.last_verifier_run_at || ops.verifier_last_run) },
+		]
+	}
+
+	function playbookEvidenceChipLabels(row, opts) {
+		var r = row || {}
+		var o = opts || {}
+		var blocked = !!o.deployBlocked
+		var qc = r.quality_chip || (r.opportunity_quality_eval && r.opportunity_quality_eval.quality_chip) || {}
+		var chips = (qc.chips || []).slice()
+		var n = Number(qc.sample_size != null ? qc.sample_size : r.sample_size) || 0
+		if (blocked) {
+			chips.unshift("deploy-qualified=0")
+			chips.unshift("blocker first")
+		}
+		if (n < 5) chips.push("Learning")
+		var overfit = String((r.opportunity_quality_eval && r.opportunity_quality_eval.overfit_risk) || r.overfit_risk || "").toLowerCase()
+		var allowGreen = !!(r.opportunity_quality_eval && r.opportunity_quality_eval.allow_green_ui)
+		if ((overfit === "medium" || overfit === "high") && !allowGreen) {
+			chips = chips.filter(function (c) {
+				return !/success|validated|green/i.test(String(c))
+			})
+		}
+		return chips.slice(0, 10)
+	}
+
 	function portfolioOperatorBlockLocalized(block) {
 		var b = block || {}
 		return localizeOperatorBlock({
@@ -3728,6 +3809,180 @@
 		return s.slice(0, Math.max(0, n - 3)) + "..."
 	}
 
+	function exportOperatorBlockHtml(block, title) {
+		var b = block || {}
+		var rows = [
+			["Now", b.now],
+			["Why", b.why],
+			["Allowed", b.allowed],
+			["Blocked", b.blocked],
+			["Valid candidates", b.valid_candidates || b.validation],
+			["Next", b.next],
+		]
+		var html = title ? "<h3>" + escapeExportHtml(title) + "</h3>" : ""
+		var body = rows
+			.filter(function (pair) {
+				return String(pair[1] || "").trim()
+			})
+			.map(function (pair) {
+				return (
+					"<tr><th>" +
+					escapeExportHtml(pair[0]) +
+					"</th><td>" +
+					escapeExportHtml(truncateExportText(pair[1], 400)) +
+					"</td></tr>"
+				)
+			})
+			.join("")
+		if (!body) {
+			return html + '<div class="cc-export-muted">Operator block unavailable</div>'
+		}
+		return html + "<table><tbody>" + body + "</tbody></table>"
+	}
+
+	function exportSnapshotHasContent(snapshot) {
+		var s = snapshot || {}
+		var truth = s.system_truth || {}
+		if (Object.keys(truth).length) return true
+		if (String(s.system_truth_line || "").trim()) return true
+		if ((s.system_blockers || []).length) return true
+		if (String(s.dashboard_operator && s.dashboard_operator.now).trim()) return true
+		if (String(s.scoped_freshness_strip || "").trim()) return true
+		if ((s.playbook && (s.playbook.rows || []).length) || String(s.playbook && s.playbook.funnel_label).trim())
+			return true
+		if (String(s.discovery_funnel && s.discovery_funnel.now).trim()) return true
+		if (String(s.portfolio_risk && s.portfolio_risk.now).trim()) return true
+		if ((s.error_log || []).length) return true
+		if ((s.probe_rows || []).length) return true
+		if (String(s.today && (s.today.board_message || s.today.morning_decision || s.today.tradeability)).trim())
+			return true
+		return false
+	}
+
+	function exportReviewJsonDownload(snapshot, opts) {
+		var o = opts || {}
+		if (typeof document === "undefined" || typeof Blob === "undefined") {
+			return Promise.resolve({ ok: false, error: "download unavailable" })
+		}
+		var payload = snapshot || {}
+		var filename = "cc-review-" + exportReviewPdfDateSlug(payload) + ".json"
+		try {
+			var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" })
+			var url = URL.createObjectURL(blob)
+			var link = document.createElement("a")
+			link.href = url
+			link.download = filename
+			link.style.display = "none"
+			document.body.appendChild(link)
+			link.click()
+			document.body.removeChild(link)
+			window.setTimeout(function () {
+				URL.revokeObjectURL(url)
+			}, 1000)
+			return Promise.resolve({ ok: true, filename: filename, format: "json" })
+		} catch (err) {
+			return Promise.resolve({ ok: false, error: String((err && err.message) || err || "json export failed") })
+		}
+	}
+
+	function exportReviewMarkdownDownload(snapshot, opts) {
+		var o = opts || {}
+		if (typeof document === "undefined" || typeof Blob === "undefined") {
+			return Promise.resolve({ ok: false, error: "download unavailable" })
+		}
+		var s = snapshot || {}
+		var lines = [
+			"# CC operator review export",
+			"",
+			"Generated: " + (s.generated_at || new Date().toISOString()),
+			"",
+			"> Not trade authority — operator review snapshot only.",
+			"",
+		]
+		if (s.system_truth_line) lines.push("## SystemTruth", "", String(s.system_truth_line), "")
+		if (s.scoped_freshness_strip) lines.push("## Scoped freshness", "", String(s.scoped_freshness_strip), "")
+		if (s.dashboard_operator) {
+			var d = s.dashboard_operator
+			lines.push(
+				"## Dashboard operator",
+				"",
+				"- Now: " + (d.now || "—"),
+				"- Why: " + (d.why || "—"),
+				"- Allowed: " + (d.allowed || "—"),
+				"- Blocked: " + (d.blocked || "—"),
+				"- Next: " + (d.next || "—"),
+				"",
+			)
+		}
+		if (s.playbook_operator) {
+			var p = s.playbook_operator
+			lines.push(
+				"## Playbook",
+				"",
+				"- Authority: " + (p.authority || "—"),
+				"- Truth: " + (p.truth_strip || "—"),
+				"- Qualification: " + (p.qualification_line || s.playbook && s.playbook.funnel_label || "—"),
+				"- Best action: " + (p.best_action || "—"),
+				"",
+			)
+		}
+		if (s.discovery_funnel) {
+			var f = s.discovery_funnel
+			lines.push(
+				"## Discovery funnel",
+				"",
+				"- Now: " + (f.now || "—"),
+				"- Why: " + (f.why || "—"),
+				"- Funnel: " + (f.funnel_line || "—"),
+				"- Status: " + (f.status_line || "—"),
+				"- Best action: " + (f.best_action || "—"),
+				"",
+			)
+		}
+		if (s.portfolio_risk) {
+			var pf = s.portfolio_risk
+			lines.push(
+				"## Portfolio risk",
+				"",
+				"- Now: " + (pf.now || "—"),
+				"- Why: " + (pf.why || "—"),
+				"- Allowed: " + (pf.allowed || "—"),
+				"- Blocked: " + (pf.blocked || "—"),
+				"- Next: " + (pf.next || "—"),
+				"",
+			)
+		}
+		if ((s.system_blockers || []).length) {
+			lines.push("## Blockers", "")
+			;(s.system_blockers || []).forEach(function (item) {
+				lines.push("- " + String(item))
+			})
+			lines.push("")
+		}
+		var md = lines.join("\n").trim()
+		if (md.length < 80) {
+			return Promise.resolve({ ok: false, error: "empty markdown export" })
+		}
+		var filename = "cc-review-" + exportReviewPdfDateSlug(s) + ".md"
+		try {
+			var blob = new Blob([md], { type: "text/markdown;charset=utf-8" })
+			var url = URL.createObjectURL(blob)
+			var link = document.createElement("a")
+			link.href = url
+			link.download = filename
+			link.style.display = "none"
+			document.body.appendChild(link)
+			link.click()
+			document.body.removeChild(link)
+			window.setTimeout(function () {
+				URL.revokeObjectURL(url)
+			}, 1000)
+			return Promise.resolve({ ok: true, filename: filename, format: "markdown" })
+		} catch (err) {
+			return Promise.resolve({ ok: false, error: String((err && err.message) || err || "markdown export failed") })
+		}
+	}
+
 	function exportIssuesList(items) {
 		var rows = Array.isArray(items) ? items : []
 		if (!rows.length) {
@@ -3856,6 +4111,10 @@
 			" · review export · not trade authority</p>" +
 			"<h2>SystemTruth</h2>" +
 			(truthLine ? '<p class="cc-export-lead">' + escapeExportHtml(truthLine) + "</p>" : "") +
+			(s.scoped_freshness_strip
+				? '<p class="cc-export-muted">' + escapeExportHtml(s.scoped_freshness_strip) + "</p>"
+				: "") +
+			exportOperatorBlockHtml(s.dashboard_operator, "Dashboard operator") +
 			exportIssuesList(blockers) +
 			"<h2>cc-header status</h2>" +
 			"<table><tbody>" +
@@ -4071,8 +4330,32 @@
 			exportIssuesList(today.top_ranked || today.monitors || []) +
 			"<h2>Playbook</h2>" +
 			"<p>" +
-			escapeExportHtml(playbook.funnel_label || playbook.board_message || "Playbook not loaded") +
+			escapeExportHtml(
+				(s.playbook_operator && s.playbook_operator.qualification_line) ||
+					playbook.funnel_label ||
+					playbook.board_message ||
+					"Playbook not loaded",
+			) +
 			"</p>" +
+			(s.playbook_operator
+				? "<table><tbody>" +
+					"<tr><th>Authority</th><td>" +
+					escapeExportHtml(s.playbook_operator.authority || "—") +
+					"</td></tr>" +
+					"<tr><th>Truth strip</th><td>" +
+					escapeExportHtml(truncateExportText(s.playbook_operator.truth_strip || "—", 240)) +
+					"</td></tr>" +
+					"<tr><th>Best action</th><td>" +
+					escapeExportHtml(s.playbook_operator.best_action || "—") +
+					"</td></tr>" +
+					"<tr><th>Next</th><td>" +
+					escapeExportHtml(
+						Array.isArray(s.playbook_operator.next)
+							? s.playbook_operator.next.join(" · ")
+							: s.playbook_operator.next || "—",
+					) +
+					"</td></tr></tbody></table>"
+				: "") +
 			exportIssuesList(
 				(playbook.rows || []).slice(0, 12).map(function (row) {
 					var r = row || {}
@@ -4084,14 +4367,18 @@
 					)
 				}),
 			) +
-			"<h2>Discovery</h2>" +
-			discoveryExportSummaryBlock(s.discovery) +
+			"<h2>Discovery funnel</h2>" +
+			(s.discovery_funnel
+				? exportOperatorBlockHtml(s.discovery_funnel, "")
+				: discoveryExportSummaryBlock(s.discovery)) +
 			"<h2>Dossier</h2>" +
 			dossierExportBlock(s.dossier) +
-			"<h2>Portfolio</h2>" +
+			"<h2>Portfolio risk</h2>" +
+			exportOperatorBlockHtml(s.portfolio_risk, "") +
 			"<p>" +
 			escapeExportHtml(
-				portfolio.summary ||
+				(s.portfolio_risk && s.portfolio_risk.scoped_truth_strip) ||
+					portfolio.summary ||
 					((portfolio.positions || []).length
 						? (portfolio.positions || []).length + " positions"
 						: "No portfolio positions loaded"),
@@ -4114,9 +4401,21 @@
 			"<p>" +
 			escapeExportHtml(
 				guide.workflow ||
+					exportGuideWorkflowLine() ||
 					"Core workflow: Dashboard → Playbook → Discovery → Dossier → Portfolio / IBKR. Monitor-only when degraded.",
 			) +
 			"</p>" +
+			"<h2>Decision Quality (collapsed summary)</h2>" +
+			exportIssuesList(
+				(s.decision_quality && s.decision_quality.summary_lines) ||
+					(s.decision_quality && [
+						s.decision_quality.state_label,
+						s.decision_quality.banner,
+						s.decision_quality.alpha_quality && s.decision_quality.alpha_quality.status_label,
+						s.decision_quality.threshold_governance && s.decision_quality.threshold_governance.status_line,
+					].filter(Boolean)) ||
+					["Learning mode — intelligence collapsed in UI"],
+			) +
 			'<footer class="cc-export-footer">End of CC review export · not trade authority</footer>' +
 			"</section>"
 		)
@@ -4133,9 +4432,45 @@
 		var y = d.getUTCFullYear()
 		var m = String(d.getUTCMonth() + 1)
 		var day = String(d.getUTCDate())
+		var hh = String(d.getUTCHours())
+		var mm = String(d.getUTCMinutes())
 		if (m.length < 2) m = "0" + m
 		if (day.length < 2) day = "0" + day
-		return y + "-" + m + "-" + day
+		if (hh.length < 2) hh = "0" + hh
+		if (mm.length < 2) mm = "0" + mm
+		return y + "-" + m + "-" + day + "T" + hh + mm
+	}
+
+	function exportReviewTextFallback(snapshot) {
+		var html = buildExportReviewHtml(snapshot || {})
+		var text = html
+			.replace(/<br\s*\/?>/gi, "\n")
+			.replace(/<\/(p|div|h1|h2|li|tr)>/gi, "\n")
+			.replace(/<[^>]+>/g, "")
+			.replace(/&amp;/g, "&")
+			.replace(/&lt;/g, "<")
+			.replace(/&gt;/g, ">")
+			.replace(/\n{3,}/g, "\n\n")
+			.trim()
+		return text || "CC review export — monitor only · not trade authority"
+	}
+
+	function downloadExportTextBlob(text, filename) {
+		if (typeof document === "undefined" || typeof Blob === "undefined") return false
+		try {
+			var blob = new Blob([text], { type: "text/plain;charset=utf-8" })
+			var url = URL.createObjectURL(blob)
+			var a = document.createElement("a")
+			a.href = url
+			a.download = filename
+			document.body.appendChild(a)
+			a.click()
+			document.body.removeChild(a)
+			URL.revokeObjectURL(url)
+			return true
+		} catch (_e) {
+			return false
+		}
 	}
 
 	/** Populate #cc-export-print-root and download PDF via html2pdf (no print dialog). */
@@ -4148,26 +4483,52 @@
 		if (!root) {
 			return Promise.resolve({ ok: false, error: "missing #cc-export-print-root" })
 		}
-		if (typeof html2pdf === "undefined") {
-			return Promise.resolve({ ok: false, error: "html2pdf unavailable" })
+		var snap = snapshot || {}
+		var html = buildExportReviewHtml(snap)
+		if (!String(html || "").trim()) {
+			return Promise.resolve({ ok: false, error: "empty export html" })
 		}
-		var filename = "cc-review-" + exportReviewPdfDateSlug(snapshot) + ".pdf"
-		root.innerHTML = buildExportReviewHtml(snapshot || {})
+		root.innerHTML = html
+		var textLen = String(root.textContent || "").replace(/\s+/g, " ").trim().length
+		if (textLen < 80) {
+			return Promise.resolve({ ok: false, error: "empty export content" })
+		}
+		if (typeof html2pdf === "undefined") {
+			return exportReviewJsonDownload(snap, o).then(function (res) {
+				return res.ok ? res : { ok: false, error: "html2pdf unavailable" }
+			})
+		}
+		var filename = "cc-review-" + exportReviewPdfDateSlug(snap) + ".pdf"
 		var prevDisplay = root.style.display
 		var prevPosition = root.style.position
 		var prevLeft = root.style.left
 		var prevTop = root.style.top
 		var prevWidth = root.style.width
+		var prevOpacity = root.style.opacity
+		var prevPointerEvents = root.style.pointerEvents
+		var prevZIndex = root.style.zIndex
+		var prevOverflow = root.style.overflow
 		root.style.display = "block"
-		root.style.position = "absolute"
-		root.style.left = "-9999px"
+		root.style.position = "fixed"
+		root.style.left = "0"
 		root.style.top = "0"
-		root.style.width = "210mm"
+		root.style.width = "794px"
+		root.style.opacity = "0"
+		root.style.pointerEvents = "none"
+		root.style.zIndex = "-1"
+		root.style.overflow = "visible"
 		var pdfOpts = {
 			margin: [10, 10, 10, 10],
 			filename: filename,
 			image: { type: "jpeg", quality: 0.95 },
-			html2canvas: { scale: 2, useCORS: true, logging: false },
+			html2canvas: {
+				scale: 2,
+				useCORS: true,
+				logging: false,
+				scrollX: 0,
+				scrollY: 0,
+				windowWidth: 794,
+			},
 			jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
 			pagebreak: { mode: ["css", "legacy"], before: ".cc-export-page", avoid: ".cc-export-footer" },
 		}
@@ -4177,8 +4538,12 @@
 			root.style.left = prevLeft
 			root.style.top = prevTop
 			root.style.width = prevWidth
+			root.style.opacity = prevOpacity
+			root.style.pointerEvents = prevPointerEvents
+			root.style.zIndex = prevZIndex
+			root.style.overflow = prevOverflow
 		}
-		var delayMs = o.delayMs != null ? o.delayMs : 80
+		var delayMs = o.delayMs != null ? o.delayMs : 180
 		return new Promise(function (resolve) {
 			window.setTimeout(function () {
 				html2pdf()
@@ -4187,11 +4552,23 @@
 					.save()
 					.then(function () {
 						restoreRoot()
-						resolve({ ok: true, filename: filename })
+						resolve({ ok: true, filename: filename, format: "pdf" })
 					})
 					.catch(function (err) {
 						restoreRoot()
-						resolve({ ok: false, error: String((err && err.message) || err || "pdf export failed") })
+						exportReviewJsonDownload(snap, o).then(function (fallback) {
+							if (fallback.ok) {
+								resolve({
+									ok: true,
+									filename: fallback.filename,
+									format: "json",
+									fallback: true,
+									pdf_error: String((err && err.message) || err || "pdf export failed"),
+								})
+							} else {
+								resolve({ ok: false, error: String((err && err.message) || err || "pdf export failed") })
+							}
+						})
 					})
 			}, delayMs)
 		})
@@ -4424,6 +4801,10 @@
 		strategyLabActionReason: strategyLabActionReason,
 		strategyLabValidationStatus: strategyLabValidationStatus,
 		strategyLabValidationSummary: strategyLabValidationSummary,
+		exportOperatorBlockHtml: exportOperatorBlockHtml,
+		exportSnapshotHasContent: exportSnapshotHasContent,
+		exportReviewJsonDownload: exportReviewJsonDownload,
+		exportReviewMarkdownDownload: exportReviewMarkdownDownload,
 		buildExportIssuesPage: buildExportIssuesPage,
 		buildExportAllSurfacesPage: buildExportAllSurfacesPage,
 		buildExportReviewHtml: buildExportReviewHtml,
