@@ -297,3 +297,18 @@ Must not appear in live template bindings unless whitelisted:
 | `stock-intel` | `dossier` |
 | `rejections` | `notrade` |
 | `backtest` | `btlab` |
+
+---
+
+## Release Enforcement
+
+```bash
+bash scripts/cc-release-check.sh
+python3 scripts/audit-authority-language.py --fail-on critical
+python3 scripts/audit-visible-copy.py --fail-on high
+```
+
+- Authority language audit scans templates + service payload builders for forbidden deploy/trade phrases outside approved contexts.
+- Visible copy audit flags `??`, mojibake, and corrupted UI prefixes.
+- Export All Pages must produce non-empty degraded fallback — never silent empty PDF.
+- Intelligence panels (Decision Quality, OI, Threshold Review) default **collapsed**; learning mode is neutral, not success.

@@ -335,10 +335,14 @@ def threshold_governance_summary_for_dashboard(
     open_n = int(s.get("open_count") or 0)
     shadow_n = int(s.get("shadow_count") or 0)
     live_n = int(s.get("live_change_count") or 0)
+    review_tail = (
+        "Review only · no live changes"
+        if live_n == 0
+        else f"{live_n} live change(s) · audit trail only"
+    )
     return {
         "status_line": (
-            f"Threshold Review: {open_n} open · {shadow_n} shadow · "
-            f"{'no live changes' if live_n == 0 else f'{live_n} live (audit)'}"
+            f"Threshold Review: {open_n} open · {shadow_n} shadow · {review_tail}"
         ),
         "open_count": open_n,
         "shadow_count": shadow_n,

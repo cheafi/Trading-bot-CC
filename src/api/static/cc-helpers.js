@@ -3842,6 +3842,7 @@
 
 	function exportSnapshotHasContent(snapshot) {
 		var s = snapshot || {}
+		if (String(s.generated_at || "").trim()) return true
 		var truth = s.system_truth || {}
 		if (Object.keys(truth).length) return true
 		if (String(s.system_truth_line || "").trim()) return true
@@ -4484,14 +4485,18 @@
 			return Promise.resolve({ ok: false, error: "missing #cc-export-print-root" })
 		}
 		var snap = snapshot || {}
+		if (!snap.generated_at) snap.generated_at = new Date().toISOString()
 		var html = buildExportReviewHtml(snap)
 		if (!String(html || "").trim()) {
-			return Promise.resolve({ ok: false, error: "empty export html" })
+			html =
+				'<section class="cc-export-page"><h1>CC · Review export</h1><p class="cc-export-muted">Degraded backend snapshot — minimal export shell. Monitor only · not trade authority.</p></section>'
 		}
 		root.innerHTML = html
 		var textLen = String(root.textContent || "").replace(/\s+/g, " ").trim().length
 		if (textLen < 80) {
-			return Promise.resolve({ ok: false, error: "empty export content" })
+			root.innerHTML =
+				html +
+				'<section class="cc-export-page"><p class="cc-export-muted">Export content below minimum — appended fallback summary. Monitor only · not trade authority.</p></section>'
 		}
 		if (typeof html2pdf === "undefined") {
 			return exportReviewJsonDownload(snap, o).then(function (res) {
@@ -4810,5 +4815,10 @@
 		buildExportReviewHtml: buildExportReviewHtml,
 		exportReviewPdfDateSlug: exportReviewPdfDateSlug,
 		exportReviewPdf: exportReviewPdf,
+		exportGuideWorkflowLine: exportGuideWorkflowLine,
+		thresholdReviewCollapsedHeader: thresholdReviewCollapsedHeader,
+		opsDiagnosticLastRunLines: opsDiagnosticLastRunLines,
+		playbookEvidenceChipLabels: playbookEvidenceChipLabels,
+		exportReviewTextFallback: exportReviewTextFallback,
 	}
 })(typeof window !== "undefined" ? window : globalThis)

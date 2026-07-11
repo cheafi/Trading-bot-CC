@@ -109,11 +109,17 @@ See [DAILY_OPERATOR_FLOW.md](./DAILY_OPERATOR_FLOW.md) for step-by-step blocked 
 Before merging surface/authority changes:
 
 ```bash
+bash scripts/cc-release-check.sh
 node scripts/build-cc-template.mjs --check
 node scripts/verify-runtime-contract.mjs
 node scripts/verify-surface-authority-contract.mjs
-python -m pytest tests/test_surface_authority_contract.py tests/test_guide_surface_authority.py tests/test_runtime_render_contract.py -q
+python3 scripts/audit-authority-language.py --fail-on critical
+python3 scripts/audit-visible-copy.py --fail-on high
+python3 scripts/snapshot-today-payload.py
+python -m pytest tests/test_surface_authority_contract.py tests/test_guide_surface_authority.py tests/test_runtime_render_contract.py tests/test_cc_release_audit.py -q
 ```
+
+See [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md) and [INTELLIGENCE_STACK.md](./INTELLIGENCE_STACK.md).
 
 - [ ] `guide.html` partial changes rebuilt into `index.html`
 - [ ] No banned phrases in live runtime bindings (whitelist only in guide illustrations / sanitizer maps)
