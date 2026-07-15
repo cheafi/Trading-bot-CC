@@ -2183,6 +2183,153 @@
 		return discoveryScannerRunLabel({ data_freshness: h.freshness || "live" })
 	}
 
+	var INTELLIGENCE_EMPTY_LEARNING = "Learning — not enough forward outcomes yet"
+	var INTELLIGENCE_EMPTY_NO_RESEARCH = "No research candidates yet"
+	var INTELLIGENCE_EMPTY_NO_REVIEW = "No review items yet"
+	var INTELLIGENCE_EMPTY_NO_THRESHOLD = "No threshold proposals yet"
+	var INTELLIGENCE_EMPTY_REVIEW_ONLY = "Review only · no live changes"
+
+	function intelligenceFallbackDecisionQuality() {
+		return {
+			title: "Decision Quality",
+			state: "learning",
+			state_label: "Learning mode",
+			banner: INTELLIGENCE_EMPTY_LEARNING,
+			metrics: {
+				journal_events_n: 0,
+				forward_outcomes_n: 0,
+				no_edge_samples_n: 0,
+				sample_size: 0,
+				learning_mode: true,
+			},
+			collapsed: true,
+			evidence_only: true,
+			may_authorize_deploy: false,
+			authority_effect: "none",
+			alpha_quality: {
+				sample_size: 0,
+				status_label: "learning",
+				learning_mode: true,
+				empty_message: INTELLIGENCE_EMPTY_LEARNING,
+			},
+			alpha_review: {
+				status_label: "learning",
+				evidence_level: "learning",
+				what_improved: [],
+				what_deteriorated: [],
+				top_items: [],
+				next_actions: [],
+				threshold_review_line: INTELLIGENCE_EMPTY_REVIEW_ONLY,
+				empty_message: INTELLIGENCE_EMPTY_NO_REVIEW,
+			},
+			threshold_governance: {
+				open_count: 0,
+				shadow_count: 0,
+				registry_count: 0,
+				status_line: "Threshold Review: 0 open · 0 shadow · " + INTELLIGENCE_EMPTY_REVIEW_ONLY,
+				empty_message: INTELLIGENCE_EMPTY_NO_THRESHOLD,
+			},
+		}
+	}
+
+	function intelligenceFallbackOpportunityIntelligence() {
+		return {
+			title: "Opportunity Intelligence",
+			counts: { total: 0 },
+			by_stage: {},
+			candidate_chips: [],
+			best_action: INTELLIGENCE_EMPTY_NO_RESEARCH,
+			research_note: INTELLIGENCE_EMPTY_NO_RESEARCH,
+			empty_message: INTELLIGENCE_EMPTY_NO_RESEARCH,
+			learning_mode: true,
+			evidence_only: true,
+			may_authorize_deploy: false,
+			authority_effect: "none",
+		}
+	}
+
+	function ensureIntelligenceBlocks(payload) {
+		var p = payload && typeof payload === "object" ? payload : {}
+		var fbDq = intelligenceFallbackDecisionQuality()
+		var fbOi = intelligenceFallbackOpportunityIntelligence()
+		if (!p.decision_quality || typeof p.decision_quality !== "object") {
+			p.decision_quality = fbDq
+		} else {
+			var dq = p.decision_quality
+			if (!dq.banner) dq.banner = fbDq.banner
+			if (!dq.metrics || typeof dq.metrics !== "object") dq.metrics = fbDq.metrics
+			if (!dq.alpha_quality || typeof dq.alpha_quality !== "object") dq.alpha_quality = fbDq.alpha_quality
+			if (!dq.alpha_review || typeof dq.alpha_review !== "object") dq.alpha_review = fbDq.alpha_review
+			if (!dq.threshold_governance || typeof dq.threshold_governance !== "object") {
+				dq.threshold_governance = fbDq.threshold_governance
+			}
+			if (!dq.alpha_quality.empty_message && Number(dq.alpha_quality.sample_size || 0) < 1) {
+				dq.alpha_quality.empty_message = INTELLIGENCE_EMPTY_LEARNING
+				dq.alpha_quality.learning_mode = true
+			}
+			var ar = dq.alpha_review
+			if (
+				!ar.empty_message &&
+				!(ar.what_improved || []).length &&
+				!(ar.what_deteriorated || []).length &&
+				!(ar.top_items || []).length &&
+				!(ar.next_actions || []).length
+			) {
+				ar.empty_message = INTELLIGENCE_EMPTY_NO_REVIEW
+			}
+			var tg = dq.threshold_governance
+			if (!tg.empty_message && Number(tg.open_count || 0) < 1) {
+				tg.empty_message = INTELLIGENCE_EMPTY_NO_THRESHOLD
+				if (!tg.status_line) {
+					tg.status_line = "Threshold Review: 0 open · 0 shadow · " + INTELLIGENCE_EMPTY_REVIEW_ONLY
+				}
+			}
+		}
+		if (!p.opportunity_intelligence || typeof p.opportunity_intelligence !== "object") {
+			p.opportunity_intelligence = fbOi
+		} else {
+			var oi = p.opportunity_intelligence
+			var total = Number((oi.counts && oi.counts.total) || 0)
+			if (total < 1) {
+				oi.empty_message = oi.empty_message || INTELLIGENCE_EMPTY_NO_RESEARCH
+				oi.best_action = oi.best_action || INTELLIGENCE_EMPTY_NO_RESEARCH
+				oi.research_note = oi.research_note || INTELLIGENCE_EMPTY_NO_RESEARCH
+				oi.learning_mode = true
+			}
+		}
+		return p
+	}
+
+	function intelligenceEmptyMessage(section, block) {
+		var b = block || {}
+		if (b.empty_message) return String(b.empty_message)
+		var key = String(section || "").toLowerCase()
+		if (key === "alpha_quality" || key === "learning" || key === "decision_quality") {
+			return INTELLIGENCE_EMPTY_LEARNING
+		}
+		if (key === "alpha_review" || key === "review") return INTELLIGENCE_EMPTY_NO_REVIEW
+		if (key === "threshold_governance" || key === "threshold" || key === "threshold_review") {
+			return INTELLIGENCE_EMPTY_NO_THRESHOLD
+		}
+		if (key === "opportunity_intelligence" || key === "research" || key === "oi") {
+			return INTELLIGENCE_EMPTY_NO_RESEARCH
+		}
+		return INTELLIGENCE_EMPTY_LEARNING
+	}
+
+	function todayOpsRecoveryCompactLine(vm) {
+		var v = vm || {}
+		var engineRunning = v.engineRunning
+		if (engineRunning == null && v.ops) engineRunning = !!v.ops.running
+		if (engineRunning == null && v.cc_status) engineRunning = !v.cc_status.breaker && !!v.ops?.running
+		if (engineRunning === false) return engineOffRecoveryLine()
+		var truth = (v.today7 && v.today7.system_truth) || {}
+		if (truth.data_stale || (v.today7 && v.today7.trust && v.today7.trust.stale)) {
+			return staleRefreshRecoveryLine()
+		}
+		return ""
+	}
+
 	function discoveryFunnelView(payload, truth) {
 		var p = payload || {}
 		var funnel = p.discovery_operator_view || {}
@@ -2252,29 +2399,37 @@
 		if (!chips.length && block.by_stage) {
 			for (var stage in block.by_stage) {
 				if (!Object.prototype.hasOwnProperty.call(block.by_stage, stage)) continue
-				chips.push(String(stage).replace(/_/g, " ") + " n=" + Number(block.by_stage[stage] || 0))
+				var stageN = Number(block.by_stage[stage] || 0)
+				if (stageN > 0) chips.push(String(stage).replace(/_/g, " ") + " n=" + stageN)
 			}
 		}
-		var bestAction = String(block.best_action || "send to Playbook review").replace(/_/g, " ")
+		var total = Number(counts.total || 0)
+		var empty = total < 1 && !chips.length
+		var emptyMsg = block.empty_message || INTELLIGENCE_EMPTY_NO_RESEARCH
+		var bestAction = String(block.best_action || emptyMsg).replace(/_/g, " ")
 		if (/deploy|execute|trade now|size/i.test(bestAction)) {
 			bestAction = "send to Playbook review"
 		}
+		if (empty) bestAction = emptyMsg
 		var note =
 			block.research_note ||
 			(block.learning_mode
-				? "Learning mode — evidence study only"
+				? INTELLIGENCE_EMPTY_LEARNING
 				: "Evidence study — not deploy permission")
+		if (empty) note = emptyMsg
 		if (blocked) {
 			note = "Research only · deploy authority unavailable · " + note
 		}
 		return {
-			visible: !!(counts.total || block.by_stage || chips.length),
-			total: Number(counts.total || 0),
+			visible: true,
+			empty: empty,
+			empty_message: emptyMsg,
+			total: total,
 			best_theme: block.best_theme || "",
 			best_action: bestAction,
 			candidate_chips: chips,
 			note: note,
-			learning_mode: !!block.learning_mode,
+			learning_mode: !!block.learning_mode || empty,
 			research_only: true,
 			blocked: !!blocked,
 		}
@@ -4662,6 +4817,11 @@
 		routeAbortRecoveryHint: routeAbortRecoveryHint,
 		staleRefreshRecoveryLine: staleRefreshRecoveryLine,
 		engineOffRecoveryLine: engineOffRecoveryLine,
+		todayOpsRecoveryCompactLine: todayOpsRecoveryCompactLine,
+		ensureIntelligenceBlocks: ensureIntelligenceBlocks,
+		intelligenceEmptyMessage: intelligenceEmptyMessage,
+		intelligenceFallbackDecisionQuality: intelligenceFallbackDecisionQuality,
+		intelligenceFallbackOpportunityIntelligence: intelligenceFallbackOpportunityIntelligence,
 		ibkrLoginToReadyHint: ibkrLoginToReadyHint,
 		ibkrSyncHostFromStatus: ibkrSyncHostFromStatus,
 		ibkrHostPlaceholder: ibkrHostPlaceholder,

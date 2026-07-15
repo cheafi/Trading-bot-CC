@@ -379,6 +379,9 @@ def build_opportunity_intelligence_block(
         if n:
             candidate_chips.append(f"{s.replace('_', ' ')}:{n}")
 
+    from src.services.cc_live_policy import INTELLIGENCE_EMPTY_NO_RESEARCH
+
+    empty = len(candidates) < 1
     return {
         "title": "Opportunity Intelligence",
         "funnel_stages": list(FUNNEL_STAGES),
@@ -394,17 +397,17 @@ def build_opportunity_intelligence_block(
             "capital_candidate": by_stage.get("capital_candidate", 0),
         },
         "best_theme": best_theme,
-        "best_action": best_action,
+        "best_action": INTELLIGENCE_EMPTY_NO_RESEARCH if empty else best_action,
         "candidate_chips": candidate_chips[:8],
         "portfolio": portfolio,
         "scored_sample": scored_rows[:5],
         "store_summary": st.summary(),
         "surface_stage_caps": dict(SURFACE_STAGE_CAPS),
-        "learning_mode": any(
-            r.get("calibration", {}).get("learning_mode") for r in scored_rows
-        ),
+        "learning_mode": empty
+        or any(r.get("calibration", {}).get("learning_mode") for r in scored_rows),
         "evidence_only": True,
         "may_authorize_deploy": False,
         "authority_effect": "none",
-        "research_note": "Evidence study — not deploy permission",
+        "research_note": INTELLIGENCE_EMPTY_NO_RESEARCH if empty else "Evidence study — not deploy permission",
+        "empty_message": INTELLIGENCE_EMPTY_NO_RESEARCH if empty else None,
     }

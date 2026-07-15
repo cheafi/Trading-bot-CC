@@ -130,4 +130,5 @@
         <button @click="switchTab('funds')" class="btn-s text-[8px] ml-auto" x-show="(pmStrip.funds||[]).length===0">Load Funds</button>
       </div>
       <div x-show="tab==='today'&&todayOpsRecoveryCompactLine()" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3);line-height:1.45" x-text="todayOpsRecoveryCompactLine()"></div>
+      <div x-show="tab==='today'&&!ops?.running" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3);line-height:1.45" x-text="engineOffRecoveryLine()"></div>
       </div>

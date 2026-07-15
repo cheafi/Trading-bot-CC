@@ -1773,4 +1773,7 @@ async def build_today_payload(request: Request) -> Tuple[Dict[str, Any], bool]:
         },
         "generated_at": now.isoformat() + "Z",
     }
+    from src.services.cc_live_policy import ensure_intelligence_payload_blocks
+
+    payload = ensure_intelligence_payload_blocks(payload)
     return payload, not scanner_degraded

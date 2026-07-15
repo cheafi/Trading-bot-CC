@@ -461,6 +461,12 @@ def _stale_today_bytes(reason: str = "backend importing") -> bytes:
         },
         "generated_at": now.isoformat() + "Z",
     }
+    try:
+        from src.services.cc_live_policy import build_intelligence_fallback_blocks
+
+        payload.update(build_intelligence_fallback_blocks(reason=reason))
+    except Exception:
+        pass
     return _encode_degraded(payload, reason=reason)
 
 

@@ -1296,6 +1296,7 @@
         <button @click="switchTab('funds')" class="btn-s text-[8px] ml-auto" x-show="(pmStrip.funds||[]).length===0">Load Funds</button>
       </div>
       <div x-show="tab==='today'&&todayOpsRecoveryCompactLine()" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3);line-height:1.45" x-text="todayOpsRecoveryCompactLine()"></div>
+      <div x-show="tab==='today'&&!ops?.running" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3);line-height:1.45" x-text="engineOffRecoveryLine()"></div>
       </div>
     <!-- @cc-partial-end deploy_surfaces -->
 
@@ -1523,10 +1524,10 @@
               <span class="font-bold uppercase" style="color:var(--blue)" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.decisionQualityHeader)?CCHelpers.decisionQualityHeader():'決策品質 · Decision Quality'"></span>
               <span class="pill text-[7px] pw" x-text="today7.decision_quality.state_label||'Learning mode'"></span>
               <span class="pill text-[7px] pa" x-show="today7.decision_quality.capital_mode" x-text="today7.decision_quality.capital_mode"></span>
-              <span class="mono text-[8px]" style="color:var(--t2)" x-text="today7.decision_quality.banner"></span>
+              <span class="mono text-[8px]" style="color:var(--t2)" x-text="today7.decision_quality.banner||(typeof CCHelpers!=='undefined'&&CCHelpers.intelligenceEmptyMessage?CCHelpers.intelligenceEmptyMessage('learning'):'Learning — not enough forward outcomes yet')"></span>
             </summary>
             <div class="text-[8px] mt-2" style="color:var(--t2);line-height:1.5">
-              <span x-show="today7.decision_quality.metrics.learning_mode">Learning mode — not enough live forward outcomes for calibration.</span>
+              <span x-show="today7.decision_quality.metrics.learning_mode" x-text="(today7.decision_quality.banner||(typeof CCHelpers!=='undefined'&&CCHelpers.intelligenceEmptyMessage?CCHelpers.intelligenceEmptyMessage('learning'):'Learning — not enough forward outcomes yet'))"></span>
               <span x-show="!today7.decision_quality.metrics.learning_mode" x-text="'Forward outcome study · n='+today7.decision_quality.metrics.sample_size"></span>
             </div>
             <div class="flex flex-wrap gap-1 mt-1.5 text-[7px]">
@@ -1561,7 +1562,7 @@
                   <span class="pill pr" x-show="today7.decision_quality.alpha_quality.governor_qa&&today7.decision_quality.alpha_quality.governor_qa.human_review_suggested" x-text="'human review'"></span>
                   <span class="pill pw" x-text="today7.decision_quality.alpha_quality.status_label||'learning'"></span>
                 </div>
-                <div class="text-[7px] mt-1" style="color:var(--t3)" x-show="today7.decision_quality.alpha_quality.learning_mode">Learning mode — no precise lift or success labels until sample threshold met.</div>
+                <div class="text-[7px] mt-1" style="color:var(--t3)" x-show="today7.decision_quality.alpha_quality.learning_mode" x-text="today7.decision_quality.alpha_quality.empty_message||(typeof CCHelpers!=='undefined'&&CCHelpers.intelligenceEmptyMessage?CCHelpers.intelligenceEmptyMessage('alpha_quality',today7.decision_quality.alpha_quality):'Learning — not enough forward outcomes yet')"></div>
                 <div class="text-[7px] mt-1" style="color:var(--t3)" x-show="today7.decision_quality.alpha_quality.overfit_risk!=='low'">Overfit guard active — success labels capped at promising/learning.</div>
                 <template x-if="today7.decision_quality.alpha_review">
                   <details data-cc="alpha-review-panel" class="mt-2 pt-1" style="border-top:1px solid rgba(255,255,255,.04)" :open="false">
@@ -1597,6 +1598,7 @@
                       <span class="ml-1" x-text="today7.decision_quality.alpha_review.governor_review.qa_adjustment"></span>
                     </div>
                     <div class="text-[7px] mt-1" style="color:var(--t3)" x-show="today7.decision_quality.alpha_review.threshold_review_line" x-text="today7.decision_quality.alpha_review.threshold_review_line"></div>
+                    <div class="text-[7px] mt-1" style="color:var(--t3)" x-show="!(today7.decision_quality.alpha_review.what_improved||[]).length&&!(today7.decision_quality.alpha_review.what_deteriorated||[]).length&&!(today7.decision_quality.alpha_review.top_items||[]).length&&!(today7.decision_quality.alpha_review.next_actions||[]).length" x-text="today7.decision_quality.alpha_review.empty_message||(typeof CCHelpers!=='undefined'&&CCHelpers.intelligenceEmptyMessage?CCHelpers.intelligenceEmptyMessage('alpha_review',today7.decision_quality.alpha_review):'No review items yet')"></div>
                     <template x-if="today7.decision_quality.threshold_governance">
                       <details data-cc="threshold-review-panel" class="mt-2 pt-1" style="border-top:1px solid rgba(255,255,255,.04)" :open="false">
                         <summary class="text-[8px] font-bold cursor-pointer flex flex-wrap gap-1 items-center" style="color:var(--amber)">
@@ -1610,6 +1612,7 @@
                           <span class="pill pw" x-text="'registry '+(today7.decision_quality.threshold_governance.registry_count||0)"></span>
                           <span class="pill pw">loosen blocked globally</span>
                         </div>
+                        <div class="text-[7px] mt-1" style="color:var(--t3)" x-show="!(today7.decision_quality.threshold_governance.open_proposals||[]).length" x-text="today7.decision_quality.threshold_governance.empty_message||(typeof CCHelpers!=='undefined'&&CCHelpers.intelligenceEmptyMessage?CCHelpers.intelligenceEmptyMessage('threshold_governance',today7.decision_quality.threshold_governance):'No threshold proposals yet')"></div>
                       </details>
                     </template>
                     <template x-if="(today7.decision_quality.alpha_review.next_actions||[]).length">
@@ -1624,6 +1627,21 @@
                 </template>
               </details>
             </template>
+            <template x-if="!today7.decision_quality.alpha_quality">
+              <div class="text-[7px] mt-2 pt-1" style="border-top:1px solid rgba(255,255,255,.06);color:var(--t3)" data-cc="alpha-quality-empty" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.intelligenceEmptyMessage)?CCHelpers.intelligenceEmptyMessage('alpha_quality'):'Learning — not enough forward outcomes yet'"></div>
+            </template>
+          </details>
+        </div>
+      </template>
+      <template x-if="!today7.decision_quality">
+        <div style="padding:4px 12px 0" data-cc="decision-quality-panel-fallback">
+          <details class="card card-p" style="padding:8px 10px;border-left:3px solid var(--blue)" :open="false">
+            <summary class="flex flex-wrap items-center gap-2 text-[9px] cursor-pointer">
+              <span class="font-bold uppercase" style="color:var(--blue)" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.decisionQualityHeader)?CCHelpers.decisionQualityHeader():'決策品質 · Decision Quality'"></span>
+              <span class="pill text-[7px] pw">Learning mode</span>
+              <span class="mono text-[8px]" style="color:var(--t2)" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.intelligenceEmptyMessage)?CCHelpers.intelligenceEmptyMessage('learning'):'Learning — not enough forward outcomes yet'"></span>
+            </summary>
+            <div class="text-[8px] mt-2" style="color:var(--t2);line-height:1.5" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.intelligenceEmptyMessage)?CCHelpers.intelligenceEmptyMessage('learning'):'Learning — not enough forward outcomes yet'"></div>
           </details>
         </div>
       </template>
@@ -5170,14 +5188,14 @@
               <span x-text="'Avoid Now scanner flags: '+(scannerAvoidNowCount())"></span>
               <span>Pipeline rejects: see Rejections</span>
             </div>
-            <div x-show="discoveryOpportunityIntel().visible" class="px-3 pb-2">
+            <div class="px-3 pb-2" data-cc="discovery-oi-panel-wrap">
               <details class="rounded" style="background:var(--s1)" :open="false" data-cc="discovery-oi-panel">
                 <summary class="text-[8px] font-bold uppercase p-2 cursor-pointer flex flex-wrap gap-1 items-center" style="color:var(--purple)">
                   <span>Opportunity Intelligence</span>
                   <span class="pill pw text-[7px]" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.bilingualLine)?CCHelpers.bilingualLine('僅供研究','Research-only'):'Research-only'"></span>
                   <span class="pill pa text-[7px]" x-show="discoveryOpportunityIntel().blocked" x-text="'Research only · deploy authority unavailable'"></span>
                 </summary>
-                <div class="text-[8px] p-2 pt-0 flex flex-wrap gap-2" style="color:var(--t2)">
+                <div class="text-[8px] p-2 pt-0 flex flex-wrap gap-2" style="color:var(--t2)" x-show="!discoveryOpportunityIntel().empty">
                   <span class="pill pw text-[7px]" x-text="'total: '+(discoveryOpportunityIntel().total||0)"></span>
                   <span class="pill pw text-[7px]" x-show="discoveryOpportunityIntel().best_theme" x-text="'theme: '+discoveryOpportunityIntel().best_theme"></span>
                   <span class="pill pa text-[7px]" x-text="'next: '+discoveryOpportunityIntel().best_action"></span>
@@ -5186,7 +5204,7 @@
                     <span class="pill pw text-[6px]" x-text="chip"></span>
                   </template>
                 </div>
-                <div class="text-[7px] px-2 pb-2" style="color:var(--t3)" x-text="discoveryOpportunityIntel().note"></div>
+                <div class="text-[7px] px-2 pb-2" style="color:var(--t3)" x-text="discoveryOpportunityIntel().empty?discoveryOpportunityIntel().empty_message:discoveryOpportunityIntel().note"></div>
               </details>
             </div>
             <div class="px-3 pb-3">
@@ -7575,7 +7593,7 @@
             </div>
           </template>
           <template x-if="!today7.decision_quality?.alpha_review">
-            <div class="card card-p text-[10px]" style="color:var(--t3)">Alpha Review summary unavailable — load Dashboard /api/v7/today first.</div>
+            <div class="card card-p text-[10px]" style="color:var(--t3)" x-text="(typeof CCHelpers!=='undefined'&&CCHelpers.intelligenceEmptyMessage)?CCHelpers.intelligenceEmptyMessage('alpha_review'):'No review items yet'"></div>
           </template>
 
           <!-- THRESHOLD GOVERNANCE (diagnostic only, collapsed) -->
@@ -7608,7 +7626,7 @@
               </div>
             </template>
             <template x-if="!(today7.decision_quality?.threshold_governance?.open_proposals||[]).length">
-              <div class="text-[9px]" style="color:var(--t3)">No open threshold proposals.</div>
+              <div class="text-[9px]" style="color:var(--t3)" x-text="today7.decision_quality?.threshold_governance?.empty_message||(typeof CCHelpers!=='undefined'&&CCHelpers.intelligenceEmptyMessage?CCHelpers.intelligenceEmptyMessage('threshold_governance',today7.decision_quality?.threshold_governance):'No threshold proposals yet')"></div>
             </template>
             <div class="text-[8px] mt-2" style="color:var(--t3)">Run <span class="mono">scripts/propose-threshold-reviews.py</span> or <span class="mono">scripts/list-threshold-proposals.py</span></div>
           </details>
@@ -10349,6 +10367,12 @@
         if(typeof CCHelpers!=='undefined'&&CCHelpers.engineOffRecoveryLine)
           return CCHelpers.engineOffRecoveryLine();
         return 'Engine OFF — start engine in Ops or set CC_AUTO_START_ENGINE=1; board may be precomputed only';
+      },
+      todayOpsRecoveryCompactLine(){
+        if(typeof CCHelpers!=='undefined'&&CCHelpers.todayOpsRecoveryCompactLine)
+          return CCHelpers.todayOpsRecoveryCompactLine({ops:this.ops,cc_status:this.cc_status,today7:this.today7,engineRunning:!!this.ops?.running});
+        if(!this.ops?.running) return this.engineOffRecoveryLine();
+        return '';
       },
       ibkrLoginToReadyHint(){
         const st=this.ibkrStateFrom(this.today7.execution_readiness||{});
@@ -15458,7 +15482,9 @@
             return;
           }
           if(!r||!r.ok)throw new Error('HTTP '+(r?r.status:'fail'));
-          const d=await r.json();this._ccTodayBodyCache=d;this.captureInstantDegradedBanner(d);if(d&&d.error)throw new Error(String(d.error));if(!d||!d.market_regime)throw new Error('incomplete today payload');this.today7.regime=d.market_regime||null;this.today7.decision_authority=d.decision_authority||null;this.today7.top_ranked=d.top_5||[];this.today7.todays_decision=d.todays_decision||null;this.today7.best_action=d.best_action||null;this.today7.overlap_warning=d.overlap_warning||null;this.today7.near_miss=d.near_miss||[];this.today7.score_reconciliation=d.score_reconciliation||null;this.today7.no_setup_diagnosis=d.no_setup_diagnosis||null;this.today7.quant_cluster_hints=d.quant_cluster_hints||[];this.today7.unlock_deploy=d.unlock_deploy||null;this.today7.regime_wait_explanation=d.regime_wait_explanation||[];this.today7.monitor_triggers=d.monitor_triggers||[];this.today7.sleeve_summary=d.sleeve_summary||null;this.today7.execution_readiness=d.execution_readiness||d.best_action?.execution_readiness||null;this.today7.evidence_badges=d.evidence_badges||null;this.today7.cross_asset_confirmation=d.cross_asset_confirmation||null;this.today7.index_regime_summary=d.index_regime_summary||null;this.today7.regime_strip=d.regime_strip||null;this.today7.regime_stack_summary=d.regime_stack_summary||null;this.today7.allocator_stance=d.allocator_stance||null;this.today7.ai_reason_codes=d.ai_reason_codes||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.decision_model=d.decision_model||null;this.today7.decision_hierarchy=d.decision_hierarchy||null;this.today7.passive_baseline=d.passive_baseline||null;this.today7.complexity_challenge=d.complexity_challenge||null;this.today7.restraint=d.restraint||null;this.today7.surface_authority=d.surface_authority||null;this.today7.crisis_regime=d.crisis_regime||null;this.today7.naval_clarity=d.naval_clarity||null;this.today7.buffett_clarity=d.buffett_clarity||null;this.today7.index_fund_posture=d.index_fund_posture||null;this.today7.principles_posture=d.principles_posture||null;this.today7.avoid_grouped=d.avoid_grouped||null;this.today7.bucket_quality=d.bucket_quality||[];this.today7.avoid_list=(d.avoid_now||[]).length?(d.avoid_now||[]):(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'?',reason:a,category:'regime'}:a);this.today7.tradeability=(d.decision_model&&d.decision_model.honest_tradeability)||(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{};this.today7.system_truth=d.system_truth||null;this.today7.actionable_today=d.actionable_today||null;this.today7.opportunity_status=d.opportunity_status||null;this.today7.decision_quality=d.decision_quality||null;this.today7.operator_block=d.operator_block||null;this.today7.agent_page_state=d.agent_page_state||null;this.today7.agent_audit_journal=d.agent_audit_journal||[];this.today7.monitor_display_limit=d.monitor_display_limit||((typeof CCHelpers!=='undefined'&&CCHelpers.CC_TOP_MONITOR_COUNT)||10);this.today7.top_monitor=d.top_monitor||null;this.today7.top_opportunities=d.top_opportunities||[];this.today7.candidate_counts=d.candidate_counts||null;this.today7.evidence_conflict=d.evidence_conflict||null;if(this.isWaitDay()){this.today7.avoid_collapsed=true;}
+          const dRaw=await r.json();
+          const d=(typeof CCHelpers!=='undefined'&&CCHelpers.ensureIntelligenceBlocks)?CCHelpers.ensureIntelligenceBlocks(dRaw):dRaw;
+          this._ccTodayBodyCache=d;this.captureInstantDegradedBanner(d);if(d&&d.error)throw new Error(String(d.error));if(!d||!d.market_regime)throw new Error('incomplete today payload');this.today7.regime=d.market_regime||null;this.today7.decision_authority=d.decision_authority||null;this.today7.top_ranked=d.top_5||[];this.today7.todays_decision=d.todays_decision||null;this.today7.best_action=d.best_action||null;this.today7.overlap_warning=d.overlap_warning||null;this.today7.near_miss=d.near_miss||[];this.today7.score_reconciliation=d.score_reconciliation||null;this.today7.no_setup_diagnosis=d.no_setup_diagnosis||null;this.today7.quant_cluster_hints=d.quant_cluster_hints||[];this.today7.unlock_deploy=d.unlock_deploy||null;this.today7.regime_wait_explanation=d.regime_wait_explanation||[];this.today7.monitor_triggers=d.monitor_triggers||[];this.today7.sleeve_summary=d.sleeve_summary||null;this.today7.execution_readiness=d.execution_readiness||d.best_action?.execution_readiness||null;this.today7.evidence_badges=d.evidence_badges||null;this.today7.cross_asset_confirmation=d.cross_asset_confirmation||null;this.today7.index_regime_summary=d.index_regime_summary||null;this.today7.regime_strip=d.regime_strip||null;this.today7.regime_stack_summary=d.regime_stack_summary||null;this.today7.allocator_stance=d.allocator_stance||null;this.today7.ai_reason_codes=d.ai_reason_codes||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.decision_model=d.decision_model||null;this.today7.decision_hierarchy=d.decision_hierarchy||null;this.today7.passive_baseline=d.passive_baseline||null;this.today7.complexity_challenge=d.complexity_challenge||null;this.today7.restraint=d.restraint||null;this.today7.surface_authority=d.surface_authority||null;this.today7.crisis_regime=d.crisis_regime||null;this.today7.naval_clarity=d.naval_clarity||null;this.today7.buffett_clarity=d.buffett_clarity||null;this.today7.index_fund_posture=d.index_fund_posture||null;this.today7.principles_posture=d.principles_posture||null;this.today7.avoid_grouped=d.avoid_grouped||null;this.today7.bucket_quality=d.bucket_quality||[];this.today7.avoid_list=(d.avoid_now||[]).length?(d.avoid_now||[]):(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'?',reason:a,category:'regime'}:a);this.today7.tradeability=(d.decision_model&&d.decision_model.honest_tradeability)||(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{};this.today7.system_truth=d.system_truth||null;this.today7.actionable_today=d.actionable_today||null;this.today7.opportunity_status=d.opportunity_status||null;this.today7.decision_quality=d.decision_quality||(typeof CCHelpers!=='undefined'&&CCHelpers.intelligenceFallbackDecisionQuality?CCHelpers.intelligenceFallbackDecisionQuality():null);this.today7.operator_block=d.operator_block||null;this.today7.agent_page_state=d.agent_page_state||null;this.today7.agent_audit_journal=d.agent_audit_journal||[];this.today7.monitor_display_limit=d.monitor_display_limit||((typeof CCHelpers!=='undefined'&&CCHelpers.CC_TOP_MONITOR_COUNT)||10);this.today7.top_monitor=d.top_monitor||null;this.today7.top_opportunities=d.top_opportunities||[];this.today7.candidate_counts=d.candidate_counts||null;this.today7.evidence_conflict=d.evidence_conflict||null;if(this.isWaitDay()){this.today7.avoid_collapsed=true;}
           this.applyPulseToMarketStrip(this.today7.pulse);
           this.saveToday7ToCache(d);
           // DAY-OVER-DAY DIFF — tag NEW vs CARRYOVER vs MOVED
@@ -15932,7 +15958,7 @@
         const blocked=this.todayDeployBlocked()||this.pageAuthorityIsDegraded();
         if(typeof CCHelpers!=='undefined'&&CCHelpers.discoveryOpportunityIntelView)
           return CCHelpers.discoveryOpportunityIntelView(oi,{deployBlocked:blocked,blocked});
-        return {visible:!!oi.counts,total:oi.counts?.total||0,best_theme:oi.best_theme||'',best_action:oi.best_action||'monitor',candidate_chips:oi.candidate_chips||[],note:oi.research_note||'Evidence study — not deploy permission',blocked};
+        return {visible:true,empty:!(oi.counts&&oi.counts.total),empty_message:oi.empty_message||((typeof CCHelpers!=='undefined'&&CCHelpers.intelligenceEmptyMessage)?CCHelpers.intelligenceEmptyMessage('oi',oi):'No research candidates yet'),total:oi.counts?.total||0,best_theme:oi.best_theme||'',best_action:oi.best_action||'No research candidates yet',candidate_chips:oi.candidate_chips||[],note:oi.research_note||oi.empty_message||'No research candidates yet',learning_mode:!!oi.learning_mode,blocked};
       },
       discoveryScannerRunLabel(){
         const d=(this.scannerHub.data&&this.scannerHub.data.diagnostics)||{};

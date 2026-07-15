@@ -436,7 +436,45 @@ def build_decision_quality_dashboard(
             "cash_protected": "cash protected",
             "no_fake_precision": True,
         },
-        "alpha_quality": aq if aq else None,
-        "alpha_review": ar if ar else None,
-        "threshold_governance": tg if tg else None,
+        "alpha_quality": aq
+        if aq
+        else {
+            "sample_size": 0,
+            "status": "learning",
+            "status_label": "learning",
+            "oi_lift_display": "learning",
+            "cost_adj_expectancy_display": "learning",
+            "conversion_quality": "learning",
+            "overfit_risk": "medium",
+            "allow_green_ui": False,
+            "learning_mode": True,
+            "empty_message": "Learning — not enough forward outcomes yet",
+        },
+        "alpha_review": ar
+        if ar
+        else {
+            "status": "learning",
+            "status_label": "learning",
+            "evidence_level": "learning",
+            "human_review_count": 0,
+            "what_improved": [],
+            "what_deteriorated": [],
+            "top_items": [],
+            "governor_review": {},
+            "next_actions": [],
+            "threshold_review_line": "Review only · no live changes",
+            "empty_message": "No review items yet",
+            "collapsed": True,
+            "authority_effect": "none",
+            "may_authorize_deploy": False,
+        },
+        "threshold_governance": tg
+        if tg
+        else {
+            "open_count": 0,
+            "shadow_count": 0,
+            "registry_count": 0,
+            "status_line": "Threshold Review: 0 open · 0 shadow · Review only · no live changes",
+            "empty_message": "No threshold proposals yet",
+        },
     }
