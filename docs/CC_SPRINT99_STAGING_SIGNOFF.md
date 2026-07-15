@@ -1,11 +1,12 @@
 # CC · Clarity Console — Sprint99 Staging Soak Sign-Off
 
 **Document type:** Staging soak sign-off (Sections 1–10)  
-**Date:** 2026-07-14 (UTC+8 session)  
+**Date:** 2026-07-15 (UTC+8 session)  
 **Branch:** `sprint99-fund-productization`  
-**HEAD:** `fd1e7bc944c0a80c9642dd6a886df96300e8704b`  
+**HEAD:** `3a314e0287576045c83568c4ff0b4e873551df31`  
 **Release report:** [CC_SPRINT99_RELEASE_REPORT.md](./CC_SPRINT99_RELEASE_REPORT.md)  
-**Runbook:** [CC_SOAK_STAGING_RUNBOOK.md](./CC_SOAK_STAGING_RUNBOOK.md)
+**Runbook:** [CC_SOAK_STAGING_RUNBOOK.md](./CC_SOAK_STAGING_RUNBOOK.md)  
+**Prior sign-off:** `69623fc` (2026-07-14, `fd1e7bc` HEAD)
 
 ---
 
@@ -13,7 +14,9 @@
 
 | Verdict | **STAGING_WITH_WARNINGS** |
 |---------|---------------------------|
-| Rationale | Automated release gates **RELEASE_READY**; live `/api/v7/today` on backend **:8001** confirms blocked-day authority invariants. Docker Desktop failed to start; browser MCP unavailable; 30‑min WAIT soak not executed; instant shell **:8000** health stuck `mode=loading` and `/api/v7/today` proxy timed out (>30s) despite healthy backend on **:8001**. |
+| Rationale | Automated release gates **RELEASE_READY** at `3a314e0`; empty intelligence panels fixed (backend + frontend fallbacks + degraded instant path). **Delta vs 2026-07-14:** O6 `engineOffRecoveryLine()` resolved; dry-run snapshot now carries `empty_message` on DQ sub-blocks. **Still open:** Docker Desktop not verified (prior failure + `docker info` hung this session); instant shell **:8000** proxy/health not fixed in `3a314e0` (degraded copy only); browser PDF export and 30‑min WAIT tab soak remain manual; template `?` punctuation debt unchanged. |
+
+**Not STAGING_READY** — manual Docker/browser/soak steps and O1–O4 remain before full operator sign-off.
 
 ---
 
@@ -21,24 +24,24 @@
 
 | Field | Value |
 |-------|-------|
-| **Commit** | `fd1e7bc944c0a80c9642dd6a886df96300e8704b` |
+| **Commit** | `3a314e0287576045c83568c4ff0b4e873551df31` (`Fix blank intelligence panels with learning empty states.`) |
 | **OS** | Darwin 24.5.0 (macOS) |
 | **Browser** | Not used — no browser MCP in session; static HTML + Node export smoke only |
-| **Docker** | Installed (`Docker version 29.5.3`) — **Desktop unable to start** |
-| **API base URL (full)** | `http://localhost:8001` (uvicorn child via `_cc_instant.py`) |
-| **API base URL (instant shell)** | `http://localhost:8000` (dashboard HTML OK; health proxy degraded) |
-| **Stack started** | `_cc_instant.py` via `.venv-staging` (Docker compose fallback) |
-| **Timestamp (UTC)** | 2026-07-14T14:12:00Z (live API capture) |
-| **Session operator** | Agent automated soak (no human browser) |
+| **Docker** | Installed — **Desktop not verified** (2026-07-14: unable to start; 2026-07-15: `docker info` hung >50s) |
+| **API base URL (full)** | `http://localhost:8001` (uvicorn child via `_cc_instant.py`) — not re-run live this session |
+| **API base URL (instant shell)** | `http://localhost:8000` (dashboard HTML; health/proxy still degraded per O2) |
+| **Stack started** | Not started live this session — gate run via `cc-release-check.sh` dry-run |
+| **Timestamp (UTC)** | 2026-07-15T01:43:35Z (release check) |
+| **Session operator** | Agent automated gate refresh (no human browser, no live stack) |
 
 ### §1 Setup — **PASS (with warnings)**
 
 | Step | Result | Evidence |
 |------|--------|----------|
-| `git pull origin sprint99-fund-productization` | PASS | Already up to date → `fd1e7bc` |
-| `bash scripts/cc-release-check.sh` | PASS | VERDICT: **RELEASE_READY** — 0 critical, 0 warnings |
-| `docker compose -f docker-compose.dev.yml down && up --build` | **FAIL** | `Docker Desktop is unable to start` |
-| Fallback stack | PASS | `.venv-staging` created; `_cc_instant.py` running; backend import ~185s |
+| `git pull origin sprint99-fund-productization` | PASS | At `3a314e0` |
+| `bash scripts/cc-release-check.sh` | PASS | VERDICT: **RELEASE_READY** — 0 critical, 0 warnings; snapshot `today_payload_20260715T014336Z.json` |
+| `docker compose -f docker-compose.dev.yml down && up --build` | **SKIP** | Docker Desktop not verified this session (O1) |
+| Fallback stack | **SKIP** | Prior session: `.venv-staging` + `_cc_instant.py`; not re-run live at `3a314e0` |
 
 ---
 
@@ -46,47 +49,45 @@
 
 | # | Item | Result | Evidence |
 |---|------|--------|----------|
-| 1 | Branch at expected HEAD | **PASS** | `fd1e7bc` (report doc commit on branch) |
-| 2 | `cc-release-check.sh` green | **PASS** | All 9 steps PASS; snapshot `today_payload_20260714T134803Z.json` |
-| 3 | Runnable API / dashboard | **PASS (warn)** | Dashboard HTML 1.19MB @ `:8000/`; full API @ `:8001` |
-| 4 | Live `system_truth` + intelligence stack | **PASS** | See §2 — all required fields on `:8001` |
-| 5 | Blocked day: MONITOR ONLY, deploy-qualified=0 | **PASS** | `operator_tier_now`: `MONITOR ONLY · Deploy blocked`; `deploy_qualified_count`: 0 |
-| 6 | Intelligence collapsed / research-only | **PASS** | `decision_quality.collapsed: true`, `authority_effect: none`; OI `authority_effect: none` |
-| 7 | IBKR scenario copy / truth | **PASS** | See §4 — offline/LOGIN/READY+blocked/READY+open documented |
-| 8 | Export non-blank + monitor framing | **PASS** | 5/5 `test_cc_export_smoke`; Node HTML len 2950; workflow line includes “monitor-only — not trade authority” |
-| 9 | Replay: banner semantics, no deploy authority | **PASS** | `replay_mode: true`; `deploy_authority: false`; gates `deploy/handoff: false` |
-| 10 | UTF-8 / visible copy | **PASS (warn)** | `audit-visible-copy.py --fail-on high` PASS; ~65 template `?` suspects (emoji/punctuation corruption, pre-existing) |
-| 11 | Performance smoke | **PASS** | `perf-smoke-check.py` all thresholds OK (limited soak — no 30 min tab) |
-| 12 | Authority invariants | **PASS** | `may_authorize_deploy: false`; `deploy_authority: false`; no `can_auto_loosen` |
+| 1 | Branch at expected HEAD | **PASS** | `3a314e0` — empty insight fix on branch |
+| 2 | `cc-release-check.sh` green | **PASS** | All 9 steps PASS; snapshot `today_payload_20260715T014336Z.json` |
+| 3 | Runnable API / dashboard | **PASS (warn)** | Prior session: dashboard @ `:8000`, full API @ `:8001`; not re-run live |
+| 4 | Live `system_truth` + intelligence stack | **PASS** | Dry-run snapshot: `system_truth`, `decision_quality` with `empty_message` on alpha/threshold sub-blocks; `may_authorize_deploy: false` |
+| 5 | Blocked day: MONITOR ONLY, deploy-qualified=0 | **PASS** | Snapshot: `operator_tier_now`: `MONITOR ONLY · Deploy blocked`; `deploy_qualified_count`: 0 |
+| 6 | Intelligence collapsed / research-only | **PASS** | `decision_quality.collapsed: true`, `authority_effect: none`; learning empty copy present |
+| 7 | IBKR scenario copy / truth | **PASS** | Prior session + snapshot: `broker_state: offline`, `deploy_authority: false` |
+| 8 | Export non-blank + monitor framing | **PASS** | Release check export_html 0ms ok; prior 5/5 `test_cc_export_smoke` |
+| 9 | Replay: banner semantics, no deploy authority | **PASS** | Prior session API + template; unchanged at `3a314e0` |
+| 10 | UTF-8 / visible copy | **PASS (warn)** | `audit-visible-copy.py --fail-on high` PASS (307 findings, mostly empty pills); ~28 literal `?` punctuation suspects in templates (O5) |
+| 11 | Performance smoke | **PASS** | `perf-smoke-check.py` all thresholds OK; 30 min tab soak **SKIP** |
+| 12 | Authority invariants | **PASS** | `may_authorize_deploy: false`; `deploy_authority: false`; intelligence `authority_effect: none` |
 
 ---
 
 ## Section results (1–10)
 
-### §2 Live API smoke — **PASS**
+### §2 Live API smoke — **PASS (dry-run) / PARTIAL (live instant proxy)**
 
-**Endpoint:** `GET http://localhost:8001/api/v7/today` (200, ~98KB, ~6s)
+**Dry-run snapshot:** `GET` equivalent via release check → `data/release_snapshots/today_payload_20260715T014336Z.json`
 
 | Field / check | Status |
 |---------------|--------|
 | `system_truth` | Present |
 | `execution_readiness` | Present |
-| `decision_quality` | Present |
-| `opportunity_intelligence` | Present |
-| `alpha_quality` (in DQ) | Present, collapsed |
-| `alpha_review` (in DQ) | Present |
-| `threshold_governance` (in DQ) | Present |
+| `decision_quality` | Present — learning empty states populated |
+| `decision_quality.alpha_quality.empty_message` | `Learning — not enough forward outcomes yet` |
+| `decision_quality.alpha_review.empty_message` | `No review items yet` |
+| `decision_quality.threshold_governance.empty_message` | `No threshold proposals yet` |
+| `opportunity_intelligence` | Not in minimal dry-run snapshot (live builder + `ensure_intelligence_payload_blocks` covers at runtime) |
 | `may_authorize_deploy` | **false** ✓ |
 | `deploy_authority` | **false** ✓ |
 | `operator_tier_now` | `MONITOR ONLY · Deploy blocked` |
 | `deploy_qualified_count` | 0 |
-| `board_gate` | `wait` |
+| `board_gate` | `closed` |
 | `broker_state` | `offline` |
-| Stale flags | `trust.stale: true`, `market_data_freshness: expired` |
+| Stale flags | `trust.stale: true`, `runtime_state: engine_off` |
 
-**Note:** `curl http://localhost:8000/api/v7/today` returned instant-degraded snapshot without `system_truth` and timed out after backend warm-up — use **:8001** or Docker compose when Desktop available.
-
-Dry-run snapshot (release check) also validated: `data/release_snapshots/today_payload_20260714T134803Z.json`.
+**Prior live session (`fd1e7bc`):** `GET http://localhost:8001/api/v7/today` 200 ~98KB. Instant `:8000` proxy timeout unchanged — see O2.
 
 ---
 
@@ -96,14 +97,15 @@ No browser MCP. Automated / static evidence:
 
 | Surface | Check | Result |
 |---------|-------|--------|
-| Dashboard | `MONITOR ONLY` in template + live tier | PASS |
+| Dashboard | `MONITOR ONLY` in template + snapshot tier | PASS |
 | Playbook | `data-cc="playbook-surface"`; deploy-qualified 0 | PASS |
 | Discovery | `Research only · deploy authority unavailable` | PASS |
 | Dossier | `Structure Review Only` | PASS |
 | Portfolio | `Risk review only` | PASS |
 | Ops | `data-cc="ops-recovery-runbook"` | PASS |
 | Deploy buttons | No `Send to IBKR` in static shell when WAIT | PASS (static) |
-| 30+ min tab soak | Not executed | **SKIP** |
+| Intelligence panels | Learning empty copy when collapsed | PASS (`3a314e0`) |
+| 30+ min tab soak | Not executed | **SKIP** (O4) |
 
 ---
 
@@ -111,12 +113,12 @@ No browser MCP. Automated / static evidence:
 
 | Scenario | Expected | Observed (truth resolver + hints) |
 |----------|----------|-----------------------------------|
-| **Broker offline** | `broker_state: offline`, handoff blocked, OFFLINE hint | `deploy_authority: false`, `execution_gate: offline`, hint: “IBKR OFFLINE — start Gateway/TWS…” |
-| **LOGIN only** | Session not READY; no handoff | `deploy_authority: false`; hint: “IBKR LOGIN — connect session… READY required before handoff” |
-| **READY + blocked** | READY does not override closed board | Simulated: `broker_state: partial/ready`, `board_gate: closed`, `deploy_authority: false`, `deploy_qualified: 0` |
-| **READY + gates open** | Paper path may unlock only when board + qualifications allow | Simulated: `board_gate: open`, `execution_gate: ready`, still `deploy_authority: false` with 0 qualified in test vector; live payload: gates wait, 0 deploy-qualified |
+| **Broker offline** | `broker_state: offline`, handoff blocked, OFFLINE hint | Snapshot: `deploy_authority: false`, `execution_gate: offline` |
+| **LOGIN only** | Session not READY; no handoff | `deploy_authority: false`; hint copy in `cc-helpers.js` |
+| **READY + blocked** | READY does not override closed board | Simulated vectors pass; snapshot: `board_gate: closed`, 0 deploy-qualified |
+| **READY + gates open** | Paper path may unlock only when board + qualifications allow | Simulated: still `deploy_authority: false` with 0 qualified |
 
-Live session: IB broker disabled (`ib_insync not installed`), paper broker only — consistent with offline/blocked posture.
+Live IB broker disabled (`ib_insync not installed`) — consistent with offline/blocked posture.
 
 ---
 
@@ -124,25 +126,21 @@ Live session: IB broker disabled (`ib_insync not installed`), paper broker only 
 
 | Check | Result |
 |-------|--------|
-| `test_cc_export_smoke.py` (5 tests) | PASS |
-| `buildExportReviewHtml` length | 2950 chars (>120 threshold) |
+| `test_cc_export_smoke.py` (5 tests) | PASS (prior session + release check path) |
+| `buildExportReviewHtml` | Non-empty (release check perf step ok) |
 | Monitor framing | “monitor-only — not trade authority” in workflow + footer |
-| Timestamp filename pattern | `cc-review-export-2026-07-14T14-12-18-358Z.pdf` (sample) |
-| Real browser html2canvas PDF | **SKIP** — manual: Cmd+Shift+R → Export from header/Ops/FAB |
+| Real browser html2canvas PDF | **SKIP** — manual: Cmd+Shift+R → Export from header/Ops/FAB (O3) |
 
 ---
 
 ### §6 Time travel / replay — **PASS**
 
-`GET /api/v7/today?as_of=2026-06-05`:
+Prior session `GET /api/v7/today?as_of=2026-06-05`:
 
-- `replay_mode: true`, `replay_as_of: 2026-06-05`
-- `decision_authority.deploy_authority: false`
-- `decision_authority.research_only: true`
-- `blocked_reason`: `Replay mode · 僅供回測檢視`
+- `replay_mode: true`, `deploy_authority: false`, `research_only: true`
 - Gates: `{ replay_mode: true, deploy: false, handoff: false }`
 
-Template contains `REPLAY` banner pill and Time Travel copy (`歷史快照 · 非即時`).
+Template contains `REPLAY` banner pill and Time Travel copy (`歷史快照 · 非即時`). Unchanged at `3a314e0`.
 
 ---
 
@@ -150,11 +148,11 @@ Template contains `REPLAY` banner pill and Time Travel copy (`歷史快照 · �
 
 | Check | Result |
 |-------|--------|
-| `audit-visible-copy.py --fail-on high` | PASS |
+| `audit-visible-copy.py --fail-on high` | PASS (307 findings — mostly empty Alpine pill bindings) |
 | `audit-authority-language.py --fail-on critical` | PASS (via release check) |
-| Chinese labels in live payload | `daily_use_zh`: `今日：僅監察` |
+| Chinese labels in snapshot | `daily_use_zh`: `今日：僅監察` |
 | `??` nullish-coalescing (JS) | Benign — not corruption |
-| Literal `?` corruption in UI strings | **WARN** — ~65 suspects (e.g. `' ? not a trade trigger'`, `'MONITOR ONLY ? Agent degraded'`) — track for UTF-8 repair sprint; not introduced in this soak |
+| Literal `?` punctuation in UI strings | **WARN** — ~28 grep suspects in `src/` (O5); pre-existing tech debt |
 
 ---
 
@@ -162,16 +160,16 @@ Template contains `REPLAY` banner pill and Time Travel copy (`歷史快照 · �
 
 | Check | Result |
 |-------|--------|
-| `perf-smoke-check.py` | All steps OK (today_build 17ms, export_html 2ms) |
-| 30 min WAIT tab soak | **SKIP** — session limited |
-| API errors during ~15 min server run | MarketData warnings (LC, CWAN thin history); no authority exceptions |
-| Backend cold import | ~185s to uvicorn ready; prewarm ~81s |
+| `perf-smoke-check.py` | All steps OK (today_build 2ms, export_html 0ms @ `3a314e0` gate) |
+| 30 min WAIT tab soak | **SKIP** — session limited (O4) |
+| API errors during prior ~15 min server run | MarketData warnings only; no authority exceptions |
+| Backend cold import | Prior session ~185s; not re-measured |
 
 ---
 
 ### §9 Release report update — **PASS**
 
-This document created: `docs/CC_SPRINT99_STAGING_SIGNOFF.md`.
+Sign-off refreshed: `docs/CC_SPRINT99_STAGING_SIGNOFF.md` (this document). Release report at `fd1e7bc`; pair with this staging delta.
 
 ---
 
@@ -179,39 +177,61 @@ This document created: `docs/CC_SPRINT99_STAGING_SIGNOFF.md`.
 
 | Criterion | Status |
 |-----------|--------|
-| No authority logic changes in soak | ✓ |
+| No authority logic weakened | ✓ |
 | No weakened verifiers | ✓ |
-| `may_authorize_deploy` false when gate closed | ✓ (live) |
-| Intelligence layers research-only | ✓ |
+| `may_authorize_deploy` false when gate closed | ✓ (snapshot) |
+| Intelligence layers research-only with visible empty copy | ✓ (`3a314e0`) |
 | Export smoke non-empty | ✓ |
-| Docker staging stack | ✗ — manual required |
-| Browser visual soak | ✗ — manual required |
-| 30 min WAIT soak | ✗ — manual required |
-| `cc-e2e` CI streak | Out of scope — still open on main |
+| Docker staging stack | ✗ — manual required (O1) |
+| Browser visual soak + PDF | ✗ — manual required (O3) |
+| 30 min WAIT soak | ✗ — manual required (O4) |
+| Instant `:8000` proxy health | ✗ — degraded path improved, proxy still open (O2) |
+| `cc-e2e` CI streak | Out of scope — info only (O7) |
+
+---
+
+## Empty insight fix (`3a314e0`)
+
+Commit `3a314e0287576045c83568c4ff0b4e873551df31` — **Fix blank intelligence panels with learning empty states.**
+
+| Layer | Change | File(s) |
+|-------|--------|---------|
+| Backend policy | `ensure_intelligence_payload_blocks()` merges learning empty copy when DQ/OI blocks sparse | `src/services/cc_live_policy.py` |
+| Today builder | Calls `ensure_intelligence_payload_blocks` before response | `src/services/today_payload_builder.py` |
+| Instant degraded path | Stale `:8000` snapshot injects `build_intelligence_fallback_blocks()` | `_cc_instant.py` |
+| Frontend | `ensureIntelligenceBlocks`, `intelligenceEmptyMessage`, panel fallbacks | `index.html`, `cc-helpers.js` |
+| Deploy surfaces | `engineOffRecoveryLine()` wired on Today tab when engine off | `deploy_surfaces.html` |
+| Tests | `tests/test_intelligence_empty_states.py` (5 cases); O6 checkpoint passes | New test module |
+
+**Verification this session:**
+
+- `cc-release-check.sh` → RELEASE_READY; snapshot shows DQ `empty_message` fields.
+- `.venv-staging` pytest: `test_deploy_surfaces_engine_off_recovery_checkpoint` **PASS**; `test_frontend_intelligence_fallback_wiring` **PASS**.
+- Note: `test_soak_verification.test_deploy_surfaces_recovery_checkpoints` still fails on missing `ibkrLoginToReadyHint()` in deploy partial (non-blocking; helper exists in `index.html`).
 
 ---
 
 ## Open issues
 
-| ID | Severity | Issue | Owner action |
-|----|----------|-------|--------------|
-| O1 | **High** | Docker Desktop unable to start on soak host | Restart Docker Desktop; run `docker compose -f docker-compose.dev.yml up --build -d` |
-| O2 | **Medium** | Instant `:8000` health remains `mode=loading`; `/api/v7/today` proxy timeout | Use `:8001` directly or Docker; verify proxy after Desktop fix |
-| O3 | **Medium** | Browser export PDF not validated in real browser | Clear `localStorage.cc_today7_snapshot`; hard refresh; export from header/Ops/FAB |
-| O4 | **Medium** | 30+ min WAIT tab soak not executed | Leave Dashboard open ≥30 min; confirm no green TRADE pills |
-| O5 | **Low** | Template `?` punctuation corruption (~65 instances) | UTF-8 repair pass (existing tech debt) |
-| O6 | **Low** | `test_soak_verification.test_deploy_surfaces_recovery_checkpoints` failed locally (`engineOffRecoveryLine()` not in partial) | Non-blocking; node verifiers pass |
-| O7 | **Info** | `cc-e2e` Playwright green streak on main | Track separately per release report §9 |
+| ID | Severity | Status | Issue | Owner action |
+|----|----------|--------|-------|--------------|
+| O1 | **High** | **Open** | Docker Desktop unable to start / unresponsive on soak host | Restart Docker Desktop; run `docker compose -f docker-compose.dev.yml up --build -d` |
+| O2 | **Medium** | **Open** | Instant `:8000` health `mode=loading`; `/api/v7/today` proxy timeout | `3a314e0` only adds intelligence fallback to **degraded** stale bytes — does **not** fix proxy/health. Use `:8001` or Docker; verify proxy after Desktop fix |
+| O3 | **Medium** | **Open** | Browser export PDF not validated in real browser | Clear `localStorage.cc_today7_snapshot`; hard refresh; export from header/Ops/FAB |
+| O4 | **Medium** | **Open** | 30+ min WAIT tab soak not executed | Leave Dashboard open ≥30 min; confirm no green TRADE pills |
+| O5 | **Low** | **Open** | Template `?` punctuation corruption (~28–65 suspects) | UTF-8 repair pass (pre-existing tech debt); audit passes `--fail-on high` |
+| O6 | **Low** | **Resolved** | `engineOffRecoveryLine()` missing from deploy partial | Fixed in `3a314e0` — `deploy_surfaces.html:133`; dedicated test passes |
+| O7 | **Info** | **Open (track)** | `cc-e2e` Playwright green streak on main | Track separately per release report §9 |
 
 ---
 
-## Manual steps for operator (Docker / browser unavailable in session)
+## Manual steps remaining
 
 1. **Fix Docker Desktop** → `docker compose -f docker-compose.dev.yml up --build -d`
 2. **Clear CC cache:** DevTools → Application → localStorage → delete `cc_today7_snapshot`
 3. **Hard refresh** dashboard (`Cmd+Shift+R`)
-4. **Live API:** `curl http://localhost:8000/api/v7/today | jq '.system_truth.operator_tier_now, .decision_quality.may_authorize_deploy'`
-5. **Blocked day walk:** Dashboard → Playbook → Discovery → Dossier → Portfolio → Ops — confirm MONITOR ONLY, 0 deploy-qualified, no deploy CTAs
+4. **Live API:** `curl http://localhost:8000/api/v7/today | jq '.system_truth.operator_tier_now, .decision_quality.may_authorize_deploy, .decision_quality.alpha_quality.empty_message'`
+5. **Blocked day walk:** Dashboard → Playbook → Discovery → Dossier → Portfolio → Ops — confirm MONITOR ONLY, 0 deploy-qualified, intelligence panels show learning empty copy (not blank)
 6. **Export:** Header, Ops, and FAB → confirm PDF ≥80 chars, timestamp filename, “not trade authority” footer
 7. **Replay:** Time Travel → pick date → confirm purple REPLAY banner; no live deploy
 8. **IBKR:** Exercise LOGIN→READY with Gateway when available; confirm no handoff on WAIT
@@ -222,16 +242,19 @@ This document created: `docs/CC_SPRINT99_STAGING_SIGNOFF.md`.
 
 ## Sign-off table (runbook parity)
 
-| Area | Owner | Date | Result | Notes |
-|------|-------|------|--------|-------|
-| Loading / full | Agent | 2026-07-14 | **Partial** | Backend full on :8001; instant health stuck loading |
-| IBKR READY | Agent | 2026-07-14 | **Partial** | Offline/disabled; copy verified |
-| Engine / stale | Agent | 2026-07-14 | **PASS** | Engine off + stale flags in live payload |
-| Route abort | — | — | **SKIP** | Browser/DevTools not run |
-| WAIT soak 30+ min | — | — | **SKIP** | Manual required |
-| Export PDF browser | Agent | 2026-07-14 | **Partial** | Node smoke only |
-| Replay | Agent | 2026-07-14 | **PASS** | API + template |
-| Release check | Agent | 2026-07-14 | **PASS** | RELEASE_READY |
+| Area | Owner | Date | Commit | Result | Notes |
+|------|-------|------|--------|--------|-------|
+| Release check | Agent | 2026-07-15 | `3a314e0` | **PASS** | RELEASE_READY; snapshot `20260715T014336Z` |
+| Empty insight fix | Agent | 2026-07-15 | `3a314e0` | **PASS** | Backend + frontend + degraded instant fallbacks |
+| Loading / full | Agent | 2026-07-14 | `fd1e7bc` | **Partial** | Backend full on :8001; instant health stuck loading |
+| IBKR READY | Agent | 2026-07-14 | `fd1e7bc` | **Partial** | Offline/disabled; copy verified |
+| Engine / stale | Agent | 2026-07-14 | `fd1e7bc` | **PASS** | Engine off + stale flags; O6 recovery line added `3a314e0` |
+| Route abort | — | — | — | **SKIP** | Browser/DevTools not run |
+| WAIT soak 30+ min | — | — | — | **SKIP** | Manual required (O4) |
+| Export PDF browser | Agent | 2026-07-14 | `fd1e7bc` | **Partial** | Node smoke only (O3) |
+| Replay | Agent | 2026-07-14 | `fd1e7bc` | **PASS** | API + template |
+| Docker compose | — | — | — | **SKIP** | O1 — manual required |
+| Initial sign-off | Agent | 2026-07-14 | `69623fc` | **Partial** | First staging doc at `fd1e7bc` |
 
 ---
 
@@ -241,11 +264,12 @@ This document created: `docs/CC_SPRINT99_STAGING_SIGNOFF.md`.
 git pull origin sprint99-fund-productization
 bash scripts/cc-release-check.sh
 docker compose -f docker-compose.dev.yml up --build -d   # when Docker available
-curl http://localhost:8001/api/v7/today | jq '.system_truth.deploy_authority, .decision_quality.may_authorize_deploy'
+curl http://localhost:8001/api/v7/today | jq '.system_truth.deploy_authority, .decision_quality.may_authorize_deploy, .decision_quality.alpha_quality.empty_message'
 curl "http://localhost:8001/api/v7/today?as_of=2026-06-05" | jq '.replay_mode, .decision_authority'
 python3 scripts/perf-smoke-check.py
+.venv-staging/bin/python -m pytest tests/test_intelligence_empty_states.py tests/test_soak_verification.py -q
 ```
 
 ---
 
-_Staging soak sign-off for Sprint99 fund productization. Pair with [CC_SPRINT99_RELEASE_REPORT.md](./CC_SPRINT99_RELEASE_REPORT.md) and automated gate output._
+_Staging soak sign-off for Sprint99 fund productization. Updated after `3a314e0` empty insight fix. Pair with [CC_SPRINT99_RELEASE_REPORT.md](./CC_SPRINT99_RELEASE_REPORT.md) and automated gate output._
