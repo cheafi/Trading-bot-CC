@@ -14,9 +14,9 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from src.api.deps import sanitize_for_json
+from src.api.deps import sanitize_for_json, verify_api_key
 from src.services.regime_service import get_regime as _fetch_regime
 from src.utils.numeric_parse import parse_ratio
 
@@ -343,7 +343,7 @@ async def warmup_brief_board(limit: int = Query(30, ge=1, le=100)):
 
 
 @router.get("/api/v7/today")
-async def today_summary(request: Request):
+async def today_summary(request: Request, _: bool = Depends(verify_api_key)):
     """Decision homepage: regime + top 5 + filter funnel + action guidance.
 
     This is the first thing a trader should see — answers:
@@ -1228,6 +1228,33 @@ async def today_summary(request: Request):
         event_risks=event_risks,
     )
 
+    from src.services.opportunity_quality import (
+        attach_quality_to_rows,
+        build_opportunity_verdict,
+        resolve_brief_stale_context,
+    )
+
+    brief_ctx = resolve_brief_stale_context(
+        used_brief_fallback=used_brief_fallback,
+    )
+    _quality_stale = scanner_degraded or used_brief_fallback
+    _brief_stale = bool(brief_ctx.get("brief_stale"))
+    top5 = attach_quality_to_rows(
+        top5,
+        data_stale=_quality_stale,
+        brief_stale=_brief_stale,
+    )
+    near_miss = attach_quality_to_rows(
+        near_miss,
+        data_stale=_quality_stale,
+        brief_stale=_brief_stale,
+    )
+    all_opps_for_action = attach_quality_to_rows(
+        all_opps_for_action,
+        data_stale=_quality_stale,
+        brief_stale=_brief_stale,
+    )
+
     todays_decision = build_todays_decision(
         tradeability=tradeability,
         should_trade=should_trade,
@@ -1432,6 +1459,7 @@ async def today_summary(request: Request):
         },
         "market_pulse": market_pulse,
         "top_5": top5,
+        "top_ranked": top5,
         "filter_funnel": funnel,
         "best_setup_family": best_family,
         "family_breakdown": {
@@ -1493,7 +1521,11 @@ async def today_summary(request: Request):
         "decision_authority": decision_authority,
         "trust": trust,
         "generated_at": now.isoformat() + "Z",
+        "brief_context": brief_ctx,
+        "data_stale": _quality_stale,
+        "brief_stale": _brief_stale,
     }
+    payload["opportunity_verdict"] = build_opportunity_verdict(payload)
     payload["cc_state"] = build_cc_state(
         tradeability=decision_model.get("honest_tradeability") or tradeability,
         should_trade=should_trade,
@@ -1758,7 +1790,7 @@ def _build_board_payload(
 
 
 @router.get("/api/v7/decision/board")
-async def decision_board(request: Request):
+async def decision_board(request: Request, _: bool = Depends(verify_api_key)):
     """Lightweight canonical decision board for header / cross-surface polling."""
     ops = _board_ops_snapshot(request)
     today = _today_payload_for_board(request)
@@ -1795,7 +1827,7 @@ async def decision_board(request: Request):
 
 
 @router.get("/api/v7/decision/bdr-summary")
-async def bdr_operator_summary(request: Request):
+async def bdr_operator_summary(request: Request, _: bool = Depends(verify_api_key)):
     """Auto-generated BDR-style operator brief from live today / playbook state."""
     today = await today_summary(request)
     if isinstance(today, dict) and today.get("error"):

@@ -20,7 +20,9 @@ import statistics
 import time
 from typing import Any, Callable, Dict, List
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
+
+from src.api.deps import verify_api_key
 
 from src.core.stock_universe import (
     OPPORTUNITY_COVERAGE_UNIVERSE,
@@ -45,6 +47,8 @@ _RANKED_CACHE_TTL = 10 * 60
 _RANKED_STALE_SERVE_TTL = 30 * 60
 _RANKED_LOAD_TIMEOUT_SECONDS = 15.0
 _RANKED_TIMEOUT_SECONDS = 30.0
+_RANKED_CACHE_MAX_KEYS = 32
+_RS_RANKING_CACHE_MAX_KEYS = 16
 _ranked_cache: Dict[str, Dict[str, Any]] = {}
 _ranked_refreshing: set[str] = set()
 _FLOW_CACHE_TTL = 10 * 60
@@ -227,6 +231,10 @@ def _get_ranked_cached(key: str, *, allow_stale: bool = False) -> Dict[str, Any]
 
 def _set_ranked_cached(key: str, data: Dict[str, Any]) -> None:
     _ranked_cache[key] = {"data": data, "ts": time.time()}
+    if len(_ranked_cache) > _RANKED_CACHE_MAX_KEYS:
+        oldest = min(_ranked_cache.items(), key=lambda item: item[1]["ts"])[0]
+        if oldest != key:
+            _ranked_cache.pop(oldest, None)
 
 
 def _rs_ranking_cache_key(sector: str | None, cap: str | None, limit: int) -> str:
@@ -245,6 +253,9 @@ def _get_rs_ranking_cached(key: str) -> Dict[str, Any] | None:
 
 def _set_rs_ranking_cached(key: str, data: Dict[str, Any]) -> None:
     _rs_ranking_cache[key] = {"data": data, "ts": time.time()}
+    if len(_rs_ranking_cache) > _RS_RANKING_CACHE_MAX_KEYS:
+        oldest = min(_rs_ranking_cache.items(), key=lambda item: item[1]["ts"])[0]
+        _rs_ranking_cache.pop(oldest, None)
 
 
 def _brief_rs_ranking_fallback(
@@ -482,6 +493,33 @@ def _finalize_ranked_response(
                 for c in [f"{r.get('ticker')}: high conflict"]
             ],
         )
+    except Exception:
+        pass
+    try:
+        from src.services.opportunity_quality import (
+            attach_quality_to_rows,
+            build_opportunity_verdict,
+            resolve_brief_stale_context,
+        )
+
+        scanner_degraded = bool(data.get("compressed") or data.get("stale"))
+        brief_ctx = resolve_brief_stale_context(
+            used_brief_fallback=bool(data.get("from_brief") or data.get("brief_fallback")),
+        )
+        _brief_stale = bool(brief_ctx.get("brief_stale"))
+        for key in ("opportunities", "near_miss", "near_miss_rows"):
+            rows = data.get(key)
+            if rows:
+                data[key] = attach_quality_to_rows(
+                    rows,
+                    data_stale=scanner_degraded,
+                    brief_stale=_brief_stale,
+                )
+        data["brief_context"] = brief_ctx
+        data["data_stale"] = scanner_degraded
+        data["brief_stale"] = _brief_stale
+        data["top_ranked"] = data.get("opportunities") or []
+        data["opportunity_verdict"] = build_opportunity_verdict(data)
     except Exception:
         pass
     try:
@@ -940,6 +978,7 @@ async def ranked_snapshot(
     limit: int = Query(50, ge=1, le=100),
     action: str = Query(None),
     sector: str = Query(None),
+    _: bool = Depends(verify_api_key),
 ) -> Dict[str, Any]:
     """Instant last-good board — memory or disk only, no live compute."""
     from src.services.cc_live_policy import (
@@ -999,6 +1038,7 @@ async def ranked_opportunities(
     refresh: bool = Query(
         False, description="Skip stale snapshot fast-path and await live compute"
     ),
+    _: bool = Depends(verify_api_key),
 ) -> Dict[str, Any]:
     """3-layer ranked opportunity board."""
     from src.services.cc_live_policy import cc_live_data_only_enabled

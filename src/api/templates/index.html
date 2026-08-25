@@ -1923,6 +1923,21 @@
           </template>
         </div>
       </template>
+
+      <!-- ── Opportunity Verdict (rank / quality / authority — never deploy) ── -->
+      <template x-if="today7.opportunity_verdict">
+        <div style="margin:4px 12px;padding:10px 12px;border-radius:10px;border:1px solid var(--bd);background:var(--s1)" :style="opportunityVerdictMuted()?'opacity:.72':''">
+          <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--blue)">Opportunity Verdict · 機會評級</div>
+          <div class="text-[10px] font-bold text-white mb-1" x-text="today7.opportunity_verdict.headline_bilingual||today7.opportunity_verdict.headline"></div>
+          <div class="text-[8px] mb-2" style="color:var(--t2);line-height:1.45" x-text="today7.opportunity_verdict.authority_note"></div>
+          <div class="flex gap-2 flex-wrap text-[7px]">
+            <span class="pill pg mono" x-show="(today7.opportunity_verdict.opportunity_states||{}).quality" x-text="'STRONG: '+(today7.opportunity_verdict.opportunity_states||{}).quality"></span>
+            <span class="pill pa mono" x-show="(today7.opportunity_verdict.opportunity_states||{}).promising" x-text="'PROMISING: '+(today7.opportunity_verdict.opportunity_states||{}).promising"></span>
+            <span class="pill pw mono" x-show="(today7.opportunity_verdict.opportunity_states||{}).weak" x-text="'WEAK: '+(today7.opportunity_verdict.opportunity_states||{}).weak"></span>
+            <span x-show="opportunityVerdictMuted()" class="pill pa text-[7px]">Stale brief · muted</span>
+          </div>
+        </div>
+      </template>
       <template x-if="(today7.bucket_quality||[]).length">
         <div style="padding:0 12px 6px">
           <div class="card card-p">
@@ -2059,7 +2074,7 @@
       </template>
 
       <!-- ── Top Ranked Opportunities ── -->
-      <div class="section-hdr" style="margin-top:6px">🏆 Top Opportunities</div>
+      <div class="section-hdr" style="margin-top:6px" x-text="topRankedSectionTitle()"></div>
 
       <!-- ══ Quick Action Strip — deploy-ready review ══ -->
       <template x-if="dashboardActionablePicks().length>0 && today7.todays_decision && today7.todays_decision.can_deploy_today">
@@ -2142,10 +2157,13 @@
               </div>
               <!-- Action color bar -->
               <div :style="'height:3px;background:var(--'+(['BUY','TRADE','BUY_ON_DIP'].includes(String(effectiveCardAction(opp)).toUpperCase())?'green':(String(effectiveCardAction(opp)).toUpperCase()==='PILOT'&&String(opp.pilot_state||'').toUpperCase()==='PILOT_EXECUTABLE')?'blue':['AVOID','NO_TRADE','BLOCKED'].includes(String(effectiveCardAction(opp)).toUpperCase())?'red':'amber')+')'"></div>
-              <div style="padding:10px 12px">
+              <div style="padding:10px 12px" :style="cardIsResearchContext(opp)?'opacity:0.72':''">
+                <template x-if="cardResearchContextBanner(opp)">
+                  <div class="text-[8px] mb-2 font-bold px-2 py-1 rounded" style="background:rgba(251,191,36,.12);color:var(--amber);border:1px solid rgba(251,191,36,.25)" x-text="cardResearchContextBanner(opp)"></div>
+                </template>
                 <!-- Row 1: Rank + Ticker + Sector + Grade + Action -->
                 <div class="flex items-center gap-2 mb-1">
-                  <span class="text-[11px] font-bold mono" style="color:var(--amber);min-width:20px" x-text="'#'+(idx+1)"></span>
+                  <span class="text-[10px] font-bold mono" style="color:var(--t3);min-width:36px" x-text="cardRankTotalLabel(opp,idx)"></span>
                   <span class="text-[13px] font-extrabold mono text-white" x-text="opp.ticker"></span>
                   <!-- Day-over-day diff badge -->
                   <template x-if="opp._diff==='NEW'"><span class="pill pg text-[7px] font-bold" title="New entry vs yesterday's top list">✨ NEW</span></template>
@@ -2157,6 +2175,9 @@
                   <template x-if="opp.theme"><span class="pill pw text-[7px]" x-text="opp.theme"></span></template>
                   <template x-if="opp.grade"><span class="pill mono text-[8px]" :class="opp.grade==='A'?'pg':opp.grade==='B'?'pa':'pr'" x-text="'Grade '+opp.grade"></span></template>
                   <span class="pill mono text-[8px]" :class="cardScorePillClass(opp)" x-text="cardScoreLabel(opp)"></span>
+                  <span class="pill text-[7px] pw" x-show="cardQualityTier(opp)" :class="qualityTierClass(cardQualityTier(opp))" x-text="cardQualityTier(opp)"></span>
+                  <span class="pill text-[7px] pb" x-show="opp.rank_bucket" x-text="opp.rank_bucket||''"></span>
+                  <span class="pill text-[7px] pp" x-show="opp.authority_label||opp.opportunity_verdict?.authority" x-text="opp.authority_label||opp.opportunity_verdict?.authority||''"></span>
                   <!-- Position conflict: already in book? -->
                   <template x-if="(pf?.positions||[]).find(p=>(p.ticker||p.symbol)===opp.ticker)"><span class="pill pb text-[7px] font-bold" title="已在倉內 · 加倉會提高集中度">📊 在倉</span></template>
                   <!-- R-multiple risk per share -->
@@ -2167,11 +2188,33 @@
                     x-text="cardActionDisplay(opp)"></span>
                 </div>
 
+                <!-- Rank · Quality · Authority strip -->
+                <div x-show="cardRankQualityAuthorityLine(opp)" class="text-[8px] mb-1 mono" style="color:var(--t3);line-height:1.4" x-text="cardRankQualityAuthorityLine(opp)"></div>
+
                 <!-- Action guidance line -->
                 <div class="text-[9px] mb-2" style="line-height:1.4"
                   :style="'color:'+(cardReferenceBanner(opp)?'var(--amber)':(['TRADE','BUY','BUY_ON_DIP'].includes(String(effectiveCardAction(opp)).toUpperCase())?'var(--green)':['AVOID','NO_TRADE','BLOCKED'].includes(String(effectiveCardAction(opp)).toUpperCase())?'var(--red)':'var(--amber)'))"
                   x-text="cardReferenceBanner(opp)||opp.action_reason||opp.action_rationale||''">
                 </div>
+
+                <!-- Rank ≠ Quality ≠ Authority -->
+                <div class="flex flex-wrap gap-1 mb-2 text-[7px]">
+                  <span class="pill pw mono" x-text="'Rank '+cardRankTotalLabel(opp,idx)"></span>
+                  <span class="pill mono" :class="cardQualityPillClass(opp)" x-text="'Quality '+cardQualityLabel(opp)"></span>
+                  <span class="pill pa" x-text="'Authority '+cardAuthorityLabel(opp)"></span>
+                </div>
+                <template x-if="cardQualityReasons(opp).length">
+                  <div class="text-[8px] px-2 py-1 mb-1 rounded" style="background:rgba(251,191,36,.06);border-left:2px solid var(--amber)">
+                    <div class="font-bold uppercase mb-0.5" style="color:var(--amber)">Why weak · 偏弱原因</div>
+                    <template x-for="ln in cardQualityReasons(opp)" :key="ln"><div style="color:var(--t2)" x-text="'• '+ln"></div></template>
+                  </div>
+                </template>
+                <template x-if="cardQualityUpgradePath(opp).length">
+                  <div class="text-[8px] px-2 py-1 mb-1 rounded" style="background:rgba(88,166,255,.06);border-left:2px solid var(--blue)">
+                    <div class="font-bold uppercase mb-0.5" style="color:var(--blue)">Upgrade path · 升級路徑</div>
+                    <template x-for="ln in cardQualityUpgradePath(opp)" :key="ln"><div style="color:var(--t2)" x-text="'→ '+ln"></div></template>
+                  </div>
+                </template>
 
                 <!-- Row 2: Confidence 4-bar breakdown -->
                 <template x-if="opp.confidence||opp.thesis_conf||opp.final_conf||opp.confidence_breakdown">
@@ -2807,11 +2850,15 @@
                   <template x-if="r.sector_type"><span class="pill pp text-[7px]" x-text="r.sector_type"></span></template>
                   <template x-if="r.grade"><span class="pill mono text-[8px]" :class="r.grade==='A'?'pg':r.grade==='B'?'pa':'pr'" x-text="'Grade '+r.grade"></span></template>
                   <span class="pill text-[7px]" :class="cardEvidenceTierClass(r)" x-text="cardEvidenceTier(r)"></span>
+                  <span class="pill text-[7px] pw" x-show="cardQualityTier(r)" :class="qualityTierClass(cardQualityTier(r))" x-text="cardQualityTier(r)"></span>
+                  <span class="pill text-[7px] pb" x-show="r.rank_bucket" x-text="r.rank_bucket||''"></span>
+                  <span class="pill text-[7px] pp" x-show="r.authority_label||r.opportunity_verdict?.authority" x-text="r.authority_label||r.opportunity_verdict?.authority||''"></span>
                   <span x-show="flowPlaybookCrossBadge(r.ticker)" class="pill pb text-[7px]" title="Flow 只屬確認輔助，唔係 deploy trigger">Flow 輔助 · confirm</span>
                   <span x-show="r.watch_intelligence?.alert_worthy" class="pill pa text-[7px]">Alert</span>
                   <span x-show="r.watch_intelligence?.upgrade_probability>=0.55" class="pill pg text-[7px] mono" x-text="'P(up) '+Math.round((r.watch_intelligence?.upgrade_probability||0)*100)+'%'"></span>
                   <span class="pill text-[8px] font-bold ml-auto" x-show="!playbookUseCompactCards(r)" :class="cardActionDisplayClass(r)" x-text="cardActionDisplay(r)"></span>
                 </div>
+                <div x-show="cardRankQualityAuthorityLine(r)" class="text-[8px] mb-1 mono" style="color:var(--t3);line-height:1.4" x-text="cardRankQualityAuthorityLine(r)"></div>
                 <template x-if="playbookCardBuySignalLine(r)">
                   <div class="text-[8px] p-2 mb-1 rounded font-medium" style="background:rgba(34,197,94,.08);border-left:2px solid var(--green);color:var(--t2);line-height:1.45" x-text="playbookCardBuySignalLine(r)"></div>
                 </template>

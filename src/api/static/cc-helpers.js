@@ -2759,6 +2759,7 @@ function cc() {
 			allocator_stance: null,
 			ai_reason_codes: [],
 			score_reconciliation: null,
+			opportunity_verdict: null,
 			ai_commentary_open: false,
 			avoid_collapsed: true,
 		},
@@ -6780,6 +6781,80 @@ function cc() {
 			if (act === "PILOT" || act === "WATCH" || act === "WATCH ONLY") return "#1 監察候選 · monitor candidate"
 			return "#1 監察候選 · monitor candidate"
 		},
+		topRankedSectionTitle() {
+			const ss = this.systemState()
+			const deployOpen = !!(ss && ss.deploy_open) || !!this.today7.todays_decision?.can_deploy_today
+			if (deployOpen && !this.isWaitDay() && !this.pageAuthorityIsDegraded())
+				return this._uiText("🏆 Deploy Opportunities · 可部署機會")
+			return this._uiText("🔎 今日最佳監察候選 · Best Monitor Candidates")
+		},
+		opportunityVerdictHeadline() {
+			const v = this.today7.opportunity_verdict
+			if (!v) return ""
+			return this._uiText(v.headline_bilingual || v.headline || "")
+		},
+		opportunityVerdictCountsLine() {
+			const v = this.today7.opportunity_verdict
+			if (!v) return ""
+			return (
+				String(v.monitor_qualified_count || 0) +
+				" monitor-qualified · " +
+				String(v.quality_qualified_count || 0) +
+				" quality-qualified · " +
+				String(v.deploy_qualified_count || 0) +
+				" deploy-qualified"
+			)
+		},
+		cardRankTotalLabel(opp, idx) {
+			if (!opp) return ""
+			if (opp.rank_label) return opp.rank_label
+			const total = (this.today7.top_ranked || []).length
+			return "#" + (opp.rank || idx + 1) + " / " + total
+		},
+		cardQualityTier(opp) {
+			return String(opp?.quality?.tier || "—").toUpperCase()
+		},
+		cardQualityScore(opp) {
+			const s = opp?.quality?.score
+			return s == null ? "—" : String(s) + "/100"
+		},
+		cardQualityLabel(opp) {
+			const q = opp?.quality
+			if (!q) return "—"
+			return this._uiText((q.label_zh || q.tier || "—") + " · " + this.cardQualityScore(opp))
+		},
+		cardQualityPillClass(opp) {
+			const t = this.cardQualityTier(opp)
+			if (t === "STRONG") return "pg"
+			if (t === "PROMISING") return "pb"
+			if (t === "WEAK") return "pa"
+			return "pr"
+		},
+		cardAuthorityLabel(opp) {
+			if (!opp) return "—"
+			const ps = String(opp.pilot_state || "").toUpperCase()
+			if (opp.execution_ready && !this.isWaitDay() && this.today7.todays_decision?.can_deploy_today)
+				return this._uiText("DEPLOY · Decision Engine")
+			if (ps === "BLOCKED") return this._uiText("BLOCKED · 封鎖")
+			return this._uiText("MONITOR ONLY · 只可監察")
+		},
+		cardQualityReasons(opp) {
+			return (opp?.quality?.reasons || []).slice(0, 4)
+		},
+		cardQualityUpgradePath(opp) {
+			return (opp?.quality?.upgrade_path || []).slice(0, 4)
+		},
+		cardIsResearchContext(opp) {
+			if (!opp) return false
+			if (opp?.quality?.research_context_only) return true
+			const age = this.today7.opportunity_verdict?.brief_context?.brief_age_days
+			const thresh = this.today7.opportunity_verdict?.brief_context?.brief_stale_threshold_days || 7
+			return !!(this.todayUsesBriefFallback() && age != null && age > thresh)
+		},
+		cardResearchContextBanner(opp) {
+			if (!this.cardIsResearchContext(opp)) return ""
+			return this._uiText("RESEARCH CONTEXT ONLY · 研究脈絡 · brief stale — not live deploy signal")
+		},
 		dashboardOperatorNowLine() {
 			const td = this.today7.todays_decision
 			if (this.pageAuthorityIsDegraded())
@@ -7727,7 +7802,7 @@ function cc() {
 		},
 		playbookBucketLabel(key) {
 			const labels = {
-				deployQualified: "部署層 · Deploy-qualified",
+				deployQualified: "部署機會 · Deploy Opportunities",
 				pilotQualified: "試點層 · Pilot-qualified",
 				watchQualified: "監控層 · Watch-qualified",
 				nearMiss: "接近達標升級 · Near-miss upgrade",
@@ -7735,12 +7810,40 @@ function cc() {
 			}
 			return this._uiText(labels[key] || key)
 		},
+		playbookDeploySectionLabel() {
+			const b = this.rankedOpps.rank_buckets
+			if (b?.deploy_section_label) return this._uiText(b.deploy_section_label)
+			return this._uiText("Deploy Opportunities")
+		},
 		playbookMonitorSectionLabel() {
 			const b = this.rankedOpps.rank_buckets
 			if (b?.monitor_section_label) return this._uiText(b.monitor_section_label)
 			return this.playbookDisplayRows().length
-				? this._uiText("Monitor ranking")
+				? this._uiText("Monitor Candidates")
 				: this._uiText("No valid monitor candidates")
+		},
+		opportunityVerdictMuted() {
+			const ov = this.today7?.opportunity_verdict || this.rankedOpps?.opportunity_verdict
+			if (ov?.research_context_only) return true
+			return this.todayUsesBriefFallback() || this.decisionAuthority().source === "fallback_brief"
+		},
+		qualityTierClass(tier) {
+			const t = String(tier || "").toUpperCase()
+			if (t === "STRONG") return "pg"
+			if (t === "PROMISING") return "pa"
+			if (t === "WEAK") return "pw"
+			if (t === "REJECT") return "pr"
+			return "pw"
+		},
+		cardQualityTier(r) {
+			return r?.quality?.tier || r?.quality_tier || ""
+		},
+		cardRankQualityAuthorityLine(r) {
+			if (!r) return ""
+			const rank = r.rank_label || (r.rank != null ? `#${r.rank}` : r.rank_bucket || "—")
+			const quality = this.cardQualityTier(r) || "—"
+			const auth = r.authority_label || (r.execution_ready ? "DEPLOY ELIGIBLE" : "MONITOR")
+			return `Rank ${rank} · Quality ${quality} · Authority ${auth}`
 		},
 		playbookRejectedDisplayRows() {
 			const b = this.rankedOpps.rank_buckets?.buckets?.rejectedAvoid
@@ -13049,6 +13152,7 @@ function cc() {
 				this.today7.overlap_warning = d.overlap_warning || null
 				this.today7.near_miss = d.near_miss || []
 				this.today7.score_reconciliation = d.score_reconciliation || null
+				this.today7.opportunity_verdict = d.opportunity_verdict || null
 				this.today7.no_setup_diagnosis = d.no_setup_diagnosis || null
 				this.today7.quant_cluster_hints = d.quant_cluster_hints || []
 				this.today7.unlock_deploy = d.unlock_deploy || null
