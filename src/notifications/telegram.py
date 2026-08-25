@@ -292,12 +292,20 @@ async def set_bot_commands_async(
     """Register slash commands for operator discovery."""
     cmds = commands or [
         {
+            "command": "start",
+            "description": "Welcome & setup · 歡迎與設定",
+        },
+        {
             "command": "status",
-            "description": "CC Live Intelligence channel status · 頻道狀態",
+            "description": "CC deploy gate & channel status · 部署閘門與頻道狀態",
         },
         {
             "command": "test",
             "description": "Send test alert · 測試推播",
+        },
+        {
+            "command": "help",
+            "description": "Command list · 指令說明",
         },
     ]
     ok, err = await _bot_api_post("setMyCommands", {"commands": cmds})

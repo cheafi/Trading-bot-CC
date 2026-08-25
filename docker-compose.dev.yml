@@ -66,3 +66,27 @@ services:
       timeout: 5s
       retries: 5
       start_period: 45s
+
+  telegram-bot:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+      cache_from:
+        - type=local,src=/tmp/.buildx-cache
+      cache_to:
+        - type=local,dest=/tmp/.buildx-cache-new,mode=max
+    container_name: cc_telegram_bot_dev
+    restart: unless-stopped
+    command: ["python", "scripts/run_telegram_bot.py"]
+    volumes:
+      - ./src:/app/src:ro,delegated
+      - ./scripts:/app/scripts:ro,delegated
+      - ./data:/app/data:delegated
+      - ./.env:/app/.env:ro,delegated
+    environment:
+      - PYTHONUNBUFFERED=1
+      - CC_ENV=development
+      - API_BASE_URL=http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy

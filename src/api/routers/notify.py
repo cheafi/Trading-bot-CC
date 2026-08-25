@@ -231,17 +231,27 @@ async def telegram_setup() -> Dict[str, Any]:
         "4. Send /start to your bot → getUpdates → copy chat.id → TELEGRAM_CHAT_ID",
         "5. Add TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID to .env (see config/telegram.env.example)",
         "6. Optional: CC_PUBLIC_BASE_URL for deep links in live alerts",
-        "7. Restart API → POST /api/v7/notify/telegram/test",
-        "8. Optional: POST /api/v7/notify/telegram/configure-profile to set via API",
+        "7. Restart API → run bot poller: python scripts/run_telegram_bot.py",
+        "8. Send /start in Telegram — bot should reply with welcome",
+        "9. POST /api/v7/notify/telegram/test or send /test in Telegram",
+        "10. Optional: POST /api/v7/notify/telegram/configure-profile to set via API",
     ]
     botfather_commands = [
         {
+            "command": "start",
+            "description": "Welcome & setup · 歡迎與設定",
+        },
+        {
             "command": "status",
-            "description": "CC Live Intelligence channel status · 頻道狀態",
+            "description": "CC deploy gate & channel status · 部署閘門與頻道狀態",
         },
         {
             "command": "test",
             "description": "Send test alert · 測試推播",
+        },
+        {
+            "command": "help",
+            "description": "Command list · 指令說明",
         },
     ]
     return {

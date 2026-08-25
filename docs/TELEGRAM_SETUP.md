@@ -28,11 +28,13 @@ Advisory only · 僅供參考 · Not financial advice.
 ### Commands (`/setcommands`)
 
 ```
-status - CC Live Intelligence channel status · 頻道狀態
+start - Welcome & setup · 歡迎與設定
+status - CC deploy gate & channel status · 部署閘門與頻道狀態
 test - Send test alert · 測試推播
+help - Command list · 指令說明
 ```
 
-For in-chat `/status` and `/test` replies without a webhook, run the polling helper (see [Bot commands](#bot-commands-polling) below).
+For in-chat `/start`, `/status`, and `/test` replies without a webhook, run the bot poller (see [Run bot poller](#run-bot-poller) below).
 
 ## 1. Create a bot
 
@@ -118,19 +120,38 @@ When `TELEGRAM_NOTIFY_SYSTEM=true` (default), these Discord-equivalent events al
 
 All use the same bilingual CC Live Intelligence format with **Advisory only · 僅供參考** footer.
 
-## Bot commands (polling)
+## Run bot poller
 
-Webhook setup is optional. For `/status` and `/test` replies inside Telegram:
+**Root cause of “no reply after /start”:** outbound alerts use `sendMessage` from the CC API process, but **inbound** slash commands require a separate long-polling runner. If only the API container is running, `/start` messages queue in Telegram with no handler.
+
+Webhook setup is optional. For dev, use long polling:
 
 ```bash
 # Terminal 1 — CC API
 python _cc_instant.py
 
-# Terminal 2 — bot polling (reads .env)
-python scripts/dev/telegram_bot_poll.py
+# Terminal 2 — bot poller (reads .env)
+python scripts/run_telegram_bot.py
 ```
 
-The script calls CC `/api/v7/notify/status` and `/api/v7/notify/telegram/test` on your behalf. Restrict to your chat with `TELEGRAM_CHAT_ID` in `.env`.
+Or with Docker Compose (starts API + poller):
+
+```bash
+docker compose -f docker-compose.dev.yml up api telegram-bot
+```
+
+The poller handles:
+
+| Command   | Behavior                                                    |
+| --------- | ----------------------------------------------------------- |
+| `/start`  | Welcome + alert types + chat ID setup hint (any chat)       |
+| `/status` | `deploy_open` from `/api/v7/decision/board` + notify status |
+| `/test`   | Calls `POST /api/v7/notify/telegram/test`                   |
+| `/help`   | Command list                                                |
+
+`/status` and `/test` are restricted to `TELEGRAM_CHAT_ID` when set. `/start` always replies and shows your chat ID for `.env` setup.
+
+Legacy path `scripts/dev/telegram_bot_poll.py` delegates to the same runner.
 
 ## Alert format preview
 
