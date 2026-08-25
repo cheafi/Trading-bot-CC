@@ -134,40 +134,80 @@ async def notify_status() -> Dict[str, Any]:
 
 @router.post("/telegram/test")
 async def send_telegram_test(
-    message: str = Query(default="Test ping from TradingAI Bot · CC 測試"),
+    message: str = Query(default=""),
 ) -> Dict[str, Any]:
-    """Fire a test Telegram message (HTML)."""
+    """Fire a professional Telegram welcome/test message (HTML)."""
     try:
         from src.notifications.telegram import (
-            escape_html,
+            format_test_welcome_message,
             send_message,
             telegram_config_status,
         )
 
-        text = f"<b>🧪 Test Alert · CC</b>\n{escape_html(message)}"
+        note = message.strip() if message else ""
+        text = format_test_welcome_message(custom_note=note)
         pushed = send_message(text)
         return {
             "ok": True,
             "pushed_to_telegram": pushed,
-            "message": message,
+            "message": note or "welcome intro",
             "config": telegram_config_status(),
         }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
 
 
+@router.post("/telegram/configure-profile")
+async def configure_telegram_profile() -> Dict[str, Any]:
+    """Set bot description, short description, and commands via Bot API."""
+    try:
+        from src.notifications.telegram import (
+            configure_bot_profile_async,
+            telegram_config_status,
+        )
+
+        st = telegram_config_status()
+        if not st.get("bot_token_set"):
+            return {
+                "ok": False,
+                "error": "TELEGRAM_BOT_TOKEN not set",
+                "config": st,
+            }
+        result = await configure_bot_profile_async()
+        return {"ok": result.get("ok"), **result, "config": st}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
 @router.get("/telegram/setup")
 async def telegram_setup() -> Dict[str, Any]:
-    """Human-readable Telegram setup checklist."""
-    from src.notifications.telegram import telegram_config_status
+    """Human-readable Telegram setup checklist for CC Live Intelligence."""
+    from src.notifications.telegram import (
+        BRAND_LONG_DESCRIPTION,
+        BRAND_SHORT_DESCRIPTION,
+        telegram_config_status,
+    )
 
     st = telegram_config_status()
     steps = [
-        "1. Message @BotFather → /newbot → copy TELEGRAM_BOT_TOKEN",
-        "2. Send /start to your bot, then open https://api.telegram.org/bot<TOKEN>/getUpdates",
-        "3. Copy chat.id → TELEGRAM_CHAT_ID in .env",
-        "4. Optional: CC_PUBLIC_BASE_URL for deep links in alerts",
-        "5. Restart API → POST /api/v7/notify/telegram/test",
-        "See docs/TELEGRAM_SETUP.md for full guide",
+        "1. @BotFather → /newbot → name: TradingAI Alerts CC → username: TradingAI_AlertsCC_bot",
+        "2. /setdescription — paste long description from botfather_description below",
+        "3. /setabouttext — paste short description from botfather_short_description",
+        "4. Send /start to your bot → getUpdates → copy chat.id → TELEGRAM_CHAT_ID",
+        "5. Add TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID to .env (see config/telegram.env.example)",
+        "6. Optional: CC_PUBLIC_BASE_URL for deep links in live alerts",
+        "7. Restart API → POST /api/v7/notify/telegram/test",
+        "8. Optional: POST /api/v7/notify/telegram/configure-profile to set via API",
     ]
-    return {**st, "steps": steps}
+    botfather_commands = [
+        {"command": "status", "description": "Check CC alert channel status"},
+        {"command": "test", "description": "Verify live alert delivery"},
+    ]
+    return {
+        **st,
+        "steps": steps,
+        "bot_username": "@TradingAI_AlertsCC_bot",
+        "botfather_short_description": BRAND_SHORT_DESCRIPTION,
+        "botfather_description": BRAND_LONG_DESCRIPTION,
+        "botfather_commands": botfather_commands,
+    }

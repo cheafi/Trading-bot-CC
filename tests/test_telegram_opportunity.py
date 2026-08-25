@@ -224,7 +224,8 @@ class TestOpportunityTelegramAlerts(unittest.TestCase):
                         send.assert_called_once()
                         body = send.call_args[0][0]
                         self.assertIn("DEPLOY", body)
-                        self.assertIn("可部署", body)
+                        self.assertIn("CC Live Intelligence", body)
+                        self.assertIn("部署許可", body)
 
     def test_format_message_bilingual_monitor(self):
         text = ota._format_message(
@@ -236,8 +237,34 @@ class TestOpportunityTelegramAlerts(unittest.TestCase):
             blocker="timing",
             headline="New",
         )
+        self.assertIn("CC Live Intelligence", text)
         self.assertIn("NOT deploy permission", text)
+        self.assertIn("Why it matters", text)
+        self.assertIn("Advisory only", text)
         self.assertIn("監控", text)
+
+    def test_format_message_deploy_authority(self):
+        text = ota._format_message(
+            kind="deploy",
+            ticker="NVDA",
+            tier="A",
+            score=8.5,
+            rr=2.8,
+            blocker="—",
+            headline="New opportunity detected · 新機會",
+        )
+        self.assertIn("DEPLOY", text)
+        self.assertIn("TRADE bar passed", text)
+        self.assertIn("部署許可", text)
+        self.assertIn("Signal:", text)
+        self.assertIn("CC Operator Decision OS", text)
+
+    def test_format_test_welcome_message(self):
+        text = tg.format_test_welcome_message()
+        self.assertIn("CC Live Intelligence", text)
+        self.assertIn("DEPLOY", text)
+        self.assertIn("WATCH / MONITOR", text)
+        self.assertIn("Advisory only", text)
 
 
 if __name__ == "__main__":

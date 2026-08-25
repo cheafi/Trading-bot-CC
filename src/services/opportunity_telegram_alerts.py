@@ -12,6 +12,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from src.notifications.telegram import (
     dedupe_blocked_for_alert,
     escape_html,
+    format_alert_timestamp,
+    format_brand_footer,
+    format_brand_header,
     format_cc_link,
     send_message,
     telegram_is_configured,
@@ -198,32 +201,42 @@ def _format_message(
     degraded: bool = False,
 ) -> str:
     sym = escape_html(ticker)
+    rr_text = f"{rr:.1f}" if rr is not None else "—"
+
     if kind == "deploy":
         badge = "🟢 DEPLOY"
-        authority = "DEPLOY · 可部署 · Playbook confirmed"
-        footer = "Confirm bracket/IBKR in CC before sending orders · 下單前請在 CC 確認"
+        authority = "Authority · 部署許可 · Playbook confirmed · TRADE bar passed"
+        footer_extra = (
+            "Confirm bracket/IBKR in CC before sending orders · 下單前請在 CC 確認"
+        )
+        context_label = "Signal"
     else:
         badge = "👀 WATCH / MONITOR"
-        authority = "RESEARCH · 監控 · NOT deploy permission · 非部署許可"
-        footer = "Monitor only — rank ≠ permission · 僅供監控，排名≠許可"
+        authority = (
+            "Research only · 監控 · NOT deploy permission · 非部署許可 · rank ≠ permission"
+        )
+        footer_extra = "Monitor only — rank ≠ permission · 僅供監控，排名≠許可"
+        context_label = "Why it matters"
 
-    rr_text = f"{rr:.1f}" if rr is not None else "—"
-    link = format_cc_link(ticker)
     lines = [
+        format_brand_header(),
+        "━━━━━━━━━━━━━━━━━━━━",
         f"<b>{badge} · {sym}</b>",
         escape_html(authority),
         "",
-        f"Score: {score:.1f} | Tier: {escape_html(tier)} | R:R {escape_html(rr_text)}",
+        f"Score {score:.1f} · Tier {escape_html(tier)} · R:R {escape_html(rr_text)}",
         f"Blocker: {escape_html(blocker)}",
     ]
     if headline:
-        lines.append(f"Note: {escape_html(headline)}")
+        lines.append(f"{context_label}: {escape_html(headline)}")
     if degraded:
-        lines.append("⚠️ Degraded board · 降級看板")
+        lines.append("⚠️ Degraded board · 降級看板 — deploy alerts suppressed")
+    lines.append(format_alert_timestamp())
+    link = format_cc_link(ticker)
     if link:
         lines.append(f'🔗 <a href="{escape_html(link)}">Open in CC · 開啟 CC</a>')
     lines.append("")
-    lines.append(escape_html(footer))
+    lines.append(format_brand_footer(extra=footer_extra))
     return "\n".join(lines)
 
 
