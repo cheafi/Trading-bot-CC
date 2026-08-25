@@ -6,6 +6,7 @@
 **Roadmap date:** 2026-08-25  
 **Branch:** `cc/upgrade-regime-tracking`  
 **Parent review:** [`CC_VNEXT_INSTITUTIONAL_MASTER_REVIEW.md`](./CC_VNEXT_INSTITUTIONAL_MASTER_REVIEW.md)  
+**Full institutional review:** [`CC_X_FULL_INSTITUTIONAL_REVIEW.md`](./CC_X_FULL_INSTITUTIONAL_REVIEW.md)  
 **Authority contract:** [`CC_CONSOLIDATED_BRIEFING.md`](./CC_CONSOLIDATED_BRIEFING.md) §2
 
 ---

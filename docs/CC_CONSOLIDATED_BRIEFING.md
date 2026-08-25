@@ -2,9 +2,9 @@
 
 > **Purpose of this document:** Paste this entire file into ChatGPT (or another advisor) to get informed guidance on architecture, authority boundaries, ops issues, i18n gaps, and next steps.  
 > **Live page (recommended):** [http://localhost:8000/briefing](http://localhost:8000/briefing) — includes this doc plus API result-structure appendix and 10 ChatGPT prompts. Plain text: `/briefing.txt`.  
-> **Product:** CC (Clarity Console) — _Regime-Aware Market Intelligence Platform_ (repo name: TradingAI_Bot)  
+> **Product:** CC (Clarity Console) — _Regime-Aware Market Intelligence Platform_ (repo name: TradingAI*Bot)  
 > **Version:** 9.0.0 · **Last assembled:** 2026-06-25  
-> **No secrets below** — environment variable _names_ only.
+> **No secrets below** — environment variable \_names* only.
 
 ---
 
@@ -493,7 +493,7 @@ Copy one of these after pasting this briefing (full set of 10 on http://localhos
 
 **When in doubt:** If `authority` ≠ `deploy` or `deploy_open` is false → **monitor and research only**.
 
-**Strategic roadmap:** [`CC_X_INSTITUTIONAL_ALPHA_OS.md`](./CC_X_INSTITUTIONAL_ALPHA_OS.md) — CC X Institutional Alpha OS (Investment Object, five systems, sprints 115–125).
+**Strategic roadmap:** [`CC_X_INSTITUTIONAL_ALPHA_OS.md`](./CC_X_INSTITUTIONAL_ALPHA_OS.md) — CC X Institutional Alpha OS (six engines, InvestmentObject + AlphaObject, sprints 115–126). **Full review (7.2/10):** [`CC_X_FULL_INSTITUTIONAL_REVIEW.md`](./CC_X_FULL_INSTITUTIONAL_REVIEW.md) · **Master prompt:** [`CC_X_MASTER_REVIEW_PROMPT.md`](./CC_X_MASTER_REVIEW_PROMPT.md).
 
 ---
 
