@@ -896,14 +896,14 @@ async def warm_playbook_discovery_cache(app) -> None:
     load is not empty. Does not loosen deploy gates.
     """
     scan_fn = getattr(app.state, "scan_signals", None)
-    cache_key = _ranked_cache_key(40, None, None)
+    cache_key = _ranked_cache_key(50, None, None)
     try:
         if not _get_ranked_cached(cache_key):
             response = await asyncio.wait_for(
-                _compute_ranked_live(40, None, None, scan_fn=scan_fn),
+                _compute_ranked_live(50, None, None, scan_fn=scan_fn),
                 timeout=_RANKED_LOAD_TIMEOUT_SECONDS + _RANKED_TIMEOUT_SECONDS,
             )
-            response = _finalize_ranked_response(response, from_live=True, limit=40)
+            response = _finalize_ranked_response(response, from_live=True, limit=50)
             _set_ranked_cached(cache_key, response)
             from src.services.playbook_board_fallback import save_playbook_snapshot
 
@@ -991,7 +991,7 @@ async def ranked_snapshot(
 @router.get("/ranked")
 async def ranked_opportunities(
     request: Request,
-    limit: int = Query(40, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=100),
     action: str = Query(None, description="Filter by action"),
     sector: str = Query(None, description="Filter by sector bucket"),
     refresh: bool = Query(

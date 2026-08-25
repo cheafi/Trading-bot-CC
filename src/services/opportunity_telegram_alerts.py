@@ -153,7 +153,8 @@ def _alert_kind(row: Dict[str, Any]) -> Optional[str]:
     if act in _WATCH_ACTIONS or row.get("near_miss_label") in ("watch", "near_miss"):
         score = _row_score(row)
         tier = _row_tier(row)
-        if score >= 7.0 or tier in _HIGH_TIERS:
+        conf_tier = str(row.get("confidence_tier") or "").upper()
+        if score >= 6.5 or tier in _HIGH_TIERS or conf_tier in ("HIGH", "MEDIUM"):
             return "monitor"
     return None
 
@@ -199,6 +200,8 @@ def _format_message(
     blocker: str,
     headline: str,
     degraded: bool = False,
+    buy_signal_summary: str = "",
+    why_now: str = "",
 ) -> str:
     sym = escape_html(ticker)
     rr_text = f"{rr:.1f}" if rr is not None else "—"
@@ -229,6 +232,10 @@ def _format_message(
     ]
     if headline:
         lines.append(f"{context_label}: {escape_html(headline)}")
+    if buy_signal_summary:
+        lines.append(f"Thesis: {escape_html(str(buy_signal_summary)[:240])}")
+    if why_now and not headline:
+        lines.append(f"Why now: {escape_html(str(why_now)[:240])}")
     if degraded:
         lines.append("⚠️ Degraded board · 降級看板 — deploy alerts suppressed")
     lines.append(format_alert_timestamp())
@@ -304,6 +311,8 @@ def _detect_alerts(
                 "blocker": _row_blocker(row),
                 "headline": headline,
                 "degraded": degraded,
+                "buy_signal_summary": str(row.get("buy_signal_summary") or ""),
+                "why_now": str(row.get("why_now") or ""),
             }
         )
 
@@ -338,6 +347,8 @@ def _detect_alerts(
                         "blocker": _row_blocker(top_row),
                         "headline": "New top-ranked · 新榜首",
                         "degraded": degraded,
+                        "buy_signal_summary": str(top_row.get("buy_signal_summary") or ""),
+                        "why_now": str(top_row.get("why_now") or ""),
                     }
                 )
 
@@ -371,6 +382,8 @@ def _detect_force_alerts(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "blocker": _row_blocker(row),
                 "headline": "Manual test push · 手動測試推播",
                 "degraded": degraded,
+                "buy_signal_summary": str(row.get("buy_signal_summary") or ""),
+                "why_now": str(row.get("why_now") or ""),
             }
         )
     return alerts
@@ -421,6 +434,8 @@ def notify_live_playbook_scan(
             blocker=str(alert.get("blocker") or "—"),
             headline=str(alert.get("headline") or ""),
             degraded=bool(alert.get("degraded")),
+            buy_signal_summary=str(alert.get("buy_signal_summary") or ""),
+            why_now=str(alert.get("why_now") or ""),
         )
         ok = send_message(text)
         if ok:

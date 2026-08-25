@@ -126,8 +126,8 @@ def test_index_etf_trend_scanner_fires_for_sector_etf():
 
 
 def test_near_miss_limit_expanded():
-    assert PLAYBOOK_NEAR_MISS_LIMIT == 16
-    assert DISCOVERY_NEAR_MISS_STRIP_LIMIT == 12
+    assert PLAYBOOK_NEAR_MISS_LIMIT == 24
+    assert DISCOVERY_NEAR_MISS_STRIP_LIMIT == 16
 
 
 def test_near_miss_includes_etf_watch_at_lower_threshold():
@@ -142,7 +142,7 @@ def test_near_miss_includes_etf_watch_at_lower_threshold():
         {
             "ticker": "LOW",
             "action": "WATCH",
-            "score": 5.25,
+            "score": 5.05,
             "execution_ready": False,
         },
     ]
@@ -153,4 +153,4 @@ def test_near_miss_includes_etf_watch_at_lower_threshold():
 
 
 def test_playbook_signal_target_increased():
-    assert PLAYBOOK_SIGNAL_TARGET == 120
+    assert PLAYBOOK_SIGNAL_TARGET == 150

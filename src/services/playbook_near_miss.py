@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-PLAYBOOK_NEAR_MISS_LIMIT = 16
-DISCOVERY_NEAR_MISS_STRIP_LIMIT = 12
+PLAYBOOK_NEAR_MISS_LIMIT = 24
+DISCOVERY_NEAR_MISS_STRIP_LIMIT = 16
 
 _WATCH_ACTIONS = frozenset(
     {"WATCH", "WAIT", "WATCH_TRIGGER", "LEADER", "LEADER_MONITOR"}
@@ -54,12 +54,12 @@ def build_playbook_near_miss_rows(
 
         is_watch = act in _WATCH_ACTIONS
         is_near_avoid = act in _AVOID_ACTIONS and (
-            (score >= 4.3 or net >= 3.8) and (timing >= 0.48 or thesis >= 0.38)
+            (score >= 4.1 or net >= 3.5) and (timing >= 0.45 or thesis >= 0.36)
         )
         if not is_watch and not is_near_avoid:
             continue
         min_watch_score = (
-            5.2 if str(row.get("asset_class") or "") in ("etf", "index") else 5.3
+            5.0 if str(row.get("asset_class") or "") in ("etf", "index") else 5.1
         )
         if is_watch and score < min_watch_score:
             continue
@@ -71,12 +71,16 @@ def build_playbook_near_miss_rows(
         nm.setdefault("surface_authority", "monitor_only")
         if is_near_avoid:
             nm["near_miss_label"] = "near_miss"
+            nm["upgrade_path_label"] = "near_miss → watch → pilot → deploy"
+            nm["promotion_source"] = "near_avoid"
             nm.setdefault(
                 "whats_missing",
                 "Blocked by deploy gates — monitor for upgrade (not deploy-ready)",
             )
         else:
             nm["near_miss_label"] = "watch"
+            nm["upgrade_path_label"] = "watch → pilot → deploy"
+            nm["promotion_source"] = "watch"
         if not nm.get("whats_missing") and not nm.get("gaps"):
             nm["whats_missing"] = _DEFAULT_MISSING
         if not nm.get("timing_bucket"):
@@ -90,7 +94,13 @@ def build_playbook_near_miss_rows(
         return (gaps, -timing, -net)
 
     candidates.sort(key=_sort_key)
-    return candidates[:limit]
+    try:
+        from src.services.opportunity_scan_filters import filter_watch_promotion_candidates
+
+        filtered, _stats = filter_watch_promotion_candidates(candidates[: limit * 2])
+        return filtered[:limit]
+    except Exception:
+        return candidates[:limit]
 
 
 def build_discovery_near_miss_strip(

@@ -5309,6 +5309,15 @@ function cc() {
 		playbookCardMonitorLine(r) {
 			return this.playbookCardGateLine(r)
 		},
+		playbookCardBuySignalLine(r) {
+			const raw =
+				r?.buy_signal_summary ||
+				(r?.signal_type && r?.authority_label
+					? `${r.ticker || ""} · ${r.signal_type} · ${r.authority_label}`
+					: "")
+			if (!raw) return ""
+			return this.localizeText(raw)
+		},
 		playbookCardPrimaryBlocker(r) {
 			const oi = r?.operator_insight?.blocker
 			if (oi && String(oi).trim()) return oi

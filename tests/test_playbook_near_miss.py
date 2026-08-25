@@ -16,6 +16,9 @@ def test_near_miss_includes_high_scoring_avoid_rows():
             "score": 6.2,
             "timing_conf": 0.62,
             "thesis_conf": 0.4,
+            "vol_ratio": 1.4,
+            "rs_rank": 80,
+            "near_52w_high": True,
             "execution_ready": False,
         },
         {

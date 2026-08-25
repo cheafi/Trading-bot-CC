@@ -2882,6 +2882,9 @@
                   <span x-show="r.watch_intelligence?.upgrade_probability>=0.55" class="pill pg text-[7px] mono" x-text="'P(up) '+Math.round((r.watch_intelligence?.upgrade_probability||0)*100)+'%'"></span>
                   <span class="pill text-[8px] font-bold ml-auto" x-show="!playbookUseCompactCards(r)" :class="cardActionDisplayClass(r)" x-text="cardActionDisplay(r)"></span>
                 </div>
+                <template x-if="playbookCardBuySignalLine(r)">
+                  <div class="text-[8px] p-2 mb-1 rounded font-medium" style="background:rgba(34,197,94,.08);border-left:2px solid var(--green);color:var(--t2);line-height:1.45" x-text="playbookCardBuySignalLine(r)"></div>
+                </template>
                 <template x-if="r.operator_insight && !playbookUseCompactCards(r)">
                   <div class="text-[8px] p-2 mb-1 rounded" style="background:var(--s2);line-height:1.4">
                     <div><span class="font-bold" style="color:var(--t3)">Now:</span> <span x-text="r.operator_insight.now"></span></div>
@@ -2907,6 +2910,9 @@
                       <span x-show="r.target_price" x-text="'Target $'+Number(r.target_price||0).toFixed(2)"></span>
                       <span x-show="r.risk_reward" x-text="'R:R '+parseRR(r.risk_reward).toFixed(1)"></span>
                     </div>
+                    <template x-if="playbookCardBuySignalLine(r)">
+                      <div class="text-[8px] mt-1 font-medium" style="color:var(--green);line-height:1.4" x-text="playbookCardBuySignalLine(r)"></div>
+                    </template>
                     <template x-if="r.operator_insight">
                       <div class="mt-1 text-[8px]" style="line-height:1.4">
                         <div class="text-amber-300" x-text="r.operator_insight.blocker"></div>

@@ -117,6 +117,15 @@ class TradingScheduler:
             replace_existing=True,
         )
 
+        # Every hour during market hours — opportunity ranked refresh + watch delta alerts
+        self.scheduler.add_job(
+            self._job_hourly_opportunity_refresh,
+            CronTrigger(hour="9-15", minute=5, day_of_week="mon-fri"),
+            id="hourly_opportunity_refresh",
+            name="Hourly Opportunity Refresh",
+            replace_existing=True,
+        )
+
         # Every 30 minutes - Signal refresh
         self.scheduler.add_job(
             self._job_signal_refresh,
@@ -328,6 +337,24 @@ class TradingScheduler:
             self._log_job_result("news_update", result)
         except Exception as e:
             logger.error(f"News update job failed: {e}")
+
+    async def _job_hourly_opportunity_refresh(self):
+        """Refresh Playbook ranked cache and push watch-tier delta alerts."""
+        logger.info("Hourly opportunity refresh")
+        try:
+            if not self._is_market_hours():
+                return
+            from src.services.opportunity_hourly_refresh import run_opportunity_refresh
+
+            result = await run_opportunity_refresh(
+                limit=50,
+                scan_fn=None,
+                notify=True,
+                source="scheduler_hourly",
+            )
+            self._log_job_result("hourly_opportunity_refresh", result)
+        except Exception as e:
+            logger.error("Hourly opportunity refresh failed: %s", e)
 
     async def _job_signal_refresh(self):
         """Refresh trading signals and regime cache during market hours."""

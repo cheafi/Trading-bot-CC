@@ -254,6 +254,14 @@ THEMATIC_ETFS: list[str] = [
     "ICLN",
     "USO",
     "BITO",
+    "QQQM",
+    "SCHD",
+    "XME",
+    "BOTZ",
+    "SKYY",
+    "JETS",
+    "XHB",
+    "XOP",
 ]
 
 # Liquid mid/large names often absent from brief
@@ -289,6 +297,13 @@ LIQUID_MID_LARGE: list[str] = [
     "ENPH",
     "ANET",
     "CRDO",
+    "PLTR",
+    "SNOW",
+    "NET",
+    "DKNG",
+    "COIN",
+    "HOOD",
+    "SOFI",
 ]
 
 

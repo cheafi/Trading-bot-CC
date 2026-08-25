@@ -1618,4 +1618,10 @@ def enrich_opportunity_row(
         row["confidence_breakdown"] = conf
         row["final_conf"] = conf.get("final")
         row["confidence_unavailable"] = bool(conf.get("unavailable"))
+    try:
+        from src.services.buy_signal_summary import attach_buy_signal_summary
+
+        row = attach_buy_signal_summary(row)
+    except Exception:
+        pass
     return row

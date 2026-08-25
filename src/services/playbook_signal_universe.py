@@ -23,9 +23,9 @@ BRIEF_PIPELINE_SECTIONS: Tuple[str, ...] = (
 )
 
 # Top up with live scan when merged pool is below target (monitor candidates only).
-PLAYBOOK_MIN_SIGNALS_BEFORE_SCAN = 15
-PLAYBOOK_SIGNAL_TARGET = 120
-PLAYBOOK_LIVE_SCAN_LIMIT = 150
+PLAYBOOK_MIN_SIGNALS_BEFORE_SCAN = 12
+PLAYBOOK_SIGNAL_TARGET = 150
+PLAYBOOK_LIVE_SCAN_LIMIT = 180
 
 
 def resolve_rs_rank(row: Dict[str, Any]) -> int:

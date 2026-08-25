@@ -989,6 +989,7 @@ startup_time = datetime.now(timezone.utc)
 
 # ── Breakout Monitor background loop ──
 _breakout_monitor_task = None
+_opportunity_refresh_task = None
 
 
 async def _breakout_monitor_loop():
@@ -1132,7 +1133,7 @@ async def _startup_prewarm():
 
 @asynccontextmanager
 async def _lifespan(app):  # noqa: ARG001
-    global _breakout_monitor_task
+    global _breakout_monitor_task, _opportunity_refresh_task
     if not getattr(app.state, "startup_time", None):
         app.state.startup_time = datetime.now(timezone.utc)
     # Share module scanner cache with Today / decision routers (same dict ref).
@@ -1172,6 +1173,15 @@ async def _lifespan(app):  # noqa: ARG001
     # Start both background tasks immediately on boot
     _prewarm_task = asyncio.create_task(_startup_prewarm())
     _breakout_monitor_task = asyncio.create_task(_breakout_monitor_loop())
+    try:
+        from src.services.opportunity_hourly_refresh import opportunity_hourly_loop
+
+        _opportunity_refresh_task = asyncio.create_task(
+            opportunity_hourly_loop(app, interval_seconds=3600, limit=50)
+        )
+        logger.info("[startup] Hourly opportunity refresh loop started")
+    except Exception as exc:
+        logger.warning("[startup] Hourly opportunity refresh skipped: %s", exc)
     if os.getenv("CC_AUTO_START_ENGINE", "").lower() in ("1", "true", "yes"):
         try:
             eng = _get_engine()
@@ -1188,6 +1198,12 @@ async def _lifespan(app):  # noqa: ARG001
         _breakout_monitor_task.cancel()
         try:
             await _breakout_monitor_task
+        except asyncio.CancelledError:
+            pass
+    if _opportunity_refresh_task:
+        _opportunity_refresh_task.cancel()
+        try:
+            await _opportunity_refresh_task
         except asyncio.CancelledError:
             pass
 
