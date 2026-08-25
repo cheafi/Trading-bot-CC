@@ -142,6 +142,10 @@ async def cc_header(
     tab: Optional[str] = Query(
         None, description="Active UI tab for surface-aware header"
     ),
+    light: bool = Query(
+        False,
+        description="Fast path — skip live provider probes and heavy IBKR/alerts fetches",
+    ),
     _=optional_api_key,
 ):
     """Aggregate status for CC top bar (mode, data, brief, alerts, IBKR)."""
@@ -158,22 +162,30 @@ async def cc_header(
     )
 
     freshness = None
-    try:
-        mds = request.app.state.market_data
-        freshness = await freshness_report(mds)
-    except Exception as exc:
-        logger.debug("cc-header freshness failed: %s", exc)
+    if not light:
+        try:
+            mds = request.app.state.market_data
+            freshness = await freshness_report(mds)
+        except Exception as exc:
+            logger.debug("cc-header freshness failed: %s", exc)
 
     brief = {"ok": True, "latest": _latest_brief()}
     alerts: Dict[str, Any] = {"count": 0, "by_severity": {}}
-    try:
-        from src.api.routers.position_alerts import portfolio_risk_alerts
+    if not light:
+        try:
+            from src.api.routers.position_alerts import portfolio_risk_alerts
 
-        alerts = await portfolio_risk_alerts(request, _=None)
-    except Exception as exc:
-        logger.debug("cc-header alerts failed: %s", exc)
+            alerts = await portfolio_risk_alerts(request, _=None)
+        except Exception as exc:
+            logger.debug("cc-header alerts failed: %s", exc)
 
-    ibkr_st = get_ibkr_service().status()
+    if light:
+        try:
+            ibkr_st = get_ibkr_service().status()
+        except Exception:
+            ibkr_st = {}
+    else:
+        ibkr_st = get_ibkr_service().status()
     ibkr_st["health_label"] = (
         (ibkr_st.get("diagnosis") or {}).get("label")
         or ibkr_st.get("health_label")
@@ -181,7 +193,19 @@ async def cc_header(
     )
     ibkr_st["health_label_short"] = (ibkr_st.get("diagnosis") or {}).get("short")
 
-    components = await _provider_components(request, engine, freshness)
+    if light:
+        components = {
+            "market_data": True,
+            "regime_router": getattr(request.app.state, "regime_router", None)
+            is not None,
+            "broker": bool(
+                ibkr_st.get("gateway_reachable")
+                or ibkr_st.get("session_usable")
+                or ibkr_st.get("connected")
+            ),
+        }
+    else:
+        components = await _provider_components(request, engine, freshness)
     alpaca_configured = bool(settings.alpaca_api_key and settings.alpaca_secret_key)
 
     pills = {

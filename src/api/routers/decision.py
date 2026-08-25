@@ -40,8 +40,11 @@ _meta_instance = None
 _today_cache: Optional[Dict[str, Any]] = None
 _today_cache_ts: float = 0.0
 _today_lock = asyncio.Lock()
-_TODAY_CACHE_TTL = 90.0
+_TODAY_CACHE_TTL = 120.0
 _TODAY_SCAN_TIMEOUT = 3.0
+_board_cache: Optional[Dict[str, Any]] = None
+_board_cache_ts: float = 0.0
+_BOARD_CACHE_TTL = 15.0
 
 
 def _stale_today_payload(reason: str) -> Dict[str, Any]:
@@ -1564,6 +1567,9 @@ async def today_summary(request: Request):
     if not scanner_degraded:
         _today_cache = payload
         _today_cache_ts = time.time()
+        global _board_cache, _board_cache_ts
+        _board_cache = None
+        _board_cache_ts = 0.0
     else:
         _today_cache = None
         _today_cache_ts = 0.0
@@ -1620,42 +1626,73 @@ async def today_summary(request: Request):
 # ══════════════════════════════════════════════════════════════════════
 
 
-@router.get("/api/v7/decision/board")
-async def decision_board(request: Request):
-    """Lightweight canonical decision board for header / cross-surface polling."""
-    ops: Dict[str, Any] = {}
+def _board_ops_snapshot(request: Request) -> Dict[str, Any]:
     try:
         from src.api.app_state import get_engine
         from src.services.runtime_truth import engine_runtime_snapshot
 
         engine = get_engine(request.app)
         runtime = engine_runtime_snapshot(engine) if engine else {}
-        ops = {
+        return {
             "running": bool(runtime.get("running")),
             "breaker": bool(runtime.get("circuit_breaker")),
         }
     except Exception:
-        pass
+        return {}
 
+
+def _today_payload_for_board(request: Request) -> Optional[Dict[str, Any]]:
+    """Prefer any cached today payload — never block board on live scan."""
     cached = getattr(request.app.state, "today_v7_cache", None)
-    if not cached:
-        cached = _cached_today_payload("decision board cache miss")
-    if cached and isinstance(cached, dict) and cached.get("market_regime"):
-        try:
-            from src.services.decision_board_service import build_decision_board
+    if isinstance(cached, dict) and cached.get("market_regime"):
+        return cached
+    stale = _cached_today_payload("decision board")
+    if stale and stale.get("market_regime"):
+        return stale
+    if _today_cache and _today_cache.get("market_regime"):
+        return _today_cache
+    return None
 
-            board = build_decision_board(cached, ops=ops, source="board")
+
+def _build_board_payload(
+    today: Dict[str, Any], *, ops: Dict[str, Any], source: str = "board"
+) -> Dict[str, Any]:
+    from src.services.decision_board_service import build_decision_board
+
+    return build_decision_board(today, ops=ops, source=source)
+
+
+@router.get("/api/v7/decision/board")
+async def decision_board(request: Request):
+    """Lightweight canonical decision board for header / cross-surface polling."""
+    global _board_cache, _board_cache_ts
+    now_ts = time.time()
+    if _board_cache and now_ts - _board_cache_ts < _BOARD_CACHE_TTL:
+        return sanitize_for_json(_board_cache)
+
+    ops = _board_ops_snapshot(request)
+    today = _today_payload_for_board(request)
+    if today:
+        try:
+            board = _build_board_payload(today, ops=ops, source="board")
+            _board_cache = board
+            _board_cache_ts = now_ts
             return sanitize_for_json(board)
         except Exception as exc:
             logger.debug("decision board from cache failed: %s", exc)
+
+    if _today_lock.locked():
+        if _board_cache:
+            return sanitize_for_json(_board_cache)
+        return sanitize_for_json(_stale_today_payload("today scan in progress"))
 
     today = await today_summary(request)
     if isinstance(today, dict) and today.get("error"):
         raise HTTPException(503, today.get("error") or "today payload unavailable")
     try:
-        from src.services.decision_board_service import build_decision_board
-
-        board = build_decision_board(today, ops=ops, source="board")
+        board = _build_board_payload(today, ops=ops, source="board")
+        _board_cache = board
+        _board_cache_ts = now_ts
         return sanitize_for_json(board)
     except Exception as exc:
         logger.warning("decision board failed: %s", exc)

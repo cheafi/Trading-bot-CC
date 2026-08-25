@@ -41,7 +41,8 @@ from src.scanners.us_universe import US_UNIVERSE
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v7/playbook", tags=["playbook"])
 
-_RANKED_CACHE_TTL = 5 * 60
+_RANKED_CACHE_TTL = 10 * 60
+_RANKED_STALE_SERVE_TTL = 30 * 60
 _RANKED_LOAD_TIMEOUT_SECONDS = 15.0
 _RANKED_TIMEOUT_SECONDS = 30.0
 _ranked_cache: Dict[str, Dict[str, Any]] = {}
@@ -213,7 +214,8 @@ def _get_ranked_cached(key: str, *, allow_stale: bool = False) -> Dict[str, Any]
     if not entry:
         return None
     age = time.time() - entry["ts"]
-    if allow_stale or age < _RANKED_CACHE_TTL:
+    max_age = _RANKED_STALE_SERVE_TTL if allow_stale else _RANKED_CACHE_TTL
+    if age < max_age:
         return {
             **entry["data"],
             "cached": True,
@@ -1008,10 +1010,21 @@ async def ranked_opportunities(
 
     cache_key = _ranked_cache_key(limit, action, sector)
     live_only = cc_live_data_only_enabled()
-    if cached := _get_ranked_cached(cache_key):
+    if cached := _get_ranked_cached(cache_key, allow_stale=not refresh):
+        fresh_enough = not cached.get("stale")
         if not live_only or (
-            cached.get("source") == "ranked_pipeline" and not cached.get("stale")
+            cached.get("source") == "ranked_pipeline" and fresh_enough
         ):
+            if cached.get("stale") and not refresh and not action and not sector:
+                asyncio.create_task(
+                    _refresh_ranked_cache(cache_key, limit, action, sector)
+                )
+                cached = {
+                    **cached,
+                    "refreshing": True,
+                    "warning": cached.get("warning")
+                    or "Serving cached board while live refresh runs",
+                }
             return _finalize_ranked_response(
                 cached, limit=limit, action=action, sector=sector
             )

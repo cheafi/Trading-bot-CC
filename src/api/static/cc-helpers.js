@@ -6186,8 +6186,7 @@ function cc() {
 			return "pa"
 		},
 		bdrShouldAutoOpen() {
-			const c = (this.today7.bdr_summary || {}).decision_code || ""
-			return c === "NO_TRADE" || c === "SELECTIVE" || this.isWaitDay()
+			return false
 		},
 		featureIcDecayAlert() {
 			const st = this.today7.feature_ic_status
@@ -13042,8 +13041,8 @@ function cc() {
 				this.today7.decision_authority = d.decision_authority || null
 				this.today7.top_ranked = d.top_5 || []
 				this.today7.todays_decision = d.todays_decision || null
-				this.today7.bdr_summary = d.bdr_summary || null
-				if (this.bdrShouldAutoOpen()) this.bdrPanelOpen = true
+				this.today7.bdr_summary = null
+				this.bdrPanelOpen = false
 				this.today7.feature_ic_status = d.feature_ic_status || null
 				this.today7.ml_advisory = d.ml_advisory || null
 				this.today7.best_action = d.best_action || null
