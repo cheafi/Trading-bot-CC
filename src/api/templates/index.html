@@ -664,6 +664,16 @@
         </template>
         </div>
 
+      <template x-if="tab==='today'&&featureIcDecayAlert()">
+        <div style="padding:4px 12px 0">
+          <div class="card card-p" style="padding:6px 10px;border-left:3px solid var(--purple)">
+            <div class="text-[8px] font-bold uppercase mb-0.5" style="color:var(--purple)">ML 洞察 · Self-learn advisory</div>
+            <div class="text-[8px]" style="color:var(--t2);line-height:1.45" x-text="featureIcDecayLine()"></div>
+            <div class="text-[7px] mt-0.5" style="color:var(--t3)">Research only — does not override deploy gates or BDR decision.</div>
+          </div>
+        </div>
+      </template>
+
       <!-- ── Synthetic Data Warning (Command tab) ── -->
       <template x-if="today7.regime && today7.regime.synthetic">
         <div style="padding:4px 12px">
@@ -2685,7 +2695,7 @@
         </div>
       </template>
       <!-- Deploy unlock conditions (compressed / WAIT) -->
-      <template x-if="rankedOpps.unlock_deploy && (playbookIsCompressedFallback() || playbookBoardWait())">
+      <template x-if="rankedOpps.unlock_deploy && !rankedOpps.unlock_deploy.unlocked">
         <div style="padding:0 12px 8px">
           <div class="card card-p" style="border-left:3px solid var(--amber)">
             <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--amber)">Deploy unlock conditions</div>
@@ -2792,6 +2802,7 @@
                   <template x-if="r._spark"><svg :width="r._spark.length*3" height="18" style="flex-shrink:0"><polyline :points="r._spark.map((v,j)=>j*3+','+(18-v)).join(' ')" fill="none" :stroke="r._spark[r._spark.length-1]>=r._spark[0]?'#00d4aa':'#ff5c5c'" stroke-width="1.5"/></svg></template>
                   <template x-if="r.sector_type"><span class="pill pp text-[7px]" x-text="r.sector_type"></span></template>
                   <template x-if="r.grade"><span class="pill mono text-[8px]" :class="r.grade==='A'?'pg':r.grade==='B'?'pa':'pr'" x-text="'Grade '+r.grade"></span></template>
+                  <span class="pill text-[7px]" :class="cardEvidenceTierClass(r)" x-text="cardEvidenceTier(r)"></span>
                   <span x-show="flowPlaybookCrossBadge(r.ticker)" class="pill pb text-[7px]" title="Flow 只屬確認輔助，唔係 deploy trigger">Flow 輔助 · confirm</span>
                   <span x-show="r.watch_intelligence?.alert_worthy" class="pill pa text-[7px]">Alert</span>
                   <span x-show="r.watch_intelligence?.upgrade_probability>=0.55" class="pill pg text-[7px] mono" x-text="'P(up) '+Math.round((r.watch_intelligence?.upgrade_probability||0)*100)+'%'"></span>
@@ -3063,16 +3074,31 @@
                   </div>
                 </template>
                 </template>
-                <!-- ── Action row: Send to IBKR (only on TRADE/BUY actions when broker connected) ── -->
-                <template x-if="playbookCanSendToIbkr(r)">
-                  <div class="flex gap-2 mt-2" style="justify-content:flex-end">
+                <!-- ── Action row: 1R sizing + Send to IBKR (gated) ── -->
+                <template x-if="playbookCanSizeRow(r)||playbookCanSendToIbkr(r)">
+                  <div class="flex gap-2 mt-2 flex-wrap" style="justify-content:flex-end;align-items:center">
+                    <template x-if="playbookCanSizeRow(r)">
+                      <button @click.stop="adviseSizeForRow(r)" class="btn-s text-[9px] font-bold"
+                        style="background:var(--s2);color:var(--t2);padding:3px 10px"
+                        :disabled="playbookSizing[r.ticker]?.loading">
+                        <span x-show="!playbookSizing[r.ticker]?.loading">📐 1R Size · 部位</span>
+                        <span x-show="playbookSizing[r.ticker]?.loading"><span class="spin"></span></span>
+                      </button>
+                    </template>
+                    <span x-show="playbookSizeLine(r)" class="text-[8px] mono" style="color:var(--green)" x-text="playbookSizeLine(r)"></span>
+                    <span x-show="playbookSizing[r.ticker]?.error" class="text-[8px] text-red-400" x-text="playbookSizing[r.ticker]?.error"></span>
+                    <template x-if="playbookCanSendToIbkr(r)">
                     <button @click.stop="sendPlaybookToIbkr(r)" class="btn-s text-[9px] font-bold"
                       :style="cc_status&&cc_status.ibkr_connected?'background:var(--blue);color:white;padding:3px 10px':'background:var(--s2);color:var(--t3);padding:3px 10px;cursor:not-allowed'"
                       :disabled="!cc_status||!cc_status.ibkr_connected"
                       :title="ibkrUnifiedLabel(today7.execution_readiness||rankedOpps.bestAction?.execution_readiness)+' — click IBKR pill to connect'">
                       ⚡ Send to IBKR
                     </button>
+                    </template>
                   </div>
+                </template>
+                <template x-if="playbookCanSizeRow(r)&&!playbookCanSendToIbkr(r)&&playbookBoardWait()">
+                  <div class="text-[7px] mt-1 text-right" style="color:var(--t3)">1R sizing is advisory on WAIT days — deploy blocked until unlock checklist clears.</div>
                 </template>
               </div>
             </div>

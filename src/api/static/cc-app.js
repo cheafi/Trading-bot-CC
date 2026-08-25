@@ -112,6 +112,7 @@
       showAlertsModal:false,
       uiExpandAll:false,
       bdrPanelOpen:false,
+      playbookSizing:{},
       brief_status:null,
       brief_regen_loading:false,
       tt:{show:false,ticker:'AAPL',date:new Date(Date.now()-30*86400000).toISOString().slice(0,10),strategy:'all',loading:false,data:null,err:'',result:null},
@@ -2443,8 +2444,87 @@
       playbookCanSendToIbkr(r){
         if(!r||!r.execution_ready||!r.entry_price||!r.stop_price) return false;
         if(this.pageAuthorityIsDegraded()||this.playbookBoardWait()||this.playbookUsesBriefFallback()) return false;
+        const ud=this.rankedOpps.unlock_deploy||this.today7.unlock_deploy;
+        if(ud&&!ud.unlocked) return false;
+        const da=this.decisionAuthority();
+        if(da&&da.authority_level&&da.authority_level!=='deploy') return false;
+        if(da&&da.allows_trade_labels===false) return false;
+        const er=this.today7.execution_readiness||this.rankedOpps.bestAction?.execution_readiness;
+        if(er&&er.trade_handoff_ready===false) return false;
         const act=String(this.effectiveCardAction(r)||'').toUpperCase();
         return ['TRADE','BUY','BUY_ON_DIP','STRONG_TRADE'].includes(act);
+      },
+      cardEvidenceTier(r){
+        if(!r) return '';
+        const src=String(r.source||r.data_source||'').toLowerCase();
+        if(r.fallback_brief||src.includes('brief')||src.includes('fallback')) return 'brief · 簡報';
+        if(r.stale||r.data_stale||(r.data_freshness_minutes||0)>480) return 'stale · 過期';
+        if(src.includes('live')||r.execution_ready) return 'live · 即時';
+        if(r.training_only||r.research_only) return 'research · 研究';
+        return r.evidence_badge||'monitor · 監控';
+      },
+      cardEvidenceTierClass(r){
+        const t=this.cardEvidenceTier(r);
+        if(t.includes('live')) return 'pg';
+        if(t.includes('stale')||t.includes('brief')) return 'pa';
+        if(t.includes('research')) return 'pb';
+        return 'pw';
+      },
+      async adviseSizeForRow(r){
+        if(!r||!r.ticker||!r.entry_price||!r.stop_price) return;
+        const tk=r.ticker;
+        if(this.playbookSizing[tk]?.loading) return;
+        this.playbookSizing={...this.playbookSizing,[tk]:{loading:true,error:'',data:null}};
+        try{
+          const q=new URLSearchParams({
+            ticker:tk,
+            entry_price:String(r.entry_price),
+            stop_price:String(r.stop_price),
+            signal_score:String(r.score||r.final_score||70),
+            signal_grade:String(r.grade||'B'),
+            strategy:String(r.strategy||'UNKNOWN'),
+            regime:String(this.today7.regime?.regime||this.canonicalTradeability()||'UNKNOWN'),
+          });
+          const resp=await this.ccFetch('/api/v7/size/advise?'+q.toString());
+          if(!resp||!resp.ok) throw new Error('HTTP '+(resp?resp.status:'fail'));
+          const data=await resp.json();
+          if(data.error) throw new Error(data.error);
+          this.playbookSizing={...this.playbookSizing,[tk]:{loading:false,error:'',data}};
+        }catch(e){
+          this.playbookSizing={...this.playbookSizing,[tk]:{loading:false,error:String(e.message||e),data:null}};
+        }
+      },
+      playbookSizeLine(r){
+        const s=this.playbookSizing[r?.ticker];
+        if(!s?.data) return '';
+        const d=s.data;
+        const shares=d.shares||0;
+        const pct=d.final_size_pct||0;
+        const risk=d.total_risk_usd||0;
+        return shares?`${shares} sh · ${pct}% · $${Math.round(risk)} @ 1R`:'';
+      },
+      playbookCanSizeRow(r){
+        return !!(r&&r.entry_price&&r.stop_price&&r.entry_price>r.stop_price);
+      },
+      bdrDecisionPillClass(){
+        const c=(this.today7.bdr_summary||{}).decision_code||'';
+        if(c==='DEPLOY') return 'pg';
+        if(c==='SELECTIVE') return 'pb';
+        return 'pa';
+      },
+      bdrShouldAutoOpen(){
+        const c=(this.today7.bdr_summary||{}).decision_code||'';
+        return c==='NO_TRADE'||c==='SELECTIVE'||this.isWaitDay();
+      },
+      featureIcDecayAlert(){
+        const st=this.today7.feature_ic_status;
+        return !!(st&&((st.alerts||[]).length||(st.status==='decay_detected')));
+      },
+      featureIcDecayLine(){
+        const st=this.today7.feature_ic_status;
+        if(!st) return '';
+        const alerts=(st.alerts||[]).slice(0,3).join(', ');
+        return alerts?`Feature IC decay · ${alerts} — sizing confidence reduced (advisory only)`:'Feature IC decay detected — review Ops ML panel';
       },
       degradedDecisionAuthorityLine(){
         const dc=(this.decisionAuthority().degraded_copy||{});
@@ -6983,7 +7063,7 @@
         }
       },
       async fetchToday7(){
-        try{const r=await this.ccFetch('/api/v7/today',{retries:2,backoff:500,timeoutMs:15000});if(!r||!r.ok)throw new Error('HTTP '+(r?r.status:'fail'));const d=await r.json();this.captureInstantDegradedBanner(d);if(d&&d.error)throw new Error(String(d.error));if(!d||!d.market_regime)throw new Error('incomplete today payload');this.today7.regime=d.market_regime||null;this.today7.decision_authority=d.decision_authority||null;this.today7.top_ranked=d.top_5||[];this.today7.todays_decision=d.todays_decision||null;this.today7.bdr_summary=d.bdr_summary||null;this.today7.best_action=d.best_action||null;this.today7.overlap_warning=d.overlap_warning||null;this.today7.near_miss=d.near_miss||[];this.today7.score_reconciliation=d.score_reconciliation||null;this.today7.no_setup_diagnosis=d.no_setup_diagnosis||null;this.today7.quant_cluster_hints=d.quant_cluster_hints||[];this.today7.unlock_deploy=d.unlock_deploy||null;this.today7.regime_wait_explanation=d.regime_wait_explanation||[];this.today7.monitor_triggers=d.monitor_triggers||[];this.today7.sleeve_summary=d.sleeve_summary||null;this.today7.execution_readiness=d.execution_readiness||d.best_action?.execution_readiness||null;this.today7.evidence_badges=d.evidence_badges||null;this.today7.cross_asset_confirmation=d.cross_asset_confirmation||null;this.today7.index_regime_summary=d.index_regime_summary||null;this.today7.regime_strip=d.regime_strip||null;this.today7.regime_stack_summary=d.regime_stack_summary||null;this.today7.allocator_stance=d.allocator_stance||null;this.today7.ai_reason_codes=d.ai_reason_codes||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.decision_model=d.decision_model||null;this.today7.decision_hierarchy=d.decision_hierarchy||null;this.today7.passive_baseline=d.passive_baseline||null;this.today7.complexity_challenge=d.complexity_challenge||null;this.today7.restraint=d.restraint||null;this.today7.surface_authority=d.surface_authority||null;this.today7.crisis_regime=d.crisis_regime||null;this.today7.naval_clarity=d.naval_clarity||null;this.today7.buffett_clarity=d.buffett_clarity||null;this.today7.index_fund_posture=d.index_fund_posture||null;this.today7.principles_posture=d.principles_posture||null;this.today7.avoid_grouped=d.avoid_grouped||null;this.today7.bucket_quality=d.bucket_quality||[];this.today7.avoid_list=(d.avoid_now||[]).length?(d.avoid_now||[]):(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'—',reason:a,category:'regime'}:a);this.today7.tradeability=(d.cc_state&&d.cc_state.tradeability_state&&d.cc_state.tradeability_state.tradeability)||(d.decision_model&&d.decision_model.honest_tradeability)||(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{};this.today7.cc_state=d.cc_state||null;this.today7.system_state=d.system_state||null;this.today7.dashboard_monitors=d.dashboard_monitors||[];this.today7.page_capability=d.page_capability||null;
+        try{const r=await this.ccFetch('/api/v7/today',{retries:2,backoff:500,timeoutMs:15000});if(!r||!r.ok)throw new Error('HTTP '+(r?r.status:'fail'));const d=await r.json();this.captureInstantDegradedBanner(d);if(d&&d.error)throw new Error(String(d.error));if(!d||!d.market_regime)throw new Error('incomplete today payload');this.today7.regime=d.market_regime||null;this.today7.decision_authority=d.decision_authority||null;this.today7.top_ranked=d.top_5||[];this.today7.todays_decision=d.todays_decision||null;this.today7.bdr_summary=d.bdr_summary||null;if(this.bdrShouldAutoOpen()) this.bdrPanelOpen=true;this.today7.feature_ic_status=d.feature_ic_status||null;this.today7.best_action=d.best_action||null;this.today7.overlap_warning=d.overlap_warning||null;this.today7.near_miss=d.near_miss||[];this.today7.score_reconciliation=d.score_reconciliation||null;this.today7.no_setup_diagnosis=d.no_setup_diagnosis||null;this.today7.quant_cluster_hints=d.quant_cluster_hints||[];this.today7.unlock_deploy=d.unlock_deploy||null;this.today7.regime_wait_explanation=d.regime_wait_explanation||[];this.today7.monitor_triggers=d.monitor_triggers||[];this.today7.sleeve_summary=d.sleeve_summary||null;this.today7.execution_readiness=d.execution_readiness||d.best_action?.execution_readiness||null;this.today7.evidence_badges=d.evidence_badges||null;this.today7.cross_asset_confirmation=d.cross_asset_confirmation||null;this.today7.index_regime_summary=d.index_regime_summary||null;this.today7.regime_strip=d.regime_strip||null;this.today7.regime_stack_summary=d.regime_stack_summary||null;this.today7.allocator_stance=d.allocator_stance||null;this.today7.ai_reason_codes=d.ai_reason_codes||[];this.today7.filter_funnel=d.filter_funnel||null;this.today7.decision_model=d.decision_model||null;this.today7.decision_hierarchy=d.decision_hierarchy||null;this.today7.passive_baseline=d.passive_baseline||null;this.today7.complexity_challenge=d.complexity_challenge||null;this.today7.restraint=d.restraint||null;this.today7.surface_authority=d.surface_authority||null;this.today7.crisis_regime=d.crisis_regime||null;this.today7.naval_clarity=d.naval_clarity||null;this.today7.buffett_clarity=d.buffett_clarity||null;this.today7.index_fund_posture=d.index_fund_posture||null;this.today7.principles_posture=d.principles_posture||null;this.today7.avoid_grouped=d.avoid_grouped||null;this.today7.bucket_quality=d.bucket_quality||[];this.today7.avoid_list=(d.avoid_now||[]).length?(d.avoid_now||[]):(d.avoid||[]).map(a=>typeof a==='string'?{ticker:'—',reason:a,category:'regime'}:a);this.today7.tradeability=(d.cc_state&&d.cc_state.tradeability_state&&d.cc_state.tradeability_state.tradeability)||(d.decision_model&&d.decision_model.honest_tradeability)||(d.market_regime||{}).tradeability||'';this.today7.what_changed=d.what_changed||[];this.today7.event_risks=d.event_risks||[];this.today7.best_family=d.best_setup_family||null;this.today7.pulse=d.market_pulse||null;this.today7.narrative=d.narrative||'';this.today7.ai_narrative=d.ai_narrative||null;this.today7.date=d.date||'';this.today7.trust=d.trust||{};this.today7.cc_state=d.cc_state||null;this.today7.system_state=d.system_state||null;this.today7.dashboard_monitors=d.dashboard_monitors||[];this.today7.page_capability=d.page_capability||null;
           if(!(this.today7.top_ranked||[]).length&&(d.degraded||d.instant_degraded)){
             this.hydrateToday7FromCache();
             if(!(this.today7.top_ranked||[]).length){

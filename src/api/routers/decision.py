@@ -1508,6 +1508,12 @@ async def today_summary(request: Request):
     except Exception:
         logger.debug("bdr_summary build failed", exc_info=True)
     try:
+        from src.engines.feature_ic import get_feature_ic_status
+
+        payload["feature_ic_status"] = get_feature_ic_status()
+    except Exception:
+        logger.debug("feature_ic_status failed", exc_info=True)
+    try:
         from src.services.operator_state_contract import pick_dashboard_monitors, structural_valid_for_monitor
 
         payload["dashboard_monitors"] = pick_dashboard_monitors(
