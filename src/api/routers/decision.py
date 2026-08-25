@@ -1514,6 +1514,12 @@ async def today_summary(request: Request):
     except Exception:
         logger.debug("feature_ic_status failed", exc_info=True)
     try:
+        from src.services.ml_advisory_summary import build_ml_advisory_summary
+
+        payload["ml_advisory"] = build_ml_advisory_summary()
+    except Exception:
+        logger.debug("ml_advisory build failed", exc_info=True)
+    try:
         from src.services.operator_state_contract import pick_dashboard_monitors, structural_valid_for_monitor
 
         payload["dashboard_monitors"] = pick_dashboard_monitors(

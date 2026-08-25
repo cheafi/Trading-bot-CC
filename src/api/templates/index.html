@@ -664,12 +664,18 @@
         </template>
         </div>
 
-      <template x-if="tab==='today'&&featureIcDecayAlert()">
+      <template x-if="tab==='today'&&mlAdvisoryShow()">
         <div style="padding:4px 12px 0">
           <div class="card card-p" style="padding:6px 10px;border-left:3px solid var(--purple)">
-            <div class="text-[8px] font-bold uppercase mb-0.5" style="color:var(--purple)">ML 洞察 · Self-learn advisory</div>
-            <div class="text-[8px]" style="color:var(--t2);line-height:1.45" x-text="featureIcDecayLine()"></div>
-            <div class="text-[7px] mt-0.5" style="color:var(--t3)">Research only — does not override deploy gates or BDR decision.</div>
+            <div class="flex flex-wrap items-center gap-2 mb-1">
+              <span class="text-[8px] font-bold uppercase" style="color:var(--purple)">ML 洞察 · Self-learn advisory</span>
+              <span class="pill text-[7px] pw" x-text="mlAdvisoryStatus().toUpperCase()"></span>
+            </div>
+            <template x-for="(ln,i) in mlAdvisoryLines()" :key="'ml-adv-'+i">
+              <div class="text-[8px] mb-0.5" style="color:var(--t2);line-height:1.45" x-text="'• '+ln"></div>
+            </template>
+            <div x-show="!mlAdvisoryLines().length&&featureIcDecayAlert()" class="text-[8px]" style="color:var(--t2);line-height:1.45" x-text="featureIcDecayLine()"></div>
+            <div class="text-[7px] mt-0.5" style="color:var(--t3)" x-text="(today7.ml_advisory&&today7.ml_advisory.authority_note)||'Research only — does not override deploy gates or BDR decision.'"></div>
           </div>
         </div>
       </template>
@@ -1796,6 +1802,12 @@
               <template x-if="today7.top_ranked[0].invalidation">
                 <div class="text-[10px] mt-1" style="color:var(--red);line-height:1.4" x-text="'❌ Invalidation: '+today7.top_ranked[0].invalidation"></div>
               </template>
+              <template x-if="today7.top_ranked[0].runner_up">
+                <div class="text-[9px] mt-2 p-2 rounded" style="background:var(--s2);border-left:2px solid var(--blue);line-height:1.45">
+                  <div class="font-bold uppercase mb-0.5" style="color:var(--blue)">為何此非彼 · Why This Not That</div>
+                  <div class="text-[8px]" style="color:var(--t2)" x-text="peerCompareLine(today7.top_ranked[0])"></div>
+                </div>
+              </template>
             </div>
           </div>
         </div>
@@ -2293,7 +2305,7 @@
                 <!-- Why This Not That — peer comparison -->
                 <template x-if="opp.runner_up">
                   <div style="margin-top:6px;padding:6px 8px;background:var(--s2);border-radius:6px;border-left:2px solid var(--blue)">
-                    <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--blue)">🔄 Why This Not That</div>
+                    <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--blue)">🔄 為何此非彼 · Why This Not That</div>
                     <div class="flex items-center gap-3 text-[9px]">
                       <div>
                         <span class="font-bold text-white" x-text="opp.ticker"></span>
@@ -2845,6 +2857,12 @@
                     <div class="text-blue-300 mt-0.5" x-text="'Upgrade trigger · '+playbookCardUpgradeTrigger(r)"></div>
                     </template>
                     <div class="text-[7px] mt-0.5" style="color:var(--t3)" x-text="playbookCompactEvidenceLine(r)"></div>
+                    <template x-if="r.runner_up">
+                      <div class="text-[7px] mt-1 p-1 rounded" style="background:var(--s1);border-left:2px solid var(--blue);line-height:1.4">
+                        <span class="font-bold" style="color:var(--blue)">為何此非彼 · </span>
+                        <span style="color:var(--t2)" x-text="peerCompareLine(r)"></span>
+                      </div>
+                    </template>
                   </div>
                 </template>
                 <template x-if="!playbookUseCompactCards(r)">
@@ -3062,7 +3080,7 @@
                 <!-- Why This Not That -->
                 <template x-if="r.runner_up">
                   <div style="margin-top:6px;padding:6px 8px;background:var(--s2);border-radius:6px;border-left:2px solid var(--blue)">
-                    <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--blue)">🔄 Why This Not That</div>
+                    <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--blue)">🔄 為何此非彼 · Why This Not That</div>
                     <div class="flex items-center gap-3 text-[9px]">
                       <span class="font-bold text-white" x-text="r.ticker"></span>
                       <span class="mono" style="color:var(--green)" x-text="cardScoreLabel(r)"></span>
