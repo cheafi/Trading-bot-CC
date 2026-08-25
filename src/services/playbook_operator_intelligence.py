@@ -298,7 +298,7 @@ def build_board_posture(
     return {
         "tradeability_label": tb,
         "effective_posture": effective,
-        "deploy_open": deploy_count >= 1,
+        "deploy_qualified_present": deploy_count >= 1,
         "copy_line": copy_line,
     }
 
@@ -538,12 +538,18 @@ def enrich_playbook_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     from src.services.operator_state_contract import build_playbook_rank_buckets
 
     payload["rank_buckets"] = build_playbook_rank_buckets(enriched, enriched_near)
+    from src.services.cc_state import attach_system_state
+
+    if not payload.get("system_state"):
+        attach_system_state(payload)
+    board_deploy_open = bool((payload.get("system_state") or {}).get("deploy_open"))
     payload["auto_execution"] = build_auto_execution_stub(
-        deploy_open=deploy >= 1,
+        deploy_open=board_deploy_open,
         broker_ready=broker_ready,
         data_fresh=not degraded,
         degraded=degraded,
     )
+    payload["auto_execution"]["deploy_open"] = board_deploy_open
     try:
         from src.services.buy_signal_summary import attach_buy_signal_to_rows
 

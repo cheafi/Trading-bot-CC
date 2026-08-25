@@ -39,6 +39,7 @@ services:
       - LOG_LEVEL=INFO
       - API_SECRET_KEY=dev-secret-local
       - CC_AUTO_START_ENGINE=1
+      # Set CC_AUTO_START_ENGINE=1 to auto-start AutoTradingEngine on container boot (dev only).
       - YFINANCE_CACHE_DIR=/tmp/yfinance-cache
       # Docker Model Runner — local LLM (Docker Desktop AI)
       # Update tags after `docker model pull <tag>`; see config/docker-models.env.example

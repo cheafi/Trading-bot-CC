@@ -5,10 +5,12 @@ Extracted from main.py Sprint 56.
 Handles portfolio import/holdings/futu/advise + operator console.
 """
 
+import json
 import logging
 import os
 import tempfile
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import List
 
 import numpy as np
@@ -25,8 +27,41 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+_PORTFOLIO_LOCAL_PATH = (
+    Path(__file__).resolve().parents[3] / "data/portfolio_local_holdings.json"
+)
+
+
+def _load_portfolio_from_disk() -> dict:
+    try:
+        if _PORTFOLIO_LOCAL_PATH.is_file():
+            data = json.loads(_PORTFOLIO_LOCAL_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except Exception as exc:
+        logger.debug("portfolio local load failed: %s", exc)
+    default = {"holdings": [], "source": "manual", "updated_at": ""}
+    _persist_portfolio(default)
+    return default
+
+
+def _persist_portfolio(data: dict) -> None:
+    try:
+        _PORTFOLIO_LOCAL_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _PORTFOLIO_LOCAL_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except Exception as exc:
+        logger.warning("portfolio local persist failed: %s", exc)
+
+
+def _commit_portfolio(data: dict) -> dict:
+    global _user_portfolio
+    _user_portfolio = data
+    _persist_portfolio(data)
+    return data
+
+
 # ── Portfolio state ──────────────────────────────────────────────────
-_user_portfolio: dict = {"holdings": [], "source": "manual", "updated_at": ""}
+_user_portfolio: dict = _load_portfolio_from_disk()
 
 
 def positions_label(count: int) -> str:
@@ -141,13 +176,14 @@ async def portfolio_import(req: PortfolioImportRequest, request: Request):
                 ),
             }
         )
-    _user_portfolio = {
-        "holdings": enriched,
-        "source": req.source,
-        "updated_at": now,
-        "count": len(enriched),
-    }
-    return _user_portfolio
+    return _commit_portfolio(
+        {
+            "holdings": enriched,
+            "source": req.source,
+            "updated_at": now,
+            "count": len(enriched),
+        }
+    )
 
 
 @router.get("/api/portfolio/holdings", tags=["portfolio"])
@@ -207,12 +243,14 @@ async def portfolio_seed_demo(request: Request):
                 ),
             }
         )
-    _user_portfolio = {
-        "holdings": enriched,
-        "source": "demo-seed",
-        "updated_at": now,
-        "count": len(enriched),
-    }
+    _commit_portfolio(
+        {
+            "holdings": enriched,
+            "source": "demo-seed",
+            "updated_at": now,
+            "count": len(enriched),
+        }
+    )
     return {
         "ok": True,
         "seeded": len(enriched),
@@ -247,18 +285,19 @@ async def portfolio_from_futu():
                 }
             )
         now = datetime.now(timezone.utc).isoformat() + "Z"
-        _user_portfolio = {
-            "holdings": enriched,
-            "source": "futu",
-            "updated_at": now,
-            "count": len(enriched),
-            "account": {
-                "portfolio_value": account.portfolio_value,
-                "cash": account.cash,
-                "buying_power": account.buying_power,
-            },
-        }
-        return _user_portfolio
+        return _commit_portfolio(
+            {
+                "holdings": enriched,
+                "source": "futu",
+                "updated_at": now,
+                "count": len(enriched),
+                "account": {
+                    "portfolio_value": account.portfolio_value,
+                    "cash": account.cash,
+                    "buying_power": account.buying_power,
+                },
+            }
+        )
     except Exception as exc:
         # FUTU OpenD not running / not installed — degrade honestly, do not 500.
         return {
@@ -377,12 +416,14 @@ async def futu_portfolio_capture(
         mds = request.app.state.market_data
         enriched = await _enrich_futu_holdings(holdings_raw, mds)
         now = datetime.now(timezone.utc).isoformat() + "Z"
-        _user_portfolio = {
-            "holdings": enriched,
-            "source": "futu-capture",
-            "updated_at": now,
-            "count": len(enriched),
-        }
+        _commit_portfolio(
+            {
+                "holdings": enriched,
+                "source": "futu-capture",
+                "updated_at": now,
+                "count": len(enriched),
+            }
+        )
 
         regime = {}
         try:
@@ -465,12 +506,14 @@ async def add_position(req: PositionAddRequest, request: Request):
     holdings = _user_portfolio.get("holdings", [])
     holdings = [h for h in holdings if h.get("ticker") != t]
     holdings.append(pos)
-    _user_portfolio = {
-        "holdings": holdings,
-        "source": _user_portfolio.get("source", "manual"),
-        "updated_at": now,
-        "count": len(holdings),
-    }
+    _commit_portfolio(
+        {
+            "holdings": holdings,
+            "source": _user_portfolio.get("source", "manual"),
+            "updated_at": now,
+            "count": len(holdings),
+        }
+    )
 
     broker_sync = "skipped"
     broker_message = ""
@@ -527,6 +570,7 @@ async def update_position(req: PositionUpdateRequest):
     if req.notes is not None:
         found["notes"] = req.notes
     _user_portfolio["updated_at"] = datetime.now(timezone.utc).isoformat() + "Z"
+    _persist_portfolio(_user_portfolio)
     return {"status": "updated", "position": found}
 
 
@@ -543,6 +587,7 @@ async def remove_position(ticker: str):
     _user_portfolio["holdings"] = holdings
     _user_portfolio["count"] = len(holdings)
     _user_portfolio["updated_at"] = datetime.now(timezone.utc).isoformat() + "Z"
+    _persist_portfolio(_user_portfolio)
     return {"status": "removed", "ticker": t}
 
 

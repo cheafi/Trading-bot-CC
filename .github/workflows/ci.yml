@@ -73,6 +73,21 @@ jobs:
         env:
           TRADING_ENV: paper
 
+      - name: Authority contract tests (must pass)
+        run: |
+          PYTHONPATH=. python -m pytest \
+            tests/test_decision_board_service.py \
+            tests/test_decision_board_authority_cache.py \
+            tests/test_operator_state_contract.py \
+            tests/test_quant_authority_boundaries.py \
+            tests/test_opportunity_quality.py \
+            tests/test_provenance_contract.py \
+            tests/test_investment_object_factory.py \
+            tests/test_cc_x_sprint_modules.py \
+            -q --tb=short
+        env:
+          TRADING_ENV: paper
+
       - name: Sprint tests (all)
         run: |
           python -m pytest tests/sprints/ -x -q --tb=short \

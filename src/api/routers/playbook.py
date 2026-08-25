@@ -593,7 +593,7 @@ def _set_flow_cached(data: Dict[str, Any]) -> None:
 
 
 @router.get("/today")
-async def today_playbook() -> Dict[str, Any]:
+async def today_playbook(_: bool = Depends(verify_api_key)) -> Dict[str, Any]:
     """Today's market regime, sector playbook, top 5, avoid list."""
     pipeline = _get_pipeline()
 
