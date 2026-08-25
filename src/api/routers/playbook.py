@@ -509,6 +509,12 @@ def _finalize_ranked_response(
         data = attach_page_capability(data, "signals")
     except Exception:
         pass
+    try:
+        from src.services.decision_board_service import attach_decision_board
+
+        attach_decision_board(data, source="playbook")
+    except Exception:
+        pass
     return data
 
 

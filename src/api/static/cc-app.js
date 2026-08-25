@@ -91,6 +91,8 @@ function cc() {
 		},
 		ccHeader: {
 			decision_authority: null,
+			decision_board: null,
+			decision_board_hash: null,
 			page_authority_mode: "diagnostic",
 			portfolio_context: null,
 			header_summary: null,
@@ -511,6 +513,8 @@ function cc() {
 			compact_rows: null,
 			rank_buckets: null,
 			system_state: null,
+			decision_board: null,
+			decision_board_hash: null,
 		},
 		flowPanel: { loading: false, data: null, radar: null, decision: null, error: "" },
 		opsConsole: { loading: false, data: null, error: "" },
@@ -1529,6 +1533,9 @@ function cc() {
 			return { market, board, dossier, execution, worst_tier: worstTier, worst_domain: worstDomain, as_of: asOf }
 		},
 		systemState() {
+			const board =
+				this.ccHeader?.decision_board || this.today7?.decision_board || this.rankedOpps?.decision_board || null
+			if (board?.system_state && typeof board.system_state === "object") return board.system_state
 			if (this.tab === "signals" && this.rankedOpps.system_state) return this.rankedOpps.system_state
 			if (this.today7?.system_state && typeof this.today7.system_state === "object")
 				return this.today7.system_state
@@ -1536,6 +1543,9 @@ function cc() {
 			return this._clientSystemState()
 		},
 		_clientSystemState() {
+			const board =
+				this.ccHeader?.decision_board || this.today7?.decision_board || this.rankedOpps?.decision_board || null
+			if (board?.system_state && typeof board.system_state === "object") return board.system_state
 			const cs = this.ccState()
 			const ss = this.ccHeader?.system_state || {}
 			const fs = cs.freshness_state || {}
@@ -6003,13 +6013,11 @@ function cc() {
 				const rr = this.parseRR(t.risk_reward || 0)
 				if (rr > 0 && (!best_rr || rr > best_rr.risk_reward)) best_rr = { ticker: t.ticker, risk_reward: rr }
 			})
-			const stock_mon = (d.near_miss || [])
-				.slice(0, 3)
-				.map((nm) => ({
-					class: "stock",
-					rule: "Upgrade watch " + (nm.ticker || ""),
-					detail: nm.upgrade_trigger || "",
-				}))
+			const stock_mon = (d.near_miss || []).slice(0, 3).map((nm) => ({
+				class: "stock",
+				rule: "Upgrade watch " + (nm.ticker || ""),
+				detail: nm.upgrade_trigger || "",
+			}))
 			const market_mon = []
 			if (regime.vix != null)
 				market_mon.push({ class: "market", rule: "VIX " + regime.vix, detail: "Reduce size if VIX >25" })
@@ -6084,6 +6092,8 @@ function cc() {
 					const eng = h.engine || {}
 					this.ccHeader = {
 						decision_authority: h.decision_authority || null,
+						decision_board: h.decision_board || null,
+						decision_board_hash: h.decision_board_hash || null,
 						cc_state: h.cc_state || null,
 						system_state: h.system_state || null,
 						page_capability: h.page_capability || null,
@@ -10650,6 +10660,8 @@ function cc() {
 				this.today7.trust = d.trust || {}
 				this.today7.cc_state = d.cc_state || null
 				this.today7.system_state = d.system_state || null
+				this.today7.decision_board = d.decision_board || null
+				this.today7.decision_board_hash = d.decision_board_hash || null
 				this.today7.dashboard_monitors = d.dashboard_monitors || []
 				this.today7.page_capability = d.page_capability || null
 				if (!(this.today7.top_ranked || []).length && (d.degraded || d.instant_degraded)) {
@@ -11041,6 +11053,8 @@ function cc() {
 			this.rankedOpps.monitor_auto_actions = d.monitor_auto_actions || null
 			this.rankedOpps.rank_buckets = d.rank_buckets || null
 			this.rankedOpps.system_state = d.system_state || null
+			this.rankedOpps.decision_board = d.decision_board || null
+			this.rankedOpps.decision_board_hash = d.decision_board_hash || null
 			this.rankedOpps.page_capability = d.page_capability || null
 			if (this.rankedOpps.compact_rows === null && d.board_posture) this.rankedOpps.compact_rows = null
 			this.captureInstantDegradedBanner(d)

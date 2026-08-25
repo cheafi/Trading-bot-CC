@@ -198,10 +198,32 @@ async def cc_header(
     )
 
     today = _cached_today_payload()
+    decision_board = None
+    if today and today.get("decision_board"):
+        decision_board = today.get("decision_board")
+    elif today:
+        try:
+            from src.services.decision_board_service import build_decision_board
+
+            decision_board = build_decision_board(today, source="header")
+        except Exception as exc:
+            logger.debug("cc-header decision_board build failed: %s", exc)
+
     decision_authority = (today or {}).get("decision_authority")
     tradeability = "WAIT"
     should_trade = True
-    if today:
+    if decision_board:
+        regime = decision_board.get("regime") or {}
+        tradeability = str(
+            decision_board.get("tradeability")
+            or regime.get("tradeability")
+            or "WAIT"
+        )
+        should_trade = bool(regime.get("should_trade", True))
+        decision_authority = (
+            decision_board.get("decision_authority") or decision_authority
+        )
+    elif today:
         regime = today.get("market_regime") or {}
         tradeability = str(
             regime.get("tradeability")
@@ -297,7 +319,10 @@ async def cc_header(
         "trust": trust,
         "execution_readiness": execution_readiness,
     }
-    attach_system_state(state_payload)
+    if decision_board and decision_board.get("system_state"):
+        state_payload["system_state"] = decision_board["system_state"]
+    else:
+        attach_system_state(state_payload)
     page_capability = None
     if tab:
         cap_payload = dict(state_payload)
@@ -318,6 +343,8 @@ async def cc_header(
             "pills": pills,
             "components": components,
             "decision_authority": decision_authority,
+            "decision_board": decision_board,
+            "decision_board_hash": (decision_board or {}).get("decision_board_hash"),
             "cc_state": cc_state,
             "system_state": state_payload.get("system_state"),
             "page_capability": page_capability,

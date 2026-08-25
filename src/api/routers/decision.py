@@ -1519,6 +1519,16 @@ async def today_summary(request: Request):
     except Exception:
         logger.debug("bdr_summary build failed", exc_info=True)
     try:
+        from src.services.decision_board_service import attach_decision_board
+
+        attach_decision_board(
+            payload,
+            ops={"running": eng_running, "breaker": exec_blocked},
+            source="today",
+        )
+    except Exception:
+        logger.debug("decision_board attach failed", exc_info=True)
+    try:
         from src.engines.feature_ic import get_feature_ic_status
 
         payload["feature_ic_status"] = get_feature_ic_status()
@@ -1608,6 +1618,48 @@ async def today_summary(request: Request):
 # ══════════════════════════════════════════════════════════════════════
 # /api/v7/decision/bdr-summary — BDR operator decision brief
 # ══════════════════════════════════════════════════════════════════════
+
+
+@router.get("/api/v7/decision/board")
+async def decision_board(request: Request):
+    """Lightweight canonical decision board for header / cross-surface polling."""
+    ops: Dict[str, Any] = {}
+    try:
+        from src.api.app_state import get_engine
+        from src.services.runtime_truth import engine_runtime_snapshot
+
+        engine = get_engine(request.app)
+        runtime = engine_runtime_snapshot(engine) if engine else {}
+        ops = {
+            "running": bool(runtime.get("running")),
+            "breaker": bool(runtime.get("circuit_breaker")),
+        }
+    except Exception:
+        pass
+
+    cached = getattr(request.app.state, "today_v7_cache", None)
+    if not cached:
+        cached = _cached_today_payload("decision board cache miss")
+    if cached and isinstance(cached, dict) and cached.get("market_regime"):
+        try:
+            from src.services.decision_board_service import build_decision_board
+
+            board = build_decision_board(cached, ops=ops, source="board")
+            return sanitize_for_json(board)
+        except Exception as exc:
+            logger.debug("decision board from cache failed: %s", exc)
+
+    today = await today_summary(request)
+    if isinstance(today, dict) and today.get("error"):
+        raise HTTPException(503, today.get("error") or "today payload unavailable")
+    try:
+        from src.services.decision_board_service import build_decision_board
+
+        board = build_decision_board(today, ops=ops, source="board")
+        return sanitize_for_json(board)
+    except Exception as exc:
+        logger.warning("decision board failed: %s", exc)
+        raise HTTPException(500, f"Decision board error: {exc}") from exc
 
 
 @router.get("/api/v7/decision/bdr-summary")
