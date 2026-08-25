@@ -1,3 +1,5 @@
+> **Superseded by [`CC_X_ENGINEERING_BACKLOG.md`](../CC_X_ENGINEERING_BACKLOG.md) and [`CC_X_ARCHITECTURE.md`](../CC_X_ARCHITECTURE.md) — retained for history only.**
+
 # CC · Clarity Console — Final Verification + Close-Out Review
 
 **Date:** 2026-06-03  

@@ -1,3 +1,5 @@
+> **Superseded by [`CC_X_ENGINEERING_BACKLOG.md`](../CC_X_ENGINEERING_BACKLOG.md) and [`CC_X_ARCHITECTURE.md`](../CC_X_ARCHITECTURE.md) — retained for history only.**
+
 # CC · Clarity Console — 10/10 Upgrade Plan
 
 **Baseline:** [CC_FULL_SYSTEM_AUDIT.md](./CC_FULL_SYSTEM_AUDIT.md) — **8.2/10** (2026-06-02)  

@@ -1,3 +1,5 @@
+> **Superseded by [`CC_X_ENGINEERING_BACKLOG.md`](../CC_X_ENGINEERING_BACKLOG.md) and [`CC_X_ARCHITECTURE.md`](../CC_X_ARCHITECTURE.md) — retained for history only.**
+
 # Clarity Console vNext — Institutional AI Trading Platform Master Review
 
 **Document:** `docs/CC_VNEXT_MASTER_REVIEW.md`  

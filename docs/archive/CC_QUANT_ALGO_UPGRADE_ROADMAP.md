@@ -1,3 +1,5 @@
+> **Superseded by [`CC_X_ENGINEERING_BACKLOG.md`](../CC_X_ENGINEERING_BACKLOG.md) and [`CC_X_ARCHITECTURE.md`](../CC_X_ARCHITECTURE.md) — retained for history only.**
+
 # CC · Clarity Console — QUANT / ALGO / EXECUTION Upgrade Roadmap
 
 Branch baseline: `sprint99-fund-productization` @ 4b2f409+ (builds on opportunity intelligence pass).

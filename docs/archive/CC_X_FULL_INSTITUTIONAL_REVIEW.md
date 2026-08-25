@@ -1,3 +1,5 @@
+> **Superseded by [`CC_X_ENGINEERING_BACKLOG.md`](../CC_X_ENGINEERING_BACKLOG.md) and [`CC_X_ARCHITECTURE.md`](../CC_X_ARCHITECTURE.md) — retained for history only.**
+
 # CC X — Full Institutional Alpha OS Review
 
 **Document:** `docs/CC_X_FULL_INSTITUTIONAL_REVIEW.md`  

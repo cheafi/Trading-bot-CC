@@ -1,3 +1,5 @@
+> **Superseded by [`CC_X_ENGINEERING_BACKLOG.md`](../CC_X_ENGINEERING_BACKLOG.md) and [`CC_X_ARCHITECTURE.md`](../CC_X_ARCHITECTURE.md) — retained for history only.**
+
 # Clarity Console · Dashboard (Today) — 10/10 Gap List
 
 > **完整四欄 roadmap（Must / Nice / Reduce / Postpone + Sprint + 實作狀態）：**  

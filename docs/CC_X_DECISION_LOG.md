@@ -30,7 +30,7 @@
 | **Alternatives rejected** | Discovery deploy buttons; dossier-triggered handoff; backtest pass → live TRADE                                                                                                                             |
 | **Trade-offs**            | Extra navigation step for operator; fewer accidental deploys                                                                                                                                                |
 | **Impact**                | `TAB_SURFACE_MAP`, API `authority` fields, Telegram/Discord alert gating                                                                                                                                    |
-| **Evidence**              | `surface_authority.py`, `CC_CONSOLIDATED_BRIEFING.md` §2                                                                                                                                                    |
+| **Evidence**              | `surface_authority.py`, [`archive/CC_CONSOLIDATED_BRIEFING.md`](./archive/CC_CONSOLIDATED_BRIEFING.md) §2                                                                                                   |
 
 ---
 
@@ -185,6 +185,20 @@
 | **Trade-offs**            | Less narrative history in one file; clearer SSOT for engineering                                                                                                                            |
 | **Impact**                | `docs/CC_X_*.md`; `docs/archive/`                                                                                                                                                           |
 | **Evidence**              | This decision log; `CC_X_REVIEW_CYCLE.md`                                                                                                                                                   |
+
+---
+
+## ADR-014 — Operator Mode: Mission Brief + Guide as Help
+
+| Field                     | Detail                                                                                                                                                                              |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Date**                  | 2026-08-25                                                                                                                                                                          |
+| **Status**                | Accepted (in rollout)                                                                                                                                                               |
+| **Decision**              | Today dashboard uses **Mission Brief** panel with bilingual NOW/BLOCKER/NEXT copy as default operator surface. Guide tab is **Help** — reference-only, no active decision language. |
+| **Alternatives rejected** | Guide as primary decision surface; AI commentary as first screen                                                                                                                    |
+| **Trade-offs**            | Clearer operator workflow; Guide demoted to manual                                                                                                                                  |
+| **Impact**                | `cc-helpers.js` Mission Brief title, `today-mission-panel`, Guide `AUTHORITY_SUSPENDED`                                                                                             |
+| **Evidence**              | Commit `4905a4e`; backlog CCX-UX-01, CCX-UX-05                                                                                                                                      |
 
 ---
 

@@ -144,7 +144,89 @@ Run after stabilization passes. Copy-only recovery — no fake authority.
 ## Pre-deploy gate
 
 - [ ] `bash scripts/verify_10_10.sh` green
-- [ ] Authority tests green (`test_operator_state_contract`, `test_decision_board_service`)
+- [ ] Authority tests green (`test_operator_state_contract`, `test_decision_board_service`, `test_decision_board_authority_cache`)
 - [ ] Soak checklist passed on staging
 - [ ] No secrets in committed files
 - [ ] `.env` not in git
+- [ ] `node scripts/build-cc-template.mjs --check` green
+
+---
+
+## Chaos tests (planned — CCX-092)
+
+| Scenario                    | Inject                             | Expected behavior                            |
+| --------------------------- | ---------------------------------- | -------------------------------------------- |
+| IBKR disconnect mid-handoff | Kill gateway during bracket submit | HANDOFF_BLOCKED; no orphan deploy state      |
+| Regime service exception    | Force regime router error          | FAIL CLOSED → WAIT                           |
+| Stale cache with old rank   | Serve aged playbook snapshot       | `deploy_open` recomputed false if gates bind |
+| Engine OFF during poll      | Stop AutoTradingEngine             | ENGINE OFF pill; mission blockers update     |
+| Data STALE during deploy    | Mark freshness CRITICAL            | Deploy CTAs hidden                           |
+
+**Verified (2026-08-25):** regime fail-closed + never-cache-deploy_open — commit `8b51620`.
+
+---
+
+## Performance targets
+
+Cache affects **latency only**, never **permission**.
+
+| Surface                  | Current (observed)   | Target                  | Module                          |
+| ------------------------ | -------------------- | ----------------------- | ------------------------------- |
+| Playbook ranked (cached) | 8–15s live scan days | **<1.5s p95** cache hit | `playbook_ranked_snapshot.json` |
+| Playbook ranked (live)   | 8–15s                | **<2s p95** with SWR    | Snapshot writer                 |
+| Today load               | 3–5s                 | **<800ms**              | `_cc_instant.py`, gzip          |
+| Dossier core             | Partial instant      | **<500ms** core fields  | `live_dossier.py`               |
+| cc-header poll           | 15s + 60s freshness  | **1 unified poll**      | `cc_header.py`, board service   |
+| API QPS (multi-tab)      | Poll storm           | **−40%**                | Poll consolidation              |
+
+**Forbidden:** skip gate computation; cache `deploy_open=true`; client-side rank bypass.
+
+**CI gates (todo):** k6 p95 (CCX-091); Playwright E2E (CCX-090).
+
+---
+
+## Security checklist
+
+| Area                 | Status             | Action                           |
+| -------------------- | ------------------ | -------------------------------- |
+| API auth             | Dev key in compose | Rotate `API_SECRET_KEY` in prod  |
+| Secrets in code      | Clean — env vars   | Never commit `.env`              |
+| Telegram HTML escape | ✓                  | `escape_html()` in `telegram.py` |
+| Input validation     | ✓                  | `validate_ticker()` on alerts    |
+| RBAC / audit ledger  | Not started        | CCX-120                          |
+| IBKR credentials     | Env vars           | Never logged                     |
+| Rate limiting        | Dev relaxed        | Tighten in production            |
+| Dependency audit     | Not in CI          | Add `pip audit`                  |
+
+---
+
+## CI gaps
+
+| Gap                 | Current          | Target                       | Backlog          |
+| ------------------- | ---------------- | ---------------------------- | ---------------- |
+| Playwright E2E      | Absent / partial | WAIT → deploy disabled in CI | CCX-090          |
+| k6 performance      | Absent           | p95 gate on playbook ranked  | CCX-091          |
+| Provenance contract | Partial          | CI fails on unlabeled prices | CCX-006, CCX-007 |
+| Chaos IBKR          | Absent           | Reconnect test in staging    | CCX-092          |
+
+---
+
+## Runbooks
+
+### Authority incident (deploy drift)
+
+1. Compare `deploy_open` on Today, Playbook ranked, cc-header
+2. Run `pytest tests/test_decision_board_authority_cache.py -q`
+3. Rollback: revert router attach only — gates stay in truth model + operator contract
+
+### IBKR handoff failure
+
+1. Confirm LOGIN → READY ladder honest
+2. Check `execution_readiness` HARD blocks
+3. Log fill vs plan in `execution_analytics.py`
+
+---
+
+## Historical soak doc
+
+Full step-by-step: [`archive/CC_SOAK_STAGING_RUNBOOK.md`](./archive/CC_SOAK_STAGING_RUNBOOK.md) (superseded by this file).

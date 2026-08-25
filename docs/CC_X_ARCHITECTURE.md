@@ -1,11 +1,12 @@
-# CC / TradingAI Bot — CC X Architecture (Source of Truth)
+# CC X — Architecture Source of Truth
 
-> **Purpose of this document:** Paste into ChatGPT (or another advisor) for architecture, authority, and ops guidance. Live page: `/briefing` · plain text: `/briefing.txt`.  
-> **Product:** CC X (Clarity Console X) · repo: `TradingAI_Bot`  
-> **Version:** 9.0.0 (`src/core/version.py`)  
-> **Last verified:** 2026-08-25 · **No secrets below** — env var _names_ only.
+**Product:** CC X (Clarity Console X) · `TradingAI_Bot`  
+**Version:** 9.0.0 (`src/core/version.py`)  
+**Last verified:** 2026-08-25 (code paths cited below)
 
 Work tracking → [`CC_X_ENGINEERING_BACKLOG.md`](./CC_X_ENGINEERING_BACKLOG.md) · Ops → [`CC_X_PRODUCTION_READINESS.md`](./CC_X_PRODUCTION_READINESS.md) · ADRs → [`CC_X_DECISION_LOG.md`](./CC_X_DECISION_LOG.md)
+
+> Architecture facts only — no roadmap, scores, or opinions.
 
 ---
 
@@ -195,65 +196,11 @@ Research-only path (Discovery / Dossier / Flow) feeds scanner and dossier payloa
 
 ---
 
-## Methodology summary
+## Related documents
 
-- **4 registered strategies:** momentum, breakout, swing, mean_reversion
-- **Regime:** VIX-entropy probabilistic (RISK_ON / RISK_OFF / NEUTRAL / crisis NO_TRADE)
-- **Conviction tiers:** TRADE / LEADER / WATCH — council + truth model gate deploy
-- **Ensemble:** 8 weighted components via `OpportunityEnsembler`; EV from `EdgeCalculator`
-
----
-
-## Ops & environment (summary)
-
-See [`CC_X_PRODUCTION_READINESS.md`](./CC_X_PRODUCTION_READINESS.md) for full setup, soak, and tunnel docs.
-
-| Component      | Path                                                      |
-| -------------- | --------------------------------------------------------- |
-| Docker dev     | `docker compose -f docker-compose.dev.yml up --build`     |
-| Instant server | `_cc_instant.py` (:8000 → proxy :8001)                    |
-| Health         | `GET /health` (`mode=full` vs `loading`)                  |
-| Discord        | `discord_dispatch.py` — webhook preferred                 |
-| Telegram       | `src/notifications/telegram.py` — see `TELEGRAM_SETUP.md` |
-| IBKR dev       | `CC_SKIP_IB_INSYNC=1` in Docker dev                       |
-
----
-
-## 10. Suggested Advisory Prompts for ChatGPT
-
-Copy one of these after pasting this document:
-
-1. **Authority audit:** "Given the authority model in § Authority model, review my planned feature [describe feature] and tell me which tab(s) it belongs on, what `PageCapability` flags it needs, and what gates must block it when tradeability is WAIT."
-
-2. **Ops diagnostics:** "My Ops tab shows engine off and insufficient sample on advanced diagnostics. Using the ops summary, give me a step-by-step recovery checklist for Docker dev (`cc_api_dev`) including which env vars to verify and which `/health` / `/api/ops` endpoints to hit."
-
-3. **i18n strategy:** "Chinese is incomplete in CC. Propose a maintainable i18n plan that doesn't break `index.html` tests — extend `cc-i18n.js`, move Ops strings server-side, or extract locale JSON? Prioritize Ops probe/runtime."
-
-4. **Discord setup:** "I want reliable operator alerts without bot permission issues. Recommend webhook vs bot mode and exact `.env` keys for macOS Docker dev."
-
-5. **Research vs deploy boundary:** "I'm building [Vibe Agent rule / Strategy Lab draft / Shadow analysis]. Confirm it cannot grant deploy authority, list the API surfaces involved, and suggest UX copy for a Chinese-speaking operator."
-
-6. **Architecture review:** "Review the runtime topology and propose which services should stay synchronous vs async for ranked playbook under 2s p95."
-
-7. **Ops honesty model:** "Explain how probe vs runtime evidence should be presented so operators don't confuse disk-brief OK with engine health."
-
-8. **Performance:** "Propose a polling budget for cc-header, playbook ranked, and ops console without hammering yfinance."
-
-9. **Testing plan:** "Design pytest coverage for SystemState/PageCapability across WAIT, NO_TRADE, and deploy_open with stale data."
-
-10. **IBKR MONITOR ladder:** "When monitoring_only=true but connected=true, what should Playbook and Portfolio show?"
-
----
-
-## Quick Reference: Daily Operator Flow
-
-```
-1. Dashboard (today)  →  check tradeability + global strip
-2. Playbook (signals) →  deploy-qualified only if deploy_open
-3. Dossier            →  structure confirm (no handoff until gates open)
-4. Agent / Strategy Lab / Shadow / Reports → research only
-5. Ops                →  health, engine, Discord
-6. IBKR               →  Gateway → Session → Bracket → Handoff ladder
-```
-
-**When in doubt:** If `authority` ≠ `deploy` or `deploy_open` is false → **monitor and research only**.
+| Doc                                                                            | Purpose                                  |
+| ------------------------------------------------------------------------------ | ---------------------------------------- |
+| [`archive/CC_CONSOLIDATED_BRIEFING.md`](./archive/CC_CONSOLIDATED_BRIEFING.md) | Operator-facing authority narrative (§2) |
+| [`CC_X_ENGINEERING_BACKLOG.md`](./CC_X_ENGINEERING_BACKLOG.md)                 | All planned work                         |
+| [`CC_X_PRODUCTION_READINESS.md`](./CC_X_PRODUCTION_READINESS.md)               | Deploy / soak / chaos                    |
+| [`CC_X_DECISION_LOG.md`](./CC_X_DECISION_LOG.md)                               | ADRs                                     |

@@ -1,3 +1,5 @@
+> **Superseded by [`CC_X_ENGINEERING_BACKLOG.md`](../CC_X_ENGINEERING_BACKLOG.md) and [`CC_X_ARCHITECTURE.md`](../CC_X_ARCHITECTURE.md) — retained for history only.**
+
 # CC · Clarity Console — Monolith Split Plan
 
 **Scope:** `src/api/templates/index.html` (~13k lines, single Alpine `x-data` root)  
