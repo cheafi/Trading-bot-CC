@@ -227,7 +227,14 @@ def on_regime_change(old_regime: str, new_regime: str, vix: float = 0.0) -> bool
     )
     _append_log(event)
     logger.info("[ALERT] %s", title)
-    return _push_discord(title, message, severity, zh_summary=zh)
+    discord_ok = _push_discord(title, message, severity, zh_summary=zh)
+    try:
+        from src.services.system_telegram_alerts import push_regime_change
+
+        push_regime_change(old_regime, new_regime, vix)
+    except Exception:
+        pass
+    return discord_ok
 
 
 def on_drawdown_breach(
@@ -266,7 +273,14 @@ def on_circuit_breaker(reason: str) -> bool:
     )
     _append_log(event)
     logger.error("[ALERT] %s | %s", title, message)
-    return _push_discord(title, message, "critical", zh_summary=zh)
+    discord_ok = _push_discord(title, message, "critical", zh_summary=zh)
+    try:
+        from src.services.system_telegram_alerts import push_circuit_breaker
+
+        push_circuit_breaker(reason)
+    except Exception:
+        pass
+    return discord_ok
 
 
 def on_deploy_gate_change(
@@ -304,7 +318,7 @@ def on_deploy_gate_change(
     )
     _append_log(event)
     logger.info("[ALERT] %s", title)
-    return _push_discord(
+    discord_ok = _push_discord(
         title,
         message,
         severity,
@@ -312,6 +326,18 @@ def on_deploy_gate_change(
         zh_summary=zh,
         log=True,
     )
+    try:
+        from src.services.system_telegram_alerts import push_deploy_gate_change
+
+        push_deploy_gate_change(
+            unlocked=unlocked,
+            summary=summary,
+            tradeability=tradeability,
+            remaining=rem,
+        )
+    except Exception:
+        pass
+    return discord_ok
 
 
 def on_bdr_decision_change(
@@ -337,7 +363,7 @@ def on_bdr_decision_change(
     )
     _append_log(event)
     logger.info("[ALERT] %s", title)
-    return _push_discord(
+    discord_ok = _push_discord(
         title,
         message,
         severity,
@@ -345,6 +371,13 @@ def on_bdr_decision_change(
         zh_summary=zh,
         log=True,
     )
+    try:
+        from src.services.system_telegram_alerts import push_bdr_decision_change
+
+        push_bdr_decision_change(old_code, new_code, decision_line)
+    except Exception:
+        pass
+    return discord_ok
 
 
 def on_trade_gate_blocked(hard_blocks: List[str]) -> bool:
@@ -364,7 +397,7 @@ def on_trade_gate_blocked(hard_blocks: List[str]) -> bool:
         meta={"hard_blocks": hard_blocks, "zh_summary": zh},
     )
     _append_log(event)
-    return _push_discord(
+    discord_ok = _push_discord(
         title,
         message,
         "warning",
@@ -372,6 +405,13 @@ def on_trade_gate_blocked(hard_blocks: List[str]) -> bool:
         zh_summary=zh,
         log=True,
     )
+    try:
+        from src.services.system_telegram_alerts import push_trade_gate_blocked
+
+        push_trade_gate_blocked(hard_blocks)
+    except Exception:
+        pass
+    return discord_ok
 
 
 def on_trade_gate_cleared(soft_warnings: Optional[List[str]] = None) -> bool:
@@ -389,7 +429,7 @@ def on_trade_gate_cleared(soft_warnings: Optional[List[str]] = None) -> bool:
         meta={"soft_warnings": soft_warnings or [], "zh_summary": zh},
     )
     _append_log(event)
-    return _push_discord(
+    discord_ok = _push_discord(
         title,
         message,
         "ok",
@@ -397,6 +437,13 @@ def on_trade_gate_cleared(soft_warnings: Optional[List[str]] = None) -> bool:
         zh_summary=zh,
         log=True,
     )
+    try:
+        from src.services.system_telegram_alerts import push_trade_gate_cleared
+
+        push_trade_gate_cleared(soft_warnings)
+    except Exception:
+        pass
+    return discord_ok
 
 
 def check_and_push_ic_decay() -> bool:

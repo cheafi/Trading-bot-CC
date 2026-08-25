@@ -29,6 +29,71 @@ def _holdings_table(holdings: List[Dict[str, Any]], limit: int = 12) -> str:
     return "\n".join(lines) or "No holdings parsed"
 
 
+async def notify_futu_capture_telegram(
+    *,
+    holdings: List[Dict[str, Any]],
+    advisory: Dict[str, Any],
+    parse_method: str,
+    pushed_by: str = "cc-api",
+) -> bool:
+    """Post parsed holdings + AI advisory to Telegram (monitor-only)."""
+    from src.notifications.telegram import (
+        escape_html,
+        format_alert_timestamp,
+        format_brand_footer,
+        format_brand_header,
+        format_cc_dashboard_link,
+        send_message_async,
+        telegram_is_configured,
+    )
+
+    if not telegram_is_configured():
+        return False
+
+    summary = advisory.get("portfolio_summary") or {}
+    lines = [
+        format_brand_header(),
+        "━━━━━━━━━━━━━━━━━━━━",
+        "<b>📸 Futu Capture · 富途持倉解析</b>",
+        "",
+        f"Holdings ({escape_html(parse_method)}) · "
+        f"{summary.get('holdings_count', 0)} names",
+        "",
+    ]
+    for h in holdings[:8]:
+        ticker = escape_html(h.get("ticker", "?"))
+        shares = h.get("shares", 0)
+        pnl = h.get("pnl_pct")
+        pnl_s = f"{pnl:+.1f}%" if pnl is not None else "—"
+        lines.append(f"• <b>{ticker}</b> · {shares:g} sh · {escape_html(pnl_s)}")
+    extra = len(holdings) - 8
+    if extra > 0:
+        lines.append(f"• +{extra} more positions")
+    en = str(advisory.get("summary_en") or "")[:600]
+    if en:
+        lines.extend(["", f"<i>{escape_html(en)}</i>"])
+    zh = str(advisory.get("summary_zh") or "")[:400]
+    if zh:
+        lines.extend(["", f"繁中 · {escape_html(zh)}"])
+    lines.append(format_alert_timestamp())
+    dash = format_cc_dashboard_link()
+    if dash:
+        lines.append(f'🔗 <a href="{escape_html(dash)}">Open CC · 開啟 CC</a>')
+    lines.extend(
+        [
+            "",
+            format_brand_footer(
+                extra="Advisory only · 僅供參考 · Not financial advice · 非投資建議"
+            ),
+        ]
+    )
+    try:
+        return await send_message_async("\n".join(lines))
+    except Exception as exc:
+        logger.warning("Futu Telegram notify failed: %s", exc)
+        return False
+
+
 async def notify_futu_capture_discord(
     *,
     holdings: List[Dict[str, Any]],

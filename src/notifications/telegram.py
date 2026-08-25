@@ -115,11 +115,24 @@ def dedupe_blocked_for_alert(kind: str, ticker: str, tier: str) -> bool:
     return False
 
 
+def format_cc_dashboard_link(path: str = "") -> str:
+    """CC dashboard deep link (optionally with path suffix)."""
+    base = _cc_base_url()
+    if not base:
+        return ""
+    suffix = str(path or "").strip()
+    if suffix and not suffix.startswith("/"):
+        suffix = f"/{suffix}"
+    return f"{base}{suffix}" if suffix else base
+
+
 def format_cc_link(ticker: str) -> str:
     """Optional CC deep link when a public base URL is configured."""
-    base = _cc_base_url()
     sym = validate_ticker(ticker)
-    if not base or not sym:
+    if not sym:
+        return ""
+    base = format_cc_dashboard_link()
+    if not base:
         return ""
     return f"{base}/?ticker={sym}"
 
@@ -278,8 +291,14 @@ async def set_bot_commands_async(
 ) -> bool:
     """Register slash commands for operator discovery."""
     cmds = commands or [
-        {"command": "status", "description": "Check CC alert channel status"},
-        {"command": "test", "description": "Verify live alert delivery"},
+        {
+            "command": "status",
+            "description": "CC Live Intelligence channel status · 頻道狀態",
+        },
+        {
+            "command": "test",
+            "description": "Send test alert · 測試推播",
+        },
     ]
     ok, err = await _bot_api_post("setMyCommands", {"commands": cmds})
     if not ok:

@@ -28,9 +28,11 @@ Advisory only · 僅供參考 · Not financial advice.
 ### Commands (`/setcommands`)
 
 ```
-status - Check CC alert channel status
-test - Verify live alert delivery
+status - CC Live Intelligence channel status · 頻道狀態
+test - Send test alert · 測試推播
 ```
+
+For in-chat `/status` and `/test` replies without a webhook, run the polling helper (see [Bot commands](#bot-commands-polling) below).
 
 ## 1. Create a bot
 
@@ -66,9 +68,18 @@ Add to `.env` (or merge `config/telegram.env.example`):
 TELEGRAM_BOT_TOKEN=your_token_here
 TELEGRAM_CHAT_ID=your_chat_id_here
 
-# Optional — link alerts back to CC when using a tunnel
+# Deep links — required for "Open in CC" buttons in alerts (tunnel or LAN URL)
+# See docs/CC_PUBLIC_ACCESS.md for Cloudflare/ngrok setup
 CC_PUBLIC_BASE_URL=https://your-subdomain.trycloudflare.com
 ```
+
+When `CC_PUBLIC_BASE_URL` is set, all Telegram alerts include an **Open in CC · 開啟 CC** link:
+
+- Opportunity alerts → `{CC_PUBLIC_BASE_URL}/?ticker=NVDA`
+- System alerts (deploy gate, BDR, trade gate, regime, circuit breaker) → `{CC_PUBLIC_BASE_URL}`
+- Futu capture summary → `{CC_PUBLIC_BASE_URL}`
+
+Without it, alerts still deliver but omit the link button.
 
 Restart the API (`python _cc_instant.py` or `docker compose -f docker-compose.dev.yml up`).
 
@@ -86,9 +97,40 @@ curl -s -X POST "http://localhost:8000/api/v7/notify/telegram/test"
 
 # Optional — push description + commands via Bot API
 curl -s -X POST http://localhost:8000/api/v7/notify/telegram/configure-profile
+
+# Force opportunity alerts from latest playbook snapshot (testing)
+curl -s -X POST "http://localhost:8000/api/v7/notify/telegram/opportunities-now"
 ```
 
 Live opportunity alerts fire automatically after each **live playbook ranked scan** (background refresh, prewarm, or `GET /api/playbook/ranked?refresh=true`). The first scan only seeds state (no flood); subsequent scans alert on new deploy/monitor names, upgrades, or a new #1 ranked ticker.
+
+## System alerts (AlertService fan-out)
+
+When `TELEGRAM_NOTIFY_SYSTEM=true` (default), these Discord-equivalent events also push to Telegram:
+
+| Event                       | Trigger                                              |
+| --------------------------- | ---------------------------------------------------- |
+| Deploy gate locked/unlocked | `unlock_deploy` transition in Today/decision refresh |
+| BDR decision change         | Board decision code transition                       |
+| Trade gate blocked/cleared  | Engine TradeGate hard-block or clear                 |
+| Regime change               | RegimeRouter transition                              |
+| Circuit breaker             | Hard circuit-breaker triggered                       |
+
+All use the same bilingual CC Live Intelligence format with **Advisory only · 僅供參考** footer.
+
+## Bot commands (polling)
+
+Webhook setup is optional. For `/status` and `/test` replies inside Telegram:
+
+```bash
+# Terminal 1 — CC API
+python _cc_instant.py
+
+# Terminal 2 — bot polling (reads .env)
+python scripts/dev/telegram_bot_poll.py
+```
+
+The script calls CC `/api/v7/notify/status` and `/api/v7/notify/telegram/test` on your behalf. Restrict to your chat with `TELEGRAM_CHAT_ID` in `.env`.
 
 ## Alert format preview
 
@@ -130,13 +172,14 @@ Monitor only — rank ≠ permission · 僅供監控，排名≠許可
 
 ## Toggles
 
-| Variable                      | Default | Purpose                      |
-| ----------------------------- | ------- | ---------------------------- |
-| `TELEGRAM_NOTIFY_ENABLED`     | `true`  | Master switch                |
-| `TELEGRAM_NOTIFY_DEPLOY`      | `true`  | Deploy-qualified alerts      |
-| `TELEGRAM_NOTIFY_MONITOR`     | `true`  | High-tier WATCH / near-miss  |
-| `TELEGRAM_ALERT_COOLDOWN_SEC` | `300`   | Dedup window per ticker+tier |
-| `TELEGRAM_ALERT_DEDUPE`       | `true`  | Enable deduplication         |
+| Variable                      | Default | Purpose                                       |
+| ----------------------------- | ------- | --------------------------------------------- |
+| `TELEGRAM_NOTIFY_ENABLED`     | `true`  | Master switch                                 |
+| `TELEGRAM_NOTIFY_DEPLOY`      | `true`  | Deploy-qualified alerts                       |
+| `TELEGRAM_NOTIFY_MONITOR`     | `true`  | High-tier WATCH / near-miss                   |
+| `TELEGRAM_NOTIFY_SYSTEM`      | `true`  | Deploy gate, BDR, trade gate, regime, breaker |
+| `TELEGRAM_ALERT_COOLDOWN_SEC` | `300`   | Dedup window per ticker+tier                  |
+| `TELEGRAM_ALERT_DEDUPE`       | `true`  | Enable deduplication                          |
 
 ## Security notes
 

@@ -344,8 +344,40 @@ def _detect_alerts(
     return alerts
 
 
+def _detect_force_alerts(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Manual test — alert all current deploy/monitor rows (respects toggles)."""
+    alerts: List[Dict[str, Any]] = []
+    degraded = bool(payload.get("compressed") or payload.get("stale"))
+    for rank, row in _collect_rows(payload):
+        ticker = validate_ticker(row.get("ticker") or "")
+        if not ticker:
+            continue
+        kind = _alert_kind(row)
+        if not kind:
+            continue
+        if kind == "deploy" and not _notify_deploy():
+            continue
+        if kind == "monitor" and not _notify_monitor():
+            continue
+        if degraded and kind == "deploy":
+            continue
+        alerts.append(
+            {
+                "kind": kind,
+                "ticker": ticker,
+                "tier": _row_tier(row),
+                "score": _row_score(row),
+                "rr": _row_rr(row),
+                "blocker": _row_blocker(row),
+                "headline": "Manual test push · 手動測試推播",
+                "degraded": degraded,
+            }
+        )
+    return alerts
+
+
 def notify_live_playbook_scan(
-    payload: Dict[str, Any], *, source: str = "playbook"
+    payload: Dict[str, Any], *, source: str = "playbook", force: bool = False
 ) -> Dict[str, Any]:
     """Evaluate ranked playbook payload and push immediate Telegram alerts."""
     result = {
@@ -362,7 +394,10 @@ def notify_live_playbook_scan(
 
     with _STATE_LOCK:
         prev = _load_state()
-        alerts = _detect_alerts(payload, prev)
+        if force:
+            alerts = _detect_force_alerts(payload)
+        else:
+            alerts = _detect_alerts(payload, prev)
         next_state: Dict[str, Any] = {"tickers": {}, "top_ticker": None}
         for rank, row in _collect_rows(payload):
             ticker = validate_ticker(row.get("ticker") or "")

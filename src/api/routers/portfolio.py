@@ -394,11 +394,20 @@ async def futu_portfolio_capture(
             enriched, market_data=mds, regime=regime if isinstance(regime, dict) else {}
         )
 
-        pushed = False
+        pushed_discord = False
+        pushed_telegram = False
         if notify_discord:
-            from src.services.futu_capture_notify import notify_futu_capture_discord
+            from src.services.futu_capture_notify import (
+                notify_futu_capture_discord,
+                notify_futu_capture_telegram,
+            )
 
-            pushed = await notify_futu_capture_discord(
+            pushed_discord = await notify_futu_capture_discord(
+                holdings=enriched,
+                advisory=advisory,
+                parse_method=parse_method,
+            )
+            pushed_telegram = await notify_futu_capture_telegram(
                 holdings=enriched,
                 advisory=advisory,
                 parse_method=parse_method,
@@ -411,7 +420,8 @@ async def futu_portfolio_capture(
             "holdings": enriched,
             "count": len(enriched),
             "advisory": advisory,
-            "pushed_to_discord": pushed,
+            "pushed_to_discord": pushed_discord,
+            "pushed_to_telegram": pushed_telegram,
             "source": "futu-capture",
             "updated_at": now,
         }

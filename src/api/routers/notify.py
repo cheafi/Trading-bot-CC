@@ -179,6 +179,41 @@ async def configure_telegram_profile() -> Dict[str, Any]:
         return {"ok": False, "error": str(exc)}
 
 
+@router.post("/telegram/opportunities-now")
+async def telegram_opportunities_now(
+    force: bool = Query(
+        True,
+        description="Push alerts for all current deploy/monitor rows (test mode)",
+    ),
+) -> Dict[str, Any]:
+    """Force opportunity Telegram alerts from latest playbook ranked snapshot."""
+    try:
+        from src.services.opportunity_telegram_alerts import notify_live_playbook_scan
+        from src.services.playbook_board_fallback import load_playbook_snapshot
+        from src.notifications.telegram import telegram_config_status
+
+        st = telegram_config_status()
+        if not st.get("telegram_configured"):
+            return {
+                "ok": False,
+                "error": "Telegram not configured",
+                "config": st,
+            }
+        payload = load_playbook_snapshot("30::") or {}
+        if not payload.get("opportunities"):
+            return {
+                "ok": False,
+                "error": "No playbook ranked snapshot — run GET /api/v7/playbook/ranked?refresh=true first",
+                "config": st,
+            }
+        result = notify_live_playbook_scan(
+            payload, source="manual_opportunities_now", force=force
+        )
+        return {"ok": True, **result, "config": st}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
 @router.get("/telegram/setup")
 async def telegram_setup() -> Dict[str, Any]:
     """Human-readable Telegram setup checklist for CC Live Intelligence."""
@@ -200,8 +235,14 @@ async def telegram_setup() -> Dict[str, Any]:
         "8. Optional: POST /api/v7/notify/telegram/configure-profile to set via API",
     ]
     botfather_commands = [
-        {"command": "status", "description": "Check CC alert channel status"},
-        {"command": "test", "description": "Verify live alert delivery"},
+        {
+            "command": "status",
+            "description": "CC Live Intelligence channel status · 頻道狀態",
+        },
+        {
+            "command": "test",
+            "description": "Send test alert · 測試推播",
+        },
     ]
     return {
         **st,

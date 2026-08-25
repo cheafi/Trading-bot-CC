@@ -266,6 +266,111 @@ class TestOpportunityTelegramAlerts(unittest.TestCase):
         self.assertIn("WATCH / MONITOR", text)
         self.assertIn("Advisory only", text)
 
+    def test_format_cc_dashboard_link(self):
+        with mock.patch.dict(
+            "os.environ",
+            {"CC_PUBLIC_BASE_URL": "https://demo.trycloudflare.com"},
+            clear=True,
+        ):
+            self.assertEqual(
+                tg.format_cc_dashboard_link(),
+                "https://demo.trycloudflare.com",
+            )
+            self.assertEqual(
+                tg.format_cc_link("NVDA"),
+                "https://demo.trycloudflare.com/?ticker=NVDA",
+            )
+
+
+class TestSystemTelegramAlerts(unittest.TestCase):
+    def setUp(self):
+        tg._DEDUPE.clear()
+
+    def test_push_deploy_gate_unlocked(self):
+        from src.services import system_telegram_alerts as sta
+
+        with mock.patch.dict(
+            "os.environ",
+            {"TELEGRAM_BOT_TOKEN": "1:a", "TELEGRAM_CHAT_ID": "1"},
+            clear=True,
+        ):
+            with mock.patch.object(sta, "send_message", return_value=True) as send:
+                ok = sta.push_deploy_gate_change(
+                    unlocked=True,
+                    summary="All four conditions met.",
+                )
+                self.assertTrue(ok)
+                body = send.call_args[0][0]
+                self.assertIn("Deploy Gate UNLOCKED", body)
+                self.assertIn("Advisory only", body)
+                self.assertIn("部署閘門解鎖", body)
+
+    def test_push_trade_gate_blocked(self):
+        from src.services import system_telegram_alerts as sta
+
+        with mock.patch.dict(
+            "os.environ",
+            {"TELEGRAM_BOT_TOKEN": "1:a", "TELEGRAM_CHAT_ID": "1"},
+            clear=True,
+        ):
+            with mock.patch.object(sta, "send_message", return_value=True) as send:
+                ok = sta.push_trade_gate_blocked(["VIX at 50 — hard block"])
+                self.assertTrue(ok)
+                self.assertIn("Trade Gate BLOCKED", send.call_args[0][0])
+
+    def test_push_regime_change_includes_zh(self):
+        from src.services import system_telegram_alerts as sta
+
+        with mock.patch.dict(
+            "os.environ",
+            {"TELEGRAM_BOT_TOKEN": "1:a", "TELEGRAM_CHAT_ID": "1"},
+            clear=True,
+        ):
+            with mock.patch.object(sta, "send_message", return_value=True) as send:
+                sta.push_regime_change("BULL", "BEAR", vix=28.5)
+                self.assertIn("Regime Change", send.call_args[0][0])
+                self.assertIn("繁中", send.call_args[0][0])
+
+    def test_dashboard_link_when_base_url_set(self):
+        from src.services import system_telegram_alerts as sta
+
+        with mock.patch.dict(
+            "os.environ",
+            {
+                "TELEGRAM_BOT_TOKEN": "1:a",
+                "TELEGRAM_CHAT_ID": "1",
+                "CC_PUBLIC_BASE_URL": "https://cc.example.com",
+            },
+            clear=True,
+        ):
+            with mock.patch.object(sta, "send_message", return_value=True) as send:
+                sta.push_circuit_breaker("Daily loss limit")
+                self.assertIn("https://cc.example.com", send.call_args[0][0])
+
+
+class TestOpportunityForcePush(unittest.TestCase):
+    def setUp(self):
+        self._tmpdir = tempfile.mkdtemp()
+        ota._STATE_PATH = os.path.join(self._tmpdir, "state.json")
+        tg._DEDUPE.clear()
+
+    def test_force_push_all_deploy_monitor(self):
+        payload = {
+            "opportunities": [_deploy_row(), _watch_row(ticker="AMD")],
+            "board_mode": "full_live",
+        }
+        with mock.patch.dict(
+            "os.environ",
+            {"TELEGRAM_BOT_TOKEN": "1:a", "TELEGRAM_CHAT_ID": "1"},
+            clear=True,
+        ):
+            with mock.patch.object(ota, "_load_state", return_value={"tickers": {}}):
+                with mock.patch.object(ota, "_save_state"):
+                    with mock.patch.object(ota, "send_message", return_value=True) as send:
+                        result = ota.notify_live_playbook_scan(payload, force=True)
+                        self.assertEqual(result["sent"], 2)
+                        self.assertEqual(send.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()
