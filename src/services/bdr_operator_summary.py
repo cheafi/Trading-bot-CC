@@ -205,21 +205,32 @@ def _plain_english_read(
     elif diag.get("headline"):
         lead = str(diag["headline"])
     elif deploy_count >= 1:
-        lead = f"{deploy_count} deploy-qualified name(s) — gates still bind sizing until checklist clears."
+        lead = _bi(
+            f"{deploy_count} 個 deploy-qualified — 清單通過前 sizing 仍受閘門約束",
+            f"{deploy_count} deploy-qualified name(s) — gates still bind sizing until checklist clears.",
+        )
     elif watch_count and not avoid_count:
-        lead = (
+        lead = _bi(
+            "板面有 watch 級 idea，但未達 deploy bar — 質素篩選正常，非 idea 不足",
             "Board has watch-grade ideas but none cleared deploy bar — "
-            "quality filters are doing their job, not an idea shortage."
+            "quality filters are doing their job, not an idea shortage.",
         )
     elif watch_count or avoid_count:
-        lead = (
+        lead = _bi(
+            "板面標的未過時機、R:R 或 execution 閘門 — 屬質素門檻問題，非掃描器故障",
             "Names on the board fail timing, R:R, or execution gates — "
-            "this is a quality bar issue, not a broken scanner."
+            "this is a quality bar issue, not a broken scanner.",
         )
     elif not should_trade or (tradeability or "").upper() == "NO_TRADE":
-        lead = "Regime gate closed — capital preservation overrides individual setups."
+        lead = _bi(
+            "體制閘門關閉 — 守護資金優先於個別 setup",
+            "Regime gate closed — capital preservation overrides individual setups.",
+        )
     else:
-        lead = "No deploy-qualified setups — patience and monitor queue are the active decision."
+        lead = _bi(
+            "無 deploy-qualified — 耐心同 monitor queue 為主決策",
+            "No deploy-qualified setups — patience and monitor queue are the active decision.",
+        )
     return lead
 
 
@@ -238,7 +249,10 @@ def _what_to_do_now(
     for t in monitor_tickers[:5]:
         if t:
             monitor_only.append(
-                f"Track {t} for upgrade triggers — Playbook monitor queue only."
+                _bi(
+                    f"追蹤 {t} 升級觸發 — 僅 Playbook monitor queue",
+                    f"Track {t} for upgrade triggers — Playbook monitor queue only.",
+                )
             )
 
     for ln in (td.get("monitor_triggers") or [])[:3]:
@@ -248,9 +262,17 @@ def _what_to_do_now(
 
     if not monitor_only:
         monitor_only.append(
-            "Follow Dashboard monitor queue and near-miss upgrade candidates."
+            _bi(
+                "跟 Dashboard monitor queue 同 near-miss 升級候選",
+                "Follow Dashboard monitor queue and near-miss upgrade candidates.",
+            )
         )
-    monitor_only.append("Refresh Dashboard + Playbook after data / IBKR repair.")
+    monitor_only.append(
+        _bi(
+            "資料／IBKR 修復後重新整理 Dashboard＋Playbook",
+            "Refresh Dashboard + Playbook after data / IBKR repair.",
+        )
+    )
     if repair_priority:
         monitor_only.append(repair_priority)
 
@@ -274,10 +296,16 @@ def _what_to_do_now(
                 do_not_deploy.append(f"Gate active: {key.replace('_', ' ')}")
     if not do_not_deploy:
         do_not_deploy.append(
-            "Do not deploy — board gate closed until unlock checklist clears."
+            _bi(
+                "禁止部署 — board 閘門關閉，待 unlock 清單通過",
+                "Do not deploy — board gate closed until unlock checklist clears.",
+            )
         )
     do_not_deploy.append(
-        "No sizing, bracket send, or handoff until deploy_open and authority=deploy."
+        _bi(
+            "deploy_open 且 authority=deploy 前，勿 sizing、bracket 或 handoff",
+            "No sizing, bracket send, or handoff until deploy_open and authority=deploy.",
+        )
     )
 
     return {

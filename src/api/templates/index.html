@@ -3177,8 +3177,8 @@
                     <button @click.stop="sendPlaybookToIbkr(r)" class="btn-s text-[9px] font-bold"
                       :style="cc_status&&cc_status.ibkr_connected?'background:var(--blue);color:white;padding:3px 10px':'background:var(--s2);color:var(--t3);padding:3px 10px;cursor:not-allowed'"
                       :disabled="!cc_status||!cc_status.ibkr_connected"
-                      :title="ibkrUnifiedLabel(today7.execution_readiness||rankedOpps.bestAction?.execution_readiness)+' — click IBKR pill to connect'">
-                      ⚡ Send to IBKR
+                      :title="ibkrUnifiedLabel(today7.execution_readiness||rankedOpps.bestAction?.execution_readiness)+' — 點擊 IBKR pill 連線 · click IBKR pill to connect'">
+                      ⚡ 送至 IBKR · Send to IBKR
                     </button>
                     </template>
                   </div>
@@ -4251,8 +4251,8 @@
       <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--amber)">
         <summary style="padding:10px 16px;background:rgba(251,191,36,.06);display:flex;align-items:center;gap:8px">
           <span style="font-size:16px">⚠️</span>
-          <span class="guide-layer-hdr" style="color:var(--amber)">Current Build Reality Check</span>
-          <span style="font-size:10px;color:var(--t3);margin-left:auto">Expand</span>
+          <span class="guide-layer-hdr" style="color:var(--amber)">目前版本實況 · Current Build Reality Check</span>
+          <span style="font-size:10px;color:var(--t3);margin-left:auto">展開 · Expand</span>
         </summary>
         <div style="padding:14px 16px;font-size:12px;color:var(--t2);line-height:1.75">
           Platform state varies: <strong style="color:var(--t1)">live</strong>, <strong style="color:var(--t1)">fallback</strong>, <strong style="color:var(--t1)">mock</strong>, <strong style="color:var(--t1)">partial-sync</strong>, or <strong style="color:var(--t1)">diagnostics-first</strong>.
@@ -4268,8 +4268,8 @@
       <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--purple)">
         <summary style="padding:10px 16px;background:rgba(168,85,247,.06);display:flex;align-items:center;gap:8px">
           <span style="font-size:16px">📘</span>
-          <span class="guide-layer-hdr" style="color:var(--purple)">Random Walk — Global Principles (8)</span>
-          <span style="font-size:10px;color:var(--t3);margin-left:auto">Expand</span>
+          <span class="guide-layer-hdr" style="color:var(--purple)">隨機漫步原則 (8) · Random Walk — Global Principles</span>
+          <span style="font-size:10px;color:var(--t3);margin-left:auto">展開 · Expand</span>
         </summary>
         <div style="padding:14px 16px;font-size:11px;color:var(--t2);line-height:1.75">
           <div style="font-size:10px;color:var(--t3);margin-bottom:10px">Constitution layer — apply on every surface (Dashboard, Playbook, Dossier, Portfolio, Funds). Read net edge after cost; humility labels are supportive, not excuses to trade.</div>
@@ -4324,7 +4324,7 @@
         </summary>
         <div style="padding:14px 16px">
           <div class="guide-operator-checklist" id="cc-operator-checklist">
-            <div style="font-size:11px;font-weight:800;color:var(--green);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">Operator checklist</div>
+            <div style="font-size:11px;font-weight:800;color:var(--green);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">操盤手檢查清單 · Operator checklist</div>
             <ul style="font-size:11px;color:var(--t2);line-height:1.65;padding-left:16px;margin:0">
               <li><strong style="color:var(--t1)">Page gate beats card rank</strong> — WAIT / NO_TRADE 先於任何靚卡。</li>
               <li><strong style="color:var(--t1)">Research ≠ permission</strong> — Discovery、Flow、Funds、RS 只供研究。</li>
@@ -4332,7 +4332,7 @@
             </ul>
           </div>
 
-          <div style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.4px;margin:12px 0 6px">Most common mistakes</div>
+          <div style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.4px;margin:12px 0 6px">最常見錯誤 · Most common mistakes</div>
           <ul style="font-size:11px;color:var(--t2);line-height:1.65;padding-left:16px;margin:0 0 12px">
             <li><strong style="color:var(--t1)">不要用 fallback 卡做 sizing</strong> — brief / fallback 只供 monitor。</li>
             <li><strong style="color:var(--t1)">不要把 IBKR LOGIN 當 READY</strong> — transport up 仍未等於可 handoff。</li>
@@ -4341,16 +4341,16 @@
           </ul>
 
           <details style="margin-top:4px">
-            <summary style="font-size:11px;font-weight:700;color:var(--t1);cursor:pointer;padding:4px 0">When capital is allowed / blocked</summary>
+            <summary style="font-size:11px;font-weight:700;color:var(--t1);cursor:pointer;padding:4px 0">何時允許／禁止動用資金 · When capital is allowed / blocked</summary>
             <div style="margin-top:8px">
-              <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Capital allowed when</div>
+              <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">允許動用資金的條件 · Capital allowed when</div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;margin-bottom:10px">
                 <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">☑</span><span style="color:var(--t2)"><strong style="color:var(--t1)">Data fresh</strong> — no STALE/CRITICAL; trust strip not synthetic</span></div>
                 <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">☑</span><span style="color:var(--t2)"><strong style="color:var(--t1)">Engine confirmed</strong> — header + Ops agree; badge alone ≠ fresh cycle</span></div>
                 <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">☑</span><span style="color:var(--t2)"><strong style="color:var(--t1)">IBKR READY</strong> — session active, not LOGIN-only; bracket aligned</span></div>
                 <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">☑</span><span style="color:var(--t2)"><strong style="color:var(--t1)">Board gate open</strong> — not WAIT/NO_TRADE; entry + stop + execution_ready</span></div>
               </div>
-              <div style="font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px">Capital blocked when</div>
+              <div style="font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px">禁止動用資金的條件 · Capital blocked when</div>
               <div style="font-size:11px;color:var(--t2);line-height:1.6">
                 Engine OFF/stale · board WAIT/NO_TRADE · IBKR LOGIN-only or disconnected · bracket missing · fallback / confirm-only dossier · research-only / mock surfaces
                 <span style="color:var(--t3)"> — full list in Layer 3.</span>
@@ -4371,8 +4371,8 @@
       <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--blue)">
         <summary style="padding:12px 16px;background:var(--s2);display:flex;align-items:center;gap:8px">
           <span style="font-size:18px">📖</span>
-          <span class="guide-layer-hdr" style="color:var(--t1)">Layer 2 — How to Read the Platform</span>
-          <span style="font-size:10px;color:var(--t3);margin-left:auto">Expand</span>
+          <span class="guide-layer-hdr" style="color:var(--t1)">第 2 層 — 如何解讀平台 · Layer 2 — How to Read the Platform</span>
+          <span style="font-size:10px;color:var(--t3);margin-left:auto">展開 · Expand</span>
         </summary>
         <div style="padding:0">
 
@@ -4819,15 +4819,15 @@
       <div style="padding:6px 12px">
         <template x-if="discoveryPageStateVisible()">
           <div class="card card-p mb-2" style="border-left:3px solid var(--blue);padding:10px">
-            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--blue)">Discovery · page state</div>
+            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--blue)">探索頁面狀態 · Discovery · page state</div>
             <div class="text-[8px]" style="line-height:1.45">
               <div><span class="font-bold" style="color:var(--t3)">現況 · NOW</span> <span x-text="pageOperatorSentence().now"></span></div>
               <div><span class="font-bold" style="color:var(--amber)">阻擋 · BLOCKER</span> <span x-text="pageOperatorSentence().blocker"></span></div>
               <div><span class="font-bold" style="color:var(--green)">下一步 · NEXT</span> <span x-text="pageOperatorSentence().next_action"></span></div>
             </div>
             <div class="flex gap-2 mt-2">
-              <button type="button" class="btn-s text-[8px]" @click="fetchScanners()">Retry scan</button>
-              <span class="pill pw text-[7px] ml-auto">Research only</span>
+              <button type="button" class="btn-s text-[8px]" @click="fetchScanners()">重試掃描 · Retry scan</button>
+              <span class="pill pw text-[7px] ml-auto">研究層 · Research only</span>
             </div>
           </div>
         </template>
@@ -4859,8 +4859,8 @@
         </template>
         <template x-if="discoveryShowCachedLeaders()">
           <div class="card card-p mb-3" style="border-left:3px solid var(--blue)">
-            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--blue)">Cached leaders · last-good snapshot</div>
-            <div class="text-[8px] mb-2" style="color:var(--t3)">Research only — not live scan output. Confirm in Playbook before monitor upgrade.</div>
+            <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--blue)">快取領袖 · Cached leaders · last-good snapshot</div>
+            <div class="text-[8px] mb-2" style="color:var(--t3)">研究層 — 非即時掃描輸出。升級 monitor 前須先在 Playbook 確認。 · Research only — not live scan output. Confirm in Playbook before monitor upgrade.</div>
             <template x-for="row in discoveryCachedLeadersRows()" :key="'cl-'+row.ticker">
               <div class="flex items-center gap-2 mb-1 p-1.5 rounded text-[8px]" style="background:var(--s2)">
                 <span class="mono font-bold text-white cursor-pointer" @click="openDossier(row.ticker)" x-text="row.ticker"></span>
@@ -4904,13 +4904,13 @@
         </div>
         <!-- Loading -->
         <template x-if="scannerHub.loading">
-          <div class="card card-p" style="text-align:center;padding:30px"><span class="spin"></span> Scanning…</div>
+          <div class="card card-p" style="text-align:center;padding:30px"><span class="spin"></span> 掃描中… · Scanning…</div>
         </template>
         <!-- Discovery verdict + merged board (full hub) -->
         <template x-if="!scannerHub.loading&&scannerHub.data&&!scannerHub.category&&scannerHub.data.discovery_verdict">
           <div class="card mb-3" style="border-left:4px solid var(--green);overflow:hidden">
             <div style="padding:8px 12px;background:var(--s2);border-bottom:1px solid var(--bd)">
-              <span class="text-[10px] font-bold uppercase text-white">Discovery Verdict</span>
+              <span class="text-[10px] font-bold uppercase text-white">探索結論 · Discovery Verdict</span>
               <span class="pill pa text-[8px] ml-2" x-text="discoveryVerdictQualityLabel()"></span>
             </div>
             <div class="grid grid-cols-2 gap-2 p-2.5 text-[9px]" style="color:var(--t2)">
@@ -4927,12 +4927,12 @@
           <template x-if="discoveryNearMissStripVisible()">
             <div class="card mb-3" style="overflow:hidden;border-left:4px solid var(--blue)">
               <div style="padding:8px 12px;background:var(--s2);border-bottom:1px solid var(--bd)">
-                <span class="text-[10px] font-bold uppercase text-white">Near-miss · monitor only</span>
-                <span class="pill pa text-[7px] ml-2">research_only</span>
+                <span class="text-[10px] font-bold uppercase text-white">接近達標 · 監控層 · Near-miss · monitor only</span>
+                <span class="pill pa text-[7px] ml-2">研究層 · research_only</span>
                 <span class="pill pw text-[7px] ml-1" x-text="discoveryNearMissStripRows().length+' rows'"></span>
               </div>
               <div style="padding:6px 10px">
-                <div class="text-[8px] mb-2" style="color:var(--t2)">Deploy gate closed — speculative / watch names for research. Not deploy-qualified.</div>
+                <div class="text-[8px] mb-2" style="color:var(--t2)">部署閘門關閉 — 以下為研究用 speculative／watch 名單，非 deploy-qualified。 · Deploy gate closed — speculative / watch names for research. Not deploy-qualified.</div>
                 <template x-for="row in discoveryNearMissStripRows()" :key="'nms-'+row.ticker">
                   <div class="mb-2 p-2 rounded text-[8px]" style="background:var(--s2);border-left:3px solid var(--amber)">
                     <div class="flex flex-wrap items-center gap-2 mb-1">
@@ -4950,7 +4950,7 @@
           <template x-if="(scannerHub.data.merged_top_names||[]).length">
             <div class="card mb-3" style="overflow:hidden">
               <div style="padding:8px 12px;background:var(--s2);border-bottom:1px solid var(--bd)">
-                <span class="text-[10px] font-bold uppercase text-white">Merged Top Names</span>
+                <span class="text-[10px] font-bold uppercase text-white">合併頭部名單 · Merged Top Names</span>
                 <span class="pill pg text-[8px] ml-2" x-text="(scannerHub.data.merged_top_names||[]).length+' ranked'"></span>
                 <span class="pill pw text-[7px] ml-1" x-text="scannerHitsShownLabel((scannerHub.data.merged_top_names||[]).length)"></span>
               </div>
@@ -4981,7 +4981,7 @@
         <!-- Results: All categories — Tier 1 active / Tier 2 empty pills -->
         <template x-if="!scannerHub.loading&&scannerHub.data&&scannerHub.data.scanners&&!scannerHub.category">
           <div class="space-y-3">
-            <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--green)">Tier 1 · Active discovery</div>
+            <div class="text-[8px] font-bold uppercase mb-1" style="color:var(--green)">第一層 · 活躍探索 · Tier 1 · Active discovery</div>
             <template x-for="catName in scannerCategoriesWithHits()" :key="catName">
               <div class="card" style="overflow:hidden">
                 <div style="padding:8px 12px;background:var(--s2);border-bottom:1px solid var(--bd)">
@@ -5037,7 +5037,7 @@
               </div>
             </template>
             <template x-if="scannerCategoriesEmpty().length">
-              <div class="text-[8px] font-bold uppercase mt-2 mb-1" style="color:var(--t3)">Tier 2 · Inactive (0 hits)</div>
+              <div class="text-[8px] font-bold uppercase mt-2 mb-1" style="color:var(--t3)">第二層 · 零命中 · Tier 2 · Inactive (0 hits)</div>
               <div class="flex flex-wrap gap-1 p-2 rounded" style="background:var(--s1);border:1px solid var(--bd)">
                 <template x-for="catName in scannerCategoriesEmpty()" :key="'empty-'+catName">
                   <span class="pill pw text-[8px]" :title="scannerCategoryEmptyWhy(catName)" x-text="scannerCategoryLabel(catName)+' 0'"></span>
@@ -5333,7 +5333,7 @@
         <template x-if="pfDecision">
           <div class="card card-p mb-2" style="border-left:4px solid var(--blue)">
             <div class="flex flex-wrap items-center gap-2 mb-2">
-              <span class="text-[10px] font-bold uppercase" style="color:var(--blue)">Portfolio truth</span>
+              <span class="text-[10px] font-bold uppercase" style="color:var(--blue)">持倉真相 · Portfolio truth</span>
               <span class="pill text-[7px] font-bold" :style="pfBrokerSource().pillClass" x-text="pfBrokerSource().pill"></span>
               <span class="pill text-[7px]" :class="pfDecision?.ibkr_linkage?.broker_truth?'pg':'pr'" x-text="pfPrioritySummary().truth"></span>
               <span class="pill text-[7px] pa" x-text="'同步 · '+pfPrioritySummary().sync"></span>
@@ -5341,11 +5341,11 @@
             </div>
             <div class="space-y-2 text-[9px]">
               <div class="p-2 rounded" style="background:var(--s2)">
-                <div class="text-[8px] uppercase mb-1" style="color:var(--t3)">Book truth</div>
+                <div class="text-[8px] uppercase mb-1" style="color:var(--t3)">帳簿真相 · Book truth</div>
                 <div class="text-white font-bold" x-text="pfPrioritySummary().truth+' · '+pfPrioritySummary().riskLine"></div>
               </div>
               <div class="p-2 rounded" style="background:var(--s2)">
-                <div class="text-[8px] uppercase mb-1" style="color:var(--t3)">Sync state</div>
+                <div class="text-[8px] uppercase mb-1" style="color:var(--t3)">同步狀態 · Sync state</div>
                 <div class="text-white font-bold" x-text="'同步 '+pfPrioritySummary().sync+' · '+pfPrioritySummary().posture"></div>
                 <div class="text-[8px] mt-1" style="color:var(--t2)" x-text="pfPrioritySummary().allocateReason"></div>
               </div>
@@ -5396,7 +5396,7 @@
         <!-- 2 · Do now -->
         <template x-if="pfDecision&&(pfDecision.do_now||[]).length">
           <div class="card card-p mb-2" style="border-left:4px solid var(--red)">
-            <div class="text-[10px] font-bold uppercase mb-2 text-red-400">Do now</div>
+            <div class="text-[10px] font-bold uppercase mb-2 text-red-400">立即行動 · Do now</div>
             <template x-for="(item,i) in pfDecision.do_now" :key="'donow-'+i">
               <div class="text-[9px] py-1 flex gap-2" :class="item.tier==='critical'?'text-red-300':'text-amber-300'">
                 <span class="pill text-[6px] pr shrink-0" x-text="item.action"></span>
@@ -5408,7 +5408,7 @@
         <!-- 3 · Risk state -->
         <template x-if="pfDecision&&pfDecision.risk_state">
           <div class="card card-p mb-2" style="border-left:3px solid var(--amber)">
-            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--amber)">Risk state</div>
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--amber)">風險狀態 · Risk state</div>
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[8px] mb-2">
               <div><span style="color:var(--t3)">Stop breached</span> <strong :class="pfDecision.risk_state.stop_breached?'text-red-400':'text-green-400'" x-text="pfDecision.risk_state.stop_breached?(pfDecision.risk_state.stop_breached_tickers||[]).join(', ')||'Yes':'No'"></strong></div>
               <div><span style="color:var(--t3)">Single-name</span> <strong :class="(pfDecision.risk_state.single_name_pct||0)>12?'text-red-400':'text-white'" x-text="(pfDecision.risk_state.single_name_ticker||'—')+' '+(pfDecision.risk_state.single_name_pct||0)+'%'"></strong></div>
@@ -5423,7 +5423,7 @@
         <template x-if="pfDecision&&pfDecision.portfolio_action_now&&!pfDemoteResearch()">
           <div class="card card-p mb-2" style="border-left:4px solid var(--green)">
             <div class="flex flex-wrap items-center gap-2 mb-2">
-              <span class="text-[10px] font-bold uppercase" style="color:var(--green)">Operating priority</span>
+              <span class="text-[10px] font-bold uppercase" style="color:var(--green)">操作優先 · Operating priority</span>
               <span class="pill font-bold" :class="verdictPillClass(pfDecision.portfolio_action_now.decision)" x-text="pfDecision.portfolio_action_now.decision"></span>
               <span class="pill text-[7px] pa" x-text="'Urgency · '+pfDecision.portfolio_action_now.urgency"></span>
               <span class="pill text-[7px]" :style="pfBrokerSource().pillClass" x-text="pfBrokerSource().pill"></span>
@@ -5766,11 +5766,11 @@
         </template>
         <!-- Header + Add button -->
         <div class="flex justify-between items-center">
-          <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">💼 My Portfolio</div>
+          <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">💼 我的持倉 · My Portfolio</div>
           <div class="flex gap-2">
             <button @click="fetchPortfolio()" class="btn-s text-[10px]" :disabled="pf.loading">🔄</button>
             <label class="btn-s text-[10px] cursor-pointer" style="background:var(--blue);color:#0d1117;font-weight:700">
-              📸 Futu
+              📸 富途上傳 · Futu
               <input type="file" accept="image/png,image/jpeg,image/webp" class="hidden" @change="uploadFutuCapture($event)" />
             </label>
             <button @click="pf.showAdd=!pf.showAdd" class="btn-s text-[10px]" style="background:var(--green);color:#0d1117;font-weight:700">+ Add Position</button>
@@ -7191,7 +7191,7 @@
         <div class="card card-p" style="border-left:4px solid var(--amber)">
           <div class="flex items-center gap-2 mb-1">
             <span class="pill text-[8px] font-bold pa">REPAIR CONSOLE</span>
-            <span class="text-[10px] font-bold uppercase" style="color:var(--amber)">IBKR repair checklist</span>
+            <span class="text-[10px] font-bold uppercase" style="color:var(--amber)">IBKR 修復清單 · IBKR repair checklist</span>
           </div>
           <div class="text-[10px] font-bold mb-1" style="color:var(--t1)" x-text="ibkrRepairPrimaryLine()"></div>
           <div class="text-[9px] mb-2" style="color:var(--t2);line-height:1.45" x-text="ibkrRepairBlockerLine()"></div>
@@ -7263,15 +7263,15 @@
         <!-- ── 2. Execution readiness (critical + workflow) ── -->
         <div class="card card-p">
           <div class="flex items-center justify-between mb-2">
-            <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">🛡 Execution Readiness</div>
+            <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">🛡 執行就緒 · Execution Readiness</div>
             <span x-show="ibkr.readiness" class="pill text-[8px] pa" x-text="ibkrReadinessScore()"></span>
           </div>
-          <div class="text-[8px] mb-2" style="color:var(--t3)">Explicit gates — critical connectivity vs workflow alignment carry different weight.</div>
+          <div class="text-[8px] mb-2" style="color:var(--t3)">明確閘門 — 連線關鍵項與工作流程對齊分開評估。 · Explicit gates — critical connectivity vs workflow alignment carry different weight.</div>
           <template x-if="!ibkr.readiness">
-            <div class="text-[10px] text-center py-3" style="color:var(--t3)">Loading readiness…</div>
+            <div class="text-[10px] text-center py-3" style="color:var(--t3)">載入就緒狀態… · Loading readiness…</div>
           </template>
           <template x-if="ibkr.readiness">
-            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">Critical</div>
+            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">關鍵項 · Critical</div>
             <div class="space-y-1 mb-3">
               <template x-for="row in ibkrCriticalRows()" :key="row.key">
                 <div class="flex items-start justify-between py-1 text-[9px]" style="border-bottom:1px solid var(--s2)">
@@ -7285,7 +7285,7 @@
                 </div>
               </template>
             </div>
-            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">Workflow</div>
+            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">工作流程 · Workflow</div>
             <div class="space-y-1 mb-2">
               <template x-for="row in ibkrWorkflowRows()" :key="row.key">
                 <div class="flex items-start justify-between py-1 text-[9px]" style="border-bottom:1px solid var(--s2)">
@@ -7328,9 +7328,9 @@
         <!-- ── 3. Truth alignment (book mismatch) ── -->
         <template x-if="ibkrBookMismatch()">
           <div class="card card-p" style="border:2px solid var(--red);background:#3a1e1e">
-            <div class="text-[11px] font-bold uppercase mb-1" style="color:#fecaca">⚠ BOOK MISMATCH</div>
+            <div class="text-[11px] font-bold uppercase mb-1" style="color:#fecaca">⚠ 帳簿不一致 · BOOK MISMATCH</div>
             <div class="text-[10px] leading-relaxed" style="color:#fca5a5">
-              Broker truth and local research book are not aligned. Portfolio analytics based on local positions should not be treated as executable broker state until reconciled.
+              券商真實持倉與本地研究帳簿未對齊。對帳前，勿將本地持倉分析視為可執行券商狀態。 · Broker truth and local research book are not aligned. Portfolio analytics based on local positions should not be treated as executable broker state until reconciled.
             </div>
             <div class="text-[9px] mt-2" style="color:#fde68a" x-text="ibkr.readiness&&ibkr.readiness.portfolio_sync_reason||ibkr.portfolioCompare.note||''"></div>
           </div>
@@ -7338,11 +7338,11 @@
 
         <!-- ── 4. Action surface (demoted when partial) ── -->
         <div :style="ibkrPartialMode()?'opacity:0.92':''">
-        <div class="text-[8px] uppercase mb-1 px-1" style="color:var(--t3)" x-show="ibkrPartialMode()">Action surface — manual handoff available; full execution control not yet aligned</div>
+        <div class="text-[8px] uppercase mb-1 px-1" style="color:var(--t3)" x-show="ibkrPartialMode()">操作區 — 可手動 handoff；完整執行控制尚未對齊 · Action surface — manual handoff available; full execution control not yet aligned</div>
 
         <!-- ── Connection card ── -->
         <div class="card card-p">
-          <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">🏦 IB Gateway Connection</div>
+          <div class="text-[10px] font-bold uppercase mb-3" style="color:var(--t3)">🏦 IB Gateway 連線 · IB Gateway Connection</div>
           <div class="flex gap-2 mb-3">
             <div style="min-width:160px">
               <label class="text-[9px] font-bold uppercase mb-1 block" style="color:var(--t3)">Host / IP</label>
@@ -7810,10 +7810,10 @@
             <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--t3)" x-text="opsSessionErrorLogTitle()"></div>
             <div class="text-[10px] leading-relaxed mb-2" style="color:var(--t2)" x-text="opsErrorLogIntro()"></div>
             <div class="flex gap-1 flex-wrap items-center">
-              <button type="button" class="btn-s text-[8px]" :class="errorLog.filter==='all'?'btn-p':''" @click="errorLog.filter='all';fetchErrorLog()">All</button>
-              <button type="button" class="btn-s text-[8px]" :class="errorLog.filter==='critical'?'btn-p':''" @click="errorLog.filter='critical';fetchErrorLog()">Critical</button>
-              <button type="button" class="btn-s text-[8px]" :class="errorLog.filter==='warning'?'btn-p':''" @click="errorLog.filter='warning';fetchErrorLog()">Warnings</button>
-              <button type="button" class="btn-s text-[8px]" :class="errorLog.filter==='info'?'btn-p':''" @click="errorLog.filter='info';fetchErrorLog()">Info</button>
+              <button type="button" class="btn-s text-[8px]" :class="errorLog.filter==='all'?'btn-p':''" @click="errorLog.filter='all';fetchErrorLog()">全部 · All</button>
+              <button type="button" class="btn-s text-[8px]" :class="errorLog.filter==='critical'?'btn-p':''" @click="errorLog.filter='critical';fetchErrorLog()">危急 · Critical</button>
+              <button type="button" class="btn-s text-[8px]" :class="errorLog.filter==='warning'?'btn-p':''" @click="errorLog.filter='warning';fetchErrorLog()">警告 · Warnings</button>
+              <button type="button" class="btn-s text-[8px]" :class="errorLog.filter==='info'?'btn-p':''" @click="errorLog.filter='info';fetchErrorLog()">資訊 · Info</button>
               <button type="button" class="btn-s text-[8px] ml-auto" @click="fetchErrorLog()" :disabled="errorLog.loading">重新整理 Refresh</button>
             </div>
           </div>
@@ -7847,10 +7847,10 @@
                 </div>
               </summary>
               <div class="mt-2 space-y-2 text-[10px]">
-                <div><span class="font-bold" style="color:var(--t3)">What happened</span><div class="mt-0.5 leading-relaxed" style="color:var(--t2)" x-text="row.detail"></div></div>
-                <div><span class="font-bold" style="color:var(--green)">Suggested action</span><div class="mt-0.5 leading-relaxed" style="color:var(--t2)" x-text="row.suggested_action"></div></div>
-                <div x-show="row.root_cause"><span class="font-bold" style="color:var(--purple)">Root cause</span><div class="mt-0.5 leading-relaxed" style="color:var(--t2)" x-text="row.root_cause"></div></div>
-                <div x-show="row.lesson"><span class="font-bold" style="color:var(--amber)">Lesson</span><div class="mt-0.5 leading-relaxed" style="color:var(--t2)" x-text="row.lesson"></div></div>
+                <div><span class="font-bold" style="color:var(--t3)">發生什麼 · What happened</span><div class="mt-0.5 leading-relaxed" style="color:var(--t2)" x-text="row.detail"></div></div>
+                <div><span class="font-bold" style="color:var(--green)">建議操作 · Suggested action</span><div class="mt-0.5 leading-relaxed" style="color:var(--t2)" x-text="row.suggested_action"></div></div>
+                <div x-show="row.root_cause"><span class="font-bold" style="color:var(--purple)">根本原因 · Root cause</span><div class="mt-0.5 leading-relaxed" style="color:var(--t2)" x-text="row.root_cause"></div></div>
+                <div x-show="row.lesson"><span class="font-bold" style="color:var(--amber)">教訓 · Lesson</span><div class="mt-0.5 leading-relaxed" style="color:var(--t2)" x-text="row.lesson"></div></div>
                 <pre x-show="row.stack_trace && errorLog.devMode" class="text-[8px] mono p-2 rounded overflow-x-auto" style="background:var(--s2);color:var(--t3);max-height:160px" x-text="row.stack_trace"></pre>
               </div>
             </details>

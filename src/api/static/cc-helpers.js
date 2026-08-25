@@ -1395,6 +1395,63 @@
 					"CC · Clarity Console release notes。維護於 data/changelog.json — 非 live git 歷史。",
 					"Release notes for CC · Clarity Console. Maintained in data/changelog.json — not live git history.",
 				),
+			DEPLOY: _opsBilingual("部署許可", "DEPLOY"),
+			"RESEARCH ONLY": _opsBilingual("研究層", "RESEARCH ONLY"),
+			"MONITOR ONLY": _opsBilingual("監控層", "MONITOR ONLY"),
+			BLOCKED: _opsBilingual("非部署", "BLOCKED"),
+			"CONFIRM ONLY": _opsBilingual("僅確認", "CONFIRM ONLY"),
+			"HANDOFF READY": _opsBilingual("交付就緒", "HANDOFF READY"),
+			"GUIDE MODE": _opsBilingual("指南模式", "GUIDE MODE"),
+			"ANALYSIS ONLY": _opsBilingual("分析層", "ANALYSIS ONLY"),
+			"Monitor ranking": _opsBilingual("監控排序", "Monitor ranking"),
+			"No valid monitor candidates": _opsBilingual("無有效 monitor 候選", "No valid monitor candidates"),
+			Active: _opsBilingual("有效", "Active"),
+			Warming: _opsBilingual("預熱中", "Warming"),
+			Idle: _opsBilingual("閒置", "Idle"),
+			"Dashboard gate: WAIT": _opsBilingual("Dashboard 閘門：WAIT", "Dashboard gate: WAIT"),
+			"Dashboard gate: NO TRADE": _opsBilingual("Dashboard 閘門：NO TRADE", "Dashboard gate: NO TRADE"),
+			"Dashboard gate: SELECTIVE": _opsBilingual("Dashboard 閘門：SELECTIVE", "Dashboard gate: SELECTIVE"),
+			"Dashboard gate: TRADE": _opsBilingual("Dashboard 閘門：TRADE", "Dashboard gate: TRADE"),
+			"Dashboard gate: STRONG TRADE": _opsBilingual(
+				"Dashboard 閘門：STRONG TRADE",
+				"Dashboard gate: STRONG TRADE",
+			),
+			"部署層 · Deploy-qualified": _opsBilingual("部署層", "Deploy-qualified"),
+			"試點層 · Pilot-qualified": _opsBilingual("試點層", "Pilot-qualified"),
+			"監控層 · Watch-qualified": _opsBilingual("監控層", "Watch-qualified"),
+			"接近達標升級 · Near-miss upgrade": _opsBilingual("接近達標升級", "Near-miss upgrade"),
+			"否決／避免 · Rejected / Avoid": _opsBilingual("否決／避免", "Rejected / Avoid"),
+			"可交易 · TRADE": _opsBilingual("可交易", "TRADE"),
+			"買進 · BUY": _opsBilingual("買進", "BUY"),
+			"回測買進 · BUY ON DIP": _opsBilingual("回測買進", "BUY ON DIP"),
+			"強力交易 · STRONG TRADE": _opsBilingual("強力交易", "STRONG TRADE"),
+			"監控 · WATCH": _opsBilingual("監控", "WATCH"),
+			"試點 · PILOT": _opsBilingual("試點", "PILOT"),
+			"試點（研究層）· PILOT (RESEARCH)": _opsBilingual("試點（研究層）", "PILOT (RESEARCH)"),
+			"試點（監控層）· PILOT (MONITOR)": _opsBilingual("試點（監控層）", "PILOT (MONITOR)"),
+			"避免 · AVOID": _opsBilingual("避免", "AVOID"),
+			"禁止交易 · NO TRADE": _opsBilingual("禁止交易", "NO TRADE"),
+			"後備候選 · FALLBACK CANDIDATE": _opsBilingual("後備候選", "FALLBACK CANDIDATE"),
+			"後備監控 · FALLBACK WATCH": _opsBilingual("後備監控", "FALLBACK WATCH"),
+			"研究層 · RESEARCH ONLY": _opsBilingual("研究層", "RESEARCH ONLY"),
+			"監控層 · WATCH ONLY": _opsBilingual("監控層", "WATCH ONLY"),
+			"部署許可 · DEPLOY": _opsBilingual("部署許可", "DEPLOY"),
+			"研究層 · RESEARCH ONLY": _opsBilingual("研究層", "RESEARCH ONLY"),
+			"監控層 · MONITOR ONLY": _opsBilingual("監控層", "MONITOR ONLY"),
+			"非部署 · BLOCKED": _opsBilingual("非部署", "BLOCKED"),
+			"僅確認 · CONFIRM ONLY": _opsBilingual("僅確認", "CONFIRM ONLY"),
+			"交付就緒 · HANDOFF READY": _opsBilingual("交付就緒", "HANDOFF READY"),
+			"指南模式 · GUIDE MODE": _opsBilingual("指南模式", "GUIDE MODE"),
+			"分析層 · ANALYSIS ONLY": _opsBilingual("分析層", "ANALYSIS ONLY"),
+			"領漲股 · Leaders": _opsBilingual("領漲股", "Leaders"),
+			"回測 · Pullbacks": _opsBilingual("回測", "Pullbacks"),
+			"突破 · Breakouts": _opsBilingual("突破", "Breakouts"),
+			"確認型 · Confirmation": _opsBilingual("確認型", "Confirmation"),
+			"暫避 · Avoid Now": _opsBilingual("暫避", "Avoid Now"),
+			"價格／型態 · Price / Pattern": _opsBilingual("價格／型態", "Price / Pattern"),
+			"期權資金流 · Options Flow": _opsBilingual("期權資金流", "Options Flow"),
+			"風險標記 · Risk Flags": _opsBilingual("風險標記", "Risk Flags"),
+			"板塊 · Sector": _opsBilingual("板塊", "Sector"),
 		}
 		if (exact[t]) return exact[t]
 		if (/^(\d+) near-miss$/.test(t)) {
@@ -2387,6 +2444,8 @@ function cc() {
 		},
 		ccHeader: {
 			decision_authority: null,
+			decision_board: null,
+			decision_board_hash: null,
 			page_authority_mode: "diagnostic",
 			portfolio_context: null,
 			header_summary: null,
@@ -2807,6 +2866,8 @@ function cc() {
 			compact_rows: null,
 			rank_buckets: null,
 			system_state: null,
+			decision_board: null,
+			decision_board_hash: null,
 		},
 		flowPanel: { loading: false, data: null, radar: null, decision: null, error: "" },
 		opsConsole: { loading: false, data: null, error: "" },
@@ -2849,60 +2910,62 @@ function cc() {
 			this.tick()
 			setInterval(() => this.tick(), 1000)
 			this.fetchHealth()
-			setInterval(() => this.fetchHealth(), 15000)
-			// Phase 1 — critical path (avoid burst 503s on cold start)
-			this.fetchCcStatus()
-			setInterval(() => this.fetchCcStatus(), 30000)
+			setInterval(() => this.fetchHealth(), 30000)
+			// Phase 1 — critical path (hydrate local cache first, then network)
+			this.hydrateRankedFromCache()
+			this.hydrateToday7FromCache()
+			this.hydrateScannersFromCache()
+			this.fetchDecisionBoardLight()
+			setInterval(() => this.fetchDecisionBoardLight(), 30000)
+			this.fetchCcStatus({ full: true })
+			setInterval(() => this.fetchCcStatus({ light: true }), 120000)
 			this.fetchToday7()
-			setInterval(() => this.fetchToday7(), 120000)
-			setTimeout(() => this.fetchMarketStrip(), 400)
-			setInterval(() => this.fetchMarketStrip(), 180000)
+			setInterval(() => this.fetchToday7(), 180000)
+			setTimeout(() => this.fetchMarketStrip(), 800)
+			setInterval(() => this.fetchMarketStrip(), 300000)
 			// Signals feed loads on tab switch only (avoids duplicate /api/recommendations traffic)
 			// Phase 2 — secondary panels (staggered)
 			setTimeout(() => {
-				this.fetchRanked()
+				this.fetchRanked({ snapshotFirst: true })
 				this.fetchFlow()
-			}, 600)
+			}, 1200)
 			setTimeout(() => {
 				this.fetchFunds()
-			}, 1200)
+			}, 2200)
 			setTimeout(() => {
 				this.fetchDecisionHub()
 				this.fetchPortfolio()
 				this.fetchAosMonitors()
 				this.fetchAIStatus()
-			}, 2000)
+			}, 3500)
 			setTimeout(() => {
 				this.fetchDesk()
 				this.fetchLeadersDashboard()
-			}, 3000)
-			setInterval(() => this.fetchDesk(), 120000)
+			}, 5000)
+			setInterval(() => this.fetchDesk(), 180000)
 			setInterval(() => this.fetchLeadersDashboard(), 300000)
-			setInterval(() => this.fetchDecisionHub(), 120000)
-			setInterval(() => this.fetchPortfolio(), 180000)
+			setInterval(() => this.fetchDecisionHub(), 180000)
+			setInterval(() => this.fetchPortfolio(), 300000)
 			// Per-strategy realized analytics (cheap; refresh every 10min)
 			this.fetchStrategyHealth()
 			setInterval(() => this.fetchStrategyHealth(), 600000)
-			// Data freshness watchdog (every 60s; cheap — already-cached histories)
-			this.fetchFreshness()
-			setInterval(() => this.fetchFreshness(), 60000)
-			// Position-level risk alerts (every 60s)
-			this.fetchRiskAlerts()
-			setInterval(() => this.fetchRiskAlerts(), 60000)
+			// Data freshness watchdog (every 2 min; cheap — already-cached histories)
+			setTimeout(() => this.fetchFreshness(), 1500)
+			setInterval(() => this.fetchFreshness(), 120000)
+			// Position-level risk alerts (every 2 min)
+			setTimeout(() => this.fetchRiskAlerts(), 2000)
+			setInterval(() => this.fetchRiskAlerts(), 120000)
 			// Morning brief freshness check (every 5 min — cheap, just stats a file)
 			this.fetchBriefStatus()
 			setInterval(() => this.fetchBriefStatus(), 300000)
-			this.hydrateRankedFromCache()
-			this.hydrateToday7FromCache()
-			this.hydrateScannersFromCache()
 			this.fetchWarmupBriefBoard()
 			setTimeout(() => {
 				if (!this.playbookBoardHasContent()) this.fetchWarmupBriefBoard()
-			}, 400)
+			}, 600)
 			setTimeout(() => {
 				if (this.rankedOpps.loading) this.rankedOpps.loading = false
 				if (this.rankedOpps.refreshing) this.rankedOpps.refreshing = false
-			}, 10000)
+			}, 8000)
 			try {
 				this.instantDegradedDismissed = sessionStorage.getItem("cc_instant_degraded_dismissed") === "1"
 			} catch (e) {}
@@ -3825,6 +3888,9 @@ function cc() {
 			return { market, board, dossier, execution, worst_tier: worstTier, worst_domain: worstDomain, as_of: asOf }
 		},
 		systemState() {
+			const board =
+				this.ccHeader?.decision_board || this.today7?.decision_board || this.rankedOpps?.decision_board || null
+			if (board?.system_state && typeof board.system_state === "object") return board.system_state
 			if (this.tab === "signals" && this.rankedOpps.system_state) return this.rankedOpps.system_state
 			if (this.today7?.system_state && typeof this.today7.system_state === "object")
 				return this.today7.system_state
@@ -3832,6 +3898,9 @@ function cc() {
 			return this._clientSystemState()
 		},
 		_clientSystemState() {
+			const board =
+				this.ccHeader?.decision_board || this.today7?.decision_board || this.rankedOpps?.decision_board || null
+			if (board?.system_state && typeof board.system_state === "object") return board.system_state
 			const cs = this.ccState()
 			const ss = this.ccHeader?.system_state || {}
 			const fs = cs.freshness_state || {}
@@ -4074,7 +4143,8 @@ function cc() {
 					badge: "CONFIRM ONLY",
 					short: "只可確認結構 · no sizing",
 					authority: "confirmation_only",
-					authority_label: "Dossier is confirm-only — confirm structure only, no sizing or handoff",
+					authority_label:
+						"檔案層 — 只確認結構，無 sizing 或 handoff · Dossier is confirm-only — confirm structure only, no sizing or handoff",
 				}
 			}
 			if (mode === "flow_supporting") {
@@ -4083,7 +4153,8 @@ function cc() {
 					badge: "CONFIRM ONLY",
 					short: "只作確認輔助 · not executable here",
 					authority: "confirmation_only",
-					authority_label: "Flow is confirmation-only — supporting overlay, not an execution surface",
+					authority_label:
+						"資金流層 — 只作確認輔助，非執行介面 · Flow is confirmation-only — supporting overlay, not an execution surface",
 				}
 			}
 			if (mode === "portfolio_manual" || mode === "rejections_diagnostic" || mode === "ops_diagnostic") {
@@ -4092,7 +4163,7 @@ function cc() {
 					badge: hardBlocked ? "BLOCKED" : "MONITOR ONLY",
 					short: mode === "portfolio_manual" ? "先對齊倉位真相 · monitor first" : "診斷頁面 · monitor first",
 					authority: hardBlocked ? "blocked" : "monitor_only",
-					authority_label: "This surface is monitor/diagnostic only",
+					authority_label: "此介面屬監控／診斷層 · This surface is monitor/diagnostic only",
 				}
 			}
 			if (mode === "ibkr_execution") {
@@ -4102,7 +4173,7 @@ function cc() {
 						badge: "HANDOFF READY",
 						short: "Broker 已就緒 · execution ready",
 						authority: "deploy_authority",
-						authority_label: "IBKR handoff is ready",
+						authority_label: "部署許可 — IBKR handoff 就緒 · IBKR handoff is ready",
 					}
 				}
 				return {
@@ -4110,7 +4181,7 @@ function cc() {
 					badge: hardBlocked ? "BLOCKED" : "MONITOR ONLY",
 					short: "先修 broker checklist · then reconnect",
 					authority: hardBlocked ? "blocked" : "monitor_only",
-					authority_label: "Broker handoff is not ready yet",
+					authority_label: "非部署 — broker handoff 尚未就緒 · Broker handoff is not ready yet",
 				}
 			}
 			if (needsResearch) {
@@ -4119,7 +4190,8 @@ function cc() {
 					badge: "RESEARCH ONLY",
 					short: "可比較研究，不可執行 · not executable here",
 					authority: "research_only",
-					authority_label: "Research surface only — compare candidates, not executable here",
+					authority_label:
+						"研究層 — 只可比較候選，不可執行 · Research surface only — compare candidates, not executable here",
 				}
 			}
 			if (mode === "dashboard_core" || mode === "playbook_core") {
@@ -4130,7 +4202,7 @@ function cc() {
 						badge: "DEPLOY",
 						short: "Board + broker + execution 已對齊",
 						authority: "deploy_authority",
-						authority_label: "Deploy authority open",
+						authority_label: "部署許可已開啟 · Deploy authority open",
 					}
 				}
 				return {
@@ -4141,16 +4213,16 @@ function cc() {
 						: "盤面未開閘 · ranked for review only",
 					authority: hardBlocked ? "blocked" : "monitor_only",
 					authority_label: hardBlocked
-						? "Deploy blocked by board / broker / execution truth"
-						: "Board not open — monitor only",
+						? "非部署 — 被 board／broker／execution 阻擋 · Deploy blocked by board / broker / execution truth"
+						: "監控層 — 板面未開閘 · Board not open — monitor only",
 				}
 			}
 			return {
 				...entry,
 				badge: "MONITOR ONLY",
-				short: "Authority capped on this surface",
+				short: "此介面權限受限 · Authority capped on this surface",
 				authority: "monitor_only",
-				authority_label: "Authority capped on this surface",
+				authority_label: "監控層 — 此介面權限受限 · Authority capped on this surface",
 			}
 		},
 		_normalizeFetchState(ctx) {
@@ -6575,10 +6647,30 @@ function cc() {
 		},
 		cardActionDisplay(opp) {
 			const a = String(this.effectiveCardAction(opp) || "").toUpperCase()
-			if (a !== "PILOT") return this.effectiveCardAction(opp)
-			const ps = String(opp?.pilot_state || "").toUpperCase()
-			if (ps === "PILOT_RESEARCH_ONLY") return "PILOT (RESEARCH)"
-			return "PILOT"
+			let raw = a
+			if (a !== "PILOT") raw = this.effectiveCardAction(opp)
+			else {
+				const ps = String(opp?.pilot_state || "").toUpperCase()
+				raw = ps === "PILOT_RESEARCH_ONLY" ? "PILOT (RESEARCH)" : "PILOT"
+			}
+			const actionMap = {
+				TRADE: "可交易 · TRADE",
+				BUY: "買進 · BUY",
+				BUY_ON_DIP: "回測買進 · BUY ON DIP",
+				STRONG_TRADE: "強力交易 · STRONG TRADE",
+				WATCH: "監控 · WATCH",
+				PILOT: "試點 · PILOT",
+				"PILOT (RESEARCH)": "試點（研究層）· PILOT (RESEARCH)",
+				"PILOT (MONITOR)": "試點（監控層）· PILOT (MONITOR)",
+				AVOID: "避免 · AVOID",
+				NO_TRADE: "禁止交易 · NO TRADE",
+				"FALLBACK CANDIDATE": "後備候選 · FALLBACK CANDIDATE",
+				"FALLBACK WATCH": "後備監控 · FALLBACK WATCH",
+				"RESEARCH ONLY": "研究層 · RESEARCH ONLY",
+				"WATCH ONLY": "監控層 · WATCH ONLY",
+			}
+			const key = String(raw || "").toUpperCase()
+			return this._uiText(actionMap[key] || actionMap[raw] || raw || "—")
 		},
 		effectiveCardActionClass(opp) {
 			const a = String(this.effectiveCardAction(opp) || "").toUpperCase()
@@ -7595,6 +7687,15 @@ function cc() {
 		playbookCardMonitorLine(r) {
 			return this.playbookCardGateLine(r)
 		},
+		playbookCardBuySignalLine(r) {
+			const raw =
+				r?.buy_signal_summary ||
+				(r?.signal_type && r?.authority_label
+					? `${r.ticker || ""} · ${r.signal_type} · ${r.authority_label}`
+					: "")
+			if (!raw) return ""
+			return this.localizeText(raw)
+		},
 		playbookCardPrimaryBlocker(r) {
 			const oi = r?.operator_insight?.blocker
 			if (oi && String(oi).trim()) return oi
@@ -7627,18 +7728,20 @@ function cc() {
 		},
 		playbookBucketLabel(key) {
 			const labels = {
-				deployQualified: "Deploy-qualified",
-				pilotQualified: "Pilot-qualified",
-				watchQualified: "Watch-qualified",
-				nearMiss: "Near-miss upgrade",
-				rejectedAvoid: "Rejected / Avoid",
+				deployQualified: "部署層 · Deploy-qualified",
+				pilotQualified: "試點層 · Pilot-qualified",
+				watchQualified: "監控層 · Watch-qualified",
+				nearMiss: "接近達標升級 · Near-miss upgrade",
+				rejectedAvoid: "否決／避免 · Rejected / Avoid",
 			}
-			return labels[key] || key
+			return this._uiText(labels[key] || key)
 		},
 		playbookMonitorSectionLabel() {
 			const b = this.rankedOpps.rank_buckets
-			if (b?.monitor_section_label) return b.monitor_section_label
-			return this.playbookDisplayRows().length ? "Monitor ranking" : "No valid monitor candidates"
+			if (b?.monitor_section_label) return this._uiText(b.monitor_section_label)
+			return this.playbookDisplayRows().length
+				? this._uiText("Monitor ranking")
+				: this._uiText("No valid monitor candidates")
 		},
 		playbookRejectedDisplayRows() {
 			const b = this.rankedOpps.rank_buckets?.buckets?.rejectedAvoid
@@ -8367,17 +8470,54 @@ function cc() {
 		async fetchCcHeader() {
 			return this.fetchCcStatus()
 		},
-		async fetchCcStatus() {
+		applyDecisionBoardPayload(board) {
+			if (!board || typeof board !== "object") return
+			this.ccHeader = {
+				...(this.ccHeader || {}),
+				decision_board: board,
+				decision_board_hash: board.decision_board_hash || null,
+				decision_authority: board.deploy_authority || this.ccHeader?.decision_authority || null,
+				system_state: board.system_state || this.ccHeader?.system_state || null,
+			}
+			if (board.system_state) {
+				this.today7.system_state = board.system_state
+				this.today7.decision_board = board
+				this.today7.decision_board_hash = board.decision_board_hash || null
+			}
+		},
+		async fetchDecisionBoardLight() {
 			try {
-				const tabQ = this.tab ? "?tab=" + encodeURIComponent(this.tab) : ""
+				const r = await fetch("/api/v7/decision/board", {
+					headers: { "X-API-Key": window._apiKey || "dev-secret-local" },
+					signal: AbortSignal.timeout(8000),
+				})
+				if (!r.ok) return
+				const board = await r.json()
+				const prevHash = this.ccHeader?.decision_board_hash || this.today7?.decision_board_hash
+				if (prevHash && board.decision_board_hash === prevHash) return
+				this.applyDecisionBoardPayload(board)
+			} catch (e) {
+				/* non-fatal */
+			}
+		},
+		async fetchCcStatus(opts = {}) {
+			const light = !!opts.light && !opts.full
+			try {
+				const parts = []
+				if (this.tab) parts.push("tab=" + encodeURIComponent(this.tab))
+				if (light) parts.push("light=1")
+				const tabQ = parts.length ? "?" + parts.join("&") : ""
 				const r = await fetch("/api/ops/cc-header" + tabQ, {
 					headers: { "X-API-Key": window._apiKey || "dev-secret-local" },
+					signal: AbortSignal.timeout(light ? 8000 : 20000),
 				})
 				if (r.ok) {
 					const h = await r.json()
 					const eng = h.engine || {}
 					this.ccHeader = {
 						decision_authority: h.decision_authority || null,
+						decision_board: h.decision_board || null,
+						decision_board_hash: h.decision_board_hash || null,
 						cc_state: h.cc_state || null,
 						system_state: h.system_state || null,
 						page_capability: h.page_capability || null,
@@ -10885,43 +11025,6 @@ function cc() {
 				this.histVar.loading = false
 			}
 		},
-		async uploadFutuCapture(ev) {
-			const file = ev.target && ev.target.files && ev.target.files[0]
-			if (!file) return
-			if (file.size > 10 * 1024 * 1024) {
-				alert("Image too large (max 10MB)")
-				ev.target.value = ""
-				return
-			}
-			const okType = /^image\/(png|jpeg|jpg|webp)$/i.test(file.type || "")
-			if (!okType) {
-				alert("Use PNG, JPEG, or WebP")
-				ev.target.value = ""
-				return
-			}
-			this.pf.loading = true
-			try {
-				const fd = new FormData()
-				fd.append("file", file)
-				fd.append("notify_discord", "true")
-				const r = await fetch("/api/v7/portfolio/futu-capture", { method: "POST", body: fd })
-				const d = await r.json().catch(() => ({}))
-				if (!r.ok) throw new Error(d.detail || "HTTP " + r.status)
-				const adv = d.advisory || {}
-				const msg =
-					(adv.summary_zh || adv.summary_en || "") +
-					"\n\n" +
-					(adv.disclaimer_zh || adv.disclaimer_en || "Advisory only")
-				alert("✅ Parsed " + d.count + " holdings (" + (d.parse_method || "?") + ")\n\n" + msg.slice(0, 1200))
-				await this.fetchPortfolio()
-				await this.fetchPortfolioDecision()
-			} catch (e) {
-				alert("Futu capture failed: " + e.message)
-			} finally {
-				this.pf.loading = false
-				if (ev.target) ev.target.value = ""
-			}
-		},
 		resetAddPositionForm() {
 			this.pf.showAdd = false
 			this.pf.showAdvanced = false
@@ -12713,11 +12816,11 @@ function cc() {
 		// switches to the IBKR tab. PM still has to confirm — no silent submission.
 		sendPlaybookToIbkr(r) {
 			if (!r || !r.ticker) {
-				alert("Missing ticker")
+				alert("缺少代碼 · Missing ticker")
 				return
 			}
 			if (!this.cc_status || !this.cc_status.ibkr_connected) {
-				alert("IBKR not connected. Open the IBKR pill to connect first.")
+				alert("IBKR 未連線 — 請先點 IBKR pill 連線 · IBKR not connected. Open the IBKR pill to connect first.")
 				return
 			}
 			const equity =
@@ -12915,9 +13018,23 @@ function cc() {
 		},
 		async fetchToday7() {
 			try {
-				const r = await this.ccFetch("/api/v7/today", { retries: 2, backoff: 500, timeoutMs: 15000 })
+				const prevHash = this.today7?.decision_board_hash || ""
+				const r = await this.ccFetch("/api/v7/today", { retries: 1, backoff: 400, timeoutMs: 12000 })
 				if (!r || !r.ok) throw new Error("HTTP " + (r ? r.status : "fail"))
 				const d = await r.json()
+				if (
+					prevHash &&
+					d.decision_board_hash &&
+					prevHash === d.decision_board_hash &&
+					this.today7.regime &&
+					(this.today7.top_ranked || []).length
+				) {
+					this.today7.decision_board = d.decision_board || this.today7.decision_board
+					this.today7.decision_board_hash = d.decision_board_hash
+					this.today7.system_state = d.system_state || this.today7.system_state
+					this.today7.trust = d.trust || this.today7.trust
+					return
+				}
 				this.captureInstantDegradedBanner(d)
 				if (d && d.error) throw new Error(String(d.error))
 				if (!d || !d.market_regime) throw new Error("incomplete today payload")
@@ -12981,6 +13098,8 @@ function cc() {
 				this.today7.trust = d.trust || {}
 				this.today7.cc_state = d.cc_state || null
 				this.today7.system_state = d.system_state || null
+				this.today7.decision_board = d.decision_board || null
+				this.today7.decision_board_hash = d.decision_board_hash || null
 				this.today7.dashboard_monitors = d.dashboard_monitors || []
 				this.today7.page_capability = d.page_capability || null
 				if (!(this.today7.top_ranked || []).length && (d.degraded || d.instant_degraded)) {
@@ -13198,7 +13317,7 @@ function cc() {
 					} else {
 						try {
 							const sr = await fetch("/api/v7/playbook/ranked/snapshot?limit=50", {
-								signal: AbortSignal.timeout(5000),
+								signal: AbortSignal.timeout(4000),
 							})
 							if (sr.ok) this.applyRankedPayload(await sr.json(), { fromSnapshot: true })
 						} catch (e) {
@@ -13207,11 +13326,16 @@ function cc() {
 						if (this.rankedOpps.rows.length) this.rankedOpps.loading = false
 					}
 				}
+				if (opts.snapshotFirst && (this.rankedOpps.rows || []).length) {
+					this.rankedOpps.refreshing = true
+					setTimeout(() => this.fetchRanked({ backgroundRefresh: true }), 50)
+					return
+				}
 				let u = "/api/v7/playbook/ranked?limit=50"
 				if (this.rankedOpps.actionFilter) u += "&action=" + this.rankedOpps.actionFilter
 				if (this.rankedOpps.sectorFilter) u += "&sector=" + this.rankedOpps.sectorFilter
 				if (opts.refresh) u += "&refresh=true"
-				const r = await fetch(u, { signal: AbortSignal.timeout(12000) })
+				const r = await fetch(u, { signal: AbortSignal.timeout(opts.backgroundRefresh ? 20000 : 8000) })
 				if (!r.ok) {
 					if (r.status === 503) {
 						try {
@@ -13282,6 +13406,9 @@ function cc() {
 					this.saveRankedToCache()
 			} catch (e) {
 				console.warn("ranked fetch failed", e)
+				if (opts.backgroundRefresh && (this.rankedOpps.rows || []).length) {
+					return
+				}
 				if (!this.playbookBoardHasContent()) {
 					await this.fetchWarmupBriefBoard()
 					this.rankedOpps.fetch_failed = !this.playbookBoardHasContent()
@@ -13372,6 +13499,8 @@ function cc() {
 			this.rankedOpps.monitor_auto_actions = d.monitor_auto_actions || null
 			this.rankedOpps.rank_buckets = d.rank_buckets || null
 			this.rankedOpps.system_state = d.system_state || null
+			this.rankedOpps.decision_board = d.decision_board || null
+			this.rankedOpps.decision_board_hash = d.decision_board_hash || null
 			this.rankedOpps.page_capability = d.page_capability || null
 			if (this.rankedOpps.compact_rows === null && d.board_posture) this.rankedOpps.compact_rows = null
 			this.captureInstantDegradedBanner(d)
@@ -13463,34 +13592,40 @@ function cc() {
 		},
 		scannerCategoryLabel(cat) {
 			const m = {
-				VALIDATION: "Confirmation",
-				NO_TRADE: "Avoid Now",
-				PATTERN: "Price / Pattern",
-				FLOW: "Options Flow",
-				RISK: "Risk Flags",
-				SECTOR: "Sector",
-				LEADERS: "Leaders",
-				PULLBACKS: "Pullbacks",
-				BREAKOUTS: "Breakouts",
+				VALIDATION: "確認型 · Confirmation",
+				NO_TRADE: "暫避 · Avoid Now",
+				PATTERN: "價格／型態 · Price / Pattern",
+				FLOW: "期權資金流 · Options Flow",
+				RISK: "風險標記 · Risk Flags",
+				SECTOR: "板塊 · Sector",
+				LEADERS: "領漲股 · Leaders",
+				PULLBACKS: "回測 · Pullbacks",
+				BREAKOUTS: "突破 · Breakouts",
 			}
-			return m[cat] || (cat || "").replace(/_/g, " ")
+			const raw = m[cat] || (cat || "").replace(/_/g, " ")
+			return this._uiText(raw)
 		},
 		scannerCategoryEmptyWhy(cat) {
 			const d = this.scannerHub.data
 			const intent = d && d.decision_intent && d.decision_intent[cat]
-			if (intent && intent.empty_why) return intent.empty_why
+			if (intent && intent.empty_why) return this._uiText(intent.empty_why)
 			const w = {
-				FLOW: "No unusual volume or options-flow triggers in the scanned universe.",
-				VALIDATION: "No confirmation / calibration patterns passed strict gates.",
-				PATTERN: "No VCP, breakout, or pullback patterns met score thresholds.",
-				SECTOR: "No sector rotation or leader/laggard signals fired.",
-				RISK: "No risk warnings — or regime is permissive.",
-				LEADERS: "No RS leaders mapped for this intent filter.",
-				PULLBACKS: "No pullback setups in current tape.",
-				BREAKOUTS: "No breakout pivots with confirming volume.",
-				NO_TRADE: "No avoid-now composite triggers — see Rejections for pipeline blocks.",
+				FLOW: "掃描 universe 內無異常成交量或期權流觸發。 · No unusual volume or options-flow triggers in the scanned universe.",
+				VALIDATION:
+					"無確認／校準型態通過嚴格閘門。 · No confirmation / calibration patterns passed strict gates.",
+				PATTERN:
+					"無 VCP、突破或回測型態達分數門檻。 · No VCP, breakout, or pullback patterns met score thresholds.",
+				SECTOR: "無板塊輪動或領漲／落後訊號。 · No sector rotation or leader/laggard signals fired.",
+				RISK: "無風險警告 — 或體制偏寬鬆。 · No risk warnings — or regime is permissive.",
+				LEADERS: "此 intent 篩選下無 RS 領漲映射。 · No RS leaders mapped for this intent filter.",
+				PULLBACKS: "當前 tape 無回測 setup。 · No pullback setups in current tape.",
+				BREAKOUTS: "無具確認成交量的突破 pivot。 · No breakout pivots with confirming volume.",
+				NO_TRADE:
+					"無 composite 暫避觸發 — 見 Rejections 管線阻擋。 · No avoid-now composite triggers — see Rejections for pipeline blocks.",
 			}
-			return w[cat] || "No symbols passed this category threshold in the current run."
+			return this._uiText(
+				w[cat] || "本輪無標的通過此類別門檻。 · No symbols passed this category threshold in the current run.",
+			)
 		},
 		scannerIntentRow(intent) {
 			const d = this.scannerHub.data
@@ -13509,9 +13644,9 @@ function cc() {
 		scannerIntentProbeLabel(intent) {
 			const row = this.scannerIntentRow(intent)
 			const p = (row && row.probe_status) || "idle"
-			if (p === "active") return "Active"
-			if (p === "warming") return "Warming"
-			return "Idle"
+			if (p === "active") return this._uiText("Active")
+			if (p === "warming") return this._uiText("Warming")
+			return this._uiText("Idle")
 		},
 		scannerHitDisplayLimit() {
 			return this.scannerHub.expanded ? 25 : 10
@@ -13548,7 +13683,7 @@ function cc() {
 					this.scannerHub.data.diagnostics.tradeability) ||
 				""
 			if (!tb) return ""
-			return "Dashboard gate: " + String(tb).replace(/_/g, " ")
+			return this._uiText("Dashboard gate: " + String(tb).replace(/_/g, " "))
 		},
 		scannerPageGateClass() {
 			const tb = String(
@@ -13771,27 +13906,51 @@ function cc() {
 			return this._uiText("Mode · " + mode + " · Runtime not evaluated here")
 		},
 		tabAuthorityChip() {
+			let chip
 			if (this.tab === "guide") {
-				return {
+				chip = {
 					badge: "GUIDE MODE",
 					short: "Reference only · Decision surfaces suspended",
 					authority: "suspended",
 					authority_label: "Guide mode — decision surfaces suspended; reference only",
 				}
+			} else {
+				const strip = this.currentSurfaceAuthorityStrip()
+				if (!strip || !(strip.surfaces || []).length) {
+					chip = this.normalizedAuthorityChipForTab(this.tab, {
+						badge: "—",
+						short: "",
+						authority: "research_only",
+						authority_label: "",
+					})
+				} else {
+					const key = this.tabAuthorityAlias(this.tab)
+					const hit = strip.surfaces.find((s) => s.tab === key)
+					chip = hit
+						? this.normalizedAuthorityChipForTab(this.tab, hit)
+						: this.normalizedAuthorityChipForTab(this.tab, strip.surfaces[0])
+				}
 			}
-			const strip = this.currentSurfaceAuthorityStrip()
-			if (!strip || !(strip.surfaces || []).length) {
-				return this.normalizedAuthorityChipForTab(this.tab, {
-					badge: "—",
-					short: "",
-					authority: "research_only",
-					authority_label: "",
-				})
+			return {
+				...chip,
+				badge: this.authorityBadgeLabel(chip.badge),
+				short: this._uiText(chip.short || ""),
+				authority_label: this._uiText(chip.authority_label || ""),
 			}
-			const key = this.tabAuthorityAlias(this.tab)
-			const hit = strip.surfaces.find((s) => s.tab === key)
-			if (hit) return this.normalizedAuthorityChipForTab(this.tab, hit)
-			return this.normalizedAuthorityChipForTab(this.tab, strip.surfaces[0])
+		},
+		authorityBadgeLabel(badge) {
+			const key = String(badge || "").toUpperCase()
+			const map = {
+				DEPLOY: "部署許可 · DEPLOY",
+				"RESEARCH ONLY": "研究層 · RESEARCH ONLY",
+				"MONITOR ONLY": "監控層 · MONITOR ONLY",
+				BLOCKED: "非部署 · BLOCKED",
+				"CONFIRM ONLY": "僅確認 · CONFIRM ONLY",
+				"HANDOFF READY": "交付就緒 · HANDOFF READY",
+				"GUIDE MODE": "指南模式 · GUIDE MODE",
+				"ANALYSIS ONLY": "分析層 · ANALYSIS ONLY",
+			}
+			return this._uiText(map[key] || badge || "—")
 		},
 
 		flowPanelCount() {
