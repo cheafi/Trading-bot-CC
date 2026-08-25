@@ -51,29 +51,33 @@
 		var o = opts || {}
 		var mode = String(o.healthMode || "").toLowerCase()
 		if (o.apiReachable === false) {
-			return "OFFLINE - API unreachable; cached snapshot may be stale"
+			return _opsBilingual("離線 — API 不可達；快取 snapshot 可能過期", "OFFLINE - API unreachable; cached snapshot may be stale")
 		}
 		if (mode === "loading") {
-			return "WARMING - monitor-only until full"
+			return _opsBilingual("預熱中 — full 前只 monitor", "WARMING - monitor-only until full")
 		}
 		if (o.instantDegraded || o.fetchFailed) {
-			return "DEGRADED - snapshot only until live ranked data returns"
+			return _opsBilingual("降級 — 僅 snapshot 直至 live ranked 返回", "DEGRADED - snapshot only until live ranked data returns")
 		}
 		if (mode === "full") {
-			return "LIVE - ranked payloads are authoritative when fetch badges clear"
+			return _opsBilingual("即時 — fetch badges 清除後 ranked 為權威", "LIVE - ranked payloads are authoritative when fetch badges clear")
 		}
-		return "LOADING - probing health before treating the board as live"
+		return _opsBilingual("載入中 — 探測 health 前勿視 board 為 live", "LOADING - probing health before treating the board as live")
 	}
 
 	function warmupUpgradeQueue(opts) {
 		var o = opts || {}
 		var mode = String(o.healthMode || "").toLowerCase()
 		if (mode !== "loading" && !o.briefFallback) return ""
-		var parts = ["live ranked playbook", "today council reconciliation", "dossier enrichment"]
+		var parts = [
+			_opsBilingual("live ranked playbook", "live ranked playbook"),
+			_opsBilingual("today council reconciliation", "today council reconciliation"),
+			_opsBilingual("dossier enrichment", "dossier enrichment"),
+		]
 		if (o.nearMiss || o.briefFallback) {
-			parts.unshift("monitor queue (brief near-miss + top watch)")
+			parts.unshift(_opsBilingual("monitor queue (brief near-miss + top watch)", "monitor queue (brief near-miss + top watch)"))
 		}
-		return "Next: " + parts.join(" · ")
+		return _opsBilingual("下一步", "Next") + ": " + parts.join(" · ")
 	}
 
 	/** Instant banner wins over warmup strip — avoids duplicate WARMING copy. */
@@ -90,7 +94,10 @@
 		var mode = String(o.healthMode || "").toLowerCase()
 		var ccMode = String(o.ccMode || "").toUpperCase()
 		if (mode !== "loading" && ccMode !== "LOADING") return ""
-		return "Cold start - wait for /health mode=full; restart once if loading exceeds ~2 min"
+		return _opsBilingual(
+			"冷啟動 — 等待 /health mode=full；載入逾 ~2 分鐘可重啟一次",
+			"Cold start - wait for /health mode=full; restart once if loading exceeds ~2 min"
+		)
 	}
 
 	function instantDegradedBannerHint(healthData) {
@@ -110,10 +117,11 @@
 		var n = (monitors || []).length
 		var nm = Number(nearMissCount) || 0
 		var wq = Number(watchQualified)
-		if (!n && !nm) return "Monitors"
-		var prefix = n && (isNaN(wq) || wq === 0) ? "Fallback monitors" : "Monitors"
+		if (!n && !nm) return _opsBilingual("監控", "Monitors")
+		var prefix =
+			n && (isNaN(wq) || wq === 0) ? _opsBilingual("後備監控", "Fallback monitors") : _opsBilingual("監控", "Monitors")
 		var base = n ? prefix + " (" + n + ")" : prefix
-		return nm ? base + " · " + nm + " near-miss" : base
+		return nm ? base + " · " + nm + " " + _opsBilingual("接近達標", "near-miss") : base
 	}
 
 	/** Clarifies monitor vs near-miss vs deploy — attention routing without tradability. */
@@ -125,7 +133,7 @@
 			var label = String(h.label || "").trim()
 			if (!label) label = String(h.cluster || "").trim()
 			var detail = String(h.detail || "").trim()
-			var line = label + (detail && detail.length <= 72 ? " — " + detail : " — monitor only, not deploy")
+			var line = label + (detail && detail.length <= 72 ? " — " + detail : " — " + _opsBilingual("只供 monitor，不可 deploy", "monitor only, not deploy"))
 			if (line && lines.indexOf(line) < 0) lines.push(line)
 		}
 		return lines
@@ -152,25 +160,27 @@
 		var blocker = String(diag.primary_blocker || diag.headline || "").trim()
 		if (blocker) parts.push(blocker)
 		if (!parts.length) return ""
-		return "Monitor context: " + parts.join(" · ") + " — not deploy permission"
+		return _opsBilingual("Monitor 脈絡", "Monitor context") + ": " + parts.join(" · ") + " " + _opsBilingual("— 非 deploy 許可", "— not deploy permission")
 	}
 
 	function todayExecutionReadinessDiagnostic(er) {
 		var e = er || {}
 		var sub = e.sub_status || {}
 		var gaps = []
-		if (sub.broker_transport !== "up") gaps.push("transport down")
-		if (sub.session_auth !== "active") gaps.push("session inactive")
-		if (sub.engine !== "on") gaps.push("engine off")
-		if (sub.handoff_readiness !== "ready") gaps.push("handoff blocked")
-		if (sub.bracket_readiness !== "ready") gaps.push("bracket draft")
-		if (e.circuit_breaker) gaps.push("breaker on")
+		if (sub.broker_transport !== "up") gaps.push(_opsBilingual("傳輸 down", "transport down"))
+		if (sub.session_auth !== "active") gaps.push(_opsBilingual("session 未啟動", "session inactive"))
+		if (sub.engine !== "on") gaps.push(_opsBilingual("引擎 off", "engine off"))
+		if (sub.handoff_readiness !== "ready") gaps.push(_opsBilingual("handoff 阻擋", "handoff blocked"))
+		if (sub.bracket_readiness !== "ready") gaps.push(_opsBilingual("bracket 草稿", "bracket draft"))
+		if (e.circuit_breaker) gaps.push(_opsBilingual("熔斷 on", "breaker on"))
 		if (!gaps.length && e.trade_handoff_ready) return ""
 		var reasons = (e.degraded_reasons || []).slice(0, 2)
 		var base =
-			"Exec diagnostic: " + (gaps.length ? gaps.join(" · ") : String(e.readiness_label || "path incomplete"))
+			_opsBilingual("執行診斷", "Exec diagnostic") +
+			": " +
+			(gaps.length ? gaps.join(" · ") : String(e.readiness_label || _opsBilingual("路徑不完整", "path incomplete")))
 		if (reasons.length) base += " — " + reasons.join("; ")
-		return base + " (not deploy authority)"
+		return base + " " + _opsBilingual("(非 deploy 權威)", "(not deploy authority)")
 	}
 
 	function playbookStrategyDecayLine(row) {
@@ -183,15 +193,19 @@
 		var wq = Number(o.watchQualified)
 		var mc = Number(o.monitorCount) || 0
 		if (!isNaN(wq) && wq > 0) {
-			return wq + " watch-qualified on funnel — mission tickers are attention queue, not extra KPI count"
+			return localizeUiText(
+				wq + " watch-qualified on funnel — mission tickers are attention queue, not extra KPI count"
+			)
 		}
 		if (mc > 0) {
-			return "Fallback monitors — scan / near-miss queue; filter_funnel is authority for watch-qualified"
+			return localizeUiText(
+				"Fallback monitors — scan / near-miss queue; filter_funnel is authority for watch-qualified"
+			)
 		}
 		if (o.waitDay) {
-			return "Near-miss · watch queue — priority only, not deploy on WAIT"
+			return localizeUiText("Near-miss · watch queue — priority only, not deploy on WAIT")
 		}
-		return "Watch / near-miss — ranking for attention, not handoff permission"
+		return localizeUiText("Watch / near-miss — ranking for attention, not handoff permission")
 	}
 
 	function playbookWhatToMonitorLine(opts) {
@@ -205,12 +219,12 @@
 		if (sym) parts.push(sym + " upgrade triggers")
 		if (nm) parts.push(nm + " near-miss row" + (nm === 1 ? "" : "s"))
 		parts.push("deploy unlock checklist below")
-		return "Monitor only - " + parts.join(" · ") + " · no deploy authority"
+		return _opsBilingual("只 monitor", "Monitor only") + " - " + parts.join(" · ") + " " + _opsBilingual("— 無 deploy 權威", "— no deploy authority")
 	}
 
 	function todayMissionWaitSubtitle(opts) {
 		if (!opts || !opts.waitDay) return ""
-		return "Deploy blocked - use monitors and Playbook ranking only"
+		return localizeUiText("Deploy blocked — use monitors and Playbook ranking only")
 	}
 
 	function todayMissionSystemBlockers(opts) {
@@ -252,20 +266,20 @@
 	function todayMissionBlockersTitle(opts) {
 		var o = opts || {}
 		if (o.waitDay && o.hasSystem) {
-			return "System blockers · gate flags"
+			return _opsBilingual("系統阻擋 · 閘門標記", "System blockers · gate flags")
 		}
 		if (o.waitDay) {
-			return "Gate flags"
+			return _opsBilingual("閘門標記", "Gate flags")
 		}
-		return o.hasSystem ? "System blockers" : "Blockers"
+		return o.hasSystem ? _opsBilingual("系統阻擋", "System blockers") : _opsBilingual("阻擋", "Blockers")
 	}
 
 	function todayMissionEmptyBlockersCopy(opts) {
 		var o = opts || {}
 		if ((o.systemBlockers || []).length && !(o.cardGates || []).length) {
-			return "No card-level gate flags"
+			return _opsBilingual("無卡片級閘門標記", "No card-level gate flags")
 		}
-		return "None flagged"
+		return _opsBilingual("未標記", "None flagged")
 	}
 
 	function localizeIbkrBracketReason(reason) {
@@ -824,6 +838,363 @@
 		return zh + " · " + en
 	}
 
+	/** Dynamic Alpine / API copy — 繁中 · English (Dashboard, Playbook, Ops chrome). */
+	function localizeUiText(text) {
+		var t = String(text || "").trim()
+		if (!t) return ""
+		if (t.indexOf(" · ") > 0 && /[\u4e00-\u9fff]/.test(t)) return t
+		var exact = {
+			Monitors: _opsBilingual("監控", "Monitors"),
+			"Fallback monitors": _opsBilingual("後備監控", "Fallback monitors"),
+			"Deploy blocked — use monitors and Playbook ranking only": _opsBilingual(
+				"部署已阻 — 只用 monitor 同 Playbook 排序",
+				"Deploy blocked — use monitors and Playbook ranking only"
+			),
+			"Deploy blocked - use monitors and Playbook ranking only": _opsBilingual(
+				"部署已阻 — 只用 monitor 同 Playbook 排序",
+				"Deploy blocked — use monitors and Playbook ranking only"
+			),
+			"Blocked: deploy · Safe: monitors · near-miss · Playbook ranking": _opsBilingual(
+				"阻擋：deploy · 安全：monitor、near-miss、Playbook 排序",
+				"Blocked: deploy · Safe: monitors · near-miss · Playbook ranking"
+			),
+			"Blocked: IBKR handoff · Safe: dossier core-only · monitor queue": _opsBilingual(
+				"阻擋：IBKR handoff · 安全：檔案核心欄、monitor queue",
+				"Blocked: IBKR handoff · Safe: dossier core-only · monitor queue"
+			),
+			"Blocked: new cycle sizing · Safe: Guide · monitors until engine ON": _opsBilingual(
+				"阻擋：新 cycle sizing · 安全：Guide、monitor 直至引擎 ON",
+				"Blocked: new cycle sizing · Safe: Guide · monitors until engine ON"
+			),
+			"Near-miss · watch queue — priority only, not deploy on WAIT": _opsBilingual(
+				"Near-miss · watch queue — WAIT 日只排優先，不可 deploy",
+				"Near-miss · watch queue — priority only, not deploy on WAIT"
+			),
+			"Watch / near-miss — ranking for attention, not handoff permission": _opsBilingual(
+				"Watch／near-miss — 注意力排序，非 handoff 許可",
+				"Watch / near-miss — ranking for attention, not handoff permission"
+			),
+			"Fallback monitors — scan / near-miss queue; filter_funnel is authority for watch-qualified": _opsBilingual(
+				"後備 monitor — 掃描／near-miss queue；filter_funnel 為 watch-qualified 權威",
+				"Fallback monitors — scan / near-miss queue; filter_funnel is authority for watch-qualified"
+			),
+			"Monitor context: ": _opsBilingual("Monitor 脈絡", "Monitor context"),
+			" — not deploy permission": _opsBilingual(" — 非 deploy 許可", " — not deploy permission"),
+			"monitor only, not deploy": _opsBilingual("只供 monitor，不可 deploy", "monitor only, not deploy"),
+			" — monitor context": _opsBilingual(" — monitor 脈絡", " — monitor context"),
+			"System blockers": _opsBilingual("系統阻擋", "System blockers"),
+			"System blockers · gate flags": _opsBilingual("系統阻擋 · 閘門標記", "System blockers · gate flags"),
+			"Gate flags": _opsBilingual("閘門標記", "Gate flags"),
+			Blockers: _opsBilingual("阻擋", "Blockers"),
+			"No card-level gate flags": _opsBilingual("無卡片級閘門標記", "No card-level gate flags"),
+			"None flagged": _opsBilingual("未標記", "None flagged"),
+			"Today focus": _opsBilingual("今日重點", "Today focus"),
+			"Today mission": _opsBilingual("今日任務", "Today mission"),
+			"Best deploy": _opsBilingual("最佳 deploy", "Best deploy"),
+			"Top candidate": _opsBilingual("頭號候選", "Top candidate"),
+			"Best trade": _opsBilingual("最佳交易", "Best trade"),
+			"Top monitor": _opsBilingual("頭號 monitor", "Top monitor"),
+			"Top promotion": _opsBilingual("頭號升級", "Top promotion"),
+			"Top watch": _opsBilingual("頭號 watch", "Top watch"),
+			"Best monitor": _opsBilingual("最佳 monitor", "Best monitor"),
+			"Often correct on WAIT — monitor funnel, not deploy.": _opsBilingual(
+				"WAIT 日常正確 — 監控 funnel，非 deploy",
+				"Often correct on WAIT — monitor funnel, not deploy."
+			),
+			"deploy-qualified": _opsBilingual("deploy-qualified", "deploy-qualified"),
+			"watch-qualified": _opsBilingual("watch-qualified", "watch-qualified"),
+			scanned: _opsBilingual("已掃描", "scanned"),
+			"monitor-only pipeline": _opsBilingual("只供 monitor pipeline", "monitor-only pipeline"),
+			"0 near-miss": _opsBilingual("0 near-miss", "0 near-miss"),
+			"Closest monitor upgrade": _opsBilingual("最接近 monitor 升級", "Closest monitor upgrade"),
+			"Closest to upgrade": _opsBilingual("最接近升級", "Closest to upgrade"),
+			"All four must clear together — see checklist:": _opsBilingual(
+				"四項須同時通過 — 見清單：",
+				"All four must clear together — see checklist:"
+			),
+			"Unlock deploy requires all 4 conditions together: tradeability SELECTIVE+, ≥1 deploy-qualified setup, live broker handoff, and ≥1 watch-qualified name on fresh data (scan-ranked alone does not qualify).":
+				_opsBilingual(
+					"解鎖 deploy 須四項齊備：tradeability SELECTIVE+、≥1 deploy-qualified、live broker handoff、≥1 watch-qualified（僅 scan-ranked 不足）。",
+					"Unlock deploy requires all 4 conditions together: tradeability SELECTIVE+, ≥1 deploy-qualified setup, live broker handoff, and ≥1 watch-qualified name on fresh data (scan-ranked alone does not qualify)."
+				),
+			"Deploy-qualified count — authority suspended; watch-qualified names are in the middle KPI": _opsBilingual(
+				"Deploy-qualified 計數 — 權限暫停；watch-qualified 在中間 KPI",
+				"Deploy-qualified count — authority suspended; watch-qualified names are in the middle KPI"
+			),
+			"Deploy-qualified setups in top board": _opsBilingual(
+				"頂板 deploy-qualified 型態",
+				"Deploy-qualified setups in top board"
+			),
+			"Watch-qualified — council monitor bar from filter_funnel (same as Playbook strip). Near-miss rows are a separate upgrade layer.":
+				_opsBilingual(
+					"Watch-qualified — filter_funnel council monitor bar（同 Playbook strip）。Near-miss 為獨立升級層。",
+					"Watch-qualified — council monitor bar from filter_funnel (same as Playbook strip). Near-miss rows are a separate upgrade layer."
+				),
+			"Scanned — universe evaluated by the scan pipeline": _opsBilingual(
+				"已掃描 — 掃描管線評估的 universe",
+				"Scanned — universe evaluated by the scan pipeline"
+			),
+			"Scanned = universe evaluated · Watch-qualified = monitor / near-miss pool · Deploy-qualified = execution-ready · Near-miss = upgrade layer (not deploy) · Monitor ranking = priority only, not permission.":
+				_opsBilingual(
+					"Scanned＝universe 評估 · Watch-qualified＝monitor／near-miss pool · Deploy-qualified＝execution-ready · Near-miss＝升級層（非 deploy）· Monitor ranking＝優先序（非許可）",
+					"Scanned = universe evaluated · Watch-qualified = monitor / near-miss pool · Deploy-qualified = execution-ready · Near-miss = upgrade layer (not deploy) · Monitor ranking = priority only, not permission."
+				),
+			"Scanned — universe evaluated by the scan pipeline.": _opsBilingual(
+				"已掃描 — 掃描管線評估的 universe",
+				"Scanned — universe evaluated by the scan pipeline."
+			),
+			"Watch-qualified — met the monitor bar / near-miss pool; not deploy-ready.": _opsBilingual(
+				"Watch-qualified — 達 monitor bar／near-miss pool；非 deploy-ready",
+				"Watch-qualified — met the monitor bar / near-miss pool; not deploy-ready."
+			),
+			"Deploy-qualified — execution-ready (timing, R:R, handoff).": _opsBilingual(
+				"Deploy-qualified — execution-ready（時機、R:R、handoff）",
+				"Deploy-qualified — execution-ready (timing, R:R, handoff)."
+			),
+			"Near-miss — upgrade layer: closest monitor upgrade; not deploy-ready.": _opsBilingual(
+				"Near-miss — 升級層：最接近 monitor 升級；非 deploy-ready",
+				"Near-miss — upgrade layer: closest monitor upgrade; not deploy-ready."
+			),
+			"Monitor ranking — relative scan priority on WAIT days; rank ≠ deploy permission.": _opsBilingual(
+				"Monitor ranking — WAIT 日掃描相對優先；rank ≠ deploy 許可",
+				"Monitor ranking — relative scan priority on WAIT days; rank ≠ deploy permission."
+			),
+			"Evidence unavailable": _opsBilingual("證據不可用", "Evidence unavailable"),
+			"Feature IC decay detected — review Ops ML panel": _opsBilingual(
+				"Feature IC 衰減 — 請查 Ops ML 面板",
+				"Feature IC decay detected — review Ops ML panel"
+			),
+			"Decision authority degraded": _opsBilingual("決策權限降級", "Decision authority degraded"),
+			"Loading…": _opsBilingual("載入中…", "Loading…"),
+			Loading: _opsBilingual("載入中", "Loading"),
+			"Panel unavailable": _opsBilingual("面板不可用", "Panel unavailable"),
+			"No fallback available": _opsBilingual("無後備可用", "No fallback available"),
+			"Fallback unavailable": _opsBilingual("後備不可用", "Fallback unavailable"),
+			"Error log unavailable": _opsBilingual("錯誤日誌不可用", "Error log unavailable"),
+			"No errors logged this session": _opsBilingual("本 session 無錯誤紀錄", "No errors logged this session"),
+			"Unable to confirm whether errors were logged this session.": _opsBilingual(
+				"無法確認本 session 是否有錯誤紀錄",
+				"Unable to confirm whether errors were logged this session."
+			),
+			"Built-in fallback — edit data/changelog.json for release notes.": _opsBilingual(
+				"內建後備 — 編輯 data/changelog.json 以更新 release notes",
+				"Built-in fallback — edit data/changelog.json for release notes."
+			),
+			"CC platform": _opsBilingual("CC 平台", "CC platform"),
+			LATEST: _opsBilingual("最新", "LATEST"),
+			"DEPLOY. Selective sizing at 1R when brackets ready.": _opsBilingual(
+				"DEPLOY — bracket 就緒時以 1R 選擇性 sizing",
+				"DEPLOY. Selective sizing at 1R when brackets ready."
+			),
+			"SELECTIVE. Deploy when gates open.": _opsBilingual(
+				"SELECTIVE — 閘門開啟後 deploy",
+				"SELECTIVE. Deploy when gates open."
+			),
+			"SELECTIVE. Review deploy-qualified — verify execution ladder.": _opsBilingual(
+				"SELECTIVE — 複核 deploy-qualified，確認 execution ladder",
+				"SELECTIVE. Review deploy-qualified — verify execution ladder."
+			),
+			"NO TRADE. Monitor only.": _opsBilingual("NO TRADE — 只 monitor", "NO TRADE. Monitor only."),
+			"Deploy window — size only at 1R with bracket; gates cleared.": _opsBilingual(
+				"Deploy 窗口 — 僅以 1R＋bracket sizing；閘門已清",
+				"Deploy window — size only at 1R with bracket; gates cleared."
+			),
+			"Selective day — verify checklist before any handoff.": _opsBilingual(
+				"SELECTIVE 日 — handoff 前確認清單",
+				"Selective day — verify checklist before any handoff."
+			),
+			"Preservation / monitor day — ideas exist but deploy bar not met.": _opsBilingual(
+				"守護／monitor 日 — 有 idea 但未達 deploy bar",
+				"Preservation / monitor day — ideas exist but deploy bar not met."
+			),
+			"Monitor-only day — protect capital until tradeability improves.": _opsBilingual(
+				"只 monitor 日 — 待 tradeability 改善前守護資金",
+				"Monitor-only day — protect capital until tradeability improves."
+			),
+			"Monitor session — no full-size deploy until gates open.": _opsBilingual(
+				"Monitor session — 閘門開啟前勿全倉 deploy",
+				"Monitor session — no full-size deploy until gates open."
+			),
+			"Follow Dashboard monitor queue and near-miss upgrade candidates.": _opsBilingual(
+				"跟 Dashboard monitor queue 同 near-miss 升級候選",
+				"Follow Dashboard monitor queue and near-miss upgrade candidates."
+			),
+			"Refresh Dashboard + Playbook after data / IBKR repair.": _opsBilingual(
+				"資料／IBKR 修復後重新整理 Dashboard＋Playbook",
+				"Refresh Dashboard + Playbook after data / IBKR repair."
+			),
+			"Regime gate closed — capital preservation overrides individual setups.": _opsBilingual(
+				"體制閘門關閉 — 守護資金優先於個別 setup",
+				"Regime gate closed — capital preservation overrides individual setups."
+			),
+			"No deploy-qualified setups — patience and monitor queue are the active decision.": _opsBilingual(
+				"無 deploy-qualified — 耐心同 monitor queue 為主決策",
+				"No deploy-qualified setups — patience and monitor queue are the active decision."
+			),
+			"transport down": _opsBilingual("傳輸 down", "transport down"),
+			"session inactive": _opsBilingual("session 未啟動", "session inactive"),
+			"engine off": _opsBilingual("引擎 off", "engine off"),
+			"handoff blocked": _opsBilingual("handoff 阻擋", "handoff blocked"),
+			"bracket draft": _opsBilingual("bracket 草稿", "bracket draft"),
+			"breaker on": _opsBilingual("熔斷 on", "breaker on"),
+			"path incomplete": _opsBilingual("路徑不完整", "path incomplete"),
+			"Connected": _opsBilingual("已連線", "Connected"),
+			Ready: _opsBilingual("就緒", "Ready"),
+			Yes: _opsBilingual("是", "Yes"),
+			No: _opsBilingual("否", "No"),
+			Up: _opsBilingual("正常", "Up"),
+			Down: _opsBilingual("離線", "Down"),
+			OK: _opsBilingual("正常", "OK"),
+			Transport: _opsBilingual("傳輸", "Transport"),
+			Session: _opsBilingual("Session", "Session"),
+			Engine: _opsBilingual("引擎", "Engine"),
+			Handoff: _opsBilingual("Handoff", "Handoff"),
+			Bracket: _opsBilingual("Bracket", "Bracket"),
+			Execution: _opsBilingual("執行", "Execution"),
+			Broker: _opsBilingual("券商", "Broker"),
+			Mode: _opsBilingual("模式", "Mode"),
+			Gateway: _opsBilingual("Gateway", "Gateway"),
+			Heartbeat: _opsBilingual("心跳", "Heartbeat"),
+			"Position sync": _opsBilingual("持倉同步", "Position sync"),
+			"Order queue": _opsBilingual("訂單佇列", "Order queue"),
+			Manual: _opsBilingual("手動", "Manual"),
+			"Trade Now": _opsBilingual("可交易", "Trade Now"),
+			"Pilot Only": _opsBilingual("僅試點", "Pilot Only"),
+			"High conviction · low conflict · sector leader. Size at 1R.": _opsBilingual(
+				"高 conviction · 低衝突 · 板塊領導 — 以 1R sizing",
+				"High conviction · low conflict · sector leader. Size at 1R."
+			),
+			"Position size vs 1R stop": _opsBilingual("部位 vs 1R 止損", "Position size vs 1R stop"),
+			"Resize if stop widens >15%": _opsBilingual("止損拉闊 >15% 時調整", "Resize if stop widens >15%"),
+			"Research only — does not override deploy gates or BDR decision.": _opsBilingual(
+				"僅供研究 — 不覆寫 deploy 閘門或 BDR 決策",
+				"Research only — does not override deploy gates or BDR decision."
+			),
+			"Captures API failures, engine state, broker events, and dossier timeouts during this API session. Informational — optional features like Discord being unconfigured are not logged as errors.":
+				_opsBilingual(
+					"記錄本 API session 的 API 失敗、引擎狀態、券商事件、檔案逾時。資訊性 — Discord 未設定等可選功能不記為錯誤。",
+					"Captures API failures, engine state, broker events, and dossier timeouts during this API session. Informational — optional features like Discord being unconfigured are not logged as errors."
+				),
+			"When the API returns 503/500, the signal engine is stopped, IBKR disconnects, or dossier aggregation times out, entries appear here with plain-English detail and suggested actions.":
+				_opsBilingual(
+					"API 503/500、引擎停止、IBKR 斷線或檔案聚合逾時時，此處顯示詳情同建議操作。",
+					"When the API returns 503/500, the signal engine is stopped, IBKR disconnects, or dossier aggregation times out, entries appear here with plain-English detail and suggested actions."
+				),
+			"Release notes for CC · Clarity Console. Maintained in data/changelog.json — not live git history.": _opsBilingual(
+				"CC · Clarity Console release notes。維護於 data/changelog.json — 非 live git 歷史。",
+				"Release notes for CC · Clarity Console. Maintained in data/changelog.json — not live git history."
+			),
+		}
+		if (exact[t]) return exact[t]
+		if (/^(\d+) near-miss$/.test(t)) {
+			var nm1 = t.match(/^(\d+)/)
+			return nm1[1] + " " + _opsBilingual("接近達標", "near-miss")
+		}
+		if (/^(\d+) near-miss monitor$/.test(t)) {
+			var nm2 = t.match(/^(\d+)/)
+			return nm2[1] + " " + _opsBilingual("接近達標 monitor", "near-miss monitor")
+		}
+		if (/^(\d+) near-miss \(not watch-qualified\)$/.test(t)) {
+			var nm3 = t.match(/^(\d+)/)
+			return nm3[1] + " " + _opsBilingual("接近達標（非 watch-qualified）", "near-miss (not watch-qualified)")
+		}
+		if (/^(\d+) watch-qualified on funnel — mission tickers are attention queue, not extra KPI count$/.test(t)) {
+			var wq = t.match(/^(\d+)/)
+			return _opsBilingual(
+				wq[1] + " funnel watch-qualified — 任務代碼為注意力 queue，非額外 KPI",
+				t
+			)
+		}
+		if (/^(\d+) scanned · (\d+) funnel watch-qualified · (\d+) deploy-qualified/.test(t)) {
+			var pf = t.match(/^(\d+) scanned · (\d+) funnel watch-qualified · (\d+) deploy-qualified(.*)$/)
+			if (pf) {
+				return _opsBilingual(
+					pf[1] + " 已掃描 · " + pf[2] + " funnel watch-qualified · " + pf[3] + " deploy-qualified" + (pf[4] || ""),
+					t
+				)
+			}
+		}
+		if (/^(\d+) sh · ([\d.]+)% · \$([\d]+) @ 1R$/.test(t)) {
+			var sz = t.match(/^(\d+) sh · ([\d.]+)% · \$([\d]+) @ 1R$/)
+			return _opsBilingual(
+				sz[1] + " 股 · " + sz[2] + "% · $" + sz[3] + " @ 1R",
+				t
+			)
+		}
+		if (/^Feature IC decay · .+ — sizing confidence reduced \(advisory only\)$/.test(t)) {
+			return _opsBilingual("Feature IC 衰減 — sizing 信心降低（僅 advisory）", t)
+		}
+		if (/^Evidence score /.test(t) || /^Evidence quality · /.test(t) || /^Evidence · /.test(t)) {
+			return _opsBilingual(t.replace(/^Evidence (score |quality · |· )?/, "證據$1"), t)
+		}
+		if (/^board score /.test(t)) return _opsBilingual("board 分數 " + t.slice(12), t)
+		if (/^data quality /.test(t)) return _opsBilingual("資料品質 " + t.slice(12), t)
+		if (t === "calibrated") return _opsBilingual("已校準", "calibrated")
+		if (/^(\d+) blocker\(s\)$/.test(t)) {
+			var bc = t.match(/^(\d+)/)
+			return bc[1] + " " + _opsBilingual("項阻擋", "blocker(s)")
+		}
+		if (/^(\d+) log$/.test(t)) {
+			var lg = t.match(/^(\d+)/)
+			return lg[1] + " " + _opsBilingual("筆紀錄", "log")
+		}
+		if (/^Track .+ for upgrade triggers — Playbook monitor queue only\.$/.test(t)) {
+			return _opsBilingual("追蹤升級觸發 — 僅 Playbook monitor queue", t)
+		}
+		if (/^Current status: /.test(t)) return _opsBilingual("現況：" + t.slice(16), t)
+		if (/^The issue is not idea scarcity/.test(t)) {
+			return _opsBilingual("問題非 idea 不足 — 而是質素不足", t)
+		}
+		if (/^Exec diagnostic: /.test(t)) {
+			return _opsBilingual("執行診斷：" + t.slice(16).replace(" (not deploy authority)", ""), t)
+		}
+		if (/^Monitor only - /.test(t)) {
+			return _opsBilingual("只 monitor — " + t.slice(14), t)
+		}
+		if (/^Wait for \/health mode=full, then refresh Dashboard and Playbook$/.test(t)) {
+			return _opsBilingual("等待 /health mode=full，然後重新整理 Dashboard 同 Playbook", t)
+		}
+		if (/^Refresh Ops health · Error log · Updates panels$/.test(t)) {
+			return _opsBilingual("重新整理 Ops health · 錯誤日誌 · 更新面板", t)
+		}
+		if (/^Start engine \(Ops health\) or set CC_AUTO_START_ENGINE=1$/.test(t)) {
+			return _opsBilingual("啟動引擎（Ops health）或設定 CC_AUTO_START_ENGINE=1", t)
+		}
+		if (/^No engine cycle — Today\/Signals may be precomputed only$/.test(t)) {
+			return _opsBilingual("無 engine cycle — Today／Signals 可能僅預先計算", t)
+		}
+		if (/^Risk breaker ON — blocks new entries until cleared$/.test(t)) {
+			return _opsBilingual("Risk breaker ON — 清除前阻擋新進場", t)
+		}
+		if (/^IBKR session inactive — no handoff until LOGIN→READY on IBKR tab$/.test(t)) {
+			return _opsBilingual("IBKR session 未啟動 — IBKR 分頁 LOGIN→READY 前無 handoff", t)
+		}
+		if (/^Monitor-only: near-miss, Discovery context, Guide checklist$/.test(t)) {
+			return _opsBilingual("只 monitor：near-miss、Discovery 脈絡、Guide 清單", t)
+		}
+		if (/^Read data contract strip — FETCH FAILED \/ FALLBACK suspends sizing$/.test(t)) {
+			return _opsBilingual("閱讀 data contract strip — FETCH FAILED／FALLBACK 暫停 sizing", t)
+		}
+		if (/^Paper review and dossier research when board is WAIT$/.test(t)) {
+			return _opsBilingual("WAIT 板面時可 paper 複核同檔案研究", t)
+		}
+		if (/^Ops diagnostics do not override Dashboard deploy gate$/.test(t)) {
+			return _opsBilingual("Ops 診斷不覆寫 Dashboard deploy 閘門", t)
+		}
+		if (/^R:R .+ — below 2.5 deploy bar$/.test(t)) {
+			return _opsBilingual("R:R 低於 2.5 deploy bar", t)
+		}
+		if (/^AVOID — not monitor\/deploy priority$/.test(t)) {
+			return _opsBilingual("AVOID — 非 monitor／deploy 優先", t)
+		}
+		if (/^Not execution-ready$/.test(t)) return _opsBilingual("非 execution-ready", t)
+		if (/^Monitor — timing \/ confirmation pending$/.test(t)) {
+			return _opsBilingual("Monitor — 時機／確認待定", t)
+		}
+		if (/^Current: /.test(t)) return _opsBilingual("現況：" + t.slice(9), t)
+		return localizeOpsRuntimeText(t)
+	}
+
 	function localizeOpsAdvancedDiagnosticsCopy(text) {
 		var t = String(text || "").trim()
 		if (!t) return ""
@@ -1120,22 +1491,32 @@
 	function routeAbortRecoveryHint(surface) {
 		var s = String(surface || "").toLowerCase()
 		if (s === "dossier" || s === "dossier_research") {
-			return "Route failed — retry or Load core only"
+			return _opsBilingual("路由失敗 — 重試或只載核心欄", "Route failed — retry or Load core only")
 		}
 		if (s === "discovery" || s === "scanners") {
-			return "Scanner route failed — retry Run Scanners; fallback funnel is not deploy authority"
+			return _opsBilingual(
+				"掃描路由失敗 — 重試 Run Scanners；後備 funnel 非 deploy 權威",
+				"Scanner route failed — retry Run Scanners; fallback funnel is not deploy authority"
+			)
 		}
-		return "Fetch failed — retry when badges clear; monitor queue and Guide remain safe"
+		return _opsBilingual(
+			"擷取失敗 — badges 恢復後重試；monitor queue 同 Guide 仍安全",
+			"Fetch failed — retry when badges clear; monitor queue and Guide remain safe"
+		)
 	}
 
-	/** Market strip stale — refresh before sizing (copy-only). */
 	function staleRefreshRecoveryLine() {
-		return "Market snapshot stale — refresh market data before using levels for sizing"
+		return _opsBilingual(
+			"市場 snapshot 過期 — sizing 前請重新整理市場資料",
+			"Market snapshot stale — refresh market data before using levels for sizing"
+		)
 	}
 
-	/** Engine off — no new cycle authority (copy-only). */
 	function engineOffRecoveryLine() {
-		return "Engine OFF - start the engine in Ops; board may be precomputed only"
+		return _opsBilingual(
+			"引擎 OFF — 於 Ops 啟動；board 可能僅預先計算",
+			"Engine OFF - start the engine in Ops; board may be precomputed only"
+		)
 	}
 
 	/** IBKR recovery copy — aligned with ibkr_diagnosis short codes (not deploy gate). */
@@ -1179,13 +1560,13 @@
 	function todayMissionSafeUnlockHint(opts) {
 		var o = opts || {}
 		if (o.waitDay) {
-			return "Blocked: deploy · Safe: monitors · near-miss · Playbook ranking"
+			return localizeUiText("Blocked: deploy · Safe: monitors · near-miss · Playbook ranking")
 		}
 		if (!o.ibkrReady) {
-			return "Blocked: IBKR handoff · Safe: dossier core-only · monitor queue"
+			return localizeUiText("Blocked: IBKR handoff · Safe: dossier core-only · monitor queue")
 		}
 		if (!o.engineRunning) {
-			return "Blocked: new cycle sizing · Safe: Guide · monitors until engine ON"
+			return localizeUiText("Blocked: new cycle sizing · Safe: Guide · monitors until engine ON")
 		}
 		return ""
 	}
@@ -1487,6 +1868,7 @@
 		todayMissionEmptyBlockersCopy: todayMissionEmptyBlockersCopy,
 		formatOperatorSentence: formatOperatorSentence,
 		localizeOperatorCopy: localizeOperatorCopy,
+		localizeUiText: localizeUiText,
 		localizeIbkrBracketReason: localizeIbkrBracketReason,
 		localizeOpsRuntimeText: localizeOpsRuntimeText,
 		localizeOpsComponentName: localizeOpsComponentName,
@@ -2747,9 +3129,10 @@
         }
         return '';
       },
-      opsPanelLoadingShort(){return 'Loading…'},
+      opsPanelLoadingShort(){return this._uiText('Loading…');},
+      opsPanelLoadingTimeoutSuffix(){return this._uiText('Loading…')+' (8s timeout)';},
       opsUpdatesPanelTitle(){
-        if(this.changelogPanel?.loading) return 'Loading';
+        if(this.changelogPanel?.loading) return this._uiText('Loading');
         if(!this.changelogPanel?.error) return '';
         const hasEntries=(this.changelogPanel.entries||[]).length>0;
         const state=this.opsInferDegradedState({
@@ -2757,13 +3140,40 @@
           fallback:hasEntries,
           timed_out:!!this.changelogPanel.timeout,
         });
-        if(state==='unavailable') return 'Panel unavailable';
+        if(state==='unavailable') return this._uiText('Panel unavailable');
         if(state==='fallback'){
-          if(this.changelogPanel.timeout) return 'No fallback available';
-          return 'Fallback unavailable';
+          if(this.changelogPanel.timeout) return this._uiText('No fallback available');
+          return this._uiText('Fallback unavailable');
         }
         return this.opsDegradedCopy(state).title;
       },
+      opsSubNavLabel(key){
+        const map={health:'⚙️ '+this._uiText('Health'),updates:'📋 '+this._uiText('Updates'),errors:'🧾 '+this._uiText('Error Log')};
+        return map[key]||key;
+      },
+      opsBlockerCountLabel(){
+        const n=this.opsConsole.data?.blockers?.length||0;
+        return n?this._uiText(n+' blocker(s)'):'';
+      },
+      opsLogCountLabel(){
+        const n=this.errorLog.entries.length||0;
+        return n?this._uiText(n+' log'):'';
+      },
+      opsChangelogIntro(){
+        return this._uiText('Release notes for CC · Clarity Console. Maintained in data/changelog.json — not live git history.');
+      },
+      opsErrorLogIntro(){
+        return this._uiText('Captures API failures, engine state, broker events, and dossier timeouts during this API session. Informational — optional features like Discord being unconfigured are not logged as errors.');
+      },
+      opsErrorLogEmptyTitle(){return this._uiText('No errors logged this session');},
+      opsErrorLogEmptyDetail(){
+        return this._uiText('When the API returns 503/500, the signal engine is stopped, IBKR disconnects, or dossier aggregation times out, entries appear here with plain-English detail and suggested actions.');
+      },
+      opsErrorLogUnavailableTitle(){return this._uiText('Error log unavailable');},
+      opsErrorLogUnavailableDetail(){return this._uiText('Unable to confirm whether errors were logged this session.');},
+      opsChangelogEntryTitle(entry){return this._uiText((entry&&entry.title)||'');},
+      opsChangelogEntrySummary(entry){return this._uiText((entry&&entry.summary)||'');},
+      opsLatestPillLabel(){return this._uiText('LATEST');},
       opsProviderRuntimeFallbackLabel(probeOk){
         const H=window.CCHelpers||{};
         const line=probeOk?'Probe available · runtime unknown':'Probe only — runtime unconfirmed';
@@ -2785,6 +3195,10 @@
         return p?('探測 · Probe: '+p):'';
       },
       _opsH(){ return window.CCHelpers||{}; },
+      _uiText(t){
+        const H=this._opsH();
+        return H.localizeUiText?H.localizeUiText(t):String(t||'');
+      },
       opsSystemVerdictText(){
         const H=this._opsH();
         const t=this.opsConsole.data?.system_verdict||'';
@@ -3540,7 +3954,7 @@
         return 'When API ready: '+parts.join(' · ');
       },
       todayMissionPanelTitle(){
-        return this.isWaitDay()?'Today focus':'Today mission';
+        return this.isWaitDay()?this._uiText('Today focus'):this._uiText('Today mission');
       },
       trustProvenanceLine(){
         const t=this.today7.trust||this.trust||{};
@@ -3672,7 +4086,11 @@
           safe.push('Paper review and dossier research when board is WAIT');
           safe.push('Ops diagnostics do not override Dashboard deploy gate');
         }
-        return {retry,blocks_capital:blocks,safe_degraded:safe};
+        return {
+          retry:retry.map(ln=>this._uiText(ln)),
+          blocks_capital:blocks.map(ln=>this._uiText(ln)),
+          safe_degraded:safe.map(ln=>this._uiText(ln)),
+        };
       },
       pmStripNarrow(){return typeof window!=='undefined'&&window.innerWidth<768;},
       pmStripUseChipMenu(){
@@ -4096,10 +4514,34 @@
         const shares=d.shares||0;
         const pct=d.final_size_pct||0;
         const risk=d.total_risk_usd||0;
-        return shares?`${shares} sh · ${pct}% · $${Math.round(risk)} @ 1R`:'';
+        return shares?this._uiText(`${shares} sh · ${pct}% · $${Math.round(risk)} @ 1R`):'';
       },
       playbookCanSizeRow(r){
         return !!(r&&r.entry_price&&r.stop_price&&r.entry_price>r.stop_price);
+      },
+      bdrDecisionLine(){
+        return this._uiText((this.today7.bdr_summary||{}).decision_line||'');
+      },
+      bdrPlainEnglishRead(){
+        return this._uiText((this.today7.bdr_summary||{}).plain_english_read||'');
+      },
+      bdrBestConciseNote(){
+        return this._uiText((this.today7.bdr_summary||{}).best_concise_note||'');
+      },
+      bdrHardGateLine(g){
+        if(!g) return '';
+        return this._uiText(String(g.label||'')+' — '+String(g.detail||''));
+      },
+      bdrMainIssue(row){
+        return this._uiText((row&&row.main_issue)||'');
+      },
+      bdrActionBullet(ln){
+        return '• '+this._uiText(String(ln||''));
+      },
+      bdrUnlockChecklistLine(c){
+        if(!c) return '';
+        const head=(c.met?'✓':'✗')+' '+String(c.label||'')+': '+String(c.current||'');
+        return this._uiText(head)+' → '+this._uiText(String(c.target||''));
       },
       bdrDecisionPillClass(){
         const c=(this.today7.bdr_summary||{}).decision_code||'';
@@ -4119,7 +4561,15 @@
         const st=this.today7.feature_ic_status;
         if(!st) return '';
         const alerts=(st.alerts||[]).slice(0,3).join(', ');
-        return alerts?`Feature IC decay · ${alerts} — sizing confidence reduced (advisory only)`:'Feature IC decay detected — review Ops ML panel';
+        return alerts?this._uiText(`Feature IC decay · ${alerts} — sizing confidence reduced (advisory only)`):this._uiText('Feature IC decay detected — review Ops ML panel');
+      },
+      mlAdvisoryLineText(ln){
+        const t=this._uiText(String(ln||''));
+        return t?('• '+t):'';
+      },
+      mlAdvisoryAuthorityNote(){
+        const note=(this.today7.ml_advisory&&this.today7.ml_advisory.authority_note)||'Research only — does not override deploy gates or BDR decision.';
+        return this._uiText(note);
       },
       mlAdvisoryActive(){
         return !!(this.today7.ml_advisory&&this.today7.ml_advisory.active);
@@ -4161,38 +4611,38 @@
         return !!(ex.readiness_label&&String(ex.readiness_label).toLowerCase().includes('offline'));
       },
       formatEvidence(v){
-        if(v==null||v==='') return 'Evidence unavailable';
+        if(v==null||v==='') return this._uiText('Evidence unavailable');
         if(typeof v==='string'){
           const s=this.sanitizeVisibleText(v.trim());
-          if(!s||/\[object Object\]/i.test(s)) return 'Evidence unavailable';
-          return s;
+          if(!s||/\[object Object\]/i.test(s)) return this._uiText('Evidence unavailable');
+          return this._uiText(s);
         }
         if(typeof v==='number'||typeof v==='boolean') return String(v);
         if(Array.isArray(v)){
-          const parts=v.map(x=>this.formatEvidence(x)).filter(x=>x&&x!=='Evidence unavailable');
-          return parts.length?parts.join(' · '):'Evidence unavailable';
+          const parts=v.map(x=>this.formatEvidence(x)).filter(x=>x&&x!==this._uiText('Evidence unavailable'));
+          return parts.length?parts.join(' · '):this._uiText('Evidence unavailable');
         }
         if(typeof v==='object'){
-          if(v.label) return String(v.label);
-          if(v.tier) return String(v.tier);
-          if(v.badge) return String(v.badge);
+          if(v.label) return this._uiText(String(v.label));
+          if(v.tier) return this._uiText(String(v.tier));
+          if(v.badge) return this._uiText(String(v.badge));
           const bits=[];
-          if(v.validated_score!=null) bits.push('board score '+v.validated_score);
-          if(v.data_conf!=null) bits.push('data quality '+((Number(v.data_conf)<=1?Number(v.data_conf)*100:Number(v.data_conf)).toFixed(0))+'%');
-          if(v.calibration_available) bits.push('calibrated');
+          if(v.validated_score!=null) bits.push(this._uiText('board score '+v.validated_score));
+          if(v.data_conf!=null) bits.push(this._uiText('data quality '+((Number(v.data_conf)<=1?Number(v.data_conf)*100:Number(v.data_conf)).toFixed(0))+'%'));
+          if(v.calibration_available) bits.push(this._uiText('calibrated'));
           if(bits.length) return bits.join(' · ');
-          return 'Evidence unavailable';
+          return this._uiText('Evidence unavailable');
         }
-        return 'Evidence unavailable';
+        return this._uiText('Evidence unavailable');
       },
       playbookEvidenceLine(v){
-        if(v==null||v==='') return 'Evidence unavailable';
-        if(typeof v==='string') return this.sanitizeVisibleText(v.trim())||'Evidence unavailable';
+        if(v==null||v==='') return this._uiText('Evidence unavailable');
+        if(typeof v==='string') return this._uiText(this.sanitizeVisibleText(v.trim())||'Evidence unavailable');
         if(typeof v==='object'){
           const bits=[];
-          if(v.validated_score!=null) bits.push('Evidence score '+v.validated_score);
-          if(v.data_conf!=null) bits.push('data quality '+((Number(v.data_conf)<=1?Number(v.data_conf)*100:Number(v.data_conf)).toFixed(0))+'%');
-          if(v.calibration_available) bits.push('calibrated');
+          if(v.validated_score!=null) bits.push(this._uiText('Evidence score '+v.validated_score));
+          if(v.data_conf!=null) bits.push(this._uiText('data quality '+((Number(v.data_conf)<=1?Number(v.data_conf)*100:Number(v.data_conf)).toFixed(0))+'%'));
+          if(v.calibration_available) bits.push(this._uiText('calibrated'));
           return bits.length?bits.join(' · '):this.formatEvidence(v);
         }
         return this.formatEvidence(v);
@@ -4225,11 +4675,11 @@
       },
       dashboardBestActionLabel(kind){
         const deploy=!!(this.today7?.todays_decision?.can_deploy_today)&&!this.isWaitDay()&&!this.todayDeployAuthoritySuspended()&&!this.pageAuthorityIsDegraded();
-        if(kind==='trade') return deploy?'Best deploy':'Top candidate';
-        if(kind==='action') return deploy?'Best trade':'Top monitor';
-        if(kind==='watch') return 'Top monitor';
-        if(kind==='pilot') return 'Top promotion';
-        return deploy?'TRADE':'Monitor';
+        if(kind==='trade') return deploy?this._uiText('Best deploy'):this._uiText('Top candidate');
+        if(kind==='action') return deploy?this._uiText('Best trade'):this._uiText('Top monitor');
+        if(kind==='watch') return this._uiText('Top monitor');
+        if(kind==='pilot') return this._uiText('Top promotion');
+        return deploy?'TRADE':this._uiText('Monitor');
       },
       dashboardPlaybookCtaLabel(){
         if(this.isWaitDay()||!this.today7?.todays_decision?.can_deploy_today||this.todayDeployAuthoritySuspended()){
@@ -4241,7 +4691,7 @@
         return (this.isWaitDay()||this.canonicalTradeability()==='WAIT')&&String(this.scannerTotalHits())==='0'&&!this.scannerDiscoveryHasFallbackRows()&&!this.scannerHub.loading;
       },
       discoveryWaitEmptyLine(){
-        return 'Often correct on WAIT — monitor funnel, not deploy.';
+        return this._uiText('Often correct on WAIT — monitor funnel, not deploy.');
       },
       dossierLevelsIndicativeOnly(){
         return this.dossierResearchOnly();
@@ -4941,19 +5391,22 @@
         let s=scanned+' scanned · '+watch+' funnel watch-qualified · '+deploy+' deploy-qualified';
         const pool=this.playbookBoardScanPoolCount(funnel,rows);
         if(Number(watch)>0&&pool>Number(watch)) s+=' · '+pool+' board scan pool';
-        return s;
+        return this._uiText(s);
       },
       playbookLayerDefinitions(){
-        return {
+        const defs={
           scanned:'Scanned — universe evaluated by the scan pipeline.',
           watch_qualified:'Watch-qualified — met the monitor bar / near-miss pool; not deploy-ready.',
           deploy_qualified:'Deploy-qualified — execution-ready (timing, R:R, handoff).',
           near_miss:'Near-miss — upgrade layer: closest monitor upgrade; not deploy-ready.',
           monitor_ranking:'Monitor ranking — relative scan priority on WAIT days; rank ≠ deploy permission.',
         };
+        const out={};
+        Object.keys(defs).forEach(k=>{out[k]=this._uiText(defs[k]);});
+        return out;
       },
       playbookLayerDefinitionsNote(){
-        return 'Scanned = universe evaluated · Watch-qualified = monitor / near-miss pool · Deploy-qualified = execution-ready · Near-miss = upgrade layer (not deploy) · Monitor ranking = priority only, not permission.';
+        return this._uiText('Scanned = universe evaluated · Watch-qualified = monitor / near-miss pool · Deploy-qualified = execution-ready · Near-miss = upgrade layer (not deploy) · Monitor ranking = priority only, not permission.');
       },
       playbookUnlockConditionDetail(c){
         const raw=String((c&&c.detail)||'');
@@ -4980,9 +5433,9 @@
       },
       playbookClosestUpgradeLabel(){
         if(this.playbookBoardWait()||this.playbookBrokerOffline()||this.playbookDeployQualifiedCount()<1){
-          return 'Closest monitor upgrade';
+          return this._uiText('Closest monitor upgrade');
         }
-        return 'Closest to upgrade';
+        return this._uiText('Closest to upgrade');
       },
       playbookDeployQualifiedCount(){
         const {deploy}=this.playbookFunnelCounts(this.rankedOpps.filter_funnel||this.today7.filter_funnel,null);
@@ -4999,7 +5452,7 @@
         return 'Cluster counts ('+sum+') group by blocker theme; '+filtered+' names in the filtered list — themes can overlap.';
       },
       dashboardUnlockDeployIntro(){
-        return 'Unlock deploy requires all 4 conditions together: tradeability SELECTIVE+, ≥1 deploy-qualified setup, live broker handoff, and ≥1 watch-qualified name on fresh data (scan-ranked alone does not qualify).';
+        return this._uiText('Unlock deploy requires all 4 conditions together: tradeability SELECTIVE+, ≥1 deploy-qualified setup, live broker handoff, and ≥1 watch-qualified name on fresh data (scan-ranked alone does not qualify).');
       },
       honestFunnelLabel(funnel,rows){
         return this.playbookFunnelLabel(funnel,rows);
@@ -5012,21 +5465,21 @@
         if(src&&src!=='live') return true;
         return false;
       },
-      kpiDeployQualifiedLabel(){ return 'deploy-qualified'; },
+      kpiDeployQualifiedLabel(){ return this._uiText('deploy-qualified'); },
       kpiDeployQualifiedCount(){
         const {deploy}=this.playbookFunnelCounts(this.today7.filter_funnel,null);
         return deploy;
       },
       kpiDeployQualifiedHint(){
         const nm=(this.today7.near_miss||[]).length;
-        if(this.todayDeployAuthoritySuspended()) return nm?(nm+' near-miss monitor'):'monitor-only pipeline';
-        return nm?(nm+' near-miss'):'0 near-miss';
+        if(this.todayDeployAuthoritySuspended()) return nm?this._uiText(nm+' near-miss monitor'):this._uiText('monitor-only pipeline');
+        return nm?this._uiText(nm+' near-miss'):this._uiText('0 near-miss');
       },
       kpiDeployQualifiedTitle(){
-        if(this.todayDeployAuthoritySuspended()) return 'Deploy-qualified count — authority suspended; watch-qualified names are in the middle KPI';
-        return 'Deploy-qualified setups in top board';
+        if(this.todayDeployAuthoritySuspended()) return this._uiText('Deploy-qualified count — authority suspended; watch-qualified names are in the middle KPI');
+        return this._uiText('Deploy-qualified setups in top board');
       },
-      kpiWatchQualifiedLabel(){ return 'watch-qualified'; },
+      kpiWatchQualifiedLabel(){ return this._uiText('watch-qualified'); },
       kpiWatchQualifiedCount(){
         const {watch}=this.playbookFunnelCounts(this.today7.filter_funnel,null);
         return watch;
@@ -5035,14 +5488,14 @@
         const nm=(this.today7.near_miss||[]).length;
         const {watch}=this.playbookFunnelCounts(this.today7.filter_funnel,null);
         if(watch||!nm) return '';
-        return nm+' near-miss (not watch-qualified)';
+        return this._uiText(nm+' near-miss (not watch-qualified)');
       },
       kpiWatchQualifiedTitle(){
-        return 'Watch-qualified — council monitor bar from filter_funnel (same as Playbook strip). Near-miss rows are a separate upgrade layer.';
+        return this._uiText('Watch-qualified — council monitor bar from filter_funnel (same as Playbook strip). Near-miss rows are a separate upgrade layer.');
       },
-      kpiScannedLabel(){ return 'scanned'; },
+      kpiScannedLabel(){ return this._uiText('scanned'); },
       kpiScannedTitle(){
-        return 'Scanned — universe evaluated by the scan pipeline';
+        return this._uiText('Scanned — universe evaluated by the scan pipeline');
       },
       kpiScannedCount(){
         const f=this.today7.filter_funnel;
@@ -5322,7 +5775,7 @@
       },
       dashboardUnlockDeployStatus(){
         const u=this.today7.unlock_deploy;
-        if(u&&u.summary&&!String(u.summary).startsWith('Blocked:')) return u.summary;
+        if(u&&u.summary&&!String(u.summary).startsWith('Blocked:')) return this._uiText(u.summary);
         const watchQualified=(this.today7.no_setup_diagnosis?.watch_qualified_count||0)>0
           || (this.playbookFunnelCounts(this.today7.filter_funnel,null).watch||0)>0;
         const near=(this.today7.near_miss||[]).length>0;
@@ -5331,7 +5784,7 @@
         const deployable=this.playbookDeployableCount();
         const parts=[boardPresent?'board present':'board thin',deployable>=1?'deploy ready':'deploy absent'];
         if(this.dashboardBrokerOffline()) parts.push('broker offline');
-        return 'Current status: '+parts.join(', ')+'.';
+        return this._uiText('Current status: '+parts.join(', ')+'.');
       },
       ibkrSubStatus(ex){const exObj=ex||{};if(exObj.sub_status&&Object.keys(exObj.sub_status).length)return exObj.sub_status;return this.ibkrStateFrom(ex).sub||{};},
       isWaitDay(){
@@ -6991,7 +7444,7 @@
         }finally{this.opsRuntime.loading=false}
       },
       changelogFallback(){
-        return [{date:new Date().toISOString().slice(0,10),title:'CC platform',summary:'Built-in fallback — edit data/changelog.json for release notes.',surfaces:['Ops']}];
+        return [{date:new Date().toISOString().slice(0,10),title:this._uiText('CC platform'),summary:this._uiText('Built-in fallback — edit data/changelog.json for release notes.'),surfaces:['Ops']}];
       },
       async fetchChangelog(){
         if(!this.changelogPanel) this.changelogPanel={loading:false,loaded:false,error:'',timeout:false,version:'',product:'CC',entries:[]};

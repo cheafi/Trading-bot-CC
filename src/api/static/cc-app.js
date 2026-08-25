@@ -1152,9 +1152,10 @@
         }
         return '';
       },
-      opsPanelLoadingShort(){return 'Loading…'},
+      opsPanelLoadingShort(){return this._uiText('Loading…');},
+      opsPanelLoadingTimeoutSuffix(){return this._uiText('Loading…')+' (8s timeout)';},
       opsUpdatesPanelTitle(){
-        if(this.changelogPanel?.loading) return 'Loading';
+        if(this.changelogPanel?.loading) return this._uiText('Loading');
         if(!this.changelogPanel?.error) return '';
         const hasEntries=(this.changelogPanel.entries||[]).length>0;
         const state=this.opsInferDegradedState({
@@ -1162,13 +1163,40 @@
           fallback:hasEntries,
           timed_out:!!this.changelogPanel.timeout,
         });
-        if(state==='unavailable') return 'Panel unavailable';
+        if(state==='unavailable') return this._uiText('Panel unavailable');
         if(state==='fallback'){
-          if(this.changelogPanel.timeout) return 'No fallback available';
-          return 'Fallback unavailable';
+          if(this.changelogPanel.timeout) return this._uiText('No fallback available');
+          return this._uiText('Fallback unavailable');
         }
         return this.opsDegradedCopy(state).title;
       },
+      opsSubNavLabel(key){
+        const map={health:'⚙️ '+this._uiText('Health'),updates:'📋 '+this._uiText('Updates'),errors:'🧾 '+this._uiText('Error Log')};
+        return map[key]||key;
+      },
+      opsBlockerCountLabel(){
+        const n=this.opsConsole.data?.blockers?.length||0;
+        return n?this._uiText(n+' blocker(s)'):'';
+      },
+      opsLogCountLabel(){
+        const n=this.errorLog.entries.length||0;
+        return n?this._uiText(n+' log'):'';
+      },
+      opsChangelogIntro(){
+        return this._uiText('Release notes for CC · Clarity Console. Maintained in data/changelog.json — not live git history.');
+      },
+      opsErrorLogIntro(){
+        return this._uiText('Captures API failures, engine state, broker events, and dossier timeouts during this API session. Informational — optional features like Discord being unconfigured are not logged as errors.');
+      },
+      opsErrorLogEmptyTitle(){return this._uiText('No errors logged this session');},
+      opsErrorLogEmptyDetail(){
+        return this._uiText('When the API returns 503/500, the signal engine is stopped, IBKR disconnects, or dossier aggregation times out, entries appear here with plain-English detail and suggested actions.');
+      },
+      opsErrorLogUnavailableTitle(){return this._uiText('Error log unavailable');},
+      opsErrorLogUnavailableDetail(){return this._uiText('Unable to confirm whether errors were logged this session.');},
+      opsChangelogEntryTitle(entry){return this._uiText((entry&&entry.title)||'');},
+      opsChangelogEntrySummary(entry){return this._uiText((entry&&entry.summary)||'');},
+      opsLatestPillLabel(){return this._uiText('LATEST');},
       opsProviderRuntimeFallbackLabel(probeOk){
         const H=window.CCHelpers||{};
         const line=probeOk?'Probe available · runtime unknown':'Probe only — runtime unconfirmed';
@@ -1190,6 +1218,10 @@
         return p?('探測 · Probe: '+p):'';
       },
       _opsH(){ return window.CCHelpers||{}; },
+      _uiText(t){
+        const H=this._opsH();
+        return H.localizeUiText?H.localizeUiText(t):String(t||'');
+      },
       opsSystemVerdictText(){
         const H=this._opsH();
         const t=this.opsConsole.data?.system_verdict||'';
@@ -1945,7 +1977,7 @@
         return 'When API ready: '+parts.join(' · ');
       },
       todayMissionPanelTitle(){
-        return this.isWaitDay()?'Today focus':'Today mission';
+        return this.isWaitDay()?this._uiText('Today focus'):this._uiText('Today mission');
       },
       trustProvenanceLine(){
         const t=this.today7.trust||this.trust||{};
@@ -2077,7 +2109,11 @@
           safe.push('Paper review and dossier research when board is WAIT');
           safe.push('Ops diagnostics do not override Dashboard deploy gate');
         }
-        return {retry,blocks_capital:blocks,safe_degraded:safe};
+        return {
+          retry:retry.map(ln=>this._uiText(ln)),
+          blocks_capital:blocks.map(ln=>this._uiText(ln)),
+          safe_degraded:safe.map(ln=>this._uiText(ln)),
+        };
       },
       pmStripNarrow(){return typeof window!=='undefined'&&window.innerWidth<768;},
       pmStripUseChipMenu(){
@@ -2501,10 +2537,34 @@
         const shares=d.shares||0;
         const pct=d.final_size_pct||0;
         const risk=d.total_risk_usd||0;
-        return shares?`${shares} sh · ${pct}% · $${Math.round(risk)} @ 1R`:'';
+        return shares?this._uiText(`${shares} sh · ${pct}% · $${Math.round(risk)} @ 1R`):'';
       },
       playbookCanSizeRow(r){
         return !!(r&&r.entry_price&&r.stop_price&&r.entry_price>r.stop_price);
+      },
+      bdrDecisionLine(){
+        return this._uiText((this.today7.bdr_summary||{}).decision_line||'');
+      },
+      bdrPlainEnglishRead(){
+        return this._uiText((this.today7.bdr_summary||{}).plain_english_read||'');
+      },
+      bdrBestConciseNote(){
+        return this._uiText((this.today7.bdr_summary||{}).best_concise_note||'');
+      },
+      bdrHardGateLine(g){
+        if(!g) return '';
+        return this._uiText(String(g.label||'')+' — '+String(g.detail||''));
+      },
+      bdrMainIssue(row){
+        return this._uiText((row&&row.main_issue)||'');
+      },
+      bdrActionBullet(ln){
+        return '• '+this._uiText(String(ln||''));
+      },
+      bdrUnlockChecklistLine(c){
+        if(!c) return '';
+        const head=(c.met?'✓':'✗')+' '+String(c.label||'')+': '+String(c.current||'');
+        return this._uiText(head)+' → '+this._uiText(String(c.target||''));
       },
       bdrDecisionPillClass(){
         const c=(this.today7.bdr_summary||{}).decision_code||'';
@@ -2524,7 +2584,15 @@
         const st=this.today7.feature_ic_status;
         if(!st) return '';
         const alerts=(st.alerts||[]).slice(0,3).join(', ');
-        return alerts?`Feature IC decay · ${alerts} — sizing confidence reduced (advisory only)`:'Feature IC decay detected — review Ops ML panel';
+        return alerts?this._uiText(`Feature IC decay · ${alerts} — sizing confidence reduced (advisory only)`):this._uiText('Feature IC decay detected — review Ops ML panel');
+      },
+      mlAdvisoryLineText(ln){
+        const t=this._uiText(String(ln||''));
+        return t?('• '+t):'';
+      },
+      mlAdvisoryAuthorityNote(){
+        const note=(this.today7.ml_advisory&&this.today7.ml_advisory.authority_note)||'Research only — does not override deploy gates or BDR decision.';
+        return this._uiText(note);
       },
       mlAdvisoryActive(){
         return !!(this.today7.ml_advisory&&this.today7.ml_advisory.active);
@@ -2566,38 +2634,38 @@
         return !!(ex.readiness_label&&String(ex.readiness_label).toLowerCase().includes('offline'));
       },
       formatEvidence(v){
-        if(v==null||v==='') return 'Evidence unavailable';
+        if(v==null||v==='') return this._uiText('Evidence unavailable');
         if(typeof v==='string'){
           const s=this.sanitizeVisibleText(v.trim());
-          if(!s||/\[object Object\]/i.test(s)) return 'Evidence unavailable';
-          return s;
+          if(!s||/\[object Object\]/i.test(s)) return this._uiText('Evidence unavailable');
+          return this._uiText(s);
         }
         if(typeof v==='number'||typeof v==='boolean') return String(v);
         if(Array.isArray(v)){
-          const parts=v.map(x=>this.formatEvidence(x)).filter(x=>x&&x!=='Evidence unavailable');
-          return parts.length?parts.join(' · '):'Evidence unavailable';
+          const parts=v.map(x=>this.formatEvidence(x)).filter(x=>x&&x!==this._uiText('Evidence unavailable'));
+          return parts.length?parts.join(' · '):this._uiText('Evidence unavailable');
         }
         if(typeof v==='object'){
-          if(v.label) return String(v.label);
-          if(v.tier) return String(v.tier);
-          if(v.badge) return String(v.badge);
+          if(v.label) return this._uiText(String(v.label));
+          if(v.tier) return this._uiText(String(v.tier));
+          if(v.badge) return this._uiText(String(v.badge));
           const bits=[];
-          if(v.validated_score!=null) bits.push('board score '+v.validated_score);
-          if(v.data_conf!=null) bits.push('data quality '+((Number(v.data_conf)<=1?Number(v.data_conf)*100:Number(v.data_conf)).toFixed(0))+'%');
-          if(v.calibration_available) bits.push('calibrated');
+          if(v.validated_score!=null) bits.push(this._uiText('board score '+v.validated_score));
+          if(v.data_conf!=null) bits.push(this._uiText('data quality '+((Number(v.data_conf)<=1?Number(v.data_conf)*100:Number(v.data_conf)).toFixed(0))+'%'));
+          if(v.calibration_available) bits.push(this._uiText('calibrated'));
           if(bits.length) return bits.join(' · ');
-          return 'Evidence unavailable';
+          return this._uiText('Evidence unavailable');
         }
-        return 'Evidence unavailable';
+        return this._uiText('Evidence unavailable');
       },
       playbookEvidenceLine(v){
-        if(v==null||v==='') return 'Evidence unavailable';
-        if(typeof v==='string') return this.sanitizeVisibleText(v.trim())||'Evidence unavailable';
+        if(v==null||v==='') return this._uiText('Evidence unavailable');
+        if(typeof v==='string') return this._uiText(this.sanitizeVisibleText(v.trim())||'Evidence unavailable');
         if(typeof v==='object'){
           const bits=[];
-          if(v.validated_score!=null) bits.push('Evidence score '+v.validated_score);
-          if(v.data_conf!=null) bits.push('data quality '+((Number(v.data_conf)<=1?Number(v.data_conf)*100:Number(v.data_conf)).toFixed(0))+'%');
-          if(v.calibration_available) bits.push('calibrated');
+          if(v.validated_score!=null) bits.push(this._uiText('Evidence score '+v.validated_score));
+          if(v.data_conf!=null) bits.push(this._uiText('data quality '+((Number(v.data_conf)<=1?Number(v.data_conf)*100:Number(v.data_conf)).toFixed(0))+'%'));
+          if(v.calibration_available) bits.push(this._uiText('calibrated'));
           return bits.length?bits.join(' · '):this.formatEvidence(v);
         }
         return this.formatEvidence(v);
@@ -2630,11 +2698,11 @@
       },
       dashboardBestActionLabel(kind){
         const deploy=!!(this.today7?.todays_decision?.can_deploy_today)&&!this.isWaitDay()&&!this.todayDeployAuthoritySuspended()&&!this.pageAuthorityIsDegraded();
-        if(kind==='trade') return deploy?'Best deploy':'Top candidate';
-        if(kind==='action') return deploy?'Best trade':'Top monitor';
-        if(kind==='watch') return 'Top monitor';
-        if(kind==='pilot') return 'Top promotion';
-        return deploy?'TRADE':'Monitor';
+        if(kind==='trade') return deploy?this._uiText('Best deploy'):this._uiText('Top candidate');
+        if(kind==='action') return deploy?this._uiText('Best trade'):this._uiText('Top monitor');
+        if(kind==='watch') return this._uiText('Top monitor');
+        if(kind==='pilot') return this._uiText('Top promotion');
+        return deploy?'TRADE':this._uiText('Monitor');
       },
       dashboardPlaybookCtaLabel(){
         if(this.isWaitDay()||!this.today7?.todays_decision?.can_deploy_today||this.todayDeployAuthoritySuspended()){
@@ -2646,7 +2714,7 @@
         return (this.isWaitDay()||this.canonicalTradeability()==='WAIT')&&String(this.scannerTotalHits())==='0'&&!this.scannerDiscoveryHasFallbackRows()&&!this.scannerHub.loading;
       },
       discoveryWaitEmptyLine(){
-        return 'Often correct on WAIT — monitor funnel, not deploy.';
+        return this._uiText('Often correct on WAIT — monitor funnel, not deploy.');
       },
       dossierLevelsIndicativeOnly(){
         return this.dossierResearchOnly();
@@ -3346,19 +3414,22 @@
         let s=scanned+' scanned · '+watch+' funnel watch-qualified · '+deploy+' deploy-qualified';
         const pool=this.playbookBoardScanPoolCount(funnel,rows);
         if(Number(watch)>0&&pool>Number(watch)) s+=' · '+pool+' board scan pool';
-        return s;
+        return this._uiText(s);
       },
       playbookLayerDefinitions(){
-        return {
+        const defs={
           scanned:'Scanned — universe evaluated by the scan pipeline.',
           watch_qualified:'Watch-qualified — met the monitor bar / near-miss pool; not deploy-ready.',
           deploy_qualified:'Deploy-qualified — execution-ready (timing, R:R, handoff).',
           near_miss:'Near-miss — upgrade layer: closest monitor upgrade; not deploy-ready.',
           monitor_ranking:'Monitor ranking — relative scan priority on WAIT days; rank ≠ deploy permission.',
         };
+        const out={};
+        Object.keys(defs).forEach(k=>{out[k]=this._uiText(defs[k]);});
+        return out;
       },
       playbookLayerDefinitionsNote(){
-        return 'Scanned = universe evaluated · Watch-qualified = monitor / near-miss pool · Deploy-qualified = execution-ready · Near-miss = upgrade layer (not deploy) · Monitor ranking = priority only, not permission.';
+        return this._uiText('Scanned = universe evaluated · Watch-qualified = monitor / near-miss pool · Deploy-qualified = execution-ready · Near-miss = upgrade layer (not deploy) · Monitor ranking = priority only, not permission.');
       },
       playbookUnlockConditionDetail(c){
         const raw=String((c&&c.detail)||'');
@@ -3385,9 +3456,9 @@
       },
       playbookClosestUpgradeLabel(){
         if(this.playbookBoardWait()||this.playbookBrokerOffline()||this.playbookDeployQualifiedCount()<1){
-          return 'Closest monitor upgrade';
+          return this._uiText('Closest monitor upgrade');
         }
-        return 'Closest to upgrade';
+        return this._uiText('Closest to upgrade');
       },
       playbookDeployQualifiedCount(){
         const {deploy}=this.playbookFunnelCounts(this.rankedOpps.filter_funnel||this.today7.filter_funnel,null);
@@ -3404,7 +3475,7 @@
         return 'Cluster counts ('+sum+') group by blocker theme; '+filtered+' names in the filtered list — themes can overlap.';
       },
       dashboardUnlockDeployIntro(){
-        return 'Unlock deploy requires all 4 conditions together: tradeability SELECTIVE+, ≥1 deploy-qualified setup, live broker handoff, and ≥1 watch-qualified name on fresh data (scan-ranked alone does not qualify).';
+        return this._uiText('Unlock deploy requires all 4 conditions together: tradeability SELECTIVE+, ≥1 deploy-qualified setup, live broker handoff, and ≥1 watch-qualified name on fresh data (scan-ranked alone does not qualify).');
       },
       honestFunnelLabel(funnel,rows){
         return this.playbookFunnelLabel(funnel,rows);
@@ -3417,21 +3488,21 @@
         if(src&&src!=='live') return true;
         return false;
       },
-      kpiDeployQualifiedLabel(){ return 'deploy-qualified'; },
+      kpiDeployQualifiedLabel(){ return this._uiText('deploy-qualified'); },
       kpiDeployQualifiedCount(){
         const {deploy}=this.playbookFunnelCounts(this.today7.filter_funnel,null);
         return deploy;
       },
       kpiDeployQualifiedHint(){
         const nm=(this.today7.near_miss||[]).length;
-        if(this.todayDeployAuthoritySuspended()) return nm?(nm+' near-miss monitor'):'monitor-only pipeline';
-        return nm?(nm+' near-miss'):'0 near-miss';
+        if(this.todayDeployAuthoritySuspended()) return nm?this._uiText(nm+' near-miss monitor'):this._uiText('monitor-only pipeline');
+        return nm?this._uiText(nm+' near-miss'):this._uiText('0 near-miss');
       },
       kpiDeployQualifiedTitle(){
-        if(this.todayDeployAuthoritySuspended()) return 'Deploy-qualified count — authority suspended; watch-qualified names are in the middle KPI';
-        return 'Deploy-qualified setups in top board';
+        if(this.todayDeployAuthoritySuspended()) return this._uiText('Deploy-qualified count — authority suspended; watch-qualified names are in the middle KPI');
+        return this._uiText('Deploy-qualified setups in top board');
       },
-      kpiWatchQualifiedLabel(){ return 'watch-qualified'; },
+      kpiWatchQualifiedLabel(){ return this._uiText('watch-qualified'); },
       kpiWatchQualifiedCount(){
         const {watch}=this.playbookFunnelCounts(this.today7.filter_funnel,null);
         return watch;
@@ -3440,14 +3511,14 @@
         const nm=(this.today7.near_miss||[]).length;
         const {watch}=this.playbookFunnelCounts(this.today7.filter_funnel,null);
         if(watch||!nm) return '';
-        return nm+' near-miss (not watch-qualified)';
+        return this._uiText(nm+' near-miss (not watch-qualified)');
       },
       kpiWatchQualifiedTitle(){
-        return 'Watch-qualified — council monitor bar from filter_funnel (same as Playbook strip). Near-miss rows are a separate upgrade layer.';
+        return this._uiText('Watch-qualified — council monitor bar from filter_funnel (same as Playbook strip). Near-miss rows are a separate upgrade layer.');
       },
-      kpiScannedLabel(){ return 'scanned'; },
+      kpiScannedLabel(){ return this._uiText('scanned'); },
       kpiScannedTitle(){
-        return 'Scanned — universe evaluated by the scan pipeline';
+        return this._uiText('Scanned — universe evaluated by the scan pipeline');
       },
       kpiScannedCount(){
         const f=this.today7.filter_funnel;
@@ -3727,7 +3798,7 @@
       },
       dashboardUnlockDeployStatus(){
         const u=this.today7.unlock_deploy;
-        if(u&&u.summary&&!String(u.summary).startsWith('Blocked:')) return u.summary;
+        if(u&&u.summary&&!String(u.summary).startsWith('Blocked:')) return this._uiText(u.summary);
         const watchQualified=(this.today7.no_setup_diagnosis?.watch_qualified_count||0)>0
           || (this.playbookFunnelCounts(this.today7.filter_funnel,null).watch||0)>0;
         const near=(this.today7.near_miss||[]).length>0;
@@ -3736,7 +3807,7 @@
         const deployable=this.playbookDeployableCount();
         const parts=[boardPresent?'board present':'board thin',deployable>=1?'deploy ready':'deploy absent'];
         if(this.dashboardBrokerOffline()) parts.push('broker offline');
-        return 'Current status: '+parts.join(', ')+'.';
+        return this._uiText('Current status: '+parts.join(', ')+'.');
       },
       ibkrSubStatus(ex){const exObj=ex||{};if(exObj.sub_status&&Object.keys(exObj.sub_status).length)return exObj.sub_status;return this.ibkrStateFrom(ex).sub||{};},
       isWaitDay(){
@@ -5396,7 +5467,7 @@
         }finally{this.opsRuntime.loading=false}
       },
       changelogFallback(){
-        return [{date:new Date().toISOString().slice(0,10),title:'CC platform',summary:'Built-in fallback — edit data/changelog.json for release notes.',surfaces:['Ops']}];
+        return [{date:new Date().toISOString().slice(0,10),title:this._uiText('CC platform'),summary:this._uiText('Built-in fallback — edit data/changelog.json for release notes.'),surfaces:['Ops']}];
       },
       async fetchChangelog(){
         if(!this.changelogPanel) this.changelogPanel={loading:false,loaded:false,error:'',timeout:false,version:'',product:'CC',entries:[]};

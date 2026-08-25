@@ -672,10 +672,10 @@
               <span class="pill text-[7px] pw" x-text="mlAdvisoryStatus().toUpperCase()"></span>
             </div>
             <template x-for="(ln,i) in mlAdvisoryLines()" :key="'ml-adv-'+i">
-              <div class="text-[8px] mb-0.5" style="color:var(--t2);line-height:1.45" x-text="'• '+ln"></div>
+              <div class="text-[8px] mb-0.5" style="color:var(--t2);line-height:1.45" x-text="mlAdvisoryLineText(ln)"></div>
             </template>
             <div x-show="!mlAdvisoryLines().length&&featureIcDecayAlert()" class="text-[8px]" style="color:var(--t2);line-height:1.45" x-text="featureIcDecayLine()"></div>
-            <div class="text-[7px] mt-0.5" style="color:var(--t3)" x-text="(today7.ml_advisory&&today7.ml_advisory.authority_note)||'Research only — does not override deploy gates or BDR decision.'"></div>
+            <div class="text-[7px] mt-0.5" style="color:var(--t3)" x-text="mlAdvisoryAuthorityNote()"></div>
           </div>
         </div>
       </template>
@@ -7493,26 +7493,24 @@
       <div class="trust-strip">
         <span style="color:var(--blue)">● Ops Console</span>
         <span class="pill text-[8px]" :class="opsConsole.data?.runnable?'pg':(opsConsole.data?.paper_ready?'pa':'pr')" x-text="opsConsole.data?.verdict_code||'—'"></span>
-        <span x-show="opsConsole.data?.blockers?.length" class="text-amber-300 text-[8px]" x-text="(opsConsole.data?.blockers?.length||0)+' blocker(s)'"></span>
+        <span x-show="opsConsole.data?.blockers?.length" class="text-amber-300 text-[8px]" x-text="opsBlockerCountLabel()"></span>
         <span x-show="opsGlobalLoadingLine()" style="color:var(--t3)" x-text="opsGlobalLoadingLine()"></span>
         <span x-show="opsConsole.error && !opsGlobalLoadingLine()" style="color:var(--red)" x-text="opsConsole.error"></span>
-        <span x-show="errorLog.entries.length" class="pill pr text-[8px]" x-text="errorLog.entries.length+' log'"></span>
+        <span x-show="errorLog.entries.length" class="pill pr text-[8px]" x-text="opsLogCountLabel()"></span>
       </div>
       <div class="p-3 space-y-3">
         <!-- Ops sub-sections -->
         <div class="flex gap-1 flex-wrap">
-          <button type="button" class="btn-s text-[9px]" :class="opsPanel==='health'?'btn-p':''" @click="opsPanel='health'">⚙️ Health</button>
-          <button type="button" class="btn-s text-[9px]" :class="opsPanel==='updates'?'btn-p':''" @click="opsPanel='updates';fetchChangelog()">📋 Updates</button>
-          <button type="button" class="btn-s text-[9px]" :class="opsPanel==='errors'?'btn-p':''" @click="opsPanel='errors';fetchErrorLog()">🧾 Error Log</button>
+          <button type="button" class="btn-s text-[9px]" :class="opsPanel==='health'?'btn-p':''" @click="opsPanel='health'" x-text="opsSubNavLabel('health')"></button>
+          <button type="button" class="btn-s text-[9px]" :class="opsPanel==='updates'?'btn-p':''" @click="opsPanel='updates';fetchChangelog()" x-text="opsSubNavLabel('updates')"></button>
+          <button type="button" class="btn-s text-[9px]" :class="opsPanel==='errors'?'btn-p':''" @click="opsPanel='errors';fetchErrorLog()" x-text="opsSubNavLabel('errors')"></button>
         </div>
 
         <!-- UPDATES / CHANGELOG -->
         <div x-show="opsPanel==='updates'" class="space-y-3">
           <div class="card card-p" style="border-left:3px solid var(--blue)">
             <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--t3)" x-text="opsPlatformUpdatesTitle()"></div>
-            <div class="text-[10px] leading-relaxed mb-2" style="color:var(--t2)">
-              Release notes for CC · Clarity Console. Maintained in <span class="mono text-[9px]">data/changelog.json</span> — not live git history.
-            </div>
+            <div class="text-[10px] leading-relaxed mb-2" style="color:var(--t2)" x-text="opsChangelogIntro()"></div>
             <div class="flex items-center gap-2 flex-wrap text-[9px]">
               <span class="pill pg" x-text="'v'+(changelogPanel.version||'—')"></span>
               <span style="color:var(--t3)" x-text="changelogPanel.product||'CC'"></span>
@@ -7521,7 +7519,7 @@
             </div>
           </div>
           <template x-if="changelogPanel.loading && !changelogPanel.loaded">
-            <div class="card card-p text-[10px]" style="color:var(--t3)" x-text="opsPanelLoadingShort()+' (8s timeout)'"></div>
+            <div class="card card-p text-[10px]" style="color:var(--t3)" x-text="opsPanelLoadingTimeoutSuffix()"></div>
           </template>
           <template x-if="changelogPanel.error">
             <div class="card card-p text-[10px]" style="border-left:3px solid var(--amber);color:var(--amber)">
@@ -7534,12 +7532,12 @@
             <div class="card card-p" :style="i===0?'border-left:3px solid var(--green)':''">
               <div class="flex items-start justify-between gap-2 mb-1">
                 <div>
-                  <div class="text-[11px] font-bold text-white" x-text="entry.title"></div>
+                  <div class="text-[11px] font-bold text-white" x-text="opsChangelogEntryTitle(entry)"></div>
                   <div class="mono text-[8px]" style="color:var(--t3)" x-text="entry.date"></div>
                 </div>
-                <span x-show="i===0" class="pill pg text-[8px] shrink-0">LATEST</span>
+                <span x-show="i===0" class="pill pg text-[8px] shrink-0" x-text="opsLatestPillLabel()"></span>
               </div>
-              <div class="text-[10px] leading-relaxed mb-2" style="color:var(--t2)" x-text="entry.summary"></div>
+              <div class="text-[10px] leading-relaxed mb-2" style="color:var(--t2)" x-text="opsChangelogEntrySummary(entry)"></div>
               <div class="flex gap-1 flex-wrap">
                 <template x-for="s in (entry.surfaces||[])" :key="s">
                   <span class="pill pw text-[7px]" x-text="s"></span>
@@ -7553,10 +7551,7 @@
         <div x-show="opsPanel==='errors'" class="space-y-3">
           <div class="card card-p" style="border-left:3px solid var(--amber)">
             <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--t3)" x-text="opsSessionErrorLogTitle()"></div>
-            <div class="text-[10px] leading-relaxed mb-2" style="color:var(--t2)">
-              Captures API failures, engine state, broker events, and dossier timeouts during this API session.
-              Informational — optional features like Discord being unconfigured are not logged as errors.
-            </div>
+            <div class="text-[10px] leading-relaxed mb-2" style="color:var(--t2)" x-text="opsErrorLogIntro()"></div>
             <div class="flex gap-1 flex-wrap items-center">
               <button type="button" class="btn-s text-[8px]" :class="errorLog.filter==='all'?'btn-p':''" @click="errorLog.filter='all';fetchErrorLog()">All</button>
               <button type="button" class="btn-s text-[8px]" :class="errorLog.filter==='critical'?'btn-p':''" @click="errorLog.filter='critical';fetchErrorLog()">Critical</button>
@@ -7570,19 +7565,16 @@
           </template>
           <template x-if="errorLog.error">
             <div class="card card-p text-[10px]" style="border-left:3px solid var(--red);color:var(--red)">
-              <div class="font-bold mb-1">Error log unavailable</div>
+              <div class="font-bold mb-1" x-text="opsErrorLogUnavailableTitle()"></div>
               <div x-text="opsDegradedLine('unavailable', errorLog.error)"></div>
-              <div class="text-[9px] mt-2" style="color:var(--t2)">Unable to confirm whether errors were logged this session.</div>
+              <div class="text-[9px] mt-2" style="color:var(--t2)" x-text="opsErrorLogUnavailableDetail()"></div>
               <div class="text-[9px] mt-1" style="color:var(--t3)" x-text="opsDegradedCopy('retry_recommended').next_action"></div>
             </div>
           </template>
           <template x-if="!errorLog.loading && !errorLog.entries.length && !errorLog.error">
             <div class="card card-p text-[10px]" style="color:var(--t2)">
-              <div class="font-bold mb-1">No errors logged this session</div>
-              <div class="text-[9px]" style="color:var(--t3)">
-                When the API returns 503/500, the signal engine is stopped, IBKR disconnects, or dossier aggregation times out,
-                entries appear here with plain-English detail and suggested actions.
-              </div>
+              <div class="font-bold mb-1" x-text="opsErrorLogEmptyTitle()"></div>
+              <div class="text-[9px]" style="color:var(--t3)" x-text="opsErrorLogEmptyDetail()"></div>
             </div>
           </template>
           <template x-for="(row,i) in errorLog.entries" :key="row.id||i">
