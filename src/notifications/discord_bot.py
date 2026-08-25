@@ -639,6 +639,17 @@ class DiscordInteractiveBot:
         )
         self._bot = bot
 
+        from src.notifications.futu_capture_discord_handlers import (
+            register_futu_capture_handlers,
+        )
+
+        register_futu_capture_handlers(
+            bot,
+            api_base_url=_API_BASE_URL,
+            color_buy=COLOR_BUY,
+            color_info=COLOR_INFO,
+        )
+
         # ═══════════════════════════════════════════════════
         # HELPERS — MarketDataService first, yfinance fallback
         # ═══════════════════════════════════════════════════
