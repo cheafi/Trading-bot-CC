@@ -543,3 +543,42 @@ def tags_for_playbook_row(
         "quality": q,
         "quality_decomposition": build_quality_decomposition(row),
     }
+
+
+def _tier_counts(rows: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    for row in rows:
+        tier = str((row.get("quality") or {}).get("tier") or "—").upper()
+        counts[tier] = counts.get(tier, 0) + 1
+    return counts
+
+
+def attach_opportunity_verdict_to_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Enrich board payload with verdict, tier counts, and per-row quality/authority labels."""
+    out = dict(payload)
+    verdict = out.get("opportunity_verdict") or build_opportunity_verdict(out)
+    rows = list(
+        out.get("top_ranked")
+        or out.get("top_5")
+        or out.get("opportunities")
+        or []
+    )
+    near = list(out.get("near_miss") or out.get("near_miss_rows") or [])
+    all_rows = rows + near
+    verdict = dict(verdict)
+    verdict["tier_counts"] = _tier_counts(all_rows)
+    out["opportunity_verdict"] = verdict
+
+    for key in ("top_ranked", "top_5", "opportunities", "near_miss", "near_miss_rows"):
+        bucket = out.get(key)
+        if not isinstance(bucket, list):
+            continue
+        enriched: List[Dict[str, Any]] = []
+        for row in bucket:
+            item = dict(row)
+            q = item.get("quality") or {}
+            item["quality_tier"] = q.get("tier")
+            item["authority_label"] = _authority_label(item)
+            enriched.append(item)
+        out[key] = enriched
+    return out

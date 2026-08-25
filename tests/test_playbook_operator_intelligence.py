@@ -53,7 +53,7 @@ def test_board_posture_selective_without_deploy():
     )
     assert posture["effective_posture"] == "SELECTIVE_MONITOR"
     assert "monitor only" in posture["copy_line"].lower()
-    assert posture["deploy_open"] is False
+    assert posture["deploy_qualified_present"] is False
 
 
 def test_ai_vibe_never_grants_authority():

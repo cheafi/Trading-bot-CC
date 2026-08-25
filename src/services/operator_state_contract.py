@@ -137,8 +137,9 @@ def build_playbook_rank_buckets(
         "buckets": buckets,
         "monitor_rows": monitor_valid[:12],
         "monitor_section_label": (
-            "Monitor ranking" if monitor_valid else "No valid monitor candidates"
+            "Monitor Candidates" if monitor_valid else "No valid monitor candidates"
         ),
+        "deploy_section_label": "Deploy Opportunities",
         "rejected_section_label": "Rejected / Avoid — not monitor priority",
         "has_valid_monitors": bool(monitor_valid),
         "counts": {k: len(v) for k, v in buckets.items()},
