@@ -6,7 +6,7 @@ Use across tabs so operators know what each page may and may not authorize.
 Root cause (2026-06): PM strip reused decisionHub / today7 playbook chips on
 every tab, so Idea QCOM · REDUCE · Avoid 1 appeared on Guide, Funds, Flow, etc.
 Fix: SURFACE_MODES + build_header_summary — exactly one surface owns header copy.
-See docs/SURFACE_AUTHORITY_REFACTOR.md
+See docs/CC_X_ARCHITECTURE.md (Authority model)
 """
 
 from __future__ import annotations

@@ -71,7 +71,7 @@ TELEGRAM_BOT_TOKEN=your_token_here
 TELEGRAM_CHAT_ID=your_chat_id_here
 
 # Deep links — required for "Open in CC" buttons in alerts (tunnel or LAN URL)
-# See docs/CC_PUBLIC_ACCESS.md for Cloudflare/ngrok setup
+# See docs/CC_X_PRODUCTION_READINESS.md for Cloudflare/ngrok setup
 CC_PUBLIC_BASE_URL=https://your-subdomain.trycloudflare.com
 ```
 
@@ -208,4 +208,4 @@ Monitor only — rank ≠ permission · 僅供監控，排名≠許可
 - Bot API calls use **HTTPS only** (`api.telegram.org`).
 - Logs record success/failure only — tokens are never logged.
 
-See also [CC_PUBLIC_ACCESS.md](CC_PUBLIC_ACCESS.md) for tunnel setup when exposing CC remotely.
+See also [CC_X_PRODUCTION_READINESS.md](CC_X_PRODUCTION_READINESS.md) for tunnel setup when exposing CC remotely.

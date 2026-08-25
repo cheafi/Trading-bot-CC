@@ -1,5 +1,7 @@
 # CC · Clarity Console — Soak / Staging Runbook
 
+> **Superseded by [`CC_X_PRODUCTION_READINESS.md`](./CC_X_PRODUCTION_READINESS.md)** — retained for history only.
+
 **Purpose:** Manual staging checklist after stabilization pass. Copy-only recovery — no fake authority or auto-deploy.
 
 **Prereqs:** Staging with `_cc_instant.py` or full API on `:8000` / `:8001`; `node scripts/build-cc-template.mjs --check` green; Playwright `cc-e2e` green on CI.

@@ -83,16 +83,20 @@ Every  Every  🌀 update_presence (1 min)              Bot status
 ## Morning Sequence (HKT 08:00–10:00)
 
 ### 08:00 HKT — Global Update
+
 `global_market_update` posts:
+
 - World indices: SPY, QQQ, Nikkei, Hang Seng, Shanghai, DAX, FTSE
 - USD/CNH, USD/JPY, Gold, Oil, BTC
 - Overnight futures context
 
 ### 08:30 HKT — First Crypto + News Pulse
+
 - `auto_crypto`: BTC/ETH/SOL/DOGE/ADA/AVAX with 24h change
 - `auto_news_feed`: Top headlines from 25 sources
 
 ### 09:00 HKT — Asia Morning Brief
+
 `morning_brief` posts to `#daily-reports`:
 
 ```
@@ -120,6 +124,7 @@ Every  Every  🌀 update_presence (1 min)              Bot status
 ## US Session (HKT 21:30–06:00)
 
 ### 21:30 HKT — Pre-Market Decision Memo
+
 `smart_morning_update` posts to `#daily-reports`:
 
 ```
@@ -141,7 +146,9 @@ Every  Every  🌀 update_presence (1 min)              Bot status
 ```
 
 ### 21:30–02:00 HKT — US Session Scanning
+
 All scanners running during US market hours:
+
 - `auto_signal_scan` (every 3h)
 - `opportunity_scanner` (every 30min)
 - `auto_momentum_scan` (every 2h)
@@ -151,6 +158,7 @@ All scanners running during US market hours:
 - `auto_ticker_news` (every 15min)
 
 ### 04:10 HKT — EOD Scorecard
+
 `eod_report` posts to `#daily-reports`:
 
 ```
@@ -211,31 +219,31 @@ All scanners running during US market hours:
 
 ## 23 Background Tasks — Quick Reference
 
-| # | Task | Interval | Active Hours |
-|---|------|----------|-------------|
-| 1 | `update_presence` | 1 min | always |
-| 2 | `market_pulse` | 15 min | always |
-| 3 | `auto_movers` | 30 min | 8–22 UTC |
-| 4 | `auto_sector_macro` | 60 min | 8–22 UTC |
-| 5 | `auto_crypto` | 30 min | always |
-| 6 | `global_market_update` | 60 min | always |
-| 7 | `auto_swing_scan` | 6 h | weekdays |
-| 8 | `auto_breakout_scan` | 4 h | weekdays |
-| 9 | `auto_momentum_scan` | 2 h | weekdays |
-| 10 | `auto_signal_scan` | 3 h | 13–21 UTC |
-| 11 | `morning_brief` | daily | 01:00 UTC |
-| 12 | `eod_report` | daily | 20:10 UTC |
-| 13 | `asia_preview` | daily | 01:00 UTC |
-| 14 | `auto_whale_scan` | 45 min | 8–22 UTC |
-| 15 | `weekly_recap` | weekly | Sun 21 UTC |
-| 16 | `realtime_price_alerts` | 3 min | always |
-| 17 | `auto_news_feed` | 30 min | always |
-| 18 | `auto_ticker_news` | 15 min | always |
-| 19 | `auto_strategy_learn` | 6 h | weekdays |
-| 20 | `smart_morning_update` | daily | 13:30 UTC |
-| 21 | `opportunity_scanner` | 30 min | 13–21 UTC |
-| 22 | `vix_fear_monitor` | 5 min | always |
-| 23 | `health_check` | 30 min | always |
+| #   | Task                    | Interval | Active Hours |
+| --- | ----------------------- | -------- | ------------ |
+| 1   | `update_presence`       | 1 min    | always       |
+| 2   | `market_pulse`          | 15 min   | always       |
+| 3   | `auto_movers`           | 30 min   | 8–22 UTC     |
+| 4   | `auto_sector_macro`     | 60 min   | 8–22 UTC     |
+| 5   | `auto_crypto`           | 30 min   | always       |
+| 6   | `global_market_update`  | 60 min   | always       |
+| 7   | `auto_swing_scan`       | 6 h      | weekdays     |
+| 8   | `auto_breakout_scan`    | 4 h      | weekdays     |
+| 9   | `auto_momentum_scan`    | 2 h      | weekdays     |
+| 10  | `auto_signal_scan`      | 3 h      | 13–21 UTC    |
+| 11  | `morning_brief`         | daily    | 01:00 UTC    |
+| 12  | `eod_report`            | daily    | 20:10 UTC    |
+| 13  | `asia_preview`          | daily    | 01:00 UTC    |
+| 14  | `auto_whale_scan`       | 45 min   | 8–22 UTC     |
+| 15  | `weekly_recap`          | weekly   | Sun 21 UTC   |
+| 16  | `realtime_price_alerts` | 3 min    | always       |
+| 17  | `auto_news_feed`        | 30 min   | always       |
+| 18  | `auto_ticker_news`      | 15 min   | always       |
+| 19  | `auto_strategy_learn`   | 6 h      | weekdays     |
+| 20  | `smart_morning_update`  | daily    | 13:30 UTC    |
+| 21  | `opportunity_scanner`   | 30 min   | 13–21 UTC    |
+| 22  | `vix_fear_monitor`      | 5 min    | always       |
+| 23  | `health_check`          | 30 min   | always       |
 
 Use `/status` to see live state of all 23 tasks.
 

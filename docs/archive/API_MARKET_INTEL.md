@@ -46,9 +46,9 @@ Current CBOE VIX level with human-readable classification.
 
 ```json
 {
-  "vix": 18.45,
-  "label": "NORMAL",
-  "as_of": "2025-01-15T12:00:00Z"
+	"vix": 18.45,
+	"label": "NORMAL",
+	"as_of": "2025-01-15T12:00:00Z"
 }
 ```
 
@@ -70,14 +70,14 @@ Market breadth indicators (advance/decline, new highs/lows).
 
 ```json
 {
-  "breadth": {
-    "advancers": 320,
-    "decliners": 180,
-    "ad_ratio": 1.78,
-    "new_highs": 42,
-    "new_lows": 8
-  },
-  "as_of": "2025-01-15T12:00:00Z"
+	"breadth": {
+		"advancers": 320,
+		"decliners": 180,
+		"ad_ratio": 1.78,
+		"new_highs": 42,
+		"new_lows": 8
+	},
+	"as_of": "2025-01-15T12:00:00Z"
 }
 ```
 
@@ -91,13 +91,13 @@ SPY returns across multiple periods.
 
 ```json
 {
-  "spy_returns": {
-    "1w_pct": 1.23,
-    "1m_pct": 3.45,
-    "3m_pct": 7.89,
-    "ytd_pct": 12.34
-  },
-  "as_of": "2025-01-15T12:00:00Z"
+	"spy_returns": {
+		"1w_pct": 1.23,
+		"1m_pct": 3.45,
+		"3m_pct": 7.89,
+		"ytd_pct": 12.34
+	},
+	"as_of": "2025-01-15T12:00:00Z"
 }
 ```
 
@@ -111,15 +111,15 @@ US Treasury yield curve snapshot.
 
 ```json
 {
-  "yields": {
-    "3M": 5.25,
-    "5Y": 4.1,
-    "10Y": 4.45,
-    "30Y": 4.65
-  },
-  "spread_10y_3m": -0.8,
-  "curve_status": "INVERTED",
-  "as_of": "2025-01-15T12:00:00Z"
+	"yields": {
+		"3M": 5.25,
+		"5Y": 4.1,
+		"10Y": 4.45,
+		"30Y": 4.65
+	},
+	"spread_10y_3m": -0.8,
+	"curve_status": "INVERTED",
+	"as_of": "2025-01-15T12:00:00Z"
 }
 ```
 
@@ -147,9 +147,9 @@ Headers returned:
 
 ```json
 {
-  "error": "Rate limit exceeded",
-  "detail": "Too many requests. Please try again later.",
-  "retry_after": 60
+	"error": "Rate limit exceeded",
+	"detail": "Too many requests. Please try again later.",
+	"retry_after": 60
 }
 ```
 

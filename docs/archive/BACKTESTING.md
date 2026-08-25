@@ -24,6 +24,7 @@ The singleton `get_optimizer()` is shared across all Discord commands and the `a
 ## 4 Simulated Strategies
 
 ### SWING
+
 ```
 Entry:  Price touches SMA20 from above · RSI 40–55 · declining pullback volume
 Exit:   Price reaches prior swing high · OR stop triggered
@@ -32,6 +33,7 @@ Hold:   5–15 days
 ```
 
 ### BREAKOUT
+
 ```
 Entry:  Price closes above multi-week range high · Volume > 1.5× avg · RSI 55–75
 Exit:   Measured move complete · OR stop triggered
@@ -40,6 +42,7 @@ Hold:   10–30 days
 ```
 
 ### MOMENTUM
+
 ```
 Entry:  EMA9 crosses above EMA21 · ADX > 25 · Relative strength top quartile
 Exit:   EMA9 crosses below EMA21 (trailing)
@@ -48,6 +51,7 @@ Hold:   1–8 weeks (trailing)
 ```
 
 ### MEAN_REVERSION
+
 ```
 Entry:  Price at lower Bollinger Band (−2σ) · RSI < 35 · Price > SMA200
 Exit:   Price reaches SMA20 (midline)
@@ -74,6 +78,7 @@ REGIMES = [
 ```
 
 Regime is detected per-ticker using:
+
 - 20-day realised volatility (ATR/price)
 - Directional bias (EMA20 vs price)
 - ADX (trend strength)
@@ -143,10 +148,10 @@ Poor: degradation > 20%
 
 Tests all combinations of:
 
-| Parameter | Values Tested |
-|-----------|--------------|
-| `rsi_period` | 9, 14, 21 |
-| `sma_period` | 20, 50, 100 |
+| Parameter        | Values Tested |
+| ---------------- | ------------- |
+| `rsi_period`     | 9, 14, 21     |
+| `sma_period`     | 20, 50, 100   |
 | `vol_multiplier` | 1.2, 1.5, 2.0 |
 
 3 × 3 × 3 = **27** combinations per strategy fold × 3 folds = **81 total** evaluations.
@@ -208,9 +213,11 @@ A strategy that shows −30% at the 5th percentile despite a positive mean is ri
 ## Discord Commands
 
 ### `/backtest TICKER [PERIOD]`
+
 Full AI backtest. `PERIOD` defaults to `1y`. Options: `6mo`, `1y`, `2y`.
 
 Output sections:
+
 1. **Regime** — detected regime + confidence %
 2. **Strategy Ranking** — all 4 strategies sorted by final score
 3. **Best Strategy** — recommendation with reasoning
@@ -221,7 +228,9 @@ Output sections:
 8. **Cross-Check** — do other strategies support the thesis?
 
 ### `/best_strategy TICKER`
+
 Fast 6-month scan. Returns:
+
 - Current regime
 - Best-fit strategy name
 - Score and win rate
@@ -230,7 +239,9 @@ Fast 6-month scan. Returns:
 Best used as a quick pre-trade check.
 
 ### `/strategy_report`
+
 Self-learning accuracy dashboard. Returns for each of the 4 strategies:
+
 - Signals posted (count)
 - Win rate (live)
 - Backtest win rate (reference)
@@ -271,17 +282,17 @@ Optimizer confidence: HIGH
 
 Strategy scores are boosted or penalised based on regime fit:
 
-| Regime | SWING | BREAKOUT | MOMENTUM | MEAN_REV |
-|--------|-------|----------|----------|----------|
-| `bull_trending` | +10 | +15 | +15 | −5 |
-| `bull_choppy` | +15 | +5 | 0 | +5 |
-| `bear_trending` | −15 | −15 | −15 | +10 |
-| `bear_choppy` | −10 | −15 | −15 | +5 |
-| `high_volatility` | −10 | 0 | +5 | 0 |
-| `low_volatility` | +5 | +10 | 0 | +10 |
-| `sideways` | 0 | −5 | −10 | +15 |
-| `breakout_environment` | 0 | +20 | +10 | −10 |
-| `mean_reversion_env` | +5 | −15 | −10 | +20 |
+| Regime                 | SWING | BREAKOUT | MOMENTUM | MEAN_REV |
+| ---------------------- | ----- | -------- | -------- | -------- |
+| `bull_trending`        | +10   | +15      | +15      | −5       |
+| `bull_choppy`          | +15   | +5       | 0        | +5       |
+| `bear_trending`        | −15   | −15      | −15      | +10      |
+| `bear_choppy`          | −10   | −15      | −15      | +5       |
+| `high_volatility`      | −10   | 0        | +5       | 0        |
+| `low_volatility`       | +5    | +10      | 0        | +10      |
+| `sideways`             | 0     | −5       | −10      | +15      |
+| `breakout_environment` | 0     | +20      | +10      | −10      |
+| `mean_reversion_env`   | +5    | −15      | −10      | +20      |
 
 ---
 

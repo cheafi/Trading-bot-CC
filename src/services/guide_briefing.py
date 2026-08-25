@@ -6,8 +6,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-_BRIEFING_REL = Path("docs") / "CC_CONSOLIDATED_BRIEFING.md"
-_DOC_PATH_LABEL = "docs/CC_CONSOLIDATED_BRIEFING.md"
+_BRIEFING_REL = Path("docs") / "CC_X_ARCHITECTURE.md"
+_DOC_PATH_LABEL = "docs/CC_X_ARCHITECTURE.md"
 
 
 def _briefing_path_candidates() -> List[Path]:

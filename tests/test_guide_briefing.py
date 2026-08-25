@@ -18,7 +18,7 @@ def test_load_guide_briefing_returns_section_ten_prompts():
     assert data["missing"] is False
     assert data["full_markdown"]
     assert "CC / TradingAI Bot" in data["full_markdown"]
-    assert data["doc_path"] == "docs/CC_CONSOLIDATED_BRIEFING.md"
+    assert data["doc_path"] == "docs/CC_X_ARCHITECTURE.md"
     assert "deploy authority" in data["authority_note"].lower()
 
 

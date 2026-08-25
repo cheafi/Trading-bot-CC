@@ -231,6 +231,7 @@ _strategy_accuracy: dict[str, dict]  # keyed by strategy_type
 Only used when `DATABASE_URL` is set. Schema defined in `init/postgres/01_init.sql`.
 
 ### signals table
+
 ```sql
 CREATE TABLE signals (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -250,6 +251,7 @@ CREATE TABLE signals (
 ```
 
 ### positions table
+
 ```sql
 CREATE TABLE positions (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -267,6 +269,7 @@ CREATE TABLE positions (
 ```
 
 ### alerts table
+
 ```sql
 CREATE TABLE alerts (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

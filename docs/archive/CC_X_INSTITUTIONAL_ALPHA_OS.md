@@ -1,3 +1,5 @@
+> **Redirect:** Architecture SSOT is [`CC_X_ARCHITECTURE.md`](./CC_X_ARCHITECTURE.md). Backlog → [`CC_X_ENGINEERING_BACKLOG.md`](./CC_X_ENGINEERING_BACKLOG.md). This file is archived at [`archive/CC_X_INSTITUTIONAL_ALPHA_OS.md`](./archive/CC_X_INSTITUTIONAL_ALPHA_OS.md).
+
 # CC X — Institutional Alpha OS Roadmap
 
 **Document:** `docs/CC_X_INSTITUTIONAL_ALPHA_OS.md`  

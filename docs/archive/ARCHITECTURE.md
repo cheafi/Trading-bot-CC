@@ -75,6 +75,7 @@
 ## Layer Breakdown
 
 ### Layer 1 — Discord Interface
+
 `src/discord_bot.py` is the single entry point for all user-facing functionality.
 
 - All 64 slash commands defined as `@bot.tree.command` decorators
@@ -84,30 +85,36 @@
 
 ### Layer 2 — Signal & Analysis Engines
 
-| File | Lines | Role |
-|------|------:|------|
-| `src/engines/signal_engine.py` | 1,244 | Swing / breakout / momentum / mean-reversion scans |
-| `src/engines/gpt_validator.py` | 1,058 | OpenAI GPT narrative generation + validation |
-| `src/engines/strategy_optimizer.py` | 936 | AI self-learning backtest engine (new) |
-| `src/engines/feature_engine.py` | — | Feature extraction for ML |
-| `src/engines/ai_advisor.py` | — | Integrated AI trade advice |
-| `src/engines/insight_engine.py` | — | Market insight aggregation |
+| File                                | Lines | Role                                               |
+| ----------------------------------- | ----: | -------------------------------------------------- |
+| `src/engines/signal_engine.py`      | 1,244 | Swing / breakout / momentum / mean-reversion scans |
+| `src/engines/gpt_validator.py`      | 1,058 | OpenAI GPT narrative generation + validation       |
+| `src/engines/strategy_optimizer.py` |   936 | AI self-learning backtest engine (new)             |
+| `src/engines/feature_engine.py`     |     — | Feature extraction for ML                          |
+| `src/engines/ai_advisor.py`         |     — | Integrated AI trade advice                         |
+| `src/engines/insight_engine.py`     |     — | Market insight aggregation                         |
 
 ### Layer 3 — Technical Indicators
+
 `src/algo/indicators.py` (1,272 lines) — pure calculation functions:
+
 - SMA, EMA, VWAP, Bollinger Bands, ATR, RSI, MACD, ADX
 - Volume spike detection, VCP pattern recognition
 - Regime classifier (9 states: bull_trending, bear_trending, high_volatility, sideways, etc.)
 - All functions return typed dicts; no side effects
 
 ### Layer 4 — Models
+
 `src/core/models.py` (766 lines) — Pydantic v2 type system:
+
 - `SignalCard`, `TradeSetup`, `BrokerPosition`, `WatchlistItem`
 - `BacktestResult`, `StrategyResult`, `RegimeState`
 - Runtime state singletons (signal cache, alert registry)
 
 ### Layer 5 — Data
+
 All market data sourced from `yfinance`:
+
 - OHLCV history (1d, 5m, 1m periods)
 - Earnings dates, analyst targets, P/E ratios
 - News headlines per ticker
@@ -117,31 +124,31 @@ All market data sourced from `yfinance`:
 
 ## 23 Background Tasks — Full Map
 
-| Task | Interval | Active Hours (UTC) | Channel | What It Posts |
-|------|----------|-------------------|---------|---------------|
-| `update_presence` | 1 min | always | — | Bot status line |
-| `market_pulse` | 15 min | always | #general | SPY/QQQ/BTC pulse |
-| `auto_movers` | 30 min | 8–22 UTC | #general | Top 5 gainers + losers |
-| `auto_sector_macro` | 60 min | 8–22 UTC | #general | Sector heatmap |
-| `auto_crypto` | 30 min | always | #crypto | Top 6 crypto |
-| `global_market_update` | 60 min | always | #general | World indices |
-| `auto_swing_scan` | 6 h | weekdays | #signals | Swing pullback setups |
-| `auto_breakout_scan` | 4 h | weekdays | #signals | Breakout setups |
-| `auto_momentum_scan` | 2 h | weekdays | #signals | Momentum setups |
-| `auto_signal_scan` | 3 h | 13–21 UTC | #signals | Combined AI scan |
-| `morning_brief` | daily | 01:00 UTC | #daily-reports | Asia morning |
-| `eod_report` | daily | 20:10 UTC | #daily-reports | EOD scorecard |
-| `asia_preview` | daily | 01:00 UTC | #daily-reports | Asia session preview |
-| `auto_whale_scan` | 45 min | 8–22 UTC | #signals | Unusual volume |
-| `weekly_recap` | weekly | Sun 21 UTC | #daily-reports | Weekly wrap-up |
-| `realtime_price_alerts` | 3 min | always | #alerts | User + auto alerts |
-| `auto_news_feed` | 30 min | always | #news | 25-source news feed |
-| `auto_ticker_news` | 15 min | always | #news | Rolling 50-stock news |
-| `auto_strategy_learn` | 6 h | weekdays | #ai-signals | ML backtest self-learning |
-| `smart_morning_update` | daily | 13:30 UTC | #daily-reports | US pre-market memo |
-| `opportunity_scanner` | 30 min | 13–21 UTC | #signals | Best setups now |
-| `vix_fear_monitor` | 5 min | always | #alerts | VIX spike warnings |
-| `health_check` | 30 min | always | — | Internal diagnostics |
+| Task                    | Interval | Active Hours (UTC) | Channel        | What It Posts             |
+| ----------------------- | -------- | ------------------ | -------------- | ------------------------- |
+| `update_presence`       | 1 min    | always             | —              | Bot status line           |
+| `market_pulse`          | 15 min   | always             | #general       | SPY/QQQ/BTC pulse         |
+| `auto_movers`           | 30 min   | 8–22 UTC           | #general       | Top 5 gainers + losers    |
+| `auto_sector_macro`     | 60 min   | 8–22 UTC           | #general       | Sector heatmap            |
+| `auto_crypto`           | 30 min   | always             | #crypto        | Top 6 crypto              |
+| `global_market_update`  | 60 min   | always             | #general       | World indices             |
+| `auto_swing_scan`       | 6 h      | weekdays           | #signals       | Swing pullback setups     |
+| `auto_breakout_scan`    | 4 h      | weekdays           | #signals       | Breakout setups           |
+| `auto_momentum_scan`    | 2 h      | weekdays           | #signals       | Momentum setups           |
+| `auto_signal_scan`      | 3 h      | 13–21 UTC          | #signals       | Combined AI scan          |
+| `morning_brief`         | daily    | 01:00 UTC          | #daily-reports | Asia morning              |
+| `eod_report`            | daily    | 20:10 UTC          | #daily-reports | EOD scorecard             |
+| `asia_preview`          | daily    | 01:00 UTC          | #daily-reports | Asia session preview      |
+| `auto_whale_scan`       | 45 min   | 8–22 UTC           | #signals       | Unusual volume            |
+| `weekly_recap`          | weekly   | Sun 21 UTC         | #daily-reports | Weekly wrap-up            |
+| `realtime_price_alerts` | 3 min    | always             | #alerts        | User + auto alerts        |
+| `auto_news_feed`        | 30 min   | always             | #news          | 25-source news feed       |
+| `auto_ticker_news`      | 15 min   | always             | #news          | Rolling 50-stock news     |
+| `auto_strategy_learn`   | 6 h      | weekdays           | #ai-signals    | ML backtest self-learning |
+| `smart_morning_update`  | daily    | 13:30 UTC          | #daily-reports | US pre-market memo        |
+| `opportunity_scanner`   | 30 min   | 13–21 UTC          | #signals       | Best setups now           |
+| `vix_fear_monitor`      | 5 min    | always             | #alerts        | VIX spike warnings        |
+| `health_check`          | 30 min   | always             | —              | Internal diagnostics      |
 
 ---
 
@@ -270,31 +277,31 @@ TradingAI_Bot-main/
 
 ## Sprint History (Decision-Layer Upgrades)
 
-| Sprint | Focus | Key Deliverables |
-|--------|-------|------------------|
-| 1-2 | P0 Bug Fixes | Core stability, 7 critical fixes |
-| 3 | Decision Engines | RegimeRouter, ContextAssembler, OpportunityEnsembler, StrategyLeaderboard, EdgeCalculator |
-| 4 | Engine Wiring | All 5 engines integrated into AutoTradingEngine._run_cycle |
-| 5 | Config + Risk | PositionManager (R-based sizing, trailing stops, partial exits) |
-| 6 | Errors + Learning | TradingError hierarchy (6 types), TradeLearningLoop wiring, 3 API endpoints |
-| 7 | ML Gate + EOD | ML quality gate (D-grade rejection), EOD cycle, signal caching |
-| 8 | Singleton + Edge | BrokerManager singleton, EdgeCalculator enrichment, JSON persistence |
-| 9 | Brokers + Discord | BrokerError in all 4 brokers, /regime /leaderboard /recommendations commands |
-| 10 | Typed Errors | 13 typed catches, health_check(), graceful_shutdown(), /api/health |
-| 11 | DB Persistence | 4 new DB tables (trade_outcomes, leaderboard, regime, health), TradeOutcomeRepository, _timed_phase wiring |
-| 12 | Boot + Logging | engines/main.py entrypoint, _boot() pre-flight, JSONFormatter, correlation IDs |
-| 13 | Infrastructure | Docker CMD fix, __main__.py, config/default.yaml, ARCHITECTURE.md update |
-| 14 | Typed Exceptions | 9 bare except→typed, heartbeat healthcheck, Dockerfile.discord/jupyter, .gitignore |
-| 15 | README + Deps | README modernised (Docker/brokers/API), 7 ghost deps removed from requirements |
-| 16 | Sync + Polish | notifications/discord_bot.py synced (54→57 commands), stale refs fixed |
-| 17 | Unit Tests | 37 decision-layer tests (Ensembler, Leaderboard, EdgeCalc, Errors, Context) |
-| 18 | Infra Hardening | ingestors/main.py entrypoint, redis lazy import, 14× utcnow→timezone.utc |
-| 19 | Pydantic V2 | 6× class Config→model_config=ConfigDict, eliminates PydanticDeprecatedSince20 |
-| 20 | Deep Integration | P0: submit_order→place_order, Position direction+aliases, portfolio schema (positions_by_ticker), strategy_weights preserved, leaderboard record_outcome→update(), circuit breaker trade_pnl, learning loop real features, ML scaler leakage fix |
-| 21 | Ensemble Sizing | Regime-weighted strategy_health in ensembler, EdgeCalculator p_t1/EV used for pwin+exp_r, half-Kelly position sizing in engine+RiskModel, leaderboard sizing_multiplier, regime_router wired to ensembler |
-| 22 | TradeRecommendation | Canonical TradeRecommendation dataclass replaces ad-hoc dicts across signal→ensemble→execution pipeline, dict-like protocol for backward compat, from_signal/from_dict/to_api_dict factories |
-| 23 | Staged Universe | UniverseBuilder 3-stage pipeline (source→filter→prioritise), crypto suffix fix (BTC→BTC-USD), per-market caps (us50/hk12/jp8/crypto10), regime-aware sector weighting, watchlist injection |
-| 24 | Hardened Risk | Equity cache (no $100k phantom), staleness guard blocks trades, circuit breaker reads TradingConfig, learning loop real direction/confidence/snapshot, PositionManager save/load state, RiskParameters field name fix |
+| Sprint | Focus               | Key Deliverables                                                                                                                                                                                                                                 |
+| ------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1-2    | P0 Bug Fixes        | Core stability, 7 critical fixes                                                                                                                                                                                                                 |
+| 3      | Decision Engines    | RegimeRouter, ContextAssembler, OpportunityEnsembler, StrategyLeaderboard, EdgeCalculator                                                                                                                                                        |
+| 4      | Engine Wiring       | All 5 engines integrated into AutoTradingEngine.\_run_cycle                                                                                                                                                                                      |
+| 5      | Config + Risk       | PositionManager (R-based sizing, trailing stops, partial exits)                                                                                                                                                                                  |
+| 6      | Errors + Learning   | TradingError hierarchy (6 types), TradeLearningLoop wiring, 3 API endpoints                                                                                                                                                                      |
+| 7      | ML Gate + EOD       | ML quality gate (D-grade rejection), EOD cycle, signal caching                                                                                                                                                                                   |
+| 8      | Singleton + Edge    | BrokerManager singleton, EdgeCalculator enrichment, JSON persistence                                                                                                                                                                             |
+| 9      | Brokers + Discord   | BrokerError in all 4 brokers, /regime /leaderboard /recommendations commands                                                                                                                                                                     |
+| 10     | Typed Errors        | 13 typed catches, health_check(), graceful_shutdown(), /api/health                                                                                                                                                                               |
+| 11     | DB Persistence      | 4 new DB tables (trade_outcomes, leaderboard, regime, health), TradeOutcomeRepository, \_timed_phase wiring                                                                                                                                      |
+| 12     | Boot + Logging      | engines/main.py entrypoint, \_boot() pre-flight, JSONFormatter, correlation IDs                                                                                                                                                                  |
+| 13     | Infrastructure      | Docker CMD fix, **main**.py, config/default.yaml, ARCHITECTURE.md update                                                                                                                                                                         |
+| 14     | Typed Exceptions    | 9 bare except→typed, heartbeat healthcheck, Dockerfile.discord/jupyter, .gitignore                                                                                                                                                               |
+| 15     | README + Deps       | README modernised (Docker/brokers/API), 7 ghost deps removed from requirements                                                                                                                                                                   |
+| 16     | Sync + Polish       | notifications/discord_bot.py synced (54→57 commands), stale refs fixed                                                                                                                                                                           |
+| 17     | Unit Tests          | 37 decision-layer tests (Ensembler, Leaderboard, EdgeCalc, Errors, Context)                                                                                                                                                                      |
+| 18     | Infra Hardening     | ingestors/main.py entrypoint, redis lazy import, 14× utcnow→timezone.utc                                                                                                                                                                         |
+| 19     | Pydantic V2         | 6× class Config→model_config=ConfigDict, eliminates PydanticDeprecatedSince20                                                                                                                                                                    |
+| 20     | Deep Integration    | P0: submit_order→place_order, Position direction+aliases, portfolio schema (positions_by_ticker), strategy_weights preserved, leaderboard record_outcome→update(), circuit breaker trade_pnl, learning loop real features, ML scaler leakage fix |
+| 21     | Ensemble Sizing     | Regime-weighted strategy_health in ensembler, EdgeCalculator p_t1/EV used for pwin+exp_r, half-Kelly position sizing in engine+RiskModel, leaderboard sizing_multiplier, regime_router wired to ensembler                                        |
+| 22     | TradeRecommendation | Canonical TradeRecommendation dataclass replaces ad-hoc dicts across signal→ensemble→execution pipeline, dict-like protocol for backward compat, from_signal/from_dict/to_api_dict factories                                                     |
+| 23     | Staged Universe     | UniverseBuilder 3-stage pipeline (source→filter→prioritise), crypto suffix fix (BTC→BTC-USD), per-market caps (us50/hk12/jp8/crypto10), regime-aware sector weighting, watchlist injection                                                       |
+| 24     | Hardened Risk       | Equity cache (no $100k phantom), staleness guard blocks trades, circuit breaker reads TradingConfig, learning loop real direction/confidence/snapshot, PositionManager save/load state, RiskParameters field name fix                            |
 
 ### AutoTradingEngine Pipeline (current)
 

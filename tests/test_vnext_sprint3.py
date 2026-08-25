@@ -729,29 +729,28 @@ class TestResearchLabPatterns:
 
 
 # ════════════════════════════════════════════════════════════════
-# COMMIT N — SKILL.md and API_MARKET_INTEL.md existence
+# COMMIT N — Living SSOT documentation
 # ════════════════════════════════════════════════════════════════
 
 class TestDocumentation:
-    """Verify commit N documentation files exist."""
+    """Verify consolidated SSOT documentation files exist."""
 
-    def test_skill_md_exists(self):
-        path = Path(__file__).parent.parent / "docs" / "SKILL.md"
-        assert path.exists(), "docs/SKILL.md missing"
+    def test_architecture_md_exists(self):
+        path = Path(__file__).parent.parent / "docs" / "CC_X_ARCHITECTURE.md"
+        assert path.exists(), "docs/CC_X_ARCHITECTURE.md missing"
         content = path.read_text()
-        assert "Capability" in content
-        assert "Market Intel" in content or "market-intel" in content
+        assert "Authority model" in content
+        assert "deploy_open" in content
 
-    def test_api_market_intel_md_exists(self):
+    def test_engineering_backlog_md_exists(self):
         path = (
             Path(__file__).parent.parent
-            / "docs" / "API_MARKET_INTEL.md"
+            / "docs" / "CC_X_ENGINEERING_BACKLOG.md"
         )
-        assert path.exists(), "docs/API_MARKET_INTEL.md missing"
+        assert path.exists(), "docs/CC_X_ENGINEERING_BACKLOG.md missing"
         content = path.read_text()
-        assert "/api/market-intel" in content
-        assert "regime" in content
-        assert "vix" in content.lower()
+        assert "P0" in content
+        assert "Sprint" in content
 
     def test_research_lab_init(self):
         """research_lab package should be importable."""

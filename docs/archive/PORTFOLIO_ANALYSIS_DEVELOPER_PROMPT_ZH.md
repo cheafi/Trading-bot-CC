@@ -8,12 +8,12 @@
 
 ## 頁面層級（Hierarchy — 必守）
 
-| 層級 | 內容 | 禁止 |
-|------|------|------|
-| 1 頂部 | **What to do now** | 唔好放歷史 heatmap 在頂 |
-| 2 中部 | **Why** — regime fit, attribution, benchmark verdict | |
-| 3 下半 | **Evidence** — curves, heatmaps, comparison tables | |
-| 4 底部 | **Deep drill** — trade log, param compare | |
+| 層級   | 內容                                                 | 禁止                    |
+| ------ | ---------------------------------------------------- | ----------------------- |
+| 1 頂部 | **What to do now**                                   | 唔好放歷史 heatmap 在頂 |
+| 2 中部 | **Why** — regime fit, attribution, benchmark verdict |                         |
+| 3 下半 | **Evidence** — curves, heatmaps, comparison tables   |                         |
+| 4 底部 | **Deep drill** — trade log, param compare            |                         |
 
 ---
 
@@ -21,18 +21,18 @@
 
 ### 頂部 Allocator Decision Summary 必須顯示
 
-| 欄位 | API 路徑 |
-|------|----------|
-| Stance: Deploy / Hold / Rebalance / Reduce / Pause | `allocator_summary.stance` |
-| Best allocation model | `allocator_summary.best_allocation_model` |
-| Last rebalance | `allocator_summary.last_rebalance_date` |
-| Risk regime | `allocator_summary.current_risk_regime` |
-| Rebalance suggested? | `allocator_summary.rebalance_suggested` |
-| Most overweight / underweight | `most_overweight`, `most_underweight` |
-| Largest risk contributor | `largest_risk_contributor` |
-| Benchmark verdict | `benchmark_relative_verdict` |
-| Recommended action | `recommended_action` |
-| Confidence / evidence | `confidence`, `evidence_quality` |
+| 欄位                                               | API 路徑                                  |
+| -------------------------------------------------- | ----------------------------------------- |
+| Stance: Deploy / Hold / Rebalance / Reduce / Pause | `allocator_summary.stance`                |
+| Best allocation model                              | `allocator_summary.best_allocation_model` |
+| Last rebalance                                     | `allocator_summary.last_rebalance_date`   |
+| Risk regime                                        | `allocator_summary.current_risk_regime`   |
+| Rebalance suggested?                               | `allocator_summary.rebalance_suggested`   |
+| Most overweight / underweight                      | `most_overweight`, `most_underweight`     |
+| Largest risk contributor                           | `largest_risk_contributor`                |
+| Benchmark verdict                                  | `benchmark_relative_verdict`              |
+| Recommended action                                 | `recommended_action`                      |
+| Confidence / evidence                              | `confidence`, `evidence_quality`          |
 
 **API：** `GET /api/v7/portfolio-decision`  
 **Service：** `src/services/portfolio_decision_console.py`  
@@ -65,15 +65,15 @@ curl -s http://127.0.0.1:8000/api/v7/portfolio-decision | jq '.allocator_summary
 
 ## 三、Current Allocation Monitor（必加 · 已 baseline）
 
-| 欄位 | 說明 |
-|------|------|
-| Asset | ticker |
-| Current weight % | 實際 |
-| Target weight % | equal-weight 或 policy target |
-| Drift % | current − target |
-| Action required | TRIM / ADD / HOLD |
-| Priority | high / medium / low |
-| Reason | 人可讀 |
+| 欄位             | 說明                          |
+| ---------------- | ----------------------------- |
+| Asset            | ticker                        |
+| Current weight % | 實際                          |
+| Target weight %  | equal-weight 或 policy target |
+| Drift %          | current − target              |
+| Action required  | TRIM / ADD / HOLD             |
+| Priority         | high / medium / low           |
+| Reason           | 人可讀                        |
 
 **下一版：** 接 `PortfolioPolicy.max_single_position_pct`、sector cap、target from fund sleeve
 
@@ -168,14 +168,14 @@ curl -s http://127.0.0.1:8000/api/v7/portfolio-decision | jq '.allocator_summary
 
 ## 高 ROI 下一輪（P1 → P2）
 
-| P | Feature | Files |
-|---|---------|-------|
-| P1 | Rebalance simulator | `portfolio_rebalance_sim.py` |
-| P1 | Correlation matrix on portfolio tab | reuse portfolio gate |
-| P1 | Scenario shocks (+50bps rates, QQQ -10%) | new service |
-| P2 | Compare workspace A vs B | extend compare.html |
-| P2 | PM memo export | `pm_memo.py` |
-| P2 | Full equity curve attribution | `benchmark_portfolio.py` |
+| P   | Feature                                  | Files                        |
+| --- | ---------------------------------------- | ---------------------------- |
+| P1  | Rebalance simulator                      | `portfolio_rebalance_sim.py` |
+| P1  | Correlation matrix on portfolio tab      | reuse portfolio gate         |
+| P1  | Scenario shocks (+50bps rates, QQQ -10%) | new service                  |
+| P2  | Compare workspace A vs B                 | extend compare.html          |
+| P2  | PM memo export                           | `pm_memo.py`                 |
+| P2  | Full equity curve attribution            | `benchmark_portfolio.py`     |
 
 ---
 
@@ -255,14 +255,14 @@ However, it still reads more like a rich backtest/reporting page than a true por
 
 ## 檔案地圖
 
-| 區域 | 路徑 |
-|------|------|
-| Decision API | `src/services/portfolio_decision_console.py`, `src/api/routers/portfolio_decision.py` |
-| Benchmark engine | `src/engines/benchmark_portfolio.py` |
-| Fund sleeves | `src/services/fund_manager_console.py` |
-| Portfolio holdings | `src/api/routers/portfolio.py` |
-| UI | `src/api/templates/index.html` (tab portfolio) |
-| Tests | `tests/test_portfolio_decision_console.py` |
+| 區域               | 路徑                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------- |
+| Decision API       | `src/services/portfolio_decision_console.py`, `src/api/routers/portfolio_decision.py` |
+| Benchmark engine   | `src/engines/benchmark_portfolio.py`                                                  |
+| Fund sleeves       | `src/services/fund_manager_console.py`                                                |
+| Portfolio holdings | `src/api/routers/portfolio.py`                                                        |
+| UI                 | `src/api/templates/index.html` (tab portfolio)                                        |
+| Tests              | `tests/test_portfolio_decision_console.py`                                            |
 
 ---
 

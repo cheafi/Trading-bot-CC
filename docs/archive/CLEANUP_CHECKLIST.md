@@ -59,8 +59,6 @@ git rev-list --objects --all \
   | head -20
 ```
 
-
-
 ### Remove mistaken large files from history
 
 Preferred tool:

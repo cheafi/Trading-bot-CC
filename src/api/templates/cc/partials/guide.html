@@ -1,4 +1,3 @@
-
       <!-- Hero -->
       <div class="guide-hero" style="position:relative;overflow:hidden;margin-bottom:16px">
         <div style="position:absolute;right:20px;top:20px;font-size:64px;opacity:.07;line-height:1">📊</div>
@@ -13,8 +12,17 @@
         </div>
       </div>
 
+      <!-- Guide progressive sub-nav -->
+      <div data-cc="guide-subnav" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+        <template x-for="sec in guideSections" :key="'guide-sec-'+sec.id">
+          <button type="button" class="btn-s text-[9px]"
+            :style="guideSection===sec.id?'border-color:var(--green);color:var(--green)':''"
+            @click="guideSection=sec.id" x-text="sec.label"></button>
+        </template>
+      </div>
+
       <!-- ══ CURRENT BUILD REALITY CHECK (collapsible) ══ -->
-      <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--amber)">
+      <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--amber)" x-show="guideSection==='workflow'" open>
         <summary style="padding:10px 16px;background:rgba(251,191,36,.06);display:flex;align-items:center;gap:8px">
           <span style="font-size:16px">⚠️</span>
           <span class="guide-layer-hdr" style="color:var(--amber)">目前版本實況 · Current Build Reality Check</span>
@@ -31,7 +39,7 @@
       </details>
 
       <!-- ══ RANDOM WALK — GLOBAL PRINCIPLES (collapsible) ══ -->
-      <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--purple)">
+      <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--purple)" x-show="guideSection==='workflow'" open>
         <summary style="padding:10px 16px;background:rgba(168,85,247,.06);display:flex;align-items:center;gap:8px">
           <span style="font-size:16px">📘</span>
           <span class="guide-layer-hdr" style="color:var(--purple)">隨機漫步原則 (8) · Random Walk — Global Principles</span>
@@ -56,13 +64,13 @@
             <strong style="color:var(--teal,#14b8a6)">Naval principles (signal-light):</strong>
             specific knowledge beats borrowed conviction · preserve mental bandwidth · suppress false urgency ·
             process leverage over labor churn · compounding patience when board says WAIT —
-            see <code style="font-size:9px">docs/NAVAL_ALMANAC_UPGRADE.md</code>
+            see <code style="font-size:9px">docs/archive/NAVAL_ALMANAC_UPGRADE.md</code>
           </div>
           <div style="margin-top:10px;padding:10px 12px;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.22);border-radius:8px;font-size:10px;color:var(--t2);line-height:1.65">
             <strong style="color:var(--amber)">Buffett principles (owner judgment):</strong>
             understand the business · economic quality and moat · honest capital allocation ·
             stay inside circle of competence · patience when board says WAIT —
-            see <code style="font-size:9px">docs/BUFFETT_BIOGRAPHY_UPGRADE.md</code>
+            see <code style="font-size:9px">docs/archive/BUFFETT_BIOGRAPHY_UPGRADE.md</code>
           </div>
         </div>
       </details>
@@ -82,7 +90,7 @@
       </div>
 
       <!-- ══ LAYER 1 — QUICK START (collapsed by default) ══ -->
-      <details class="card guide-layer" style="margin-bottom:16px;overflow:visible;border-left:4px solid var(--green)">
+      <details class="card guide-layer" style="margin-bottom:16px;overflow:visible;border-left:4px solid var(--green)" x-show="guideSection==='quickstart'" open>
         <summary style="padding:12px 16px;background:var(--s2);border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:8px;cursor:pointer">
           <span style="font-size:18px">⚡</span>
           <span class="guide-layer-hdr" style="color:var(--green)">第 1 層 · Quick Start</span>
@@ -134,7 +142,7 @@
       </details>
 
       <!-- ══ LAYER 2 — HOW TO READ THE PLATFORM ══ -->
-      <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--blue)">
+      <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--blue)" x-show="guideSection==='workflow'" open>
         <summary style="padding:12px 16px;background:var(--s2);display:flex;align-items:center;gap:8px">
           <span style="font-size:18px">📖</span>
           <span class="guide-layer-hdr" style="color:var(--t1)">第 2 層 — 如何解讀平台 · Layer 2 — How to Read the Platform</span>
@@ -402,15 +410,16 @@
       </details>
 
       <!-- ══ LAYER 3 — REFERENCE MANUAL ══ -->
-      <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--t3)">
+      <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--t3)" x-show="guideSection==='reference'||guideSection==='glossary'" open>
         <summary style="padding:12px 16px;background:var(--s2);display:flex;align-items:center;gap:8px">
           <span style="font-size:18px">📚</span>
-          <span class="guide-layer-hdr" style="color:var(--t3)">Layer 3 — Reference Manual</span>
+          <span class="guide-layer-hdr" style="color:var(--t3)" x-text="guideSection==='glossary'?'Glossary 詞彙表':'Layer 3 — Reference Manual'"></span>
           <span style="font-size:10px;color:var(--t3);margin-left:auto">Expand</span>
         </summary>
         <div style="padding:0">
 
-      <div style="padding:14px 16px;border-bottom:1px solid var(--bd)">
+      <div x-show="guideSection==='reference'">
+        <div style="padding:14px 16px;border-bottom:1px solid var(--bd)">
         <div style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">🗂 Three surface types</div>
         <div style="display:grid;grid-template-columns:1fr;gap:10px">
           <div style="background:var(--s2);border:1px solid rgba(0,212,170,.25);border-radius:8px;padding:10px 12px">
@@ -428,7 +437,7 @@
         </div>
       </div>
 
-      <div style="padding:14px 16px;border-bottom:1px solid var(--bd)">
+      <div style="padding:14px 16px;border-bottom:1px solid var(--bd)" x-show="guideSection==='reference'">
         <div style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">🛑 When NOT to act — full list</div>
         <div style="display:flex;flex-direction:column;gap:6px;font-size:11px">
           <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Engine OFF</span><span style="color:var(--t2)">Mode pill grey or Ops shows no fresh cycle — decisions stale or absent.</span></div>
@@ -444,7 +453,7 @@
         </div>
       </div>
 
-      <div style="padding:14px 16px;border-bottom:1px solid var(--bd);font-size:11px;color:var(--t2);line-height:1.8">
+      <div style="padding:14px 16px;border-bottom:1px solid var(--bd);font-size:11px;color:var(--t2);line-height:1.8" x-show="guideSection==='reference'">
         <div style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">💬 Non-decision triggers (context only)</div>
         These inform judgment but <strong style="color:var(--t1)">do not</strong> justify an entry alone:<br>
         • <strong style="color:var(--t1)">AI commentary</strong> — Dashboard narrative and Dossier "Why Now"<br>
@@ -453,8 +462,9 @@
         • <strong style="color:var(--t1)">Funds / Backtest Lab</strong> — backtest research only; not deployment authority<br>
         • <strong style="color:var(--t1)">RS leaderboard alone</strong> — must align with Playbook action, regime, and board gate
       </div>
+      </div>
 
-      <div style="border-bottom:1px solid var(--bd)">
+      <div style="border-bottom:1px solid var(--bd)" x-show="guideSection==='glossary'">
         <div style="padding:10px 16px;display:flex;align-items:center;gap:8px">
           <span style="font-size:14px">🏷</span>
           <span style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px">Colour &amp; badge glossary</span>
@@ -567,3 +577,4 @@
         <button @click="switchTab('today')" class="btn-p" style="font-size:14px;padding:12px 32px">Open Dashboard</button>
         <div style="font-size:11px;color:var(--t3);margin-top:10px">Return here anytime: 📖 Guide tab (first in nav)</div>
       </div>
+    

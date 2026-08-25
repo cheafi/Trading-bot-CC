@@ -11,16 +11,16 @@
 
 ## ✨ Features
 
-| Layer | Capability |
-|-------|-----------|
-| **Signal Engine** | Momentum, Breakout, Mean-Reversion, Swing strategies with conviction tiers (TRADE / LEADER / WATCH) |
-| **Regime Router** | VIX-entropy probabilistic regime detection (RISK_ON / RISK_OFF / NEUTRAL) with EMA hysteresis |
-| **Expert Council** | Multi-agent weighted-accuracy voting across 10+ specialist engines |
-| **Portfolio Risk** | Fixed-fractional sizing, ATR stops, correlation guards, drawdown circuit breaker, trailing stops |
-| **AI Advisor** | Local Docker Model Runner routing — PM memos, expert-view narratives, trade review with similar-case retrieval |
-| **Live Dashboard** | Alpine.js single-page UI — morning brief, signals, regime status, position tracker, playbook, AI panels |
-| **Scheduler** | APScheduler pre-market signal generation, intraday refresh, EOD brief + portfolio review |
-| **Discord Alerts** | Real-time trade signals, regime changes, and EOD summaries via Discord bot |
+| Layer              | Capability                                                                                                     |
+| ------------------ | -------------------------------------------------------------------------------------------------------------- |
+| **Signal Engine**  | Momentum, Breakout, Mean-Reversion, Swing strategies with conviction tiers (TRADE / LEADER / WATCH)            |
+| **Regime Router**  | VIX-entropy probabilistic regime detection (RISK_ON / RISK_OFF / NEUTRAL) with EMA hysteresis                  |
+| **Expert Council** | Multi-agent weighted-accuracy voting across 10+ specialist engines                                             |
+| **Portfolio Risk** | Fixed-fractional sizing, ATR stops, correlation guards, drawdown circuit breaker, trailing stops               |
+| **AI Advisor**     | Local Docker Model Runner routing — PM memos, expert-view narratives, trade review with similar-case retrieval |
+| **Live Dashboard** | Alpine.js single-page UI — morning brief, signals, regime status, position tracker, playbook, AI panels        |
+| **Scheduler**      | APScheduler pre-market signal generation, intraday refresh, EOD brief + portfolio review                       |
+| **Discord Alerts** | Real-time trade signals, regime changes, and EOD summaries via Discord bot                                     |
 
 ---
 
@@ -83,37 +83,37 @@ Share CC on the internet via Cloudflare or ngrok tunnel:
 ./scripts/dev/expose-cc-public.sh   # CC must already be on :8000
 ```
 
-See [docs/CC_PUBLIC_ACCESS.md](docs/CC_PUBLIC_ACCESS.md) for security notes, Docker tunnel profile, and LAN access.
+See [docs/CC_X_PRODUCTION_READINESS.md](docs/CC_X_PRODUCTION_READINESS.md) for security notes, Docker tunnel profile, and LAN access.
 
 ### Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `API_KEY` | `""` | Bearer token for protected endpoints |
-| `DISCORD_BOT_TOKEN` | `""` | Discord bot token |
-| `DISCORD_CHANNEL_ID` | `""` | Channel for alerts |
-| `OPENAI_API_KEY` | `""` | GPT signal validation (optional) |
-| `LOCAL_LLM_BASE_URL` | `http://localhost:12434/engines/llama.cpp/v1` | Docker Model Runner endpoint |
-| `LOCAL_LLM_ADVISOR_MODEL` | `ai/gemma3` | PM memo / expert-view model |
-| `LOCAL_LLM_REVIEWER_MODEL` | `ai/qwen3-coder` | Trade review model |
-| `LOCAL_LLM_EMBED_MODEL` | `ai/all-minilm-l6-v2-vllm` | Embedding model for similar-trade search |
-| `VIX_CRISIS` | `35.0` | VIX threshold → NO TRADE |
-| `RISK_MAX_POSITIONS` | `10` | Max concurrent open positions |
-| `RISK_MAX_DRAWDOWN_PCT` | `0.15` | Portfolio drawdown circuit breaker |
+| Variable                   | Default                                       | Description                              |
+| -------------------------- | --------------------------------------------- | ---------------------------------------- |
+| `API_KEY`                  | `""`                                          | Bearer token for protected endpoints     |
+| `DISCORD_BOT_TOKEN`        | `""`                                          | Discord bot token                        |
+| `DISCORD_CHANNEL_ID`       | `""`                                          | Channel for alerts                       |
+| `OPENAI_API_KEY`           | `""`                                          | GPT signal validation (optional)         |
+| `LOCAL_LLM_BASE_URL`       | `http://localhost:12434/engines/llama.cpp/v1` | Docker Model Runner endpoint             |
+| `LOCAL_LLM_ADVISOR_MODEL`  | `ai/gemma3`                                   | PM memo / expert-view model              |
+| `LOCAL_LLM_REVIEWER_MODEL` | `ai/qwen3-coder`                              | Trade review model                       |
+| `LOCAL_LLM_EMBED_MODEL`    | `ai/all-minilm-l6-v2-vllm`                    | Embedding model for similar-trade search |
+| `VIX_CRISIS`               | `35.0`                                        | VIX threshold → NO TRADE                 |
+| `RISK_MAX_POSITIONS`       | `10`                                          | Max concurrent open positions            |
+| `RISK_MAX_DRAWDOWN_PCT`    | `0.15`                                        | Portfolio drawdown circuit breaker       |
 
 ---
 
 ## 📊 Trading Domain Defaults
 
-| Concept | Value |
-|---------|-------|
-| Conviction tiers | TRADE > LEADER > WATCH (weights 18 / 12 / 6) |
-| Risk per trade | 1% fixed-fractional |
-| R:R minimum | 2:1 WATCH · 3:1 TRADE |
-| VIX regime | <14 RISK_ON · 14–20 normal · 20–28 elevated · 28–35 high · >35 crisis NO TRADE |
-| Max open positions | 10 (hard cap) |
-| Correlation guard | No >0.7 corr between any two new positions |
-| Stop discipline | Hard stop at 1R; trail only after +1R in profit |
+| Concept            | Value                                                                          |
+| ------------------ | ------------------------------------------------------------------------------ |
+| Conviction tiers   | TRADE > LEADER > WATCH (weights 18 / 12 / 6)                                   |
+| Risk per trade     | 1% fixed-fractional                                                            |
+| R:R minimum        | 2:1 WATCH · 3:1 TRADE                                                          |
+| VIX regime         | <14 RISK_ON · 14–20 normal · 20–28 elevated · 28–35 high · >35 crisis NO TRADE |
+| Max open positions | 10 (hard cap)                                                                  |
+| Correlation guard  | No >0.7 corr between any two new positions                                     |
+| Stop discipline    | Hard stop at 1R; trail only after +1R in profit                                |
 
 ---
 
@@ -129,23 +129,23 @@ python -m pytest test_sprint73.py -v                                  # 33 sprin
 
 ## 📁 Key Files
 
-| File | Purpose |
-|------|---------|
-| `src/api/templates/index.html` | Full dashboard (Alpine.js) |
-| `src/api/routers/brief.py` | Morning brief + changelog endpoints |
-| `src/api/deps.py` | FastAPI Depends callables — canonical auth |
-| `src/services/regime_service.py` | RegimeService singleton (4h cache) |
-| `src/engines/regime_router.py` | VIX/breadth/entropy regime classification |
-| `src/engines/signal_engine.py` | UniverseFilter + strategy engines |
-| `src/core/risk_limits.py` | All risk constants — RISK, VIX, UNIVERSE_GATES |
-| `src/scheduler/main.py` | TradingScheduler — premarket/intraday/EOD jobs |
-| `src/services/ai_service.py` | Multi-provider AI router with fail-fast on auth errors |
-| `src/services/fund_ai_service.py` | PM memo + expert-view with deterministic fallbacks |
+| File                                   | Purpose                                                            |
+| -------------------------------------- | ------------------------------------------------------------------ |
+| `src/api/templates/index.html`         | Full dashboard (Alpine.js)                                         |
+| `src/api/routers/brief.py`             | Morning brief + changelog endpoints                                |
+| `src/api/deps.py`                      | FastAPI Depends callables — canonical auth                         |
+| `src/services/regime_service.py`       | RegimeService singleton (4h cache)                                 |
+| `src/engines/regime_router.py`         | VIX/breadth/entropy regime classification                          |
+| `src/engines/signal_engine.py`         | UniverseFilter + strategy engines                                  |
+| `src/core/risk_limits.py`              | All risk constants — RISK, VIX, UNIVERSE_GATES                     |
+| `src/scheduler/main.py`                | TradingScheduler — premarket/intraday/EOD jobs                     |
+| `src/services/ai_service.py`           | Multi-provider AI router with fail-fast on auth errors             |
+| `src/services/fund_ai_service.py`      | PM memo + expert-view with deterministic fallbacks                 |
 | `src/services/trade_memory_service.py` | Embedding-aware similar-trade retrieval from `closed_trades.jsonl` |
-| `src/api/routers/ai_advisor.py` | AI advisor REST routes (memo / expert-view / overview / review) |
-| `data/brief-*.json` | Daily brief data files |
-| `data/closed_trades.jsonl` | Trade history for AI similarity search |
-| `_cc_instant.py` | Server launcher (venv auto-detect) |
+| `src/api/routers/ai_advisor.py`        | AI advisor REST routes (memo / expert-view / overview / review)    |
+| `data/brief-*.json`                    | Daily brief data files                                             |
+| `data/closed_trades.jsonl`             | Trade history for AI similarity search                             |
+| `_cc_instant.py`                       | Server launcher (venv auto-detect)                                 |
 
 ---
 
@@ -162,4 +162,4 @@ This software is for **educational and research purposes only**. It does not con
 
 ---
 
-*Built with ❤️ by cheafi*
+_Built with ❤️ by cheafi_

@@ -468,11 +468,35 @@
     <!-- ══════ TAB BAR ══════ -->
     <div class="tab-bar">
       <template x-for="t in tabs"><button class="tab-btn" :class="tab===t.id?'on':''" @click="showMore=false;switchTab(t.id)" x-text="t.icon+' '+t.label"></button></template>
+      <span style="width:1px;height:18px;background:var(--bd);margin:0 4px;flex-shrink:0" aria-hidden="true"></span>
+      <button class="tab-btn" :class="tab===guideTab.id?'on':''" @click="showMore=false;switchTab(guideTab.id)" x-text="guideTab.icon+' '+guideTab.label"></button>
       <div style="position:relative;margin-left:auto" x-show="moreTabs.length>0">
         <button class="tab-btn" :class="moreTabs.some(t=>t.id===tab)?'on':''" @click="showMore=!showMore" x-text="moreTabs.some(t=>t.id===tab)?moreTabs.find(t=>t.id===tab).icon+' '+moreTabs.find(t=>t.id===tab).label:'⋯ More'"></button>
         <div x-show="showMore" @click.outside="showMore=false" style="position:absolute;right:0;top:100%;z-index:999;background:var(--s1);border:1px solid var(--bd2);border-radius:8px;padding:4px;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.5)">
           <template x-for="t in moreTabs"><button style="display:block;width:100%;text-align:left;padding:8px 12px;border:none;background:none;color:var(--t2);font-size:11px;font-weight:600;cursor:pointer;border-radius:6px" @mouseenter="$el.style.background='var(--s2)'" @mouseleave="$el.style.background='none'" :style="tab===t.id?'color:var(--t1);background:var(--s2)':''" @click="showMore=false;switchTab(t.id)" x-text="t.icon+' '+t.label"></button></template>
         </div>
+      </div>
+    </div>
+
+    <!-- ══════ Page Gate philosophy (permanent) ══════ -->
+    <div data-cc="page-gate-philosophy-strip" x-show="tab!=='guide'" x-cloak
+      style="background:var(--s0);border-bottom:1px solid var(--bd);padding:3px 12px;font-size:8px;font-weight:700;letter-spacing:.35px;color:var(--t3);text-align:center">
+      <span x-text="pageGatePhilosophyLine()"></span>
+    </div>
+
+    <!-- ══════ Research-only banner (one line) ══════ -->
+    <div data-cc="research-only-banner" x-show="isResearchSurfaceTab()" x-cloak
+      style="background:rgba(59,130,246,.08);border-bottom:1px solid rgba(59,130,246,.22);padding:5px 12px;font-size:9px;font-weight:700;color:var(--blue);text-align:center;line-height:1.4">
+      <span x-text="researchOnlyBannerLine()"></span>
+    </div>
+
+    <!-- ══════ NOW / BLOCKER / NEXT (every operational tab) ══════ -->
+    <div data-cc="page-operator-compact" x-show="pageOperatorCompactVisible()" x-cloak
+      style="background:var(--s1);border-bottom:1px solid var(--bd);padding:6px 12px">
+      <div class="grid grid-cols-1 gap-1 text-[9px]">
+        <div><span class="font-bold" style="color:var(--t3)">現況 · NOW</span> <span x-text="pageOperatorSentence().now"></span></div>
+        <div><span class="font-bold" style="color:var(--amber)">阻擋 · BLOCKER</span> <span x-text="pageOperatorSentence().blocker"></span></div>
+        <div><span class="font-bold" style="color:var(--green)">下一步 · NEXT</span> <span x-text="pageOperatorSentence().next_action"></span></div>
       </div>
     </div>
 
@@ -1006,6 +1030,34 @@
 
     <!-- @cc-partial deploy_surfaces -->
       <div x-show="tab==='today'" data-cc="today-deploy-chrome">
+      <!-- ── Mission Brief (operator landing — 5-second decision) ── -->
+      <template x-if="tab==='today'">
+        <div data-cc="mission-brief-card" style="padding:4px 12px 0">
+          <div class="card card-p" style="padding:10px 12px;border-left:4px solid var(--green);background:linear-gradient(135deg,rgba(0,212,170,.06),rgba(88,166,255,.04))">
+            <div class="flex flex-wrap items-center gap-2 mb-2">
+              <span class="pill pg text-[8px] font-bold uppercase" x-text="missionBriefCard().title"></span>
+              <span class="pill text-[8px] font-bold" :class="missionBriefCard().deploy_open?'pg':'pa'" x-text="missionBriefCard().tradeability"></span>
+              <span class="pill text-[7px] pw" x-text="'Deploy '+missionBriefCard().deploy_label"></span>
+            </div>
+            <div class="text-[11px] font-bold text-white mb-2" x-text="missionBriefCard().quality_headline"></div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[8px] mb-2">
+              <div><span class="font-bold" style="color:var(--t3)">Market</span><div class="text-white" x-text="missionBriefCard().market"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Broker</span><div class="text-white" x-text="missionBriefCard().broker"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Engine</span><div class="text-white" x-text="missionBriefCard().engine"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Best monitor</span><div class="mono text-amber-300" x-text="missionBriefCard().best_monitor"></div></div>
+            </div>
+            <div class="text-[8px] mb-1" x-show="missionBriefCard().why_not_deploy.length">
+              <div class="font-bold uppercase mb-0.5" style="color:var(--amber)">Why not deploy? · 點解唔部署</div>
+              <template x-for="w in missionBriefCard().why_not_deploy" :key="'mbw-'+w"><div style="color:var(--t2)" x-text="'• '+w"></div></template>
+            </div>
+            <div class="text-[8px] mb-1" x-show="missionBriefCard().next_actions.length">
+              <div class="font-bold uppercase mb-0.5" style="color:var(--green)">Next action · 下一步</div>
+              <template x-for="a in missionBriefCard().next_actions" :key="'mba-'+a"><div style="color:var(--t2)" x-text="'→ '+a"></div></template>
+            </div>
+            <div class="text-[8px] font-bold mt-1" style="color:var(--t3)" x-text="'Review again in '+missionBriefCard().review_in_minutes+' minutes · '+missionBriefCard().review_in_minutes+' 分鐘後再檢查'"></div>
+          </div>
+        </div>
+      </template>
       <template x-if="tab==='today'&&(todayMissionPanel().system_blockers.length||todayMissionPanel().card_gates.length||todayMissionPanel().monitors.length||todayMissionPanel().quant_cluster_lines.length)">
         <div data-cc="today-mission-panel" style="padding:4px 12px 0">
           <div class="card card-p" style="padding:8px 10px;border-left:3px solid var(--blue)">
@@ -4209,7 +4261,6 @@
     <!-- ═══════════════════════════════════════════════════════ -->
     <main x-show="tab==='guide'" class="fade" style="padding:14px;max-width:900px;margin:0 auto;padding-bottom:40px" data-cc="guide-surface">
     <!-- @cc-partial guide -->
-
       <!-- Hero -->
       <div class="guide-hero" style="position:relative;overflow:hidden;margin-bottom:16px">
         <div style="position:absolute;right:20px;top:20px;font-size:64px;opacity:.07;line-height:1">📊</div>
@@ -4224,8 +4275,17 @@
         </div>
       </div>
 
+      <!-- Guide progressive sub-nav -->
+      <div data-cc="guide-subnav" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+        <template x-for="sec in guideSections" :key="'guide-sec-'+sec.id">
+          <button type="button" class="btn-s text-[9px]"
+            :style="guideSection===sec.id?'border-color:var(--green);color:var(--green)':''"
+            @click="guideSection=sec.id" x-text="sec.label"></button>
+        </template>
+      </div>
+
       <!-- ══ CURRENT BUILD REALITY CHECK (collapsible) ══ -->
-      <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--amber)">
+      <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--amber)" x-show="guideSection==='workflow'" open>
         <summary style="padding:10px 16px;background:rgba(251,191,36,.06);display:flex;align-items:center;gap:8px">
           <span style="font-size:16px">⚠️</span>
           <span class="guide-layer-hdr" style="color:var(--amber)">目前版本實況 · Current Build Reality Check</span>
@@ -4242,7 +4302,7 @@
       </details>
 
       <!-- ══ RANDOM WALK — GLOBAL PRINCIPLES (collapsible) ══ -->
-      <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--purple)">
+      <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--purple)" x-show="guideSection==='workflow'" open>
         <summary style="padding:10px 16px;background:rgba(168,85,247,.06);display:flex;align-items:center;gap:8px">
           <span style="font-size:16px">📘</span>
           <span class="guide-layer-hdr" style="color:var(--purple)">隨機漫步原則 (8) · Random Walk — Global Principles</span>
@@ -4267,13 +4327,13 @@
             <strong style="color:var(--teal,#14b8a6)">Naval principles (signal-light):</strong>
             specific knowledge beats borrowed conviction · preserve mental bandwidth · suppress false urgency ·
             process leverage over labor churn · compounding patience when board says WAIT —
-            see <code style="font-size:9px">docs/NAVAL_ALMANAC_UPGRADE.md</code>
+            see <code style="font-size:9px">docs/archive/NAVAL_ALMANAC_UPGRADE.md</code>
           </div>
           <div style="margin-top:10px;padding:10px 12px;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.22);border-radius:8px;font-size:10px;color:var(--t2);line-height:1.65">
             <strong style="color:var(--amber)">Buffett principles (owner judgment):</strong>
             understand the business · economic quality and moat · honest capital allocation ·
             stay inside circle of competence · patience when board says WAIT —
-            see <code style="font-size:9px">docs/BUFFETT_BIOGRAPHY_UPGRADE.md</code>
+            see <code style="font-size:9px">docs/archive/BUFFETT_BIOGRAPHY_UPGRADE.md</code>
           </div>
         </div>
       </details>
@@ -4293,7 +4353,7 @@
       </div>
 
       <!-- ══ LAYER 1 — QUICK START (collapsed by default) ══ -->
-      <details class="card guide-layer" style="margin-bottom:16px;overflow:visible;border-left:4px solid var(--green)">
+      <details class="card guide-layer" style="margin-bottom:16px;overflow:visible;border-left:4px solid var(--green)" x-show="guideSection==='quickstart'" open>
         <summary style="padding:12px 16px;background:var(--s2);border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:8px;cursor:pointer">
           <span style="font-size:18px">⚡</span>
           <span class="guide-layer-hdr" style="color:var(--green)">第 1 層 · Quick Start</span>
@@ -4345,7 +4405,7 @@
       </details>
 
       <!-- ══ LAYER 2 — HOW TO READ THE PLATFORM ══ -->
-      <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--blue)">
+      <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--blue)" x-show="guideSection==='workflow'" open>
         <summary style="padding:12px 16px;background:var(--s2);display:flex;align-items:center;gap:8px">
           <span style="font-size:18px">📖</span>
           <span class="guide-layer-hdr" style="color:var(--t1)">第 2 層 — 如何解讀平台 · Layer 2 — How to Read the Platform</span>
@@ -4613,15 +4673,16 @@
       </details>
 
       <!-- ══ LAYER 3 — REFERENCE MANUAL ══ -->
-      <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--t3)">
+      <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--t3)" x-show="guideSection==='reference'||guideSection==='glossary'" open>
         <summary style="padding:12px 16px;background:var(--s2);display:flex;align-items:center;gap:8px">
           <span style="font-size:18px">📚</span>
-          <span class="guide-layer-hdr" style="color:var(--t3)">Layer 3 — Reference Manual</span>
+          <span class="guide-layer-hdr" style="color:var(--t3)" x-text="guideSection==='glossary'?'Glossary 詞彙表':'Layer 3 — Reference Manual'"></span>
           <span style="font-size:10px;color:var(--t3);margin-left:auto">Expand</span>
         </summary>
         <div style="padding:0">
 
-      <div style="padding:14px 16px;border-bottom:1px solid var(--bd)">
+      <div x-show="guideSection==='reference'">
+        <div style="padding:14px 16px;border-bottom:1px solid var(--bd)">
         <div style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">🗂 Three surface types</div>
         <div style="display:grid;grid-template-columns:1fr;gap:10px">
           <div style="background:var(--s2);border:1px solid rgba(0,212,170,.25);border-radius:8px;padding:10px 12px">
@@ -4639,7 +4700,7 @@
         </div>
       </div>
 
-      <div style="padding:14px 16px;border-bottom:1px solid var(--bd)">
+      <div style="padding:14px 16px;border-bottom:1px solid var(--bd)" x-show="guideSection==='reference'">
         <div style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">🛑 When NOT to act — full list</div>
         <div style="display:flex;flex-direction:column;gap:6px;font-size:11px">
           <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Engine OFF</span><span style="color:var(--t2)">Mode pill grey or Ops shows no fresh cycle — decisions stale or absent.</span></div>
@@ -4655,7 +4716,7 @@
         </div>
       </div>
 
-      <div style="padding:14px 16px;border-bottom:1px solid var(--bd);font-size:11px;color:var(--t2);line-height:1.8">
+      <div style="padding:14px 16px;border-bottom:1px solid var(--bd);font-size:11px;color:var(--t2);line-height:1.8" x-show="guideSection==='reference'">
         <div style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">💬 Non-decision triggers (context only)</div>
         These inform judgment but <strong style="color:var(--t1)">do not</strong> justify an entry alone:<br>
         • <strong style="color:var(--t1)">AI commentary</strong> — Dashboard narrative and Dossier "Why Now"<br>
@@ -4664,8 +4725,9 @@
         • <strong style="color:var(--t1)">Funds / Backtest Lab</strong> — backtest research only; not deployment authority<br>
         • <strong style="color:var(--t1)">RS leaderboard alone</strong> — must align with Playbook action, regime, and board gate
       </div>
+      </div>
 
-      <div style="border-bottom:1px solid var(--bd)">
+      <div style="border-bottom:1px solid var(--bd)" x-show="guideSection==='glossary'">
         <div style="padding:10px 16px;display:flex;align-items:center;gap:8px">
           <span style="font-size:14px">🏷</span>
           <span style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px">Colour &amp; badge glossary</span>
@@ -8568,14 +8630,14 @@
     <!-- ══════ BOTTOM NAV ══════ -->
     <nav style="position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--bd);padding:6px 0 max(env(safe-area-inset-bottom),6px);z-index:50">
       <div class="flex justify-around max-w-lg mx-auto">
-        <a href="#" data-cc-nav="guide" @click.prevent="switchTab('guide')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='guide'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📖</span>指南<span style="font-size:8px;opacity:.5">Guide</span></a>
-        <a href="#" data-cc-nav="today" @click.prevent="switchTab('today')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='today'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🎯</span>總覽<span style="font-size:8px;opacity:.5">Overview</span></a>
+        <a href="#" data-cc-nav="today" @click.prevent="switchTab('today')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='today'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">☀</span>今日<span style="font-size:8px;opacity:.5">Today</span></a>
         <a href="#" data-cc-nav="signals" @click.prevent="switchTab('signals')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='signals'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📊</span>排序<span style="font-size:8px;opacity:.5">Ranked</span></a>
         <a href="#" data-cc-nav="scanners" @click.prevent="switchTab('scanners')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='scanners'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🔬</span>掃描<span style="font-size:8px;opacity:.5">Scan</span></a>
         <a href="#" data-cc-nav="portfolio" @click.prevent="switchTab('portfolio')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='portfolio'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">💼</span>持倉<span style="font-size:8px;opacity:.5">Book</span></a>
         <a href="#" data-cc-nav="ibkr" @click.prevent="switchTab('ibkr')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='ibkr'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">⚡</span>券商<span style="font-size:8px;opacity:.5">IBKR</span></a>
-        <a href="#" data-cc-nav="dossier" @click.prevent="switchTab('dossier')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='dossier'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🔍</span>檔案<span style="font-size:8px;opacity:.5">Dossier</span></a>
+        <a href="#" data-cc-nav="dossier" @click.prevent="switchTab('dossier')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='dossier'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🗂</span>工作區<span style="font-size:8px;opacity:.5">Workspace</span></a>
         <a href="#" data-cc-nav="ops" @click.prevent="switchTab('ops')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='ops'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">⚙️</span>運維<span style="font-size:8px;opacity:.5">Ops</span></a>
+        <a href="#" data-cc-nav="guide" @click.prevent="switchTab('guide')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='guide'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📖</span>指南<span style="font-size:8px;opacity:.5">Guide</span></a>
       </div>
     </nav>
 

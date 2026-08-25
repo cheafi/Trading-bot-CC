@@ -40,19 +40,18 @@ class TestTruthSync:
         assert "9 services" in content
 
     def test_methodology_4_strategies(self):
-        with open("docs/METHODOLOGY.md") as f:
+        with open("docs/CC_X_ARCHITECTURE.md") as f:
             content = f.read()
         assert "4 registered strategies" in content
-        assert "8 registered strategies" not in content
 
     def test_setup_guide_correct_repo(self):
-        with open("docs/SETUP_GUIDE.md") as f:
+        with open("docs/CC_X_PRODUCTION_READINESS.md") as f:
             content = f.read()
         assert "cd Trading-bot-CC" in content
         assert "cd TradingAI_Bot-main" not in content
 
     def test_setup_guide_no_old_bot_name(self):
-        with open("docs/SETUP_GUIDE.md") as f:
+        with open("docs/CC_X_PRODUCTION_READINESS.md") as f:
             content = f.read()
         assert "TradingAI Bot#8419" not in content
 

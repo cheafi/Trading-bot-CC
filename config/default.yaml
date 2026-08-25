@@ -2,7 +2,7 @@
 # CC — Default Configuration
 # ============================================================================
 # Override per-environment by setting env vars or using config/<env>.yaml
-# See docs/SETUP_GUIDE.md for full configuration reference.
+# See docs/CC_X_PRODUCTION_READINESS.md for full configuration reference.
 # ============================================================================
 
 app:

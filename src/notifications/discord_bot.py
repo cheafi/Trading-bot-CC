@@ -9321,7 +9321,7 @@ class DiscordInteractiveBot:
                     color=COLOR_PURPLE,
                 )
                 e.set_footer(
-                    text="Sprint 38 • v6.38 • /methodology • docs/METHODOLOGY.md"
+                    text="Sprint 38 • v6.38 • /methodology • docs/CC_X_ARCHITECTURE.md"
                 )
                 await interaction.followup.send(embed=e)
             except Exception as ex:

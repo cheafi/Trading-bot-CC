@@ -30,13 +30,13 @@ Scope: Convert strong backend depth into auditable, single-purpose surfaces with
 ## 0) Principles (hard rules)
 
 1. **One source of truth**
-   - `AutoTradingEngine` singleton state is authoritative for recommendations and live lifecycle.
+    - `AutoTradingEngine` singleton state is authoritative for recommendations and live lifecycle.
 2. **Truth badges everywhere**
-   - Every API/page returns `mode` in `{LIVE, PAPER, BACKTEST, SYNTHETIC}` + `as_of` + `source` + `sample_size`.
+    - Every API/page returns `mode` in `{LIVE, PAPER, BACKTEST, SYNTHETIC}` + `as_of` + `source` + `sample_size`.
 3. **Artifact-first**
-   - Every daily/surface analysis writes `json/csv/png/md` artifact before UI rendering.
+    - Every daily/surface analysis writes `json/csv/png/md` artifact before UI rendering.
 4. **Single-purpose page contract**
-   - Each page answers one question only.
+    - Each page answers one question only.
 
 ---
 
@@ -73,7 +73,7 @@ Scope: Convert strong backend depth into auditable, single-purpose surfaces with
 - Replace local `ContextAssembler()` + local `RegimeRouter()` fallback path with `_get_engine()` state reads.
 - Response uses engine-side cached recommendation list (`_cached_recommendations` or public getter).
 - Include metadata block:
-  - `mode`, `as_of`, `source="engine_cache"`, `regime`, `no_trade_reason`, `sample_size`.
+    - `mode`, `as_of`, `source="engine_cache"`, `regime`, `no_trade_reason`, `sample_size`.
 
 **Acceptance**
 
@@ -132,9 +132,9 @@ Scope: Convert strong backend depth into auditable, single-purpose surfaces with
 
 - Remove `np.random.normal(...)` metrics construction from non-demo path.
 - Source order:
-  1. persistent `TradeOutcomeRepository` (closed trades)
-  2. engine cached KPI snapshot
-  3. explicit synthetic demo mode only (`mode=SYNTHETIC` hard label)
+    1. persistent `TradeOutcomeRepository` (closed trades)
+    2. engine cached KPI snapshot
+    3. explicit synthetic demo mode only (`mode=SYNTHETIC` hard label)
 - Return assumptions block: fees/slippage basis and whether gross/net.
 
 **Acceptance**
@@ -165,10 +165,10 @@ Scope: Convert strong backend depth into auditable, single-purpose surfaces with
 **Changes**
 
 - On generation, write:
-  - `json`: full metrics + provenance
-  - `csv`: trade ledger / monthly returns
-  - `png`: equity + drawdown chart
-  - `md`: executive summary
+    - `json`: full metrics + provenance
+    - `csv`: trade ledger / monthly returns
+    - `png`: equity + drawdown chart
+    - `md`: executive summary
 - Add `artifact_id`, `artifact_paths`, `generated_at` in response.
 
 **Acceptance**
@@ -281,8 +281,8 @@ Scope: Convert strong backend depth into auditable, single-purpose surfaces with
 **Changes**
 
 - Replace static watchlist with:
-  1. real holdings input (if available)
-  2. fallback user watchlist
+    1. real holdings input (if available)
+    2. fallback user watchlist
 - Integrate news/catalyst feed and sector cluster summaries.
 - Output `follow_up_questions` list for conversational drill-down.
 
@@ -342,7 +342,7 @@ Scope: Convert strong backend depth into auditable, single-purpose surfaces with
 **Changes**
 
 - Reuse expression engine for explanation path:
-  - stock vs long_call vs long_put vs debit_spread rationale.
+    - stock vs long_call vs long_put vs debit_spread rationale.
 - Add `expression_rationale` and `rejection_reasons` fields.
 
 **Acceptance**
@@ -367,12 +367,12 @@ Scope: Convert strong backend depth into auditable, single-purpose surfaces with
 **Changes**
 
 - Implement aligned join strategies:
-  - strict mode: inner join
-  - smooth mode: outer join + forward fill
+    - strict mode: inner join
+    - smooth mode: outer join + forward fill
 - Add modes:
-  1. normalized return
-  2. relative strength ratio
-  3. rolling correlation/beta
+    1. normalized return
+    2. relative strength ratio
+    3. rolling correlation/beta
 
 **Acceptance**
 
@@ -402,9 +402,9 @@ Scope: Convert strong backend depth into auditable, single-purpose surfaces with
 
 - Input: strategy sleeve return streams.
 - Output:
-  - max Sharpe / min drawdown / risk parity weights
-  - correlation matrix
-  - attribution and equity curve
+    - max Sharpe / min drawdown / risk parity weights
+    - correlation matrix
+    - attribution and equity curve
 - Include regime-conditioned weight profile.
 
 **Acceptance**
@@ -434,7 +434,7 @@ Scope: Convert strong backend depth into auditable, single-purpose surfaces with
 
 - Standard output bundle per run: `json/csv/png/md`.
 - Add replay endpoint design scaffold:
-  - `/api/v7/research/artifacts/{artifact_id}`
+    - `/api/v7/research/artifacts/{artifact_id}`
 
 **Acceptance**
 
@@ -509,7 +509,7 @@ Scope: Convert strong backend depth into auditable, single-purpose surfaces with
 ## 6) Definition of Done (global)
 
 1. Every v7 response includes trust metadata:
-   - `mode`, `as_of`, `source`, `sample_size`, `assumptions`.
+    - `mode`, `as_of`, `source`, `sample_size`, `assumptions`.
 2. No silent synthetic fallback in LIVE/PAPER/BACKTEST mode.
 3. All major pages are single-question surfaces.
 4. All research-capable pages output immutable artifacts (`json/csv/png/md`).
