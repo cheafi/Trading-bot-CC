@@ -35,6 +35,7 @@ function ccNormalizeTab(tab, fallback) {
 		"strategy-lab",
 		"shadow",
 		"reports",
+		"settings",
 	])
 	return allowed.has(value) ? value : safeFallback
 }
@@ -52,21 +53,21 @@ function cc() {
 			"today",
 		),
 		tabs: [
-			{ id: "today", icon: "☀", label: "Today 今日" },
+			{ id: "today", icon: "☀", label: "TODAY 今日" },
 			{ id: "signals", icon: "📋", label: "Playbook 策略簿" },
-			{ id: "dossier", icon: "🗂", label: "Workspace 工作區" },
 			{ id: "portfolio", icon: "💼", label: "Portfolio 持倉" },
+			{ id: "dossier", icon: "🗂", label: "Workspace 工作區" },
 			{ id: "scanners", icon: "🔬", label: "Discovery 探索" },
 			{ id: "ibkr", icon: "⚡", label: "IBKR 券商" },
 			{ id: "ops", icon: "⚙️", label: "Ops 運維" },
 		],
 		guideTab: { id: "guide", icon: "📖", label: "Guide 指南" },
+		settingsTab: { id: "settings", icon: "⚙", label: "Settings 設定" },
 		guideSection: "quickstart",
 		guideSections: [
 			{ id: "quickstart", label: "Quick Start 快速上手" },
-			{ id: "workflow", label: "Operator Workflow 操盤流程" },
+			{ id: "advanced", label: "Advanced 進階" },
 			{ id: "reference", label: "Reference 參考" },
-			{ id: "glossary", label: "Glossary 詞彙" },
 		],
 		moreTabs: [
 			{ id: "agent", icon: "🤖", label: "Agent 盯盤 · monitor" },
@@ -83,6 +84,8 @@ function cc() {
 		],
 
 		showMore: false,
+		uiMode: "operator",
+		todayContextExpanded: false,
 		dataContractDismissed: false,
 		pmStripChipMenuOpen: false,
 		cc_status: {
@@ -557,6 +560,10 @@ function cc() {
 		ccWatchlist: ccStoredObject("ccWatchlist"),
 		init() {
 			this.tab = ccNormalizeTab(this.tab, "today")
+			try {
+				const mode = localStorage.getItem("cc_ui_mode")
+				if (mode === "guide" || mode === "operator") this.uiMode = mode
+			} catch (e) {}
 			this.dataContractDismissed = localStorage.getItem("cc_data_contract_dismissed") === "1"
 			if (typeof window !== "undefined") {
 				window.addEventListener("resize", () => {
@@ -1553,6 +1560,19 @@ function cc() {
 			if (this.ccHeader?.system_state) return this.ccHeader.system_state
 			return this._clientSystemState()
 		},
+		deployOpen() {
+			const ss = this.systemState()
+			if (typeof CCHelpers !== "undefined" && CCHelpers.deployOpenFromSystemState)
+				return CCHelpers.deployOpenFromSystemState(ss)
+			return !!(ss && ss.deploy_open)
+		},
+		todaySecondaryContextVisible() {
+			if (this.deployOpen() || !this.isWaitDay()) return true
+			return !!this.todayContextExpanded
+		},
+		toggleTodayContextExpanded() {
+			this.todayContextExpanded = !this.todayContextExpanded
+		},
 		_clientSystemState() {
 			const board =
 				this.ccHeader?.decision_board || this.today7?.decision_board || this.rankedOpps?.decision_board || null
@@ -1851,7 +1871,7 @@ function cc() {
 				}
 			}
 			if (mode === "dashboard_core" || mode === "playbook_core") {
-				const canDeploy = !!this.today7.todays_decision?.can_deploy_today && !degraded && !hardBlocked
+				const canDeploy = this.deployOpen() && !degraded && !hardBlocked
 				if (canDeploy) {
 					return {
 						...entry,
@@ -3591,19 +3611,18 @@ function cc() {
 		pmDecisionTickerLine() {
 			const td = this.today7.todays_decision
 			if (!td) return ""
-			const deploy = !!td.can_deploy_today
+			const deploy = this.deployOpen()
 			const lead = deploy ? "Deploy" : "Top"
 			const trail = deploy ? "Watch" : "Monitor"
 			return lead + " " + (td.best_trade?.ticker || "None") + " · " + trail + " " + (td.best_watch?.ticker || "—")
 		},
 		dashboardBestTradeLabel() {
 			const td = this.today7.todays_decision
-			if (!td || !td.can_deploy_today || this.isWaitDay())
-				return td?.best_trade?.ticker ? "Top watch" : "Best monitor"
+			if (!this.deployOpen() || this.isWaitDay()) return td?.best_trade?.ticker ? "Top watch" : "Best monitor"
 			return "Best TRADE"
 		},
 		dashboardActionablePicks() {
-			if (this.pageAuthorityIsDegraded() || !this.today7.todays_decision?.can_deploy_today) return []
+			if (this.pageAuthorityIsDegraded() || !this.deployOpen()) return []
 			return (this.today7.top_ranked || []).filter((o) => {
 				const act = String(this.effectiveCardAction(o) || "").toUpperCase()
 				return o.execution_ready && ["TRADE", "BUY", "BUY_ON_DIP", "STRONG_TRADE"].includes(act)
@@ -4013,7 +4032,7 @@ function cc() {
 		},
 		dashboardBestActionLabel(kind) {
 			const deploy =
-				!!this.today7?.todays_decision?.can_deploy_today &&
+				this.deployOpen() &&
 				!this.isWaitDay() &&
 				!this.todayDeployAuthoritySuspended() &&
 				!this.pageAuthorityIsDegraded()
@@ -4024,11 +4043,7 @@ function cc() {
 			return deploy ? "TRADE" : this._uiText("Monitor")
 		},
 		dashboardPlaybookCtaLabel() {
-			if (
-				this.isWaitDay() ||
-				!this.today7?.todays_decision?.can_deploy_today ||
-				this.todayDeployAuthoritySuspended()
-			) {
+			if (this.isWaitDay() || !this.deployOpen() || this.todayDeployAuthoritySuspended()) {
 				return "去 Playbook 複核 monitor ranking"
 			}
 			return "去 Playbook 打開 deploy-qualified board"
@@ -4244,7 +4259,7 @@ function cc() {
 				this.isWaitDay() ||
 				this.playbookBoardWait() ||
 				this.cardIsFallbackRow(opp) ||
-				!this.today7.todays_decision?.can_deploy_today
+				!this.deployOpen()
 			)
 				return "只可監察 · monitor only — 未開 deploy authority"
 			return ""
@@ -4437,8 +4452,7 @@ function cc() {
 			return "#1 監察候選 · monitor candidate"
 		},
 		topRankedSectionTitle() {
-			const ss = this.systemState()
-			const deployOpen = !!(ss && ss.deploy_open) || !!this.today7.todays_decision?.can_deploy_today
+			const deployOpen = this.deployOpen()
 			if (deployOpen && !this.isWaitDay() && !this.pageAuthorityIsDegraded())
 				return this._uiText("🏆 Deploy Opportunities · 可部署機會")
 			return this._uiText("🔎 今日最佳監察候選 · Best Monitor Candidates")
@@ -4488,7 +4502,7 @@ function cc() {
 		cardAuthorityLabel(opp) {
 			if (!opp) return "—"
 			const ps = String(opp.pilot_state || "").toUpperCase()
-			if (opp.execution_ready && !this.isWaitDay() && this.today7.todays_decision?.can_deploy_today)
+			if (opp.execution_ready && !this.isWaitDay() && this.deployOpen())
 				return this._uiText("DEPLOY · Decision Engine")
 			if (ps === "BLOCKED") return this._uiText("BLOCKED · 封鎖")
 			return this._uiText("MONITOR ONLY · 只可監察")
@@ -4555,16 +4569,23 @@ function cc() {
 				market: this.canonicalRegimeLine() || this.today7.regime?.regime || "—",
 				broker: ibkr || "OFFLINE",
 				engine: this.cc_status.breaker ? "BLOCKED" : this.ops.running ? "ON" : "OFF",
-				deployOpen: !!(ss.deploy_open || td.can_deploy_today),
+				deployOpen: this.deployOpen(),
 				systemBlockers: this.todayMissionSystemBlockersList(),
 				repair: ss.repair_priority || this.globalSystemRepairLine() || "",
-				reviewMinutes: 30,
+				reviewMinutes: 20,
 			}
 			if (typeof CCHelpers !== "undefined" && CCHelpers.buildMissionBriefCard)
 				return CCHelpers.buildMissionBriefCard(opts)
 			return {
-				title: "TODAY · Mission Brief",
+				title: "Mission Control · 任務控制",
+				mission_label: "WAIT",
 				tradeability: opts.tradeability,
+				market_state: opts.market,
+				deploy: "No deploy today",
+				good_opportunity: "No",
+				what_to_do: "Monitor —",
+				why: "—",
+				next_review: "Review again 20min",
 				quality_headline: v.headline_bilingual || v.headline || "—",
 				market: opts.market,
 				broker: opts.broker,
@@ -4574,63 +4595,54 @@ function cc() {
 				best_monitor: v.best_monitor?.ticker || "—",
 				why_not_deploy: [],
 				next_actions: [],
-				review_in_minutes: 30,
+				review_in_minutes: 20,
 			}
+		},
+		missionControl() {
+			return this.missionBriefCard()
 		},
 		isResearchSurfaceTab(tab) {
 			const t = tab != null ? tab : this.tab
 			if (typeof CCHelpers !== "undefined" && CCHelpers.isResearchSurfaceTab)
 				return CCHelpers.isResearchSurfaceTab(t)
-			return [
-				"scanners",
-				"flow",
-				"rs",
-				"funds",
-				"agent",
-				"strategy-lab",
-				"shadow",
-				"reports",
-				"btlab",
-				"leaders",
-				"command",
-			].includes(t)
+			return ["scanners", "flow", "agent", "shadow", "reports", "btlab"].includes(t)
 		},
 		researchOnlyBannerLine() {
 			if (typeof CCHelpers !== "undefined" && CCHelpers.researchOnlyBannerLine)
 				return CCHelpers.researchOnlyBannerLine()
-			return "RESEARCH ONLY · Cannot authorize deployment · 不可授權部署"
+			return "研究層 · 不可授權部署 · RESEARCH ONLY · Cannot authorize deployment."
 		},
 		pageGatePhilosophyLine() {
 			if (typeof CCHelpers !== "undefined" && CCHelpers.pageGatePhilosophyLine)
 				return CCHelpers.pageGatePhilosophyLine()
-			return "Page Gate > Card Rank · 頁面閘門優於卡片排名"
+			return "Page Gate > Card Rank"
 		},
 		pageOperatorCompactVisible() {
-			return this.tab !== "guide" && !this.globalSystemStripVisible()
+			return this.tab !== "guide" && this.tab !== "settings" && !this.globalSystemStripVisible()
 		},
 		guideSectionLabel(id) {
 			const sec = (this.guideSections || []).find((s) => s.id === (id || this.guideSection))
 			return sec ? sec.label : id
 		},
 		guideLayerVisible(layer) {
-			const map = {
-				quickstart: ["quickstart"],
-				workflow: ["workflow", "advanced", "layer2"],
-				reference: ["reference", "layer3"],
-				glossary: ["glossary"],
-			}
 			const section = this.guideSection || "quickstart"
 			if (section === "quickstart") return layer === "quickstart" || layer === "layer1"
-			if (section === "workflow") return layer === "workflow" || layer === "layer2" || layer === "advanced"
-			if (section === "reference") return layer === "reference" || layer === "layer3"
-			if (section === "glossary") return layer === "glossary"
+			if (section === "advanced") return layer === "advanced" || layer === "workflow" || layer === "layer2"
+			if (section === "reference") return layer === "reference" || layer === "layer3" || layer === "glossary"
 			return false
+		},
+		setUiMode(mode) {
+			const m = mode === "guide" ? "guide" : "operator"
+			this.uiMode = m
+			try {
+				localStorage.setItem("cc_ui_mode", m)
+			} catch (e) {}
 		},
 		dashboardOperatorNowLine() {
 			const td = this.today7.todays_decision
 			if (this.pageAuthorityIsDegraded())
 				return "Now · " + (this.canonicalTradeability() || "WAIT") + " · 只可 Monitor"
-			if (td?.can_deploy_today) return "Now · " + (this.canonicalTradeability() || "—") + " · 可部署"
+			if (this.deployOpen()) return "Now · " + (this.canonicalTradeability() || "—") + " · 可部署"
 			return "Now · " + (this.canonicalTradeability() || "WAIT") + " · 只作排序複核"
 		},
 		dashboardOperatorBlockerLine() {
@@ -4640,7 +4652,7 @@ function cc() {
 			if (this.pageAuthorityIsDegraded())
 				return "下一步 · 先修 broker / runtime / board blocker，再回 Dashboard / Playbook 複核。"
 			const td = this.today7.todays_decision
-			if (td?.can_deploy_today) return "下一步 · 只檢查 deploy-qualified setup，唔好讓 card rank 越過 page gate。"
+			if (this.deployOpen()) return "下一步 · 只檢查 deploy-qualified setup，唔好讓 card rank 越過 page gate。"
 			return "下一步 · 先睇 top monitor candidates，再去 Playbook 做 ranking review。"
 		},
 		playbookOperatorNowLine() {
@@ -5716,7 +5728,7 @@ function cc() {
 			const tb = String(this.canonicalTradeability() || td?.regime?.tradeability || "").toUpperCase()
 			if (tb === "NO_TRADE" || td?.day_state === "NO_TRADE_DAY") return true
 			if (td?.deploy_posture === "WAIT" || tb === "WAIT") return true
-			return (td?.execution_ready_count || 0) < 1 && !td?.can_deploy_today
+			return (td?.execution_ready_count || 0) < 1 && !this.deployOpen()
 		},
 		waitDayHasActionables() {
 			const td = this.today7.todays_decision
@@ -6226,8 +6238,9 @@ function cc() {
 			const should_trade = regime.should_trade !== false
 			let deploy = "WAIT"
 			const td = d.todays_decision
+			const deployOpen = !!(d.decision_board?.deploy_open ?? d.system_state?.deploy_open ?? false)
 			if (tradeability === "NO_TRADE" || td?.day_state === "NO_TRADE_DAY") deploy = "REDUCE"
-			else if (td?.can_deploy_today) deploy = "DEPLOY"
+			else if (deployOpen) deploy = "DEPLOY"
 			else if (td?.day_state === "PILOT_WATCH_DAY") deploy = "WATCH"
 			else if (!should_trade) deploy = "REDUCE"
 			const best_idea = top5[0]

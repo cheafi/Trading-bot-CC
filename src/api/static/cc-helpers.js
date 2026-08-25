@@ -1826,15 +1826,10 @@
 	var RESEARCH_SURFACE_TABS = {
 		scanners: true,
 		flow: true,
-		rs: true,
-		funds: true,
 		agent: true,
-		"strategy-lab": true,
 		shadow: true,
 		reports: true,
 		btlab: true,
-		leaders: true,
-		command: true,
 	}
 
 	function isResearchSurfaceTab(tab) {
@@ -1842,11 +1837,11 @@
 	}
 
 	function researchOnlyBannerLine() {
-		return "研究層 · RESEARCH ONLY · Cannot authorize deployment · 不可授權部署"
+		return _opsBilingual("研究層 · 不可授權部署", "RESEARCH ONLY · Cannot authorize deployment.")
 	}
 
 	function pageGatePhilosophyLine() {
-		return "Page Gate > Card Rank · 頁面閘門優於卡片排名"
+		return "Page Gate > Card Rank"
 	}
 
 	function qualityTierClass(tier) {
@@ -1891,19 +1886,52 @@
 			if (s) nextActions.push(s)
 		})
 		if (o.repair && nextActions.indexOf(o.repair) < 0) nextActions.unshift(String(o.repair))
+		var tradeability = String(o.tradeability || "WAIT").toUpperCase()
+		var deployOpen = !!o.deployOpen
+		var oppQ = (
+			v.opportunity_quality ||
+			(v.opportunity_states && v.opportunity_states.quality ? "Strong" : "") ||
+			""
+		).toString()
+		if (!oppQ && v.headline) {
+			if (/no quality|weak|monitor/i.test(String(v.headline))) oppQ = "Weak"
+		}
+		var missionLabel = deployOpen && tradeability !== "WAIT" && tradeability !== "NO_TRADE" ? "MISSION" : "WAIT"
+		var deployAnswer = deployOpen
+			? _opsBilingual("可以", "Yes")
+			: _opsBilingual("否 · 今日不部署", "No deploy today")
+		var goodOpp =
+			oppQ === "Strong" || oppQ === "Selective" || (v.opportunity_states && v.opportunity_states.quality > 0)
+				? _opsBilingual("有", "Yes")
+				: _opsBilingual("無", "No")
+		var whatToDo =
+			nextActions[0] ||
+			"" ||
+			(deployOpen
+				? _opsBilingual("部署", "Deploy") + " " + (best.ticker || "—")
+				: _opsBilingual("監控", "Monitor") + " " + (best.ticker || "—"))
+		var whyLine = whyNot[0] || v.main_blocker_bilingual || v.main_blocker || "—"
+		var reviewMin = o.reviewMinutes != null ? o.reviewMinutes : 20
 		return {
-			title: "TODAY · Mission Brief · 今日任務",
-			tradeability: String(o.tradeability || "WAIT").toUpperCase(),
+			title: "Mission Control · 任務控制",
+			mission_label: missionLabel,
+			tradeability: tradeability,
+			market_state: o.market || tradeability.replace(/_/g, " "),
+			deploy: deployAnswer,
+			good_opportunity: goodOpp,
+			what_to_do: whatToDo,
+			why: String(whyLine).slice(0, 160),
+			next_review: _opsBilingual("再檢視 " + reviewMin + " 分鐘", "Review again " + reviewMin + "min"),
 			quality_headline: v.headline_bilingual || v.headline || o.qualityHeadline || "—",
 			market: o.market || "—",
 			broker: o.broker || "—",
 			engine: o.engine || "—",
-			deploy_label: o.deployOpen ? "OPEN · 可部署" : "BLOCKED · 封鎖",
-			deploy_open: !!o.deployOpen,
+			deploy_label: deployOpen ? "OPEN · 可部署" : "BLOCKED · 封鎖",
+			deploy_open: deployOpen,
 			best_monitor: best.ticker || "—",
 			why_not_deploy: whyNot.filter(Boolean).slice(0, 4),
 			next_actions: nextActions.filter(Boolean).slice(0, 4),
-			review_in_minutes: o.reviewMinutes != null ? o.reviewMinutes : 30,
+			review_in_minutes: reviewMin,
 		}
 	}
 
@@ -2307,6 +2335,11 @@
 		return ""
 	}
 
+	/** Deploy authority SSOT — decision_board.system_state.deploy_open only. */
+	function deployOpenFromSystemState(ss) {
+		return !!(ss && ss.deploy_open)
+	}
+
 	global.CCHelpers = {
 		severityBadgeClass: severityBadgeClass,
 		surfaceWarmupLoadingLine: surfaceWarmupLoadingLine,
@@ -2393,6 +2426,7 @@
 		localizeOpsWhyNoSignalsGate: localizeOpsWhyNoSignalsGate,
 		pageOperatorSentence: pageOperatorSentence,
 		buildClientSystemState: buildClientSystemState,
+		deployOpenFromSystemState: deployOpenFromSystemState,
 		playbookWhatToMonitorLine: playbookWhatToMonitorLine,
 		partitionHeaderChips: partitionHeaderChips,
 		operatorLoadingSafeLine: operatorLoadingSafeLine,
@@ -2438,6 +2472,7 @@
 		cardRankQualityAuthorityLine: cardRankQualityAuthorityLine,
 		opportunityVerdictMuted: opportunityVerdictMuted,
 		buildMissionBriefCard: buildMissionBriefCard,
+		deployOpenFromSystemState: deployOpenFromSystemState,
 	}
 })(typeof window !== "undefined" ? window : globalThis)
 
@@ -2479,6 +2514,7 @@ function ccNormalizeTab(tab, fallback) {
 		"strategy-lab",
 		"shadow",
 		"reports",
+		"settings",
 	])
 	return allowed.has(value) ? value : safeFallback
 }
@@ -2496,21 +2532,21 @@ function cc() {
 			"today",
 		),
 		tabs: [
-			{ id: "today", icon: "☀", label: "Today 今日" },
+			{ id: "today", icon: "☀", label: "TODAY 今日" },
 			{ id: "signals", icon: "📋", label: "Playbook 策略簿" },
-			{ id: "dossier", icon: "🗂", label: "Workspace 工作區" },
 			{ id: "portfolio", icon: "💼", label: "Portfolio 持倉" },
+			{ id: "dossier", icon: "🗂", label: "Workspace 工作區" },
 			{ id: "scanners", icon: "🔬", label: "Discovery 探索" },
 			{ id: "ibkr", icon: "⚡", label: "IBKR 券商" },
 			{ id: "ops", icon: "⚙️", label: "Ops 運維" },
 		],
 		guideTab: { id: "guide", icon: "📖", label: "Guide 指南" },
+		settingsTab: { id: "settings", icon: "⚙", label: "Settings 設定" },
 		guideSection: "quickstart",
 		guideSections: [
 			{ id: "quickstart", label: "Quick Start 快速上手" },
-			{ id: "workflow", label: "Operator Workflow 操盤流程" },
+			{ id: "advanced", label: "Advanced 進階" },
 			{ id: "reference", label: "Reference 參考" },
-			{ id: "glossary", label: "Glossary 詞彙" },
 		],
 		moreTabs: [
 			{ id: "agent", icon: "🤖", label: "Agent 盯盤 · monitor" },
@@ -2527,6 +2563,7 @@ function cc() {
 		],
 
 		showMore: false,
+		uiMode: "operator",
 		dataContractDismissed: false,
 		pmStripChipMenuOpen: false,
 		cc_status: {
@@ -3001,6 +3038,10 @@ function cc() {
 		ccWatchlist: ccStoredObject("ccWatchlist"),
 		init() {
 			this.tab = ccNormalizeTab(this.tab, "today")
+			try {
+				const mode = localStorage.getItem("cc_ui_mode")
+				if (mode === "guide" || mode === "operator") this.uiMode = mode
+			} catch (e) {}
 			this.dataContractDismissed = localStorage.getItem("cc_data_contract_dismissed") === "1"
 			if (typeof window !== "undefined") {
 				window.addEventListener("resize", () => {
@@ -7002,13 +7043,20 @@ function cc() {
 				deployOpen: !!(ss.deploy_open || td.can_deploy_today),
 				systemBlockers: this.todayMissionSystemBlockersList(),
 				repair: ss.repair_priority || this.globalSystemRepairLine() || "",
-				reviewMinutes: 30,
+				reviewMinutes: 20,
 			}
 			if (typeof CCHelpers !== "undefined" && CCHelpers.buildMissionBriefCard)
 				return CCHelpers.buildMissionBriefCard(opts)
 			return {
-				title: "TODAY · Mission Brief",
+				title: "Mission Control · 任務控制",
+				mission_label: "WAIT",
 				tradeability: opts.tradeability,
+				market_state: opts.market,
+				deploy: "No deploy today",
+				good_opportunity: "No",
+				what_to_do: "Monitor —",
+				why: "—",
+				next_review: "Review again 20min",
 				quality_headline: v.headline_bilingual || v.headline || "—",
 				market: opts.market,
 				broker: opts.broker,
@@ -7018,57 +7066,48 @@ function cc() {
 				best_monitor: v.best_monitor?.ticker || "—",
 				why_not_deploy: [],
 				next_actions: [],
-				review_in_minutes: 30,
+				review_in_minutes: 20,
 			}
+		},
+		missionControl() {
+			return this.missionBriefCard()
 		},
 		isResearchSurfaceTab(tab) {
 			const t = tab != null ? tab : this.tab
 			if (typeof CCHelpers !== "undefined" && CCHelpers.isResearchSurfaceTab)
 				return CCHelpers.isResearchSurfaceTab(t)
-			return [
-				"scanners",
-				"flow",
-				"rs",
-				"funds",
-				"agent",
-				"strategy-lab",
-				"shadow",
-				"reports",
-				"btlab",
-				"leaders",
-				"command",
-			].includes(t)
+			return ["scanners", "flow", "agent", "shadow", "reports", "btlab"].includes(t)
 		},
 		researchOnlyBannerLine() {
 			if (typeof CCHelpers !== "undefined" && CCHelpers.researchOnlyBannerLine)
 				return CCHelpers.researchOnlyBannerLine()
-			return "RESEARCH ONLY · Cannot authorize deployment · 不可授權部署"
+			return "研究層 · 不可授權部署 · RESEARCH ONLY · Cannot authorize deployment."
 		},
 		pageGatePhilosophyLine() {
 			if (typeof CCHelpers !== "undefined" && CCHelpers.pageGatePhilosophyLine)
 				return CCHelpers.pageGatePhilosophyLine()
-			return "Page Gate > Card Rank · 頁面閘門優於卡片排名"
+			return "Page Gate > Card Rank"
 		},
 		pageOperatorCompactVisible() {
-			return this.tab !== "guide" && !this.globalSystemStripVisible()
+			return this.tab !== "guide" && this.tab !== "settings" && !this.globalSystemStripVisible()
 		},
 		guideSectionLabel(id) {
 			const sec = (this.guideSections || []).find((s) => s.id === (id || this.guideSection))
 			return sec ? sec.label : id
 		},
 		guideLayerVisible(layer) {
-			const map = {
-				quickstart: ["quickstart"],
-				workflow: ["workflow", "advanced", "layer2"],
-				reference: ["reference", "layer3"],
-				glossary: ["glossary"],
-			}
 			const section = this.guideSection || "quickstart"
 			if (section === "quickstart") return layer === "quickstart" || layer === "layer1"
-			if (section === "workflow") return layer === "workflow" || layer === "layer2" || layer === "advanced"
-			if (section === "reference") return layer === "reference" || layer === "layer3"
-			if (section === "glossary") return layer === "glossary"
+			if (section === "advanced") return layer === "advanced" || layer === "workflow" || layer === "layer2"
+			if (section === "reference") return layer === "reference" || layer === "layer3" || layer === "glossary"
 			return false
+		},
+		setUiMode(mode) {
+			const m = mode === "guide" ? "guide" : "operator"
+			this.uiMode = m
+			try {
+				localStorage.setItem("cc_ui_mode", m)
+			} catch (e) {}
 		},
 		dashboardOperatorNowLine() {
 			const td = this.today7.todays_decision

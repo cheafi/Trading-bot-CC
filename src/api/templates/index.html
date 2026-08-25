@@ -470,6 +470,7 @@
       <template x-for="t in tabs"><button class="tab-btn" :class="tab===t.id?'on':''" @click="showMore=false;switchTab(t.id)" x-text="t.icon+' '+t.label"></button></template>
       <span style="width:1px;height:18px;background:var(--bd);margin:0 4px;flex-shrink:0" aria-hidden="true"></span>
       <button class="tab-btn" :class="tab===guideTab.id?'on':''" @click="showMore=false;switchTab(guideTab.id)" x-text="guideTab.icon+' '+guideTab.label"></button>
+      <button class="tab-btn" :class="tab===settingsTab.id?'on':''" @click="showMore=false;switchTab(settingsTab.id)" x-text="settingsTab.icon+' '+settingsTab.label"></button>
       <div style="position:relative;margin-left:auto" x-show="moreTabs.length>0">
         <button class="tab-btn" :class="moreTabs.some(t=>t.id===tab)?'on':''" @click="showMore=!showMore" x-text="moreTabs.some(t=>t.id===tab)?moreTabs.find(t=>t.id===tab).icon+' '+moreTabs.find(t=>t.id===tab).label:'⋯ More'"></button>
         <div x-show="showMore" @click.outside="showMore=false" style="position:absolute;right:0;top:100%;z-index:999;background:var(--s1);border:1px solid var(--bd2);border-radius:8px;padding:4px;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.5)">
@@ -599,7 +600,7 @@
             <span class="text-[9px] truncate" style="color:var(--t2);max-width:240px" x-text="primaryBlockerLine()"></span>
           </template>
           <template x-if="headerSummary().show_decision_chips && !pageAuthorityIsDegraded() && today7.todays_decision">
-            <span class="text-[10px] font-bold" :class="today7.todays_decision.can_deploy_today?'text-green-400':'text-amber-300'" x-text="today7.todays_decision.deploy_posture"></span>
+            <span class="text-[10px] font-bold" :class="deployOpen()?'text-green-400':'text-amber-300'" x-text="today7.todays_decision.deploy_posture"></span>
             <span class="text-[10px] truncate" style="color:var(--t2);max-width:220px" x-text="pmDecisionTickerLine()"></span>
           </template>
         </div>
@@ -1030,31 +1031,46 @@
 
     <!-- @cc-partial deploy_surfaces -->
       <div x-show="tab==='today'" data-cc="today-deploy-chrome">
-      <!-- ── Mission Brief (operator landing — 5-second decision) ── -->
+      <!-- ── Mission Control (operator landing — 5-second decision) ── -->
       <template x-if="tab==='today'">
-        <div data-cc="mission-brief-card" style="padding:4px 12px 0">
+        <div data-cc="mission-control-card" style="padding:4px 12px 0">
           <div class="card card-p" style="padding:10px 12px;border-left:4px solid var(--green);background:linear-gradient(135deg,rgba(0,212,170,.06),rgba(88,166,255,.04))">
             <div class="flex flex-wrap items-center gap-2 mb-2">
-              <span class="pill pg text-[8px] font-bold uppercase" x-text="missionBriefCard().title"></span>
-              <span class="pill text-[8px] font-bold" :class="missionBriefCard().deploy_open?'pg':'pa'" x-text="missionBriefCard().tradeability"></span>
-              <span class="pill text-[7px] pw" x-text="'Deploy '+missionBriefCard().deploy_label"></span>
+              <span class="pill text-[8px] font-bold uppercase" :class="missionControl().mission_label==='MISSION'?'pg':'pa'" x-text="missionControl().mission_label"></span>
+              <span class="text-[9px] font-bold uppercase" style="color:var(--t3)" x-text="missionControl().title"></span>
             </div>
-            <div class="text-[11px] font-bold text-white mb-2" x-text="missionBriefCard().quality_headline"></div>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[8px] mb-2">
-              <div><span class="font-bold" style="color:var(--t3)">Market</span><div class="text-white" x-text="missionBriefCard().market"></div></div>
-              <div><span class="font-bold" style="color:var(--t3)">Broker</span><div class="text-white" x-text="missionBriefCard().broker"></div></div>
-              <div><span class="font-bold" style="color:var(--t3)">Engine</span><div class="text-white" x-text="missionBriefCard().engine"></div></div>
-              <div><span class="font-bold" style="color:var(--t3)">Best monitor</span><div class="mono text-amber-300" x-text="missionBriefCard().best_monitor"></div></div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-[8px] mb-2">
+              <div><span class="font-bold" style="color:var(--t3)">Market · 市場</span><div class="text-white font-semibold" x-text="missionControl().market_state"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Deploy? · 部署?</span><div class="text-white font-semibold" x-text="missionControl().deploy"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Opportunity · 機會</span><div class="text-white font-semibold" x-text="missionControl().good_opportunity"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Action · 行動</span><div class="text-amber-300 font-semibold" x-text="missionControl().what_to_do"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Why · 原因</span><div style="color:var(--t2);line-height:1.35" x-text="missionControl().why"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Review · 再檢視</span><div style="color:var(--t3)" x-text="missionControl().next_review"></div></div>
             </div>
-            <div class="text-[8px] mb-1" x-show="missionBriefCard().why_not_deploy.length">
-              <div class="font-bold uppercase mb-0.5" style="color:var(--amber)">Why not deploy? · 點解唔部署</div>
-              <template x-for="w in missionBriefCard().why_not_deploy" :key="'mbw-'+w"><div style="color:var(--t2)" x-text="'• '+w"></div></template>
+            <div class="text-[10px] font-bold text-white mb-1" x-text="missionControl().quality_headline"></div>
+            <div class="text-[8px] mb-1" x-show="missionControl().why_not_deploy.length">
+              <template x-for="w in missionControl().why_not_deploy" :key="'mcw-'+w"><div style="color:var(--t2)" x-text="'• '+w"></div></template>
             </div>
-            <div class="text-[8px] mb-1" x-show="missionBriefCard().next_actions.length">
-              <div class="font-bold uppercase mb-0.5" style="color:var(--green)">Next action · 下一步</div>
-              <template x-for="a in missionBriefCard().next_actions" :key="'mba-'+a"><div style="color:var(--t2)" x-text="'→ '+a"></div></template>
+            <div class="text-[8px]" x-show="missionControl().next_actions.length">
+              <template x-for="a in missionControl().next_actions" :key="'mca-'+a"><div style="color:var(--t2)" x-text="'→ '+a"></div></template>
             </div>
-            <div class="text-[8px] font-bold mt-1" style="color:var(--t3)" x-text="'Review again in '+missionBriefCard().review_in_minutes+' minutes · '+missionBriefCard().review_in_minutes+' 分鐘後再檢查'"></div>
+          </div>
+        </div>
+      </template>
+      <!-- ── Opportunity verdict (first screen — monitor counts, never deploy authority) ── -->
+      <template x-if="tab==='today'&&today7.opportunity_verdict">
+        <div data-cc="opportunity-verdict-block" style="padding:4px 12px 0">
+          <div class="card card-p" style="padding:8px 10px;border-left:3px solid var(--blue)" :style="opportunityVerdictMuted()?'opacity:.72':''">
+            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--blue)">Opportunity Verdict · 機會評級</div>
+            <div class="text-[10px] font-bold text-white mb-1" x-text="today7.opportunity_verdict.headline_bilingual||today7.opportunity_verdict.headline"></div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[8px] mb-1">
+              <div><span class="font-bold" style="color:var(--t3)">Quality</span><div x-text="(today7.opportunity_verdict.opportunity_states||{}).quality!=null?(today7.opportunity_verdict.opportunity_states.quality+' strong'):'—'"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Monitors</span><div x-text="(today7.opportunity_verdict.monitor_qualified_count||today7.todays_decision?.watch_count||0)+' watch'"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Best monitor</span><div class="mono text-amber-300" x-text="today7.opportunity_verdict.best_monitor?.ticker||missionControl().best_monitor"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Deploy-qualified</span><div x-text="today7.opportunity_verdict.deploy_qualified_count||0"></div></div>
+            </div>
+            <div class="text-[8px]" style="color:var(--t2);line-height:1.45" x-text="today7.opportunity_verdict.authority_note||today7.opportunity_verdict.why_not_deploy"></div>
+            <span x-show="opportunityVerdictMuted()" class="pill pa text-[7px] mt-1">Stale brief · muted</span>
           </div>
         </div>
       </template>
@@ -1976,20 +1992,7 @@
         </div>
       </template>
 
-      <!-- ── Opportunity Verdict (rank / quality / authority — never deploy) ── -->
-      <template x-if="today7.opportunity_verdict">
-        <div style="margin:4px 12px;padding:10px 12px;border-radius:10px;border:1px solid var(--bd);background:var(--s1)" :style="opportunityVerdictMuted()?'opacity:.72':''">
-          <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--blue)">Opportunity Verdict · 機會評級</div>
-          <div class="text-[10px] font-bold text-white mb-1" x-text="today7.opportunity_verdict.headline_bilingual||today7.opportunity_verdict.headline"></div>
-          <div class="text-[8px] mb-2" style="color:var(--t2);line-height:1.45" x-text="today7.opportunity_verdict.authority_note"></div>
-          <div class="flex gap-2 flex-wrap text-[7px]">
-            <span class="pill pg mono" x-show="(today7.opportunity_verdict.opportunity_states||{}).quality" x-text="'STRONG: '+(today7.opportunity_verdict.opportunity_states||{}).quality"></span>
-            <span class="pill pa mono" x-show="(today7.opportunity_verdict.opportunity_states||{}).promising" x-text="'PROMISING: '+(today7.opportunity_verdict.opportunity_states||{}).promising"></span>
-            <span class="pill pw mono" x-show="(today7.opportunity_verdict.opportunity_states||{}).weak" x-text="'WEAK: '+(today7.opportunity_verdict.opportunity_states||{}).weak"></span>
-            <span x-show="opportunityVerdictMuted()" class="pill pa text-[7px]">Stale brief · muted</span>
-          </div>
-        </div>
-      </template>
+      <!-- duplicate opportunity verdict removed — see deploy_surfaces partial (mission-control area) -->
       <template x-if="(today7.bucket_quality||[]).length">
         <div style="padding:0 12px 6px">
           <div class="card card-p">
@@ -2125,11 +2128,12 @@
         </div>
       </template>
 
-      <!-- ── Top Ranked Opportunities ── -->
+      <!-- ── Top Ranked Opportunities (demoted on WAIT — expand via Mission Brief toggle) ── -->
+      <div x-show="todaySecondaryContextVisible()">
       <div class="section-hdr" style="margin-top:6px" x-text="topRankedSectionTitle()"></div>
 
       <!-- ══ Quick Action Strip — deploy-ready review ══ -->
-      <template x-if="dashboardActionablePicks().length>0 && today7.todays_decision && today7.todays_decision.can_deploy_today">
+      <template x-if="dashboardActionablePicks().length>0 && deployOpen()">
         <div style="padding:0 12px 6px">
           <div style="background:linear-gradient(135deg,rgba(0,212,170,.08),rgba(0,212,170,.02));border:1px solid rgba(0,212,170,.25);border-radius:10px;padding:10px 12px">
             <div class="flex items-center gap-2 mb-2">
@@ -4285,7 +4289,7 @@
       </div>
 
       <!-- ══ CURRENT BUILD REALITY CHECK (collapsible) ══ -->
-      <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--amber)" x-show="guideSection==='workflow'" open>
+      <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--amber)" x-show="guideSection==='advanced'" open>
         <summary style="padding:10px 16px;background:rgba(251,191,36,.06);display:flex;align-items:center;gap:8px">
           <span style="font-size:16px">⚠️</span>
           <span class="guide-layer-hdr" style="color:var(--amber)">目前版本實況 · Current Build Reality Check</span>
@@ -4302,7 +4306,7 @@
       </details>
 
       <!-- ══ RANDOM WALK — GLOBAL PRINCIPLES (collapsible) ══ -->
-      <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--purple)" x-show="guideSection==='workflow'" open>
+      <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--purple)" x-show="guideSection==='advanced'" open>
         <summary style="padding:10px 16px;background:rgba(168,85,247,.06);display:flex;align-items:center;gap:8px">
           <span style="font-size:16px">📘</span>
           <span class="guide-layer-hdr" style="color:var(--purple)">隨機漫步原則 (8) · Random Walk — Global Principles</span>
@@ -4405,7 +4409,7 @@
       </details>
 
       <!-- ══ LAYER 2 — HOW TO READ THE PLATFORM ══ -->
-      <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--blue)" x-show="guideSection==='workflow'" open>
+      <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--blue)" x-show="guideSection==='advanced'" open>
         <summary style="padding:12px 16px;background:var(--s2);display:flex;align-items:center;gap:8px">
           <span style="font-size:18px">📖</span>
           <span class="guide-layer-hdr" style="color:var(--t1)">第 2 層 — 如何解讀平台 · Layer 2 — How to Read the Platform</span>
@@ -4673,7 +4677,7 @@
       </details>
 
       <!-- ══ LAYER 3 — REFERENCE MANUAL ══ -->
-      <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--t3)" x-show="guideSection==='reference'||guideSection==='glossary'" open>
+      <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--t3)" x-show="guideSection==='reference'" open>
         <summary style="padding:12px 16px;background:var(--s2);display:flex;align-items:center;gap:8px">
           <span style="font-size:18px">📚</span>
           <span class="guide-layer-hdr" style="color:var(--t3)" x-text="guideSection==='glossary'?'Glossary 詞彙表':'Layer 3 — Reference Manual'"></span>
@@ -4727,7 +4731,7 @@
       </div>
       </div>
 
-      <div style="border-bottom:1px solid var(--bd)" x-show="guideSection==='glossary'">
+      <div style="border-bottom:1px solid var(--bd)" x-show="guideSection==='reference'">
         <div style="padding:10px 16px;display:flex;align-items:center;gap:8px">
           <span style="font-size:14px">🏷</span>
           <span style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px">Colour &amp; badge glossary</span>
@@ -4838,10 +4842,28 @@
       <!-- Bottom CTA -->
       <div style="text-align:center;padding:20px 0 8px">
         <button @click="switchTab('today')" class="btn-p" style="font-size:14px;padding:12px 32px">Open Dashboard</button>
-        <div style="font-size:11px;color:var(--t3);margin-top:10px">Return here anytime: 📖 Guide tab (first in nav)</div>
+        <div style="font-size:11px;color:var(--t3);margin-top:10px">Return here anytime: 📖 Guide tab (below separator — reference manual)</div>
       </div>
     <!-- @cc-partial-end guide -->
 
+    </main>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- SURFACE: SETTINGS                                      -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <main x-show="tab==='settings'" class="fade" data-cc="settings-surface" style="padding:14px;max-width:640px;margin:0 auto;padding-bottom:40px">
+      <div class="card card-p" style="margin-bottom:12px">
+        <div class="text-[11px] font-bold uppercase mb-2" style="color:var(--green)">Settings · 設定</div>
+        <div class="text-[10px] mb-3" style="color:var(--t2);line-height:1.55">Display preferences only — does not change deploy authority · 只影響顯示，唔改部署權限。</div>
+        <div class="text-[10px] font-bold mb-2" style="color:var(--t1)">UI mode · 介面模式</div>
+        <div class="flex gap-2 flex-wrap mb-3">
+          <button type="button" class="btn-p text-[10px]" :class="uiMode==='operator'?'':'opacity-60'" @click="setUiMode('operator')">Operator · 操盤手</button>
+          <button type="button" class="btn-s text-[10px]" :class="uiMode==='guide'?'border-color:var(--green);color:var(--green)':''" @click="setUiMode('guide');switchTab('guide')">Guide reference · 手冊參考</button>
+        </div>
+        <div class="text-[10px] font-bold mb-2" style="color:var(--t1)">Data contract strip · 資料合約列</div>
+        <button type="button" class="btn-s text-[10px] mb-2" @click="dataContractDismissed=false;localStorage.removeItem('cc_data_contract_dismissed')">Show data contract again · 重新顯示資料合約列</button>
+        <div class="text-[9px]" style="color:var(--t3)">Engine / IBKR / runtime: use Ops tab · 引擎同券商設定請用 Ops 分頁。</div>
+      </div>
     </main>
 
     <!-- ═══════════════════════════════════════════════════════ -->
@@ -8631,18 +8653,20 @@
     <nav style="position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--bd);padding:6px 0 max(env(safe-area-inset-bottom),6px);z-index:50">
       <div class="flex justify-around max-w-lg mx-auto">
         <a href="#" data-cc-nav="today" @click.prevent="switchTab('today')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='today'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">☀</span>今日<span style="font-size:8px;opacity:.5">Today</span></a>
-        <a href="#" data-cc-nav="signals" @click.prevent="switchTab('signals')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='signals'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📊</span>排序<span style="font-size:8px;opacity:.5">Ranked</span></a>
-        <a href="#" data-cc-nav="scanners" @click.prevent="switchTab('scanners')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='scanners'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🔬</span>掃描<span style="font-size:8px;opacity:.5">Scan</span></a>
-        <a href="#" data-cc-nav="portfolio" @click.prevent="switchTab('portfolio')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='portfolio'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">💼</span>持倉<span style="font-size:8px;opacity:.5">Book</span></a>
-        <a href="#" data-cc-nav="ibkr" @click.prevent="switchTab('ibkr')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='ibkr'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">⚡</span>券商<span style="font-size:8px;opacity:.5">IBKR</span></a>
+        <a href="#" data-cc-nav="signals" @click.prevent="switchTab('signals')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='signals'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📋</span>策略<span style="font-size:8px;opacity:.5">Playbook</span></a>
+        <a href="#" data-cc-nav="portfolio" @click.prevent="switchTab('portfolio')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='portfolio'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">💼</span>持倉<span style="font-size:8px;opacity:.5">Portfolio</span></a>
         <a href="#" data-cc-nav="dossier" @click.prevent="switchTab('dossier')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='dossier'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🗂</span>工作區<span style="font-size:8px;opacity:.5">Workspace</span></a>
+        <a href="#" data-cc-nav="scanners" @click.prevent="switchTab('scanners')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='scanners'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🔬</span>探索<span style="font-size:8px;opacity:.5">Discovery</span></a>
+        <a href="#" data-cc-nav="ibkr" @click.prevent="switchTab('ibkr')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='ibkr'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">⚡</span>券商<span style="font-size:8px;opacity:.5">IBKR</span></a>
         <a href="#" data-cc-nav="ops" @click.prevent="switchTab('ops')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='ops'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">⚙️</span>運維<span style="font-size:8px;opacity:.5">Ops</span></a>
+        <span style="width:1px;height:18px;background:var(--bd);align-self:center" aria-hidden="true"></span>
         <a href="#" data-cc-nav="guide" @click.prevent="switchTab('guide')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='guide'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📖</span>指南<span style="font-size:8px;opacity:.5">Guide</span></a>
+        <a href="#" data-cc-nav="settings" @click.prevent="switchTab('settings')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='settings'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">⚙</span>設定<span style="font-size:8px;opacity:.5">Settings</span></a>
       </div>
     </nav>
 
     <!-- ══════ RIGHT RAIL: 1-click expand / collapse current page ══════ -->
-    <button type="button" class="cc-expand-rail" x-show="tab!=='guide'" x-cloak
+    <button type="button" class="cc-expand-rail" x-show="tab!=='guide'&&tab!=='settings'" x-cloak
       @click="toggleUiExpandAll()"
       :class="uiExpandAllActive()?'is-on':''"
       :title="uiExpandAllActive()?'收合本頁所有區塊 · Collapse all sections':'一鍵展開本頁所有區塊 · Expand all sections'"

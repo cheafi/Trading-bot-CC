@@ -22,7 +22,7 @@
       </div>
 
       <!-- ══ CURRENT BUILD REALITY CHECK (collapsible) ══ -->
-      <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--amber)" x-show="guideSection==='workflow'" open>
+      <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--amber)" x-show="guideSection==='advanced'" open>
         <summary style="padding:10px 16px;background:rgba(251,191,36,.06);display:flex;align-items:center;gap:8px">
           <span style="font-size:16px">⚠️</span>
           <span class="guide-layer-hdr" style="color:var(--amber)">目前版本實況 · Current Build Reality Check</span>
@@ -39,7 +39,7 @@
       </details>
 
       <!-- ══ RANDOM WALK — GLOBAL PRINCIPLES (collapsible) ══ -->
-      <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--purple)" x-show="guideSection==='workflow'" open>
+      <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--purple)" x-show="guideSection==='advanced'" open>
         <summary style="padding:10px 16px;background:rgba(168,85,247,.06);display:flex;align-items:center;gap:8px">
           <span style="font-size:16px">📘</span>
           <span class="guide-layer-hdr" style="color:var(--purple)">隨機漫步原則 (8) · Random Walk — Global Principles</span>
@@ -142,7 +142,7 @@
       </details>
 
       <!-- ══ LAYER 2 — HOW TO READ THE PLATFORM ══ -->
-      <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--blue)" x-show="guideSection==='workflow'" open>
+      <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--blue)" x-show="guideSection==='advanced'" open>
         <summary style="padding:12px 16px;background:var(--s2);display:flex;align-items:center;gap:8px">
           <span style="font-size:18px">📖</span>
           <span class="guide-layer-hdr" style="color:var(--t1)">第 2 層 — 如何解讀平台 · Layer 2 — How to Read the Platform</span>
@@ -410,7 +410,7 @@
       </details>
 
       <!-- ══ LAYER 3 — REFERENCE MANUAL ══ -->
-      <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--t3)" x-show="guideSection==='reference'||guideSection==='glossary'" open>
+      <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--t3)" x-show="guideSection==='reference'" open>
         <summary style="padding:12px 16px;background:var(--s2);display:flex;align-items:center;gap:8px">
           <span style="font-size:18px">📚</span>
           <span class="guide-layer-hdr" style="color:var(--t3)" x-text="guideSection==='glossary'?'Glossary 詞彙表':'Layer 3 — Reference Manual'"></span>
@@ -464,7 +464,7 @@
       </div>
       </div>
 
-      <div style="border-bottom:1px solid var(--bd)" x-show="guideSection==='glossary'">
+      <div style="border-bottom:1px solid var(--bd)" x-show="guideSection==='reference'">
         <div style="padding:10px 16px;display:flex;align-items:center;gap:8px">
           <span style="font-size:14px">🏷</span>
           <span style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px">Colour &amp; badge glossary</span>
@@ -575,6 +575,6 @@
       <!-- Bottom CTA -->
       <div style="text-align:center;padding:20px 0 8px">
         <button @click="switchTab('today')" class="btn-p" style="font-size:14px;padding:12px 32px">Open Dashboard</button>
-        <div style="font-size:11px;color:var(--t3);margin-top:10px">Return here anytime: 📖 Guide tab (first in nav)</div>
+        <div style="font-size:11px;color:var(--t3);margin-top:10px">Return here anytime: 📖 Guide tab (below separator — reference manual)</div>
       </div>
     

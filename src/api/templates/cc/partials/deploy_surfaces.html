@@ -1,29 +1,49 @@
       <div x-show="tab==='today'" data-cc="today-deploy-chrome">
-      <!-- ── Mission Brief (operator landing — 5-second decision) ── -->
+      <!-- ── Mission Control (operator landing — 5-second decision) ── -->
       <template x-if="tab==='today'">
-        <div data-cc="mission-brief-card" style="padding:4px 12px 0">
+        <div data-cc="mission-control-card" style="padding:4px 12px 0">
           <div class="card card-p" style="padding:10px 12px;border-left:4px solid var(--green);background:linear-gradient(135deg,rgba(0,212,170,.06),rgba(88,166,255,.04))">
             <div class="flex flex-wrap items-center gap-2 mb-2">
-              <span class="pill pg text-[8px] font-bold uppercase" x-text="missionBriefCard().title"></span>
-              <span class="pill text-[8px] font-bold" :class="missionBriefCard().deploy_open?'pg':'pa'" x-text="missionBriefCard().tradeability"></span>
-              <span class="pill text-[7px] pw" x-text="'Deploy '+missionBriefCard().deploy_label"></span>
+              <span class="pill text-[8px] font-bold uppercase" :class="missionControl().mission_label==='MISSION'?'pg':'pa'" x-text="missionControl().mission_label"></span>
+              <span class="text-[9px] font-bold uppercase" style="color:var(--t3)" x-text="missionControl().title"></span>
             </div>
-            <div class="text-[11px] font-bold text-white mb-2" x-text="missionBriefCard().quality_headline"></div>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[8px] mb-2">
-              <div><span class="font-bold" style="color:var(--t3)">Market</span><div class="text-white" x-text="missionBriefCard().market"></div></div>
-              <div><span class="font-bold" style="color:var(--t3)">Broker</span><div class="text-white" x-text="missionBriefCard().broker"></div></div>
-              <div><span class="font-bold" style="color:var(--t3)">Engine</span><div class="text-white" x-text="missionBriefCard().engine"></div></div>
-              <div><span class="font-bold" style="color:var(--t3)">Best monitor</span><div class="mono text-amber-300" x-text="missionBriefCard().best_monitor"></div></div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-[8px] mb-2">
+              <div><span class="font-bold" style="color:var(--t3)">Market · 市場</span><div class="text-white font-semibold" x-text="missionControl().market_state"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Deploy? · 部署?</span><div class="text-white font-semibold" x-text="missionControl().deploy"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Opportunity · 機會</span><div class="text-white font-semibold" x-text="missionControl().good_opportunity"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Action · 行動</span><div class="text-amber-300 font-semibold" x-text="missionControl().what_to_do"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Why · 原因</span><div style="color:var(--t2);line-height:1.35" x-text="missionControl().why"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Review · 再檢視</span><div style="color:var(--t3)" x-text="missionControl().next_review"></div></div>
             </div>
-            <div class="text-[8px] mb-1" x-show="missionBriefCard().why_not_deploy.length">
-              <div class="font-bold uppercase mb-0.5" style="color:var(--amber)">Why not deploy? · 點解唔部署</div>
-              <template x-for="w in missionBriefCard().why_not_deploy" :key="'mbw-'+w"><div style="color:var(--t2)" x-text="'• '+w"></div></template>
+            <div class="text-[10px] font-bold text-white mb-1" x-text="missionControl().quality_headline"></div>
+            <div class="text-[8px] mb-1" x-show="missionControl().why_not_deploy.length">
+              <template x-for="w in missionControl().why_not_deploy" :key="'mcw-'+w"><div style="color:var(--t2)" x-text="'• '+w"></div></template>
             </div>
-            <div class="text-[8px] mb-1" x-show="missionBriefCard().next_actions.length">
-              <div class="font-bold uppercase mb-0.5" style="color:var(--green)">Next action · 下一步</div>
-              <template x-for="a in missionBriefCard().next_actions" :key="'mba-'+a"><div style="color:var(--t2)" x-text="'→ '+a"></div></template>
+            <div class="text-[8px]" x-show="missionControl().next_actions.length">
+              <template x-for="a in missionControl().next_actions" :key="'mca-'+a"><div style="color:var(--t2)" x-text="'→ '+a"></div></template>
             </div>
-            <div class="text-[8px] font-bold mt-1" style="color:var(--t3)" x-text="'Review again in '+missionBriefCard().review_in_minutes+' minutes · '+missionBriefCard().review_in_minutes+' 分鐘後再檢查'"></div>
+          </div>
+        </div>
+      </template>
+      <div x-show="tab==='today'&&isWaitDay()&&!deployOpen()" style="padding:4px 12px 0">
+        <button type="button" class="btn-s text-[8px]" @click="toggleTodayContextExpanded()"
+          x-text="todayContextExpanded?'Hide monitor context · 收起監察脈絡':'Show monitor context · 展開監察脈絡'"></button>
+      </div>
+      <div x-show="tab==='today'&&todaySecondaryContextVisible()">
+      <!-- ── Opportunity verdict (first screen — monitor counts, never deploy authority) ── -->
+      <template x-if="tab==='today'&&today7.opportunity_verdict&&todaySecondaryContextVisible()">
+        <div data-cc="opportunity-verdict-block" style="padding:4px 12px 0">
+          <div class="card card-p" style="padding:8px 10px;border-left:3px solid var(--blue)" :style="opportunityVerdictMuted()?'opacity:.72':''">
+            <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--blue)">Opportunity Verdict · 機會評級</div>
+            <div class="text-[10px] font-bold text-white mb-1" x-text="today7.opportunity_verdict.headline_bilingual||today7.opportunity_verdict.headline"></div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[8px] mb-1">
+              <div><span class="font-bold" style="color:var(--t3)">Quality</span><div x-text="(today7.opportunity_verdict.opportunity_states||{}).quality!=null?(today7.opportunity_verdict.opportunity_states.quality+' strong'):'—'"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Monitors</span><div x-text="(today7.opportunity_verdict.monitor_qualified_count||today7.todays_decision?.watch_count||0)+' watch'"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Best monitor</span><div class="mono text-amber-300" x-text="today7.opportunity_verdict.best_monitor?.ticker||missionControl().best_monitor"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Deploy-qualified</span><div x-text="today7.opportunity_verdict.deploy_qualified_count||0"></div></div>
+            </div>
+            <div class="text-[8px]" style="color:var(--t2);line-height:1.45" x-text="today7.opportunity_verdict.authority_note||today7.opportunity_verdict.why_not_deploy"></div>
+            <span x-show="opportunityVerdictMuted()" class="pill pa text-[7px] mt-1">Stale brief · muted</span>
           </div>
         </div>
       </template>
@@ -65,7 +85,7 @@
         </div>
       </template>
 
-      <template x-if="tab==='today'&&today7.index_regime_summary">
+      <template x-if="tab==='today'&&todaySecondaryContextVisible()&&today7.index_regime_summary">
         <div data-cc="index-regime-strip" style="padding:4px 12px 0">
           <div class="card card-p" style="padding:6px 10px;border-left:3px solid var(--amber)">
             <div class="flex flex-wrap items-center gap-2">
@@ -77,7 +97,7 @@
         </div>
       </template>
 
-      <template x-if="tab==='today'&&(today7.regime_stack_summary||today7.ai_reason_codes?.length)">
+      <template x-if="tab==='today'&&todaySecondaryContextVisible()&&(today7.regime_stack_summary||today7.ai_reason_codes?.length)">
         <div data-cc="regime-stack-strip" style="padding:4px 12px 0">
           <div class="card card-p" style="padding:6px 10px;border-left:3px solid var(--blue)">
             <div class="flex flex-wrap items-center gap-2 mb-0.5">
@@ -99,7 +119,7 @@
       </template>
 
       <!-- ── Ops / IB / Monitor strip (institutional cockpit) ── -->
-      <div x-show="tab==='today'" data-cc="deploy-status-strip" style="padding:6px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <div x-show="tab==='today'&&todaySecondaryContextVisible()" data-cc="deploy-status-strip" style="padding:6px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <span class="pill text-[8px]" :class="ibkrStateFrom(today7.execution_readiness).level==='ready'?'pg':ibkrStateFrom(today7.execution_readiness).level==='blocked'?'pr':'pa'" x-text="'IBKR '+ibkrUnifiedShort(today7.execution_readiness)"></span>
         <span class="pill text-[8px]" :class="cc_status.breaker?'pr':(ops.running?'pg':'pw')" x-text="cc_status.breaker?'BREAKER':(ops.running?'ENGINE ON':'ENGINE OFF')"></span>
         <template x-if="today7.evidence_badges">
@@ -112,8 +132,13 @@
         <span x-show="portfolioSummaryStripVisible()" class="pill text-[8px] pb" x-text="portfolioSummaryStripLine()"></span>
         <button @click="switchTab('funds')" class="btn-s text-[8px] ml-auto" x-show="(pmStrip.funds||[]).length===0">Load Funds</button>
       </div>
-      <div x-show="tab==='today'&&!ops.running" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="engineOffRecoveryLine()"></div>
-      <div x-show="tab==='today'&&ibkrStateFrom(today7.execution_readiness).level!=='ready'" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="ibkrLoginToReadyHint()"></div>
-      <div x-show="tab==='today'&&todayExecutionReadinessDiagnostic()" class="w-full text-[8px] px-3 pb-1 mono" style="color:var(--t3)" x-text="todayExecutionReadinessDiagnostic()"></div>
+      <div x-show="tab==='today'&&!todaySecondaryContextVisible()&&!todayContextExpanded" style="padding:4px 12px 0">
+        <button type="button" class="btn-s text-[8px]" @click="toggleTodayContextExpanded()" x-text="'Expand context · 展開脈絡'"></button>
       </div>
-    
+      <div x-show="tab==='today'&&todaySecondaryContextVisible()&&todayContextExpanded&&isWaitDay()&&!deployOpen()" style="padding:2px 12px 0">
+        <button type="button" class="btn-s text-[8px]" @click="toggleTodayContextExpanded()" x-text="'Collapse context · 收起脈絡'"></button>
+      </div>
+      <div x-show="tab==='today'&&!ops.running&&todaySecondaryContextVisible()" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="engineOffRecoveryLine()"></div>
+      <div x-show="tab==='today'&&todaySecondaryContextVisible()&&ibkrStateFrom(today7.execution_readiness).level!=='ready'" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="ibkrLoginToReadyHint()"></div>
+      <div x-show="tab==='today'&&todaySecondaryContextVisible()&&todayExecutionReadinessDiagnostic()" class="w-full text-[8px] px-3 pb-1 mono" style="color:var(--t3)" x-text="todayExecutionReadinessDiagnostic()"></div>
+      </div>
