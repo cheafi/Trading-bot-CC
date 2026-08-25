@@ -12,13 +12,41 @@
 
 ## Executive Alignment
 
-### Strategic north star
+### Strategic north star — investment-outcome-first
 
-The operator agrees with the institutional master review direction. The platform gap is **no longer "more indicators"** — it is a **compounding alpha platform**. Every module must answer one question:
+The operator agrees with the institutional master review direction and refines the roadmap from **engineering-first** to **investment-outcome-first**. The platform gap is **no longer "more indicators"** — it is a **compounding alpha platform** where **capital is the first-class citizen**, not signals.
+
+Every module must answer:
 
 > **Does this improve long-term portfolio alpha after cost and risk?**
 
-CC X transforms CC from an unusually disciplined **Operator Decision OS** (score **7.0 / 10**) into an **Institutional Alpha OS** (target **9.5 / 10**) while preserving every authority contract. The competitive moat is not latency or sample size — it is **evidence + prioritization + governance** on a retail-accessible stack.
+CC X transforms CC from an unusually disciplined **Operator Decision OS** (score **7.0 / 10**) into an **Institutional Alpha OS** (target **9.5 / 10**) while preserving every authority contract. The competitive moat is not latency or sample size — it is **evidence + prioritization + governance + institutional memory** on a retail-accessible stack.
+
+### Capital flow chain (design order)
+
+Build and measure in this order — not feature-layer order:
+
+```
+Capital → Expected Alpha → Risk Budget → Portfolio Construction → Execution → Measured Alpha → Knowledge
+```
+
+| Stage                      | Question answered                                                       |
+| -------------------------- | ----------------------------------------------------------------------- |
+| **Capital**                | How much can we deploy? What is the marginal return on the next dollar? |
+| **Expected Alpha**         | What alpha does this hypothesis produce after cost and crowding?        |
+| **Risk Budget**            | Does this fit sleeve limits, drawdown, and concentration rules?         |
+| **Portfolio Construction** | What to buy, what to sell first, what becomes worse?                    |
+| **Execution**              | Can we get filled at acceptable slippage?                               |
+| **Measured Alpha**         | What alpha was produced, lost, preserved, missed, deferred, learned?    |
+| **Knowledge**              | Did the platform become smarter? What do we remember for next time?     |
+
+### Competitive positioning
+
+> **Bloomberg tells you what happened. Palantir tells you what is connected. Notion stores research. CC X remembers every hypothesis, measures every decision, governs every deployment, and continuously improves without compromising risk controls.**
+
+**Sell:** _The only AI investment OS that won't let you lie to yourself about deploy authority — ranks every idea by expected value after cost, crowding, and portfolio impact, and remembers every hypothesis forever._
+
+**Not:** HFT, auto-trading, Terminal replacement, fake confidence, trade-generator cosplay.
 
 ### Score path: 7.0 → 9.5
 
@@ -34,13 +62,24 @@ CC X transforms CC from an unusually disciplined **Operator Decision OS** (score
 
 **What moves the score:** Tier 1 systems (below) compound — each feeds the Investment Object, which feeds ranking, portfolio fit, and learning without bypassing gates.
 
-### Commercial vision
+### Internal organization — engines, not pages
 
-**Positioning:** Bloomberg × Palantir × Notion × Renaissance × AI PM — for a disciplined operator pod ($500K–$10M AUM).
+Pages (Dashboard, Playbook, Discovery, Portfolio) are **views** of the same underlying model. Internal build order:
 
-**Sell:** _The only AI investment OS that won't let you lie to yourself about deploy authority — and ranks every idea by expected value after cost, crowding, and portfolio impact._
+```
+Capital → Knowledge → Research → Decision → Execution → Learning
+```
 
-**Competitive advantage:** Evidence lineage, EV-first prioritization, threshold governance, human deploy approval. **Not:** HFT, auto-trading, Terminal replacement, fake confidence.
+Six **core engines** (not five) own the model; UI pages render slices:
+
+| Engine                  | Role                                                    | Primary question                                           |
+| ----------------------- | ------------------------------------------------------- | ---------------------------------------------------------- |
+| **Knowledge Engine**    | Market memory, analogs, graph, AlphaObject archive      | "What did we learn last time this looked like March 2024?" |
+| **Research Engine**     | Alpha Factory, evidence, validation                     | "Is the hypothesis supported?"                             |
+| **Decision Engine**     | Truth model, gates, council                             | "May we deploy?"                                           |
+| **Portfolio Engine**    | Book fit, replacement, capital allocation               | "Where should the next $10K go?"                           |
+| **Execution Engine**    | Readiness, IBKR handoff, slippage                       | "Can we execute without destroying edge?"                  |
+| **Intelligence Engine** | CEO dashboard for AI — platform IQ, not trade generator | "Did the platform become smarter today?"                   |
 
 ---
 
@@ -62,9 +101,103 @@ All CC X work inherits the hard rules from the master review and consolidated br
 
 ---
 
-## Five Institutional Systems — Design & Codebase Map
+## Six Core Engines — Design & Codebase Map
 
-### 1. Alpha Research OS
+### 0. Intelligence Engine (CEO Dashboard for AI)
+
+**Purpose:** Measure whether the **platform became smarter today** — not whether we made money today. This is **not** a trade generator.
+
+**Daily question:** _Did the platform become smarter today?_
+
+**Quality scores (proposed schema):**
+
+| Score                 | What it measures                                             | Primary inputs                                           |
+| --------------------- | ------------------------------------------------------------ | -------------------------------------------------------- |
+| **Knowledge Score**   | Recall quality — analog hits, graph links, AlphaObject reuse | `AlphaObject`, `knowledge_graph.py`, market memory index |
+| **Research Quality**  | Evidence depth, validation grade, sample size                | Alpha Factory artifacts, `validation_lab.py`             |
+| **Decision Quality**  | Gate adherence, calibration, council alignment               | `decision_truth_model.py`, BDR, forward outcomes         |
+| **Execution Quality** | Slippage vs plan, fill rate, cost vs budget                  | `execution_readiness.py`, `execution_analytics.py`       |
+| **Portfolio Quality** | Fit, concentration, sleeve discipline, replacement hygiene   | `portfolio_fit.py`, `strategy_allocator.py`              |
+| **Learning Quality**  | Closed-loop capture, lesson extraction, advisory review rate | `learning_loop.py`, `self_learning.py`                   |
+| **Alpha Quality**     | Measured vs expected alpha; attribution completeness         | Alpha Monitor KPIs, attribution tree                     |
+
+**Proposed payload (`IntelligenceDailyReport`):**
+
+```json
+{
+	"as_of": "2026-08-25T16:00:00Z",
+	"platform_smarter_today": true,
+	"scores": {
+		"knowledge": { "value": 72, "delta_1d": +3, "drivers": ["2 analog hits", "1 new AlphaObject lesson"] },
+		"research": { "value": 68, "delta_1d": 0, "drivers": ["Alpha Factory n=12 artifacts"] },
+		"decision": { "value": 81, "delta_1d": +1, "drivers": ["zero gate bypass incidents"] },
+		"execution": { "value": 74, "delta_1d": -2, "drivers": ["slippage +8bps vs plan on 1 fill"] },
+		"portfolio": { "value": 77, "delta_1d": +4, "drivers": ["sector cap respected", "replacement reviewed"] },
+		"learning": { "value": 65, "delta_1d": +5, "drivers": ["3 forward outcomes marked", "1 post-mortem"] },
+		"alpha": { "value": 70, "delta_1d": +2, "drivers": ["alpha_preserved > alpha_lost"] }
+	},
+	"authority": "research_only"
+}
+```
+
+**Real-Time Alpha Monitor KPIs** (not signal counts):
+
+| KPI                      | Definition                                               |
+| ------------------------ | -------------------------------------------------------- |
+| **Alpha Produced Today** | Realized edge from closed + marked positions (bps, R)    |
+| **Alpha Lost**           | Edge destroyed by bad timing, slippage, or gate override |
+| **Alpha Preserved**      | Edge kept by correct WAIT, trim, or exit                 |
+| **Alpha Missed**         | Validated ideas not deployed due to capital/risk/gate    |
+| **Alpha Deferred**       | Ideas queued for better entry or sleeve room             |
+| **Alpha Learned**        | Lessons captured into AlphaObject / Knowledge Engine     |
+
+**Implementation home:** _new_ `intelligence_engine.py` + Ops / CEO dashboard panel (Sprint 126). All outputs `authority: research_only`.
+
+---
+
+### 1. Knowledge Engine (Market Memory)
+
+**Purpose:** CC remembers — not GPT. Persistent institutional memory for setup analogs, failure modes, and best exits.
+
+**Market memory examples:**
+
+- _"This setup looked like March 2024 and July 2025 — avg outcome +1.8R, failure mode: gap-down on earnings, best exit: trim at +2R."_
+- Analog retrieval from `AlphaObject.lessons` + `historical_analogs` on Investment Object
+- Full-text + graph search across prior hypotheses
+
+**Alpha Attribution Tree** (institutional governance — full traceability):
+
+```
+PnL → Position → Decision → Research → Knowledge → Evidence → Market Data
+```
+
+Every PnL line must resolve upward through this chain for audit export. Stub refs: `AlphaObject.attribution_root_ref`, `InvestmentObject.decision_id`, Alpha Factory `artifact_id`.
+
+**Store:** `data/artifacts/knowledge/` + AlphaObject index; API: `GET /api/v7/knowledge/analogs/{ticker}`, `GET /api/v7/attribution/{position_id}`.
+
+**Knowledge Graph** (subset of Knowledge Engine):
+
+```
+Node types: Ticker, Sector, Theme, Factor, MacroDriver, Catalyst, Institution
+Edge types: SUPPLIES_TO, COMPETES_WITH, THEME_MEMBER, FACTOR_LOAD, MACRO_SENSITIVE, OWNED_BY
+Store: data/artifacts/knowledge_graph/graph.json + incremental edge log
+API: GET /api/v7/graph/neighbors/{ticker}, GET /api/v7/graph/search?q=AI+power
+```
+
+| Capability            | Module                                                | Status                    |
+| --------------------- | ----------------------------------------------------- | ------------------------- |
+| Sector classification | `sector_classifier.py`, `engines/correlation_risk.py` | Sector labels on names    |
+| Theme / ETF tags      | `core/stock_universe.py` (`etf_theme_for`)            | Static theme map          |
+| Sponsor / narrative   | `sponsor_index.py`, `crowding_narrative.py`           | Text narrative, not graph |
+| Cross-asset           | `cross_asset_monitor.py`, `macro_regime_engine.py`    | Macro links               |
+| Flow intelligence     | `flow_intelligence.py`, `options_flow_radar.py`       | Options chain context     |
+| Dossier assembly      | `symbol_dossier.py`, `live_dossier.py`                | Single-name 360           |
+
+**Authority:** Graph and memory outputs are `research_only`; graph rank ≠ deploy permission.
+
+---
+
+### 2. Research Engine (Alpha Research OS)
 
 **Purpose:** End-to-end research production line — idea → evidence → validation → simulation → portfolio fit → execution → outcome → learning.
 
@@ -88,38 +221,36 @@ All CC X work inherits the hard rules from the master review and consolidated br
 
 ---
 
-### 2. Market Knowledge Graph
+### 3. Decision Engine
 
-**Purpose:** Connected market ontology — NVDA → AI → semis → power → … — enabling **graph search**, not just flat scanners.
+**Purpose:** Deploy authority, truth model, and council — the **only** layer that may set `deploy_eligible=true`.
 
-**Current seeds (no graph engine yet):**
+**Core modules:**
 
-| Capability            | Module                                                | Status                    |
-| --------------------- | ----------------------------------------------------- | ------------------------- |
-| Sector classification | `sector_classifier.py`, `engines/correlation_risk.py` | Sector labels on names    |
-| Theme / ETF tags      | `core/stock_universe.py` (`etf_theme_for`)            | Static theme map          |
-| Sponsor / narrative   | `sponsor_index.py`, `crowding_narrative.py`           | Text narrative, not graph |
-| Cross-asset           | `cross_asset_monitor.py`, `macro_regime_engine.py`    | Macro links               |
-| Flow intelligence     | `flow_intelligence.py`, `options_flow_radar.py`       | Options chain context     |
-| Dossier assembly      | `symbol_dossier.py`, `live_dossier.py`                | Single-name 360           |
+| Capability        | Module                                       | Gate                                      |
+| ----------------- | -------------------------------------------- | ----------------------------------------- |
+| Truth model       | `decision_truth_model.py`                    | TRADE_RR_THRESHOLD = 2.5 — no auto-loosen |
+| Page gate         | `operator_state_contract.py`                 | WAIT/NO_TRADE blocks deploy               |
+| Council           | `expert_council.py`                          | Validates brief-sourced rows              |
+| Surface authority | `surface_authority.py`                       | Research ≠ permission                     |
+| Decision board    | `decision_hub.py`, `bdr_operator_summary.py` | Single truth payload (Sprint 115)         |
 
-**CC X target:**
-
-```
-Node types: Ticker, Sector, Theme, Factor, MacroDriver, Catalyst, Institution
-Edge types: SUPPLIES_TO, COMPETES_WITH, THEME_MEMBER, FACTOR_LOAD, MACRO_SENSITIVE, OWNED_BY
-Store: data/artifacts/knowledge_graph/graph.json + incremental edge log
-API: GET /api/v7/graph/neighbors/{ticker}, GET /api/v7/graph/search?q=AI+power
-UI: Dossier "Connected names" panel; Discovery theme clusters
-```
-
-**Authority:** Graph outputs are `research_only`; graph rank ≠ deploy permission.
+**Rule:** InvestmentObject flows in; only Decision Engine + council + operator contract may authorize deploy. AlphaObject never grants deploy.
 
 ---
 
-### 3. Institutional Portfolio Brain
+### 4. Portfolio Engine (Brain + Capital Allocation)
 
-**Purpose:** Living book organism — answers _What do I own, what risk am I running, what becomes worse if I buy this?_
+**Purpose:** Living book organism — answers _What do I own, what risk am I running, what becomes worse if I buy this?_ plus **where capital should flow next**.
+
+**Capital Allocation Engine** (beyond Portfolio Fit):
+
+| Question                                            | Module direction                                        |
+| --------------------------------------------------- | ------------------------------------------------------- |
+| Where should the next $10K go?                      | `strategy_allocator.py` + EV rank + sleeve room         |
+| What to sell first?                                 | Replacement rank + `what_becomes_worse[]`               |
+| Highest marginal return on capital?                 | `marginal_return_on_capital` on AlphaObject / IO        |
+| What increases expected alpha / decreases drawdown? | `portfolio_brain.py`, `rebalance_sim.py`, crisis stress |
 
 **Existing modules:**
 
@@ -139,48 +270,35 @@ UI: Dossier "Connected names" panel; Discovery theme clusters
 | Core/satellite     | `core_satellite.py`                        | Sleeve model                   |
 | Replacement        | _new Sprint 124_                           | Fit-delta rank; human confirm  |
 
-**Portfolio impact question:** Wire `portfolio_fit.py` + `correlation_risk.py` + theme overlap from Knowledge Graph into Investment Object `portfolio_impact` block.
-
----
-
-### 4. Opportunity Ranking 3.0 (EV Formula)
-
-**Purpose:** Single ranking function for monitor and research surfaces — **never overrides deploy gates**.
-
-**Formula (display / sort / research priority):**
+**EV Ranking 3.0** (research priority — never overrides deploy gates):
 
 ```
 EV = alpha × prob × persistence × capacity × liquidity × fit × execution × macro × regime × factor
      − cost − crowding − decay
 ```
 
-**Module mapping:**
-
-| Term        | Source module                                               | Notes                  |
-| ----------- | ----------------------------------------------------------- | ---------------------- |
-| alpha       | `cost_adjusted_edge.py`                                     | Net bps after fees     |
-| prob        | `EdgeModel` in `core/models.py`, `confidence_calibrator.py` | Sample-size labeled    |
-| persistence | `leader_persistence.py`, `leader_tracking_service.py`       | Streak days            |
-| capacity    | `capacity_intelligence.py`                                  | Downgrade-only         |
-| liquidity   | `capacity_intelligence.py`, `slippage_gate_service.py`      | ADV participation      |
-| fit         | `portfolio_fit.py`                                          | Book overlap           |
-| execution   | `execution_readiness.py`                                    | Spread / participation |
-| macro       | `macro_trend.py`, `index_regime.py`                         | Regime scalar          |
-| regime      | `regime_router.py`, `market_regime_tracker.py`              | Engine tag alignment   |
-| factor      | `factor_exposure.py`                                        | Live wire Sprint 122   |
-| cost        | `cost_adjusted_ranker.py`                                   | Explicit subtraction   |
-| crowding    | `crowding_narrative.py`, factor crowding                    | Research flag          |
-| decay       | `feature_ic.py`, `strategy_curve_health.py`                 | Half-life sessions     |
-
-**Implementation home:** Extend `cost_adjusted_ranker.py` → `ev_ranking.py` (Sprint 122); consume Investment Object; output `ev_score`, `ev_components`, `authority: research_only`.
+Implementation: `cost_adjusted_ranker.py` → `ev_ranking.py` (Sprint 122); `authority: research_only`.
 
 ---
 
-### 5. Continuous Learning Platform
+### 5. Execution Engine
 
-**Purpose:** Updates evidence across feature/factor/sector/macro/regime/execution/portfolio/drawdown — **never auto-changes rules**.
+**Purpose:** Handoff readiness, slippage governance, IBKR ladder — edge preserved or destroyed at the wire.
 
-**Existing modules:**
+| Capability | Module                     | Gate                                   |
+| ---------- | -------------------------- | -------------------------------------- |
+| Readiness  | `execution_readiness.py`   | HARD blocks handoff                    |
+| Slippage   | `slippage_gate_service.py` | Downgrade-only                         |
+| Broker     | `ibkr_service.py`          | Human deploy approval                  |
+| Analytics  | `execution_analytics.py`   | Fill vs plan → Execution Quality score |
+
+**CC X additions:** Execution quality feeds Intelligence Engine daily scores; attribution tree links fills → decisions.
+
+---
+
+### 6. Learning Loop (feeds Intelligence + Knowledge)
+
+**Purpose:** Updates evidence across feature/factor/sector/macro/regime/execution/portfolio/drawdown — **never auto-changes rules**. Outcomes flow into AlphaObject lessons and Intelligence Engine Learning Quality.
 
 | Component            | Path                                | Role                         |
 | -------------------- | ----------------------------------- | ---------------------------- |
@@ -194,7 +312,7 @@ EV = alpha × prob × persistence × capacity × liquidity × fit × execution �
 | Trade memory         | `trade_memory_service.py`           | Per-ticker history           |
 | Ops Alpha QA         | `ops_operator_console.py`           | Probe vs runtime             |
 
-**CC X additions:** `forward_outcomes.py` (Sprint 118), Continuous Research Memory index linking artifacts → decisions → outcomes (Sprint 125).
+**CC X additions:** `forward_outcomes.py` (Sprint 118), AlphaObject lifecycle close (Sprint 125), Intelligence daily report (Sprint 126).
 
 ---
 
@@ -226,56 +344,121 @@ One **Investment Object** is consumed by Knowledge → Research → Decision →
 
 ---
 
+## AlphaObject — Institutional Memory Schema
+
+**AlphaObject** survives forever as institutional memory. It links hypothesis → evidence → outcome → lessons for the Knowledge Engine.
+
+| Object               | Layer     | Purpose                                                              |
+| -------------------- | --------- | -------------------------------------------------------------------- |
+| **InvestmentObject** | Decision  | Deploy gate, execution, portfolio impact — ephemeral to active trade |
+| **AlphaObject**      | Knowledge | Hypothesis archive, evidence chain, lessons — permanent              |
+
+**Stub implementation:** `src/core/alpha_object.py`
+
+### Field summary
+
+| Group          | Fields                                                                      |
+| -------------- | --------------------------------------------------------------------------- |
+| **Identity**   | `alpha_id`, `ticker`, `investment_id`, `as_of`, `version`, `stage`          |
+| **Authority**  | `authority` (always `research_only`), `may_authorize_deploy` (always false) |
+| **Thesis**     | `hypothesis`, `setup_type`, `expected_alpha_bps`, `expected_holding_days`   |
+| **Evidence**   | `evidence[]` (source, summary, weight, supports_hypothesis)                 |
+| **Confidence** | `confidence`, `calibrated_confidence`                                       |
+| **Lifecycle**  | `updates[]`, `reviews[]`, `trades[]`                                        |
+| **Portfolio**  | `portfolio_impact` (fit, marginal_return_on_capital, sell_first_candidates) |
+| **Outcome**    | `final_outcome` (alpha_produced/lost/preserved/missed bps, verdict)         |
+| **Learning**   | `lessons[]` (failure_mode, best_exit_note, analog_tags)                     |
+| **Links**      | `knowledge_links[]`, `attribution_root_ref`, `market_data_refs[]`           |
+
+**Lifecycle stages:** HYPOTHESIS → EVIDENCE_GATHERING → UNDER_REVIEW → ACTIVE → TRADED → CLOSED → ARCHIVED
+
+**Rule:** AlphaObject never authorizes deploy. Linked InvestmentObject carries deploy authority only through Decision Engine.
+
+---
+
+## Institutional Research Workspace
+
+**Not** a bigger Dossier — one workspace per investment with tabbed institutional views of the same underlying model:
+
+| Tab            | Content source                                        |
+| -------------- | ----------------------------------------------------- |
+| **Business**   | Fundamentals, sponsor narrative, events               |
+| **Technicals** | Price structure, setup type, entry/stop/target        |
+| **Quant**      | EV components, factor loadings, validation grade      |
+| **Macro**      | Regime sensitivity, cross-asset links                 |
+| **Ownership**  | Insider, 13F, crowding                                |
+| **Execution**  | Readiness, slippage history, fill quality             |
+| **Portfolio**  | Fit score, replacement delta, capital allocation note |
+| **Knowledge**  | AlphaObject, analogs, graph neighbors, market memory  |
+| **History**    | Prior trades, journal entries, artifact timeline      |
+| **Decision**   | Gate snapshot, council notes, deploy eligibility      |
+| **Journal**    | PM notes, reviews, post-mortems                       |
+
+All tabs read/write slices of InvestmentObject + AlphaObject; authority rules unchanged per tab.
+
+---
+
 ## Architecture
 
-### Layer model
+### Layer model — six engines, one model
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         CC X INSTITUTIONAL ALPHA OS                      │
-├─────────────┬─────────────┬─────────────┬─────────────┬─────────────────┤
-│  KNOWLEDGE  │  RESEARCH   │  DECISION   │  PORTFOLIO  │   EXECUTION     │
-│  Graph      │  Alpha OS   │  Truth+Gate │  Brain      │   IBKR ladder   │
-│  Dossier    │  Factory    │  Council    │  Fit/Replace│   Readiness     │
-├─────────────┴─────────────┴──────┬──────┴─────────────┴─────────────────┤
-│                         LEARNING (advisory only)                        │
-│              forward outcomes · IC · Thompson · research memory          │
-└─────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                    CC X INVESTMENT OUTCOME OS                                 │
+├──────────┬──────────┬──────────┬──────────┬──────────┬───────────────────────┤
+│KNOWLEDGE │ RESEARCH │ DECISION │PORTFOLIO │EXECUTION │  INTELLIGENCE (CEO)   │
+│ Memory   │ Alpha OS │ Truth+   │ Brain +  │ IBKR     │  Platform IQ scores   │
+│ Graph    │ Factory  │ Gate     │ Capital  │ Ladder   │  Alpha Monitor KPIs   │
+├──────────┴──────────┴────┬─────┴──────────┴──────────┴───────────────────────┤
+│                         LEARNING → Knowledge + Intelligence                   │
+└──────────────────────────────────────────────────────────────────────────────┘
                                     │
-                    ┌───────────────▼───────────────┐
-                    │     INVESTMENT OBJECT (SSOT)   │
-                    │   src/core/investment_object   │
-                    └───────────────▲───────────────┘
+              ┌─────────────────────▼─────────────────────┐
+              │  INVESTMENT OBJECT (Decision layer SSOT) │
+              │  src/core/investment_object.py           │
+              └─────────────────────▲─────────────────────┘
                                     │
-        All modules READ/WRITE slices — none bypass authority
+              ┌─────────────────────┴─────────────────────┐
+              │  ALPHA OBJECT (Knowledge layer — forever)  │
+              │  src/core/alpha_object.py                  │
+              └────────────────────────────────────────────┘
+
+Capital → Expected Alpha → Risk Budget → Portfolio → Execution → Measured Alpha → Knowledge
+Pages (Dashboard, Playbook, Discovery, Portfolio) = views of same model
 ```
 
 ### Mermaid — layers + Investment Object flow
 
 ```mermaid
 flowchart TB
-    subgraph Knowledge["Knowledge Layer"]
-        KG[Knowledge Graph]
-        SD[symbol_dossier.py]
-        CI[context_assembler.py]
+    subgraph Intelligence["Intelligence Engine"]
+        IE[intelligence_engine.py]
+        AM[Alpha Monitor KPIs]
+        QS[Quality Scores]
     end
 
-    subgraph Research["Research Layer"]
+    subgraph Knowledge["Knowledge Engine"]
+        KG[Knowledge Graph]
+        AO[(AlphaObject)]
+        MM[Market Memory]
+    end
+
+    subgraph Research["Research Engine"]
         AF[Alpha Factory]
         OS[opportunity_scanner.py]
         VL[validation_lab.py]
     end
 
-    subgraph Decision["Decision Layer"]
+    subgraph Decision["Decision Engine"]
         DTM[decision_truth_model.py]
         OSC[operator_state_contract.py]
         EC[expert_council.py]
     end
 
-    subgraph Portfolio["Portfolio Layer"]
+    subgraph Portfolio["Portfolio Engine"]
         PB[portfolio_brain.py]
-        PF[portfolio_fit.py]
-        PR[Portfolio Replacement]
+        CA[Capital Allocation]
+        EV[ev_ranking.py]
     end
 
     subgraph Execution["Execution Layer"]
@@ -283,54 +466,56 @@ flowchart TB
         IBKR[ibkr_service.py]
     end
 
-    subgraph Learning["Learning Layer"]
+    subgraph Learning["Learning Loop"]
         LL[learning_loop.py]
         FO[forward_outcomes.py]
         SL[self_learning.py]
-        RM[research_store.py]
     end
 
     IO[(Investment Object)]
 
-    KG --> IO
-    SD --> IO
+    KG --> AO
+    MM --> AO
     OS --> AF --> IO
+    AF --> AO
     VL --> IO
-    IO --> DTM
-    DTM --> OSC
+    IO --> DTM --> OSC
     EC --> IO
-    IO --> PF
-    PF --> PB
-    PB --> PR
+    IO --> EV --> CA --> PB
     IO --> ER --> IBKR
-    IBKR --> LL
-    FO --> SL
-    LL --> RM
+    IBKR --> LL --> FO
+    FO --> AO
     SL -.->|advisory only| DTM
+    IO --> IE
+    AO --> IE
+    AM --> IE
+    QS --> IE
 
     style IO fill:#1a365d,color:#fff
+    style AO fill:#234e52,color:#fff
     style OSC fill:#742a2a,color:#fff
     style DTM fill:#742a2a,color:#fff
+    style IE fill:#553c9a,color:#fff
 ```
 
 ---
 
 ## Tier 1–3 Prioritization
 
-### Tier 1 — Highest ROI (build first)
+### Tier 1 — Highest ROI (investment-outcome-first)
 
-| #   | Initiative                     | Est. ROI                                         | Difficulty  | Key dependencies              | Primary files                                       |
-| --- | ------------------------------ | ------------------------------------------------ | ----------- | ----------------------------- | --------------------------------------------------- |
-| 1   | **Knowledge Graph**            | Fewer concentration errors; +20 min/day research | High        | `stock_universe`, sector data | _new_ `knowledge_graph.py`, `symbol_dossier.py`     |
-| 2   | **Alpha Factory**              | Audit trail; research reproducibility            | Medium      | Sprint 115 payload            | `opportunity_scanner.py`, `artifacts/*`             |
-| 3   | **Portfolio Optimizer**        | Better risk-adjusted book                        | Medium–High | Live factor wire              | `rebalance_sim.py`, `portfolio_brain.py`            |
-| 4   | **EV Ranking 3.0**             | Correct priority on WAIT days                    | Medium      | Investment Object             | `cost_adjusted_ranker.py` → `ev_ranking.py`         |
-| 5   | **Historical Analog Engine**   | Calibration; thesis validation                   | Medium      | Price history                 | _new_ `analog_engine.py`, dossier router            |
-| 6   | **Trade Lifecycle Engine**     | Closed-loop attribution                          | Medium–High | IBKR fills                    | `learning_loop.py`, `decision_persistence.py`       |
-| 7   | **Capital Allocation**         | Sleeve discipline                                | Medium      | `strategy_allocator.py`       | `strategy_allocator.py`, BDR strip                  |
-| 8   | **Portfolio Replacement**      | Swap low-fit for high-fit                        | Medium      | Portfolio fit                 | `portfolio_fit.py`, `portfolio_decision_console.py` |
-| 9   | **Macro Dependency**           | Regime-aware sizing                              | Low–Medium  | Regime stack                  | `macro_regime_engine.py`, `index_regime.py`         |
-| 10  | **Continuous Research Memory** | Institutional recall                             | Medium      | Artifact store                | `research_store.py`, `pm_memory.py`                 |
+| #   | Initiative                     | Est. ROI                                       | Difficulty  | Key dependencies             | Primary files                                       |
+| --- | ------------------------------ | ---------------------------------------------- | ----------- | ---------------------------- | --------------------------------------------------- |
+| 1   | **Capital Allocation Engine**  | Optimal next-dollar deployment; −concentration | Medium–High | Portfolio fit, EV rank       | `strategy_allocator.py`, `portfolio_brain.py`       |
+| 2   | **Real-Time Alpha Monitor**    | Measured alpha vs signal counts                | Medium      | Closed trades, forward marks | _new_ `alpha_monitor.py`, Ops panel                 |
+| 3   | **Alpha Attribution Tree**     | Institutional audit; full PnL traceability     | Medium–High | Decision + artifact linkage  | _new_ `attribution_tree.py`, AlphaObject            |
+| 4   | **AlphaObject Lifecycle**      | Permanent institutional memory                 | Medium      | Alpha Factory, learning loop | `src/core/alpha_object.py`, knowledge index         |
+| 5   | **Intelligence Engine**        | Platform IQ — smarter-today metric             | Medium      | All quality score inputs     | _new_ `intelligence_engine.py`                      |
+| 6   | **Knowledge Engine / Memory**  | Analog recall; CC remembers not GPT            | High        | Price history, AlphaObject   | _new_ `knowledge_graph.py`, `analog_engine.py`      |
+| 7   | **Institutional Workspace**    | One investment, eleven tabs                    | Medium–High | IO + AlphaObject             | Dossier → workspace shell                           |
+| 8   | **EV Ranking 3.0**             | Capital-prioritized research queue             | Medium      | Investment Object            | `cost_adjusted_ranker.py` → `ev_ranking.py`         |
+| 9   | **Portfolio Replacement**      | Sell-first + marginal return on capital        | Medium      | Portfolio fit                | `portfolio_fit.py`, `portfolio_decision_console.py` |
+| 10  | **Decision Board Unification** | Zero deploy drift; capital truth SSOT          | Medium      | Authority contracts          | `decision_hub.py`, Sprint 115                       |
 
 **Combined Tier 1 estimate:** +0.5–1.2 Sharpe process improvement; **+$40–80K/yr** avoided errors + sizing calibration (single PM, $500K–$2M book).
 
@@ -371,145 +556,153 @@ flowchart TB
 
 | #   | Flagship capability                  | Delivers                            | Primary sprints |
 | --- | ------------------------------------ | ----------------------------------- | --------------- |
-| 1   | **Knowledge Graph Intelligence**     | Theme/sector/macro connected search | 121, 119        |
-| 2   | **Alpha Factory**                    | Per-candidate artifact pipeline     | 117, 121        |
-| 3   | **Portfolio Intelligence**           | Brain + optimizer + replacement     | 122, 124        |
-| 4   | **Opportunity Intelligence v3**      | Name 360 + EV + analogs             | 119, 122        |
-| 5   | **Continuous Learning Engine**       | Outcomes → advisory review          | 118, 125        |
-| 6   | **Institutional Research Workspace** | Graph + factory + memory UI         | 125, 120        |
+| 1   | **Intelligence Engine**              | CEO dashboard; platform IQ scores   | 126             |
+| 2   | **Real-Time Alpha Monitor**          | Produced/Lost/Preserved/Missed KPIs | 118, 126        |
+| 3   | **Alpha Attribution Tree**           | PnL → Market Data full traceability | 115, 120, 125   |
+| 4   | **Capital Allocation Engine**        | Next $10K, sell-first, marginal ROC | 122, 124        |
+| 5   | **AlphaObject + Knowledge Memory**   | CC remembers every hypothesis       | 117, 121, 125   |
+| 6   | **Institutional Research Workspace** | Eleven-tab workspace per investment | 119, 125        |
 
 ---
 
-## Sprint Plan: 115–125
+## Sprint Plan: 115–126 (Investment-Outcome-First)
 
-Sprints 115–120 align with [`CC_VNEXT_INSTITUTIONAL_MASTER_REVIEW.md`](./CC_VNEXT_INSTITUTIONAL_MASTER_REVIEW.md) §14. Sprints 121–125 extend into CC X institutional systems.
+Sprints prioritize **capital → measured alpha → knowledge** over engineering convenience. Sprints 115–120 align with [`CC_VNEXT_INSTITUTIONAL_MASTER_REVIEW.md`](./CC_VNEXT_INSTITUTIONAL_MASTER_REVIEW.md) §14, re-framed. Sprints 121–126 extend CC X institutional systems.
 
-### Sprint 115 — Decision Board Unification (P0)
+### Sprint 115 — Capital-First Decision Board + Attribution Root (P0)
 
-| Field                  | Detail                                                                                                                                     |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Headline**           | **One truth payload — zero deploy drift**                                                                                                  |
-| **Objectives**         | `DecisionBoardService` shared by Today, Playbook, cc-header; identical `deploy_open`                                                       |
-| **Expected alpha/ROI** | +$15–40K/yr avoided mismatch; 15 min/day reconciliation saved                                                                              |
-| **Difficulty**         | Medium                                                                                                                                     |
-| **Dependencies**       | `operator_state_contract.py`, `decision_hub.py`, `bdr_operator_summary.py`                                                                 |
-| **Acceptance tests**   | WAIT/STALE/broker/fallback parametrize; three endpoints identical `system_state.deploy_open`; `test_dashboard_decision_integrity.py` green |
-| **Investment Object**  | Board payload embeds `gate_snapshot` on each row                                                                                           |
+| Field                  | Detail                                                                                                                             |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **Headline**           | **Capital truth first — one board, zero deploy drift, attribution root wired**                                                     |
+| **Objectives**         | `DecisionBoardService` shared by Today, Playbook, cc-header; identical `deploy_open`; each row carries `attribution_root_ref` stub |
+| **Expected alpha/ROI** | +$15–40K/yr avoided mismatch; capital visibility on every decision row                                                             |
+| **Difficulty**         | Medium                                                                                                                             |
+| **Dependencies**       | `operator_state_contract.py`, `decision_hub.py`, `bdr_operator_summary.py`                                                         |
+| **Acceptance tests**   | WAIT/STALE/broker/fallback parametrize; three endpoints identical `system_state.deploy_open`; attribution ref on board rows        |
+| **Investment Object**  | Board payload embeds `gate_snapshot` + `decision_id` for attribution chain                                                         |
 
 ---
 
-### Sprint 116 — Data Provenance & CI Truth Gate (P0)
+### Sprint 116 — Evidence Lineage Gate + Alpha Provenance (P0)
 
 | Field                  | Detail                                                                                    |
 | ---------------------- | ----------------------------------------------------------------------------------------- |
-| **Headline**           | **Every price labeled — CI blocks authority regressions**                                 |
-| **Objectives**         | Mandatory `source/as_of/mode` on market fields; Docker CI full pytest + `verify_10_10.sh` |
-| **Expected alpha/ROI** | Institutional credibility; prevents silent data degradation                               |
-| **Acceptance tests**   | STALE hides deploy CTAs; red CI on contract test failure                                  |
-| **Investment Object**  | `ProvenanceBlock` populated on all IO instances                                           |
+| **Headline**           | **Market Data → Evidence chain — CI blocks authority regressions**                        |
+| **Objectives**         | Mandatory `source/as_of/mode` on all market fields; provenance feeds AlphaObject evidence |
+| **Expected alpha/ROI** | Institutional credibility; attribution tree leaf nodes labeled                            |
+| **Acceptance tests**   | STALE hides deploy CTAs; red CI on contract test failure; evidence block on AlphaObject   |
+| **AlphaObject**        | `AlphaEvidence` populated from provenance-envelope fields                                 |
 
 ---
 
-### Sprint 117 — Playbook 10× + Alpha Factory Artifacts (P1)
+### Sprint 117 — Alpha Factory + AlphaObject Birth (P1)
 
-| Field                  | Detail                                                                            |
-| ---------------------- | --------------------------------------------------------------------------------- |
-| **Headline**           | **Sub-2s Playbook + auditable Alpha Factory artifacts**                           |
-| **Objectives**         | Universal snapshot SWR; write `data/artifacts/alpha_factory/{date}/{ticker}.json` |
-| **Expected alpha/ROI** | 30–45 min/day on scan days; research audit trail                                  |
-| **Acceptance tests**   | k6 p95 <2s cached; stale banner; 100% top-12 rows have `artifact_id`              |
-
----
-
-### Sprint 118 — Learning Loop Closure + Forward Outcomes (P1)
-
-| Field                  | Detail                                                                                |
-| ---------------------- | ------------------------------------------------------------------------------------- |
-| **Headline**           | **IBKR fills → learning; T+1/T+5/T+20 marks without waiting for close**               |
-| **Objectives**         | `closed_trades.jsonl` ≥95% capture; `forward_outcomes.py` nightly; Ops Alpha QA panel |
-| **Expected alpha/ROI** | +$8–20K/yr sizing calibration; ML sample ≥30 in 90 days                               |
-| **Acceptance tests**   | Sim fill appends JSONL; Thompson hidden n<5; self-learning kill switch default ON     |
+| Field                  | Detail                                                                              |
+| ---------------------- | ----------------------------------------------------------------------------------- |
+| **Headline**           | **Every candidate gets an AlphaObject — auditable hypothesis from day one**         |
+| **Objectives**         | Alpha Factory writes artifact + spawns `AlphaObject`; Playbook snapshot SWR p95 <2s |
+| **Expected alpha/ROI** | 30–45 min/day on scan days; institutional memory begins at hypothesis               |
+| **Acceptance tests**   | 100% top-12 rows have `artifact_id` + `alpha_id`; stale banner; research_only       |
 
 ---
 
-### Sprint 119 — Opportunity Intelligence v3 + Dossier Embed (P1)
+### Sprint 118 — Real-Time Alpha Monitor + Forward Outcomes (P1)
 
-| Field                  | Detail                                                                                    |
-| ---------------------- | ----------------------------------------------------------------------------------------- |
-| **Headline**           | **Name 360 with insider/13F/events/capacity — research_only preserved**                   |
-| **Objectives**         | v3 API; Dossier chips; Discovery bridge with `artifact_id`                                |
-| **Expected alpha/ROI** | 20 min/day research; fewer concentration mistakes                                         |
-| **Acceptance tests**   | Dossier coverage ≥80%; zero mock factor on deploy surfaces; `may_authorize_deploy: false` |
-
----
-
-### Sprint 120 — E2E Authority + Institutional Export (P1)
-
-| Field                  | Detail                                                                     |
-| ---------------------- | -------------------------------------------------------------------------- |
-| **Headline**           | **Playwright proves WAIT disables deploy; board export for advisors**      |
-| **Objectives**         | E2E in CI; JSON/CSV snapshot with authority disclaimer; command palette v0 |
-| **Expected alpha/ROI** | Regression safety; weekly PM review export                                 |
-| **Acceptance tests**   | Playwright screenshot on failure; export footer disclaimer                 |
+| Field                  | Detail                                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------ |
+| **Headline**           | **Alpha Produced/Lost/Preserved today — not signal counts**                          |
+| **Objectives**         | `alpha_monitor.py` daily KPIs; `forward_outcomes.py` T+1/T+5/T+20; IBKR → JSONL ≥95% |
+| **Expected alpha/ROI** | +$8–20K/yr sizing calibration; measured alpha visibility                             |
+| **Acceptance tests**   | Six KPIs visible in Ops; Thompson hidden n<5; self-learning kill switch default ON   |
+| **AlphaObject**        | `final_outcome` interim marks on open hypotheses                                     |
 
 ---
 
-### Sprint 121 — Knowledge Graph MVP + Theme Clusters (P1)
+### Sprint 119 — Institutional Research Workspace MVP (P1)
 
-| Field                  | Detail                                                                                                                |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| **Headline**           | **NVDA→AI→semis graph search replaces flat scanner-only context**                                                     |
-| **Objectives**         | `knowledge_graph.py` with Ticker/Theme/Sector nodes; Discovery theme clusters; Dossier neighbors panel                |
-| **Expected alpha/ROI** | Thematic overlap detection; +15 min/day faster context                                                                |
-| **Difficulty**         | High                                                                                                                  |
-| **Dependencies**       | Sprint 117 artifacts, `stock_universe.py`                                                                             |
-| **Acceptance tests**   | Graph API returns neighbors for 10 golden tickers; theme cluster on Discovery; `research_only` on all graph endpoints |
+| Field                  | Detail                                                                                                                     |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **Headline**           | **One investment, eleven tabs — workspace not bigger Dossier**                                                             |
+| **Objectives**         | Workspace shell with Business/Technicals/Quant/Macro/Ownership/Execution/Portfolio/Knowledge/History/Decision/Journal tabs |
+| **Expected alpha/ROI** | 20 min/day research; unified view of IO + AlphaObject                                                                      |
+| **Acceptance tests**   | All tabs `research_only` except Decision (gate snapshot); zero mock on deploy surfaces                                     |
 
 ---
 
-### Sprint 122 — EV Ranking 3.0 + Portfolio Brain Wire (P1)
+### Sprint 120 — Alpha Attribution Tree E2E + Institutional Export (P1)
 
-| Field                  | Detail                                                                                                                               |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| **Headline**           | **Expected Value ranking — alpha after cost, crowding, decay, fit**                                                                  |
-| **Objectives**         | `ev_ranking.py`; Investment Object consumed by ranker; live `factor_exposure` wire; portfolio impact block                           |
-| **Expected alpha/ROI** | Better WAIT-day priority; reduced crowding losses                                                                                    |
-| **Acceptance tests**   | EV components visible in Ops; rank order changes on cost/crowding; deploy gate unchanged; `test_quant_authority_boundaries.py` green |
+| Field                  | Detail                                                                |
+| ---------------------- | --------------------------------------------------------------------- |
+| **Headline**           | **PnL → Market Data traceability — Playwright + audit export**        |
+| **Objectives**         | `attribution_tree.py` resolves full chain; E2E in CI; JSON/CSV export |
+| **Expected alpha/ROI** | Regression safety; institutional governance for advisors              |
+| **Acceptance tests**   | Golden position resolves 7-level chain; export footer disclaimer      |
 
 ---
 
-### Sprint 123 — Historical Analog Engine (P2)
+### Sprint 121 — Knowledge Engine + Market Memory (P1)
+
+| Field                  | Detail                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------- |
+| **Headline**           | **CC remembers — "looked like March 2024" with avg outcome and failure modes**              |
+| **Objectives**         | `knowledge_graph.py` MVP; `analog_engine.py`; AlphaObject `lessons[]` with analog_tags      |
+| **Expected alpha/ROI** | Thesis calibration; institutional recall without GPT                                        |
+| **Acceptance tests**   | Analog API returns n ≥5 or `confidence: low`; market memory search by ticker; research_only |
+
+---
+
+### Sprint 122 — Capital Allocation Engine + EV Ranking 3.0 (P1)
+
+| Field                  | Detail                                                                                                      |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Headline**           | **Where next $10K goes — marginal return on capital ranked after cost and fit**                             |
+| **Objectives**         | Capital Allocation panel; `ev_ranking.py`; live factor wire; `marginal_return_on_capital` on IO/AlphaObject |
+| **Expected alpha/ROI** | Better capital deployment; reduced crowding losses                                                          |
+| **Acceptance tests**   | Sell-first candidates ranked; EV components visible; deploy gate unchanged                                  |
+
+---
+
+### Sprint 123 — Historical Analog Engine + Pattern Library (P2)
 
 | Field                  | Detail                                                                                  |
 | ---------------------- | --------------------------------------------------------------------------------------- |
-| **Headline**           | **Pattern analogs with n, date range, outcome R — research tab only**                   |
-| **Objectives**         | `analog_engine.py`; `GET /v3/analogs/{ticker}`; Dossier analog strip                    |
-| **Expected alpha/ROI** | Thesis calibration; fewer narrative-only trades                                         |
+| **Headline**           | **Pattern library with n, date range, outcome R — Knowledge tab only**                  |
+| **Objectives**         | Enriched analogs; failure_mode + best_exit on AlphaObject lessons                       |
+| **Expected alpha/ROI** | Fewer narrative-only trades; faster post-mortems                                        |
 | **Acceptance tests**   | Analog payload includes sample n ≥5 or `confidence: low`; never on Playbook deploy card |
 
 ---
 
-### Sprint 124 — Portfolio Replacement + Capital Allocation (P2)
+### Sprint 124 — Portfolio Replacement + Sell-First Logic (P2)
 
-| Field                  | Detail                                                                                                          |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------- |
-| **Headline**           | **"What becomes worse if I buy this?" — swap candidates, sleeve budgets**                                       |
-| **Objectives**         | Replacement chip on Portfolio; fit-delta rank; `strategy_allocator` targets in BDR; sector cap blocks quick-add |
-| **Expected alpha/ROI** | +$5–15K/yr from avoided concentration; cleaner sleeve discipline                                                |
-| **Acceptance tests**   | Replacement requires human confirm; no auto-trade; sector cap UI block; `what_becomes_worse[]` on IO            |
+| Field                  | Detail                                                                                  |
+| ---------------------- | --------------------------------------------------------------------------------------- |
+| **Headline**           | **What to sell first — swap candidates ranked by fit-delta and marginal ROC**           |
+| **Objectives**         | Replacement chip; `sell_first_candidates[]` on AlphaObject; sector cap blocks quick-add |
+| **Expected alpha/ROI** | +$5–15K/yr from avoided concentration; cleaner sleeve discipline                        |
+| **Acceptance tests**   | Replacement requires human confirm; no auto-trade; `what_becomes_worse[]` on IO         |
+
+---
+
+### Sprint 125 — AlphaObject Lifecycle Close + Research Memory (P2)
+
+| Field                  | Detail                                                                                                   |
+| ---------------------- | -------------------------------------------------------------------------------------------------------- |
+| **Headline**           | **Hypothesis → outcome → lesson — AlphaObject archived, never deleted**                                  |
+| **Objectives**         | Lifecycle close flow; Research Memory index (`alpha_id` → decision → outcome); attribution tree complete |
+| **Expected alpha/ROI** | Institutional recall; faster post-mortems; path to 9.5 score                                             |
+| **Acceptance tests**   | Closed hypotheses have `final_outcome` + `lessons[]`; self-learning apply rate 0 without Ops toggle      |
 
 ---
 
-### Sprint 125 — Continuous Research Memory + Institutional Workspace (P2)
+### Sprint 126 — Intelligence Engine CEO Dashboard (P2)
 
-| Field                  | Detail                                                                                                                                  |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| **Headline**           | **Every artifact, decision, and outcome linked — learning advises, never auto-applies**                                                 |
-| **Objectives**         | Research Memory index (`artifact_id` → decision → outcome); Institutional Workspace tab (graph + factory + memory); Ops learning digest |
-| **Expected alpha/ROI** | Institutional recall; faster post-mortems; path to 9.5 score                                                                            |
-| **Acceptance tests**   | Memory search by ticker returns linked artifacts; self-learning apply rate 0 without Ops toggle; audit log complete                     |
-
----
+| Field                  | Detail                                                                                                                                     |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Headline**           | **Did the platform become smarter today? — seven quality scores + platform_smarter_today**                                                 |
+| **Objectives**         | `intelligence_engine.py`; daily `IntelligenceDailyReport`; Ops CEO panel; Alpha Monitor rollup                                             |
+| **Expected alpha/ROI** | Process alpha visibility; operator confidence in platform improvement                                                                      |
+| **Acceptance tests**   | All seven scores computed; `platform_smarter_today` boolean; `authority: research_only`; no trade recommendations from Intelligence Engine |
 
 ## What NOT to Build (Anti-Patterns)
 
@@ -544,11 +737,12 @@ Sprints 115–120 align with [`CC_VNEXT_INSTITUTIONAL_MASTER_REVIEW.md`](./CC_VN
 3. EV ranker reads IO; **legacy rank preserved as fallback** until parity tests pass.
 4. All new fields default `authority=research_only`, `may_authorize_deploy=false`.
 
-### Phase C — Institutional systems (Sprints 121–125)
+### Phase C — Institutional systems (Sprints 121–126)
 
-1. Knowledge Graph + EV + analogs on research surfaces.
-2. Portfolio Brain consumes IO `portfolio_impact`.
-3. Research Memory indexes artifacts — no migration of historical JSONL required (append-only).
+1. Knowledge Engine + Market Memory + AlphaObject lifecycle.
+2. Capital Allocation Engine + Intelligence Engine CEO dashboard.
+3. Alpha Attribution Tree complete; Research Workspace eleven tabs.
+4. Research Memory indexes AlphaObjects — append-only, never delete.
 
 ### Authority regression gates (every sprint)
 
@@ -563,23 +757,37 @@ Sprints 115–120 align with [`CC_VNEXT_INSTITUTIONAL_MASTER_REVIEW.md`](./CC_VN
 
 ## Appendix — Module Index (CC X)
 
-| Domain            | Primary modules                                                                      |
-| ----------------- | ------------------------------------------------------------------------------------ |
-| Investment Object | `src/core/investment_object.py`, `engines/decision_object.py`                        |
-| Authority         | `operator_state_contract.py`, `decision_truth_model.py`, `surface_authority.py`      |
-| Knowledge         | _new_ `knowledge_graph.py`, `symbol_dossier.py`, `context_assembler.py`              |
-| Alpha Factory     | `opportunity_scanner.py`, `cost_adjusted_edge.py`, `artifacts/*`                     |
-| EV Ranking        | `cost_adjusted_ranker.py`, _new_ `ev_ranking.py`                                     |
-| Portfolio Brain   | `portfolio_brain.py`, `portfolio_decision_console.py`, `portfolio_fit.py`            |
-| Learning          | `learning_loop.py`, `self_learning.py`, `feature_ic.py`, _new_ `forward_outcomes.py` |
-| Opportunity v3    | `opportunity_intelligence.py`, `insider_tracker.py`, `capacity_intelligence.py`      |
+| Domain             | Primary modules                                                                      |
+| ------------------ | ------------------------------------------------------------------------------------ |
+| Investment Object  | `src/core/investment_object.py`, `engines/decision_object.py`                        |
+| Alpha Object       | `src/core/alpha_object.py`                                                           |
+| Intelligence       | _new_ `intelligence_engine.py`, _new_ `alpha_monitor.py`                             |
+| Attribution        | _new_ `attribution_tree.py`                                                          |
+| Authority          | `operator_state_contract.py`, `decision_truth_model.py`, `surface_authority.py`      |
+| Knowledge          | _new_ `knowledge_graph.py`, `symbol_dossier.py`, _new_ `analog_engine.py`            |
+| Alpha Factory      | `opportunity_scanner.py`, `cost_adjusted_edge.py`, `artifacts/*`                     |
+| EV Ranking         | `cost_adjusted_ranker.py`, _new_ `ev_ranking.py`                                     |
+| Portfolio Brain    | `portfolio_brain.py`, `portfolio_decision_console.py`, `portfolio_fit.py`            |
+| Capital Allocation | `strategy_allocator.py`, `core_satellite.py`                                         |
+| Learning           | `learning_loop.py`, `self_learning.py`, `feature_ic.py`, _new_ `forward_outcomes.py` |
+| Workspace          | Institutional Research Workspace (eleven tabs)                                       |
 
 ---
 
 ## Relation to Prior Documents
 
-This roadmap **operationalizes** the user's strategic vision and extends [`CC_VNEXT_INSTITUTIONAL_MASTER_REVIEW.md`](./CC_VNEXT_INSTITUTIONAL_MASTER_REVIEW.md) with CC X branding, Investment Object schema, Tier 1–3 prioritization, sprints 121–125, and explicit migration/anti-pattern guidance. Authority constraints are unchanged.
+This roadmap **operationalizes** the user's **investment-outcome-first** strategic refinement (2026-08-25) and extends [`CC_VNEXT_INSTITUTIONAL_MASTER_REVIEW.md`](./CC_VNEXT_INSTITUTIONAL_MASTER_REVIEW.md) with:
+
+- Six core engines (including **Intelligence Engine** — CEO dashboard for platform IQ, not trade generation)
+- **AlphaObject** institutional memory schema (`src/core/alpha_object.py`)
+- **Alpha Attribution Tree:** PnL → Position → Decision → Research → Knowledge → Evidence → Market Data
+- **Capital Allocation Engine** beyond portfolio fit
+- **Real-Time Alpha Monitor** KPIs (Produced / Lost / Preserved / Missed / Deferred / Learned)
+- **Institutional Research Workspace** (eleven tabs per investment)
+- Sprints **115–126** re-prioritized investment-outcome-first
+
+Authority constraints from [`CC_CONSOLIDATED_BRIEFING.md`](./CC_CONSOLIDATED_BRIEFING.md) §2 are unchanged.
 
 ---
 
-_End of CC X Institutional Alpha OS Roadmap._
+_End of CC X Institutional Alpha OS Roadmap (Investment-Outcome-First v2)._

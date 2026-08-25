@@ -657,7 +657,7 @@ All optimizations preserve server-authoritative gates — cache only affects **l
 
 This document **extends** `docs/CC_VNEXT_MASTER_REVIEW.md` (v9.0, score 6.8) with institutional Alpha OS framing, Alpha Factory / Portfolio Intelligence / Learning vNext designs, and sprints 115–120 re-scoped for decision unification and learning closure. Non-negotiable constraints are unchanged. Overall score raised to **7.0** reflecting Sprint 114 opportunity scanner and continued authority hardening — data and ML gaps remain the primary ceiling.
 
-**Operational roadmap:** See [`CC_X_INSTITUTIONAL_ALPHA_OS.md`](./CC_X_INSTITUTIONAL_ALPHA_OS.md) for CC X branding, Investment Object schema, Tier 1–3 priorities, sprints 115–125, and migration path.
+**Operational roadmap:** See [`CC_X_INSTITUTIONAL_ALPHA_OS.md`](./CC_X_INSTITUTIONAL_ALPHA_OS.md) for CC X **investment-outcome-first** architecture: six core engines (including Intelligence Engine), Investment Object + **AlphaObject** schemas, Alpha Attribution Tree, Capital Allocation Engine, Real-Time Alpha Monitor KPIs, Institutional Research Workspace, Tier 1–3 priorities, sprints **115–126**, and migration path.
 
 ---
 
