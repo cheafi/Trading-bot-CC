@@ -40,7 +40,9 @@ EXPOSURE_BANDS: Dict[str, Dict[str, float]] = {
 _PASSIVE_TICKERS = frozenset(
     {"SPY", "QQQ", "RSP", "IVV", "VOO", "VTI", "SCHB", "DIA", "IWM"}
 )
-_TACTICAL_HINTS = frozenset({"options", "tactical", "event", "sleeve", "deploy", "hedge"})
+_TACTICAL_HINTS = frozenset(
+    {"options", "tactical", "event", "sleeve", "deploy", "hedge"}
+)
 
 
 def classify_sleeve_role(position: Dict[str, Any]) -> str:
@@ -60,7 +62,9 @@ def classify_sleeve_role(position: Dict[str, Any]) -> str:
         return "core_passive"
 
     sleeve = str(position.get("sleeve") or "").lower()
-    strategy = str(position.get("strategy_id") or position.get("strategy") or "").lower()
+    strategy = str(
+        position.get("strategy_id") or position.get("strategy") or ""
+    ).lower()
     combined = f"{sleeve} {strategy}"
     if any(h in combined for h in _TACTICAL_HINTS):
         return "tactical"
@@ -103,7 +107,9 @@ def build_core_satellite_summary(
     """
     n = len(positions)
     total = equity if equity and equity > 0 else _total_value(positions)
-    insufficient = n < 1 or (n == 1 and local_only) or (local_only and not broker_synced)
+    insufficient = (
+        n < 1 or (n == 1 and local_only) or (local_only and not broker_synced)
+    )
 
     role_weights: Dict[str, float] = {k: 0.0 for k in SLEEVE_ROLES}
     role_holdings: Dict[str, List[str]] = {k: [] for k in SLEEVE_ROLES}
@@ -147,7 +153,9 @@ def build_core_satellite_summary(
             }
         )
 
-    out_of_band = [b for b in bands if b["status"] in ("over", "under") and b["actual_pct"] > 0]
+    out_of_band = [
+        b for b in bands if b["status"] in ("over", "under") and b["actual_pct"] > 0
+    ]
     headline = "Core + satellite allocation"
     if insufficient:
         headline = "Insufficient book depth for band math"
@@ -156,7 +164,9 @@ def build_core_satellite_summary(
             "Confirm broker sync and ≥3 names before trusting exposure bands."
         )
     elif not out_of_band:
-        detail = "All populated sleeves within policy bands — monitor drift at rebalance."
+        detail = (
+            "All populated sleeves within policy bands — monitor drift at rebalance."
+        )
     else:
         parts = [f"{b['label']} {b['status']} band" for b in out_of_band[:2]]
         detail = " · ".join(parts) + " — rebalance before adding tactical risk."
@@ -182,10 +192,14 @@ def build_core_satellite_summary(
     }
 
 
-def _index_fund_alignment_for_positions(positions: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _index_fund_alignment_for_positions(
+    positions: List[Dict[str, Any]],
+) -> Dict[str, Any]:
     """Index-fund guide alignment for core passive holdings (proxy)."""
     try:
-        from src.services.index_fund_judgment import index_fund_alignment_for_core_satellite
+        from src.services.index_fund_judgment import (
+            index_fund_alignment_for_core_satellite,
+        )
 
         return index_fund_alignment_for_core_satellite(positions)
     except Exception:

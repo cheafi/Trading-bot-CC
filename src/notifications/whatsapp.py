@@ -1,4 +1,5 @@
 """WhatsApp notifier via Twilio API."""
+
 from __future__ import annotations
 
 import logging
@@ -25,7 +26,12 @@ class WhatsAppNotifier:
 
     @property
     def is_configured(self) -> bool:
-        return bool(self.account_sid and self.auth_token and self.whatsapp_from and self.whatsapp_to)
+        return bool(
+            self.account_sid
+            and self.auth_token
+            and self.whatsapp_from
+            and self.whatsapp_to
+        )
 
     async def send_message(self, text: str) -> bool:
         if not self.is_configured:
@@ -36,7 +42,9 @@ class WhatsAppNotifier:
         url = f"https://api.twilio.com/2010-04-01/Accounts/{self.account_sid}/Messages.json"
 
         try:
-            async with aiohttp.ClientSession(auth=aiohttp.BasicAuth(self.account_sid, self.auth_token)) as session:
+            async with aiohttp.ClientSession(
+                auth=aiohttp.BasicAuth(self.account_sid, self.auth_token)
+            ) as session:
                 for chunk in chunks:
                     payload = {
                         "From": self.whatsapp_from,
@@ -46,7 +54,9 @@ class WhatsAppNotifier:
                     async with session.post(url, data=payload) as resp:
                         if resp.status not in (200, 201):
                             body = await resp.text()
-                            self.logger.error(f"Twilio WhatsApp error {resp.status}: {body[:200]}")
+                            self.logger.error(
+                                f"Twilio WhatsApp error {resp.status}: {body[:200]}"
+                            )
                             return False
             return True
         except Exception as e:

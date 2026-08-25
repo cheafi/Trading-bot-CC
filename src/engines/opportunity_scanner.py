@@ -455,8 +455,8 @@ async def run_opportunity_scanner(
 
     import yfinance as yf
 
-    from src.scanners.us_universe import US_UNIVERSE
     from src.core.stock_universe import OPPORTUNITY_COVERAGE_UNIVERSE
+    from src.scanners.us_universe import US_UNIVERSE
 
     regime_upper = regime.upper()
     engine = "bull" if regime_upper in _BULL_REGIMES else "weak"

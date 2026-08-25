@@ -37,7 +37,13 @@ def _load() -> Dict[str, Any]:
         with open(_STORE, encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, dict):
-            for key in ("strategy_drafts", "backtest_runs", "shadow_runs", "memory", "reports"):
+            for key in (
+                "strategy_drafts",
+                "backtest_runs",
+                "shadow_runs",
+                "memory",
+                "reports",
+            ):
                 if not isinstance(data.get(key), list):
                     data[key] = []
             return data
@@ -63,7 +69,11 @@ def log_research_event(entry: Dict[str, Any]) -> Dict[str, Any]:
 
 def save_strategy_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
     data = _load()
-    entry = {**draft, "id": draft.get("id") or str(uuid.uuid4())[:12], "createdAt": _now()}
+    entry = {
+        **draft,
+        "id": draft.get("id") or str(uuid.uuid4())[:12],
+        "createdAt": _now(),
+    }
     data.setdefault("strategy_drafts", []).append(entry)
     _save(data)
     log_research_event({"type": "strategy_draft", "draft_id": entry["id"]})
@@ -71,7 +81,11 @@ def save_strategy_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def list_strategy_drafts(*, limit: int = 50) -> List[Dict[str, Any]]:
-    rows = sorted(_load().get("strategy_drafts") or [], key=lambda r: r.get("createdAt", ""), reverse=True)
+    rows = sorted(
+        _load().get("strategy_drafts") or [],
+        key=lambda r: r.get("createdAt", ""),
+        reverse=True,
+    )
     return rows[:limit]
 
 
@@ -94,7 +108,11 @@ def save_backtest_run(run: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def list_backtest_runs(*, limit: int = 50) -> List[Dict[str, Any]]:
-    rows = sorted(_load().get("backtest_runs") or [], key=lambda r: r.get("createdAt", ""), reverse=True)
+    rows = sorted(
+        _load().get("backtest_runs") or [],
+        key=lambda r: r.get("createdAt", ""),
+        reverse=True,
+    )
     return rows[:limit]
 
 
@@ -110,13 +128,21 @@ def save_shadow_run(run: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def list_shadow_runs(*, limit: int = 30) -> List[Dict[str, Any]]:
-    rows = sorted(_load().get("shadow_runs") or [], key=lambda r: r.get("createdAt", ""), reverse=True)
+    rows = sorted(
+        _load().get("shadow_runs") or [],
+        key=lambda r: r.get("createdAt", ""),
+        reverse=True,
+    )
     return rows[:limit]
 
 
 def save_memory_item(item: Dict[str, Any]) -> Dict[str, Any]:
     data = _load()
-    entry = {**item, "id": item.get("id") or str(uuid.uuid4())[:12], "timestamp": _now()}
+    entry = {
+        **item,
+        "id": item.get("id") or str(uuid.uuid4())[:12],
+        "timestamp": _now(),
+    }
     data.setdefault("memory", []).append(entry)
     if len(data["memory"]) > 500:
         data["memory"] = data["memory"][-500:]
@@ -124,7 +150,9 @@ def save_memory_item(item: Dict[str, Any]) -> Dict[str, Any]:
     return entry
 
 
-def list_memory(*, limit: int = 100, item_type: Optional[str] = None) -> List[Dict[str, Any]]:
+def list_memory(
+    *, limit: int = 100, item_type: Optional[str] = None
+) -> List[Dict[str, Any]]:
     rows = _load().get("memory") or []
     if item_type:
         rows = [r for r in rows if str(r.get("type") or "") == item_type]
@@ -134,7 +162,11 @@ def list_memory(*, limit: int = 100, item_type: Optional[str] = None) -> List[Di
 
 def save_report(report: Dict[str, Any]) -> Dict[str, Any]:
     data = _load()
-    entry = {**report, "id": report.get("id") or str(uuid.uuid4())[:12], "createdAt": _now()}
+    entry = {
+        **report,
+        "id": report.get("id") or str(uuid.uuid4())[:12],
+        "createdAt": _now(),
+    }
     data.setdefault("reports", []).append(entry)
     if len(data["reports"]) > 200:
         data["reports"] = data["reports"][-200:]
@@ -144,7 +176,9 @@ def save_report(report: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def list_reports(*, limit: int = 50) -> List[Dict[str, Any]]:
-    rows = sorted(_load().get("reports") or [], key=lambda r: r.get("createdAt", ""), reverse=True)
+    rows = sorted(
+        _load().get("reports") or [], key=lambda r: r.get("createdAt", ""), reverse=True
+    )
     return rows[:limit]
 
 

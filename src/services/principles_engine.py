@@ -47,8 +47,7 @@ def classify_truth_integrity(row: Dict[str, Any]) -> Dict[str, Any]:
     freshness = str(row.get("data_freshness") or row.get("freshness") or "").lower()
     cal_n = int(row.get("calibration_n") or row.get("sample_count") or 0)
     has_levels = bool(
-        float(row.get("entry_price") or 0) > 0
-        or float(row.get("stop_price") or 0) > 0
+        float(row.get("entry_price") or 0) > 0 or float(row.get("stop_price") or 0) > 0
     )
 
     if data_conf >= 0.65 and freshness in ("fresh", "real_time", "live"):
@@ -93,7 +92,7 @@ def score_evidence_weight(row: Dict[str, Any]) -> Dict[str, Any]:
     cal_avail = cal_n >= 30
     exec_ready = bool(row.get("execution_ready"))
 
-    believability = (thesis * 0.4 + timing * 0.25 + data * 0.35)
+    believability = thesis * 0.4 + timing * 0.25 + data * 0.35
     if cal_avail:
         believability = min(1.0, believability + 0.08)
     if exec_ready and thesis >= 0.6:
@@ -247,7 +246,12 @@ def evaluate_decision_posture(
     tradeability: str = "",
 ) -> Dict[str, Any]:
     """Principle-based allowed / deferred / blocked — aligns with honest gates."""
-    tb = (tradeability or row.get("tradeability") or row.get("honest_tradeability") or "WAIT").upper()
+    tb = (
+        tradeability
+        or row.get("tradeability")
+        or row.get("honest_tradeability")
+        or "WAIT"
+    ).upper()
     truth = classify_truth_integrity(row)
     evidence = score_evidence_weight(row)
     quality = evaluate_decision_quality_principles(row, tradeability=tb)
@@ -266,7 +270,11 @@ def evaluate_decision_posture(
     if blocked_reasons:
         posture: DecisionPosture = "blocked"
         headline = "Action blocked by principle — " + blocked_reasons[0]
-    elif tb in ("TRADE", "SELECTIVE", "STRONG_TRADE") and act in ("TRADE", "BUY", "PILOT"):
+    elif tb in ("TRADE", "SELECTIVE", "STRONG_TRADE") and act in (
+        "TRADE",
+        "BUY",
+        "PILOT",
+    ):
         if quality["grade"] in ("A", "B") and evidence["tier"] in ("high", "medium"):
             posture = "allowed"
             headline = "Principle path open — process and evidence align with gate"
@@ -278,7 +286,9 @@ def evaluate_decision_posture(
         headline = "Deferred — research or pilot until principle checklist passes"
     else:
         posture = "blocked" if blocked_reasons else "deferred"
-        headline = blocked_reasons[0] if blocked_reasons else "Deferred — no deploy path"
+        headline = (
+            blocked_reasons[0] if blocked_reasons else "Deferred — no deploy path"
+        )
 
     principle_tags: List[str] = []
     if truth["integrity"] != "fact":
@@ -294,8 +304,14 @@ def evaluate_decision_posture(
         "headline": headline,
         "blocked_reasons": blocked_reasons[:3],
         "principle_tags": principle_tags[:4],
-        "principle_support": "strong" if posture == "allowed" else "weak" if posture == "blocked" else "partial",
-        "governing_principle": _GOVERNING_BY_TRADEABILITY.get(tb, "process_over_outcome"),
+        "principle_support": "strong"
+        if posture == "allowed"
+        else "weak"
+        if posture == "blocked"
+        else "partial",
+        "governing_principle": _GOVERNING_BY_TRADEABILITY.get(
+            tb, "process_over_outcome"
+        ),
         "truth_integrity": truth["integrity"],
         "evidence_quality": evidence["tier"],
         "decision_grade": quality["grade"],
@@ -421,7 +437,9 @@ def principles_posture_for_today(
         banner = "Radical transparency: refresh facts before sizing"
     elif deployable_count > 0 and allowed_count > 0:
         action_blocked = False
-        headline = f"Principle path open for {allowed_count} name(s) — believability-weighted"
+        headline = (
+            f"Principle path open for {allowed_count} name(s) — believability-weighted"
+        )
         banner = "Machine consistency — act only where process grade and evidence align"
     elif deployable_count > 0:
         action_blocked = True

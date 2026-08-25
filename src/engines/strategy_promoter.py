@@ -16,6 +16,7 @@ Promotion gates (all must pass):
 This replaces the old "optimizer picks → goes live" flow with a
 proper quant promotion pipeline.
 """
+
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -29,11 +30,11 @@ class PromotionResult:
 
     strategy_name: str
     promoted: bool
-    stage1_score: float = 0.0          # optimizer composite
+    stage1_score: float = 0.0  # optimizer composite
     stage2_passed: bool = False
 
     # Gate results
-    alpha: Optional[float] = None       # vs SPY
+    alpha: Optional[float] = None  # vs SPY
     cvar_95: Optional[float] = None
     max_drawdown: Optional[float] = None
     profit_factor: Optional[float] = None
@@ -51,7 +52,9 @@ class PromotionResult:
             f"  Stage-1 score: {self.stage1_score:.1f}",
             f"  Alpha: {self.alpha:.2%}" if self.alpha is not None else "",
             f"  CVaR-95: {self.cvar_95:.2%}" if self.cvar_95 is not None else "",
-            f"  Max DD: {self.max_drawdown:.2%}" if self.max_drawdown is not None else "",
+            f"  Max DD: {self.max_drawdown:.2%}"
+            if self.max_drawdown is not None
+            else "",
             f"  PF: {self.profit_factor:.2f}" if self.profit_factor is not None else "",
             f"  Sharpe: {self.sharpe:.2f}" if self.sharpe is not None else "",
             f"  Trades: {self.total_trades}",
@@ -59,7 +62,7 @@ class PromotionResult:
         ]
         if self.rejections:
             lines.append(f"  Reasons: {'; '.join(self.rejections)}")
-        return "\n".join(l for l in lines if l)
+        return "\n".join(line for line in lines if line)
 
 
 class StrategyPromoter:
@@ -77,13 +80,13 @@ class StrategyPromoter:
 
     # Configurable promotion gates
     DEFAULT_GATES = {
-        "min_alpha": 0.0,           # must beat SPY (positive alpha)
-        "min_cvar_95": -0.03,       # CVaR-95 floor (daily)
-        "max_drawdown": -0.15,      # max 15% drawdown
-        "min_profit_factor": 1.2,   # slippage-adjusted PF
-        "min_sharpe": 0.5,          # minimum Sharpe ratio
-        "min_trades": 10,           # statistical significance
-        "min_stage1_score": 40.0,   # optimizer composite gate
+        "min_alpha": 0.0,  # must beat SPY (positive alpha)
+        "min_cvar_95": -0.03,  # CVaR-95 floor (daily)
+        "max_drawdown": -0.15,  # max 15% drawdown
+        "min_profit_factor": 1.2,  # slippage-adjusted PF
+        "min_sharpe": 0.5,  # minimum Sharpe ratio
+        "min_trades": 10,  # statistical significance
+        "min_stage1_score": 40.0,  # optimizer composite gate
     }
 
     def __init__(
@@ -120,83 +123,56 @@ class StrategyPromoter:
         # Stage 1 gate
         if stage1_score < g["min_stage1_score"]:
             result.rejections.append(
-                f"Stage-1 score {stage1_score:.1f} < "
-                f"{g['min_stage1_score']}"
+                f"Stage-1 score {stage1_score:.1f} < {g['min_stage1_score']}"
             )
             return result
 
         # Stage 2 requires a backtest result
         if backtest_result is None:
-            result.rejections.append(
-                "No Stage-2 backtest result provided"
-            )
+            result.rejections.append("No Stage-2 backtest result provided")
             return result
 
         result.stage2_passed = True
 
         # Extract metrics from BacktestResult
-        result.alpha = getattr(
-            backtest_result, "alpha", None
-        )
-        result.cvar_95 = getattr(
-            backtest_result, "cvar_95", None
-        )
-        result.max_drawdown = getattr(
-            backtest_result, "max_drawdown", None
-        )
-        result.profit_factor = getattr(
-            backtest_result, "profit_factor", None
-        )
-        result.sharpe = getattr(
-            backtest_result, "sharpe_ratio", None
-        )
-        result.total_trades = getattr(
-            backtest_result, "total_trades", 0
-        )
-        result.avg_slippage_bps = getattr(
-            backtest_result, "avg_slippage_bps", 0.0
-        )
+        result.alpha = getattr(backtest_result, "alpha", None)
+        result.cvar_95 = getattr(backtest_result, "cvar_95", None)
+        result.max_drawdown = getattr(backtest_result, "max_drawdown", None)
+        result.profit_factor = getattr(backtest_result, "profit_factor", None)
+        result.sharpe = getattr(backtest_result, "sharpe_ratio", None)
+        result.total_trades = getattr(backtest_result, "total_trades", 0)
+        result.avg_slippage_bps = getattr(backtest_result, "avg_slippage_bps", 0.0)
 
         # Gate checks
         if result.total_trades < g["min_trades"]:
             result.rejections.append(
-                f"Only {result.total_trades} trades "
-                f"(need {g['min_trades']})"
+                f"Only {result.total_trades} trades (need {g['min_trades']})"
             )
 
-        if (result.alpha is not None
-                and result.alpha < g["min_alpha"]):
+        if result.alpha is not None and result.alpha < g["min_alpha"]:
+            result.rejections.append(f"Alpha {result.alpha:.2%} < {g['min_alpha']:.2%}")
+
+        if result.cvar_95 is not None and result.cvar_95 < g["min_cvar_95"]:
             result.rejections.append(
-                f"Alpha {result.alpha:.2%} < "
-                f"{g['min_alpha']:.2%}"
+                f"CVaR-95 {result.cvar_95:.2%} < {g['min_cvar_95']:.2%}"
             )
 
-        if (result.cvar_95 is not None
-                and result.cvar_95 < g["min_cvar_95"]):
+        if result.max_drawdown is not None and result.max_drawdown < g["max_drawdown"]:
             result.rejections.append(
-                f"CVaR-95 {result.cvar_95:.2%} < "
-                f"{g['min_cvar_95']:.2%}"
+                f"Max DD {result.max_drawdown:.2%} < {g['max_drawdown']:.2%}"
             )
 
-        if (result.max_drawdown is not None
-                and result.max_drawdown < g["max_drawdown"]):
+        if (
+            result.profit_factor is not None
+            and result.profit_factor < g["min_profit_factor"]
+        ):
             result.rejections.append(
-                f"Max DD {result.max_drawdown:.2%} < "
-                f"{g['max_drawdown']:.2%}"
+                f"PF {result.profit_factor:.2f} < {g['min_profit_factor']:.2f}"
             )
 
-        if (result.profit_factor is not None
-                and result.profit_factor < g["min_profit_factor"]):
+        if result.sharpe is not None and result.sharpe < g["min_sharpe"]:
             result.rejections.append(
-                f"PF {result.profit_factor:.2f} < "
-                f"{g['min_profit_factor']:.2f}"
-            )
-
-        if (result.sharpe is not None
-                and result.sharpe < g["min_sharpe"]):
-            result.rejections.append(
-                f"Sharpe {result.sharpe:.2f} < "
-                f"{g['min_sharpe']:.2f}"
+                f"Sharpe {result.sharpe:.2f} < {g['min_sharpe']:.2f}"
             )
 
         # Promoted if no rejections
@@ -227,20 +203,23 @@ class StrategyPromoter:
             results.append(r)
 
         results.sort(
-            key=lambda x: x.stage1_score, reverse=True,
+            key=lambda x: x.stage1_score,
+            reverse=True,
         )
         promoted = [r for r in results if r.promoted]
         rejected = [r for r in results if not r.promoted]
 
         logger.info(
-            "Strategy promotion: %d/%d promoted, "
-            "%d rejected",
-            len(promoted), len(results), len(rejected),
+            "Strategy promotion: %d/%d promoted, %d rejected",
+            len(promoted),
+            len(results),
+            len(rejected),
         )
         for r in rejected:
             logger.info(
                 "  Rejected %s: %s",
-                r.strategy_name, "; ".join(r.rejections),
+                r.strategy_name,
+                "; ".join(r.rejections),
             )
 
         return results

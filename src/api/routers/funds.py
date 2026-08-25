@@ -13,6 +13,39 @@ from src.api.deps import sanitize_for_json
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/fund-lab", tags=["funds"])
+v7_router = APIRouter(prefix="/api/v7/funds", tags=["funds-v7"])
+
+
+def _known_fund_ids() -> set[str]:
+    from src.services.fund_lab_service import FundLabService
+
+    return set(FundLabService.FUND_UNIVERSES.keys())
+
+
+@v7_router.get("/{fund_id}/positions")
+async def fund_positions(fund_id: str) -> Dict[str, Any]:
+    """Open paper positions for one model fund sleeve."""
+    if fund_id not in _known_fund_ids():
+        return {"error": f"Unknown fund_id: {fund_id}"}
+    from src.services.fund_persistence import get_open_paper_positions
+
+    positions = get_open_paper_positions(fund_id)
+    return {
+        "fund_id": fund_id,
+        "positions": positions,
+        "open_positions": len(positions),
+    }
+
+
+@v7_router.get("/positions/all")
+async def all_fund_positions() -> Dict[str, Any]:
+    """All open paper positions across model fund sleeves."""
+    from src.services.fund_persistence import get_open_paper_positions
+
+    positions: list[Dict[str, Any]] = []
+    for fund_id in sorted(_known_fund_ids()):
+        positions.extend(get_open_paper_positions(fund_id))
+    return {"total_open": len(positions), "positions": positions}
 
 
 async def _build_payload(
@@ -194,9 +227,7 @@ async def fund_manager_console(
     period: str = Query(default="1y"),
 ) -> Dict[str, Any]:
     """PM fund operating console — allocation, monitor, comparison, execution."""
-    payload = await _build_payload(
-        request, benchmark=benchmark, period=period, top_n=5
-    )
+    payload = await _build_payload(request, benchmark=benchmark, period=period, top_n=5)
     return sanitize_for_json(payload.get("console") or payload)
 
 
@@ -207,9 +238,7 @@ async def model_fund_cards(
     period: str = Query(default="1y"),
 ) -> Dict[str, Any]:
     """Model fund cards only (lighter payload for dashboard strip)."""
-    payload = await _build_payload(
-        request, benchmark=benchmark, period=period, top_n=5
-    )
+    payload = await _build_payload(request, benchmark=benchmark, period=period, top_n=5)
     return sanitize_for_json(
         {
             "regime": payload["regime"],

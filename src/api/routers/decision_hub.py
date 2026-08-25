@@ -31,7 +31,9 @@ async def decision_hub(request: Request):
     payload = await build_decision_hub(request)
     out = sanitize_for_json(payload)
     today_cache = getattr(request.app.state, "today_v7_cache", None) or {}
-    if not today_cache and not (out.get("top_5") or out.get("decision_strip", {}).get("best_idea_now")):
+    if not today_cache and not (
+        out.get("top_5") or out.get("decision_strip", {}).get("best_idea_now")
+    ):
         if _CACHE and now - _CACHE_TS < _STALE_MAX:
             stale = dict(_CACHE)
             stale["warming"] = True

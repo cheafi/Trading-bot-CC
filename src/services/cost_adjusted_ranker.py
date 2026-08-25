@@ -9,11 +9,11 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from src.services.cost_adjusted_edge import compute_net_edge, infer_burdens_from_row
-from src.services.strategy_validity import resolve_strategy_decay_line
 from src.services.signal_provenance import (
     SIGNAL_COST_RANK,
     build_provenance_envelope,
 )
+from src.services.strategy_validity import resolve_strategy_decay_line
 
 try:
     from src.services.index_relative_leadership import leadership_from_row
@@ -92,7 +92,11 @@ def rank_single_row(
         "cost_rank_blocked_on_wait": tb == "WAIT",
     }
     if tb == "WAIT":
-        out["action"] = row.get("action") if row.get("action") not in ("TRADE", "BUY", "PILOT") else "WATCH"
+        out["action"] = (
+            row.get("action")
+            if row.get("action") not in ("TRADE", "BUY", "PILOT")
+            else "WATCH"
+        )
     decay_line = resolve_strategy_decay_line(out)
     if decay_line:
         out["strategy_decay_line"] = decay_line
@@ -174,7 +178,9 @@ def enrich_opportunity_rows(
     """Rank + index intel enrichment for playbook rows."""
     ranked = rank_opportunity_rows(rows, tradeability=tradeability)
     return [
-        enrich_row_with_index_intel(r, index_regime=index_regime, tradeability=tradeability)
+        enrich_row_with_index_intel(
+            r, index_regime=index_regime, tradeability=tradeability
+        )
         for r in ranked
     ]
 

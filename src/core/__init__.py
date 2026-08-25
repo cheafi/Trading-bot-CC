@@ -17,15 +17,30 @@ from src.core.config import (  # noqa: F401 — always fast
 def __getattr__(name: str):
     """Lazy-import models on first access (avoids 250s pydantic load)."""
     _MODEL_NAMES = {
-        "OHLCV", "BacktestResult", "BacktestTrade", "CalendarEvent",
-        "DailyReport", "Direction", "Horizon", "MarketBreadth",
-        "MarketRegime", "MarketSnapshot", "NewsArticle", "Quote",
-        "RiskRegime", "Signal", "SignalStatus", "SocialPost",
-        "StopType", "TechnicalFeatures", "TrendRegime",
+        "OHLCV",
+        "BacktestResult",
+        "BacktestTrade",
+        "CalendarEvent",
+        "DailyReport",
+        "Direction",
+        "Horizon",
+        "MarketBreadth",
+        "MarketRegime",
+        "MarketSnapshot",
+        "NewsArticle",
+        "Quote",
+        "RiskRegime",
+        "Signal",
+        "SignalStatus",
+        "SocialPost",
+        "StopType",
+        "TechnicalFeatures",
+        "TrendRegime",
         "VolatilityRegime",
     }
     if name in _MODEL_NAMES:
         import importlib
+
         mod = importlib.import_module("src.core.models")
         return getattr(mod, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

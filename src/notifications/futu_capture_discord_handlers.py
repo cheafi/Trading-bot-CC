@@ -34,10 +34,17 @@ def register_futu_capture_handlers(
         target_channel = os.getenv("DISCORD_FUTU_CAPTURE_CHANNEL", "").strip().lower()
         if target_channel:
             ch_name = (message.channel.name or "").lower()
-            if target_channel not in ch_name and str(message.channel.id) != target_channel:
+            if (
+                target_channel not in ch_name
+                and str(message.channel.id) != target_channel
+            ):
                 return
         img = next(
-            (a for a in message.attachments if (a.content_type or "").startswith("image/")),
+            (
+                a
+                for a in message.attachments
+                if (a.content_type or "").startswith("image/")
+            ),
             None,
         )
         if not img:
@@ -162,9 +169,13 @@ def register_futu_capture_handlers(
                     inline=True,
                 )
             if adv.get("summary_en"):
-                e.add_field(name="AI · EN", value=adv["summary_en"][:1024], inline=False)
+                e.add_field(
+                    name="AI · EN", value=adv["summary_en"][:1024], inline=False
+                )
             if adv.get("summary_zh"):
-                e.add_field(name="AI · 繁中", value=adv["summary_zh"][:1024], inline=False)
+                e.add_field(
+                    name="AI · 繁中", value=adv["summary_zh"][:1024], inline=False
+                )
             e.set_footer(text="Advisory only — human approval required")
             await interaction.followup.send(embed=e)
         except Exception as exc:

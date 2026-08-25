@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 class ScannerAction(str, Enum):
     """Recommended actions for scanner results."""
+
     BUY = "BUY"
     SELL = "SELL"
     TRIM = "TRIM"
@@ -35,6 +36,7 @@ class ScannerAction(str, Enum):
 
 class EvidenceType(str, Enum):
     """Types of supporting evidence."""
+
     PATTERN_DETECTED = "pattern_detected"
     CATALYST_CONFIRMED = "catalyst_confirmed"
     TECHNICAL_TRIGGER = "technical_trigger"
@@ -50,6 +52,7 @@ class EvidenceType(str, Enum):
 @dataclass
 class Evidence:
     """A single piece of supporting evidence."""
+
     evidence_type: EvidenceType
     description: str
     strength: float = 0.0  # 0–1
@@ -67,6 +70,7 @@ class Evidence:
 @dataclass
 class NextStepTrigger:
     """Clear next-step trigger for the recommendation."""
+
     trigger_type: str = ""  # "price_level", "date", "earnings", "regime_change"
     description: str = ""
     trigger_value: str = ""
@@ -84,6 +88,7 @@ class NextStepTrigger:
 @dataclass
 class ActionableResult:
     """A single actionable scanner result."""
+
     ticker: str
     action: ScannerAction
     confidence: float = 0.0  # 0–100
@@ -121,7 +126,8 @@ class ActionableResult:
             "confidence": round(self.confidence, 1),
             "calibrated_confidence": (
                 round(self.calibrated_confidence, 1)
-                if self.calibrated_confidence is not None else None
+                if self.calibrated_confidence is not None
+                else None
             ),
             "evidence": [e.to_dict() for e in self.evidence],
             "next_step": self.next_step.to_dict() if self.next_step else None,
@@ -136,7 +142,8 @@ class ActionableResult:
             "position_size_suggestion": self.position_size_suggestion,
             "historical_accuracy": (
                 round(self.historical_accuracy, 3)
-                if self.historical_accuracy is not None else None
+                if self.historical_accuracy is not None
+                else None
             ),
             "historical_sample_size": self.historical_sample_size,
         }
@@ -145,6 +152,7 @@ class ActionableResult:
 @dataclass
 class ActionableScannerOutput:
     """Complete output from an actionable scanner run."""
+
     scanner_name: str = ""
     run_at: str = ""
     total_scanned: int = 0
@@ -276,9 +284,7 @@ class ActionableScannerEngine:
 
         return result
 
-    def _determine_action(
-        self, raw: Dict[str, Any]
-    ) -> Optional[ScannerAction]:
+    def _determine_action(self, raw: Dict[str, Any]) -> Optional[ScannerAction]:
         """Determine the recommended action from raw data."""
         # Explicit action field
         action_str = raw.get("action", "").upper()
@@ -320,72 +326,88 @@ class ActionableScannerEngine:
         # Pattern detection
         pattern = raw.get("pattern") or raw.get("pattern_detected")
         if pattern:
-            evidence.append(Evidence(
-                evidence_type=EvidenceType.PATTERN_DETECTED,
-                description=f"Pattern: {pattern}",
-                strength=raw.get("pattern_strength", 0.7),
-                source="pattern_scanner",
-            ))
+            evidence.append(
+                Evidence(
+                    evidence_type=EvidenceType.PATTERN_DETECTED,
+                    description=f"Pattern: {pattern}",
+                    strength=raw.get("pattern_strength", 0.7),
+                    source="pattern_scanner",
+                )
+            )
 
         # Technical trigger
         triggers = raw.get("triggers", [])
         if isinstance(triggers, list):
             for t in triggers:
                 if isinstance(t, str):
-                    evidence.append(Evidence(
-                        evidence_type=EvidenceType.TECHNICAL_TRIGGER,
-                        description=t,
-                        strength=0.7,
-                    ))
+                    evidence.append(
+                        Evidence(
+                            evidence_type=EvidenceType.TECHNICAL_TRIGGER,
+                            description=t,
+                            strength=0.7,
+                        )
+                    )
                 elif isinstance(t, dict):
-                    evidence.append(Evidence(
-                        evidence_type=EvidenceType.TECHNICAL_TRIGGER,
-                        description=t.get("description", str(t)),
-                        strength=t.get("strength", 0.7),
-                    ))
+                    evidence.append(
+                        Evidence(
+                            evidence_type=EvidenceType.TECHNICAL_TRIGGER,
+                            description=t.get("description", str(t)),
+                            strength=t.get("strength", 0.7),
+                        )
+                    )
 
         # Volume confirmation
         if raw.get("volume_confirmation") or raw.get("volume_surge"):
-            evidence.append(Evidence(
-                evidence_type=EvidenceType.VOLUME_CONFIRMATION,
-                description="Volume confirms price action",
-                strength=0.8,
-            ))
+            evidence.append(
+                Evidence(
+                    evidence_type=EvidenceType.VOLUME_CONFIRMATION,
+                    description="Volume confirms price action",
+                    strength=0.8,
+                )
+            )
 
         # RS leadership
         rs = raw.get("relative_strength", raw.get("rs_rank"))
         if rs and (isinstance(rs, (int, float)) and rs > 0.7):
-            evidence.append(Evidence(
-                evidence_type=EvidenceType.RS_LEADERSHIP,
-                description=f"Relative strength: {rs:.2f}",
-                strength=min(rs, 1.0),
-            ))
+            evidence.append(
+                Evidence(
+                    evidence_type=EvidenceType.RS_LEADERSHIP,
+                    description=f"Relative strength: {rs:.2f}",
+                    strength=min(rs, 1.0),
+                )
+            )
 
         # Catalyst
         catalyst = raw.get("catalyst")
         if catalyst:
-            evidence.append(Evidence(
-                evidence_type=EvidenceType.CATALYST_CONFIRMED,
-                description=str(catalyst),
-                strength=raw.get("catalyst_strength", 0.8),
-            ))
+            evidence.append(
+                Evidence(
+                    evidence_type=EvidenceType.CATALYST_CONFIRMED,
+                    description=str(catalyst),
+                    strength=raw.get("catalyst_strength", 0.8),
+                )
+            )
 
         # Fundamental shift
         fund_change = raw.get("fundamental_shift")
         if fund_change:
-            evidence.append(Evidence(
-                evidence_type=EvidenceType.FUNDAMENTAL_SHIFT,
-                description=str(fund_change),
-                strength=0.7,
-            ))
+            evidence.append(
+                Evidence(
+                    evidence_type=EvidenceType.FUNDAMENTAL_SHIFT,
+                    description=str(fund_change),
+                    strength=0.7,
+                )
+            )
 
         # Regime alignment
         if raw.get("regime_aligned") or raw.get("trend_aligned"):
-            evidence.append(Evidence(
-                evidence_type=EvidenceType.REGIME_ALIGNMENT,
-                description="Signal aligned with current regime",
-                strength=0.6,
-            ))
+            evidence.append(
+                Evidence(
+                    evidence_type=EvidenceType.REGIME_ALIGNMENT,
+                    description="Signal aligned with current regime",
+                    strength=0.6,
+                )
+            )
 
         return evidence
 

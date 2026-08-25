@@ -258,9 +258,7 @@ def build_ibkr_diagnosis(
     meta = dict(_MESSAGES.get(code, _MESSAGES[DIAG_API_PORT_UNREACHABLE]))
     if mode_mismatch and code == DIAG_MODE_PORT_MISMATCH:
         meta["label"] = f"Port mismatch — {mode_mismatch}"
-        meta["hint"] = (
-            f"{meta['hint']} Detected: {mode_mismatch} on {host}."
-        )
+        meta["hint"] = f"{meta['hint']} Detected: {mode_mismatch} on {host}."
     if err_detail and code in (
         DIAG_HANDSHAKE_INCOMPLETE,
         DIAG_CLIENT_ID_IN_USE,

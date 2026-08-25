@@ -8,8 +8,7 @@ from typing import Any, Dict, List
 logger = logging.getLogger(__name__)
 
 _AUTHORITY_NOTE = (
-    "Advisory only — ML insights do not grant deploy authority. "
-    "研究/監控參考 only."
+    "Advisory only — ML insights do not grant deploy authority. 研究/監控參考 only."
 )
 
 
@@ -89,5 +88,7 @@ def build_ml_advisory_summary() -> Dict[str, Any]:
         logger.debug("ml_advisory thompson failed", exc_info=True)
 
     payload["lines"] = lines[:5]
-    payload["status"] = "active" if payload["active"] else ("warming" if lines else "inactive")
+    payload["status"] = (
+        "active" if payload["active"] else ("warming" if lines else "inactive")
+    )
     return payload

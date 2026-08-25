@@ -6,7 +6,7 @@ Breakout + ATR risk + pyramiding discipline; losses cut, winners run.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from src.utils.numeric_parse import coerce_float
 
@@ -75,7 +75,9 @@ def evaluate_turtle_setup(
     }
 
 
-def tags_for_playbook_row(row: Dict[str, Any], *, tradeability: str = "") -> Dict[str, Any]:
+def tags_for_playbook_row(
+    row: Dict[str, Any], *, tradeability: str = ""
+) -> Dict[str, Any]:
     t = evaluate_turtle_setup(row, tradeability=tradeability)
     return {
         "turtle_tag": t["headline"],

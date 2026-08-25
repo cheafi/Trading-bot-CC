@@ -14,18 +14,20 @@ Each engine has a well-defined interface:
   - CalibrationInterface: calibrates confidence
   - MetaLabelInterface: go/no-go decisions
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-
 # ── Alpha Layer ───────────────────────────────────────────────
+
 
 @dataclass
 class AlphaSignal:
     """Standardized signal output from any alpha engine."""
+
     ticker: str
     direction: str  # LONG / SHORT
     score: float  # 0-100
@@ -42,9 +44,7 @@ class AlphaEngine(ABC):
     """Interface for any signal-generating engine."""
 
     @abstractmethod
-    def generate_signals(
-        self, universe: List[str], **kwargs: Any
-    ) -> List[AlphaSignal]:
+    def generate_signals(self, universe: List[str], **kwargs: Any) -> List[AlphaSignal]:
         """Generate ranked trade ideas."""
         ...
 
@@ -56,9 +56,11 @@ class AlphaEngine(ABC):
 
 # ── Portfolio Construction Layer ──────────────────────────────
 
+
 @dataclass
 class PortfolioTarget:
     """Target position from portfolio construction."""
+
     ticker: str
     direction: str
     weight_pct: float
@@ -82,9 +84,11 @@ class PortfolioEngine(ABC):
 
 # ── Risk Layer ────────────────────────────────────────────────
 
+
 @dataclass
 class RiskVerdict:
     """Risk engine output for a proposed trade."""
+
     approved: bool
     throttle_state: str = "normal"
     size_multiplier: float = 1.0
@@ -118,9 +122,11 @@ class RiskEngine(ABC):
 
 # ── Execution Layer ───────────────────────────────────────────
 
+
 @dataclass
 class OrderRequest:
     """Standardized order request."""
+
     ticker: str
     direction: str  # BUY / SELL
     quantity: int
@@ -132,6 +138,7 @@ class OrderRequest:
 @dataclass
 class OrderResult:
     """Execution result."""
+
     order_id: str
     status: str  # filled / partial / rejected
     filled_quantity: int = 0
@@ -143,9 +150,7 @@ class ExecutionEngine(ABC):
     """Interface for order routing and execution."""
 
     @abstractmethod
-    async def submit_order(
-        self, order: OrderRequest
-    ) -> OrderResult:
+    async def submit_order(self, order: OrderRequest) -> OrderResult:
         """Submit order to broker."""
         ...
 
@@ -162,25 +167,23 @@ class ExecutionEngine(ABC):
 
 # ── Calibration Interface ─────────────────────────────────────
 
+
 class CalibrationInterface(ABC):
     """Interface for confidence calibration."""
 
     @abstractmethod
-    def calibrate(
-        self, raw_confidence: float, regime: str
-    ) -> float:
+    def calibrate(self, raw_confidence: float, regime: str) -> float:
         """Return calibrated probability."""
         ...
 
     @abstractmethod
-    def reliability_bucket(
-        self, calibrated_prob: float
-    ) -> str:
+    def reliability_bucket(self, calibrated_prob: float) -> str:
         """Return reliability bucket label."""
         ...
 
 
 # ── Meta-Label Interface ──────────────────────────────────────
+
 
 class MetaLabelInterface(ABC):
     """Interface for go/no-go trade decisions."""

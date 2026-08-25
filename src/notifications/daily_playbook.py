@@ -32,6 +32,7 @@ Format:
   │   Focus: momentum + breakout   │
   └─────────────────────────────────┘
 """
+
 from __future__ import annotations
 
 import logging
@@ -45,6 +46,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PlaybookSetup:
     """A single setup in the playbook."""
+
     ticker: str
     strategy: str = ""
     confidence: float = 0.0
@@ -70,6 +72,7 @@ class PlaybookSetup:
 @dataclass
 class PlaybookCard:
     """Complete daily playbook."""
+
     date: str = ""
     regime_label: str = ""
     should_trade: bool = True
@@ -99,13 +102,12 @@ class PlaybookCard:
             "should_trade": self.should_trade,
             "vix": round(self.vix, 1),
             "futures_pct": round(self.futures_pct, 2),
-            "top_setups": [
-                s.to_dict() for s in self.top_setups
-            ],
+            "top_setups": [s.to_dict() for s in self.top_setups],
             "watch_list": self.watch_list,
             "max_new_positions": self.max_new_positions,
             "budget_remaining_pct": round(
-                self.budget_remaining_pct, 1,
+                self.budget_remaining_pct,
+                1,
             ),
             "focus_strategies": self.focus_strategies,
             "notes": self.notes,
@@ -118,24 +120,18 @@ class PlaybookCard:
             "\u2550" * 32,
         ]
         gate = "\U0001f7e2 OPEN" if self.should_trade else "\U0001f534 CLOSED"
-        lines.append(
-            f"Regime: {self.regime_label} \u2502 Gate: {gate}"
-        )
+        lines.append(f"Regime: {self.regime_label} \u2502 Gate: {gate}")
         if self.vix:
             lines.append(
-                f"VIX: {self.vix:.1f} \u2502 "
-                f"Futures: {self.futures_pct:+.2f}%"
+                f"VIX: {self.vix:.1f} \u2502 Futures: {self.futures_pct:+.2f}%"
             )
         lines.append("")
 
         if self.top_setups:
-            lines.append(
-                f"\U0001f3af Top Setups ({len(self.top_setups)})"
-            )
+            lines.append(f"\U0001f3af Top Setups ({len(self.top_setups)})")
             for i, s in enumerate(self.top_setups[:5], 1):
                 lines.append(
-                    f"  {i}. {s.ticker} \u2014 "
-                    f"{s.strategy}, {s.confidence:.0f}% conf"
+                    f"  {i}. {s.ticker} \u2014 {s.strategy}, {s.confidence:.0f}% conf"
                 )
                 if s.horizon:
                     lines[-1] += f" [{s.horizon}]"
@@ -144,24 +140,14 @@ class PlaybookCard:
         if self.watch_list:
             lines.append("\u26a0\ufe0f Watch List")
             for w in self.watch_list[:5]:
-                lines.append(
-                    f"  {w.get('ticker', '?')} \u2014 "
-                    f"{w.get('reason', '')}"
-                )
+                lines.append(f"  {w.get('ticker', '?')} \u2014 {w.get('reason', '')}")
             lines.append("")
 
         lines.append("\U0001f4ca Plan")
-        lines.append(
-            f"  Max new positions: {self.max_new_positions}"
-        )
-        lines.append(
-            f"  Budget remaining: "
-            f"{self.budget_remaining_pct:.0f}%"
-        )
+        lines.append(f"  Max new positions: {self.max_new_positions}")
+        lines.append(f"  Budget remaining: {self.budget_remaining_pct:.0f}%")
         if self.focus_strategies:
-            lines.append(
-                f"  Focus: {', '.join(self.focus_strategies)}"
-            )
+            lines.append(f"  Focus: {', '.join(self.focus_strategies)}")
         if self.notes:
             lines.append(f"  Note: {self.notes}")
 
@@ -201,7 +187,8 @@ class DailyPlaybookBuilder:
             date=now.strftime("%Y-%m-%d"),
             regime_label=regime_state.get("regime", "unknown"),
             should_trade=regime_state.get(
-                "should_trade", True,
+                "should_trade",
+                True,
             ),
             vix=mkt.get("vix", 0),
             futures_pct=mkt.get("sp500_futures_pct", 0),
@@ -210,18 +197,21 @@ class DailyPlaybookBuilder:
         # Top setups from recommendations
         for rec in recs[:5]:
             if rec.get("trade_decision", False):
-                card.top_setups.append(PlaybookSetup(
-                    ticker=rec.get("ticker", "?"),
-                    strategy=rec.get("strategy_id", ""),
-                    confidence=rec.get(
-                        "signal_confidence", 0,
-                    ),
-                    direction=rec.get("direction", "LONG"),
-                    entry_price=rec.get("entry_price", 0),
-                    stop_price=rec.get("stop_price", 0),
-                    why=rec.get("why_now", ""),
-                    horizon=rec.get("horizon", ""),
-                ))
+                card.top_setups.append(
+                    PlaybookSetup(
+                        ticker=rec.get("ticker", "?"),
+                        strategy=rec.get("strategy_id", ""),
+                        confidence=rec.get(
+                            "signal_confidence",
+                            0,
+                        ),
+                        direction=rec.get("direction", "LONG"),
+                        entry_price=rec.get("entry_price", 0),
+                        stop_price=rec.get("stop_price", 0),
+                        why=rec.get("why_now", ""),
+                        horizon=rec.get("horizon", ""),
+                    )
+                )
 
         # Watch list — recs that aren't trade_decision=True
         for rec in recs[:10]:
@@ -231,32 +221,40 @@ class DailyPlaybookBuilder:
                     rec.get("suppression_reason", ""),
                 )
                 if reason:
-                    card.watch_list.append({
-                        "ticker": rec.get("ticker", "?"),
-                        "reason": reason[:100],
-                    })
+                    card.watch_list.append(
+                        {
+                            "ticker": rec.get("ticker", "?"),
+                            "reason": reason[:100],
+                        }
+                    )
 
         # Budget
         card.budget_remaining_pct = budget.get(
-            "budget_remaining", 100,
+            "budget_remaining",
+            100,
         )
         card.max_new_positions = budget.get(
-            "max_positions", 3,
+            "max_positions",
+            3,
         ) - budget.get("open_positions", 0)
 
         # Focus strategies from regime
         regime = regime_state.get("regime", "")
         if "uptrend" in regime or "risk_on" in regime:
             card.focus_strategies = [
-                "momentum", "breakout", "trend_following",
+                "momentum",
+                "breakout",
+                "trend_following",
             ]
         elif "range" in regime or "neutral" in regime:
             card.focus_strategies = [
-                "mean_reversion", "swing",
+                "mean_reversion",
+                "swing",
             ]
         elif "risk_off" in regime or "crisis" in regime:
             card.focus_strategies = [
-                "defensive", "cash",
+                "defensive",
+                "cash",
             ]
             card.notes = "Reduce exposure. Protect capital."
         else:

@@ -28,7 +28,6 @@ Usage::
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import sqlite3
@@ -37,8 +36,6 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-
-from src.core.risk_limits import RISK
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +274,7 @@ class ExecutionCostEngine:
             slip_per_share = expected_price - fill_price
 
         slippage_usd = slip_per_share * shares
-        notional = expected_price * shares
+        expected_price * shares
         slippage_bps = (
             (slip_per_share / expected_price * 10000.0) if expected_price > 0 else 0.0
         )

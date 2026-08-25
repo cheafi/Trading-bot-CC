@@ -18,6 +18,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 
 from src.api.deps import sanitize_for_json, verify_api_key
+from src.services.ai_intelligence import build_ai_intelligence_for_today
 from src.services.capacity_intelligence import (
     build_capacity_context,
     build_sleeve_capacity,
@@ -29,10 +30,9 @@ from src.services.execution_analytics import build_execution_analytics
 from src.services.execution_tca import build_execution_tca_context
 from src.services.factor_exposure import build_factor_exposure
 from src.services.index_regime import build_index_regime_summary
-from src.services.ai_intelligence import build_ai_intelligence_for_today
 from src.services.strategy_allocator import build_allocator_context
-from src.services.strategy_curve_health import build_strategy_curve_context
 from src.services.strategy_curve_analytics import build_strategy_curve_analytics
+from src.services.strategy_curve_health import build_strategy_curve_context
 from src.services.strategy_validity import build_strategy_validity_context
 
 router = APIRouter(prefix="/api/v7/quant", tags=["quant-intelligence"])
@@ -54,7 +54,9 @@ async def quant_strategy_health(
 ):
     sym = _validate_ticker(ticker)
     return sanitize_for_json(
-        build_strategy_curve_context(sym, strategy_id=strategy_id or "momentum_breakout_v2")
+        build_strategy_curve_context(
+            sym, strategy_id=strategy_id or "momentum_breakout_v2"
+        )
     )
 
 
@@ -82,7 +84,9 @@ async def quant_execution_analytics(
     _=Depends(verify_api_key),
 ):
     return sanitize_for_json(
-        build_execution_analytics(ibkr_connected=ibkr_connected, degraded=not ibkr_connected)
+        build_execution_analytics(
+            ibkr_connected=ibkr_connected, degraded=not ibkr_connected
+        )
     )
 
 
@@ -226,23 +230,66 @@ async def quant_execution_tca(
     # Illustrative stub orders (epoch-ms timestamps, deterministic). Clearly
     # surfaced as degraded unless ibkr_connected is asserted by the caller.
     stub_orders = [
-        {"ticker": "AAPL", "side": "BUY", "algo": "vwap", "venue": "IBKR", "order_type": "LMT",
-         "session_minute": 15, "order_qty": 1000, "filled_qty": 1000, "arrival_price": 190.0,
-         "avg_fill_price": 190.12, "interval_vwap": 190.05, "midpoint_price": 190.0,
-         "ref_end_price": 190.5, "ts_signal": 0, "ts_send": 120, "ts_first_fill": 380,
-         "ts_final_fill": 900, "handoff_ok": True},
-        {"ticker": "NVDA", "side": "BUY", "algo": "twap", "venue": "IBKR", "order_type": "MKT",
-         "session_minute": 200, "order_qty": 500, "filled_qty": 450, "arrival_price": 120.0,
-         "avg_fill_price": 120.35, "interval_vwap": 120.1, "midpoint_price": 120.0,
-         "ref_end_price": 119.6, "ts_signal": 0, "ts_send": 90, "ts_first_fill": 250,
-         "ts_final_fill": 1500, "cancel_replace_count": 1, "handoff_ok": True},
-        {"ticker": "MSFT", "side": "SELL", "algo": "vwap", "venue": "IBKR", "order_type": "LMT",
-         "session_minute": 380, "order_qty": 800, "filled_qty": 0, "arrival_price": 410.0,
-         "avg_fill_price": None, "handoff_ok": False},
+        {
+            "ticker": "AAPL",
+            "side": "BUY",
+            "algo": "vwap",
+            "venue": "IBKR",
+            "order_type": "LMT",
+            "session_minute": 15,
+            "order_qty": 1000,
+            "filled_qty": 1000,
+            "arrival_price": 190.0,
+            "avg_fill_price": 190.12,
+            "interval_vwap": 190.05,
+            "midpoint_price": 190.0,
+            "ref_end_price": 190.5,
+            "ts_signal": 0,
+            "ts_send": 120,
+            "ts_first_fill": 380,
+            "ts_final_fill": 900,
+            "handoff_ok": True,
+        },
+        {
+            "ticker": "NVDA",
+            "side": "BUY",
+            "algo": "twap",
+            "venue": "IBKR",
+            "order_type": "MKT",
+            "session_minute": 200,
+            "order_qty": 500,
+            "filled_qty": 450,
+            "arrival_price": 120.0,
+            "avg_fill_price": 120.35,
+            "interval_vwap": 120.1,
+            "midpoint_price": 120.0,
+            "ref_end_price": 119.6,
+            "ts_signal": 0,
+            "ts_send": 90,
+            "ts_first_fill": 250,
+            "ts_final_fill": 1500,
+            "cancel_replace_count": 1,
+            "handoff_ok": True,
+        },
+        {
+            "ticker": "MSFT",
+            "side": "SELL",
+            "algo": "vwap",
+            "venue": "IBKR",
+            "order_type": "LMT",
+            "session_minute": 380,
+            "order_qty": 800,
+            "filled_qty": 0,
+            "arrival_price": 410.0,
+            "avg_fill_price": None,
+            "handoff_ok": False,
+        },
     ]
     return sanitize_for_json(
         build_execution_tca_context(
-            stub_orders, ibkr_connected=ibkr_connected, report_dimension=report_dimension
+            stub_orders,
+            ibkr_connected=ibkr_connected,
+            report_dimension=report_dimension,
         )
     )
 

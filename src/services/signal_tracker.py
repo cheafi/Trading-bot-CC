@@ -340,8 +340,12 @@ class SignalTracker:
                     "bucket": bucket,
                     "n_signals": len(items),
                     "n_closed": len(closed),
-                    "win_rate": round(len(winners) / len(closed), 4) if closed else None,
-                    "mean_fwd_20d": round(sum(fwd20) / len(fwd20), 4) if fwd20 else None,
+                    "win_rate": round(len(winners) / len(closed), 4)
+                    if closed
+                    else None,
+                    "mean_fwd_20d": round(sum(fwd20) / len(fwd20), 4)
+                    if fwd20
+                    else None,
                     "mean_mfe_pct": round(sum(mfes) / len(mfes), 4) if mfes else None,
                     "mean_mae_pct": round(sum(maes) / len(maes), 4) if maes else None,
                     "evidence_quality": _evidence_quality(len(closed), live=live),

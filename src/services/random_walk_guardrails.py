@@ -25,7 +25,9 @@ def _level_from_score(score: int, *, low: int = 35, high: int = 70) -> str:
     return "medium"
 
 
-def _data_completeness(layers: Dict[str, Any], module_errors: Dict[str, Any]) -> Dict[str, Any]:
+def _data_completeness(
+    layers: Dict[str, Any], module_errors: Dict[str, Any]
+) -> Dict[str, Any]:
     layer_count = len(layers or {})
     available = sum(1 for v in (layers or {}).values() if bool(v))
     ratio = (available / layer_count) if layer_count else 0.0
@@ -63,7 +65,9 @@ def build_random_walk_guardrails(
     thesis_quality = _clamp_0_100(confidence_metrics.get("thesis_quality"), default=55)
     timing_quality = _clamp_0_100(confidence_metrics.get("timing_quality"), default=50)
     rr_quality = _clamp_0_100(confidence_metrics.get("rr_quality"), default=50)
-    predictive_confidence = _clamp_0_100(conf_display.get("predictive_confidence"), default=50)
+    predictive_confidence = _clamp_0_100(
+        conf_display.get("predictive_confidence"), default=50
+    )
     evidence = _data_completeness(layers or {}, module_errors or {})
     net_edge = unified.get("net_deploy_score")
     try:

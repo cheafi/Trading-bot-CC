@@ -236,7 +236,9 @@ def build_ibkr_linkage(
     broker_connected = bool(execution.get("broker_connected"))
     mode = (execution.get("mode") or "manual").lower()
     src = (source or "manual").lower()
-    broker_positions = sum(1 for p in positions if (p.get("source") or "").lower() == "broker")
+    broker_positions = sum(
+        1 for p in positions if (p.get("source") or "").lower() == "broker"
+    )
     local_only = sum(
         1
         for p in positions
@@ -283,15 +285,14 @@ def build_ibkr_linkage(
         "local_only_banner": _LOCAL_ONLY_COPY if sync_quality == "local_only" else None,
         "broker_offline_banner": (
             _BROKER_OFFLINE_COPY
-            if sync_quality in ("local_only", "mixed_local_broker") and not broker_connected
+            if sync_quality in ("local_only", "mixed_local_broker")
+            and not broker_connected
             else _BROKER_OFFLINE_COPY
             if sync_quality == "local_only"
             else None
         ),
         "execution_warning": (
-            _BROKER_OFFLINE_COPY
-            if not (broker_connected and not local_only)
-            else None
+            _BROKER_OFFLINE_COPY if not (broker_connected and not local_only) else None
         ),
     }
 
@@ -378,7 +379,9 @@ def build_allocation_monitor(
                 "tier": tier,
                 "reason": reason,
                 "rationale": reason,
-                "policy_note": _ALLOC_MONITOR_COPY if current > max_single_pct else None,
+                "policy_note": _ALLOC_MONITOR_COPY
+                if current > max_single_pct
+                else None,
                 "trigger": (
                     f"Excess +{excess_pct:.1f}% vs {policy_pct:.0f}% cap"
                     if current > max_single_pct
@@ -391,9 +394,7 @@ def build_allocation_monitor(
                 "action_size_pct": round(action_size, 2) if action != "HOLD" else 0.0,
                 "recommended_action": action.replace(" URGENT", ""),
                 "estimated_trade_hint": (
-                    f"~{action_size:.1f}% of portfolio"
-                    if action != "HOLD"
-                    else "—"
+                    f"~{action_size:.1f}% of portfolio" if action != "HOLD" else "—"
                 ),
             }
         )
@@ -430,7 +431,11 @@ def build_return_attribution(positions: List[Dict[str, Any]]) -> Dict[str, Any]:
     contrib_return.sort(key=lambda x: -abs(x["contribution_pct"]))
     contrib_risk.sort(key=lambda x: -x["drawdown_contribution_proxy"])
     top = contrib_return[0] if contrib_return else None
-    drag = min(contrib_return, key=lambda x: x["contribution_pct"]) if contrib_return else None
+    drag = (
+        min(contrib_return, key=lambda x: x["contribution_pct"])
+        if contrib_return
+        else None
+    )
     return {
         "by_return": contrib_return,
         "by_risk": contrib_risk,
@@ -630,7 +635,10 @@ def build_action_needed(
                     "asset": row["asset"],
                 }
             )
-        elif row.get("priority") in ("high", "medium") and row.get("action_required") != "HOLD":
+        elif (
+            row.get("priority") in ("high", "medium")
+            and row.get("action_required") != "HOLD"
+        ):
             secondary.append(
                 {
                     "severity": "warning",
@@ -683,7 +691,11 @@ def build_allocator_summary(
     tradeability = regime.get("tradeability") or "WAIT"
 
     overweight = next(
-        (r for r in allocation_rows if str(r.get("action_required") or "").startswith("TRIM")),
+        (
+            r
+            for r in allocation_rows
+            if str(r.get("action_required") or "").startswith("TRIM")
+        ),
         None,
     )
     underweight = next(
@@ -713,13 +725,9 @@ def build_allocator_summary(
     deploy_posture = fund_allocator.get("deploy_posture")
     deploy_label = _format_deploy_label(deploy, deploy_posture)
     if overweight:
-        recommended_action = (
-            f"Trim {overweight['asset']} first — {overweight.get('reason', 'overweight')}"
-        )
+        recommended_action = f"Trim {overweight['asset']} first — {overweight.get('reason', 'overweight')}"
     elif underweight:
-        recommended_action = (
-            f"Add {underweight['asset']} first — {underweight.get('reason', 'underweight')}"
-        )
+        recommended_action = f"Add {underweight['asset']} first — {underweight.get('reason', 'underweight')}"
     elif deploy_label:
         recommended_action = deploy_label
     else:
@@ -767,7 +775,8 @@ def build_sleeve_monitor(fund_console: Dict[str, Any]) -> List[Dict[str, Any]]:
             else "PAPER"
             if "paper" in str(evidence_raw).lower()
             else "BACKTEST"
-            if "backtest" in str(evidence_raw).lower() or "train" in str(evidence_raw).lower()
+            if "backtest" in str(evidence_raw).lower()
+            or "train" in str(evidence_raw).lower()
             else "HEURISTIC"
             if "mixed" in str(evidence_raw).lower()
             else "BACKTEST"
@@ -779,7 +788,11 @@ def build_sleeve_monitor(fund_console: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "name": c.get("display_name"),
                 "status": gs.replace("_", " "),
                 "stance": c.get("stance") or mb.get("manager_state") or "—",
-                "action": "Deploy" if deployable else "Pause" if gs in ("PAUSED", "REDUCED") else "Monitor",
+                "action": "Deploy"
+                if deployable
+                else "Pause"
+                if gs in ("PAUSED", "REDUCED")
+                else "Monitor",
                 "why_now": c.get("stance") or mb.get("manager_state") or "—",
                 "why_not_full_size": (
                     c.get("status_reason")
@@ -797,8 +810,11 @@ def build_sleeve_monitor(fund_console: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "max_drawdown_pct": c.get("max_drawdown_pct"),
                 "next_trigger": mb.get("next_trigger"),
                 "reactivation_trigger": mb.get("next_trigger") or c.get("next_trigger"),
-                "paused_reason": c.get("status_reason") if gs in ("PAUSED", "REDUCED") else None,
-                "confidence": c.get("confidence") or ("high" if gs == "ACTIVE" else "low"),
+                "paused_reason": c.get("status_reason")
+                if gs in ("PAUSED", "REDUCED")
+                else None,
+                "confidence": c.get("confidence")
+                or ("high" if gs == "ACTIVE" else "low"),
                 "deployable_now": deployable,
                 "evidence_type": evidence_type,
                 "live_trade_count": c.get("live_trade_count") or 0,
@@ -880,11 +896,7 @@ def build_rebalance_panel(allocation_rows: List[Dict[str, Any]]) -> Dict[str, An
         for r in allocation_rows
         if str(r.get("action_required") or "").startswith("TRIM")
     ]
-    adds = [
-        r
-        for r in allocation_rows
-        if r.get("action_required") == "ADD"
-    ]
+    adds = [r for r in allocation_rows if r.get("action_required") == "ADD"]
     urgency_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     trims.sort(
         key=lambda x: (
@@ -1013,10 +1025,7 @@ def build_critical_risk_event(
         )
 
     collapse_sleeves = (
-        bool(breached)
-        or top_concentration_pct >= 50
-        or local_only
-        or broker_offline
+        bool(breached) or top_concentration_pct >= 50 or local_only or broker_offline
     )
     return {
         "active": True,
@@ -1098,7 +1107,9 @@ def build_do_now(
         )
 
     for row in allocation_rows:
-        if row.get("priority") == "critical" and str(row.get("action_required") or "").startswith("TRIM"):
+        if row.get("priority") == "critical" and str(
+            row.get("action_required") or ""
+        ).startswith("TRIM"):
             _add(
                 "Restore concentration",
                 f"{row['asset']}: trim toward {row.get('policy_max_pct', 12):.0f}% policy max "
@@ -1193,7 +1204,9 @@ def build_portfolio_action_now(
     )
 
     heat_label = "UNAVAILABLE"
-    if heat.get("heat_model") == "disabled_stop_breach" or heat.get("stop_breached_count"):
+    if heat.get("heat_model") == "disabled_stop_breach" or heat.get(
+        "stop_breached_count"
+    ):
         open_r = heat.get("post_breach_open_r")
         r_suffix = f" · {open_r:+.2f}R open" if open_r else ""
         heat_label = f"POST-BREACH{r_suffix}"
@@ -1212,7 +1225,9 @@ def build_portfolio_action_now(
         metrics_incomplete.append("portfolio heat (stop breached — planned risk N/A)")
     else:
         metrics_incomplete.append("portfolio heat (stop anchors missing)")
-    if ibkr_linkage.get("broker_truth") or ibkr_linkage.get("source_pill", "").startswith("IBKR"):
+    if ibkr_linkage.get("broker_truth") or ibkr_linkage.get(
+        "source_pill", ""
+    ).startswith("IBKR"):
         metrics_real.append("broker positions")
     else:
         metrics_incomplete.append("broker sync")
@@ -1221,9 +1236,7 @@ def build_portfolio_action_now(
     adds = rebalance_panel.get("top_adds") or []
     hedges = risk_cockpit.get("risk_reduction_actions") or []
     hold_rows = [
-        row
-        for row in (allocation_rows or [])
-        if row.get("action_required") == "HOLD"
+        row for row in (allocation_rows or []) if row.get("action_required") == "HOLD"
     ]
     hold_rows.sort(key=lambda x: -float(x.get("current_weight_pct") or 0))
     holds = [
@@ -1340,7 +1353,9 @@ async def build_portfolio_decision(request) -> Dict[str, Any]:
         "total_positions": len(positions),
         "total_value": round(total, 2),
         "total_pnl_pct": round(
-            sum(float(p.get("pnl_pct") or 0) * (float(p.get("market_value") or 0) / total)
+            sum(
+                float(p.get("pnl_pct") or 0)
+                * (float(p.get("market_value") or 0) / total)
                 if total
                 else 0
                 for p in positions
@@ -1466,7 +1481,11 @@ async def build_portfolio_decision(request) -> Dict[str, Any]:
     rebalance_sim = simulate_rebalance(positions)
     monitor_alerts = evaluate_monitors(today=today, positions=positions)
 
-    brinson = curve_diagnostics.get("brinson") if isinstance(curve_diagnostics, dict) else None
+    brinson = (
+        curve_diagnostics.get("brinson")
+        if isinstance(curve_diagnostics, dict)
+        else None
+    )
     if isinstance(brinson, dict):
         brinson = _sanitize_brinson(
             {
@@ -1486,7 +1505,9 @@ async def build_portfolio_decision(request) -> Dict[str, Any]:
             for x in [
                 regime_fit.get("note"),
                 heat.get("heat_quality_label"),
-                f"Largest position {top_pct:.1f}%" if top_pct > _MAX_SINGLE_PCT * 100 else None,
+                f"Largest position {top_pct:.1f}%"
+                if top_pct > _MAX_SINGLE_PCT * 100
+                else None,
             ]
             if x
         ],
@@ -1546,14 +1567,17 @@ async def build_portfolio_decision(request) -> Dict[str, Any]:
 
     from src.services.crisis_regime import build_crisis_bundle
 
-    crisis_survival = build_crisis_bundle(
-        market_regime={
-            **regime,
-            "heat_pct": heat.get("heat_pct"),
-        },
-        execution_readiness=execution,
-        positions=positions,
-    ).get("crisis_survival") or {}
+    crisis_survival = (
+        build_crisis_bundle(
+            market_regime={
+                **regime,
+                "heat_pct": heat.get("heat_pct"),
+            },
+            execution_readiness=execution,
+            positions=positions,
+        ).get("crisis_survival")
+        or {}
+    )
     crisis_survival = {
         **crisis_survival,
         "section_copy": crisis_survival.get("headline")
@@ -1565,9 +1589,9 @@ async def build_portfolio_decision(request) -> Dict[str, Any]:
         "critical_risk_event": critical_risk_event,
         "do_now": do_now,
         "risk_state": risk_state,
-        "allocation_monitor_note": _ALLOC_MONITOR_COPY if any(
-            float(r.get("excess_pct") or 0) > 0 for r in allocation_rows
-        ) else None,
+        "allocation_monitor_note": _ALLOC_MONITOR_COPY
+        if any(float(r.get("excess_pct") or 0) > 0 for r in allocation_rows)
+        else None,
         "sleeve_research_collapsed": critical_risk_event.get("collapse_sleeves"),
         "sleeve_collapse_note": critical_risk_event.get("sleeve_collapse_note"),
         "portfolio_action_now": portfolio_action_now,

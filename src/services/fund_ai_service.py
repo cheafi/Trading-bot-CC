@@ -61,7 +61,7 @@ class FundAIService:
         ai_service = get_ai_service()
         holdings = (
             "\n".join(
-                f"- {h.get('ticker', '—')} weight {(float(h.get('weight', 0))*100):.1f}% score {h.get('score', 0)}"
+                f"- {h.get('ticker', '—')} weight {(float(h.get('weight', 0)) * 100):.1f}% score {h.get('score', 0)}"
                 for h in (card.get("holdings") or [])[:8]
             )
             or "- No holdings"

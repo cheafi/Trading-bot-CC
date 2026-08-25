@@ -34,12 +34,14 @@ EXPERIMENT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── Strategy Variant (MUTABLE) ──────────────────────────────────────────────
 
+
 @dataclass
 class StrategyVariant:
     """
     The mutable part — AI can change these parameters.
     Everything else stays locked.
     """
+
     name: str = "baseline"
     version: int = 1
 
@@ -71,11 +73,15 @@ class StrategyVariant:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "name": self.name, "version": self.version,
+            "name": self.name,
+            "version": self.version,
             "weights": {
-                "rs_quality": self.w_rs_quality, "trend": self.w_trend,
-                "sector": self.w_sector, "setup": self.w_setup,
-                "liquidity": self.w_liquidity, "tradeability": self.w_tradeability,
+                "rs_quality": self.w_rs_quality,
+                "trend": self.w_trend,
+                "sector": self.w_sector,
+                "setup": self.w_setup,
+                "liquidity": self.w_liquidity,
+                "tradeability": self.w_tradeability,
             },
             "position_rules": {
                 "max_positions": self.max_positions,
@@ -128,9 +134,11 @@ class StrategyVariant:
 
 # ── Experiment Result ────────────────────────────────────────────────────────
 
+
 @dataclass
 class ExperimentResult:
     """Result of evaluating one strategy variant."""
+
     variant_name: str = ""
     variant_version: int = 0
     # Raw metrics
@@ -139,12 +147,12 @@ class ExperimentResult:
     outperformance: float = 0.0
     sharpe: float = 0.0
     max_drawdown_pct: float = 0.0
-    turnover: float = 0.0   # trades per month
+    turnover: float = 0.0  # trades per month
     stability: float = 0.0  # rolling sharpe consistency
     # Composite score (from fixed evaluator)
     score: float = 0.0
     # Verdict
-    verdict: str = "PENDING"   # KEEP / DISCARD / BASELINE
+    verdict: str = "PENDING"  # KEEP / DISCARD / BASELINE
     reason: str = ""
     evaluated_at: str = ""
 
@@ -166,6 +174,7 @@ class ExperimentResult:
 
 
 # ── Fixed Evaluator (LOCKED — do not modify) ────────────────────────────────
+
 
 class StrategyEvaluator:
     """
@@ -201,11 +210,11 @@ class StrategyEvaluator:
         outperf = total_return - benchmark_return
 
         # Normalize each factor to 0-100
-        outperf_score = min(100, max(0, (outperf + 10) * 5))   # -10% → 0, +10% → 100
-        sharpe_score = min(100, max(0, sharpe * 33))             # 0 → 0, 3 → 100
+        outperf_score = min(100, max(0, (outperf + 10) * 5))  # -10% → 0, +10% → 100
+        sharpe_score = min(100, max(0, sharpe * 33))  # 0 → 0, 3 → 100
         dd_score = min(100, max(0, 100 - abs(max_drawdown) * 3))  # 0% → 100, 33% → 0
-        turn_score = min(100, max(0, 100 - turnover * 10))       # 0/mo → 100, 10/mo → 0
-        stab_score = min(100, max(0, stability))                  # already 0-100
+        turn_score = min(100, max(0, 100 - turnover * 10))  # 0/mo → 100, 10/mo → 0
+        stab_score = min(100, max(0, stability))  # already 0-100
 
         score = (
             self.W_OUTPERFORMANCE * outperf_score
@@ -248,7 +257,9 @@ class StrategyEvaluator:
             candidate.reason = f"Score improved by {delta:.1f} (baseline {baseline.score:.1f} → {candidate.score:.1f})"
         elif delta > -min_improvement:
             candidate.verdict = "DISCARD"
-            candidate.reason = f"Marginal change ({delta:+.1f}), not enough to justify switch"
+            candidate.reason = (
+                f"Marginal change ({delta:+.1f}), not enough to justify switch"
+            )
         else:
             candidate.verdict = "DISCARD"
             candidate.reason = f"Score degraded by {abs(delta):.1f}"
@@ -257,6 +268,7 @@ class StrategyEvaluator:
 
 
 # ── Experiment Log ───────────────────────────────────────────────────────────
+
 
 class ExperimentLog:
     """Persistent experiment log — every variant tested is recorded."""
@@ -275,15 +287,20 @@ class ExperimentLog:
 
     def record(self, variant: StrategyVariant, result: ExperimentResult) -> None:
         """Record an experiment."""
-        self.entries.append({
-            "variant": variant.to_dict(),
-            "result": result.to_dict(),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        self.entries.append(
+            {
+                "variant": variant.to_dict(),
+                "result": result.to_dict(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
         self._save()
         logger.info(
             "[KeepDiscard] %s v%d → score %.1f → %s",
-            variant.name, variant.version, result.score, result.verdict,
+            variant.name,
+            variant.version,
+            result.score,
+            result.verdict,
         )
 
     def _save(self) -> None:
@@ -305,5 +322,7 @@ class ExperimentLog:
             "best_variant": best["result"]["variant"] if best else None,
             "best_score": best["result"]["score"] if best else 0,
             "kept": sum(1 for e in self.entries if e["result"]["verdict"] == "KEEP"),
-            "discarded": sum(1 for e in self.entries if e["result"]["verdict"] == "DISCARD"),
+            "discarded": sum(
+                1 for e in self.entries if e["result"]["verdict"] == "DISCARD"
+            ),
         }

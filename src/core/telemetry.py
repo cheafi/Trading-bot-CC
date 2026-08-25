@@ -315,8 +315,8 @@ class TelemetryTracker:
             # Sprint 98/99 — Brier calibration, A/B shadow, execution fills
             try:
                 from src.engines.self_learning import (
-                    get_calibration_status,
                     get_ab_status,
+                    get_calibration_status,
                 )
 
                 cal = get_calibration_status()

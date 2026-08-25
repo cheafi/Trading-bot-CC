@@ -16,6 +16,7 @@ Holiday rules:
   - Thanksgiving (4th Thursday in Nov)
   - Christmas (Dec 25, observed)
 """
+
 from __future__ import annotations
 
 import calendar
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════════════════════════
 # HOLIDAY COMPUTATION
 # ═══════════════════════════════════════════════════════════════════
+
 
 def _nth_weekday(year: int, month: int, weekday: int, n: int) -> int:
     """Return day-of-month for the nth occurrence of weekday in month.
@@ -61,18 +63,18 @@ def _easter_sunday(year: int) -> Tuple[int, int, int]:
     g = (b - f + 1) // 3
     h = (19 * a + b - d - g + 15) % 30
     i, k = divmod(c, 4)
-    l = (32 + 2 * e + 2 * i - h - k) % 7
-    m = (a + 11 * h + 22 * l) // 451
-    month = (h + l - 7 * m + 114) // 31
-    day = ((h + l - 7 * m + 114) % 31) + 1
+    day_offset = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * day_offset) // 451
+    month = (h + day_offset - 7 * m + 114) // 31
+    day = ((h + day_offset - 7 * m + 114) % 31) + 1
     return (year, month, day)
 
 
 def _observed(d: date) -> date:
     """Move Saturday holidays to Friday, Sunday holidays to Monday."""
-    if d.weekday() == 5:   # Saturday → Friday
+    if d.weekday() == 5:  # Saturday → Friday
         return d - timedelta(days=1)
-    if d.weekday() == 6:   # Sunday → Monday
+    if d.weekday() == 6:  # Sunday → Monday
         return d + timedelta(days=1)
     return d
 
@@ -132,7 +134,7 @@ def is_us_market_open(d: Optional[date] = None) -> bool:
     """Return True if US market trades on d (weekday and not holiday)."""
     if d is None:
         d = date.today()
-    if d.weekday() >= 5:            # Saturday=5, Sunday=6
+    if d.weekday() >= 5:  # Saturday=5, Sunday=6
         return False
     return not is_us_market_holiday(d)
 

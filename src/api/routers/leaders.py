@@ -11,6 +11,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from src.services import leader_persistence as store
 from src.services.leader_tracking_service import (
     ensure_seeded,
     get_alerts,
@@ -23,7 +24,6 @@ from src.services.leader_tracking_service import (
     list_baskets_enriched,
     list_leaders_enriched,
 )
-from src.services import leader_persistence as store
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +32,12 @@ router = APIRouter(tags=["leaders"])
 
 @router.get("/api/leaders")
 async def api_list_leaders(
-    category: Optional[str] = Query(None, description="verified_filer|public_figure|fund_manager|influencer|etf"),
-    source_quality: Optional[str] = Query(None, description="verified|delayed|derived|inferred|speculative"),
+    category: Optional[str] = Query(
+        None, description="verified_filer|public_figure|fund_manager|influencer|etf"
+    ),
+    source_quality: Optional[str] = Query(
+        None, description="verified|delayed|derived|inferred|speculative"
+    ),
     search: Optional[str] = Query(None),
 ):
     """Leader hub — list tracked entities with metrics."""
@@ -71,7 +75,9 @@ async def api_leader_detail(leader_id: str):
 @router.get("/api/leaders/{leader_id}/holdings")
 async def api_leader_holdings(
     leader_id: str,
-    action: Optional[str] = Query(None, description="new_buy|add|reduce|exit|unchanged"),
+    action: Optional[str] = Query(
+        None, description="new_buy|add|reduce|exit|unchanged"
+    ),
 ):
     detail = get_leader_detail(leader_id)
     if not detail:

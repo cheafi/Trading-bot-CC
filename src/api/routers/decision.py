@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 def _signal_rr(signal: dict, default: float = 0.0) -> float:
     return parse_ratio(signal.get("risk_reward"), default) or default
 
+
 router = APIRouter(tags=["decision-product"])
 
 # ════════════════════════════════════════════════════════════════════
@@ -375,7 +376,9 @@ async def today_summary(request: Request):
     confidence = getattr(regime_state, "confidence", 0.5)
     vix_val = getattr(regime_state, "vix", 18.0)
     breadth = getattr(regime_state, "breadth_pct", 0.50)
-    breadth_val = round(float(breadth) * 100) if float(breadth) <= 1.0 else round(float(breadth))
+    breadth_val = (
+        round(float(breadth) * 100) if float(breadth) <= 1.0 else round(float(breadth))
+    )
     entropy = getattr(regime_state, "entropy", 1.0)
 
     # Map regime fields properly
@@ -516,7 +519,9 @@ async def today_summary(request: Request):
                     engine = get_engine(request.app)
                     if engine and not bool(getattr(engine, "_running", False)):
                         await asyncio.wait_for(engine.run_one_cycle(), timeout=30.0)
-                        scan_cache = getattr(request.app.state, "scan_cache", None) or {}
+                        scan_cache = (
+                            getattr(request.app.state, "scan_cache", None) or {}
+                        )
                         scanned = list(scan_cache.get("recs", []))[:50]
                         scores = dict(scan_cache.get("scores", {}) or {})
                         if scanned:
@@ -645,7 +650,8 @@ async def today_summary(request: Request):
             or getattr(pr.decision, "risk_reward_ratio", None)
             or 0,
             "rsi": sig.get("rsi", 0),
-            "invalidation": getattr(pr.explanation, "invalidation", None) or _invalidation(sig),
+            "invalidation": getattr(pr.explanation, "invalidation", None)
+            or _invalidation(sig),
             "position_hint": _position_hint(sig, should_trade),
             "sector_bucket": pr.sector.sector_bucket.value,
             "final_conf": round(pr.confidence.final, 2),
@@ -735,9 +741,7 @@ async def today_summary(request: Request):
         idx_summary = ", ".join(parts)
 
     # Stricter summary generation based on PM feedback
-    trade_count = sum(
-        1 for cr in council_results if is_execution_ready(cr)
-    )
+    trade_count = sum(1 for cr in council_results if is_execution_ready(cr))
 
     if not should_trade:
         narrative = (
@@ -800,7 +804,9 @@ async def today_summary(request: Request):
         top5=top5,
     )
     avoid = [
-        f"{a.get('ticker', '—')}: {a.get('reason')}" if a.get("ticker") != "—" else a.get("reason", "")
+        f"{a.get('ticker', '—')}: {a.get('reason')}"
+        if a.get("ticker") != "—"
+        else a.get("reason", "")
         for a in avoid_now
     ]
     if not avoid:
@@ -830,14 +836,11 @@ async def today_summary(request: Request):
     leaders = market_pulse.get("sector_leaders", [])
     if leaders and leaders[0].get("change_pct", 0) > 1.0:
         ldr = leaders[0]
-        what_changed.append(
-            f"Sector leader: {ldr['name']}" f" +{ldr['change_pct']:.1f}%"
-        )
+        what_changed.append(f"Sector leader: {ldr['name']} +{ldr['change_pct']:.1f}%")
     laggards = market_pulse.get("sector_laggards", [])
     if laggards and laggards[0].get("change_pct", 0) < -1.0:
         what_changed.append(
-            f"Sector laggard: {laggards[0]['name']} "
-            f"{laggards[0]['change_pct']:.1f}%"
+            f"Sector laggard: {laggards[0]['name']} {laggards[0]['change_pct']:.1f}%"
         )
 
     # 11. Event risk
@@ -906,7 +909,10 @@ async def today_summary(request: Request):
         vix=vix_val,
         breadth=breadth * 100 if breadth <= 1 else breadth,
     )
-    sleeve_summary: Dict[str, Any] = {"cards": [], "note": "lazy-load via /api/fund-lab/cards"}
+    sleeve_summary: Dict[str, Any] = {
+        "cards": [],
+        "note": "lazy-load via /api/fund-lab/cards",
+    }
     fund_cards: List[Dict[str, Any]] = []
     fund_cache = getattr(request.app.state, "fund_cards_cache", None)
     if isinstance(fund_cache, dict) and fund_cache.get("cards"):
@@ -915,9 +921,7 @@ async def today_summary(request: Request):
         try:
             from src.api.routers.funds import _build_payload
 
-            pl = await _build_payload(
-                request, benchmark="SPY", period="1y", top_n=5
-            )
+            pl = await _build_payload(request, benchmark="SPY", period="1y", top_n=5)
             fund_cards = pl.get("cards") or []
             fund_cache = getattr(request.app.state, "fund_cards_cache", None)
         except Exception:
@@ -944,7 +948,8 @@ async def today_summary(request: Request):
             or getattr(pr.decision, "risk_reward_ratio", None),
             "upgrade_trigger": pr.decision.entry_trigger
             or getattr(pr.explanation, "upgrade_trigger", None),
-            "invalidation": getattr(pr.explanation, "invalidation", None) or _invalidation(sig),
+            "invalidation": getattr(pr.explanation, "invalidation", None)
+            or _invalidation(sig),
             "sector_type": pr.sector.sector_bucket.value,
             "why_pilot": pr.decision.why_pilot or "",
             "data_conf": float(pr.confidence.data),
@@ -1008,9 +1013,7 @@ async def today_summary(request: Request):
         execution_readiness = {}
 
     bracket_ready = bool(
-        top5
-        and top5[0].get("entry_price")
-        and top5[0].get("stop_price")
+        top5 and top5[0].get("entry_price") and top5[0].get("stop_price")
     )
     ibkr_connected = bool(
         (best_action.get("execution_readiness") or {}).get("ibkr_connected")
@@ -1083,7 +1086,9 @@ async def today_summary(request: Request):
         live_deploy_count=execution_ready_count if not used_brief_fallback else 0,
     )
     top5 = apply_authority_to_rows(top5, decision_authority)
-    all_opps_for_action = apply_authority_to_rows(all_opps_for_action, decision_authority)
+    all_opps_for_action = apply_authority_to_rows(
+        all_opps_for_action, decision_authority
+    )
     near_miss = apply_authority_to_rows(near_miss, decision_authority)
 
     cross_asset_confirmation = await _cross_asset_for_today(
@@ -1097,8 +1102,8 @@ async def today_summary(request: Request):
         },
         should_trade=should_trade,
     )
-    from src.services.index_regime import build_index_regime_for_today
     from src.services.cost_adjusted_ranker import enrich_opportunity_rows
+    from src.services.index_regime import build_index_regime_for_today
 
     index_regime_summary = await build_index_regime_for_today(
         request,
@@ -1114,7 +1119,8 @@ async def today_summary(request: Request):
         funnel=funnel,
     )
     regime_strip = {
-        "line": index_regime_summary.get("strip_line") or index_regime_summary.get("summary"),
+        "line": index_regime_summary.get("strip_line")
+        or index_regime_summary.get("summary"),
         "posture": index_regime_summary.get("posture"),
         "posture_label": index_regime_summary.get("posture_label"),
         "authority": "monitor_only",
@@ -1398,7 +1404,8 @@ async def today_summary(request: Request):
         ),
         "freshness": "REAL_TIME" if not scanner_degraded else "DEGRADED",
         "stale": scanner_degraded or used_brief_fallback,
-        "reason": scanner_reason or ("brief fallback board" if used_brief_fallback else ""),
+        "reason": scanner_reason
+        or ("brief fallback board" if used_brief_fallback else ""),
         "as_of": now.isoformat() + "Z",
         "ai_powered": False,
     }
@@ -1412,7 +1419,9 @@ async def today_summary(request: Request):
             "should_trade": should_trade,
             "confidence": round(confidence, 2),
             "tradeability": tradeability,
-            "honest_tradeability": decision_model.get("honest_tradeability", tradeability),
+            "honest_tradeability": decision_model.get(
+                "honest_tradeability", tradeability
+            ),
             "summary": narrative,
             "trend": trend_label,
             "volatility": vol_label,
@@ -1452,7 +1461,9 @@ async def today_summary(request: Request):
         "execution_analytics": execution_analytics,
         "evidence_badges": build_evidence_badges(
             scanner_degraded=scanner_degraded,
-            regime_synthetic=bool(getattr(request.app.state, "regime_synthetic", False)),
+            regime_synthetic=bool(
+                getattr(request.app.state, "regime_synthetic", False)
+            ),
             ai_powered=False,
         ),
         "decision_model": decision_model,
@@ -1491,7 +1502,7 @@ async def today_summary(request: Request):
         surface_authority=surface_authority,
         trust=trust,
     )
-    from src.services.cc_state import attach_system_state, attach_page_capability
+    from src.services.cc_state import attach_page_capability, attach_system_state
 
     payload = attach_system_state(payload)
     payload = attach_page_capability(payload, "today")
@@ -1520,7 +1531,10 @@ async def today_summary(request: Request):
     except Exception:
         logger.debug("ml_advisory build failed", exc_info=True)
     try:
-        from src.services.operator_state_contract import pick_dashboard_monitors, structural_valid_for_monitor
+        from src.services.operator_state_contract import (
+            pick_dashboard_monitors,
+            structural_valid_for_monitor,
+        )
 
         payload["dashboard_monitors"] = pick_dashboard_monitors(
             watch_qualified=[
@@ -1555,7 +1569,11 @@ async def today_summary(request: Request):
 
         prev_unlock = (prev.get("unlock_deploy") or {}).get("unlocked")
         new_unlock = (payload.get("unlock_deploy") or {}).get("unlocked")
-        if prev_unlock is not None and new_unlock is not None and prev_unlock != new_unlock:
+        if (
+            prev_unlock is not None
+            and new_unlock is not None
+            and prev_unlock != new_unlock
+        ):
             from src.services.alert_service import on_deploy_gate_change
 
             ud = payload.get("unlock_deploy") or {}
@@ -1683,18 +1701,20 @@ async def ranked_opportunities(
     }
     council_results = council.evaluate_batch(scanned, regime_ctx)
 
+    from src.services.ai_intelligence import attach_row_ai_hints
+    from src.services.cost_adjusted_ranker import enrich_opportunity_rows
     from src.services.decision_truth_model import (
         apply_authority_to_rows,
         build_decision_authority,
         build_honest_funnel,
         enrich_opportunity_row,
     )
-    from src.services.cost_adjusted_ranker import enrich_opportunity_rows
     from src.services.index_regime import build_index_regime_summary
-    from src.services.ai_intelligence import attach_row_ai_hints
 
     trend_label = trend_map.get(regime_label, "SIDEWAYS")
-    breadth_val = round(float(breadth) * 100) if float(breadth) <= 1.0 else round(float(breadth))
+    breadth_val = (
+        round(float(breadth) * 100) if float(breadth) <= 1.0 else round(float(breadth))
+    )
     funnel = build_honest_funnel(
         universe=len(scanned),
         scanned=scanned,
@@ -1740,9 +1760,7 @@ async def ranked_opportunities(
             "action": pr.decision.action,
             "action_reason": pr.decision.rationale,
             "why_now": ([pr.explanation.why_now] if pr.explanation.why_now else []),
-            "why_not": (
-                pr.explanation.why_not_stronger if pr.explanation else None
-            ),
+            "why_not": (pr.explanation.why_not_stronger if pr.explanation else None),
             "invalidation": getattr(pr.explanation, "invalidation", None)
             or _invalidation(sig),
             "position_hint": _position_hint(sig, should_trade),
@@ -2451,9 +2469,7 @@ async def generate_today_ai_narrative(payload: dict):
                 "setup_hint": AI_SETUP_HINT,
             }
 
-        narrative = await ai.generate_narrative(
-            regime_ctx, top5, market_pulse, funnel
-        )
+        narrative = await ai.generate_narrative(regime_ctx, top5, market_pulse, funnel)
         if narrative:
             return {
                 "ai_narrative": narrative,

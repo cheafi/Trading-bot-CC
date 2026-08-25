@@ -279,7 +279,7 @@ class MacroExpert(NamedExpert):
         vix = regime.get("vix", 18)
         breadth = regime.get("breadth", 0.5)
         should_trade = regime.get("should_trade", True)
-        vol_label = regime.get("volatility", "NORMAL")
+        regime.get("volatility", "NORMAL")
         bucket = sector.sector_bucket
 
         if vix > 35:

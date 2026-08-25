@@ -361,19 +361,14 @@ def build_unlock_deploy(
         )
     elif board_present and deployable_count < 1:
         status_line = (
-            "現況：有板面、無 deploy · "
-            "Current status: board present, deploy absent."
+            "現況：有板面、無 deploy · Current status: board present, deploy absent."
         )
     elif not board_present:
         status_line = (
-            "現況：板面薄、無 deploy · "
-            "Current status: board thin, deploy absent."
+            "現況：板面薄、無 deploy · Current status: board thin, deploy absent."
         )
     else:
-        status_line = (
-            "現況：deploy 閘門未清 · "
-            "Current status: deploy gate not cleared."
-        )
+        status_line = "現況：deploy 閘門未清 · Current status: deploy gate not cleared."
     return {
         "unlocked": unlocked,
         "conditions": conditions,

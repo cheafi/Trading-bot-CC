@@ -6,7 +6,6 @@ import asyncio
 from datetime import date, datetime, timezone
 
 import numpy as np
-
 from fastapi import APIRouter, HTTPException, Request
 
 from src.api.deps import validate_ticker
@@ -14,7 +13,6 @@ from src.api.live_state import fetch_regime_state
 from src.api.technical_indicators import compute_indicators as _compute_indicators
 from src.core.models import (
     ChangeItem,
-    DataQualityReport,
     DeltaSnapshot,
     RegimeScoreboard,
     ScenarioPlan,
@@ -38,7 +36,6 @@ router = APIRouter(tags=["v6-pro-desk"])
 
 async def _regime(request: Request):
     return await fetch_regime_state(request)
-
 
 
 @router.get("/api/v6/scoreboard", tags=["v6-pro-desk"])
@@ -370,7 +367,7 @@ async def get_signal_card(request: Request, ticker: str):
                 if above_sma50:
                     evidence.append(f"Price > SMA50 ${cur_sma50:.2f}")
                 evidence.append(f"RSI {cur_rsi:.0f}")
-                evidence.append(f"ATR {cur_atr_pct*100:.1f}%")
+                evidence.append(f"ATR {cur_atr_pct * 100:.1f}%")
 
                 reasons = []
                 if above_sma20 and above_sma50:
@@ -415,7 +412,9 @@ async def get_signal_card(request: Request, ticker: str):
             strategy="momentum" if direction == "BUY" else "none",
             entry_price=entry_price,
             stop_loss=round(entry_price * (1 - stop_pct), 2) if entry_price > 0 else 0,
-            take_profit=round(entry_price * (1 + target_pct), 2) if entry_price > 0 else 0,
+            take_profit=round(entry_price * (1 + target_pct), 2)
+            if entry_price > 0
+            else 0,
             reasons=reasons[:3],
             # v6 fields
             setup_grade=setup_grade,
@@ -423,7 +422,9 @@ async def get_signal_card(request: Request, ticker: str):
             approval_status=(
                 "APPROVED"
                 if confidence >= 0.65
-                else "REVIEW" if confidence >= 0.50 else "REJECTED"
+                else "REVIEW"
+                if confidence >= 0.50
+                else "REJECTED"
             ),
             why_now=(
                 f"{ticker.upper()} technical signal based on live market data"
@@ -433,16 +434,16 @@ async def get_signal_card(request: Request, ticker: str):
             evidence=evidence[:4],
             scenario_plan={
                 "base_case": {
-                    "probability": f"{int(confidence*60+20)}%",
-                    "description": f"Move to target +{target_pct*100:.0f}%",
+                    "probability": f"{int(confidence * 60 + 20)}%",
+                    "description": f"Move to target +{target_pct * 100:.0f}%",
                 },
                 "bull_case": {
-                    "probability": f"{int(confidence*20+10)}%",
-                    "description": f"Extended move +{target_pct*200:.0f}%",
+                    "probability": f"{int(confidence * 20 + 10)}%",
+                    "description": f"Extended move +{target_pct * 200:.0f}%",
                 },
                 "bear_case": {
-                    "probability": f"{int(100-confidence*80-30)}%",
-                    "description": f"Stop hit -{stop_pct*100:.0f}%",
+                    "probability": f"{int(100 - confidence * 80 - 30)}%",
+                    "description": f"Stop hit -{stop_pct * 100:.0f}%",
                 },
                 "triggers": ["Earnings", "Sector rotation", "Macro events"],
             },

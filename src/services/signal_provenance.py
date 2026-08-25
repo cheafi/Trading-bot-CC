@@ -12,7 +12,6 @@ from typing import Any, Dict, List, Optional
 from src.services.surface_authority import (
     AUTHORITY_BLOCKED,
     AUTHORITY_CONFIRMATION,
-    AUTHORITY_DEPLOY,
     AUTHORITY_OPS,
     AUTHORITY_RESEARCH,
 )
@@ -206,7 +205,11 @@ def quant_authority_can(signal_type: str, action: str) -> bool:
 def quant_authority_cannot(signal_type: str) -> List[str]:
     """Explicit CANNOT rules for quant / algo surfaces."""
     rules = signal_rules(signal_type)
-    cannot: List[str] = ["authorize_deploy", "override_wait", "upgrade_tradeability_from_backtest"]
+    cannot: List[str] = [
+        "authorize_deploy",
+        "override_wait",
+        "upgrade_tradeability_from_backtest",
+    ]
     if rules.get("downgrade_only"):
         cannot.append("upgrade_action")
     if rules.get("monitor_only"):

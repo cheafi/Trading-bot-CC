@@ -75,7 +75,11 @@ async def _provider_components(
             logger.debug("cc-header broker probe failed: %s", exc)
     try:
         ibkr_probe = get_ibkr_service().status()
-        if ibkr_probe.get("gateway_reachable") or ibkr_probe.get("session_usable") or ibkr_probe.get("connected"):
+        if (
+            ibkr_probe.get("gateway_reachable")
+            or ibkr_probe.get("session_usable")
+            or ibkr_probe.get("connected")
+        ):
             broker_ok = True
     except Exception as exc:
         logger.debug("cc-header ibkr broker probe failed: %s", exc)
@@ -135,7 +139,9 @@ def _engine_snapshot(engine) -> Dict[str, Any]:
 @router.get("/api/ops/cc-header")
 async def cc_header(
     request: Request,
-    tab: Optional[str] = Query(None, description="Active UI tab for surface-aware header"),
+    tab: Optional[str] = Query(
+        None, description="Active UI tab for surface-aware header"
+    ),
     _=optional_api_key,
 ):
     """Aggregate status for CC top bar (mode, data, brief, alerts, IBKR)."""
@@ -148,9 +154,7 @@ async def cc_header(
 
     trust_mode = "PAPER" if eng["dry_run"] else "LIVE"
     display_mode = (
-        "LIVE"
-        if not eng["dry_run"]
-        else ("PAPER" if eng["running"] else trust_mode)
+        "LIVE" if not eng["dry_run"] else ("PAPER" if eng["running"] else trust_mode)
     )
 
     freshness = None
@@ -211,9 +215,7 @@ async def cc_header(
 
         data_stale = pills["data"] in ("STALE", "CRITICAL")
         brief_stale = pills["brief"] in ("STALE", "CRITICAL")
-        ibkr_connected = bool(
-            ibkr_st.get("session_usable") or ibkr_st.get("connected")
-        )
+        ibkr_connected = bool(ibkr_st.get("session_usable") or ibkr_st.get("connected"))
         decision_authority = build_decision_authority(
             tradeability=tradeability,
             should_trade=should_trade,
@@ -236,7 +238,9 @@ async def cc_header(
     try:
         from src.api.routers.portfolio import portfolio_header_snapshot_for_cc
 
-        portfolio_context = portfolio_header_snapshot_for_cc(ibkr_connected=ibkr_connected)
+        portfolio_context = portfolio_header_snapshot_for_cc(
+            ibkr_connected=ibkr_connected
+        )
     except Exception as exc:
         logger.debug("cc-header portfolio snapshot failed: %s", exc)
         portfolio_context = {
@@ -246,9 +250,7 @@ async def cc_header(
             "positions_label": "No positions",
             "broker_sync": "unavailable" if not ibkr_connected else "ok",
             "broker_sync_label": (
-                "Broker sync unavailable"
-                if not ibkr_connected
-                else "Broker linked"
+                "Broker sync unavailable" if not ibkr_connected else "Broker linked"
             ),
             "rebalance_only": True,
             "rebalance_label": "Rebalance support only",
@@ -260,8 +262,11 @@ async def cc_header(
     trust = {
         "mode": trust_mode,
         "source": "cc-header",
-        "freshness": "DEGRADED" if pills["data"] in ("STALE", "CRITICAL") else "REAL_TIME",
-        "stale": pills["data"] in ("STALE", "CRITICAL") or pills["brief"] in ("STALE", "CRITICAL"),
+        "freshness": "DEGRADED"
+        if pills["data"] in ("STALE", "CRITICAL")
+        else "REAL_TIME",
+        "stale": pills["data"] in ("STALE", "CRITICAL")
+        or pills["brief"] in ("STALE", "CRITICAL"),
         "reason": "",
         "as_of": now.isoformat() + "Z",
         "ai_powered": False,

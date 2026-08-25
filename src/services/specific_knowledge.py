@@ -17,8 +17,16 @@ COMPETENCE_LABELS: Dict[str, str] = {
 def evaluate_competence_fit(row: Dict[str, Any]) -> Dict[str, Any]:
     """Heuristic competence from thesis, data confidence, calibration."""
     thesis = float(row.get("thesis_conf") or row.get("thesis_quality") or 0)
-    data = float(row.get("data_conf") or (row.get("evidence_quality") or {}).get("data_conf") or 0)
-    cal_n = int((row.get("evidence_quality") or {}).get("sample_count") or row.get("calibration_n") or 0)
+    data = float(
+        row.get("data_conf")
+        or (row.get("evidence_quality") or {}).get("data_conf")
+        or 0
+    )
+    cal_n = int(
+        (row.get("evidence_quality") or {}).get("sample_count")
+        or row.get("calibration_n")
+        or 0
+    )
     why_now = str(row.get("why_now") or "")
     narrative_heavy = len(why_now) > 120 and thesis < 0.55
 

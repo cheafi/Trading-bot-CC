@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
 class SlippageEstimate:
     """Estimated execution costs for a trade."""
-    spread_cost_bps: float       # half bid-ask spread
-    market_impact_bps: float     # price impact from order size
-    commission_bps: float        # broker commission
-    total_cost_bps: float        # all-in one-way cost
+
+    spread_cost_bps: float  # half bid-ask spread
+    market_impact_bps: float  # price impact from order size
+    commission_bps: float  # broker commission
+    total_cost_bps: float  # all-in one-way cost
 
     @property
     def round_trip_bps(self) -> float:
@@ -46,15 +46,11 @@ def estimate_slippage(
     spread_bps = avg_spread_pct * 100 / 2
 
     # Market impact (square-root model)
-    participation = (
-        size_shares / max(avg_daily_volume, 1)
-    )
+    participation = size_shares / max(avg_daily_volume, 1)
     impact_bps = 10 * math.sqrt(participation) * 100
 
     # Commission
-    comm_bps = (
-        commission_per_share / max(price, 0.01) * 10000
-    )
+    comm_bps = commission_per_share / max(price, 0.01) * 10000
 
     total = spread_bps + impact_bps + comm_bps
 

@@ -24,7 +24,9 @@ async def stock_intel(
     ticker: str,
     request: Request,
     lite: bool = Query(False, description="Core dossier only (fast path)"),
-    enrichments: bool = Query(False, description="Enrichment modules only (second-phase async load)"),
+    enrichments: bool = Query(
+        False, description="Enrichment modules only (second-phase async load)"
+    ),
 ):
     """
     Single-stock aggregate for Clarity Console Dossier.
@@ -36,7 +38,9 @@ async def stock_intel(
         cache = {}
         request.app.state.stock_intel_cache = cache
 
-    cache_key = f"{ticker}:enrich" if enrichments else (f"{ticker}:lite" if lite else ticker)
+    cache_key = (
+        f"{ticker}:enrich" if enrichments else (f"{ticker}:lite" if lite else ticker)
+    )
     ttl = _CORE_CACHE_TTL_SEC if lite else _CACHE_TTL_SEC
     now = time.time()
     entry = cache.get(cache_key)
@@ -69,7 +73,9 @@ async def stock_intel(
             log_dossier_timeout(ticker=ticker, reason=str(exc))
         except Exception:
             logger.debug("platform error log append failed", exc_info=True)
-        raise HTTPException(status_code=503, detail="Stock intel aggregation failed") from exc
+        raise HTTPException(
+            status_code=503, detail="Stock intel aggregation failed"
+        ) from exc
 
     cache[cache_key] = {"ts": now, "payload": payload}
     return sanitize_for_json(payload)

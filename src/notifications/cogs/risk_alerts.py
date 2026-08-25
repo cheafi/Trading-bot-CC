@@ -7,6 +7,7 @@ Commands:
   /risk_status — Show current risk state and regime warnings
   /circuit_breaker — Display circuit breaker status
 """
+
 from __future__ import annotations
 
 import logging
@@ -16,12 +17,10 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from src.engines.regime_throttle import RegimeThrottle
 from src.notifications._embeds import (
-    RiskAlertEmbed,
-    RegimeEmbed,
     EmbedColors,
 )
-from src.engines.regime_throttle import RegimeThrottle
 
 logger = logging.getLogger(__name__)
 
@@ -43,19 +42,14 @@ class RiskAlertsCog(commands.Cog, name="Risk Alerts"):
 
         # Try to get regime from signal engine if available
         regime_state = "unknown"
-        regime_warning = None
 
         try:
             engine = getattr(self.bot, "_signal_engine", None)
             if engine:
                 market_state = engine.get_market_state()
                 if market_state:
-                    regime_state = market_state.get(
-                        "regime_label", "unknown"
-                    )
-                    regime_warning = market_state.get(
-                        "regime_warning"
-                    )
+                    regime_state = market_state.get("regime_label", "unknown")
+                    market_state.get("regime_warning")
         except Exception as e:
             logger.warning(f"Could not fetch regime state: {e}")
 
@@ -66,8 +60,10 @@ class RiskAlertsCog(commands.Cog, name="Risk Alerts"):
         embed = discord.Embed(
             title="🛡️ Risk Status",
             color=(
-                EmbedColors.RED if throttle_rate < 0.5
-                else EmbedColors.GOLD if throttle_rate < 0.8
+                EmbedColors.RED
+                if throttle_rate < 0.5
+                else EmbedColors.GOLD
+                if throttle_rate < 0.8
                 else EmbedColors.GREEN
             ),
             timestamp=datetime.now(timezone.utc),
@@ -75,9 +71,7 @@ class RiskAlertsCog(commands.Cog, name="Risk Alerts"):
 
         # Regime
         regime_emoji = (
-            "🟢" if throttle_rate >= 0.8
-            else "🟡" if throttle_rate >= 0.5
-            else "🔴"
+            "🟢" if throttle_rate >= 0.8 else "🟡" if throttle_rate >= 0.5 else "🔴"
         )
         embed.add_field(
             name="Regime",
@@ -179,7 +173,7 @@ class RiskAlertsCog(commands.Cog, name="Risk Alerts"):
 
         embed.set_footer(
             text="Circuit breakers protect against cascading losses. "
-                 "Review SECURITY.md for full risk control docs."
+            "Review SECURITY.md for full risk control docs."
         )
 
         await interaction.followup.send(embed=embed)

@@ -9,11 +9,12 @@ Compares a ticker against:
 Outputs relative strength, valuation, momentum, and quality metrics
 in a structured format for API/dashboard consumption.
 """
+
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
 
 import numpy as np
 
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ComparisonResult:
     """Result of symbol comparison against a benchmark."""
+
     ticker: str
     benchmark: str
     benchmark_type: str  # "peer", "sector", "index"
@@ -69,7 +71,9 @@ class ComparisonResult:
             "relative_volatility": round(self.relative_volatility, 2),
             "beta": round(self.beta, 2),
             "pe_ratio": self.pe_ratio,
-            "pe_vs_benchmark": round(self.pe_vs_benchmark, 1) if self.pe_vs_benchmark is not None else None,
+            "pe_vs_benchmark": round(self.pe_vs_benchmark, 1)
+            if self.pe_vs_benchmark is not None
+            else None,
             "win_rate_vs_benchmark": round(self.win_rate_vs_benchmark, 1),
             "max_drawdown_vs": round(self.max_drawdown_vs, 1),
             "verdict": self.verdict,
@@ -148,7 +152,9 @@ class SymbolComparisonEngine:
         result.max_drawdown_vs = t_dd - b_dd
 
         # Verdict
-        result.verdict = self._classify_verdict(result.rs_composite, result.beta, result.win_rate_vs_benchmark)
+        result.verdict = self._classify_verdict(
+            result.rs_composite, result.beta, result.win_rate_vs_benchmark
+        )
         result.summary = self._build_summary(result)
 
         return result
@@ -168,13 +174,13 @@ class SymbolComparisonEngine:
         min_len = min(len(r) for r in peer_returns.values()) if peer_returns else 0
         if min_len < 5 or not peer_returns:
             return ComparisonResult(
-                ticker=ticker, benchmark="PEERS", benchmark_type="peer",
-                summary="No peer data available"
+                ticker=ticker,
+                benchmark="PEERS",
+                benchmark_type="peer",
+                summary="No peer data available",
             )
 
-        peer_avg = np.mean(
-            [r[-min_len:] for r in peer_returns.values()], axis=0
-        )
+        peer_avg = np.mean([r[-min_len:] for r in peer_returns.values()], axis=0)
 
         result = self.compare_vs_benchmark(
             ticker_returns[-min_len:], peer_avg, ticker, "PEERS", "peer"
@@ -184,18 +190,16 @@ class SymbolComparisonEngine:
         all_rs = {}
         for peer_t, peer_r in peer_returns.items():
             if len(peer_r) >= min_len:
-                rs = self._relative_strength(peer_r[-min_len:], peer_avg, min(63, min_len))
+                rs = self._relative_strength(
+                    peer_r[-min_len:], peer_avg, min(63, min_len)
+                )
                 all_rs[peer_t] = rs
         all_rs[ticker] = result.rs_composite
 
         sorted_peers = sorted(all_rs.items(), key=lambda x: x[1], reverse=True)
-        rank = next(
-            (i + 1 for i, (t, _) in enumerate(sorted_peers) if t == ticker), 0
-        )
+        rank = next((i + 1 for i, (t, _) in enumerate(sorted_peers) if t == ticker), 0)
         result.momentum_rank = rank
-        result.momentum_percentile = (
-            (1 - rank / max(len(sorted_peers), 1)) * 100
-        )
+        result.momentum_percentile = (1 - rank / max(len(sorted_peers), 1)) * 100
 
         return result
 
@@ -239,9 +243,7 @@ class SymbolComparisonEngine:
         return float(np.min(dd))
 
     @staticmethod
-    def _classify_verdict(
-        rs_composite: float, beta: float, win_rate: float
-    ) -> str:
+    def _classify_verdict(rs_composite: float, beta: float, win_rate: float) -> str:
         if rs_composite >= 115 and win_rate >= 55:
             return "LEADER"
         elif rs_composite >= 105 and win_rate >= 50:

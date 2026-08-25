@@ -144,7 +144,7 @@ class MacroRegimeEngine:
         # ── SPY trend (required) ──
         result.spy_trend = _trend_direction(spy_closes)
         spy_ret_20d = _returns(spy_closes, 20)
-        spy_ret_50d = _returns(spy_closes, 50)
+        _returns(spy_closes, 50)
         spy_dd = _max_drawdown(spy_closes, 50)
 
         if result.spy_trend == "UP":
@@ -204,7 +204,7 @@ class MacroRegimeEngine:
         # ── QQQ trend (growth leadership) ──
         if qqq_closes and len(qqq_closes) >= 20:
             result.qqq_trend = _trend_direction(qqq_closes)
-            qqq_ret = _returns(qqq_closes, 20)
+            _returns(qqq_closes, 20)
 
             if result.qqq_trend == "UP" and result.spy_trend == "UP":
                 risk_points -= 5
@@ -386,7 +386,9 @@ class StockVsSPY:
                 "rs_trend": (
                     "OUTPERFORMING"
                     if rs_ratio > 1.02
-                    else "UNDERPERFORMING" if rs_ratio < 0.98 else "INLINE"
+                    else "UNDERPERFORMING"
+                    if rs_ratio < 0.98
+                    else "INLINE"
                 ),
             }
 

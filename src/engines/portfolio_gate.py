@@ -86,7 +86,7 @@ class PortfolioGate:
         # ── 1. Max positions ──
         if len(current_positions) >= self.max_positions:
             result.allowed = False
-            result.reasons.append(f"Max positions reached" f" ({self.max_positions})")
+            result.reasons.append(f"Max positions reached ({self.max_positions})")
 
         # ── 2. Sector concentration ──
         sector_exposure = sum(
@@ -103,7 +103,7 @@ class PortfolioGate:
             )
         elif sector_exposure >= self.max_sector_pct * 0.7:
             result.warnings.append(
-                f"{sector} exposure {sector_exposure:.0f}%" " — approaching limit"
+                f"{sector} exposure {sector_exposure:.0f}% — approaching limit"
             )
 
         # ── 3. Duplicate check ──
@@ -120,7 +120,7 @@ class PortfolioGate:
         if remaining_heat <= 0:
             result.allowed = False
             result.reasons.append(
-                f"Portfolio heat {total_heat:.1f}%" f" >= {self.max_heat_pct}% limit"
+                f"Portfolio heat {total_heat:.1f}% >= {self.max_heat_pct}% limit"
             )
         elif remaining_heat < atr_risk_pct:
             result.max_size_pct = max(
@@ -128,7 +128,7 @@ class PortfolioGate:
                 remaining_heat / atr_risk_pct * self.max_single_pct,
             )
             result.warnings.append(
-                f"Reduced size to {result.max_size_pct:.1f}%" " — heat budget tight"
+                f"Reduced size to {result.max_size_pct:.1f}% — heat budget tight"
             )
 
         # ── 5. Size limit ──

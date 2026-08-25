@@ -593,9 +593,9 @@ class SklearnCalibrationWrapper:
         if len(self._raw_forecasts) < 30:
             return False
         try:
+            import numpy as np
             from sklearn.calibration import CalibratedClassifierCV
             from sklearn.linear_model import LogisticRegression
-            import numpy as np
 
             X = np.array(self._raw_forecasts).reshape(-1, 1)
             y = np.array(self._outcomes)

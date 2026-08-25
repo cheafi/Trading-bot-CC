@@ -7,7 +7,6 @@ shadow baskets, and alerts. Verified vs inferred data is always tagged.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import sqlite3
@@ -274,7 +273,8 @@ def get_leader(leader_id: str, db_path: str | None = None) -> Optional[Dict[str,
     conn = _get_db(db_path)
     try:
         row = conn.execute(
-            "SELECT * FROM leaders WHERE id = ?", (leader_id,),
+            "SELECT * FROM leaders WHERE id = ?",
+            (leader_id,),
         ).fetchone()
         return _row_to_dict(row)
     finally:
@@ -330,16 +330,26 @@ def insert_holding(h: Dict[str, Any], db_path: str | None = None) -> None:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                h["leader_id"], h["ticker"], h.get("security_name"),
-                h["action_type"], h.get("size_bucket"), h.get("weight_estimate"),
-                h.get("source_name"), h["source_quality"],
-                h.get("disclosure_date"), h.get("effective_date"),
-                h.get("first_seen_at", _now()), h.get("last_seen_at", _now()),
-                h.get("sector"), h.get("theme"),
+                h["leader_id"],
+                h["ticker"],
+                h.get("security_name"),
+                h["action_type"],
+                h.get("size_bucket"),
+                h.get("weight_estimate"),
+                h.get("source_name"),
+                h["source_quality"],
+                h.get("disclosure_date"),
+                h.get("effective_date"),
+                h.get("first_seen_at", _now()),
+                h.get("last_seen_at", _now()),
+                h.get("sector"),
+                h.get("theme"),
                 1 if h.get("verified_flag") else 0,
                 1 if h.get("inferred_flag") else 0,
-                h.get("price_since_disclosure"), h.get("setup_quality"),
-                h.get("actionability"), h.get("notes"),
+                h.get("price_since_disclosure"),
+                h.get("setup_quality"),
+                h.get("actionability"),
+                h.get("notes"),
             ),
         )
         conn.commit()
@@ -359,9 +369,16 @@ def insert_event(e: Dict[str, Any], db_path: str | None = None) -> None:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                e["leader_id"], e.get("ticker"), e["event_type"], e["event_date"],
-                e.get("disclosure_date"), e["summary"], e.get("source_name"),
-                e["source_quality"], e.get("context_tag"), e.get("size_bucket"),
+                e["leader_id"],
+                e.get("ticker"),
+                e["event_type"],
+                e["event_date"],
+                e.get("disclosure_date"),
+                e["summary"],
+                e.get("source_name"),
+                e["source_quality"],
+                e.get("context_tag"),
+                e.get("size_bucket"),
                 _now(),
             ),
         )
@@ -382,12 +399,17 @@ def upsert_consensus(row: Dict[str, Any], db_path: str | None = None) -> None:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                row["ticker"], row.get("mention_count", 0),
-                row.get("verified_count", 0), row.get("inferred_count", 0),
-                row.get("add_count", 0), row.get("reduce_count", 0),
-                row.get("exit_count", 0), row.get("new_buy_count", 0),
+                row["ticker"],
+                row.get("mention_count", 0),
+                row.get("verified_count", 0),
+                row.get("inferred_count", 0),
+                row.get("add_count", 0),
+                row.get("reduce_count", 0),
+                row.get("exit_count", 0),
+                row.get("new_buy_count", 0),
                 row.get("consensus_score", 0),
-                row.get("flow_confirmation_score", 0), _now(),
+                row.get("flow_confirmation_score", 0),
+                _now(),
             ),
         )
         conn.commit()
@@ -428,11 +450,15 @@ def upsert_flow_signal(row: Dict[str, Any], db_path: str | None = None) -> None:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                row["ticker"], row.get("leaps_oi_change"),
-                row.get("far_dated_flow_score"), row.get("iv_term_change"),
-                row.get("unusual_flow_score"), row.get("spot_confirmation_score"),
+                row["ticker"],
+                row.get("leaps_oi_change"),
+                row.get("far_dated_flow_score"),
+                row.get("iv_term_change"),
+                row.get("unusual_flow_score"),
+                row.get("spot_confirmation_score"),
                 row.get("final_confirmation_score", 0),
-                row.get("data_mode", "heuristic"), _now(),
+                row.get("data_mode", "heuristic"),
+                _now(),
             ),
         )
         conn.commit()
@@ -451,7 +477,9 @@ def list_flow_signals(db_path: str | None = None) -> List[Dict[str, Any]]:
         conn.close()
 
 
-def get_flow_signal(ticker: str, db_path: str | None = None) -> Optional[Dict[str, Any]]:
+def get_flow_signal(
+    ticker: str, db_path: str | None = None
+) -> Optional[Dict[str, Any]]:
     conn = _get_db(db_path)
     try:
         row = conn.execute(
@@ -478,7 +506,8 @@ def get_basket(basket_id: str, db_path: str | None = None) -> Optional[Dict[str,
     conn = _get_db(db_path)
     try:
         b = conn.execute(
-            "SELECT * FROM shadow_baskets WHERE id = ?", (basket_id,),
+            "SELECT * FROM shadow_baskets WHERE id = ?",
+            (basket_id,),
         ).fetchone()
         if not b:
             return None
@@ -508,10 +537,15 @@ def upsert_basket(b: Dict[str, Any], db_path: str | None = None) -> None:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                b["id"], b["name"], b["basket_type"], b.get("methodology"),
-                b.get("rebalance_rule"), b.get("benchmark", "SPY"),
+                b["id"],
+                b["name"],
+                b["basket_type"],
+                b.get("methodology"),
+                b.get("rebalance_rule"),
+                b.get("benchmark", "SPY"),
                 1 if b.get("active", True) else 0,
-                b.get("created_at", _now()), _now(),
+                b.get("created_at", _now()),
+                _now(),
             ),
         )
         conn.commit()
@@ -529,8 +563,11 @@ def insert_basket_member(m: Dict[str, Any], db_path: str | None = None) -> None:
             ) VALUES (?, ?, ?, ?, ?, 1)
             """,
             (
-                m["basket_id"], m["ticker"], m["weight"],
-                m.get("source_basis"), m.get("start_date", _now()[:10]),
+                m["basket_id"],
+                m["ticker"],
+                m["weight"],
+                m.get("source_basis"),
+                m.get("start_date", _now()[:10]),
             ),
         )
         conn.commit()
@@ -538,7 +575,9 @@ def insert_basket_member(m: Dict[str, Any], db_path: str | None = None) -> None:
         conn.close()
 
 
-def list_alerts(unseen_only: bool = True, db_path: str | None = None) -> List[Dict[str, Any]]:
+def list_alerts(
+    unseen_only: bool = True, db_path: str | None = None
+) -> List[Dict[str, Any]]:
     conn = _get_db(db_path)
     try:
         q = "SELECT * FROM leader_alerts"
@@ -562,9 +601,13 @@ def insert_alert(a: Dict[str, Any], db_path: str | None = None) -> None:
             ) VALUES (?, ?, ?, ?, ?, ?, 0, ?)
             """,
             (
-                a["alert_type"], a.get("related_entity_type"),
-                a.get("related_entity_id"), a.get("ticker"),
-                a["severity"], a["message"], _now(),
+                a["alert_type"],
+                a.get("related_entity_type"),
+                a.get("related_entity_id"),
+                a.get("ticker"),
+                a["severity"],
+                a["message"],
+                _now(),
             ),
         )
         conn.commit()
@@ -576,9 +619,15 @@ def clear_demo_data(db_path: str | None = None) -> None:
     conn = _get_db(db_path)
     try:
         for table in (
-            "leader_alerts", "shadow_basket_members", "shadow_baskets",
-            "ticker_flow_signals", "ticker_consensus", "leader_events",
-            "leader_holdings", "leader_sources", "leaders",
+            "leader_alerts",
+            "shadow_basket_members",
+            "shadow_baskets",
+            "ticker_flow_signals",
+            "ticker_consensus",
+            "leader_events",
+            "leader_holdings",
+            "leader_sources",
+            "leaders",
         ):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()

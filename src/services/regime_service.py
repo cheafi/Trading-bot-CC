@@ -25,7 +25,9 @@ class RegimeService:
     _cache: Dict[str, Any] = {}
     _cache_time: float = 0
     CACHE_TTL = 4 * 3600  # 4 hours
-    _refresh_lock: asyncio.Lock = asyncio.Lock()  # prevents duplicate concurrent fetches
+    _refresh_lock: asyncio.Lock = (
+        asyncio.Lock()
+    )  # prevents duplicate concurrent fetches
 
     @classmethod
     def get(cls) -> Dict[str, Any]:
@@ -197,4 +199,5 @@ async def get_regime(request):  # type: ignore[type-arg]
         if cache is not None:
             return cache
         from src.engines.regime_router import RegimeState  # noqa: PLC0415
+
         return RegimeState()

@@ -288,7 +288,7 @@ class DecisionTracker:
         """Record regime. Returns change dict if regime shifted."""
         now = datetime.now()
         last = self.conn.execute(
-            "SELECT trend, risk_score FROM regime_history " "ORDER BY id DESC LIMIT 1"
+            "SELECT trend, risk_score FROM regime_history ORDER BY id DESC LIMIT 1"
         ).fetchone()
 
         self.conn.execute(

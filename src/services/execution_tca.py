@@ -41,9 +41,9 @@ from src.services.signal_provenance import (
 DEFAULT_TCA_PATH = os.path.join("data", "artifacts", "execution_tca.jsonl")
 
 # Time buckets by US-session minute-of-day (ET); callers pass session_minute.
-TIME_BUCKET_OPEN = "open"          # first 30 min
+TIME_BUCKET_OPEN = "open"  # first 30 min
 TIME_BUCKET_MIDDAY = "midday"
-TIME_BUCKET_CLOSE = "close"        # last 30 min
+TIME_BUCKET_CLOSE = "close"  # last 30 min
 TIME_BUCKET_UNKNOWN = "unknown"
 
 AGG_DIMENSIONS = ("ticker", "algo", "venue", "time_bucket", "order_type")
@@ -188,14 +188,22 @@ def aggregate_tca(orders: List[Dict[str, Any]], by: str = "ticker") -> Dict[str,
             {
                 by: key,
                 "n_orders": len(items),
-                "mean_is_bps": _mean([i.get("implementation_shortfall_bps") for i in items]),
-                "mean_arrival_slip_bps": _mean([i.get("slippage_vs_arrival_bps") for i in items]),
-                "mean_vwap_slip_bps": _mean([i.get("slippage_vs_vwap_bps") for i in items]),
+                "mean_is_bps": _mean(
+                    [i.get("implementation_shortfall_bps") for i in items]
+                ),
+                "mean_arrival_slip_bps": _mean(
+                    [i.get("slippage_vs_arrival_bps") for i in items]
+                ),
+                "mean_vwap_slip_bps": _mean(
+                    [i.get("slippage_vs_vwap_bps") for i in items]
+                ),
                 "mean_fill_ratio": _mean([i.get("fill_ratio") for i in items]),
                 "handoff_success_rate": round(
                     sum(1 for i in items if i.get("handoff_ok")) / len(items), 3
                 ),
-                "cancel_replace_total": sum(int(i.get("cancel_replace_count") or 0) for i in items),
+                "cancel_replace_total": sum(
+                    int(i.get("cancel_replace_count") or 0) for i in items
+                ),
             }
         )
     rows.sort(key=lambda r: r["n_orders"], reverse=True)
@@ -204,7 +212,11 @@ def aggregate_tca(orders: List[Dict[str, Any]], by: str = "ticker") -> Dict[str,
 
 def execution_quality_trend(orders: List[Dict[str, Any]]) -> Dict[str, Any]:
     """First-half vs second-half mean IS — improving / stable / deteriorating."""
-    series = [o.get("implementation_shortfall_bps") for o in orders if o.get("implementation_shortfall_bps") is not None]
+    series = [
+        o.get("implementation_shortfall_bps")
+        for o in orders
+        if o.get("implementation_shortfall_bps") is not None
+    ]
     if len(series) < 4:
         return {"trend": "insufficient_sample", "n": len(series)}
     mid = len(series) // 2
@@ -218,21 +230,35 @@ def execution_quality_trend(orders: List[Dict[str, Any]]) -> Dict[str, Any]:
         trend = "improving"
     else:
         trend = "stable"
-    return {"trend": trend, "early_mean_is_bps": early, "late_mean_is_bps": late, "n": len(series)}
+    return {
+        "trend": trend,
+        "early_mean_is_bps": early,
+        "late_mean_is_bps": late,
+        "n": len(series),
+    }
 
 
 def execution_drag_overlay(orders: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Compact 'execution drag' figure for strategy-health surfaces (downgrade-only)."""
     mean_is = _mean([o.get("implementation_shortfall_bps") for o in orders])
     if mean_is is None:
-        return {"drag_bps": None, "label": "Execution drag unknown — no fill sample", "degraded": True}
+        return {
+            "drag_bps": None,
+            "label": "Execution drag unknown — no fill sample",
+            "degraded": True,
+        }
     if mean_is > 20:
         label = "Execution drag heavy — edge eroded by fills"
     elif mean_is > 8:
         label = "Execution drag moderate — watch sizing/urgency"
     else:
         label = "Execution drag light — fills near arrival"
-    return {"drag_bps": mean_is, "label": label, "degraded": False, "downgrade_only": True}
+    return {
+        "drag_bps": mean_is,
+        "label": label,
+        "degraded": False,
+        "downgrade_only": True,
+    }
 
 
 class ExecutionTcaLedger:
@@ -278,7 +304,9 @@ def build_execution_tca_context(
     Authority: ops_probe when fed live fills + connected; research_only and
     degraded otherwise. Never authorizes execution (deploy_from_signal_alone=False).
     """
-    computed = [compute_order_tca(o) if "fill_ratio" not in o else o for o in (orders or [])]
+    computed = [
+        compute_order_tca(o) if "fill_ratio" not in o else o for o in (orders or [])
+    ]
     degraded = not computed or not ibkr_connected
     body = {
         "orders_sampled": len(computed),

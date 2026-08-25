@@ -30,12 +30,14 @@ try:
     import numpy as np
 
     from src.engines.structure_detector import StructureDetector
+
     _HAS_STRUCTURE = True
 except ImportError:
     _HAS_STRUCTURE = False
 
 try:
-    from src.engines.historical_analog import find_similar_cases, analog_summary
+    from src.engines.historical_analog import find_similar_cases
+
     _HAS_ANALOG = True
 except ImportError:
     _HAS_ANALOG = False
@@ -209,7 +211,11 @@ class VCPIntelligence:
 
         # Layer 4: Action
         result.action = self._determine_action(
-            signal, sector, result.detection, result.quality, result.context,
+            signal,
+            sector,
+            result.detection,
+            result.quality,
+            result.context,
             regime=regime,
         )
 
@@ -262,9 +268,7 @@ class VCPIntelligence:
 
         return d
 
-    def _detect_from_ohlcv(
-        self, sig: Dict[str, Any], d: VCPDetection
-    ) -> VCPDetection:
+    def _detect_from_ohlcv(self, sig: Dict[str, Any], d: VCPDetection) -> VCPDetection:
         """
         Algorithmic VCP detection from raw OHLCV data.
         Uses StructureDetector to find swing points and measure
@@ -273,8 +277,7 @@ class VCPIntelligence:
         closes = np.array(sig["closes"], dtype=float)
         highs = np.array(sig.get("highs", sig["closes"]), dtype=float)
         lows = np.array(sig.get("lows", sig["closes"]), dtype=float)
-        volumes = np.array(sig.get("volumes", [1e6] * len(closes)),
-                           dtype=float)
+        volumes = np.array(sig.get("volumes", [1e6] * len(closes)), dtype=float)
 
         if len(closes) < 30:
             return d
@@ -317,7 +320,7 @@ class VCPIntelligence:
             d.base_depth_pct = max(ranges) / price * 100 if price > 0 else 0
 
             # Distance from highs
-            high_52 = max(highs[-min(252, len(highs)):])
+            high_52 = max(highs[-min(252, len(highs)) :])
             d.distance_from_highs_pct = (
                 (high_52 - price) / high_52 * 100 if high_52 > 0 else 0
             )
@@ -686,7 +689,9 @@ class VCPIntelligence:
         if _HAS_ANALOG:
             try:
                 strategy = sig.get("strategy", "vcp")
-                regime_trend = regime.get("trend", "") if isinstance(regime, dict) else ""
+                regime_trend = (
+                    regime.get("trend", "") if isinstance(regime, dict) else ""
+                )
                 cases = find_similar_cases(
                     strategy=strategy,
                     regime=regime_trend,

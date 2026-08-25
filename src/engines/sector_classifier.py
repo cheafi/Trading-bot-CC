@@ -270,7 +270,6 @@ _SECTOR_MAP: Dict[str, tuple[SectorBucket, str, str]] = {
     "GDX": (SectorBucket.CYCLICAL, "Gold Miners", "GDX"),
     "XBI": (SectorBucket.DEFENSIVE, "Biotech ETF", "XBI"),
     "ITA": (SectorBucket.CYCLICAL, "Aerospace/Defense", "ITA"),
-    "TLT": (SectorBucket.DEFENSIVE, "Long Treasury", "TLT"),
     "BITO": (SectorBucket.THEME_HYPE, "Bitcoin ETF", "BITO"),
 }
 
@@ -300,7 +299,11 @@ class SectorClassifier:
 
         ctx = SectorContext(ticker=ticker)
 
-        from src.core.stock_universe import asset_class_for, etf_theme_for, is_index_or_etf
+        from src.core.stock_universe import (
+            asset_class_for,
+            etf_theme_for,
+            is_index_or_etf,
+        )
 
         if is_index_or_etf(ticker):
             ctx.liquidity_quality = "deep"

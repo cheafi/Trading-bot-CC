@@ -379,7 +379,10 @@ def collect_ai_reason_codes(
     for hint in quant_cluster_hints or []:
         if not isinstance(hint, dict):
             continue
-        if hint.get("type") == "cluster_blocked_cost" or hint.get("cluster") == "blocked-by-cost":
+        if (
+            hint.get("type") == "cluster_blocked_cost"
+            or hint.get("cluster") == "blocked-by-cost"
+        ):
             codes.append(
                 explain_reason_code(
                     REASON_COST_DEMOTION,
@@ -391,7 +394,10 @@ def collect_ai_reason_codes(
     idx = index_regime or {}
     posture = str(idx.get("posture") or "")
     breadth_blk = idx.get("breadth_regime") or {}
-    if posture in ("stressed", "no_trade_pressure") and breadth_blk.get("participation") == "broad":
+    if (
+        posture in ("stressed", "no_trade_pressure")
+        and breadth_blk.get("participation") == "broad"
+    ):
         codes.append(
             explain_reason_code(
                 REASON_REGIME_CONFLICT,
@@ -489,7 +495,9 @@ def build_ai_intelligence_for_today(
     return build_provenance_envelope(
         signal_type=SIGNAL_AI_INTELLIGENCE,
         source="deterministic-ai-intelligence",
-        degraded=degraded or scanner_degraded or bool(index_regime and index_regime.get("degraded")),
+        degraded=degraded
+        or scanner_degraded
+        or bool(index_regime and index_regime.get("degraded")),
         data_mode="research_only",
         extra=body,
     )

@@ -114,6 +114,7 @@ def _build_decision_card(ticker: str, brief_data: Dict, regime: Dict) -> Dict:
 
 def _load_brief_data() -> Dict:
     from src.services.brief_data_service import load_brief
+
     return load_brief()
 
 
@@ -123,7 +124,9 @@ def _load_brief_data() -> Dict:
 @router.get("")
 async def watchlist_board(
     limit: int = Query(default=50, ge=1, le=200),
-    action: Optional[str] = Query(default=None, description="Filter: TRADE, WATCH, WAIT, NO_TRADE"),
+    action: Optional[str] = Query(
+        default=None, description="Filter: TRADE, WATCH, WAIT, NO_TRADE"
+    ),
 ):  # noqa: C901
     """
     Full decision board — all scan tickers ranked by conviction.

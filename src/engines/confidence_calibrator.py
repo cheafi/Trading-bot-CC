@@ -113,8 +113,7 @@ class ConfidenceCalibrator:
                 total_observations=n,
                 expected_calibration_error=0.0,
                 recommendation=(
-                    f"Need {self.MIN_OBSERVATIONS - n} more "
-                    f"observations to calibrate"
+                    f"Need {self.MIN_OBSERVATIONS - n} more observations to calibrate"
                 ),
             )
 

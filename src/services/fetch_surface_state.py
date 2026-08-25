@@ -231,9 +231,7 @@ def describe_dossier_fetch_state(
         }
     if state == STATE_PARTIAL:
         if svc and "instant-degraded" in svc:
-            explanation = (
-                f"Core dossier loaded from {svc} snapshot — not live market_data_service research."
-            )
+            explanation = f"Core dossier loaded from {svc} snapshot — not live market_data_service research."
             if detail:
                 explanation = f"{explanation} ({detail})"
             return {
@@ -377,7 +375,9 @@ def surface_warmup_loading_line(surface_mode: Optional[str] = None) -> str:
     return _SURFACE_WARMUP_LOADING_LINES.get(key, _SURFACE_WARMUP_LOADING_LINES[""])
 
 
-def surface_warmup_next_action(state: str, *, surface_mode: Optional[str] = None) -> str:
+def surface_warmup_next_action(
+    state: str, *, surface_mode: Optional[str] = None
+) -> str:
     """Unified retry CTA — prefer canonical fetch_state next_action."""
     s = str(state or "").lower()
     if s == OPS_STATE_RETRY_RECOMMENDED or s == "retry_recommended":
@@ -387,7 +387,9 @@ def surface_warmup_next_action(state: str, *, surface_mode: Optional[str] = None
             return ops_degraded_copy(OPS_STATE_LOADING)["next_action"]
         return describe_fetch_state(STATE_LOADING)["next_action"]
     if s in (STATE_FAILED_FETCH, STATE_FAILED_FETCH_FALLBACK):
-        return describe_fetch_state(s if s in _STATE_COPY else STATE_FAILED_FETCH)["next_action"]
+        return describe_fetch_state(s if s in _STATE_COPY else STATE_FAILED_FETCH)[
+            "next_action"
+        ]
     if s == STATE_STALE:
         return describe_fetch_state(STATE_STALE)["next_action"]
     return describe_fetch_state(STATE_FAILED_FETCH)["next_action"]
@@ -460,7 +462,9 @@ def warmup_status_line(
     if not api_reachable:
         return "OFFLINE — API unreachable · instant snapshot may be stale"
     if mode == "loading":
-        return "WARMING — backend importing modules · brief/monitor queue only until full"
+        return (
+            "WARMING — backend importing modules · brief/monitor queue only until full"
+        )
     if instant_degraded or fetch_failed:
         return "DEGRADED — instant snapshot · council/scanner may disagree until live ranked loads"
     if mode == "full":
@@ -540,13 +544,9 @@ def route_abort_recovery_hint(surface: str = "") -> str:
     """One-time recovery copy after client route abort — no backend auto-heal."""
     key = str(surface or "").lower()
     if key in ("dossier", "dossier_research"):
-        return (
-            "Route failed — retry Load core only; CONFIRM ONLY until live dossier returns"
-        )
+        return "Route failed — retry Load core only; CONFIRM ONLY until live dossier returns"
     if key in ("discovery", "scanners"):
-        return (
-            "Scanner route failed — retry Run Scanners; fallback funnel is not deploy authority"
-        )
+        return "Scanner route failed — retry Run Scanners; fallback funnel is not deploy authority"
     return "Fetch failed — retry when badges clear; monitor queue and Guide remain safe"
 
 
@@ -787,7 +787,9 @@ def today_mission_system_blockers(
     return out
 
 
-def today_mission_blockers_title(*, wait_day: bool = False, has_system: bool = False) -> str:
+def today_mission_blockers_title(
+    *, wait_day: bool = False, has_system: bool = False
+) -> str:
     if wait_day and has_system:
         return "System blockers · gate flags"
     if wait_day:
@@ -879,7 +881,9 @@ def ops_recovery_guide(
     if breaker:
         blocks.append("Risk breaker ON — blocks new entries until cleared")
     if not ibkr_connected:
-        blocks.append("IBKR session inactive — no handoff until LOGIN→READY on IBKR tab")
+        blocks.append(
+            "IBKR session inactive — no handoff until LOGIN→READY on IBKR tab"
+        )
 
     if page_degraded or mode == "loading":
         safe_line = operator_loading_safe_line(health_mode=mode, wait_day=False)
@@ -887,7 +891,9 @@ def ops_recovery_guide(
             safe.append(safe_line)
         else:
             safe.append("Monitor-only: near-miss, Discovery context, Guide checklist")
-        safe.append("Read data contract strip — FETCH FAILED / FALLBACK suspends sizing")
+        safe.append(
+            "Read data contract strip — FETCH FAILED / FALLBACK suspends sizing"
+        )
     else:
         safe.append("Paper review and dossier research when board is WAIT")
         safe.append("Ops diagnostics do not override Dashboard deploy gate")
@@ -1063,7 +1069,9 @@ def today_execution_readiness_diagnostic(
     if not gaps and er.get("trade_handoff_ready"):
         return ""
     reasons = [str(r).strip() for r in (er.get("degraded_reasons") or [])[:2] if r]
-    base = "Exec diagnostic: " + (" · ".join(gaps) if gaps else (er.get("readiness_label") or "path incomplete"))
+    base = "Exec diagnostic: " + (
+        " · ".join(gaps) if gaps else (er.get("readiness_label") or "path incomplete")
+    )
     if reasons:
         base += " — " + "; ".join(reasons)
     return base + " (not deploy authority)"
@@ -1144,9 +1152,7 @@ def insider_context_label(
     q = str(quality or "").lower()
     labels = {
         "supportive_only": (
-            "Supportive context (mock/lagged)"
-            if degraded
-            else "Supportive context"
+            "Supportive context (mock/lagged)" if degraded else "Supportive context"
         ),
         "notable_accumulation": (
             "Possible accumulation (mock/lagged)"

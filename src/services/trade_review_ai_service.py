@@ -32,20 +32,38 @@ class TradeReviewAIService:
         exit_quality = "A" if r_multiple > -1 else "F"
         regime_alignment = "A" if "BULL" in regime.upper() and r_multiple > 0 else "C"
 
-        what_worked = [f"Thesis Quality: {thesis_quality}", f"Regime Alignment: {regime_alignment}"]
-        what_failed = [f"Timing Quality: {timing_quality}", f"Exit Quality: {exit_quality}"]
-        repeat_rule = "Repeat only when regime matches and R:R is at least 2:1." if r_multiple > 0 else "Do not repeat unless entry timing avoids noise."
+        what_worked = [
+            f"Thesis Quality: {thesis_quality}",
+            f"Regime Alignment: {regime_alignment}",
+        ]
+        what_failed = [
+            f"Timing Quality: {timing_quality}",
+            f"Exit Quality: {exit_quality}",
+        ]
+        repeat_rule = (
+            "Repeat only when regime matches and R:R is at least 2:1."
+            if r_multiple > 0
+            else "Do not repeat unless entry timing avoids noise."
+        )
 
-        lesson = f"In {regime}, {conviction} setups " + ("have an edge if held patiently." if r_multiple > 0 else "fail when discipline is broken.")
+        lesson = f"In {regime}, {conviction} setups " + (
+            "have an edge if held patiently."
+            if r_multiple > 0
+            else "fail when discipline is broken."
+        )
 
         return {
             "verdict": verdict,
             "what_worked": what_worked,
             "what_failed": what_failed,
             "repeat_rule": repeat_rule,
-            "confidence_recalibration": "Keep unchanged." if r_multiple > 0 else "Downshift conviction until evidence improves.",
-            "similar_case_note": similar_cases[0]["lesson"] if similar_cases else "No real similar cases to compare against yet.",
-            "structured_lesson": lesson
+            "confidence_recalibration": "Keep unchanged."
+            if r_multiple > 0
+            else "Downshift conviction until evidence improves.",
+            "similar_case_note": similar_cases[0]["lesson"]
+            if similar_cases
+            else "No real similar cases to compare against yet.",
+            "structured_lesson": lesson,
         }
 
     async def review_trade(

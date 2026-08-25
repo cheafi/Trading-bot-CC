@@ -6,7 +6,7 @@ Business quality + valuation + patience; not scanner momentum theater.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 BAMANG_LABELS: Dict[str, str] = {
     "moat_unclear": "moat unclear — story ≠ franchise",
@@ -24,8 +24,16 @@ PARTS: List[Dict[str, str]] = [
     {"part": "3", "title": "Munger mental models", "focus": "Checklists, inversion"},
     {"part": "4", "title": "Moat & franchise", "focus": "Durability of returns"},
     {"part": "5", "title": "Capital allocation", "focus": "Mgmt reinvestment skill"},
-    {"part": "6", "title": "Accounting reality", "focus": "Owner earnings, not EPS theater"},
-    {"part": "7", "title": "Market psychology", "focus": "Fear/greed — wait for mispricing"},
+    {
+        "part": "6",
+        "title": "Accounting reality",
+        "focus": "Owner earnings, not EPS theater",
+    },
+    {
+        "part": "7",
+        "title": "Market psychology",
+        "focus": "Fear/greed — wait for mispricing",
+    },
     {"part": "8", "title": "Concentration", "focus": "Few high-conviction names"},
     {"part": "9", "title": "Patience & cash", "focus": "No action is action"},
     {"part": "10", "title": "Institutional practice", "focus": "Process > prediction"},
@@ -75,7 +83,9 @@ def evaluate_value_posture(
     }
 
 
-def tags_for_playbook_row(row: Dict[str, Any], *, tradeability: str = "") -> Dict[str, Any]:
+def tags_for_playbook_row(
+    row: Dict[str, Any], *, tradeability: str = ""
+) -> Dict[str, Any]:
     v = evaluate_value_posture(row, tradeability=tradeability)
     return {
         "value_tag": v["headline"],

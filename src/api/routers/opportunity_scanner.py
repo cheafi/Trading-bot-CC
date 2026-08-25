@@ -293,7 +293,10 @@ async def opportunity_scanner(
             timeout=_FORCE_SCAN_TIMEOUT_SECONDS,
         )
         data = result.to_dict()
-        if data.get("candidates_ranked", 0) > 0 and str(data.get("engine", "")).lower() != "unknown":
+        if (
+            data.get("candidates_ranked", 0) > 0
+            and str(data.get("engine", "")).lower() != "unknown"
+        ):
             _set_cached(key, data)
             return sanitize_for_json({**data, "cached": False, "stale": False})
 
@@ -311,7 +314,10 @@ async def opportunity_scanner(
             }
             return sanitize_for_json(payload)
 
-        if str(data.get("engine", "")).lower() == "unknown" or data.get("candidates_ranked", 0) == 0:
+        if (
+            str(data.get("engine", "")).lower() == "unknown"
+            or data.get("candidates_ranked", 0) == 0
+        ):
             logger.warning(
                 "Scanner returned unknown engine or 0 candidates with no stale fallback."
             )

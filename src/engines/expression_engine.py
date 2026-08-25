@@ -8,8 +8,9 @@ This converts a directional view into a concrete instrument choice
 based on IV environment, options liquidity, hold period,
 and account constraints.
 """
+
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +35,12 @@ class ExpressionEngine:
     """
 
     # Thresholds
-    MIN_OPTION_OI = 500          # open interest floor
-    MAX_BID_ASK_SPREAD = 0.05    # 5% of mid price
-    IV_PERCENTILE_LOW = 30       # below this = cheap IV
-    IV_PERCENTILE_HIGH = 70      # above this = rich IV
-    MIN_DTE = 14                 # minimum days to expiry
-    DEFAULT_DTE_TARGET = 45      # ideal DTE for options
+    MIN_OPTION_OI = 500  # open interest floor
+    MAX_BID_ASK_SPREAD = 0.05  # 5% of mid price
+    IV_PERCENTILE_LOW = 30  # below this = cheap IV
+    IV_PERCENTILE_HIGH = 70  # above this = rich IV
+    MIN_DTE = 14  # minimum days to expiry
+    DEFAULT_DTE_TARGET = 45  # ideal DTE for options
 
     def __init__(
         self,
@@ -54,10 +55,10 @@ class ExpressionEngine:
         # Read from config with fallback
         try:
             from src.core.config import get_trading_config
+
             tc = get_trading_config()
             self.options_enabled = (
-                options_enabled if options_enabled is not None
-                else tc.options_enabled
+                options_enabled if options_enabled is not None else tc.options_enabled
             )
             self.max_option_allocation = (
                 max_option_allocation or tc.max_option_allocation
@@ -65,9 +66,7 @@ class ExpressionEngine:
             self.MIN_OPTION_OI = tc.min_option_oi
         except Exception:
             self.options_enabled = options_enabled or False
-            self.max_option_allocation = (
-                max_option_allocation or 0.20
-            )
+            self.max_option_allocation = max_option_allocation or 0.20
 
     def select_expression(
         self,
@@ -95,7 +94,7 @@ class ExpressionEngine:
         """
         hold_days = signal_data.get("hold_period_days", 5)
         confidence = signal_data.get("confidence", 0.5)
-        exp_return = signal_data.get("expected_return", 0.02)
+        signal_data.get("expected_return", 0.02)
         from src.utils.numeric_parse import parse_numeric
 
         rr_ratio = parse_numeric(signal_data.get("risk_reward_ratio"), 1.5)
@@ -143,9 +142,7 @@ class ExpressionEngine:
 
         # Gate 4: portfolio options allocation
         if portfolio_state:
-            current_opt_alloc = portfolio_state.get(
-                "options_allocation_pct", 0
-            )
+            current_opt_alloc = portfolio_state.get("options_allocation_pct", 0)
             if current_opt_alloc >= self.max_option_allocation:
                 plan["reason"] = "max_options_allocation"
                 return plan
@@ -153,29 +150,21 @@ class ExpressionEngine:
         # ── Decision logic ────────────────────────────────
         if iv_pct <= self.IV_PERCENTILE_LOW and confidence >= 0.6:
             # Cheap IV + high confidence → long option
-            plan = self._long_option_plan(
-                ticker, direction, iv_pct, hold_days
-            )
+            plan = self._long_option_plan(ticker, direction, iv_pct, hold_days)
         elif iv_pct >= self.IV_PERCENTILE_HIGH:
             if confidence >= 0.65 and rr_ratio >= 2.0:
                 # Rich IV + strong view → debit spread
-                plan = self._debit_spread_plan(
-                    ticker, direction, iv_pct, hold_days
-                )
+                plan = self._debit_spread_plan(ticker, direction, iv_pct, hold_days)
             elif confidence < 0.5:
                 # Rich IV + weak view → credit spread
-                plan = self._credit_spread_plan(
-                    ticker, direction, iv_pct, hold_days
-                )
+                plan = self._credit_spread_plan(ticker, direction, iv_pct, hold_days)
             else:
                 # Rich IV + moderate view → stock
                 plan["reason"] = "iv_rich_moderate_view"
         else:
             # Mid IV → depends on conviction
             if confidence >= 0.7 and rr_ratio >= 2.5:
-                plan = self._long_option_plan(
-                    ticker, direction, iv_pct, hold_days
-                )
+                plan = self._long_option_plan(ticker, direction, iv_pct, hold_days)
             else:
                 plan["reason"] = "mid_iv_stock_preferred"
 
@@ -190,20 +179,20 @@ class ExpressionEngine:
     ) -> Dict[str, Any]:
         """Single long CALL or PUT."""
         option_type = "CALL" if direction == "LONG" else "PUT"
-        dte = max(
-            self.MIN_DTE, min(hold_days * 3, self.DEFAULT_DTE_TARGET)
-        )
+        dte = max(self.MIN_DTE, min(hold_days * 3, self.DEFAULT_DTE_TARGET))
         return {
             "instrument": option_type,
             "ticker": ticker,
             "direction": direction,
             "reason": f"cheap_iv_{option_type.lower()}",
-            "option_legs": [{
-                "type": option_type,
-                "side": "BUY",
-                "dte_target": dte,
-                "strike_method": "ATM",
-            }],
+            "option_legs": [
+                {
+                    "type": option_type,
+                    "side": "BUY",
+                    "dte_target": dte,
+                    "strike_method": "ATM",
+                }
+            ],
             "leverage_ratio": 3.0,
             "max_risk_pct": 0.005,
             "iv_percentile": iv_pct,
@@ -218,9 +207,7 @@ class ExpressionEngine:
     ) -> Dict[str, Any]:
         """Debit spread to cap vega risk in high IV."""
         opt_type = "CALL" if direction == "LONG" else "PUT"
-        dte = max(
-            self.MIN_DTE, min(hold_days * 3, self.DEFAULT_DTE_TARGET)
-        )
+        dte = max(self.MIN_DTE, min(hold_days * 3, self.DEFAULT_DTE_TARGET))
         return {
             "instrument": "debit_spread",
             "ticker": ticker,
@@ -258,9 +245,7 @@ class ExpressionEngine:
             sell_type, buy_type = "PUT", "PUT"
         else:
             sell_type, buy_type = "CALL", "CALL"
-        dte = max(
-            self.MIN_DTE, min(hold_days * 2, self.DEFAULT_DTE_TARGET)
-        )
+        dte = max(self.MIN_DTE, min(hold_days * 2, self.DEFAULT_DTE_TARGET))
         return {
             "instrument": "credit_spread",
             "ticker": ticker,

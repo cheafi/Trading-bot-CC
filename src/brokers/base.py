@@ -3,25 +3,28 @@ Base Broker Interface
 
 Abstract base class for all broker implementations.
 """
-import asyncio
+
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, Any, List
+from typing import Dict, List, Optional
 
 try:
     from src.core.errors import BrokerError
 except ImportError:
+
     class BrokerError(Exception):
         pass
+
 
 logger = logging.getLogger(__name__)
 
 
 class OrderType(str, Enum):
     """Order types."""
+
     MARKET = "market"
     LIMIT = "limit"
     STOP = "stop"
@@ -31,6 +34,7 @@ class OrderType(str, Enum):
 
 class OrderSide(str, Enum):
     """Order side."""
+
     BUY = "buy"
     SELL = "sell"
     SELL_SHORT = "sell_short"
@@ -39,6 +43,7 @@ class OrderSide(str, Enum):
 
 class OrderStatus(str, Enum):
     """Order status."""
+
     PENDING = "pending"
     SUBMITTED = "submitted"
     PARTIAL = "partial"
@@ -50,6 +55,7 @@ class OrderStatus(str, Enum):
 
 class Market(str, Enum):
     """Trading markets."""
+
     US = "us"
     HK = "hk"
     CN = "cn"
@@ -59,6 +65,7 @@ class Market(str, Enum):
 @dataclass
 class OrderRequest:
     """Order request details."""
+
     ticker: str
     side: OrderSide
     quantity: int
@@ -74,6 +81,7 @@ class OrderRequest:
 @dataclass
 class OrderResult:
     """Order execution result."""
+
     success: bool
     order_id: Optional[str] = None
     status: OrderStatus = OrderStatus.PENDING
@@ -87,6 +95,7 @@ class OrderResult:
 @dataclass
 class Position:
     """Portfolio position."""
+
     ticker: str
     quantity: int
     avg_price: float
@@ -127,6 +136,7 @@ class Position:
 @dataclass
 class AccountInfo:
     """Account information."""
+
     account_id: str
     currency: str = "USD"
     cash: float = 0.0
@@ -141,6 +151,7 @@ class AccountInfo:
 @dataclass
 class Quote:
     """Market quote."""
+
     ticker: str
     price: float
     bid: float = 0.0
@@ -160,110 +171,112 @@ class Quote:
 class BaseBroker(ABC):
     """
     Abstract base class for broker implementations.
-    
+
     All broker connectors must implement these methods.
     """
-    
+
     def __init__(self, name: str):
         self.name = name
         self.is_connected = False
         self.logger = logging.getLogger(f"broker.{name}")
-    
+
     @abstractmethod
     async def connect(self) -> bool:
         """
         Establish connection to broker.
-        
+
         Returns:
             True if connection successful
         """
         pass
-    
+
     @abstractmethod
     async def disconnect(self):
         """Disconnect from broker."""
         pass
-    
+
     @abstractmethod
     async def get_account(self) -> AccountInfo:
         """
         Get account information.
-        
+
         Returns:
             AccountInfo with balances and buying power
         """
         pass
-    
+
     @abstractmethod
     async def get_positions(self) -> List[Position]:
         """
         Get all open positions.
-        
+
         Returns:
             List of Position objects
         """
         pass
-    
+
     @abstractmethod
-    async def get_quote(self, ticker: str, market: Market = Market.US) -> Optional[Quote]:
+    async def get_quote(
+        self, ticker: str, market: Market = Market.US
+    ) -> Optional[Quote]:
         """
         Get real-time quote for a ticker.
-        
+
         Args:
             ticker: Stock symbol
             market: Trading market
-            
+
         Returns:
             Quote object or None
         """
         pass
-    
+
     @abstractmethod
     async def place_order(self, order: OrderRequest) -> OrderResult:
         """
         Place a trading order.
-        
+
         Args:
             order: OrderRequest with order details
-            
+
         Returns:
             OrderResult with execution status
         """
         pass
-    
+
     @abstractmethod
     async def cancel_order(self, order_id: str) -> bool:
         """
         Cancel a pending order.
-        
+
         Args:
             order_id: Order ID to cancel
-            
+
         Returns:
             True if cancelled successfully
         """
         pass
-    
+
     @abstractmethod
     async def get_orders(self, status: Optional[OrderStatus] = None) -> List[Dict]:
         """
         Get orders with optional status filter.
-        
+
         Args:
             status: Filter by order status
-            
+
         Returns:
             List of order dictionaries
         """
         pass
-    
+
     async def get_order_status(self, order_id: str) -> Optional[OrderResult]:
         """
         Get status of a specific order.
-        
+
         Args:
             order_id: Order ID to check
-            
+
         Returns:
             OrderResult or None
         """
@@ -278,27 +291,27 @@ class BaseBroker(ABC):
                     avg_fill_price=order.get("avg_fill_price"),
                 )
         return None
-    
+
     # Convenience methods
-    
+
     async def buy(
         self,
         ticker: str,
         quantity: int,
         order_type: OrderType = OrderType.MARKET,
         limit_price: Optional[float] = None,
-        market: Market = Market.US
+        market: Market = Market.US,
     ) -> OrderResult:
         """
         Place a buy order.
-        
+
         Args:
             ticker: Stock symbol
             quantity: Number of shares
             order_type: Order type (market, limit, etc.)
             limit_price: Limit price for limit orders
             market: Trading market
-            
+
         Returns:
             OrderResult
         """
@@ -308,28 +321,28 @@ class BaseBroker(ABC):
             quantity=quantity,
             order_type=order_type,
             limit_price=limit_price,
-            market=market
+            market=market,
         )
         return await self.place_order(order)
-    
+
     async def sell(
         self,
         ticker: str,
         quantity: int,
         order_type: OrderType = OrderType.MARKET,
         limit_price: Optional[float] = None,
-        market: Market = Market.US
+        market: Market = Market.US,
     ) -> OrderResult:
         """
         Place a sell order.
-        
+
         Args:
             ticker: Stock symbol
             quantity: Number of shares
             order_type: Order type (market, limit, etc.)
             limit_price: Limit price for limit orders
             market: Trading market
-            
+
         Returns:
             OrderResult
         """
@@ -339,7 +352,7 @@ class BaseBroker(ABC):
             quantity=quantity,
             order_type=order_type,
             limit_price=limit_price,
-            market=market
+            market=market,
         )
         return await self.place_order(order)
 
@@ -349,7 +362,7 @@ class BaseBroker(ABC):
         quantity: int,
         order_type: OrderType = OrderType.MARKET,
         limit_price: Optional[float] = None,
-        market: Market = Market.US
+        market: Market = Market.US,
     ) -> OrderResult:
         """Open a short position."""
         order = OrderRequest(
@@ -358,7 +371,7 @@ class BaseBroker(ABC):
             quantity=quantity,
             order_type=order_type,
             limit_price=limit_price,
-            market=market
+            market=market,
         )
         return await self.place_order(order)
 
@@ -368,7 +381,7 @@ class BaseBroker(ABC):
         quantity: int,
         order_type: OrderType = OrderType.MARKET,
         limit_price: Optional[float] = None,
-        market: Market = Market.US
+        market: Market = Market.US,
     ) -> OrderResult:
         """Close a short position."""
         order = OrderRequest(
@@ -377,18 +390,20 @@ class BaseBroker(ABC):
             quantity=quantity,
             order_type=order_type,
             limit_price=limit_price,
-            market=market
+            market=market,
         )
         return await self.place_order(order)
 
-    async def close_position(self, ticker: str, market: Market = Market.US) -> OrderResult:
+    async def close_position(
+        self, ticker: str, market: Market = Market.US
+    ) -> OrderResult:
         """
         Close entire position for a ticker.
-        
+
         Args:
             ticker: Stock symbol
             market: Trading market
-            
+
         Returns:
             OrderResult
         """
@@ -399,37 +414,37 @@ class BaseBroker(ABC):
                     return await self.sell(ticker, pos.quantity, market=market)
                 elif pos.quantity < 0:
                     return await self.buy(ticker, abs(pos.quantity), market=market)
-        
+
         raise BrokerError(
             message=f"No position found for {ticker}",
             broker=self.name,
         )
-    
+
     async def close_all_positions(self) -> List[OrderResult]:
         """
         Close all open positions.
-        
+
         Returns:
             List of OrderResults
         """
         results = []
         positions = await self.get_positions()
-        
+
         for pos in positions:
             result = await self.close_position(pos.ticker, pos.market)
             results.append(result)
-        
+
         return results
-    
+
     def format_ticker(self, ticker: str, market: Market) -> str:
         """
         Format ticker for specific broker/market.
         Override in subclasses if needed.
-        
+
         Args:
             ticker: Raw ticker symbol
             market: Target market
-            
+
         Returns:
             Formatted ticker string
         """

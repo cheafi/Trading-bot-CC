@@ -12,9 +12,7 @@ class TaskService:
     """SQLite-backed CRUD service for task management."""
 
     def __init__(self, db_path: str | None = None):
-        default_path = (
-            Path(__file__).resolve().parents[2] / "data" / "tasks.db"
-        )
+        default_path = Path(__file__).resolve().parents[2] / "data" / "tasks.db"
         configured_path = os.environ.get("TASKS_DB_PATH")
         self._db_path = Path(db_path or configured_path or default_path)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -122,7 +120,9 @@ class TaskService:
                 ).fetchone()
         return self._row_to_dict(row) if row else None
 
-    def update_task(self, task_id: int, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def update_task(
+        self, task_id: int, updates: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
         if not updates:
             return self.get_task(task_id)
 

@@ -24,9 +24,7 @@ def _validate_ticker(ticker: str) -> str:
 @router.get("/{ticker}/filings")
 async def edgar_filings(
     ticker: str,
-    form_type: Optional[str] = Query(
-        None, description="Filter: 10-K, 10-Q, 8-K, 4"
-    ),
+    form_type: Optional[str] = Query(None, description="Filter: 10-K, 10-Q, 8-K, 4"),
     limit: int = Query(10, ge=1, le=50),
 ):
     """Get recent SEC filings for a ticker."""

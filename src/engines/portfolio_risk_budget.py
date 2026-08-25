@@ -18,6 +18,7 @@ The PortfolioRiskBudget is consumed by:
   - AutoTradingEngine._calculate_position_size()  (multiplier)
   - API / Discord for exposure display
 """
+
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
@@ -48,7 +49,7 @@ class ExposureSnapshot:
 
     # Gross / net
     gross_exposure: float = 0.0  # sum(abs(weight))
-    net_exposure: float = 0.0    # long - short
+    net_exposure: float = 0.0  # long - short
     long_weight: float = 0.0
     short_weight: float = 0.0
 
@@ -66,13 +67,15 @@ class ExposureSnapshot:
             "sector_weights": self.sector_weights,
             "portfolio_beta": round(self.portfolio_beta, 2),
             "high_beta_weight": round(
-                self.high_beta_weight, 3,
+                self.high_beta_weight,
+                3,
             ),
             "earnings_48h_tickers": list(
                 self.earnings_48h_tickers,
             ),
             "earnings_48h_weight": round(
-                self.earnings_48h_weight, 3,
+                self.earnings_48h_weight,
+                3,
             ),
             "gross_exposure": round(self.gross_exposure, 2),
             "net_exposure": round(self.net_exposure, 2),
@@ -143,8 +146,7 @@ class PortfolioRiskBudget:
         if position_weight > max_single:
             scalars.append(max_single / position_weight)
             violations.append(
-                f"Position {position_weight:.1%} > "
-                f"max {max_single:.0%}",
+                f"Position {position_weight:.1%} > max {max_single:.0%}",
             )
 
         # ── 2. Sector concentration ─────────────────────────
@@ -155,15 +157,13 @@ class PortfolioRiskBudget:
             headroom = max(0, max_sect - cur_sector)
             if headroom <= 0:
                 violations.append(
-                    f"Sector {sector} at {cur_sector:.0%} "
-                    f"(limit {max_sect:.0%})",
+                    f"Sector {sector} at {cur_sector:.0%} (limit {max_sect:.0%})",
                 )
                 scalars.append(0.0)
             else:
                 scalars.append(headroom / position_weight)
                 violations.append(
-                    f"Sector {sector} near limit: "
-                    f"{new_sector:.0%} > {max_sect:.0%}",
+                    f"Sector {sector} near limit: {new_sector:.0%} > {max_sect:.0%}",
                 )
 
         # ── 3. High-beta cluster ────────────────────────────
@@ -172,7 +172,8 @@ class PortfolioRiskBudget:
             max_hb = lim["max_high_beta_weight"]
             if new_hb > max_hb:
                 headroom = max(
-                    0, max_hb - exposure.high_beta_weight,
+                    0,
+                    max_hb - exposure.high_beta_weight,
                 )
                 if headroom <= 0:
                     violations.append(
@@ -186,18 +187,16 @@ class PortfolioRiskBudget:
 
         # ── 4. Earnings-within-48h ──────────────────────────
         if days_to_earnings <= 2:
-            new_earn = (
-                exposure.earnings_48h_weight + position_weight
-            )
+            new_earn = exposure.earnings_48h_weight + position_weight
             max_earn = lim["max_earnings_48h_weight"]
             if new_earn > max_earn:
                 headroom = max(
-                    0, max_earn - exposure.earnings_48h_weight,
+                    0,
+                    max_earn - exposure.earnings_48h_weight,
                 )
                 if headroom <= 0:
                     violations.append(
-                        f"Earnings-48h exposure at "
-                        f"{exposure.earnings_48h_weight:.0%}",
+                        f"Earnings-48h exposure at {exposure.earnings_48h_weight:.0%}",
                     )
                     scalars.append(0.0)
                 else:
@@ -206,7 +205,8 @@ class PortfolioRiskBudget:
         # ── 5. Correlation bucket ───────────────────────────
         if correlation_bucket:
             bucket_names = exposure.correlated_clusters.get(
-                correlation_bucket, [],
+                correlation_bucket,
+                [],
             )
             max_bucket = int(lim["max_correlated_bucket"])
             if len(bucket_names) >= max_bucket:
@@ -220,13 +220,12 @@ class PortfolioRiskBudget:
 
         # ── 6. Gross exposure in risk-off ───────────────────
         if regime_risk == "risk_off":
-            new_gross = (
-                exposure.gross_exposure + position_weight
-            )
+            new_gross = exposure.gross_exposure + position_weight
             max_gross = lim["max_gross_risk_off"]
             if new_gross > max_gross:
                 headroom = max(
-                    0, max_gross - exposure.gross_exposure,
+                    0,
+                    max_gross - exposure.gross_exposure,
                 )
                 if headroom <= 0:
                     violations.append(
@@ -241,8 +240,7 @@ class PortfolioRiskBudget:
         # ── 7. Max positions ────────────────────────────────
         if exposure.open_positions >= lim["max_positions"]:
             violations.append(
-                f"At max positions "
-                f"({int(lim['max_positions'])})",
+                f"At max positions ({int(lim['max_positions'])})",
             )
             scalars.append(0.0)
 
@@ -251,12 +249,12 @@ class PortfolioRiskBudget:
         if exposure.portfolio_beta > beta_lim:
             # Already over beta limit → scale down
             scalar = max(
-                beta_lim / exposure.portfolio_beta, 0.0,
+                beta_lim / exposure.portfolio_beta,
+                0.0,
             )
             scalars.append(scalar)
             violations.append(
-                f"Portfolio beta {exposure.portfolio_beta:.2f}"
-                f" > {beta_lim:.2f}",
+                f"Portfolio beta {exposure.portfolio_beta:.2f} > {beta_lim:.2f}",
             )
 
         # Final scalar = most restrictive
@@ -265,13 +263,13 @@ class PortfolioRiskBudget:
 
         budget_remaining = {
             "sector": round(
-                max(0, max_sect - cur_sector), 4,
+                max(0, max_sect - cur_sector),
+                4,
             ),
             "high_beta": round(
                 max(
                     0,
-                    lim["max_high_beta_weight"]
-                    - exposure.high_beta_weight,
+                    lim["max_high_beta_weight"] - exposure.high_beta_weight,
                 ),
                 4,
             )
@@ -280,8 +278,7 @@ class PortfolioRiskBudget:
             "earnings_48h": round(
                 max(
                     0,
-                    lim["max_earnings_48h_weight"]
-                    - exposure.earnings_48h_weight,
+                    lim["max_earnings_48h_weight"] - exposure.earnings_48h_weight,
                 ),
                 4,
             )
@@ -290,8 +287,7 @@ class PortfolioRiskBudget:
             "gross_risk_off": round(
                 max(
                     0,
-                    lim["max_gross_risk_off"]
-                    - exposure.gross_exposure,
+                    lim["max_gross_risk_off"] - exposure.gross_exposure,
                 ),
                 4,
             )
@@ -299,8 +295,7 @@ class PortfolioRiskBudget:
             else 1.0,
             "positions": max(
                 0,
-                int(lim["max_positions"])
-                - exposure.open_positions,
+                int(lim["max_positions"]) - exposure.open_positions,
             ),
         }
 
@@ -368,25 +363,28 @@ class PortfolioRiskBudget:
             if bucket:
                 clusters.setdefault(bucket, []).append(tkr)
 
-        snap.sector_weights = {
-            k: round(v, 4) for k, v in sectors.items()
-        }
+        snap.sector_weights = {k: round(v, 4) for k, v in sectors.items()}
         snap.high_beta_weight = round(
-            high_beta_val / equity, 4,
+            high_beta_val / equity,
+            4,
         )
         snap.long_weight = round(long_val / equity, 4)
         snap.short_weight = round(short_val / equity, 4)
         snap.gross_exposure = round(
-            (long_val + short_val) / equity, 4,
+            (long_val + short_val) / equity,
+            4,
         )
         snap.net_exposure = round(
-            (long_val - short_val) / equity, 4,
+            (long_val - short_val) / equity,
+            4,
         )
         snap.earnings_48h_weight = round(
-            earn_val / equity, 4,
+            earn_val / equity,
+            4,
         )
         snap.portfolio_beta = round(
-            weighted_beta if positions else 1.0, 3,
+            weighted_beta if positions else 1.0,
+            3,
         )
         snap.correlated_clusters = clusters
 

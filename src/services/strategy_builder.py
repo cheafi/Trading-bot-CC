@@ -5,10 +5,13 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from src.services.research_safety import sanitize_research_payload
-from src.services.strategy_export import export_pine_draft, export_strategy_contract_json
+from src.services.strategy_export import (
+    export_pine_draft,
+    export_strategy_contract_json,
+)
 
 _TICKER_RE = re.compile(r"\b([A-Z]{1,5})\b")
 _MA_RE = re.compile(r"(\d+)\s*/\s*(\d+)\s*ma", re.I)
@@ -54,13 +57,17 @@ def parse_strategy_prompt(raw_prompt: str) -> Dict[str, Any]:
         entry_rules.append("Price above rising 50MA with RS improving vs benchmark")
         exit_rules.append("Close below 50MA or RS deterioration")
     else:
-        entry_rules.append("Setup qualifies in Playbook watch bucket with volume confirmation")
+        entry_rules.append(
+            "Setup qualifies in Playbook watch bucket with volume confirmation"
+        )
         exit_rules.append("Invalidation level hit or regime WAIT")
 
     if _VIX_RE.search(text) or "vix" in lower:
         regime_filters.append("VIX below elevated threshold (e.g. < 25) or declining")
     if "uptrend" in lower or "上升" in text or "regime" in lower:
-        regime_filters.append("Market regime uptrend / TRADE board only for deploy review")
+        regime_filters.append(
+            "Market regime uptrend / TRADE board only for deploy review"
+        )
     if "唔想追高" in text or "no chase" in lower:
         risk_rules.append("No chase: entry only on pullback to monitor zone")
 

@@ -24,7 +24,9 @@ logger = logging.getLogger("opportunity_telegram")
 _STATE_PATH = os.path.join("data", "artifacts", "telegram_opportunity_state.json")
 _STATE_LOCK = threading.Lock()
 
-_WATCH_ACTIONS = frozenset({"WATCH", "WAIT", "WATCH_TRIGGER", "LEADER", "LEADER_MONITOR"})
+_WATCH_ACTIONS = frozenset(
+    {"WATCH", "WAIT", "WATCH_TRIGGER", "LEADER", "LEADER_MONITOR"}
+)
 _HIGH_TIERS = frozenset({"A", "HIGH", "High", "STRONG"})
 
 
@@ -259,7 +261,9 @@ def _detect_alerts(
         upgraded = (
             prev_kind == "monitor"
             and kind == "deploy"
-            or (kind == "monitor" and prev_score and _row_score(row) - prev_score >= 0.5)
+            or (
+                kind == "monitor" and prev_score and _row_score(row) - prev_score >= 0.5
+            )
         )
         if is_new:
             headline = "New opportunity detected · 新機會"
@@ -298,12 +302,19 @@ def _detect_alerts(
         and not any(a.get("headline", "").startswith("New top-ranked") for a in alerts)
     ):
         top_row = next(
-            (r for _, r in rows if validate_ticker(r.get("ticker") or "") == current_top),
+            (
+                r
+                for _, r in rows
+                if validate_ticker(r.get("ticker") or "") == current_top
+            ),
             None,
         )
         if top_row:
             kind = _alert_kind(top_row)
-            if kind and ((kind == "deploy" and _notify_deploy()) or (kind == "monitor" and _notify_monitor())):
+            if kind and (
+                (kind == "deploy" and _notify_deploy())
+                or (kind == "monitor" and _notify_monitor())
+            ):
                 alerts.append(
                     {
                         "kind": kind,
@@ -320,7 +331,9 @@ def _detect_alerts(
     return alerts
 
 
-def notify_live_playbook_scan(payload: Dict[str, Any], *, source: str = "playbook") -> Dict[str, Any]:
+def notify_live_playbook_scan(
+    payload: Dict[str, Any], *, source: str = "playbook"
+) -> Dict[str, Any]:
     """Evaluate ranked playbook payload and push immediate Telegram alerts."""
     result = {
         "configured": telegram_is_configured(),

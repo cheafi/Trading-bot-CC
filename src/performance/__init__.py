@@ -7,6 +7,7 @@ Tracks:
 - Strategy performance
 - P&L analytics
 """
+
 _LAZY = {
     "PerformanceTracker": ".performance_tracker",
     "SignalOutcome": ".performance_tracker",

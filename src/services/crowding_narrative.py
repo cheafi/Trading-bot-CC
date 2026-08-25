@@ -91,11 +91,9 @@ def compute_crowding_score(
 def crowding_from_playbook_row(row: Dict[str, Any]) -> Dict[str, Any]:
     """Infer crowding from ranked playbook row fields."""
     struct = row.get("structure") or {}
-    earn = row.get("earnings") or {}
+    row.get("earnings") or {}
     extended = bool(
-        struct.get("is_extended")
-        or row.get("extended")
-        or row.get("timing_extended")
+        struct.get("is_extended") or row.get("extended") or row.get("timing_extended")
     )
     rsi = struct.get("rsi") or row.get("rsi")
     vol = row.get("vol_ratio")
@@ -108,7 +106,9 @@ def crowding_from_playbook_row(row: Dict[str, Any]) -> Dict[str, Any]:
         rsi=float(rsi) if rsi is not None else None,
         extended=extended,
         sector_overlap_pct=overlap,
-        narrative_bullet_count=len(row.get("why_now") or []) if isinstance(row.get("why_now"), list) else 0,
+        narrative_bullet_count=len(row.get("why_now") or [])
+        if isinstance(row.get("why_now"), list)
+        else 0,
         confluence_score=int(row.get("trigger_quality") or 0),
         leader_status=row.get("leader"),
         vol_ratio=float(vol) if vol is not None else None,

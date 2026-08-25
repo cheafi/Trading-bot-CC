@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +48,7 @@ class CatalystSummarizer:
 
         # Fetch news concurrently
         results = await asyncio.gather(
-            *[self._mds.get_news(t, max_items=max_items_per_ticker)
-              for t in tickers],
+            *[self._mds.get_news(t, max_items=max_items_per_ticker) for t in tickers],
             return_exceptions=True,
         )
 
@@ -68,14 +67,16 @@ class CatalystSummarizer:
                 if not title:
                     continue
 
-                catalysts.append({
-                    "ticker": ticker,
-                    "headline": title[:200],
-                    "publisher": publisher,
-                    "url": url,
-                    "age_hours": round(age_h, 1) if age_h else None,
-                    "sentiment": self._quick_sentiment(title),
-                })
+                catalysts.append(
+                    {
+                        "ticker": ticker,
+                        "headline": title[:200],
+                        "publisher": publisher,
+                        "url": url,
+                        "age_hours": round(age_h, 1) if age_h else None,
+                        "sentiment": self._quick_sentiment(title),
+                    }
+                )
                 all_headlines.append(f"[{ticker}] {title}")
 
         # Sector summary — simple aggregation
@@ -98,14 +99,35 @@ class CatalystSummarizer:
         """Ultra-simple keyword sentiment for headlines."""
         h = headline.lower()
         bullish = [
-            "surge", "rally", "beat", "upgrade", "record",
-            "boost", "gain", "soar", "breakout", "bullish",
-            "growth", "profit", "positive",
+            "surge",
+            "rally",
+            "beat",
+            "upgrade",
+            "record",
+            "boost",
+            "gain",
+            "soar",
+            "breakout",
+            "bullish",
+            "growth",
+            "profit",
+            "positive",
         ]
         bearish = [
-            "crash", "plunge", "miss", "downgrade", "warning",
-            "drop", "loss", "fear", "risk", "bearish",
-            "decline", "cut", "negative", "layoff",
+            "crash",
+            "plunge",
+            "miss",
+            "downgrade",
+            "warning",
+            "drop",
+            "loss",
+            "fear",
+            "risk",
+            "bearish",
+            "decline",
+            "cut",
+            "negative",
+            "layoff",
         ]
         b_score = sum(1 for w in bullish if w in h)
         s_score = sum(1 for w in bearish if w in h)
@@ -117,7 +139,8 @@ class CatalystSummarizer:
 
     @staticmethod
     def _build_sector_summary(
-        catalysts: List[Dict], tickers: List[str],
+        catalysts: List[Dict],
+        tickers: List[str],
     ) -> str:
         """Build a one-paragraph sector summary from catalysts."""
         if not catalysts:
@@ -159,7 +182,8 @@ class CatalystSummarizer:
 
     @staticmethod
     def _generate_follow_ups(
-        catalysts: List[Dict], tickers: List[str],
+        catalysts: List[Dict],
+        tickers: List[str],
     ) -> List[str]:
         """Generate follow-up questions for the brief UI."""
         questions: List[str] = []
@@ -171,8 +195,7 @@ class CatalystSummarizer:
 
         # Sentiment questions
         bearish_tickers = {
-            c["ticker"] for c in catalysts
-            if c.get("sentiment") == "bearish"
+            c["ticker"] for c in catalysts if c.get("sentiment") == "bearish"
         }
         if bearish_tickers:
             bt = ", ".join(list(bearish_tickers)[:3])

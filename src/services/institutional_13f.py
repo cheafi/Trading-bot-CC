@@ -5,7 +5,7 @@ Institutional 13F sponsorship — quarterly lag, crowdedness hints.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from src.services.signal_provenance import (
     SIGNAL_INSTITUTIONAL_13F,
@@ -57,7 +57,7 @@ def crowdedness_hint(
 
 
 def _mock_holders(ticker: str) -> List[Dict[str, Any]]:
-    sym = ticker.upper()
+    ticker.upper()
     return [
         {
             "filer": "Illustrative Growth Fund",

@@ -17,7 +17,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from src.api.deps import verify_api_key, sanitize_for_json
+from src.api.deps import sanitize_for_json, verify_api_key
 from src.services.ibkr_service import (
     default_ibkr_port,
     get_ibkr_service,
@@ -122,7 +122,9 @@ async def ibkr_status(
         trade_handoff_ready=bool(st["readiness"].get("full_handoff_ready")),
     )
     st["diagnosis"] = diagnosis
-    st["gateway_reachable"] = bool(diagnosis.get("gateway_reachable", gateway_reachable))
+    st["gateway_reachable"] = bool(
+        diagnosis.get("gateway_reachable", gateway_reachable)
+    )
     st["api_port_open"] = bool(diagnosis.get("api_port_open"))
     st["health_label"] = diagnosis.get("label") or st.get("health_label")
     st["health_label_short"] = diagnosis.get("short")
@@ -207,13 +209,17 @@ async def ibkr_ping(req: PingRequest):
         docker=_running_in_docker(),
         ibapi_available=IBAPI_AVAILABLE,
         socket_connected=svc.is_connected,
-        session_usable=bool(transport.get("session_status") not in ("inactive", "lost")),
+        session_usable=bool(
+            transport.get("session_status") not in ("inactive", "lost")
+        ),
         ib_api_ready=bool(transport.get("ib_api_ready")),
         paper_port=svc.PAPER_PORT,
         live_ports=[svc.LIVE_PORT, svc.LIVE_TWS_PORT],
     )
     api_open = probe_tcp_port(host, port)
-    reachable = bool(diagnosis.get("gateway_reachable") or transport.get("gateway_reachable"))
+    reachable = bool(
+        diagnosis.get("gateway_reachable") or transport.get("gateway_reachable")
+    )
     message = diagnosis.get("label") or (
         f"IB API session ready on {host}:{port}"
         if transport.get("ib_api_ready")

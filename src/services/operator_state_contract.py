@@ -65,7 +65,11 @@ def _near_miss_signals(row: Dict[str, Any]) -> int:
     rr_raw = row.get("risk_reward")
     if rr_raw is not None and rr_raw != "":
         try:
-            rr = float(rr_raw) if not isinstance(rr_raw, str) else float(str(rr_raw).split(":")[0])
+            rr = (
+                float(rr_raw)
+                if not isinstance(rr_raw, str)
+                else float(str(rr_raw).split(":")[0])
+            )
             if rr >= 2.0:
                 hits += 1
         except (TypeError, ValueError):
@@ -133,9 +137,7 @@ def build_playbook_rank_buckets(
         "buckets": buckets,
         "monitor_rows": monitor_valid[:12],
         "monitor_section_label": (
-            "Monitor ranking"
-            if monitor_valid
-            else "No valid monitor candidates"
+            "Monitor ranking" if monitor_valid else "No valid monitor candidates"
         ),
         "rejected_section_label": "Rejected / Avoid — not monitor priority",
         "has_valid_monitors": bool(monitor_valid),
@@ -233,7 +235,9 @@ def _compact_blocker_parts(
     ):
         parts.append(
             "IBKR 離線 · broker offline"
-            if "GATEWAY" in broker_state or "IB" in broker_state or broker_state == "DISCONNECTED"
+            if "GATEWAY" in broker_state
+            or "IB" in broker_state
+            or broker_state == "DISCONNECTED"
             else "執行受阻 · execution blocked"
         )
     if fallback_mode:
@@ -251,7 +255,12 @@ def _repair_priority(
 ) -> str:
     if data_tier in ("STALE", "CRITICAL"):
         return "修復市場資料新鮮度 · repair market data freshness"
-    if broker_state in ("GATEWAY_DOWN", "IBAPI_MISSING", "SESSION_INACTIVE", "DISCONNECTED"):
+    if broker_state in (
+        "GATEWAY_DOWN",
+        "IBAPI_MISSING",
+        "SESSION_INACTIVE",
+        "DISCONNECTED",
+    ):
         return "恢復 IBKR 連線 · restore IBKR session"
     if not engine_running:
         return "啟動引擎（Ops）· start engine (Ops)"
@@ -272,17 +281,20 @@ def build_system_state(
     """Global system state — shown once in header strip."""
     da = decision_authority or {}
     cs = cc_state or {}
-    ex = execution_readiness or {}
     trust_obj = trust if isinstance(trust, dict) else {}
     fs = cs.get("freshness_state") or {}
     es = cs.get("execution_state") or {}
 
     tb = str(tradeability or "WAIT").upper()
-    data_tier = str(fs.get("worst_tier") or ("STALE" if trust_obj.get("stale") else "FRESH"))
+    data_tier = str(
+        fs.get("worst_tier") or ("STALE" if trust_obj.get("stale") else "FRESH")
+    )
     broker_state = str(es.get("state") or "")
     engine_running = bool(es.get("engine_running"))
     board_src = str(fs.get("board_source") or da.get("source") or "")
-    fallback_mode = board_src in ("fallback_brief", "stale_cache") or bool(da.get("degraded"))
+    fallback_mode = board_src in ("fallback_brief", "stale_cache") or bool(
+        da.get("degraded")
+    )
     deploy_open = (
         tb not in ("WAIT", "NO_TRADE")
         and bool(should_trade)
@@ -304,7 +316,9 @@ def build_system_state(
 
     if deploy_open:
         now = f"今日狀態：{tb} · 部署閘門可能開啟 · deploy gate may be open"
-        next_action = f"確認 Playbook deploy-qualified 後才 sizing · verify before sizing"
+        next_action = (
+            "確認 Playbook deploy-qualified 後才 sizing · verify before sizing"
+        )
     elif tb in ("WAIT", "NO_TRADE"):
         now = f"今日狀態：{tb} · 只可監察"
         next_action = f"只跟進 monitor queue；先 {repair}"
@@ -312,7 +326,9 @@ def build_system_state(
         now = f"今日狀態：{tb} · 監控時段 · monitor session"
         next_action = f"閘門解除前僅研究 · research only until gates clear；{repair}"
 
-    authority = "deploy" if deploy_open else "monitor_only" if tb == "WAIT" else "research_only"
+    authority = (
+        "deploy" if deploy_open else "monitor_only" if tb == "WAIT" else "research_only"
+    )
 
     return {
         "regime": tb,
@@ -335,9 +351,15 @@ def build_system_state(
         ),
         "chips": [
             {"label": tb, "class": "tradeability"},
-            {"label": f"DATA {data_tier}", "class": "data" if data_tier == "FRESH" else "warn"},
+            {
+                "label": f"DATA {data_tier}",
+                "class": "data" if data_tier == "FRESH" else "warn",
+            },
             {"label": broker_state.replace("_", " "), "class": "broker"},
-            {"label": "ENGINE ON" if engine_running else "ENGINE OFF", "class": "engine"},
+            {
+                "label": "ENGINE ON" if engine_running else "ENGINE OFF",
+                "class": "engine",
+            },
         ],
     }
 
@@ -379,10 +401,16 @@ def build_page_capability(
     can_confirm = tab == "dossier"
     can_size = can_deploy and not degraded and not broker_bad
     can_handoff = can_deploy and not broker_bad
-    can_cached = degraded or fetch_state in ("fallback", "failed_fetch_fallback", "stale")
+    can_cached = degraded or fetch_state in (
+        "fallback",
+        "failed_fetch_fallback",
+        "stale",
+    )
 
     blocked = system_state.get("blocker_compact") or "閘門生效 · gates active"
-    primary = system_state.get("repair_priority") or "重新整理即時資料 · refresh live data"
+    primary = (
+        system_state.get("repair_priority") or "重新整理即時資料 · refresh live data"
+    )
 
     tab_key = resolve_tab_id(tab)
     sentences: Dict[str, Dict[str, str]] = {
@@ -393,9 +421,15 @@ def build_page_capability(
             scope="dashboard",
         ),
         "signals": format_operator_sentence(
-            now="無可部署名單 · No deploy names" if not can_deploy else "Deploy review · 可檢視 deploy-qualified",
-            blocker=f"board gate {tb} + 0 deploy-qualified" if not can_deploy else "verify execution readiness",
-            next_action="只追蹤 near-miss upgrade candidates" if not can_deploy else "size only deploy-qualified",
+            now="無可部署名單 · No deploy names"
+            if not can_deploy
+            else "Deploy review · 可檢視 deploy-qualified",
+            blocker=f"board gate {tb} + 0 deploy-qualified"
+            if not can_deploy
+            else "verify execution readiness",
+            next_action="只追蹤 near-miss upgrade candidates"
+            if not can_deploy
+            else "size only deploy-qualified",
             scope="playbook",
         ),
         "scanners": format_operator_sentence(
@@ -403,7 +437,9 @@ def build_page_capability(
             if fetch_state == "failed_fetch"
             else "Discovery research · 研究模式",
             blocker="API fetch failed" if fetch_state == "failed_fetch" else blocked,
-            next_action="用 cached leaders 或 retry scan" if can_cached else "run live scan",
+            next_action="用 cached leaders 或 retry scan"
+            if can_cached
+            else "run live scan",
             scope="discovery",
         ),
         "dossier": format_operator_sentence(
@@ -415,7 +451,9 @@ def build_page_capability(
         "flow": format_operator_sentence(
             now="Flow unavailable / mock · Flow 暫不可用",
             blocker="live provider not connected" if mock_only else blocked,
-            next_action="Ignore flow today · 今日忽略 flow" if mock_only else "confirm in Playbook only",
+            next_action="Ignore flow today · 今日忽略 flow"
+            if mock_only
+            else "confirm in Playbook only",
             scope="flow",
         ),
         "funds": format_operator_sentence(
@@ -462,7 +500,9 @@ def build_page_capability(
         ),
         "portfolio": format_operator_sentence(
             now="持倉與風險 · Portfolio & risk",
-            blocker=blocked if not can_deploy else "sizing 需閘門開啟 · sizing needs open gates",
+            blocker=blocked
+            if not can_deploy
+            else "sizing 需閘門開啟 · sizing needs open gates",
             next_action="檢視止損／熱度；新倉僅 monitor · review stops/heat; new entries monitor-only"
             if not can_deploy
             else "依 deploy-qualified 調整部位 · size per deploy-qualified",
@@ -476,7 +516,9 @@ def build_page_capability(
         ),
         "ibkr": format_operator_sentence(
             now="IBKR · 券商連線與交付",
-            blocker=blocked if broker_bad else "登入後確認 handoff ladder · login then verify handoff",
+            blocker=blocked
+            if broker_bad
+            else "登入後確認 handoff ladder · login then verify handoff",
             next_action="Gateway → Session → Bracket → Handoff · 逐步確認交付梯",
             scope="ibkr",
         ),

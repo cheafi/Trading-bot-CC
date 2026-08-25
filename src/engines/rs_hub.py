@@ -12,11 +12,11 @@ Relative Strength ranking engine providing:
 
 from __future__ import annotations
 
-from src.core.stock_universe import SECTOR_BY_TICKER as _UNIVERSE_SECTORS
-
 import logging
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
+
+from src.core.stock_universe import SECTOR_BY_TICKER as _UNIVERSE_SECTORS
 
 logger = logging.getLogger(__name__)
 
@@ -24,20 +24,21 @@ logger = logging.getLogger(__name__)
 # ── RS Lifecycle States ──────────────────────────────────────────────────────
 
 RS_STATES = {
-    "EMERGING":          "RS turning positive, early leadership signal",
-    "CONFIRMED_LEADER":  "RS sustained above 120 for 20+ days",
-    "MATURE_LEADER":     "RS high but slope flattening",
-    "EXTENDED":          "RS very high, risk of mean reversion",
-    "FADING":            "RS declining from leadership",
-    "BROKEN":            "RS dropped below 95 from leadership",
-    "LAGGARD":           "RS consistently below benchmark",
-    "NEUTRAL":           "RS near benchmark, no edge",
+    "EMERGING": "RS turning positive, early leadership signal",
+    "CONFIRMED_LEADER": "RS sustained above 120 for 20+ days",
+    "MATURE_LEADER": "RS high but slope flattening",
+    "EXTENDED": "RS very high, risk of mean reversion",
+    "FADING": "RS declining from leadership",
+    "BROKEN": "RS dropped below 95 from leadership",
+    "LAGGARD": "RS consistently below benchmark",
+    "NEUTRAL": "RS near benchmark, no edge",
 }
 
 
 @dataclass
 class RSProfile:
     """Full RS profile for one ticker."""
+
     ticker: str = ""
     rank: int = 0
 
@@ -56,7 +57,7 @@ class RSProfile:
     leadership: str = "NEUTRAL"  # LEADER / FOLLOWER / LAGGARD
 
     # Quality layers (0-100)
-    rs_quality: float = 50.0       # How strong is RS
+    rs_quality: float = 50.0  # How strong is RS
     rs_tradeability: float = 50.0  # Is it tradeable now
     rs_sustainability: float = 50.0  # Will it persist
 
@@ -72,8 +73,8 @@ class RSProfile:
     rs_delta_60d: float = 0.0
 
     # RS velocity & acceleration
-    rs_velocity: float = 0.0       # slope magnitude
-    rs_acceleration: float = 0.0   # slope change
+    rs_velocity: float = 0.0  # slope magnitude
+    rs_acceleration: float = 0.0  # slope change
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -106,26 +107,58 @@ class RSProfile:
 # ── Sector / MCap mappings ──────────────────────────────────────────────────
 
 SECTOR_MAP: Dict[str, str] = {
-    "AAPL": "Technology", "MSFT": "Technology", "NVDA": "Technology",
-    "AVGO": "Technology", "ORCL": "Technology", "CRM": "Technology",
-    "AMD": "Technology", "CSCO": "Technology", "ADBE": "Technology",
-    "INTC": "Technology", "TXN": "Technology", "QCOM": "Technology",
-    "INTU": "Technology", "AMAT": "Technology", "NOW": "Technology",
-    "META": "Communication", "GOOGL": "Communication", "NFLX": "Communication",
-    "AMZN": "Consumer Discretionary", "TSLA": "Consumer Discretionary",
-    "HD": "Consumer Discretionary", "NKE": "Consumer Discretionary",
-    "JPM": "Financials", "BAC": "Financials", "GS": "Financials",
-    "MS": "Financials", "V": "Financials", "MA": "Financials",
-    "JNJ": "Healthcare", "UNH": "Healthcare", "PFE": "Healthcare",
-    "ABBV": "Healthcare", "LLY": "Healthcare", "MRK": "Healthcare",
-    "XOM": "Energy", "CVX": "Energy", "COP": "Energy",
-    "LIN": "Materials", "APD": "Materials",
-    "NEE": "Utilities", "DUK": "Utilities",
-    "PLD": "Real Estate", "AMT": "Real Estate",
-    "CAT": "Industrials", "BA": "Industrials", "GE": "Industrials",
-    "HON": "Industrials", "UPS": "Industrials",
-    "PG": "Consumer Staples", "KO": "Consumer Staples",
-    "PEP": "Consumer Staples", "WMT": "Consumer Staples",
+    "AAPL": "Technology",
+    "MSFT": "Technology",
+    "NVDA": "Technology",
+    "AVGO": "Technology",
+    "ORCL": "Technology",
+    "CRM": "Technology",
+    "AMD": "Technology",
+    "CSCO": "Technology",
+    "ADBE": "Technology",
+    "INTC": "Technology",
+    "TXN": "Technology",
+    "QCOM": "Technology",
+    "INTU": "Technology",
+    "AMAT": "Technology",
+    "NOW": "Technology",
+    "META": "Communication",
+    "GOOGL": "Communication",
+    "NFLX": "Communication",
+    "AMZN": "Consumer Discretionary",
+    "TSLA": "Consumer Discretionary",
+    "HD": "Consumer Discretionary",
+    "NKE": "Consumer Discretionary",
+    "JPM": "Financials",
+    "BAC": "Financials",
+    "GS": "Financials",
+    "MS": "Financials",
+    "V": "Financials",
+    "MA": "Financials",
+    "JNJ": "Healthcare",
+    "UNH": "Healthcare",
+    "PFE": "Healthcare",
+    "ABBV": "Healthcare",
+    "LLY": "Healthcare",
+    "MRK": "Healthcare",
+    "XOM": "Energy",
+    "CVX": "Energy",
+    "COP": "Energy",
+    "LIN": "Materials",
+    "APD": "Materials",
+    "NEE": "Utilities",
+    "DUK": "Utilities",
+    "PLD": "Real Estate",
+    "AMT": "Real Estate",
+    "CAT": "Industrials",
+    "BA": "Industrials",
+    "GE": "Industrials",
+    "HON": "Industrials",
+    "UPS": "Industrials",
+    "PG": "Consumer Staples",
+    "KO": "Consumer Staples",
+    "PEP": "Consumer Staples",
+    "WMT": "Consumer Staples",
 }
 
 for _t, _s in _UNIVERSE_SECTORS.items():
@@ -133,24 +166,51 @@ for _t, _s in _UNIVERSE_SECTORS.items():
         SECTOR_MAP[_t] = _s.replace("Communication Services", "Communication")
 
 SECTOR_ETF_MAP: Dict[str, str] = {
-    "Technology": "XLK", "Communication": "XLC",
-    "Consumer Discretionary": "XLY", "Financials": "XLF",
-    "Healthcare": "XLV", "Energy": "XLE", "Materials": "XLB",
-    "Utilities": "XLU", "Real Estate": "XLRE",
-    "Industrials": "XLI", "Consumer Staples": "XLP",
+    "Technology": "XLK",
+    "Communication": "XLC",
+    "Consumer Discretionary": "XLY",
+    "Financials": "XLF",
+    "Healthcare": "XLV",
+    "Energy": "XLE",
+    "Materials": "XLB",
+    "Utilities": "XLU",
+    "Real Estate": "XLRE",
+    "Industrials": "XLI",
+    "Consumer Staples": "XLP",
 }
 
 # Semis get SMH override
 _SEMI_TICKERS = {"NVDA", "AMD", "INTC", "AVGO", "TXN", "QCOM", "AMAT", "TSM", "MU"}
 
 MCAP_BUCKETS: Dict[str, str] = {
-    "AAPL": "Mega", "MSFT": "Mega", "NVDA": "Mega", "GOOGL": "Mega",
-    "AMZN": "Mega", "META": "Mega", "TSLA": "Large", "JPM": "Large",
-    "V": "Large", "UNH": "Large", "JNJ": "Large", "XOM": "Large",
-    "PG": "Large", "HD": "Large", "MA": "Large", "BAC": "Large",
-    "AVGO": "Large", "LLY": "Large", "ABBV": "Large", "CRM": "Large",
-    "AMD": "Large", "NFLX": "Large", "ORCL": "Large", "GS": "Large",
-    "ADBE": "Large", "QCOM": "Large", "CSCO": "Large", "CAT": "Large",
+    "AAPL": "Mega",
+    "MSFT": "Mega",
+    "NVDA": "Mega",
+    "GOOGL": "Mega",
+    "AMZN": "Mega",
+    "META": "Mega",
+    "TSLA": "Large",
+    "JPM": "Large",
+    "V": "Large",
+    "UNH": "Large",
+    "JNJ": "Large",
+    "XOM": "Large",
+    "PG": "Large",
+    "HD": "Large",
+    "MA": "Large",
+    "BAC": "Large",
+    "AVGO": "Large",
+    "LLY": "Large",
+    "ABBV": "Large",
+    "CRM": "Large",
+    "AMD": "Large",
+    "NFLX": "Large",
+    "ORCL": "Large",
+    "GS": "Large",
+    "ADBE": "Large",
+    "QCOM": "Large",
+    "CSCO": "Large",
+    "CAT": "Large",
 }
 
 
@@ -170,6 +230,7 @@ def _get_mcap(ticker: str) -> str:
 
 
 # ── Core RS Engine ───────────────────────────────────────────────────────────
+
 
 def classify_rs_state(
     composite: float,
@@ -297,15 +358,21 @@ def compute_final_rank_score(profile: RSProfile) -> float:
 
     # Sector score: LEADER in a strong sector > follower in weak sector
     sector_score = (
-        80 if profile.leadership == "LEADER" else
-        50 if profile.leadership == "FOLLOWER" else 20
+        80
+        if profile.leadership == "LEADER"
+        else 50
+        if profile.leadership == "FOLLOWER"
+        else 20
     )
     # Setup score: derived from tradeability + sustainability
     setup_score = (profile.rs_tradeability + profile.rs_sustainability) / 2
     # Liquidity proxy: large/mega caps more liquid
     liquidity_score = (
-        80 if profile.mcap_bucket == "Mega" else
-        65 if profile.mcap_bucket == "Large" else 45
+        80
+        if profile.mcap_bucket == "Mega"
+        else 65
+        if profile.mcap_bucket == "Large"
+        else 45
     )
 
     score = (
@@ -327,6 +394,7 @@ def compute_final_rank_score(profile: RSProfile) -> float:
 
 
 # ── Setup + RS Matrix ────────────────────────────────────────────────────────
+
 
 def rs_setup_matrix(rs_quality: float, setup_quality: float) -> str:
     """

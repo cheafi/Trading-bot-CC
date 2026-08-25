@@ -114,7 +114,9 @@ def build_breadth_regime_block(
             participation = "mixed"
     elif scanner_participation is not None and universe_scanned:
         ratio = scanner_participation / max(universe_scanned, 1)
-        participation = "broad" if ratio > 0.12 else "mixed" if ratio > 0.05 else "narrow"
+        participation = (
+            "broad" if ratio > 0.12 else "mixed" if ratio > 0.05 else "narrow"
+        )
     return {
         "block": "breadth",
         "authority": AUTHORITY_REGIME_FILTER,
@@ -277,7 +279,8 @@ def build_index_regime_summary(
         "vol_regime": vol_block,
         "breadth_regime": breadth_block,
         "factor_regime": factor_block,
-        "cross_asset": cross_asset or {
+        "cross_asset": cross_asset
+        or {
             "degraded": True,
             "summary": "Cross-asset block pending — MOCK/DEGRADED",
             "monitor_only": True,
@@ -312,7 +315,8 @@ async def build_index_regime_for_today(
         volatility_label=str(regime.get("volatility") or "NORMAL"),
         should_trade=bool(regime.get("should_trade")),
         tradeability=str(regime.get("tradeability") or "WAIT"),
-        scanner_participation=funnel.get("signals_triggered") or funnel.get("actionable_above_7"),
+        scanner_participation=funnel.get("signals_triggered")
+        or funnel.get("actionable_above_7"),
         universe_scanned=funnel.get("universe"),
         cross_asset=cross_asset,
         source="today-index-regime",

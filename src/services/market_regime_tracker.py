@@ -135,7 +135,9 @@ class MarketRegimeTracker:
         )
 
     # -- analytics ----------------------------------------------------------
-    def distribution_day_count(self, window: int = _DISTRIBUTION_WINDOW) -> Dict[str, Any]:
+    def distribution_day_count(
+        self, window: int = _DISTRIBUTION_WINDOW
+    ) -> Dict[str, Any]:
         """Count distribution days in the trailing window.
 
         Distribution day = index closes down >= _DISTRIBUTION_DROP_PCT on volume
@@ -207,7 +209,11 @@ class MarketRegimeTracker:
         timeline: List[Dict[str, Any]] = []
         prev: Optional[Dict[str, Any]] = None
         for s in snaps:
-            if prev is None or s["trend"] != prev["trend"] or s["tradeability"] != prev["tradeability"]:
+            if (
+                prev is None
+                or s["trend"] != prev["trend"]
+                or s["tradeability"] != prev["tradeability"]
+            ):
                 timeline.append(
                     {
                         "date": s["date"],
@@ -233,8 +239,12 @@ class MarketRegimeTracker:
         return {
             "window": window,
             "sessions": len(snaps),
-            "leader_cluster": sorted(leader_counts.items(), key=lambda kv: kv[1], reverse=True),
-            "laggard_cluster": sorted(laggard_counts.items(), key=lambda kv: kv[1], reverse=True),
+            "leader_cluster": sorted(
+                leader_counts.items(), key=lambda kv: kv[1], reverse=True
+            ),
+            "laggard_cluster": sorted(
+                laggard_counts.items(), key=lambda kv: kv[1], reverse=True
+            ),
         }
 
     def market_pressure_score(self) -> Dict[str, Any]:

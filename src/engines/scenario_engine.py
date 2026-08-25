@@ -24,21 +24,40 @@ _BUILTIN_SCENARIOS = {
     "gfc_2008": {
         "name": "2008 Global Financial Crisis",
         "description": "Broad equity drawdown ~55%, financials -80%, credit freeze",
-        "shocks": {"equity": -0.55, "financials": -0.80, "tech": -0.50, "energy": -0.45, "vix_to": 80},
+        "shocks": {
+            "equity": -0.55,
+            "financials": -0.80,
+            "tech": -0.50,
+            "energy": -0.45,
+            "vix_to": 80,
+        },
         "duration_days": 365,
         "historical_ref": "S&P 500 Oct 2007 – Mar 2009",
     },
     "covid_2020": {
         "name": "COVID-19 Crash",
         "description": "Sharp -34% drawdown in 23 trading days, V-shaped recovery",
-        "shocks": {"equity": -0.34, "travel": -0.60, "energy": -0.50, "tech": -0.25, "vix_to": 82},
+        "shocks": {
+            "equity": -0.34,
+            "travel": -0.60,
+            "energy": -0.50,
+            "tech": -0.25,
+            "vix_to": 82,
+        },
         "duration_days": 23,
         "historical_ref": "S&P 500 Feb–Mar 2020",
     },
     "rate_shock_2022": {
         "name": "2022 Rate Shock",
         "description": "Fed hiking cycle, growth-to-value rotation, -27% Nasdaq",
-        "shocks": {"equity": -0.20, "tech": -0.33, "growth": -0.35, "value": -0.05, "bonds": -0.15, "vix_to": 35},
+        "shocks": {
+            "equity": -0.20,
+            "tech": -0.33,
+            "growth": -0.35,
+            "value": -0.05,
+            "bonds": -0.15,
+            "vix_to": 35,
+        },
         "duration_days": 280,
         "historical_ref": "Nasdaq Jan–Oct 2022",
     },
@@ -52,28 +71,51 @@ _BUILTIN_SCENARIOS = {
     "sector_rotation": {
         "name": "Sector Rotation",
         "description": "Sharp rotation from growth/momentum into value/defensive",
-        "shocks": {"growth": -0.15, "momentum": -0.12, "value": 0.05, "defensive": 0.03, "vix_to": 22},
+        "shocks": {
+            "growth": -0.15,
+            "momentum": -0.12,
+            "value": 0.05,
+            "defensive": 0.03,
+            "vix_to": 22,
+        },
         "duration_days": 30,
         "historical_ref": "Various rotation episodes",
     },
     "china_contagion": {
         "name": "China/EM Contagion",
         "description": "EM crisis spills into US markets, commodity crash",
-        "shocks": {"equity": -0.15, "em": -0.30, "commodities": -0.25, "energy": -0.20, "vix_to": 30},
+        "shocks": {
+            "equity": -0.15,
+            "em": -0.30,
+            "commodities": -0.25,
+            "energy": -0.20,
+            "vix_to": 30,
+        },
         "duration_days": 60,
         "historical_ref": "Aug 2015 / 2018 EM stress",
     },
     "inflation_spike": {
         "name": "Inflation Spike",
         "description": "Unexpected CPI surge → rate fears → equity selloff",
-        "shocks": {"equity": -0.12, "tech": -0.18, "bonds": -0.08, "commodities": 0.10, "vix_to": 28},
+        "shocks": {
+            "equity": -0.12,
+            "tech": -0.18,
+            "bonds": -0.08,
+            "commodities": 0.10,
+            "vix_to": 28,
+        },
         "duration_days": 45,
         "historical_ref": "2021–2022 inflation surprise",
     },
     "liquidity_crisis": {
         "name": "Liquidity Crisis",
         "description": "Funding stress, credit spreads widen, small-caps illiquid",
-        "shocks": {"equity": -0.20, "small_cap": -0.30, "financials": -0.25, "vix_to": 40},
+        "shocks": {
+            "equity": -0.20,
+            "small_cap": -0.30,
+            "financials": -0.25,
+            "vix_to": 40,
+        },
         "duration_days": 30,
         "historical_ref": "Mar 2023 SVB / regional banks",
     },
@@ -272,10 +314,16 @@ class ScenarioEngine:
         # Generate hedge suggestions
         hedges = self._suggest_hedges(scenario, total_pnl, positions)
 
-        severity = "SEVERE" if total_pnl < -0.20 else "MODERATE" if total_pnl < -0.10 else "MILD"
+        severity = (
+            "SEVERE"
+            if total_pnl < -0.20
+            else "MODERATE"
+            if total_pnl < -0.10
+            else "MILD"
+        )
         summary = (
-            f"{scenario.name}: estimated {total_pnl*100:.1f}% portfolio impact ({severity}). "
-            f"Worst hit: {worst_ticker} at {worst_loss*100:.1f}%. "
+            f"{scenario.name}: estimated {total_pnl * 100:.1f}% portfolio impact ({severity}). "
+            f"Worst hit: {worst_ticker} at {worst_loss * 100:.1f}%. "
             f"{surviving}/{len(positions)} positions survive."
         )
 
@@ -295,10 +343,7 @@ class ScenarioEngine:
         positions: list[dict],
     ) -> list[dict]:
         """Run portfolio through all builtin scenarios."""
-        return [
-            self.run_scenario(key, positions).to_dict()
-            for key in self.scenarios
-        ]
+        return [self.run_scenario(key, positions).to_dict() for key in self.scenarios]
 
     def _suggest_hedges(
         self,
@@ -310,34 +355,54 @@ class ScenarioEngine:
         hedges: list[HedgeSuggestion] = []
 
         if estimated_pnl < -0.15:
-            hedges.append(HedgeSuggestion(
-                "SPY puts (1-month ATM)", "BUY",
-                "Broad equity protection for severe drawdown",
-                "IMMEDIATE", 1.5,
-            ))
+            hedges.append(
+                HedgeSuggestion(
+                    "SPY puts (1-month ATM)",
+                    "BUY",
+                    "Broad equity protection for severe drawdown",
+                    "IMMEDIATE",
+                    1.5,
+                )
+            )
         if estimated_pnl < -0.10:
-            hedges.append(HedgeSuggestion(
-                "VIX calls (short-dated)", "BUY",
-                "Volatility hedge — profits from fear spikes",
-                "SOON", 0.5,
-            ))
+            hedges.append(
+                HedgeSuggestion(
+                    "VIX calls (short-dated)",
+                    "BUY",
+                    "Volatility hedge — profits from fear spikes",
+                    "SOON",
+                    0.5,
+                )
+            )
         if scenario.shocks.get("tech", 0) < -0.20:
-            hedges.append(HedgeSuggestion(
-                "QQQ puts or reduce tech weight", "BUY/REDUCE",
-                "Tech-heavy portfolio needs sector hedge",
-                "IMMEDIATE", 1.0,
-            ))
+            hedges.append(
+                HedgeSuggestion(
+                    "QQQ puts or reduce tech weight",
+                    "BUY/REDUCE",
+                    "Tech-heavy portfolio needs sector hedge",
+                    "IMMEDIATE",
+                    1.0,
+                )
+            )
         if scenario.shocks.get("bonds", 0) < -0.10:
-            hedges.append(HedgeSuggestion(
-                "TLT puts or short duration", "BUY",
-                "Rate-sensitive scenario — hedge duration",
-                "SOON", 0.5,
-            ))
+            hedges.append(
+                HedgeSuggestion(
+                    "TLT puts or short duration",
+                    "BUY",
+                    "Rate-sensitive scenario — hedge duration",
+                    "SOON",
+                    0.5,
+                )
+            )
         if not hedges:
-            hedges.append(HedgeSuggestion(
-                "Cash raise 5-10%", "SELL",
-                "Mild scenario — small cash raise sufficient",
-                "MONITOR", 0.0,
-            ))
+            hedges.append(
+                HedgeSuggestion(
+                    "Cash raise 5-10%",
+                    "SELL",
+                    "Mild scenario — small cash raise sufficient",
+                    "MONITOR",
+                    0.0,
+                )
+            )
 
         return hedges

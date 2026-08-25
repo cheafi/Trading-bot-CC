@@ -13,19 +13,18 @@ Report types:
 All builders return plain dicts so renderers (Discord, API)
 can consume them without importing heavyweight UI libraries.
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.core.models import (
     ChangeItem,
     DeltaSnapshot,
     FlowsPositioning,
-    MarketRegime,
     RegimeScoreboard,
-    ScenarioPlan,
     Signal,
 )
 
@@ -35,6 +34,7 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────
+
 
 def _grade_emoji(grade: Optional[str]) -> str:
     return {"A": "🅰️", "B": "🅱️", "C": "🆑", "D": "🆔"}.get(grade or "", "❓")
@@ -48,10 +48,10 @@ def _regime_color(label: str) -> int:
     """Discord-compatible colour int."""
     label_lc = label.lower()
     if "risk_on" in label_lc or "risk on" in label_lc:
-        return 0x00C853   # green
+        return 0x00C853  # green
     if "risk_off" in label_lc or "risk off" in label_lc:
-        return 0xFF1744   # red
-    return 0xFFAB00       # amber
+        return 0xFF1744  # red
+    return 0xFFAB00  # amber
 
 
 def _pct_bar(pct: float, width: int = 10) -> str:
@@ -74,6 +74,7 @@ def _format_vol(v: float) -> str:
 # 1. Signal Card (v6)
 # ─────────────────────────────────────────────────────────────────────
 
+
 def build_signal_card(signal: Signal) -> Dict[str, Any]:
     """
     Build a v6 signal card dict with all pro-desk fields.
@@ -93,20 +94,24 @@ def build_signal_card(signal: Signal) -> Dict[str, Any]:
     # ── Confidence + Approval ──
     approval = _approval_emoji(signal.approval_status)
     grade = _grade_emoji(signal.setup_grade)
-    fields.append({
-        "name": "Confidence",
-        "value": (
-            f"{'█' * (conf // 10)}{'░' * (10 - conf // 10)} {conf}% "
-            f"{approval} {grade} {signal.setup_grade or '?'}"
-        ),
-        "inline": False,
-    })
+    fields.append(
+        {
+            "name": "Confidence",
+            "value": (
+                f"{'█' * (conf // 10)}{'░' * (10 - conf // 10)} {conf}% "
+                f"{approval} {grade} {signal.setup_grade or '?'}"
+            ),
+            "inline": False,
+        }
+    )
 
     # ── Horizon + Edge Type ──
     horizon_val = getattr(signal.horizon, "value", str(signal.horizon))
     fields.append({"name": "Horizon", "value": horizon_val, "inline": True})
     if signal.edge_type:
-        fields.append({"name": "Edge", "value": f"`{signal.edge_type}`", "inline": True})
+        fields.append(
+            {"name": "Edge", "value": f"`{signal.edge_type}`", "inline": True}
+        )
 
     # ── Targets ──
     if signal.targets:
@@ -119,23 +124,39 @@ def build_signal_card(signal: Signal) -> Dict[str, Any]:
     # ── Stop ──
     if signal.invalidation:
         inv = signal.invalidation
-        fields.append({
-            "name": "🛑 Stop",
-            "value": f"${inv.stop_price:.2f} ({getattr(inv.stop_type, 'value', inv.stop_type)})",
-            "inline": True,
-        })
+        fields.append(
+            {
+                "name": "🛑 Stop",
+                "value": f"${inv.stop_price:.2f} ({getattr(inv.stop_type, 'value', inv.stop_type)})",
+                "inline": True,
+            }
+        )
 
     # ── R:R ──
     if signal.risk_reward_ratio:
-        fields.append({"name": "R:R", "value": f"**{signal.risk_reward_ratio:.1f}:1**", "inline": True})
+        fields.append(
+            {
+                "name": "R:R",
+                "value": f"**{signal.risk_reward_ratio:.1f}:1**",
+                "inline": True,
+            }
+        )
 
     # ── EV ──
     if signal.expected_value is not None:
-        fields.append({"name": "EV", "value": f"**{signal.expected_value:+.1f}%**", "inline": True})
+        fields.append(
+            {
+                "name": "EV",
+                "value": f"**{signal.expected_value:+.1f}%**",
+                "inline": True,
+            }
+        )
 
     # ── Strategy ──
     if signal.strategy_id:
-        fields.append({"name": "Strategy", "value": f"`{signal.strategy_id}`", "inline": True})
+        fields.append(
+            {"name": "Strategy", "value": f"`{signal.strategy_id}`", "inline": True}
+        )
 
     # ── Why Now (v6) ──
     if signal.why_now:
@@ -143,11 +164,19 @@ def build_signal_card(signal: Signal) -> Dict[str, Any]:
 
     # ── Time Stop ──
     if signal.time_stop_days:
-        fields.append({"name": "⏳ Time Stop", "value": f"{signal.time_stop_days} days", "inline": True})
+        fields.append(
+            {
+                "name": "⏳ Time Stop",
+                "value": f"{signal.time_stop_days} days",
+                "inline": True,
+            }
+        )
 
     # ── Event Risk ──
     if signal.event_risk:
-        fields.append({"name": "📅 Event Risk", "value": signal.event_risk, "inline": True})
+        fields.append(
+            {"name": "📅 Event Risk", "value": signal.event_risk, "inline": True}
+        )
 
     # ── Edge Model (from feature_snapshot) ──
     fs = signal.feature_snapshot or {}
@@ -158,15 +187,17 @@ def build_signal_card(signal: Signal) -> Dict[str, Any]:
         ev = edge.get("expected_return_pct", 0)
         sample = edge.get("sample_size", 0)
         cal = f"(n={sample})" if sample >= 30 else "(base-rate)"
-        fields.append({
-            "name": "📊 Edge Model",
-            "value": (
-                f"P(T1): **{p_t1 * 100:.0f}%** | P(stop): {p_stop * 100:.0f}%\n"
-                f"EV: **{ev:+.1f}%** | Hold: {edge.get('expected_holding_days', '?')}d\n"
-                f"MAE: {edge.get('expected_mae_pct', 0):.1f}% {cal}"
-            ),
-            "inline": False,
-        })
+        fields.append(
+            {
+                "name": "📊 Edge Model",
+                "value": (
+                    f"P(T1): **{p_t1 * 100:.0f}%** | P(stop): {p_stop * 100:.0f}%\n"
+                    f"EV: **{ev:+.1f}%** | Hold: {edge.get('expected_holding_days', '?')}d\n"
+                    f"MAE: {edge.get('expected_mae_pct', 0):.1f}% {cal}"
+                ),
+                "inline": False,
+            }
+        )
 
     # ── Scenario Plan (v6) ──
     sp = signal.scenario_plan
@@ -176,44 +207,58 @@ def build_signal_card(signal: Signal) -> Dict[str, Any]:
         bear = sp.get("bear_case", {})
         scenario_lines = []
         if base:
-            scenario_lines.append(f"**Base** ({base.get('probability', '?')}): {base.get('description', '—')}")
+            scenario_lines.append(
+                f"**Base** ({base.get('probability', '?')}): {base.get('description', '—')}"
+            )
         if bull:
-            scenario_lines.append(f"**Bull** ({bull.get('probability', '?')}): {bull.get('description', '—')}")
+            scenario_lines.append(
+                f"**Bull** ({bull.get('probability', '?')}): {bull.get('description', '—')}"
+            )
         if bear:
-            scenario_lines.append(f"**Bear** ({bear.get('probability', '?')}): {bear.get('description', '—')}")
+            scenario_lines.append(
+                f"**Bear** ({bear.get('probability', '?')}): {bear.get('description', '—')}"
+            )
         if scenario_lines:
-            fields.append({
-                "name": "🗺️ Scenario Map",
-                "value": "\n".join(scenario_lines),
-                "inline": False,
-            })
+            fields.append(
+                {
+                    "name": "🗺️ Scenario Map",
+                    "value": "\n".join(scenario_lines),
+                    "inline": False,
+                }
+            )
 
     # ── Evidence (v6) ──
     if signal.evidence:
-        fields.append({
-            "name": "📋 Evidence",
-            "value": "\n".join(f"• {e}" for e in signal.evidence[:5]),
-            "inline": False,
-        })
+        fields.append(
+            {
+                "name": "📋 Evidence",
+                "value": "\n".join(f"• {e}" for e in signal.evidence[:5]),
+                "inline": False,
+            }
+        )
 
     # ── Risks ──
     if signal.key_risks:
-        fields.append({
-            "name": "⚠️ Risks",
-            "value": "\n".join(f"• {r}" for r in signal.key_risks[:3]),
-            "inline": False,
-        })
+        fields.append(
+            {
+                "name": "⚠️ Risks",
+                "value": "\n".join(f"• {r}" for r in signal.key_risks[:3]),
+                "inline": False,
+            }
+        )
 
     # ── Portfolio Fit ──
     if signal.portfolio_fit:
         fit_icon = {"good": "✅", "overlap": "⚠️", "concentrated": "🔴"}.get(
             signal.portfolio_fit, "❓"
         )
-        fields.append({
-            "name": "📦 Portfolio Fit",
-            "value": f"{fit_icon} {signal.portfolio_fit}",
-            "inline": True,
-        })
+        fields.append(
+            {
+                "name": "📦 Portfolio Fit",
+                "value": f"{fit_icon} {signal.portfolio_fit}",
+                "inline": True,
+            }
+        )
 
     # ── Approval Flags (v6) ──
     if signal.approval_flags:
@@ -221,11 +266,13 @@ def build_signal_card(signal: Signal) -> Dict[str, Any]:
         for flag_name, passed in signal.approval_flags.items():
             icon = "✅" if passed else "❌"
             flag_lines.append(f"{icon} {flag_name}")
-        fields.append({
-            "name": "🔍 Validation Checklist",
-            "value": "\n".join(flag_lines),
-            "inline": False,
-        })
+        fields.append(
+            {
+                "name": "🔍 Validation Checklist",
+                "value": "\n".join(flag_lines),
+                "inline": False,
+            }
+        )
 
     return {
         "title": f"{arrow}  {signal.ticker}  —  ${signal.entry_price:.2f}",
@@ -239,6 +286,7 @@ def build_signal_card(signal: Signal) -> Dict[str, Any]:
 # ─────────────────────────────────────────────────────────────────────
 # 2. Regime Snapshot (for /market_now)
 # ─────────────────────────────────────────────────────────────────────
+
 
 def build_regime_snapshot(
     scoreboard: RegimeScoreboard,
@@ -261,26 +309,30 @@ def build_regime_snapshot(
     sections: List[Dict[str, Any]] = []
 
     # ── Section 1: Regime + Risk Score ──
-    sections.append({
-        "name": "📊 Regime",
-        "value": (
-            f"**{sb.regime_label}** • Risk-On Score: **{sb.risk_on_score:.0f}/100**\n"
-            f"Trend: **{sb.trend_state}** | Vol: **{sb.vol_state}**"
-        ),
-        "inline": False,
-    })
+    sections.append(
+        {
+            "name": "📊 Regime",
+            "value": (
+                f"**{sb.regime_label}** • Risk-On Score: **{sb.risk_on_score:.0f}/100**\n"
+                f"Trend: **{sb.trend_state}** | Vol: **{sb.vol_state}**"
+            ),
+            "inline": False,
+        }
+    )
 
     # ── Section 2: Risk Budget ──
-    sections.append({
-        "name": "💰 Risk Budget",
-        "value": (
-            f"Max Gross: **{sb.max_gross_pct:.0f}%** | "
-            f"Net Long: **{sb.net_long_target_low:.0f}-{sb.net_long_target_high:.0f}%**\n"
-            f"Max Single Name: **{sb.max_single_name_pct:.0f}%** | "
-            f"Max Sector: **{sb.max_sector_pct:.0f}%**"
-        ),
-        "inline": False,
-    })
+    sections.append(
+        {
+            "name": "💰 Risk Budget",
+            "value": (
+                f"Max Gross: **{sb.max_gross_pct:.0f}%** | "
+                f"Net Long: **{sb.net_long_target_low:.0f}-{sb.net_long_target_high:.0f}%**\n"
+                f"Max Single Name: **{sb.max_single_name_pct:.0f}%** | "
+                f"Max Sector: **{sb.max_sector_pct:.0f}%**"
+            ),
+            "inline": False,
+        }
+    )
 
     # ── Section 3: Strategy Playbook ──
     on_str = " · ".join(f"`{s}`" for s in sb.strategies_on) if sb.strategies_on else "—"
@@ -290,12 +342,16 @@ def build_regime_snapshot(
         cond = c.get("condition", "?")
         cond_strs.append(f"`{name}` if {cond}")
     cond_str = "\n".join(cond_strs) if cond_strs else "—"
-    off_str = " · ".join(f"~~{s}~~" for s in sb.strategies_off) if sb.strategies_off else "—"
-    sections.append({
-        "name": "📋 Strategy Playbook",
-        "value": f"🟢 ON: {on_str}\n🟡 CONDITIONAL:\n{cond_str}\n🔴 OFF: {off_str}",
-        "inline": False,
-    })
+    off_str = (
+        " · ".join(f"~~{s}~~" for s in sb.strategies_off) if sb.strategies_off else "—"
+    )
+    sections.append(
+        {
+            "name": "📋 Strategy Playbook",
+            "value": f"🟢 ON: {on_str}\n🟡 CONDITIONAL:\n{cond_str}\n🔴 OFF: {off_str}",
+            "inline": False,
+        }
+    )
 
     # ── Section 4: What Changed (delta) ──
     if bullish_changes or bearish_changes:
@@ -305,19 +361,25 @@ def build_regime_snapshot(
         for ch in (bearish_changes or [])[:3]:
             change_lines.append(f"📉 {ch.description}")
         if change_lines:
-            sections.append({
-                "name": "🔄 What Changed",
-                "value": "\n".join(change_lines),
-                "inline": False,
-            })
+            sections.append(
+                {
+                    "name": "🔄 What Changed",
+                    "value": "\n".join(change_lines),
+                    "inline": False,
+                }
+            )
 
     # ── Section 5: Delta numbers ──
     if delta:
         delta_lines = []
         if delta.spx_1d_pct is not None:
-            delta_lines.append(f"SPX: **{delta.spx_1d_pct:+.2f}%** (5d: {delta.spx_5d_pct or 0:+.2f}%)")
+            delta_lines.append(
+                f"SPX: **{delta.spx_1d_pct:+.2f}%** (5d: {delta.spx_5d_pct or 0:+.2f}%)"
+            )
         if delta.ndx_1d_pct is not None:
-            delta_lines.append(f"NDX: **{delta.ndx_1d_pct:+.2f}%** (5d: {delta.ndx_5d_pct or 0:+.2f}%)")
+            delta_lines.append(
+                f"NDX: **{delta.ndx_1d_pct:+.2f}%** (5d: {delta.ndx_5d_pct or 0:+.2f}%)"
+            )
         if delta.vix_close is not None:
             delta_lines.append(
                 f"VIX: **{delta.vix_close:.1f}** "
@@ -325,33 +387,45 @@ def build_regime_snapshot(
                 f"Δ1d: {delta.vix_1d_change or 0:+.1f}"
             )
         if delta.yield_10y is not None:
-            delta_lines.append(f"10Y: **{delta.yield_10y:.2f}%** (Δ1d: {delta.yield_10y_1d_bp or 0:+.0f}bp)")
+            delta_lines.append(
+                f"10Y: **{delta.yield_10y:.2f}%** (Δ1d: {delta.yield_10y_1d_bp or 0:+.0f}bp)"
+            )
         if delta.pct_above_50dma is not None:
-            delta_lines.append(f"Breadth (>50d): **{delta.pct_above_50dma:.0f}%** Δ{delta.pct_above_50dma_1d_change or 0:+.1f}%")
+            delta_lines.append(
+                f"Breadth (>50d): **{delta.pct_above_50dma:.0f}%** Δ{delta.pct_above_50dma_1d_change or 0:+.1f}%"
+            )
         if delta_lines:
-            sections.append({
-                "name": "📐 Delta Deck",
-                "value": "\n".join(delta_lines),
-                "inline": False,
-            })
+            sections.append(
+                {
+                    "name": "📐 Delta Deck",
+                    "value": "\n".join(delta_lines),
+                    "inline": False,
+                }
+            )
 
     # ── Section 6: Flows & Positioning ──
     if flows:
         flow_lines = []
         if flows.put_call_ratio is not None:
-            flow_lines.append(f"P/C Ratio: **{flows.put_call_ratio:.2f}** ({flows.put_call_trend or '—'})")
+            flow_lines.append(
+                f"P/C Ratio: **{flows.put_call_ratio:.2f}** ({flows.put_call_trend or '—'})"
+            )
         if flows.iv_rank_spy is not None:
-            flow_lines.append(f"IV Rank (SPY): **{flows.iv_rank_spy:.0f}** | IV vs RV: {flows.iv_vs_rv or '—'}")
+            flow_lines.append(
+                f"IV Rank (SPY): **{flows.iv_rank_spy:.0f}** | IV vs RV: {flows.iv_vs_rv or '—'}"
+            )
         if flows.gamma_zone:
             flow_lines.append(f"Gamma: **{flows.gamma_zone}**")
         if flows.crowding_flags:
             flow_lines.append(f"⚠️ Crowding: {', '.join(flows.crowding_flags[:3])}")
         if flow_lines:
-            sections.append({
-                "name": "🌊 Flows & Positioning",
-                "value": "\n".join(flow_lines),
-                "inline": False,
-            })
+            sections.append(
+                {
+                    "name": "🌊 Flows & Positioning",
+                    "value": "\n".join(flow_lines),
+                    "inline": False,
+                }
+            )
 
     # ── Section 7: Scenarios ──
     if sb.scenarios:
@@ -373,27 +447,33 @@ def build_regime_snapshot(
                 f"{sp.bear_case.get('description', '—')}"
             )
         if scenario_lines:
-            sections.append({
-                "name": "🗺️ Scenario Map",
-                "value": "\n".join(scenario_lines),
-                "inline": False,
-            })
+            sections.append(
+                {
+                    "name": "🗺️ Scenario Map",
+                    "value": "\n".join(scenario_lines),
+                    "inline": False,
+                }
+            )
 
     # ── Section 8: Top Drivers ──
     if sb.top_drivers:
-        sections.append({
-            "name": "🔑 Top Drivers",
-            "value": "\n".join(f"• {d}" for d in sb.top_drivers[:5]),
-            "inline": False,
-        })
+        sections.append(
+            {
+                "name": "🔑 Top Drivers",
+                "value": "\n".join(f"• {d}" for d in sb.top_drivers[:5]),
+                "inline": False,
+            }
+        )
 
     # ── Section 9: No-Trade Triggers ──
     if sb.no_trade_triggers:
-        sections.append({
-            "name": "🚫 No-Trade Triggers",
-            "value": "\n".join(f"🔴 {t}" for t in sb.no_trade_triggers),
-            "inline": False,
-        })
+        sections.append(
+            {
+                "name": "🚫 No-Trade Triggers",
+                "value": "\n".join(f"🔴 {t}" for t in sb.no_trade_triggers),
+                "inline": False,
+            }
+        )
 
     return {
         "title": f"🎛️ Market Now — {now_ts.strftime('%H:%M UTC')}",
@@ -410,6 +490,7 @@ def build_regime_snapshot(
 # ─────────────────────────────────────────────────────────────────────
 # 3. Morning Decision Memo (v6)
 # ─────────────────────────────────────────────────────────────────────
+
 
 def build_morning_memo(
     scoreboard: RegimeScoreboard,
@@ -438,16 +519,18 @@ def build_morning_memo(
     fields: List[Dict[str, Any]] = []
 
     # ── Regime ──
-    fields.append({
-        "name": "📊 Regime Scoreboard",
-        "value": (
-            f"**{sb.regime_label}** • Risk-On: **{sb.risk_on_score:.0f}/100**\n"
-            f"Trend: **{sb.trend_state}** | Vol: **{sb.vol_state}**\n"
-            f"Max Gross: {sb.max_gross_pct:.0f}% | "
-            f"Net Long: {sb.net_long_target_low:.0f}-{sb.net_long_target_high:.0f}%"
-        ),
-        "inline": False,
-    })
+    fields.append(
+        {
+            "name": "📊 Regime Scoreboard",
+            "value": (
+                f"**{sb.regime_label}** • Risk-On: **{sb.risk_on_score:.0f}/100**\n"
+                f"Trend: **{sb.trend_state}** | Vol: **{sb.vol_state}**\n"
+                f"Max Gross: {sb.max_gross_pct:.0f}% | "
+                f"Net Long: {sb.net_long_target_low:.0f}-{sb.net_long_target_high:.0f}%"
+            ),
+            "inline": False,
+        }
+    )
 
     # ── What Changed ──
     change_lines = []
@@ -459,11 +542,13 @@ def build_morning_memo(
         change_lines.append(f"{sev_icon} {ch.description}")
     if not change_lines:
         change_lines.append("No major overnight changes — quiet open expected")
-    fields.append({
-        "name": "🔄 What Changed",
-        "value": "\n".join(change_lines[:8]),
-        "inline": False,
-    })
+    fields.append(
+        {
+            "name": "🔄 What Changed",
+            "value": "\n".join(change_lines[:8]),
+            "inline": False,
+        }
+    )
 
     # ── Delta Deck (compact) ──
     if delta:
@@ -479,15 +564,23 @@ def build_morning_memo(
         if delta.yield_10y is not None:
             delta_parts.append(f"10Y {delta.yield_10y:.2f}%")
         if delta_parts:
-            fields.append({
-                "name": "📐 Delta Snapshot",
-                "value": " | ".join(delta_parts),
-                "inline": False,
-            })
+            fields.append(
+                {
+                    "name": "📐 Delta Snapshot",
+                    "value": " | ".join(delta_parts),
+                    "inline": False,
+                }
+            )
 
     # ── Breadth ──
     if delta and delta.pct_above_50dma is not None:
-        breadth_icon = "🟢" if (delta.pct_above_50dma or 0) > 60 else "🔴" if (delta.pct_above_50dma or 0) < 40 else "🟡"
+        breadth_icon = (
+            "🟢"
+            if (delta.pct_above_50dma or 0) > 60
+            else "🔴"
+            if (delta.pct_above_50dma or 0) < 40
+            else "🟡"
+        )
         breadth_text = (
             f"{breadth_icon} >50d: **{delta.pct_above_50dma:.0f}%** "
             f"(Δ{delta.pct_above_50dma_1d_change or 0:+.1f}%)"
@@ -500,11 +593,13 @@ def build_morning_memo(
     if delta and (delta.top_3_sectors or delta.bottom_3_sectors):
         top_s = ", ".join(delta.top_3_sectors[:3]) if delta.top_3_sectors else "—"
         bot_s = ", ".join(delta.bottom_3_sectors[:3]) if delta.bottom_3_sectors else "—"
-        fields.append({
-            "name": "🏭 Sector Leadership",
-            "value": f"📈 {top_s}\n📉 {bot_s}",
-            "inline": True,
-        })
+        fields.append(
+            {
+                "name": "🏭 Sector Leadership",
+                "value": f"📈 {top_s}\n📉 {bot_s}",
+                "inline": True,
+            }
+        )
 
     # ── Flows ──
     if flows:
@@ -516,23 +611,29 @@ def build_morning_memo(
         if flows.gamma_zone:
             flow_parts.append(f"γ: {flows.gamma_zone}")
         if flow_parts:
-            fields.append({
-                "name": "🌊 Flows",
-                "value": " | ".join(flow_parts),
-                "inline": True,
-            })
+            fields.append(
+                {
+                    "name": "🌊 Flows",
+                    "value": " | ".join(flow_parts),
+                    "inline": True,
+                }
+            )
 
     # ── Strategy Playbook ──
     on_str = " · ".join(f"`{s}`" for s in sb.strategies_on) if sb.strategies_on else "—"
-    off_str = " · ".join(f"~~{s}~~" for s in sb.strategies_off) if sb.strategies_off else "—"
+    off_str = (
+        " · ".join(f"~~{s}~~" for s in sb.strategies_off) if sb.strategies_off else "—"
+    )
     playbook_text = f"🟢 **ON:** {on_str}\n🔴 **OFF:** {off_str}"
     for c in sb.strategies_conditional[:3]:
         playbook_text += f"\n🟡 `{c.get('strategy', '?')}` if {c.get('condition', '?')}"
-    fields.append({
-        "name": "📋 Today's Playbook",
-        "value": playbook_text,
-        "inline": False,
-    })
+    fields.append(
+        {
+            "name": "📋 Today's Playbook",
+            "value": playbook_text,
+            "inline": False,
+        }
+    )
 
     # ── Key Levels (from market_prices) ──
     level_lines = []
@@ -543,13 +644,17 @@ def build_morning_memo(
             hi = p.get("high", price)
             lo = p.get("low", price)
             pct = p.get("change_pct", 0)
-            level_lines.append(f"**{label}**: ${price:.2f} ({pct:+.2f}%) — R: ${hi:.2f} | S: ${lo:.2f}")
+            level_lines.append(
+                f"**{label}**: ${price:.2f} ({pct:+.2f}%) — R: ${hi:.2f} | S: ${lo:.2f}"
+            )
     if level_lines:
-        fields.append({
-            "name": "📐 Key Levels",
-            "value": "\n".join(level_lines),
-            "inline": False,
-        })
+        fields.append(
+            {
+                "name": "📐 Key Levels",
+                "value": "\n".join(level_lines),
+                "inline": False,
+            }
+        )
 
     # ── Risk Bulletin ──
     risk_lines = list(sb.no_trade_triggers) if sb.no_trade_triggers else []
@@ -557,11 +662,13 @@ def build_morning_memo(
         risk_lines.append("✅ No critical risk flags")
     else:
         risk_lines = [f"🔴 {r}" for r in risk_lines[:5]]
-    fields.append({
-        "name": "🛡️ Risk Bulletin",
-        "value": "\n".join(risk_lines),
-        "inline": False,
-    })
+    fields.append(
+        {
+            "name": "🛡️ Risk Bulletin",
+            "value": "\n".join(risk_lines),
+            "inline": False,
+        }
+    )
 
     # ── Sizing Guidance ──
     regime_lc = sb.regime_label.lower()
@@ -573,17 +680,19 @@ def build_morning_memo(
         sizing = "🟢 **100%** full size • Tight stops • Full offence"
     fields.append({"name": "📏 Sizing Guidance", "value": sizing, "inline": False})
 
-    embeds.append({
-        "title": f"☀️ Morning Decision Memo — {now_ts.strftime('%A, %B %d')}",
-        "description": (
-            f"**{sb.regime_label}** • Risk-On: {sb.risk_on_score:.0f}/100 • "
-            f"Trend: {sb.trend_state} • Vol: {sb.vol_state}\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        ),
-        "color": color,
-        "fields": fields,
-        "footer": "☀️ v6 Decision Memo • /market_now for real-time • Good luck!",
-    })
+    embeds.append(
+        {
+            "title": f"☀️ Morning Decision Memo — {now_ts.strftime('%A, %B %d')}",
+            "description": (
+                f"**{sb.regime_label}** • Risk-On: {sb.risk_on_score:.0f}/100 • "
+                f"Trend: {sb.trend_state} • Vol: {sb.vol_state}\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            ),
+            "color": color,
+            "fields": fields,
+            "footer": "☀️ v6 Decision Memo • /market_now for real-time • Good luck!",
+        }
+    )
 
     # ═══ EMBED 2: Top 5 Trade Ideas ═══
     if top_signals:
@@ -606,19 +715,23 @@ def build_morning_memo(
             if why:
                 value_parts.append(f"💡 {why[:80]}")
 
-            trade_fields.append({
-                "name": f"{arrow} #{i} {sig.ticker} — ${sig.entry_price:.2f}",
-                "value": "\n".join(value_parts),
-                "inline": False,
-            })
+            trade_fields.append(
+                {
+                    "name": f"{arrow} #{i} {sig.ticker} — ${sig.entry_price:.2f}",
+                    "value": "\n".join(value_parts),
+                    "inline": False,
+                }
+            )
 
-        embeds.append({
-            "title": "🎯 Top 5 Trade Ideas",
-            "description": "Pre-market scan • sorted by conviction • v6 edge scoring",
-            "color": 0x2979FF,
-            "fields": trade_fields,
-            "footer": "/signals for full list • Use buttons for deep-dive",
-        })
+        embeds.append(
+            {
+                "title": "🎯 Top 5 Trade Ideas",
+                "description": "Pre-market scan • sorted by conviction • v6 edge scoring",
+                "color": 0x2979FF,
+                "fields": trade_fields,
+                "footer": "/signals for full list • Use buttons for deep-dive",
+            }
+        )
 
     # ═══ EMBED 3: Scenario Map (if available) ═══
     if sb.scenarios:
@@ -636,23 +749,29 @@ def build_morning_memo(
                 value = f"**{prob}** — {desc}"
                 if trigger:
                     value += f"\n→ Trigger: _{trigger}_"
-                scenario_fields.append({"name": f"{emoji} {label}", "value": value, "inline": False})
+                scenario_fields.append(
+                    {"name": f"{emoji} {label}", "value": value, "inline": False}
+                )
 
         if sp.triggers:
-            scenario_fields.append({
-                "name": "⚡ Key Triggers to Watch",
-                "value": "\n".join(f"• {t}" for t in sp.triggers[:5]),
-                "inline": False,
-            })
+            scenario_fields.append(
+                {
+                    "name": "⚡ Key Triggers to Watch",
+                    "value": "\n".join(f"• {t}" for t in sp.triggers[:5]),
+                    "inline": False,
+                }
+            )
 
         if scenario_fields:
-            embeds.append({
-                "title": "🗺️ Scenario Map",
-                "description": "If/then framework for today's session",
-                "color": 0x7C4DFF,
-                "fields": scenario_fields,
-                "footer": "Scenarios update intraday as data changes",
-            })
+            embeds.append(
+                {
+                    "title": "🗺️ Scenario Map",
+                    "description": "If/then framework for today's session",
+                    "color": 0x7C4DFF,
+                    "fields": scenario_fields,
+                    "footer": "Scenarios update intraday as data changes",
+                }
+            )
 
     return embeds
 
@@ -660,6 +779,7 @@ def build_morning_memo(
 # ─────────────────────────────────────────────────────────────────────
 # 4. EOD Scorecard (v6)
 # ─────────────────────────────────────────────────────────────────────
+
 
 def build_eod_scorecard(
     scoreboard: RegimeScoreboard,
@@ -681,28 +801,39 @@ def build_eod_scorecard(
     fields: List[Dict[str, Any]] = []
 
     # ── Regime close ──
-    fields.append({
-        "name": "📊 Regime at Close",
-        "value": (
-            f"**{sb.regime_label}** • Risk-On: {sb.risk_on_score:.0f}/100\n"
-            f"Trend: {sb.trend_state} | Vol: {sb.vol_state}"
-        ),
-        "inline": False,
-    })
+    fields.append(
+        {
+            "name": "📊 Regime at Close",
+            "value": (
+                f"**{sb.regime_label}** • Risk-On: {sb.risk_on_score:.0f}/100\n"
+                f"Trend: {sb.trend_state} | Vol: {sb.vol_state}"
+            ),
+            "inline": False,
+        }
+    )
 
     # ── Index performance ──
     index_lines = []
-    for sym, label in [("SPY", "S&P 500"), ("QQQ", "Nasdaq"), ("IWM", "Russell"), ("DIA", "Dow")]:
+    for sym, label in [
+        ("SPY", "S&P 500"),
+        ("QQQ", "Nasdaq"),
+        ("IWM", "Russell"),
+        ("DIA", "Dow"),
+    ]:
         p = prices.get(sym, {})
         if p:
             pct = p.get("change_pct", 0)
-            index_lines.append(f"{_pct_bar(pct, 6)} **{label}** ${p.get('price', 0):.2f}")
+            index_lines.append(
+                f"{_pct_bar(pct, 6)} **{label}** ${p.get('price', 0):.2f}"
+            )
     if index_lines:
-        fields.append({
-            "name": "📈 Index Performance",
-            "value": "\n".join(index_lines),
-            "inline": False,
-        })
+        fields.append(
+            {
+                "name": "📈 Index Performance",
+                "value": "\n".join(index_lines),
+                "inline": False,
+            }
+        )
 
     # ── Sector heat map ──
     if sector_data:
@@ -711,43 +842,51 @@ def build_eod_scorecard(
         for name, pct in sector_data_sorted[:8]:
             icon = "🟢" if pct > 0.5 else "🔴" if pct < -0.5 else "⚪"
             heat_lines.append(f"{icon} {name}: {pct:+.2f}%")
-        fields.append({
-            "name": "🏭 Sector Heat Map",
-            "value": "\n".join(heat_lines),
-            "inline": False,
-        })
+        fields.append(
+            {
+                "name": "🏭 Sector Heat Map",
+                "value": "\n".join(heat_lines),
+                "inline": False,
+            }
+        )
 
     # ── Delta summary ──
     if delta:
         delta_parts = []
         if delta.vix_close is not None:
-            delta_parts.append(f"VIX: {delta.vix_close:.1f} (Δ{delta.vix_1d_change or 0:+.1f})")
+            delta_parts.append(
+                f"VIX: {delta.vix_close:.1f} (Δ{delta.vix_1d_change or 0:+.1f})"
+            )
         if delta.pct_above_50dma is not None:
             delta_parts.append(f">50d: {delta.pct_above_50dma:.0f}%")
         if delta.new_highs is not None and delta.new_lows is not None:
             delta_parts.append(f"H/L: {delta.new_highs}/{delta.new_lows}")
         if delta_parts:
-            fields.append({
-                "name": "📐 Breadth & Vol",
-                "value": " | ".join(delta_parts),
-                "inline": False,
-            })
+            fields.append(
+                {
+                    "name": "📐 Breadth & Vol",
+                    "value": " | ".join(delta_parts),
+                    "inline": False,
+                }
+            )
 
     # ── Signal performance ──
     if signals_today:
         approved = [s for s in signals_today if s.approval_status == "approved"]
         conditional = [s for s in signals_today if s.approval_status == "conditional"]
         rejected = [s for s in signals_today if s.approval_status == "rejected"]
-        fields.append({
-            "name": "🎯 Signal Summary",
-            "value": (
-                f"Total: **{len(signals_today)}** | "
-                f"✅ Approved: **{len(approved)}** | "
-                f"🟡 Conditional: **{len(conditional)}** | "
-                f"❌ Rejected: **{len(rejected)}**"
-            ),
-            "inline": False,
-        })
+        fields.append(
+            {
+                "name": "🎯 Signal Summary",
+                "value": (
+                    f"Total: **{len(signals_today)}** | "
+                    f"✅ Approved: **{len(approved)}** | "
+                    f"🟡 Conditional: **{len(conditional)}** | "
+                    f"❌ Rejected: **{len(rejected)}**"
+                ),
+                "inline": False,
+            }
+        )
 
         # Top signals by grade
         top = sorted(
@@ -764,11 +903,13 @@ def build_eod_scorecard(
                     f"{arrow} **{s.ticker}** {s.setup_grade or '?'} "
                     f"Conf:{s.confidence} R:R:{s.risk_reward_ratio or 0:.1f}"
                 )
-            fields.append({
-                "name": "🏆 Top Signals",
-                "value": "\n".join(top_lines),
-                "inline": False,
-            })
+            fields.append(
+                {
+                    "name": "🏆 Top Signals",
+                    "value": "\n".join(top_lines),
+                    "inline": False,
+                }
+            )
 
     # ── Tomorrow outlook ──
     regime_lc = sb.regime_label.lower()
@@ -780,13 +921,15 @@ def build_eod_scorecard(
         outlook = "🟡 Mixed — be selective, manage position sizes"
     fields.append({"name": "🔮 Tomorrow Outlook", "value": outlook, "inline": False})
 
-    embeds.append({
-        "title": f"🌙 End-of-Day Scorecard — {now_ts.strftime('%A, %B %d')}",
-        "description": "Markets closed. Here's your daily performance review.",
-        "color": 0x7C4DFF,
-        "fields": fields,
-        "footer": f"TradingAI Pro v6 • {now_ts.strftime('%Y-%m-%d %H:%M UTC')}",
-    })
+    embeds.append(
+        {
+            "title": f"🌙 End-of-Day Scorecard — {now_ts.strftime('%A, %B %d')}",
+            "description": "Markets closed. Here's your daily performance review.",
+            "color": 0x7C4DFF,
+            "fields": fields,
+            "footer": f"TradingAI Pro v6 • {now_ts.strftime('%Y-%m-%d %H:%M UTC')}",
+        }
+    )
 
     return embeds
 
@@ -794,6 +937,7 @@ def build_eod_scorecard(
 # ─────────────────────────────────────────────────────────────────────
 # 5. Markdown export (for docs / notifications / email)
 # ─────────────────────────────────────────────────────────────────────
+
 
 def embeds_to_markdown(embeds: List[Dict[str, Any]]) -> str:
     """Convert a list of embed dicts to a Markdown string."""

@@ -14,17 +14,16 @@ import asyncio
 import logging
 import math
 import os
-from contextlib import asynccontextmanager
-import re
 import time
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
 import uvicorn
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -33,42 +32,22 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from src.api.live_analytics import (
+    compute_4layer_confidence as _compute_4layer_confidence,
+)
 from src.core.config import get_settings
 from src.core.models import (
-    ChangeItem,
-    DataQualityReport,
-    DeltaSnapshot,
-    RegimeScoreboard,
-    ScenarioPlan,
     Signal,
 )
-from src.core.risk_limits import BACKTEST_DEFAULTS, RISK, SIGNAL_THRESHOLDS
-from src.core.telemetry import telemetry
+from src.core.risk_limits import RISK, SIGNAL_THRESHOLDS
 from src.core.version import APP_VERSION, PRODUCT_NAME
-from src.api.live_analytics import compute_4layer_confidence as _compute_4layer_confidence
-
-# ── Extracted services (back-compat shims) ──
-from src.services.indicators import (
-    compute_indicators as _compute_indicators,
-    compute_rs_vs_benchmark as _compute_rs_vs_benchmark,
-    rolling_mean as _rolling_mean,
-)
-from src.services.calendar_service import (
-    is_us_market_holiday as _is_us_market_holiday,
-    us_market_holidays as _compute_us_market_holidays,
-    is_us_market_open,
-    next_trading_day,
-)
+from src.engines.conformal_predictor import reliability_bucket, reliability_note
 
 # ── Phase 9 engine imports ──
 try:
     from src.engines.breakout_monitor import BreakoutMonitor
-    from src.engines.decision_persistence import get_expert_store, get_journal
-    from src.engines.earnings_calendar import (
-        get_days_to_earnings,
-        get_earnings_info,
-        is_in_blackout,
-    )
+    from src.engines.decision_persistence import get_journal
+    from src.engines.earnings_calendar import get_earnings_info
     from src.engines.entry_quality import EntryQualityEngine
     from src.engines.fundamental_data import get_fundamentals
     from src.engines.portfolio_gate import PortfolioGate
@@ -80,13 +59,7 @@ except ImportError:
 
 # v6 optional imports (graceful fallback)
 try:
-    from src.notifications.report_generator import (
-        build_eod_scorecard,
-        build_morning_memo,
-        build_regime_snapshot,
-        build_signal_card,
-        embeds_to_markdown,
-    )
+    from src.notifications.report_generator import build_regime_snapshot  # noqa: F401
 
     _HAS_REPORT_GEN = True
 except ImportError:
@@ -431,7 +404,9 @@ def _downsample_series(values: list, max_pts: int = 80) -> list:
     return out
 
 
-def _benchmark_curve_scaled(close_values, start_equity: float, max_pts: int = 80) -> list:
+def _benchmark_curve_scaled(
+    close_values, start_equity: float, max_pts: int = 80
+) -> list:
     import numpy as np
 
     close = np.asarray(close_values, dtype=float)
@@ -465,13 +440,15 @@ def _allocation_from_engine(eng, pm, equity: float) -> dict:
         cur = float(getattr(pos, "current_price", 0) or 0)
         actual = (qty * cur) / equity * 100
         invested += actual
-        holdings.append({
-            "ticker": tkr,
-            "strategy": getattr(pos, "strategy", "—"),
-            "actual_pct": round(actual, 2),
-            "target_pct": round(equal_target, 2),
-            "drift_pct": round(actual - equal_target, 2),
-        })
+        holdings.append(
+            {
+                "ticker": tkr,
+                "strategy": getattr(pos, "strategy", "—"),
+                "actual_pct": round(actual, 2),
+                "target_pct": round(equal_target, 2),
+                "drift_pct": round(actual - equal_target, 2),
+            }
+        )
     holdings.sort(key=lambda x: x["actual_pct"], reverse=True)
     gross_raw = float(exposure_dict.get("gross_exposure", invested / 100) or 0)
     gross_pct = round(gross_raw * 100 if gross_raw <= 1.5 else gross_raw, 2)
@@ -500,17 +477,19 @@ async def desk_portfolio():
             target = float(getattr(pos, "target_price", 0) or 0)
             unr = (cur - entry) * qty
             unr_pct = ((cur / entry - 1) * 100) if entry else 0.0
-            positions.append({
-                "ticker": tkr,
-                "shares": qty,
-                "entry": round(entry, 2),
-                "current": round(cur, 2),
-                "stop": round(stop, 2),
-                "target": round(target, 2),
-                "unrealized_pnl": round(unr, 2),
-                "unrealized_pct": round(unr_pct, 2),
-                "strategy": getattr(pos, "strategy", "—"),
-            })
+            positions.append(
+                {
+                    "ticker": tkr,
+                    "shares": qty,
+                    "entry": round(entry, 2),
+                    "current": round(cur, 2),
+                    "stop": round(stop, 2),
+                    "target": round(target, 2),
+                    "unrealized_pnl": round(unr, 2),
+                    "unrealized_pct": round(unr_pct, 2),
+                    "strategy": getattr(pos, "strategy", "—"),
+                }
+            )
 
     broker_account = None
     broker_name = "paper"
@@ -533,8 +512,12 @@ async def desk_portfolio():
         pass
 
     curve = _equity_curve_from_engine(eng)
-    start_eq = curve[0]["equity"] if curve else float(
-        getattr(pm.params, "account_size", 100_000.0) if pm else 100_000.0,
+    start_eq = (
+        curve[0]["equity"]
+        if curve
+        else float(
+            getattr(pm.params, "account_size", 100_000.0) if pm else 100_000.0,
+        )
     )
     end_eq = curve[-1]["equity"] if curve else start_eq
     total_return_pct = ((end_eq / start_eq - 1) * 100) if start_eq else 0
@@ -548,7 +531,8 @@ async def desk_portfolio():
         )
         if spy_hist is not None and not spy_hist.empty:
             benchmark_curve = _benchmark_curve_scaled(
-                spy_hist["Close"].values, start_eq,
+                spy_hist["Close"].values,
+                start_eq,
             )
     except Exception:  # noqa: BLE001
         benchmark_curve = []
@@ -564,44 +548,50 @@ async def desk_portfolio():
             if status not in ("active", "reduced"):
                 continue
             metrics = entry.get("metrics", {}) or {}
-            active_sleeves.append({
-                "name": entry.get("name"),
-                "status": status,
-                "stance": "reduced size" if status == "reduced" else "active",
-                "score": round(float(entry.get("blended_score", 0) or 0), 2),
-                "win_rate": round(float(metrics.get("win_rate", 0) or 0) * 100, 1),
-                "sharpe": round(float(metrics.get("oos_sharpe", 0) or 0), 2),
-                "max_dd": round(float(metrics.get("max_drawdown", 0) or 0) * 100, 1),
-                "trades": entry.get("trade_count", 0),
-                "last_updated": entry.get("last_updated"),
-            })
+            active_sleeves.append(
+                {
+                    "name": entry.get("name"),
+                    "status": status,
+                    "stance": "reduced size" if status == "reduced" else "active",
+                    "score": round(float(entry.get("blended_score", 0) or 0), 2),
+                    "win_rate": round(float(metrics.get("win_rate", 0) or 0) * 100, 1),
+                    "sharpe": round(float(metrics.get("oos_sharpe", 0) or 0), 2),
+                    "max_dd": round(
+                        float(metrics.get("max_drawdown", 0) or 0) * 100, 1
+                    ),
+                    "trades": entry.get("trade_count", 0),
+                    "last_updated": entry.get("last_updated"),
+                }
+            )
 
-    return _sanitize_for_json({
-        "timestamp": datetime.utcnow().isoformat(),
-        "broker": {
-            "name": broker_name,
-            "account": broker_account,
-            "connected": broker_account is not None,
-            "last_sync": datetime.utcnow().isoformat(),
-        },
-        "kpis": {
-            "equity": end_eq,
-            "start_equity": start_eq,
-            "total_return_pct": round(total_return_pct, 2),
-            "open_positions": state.get("open_positions", len(positions)),
-            "total_trades": state.get("total_trades", 0),
-            "win_rate": round(state.get("win_rate", 0), 1),
-            "daily_pnl": state.get("circuit_breaker", {}).get("daily_pnl", 0),
-            "dry_run": state.get("dry_run", True),
-        },
-        "positions": positions,
-        "equity_curve": curve,
-        "benchmark_curve": benchmark_curve,
-        "allocation": allocation,
-        "active_sleeves": active_sleeves,
-        "pro_kpis": state.get("pro_kpis", {}),
-        "regime": state.get("regime", {}),
-    })
+    return _sanitize_for_json(
+        {
+            "timestamp": datetime.utcnow().isoformat(),
+            "broker": {
+                "name": broker_name,
+                "account": broker_account,
+                "connected": broker_account is not None,
+                "last_sync": datetime.utcnow().isoformat(),
+            },
+            "kpis": {
+                "equity": end_eq,
+                "start_equity": start_eq,
+                "total_return_pct": round(total_return_pct, 2),
+                "open_positions": state.get("open_positions", len(positions)),
+                "total_trades": state.get("total_trades", 0),
+                "win_rate": round(state.get("win_rate", 0), 1),
+                "daily_pnl": state.get("circuit_breaker", {}).get("daily_pnl", 0),
+                "dry_run": state.get("dry_run", True),
+            },
+            "positions": positions,
+            "equity_curve": curve,
+            "benchmark_curve": benchmark_curve,
+            "allocation": allocation,
+            "active_sleeves": active_sleeves,
+            "pro_kpis": state.get("pro_kpis", {}),
+            "regime": state.get("regime", {}),
+        }
+    )
 
 
 @app.get("/api/desk/strategies", tags=["desk"])
@@ -613,34 +603,40 @@ async def desk_strategies():
         for entry in eng.leaderboard.get_rankings():
             metrics = entry.get("metrics", {}) or {}
             pnl_hist = (
-                entry.get("pnl_history", [])
-                or metrics.get("pnl_history", [])
-                or []
+                entry.get("pnl_history", []) or metrics.get("pnl_history", []) or []
             )
             status = entry.get("status", "active")
             if hasattr(status, "value"):
                 status = status.value
-            out.append({
-                "name": entry.get("name"),
-                "status": status,
-                "score": entry.get("blended_score", 0),
-                "trades": entry.get("trade_count", 0),
-                "win_rate": round(float(metrics.get("win_rate", 0) or 0) * 100, 1),
-                "expectancy": round(float(metrics.get("expectancy", 0) or 0), 3),
-                "sharpe": round(float(metrics.get("oos_sharpe", 0) or 0), 2),
-                "max_dd": round(float(metrics.get("max_drawdown", 0) or 0) * 100, 1),
-                "profit_factor": round(float(metrics.get("profit_factor", 0) or 0), 2),
-                "pnl_sparkline": [round(float(x), 2) for x in pnl_hist[-30:]],
-                "last_updated": entry.get("last_updated"),
-            })
+            out.append(
+                {
+                    "name": entry.get("name"),
+                    "status": status,
+                    "score": entry.get("blended_score", 0),
+                    "trades": entry.get("trade_count", 0),
+                    "win_rate": round(float(metrics.get("win_rate", 0) or 0) * 100, 1),
+                    "expectancy": round(float(metrics.get("expectancy", 0) or 0), 3),
+                    "sharpe": round(float(metrics.get("oos_sharpe", 0) or 0), 2),
+                    "max_dd": round(
+                        float(metrics.get("max_drawdown", 0) or 0) * 100, 1
+                    ),
+                    "profit_factor": round(
+                        float(metrics.get("profit_factor", 0) or 0), 2
+                    ),
+                    "pnl_sparkline": [round(float(x), 2) for x in pnl_hist[-30:]],
+                    "last_updated": entry.get("last_updated"),
+                }
+            )
     counts = {"active": 0, "reduced": 0, "cooldown": 0, "retired": 0}
     for s in out:
         counts[s["status"]] = counts.get(s["status"], 0) + 1
-    return _sanitize_for_json({
-        "timestamp": datetime.utcnow().isoformat(),
-        "counts": counts,
-        "strategies": out,
-    })
+    return _sanitize_for_json(
+        {
+            "timestamp": datetime.utcnow().isoformat(),
+            "counts": counts,
+            "strategies": out,
+        }
+    )
 
 
 @app.get("/api/desk/monitor", tags=["desk"])
@@ -652,7 +648,9 @@ async def desk_monitor():
         "running": eng is not None,
         "dry_run": state.get("dry_run", True),
         "cycle_count": state.get("cycle_count", 0),
-        "cycle_interval_s": getattr(eng, "cycle_interval_seconds", None) if eng else None,
+        "cycle_interval_s": getattr(eng, "cycle_interval_seconds", None)
+        if eng
+        else None,
         "signals_today": state.get("signals_today", 0),
         "trades_today": state.get("trades_today", 0),
     }
@@ -689,32 +687,40 @@ async def desk_monitor():
 
     alerts = []
     if cb.get("triggered"):
-        alerts.append({
-            "level": "critical",
-            "msg": f"Circuit breaker: {cb.get('reason', 'unknown')}",
-        })
+        alerts.append(
+            {
+                "level": "critical",
+                "msg": f"Circuit breaker: {cb.get('reason', 'unknown')}",
+            }
+        )
     if cb.get("consecutive_losses", 0) >= 3:
-        alerts.append({
-            "level": "warn",
-            "msg": f"{cb['consecutive_losses']} consecutive losses",
-        })
+        alerts.append(
+            {
+                "level": "warn",
+                "msg": f"{cb['consecutive_losses']} consecutive losses",
+            }
+        )
     if nt.get("active") or nt.get("decision") == "NO_TRADE":
-        alerts.append({
-            "level": "info",
-            "msg": f"NO-TRADE: {nt.get('reason', 'risk gates')}",
-        })
+        alerts.append(
+            {
+                "level": "info",
+                "msg": f"NO-TRADE: {nt.get('reason', 'risk gates')}",
+            }
+        )
     if not engine_block["running"]:
         alerts.append({"level": "critical", "msg": "Engine not running"})
 
-    return _sanitize_for_json({
-        "timestamp": datetime.utcnow().isoformat(),
-        "engine": engine_block,
-        "broker": broker_block,
-        "data": data_block,
-        "circuit_breaker": cb,
-        "no_trade_card": nt,
-        "alerts": alerts,
-    })
+    return _sanitize_for_json(
+        {
+            "timestamp": datetime.utcnow().isoformat(),
+            "engine": engine_block,
+            "broker": broker_block,
+            "data": data_block,
+            "circuit_breaker": cb,
+            "no_trade_card": nt,
+            "alerts": alerts,
+        }
+    )
 
 
 async def _get_regime():
@@ -1134,6 +1140,8 @@ async def _lifespan(app):  # noqa: ARG001
     app.state.scan_watchlist = _SCAN_WATCHLIST
     # Seed self-learning default files (no-op if already exist)
     try:
+        import json as _json
+
         from src.engines.self_learning import (
             _DEFAULT_FUND_WEIGHTS,
             _DEFAULT_REGIME_PARAMS,
@@ -1141,7 +1149,6 @@ async def _lifespan(app):  # noqa: ARG001
             _REGIME_PARAMS_FILE,
             AUDIT_DIR,
         )
-        import json as _json
 
         AUDIT_DIR.mkdir(exist_ok=True)
         if not _REGIME_PARAMS_FILE.exists():
@@ -1239,9 +1246,7 @@ def _check_data_freshness(
 
 from src.api.technical_indicators import (
     compute_indicators as _compute_indicators,
-    rolling_mean as _rolling_mean,
 )
-
 
 # ── Inline RS vs SPY computation ──
 _SPY_CACHE: dict = {"close": None, "ts": 0}
@@ -1364,8 +1369,8 @@ def _nth_weekday(year: int, month: int, weekday: int, n: int) -> int:
 
 def _last_weekday(year: int, month: int, weekday: int) -> int:
     """Return day of month for the last occurrence of weekday in month."""
-    from datetime import date as _date
     import calendar
+    from datetime import date as _date
 
     last_day = calendar.monthrange(year, month)[1]
     last = _date(year, month, last_day)
@@ -1384,16 +1389,16 @@ def _easter_sunday(year: int) -> tuple:
     g = (b - f + 1) // 3
     h = (19 * a + b - d - g + 15) % 30
     i, k = divmod(c, 4)
-    l = (32 + 2 * e + 2 * i - h - k) % 7
-    m = (a + 11 * h + 22 * l) // 451
-    month = (h + l - 7 * m + 114) // 31
-    day = ((h + l - 7 * m + 114) % 31) + 1
+    day_offset = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * day_offset) // 451
+    month = (h + day_offset - 7 * m + 114) // 31
+    day = ((h + day_offset - 7 * m + 114) % 31) + 1
     return (year, month, day)
 
 
 def _observed(d: tuple) -> tuple:
     """If holiday falls on Saturday, use Friday; Sunday → Monday."""
-    from datetime import date as _date, timedelta
+    from datetime import date as _date
 
     dt = _date(d[0], d[1], d[2])
     if dt.weekday() == 5:  # Saturday
@@ -1405,7 +1410,7 @@ def _observed(d: tuple) -> tuple:
 
 def _compute_us_market_holidays(year: int) -> set:
     """Compute US market holidays for a given year."""
-    from datetime import date as _date, timedelta
+    from datetime import date as _date
 
     holidays = set()
 
@@ -1726,7 +1731,6 @@ async def get_signals(
 
     Returns latest signals filtered by date, ticker, direction, and confidence.
     """
-    from sqlalchemy import text
 
     from src.core.database import AsyncSessionLocal
 
@@ -1753,7 +1757,7 @@ async def get_signals(
         # Build query using SQLAlchemy select() — avoids f-string interpolation
         # of user-supplied values into SQL (SQL injection prevention).
         # All filter values go through bound parameters only.
-        from sqlalchemy import Column, Float, Integer, MetaData, String, Table, select
+        from sqlalchemy import Column, Float, MetaData, String, Table, select
 
         meta = MetaData()
         signals_table = Table(
@@ -1777,8 +1781,7 @@ async def get_signals(
 
             stmt = stmt.where(func.date(signals_table.c.generated_at) == params["date"])
         else:
-            from sqlalchemy import func, cast
-            from sqlalchemy.sql.expression import literal
+            from sqlalchemy import func
 
             stmt = stmt.where(
                 func.date(signals_table.c.generated_at) == func.current_date()
@@ -1863,7 +1866,7 @@ async def get_signals_for_ticker(
     async with AsyncSessionLocal() as session:
         result = await session.execute(
             text("""
-                SELECT * FROM signals 
+                SELECT * FROM signals
                 WHERE ticker = :ticker
                 AND generated_at > NOW() - INTERVAL ':days days'
                 ORDER BY generated_at DESC
@@ -1945,8 +1948,8 @@ async def get_market_overview(_: bool = Depends(verify_api_key)):
         async with AsyncSessionLocal() as session:
             # Get latest index data
             indices_sql = """
-                SELECT ticker, close, 
-                       (close - LAG(close) OVER (PARTITION BY ticker ORDER BY timestamp)) / 
+                SELECT ticker, close,
+                       (close - LAG(close) OVER (PARTITION BY ticker ORDER BY timestamp)) /
                        LAG(close) OVER (PARTITION BY ticker ORDER BY timestamp) * 100 as change_pct
                 FROM ohlcv
                 WHERE ticker IN ('SPY', 'QQQ', 'IWM', 'DIA')
@@ -1965,8 +1968,8 @@ async def get_market_overview(_: bool = Depends(verify_api_key)):
 
             # Get sector performance
             sectors_sql = """
-                SELECT ticker, 
-                       (close - LAG(close) OVER (PARTITION BY ticker ORDER BY timestamp)) / 
+                SELECT ticker,
+                       (close - LAG(close) OVER (PARTITION BY ticker ORDER BY timestamp)) /
                        LAG(close) OVER (PARTITION BY ticker ORDER BY timestamp) * 100 as change_pct
                 FROM ohlcv
                 WHERE ticker IN ('XLF', 'XLE', 'XLK', 'XLV', 'XLY', 'XLP', 'XLI', 'XLU', 'XLB', 'XLRE', 'XLC')
@@ -2803,9 +2806,7 @@ async def probe_local_llm():
         return {"local_llm_available": False, "error": str(exc)}
 
 
-
 # v6 pro desk → src/api/routers/v6_pro_desk.py
-
 
 
 # ===== Sprint 6: Decision-Layer API Endpoints =====
@@ -4112,11 +4113,13 @@ def _build_reasons_against(
         reasons.append("Below-average volume — weak conviction")
     if float(atr_pct[i]) > 0.04:
         reasons.append(
-            f"High volatility ({float(atr_pct[i])*100:.1f}% ATR) — wider stops needed"
+            f"High volatility ({float(atr_pct[i]) * 100:.1f}% ATR) — wider stops needed"
         )
     dist_sma20 = abs(close[i] - sma20[i]) / sma20[i] if sma20[i] > 0 else 0
     if dist_sma20 > 0.05:
-        reasons.append(f"Extended {dist_sma20*100:.1f}% from SMA20 — may need pullback")
+        reasons.append(
+            f"Extended {dist_sma20 * 100:.1f}% from SMA20 — may need pullback"
+        )
     if strategy == "mean_reversion" and close[i] < sma200[i]:
         reasons.append("Counter-trend trade in downtrend — higher failure rate")
     if not reasons:
@@ -4163,7 +4166,9 @@ def _build_why_wait(conf: dict, rr: float) -> str | None:
     return "Consider waiting: " + "; ".join(reasons)
 
 
-def _scan_cache_slice(limit: int, *, degraded: bool = False, reason: str = "") -> tuple[list, dict]:
+def _scan_cache_slice(
+    limit: int, *, degraded: bool = False, reason: str = ""
+) -> tuple[list, dict]:
     """Return cached scanner rows; optional degraded stamp for in-flight scans."""
     scores = dict(_scan_cache.get("scores") or {})
     if degraded:
@@ -4238,7 +4243,9 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                 *[_fetch_one(t) for t in batch], return_exceptions=True
             )
             all_results.extend(
-                r for r in batch_results if r is not None and not isinstance(r, Exception)
+                r
+                for r in batch_results
+                if r is not None and not isinstance(r, Exception)
             )
 
         # Fetch SPY benchmark for RS computation
@@ -4324,7 +4331,9 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                 strat_params = {
                     "momentum": {
                         "stop": cur_atr * _ST.stop_atr_multiplier_momentum,
-                        "target": _ST.target_trending if trending else _ST.target_normal,
+                        "target": _ST.target_trending
+                        if trending
+                        else _ST.target_normal,
                     },
                     "breakout": {
                         "stop": cur_atr * _ST.stop_atr_multiplier_breakout,
@@ -4434,7 +4443,9 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                             )
                             _entry_qual = _eqr.to_dict()
                         except Exception as _e9:
-                            logger.debug("[Phase9] StructureDetector/EntryQuality: %s", _e9)
+                            logger.debug(
+                                "[Phase9] StructureDetector/EntryQuality: %s", _e9
+                            )
                         try:
                             _earnings = get_earnings_info(ticker)
                         except Exception as _e9:
@@ -4445,7 +4456,9 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                                 "quality": _fd.get("quality_score", None),
                                 "pe": _fd.get("valuation", {}).get("pe_trailing"),
                                 "roe": _fd.get("profitability", {}).get("roe"),
-                                "rev_growth": _fd.get("growth", {}).get("revenue_growth"),
+                                "rev_growth": _fd.get("growth", {}).get(
+                                    "revenue_growth"
+                                ),
                                 "moat": _fd.get("moat_indicators", {}).get(
                                     "has_moat", False
                                 ),
@@ -4494,7 +4507,9 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                             "vol_ratio": round(float(vol_ratio[i]), 2),
                             "atr_pct": round(float(atr_pct[i]) * 100, 2),
                             # ── Calibrated confidence (6-layer) ──
-                            "calibrated_confidence": _enrich_calibration(conf, strat_name),
+                            "calibrated_confidence": _enrich_calibration(
+                                conf, strat_name
+                            ),
                             # ── Action state ──
                             "action_state": _compute_action_state(conf, rr, trending),
                             # ── Trust strip ──
@@ -4575,7 +4590,11 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                                 entry_price=entry_price,
                                 stop_price=stop_price,
                                 target_price=target_price,
-                                extra={"strategy": strat_name, "rr": rr, "score": score},
+                                extra={
+                                    "strategy": strat_name,
+                                    "rr": rr,
+                                    "score": score,
+                                },
                             )
                         except Exception as _e9:
                             logger.debug("[Phase9] DecisionJournal: %s", _e9)
@@ -4633,7 +4652,9 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                                 "quality": _fd.get("quality_score"),
                                 "pe": _fd.get("valuation", {}).get("pe_trailing"),
                                 "roe": _fd.get("profitability", {}).get("roe"),
-                                "rev_growth": _fd.get("growth", {}).get("revenue_growth"),
+                                "rev_growth": _fd.get("growth", {}).get(
+                                    "revenue_growth"
+                                ),
                                 "moat": _fd.get("moat_indicators", {}).get(
                                     "has_moat", False
                                 ),
@@ -4689,7 +4710,9 @@ async def _scan_live_signals(limit: int = 10) -> tuple[list, dict]:
                                 "calibrated_confidence": _enrich_calibration(
                                     conf, "momentum"
                                 ),
-                                "action_state": _compute_action_state(conf, rr, trending),
+                                "action_state": _compute_action_state(
+                                    conf, rr, trending
+                                ),
                                 "trust_strip": {
                                     "mode": "WATCH",
                                     "source": "yfinance",
@@ -5393,7 +5416,7 @@ def _generate_strategy_code(template: dict, params: dict) -> str:
             f"    d = pd.Series(k).rolling({ds}).mean().values",
             "    ma50 = pd.Series(close).rolling(50).mean().values",
             "    for i in range(55, len(close)):",
-            f"        if k[i] > d[i] and k[i-1] <= d[i-1] and k[i] < {el+20} and close[i] > ma50[i]:",
+            f"        if k[i] > d[i] and k[i-1] <= d[i-1] and k[i] < {el + 20} and close[i] > ma50[i]:",
             "            sig.iloc[i] = 1",
             "        elif k[i] > 80 and k[i] < d[i]: sig.iloc[i] = -1",
         ]
@@ -5465,7 +5488,9 @@ def _run_strategy_backtest(close, high, low, volume, signals, dates_idx):
                             else (
                                 "trail"
                                 if trail_hit
-                                else "signal" if sig_exit else "time"
+                                else "signal"
+                                if sig_exit
+                                else "time"
                             )
                         ),
                     }
@@ -5974,7 +5999,7 @@ async def strategy_factory_generate(
                     wf = _walk_forward_test(close, high, low, volume, signals)
 
                     # Monte Carlo
-                    mc_returns = [t["pnl_pct"] / 100 for t in metrics.get("trades", [])]
+                    [t["pnl_pct"] / 100 for t in metrics.get("trades", [])]
                     all_returns = [
                         t["pnl_pct"] / 100 for t in metrics.get("trades", [])
                     ]
@@ -6103,7 +6128,6 @@ async def strategy_factory_deploy(strategy_id: str):
             s["deployed_at"] = datetime.now(timezone.utc).isoformat() + "Z"
             return {"status": "deployed", "strategy": s["name"]}
     raise HTTPException(404, f"Strategy {strategy_id} not found")
-
 
 
 # live/brief, live/options → live_brief_options.py
@@ -6361,8 +6385,10 @@ except Exception:
 # Model fund / active manager sleeves
 try:
     from src.api.routers.funds import router as funds_router
+    from src.api.routers.funds import v7_router as funds_v7_router
 
     app.include_router(funds_router)
+    app.include_router(funds_v7_router)
 except Exception:
     logger.exception("[Router] Failed to load funds router")
 
@@ -6593,7 +6619,10 @@ try:
     from src.api.routers.research_pipeline import router as research_pipeline_router
 
     app.include_router(research_pipeline_router)
-    logger.info("[Router] research_pipeline loaded (%d routes)", len(research_pipeline_router.routes))
+    logger.info(
+        "[Router] research_pipeline loaded (%d routes)",
+        len(research_pipeline_router.routes),
+    )
 except Exception:
     logger.exception("[Router] Failed to load research_pipeline router")
 
@@ -6601,7 +6630,9 @@ try:
     from src.api.routers.guide_briefing import router as guide_briefing_router
 
     app.include_router(guide_briefing_router)
-    logger.info("[Router] guide_briefing loaded (%d routes)", len(guide_briefing_router.routes))
+    logger.info(
+        "[Router] guide_briefing loaded (%d routes)", len(guide_briefing_router.routes)
+    )
 except Exception:
     logger.exception("[Router] Failed to load guide_briefing router")
 

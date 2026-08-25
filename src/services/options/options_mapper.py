@@ -21,8 +21,7 @@ from __future__ import annotations
 
 import logging
 import math
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -145,11 +144,11 @@ class OptionsMapper:
             )
         if iv_rank > 60:
             warnings.append(
-                f"⚠️ IV rank {iv_rank:.0f}% — options are " "expensive (rich IV)"
+                f"⚠️ IV rank {iv_rank:.0f}% — options are expensive (rich IV)"
             )
         if iv_pct > 70 and atm_iv / hv > 1.3:
             warnings.append(
-                "⚠️ IV significantly above HV — consider " "spreads over single-leg"
+                "⚠️ IV significantly above HV — consider spreads over single-leg"
             )
         if ex_div_days < 14:
             warnings.append(
@@ -204,7 +203,7 @@ class OptionsMapper:
                     rejection_reasons.append("No options chain data available")
                 elif reason == "illiquid_options":
                     rejection_reasons.append(
-                        f"OI below {self._ee.MIN_OPTION_OI} " "threshold"
+                        f"OI below {self._ee.MIN_OPTION_OI} threshold"
                     )
                 elif reason == "wide_spreads":
                     rejection_reasons.append("Bid-ask spreads too wide")

@@ -6,7 +6,7 @@ Blocked entirely in research_only / confirm-only / fallback / stale modes.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from src.services.signal_provenance import (
     SIGNAL_DRAWDOWN_SIZER,

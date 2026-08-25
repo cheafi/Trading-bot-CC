@@ -61,7 +61,7 @@ async def build_catalyst_calendar(
                 }
             )
 
-    events.sort(key=lambda e: (e.get("days_until") or 999))
+    events.sort(key=lambda e: e.get("days_until") or 999)
     macro_events = [
         {
             "ticker": "MACRO",

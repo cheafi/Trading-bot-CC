@@ -179,12 +179,16 @@ class SECEdgarProvider(EventDataProvider):
         """Resolve ticker → zero-padded 10-digit CIK via EDGAR company search."""
         if ticker in self._cik_cache:
             return self._cik_cache[ticker]
-        import asyncio, urllib.request, json as _json
-        url = f"https://efts.sec.gov/LATEST/search-index?q=%22{ticker}%22&dateRange=custom&startdt=2020-01-01&forms=10-K"
+        import asyncio
+        import json as _json
+        import urllib.request
+
         # Use simpler company-tickers.json mapping first (fast, no rate limit)
         try:
             tickers_url = "https://www.sec.gov/files/company_tickers.json"
-            req = urllib.request.Request(tickers_url, headers={"User-Agent": self._HEADERS["User-Agent"]})
+            req = urllib.request.Request(
+                tickers_url, headers={"User-Agent": self._HEADERS["User-Agent"]}
+            )
 
             def _fetch_cik_map() -> bytes:
                 with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
@@ -201,9 +205,14 @@ class SECEdgarProvider(EventDataProvider):
             logger.warning("SEC CIK lookup failed for %s: %s", ticker, e)
         return None
 
-    async def _fetch_json(self, url: str, host_header: Optional[str] = None) -> Optional[Dict]:
+    async def _fetch_json(
+        self, url: str, host_header: Optional[str] = None
+    ) -> Optional[Dict]:
         """Fetch JSON from SEC with proper headers and timeout."""
-        import asyncio, urllib.request, json as _json
+        import asyncio
+        import json as _json
+        import urllib.request
+
         headers = dict(self._HEADERS)
         if host_header:
             headers["Host"] = host_header
@@ -248,16 +257,22 @@ class SECEdgarProvider(EventDataProvider):
                 continue
             acc = accessions[i] if i < len(accessions) else ""
             acc_path = acc.replace("-", "")
-            url = f"https://www.sec.gov/Archives/edgar/full-index/{acc_path}/{docs[i]}" if i < len(docs) else ""
-            results.append(SECFiling(
-                cik=cik,
-                company_name=company_name,
-                form_type=form,
-                filing_date=dates[i] if i < len(dates) else "",
-                accession_number=acc,
-                primary_document=docs[i] if i < len(docs) else "",
-                url=url,
-            ))
+            url = (
+                f"https://www.sec.gov/Archives/edgar/full-index/{acc_path}/{docs[i]}"
+                if i < len(docs)
+                else ""
+            )
+            results.append(
+                SECFiling(
+                    cik=cik,
+                    company_name=company_name,
+                    form_type=form,
+                    filing_date=dates[i] if i < len(dates) else "",
+                    accession_number=acc,
+                    primary_document=docs[i] if i < len(docs) else "",
+                    url=url,
+                )
+            )
             if len(results) >= limit:
                 break
         return results
@@ -269,6 +284,7 @@ class SECEdgarProvider(EventDataProvider):
         logger.info("SEC EDGAR: fetching insider txns for %s", ticker)
         import urllib.parse
         from datetime import datetime, timedelta
+
         start = (datetime.utcnow() - timedelta(days=days_back)).strftime("%Y-%m-%d")
         q = urllib.parse.quote(ticker)
         url = (
@@ -283,12 +299,18 @@ class SECEdgarProvider(EventDataProvider):
         for hit in data.get("hits", {}).get("hits", []):
             src = hit.get("_source", {})
             # Parse minimal fields available in search index
-            results.append(InsiderTransaction(
-                issuer_name=src.get("entity_name", ticker),
-                transaction_date=src.get("period_of_report", src.get("file_date", "")),
-                transaction_type="?",   # full XML parse needed for exact type
-                owner_name=src.get("display_names", ["?"])[0] if src.get("display_names") else "?",
-            ))
+            results.append(
+                InsiderTransaction(
+                    issuer_name=src.get("entity_name", ticker),
+                    transaction_date=src.get(
+                        "period_of_report", src.get("file_date", "")
+                    ),
+                    transaction_type="?",  # full XML parse needed for exact type
+                    owner_name=src.get("display_names", ["?"])[0]
+                    if src.get("display_names")
+                    else "?",
+                )
+            )
         return results
 
     async def get_13f_holdings(self, cik: str) -> List[Dict[str, Any]]:
@@ -309,14 +331,16 @@ class SECEdgarProvider(EventDataProvider):
         for i, form in enumerate(forms):
             if form != "13F-HR":
                 continue
-            holdings.append({
-                "form": form,
-                "filing_date": dates[i] if i < len(dates) else "",
-                "accession": accessions[i] if i < len(accessions) else "",
-                "cik": padded,
-                "company": data.get("name", ""),
-            })
-            if len(holdings) >= 5:   # last 5 13F filings
+            holdings.append(
+                {
+                    "form": form,
+                    "filing_date": dates[i] if i < len(dates) else "",
+                    "accession": accessions[i] if i < len(accessions) else "",
+                    "cik": padded,
+                    "company": data.get("name", ""),
+                }
+            )
+            if len(holdings) >= 5:  # last 5 13F filings
                 break
         return holdings
 
@@ -439,13 +463,9 @@ class CongressDisclosureProvider(EventDataProvider):
         )
         return []
 
-    async def get_member_trades(
-        self, member_name: str
-    ) -> List[Dict[str, Any]]:
+    async def get_member_trades(self, member_name: str) -> List[Dict[str, Any]]:
         """Fetch trades for a specific member of congress."""
-        logger.info(
-            f"Congress: fetching trades for {member_name}"
-        )
+        logger.info(f"Congress: fetching trades for {member_name}")
         return []
 
 
@@ -511,7 +531,9 @@ class EventDataService:
                 "signal": (
                     "bullish"
                     if buys > sells + 2
-                    else "bearish" if sells > buys + 2 else "neutral"
+                    else "bearish"
+                    if sells > buys + 2
+                    else "neutral"
                 ),
             }
         except Exception as e:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from src.services.p2_cache import get_cached, set_cached
 
@@ -43,7 +43,12 @@ async def build_backtest_lab(
     wf = (
         await _walk_forward_summary(request, sym, strategy, period)
         if walk_forward
-        else {"windows": [], "stability_score": 0, "verdict": "skipped", "note": "walk_forward=false"}
+        else {
+            "windows": [],
+            "stability_score": 0,
+            "verdict": "skipped",
+            "note": "walk_forward=false",
+        }
     )
     trade_review = _trade_level_review(core)
     attribution = _strategy_attribution(core)
@@ -102,8 +107,12 @@ async def _walk_forward_summary(
             return {
                 "window": label,
                 "period": p,
-                "best_strategy": best_key if isinstance(best_key, str) else best_row.get("name"),
-                "return_pct": best_row.get("total_return_pct", best_row.get("total_return")),
+                "best_strategy": best_key
+                if isinstance(best_key, str)
+                else best_row.get("name"),
+                "return_pct": best_row.get(
+                    "total_return_pct", best_row.get("total_return")
+                ),
                 "win_rate": best_row.get("win_rate"),
                 "sharpe": best_row.get("sharpe"),
                 "max_dd": best_row.get("max_drawdown"),
@@ -122,7 +131,8 @@ async def _walk_forward_summary(
         "verdict": (
             "stable_across_windows"
             if stable >= 2
-            else "unstable" if rows
+            else "unstable"
+            if rows
             else "insufficient_data"
         ),
         "note": "Windows run in parallel — compare consistency not single fit",
@@ -137,7 +147,9 @@ def _trade_level_review(core: Dict[str, Any]) -> Dict[str, Any]:
     """Trade-level stats from best strategy."""
     strategies = core.get("strategies") or []
     raw_best = core.get("best_strategy")
-    best_name = raw_best if isinstance(raw_best, str) else (raw_best or {}).get("name", "")
+    best_name = (
+        raw_best if isinstance(raw_best, str) else (raw_best or {}).get("name", "")
+    )
     best = next((s for s in strategies if _strategy_name(s) == best_name), None)
     if not best:
         return {"trades": [], "summary": "No strategy trades", "trade_count": 0}
@@ -175,7 +187,10 @@ def _strategy_attribution(core: Dict[str, Any]) -> Dict[str, Any]:
     ranked = sorted(
         strategies,
         key=lambda s: float(
-            s.get("total_return_pct") or s.get("total_return") or s.get("return_pct") or 0
+            s.get("total_return_pct")
+            or s.get("total_return")
+            or s.get("return_pct")
+            or 0
         ),
         reverse=True,
     )
@@ -184,7 +199,9 @@ def _strategy_attribution(core: Dict[str, Any]) -> Dict[str, Any]:
         "ranked": [
             {
                 "name": _strategy_name(s),
-                "return_pct": s.get("total_return_pct", s.get("total_return", s.get("return_pct"))),
+                "return_pct": s.get(
+                    "total_return_pct", s.get("total_return", s.get("return_pct"))
+                ),
                 "sharpe": s.get("sharpe"),
                 "trades": s.get("total_trades", s.get("trades")),
                 "contribution_note": "Standalone strategy run — not blended portfolio",

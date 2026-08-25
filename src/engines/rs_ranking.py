@@ -191,9 +191,7 @@ class RSRankingEngine:
             bench_factor = 1 + bench_ret / 100
             if bench_factor <= 0:
                 return 100.0  # degenerate case
-            return max(
-                0, min(300, (1 + stock_ret / 100) / bench_factor * 100)
-            )
+            return max(0, min(300, (1 + stock_ret / 100) / bench_factor * 100))
 
         rs_1w = rs_score(stock.get("return_1w", 0), bench.get("return_1w", 0))
         rs_1m = rs_score(stock.get("return_1m", 0), bench.get("return_1m", 0))
@@ -318,10 +316,15 @@ class RSRankingEngine:
         entries: List[RSEntry] = []
         for stock in universe:
             sector = stock.get("sector", "")
-            bench = sector_etf_returns.get(sector, {
-                "return_1w": 0, "return_1m": 0,
-                "return_3m": 0, "return_6m": 0,
-            })
+            bench = sector_etf_returns.get(
+                sector,
+                {
+                    "return_1w": 0,
+                    "return_1m": 0,
+                    "return_3m": 0,
+                    "return_6m": 0,
+                },
+            )
             entry = self._compute_rs(stock, bench)
             entries.append(entry)
 
@@ -347,8 +350,10 @@ class RSRankingEngine:
         """
         if not benchmark:
             benchmark = {
-                "return_1w": 0, "return_1m": 0,
-                "return_3m": 0, "return_6m": 0,
+                "return_1w": 0,
+                "return_1m": 0,
+                "return_3m": 0,
+                "return_6m": 0,
             }
 
         # Group by sector
@@ -362,14 +367,12 @@ class RSRankingEngine:
             # Use sector median as benchmark for peer comparison
             if len(stocks) >= 3:
                 peer_bench = {
-                    tf: sorted(
-                        s.get(f"return_{tf}", 0) for s in stocks
-                    )[len(stocks) // 2]
+                    tf: sorted(s.get(f"return_{tf}", 0) for s in stocks)[
+                        len(stocks) // 2
+                    ]
                     for tf in ("1w", "1m", "3m", "6m")
                 }
-                peer_bench = {
-                    f"return_{k}": v for k, v in peer_bench.items()
-                }
+                peer_bench = {f"return_{k}": v for k, v in peer_bench.items()}
             else:
                 peer_bench = benchmark
 
@@ -381,9 +384,7 @@ class RSRankingEngine:
             entries.sort(key=lambda e: e.rs_composite, reverse=True)
             n = len(entries)
             for i, entry in enumerate(entries):
-                entry.rs_percentile = int(
-                    ((n - i - 1) / max(n - 1, 1)) * 99
-                )
+                entry.rs_percentile = int(((n - i - 1) / max(n - 1, 1)) * 99)
             for entry in entries:
                 entry.status = self._classify_status(entry)
                 entry.trend = self._classify_trend(entry)
@@ -405,14 +406,14 @@ class RSRankingEngine:
         """
         if not spy_benchmark:
             spy_benchmark = {
-                "return_1w": 0, "return_1m": 0,
-                "return_3m": 0, "return_6m": 0,
+                "return_1w": 0,
+                "return_1m": 0,
+                "return_3m": 0,
+                "return_6m": 0,
             }
 
         # Layer 1: vs SPY
-        spy_entries = {
-            e.ticker: e for e in self.rank(universe, spy_benchmark)
-        }
+        spy_entries = {e.ticker: e for e in self.rank(universe, spy_benchmark)}
 
         # Layer 2: vs sector ETF (if provided)
         etf_entries: Dict[str, RSEntry] = {}
@@ -433,35 +434,27 @@ class RSRankingEngine:
             etf_e = etf_entries.get(ticker)
             peer_e = peer_map.get(ticker)
 
-            result.append({
-                "ticker": ticker,
-                "sector": stock.get("sector", ""),
-                "rs_vs_spy": spy_e.rs_composite if spy_e else 100.0,
-                "rs_vs_spy_percentile": (
-                    spy_e.rs_percentile if spy_e else 50
-                ),
-                "rs_vs_spy_status": (
-                    spy_e.status.value if spy_e else "NEUTRAL"
-                ),
-                "rs_vs_sector_etf": (
-                    etf_e.rs_composite if etf_e else None
-                ),
-                "rs_vs_sector_etf_percentile": (
-                    etf_e.rs_percentile if etf_e else None
-                ),
-                "rs_vs_peers": (
-                    peer_e.rs_composite if peer_e else 100.0
-                ),
-                "rs_vs_peers_percentile": (
-                    peer_e.rs_percentile if peer_e else 50
-                ),
-                "rs_vs_peers_status": (
-                    peer_e.status.value if peer_e else "NEUTRAL"
-                ),
-                "three_layer_verdict": self._three_layer_verdict(
-                    spy_e, etf_e, peer_e
-                ),
-            })
+            result.append(
+                {
+                    "ticker": ticker,
+                    "sector": stock.get("sector", ""),
+                    "rs_vs_spy": spy_e.rs_composite if spy_e else 100.0,
+                    "rs_vs_spy_percentile": (spy_e.rs_percentile if spy_e else 50),
+                    "rs_vs_spy_status": (spy_e.status.value if spy_e else "NEUTRAL"),
+                    "rs_vs_sector_etf": (etf_e.rs_composite if etf_e else None),
+                    "rs_vs_sector_etf_percentile": (
+                        etf_e.rs_percentile if etf_e else None
+                    ),
+                    "rs_vs_peers": (peer_e.rs_composite if peer_e else 100.0),
+                    "rs_vs_peers_percentile": (peer_e.rs_percentile if peer_e else 50),
+                    "rs_vs_peers_status": (
+                        peer_e.status.value if peer_e else "NEUTRAL"
+                    ),
+                    "three_layer_verdict": self._three_layer_verdict(
+                        spy_e, etf_e, peer_e
+                    ),
+                }
+            )
 
         return result
 

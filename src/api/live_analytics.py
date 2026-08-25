@@ -10,10 +10,12 @@ logger = logging.getLogger(__name__)
 
 try:
     from src.engines.decision_persistence import get_expert_store
+    from src.engines.fundamental_data import get_fundamentals
 
     _P9_ENGINES = True
 except ImportError:
     get_expert_store = None  # type: ignore
+    get_fundamentals = None  # type: ignore
     _P9_ENGINES = False
 
 
@@ -228,7 +230,7 @@ def compute_4layer_confidence(
         cases = find_similar_cases(
             strategy=strategy,
             regime=regime_label_str,
-            grade=str(grade) if "grade" in locals() else "",
+            grade="",
             direction="LONG",
         )
         analog = analog_summary(cases)
@@ -275,10 +277,10 @@ def compute_4layer_confidence(
     # Trade / Watch / Wait / Hold / Reduce / Exit / No Trade
     if composite >= SIGNAL_THRESHOLDS.strong_buy_threshold and not penalties:
         decision_tier = "TRADE"
-        sizing = "Full position" f" ({RISK.max_position_pct*100:.0f}%" " of portfolio)"
+        sizing = f"Full position ({RISK.max_position_pct * 100:.0f}% of portfolio)"
     elif composite >= SIGNAL_THRESHOLDS.buy_threshold:
         decision_tier = "TRADE"
-        sizing = "Half position" f" ({RISK.max_position_pct*50:.1f}%" " of portfolio)"
+        sizing = f"Half position ({RISK.max_position_pct * 50:.1f}% of portfolio)"
     elif composite >= SIGNAL_THRESHOLDS.watch_threshold:
         decision_tier = "WATCH"
         sizing = "No position — watchlist only"
@@ -320,7 +322,7 @@ def compute_4layer_confidence(
         invalidation.append(f"Close below SMA20 ({sma20[i]:.2f}) → timing fails")
     if atr_pct[i] > 0.03:
         invalidation.append(
-            f"ATR expansion beyond {atr_pct[i]*1.5:.1%} → risk too high"
+            f"ATR expansion beyond {atr_pct[i] * 1.5:.1%} → risk too high"
         )
     if not invalidation:
         invalidation.append("Broad market crash or sector-wide sell-off")
@@ -337,7 +339,9 @@ def compute_4layer_confidence(
         "confidence_bucket": (
             "high"
             if composite >= SIGNAL_THRESHOLDS.high_confidence_threshold
-            else "medium" if composite >= SIGNAL_THRESHOLDS.watch_threshold else "low"
+            else "medium"
+            if composite >= SIGNAL_THRESHOLDS.watch_threshold
+            else "low"
         ),
         "decay_rate_per_day": confidence_decay_rate,
         "abstention_threshold": ABSTENTION_THRESHOLD,
@@ -468,14 +472,14 @@ def run_expert_council(
                 if _qs >= 70:
                     fund_score += 15
                     fund_reasons.append(
-                        f"Quality score {_qs}/100" " — strong fundamentals"
+                        f"Quality score {_qs}/100 — strong fundamentals"
                     )
                 elif _qs >= 55:
                     fund_score += 5
-                    fund_reasons.append(f"Quality score {_qs}/100" " — acceptable")
+                    fund_reasons.append(f"Quality score {_qs}/100 — acceptable")
                 elif _qs < 40:
                     fund_score -= 10
-                    fund_risks.append(f"Weak fundamentals" f" (quality {_qs}/100)")
+                    fund_risks.append(f"Weak fundamentals (quality {_qs}/100)")
                 _g = _fd.get("growth", {})
                 rg = _g.get("revenue_growth")
                 if rg and rg > 15:

@@ -55,7 +55,9 @@ def _classify_action(
     return "WAIT"
 
 
-async def _load_edgar_sponsor(ticker: str) -> tuple[Dict[str, Any], Dict[str, Any], bool]:
+async def _load_edgar_sponsor(
+    ticker: str,
+) -> tuple[Dict[str, Any], Dict[str, Any], bool]:
     """Return insider_block, sponsor_block, sponsor_bullish from SEC EDGAR."""
     from src.ingestors.edgar import EdgarClient
     from src.services.sponsor_index import lookup_13f_sponsor_overlap
@@ -64,9 +66,7 @@ async def _load_edgar_sponsor(ticker: str) -> tuple[Dict[str, Any], Dict[str, An
     sponsor_13f = await lookup_13f_sponsor_overlap(ticker)
     insider_summary = await edgar.get_insider_summary(ticker)
     recent_filings = await edgar.get_recent_filings(ticker, limit=8)
-    filing_dicts = [
-        f.to_dict() if hasattr(f, "to_dict") else f for f in recent_filings
-    ]
+    filing_dicts = [f.to_dict() if hasattr(f, "to_dict") else f for f in recent_filings]
 
     signal = insider_summary.get("signal", "NEUTRAL")
     buy_f = int(insider_summary.get("buy_filings") or 0)
@@ -134,9 +134,7 @@ async def _load_edgar_sponsor(ticker: str) -> tuple[Dict[str, Any], Dict[str, An
         ),
     }
     sponsor_bullish = (
-        signal == "INSIDER_BUYING"
-        or accum >= 55
-        or (tier_a >= 1 and len(matched) >= 2)
+        signal == "INSIDER_BUYING" or accum >= 55 or (tier_a >= 1 and len(matched) >= 2)
     )
     return insider_block, sponsor_block, sponsor_bullish
 
@@ -156,9 +154,7 @@ async def stock_conviction(ticker: str, request: Request) -> Dict[str, Any]:
         if regime_service is not None:
             regime_payload = await regime_service.get()
             regime_label = (
-                regime_payload.get("label")
-                or regime_payload.get("trend")
-                or "UNKNOWN"
+                regime_payload.get("label") or regime_payload.get("trend") or "UNKNOWN"
             )
             regime_ok = bool(regime_payload.get("should_trade", True))
     except Exception:
@@ -223,7 +219,11 @@ async def stock_conviction(ticker: str, request: Request) -> Dict[str, Any]:
             "transactions": [],
             "sentiment": None,
             "cluster_buy": False,
-            "trust": {"source": "sec_edgar", "mode": "unavailable", "message": str(exc)},
+            "trust": {
+                "source": "sec_edgar",
+                "mode": "unavailable",
+                "message": str(exc),
+            },
         }
         sponsor_block = {
             "status": "unavailable",
@@ -231,7 +231,11 @@ async def stock_conviction(ticker: str, request: Request) -> Dict[str, Any]:
             "insider_signal": None,
             "accumulation_score": 0,
             "crowding_risk": None,
-            "trust": {"source": "sec_edgar", "mode": "unavailable", "message": str(exc)},
+            "trust": {
+                "source": "sec_edgar",
+                "mode": "unavailable",
+                "message": str(exc),
+            },
             "message": "EDGAR fetch failed — sponsor layer degraded.",
         }
         try:

@@ -44,7 +44,9 @@ def build_position_record(
         "unrealized_pnl": round((price - entry) * shares, 2) if price else None,
         "pnl_pct": round((price / entry - 1) * 100, 2) if price and entry else None,
         "r_multiple": (
-            round((price - entry) / risk, 2) if price and stop_defined and risk else None
+            round((price - entry) / risk, 2)
+            if price and stop_defined and risk
+            else None
         ),
         "stop_defined": stop_defined,
         "quote_pending": quote_pending,

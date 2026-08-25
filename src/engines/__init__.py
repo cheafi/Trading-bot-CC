@@ -8,6 +8,7 @@ Contains the core processing engines:
 - AIAdvisor: Chain-of-thought decision making
 - AutoTradingEngine: 24/7 autonomous trading
 """
+
 _LAZY = {
     "FeatureEngine": "src.engines.feature_engine",
     "SignalEngine": "src.engines.signal_engine",

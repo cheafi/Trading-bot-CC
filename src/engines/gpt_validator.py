@@ -12,15 +12,16 @@ Upgrades v6:
   • LLM governance: every call logged with prompt_hash, tokens, latency
   • Falls back to deterministic explanation on parse failure
 """
+
+import asyncio
 import hashlib
 import json
 import logging
 import random
 import re
 import time
-from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
-import asyncio
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -34,11 +35,15 @@ settings = get_settings()
 # RESPONSE SCHEMAS (enforced on every GPT output)
 # ═══════════════════════════════════════════════════════════════════════
 
+
 class ValidationResponse(BaseModel):
     """Strict schema for signal validation output (v6 — pro desk)."""
+
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     validation_result: str = Field(pattern=r"^(PASS|WARN|FAIL)$")
-    approval_status: str = Field(pattern=r"^(approved|conditional|rejected)$", default="conditional")
+    approval_status: str = Field(
+        pattern=r"^(approved|conditional|rejected)$", default="conditional"
+    )
     confidence_adjustment: float = Field(ge=-30, le=10)
     reason: str = Field(max_length=300)
     red_flags: List[str] = Field(default_factory=list, max_length=5)
@@ -50,6 +55,7 @@ class ValidationResponse(BaseModel):
 
 class SentimentResponse(BaseModel):
     """Strict schema for sentiment output."""
+
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     sentiment: str = Field(pattern=r"^(BULLISH|BEARISH|NEUTRAL|MIXED)$")
     confidence: float = Field(ge=0.0, le=1.0)
@@ -61,6 +67,7 @@ class SentimentResponse(BaseModel):
 # PROMPT INJECTION DEFENSE
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def sanitize_external_text(text: str) -> str:
     """
     Sanitize untrusted text (news, social) before including in prompts.
@@ -69,19 +76,19 @@ def sanitize_external_text(text: str) -> str:
     if not text:
         return ""
     # Strip URLs
-    text = re.sub(r'https?://\S+', '[link]', text)
+    text = re.sub(r"https?://\S+", "[link]", text)
     # Strip anything that looks like prompt manipulation
     injection_patterns = [
-        r'ignore (?:all )?(?:previous |above )?instructions',
-        r'you are now',
-        r'new instructions:',
-        r'system:',
-        r'<\|.*?\|>',
-        r'\[INST\]',
-        r'\[/INST\]',
+        r"ignore (?:all )?(?:previous |above )?instructions",
+        r"you are now",
+        r"new instructions:",
+        r"system:",
+        r"<\|.*?\|>",
+        r"\[INST\]",
+        r"\[/INST\]",
     ]
     for pat in injection_patterns:
-        text = re.sub(pat, '[filtered]', text, flags=re.IGNORECASE)
+        text = re.sub(pat, "[filtered]", text, flags=re.IGNORECASE)
     # Truncate
     return text[:1500]
 
@@ -90,17 +97,17 @@ def get_openai_client():
     """
     Get the appropriate OpenAI client based on configuration.
     Prefers Azure OpenAI if configured, falls back to standard OpenAI.
-    
+
     Azure OpenAI supports two auth methods:
     1. API Key (simpler, recommended for dev)
     2. Azure AD / Service Principal (for production)
     """
     if settings.use_azure_openai:
         from openai import AsyncAzureOpenAI
-        
+
         # Check if we have an API key for Azure OpenAI
-        azure_api_key = getattr(settings, 'azure_openai_api_key', None)
-        
+        azure_api_key = getattr(settings, "azure_openai_api_key", None)
+
         if azure_api_key:
             # Use API key authentication (simpler)
             return AsyncAzureOpenAI(
@@ -111,18 +118,17 @@ def get_openai_client():
         else:
             # Use Azure AD / Service Principal authentication
             from azure.identity import ClientSecretCredential, get_bearer_token_provider
-            
+
             credential = ClientSecretCredential(
                 tenant_id=settings.azure_tenant_id,
                 client_id=settings.azure_client_id,
-                client_secret=settings.azure_client_secret
+                client_secret=settings.azure_client_secret,
             )
-            
+
             token_provider = get_bearer_token_provider(
-                credential, 
-                "https://cognitiveservices.azure.com/.default"
+                credential, "https://cognitiveservices.azure.com/.default"
             )
-            
+
             return AsyncAzureOpenAI(
                 azure_endpoint=settings.azure_openai_endpoint,
                 azure_ad_token_provider=token_provider,
@@ -130,6 +136,7 @@ def get_openai_client():
             )
     else:
         from openai import AsyncOpenAI
+
         return AsyncOpenAI(api_key=settings.openai_api_key)
 
 
@@ -137,10 +144,10 @@ class GPTSignalValidator:
     """
     Uses GPT to validate trading signals by checking for news/events
     that the quantitative model might have missed.
-    
+
     Important: GPT is NOT the source of signals - it's a sanity check layer.
     """
-    
+
     VALIDATION_PROMPT = """You are a SENIOR RISK MANAGER at a systematic trading desk.
 Your job: VALIDATE or REJECT this signal. Be harsh, be specific, protect capital.
 You do NOT generate ideas. You only check the math, the context, and the risks.
@@ -253,29 +260,26 @@ Respond ONLY in JSON:
 }}"""
 
     def __init__(
-        self,
-        model: Optional[str] = None,
-        max_retries: int = 3,
-        timeout: float = 30.0
+        self, model: Optional[str] = None, max_retries: int = 3, timeout: float = 30.0
     ):
         # Use Azure deployment name if Azure, otherwise default model
         if settings.use_azure_openai:
             self.model = settings.azure_openai_deployment or "gpt-5.2-mini"
         else:
             self.model = model or "gpt-5.2-mini"
-        
+
         self.max_retries = max_retries
         self.timeout = timeout
         self.logger = logging.getLogger(__name__)
-        
+
         # Initialize appropriate OpenAI client (Azure or standard)
         self.client = get_openai_client()
-    
+
     async def validate_signal(
         self,
         signal: Signal,
         news_headlines: List[str],
-        social_sentiment: str = "No social sentiment data available"
+        social_sentiment: str = "No social sentiment data available",
     ) -> Dict[str, Any]:
         """
         Validate a trading signal using GPT as a skeptical risk manager.
@@ -286,11 +290,11 @@ Respond ONLY in JSON:
 
         stop_loss = (
             signal.invalidation.stop_price
-            if signal.invalidation else signal.entry_price * 0.95
+            if signal.invalidation
+            else signal.entry_price * 0.95
         )
         take_profit = (
-            signal.targets[0].price
-            if signal.targets else signal.entry_price * 1.10
+            signal.targets[0].price if signal.targets else signal.entry_price * 1.10
         )
         risk = abs(signal.entry_price - stop_loss)
         reward = abs(take_profit - signal.entry_price)
@@ -302,7 +306,9 @@ Respond ONLY in JSON:
 
         prompt = self.VALIDATION_PROMPT.format(
             ticker=signal.ticker,
-            direction=signal.direction.value if hasattr(signal.direction, 'value') else signal.direction,
+            direction=signal.direction.value
+            if hasattr(signal.direction, "value")
+            else signal.direction,
             strategy=signal.strategy_id or "unknown",
             entry_price=signal.entry_price,
             take_profit=take_profit,
@@ -336,13 +342,15 @@ Respond ONLY in JSON:
             llm_log["success"] = True
 
             raw_result = self._parse_json_response(response)
-            
+
             # Enforce schema with Pydantic
             try:
                 validated = ValidationResponse(**raw_result)
                 result = validated.model_dump()
             except ValidationError as ve:
-                self.logger.warning(f"GPT response schema invalid, attempting repair: {ve}")
+                self.logger.warning(
+                    f"GPT response schema invalid, attempting repair: {ve}"
+                )
                 # Retry with repair prompt
                 repair_response = await self._call_gpt(
                     f"Fix this JSON to match the required schema. Errors: {ve}\n\nOriginal: {response}"
@@ -355,30 +363,30 @@ Respond ONLY in JSON:
                     # Fall back to deterministic
                     result = self._deterministic_validation(signal, checklist, rr_ratio)
                     llm_log["fallback"] = "deterministic"
-            
+
             # Apply validation result
             original_confidence = signal.confidence
-            adjustment = result.get('confidence_adjustment', 0)
+            adjustment = result.get("confidence_adjustment", 0)
             new_confidence = max(0, min(100, original_confidence + adjustment))
-            
+
             llm_log["parsed_result"] = result
 
             return {
-                'validation_result': result.get('validation_result', 'PASS'),
-                'approval_status': result.get('approval_status', 'conditional'),
-                'approval_flags': result.get('approval_flags', {}),
-                'original_confidence': original_confidence,
-                'adjusted_confidence': new_confidence,
-                'reason': result.get('reason', ''),
-                'red_flags': result.get('red_flags', []),
-                'supporting_factors': result.get('supporting_factors', []),
-                'checklist_violations': result.get('checklist_violations', []),
-                'sources_used': result.get('sources_used', []),
-                'gpt_validation_json': result,
-                'validated_at': datetime.now(timezone.utc).isoformat(),
-                'llm_log': llm_log,
+                "validation_result": result.get("validation_result", "PASS"),
+                "approval_status": result.get("approval_status", "conditional"),
+                "approval_flags": result.get("approval_flags", {}),
+                "original_confidence": original_confidence,
+                "adjusted_confidence": new_confidence,
+                "reason": result.get("reason", ""),
+                "red_flags": result.get("red_flags", []),
+                "supporting_factors": result.get("supporting_factors", []),
+                "checklist_violations": result.get("checklist_violations", []),
+                "sources_used": result.get("sources_used", []),
+                "gpt_validation_json": result,
+                "validated_at": datetime.now(timezone.utc).isoformat(),
+                "llm_log": llm_log,
             }
-            
+
         except Exception as e:
             latency_ms = int((time.time() - start_ts) * 1000)
             llm_log["latency_ms"] = latency_ms
@@ -390,9 +398,9 @@ Respond ONLY in JSON:
             result = self._deterministic_validation(signal, checklist, rr_ratio)
             return {
                 **result,
-                'error': str(e),
-                'validated_at': datetime.now(timezone.utc).isoformat(),
-                'llm_log': llm_log,
+                "error": str(e),
+                "validated_at": datetime.now(timezone.utc).isoformat(),
+                "llm_log": llm_log,
             }
 
     def _deterministic_validation(
@@ -419,7 +427,9 @@ Respond ONLY in JSON:
         # Stop vs ATR
         stop_vs_atr = checklist.get("stop_vs_atr", 1.0)
         if isinstance(stop_vs_atr, (int, float)) and stop_vs_atr < 0.5:
-            red_flags.append(f"Stop {stop_vs_atr:.1f}x ATR — too tight, will get stopped out by noise")
+            red_flags.append(
+                f"Stop {stop_vs_atr:.1f}x ATR — too tight, will get stopped out by noise"
+            )
             violations.append("stop_too_tight")
             adjustment -= 15
 
@@ -446,7 +456,11 @@ Respond ONLY in JSON:
                 red_flags.append(f"RSI {rsi:.0f} — catching a falling knife")
 
         # Determine result
-        if adjustment <= -25 or "earnings_imminent" in violations or "rr_below_1" in violations:
+        if (
+            adjustment <= -25
+            or "earnings_imminent" in violations
+            or "rr_below_1" in violations
+        ):
             result = "FAIL"
         elif adjustment <= -10:
             result = "WARN"
@@ -455,7 +469,8 @@ Respond ONLY in JSON:
 
         # Build approval flags from deterministic checks
         flags = {
-            "math_ok": "rr_below_1" not in violations and "stop_too_tight" not in violations,
+            "math_ok": "rr_below_1" not in violations
+            and "stop_too_tight" not in violations,
             "event_ok": "earnings_imminent" not in violations,
             "crowding_ok": True,  # can't check without social data
             "liquidity_ok": True,  # can't check without volume data
@@ -475,24 +490,22 @@ Respond ONLY in JSON:
             approval_status = "approved" if all(flags.values()) else "conditional"
 
         return {
-            'validation_result': result,
-            'approval_status': approval_status,
-            'approval_flags': flags,
-            'original_confidence': signal.confidence,
-            'adjusted_confidence': max(0, min(100, signal.confidence + adjustment)),
-            'reason': "; ".join(red_flags) if red_flags else "Checklist clean — no issues found",
-            'red_flags': red_flags,
-            'supporting_factors': [],
-            'checklist_violations': violations,
-            'sources_used': ["deterministic_fallback"],
-            'gpt_validation_json': None,
+            "validation_result": result,
+            "approval_status": approval_status,
+            "approval_flags": flags,
+            "original_confidence": signal.confidence,
+            "adjusted_confidence": max(0, min(100, signal.confidence + adjustment)),
+            "reason": "; ".join(red_flags)
+            if red_flags
+            else "Checklist clean — no issues found",
+            "red_flags": red_flags,
+            "supporting_factors": [],
+            "checklist_violations": violations,
+            "sources_used": ["deterministic_fallback"],
+            "gpt_validation_json": None,
         }
-    
-    async def analyze_sentiment(
-        self,
-        ticker: str,
-        text: str
-    ) -> Dict[str, Any]:
+
+    async def analyze_sentiment(self, ticker: str, text: str) -> Dict[str, Any]:
         """
         Analyze sentiment of text using GPT.
         Sanitizes all external text before sending to model.
@@ -512,49 +525,49 @@ Respond ONLY in JSON:
                 validated = SentimentResponse(**raw_result)
                 result = validated.model_dump()
             except ValidationError:
-                    # GPT returned unexpected fields or violated schema.
-                    # Never pass raw model output through — use safe defaults.
-                    result = {
-                        "sentiment": "NEUTRAL",
-                        "confidence": 0.3,
-                        "key_topics": [],
-                        "summary": "Schema validation failed — defaulting to NEUTRAL.",
-                    }
+                # GPT returned unexpected fields or violated schema.
+                # Never pass raw model output through — use safe defaults.
+                result = {
+                    "sentiment": "NEUTRAL",
+                    "confidence": 0.3,
+                    "key_topics": [],
+                    "summary": "Schema validation failed — defaulting to NEUTRAL.",
+                }
 
             return {
-                'sentiment': result.get('sentiment', 'NEUTRAL'),
-                'confidence': result.get('confidence', 0.5),
-                'key_topics': result.get('key_topics', []),
-                'summary': result.get('summary', ''),
-                'analyzed_at': datetime.now(timezone.utc).isoformat(),
-                'latency_ms': latency_ms,
+                "sentiment": result.get("sentiment", "NEUTRAL"),
+                "confidence": result.get("confidence", 0.5),
+                "key_topics": result.get("key_topics", []),
+                "summary": result.get("summary", ""),
+                "analyzed_at": datetime.now(timezone.utc).isoformat(),
+                "latency_ms": latency_ms,
             }
 
         except Exception as e:
             self.logger.error(f"Sentiment analysis failed for {ticker}: {e}")
             return {
-                'sentiment': 'NEUTRAL',
-                'confidence': 0.0,
-                'key_topics': [],
-                'summary': 'Analysis failed',
-                'error': str(e),
-                'analyzed_at': datetime.now(timezone.utc).isoformat()
+                "sentiment": "NEUTRAL",
+                "confidence": 0.0,
+                "key_topics": [],
+                "summary": "Analysis failed",
+                "error": str(e),
+                "analyzed_at": datetime.now(timezone.utc).isoformat(),
             }
-    
+
     async def validate_batch(
         self,
         signals: List[Signal],
         news_by_ticker: Dict[str, List[str]],
-        sentiment_by_ticker: Dict[str, str]
+        sentiment_by_ticker: Dict[str, str],
     ) -> List[Dict[str, Any]]:
         """
         Validate multiple signals in parallel.
-        
+
         Args:
             signals: List of signals to validate
             news_by_ticker: Dict mapping ticker to news headlines
             sentiment_by_ticker: Dict mapping ticker to sentiment summary
-        
+
         Returns:
             List of validation results
         """
@@ -563,17 +576,20 @@ Respond ONLY in JSON:
             news = news_by_ticker.get(signal.ticker, [])
             sentiment = sentiment_by_ticker.get(signal.ticker, "No data")
             tasks.append(self.validate_signal(signal, news, sentiment))
-        
+
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         # Handle any exceptions
         processed_results = []
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                    self.logger.error(f"Validation failed for {signals[i].ticker}: {result}")
-                    # Default to WARN + confidence penalty — never silently PASS an
-                    # unvalidated signal (the original code incorrectly used PASS here).
-                    processed_results.append({
+                self.logger.error(
+                    f"Validation failed for {signals[i].ticker}: {result}"
+                )
+                # Default to WARN + confidence penalty — never silently PASS an
+                # unvalidated signal (the original code incorrectly used PASS here).
+                processed_results.append(
+                    {
                         "validation_result": "WARN",
                         "approval_status": "conditional",
                         "original_confidence": signals[i].confidence,
@@ -582,33 +598,37 @@ Respond ONLY in JSON:
                         "red_flags": ["validation_error"],
                         "supporting_factors": [],
                         "checklist_violations": ["validation_unavailable"],
-                    })
+                    }
+                )
             else:
                 processed_results.append(result)
-        
+
         return processed_results
-    
+
     async def _call_gpt(self, prompt: str) -> str:
         """Make API call to GPT with retries."""
         last_error = None
-        
+
         for attempt in range(self.max_retries):
             try:
                 response = await asyncio.wait_for(
                     self.client.chat.completions.create(
                         model=self.model,
                         messages=[
-                            {"role": "system", "content": "You are a financial analyst assistant. Always respond in valid JSON."},
-                            {"role": "user", "content": prompt}
+                            {
+                                "role": "system",
+                                "content": "You are a financial analyst assistant. Always respond in valid JSON.",
+                            },
+                            {"role": "user", "content": prompt},
                         ],
                         temperature=0.1,
                         max_tokens=500,
-                        response_format={"type": "json_object"}
+                        response_format={"type": "json_object"},
                     ),
-                    timeout=self.timeout
+                    timeout=self.timeout,
                 )
                 return response.choices[0].message.content
-                
+
             except asyncio.TimeoutError:
                 last_error = "Request timeout"
                 self.logger.warning(f"GPT timeout on attempt {attempt + 1}")
@@ -616,14 +636,16 @@ Respond ONLY in JSON:
                 # Handle rate limits with exponential backoff
                 if "rate" in str(e).lower() or "429" in str(e):
                     last_error = "Rate limit exceeded"
-                    delay = (2 ** attempt) * (0.8 + random.random() * 0.4)
+                    delay = (2**attempt) * (0.8 + random.random() * 0.4)
                     await asyncio.sleep(delay)
                 else:
                     last_error = str(e)
                     self.logger.warning(f"GPT error on attempt {attempt + 1}: {e}")
-        
-        raise Exception(f"GPT call failed after {self.max_retries} attempts: {last_error}")
-    
+
+        raise Exception(
+            f"GPT call failed after {self.max_retries} attempts: {last_error}"
+        )
+
     def _parse_json_response(self, response: str) -> Dict[str, Any]:
         """Parse JSON from GPT response."""
         try:
@@ -631,7 +653,8 @@ Respond ONLY in JSON:
         except json.JSONDecodeError:
             # Try to extract JSON from response
             import re
-            match = re.search(r'\{.*\}', response, re.DOTALL)
+
+            match = re.search(r"\{.*\}", response, re.DOTALL)
             if match:
                 return json.loads(match.group())
             raise ValueError(f"Could not parse JSON from response: {response[:200]}")
@@ -640,7 +663,7 @@ Respond ONLY in JSON:
 class GPTSummarizer:
     """
     Uses GPT for market summarization and report generation (v6 — pro desk).
-    
+
     Upgrades v6:
       • Regime scoreboard + delta snapshot as primary inputs
       • JSON-first output: tone, drivers, scenarios, positioning, risks, trade priorities
@@ -649,7 +672,7 @@ class GPTSummarizer:
       • "What changes my mind?" mandatory per trade brief
       • Flows & positioning data integration
     """
-    
+
     MARKET_SUMMARY_PROMPT = """You are a senior desk strategist composing the MORNING DECISION MEMO.
 You receive pre-computed data. Your job is to COMPOSE — never invent numbers or facts.
 
@@ -779,11 +802,11 @@ All data is pre-computed. Your job is composition — do NOT invent any numbers.
             self.model = settings.azure_openai_deployment or "gpt-5.2"
         else:
             self.model = model or "gpt-5.2"
-        
+
         # Initialize appropriate OpenAI client (Azure or standard)
         self.client = get_openai_client()
         self.logger = logging.getLogger(__name__)
-    
+
     async def generate_morning_memo(
         self,
         playbook: Any,
@@ -801,35 +824,54 @@ All data is pre-computed. Your job is composition — do NOT invent any numbers.
         Takes pre-computed InsightEngine + DeltaTracker + ScoreboardBuilder outputs.
         GPT composes from data — never invents.
         """
-        from src.core.models import MarketPlaybook, TradeBrief, RiskBulletin
 
         # ── Marshal regime scoreboard ──
         if regime_scoreboard:
             sb = regime_scoreboard
             # Handle both dict-based and list-based strategy playbook
-            if hasattr(sb, 'strategies_on'):
+            if hasattr(sb, "strategies_on"):
                 on_strats = sb.strategies_on
                 cond_strats = [
-                    s.get('strategy', str(s)) if isinstance(s, dict) else str(s)
+                    s.get("strategy", str(s)) if isinstance(s, dict) else str(s)
                     for s in (sb.strategies_conditional or [])
                 ]
                 off_strats = sb.strategies_off
             else:
-                playbook = getattr(sb, 'strategy_playbook', {})
-                on_strats = playbook.get('ON', [])
-                cond_strats = playbook.get('CONDITIONAL', [])
-                off_strats = playbook.get('OFF', [])
+                playbook = getattr(sb, "strategy_playbook", {})
+                on_strats = playbook.get("ON", [])
+                cond_strats = playbook.get("CONDITIONAL", [])
+                off_strats = playbook.get("OFF", [])
 
             # Get scenario text
             scenario_text = ""
             if sb.scenarios:
                 sc = sb.scenarios
-                if hasattr(sc, 'base_case'):
+                if hasattr(sc, "base_case"):
                     base = sc.base_case
-                    base_prob = base.get('probability', '?') if isinstance(base, dict) else getattr(sc, 'base_probability', '?')
-                    base_desc = base.get('description', str(base)) if isinstance(base, dict) else str(base)
-                    bull_desc = sc.bull_case.get('description', str(sc.bull_case)) if isinstance(sc.bull_case, dict) else str(sc.bull_case) if sc.bull_case else 'N/A'
-                    bear_desc = sc.bear_case.get('description', str(sc.bear_case)) if isinstance(sc.bear_case, dict) else str(sc.bear_case) if sc.bear_case else 'N/A'
+                    base_prob = (
+                        base.get("probability", "?")
+                        if isinstance(base, dict)
+                        else getattr(sc, "base_probability", "?")
+                    )
+                    base_desc = (
+                        base.get("description", str(base))
+                        if isinstance(base, dict)
+                        else str(base)
+                    )
+                    bull_desc = (
+                        sc.bull_case.get("description", str(sc.bull_case))
+                        if isinstance(sc.bull_case, dict)
+                        else str(sc.bull_case)
+                        if sc.bull_case
+                        else "N/A"
+                    )
+                    bear_desc = (
+                        sc.bear_case.get("description", str(sc.bear_case))
+                        if isinstance(sc.bear_case, dict)
+                        else str(sc.bear_case)
+                        if sc.bear_case
+                        else "N/A"
+                    )
                     scenario_text = (
                         f"Base ({base_prob}%): {base_desc}\n"
                         f"Bull Trigger: {bull_desc}\n"
@@ -891,10 +933,10 @@ All data is pre-computed. Your job is composition — do NOT invent any numbers.
             ep = tb.execution_plan
             rp = tb.risk_plan
             brief_lines.append(
-                f"#{i+1} {tb.ticker} {tb.direction.value if hasattr(tb.direction, 'value') else tb.direction}\n"
+                f"#{i + 1} {tb.ticker} {tb.direction.value if hasattr(tb.direction, 'value') else tb.direction}\n"
                 f"  Entry logic: {tb.entry_logic}\n"
                 f"  Why now: {getattr(tb, 'why_now', tb.entry_logic)}\n"
-                f"  P(T1): {edge.p_t1*100:.0f}% | P(T2): {edge.p_t2*100:.0f}% | P(stop): {edge.p_stop*100:.0f}%\n"
+                f"  P(T1): {edge.p_t1 * 100:.0f}% | P(T2): {edge.p_t2 * 100:.0f}% | P(stop): {edge.p_stop * 100:.0f}%\n"
                 f"  EV: {edge.expected_return_pct:+.1f}% | Expected hold: {edge.expected_holding_days}d\n"
                 f"  R:R to T1: {rp.rr_to_t1:.1f} | R:R to T2: {rp.rr_to_t2 or 'N/A'}\n"
                 f"  Order: {ep.order_type} | Window: {ep.entry_window}\n"
@@ -931,53 +973,59 @@ All data is pre-computed. Your job is composition — do NOT invent any numbers.
             risk_bulletin=bulletin_text or "No bulletin data",
             news_headlines="\n".join(f"- {h}" for h in safe_news) or "None available",
         )
-        
+
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are a senior desk strategist. Compose from data — never invent."},
-                    {"role": "user", "content": prompt}
+                    {
+                        "role": "system",
+                        "content": "You are a senior desk strategist. Compose from data — never invent.",
+                    },
+                    {"role": "user", "content": prompt},
                 ],
                 temperature=0.3,
-                max_tokens=1500
+                max_tokens=1500,
             )
             return response.choices[0].message.content
-            
+
         except Exception as e:
             self.logger.error(f"Failed to generate morning memo: {e}")
             # Deterministic fallback — plain data dump
             return self._deterministic_memo(playbook, trade_briefs, risk_bulletin)
 
     async def generate_market_summary(
-        self,
-        market_data: Dict[str, Any],
-        news_headlines: List[str]
+        self, market_data: Dict[str, Any], news_headlines: List[str]
     ) -> str:
         """Generate daily market summary (legacy compat)."""
         prompt = (
             f"Summarize today's market activity based on the following data:\n\n"
             f"Market Data:\n{json.dumps(market_data, indent=2)}\n\n"
-            f"News Headlines:\n" + "\n".join(f"- {h}" for h in news_headlines[:20]) + "\n\n"
-            f"Generate a 2-3 paragraph professional market summary covering:\n"
-            f"1. Overall market direction and major index performance\n"
-            f"2. Key sector movements and notable movers\n"
-            f"3. Important themes or catalysts driving the market\n\n"
-            f"Be concise, professional, and factual. Avoid speculation."
+            f"News Headlines:\n"
+            + "\n".join(f"- {h}" for h in news_headlines[:20])
+            + "\n\n"
+            "Generate a 2-3 paragraph professional market summary covering:\n"
+            "1. Overall market direction and major index performance\n"
+            "2. Key sector movements and notable movers\n"
+            "3. Important themes or catalysts driving the market\n\n"
+            "Be concise, professional, and factual. Avoid speculation."
         )
-        
+
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are a professional financial market analyst."},
-                    {"role": "user", "content": prompt}
+                    {
+                        "role": "system",
+                        "content": "You are a professional financial market analyst.",
+                    },
+                    {"role": "user", "content": prompt},
                 ],
                 temperature=0.3,
-                max_tokens=1000
+                max_tokens=1000,
             )
             return response.choices[0].message.content
-            
+
         except Exception as e:
             self.logger.error(f"Failed to generate market summary: {e}")
             return "Market summary unavailable due to technical issues."
@@ -987,12 +1035,12 @@ All data is pre-computed. Your job is composition — do NOT invent any numbers.
         tb = trade_brief
         edge = tb.edge_model
         rp = tb.risk_plan
-        
+
         # Build scenario text
         scenario_text = "No scenario data"
-        if hasattr(tb, 'scenario_plan') and tb.scenario_plan:
+        if hasattr(tb, "scenario_plan") and tb.scenario_plan:
             sp = tb.scenario_plan
-            if hasattr(sp, 'base_case'):
+            if hasattr(sp, "base_case"):
                 scenario_text = (
                     f"Base ({getattr(sp, 'base_probability', '?')}%): {sp.base_case}\n"
                     f"Bull trigger: {sp.bull_trigger}\n"
@@ -1005,7 +1053,7 @@ All data is pre-computed. Your job is composition — do NOT invent any numbers.
             f"Why now: {getattr(tb, 'why_now', tb.entry_logic)}\n"
             f"Entry logic: {tb.entry_logic}\n"
             f"Setup grade: {getattr(tb, 'setup_grade', 'N/A')}\n"
-            f"P(T1): {edge.p_t1*100:.0f}% | P(T2): {edge.p_t2*100:.0f}% | P(stop): {edge.p_stop*100:.0f}%\n"
+            f"P(T1): {edge.p_t1 * 100:.0f}% | P(T2): {edge.p_t2 * 100:.0f}% | P(stop): {edge.p_stop * 100:.0f}%\n"
             f"EV: {edge.expected_return_pct:+.1f}% | MAE: {edge.expected_mae_pct:.1f}%\n"
             f"R:R to T1: {rp.rr_to_t1:.1f} | Liquidity: {rp.liquidity_tier}\n"
             f"Time stop: {getattr(tb, 'time_stop_days', edge.expected_holding_days)} days\n"
@@ -1018,18 +1066,21 @@ All data is pre-computed. Your job is composition — do NOT invent any numbers.
             f"Confidence: {tb.confidence}/100\n"
             f"Calibration: {edge.calibration_bucket} (n={edge.sample_size})"
         )
-        
+
         prompt = self.TRADE_BRIEF_PROMPT.format(trade_data=data)
-        
+
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are a desk strategist. Compose from data — never invent numbers."},
-                    {"role": "user", "content": prompt}
+                    {
+                        "role": "system",
+                        "content": "You are a desk strategist. Compose from data — never invent numbers.",
+                    },
+                    {"role": "user", "content": prompt},
                 ],
                 temperature=0.2,
-                max_tokens=400
+                max_tokens=400,
             )
             return response.choices[0].message.content
         except Exception as e:
@@ -1037,7 +1088,7 @@ All data is pre-computed. Your job is composition — do NOT invent any numbers.
             return (
                 f"**{tb.ticker} {tb.direction.value if hasattr(tb.direction, 'value') else tb.direction}** — "
                 f"{getattr(tb, 'why_now', tb.entry_logic)}. "
-                f"P(T1) {edge.p_t1*100:.0f}%, EV {edge.expected_return_pct:+.1f}%, R:R {rp.rr_to_t1:.1f}. "
+                f"P(T1) {edge.p_t1 * 100:.0f}%, EV {edge.expected_return_pct:+.1f}%, R:R {rp.rr_to_t1:.1f}. "
                 f"Time stop: {getattr(tb, 'time_stop_days', edge.expected_holding_days)}d. "
                 f"Invalidation: {tb.invalidation_sentence}"
             )
@@ -1046,23 +1097,29 @@ All data is pre-computed. Your job is composition — do NOT invent any numbers.
         """Plain-data fallback when GPT is unavailable."""
         lines = []
         if playbook:
-            lines.append(f"**REGIME**: {playbook.risk_regime} / {playbook.trend_regime} / {playbook.volatility_regime}")
+            lines.append(
+                f"**REGIME**: {playbook.risk_regime} / {playbook.trend_regime} / {playbook.volatility_regime}"
+            )
             lines.append(f"**STANCE**: {playbook.sizing_stance}")
             lines.append(f"\n**PLAYBOOK**: {playbook.playbook_text}")
             if playbook.change_summary:
                 lines.append("\n**CHANGES**")
                 for c in playbook.change_summary:
                     lines.append(f"• {c.description}")
-        
+
         if trade_briefs:
             lines.append(f"\n**TOP {len(trade_briefs)} TRADES**")
             for i, tb in enumerate(trade_briefs[:5]):
                 edge = tb.edge_model
                 rp = tb.risk_plan
-                direction = tb.direction.value if hasattr(tb.direction, 'value') else tb.direction
+                direction = (
+                    tb.direction.value
+                    if hasattr(tb.direction, "value")
+                    else tb.direction
+                )
                 lines.append(
-                    f"{i+1}. **{tb.ticker}** {direction} — "
-                    f"P(T1) {edge.p_t1*100:.0f}% | EV {edge.expected_return_pct:+.1f}% | "
+                    f"{i + 1}. **{tb.ticker}** {direction} — "
+                    f"P(T1) {edge.p_t1 * 100:.0f}% | EV {edge.expected_return_pct:+.1f}% | "
                     f"R:R {rp.rr_to_t1:.1f} | {tb.invalidation_sentence}"
                 )
 
@@ -1070,5 +1127,5 @@ All data is pre-computed. Your job is composition — do NOT invent any numbers.
             lines.append(f"\n**RISK BULLETIN**: {risk_bulletin.recommendation}")
             for w in risk_bulletin.warnings:
                 lines.append(f"• {w}")
-        
+
         return "\n".join(lines) or "No data available for memo."

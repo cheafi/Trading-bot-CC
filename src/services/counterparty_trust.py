@@ -68,7 +68,10 @@ def evaluate_counterparty_trust(
         return {
             "trust_level": "degraded",
             "headline": TRUST_LABELS["degraded"],
-            "labels": [TRUST_LABELS["degraded"], *(health.get("degraded_reasons") or [])[:2]],
+            "labels": [
+                TRUST_LABELS["degraded"],
+                *(health.get("degraded_reasons") or [])[:2],
+            ],
             "deploy_trusted": False,
             "monitoring_only": True,
         }

@@ -28,16 +28,30 @@ def build_execution_ladder_state(
     blockers: List[Dict[str, Any]] = []
 
     if not gateway_reachable:
-        blockers.append({"domain": "broker", "code": "GATEWAY_DOWN", "label": "Gateway unreachable"})
+        blockers.append(
+            {"domain": "broker", "code": "GATEWAY_DOWN", "label": "Gateway unreachable"}
+        )
     elif not api_port_open and not broker_connected:
-        blockers.append({"domain": "broker", "code": "IBAPI_MISSING", "label": "IB API port closed"})
+        blockers.append(
+            {"domain": "broker", "code": "IBAPI_MISSING", "label": "IB API port closed"}
+        )
     elif gateway_reachable and not broker_connected:
-        blockers.append({"domain": "broker", "code": "SESSION_INACTIVE", "label": "Session inactive"})
+        blockers.append(
+            {
+                "domain": "broker",
+                "code": "SESSION_INACTIVE",
+                "label": "Session inactive",
+            }
+        )
 
     if circuit_breaker:
-        blockers.append({"domain": "engine", "code": "CIRCUIT_BREAKER", "label": "Circuit breaker"})
+        blockers.append(
+            {"domain": "engine", "code": "CIRCUIT_BREAKER", "label": "Circuit breaker"}
+        )
     elif not engine_running:
-        blockers.append({"domain": "engine", "code": "ENGINE_OFF", "label": "Engine off"})
+        blockers.append(
+            {"domain": "engine", "code": "ENGINE_OFF", "label": "Engine off"}
+        )
 
     if board_blocked:
         blockers.append(
@@ -107,7 +121,9 @@ def build_cc_state(
     else:
         board_state = "RESEARCH_ONLY"
 
-    board_blocked = board_state != "DEPLOY" or tb in ("WAIT", "NO_TRADE") or not should_trade
+    board_blocked = (
+        board_state != "DEPLOY" or tb in ("WAIT", "NO_TRADE") or not should_trade
+    )
     board_reason = (
         "Regime gate: WAIT"
         if tb == "WAIT"
@@ -220,7 +236,10 @@ def attach_page_capability(
     mock_only: bool = False,
 ) -> Dict[str, Any]:
     """Attach page_capability for a UI tab (requires system_state on payload)."""
-    from src.services.operator_state_contract import build_page_capability, resolve_tab_id
+    from src.services.operator_state_contract import (
+        build_page_capability,
+        resolve_tab_id,
+    )
 
     if not payload.get("system_state"):
         attach_system_state(payload)

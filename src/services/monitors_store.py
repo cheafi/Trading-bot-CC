@@ -14,9 +14,7 @@ logger = logging.getLogger(__name__)
 
 _STORE = Path("data") / "monitors.json"
 _TICKER_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
-_ALLOWED_CLASSES = frozenset(
-    {"stock", "portfolio", "market", "smart_money", "thesis"}
-)
+_ALLOWED_CLASSES = frozenset({"stock", "portfolio", "market", "smart_money", "thesis"})
 _ALLOWED_RULE_TYPES = frozenset(
     {
         "thesis_drift",
@@ -121,7 +119,9 @@ def update_monitor(monitor_id: str, body: Dict[str, Any]) -> Optional[Dict[str, 
 def delete_monitor(monitor_id: str) -> bool:
     data = _load()
     before = len(data.get("monitors") or [])
-    data["monitors"] = [m for m in data.get("monitors") or [] if m.get("id") != monitor_id]
+    data["monitors"] = [
+        m for m in data.get("monitors") or [] if m.get("id") != monitor_id
+    ]
     if len(data["monitors"]) < before:
         _save(data)
         return True
@@ -153,12 +153,16 @@ def evaluate_monitors(
             )
         elif rt == "weight_drift" and positions:
             alerts.append(
-                _alert_from_rule(m, "Portfolio drift — check allocation monitor", "medium")
+                _alert_from_rule(
+                    m, "Portfolio drift — check allocation monitor", "medium"
+                )
             )
     return alerts[:20]
 
 
-def _alert_from_rule(rule: Dict[str, Any], message: str, severity: str) -> Dict[str, Any]:
+def _alert_from_rule(
+    rule: Dict[str, Any], message: str, severity: str
+) -> Dict[str, Any]:
     return {
         "id": rule.get("id"),
         "what_changed": message,

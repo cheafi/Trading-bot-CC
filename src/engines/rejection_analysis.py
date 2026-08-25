@@ -7,13 +7,13 @@ Analyzes rejected/avoided signals to find:
   3. False-negative detection (signals that were rejected but would have won)
   4. Rule tuning recommendations based on rejection outcomes
 """
+
 from __future__ import annotations
 
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +21,15 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RejectionRecord:
     """A single rejected signal with context."""
+
     ticker: str
     strategy: str
     direction: str
     confidence: float
     rejection_reasons: List[str] = field(default_factory=list)
-    rejection_category: str = "unknown"  # timing, liquidity, earnings, regime, conflict, data
+    rejection_category: str = (
+        "unknown"  # timing, liquidity, earnings, regime, conflict, data
+    )
     regime_at_rejection: str = ""
     timestamp: str = ""
     # Outcome tracking (filled later)
@@ -55,6 +58,7 @@ class RejectionRecord:
 @dataclass
 class ConfidenceDisagreement:
     """When two confidence sources disagree on a signal."""
+
     ticker: str
     strategy_confidence: float  # from signal engine
     ensemble_confidence: float  # from opportunity ensembler
@@ -68,7 +72,9 @@ class ConfidenceDisagreement:
             "ticker": self.ticker,
             "strategy_confidence": round(self.strategy_confidence, 2),
             "ensemble_confidence": round(self.ensemble_confidence, 2),
-            "gpt_confidence": round(self.gpt_confidence, 2) if self.gpt_confidence is not None else None,
+            "gpt_confidence": round(self.gpt_confidence, 2)
+            if self.gpt_confidence is not None
+            else None,
             "disagreement_magnitude": round(self.disagreement_magnitude, 2),
             "direction": self.direction,
             "explanation": self.explanation,
@@ -78,6 +84,7 @@ class ConfidenceDisagreement:
 @dataclass
 class RejectionAnalysis:
     """Complete rejection analysis result."""
+
     total_rejections: int = 0
     rejection_categories: Dict[str, int] = field(default_factory=dict)
     false_negative_rate: float = 0.0  # % of rejections that would have won
@@ -159,9 +166,9 @@ class RejectionAnalysisEngine:
         categories: Dict[str, int] = defaultdict(int)
         for r in self._rejections:
             categories[r.rejection_category] += 1
-        result.rejection_categories = dict(sorted(
-            categories.items(), key=lambda x: x[1], reverse=True
-        ))
+        result.rejection_categories = dict(
+            sorted(categories.items(), key=lambda x: x[1], reverse=True)
+        )
 
         # Top rejection reasons
         reason_counts: Dict[str, int] = defaultdict(int)
@@ -170,7 +177,9 @@ class RejectionAnalysisEngine:
                 reason_counts[reason] += 1
         result.top_rejection_reasons = [
             {"reason": k, "count": v, "pct": round(v / len(self._rejections) * 100, 1)}
-            for k, v in sorted(reason_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+            for k, v in sorted(reason_counts.items(), key=lambda x: x[1], reverse=True)[
+                :10
+            ]
         ]
 
         # False negative analysis
@@ -189,13 +198,12 @@ class RejectionAnalysisEngine:
         for r in self._rejections:
             regime = r.regime_at_rejection or "unknown"
             regime_cats[regime][r.rejection_category] += 1
-        result.regime_breakdown = {
-            k: dict(v) for k, v in regime_cats.items()
-        }
+        result.regime_breakdown = {k: dict(v) for k, v in regime_cats.items()}
 
         # Confidence disagreements
         result.confidence_disagreements = [
-            d.to_dict() for d in self._disagreements[-20:]  # last 20
+            d.to_dict()
+            for d in self._disagreements[-20:]  # last 20
         ]
 
         # Rule recommendations
@@ -282,6 +290,8 @@ class RejectionAnalysisEngine:
                 )
 
         if not recs:
-            recs.append("Rejection patterns look healthy — no rule changes recommended.")
+            recs.append(
+                "Rejection patterns look healthy — no rule changes recommended."
+            )
 
         return recs

@@ -112,11 +112,7 @@ async def ops_engine_status(request: Request):
     return sanitize_for_json(
         {
             "engine": _engine_snapshot(engine),
-            "loop_task": (
-                "running"
-                if task and not task.done()
-                else "idle"
-            ),
+            "loop_task": ("running" if task and not task.done() else "idle"),
             "auto_start_env": "CC_AUTO_START_ENGINE",
         }
     )

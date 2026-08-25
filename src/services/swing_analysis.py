@@ -17,12 +17,14 @@ Implements Swing_Project best-practices:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
-
+from typing import Any, Dict, List
 
 # ── RS vs SPY ────────────────────────────────────────────────────────────────
 
-def compute_rs_vs_spy(stock_closes: List[float], spy_closes: List[float]) -> Dict[str, Any]:
+
+def compute_rs_vs_spy(
+    stock_closes: List[float], spy_closes: List[float]
+) -> Dict[str, Any]:
     """Relative Strength vs SPY — leadership filter from Swing_Project."""
     if len(stock_closes) < 90 or len(spy_closes) < 90:
         return {
@@ -51,8 +53,7 @@ def compute_rs_vs_spy(stock_closes: List[float], spy_closes: List[float]) -> Dic
 
     # RS line = stock/SPY ratio (last 50 bars)
     rs_line = [
-        s / b if b > 0 else 0
-        for s, b in zip(stock_closes[-50:], spy_closes[-50:])
+        s / b if b > 0 else 0 for s, b in zip(stock_closes[-50:], spy_closes[-50:])
     ]
     rs_sma10 = sum(rs_line[-10:]) / 10 if len(rs_line) >= 10 else 0
     rs_sma50 = sum(rs_line) / len(rs_line) if rs_line else 0
@@ -79,7 +80,10 @@ def compute_rs_vs_spy(stock_closes: List[float], spy_closes: List[float]) -> Dic
 
 # ── Distribution Days (IBD-style) ─────────────────────────────────────────────
 
-def detect_distribution_days(spy_data: List[Dict], lookback: int = 25) -> Dict[str, Any]:
+
+def detect_distribution_days(
+    spy_data: List[Dict], lookback: int = 25
+) -> Dict[str, Any]:
     """IBD-style distribution day counting.
 
     A distribution day = SPY down >= 0.2% on higher volume than prior day.
@@ -117,7 +121,9 @@ def detect_distribution_days(spy_data: List[Dict], lookback: int = 25) -> Dict[s
     pressure = (
         "heavy_distribution"
         if dd_count >= 5
-        else "moderate_distribution" if dd_count >= 3 else "neutral"
+        else "moderate_distribution"
+        if dd_count >= 3
+        else "neutral"
     )
     return {
         "distribution_day_count": dd_count,
@@ -127,6 +133,7 @@ def detect_distribution_days(spy_data: List[Dict], lookback: int = 25) -> Dict[s
 
 
 # ── VCP Pattern ───────────────────────────────────────────────────────────────
+
 
 def detect_vcp_pattern(
     highs: List[float],
@@ -198,6 +205,7 @@ def detect_vcp_pattern(
 
 # ── Volume Quality ────────────────────────────────────────────────────────────
 
+
 def compute_volume_quality(volumes: List[float], closes: List[float]) -> Dict[str, Any]:
     """Volume quality scoring from Swing_Project.
 
@@ -256,6 +264,7 @@ def compute_volume_quality(volumes: List[float], closes: List[float]) -> Dict[st
 
 # ── Pullback Entry Engine ─────────────────────────────────────────────────────
 
+
 def detect_pullback_entry(
     closes: List[float],
     highs: List[float],
@@ -306,6 +315,7 @@ def detect_pullback_entry(
 
 # ── Dual-Axis Leadership / Actionability ──────────────────────────────────────
 
+
 def compute_leadership_actionability(
     rs_data: Dict[str, Any],
     vcp_data: Dict[str, Any],
@@ -338,7 +348,9 @@ def compute_leadership_actionability(
         "none": 0.2,
     }.get(pullback_data.get("pullback_state", "none"), 0.2)
 
-    actionability = vcp_component * 0.3 + vol_component * 0.3 + pullback_stage_score * 0.4
+    actionability = (
+        vcp_component * 0.3 + vol_component * 0.3 + pullback_stage_score * 0.4
+    )
 
     final_score = (leadership * 0.45 + actionability * 0.55) * 100
 

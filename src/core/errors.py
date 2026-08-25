@@ -52,7 +52,9 @@ class DataError(TradingError):
 class ValidationError(TradingError):
     """Raised when a signal or input fails validation."""
 
-    def __init__(self, message: str = "", field: str = "", code: str = "VALIDATION_ERR"):
+    def __init__(
+        self, message: str = "", field: str = "", code: str = "VALIDATION_ERR"
+    ):
         self.field = field
         super().__init__(message=message, code=code, detail=f"field={field}")
 
@@ -60,7 +62,9 @@ class ValidationError(TradingError):
 class RiskLimitError(TradingError):
     """Raised when a risk limit (circuit breaker, exposure, drawdown) is hit."""
 
-    def __init__(self, message: str = "", limit_type: str = "", code: str = "RISK_LIMIT"):
+    def __init__(
+        self, message: str = "", limit_type: str = "", code: str = "RISK_LIMIT"
+    ):
         self.limit_type = limit_type
         super().__init__(message=message, code=code, detail=f"limit={limit_type}")
 

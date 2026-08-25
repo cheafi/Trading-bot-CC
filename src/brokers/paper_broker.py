@@ -10,17 +10,26 @@ Sprint 25: adds realistic execution modelling:
 - Commission     — configurable per-order + per-share fees
 - Latency        — configurable async delay before fill
 """
+
 import asyncio
 import logging
 import random
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Dict, List, Optional
 
 from src.brokers.base import (
-    BaseBroker, OrderRequest, OrderResult, Position,
-    AccountInfo, Quote, OrderType, OrderSide, OrderStatus, Market,
+    AccountInfo,
+    BaseBroker,
+    Market,
+    OrderRequest,
+    OrderResult,
+    OrderSide,
+    OrderStatus,
+    OrderType,
+    Position,
+    Quote,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,6 +37,7 @@ logger = logging.getLogger(__name__)
 try:
     from src.core.errors import BrokerError
 except ImportError:
+
     class BrokerError(Exception):
         pass
 
@@ -35,6 +45,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Sprint 25: execution-realism models
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class SlippageModel:
@@ -46,9 +57,10 @@ class SlippageModel:
     volatility (approximated from bid-ask spread width).
     ``max_bps`` caps slippage to avoid absurd outliers.
     """
-    base_bps: float = 2.0         # 0.02 %
-    vol_multiplier: float = 1.0   # scale with spread width
-    max_bps: float = 20.0         # 0.20 % hard cap
+
+    base_bps: float = 2.0  # 0.02 %
+    vol_multiplier: float = 1.0  # scale with spread width
+    max_bps: float = 20.0  # 0.20 % hard cap
     random_seed: Optional[int] = None  # for reproducible tests
 
     def _rng(self) -> random.Random:
@@ -85,10 +97,11 @@ class CommissionModel:
     model for equities but charges $0.65/contract for options.
     Crypto typically has a flat 0.10% taker fee.
     """
-    per_order: float = 0.0          # flat fee per order
-    per_share: float = 0.0          # per-share fee
-    min_per_order: float = 0.0      # minimum charge
-    pct_of_value: float = 0.0       # percentage of notional (e.g. 0.001 = 0.1%)
+
+    per_order: float = 0.0  # flat fee per order
+    per_share: float = 0.0  # per-share fee
+    min_per_order: float = 0.0  # minimum charge
+    pct_of_value: float = 0.0  # percentage of notional (e.g. 0.001 = 0.1%)
 
     def calculate(self, quantity: int, fill_price: float) -> float:
         """Return total commission for an order fill."""
@@ -101,10 +114,10 @@ class CommissionModel:
 # Preset commission schedules
 # ---------------------------------------------------------------------------
 COMMISSION_PRESETS: Dict[str, CommissionModel] = {
-    "zero":   CommissionModel(),                                        # Alpaca / Robinhood
-    "ibkr":   CommissionModel(per_share=0.005, min_per_order=1.0),      # IBKR Pro
-    "crypto": CommissionModel(pct_of_value=0.001),                      # 0.10% taker
-    "hk":     CommissionModel(pct_of_value=0.0008, min_per_order=18.0), # HK brokerage
+    "zero": CommissionModel(),  # Alpaca / Robinhood
+    "ibkr": CommissionModel(per_share=0.005, min_per_order=1.0),  # IBKR Pro
+    "crypto": CommissionModel(pct_of_value=0.001),  # 0.10% taker
+    "hk": CommissionModel(pct_of_value=0.0008, min_per_order=18.0),  # HK brokerage
 }
 
 
@@ -143,7 +156,8 @@ class PaperBroker(BaseBroker):
             self.commission_model = commission
         else:
             self.commission_model = COMMISSION_PRESETS.get(
-                commission_preset, CommissionModel(),
+                commission_preset,
+                CommissionModel(),
             )
         self.latency_ms = latency_ms
 
@@ -169,6 +183,7 @@ class PaperBroker(BaseBroker):
         # Initialize market data source
         try:
             from src.ingestors.market_data import MarketDataIngestor
+
             self._market_data = MarketDataIngestor()
         except Exception as e:
             logger.info("Paper broker market data source unavailable: %s", e)
@@ -189,7 +204,7 @@ class PaperBroker(BaseBroker):
             portfolio_value += pos.market_value
             unrealized_pnl += pos.unrealized_pnl
 
-        realized_pnl = sum(t.get('pnl', 0) for t in self._trades)
+        realized_pnl = sum(t.get("pnl", 0) for t in self._trades)
 
         return AccountInfo(
             account_id="PAPER-001",
@@ -210,10 +225,13 @@ class PaperBroker(BaseBroker):
 
         return list(self._positions.values())
 
-    async def get_quote(self, ticker: str, market: Market = Market.US) -> Optional[Quote]:
+    async def get_quote(
+        self, ticker: str, market: Market = Market.US
+    ) -> Optional[Quote]:
         """Get real-time quote from Alpaca."""
         try:
             import aiohttp
+
             from src.core.config import get_settings
 
             settings = get_settings()
@@ -232,7 +250,9 @@ class PaperBroker(BaseBroker):
                 async with session.get(url, headers=headers) as resp:
                     if resp.status != 200:
                         trade_url = f"https://data.alpaca.markets/v2/stocks/{ticker}/trades/latest"
-                        async with session.get(trade_url, headers=headers) as trade_resp:
+                        async with session.get(
+                            trade_url, headers=headers
+                        ) as trade_resp:
                             if trade_resp.status != 200:
                                 return None
                             trade_data = await trade_resp.json()
@@ -304,10 +324,7 @@ class PaperBroker(BaseBroker):
             raw = mid
 
         # Apply slippage on top — map to simple "buy"/"sell" for model
-        slip_side = (
-            "buy" if side in (OrderSide.BUY, OrderSide.BUY_TO_COVER)
-            else "sell"
-        )
+        slip_side = "buy" if side in (OrderSide.BUY, OrderSide.BUY_TO_COVER) else "sell"
         fill = self.slippage_model.apply(raw, slip_side, spread_pct)
 
         # Track cumulative slippage cost (vs mid)
@@ -336,7 +353,9 @@ class PaperBroker(BaseBroker):
         # Market order — fill immediately
         if order.order_type == OrderType.MARKET:
             fill_price = self._realistic_fill_price(
-                quote, order.side, OrderType.MARKET,
+                quote,
+                order.side,
+                OrderType.MARKET,
             )
             return await self._execute_order(order_id, order, fill_price)
 
@@ -346,21 +365,27 @@ class PaperBroker(BaseBroker):
             if order.side == OrderSide.BUY:
                 if current_price <= order.limit_price:
                     fill_price = self._realistic_fill_price(
-                        quote, order.side, OrderType.LIMIT, order.limit_price,
+                        quote,
+                        order.side,
+                        OrderType.LIMIT,
+                        order.limit_price,
                     )
                     return await self._execute_order(order_id, order, fill_price)
             else:
                 if current_price >= order.limit_price:
                     fill_price = self._realistic_fill_price(
-                        quote, order.side, OrderType.LIMIT, order.limit_price,
+                        quote,
+                        order.side,
+                        OrderType.LIMIT,
+                        order.limit_price,
                     )
                     return await self._execute_order(order_id, order, fill_price)
 
             self._orders[order_id] = {
-                'order_id': order_id,
-                'order': order,
-                'status': OrderStatus.SUBMITTED,
-                'created': datetime.now(),
+                "order_id": order_id,
+                "order": order,
+                "status": OrderStatus.SUBMITTED,
+                "created": datetime.now(),
             }
             return OrderResult(
                 success=True,
@@ -375,21 +400,25 @@ class PaperBroker(BaseBroker):
             if order.side == OrderSide.BUY:
                 if current_price >= order.stop_price:
                     fill_price = self._realistic_fill_price(
-                        quote, order.side, OrderType.MARKET,
+                        quote,
+                        order.side,
+                        OrderType.MARKET,
                     )
                     return await self._execute_order(order_id, order, fill_price)
             else:
                 if current_price <= order.stop_price:
                     fill_price = self._realistic_fill_price(
-                        quote, order.side, OrderType.MARKET,
+                        quote,
+                        order.side,
+                        OrderType.MARKET,
                     )
                     return await self._execute_order(order_id, order, fill_price)
 
             self._orders[order_id] = {
-                'order_id': order_id,
-                'order': order,
-                'status': OrderStatus.SUBMITTED,
-                'created': datetime.now(),
+                "order_id": order_id,
+                "order": order,
+                "status": OrderStatus.SUBMITTED,
+                "created": datetime.now(),
             }
             return OrderResult(
                 success=True,
@@ -432,7 +461,7 @@ class PaperBroker(BaseBroker):
                     ),
                 )
 
-            self._cash -= (total_cost + commission)
+            self._cash -= total_cost + commission
 
             if order.ticker in self._positions:
                 pos = self._positions[order.ticker]
@@ -472,7 +501,7 @@ class PaperBroker(BaseBroker):
             # P&L net of commission
             pnl = (fill_price - pos.avg_price) * order.quantity - commission
 
-            self._cash += (total_cost - commission)
+            self._cash += total_cost - commission
 
             pos.quantity -= order.quantity
             pos.realized_pnl += pnl
@@ -480,15 +509,17 @@ class PaperBroker(BaseBroker):
             if pos.quantity == 0:
                 del self._positions[order.ticker]
 
-            self._trades.append({
-                'ticker': order.ticker,
-                'side': order.side.value,
-                'quantity': order.quantity,
-                'price': fill_price,
-                'pnl': pnl,
-                'commission': commission,
-                'timestamp': datetime.now(),
-            })
+            self._trades.append(
+                {
+                    "ticker": order.ticker,
+                    "side": order.side.value,
+                    "quantity": order.quantity,
+                    "price": fill_price,
+                    "pnl": pnl,
+                    "commission": commission,
+                    "timestamp": datetime.now(),
+                }
+            )
 
         elif order.side == OrderSide.SELL_SHORT:
             # Sprint 27: open short — set aside margin (= notional)
@@ -516,8 +547,7 @@ class PaperBroker(BaseBroker):
                         order_id=order_id,
                         status=OrderStatus.REJECTED,
                         message=(
-                            f"Already long {order.ticker}; "
-                            f"close long before shorting"
+                            f"Already long {order.ticker}; close long before shorting"
                         ),
                     )
                 # Add to existing short
@@ -555,17 +585,14 @@ class PaperBroker(BaseBroker):
                     success=False,
                     order_id=order_id,
                     status=OrderStatus.REJECTED,
-                    message=(
-                        f"Cover qty {order.quantity} > "
-                        f"short {short_qty}"
-                    ),
+                    message=(f"Cover qty {order.quantity} > short {short_qty}"),
                 )
 
             # Short P&L: (entry - exit) * shares
             pnl = (pos.avg_price - fill_price) * order.quantity - commission
 
             # Pay to buy back shares
-            self._cash -= (total_cost + commission)
+            self._cash -= total_cost + commission
 
             pos.quantity += order.quantity  # negative + positive
             pos.realized_pnl += pnl
@@ -573,26 +600,30 @@ class PaperBroker(BaseBroker):
             if pos.quantity == 0:
                 del self._positions[order.ticker]
 
-            self._trades.append({
-                'ticker': order.ticker,
-                'side': order.side.value,
-                'quantity': order.quantity,
-                'price': fill_price,
-                'pnl': pnl,
-                'commission': commission,
-                'timestamp': datetime.now(),
-            })
+            self._trades.append(
+                {
+                    "ticker": order.ticker,
+                    "side": order.side.value,
+                    "quantity": order.quantity,
+                    "price": fill_price,
+                    "pnl": pnl,
+                    "commission": commission,
+                    "timestamp": datetime.now(),
+                }
+            )
 
-        self._order_history.append({
-            'order_id': order_id,
-            'ticker': order.ticker,
-            'side': order.side.value,
-            'quantity': order.quantity,
-            'fill_price': fill_price,
-            'commission': commission,
-            'status': OrderStatus.FILLED.value,
-            'timestamp': datetime.now(),
-        })
+        self._order_history.append(
+            {
+                "order_id": order_id,
+                "ticker": order.ticker,
+                "side": order.side.value,
+                "quantity": order.quantity,
+                "fill_price": fill_price,
+                "commission": commission,
+                "status": OrderStatus.FILLED.value,
+                "timestamp": datetime.now(),
+            }
+        )
 
         return OrderResult(
             success=True,
@@ -606,14 +637,16 @@ class PaperBroker(BaseBroker):
     async def cancel_order(self, order_id: str) -> bool:
         """Cancel a pending order."""
         if order_id in self._orders:
-            self._orders[order_id]['status'] = OrderStatus.CANCELLED
+            self._orders[order_id]["status"] = OrderStatus.CANCELLED
             del self._orders[order_id]
 
-            self._order_history.append({
-                'order_id': order_id,
-                'status': OrderStatus.CANCELLED.value,
-                'timestamp': datetime.now(),
-            })
+            self._order_history.append(
+                {
+                    "order_id": order_id,
+                    "status": OrderStatus.CANCELLED.value,
+                    "timestamp": datetime.now(),
+                }
+            )
             return True
         return False
 
@@ -622,25 +655,27 @@ class PaperBroker(BaseBroker):
         orders = []
 
         for order_id, order_data in self._orders.items():
-            order = order_data['order']
-            order_status = order_data['status']
+            order = order_data["order"]
+            order_status = order_data["status"]
 
             if status is None or order_status == status:
-                orders.append({
-                    'order_id': order_id,
-                    'ticker': order.ticker,
-                    'side': order.side.value,
-                    'quantity': order.quantity,
-                    'order_type': order.order_type.value,
-                    'limit_price': order.limit_price,
-                    'stop_price': order.stop_price,
-                    'status': order_status.value,
-                    'created': order_data['created'].isoformat(),
-                })
+                orders.append(
+                    {
+                        "order_id": order_id,
+                        "ticker": order.ticker,
+                        "side": order.side.value,
+                        "quantity": order.quantity,
+                        "order_type": order.order_type.value,
+                        "limit_price": order.limit_price,
+                        "stop_price": order.stop_price,
+                        "status": order_status.value,
+                        "created": order_data["created"].isoformat(),
+                    }
+                )
 
         if status == OrderStatus.FILLED:
             for hist in self._order_history:
-                if hist.get('status') == OrderStatus.FILLED.value:
+                if hist.get("status") == OrderStatus.FILLED.value:
                     orders.append(hist)
 
         return orders
@@ -665,10 +700,10 @@ class PaperBroker(BaseBroker):
     def get_performance_summary(self) -> Dict:
         """Get performance summary including commission & slippage impact."""
         total_trades = len(self._trades)
-        winning_trades = sum(1 for t in self._trades if t.get('pnl', 0) > 0)
-        losing_trades = sum(1 for t in self._trades if t.get('pnl', 0) < 0)
+        winning_trades = sum(1 for t in self._trades if t.get("pnl", 0) > 0)
+        losing_trades = sum(1 for t in self._trades if t.get("pnl", 0) < 0)
 
-        total_pnl = sum(t.get('pnl', 0) for t in self._trades)
+        total_pnl = sum(t.get("pnl", 0) for t in self._trades)
 
         portfolio_value = self._cash
         unrealized_pnl = 0.0
@@ -678,21 +713,24 @@ class PaperBroker(BaseBroker):
             unrealized_pnl += pos.unrealized_pnl
 
         return {
-            'initial_capital': self.initial_cash,
-            'current_portfolio_value': portfolio_value,
-            'cash': self._cash,
-            'total_return': ((portfolio_value - self.initial_cash) / self.initial_cash) * 100,
-            'realized_pnl': total_pnl,
-            'unrealized_pnl': unrealized_pnl,
-            'total_trades': total_trades,
-            'winning_trades': winning_trades,
-            'losing_trades': losing_trades,
-            'win_rate': (winning_trades / total_trades * 100) if total_trades > 0 else 0,
-            'open_positions': len(self._positions),
+            "initial_capital": self.initial_cash,
+            "current_portfolio_value": portfolio_value,
+            "cash": self._cash,
+            "total_return": ((portfolio_value - self.initial_cash) / self.initial_cash)
+            * 100,
+            "realized_pnl": total_pnl,
+            "unrealized_pnl": unrealized_pnl,
+            "total_trades": total_trades,
+            "winning_trades": winning_trades,
+            "losing_trades": losing_trades,
+            "win_rate": (winning_trades / total_trades * 100)
+            if total_trades > 0
+            else 0,
+            "open_positions": len(self._positions),
             # Sprint 25: execution cost transparency
-            'total_commissions': self._total_commissions,
-            'total_slippage_cost': self._total_slippage_cost,
-            'total_execution_cost': self._total_commissions + self._total_slippage_cost,
+            "total_commissions": self._total_commissions,
+            "total_slippage_cost": self._total_slippage_cost,
+            "total_execution_cost": self._total_commissions + self._total_slippage_cost,
         }
 
     async def check_pending_orders(self):
@@ -700,7 +738,7 @@ class PaperBroker(BaseBroker):
         to_remove = []
 
         for order_id, order_data in self._orders.items():
-            order = order_data['order']
+            order = order_data["order"]
             quote = await self.get_quote(order.ticker, order.market)
 
             if not quote:
@@ -712,7 +750,9 @@ class PaperBroker(BaseBroker):
             if order.order_type == OrderType.LIMIT:
                 if order.side == OrderSide.BUY and current_price <= order.limit_price:
                     should_fill = True
-                elif order.side == OrderSide.SELL and current_price >= order.limit_price:
+                elif (
+                    order.side == OrderSide.SELL and current_price >= order.limit_price
+                ):
                     should_fill = True
 
             elif order.order_type == OrderType.STOP:
@@ -723,8 +763,11 @@ class PaperBroker(BaseBroker):
 
             if should_fill:
                 fill_price = self._realistic_fill_price(
-                    quote, order.side,
-                    order.order_type if order.order_type == OrderType.LIMIT else OrderType.MARKET,
+                    quote,
+                    order.side,
+                    order.order_type
+                    if order.order_type == OrderType.LIMIT
+                    else OrderType.MARKET,
                     order.limit_price if order.order_type == OrderType.LIMIT else None,
                 )
                 result = await self._execute_order(order_id, order, fill_price)

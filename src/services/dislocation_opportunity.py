@@ -45,7 +45,9 @@ def classify_dislocation(
     }
 
 
-def dislocation_for_row(row: Dict[str, Any], *, market_vix: Optional[float] = None) -> Dict[str, Any]:
+def dislocation_for_row(
+    row: Dict[str, Any], *, market_vix: Optional[float] = None
+) -> Dict[str, Any]:
     """Playbook row helper."""
     return classify_dislocation(
         vix=row.get("vix") or market_vix,

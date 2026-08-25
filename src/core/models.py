@@ -794,7 +794,7 @@ class RegimeScoreboard(BaseModel):
             d = {}
 
         regime = d.get("regime", "NEUTRAL")
-        risk = d.get("risk_regime", "neutral")
+        d.get("risk_regime", "neutral")
 
         # Map canonical regime → label
         label_map = {
@@ -1362,9 +1362,10 @@ class TradeRecommendation(BaseModel):
         _conf = d.get("confidence", int(_score * 100))
         from src.utils.numeric_parse import parse_ratio
 
-        _rr = parse_ratio(
-            d.get("risk_reward_ratio", d.get("risk_reward", 1.5)), 1.5
-        ) or 1.5
+        _rr = (
+            parse_ratio(d.get("risk_reward_ratio", d.get("risk_reward", 1.5)), 1.5)
+            or 1.5
+        )
 
         rec = cls(
             ticker=d.get("ticker", "???"),

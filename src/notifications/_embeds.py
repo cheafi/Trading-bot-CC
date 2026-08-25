@@ -7,41 +7,46 @@ and paginated embed handler for long data.
 v6.1: Added SignalEmbed for structured trade signal alerts with
       strategy labeling, confidence bars, invalidation, and trust strips.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-
 # ══════════════════════════════════════════════════════════════════════
 # COLOR PALETTE
 # ══════════════════════════════════════════════════════════════════════
 
+
 class EmbedColors:
     """Consistent color scheme for Discord embeds."""
-    BLURPLE = 0x5865F2        # Default / informational
-    GREEN = 0x00D4AA          # Long / bullish / success
-    RED = 0xFF4444            # Short / bearish / error / urgent
-    GOLD = 0xFFBF00           # Warning / important
-    BLUE = 0x3B82F6           # Informational / regime
-    GRAY = 0x6B7280           # Neutral / low priority
-    ORANGE = 0xF97316         # Caution / experimental
+
+    BLURPLE = 0x5865F2  # Default / informational
+    GREEN = 0x00D4AA  # Long / bullish / success
+    RED = 0xFF4444  # Short / bearish / error / urgent
+    GOLD = 0xFFBF00  # Warning / important
+    BLUE = 0x3B82F6  # Informational / regime
+    GRAY = 0x6B7280  # Neutral / low priority
+    ORANGE = 0xF97316  # Caution / experimental
 
 
 # ══════════════════════════════════════════════════════════════════════
 # SEVERITY TIERS
 # ══════════════════════════════════════════════════════════════════════
 
+
 class AlertSeverity:
     """Alert severity tiers for Discord notifications."""
-    URGENT = "🔴"             # Circuit breaker, tail risk, stop hit
-    IMPORTANT = "🟡"          # New signal, regime change, earnings warning
-    INFORMATIONAL = "🔵"      # Regime update, news digest, watchlist
+
+    URGENT = "🔴"  # Circuit breaker, tail risk, stop hit
+    IMPORTANT = "🟡"  # New signal, regime change, earnings warning
+    INFORMATIONAL = "🔵"  # Regime update, news digest, watchlist
 
 
 # ══════════════════════════════════════════════════════════════════════
 # BASE EMBED
 # ══════════════════════════════════════════════════════════════════════
+
 
 class DiscordEmbed:
     """
@@ -72,11 +77,13 @@ class DiscordEmbed:
         value: str,
         inline: bool = False,
     ) -> "DiscordEmbed":
-        self.fields.append({
-            "name": name,
-            "value": value,
-            "inline": inline,
-        })
+        self.fields.append(
+            {
+                "name": name,
+                "value": value,
+                "inline": inline,
+            }
+        )
         return self
 
     def set_footer(self, text: str) -> "DiscordEmbed":
@@ -92,9 +99,7 @@ class DiscordEmbed:
         return self
 
     def set_timestamp(self) -> "DiscordEmbed":
-        self.timestamp = datetime.now(
-            timezone.utc
-        ).isoformat()
+        self.timestamp = datetime.now(timezone.utc).isoformat()
         return self
 
     def to_dict(self) -> Dict[str, Any]:
@@ -124,6 +129,7 @@ class DiscordEmbed:
 # SIGNAL EMBED — Structured trade signal alerts
 # ══════════════════════════════════════════════════════════════════════
 
+
 class SignalEmbed:
     """
     Build a structured Discord embed for a trade signal.
@@ -140,9 +146,15 @@ class SignalEmbed:
     """
 
     GRADE_MAP = [
-        (90, "A+"), (80, "A"), (75, "A-"),
-        (70, "B+"), (65, "B"), (60, "B-"),
-        (55, "C+"), (50, "C"), (0, "D"),
+        (90, "A+"),
+        (80, "A"),
+        (75, "A-"),
+        (70, "B+"),
+        (65, "B"),
+        (60, "B-"),
+        (55, "C+"),
+        (50, "C"),
+        (0, "D"),
     ]
 
     @staticmethod
@@ -213,8 +225,12 @@ class SignalEmbed:
             embed.add_field(name="Regime", value=regime, inline=True)
 
         # Row 2: Trade plan
-        risk_pct = abs((stop_price - entry_price) / entry_price * 100) if entry_price else 0
-        reward_pct = abs((target_price - entry_price) / entry_price * 100) if entry_price else 0
+        risk_pct = (
+            abs((stop_price - entry_price) / entry_price * 100) if entry_price else 0
+        )
+        reward_pct = (
+            abs((target_price - entry_price) / entry_price * 100) if entry_price else 0
+        )
         rr_ratio = reward_pct / risk_pct if risk_pct > 0 else 0
 
         trade_plan = (
@@ -270,10 +286,14 @@ class RegimeEmbed:
         embed.set_timestamp()
 
         embed.add_field(
-            name="Previous", value=old_regime or "Unknown", inline=True,
+            name="Previous",
+            value=old_regime or "Unknown",
+            inline=True,
         )
         embed.add_field(
-            name="Current", value=new_regime or "Unknown", inline=True,
+            name="Current",
+            value=new_regime or "Unknown",
+            inline=True,
         )
         if probability:
             embed.add_field(
@@ -284,7 +304,9 @@ class RegimeEmbed:
         if playbook:
             embed.add_field(name="Playbook", value=playbook, inline=False)
 
-        embed.set_footer(f"{data_mode} · Regime classification is probabilistic, not certain")
+        embed.set_footer(
+            f"{data_mode} · Regime classification is probabilistic, not certain"
+        )
         return embed
 
 
@@ -309,13 +331,16 @@ class RiskAlertEmbed:
         if action_required:
             embed.add_field(name="Action Required", value=action_required, inline=False)
 
-        embed.set_footer("This is an automated risk alert, not financial advice. Review immediately.")
+        embed.set_footer(
+            "This is an automated risk alert, not financial advice. Review immediately."
+        )
         return embed
 
 
 # ══════════════════════════════════════════════════════════════════════
 # PAGINATOR (unchanged from v6)
 # ══════════════════════════════════════════════════════════════════════
+
 
 class EmbedPaginator:
     """
@@ -354,9 +379,11 @@ class EmbedPaginator:
             title = self.title
             if total > 1:
                 title += f" ({i + 1}/{total})"
-            embeds.append(DiscordEmbed(
-                title=title,
-                description=page,
-                color=self.color,
-            ))
+            embeds.append(
+                DiscordEmbed(
+                    title=title,
+                    description=page,
+                    color=self.color,
+                )
+            )
         return embeds

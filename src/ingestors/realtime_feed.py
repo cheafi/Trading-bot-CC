@@ -14,12 +14,12 @@ Features:
 - Heartbeat monitoring and stale-data detection
 - Price snapshot caching for instant lookups
 """
+
 import asyncio
 import json
 import logging
 import time
 from abc import ABC, abstractmethod
-from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Set
 
@@ -40,8 +40,15 @@ class PriceUpdate:
     """Normalized real-time price update."""
 
     __slots__ = (
-        "ticker", "price", "bid", "ask", "volume", "timestamp",
-        "market", "source", "change_pct",
+        "ticker",
+        "price",
+        "bid",
+        "ask",
+        "volume",
+        "timestamp",
+        "market",
+        "source",
+        "change_pct",
     )
 
     def __init__(
@@ -83,6 +90,7 @@ class PriceUpdate:
 # ---------------------------------------------------------------------------
 # Abstract WebSocket feed
 # ---------------------------------------------------------------------------
+
 
 class BaseFeed(ABC):
     """Base class for all real-time data feeds."""
@@ -176,6 +184,7 @@ class BaseFeed(ABC):
 # Alpaca Real-Time Feed (US Stocks + Crypto)
 # ---------------------------------------------------------------------------
 
+
 class AlpacaRealtimeFeed(BaseFeed):
     """
     Alpaca Markets WebSocket for US equities and crypto.
@@ -193,7 +202,11 @@ class AlpacaRealtimeFeed(BaseFeed):
 
     async def _connect(self):
         stock_tickers = [t for t in self._subscriptions if not t.startswith("CRYPTO:")]
-        crypto_tickers = [t.replace("CRYPTO:", "") for t in self._subscriptions if t.startswith("CRYPTO:")]
+        crypto_tickers = [
+            t.replace("CRYPTO:", "")
+            for t in self._subscriptions
+            if t.startswith("CRYPTO:")
+        ]
 
         tasks = []
         if stock_tickers:
@@ -212,11 +225,13 @@ class AlpacaRealtimeFeed(BaseFeed):
         async with aiohttp.ClientSession() as session:
             async with session.ws_connect(url) as ws:
                 # Authenticate
-                await ws.send_json({
-                    "action": "auth",
-                    "key": self._api_key,
-                    "secret": self._secret_key,
-                })
+                await ws.send_json(
+                    {
+                        "action": "auth",
+                        "key": self._api_key,
+                        "secret": self._secret_key,
+                    }
+                )
                 auth_resp = await ws.receive_json()
                 self.logger.info(f"Alpaca auth: {auth_resp}")
 
@@ -236,34 +251,42 @@ class AlpacaRealtimeFeed(BaseFeed):
                         data = json.loads(msg.data)
                         for item in data if isinstance(data, list) else [data]:
                             await self._handle_message(item, market)
-                    elif msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSED):
+                    elif msg.type in (
+                        aiohttp.WSMsgType.ERROR,
+                        aiohttp.WSMsgType.CLOSED,
+                    ):
                         break
 
     async def _handle_message(self, item: Dict, market: str):
         msg_type = item.get("T", "")
         if msg_type == "t":  # trade
-            await self._publish(PriceUpdate(
-                ticker=item["S"],
-                price=float(item["p"]),
-                volume=int(item.get("s", 0)),
-                timestamp=datetime.fromisoformat(item["t"].replace("Z", "+00:00")),
-                market=market,
-                source="alpaca",
-            ))
+            await self._publish(
+                PriceUpdate(
+                    ticker=item["S"],
+                    price=float(item["p"]),
+                    volume=int(item.get("s", 0)),
+                    timestamp=datetime.fromisoformat(item["t"].replace("Z", "+00:00")),
+                    market=market,
+                    source="alpaca",
+                )
+            )
         elif msg_type == "q":  # quote
-            await self._publish(PriceUpdate(
-                ticker=item["S"],
-                price=(float(item["bp"]) + float(item["ap"])) / 2,
-                bid=float(item["bp"]),
-                ask=float(item["ap"]),
-                market=market,
-                source="alpaca",
-            ))
+            await self._publish(
+                PriceUpdate(
+                    ticker=item["S"],
+                    price=(float(item["bp"]) + float(item["ap"])) / 2,
+                    bid=float(item["bp"]),
+                    ask=float(item["ap"]),
+                    market=market,
+                    source="alpaca",
+                )
+            )
 
 
 # ---------------------------------------------------------------------------
 # Binance Crypto Feed
 # ---------------------------------------------------------------------------
+
 
 class BinanceRealtimeFeed(BaseFeed):
     """Binance WebSocket for crypto pairs."""
@@ -280,35 +303,45 @@ class BinanceRealtimeFeed(BaseFeed):
                 await asyncio.sleep(5)
             return
 
-        url = f"{self.WS_URL}/{'/'.join(streams)}" if len(streams) <= 200 else self.WS_URL
+        url = (
+            f"{self.WS_URL}/{'/'.join(streams)}" if len(streams) <= 200 else self.WS_URL
+        )
         async with aiohttp.ClientSession() as session:
             async with session.ws_connect(url) as ws:
                 if len(streams) > 200:
                     # combined stream via SUBSCRIBE
-                    await ws.send_json({"method": "SUBSCRIBE", "params": streams, "id": 1})
+                    await ws.send_json(
+                        {"method": "SUBSCRIBE", "params": streams, "id": 1}
+                    )
 
                 async for msg in ws:
                     if msg.type == aiohttp.WSMsgType.TEXT:
                         data = json.loads(msg.data)
                         if "e" in data and data["e"] == "trade":
                             symbol = data["s"].replace("USDT", "")
-                            await self._publish(PriceUpdate(
-                                ticker=symbol,
-                                price=float(data["p"]),
-                                volume=int(float(data["q"])),
-                                timestamp=datetime.fromtimestamp(
-                                    data["T"] / 1000, tz=timezone.utc
-                                ),
-                                market="crypto",
-                                source="binance",
-                            ))
-                    elif msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSED):
+                            await self._publish(
+                                PriceUpdate(
+                                    ticker=symbol,
+                                    price=float(data["p"]),
+                                    volume=int(float(data["q"])),
+                                    timestamp=datetime.fromtimestamp(
+                                        data["T"] / 1000, tz=timezone.utc
+                                    ),
+                                    market="crypto",
+                                    source="binance",
+                                )
+                            )
+                    elif msg.type in (
+                        aiohttp.WSMsgType.ERROR,
+                        aiohttp.WSMsgType.CLOSED,
+                    ):
                         break
 
 
 # ---------------------------------------------------------------------------
 # Yahoo Finance Global Feed (HK, JP, etc.)
 # ---------------------------------------------------------------------------
+
 
 class YahooGlobalFeed(BaseFeed):
     """
@@ -359,7 +392,11 @@ class YahooGlobalFeed(BaseFeed):
                         if len(tickers_list) == 1:
                             row = data.iloc[-1]
                         else:
-                            row = data[ticker].iloc[-1] if ticker in data.columns.get_level_values(1) else None
+                            row = (
+                                data[ticker].iloc[-1]
+                                if ticker in data.columns.get_level_values(1)
+                                else None
+                            )
                         if row is None:
                             continue
 
@@ -369,13 +406,15 @@ class YahooGlobalFeed(BaseFeed):
                                 market = mkt
                                 break
 
-                        await self._publish(PriceUpdate(
-                            ticker=ticker,
-                            price=float(row["Close"]),
-                            volume=int(row.get("Volume", 0)),
-                            market=market,
-                            source="yahoo",
-                        ))
+                        await self._publish(
+                            PriceUpdate(
+                                ticker=ticker,
+                                price=float(row["Close"]),
+                                volume=int(row.get("Volume", 0)),
+                                market=market,
+                                source="yahoo",
+                            )
+                        )
                     except Exception:
                         pass
             except Exception as e:
@@ -388,10 +427,11 @@ class YahooGlobalFeed(BaseFeed):
 # Unified Feed Manager
 # ---------------------------------------------------------------------------
 
+
 class RealtimeFeedManager:
     """
     Manages all real-time feeds and provides a unified interface.
-    
+
     Usage:
         manager = RealtimeFeedManager()
         manager.subscribe_us(["AAPL", "TSLA", "NVDA"])

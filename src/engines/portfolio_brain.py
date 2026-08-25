@@ -29,21 +29,23 @@ PORTFOLIO_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── Portfolio Policy ─────────────────────────────────────────────────────────
 
+
 @dataclass
 class PortfolioPolicy:
     """Defines the rules for a portfolio archetype."""
+
     name: str = ""
-    archetype: str = ""             # TREND_LEADERS / DEFENSIVE / TACTICAL
+    archetype: str = ""  # TREND_LEADERS / DEFENSIVE / TACTICAL
     benchmark: str = "SPY"
     max_positions: int = 10
-    max_sector_pct: float = 0.30    # max 30% in one sector
-    max_single_position_pct: float = 0.10   # max 10% per position
-    correlation_cap: float = 0.70   # reject if corr > 0.7 with existing
+    max_sector_pct: float = 0.30  # max 30% in one sector
+    max_single_position_pct: float = 0.10  # max 10% per position
+    correlation_cap: float = 0.70  # reject if corr > 0.7 with existing
     rebalance_frequency: str = "weekly"  # daily / weekly / monthly
-    stop_policy: str = "1R_HARD"    # 1R_HARD / TRAILING_1R / ATR_2X
-    sizing_policy: str = "EQUAL"    # EQUAL / CONVICTION / KELLY
+    stop_policy: str = "1R_HARD"  # 1R_HARD / TRAILING_1R / ATR_2X
+    sizing_policy: str = "EQUAL"  # EQUAL / CONVICTION / KELLY
     min_rs_composite: float = 105.0  # RS floor for entry
-    min_confidence: int = 60        # minimum final_confidence
+    min_confidence: int = 60  # minimum final_confidence
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -115,9 +117,11 @@ ALL_POLICIES = {
 
 # ── Portfolio Holding ────────────────────────────────────────────────────────
 
+
 @dataclass
 class Holding:
     """A single position in a portfolio."""
+
     ticker: str = ""
     entry_date: str = ""
     entry_price: float = 0.0
@@ -132,7 +136,7 @@ class Holding:
     entry_thesis: str = ""
     pnl_pct: float = 0.0
     r_multiple: float = 0.0
-    status: str = "OPEN"       # OPEN / STOPPED / TARGET_HIT / MANUAL_EXIT
+    status: str = "OPEN"  # OPEN / STOPPED / TARGET_HIT / MANUAL_EXIT
 
     def update_pnl(self) -> None:
         if self.entry_price > 0:
@@ -141,28 +145,39 @@ class Holding:
             )
             if self.stop and self.entry_price != self.stop:
                 risk = abs(self.entry_price - self.stop)
-                self.r_multiple = round(
-                    (self.current_price - self.entry_price) / risk, 2
-                ) if risk > 0 else 0.0
+                self.r_multiple = (
+                    round((self.current_price - self.entry_price) / risk, 2)
+                    if risk > 0
+                    else 0.0
+                )
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "ticker": self.ticker, "entry_date": self.entry_date,
-            "entry_price": self.entry_price, "current_price": self.current_price,
-            "shares": self.shares, "weight_pct": round(self.weight_pct, 2),
-            "sector": self.sector, "stop": self.stop, "target": self.target,
-            "entry_rs": self.entry_rs, "entry_confidence": self.entry_confidence,
+            "ticker": self.ticker,
+            "entry_date": self.entry_date,
+            "entry_price": self.entry_price,
+            "current_price": self.current_price,
+            "shares": self.shares,
+            "weight_pct": round(self.weight_pct, 2),
+            "sector": self.sector,
+            "stop": self.stop,
+            "target": self.target,
+            "entry_rs": self.entry_rs,
+            "entry_confidence": self.entry_confidence,
             "entry_thesis": self.entry_thesis,
-            "pnl_pct": self.pnl_pct, "r_multiple": self.r_multiple,
+            "pnl_pct": self.pnl_pct,
+            "r_multiple": self.r_multiple,
             "status": self.status,
         }
 
 
 # ── Portfolio Run ────────────────────────────────────────────────────────────
 
+
 @dataclass
 class PortfolioRun:
     """A single portfolio instance with holdings and performance."""
+
     policy: PortfolioPolicy = field(default_factory=PortfolioPolicy)
     holdings: List[Holding] = field(default_factory=list)
     cash_pct: float = 100.0
@@ -198,8 +213,14 @@ class PortfolioRun:
         # Sector cap
         sec_exp = self.sector_exposure()
         current_sector_pct = sec_exp.get(sector, 0)
-        if current_sector_pct + self.policy.max_single_position_pct > self.policy.max_sector_pct:
-            return False, f"Sector {sector} at {current_sector_pct:.0%}, cap is {self.policy.max_sector_pct:.0%}"
+        if (
+            current_sector_pct + self.policy.max_single_position_pct
+            > self.policy.max_sector_pct
+        ):
+            return (
+                False,
+                f"Sector {sector} at {current_sector_pct:.0%}, cap is {self.policy.max_sector_pct:.0%}",
+            )
 
         # Duplicate check
         if any(h.ticker == ticker for h in open_pos):
@@ -211,13 +232,15 @@ class PortfolioRun:
         """Add a new position and update weights."""
         self.holdings.append(holding)
         self._reweight()
-        self.journal.append({
-            "action": "ADD",
-            "ticker": holding.ticker,
-            "date": holding.entry_date,
-            "price": holding.entry_price,
-            "thesis": holding.entry_thesis,
-        })
+        self.journal.append(
+            {
+                "action": "ADD",
+                "ticker": holding.ticker,
+                "date": holding.entry_date,
+                "price": holding.entry_price,
+                "thesis": holding.entry_thesis,
+            }
+        )
 
     def close_holding(self, ticker: str, exit_price: float, reason: str) -> None:
         """Close a position."""
@@ -226,15 +249,17 @@ class PortfolioRun:
                 h.current_price = exit_price
                 h.status = reason  # STOPPED / TARGET_HIT / MANUAL_EXIT
                 h.update_pnl()
-                self.journal.append({
-                    "action": "CLOSE",
-                    "ticker": ticker,
-                    "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-                    "exit_price": exit_price,
-                    "pnl_pct": h.pnl_pct,
-                    "r_multiple": h.r_multiple,
-                    "reason": reason,
-                })
+                self.journal.append(
+                    {
+                        "action": "CLOSE",
+                        "ticker": ticker,
+                        "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                        "exit_price": exit_price,
+                        "pnl_pct": h.pnl_pct,
+                        "r_multiple": h.r_multiple,
+                        "reason": reason,
+                    }
+                )
                 break
         self._reweight()
 
@@ -247,7 +272,9 @@ class PortfolioRun:
         total_value = sum(h.shares * h.current_price for h in open_pos)
         if total_value > 0:
             for h in open_pos:
-                h.weight_pct = (h.shares * h.current_price) / total_value * (100 - self.cash_pct)
+                h.weight_pct = (
+                    (h.shares * h.current_price) / total_value * (100 - self.cash_pct)
+                )
 
     def summary(self) -> Dict[str, Any]:
         """Portfolio summary snapshot."""
@@ -267,8 +294,12 @@ class PortfolioRun:
             "benchmark_return_pct": self.benchmark_return_pct,
             "alpha_pct": round(self.total_return_pct - self.benchmark_return_pct, 2),
             "win_rate": round(len(winners) / len(closed) * 100, 1) if closed else 0,
-            "avg_winner": round(sum(h.pnl_pct for h in winners) / len(winners), 2) if winners else 0,
-            "avg_loser": round(sum(h.pnl_pct for h in losers) / len(losers), 2) if losers else 0,
+            "avg_winner": round(sum(h.pnl_pct for h in winners) / len(winners), 2)
+            if winners
+            else 0,
+            "avg_loser": round(sum(h.pnl_pct for h in losers) / len(losers), 2)
+            if losers
+            else 0,
             "max_drawdown_pct": self.max_drawdown_pct,
             "sector_exposure": self.sector_exposure(),
             "holdings": [h.to_dict() for h in open_pos],
@@ -320,12 +351,14 @@ class PortfolioRun:
 
 # ── Portfolio Review ─────────────────────────────────────────────────────────
 
+
 @dataclass
 class PortfolioReview:
     """
     Periodic postmortem output.
     Answers: why did we win/lose, what should change.
     """
+
     archetype: str = ""
     period: str = ""  # "2026-W18" or "2026-04"
     total_return: float = 0.0
@@ -336,8 +369,8 @@ class PortfolioReview:
     biggest_winner_pnl: float = 0.0
     biggest_loser: str = ""
     biggest_loser_pnl: float = 0.0
-    biggest_drag: str = ""           # sector or position dragging most
-    biggest_contributor: str = ""    # sector or position contributing most
+    biggest_drag: str = ""  # sector or position dragging most
+    biggest_contributor: str = ""  # sector or position contributing most
     # Self-critique
     stopped_too_early: List[str] = field(default_factory=list)
     stopped_too_late: List[str] = field(default_factory=list)
@@ -345,7 +378,7 @@ class PortfolioReview:
     should_have_added: List[str] = field(default_factory=list)
     # What-if
     tighter_stop_result: float = 0.0  # return if stops were 20% tighter
-    looser_stop_result: float = 0.0   # return if stops were 20% looser
+    looser_stop_result: float = 0.0  # return if stops were 20% looser
     less_sector_concentration_result: float = 0.0
     # Recommendations
     recommendations: List[str] = field(default_factory=list)
@@ -411,11 +444,17 @@ def generate_review(run: PortfolioRun, period: str = "") -> PortfolioReview:
 
     # Recommendations
     if review.alpha < -2:
-        review.recommendations.append("Underperforming benchmark — review entry criteria")
+        review.recommendations.append(
+            "Underperforming benchmark — review entry criteria"
+        )
     if len(review.stopped_too_late) > 2:
-        review.recommendations.append("Multiple late stops — consider tighter stop policy")
+        review.recommendations.append(
+            "Multiple late stops — consider tighter stop policy"
+        )
     if len(review.stopped_too_early) > 2:
-        review.recommendations.append("Multiple early stops — consider wider initial stops")
+        review.recommendations.append(
+            "Multiple early stops — consider wider initial stops"
+        )
 
     winners = [h for h in closed if h.pnl_pct > 0]
     losers = [h for h in closed if h.pnl_pct <= 0]
@@ -439,6 +478,7 @@ def generate_review(run: PortfolioRun, period: str = "") -> PortfolioReview:
 
 
 # ── Portfolio Brain (orchestrator) ───────────────────────────────────────────
+
 
 class PortfolioBrain:
     """
@@ -469,10 +509,7 @@ class PortfolioBrain:
         return [run.summary() for run in self.portfolios.values()]
 
     def review_all(self) -> List[Dict[str, Any]]:
-        return [
-            generate_review(run).to_dict()
-            for run in self.portfolios.values()
-        ]
+        return [generate_review(run).to_dict() for run in self.portfolios.values()]
 
     def save_all(self) -> None:
         for run in self.portfolios.values():

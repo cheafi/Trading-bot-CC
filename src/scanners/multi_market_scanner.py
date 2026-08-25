@@ -10,11 +10,11 @@ Features:
 - Liquidity and volatility filters
 - Cross-market correlation analysis
 """
+
 import logging
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -35,6 +35,7 @@ class MarketRegion(str, Enum):
 @dataclass
 class UniverseAsset:
     """An asset in the trading universe."""
+
     ticker: str
     name: str
     market: MarketRegion
@@ -55,115 +56,545 @@ class UniverseAsset:
 # ---------------------------------------------------------------------------
 
 US_MEGA_CAPS = [
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK.B",
-    "UNH", "JNJ", "V", "MA", "HD", "PG", "COST", "ABBV", "MRK", "PEP",
-    "KO", "LLY", "AVGO", "TMO", "ACN", "MCD", "CSCO", "DHR", "ABT",
-    "TXN", "NEE", "PM", "UNP", "RTX", "HON", "LOW", "COP", "AMAT",
+    "AAPL",
+    "MSFT",
+    "GOOGL",
+    "AMZN",
+    "NVDA",
+    "META",
+    "TSLA",
+    "BRK.B",
+    "UNH",
+    "JNJ",
+    "V",
+    "MA",
+    "HD",
+    "PG",
+    "COST",
+    "ABBV",
+    "MRK",
+    "PEP",
+    "KO",
+    "LLY",
+    "AVGO",
+    "TMO",
+    "ACN",
+    "MCD",
+    "CSCO",
+    "DHR",
+    "ABT",
+    "TXN",
+    "NEE",
+    "PM",
+    "UNP",
+    "RTX",
+    "HON",
+    "LOW",
+    "COP",
+    "AMAT",
 ]
 
 # Sprint 32: expanded mid-cap + value + sector leaders
 US_MID_CAPS = [
     # Semiconductors
-    "MRVL", "ON", "NXPI", "KLAC", "LRCX", "MPWR", "SWKS", "QCOM",
+    "MRVL",
+    "ON",
+    "NXPI",
+    "KLAC",
+    "LRCX",
+    "MPWR",
+    "SWKS",
+    "QCOM",
     # Software / Cloud
-    "NOW", "INTU", "ADBE", "CRM", "WDAY", "TEAM", "HUBS", "VEEV",
-    "BILL", "PAYC", "PCTY", "GTLB", "MDB", "ESTC", "CFLT", "DKNG",
+    "NOW",
+    "INTU",
+    "ADBE",
+    "CRM",
+    "WDAY",
+    "TEAM",
+    "HUBS",
+    "VEEV",
+    "BILL",
+    "PAYC",
+    "PCTY",
+    "GTLB",
+    "MDB",
+    "ESTC",
+    "CFLT",
+    "DKNG",
     # Fintech / Financials
-    "GS", "MS", "JPM", "BAC", "WFC", "C", "SCHW", "BX", "KKR",
-    "AXP", "PYPL", "FIS", "FISV", "GPN",
+    "GS",
+    "MS",
+    "JPM",
+    "BAC",
+    "WFC",
+    "C",
+    "SCHW",
+    "BX",
+    "KKR",
+    "AXP",
+    "PYPL",
+    "FIS",
+    "FISV",
+    "GPN",
     # Healthcare / Biotech
-    "ISRG", "REGN", "VRTX", "GILD", "AMGN", "BIIB", "MRNA", "BMY",
-    "ZTS", "EW", "DXCM", "ALGN", "IDXX", "SYK", "MDT", "BSX",
+    "ISRG",
+    "REGN",
+    "VRTX",
+    "GILD",
+    "AMGN",
+    "BIIB",
+    "MRNA",
+    "BMY",
+    "ZTS",
+    "EW",
+    "DXCM",
+    "ALGN",
+    "IDXX",
+    "SYK",
+    "MDT",
+    "BSX",
     # Industrials / Defense
-    "CAT", "DE", "GE", "LMT", "NOC", "GD", "BA", "MMM",
-    "EMR", "ETN", "ITW", "PH", "ROK", "FTV",
+    "CAT",
+    "DE",
+    "GE",
+    "LMT",
+    "NOC",
+    "GD",
+    "BA",
+    "MMM",
+    "EMR",
+    "ETN",
+    "ITW",
+    "PH",
+    "ROK",
+    "FTV",
     # Energy
-    "XOM", "CVX", "SLB", "EOG", "PXD", "DVN", "OXY", "MPC",
-    "PSX", "VLO", "HAL",
+    "XOM",
+    "CVX",
+    "SLB",
+    "EOG",
+    "PXD",
+    "DVN",
+    "OXY",
+    "MPC",
+    "PSX",
+    "VLO",
+    "HAL",
     # Consumer / Retail
-    "NKE", "SBUX", "TGT", "WMT", "LULU", "DG", "DLTR", "ROST",
-    "TJX", "CMG", "YUM", "DPZ", "WYNN", "MGM", "MAR", "HLT",
+    "NKE",
+    "SBUX",
+    "TGT",
+    "WMT",
+    "LULU",
+    "DG",
+    "DLTR",
+    "ROST",
+    "TJX",
+    "CMG",
+    "YUM",
+    "DPZ",
+    "WYNN",
+    "MGM",
+    "MAR",
+    "HLT",
     # Media / Communication
-    "DIS", "NFLX", "CMCSA", "PARA", "WBD", "SPOT", "ROKU",
+    "DIS",
+    "NFLX",
+    "CMCSA",
+    "PARA",
+    "WBD",
+    "SPOT",
+    "ROKU",
     # REITs / Real Estate
-    "AMT", "CCI", "PLD", "EQIX", "O", "SPG",
+    "AMT",
+    "CCI",
+    "PLD",
+    "EQIX",
+    "O",
+    "SPG",
     # Utilities / Staples (defensive)
-    "SO", "DUK", "AEP", "D", "SRE", "CL", "GIS", "K", "HSY",
+    "SO",
+    "DUK",
+    "AEP",
+    "D",
+    "SRE",
+    "CL",
+    "GIS",
+    "K",
+    "HSY",
 ]
 
 US_GROWTH = [
-    "NVDA", "AMD", "SMCI", "ARM", "PLTR", "CRWD", "PANW", "SNOW",
-    "DDOG", "NET", "ZS", "MNDY", "TTD", "SHOP", "MELI", "SE",
-    "NU", "COIN", "SQ", "SOFI", "HOOD", "AFRM",
-    "UBER", "LYFT", "DASH", "ABNB", "RBLX", "U",
+    "NVDA",
+    "AMD",
+    "SMCI",
+    "ARM",
+    "PLTR",
+    "CRWD",
+    "PANW",
+    "SNOW",
+    "DDOG",
+    "NET",
+    "ZS",
+    "MNDY",
+    "TTD",
+    "SHOP",
+    "MELI",
+    "SE",
+    "NU",
+    "COIN",
+    "SQ",
+    "SOFI",
+    "HOOD",
+    "AFRM",
+    "UBER",
+    "LYFT",
+    "DASH",
+    "ABNB",
+    "RBLX",
+    "U",
     # Sprint 32: additional growth
-    "IONQ", "RGTI", "QUBT", "APP", "RDDT", "DUOL",
-    "TOST", "CAVA", "BROS", "GRAB", "RIVN", "LCID",
-    "JOBY", "LUNR", "RKLB", "ASTS", "SOUN", "AI",
-    "PATH", "S", "OKTA", "DOCN", "DT", "GLBE",
+    "IONQ",
+    "RGTI",
+    "QUBT",
+    "APP",
+    "RDDT",
+    "DUOL",
+    "TOST",
+    "CAVA",
+    "BROS",
+    "GRAB",
+    "RIVN",
+    "LCID",
+    "JOBY",
+    "LUNR",
+    "RKLB",
+    "ASTS",
+    "SOUN",
+    "AI",
+    "PATH",
+    "S",
+    "OKTA",
+    "DOCN",
+    "DT",
+    "GLBE",
 ]
 
 US_SECTOR_ETFS = [
-    "XLK", "XLF", "XLV", "XLE", "XLI", "XLC", "XLY", "XLP",
-    "XLRE", "XLU", "XLB", "SPY", "QQQ", "IWM", "DIA",
+    "XLK",
+    "XLF",
+    "XLV",
+    "XLE",
+    "XLI",
+    "XLC",
+    "XLY",
+    "XLP",
+    "XLRE",
+    "XLU",
+    "XLB",
+    "SPY",
+    "QQQ",
+    "IWM",
+    "DIA",
 ]
 
 # Sprint 32-b: remaining S&P 500 constituents (not in mega/mid/growth)
 US_SP500_REST = [
     # ── Technology / IT Services ─────────────────────────────
-    "ORCL", "IBM", "FTNT", "ANSS", "CDNS", "SNPS", "KEYS",
-    "TER", "ZBRA", "JNPR", "HPE", "HPQ", "NTAP", "WDC",
-    "STX", "AKAM", "FFIV", "LDOS", "IT", "TRMB", "VRSN",
-    "GEN", "CTSH", "ENPH", "FSLR", "TYL", "BR", "CDW",
-    "FICO", "CPAY", "GDDY", "EPAM", "PTC", "MANH", "NTNX",
-    "JKHY", "MSCI",
+    "ORCL",
+    "IBM",
+    "FTNT",
+    "ANSS",
+    "CDNS",
+    "SNPS",
+    "KEYS",
+    "TER",
+    "ZBRA",
+    "JNPR",
+    "HPE",
+    "HPQ",
+    "NTAP",
+    "WDC",
+    "STX",
+    "AKAM",
+    "FFIV",
+    "LDOS",
+    "IT",
+    "TRMB",
+    "VRSN",
+    "GEN",
+    "CTSH",
+    "ENPH",
+    "FSLR",
+    "TYL",
+    "BR",
+    "CDW",
+    "FICO",
+    "CPAY",
+    "GDDY",
+    "EPAM",
+    "PTC",
+    "MANH",
+    "NTNX",
+    "JKHY",
+    "MSCI",
     # ── Financials ───────────────────────────────────────────
-    "BLK", "CB", "PGR", "AFL", "MET", "PRU", "TRV", "AIG",
-    "ALL", "CINF", "AJG", "MMC", "AON", "TROW", "BEN",
-    "IVZ", "NDAQ", "ICE", "CME", "MCO", "SPGI", "ACGL",
-    "RJF", "STT", "NTRS", "CFG", "HBAN", "KEY", "RF",
-    "FITB", "ZION", "CMA", "MTB", "PNC", "USB", "TFC",
-    "DFS", "SYF", "COF", "GL", "L", "ERIE", "RE",
+    "BLK",
+    "CB",
+    "PGR",
+    "AFL",
+    "MET",
+    "PRU",
+    "TRV",
+    "AIG",
+    "ALL",
+    "CINF",
+    "AJG",
+    "MMC",
+    "AON",
+    "TROW",
+    "BEN",
+    "IVZ",
+    "NDAQ",
+    "ICE",
+    "CME",
+    "MCO",
+    "SPGI",
+    "ACGL",
+    "RJF",
+    "STT",
+    "NTRS",
+    "CFG",
+    "HBAN",
+    "KEY",
+    "RF",
+    "FITB",
+    "ZION",
+    "CMA",
+    "MTB",
+    "PNC",
+    "USB",
+    "TFC",
+    "DFS",
+    "SYF",
+    "COF",
+    "GL",
+    "L",
+    "ERIE",
+    "RE",
     # ── Healthcare ───────────────────────────────────────────
-    "CI", "ELV", "HCA", "HUM", "CNC", "MOH", "A", "IQV",
-    "WAT", "BIO", "DGX", "LH", "HOLX", "MTD", "BAX", "BDX",
-    "COO", "RMD", "PODD", "INCY", "ALNY", "GEHC", "VTRS",
-    "PKI", "RVTY", "TFX", "OGN",
+    "CI",
+    "ELV",
+    "HCA",
+    "HUM",
+    "CNC",
+    "MOH",
+    "A",
+    "IQV",
+    "WAT",
+    "BIO",
+    "DGX",
+    "LH",
+    "HOLX",
+    "MTD",
+    "BAX",
+    "BDX",
+    "COO",
+    "RMD",
+    "PODD",
+    "INCY",
+    "ALNY",
+    "GEHC",
+    "VTRS",
+    "PKI",
+    "RVTY",
+    "TFX",
+    "OGN",
     # ── Consumer Discretionary ───────────────────────────────
-    "F", "GM", "APTV", "BWA", "RL", "PVH", "TPR", "GRMN",
-    "POOL", "TSCO", "BBY", "KMX", "AZO", "ORLY", "EBAY",
-    "ETSY", "LVS", "CZR", "RCL", "CCL", "NCLH", "LEN",
-    "DHI", "PHM", "NVR", "DECK", "BURL", "ULTA", "GPC",
-    "EXPE", "CPRT", "PENN",
+    "F",
+    "GM",
+    "APTV",
+    "BWA",
+    "RL",
+    "PVH",
+    "TPR",
+    "GRMN",
+    "POOL",
+    "TSCO",
+    "BBY",
+    "KMX",
+    "AZO",
+    "ORLY",
+    "EBAY",
+    "ETSY",
+    "LVS",
+    "CZR",
+    "RCL",
+    "CCL",
+    "NCLH",
+    "LEN",
+    "DHI",
+    "PHM",
+    "NVR",
+    "DECK",
+    "BURL",
+    "ULTA",
+    "GPC",
+    "EXPE",
+    "CPRT",
+    "PENN",
     # ── Consumer Staples ─────────────────────────────────────
-    "MDLZ", "KHC", "SJM", "MKC", "CAG", "CPB", "HRL",
-    "TSN", "SYY", "KR", "ADM", "STZ", "TAP", "MNST",
-    "KDP", "CHD", "EL", "WBA", "CVS", "MO",
+    "MDLZ",
+    "KHC",
+    "SJM",
+    "MKC",
+    "CAG",
+    "CPB",
+    "HRL",
+    "TSN",
+    "SYY",
+    "KR",
+    "ADM",
+    "STZ",
+    "TAP",
+    "MNST",
+    "KDP",
+    "CHD",
+    "EL",
+    "WBA",
+    "CVS",
+    "MO",
     # ── Industrials ──────────────────────────────────────────
-    "WM", "RSG", "VRSK", "PAYX", "ADP", "CTAS", "FAST",
-    "GWW", "SNA", "SWK", "TT", "CARR", "OTIS", "AME",
-    "HUBB", "ROP", "IEX", "XYL", "DOV", "AOS", "GNRC",
-    "PWR", "PCAR", "WAB", "NSC", "CSX", "CHRW", "JBHT",
-    "UAL", "DAL", "LUV", "FDX", "UPS", "IR", "TDG",
-    "HWM", "AXON", "EXPD", "STE", "ALLE", "HII",
+    "WM",
+    "RSG",
+    "VRSK",
+    "PAYX",
+    "ADP",
+    "CTAS",
+    "FAST",
+    "GWW",
+    "SNA",
+    "SWK",
+    "TT",
+    "CARR",
+    "OTIS",
+    "AME",
+    "HUBB",
+    "ROP",
+    "IEX",
+    "XYL",
+    "DOV",
+    "AOS",
+    "GNRC",
+    "PWR",
+    "PCAR",
+    "WAB",
+    "NSC",
+    "CSX",
+    "CHRW",
+    "JBHT",
+    "UAL",
+    "DAL",
+    "LUV",
+    "FDX",
+    "UPS",
+    "IR",
+    "TDG",
+    "HWM",
+    "AXON",
+    "EXPD",
+    "STE",
+    "ALLE",
+    "HII",
     # ── Energy ───────────────────────────────────────────────
-    "WMB", "KMI", "OKE", "TRGP", "FANG", "CTRA", "MRO",
-    "APA", "EQT", "BKR", "HES",
+    "WMB",
+    "KMI",
+    "OKE",
+    "TRGP",
+    "FANG",
+    "CTRA",
+    "MRO",
+    "APA",
+    "EQT",
+    "BKR",
+    "HES",
     # ── Materials ────────────────────────────────────────────
-    "LIN", "APD", "SHW", "ECL", "DD", "DOW", "LYB", "EMN",
-    "PPG", "ALB", "FMC", "CF", "MOS", "NUE", "STLD", "FCX",
-    "NEM", "IP", "PKG", "AVY", "BLL", "VMC", "MLM", "CE",
-    "CLF", "WRK", "SEE",
+    "LIN",
+    "APD",
+    "SHW",
+    "ECL",
+    "DD",
+    "DOW",
+    "LYB",
+    "EMN",
+    "PPG",
+    "ALB",
+    "FMC",
+    "CF",
+    "MOS",
+    "NUE",
+    "STLD",
+    "FCX",
+    "NEM",
+    "IP",
+    "PKG",
+    "AVY",
+    "BLL",
+    "VMC",
+    "MLM",
+    "CE",
+    "CLF",
+    "WRK",
+    "SEE",
     # ── Utilities ────────────────────────────────────────────
-    "EXC", "XEL", "ES", "WEC", "ED", "DTE", "CMS", "CNP",
-    "ATO", "NI", "EVRG", "PPL", "FE", "AWK", "PNW", "AES",
+    "EXC",
+    "XEL",
+    "ES",
+    "WEC",
+    "ED",
+    "DTE",
+    "CMS",
+    "CNP",
+    "ATO",
+    "NI",
+    "EVRG",
+    "PPL",
+    "FE",
+    "AWK",
+    "PNW",
+    "AES",
     "LNT",
     # ── REITs / Real Estate ──────────────────────────────────
-    "DLR", "PSA", "WELL", "AVB", "EQR", "ESS", "MAA", "UDR",
-    "INVH", "KIM", "REG", "VTR", "IRM", "SBA", "ARE",
+    "DLR",
+    "PSA",
+    "WELL",
+    "AVB",
+    "EQR",
+    "ESS",
+    "MAA",
+    "UDR",
+    "INVH",
+    "KIM",
+    "REG",
+    "VTR",
+    "IRM",
+    "SBA",
+    "ARE",
     # ── Communication Services ───────────────────────────────
-    "T", "VZ", "TMUS", "CHTR", "EA", "TTWO", "MTCH", "PINS",
-    "SNAP", "LYV", "FOXA", "OMC", "IPG",
+    "T",
+    "VZ",
+    "TMUS",
+    "CHTR",
+    "EA",
+    "TTWO",
+    "MTCH",
+    "PINS",
+    "SNAP",
+    "LYV",
+    "FOXA",
+    "OMC",
+    "IPG",
 ]
 
 HK_MAJOR = [
@@ -197,39 +628,61 @@ HK_MAJOR = [
 ]
 
 JP_MAJOR = [
-    "7203.T",   # Toyota
-    "6758.T",   # Sony
-    "6861.T",   # Keyence
-    "9984.T",   # SoftBank Group
-    "6098.T",   # Recruit
-    "8306.T",   # MUFG
-    "7741.T",   # HOYA
-    "9433.T",   # KDDI
-    "4063.T",   # Shin-Etsu Chemical
-    "6501.T",   # Hitachi
-    "4568.T",   # Daiichi Sankyo
-    "6902.T",   # Denso
-    "7974.T",   # Nintendo
-    "8035.T",   # Tokyo Electron
-    "6857.T",   # Advantest
-    "4519.T",   # Chugai Pharma
-    "6367.T",   # Daikin
-    "4661.T",   # Oriental Land
-    "6954.T",   # Fanuc
-    "7267.T",   # Honda
+    "7203.T",  # Toyota
+    "6758.T",  # Sony
+    "6861.T",  # Keyence
+    "9984.T",  # SoftBank Group
+    "6098.T",  # Recruit
+    "8306.T",  # MUFG
+    "7741.T",  # HOYA
+    "9433.T",  # KDDI
+    "4063.T",  # Shin-Etsu Chemical
+    "6501.T",  # Hitachi
+    "4568.T",  # Daiichi Sankyo
+    "6902.T",  # Denso
+    "7974.T",  # Nintendo
+    "8035.T",  # Tokyo Electron
+    "6857.T",  # Advantest
+    "4519.T",  # Chugai Pharma
+    "6367.T",  # Daikin
+    "4661.T",  # Oriental Land
+    "6954.T",  # Fanuc
+    "7267.T",  # Honda
 ]
 
 CRYPTO_MAJOR = [
-    "BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "AVAX", "DOT",
-    "MATIC", "LINK", "UNI", "AAVE", "MKR", "LDO", "ARB",
-    "OP", "APT", "SUI", "SEI", "TIA", "NEAR", "ATOM",
-    "DOGE", "SHIB", "PEPE",
+    "BTC",
+    "ETH",
+    "BNB",
+    "SOL",
+    "XRP",
+    "ADA",
+    "AVAX",
+    "DOT",
+    "MATIC",
+    "LINK",
+    "UNI",
+    "AAVE",
+    "MKR",
+    "LDO",
+    "ARB",
+    "OP",
+    "APT",
+    "SUI",
+    "SEI",
+    "TIA",
+    "NEAR",
+    "ATOM",
+    "DOGE",
+    "SHIB",
+    "PEPE",
 ]
 
 
 # ---------------------------------------------------------------------------
 # Universe builder
 # ---------------------------------------------------------------------------
+
 
 class MultiMarketUniverse:
     """
@@ -247,39 +700,68 @@ class MultiMarketUniverse:
     ) -> List[UniverseAsset]:
         """Build the full trading universe."""
         if markets is None:
-            markets = [MarketRegion.US, MarketRegion.HK, MarketRegion.JP, MarketRegion.CRYPTO]
+            markets = [
+                MarketRegion.US,
+                MarketRegion.HK,
+                MarketRegion.JP,
+                MarketRegion.CRYPTO,
+            ]
 
         assets: List[UniverseAsset] = []
 
         if MarketRegion.US in markets:
-            for t in (US_MEGA_CAPS + US_MID_CAPS + US_SP500_REST
-                      + US_GROWTH):
-                assets.append(UniverseAsset(
-                    ticker=t, name=t, market=MarketRegion.US, sector="Equity",
-                ))
+            for t in US_MEGA_CAPS + US_MID_CAPS + US_SP500_REST + US_GROWTH:
+                assets.append(
+                    UniverseAsset(
+                        ticker=t,
+                        name=t,
+                        market=MarketRegion.US,
+                        sector="Equity",
+                    )
+                )
             if include_etfs:
                 for t in US_SECTOR_ETFS:
-                    assets.append(UniverseAsset(
-                        ticker=t, name=t, market=MarketRegion.US, sector="ETF",
-                    ))
+                    assets.append(
+                        UniverseAsset(
+                            ticker=t,
+                            name=t,
+                            market=MarketRegion.US,
+                            sector="ETF",
+                        )
+                    )
 
         if MarketRegion.HK in markets:
             for t in HK_MAJOR:
-                assets.append(UniverseAsset(
-                    ticker=t, name=t, market=MarketRegion.HK, sector="HK Equity",
-                ))
+                assets.append(
+                    UniverseAsset(
+                        ticker=t,
+                        name=t,
+                        market=MarketRegion.HK,
+                        sector="HK Equity",
+                    )
+                )
 
         if MarketRegion.JP in markets:
             for t in JP_MAJOR:
-                assets.append(UniverseAsset(
-                    ticker=t, name=t, market=MarketRegion.JP, sector="JP Equity",
-                ))
+                assets.append(
+                    UniverseAsset(
+                        ticker=t,
+                        name=t,
+                        market=MarketRegion.JP,
+                        sector="JP Equity",
+                    )
+                )
 
         if MarketRegion.CRYPTO in markets:
             for t in CRYPTO_MAJOR:
-                assets.append(UniverseAsset(
-                    ticker=t, name=t, market=MarketRegion.CRYPTO, sector="Crypto",
-                ))
+                assets.append(
+                    UniverseAsset(
+                        ticker=t,
+                        name=t,
+                        market=MarketRegion.CRYPTO,
+                        sector="Crypto",
+                    )
+                )
 
         # Deduplicate
         seen = set()
@@ -311,6 +793,7 @@ class MultiMarketUniverse:
 # Multi-factor screener
 # ---------------------------------------------------------------------------
 
+
 class MultiFactorScreener:
     """
     Screens the universe using multiple factors:
@@ -331,7 +814,7 @@ class MultiFactorScreener:
     ) -> List[UniverseAsset]:
         """
         Screen and rank assets by composite score.
-        
+
         Args:
             df: DataFrame with columns [ticker, close, volume, rsi, adx, sma_50, ...]
             universe: List of UniverseAsset to screen
@@ -357,10 +840,10 @@ class MultiFactorScreener:
             # Momentum score: price above SMA + RSI in sweet spot
             above_sma = (close / sma_50 - 1) * 100 if sma_50 > 0 else 0
             rsi_score = 100 - abs(rsi - 60)  # peaks at RSI=60
-            asset.momentum_score = (above_sma * 0.4 + rsi_score * 0.6)
+            asset.momentum_score = above_sma * 0.4 + rsi_score * 0.6
 
             # Quality: strong trend + good volume
-            asset.quality_score = (adx * 0.5 + min(rel_vol, 3.0) * 33 * 0.5)
+            asset.quality_score = adx * 0.5 + min(rel_vol, 3.0) * 33 * 0.5
 
             # Composite
             asset.composite_score = (
@@ -385,10 +868,11 @@ class MultiFactorScreener:
 # Cross-market correlation monitor
 # ---------------------------------------------------------------------------
 
+
 class CrossMarketMonitor:
     """
     Monitors cross-market correlations and regime shifts.
-    
+
     - US/HK correlation (China tech often correlates with US tech)
     - Crypto/tech correlation
     - Yen strength → JP stock impact
@@ -398,9 +882,7 @@ class CrossMarketMonitor:
     def __init__(self):
         self._correlation_window = 60  # trading days
 
-    def compute_correlations(
-        self, returns: Dict[str, pd.Series]
-    ) -> pd.DataFrame:
+    def compute_correlations(self, returns: Dict[str, pd.Series]) -> pd.DataFrame:
         """Compute pairwise correlation matrix from return series."""
         df = pd.DataFrame(returns)
         return df.corr()
@@ -413,12 +895,14 @@ class CrossMarketMonitor:
         crypto_returns: pd.Series,
     ) -> Dict[str, Any]:
         """Detect when markets are diverging (opportunity or risk signal)."""
-        all_returns = pd.DataFrame({
-            "US": us_returns,
-            "HK": hk_returns,
-            "JP": jp_returns,
-            "Crypto": crypto_returns,
-        }).dropna()
+        all_returns = pd.DataFrame(
+            {
+                "US": us_returns,
+                "HK": hk_returns,
+                "JP": jp_returns,
+                "Crypto": crypto_returns,
+            }
+        ).dropna()
 
         if len(all_returns) < 20:
             return {"status": "insufficient_data"}
@@ -428,7 +912,11 @@ class CrossMarketMonitor:
 
         # Rolling correlation trend
         rolling_corr = all_returns["US"].rolling(20).corr(all_returns["HK"])
-        corr_trend = "rising" if rolling_corr.iloc[-5:].mean() > rolling_corr.iloc[-20:-5].mean() else "falling"
+        corr_trend = (
+            "rising"
+            if rolling_corr.iloc[-5:].mean() > rolling_corr.iloc[-20:-5].mean()
+            else "falling"
+        )
 
         return {
             "status": "ok",
@@ -437,8 +925,10 @@ class CrossMarketMonitor:
             "us_hk_corr": round(float(corr.loc["US", "HK"]), 3),
             "us_crypto_corr": round(float(corr.loc["US", "Crypto"]), 3),
             "regime": (
-                "risk_on" if avg_corr > 0.6
-                else "risk_off" if avg_corr < 0.2
+                "risk_on"
+                if avg_corr > 0.6
+                else "risk_off"
+                if avg_corr < 0.2
                 else "diverging"
             ),
         }

@@ -34,7 +34,9 @@ def evaluate_calm_reactive(
     peace_cost = "high" if false_urgency else "medium" if tb == "WAIT" else "low"
     preserve_focus = tb in ("WAIT", "NO_TRADE") or deployable_count == 0
 
-    lev = label_leverage({"action": tb, "execution_ready": deployable_count > 0}, surface="today")
+    lev = label_leverage(
+        {"action": tb, "execution_ready": deployable_count > 0}, surface="today"
+    )
 
     if false_urgency:
         headline = "False urgency detected — high scores without deploy path"

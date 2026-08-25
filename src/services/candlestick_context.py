@@ -273,7 +273,11 @@ def resolve_composite_label(
     if direction == "bullish" and bias == "bearish":
         chips.append(NISON_LABELS["bullish_pattern_bearish_backdrop"])
 
-    if pattern_q >= PATTERN_QUALITY_MIN and context_q >= CONTEXT_QUALITY_MIN and exec_q >= 60:
+    if (
+        pattern_q >= PATTERN_QUALITY_MIN
+        and context_q >= CONTEXT_QUALITY_MIN
+        and exec_q >= 60
+    ):
         key = "strong_pattern_strong_context"
         chips.append(NISON_LABELS[key])
     elif pattern_q >= PATTERN_QUALITY_MIN and context_q < CONTEXT_QUALITY_MIN:
@@ -286,7 +290,9 @@ def resolve_composite_label(
     elif pattern_q >= 50 and context_q < 45:
         key = "pattern_present_not_actionable"
         chips.append(NISON_LABELS[key])
-    elif pattern.get("pattern_name", "").endswith("reversal") or "reversal" in pattern.get("pattern_name", ""):
+    elif pattern.get("pattern_name", "").endswith(
+        "reversal"
+    ) or "reversal" in pattern.get("pattern_name", ""):
         key = "reversal_clue_not_trade"
         chips.append(NISON_LABELS[key])
     elif exec_q >= 55:
@@ -384,7 +390,9 @@ def build_candlestick_analysis(
     exec_q = score_candlestick_execution_readiness(
         pq, cq, rq, tq, iq, has_stop=stop > 0, rr=rr
     )
-    label_key, label_display, chips = resolve_composite_label(pq, cq, exec_q, macro, pattern)
+    label_key, label_display, chips = resolve_composite_label(
+        pq, cq, exec_q, macro, pattern
+    )
     inv_text = str(trade_plan.get("invalidation") or unified.get("invalidation") or "")
 
     scores = {
@@ -497,7 +505,9 @@ def demote_scanner_hit_metadata(
     meta = dict(hit_metadata or {})
     sig = signal or meta
     tags = tags_for_playbook_row(signal=sig)
-    meta["nison_context_label"] = tags.get("context_label") or NISON_LABELS["context_check_pending"]
+    meta["nison_context_label"] = (
+        tags.get("context_label") or NISON_LABELS["context_check_pending"]
+    )
     meta["nison_context_checked"] = tags.get("context_checked", False)
     exec_status = tags.get("nison_execution_status", "NOT_ACTIONABLE")
     if exec_status != "ACTIONABLE":
@@ -506,7 +516,9 @@ def demote_scanner_hit_metadata(
     return meta
 
 
-def _location_note(tech: Dict[str, Any], pattern: Dict[str, Any], context_q: int) -> Dict[str, Any]:
+def _location_note(
+    tech: Dict[str, Any], pattern: Dict[str, Any], context_q: int
+) -> Dict[str, Any]:
     support = coerce_float(tech.get("support"), 0.0)
     resistance = coerce_float(tech.get("resistance"), 0.0)
     s_dist = coerce_float(tech.get("support_dist_pct"), 0.0)

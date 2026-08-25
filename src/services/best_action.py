@@ -5,12 +5,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from src.utils.numeric_parse import parse_ratio
-
 _TRADE_ACTIONS = frozenset({"TRADE", "BUY", "BUY_ON_DIP", "TRADE_NOW", "STRONG_TRADE"})
 _PILOT_ACTIONS = frozenset({"PILOT"})
-_WATCH_ACTIONS = frozenset({"WATCH", "WAIT", "WATCH_TRIGGER", "LEADER", "LEADER_MONITOR"})
-_AVOID_ACTIONS = frozenset({"AVOID", "NO_TRADE", "NO_TOUCH", "DO_NOT_TOUCH", "AVOID_NOW"})
+_WATCH_ACTIONS = frozenset(
+    {"WATCH", "WAIT", "WATCH_TRIGGER", "LEADER", "LEADER_MONITOR"}
+)
+_AVOID_ACTIONS = frozenset(
+    {"AVOID", "NO_TRADE", "NO_TOUCH", "DO_NOT_TOUCH", "AVOID_NOW"}
+)
 
 _SEMI_TICKERS = frozenset(
     {
@@ -74,7 +76,9 @@ def _evidence_quality(
     return "low", "Raw model output · limited live validation"
 
 
-def compute_theme_overlap(opportunities: List[Dict[str, Any]], limit: int = 10) -> Dict[str, Any]:
+def compute_theme_overlap(
+    opportunities: List[Dict[str, Any]], limit: int = 10
+) -> Dict[str, Any]:
     """Warn when top ranks cluster in semis / same sector bucket."""
     top = opportunities[:limit]
     semi = [o for o in top if (o.get("ticker") or "").upper() in _SEMI_TICKERS]
@@ -162,10 +166,7 @@ def build_best_action(
         if not tk:
             continue
         conf = float(
-            o.get("final_conf")
-            or o.get("score", 0) / 10
-            if o.get("score")
-            else 0.6
+            o.get("final_conf") or o.get("score", 0) / 10 if o.get("score") else 0.6
         )
         if o.get("execution_ready"):
             execution_ready_count += 1
@@ -277,12 +278,13 @@ def enrich_ranked_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     stale = bool(payload.get("stale"))
     source = str(payload.get("source") or "")
     tradeability_hint = str(
-        payload.get("tradeability")
-        or payload.get("board_tradeability")
-        or ""
+        payload.get("tradeability") or payload.get("board_tradeability") or ""
     ).upper()
     try:
-        from src.services.ibkr_service import get_ibkr_service, ibkr_authority_gate_snapshot
+        from src.services.ibkr_service import (
+            get_ibkr_service,
+            ibkr_authority_gate_snapshot,
+        )
 
         gates = ibkr_authority_gate_snapshot()
         ibkr_on = bool(gates.get("connected"))
@@ -313,9 +315,11 @@ def enrich_ranked_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         pass
 
     payload["overlap_warning"] = compute_theme_overlap(opps)
-    trade_count = sum(1 for o in opps if _norm_action(o.get("action")) in _TRADE_ACTIONS)
+    sum(1 for o in opps if _norm_action(o.get("action")) in _TRADE_ACTIONS)
     execution_ready_count = sum(1 for o in opps if o.get("execution_ready"))
-    pilot_count = sum(1 for o in opps if _norm_action(o.get("action")) in _PILOT_ACTIONS)
+    pilot_count = sum(
+        1 for o in opps if _norm_action(o.get("action")) in _PILOT_ACTIONS
+    )
     board_tb = str(
         tradeability_hint
         or ((payload.get("cc_state") or {}).get("tradeability_state") or {}).get(
@@ -331,9 +335,7 @@ def enrich_ranked_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
             should_trade=board_tb not in ("WAIT", "NO_TRADE"),
             execution_ready=execution_ready_count,
             pilot_ready=pilot_count,
-            council_high_8=len(
-                [o for o in opps if float(o.get("score") or 0) >= 8.0]
-            ),
+            council_high_8=len([o for o in opps if float(o.get("score") or 0) >= 8.0]),
             macro="Neutral",
             opportunity=(
                 "Strong"

@@ -40,10 +40,30 @@ def build_sleeve_budgets(
 ) -> List[Dict[str, Any]]:
     """Default sleeve budget table when none supplied."""
     default = sleeves or [
-        {"id": "core_momentum", "name": "Core momentum", "budget_pct": 35, "utilization_pct": 62},
-        {"id": "satellite_breakout", "name": "Satellite breakout", "budget_pct": 20, "utilization_pct": 40},
-        {"id": "defensive_quality", "name": "Defensive quality", "budget_pct": 25, "utilization_pct": 28},
-        {"id": "pilot_experimental", "name": "Pilot experimental", "budget_pct": 10, "utilization_pct": 15},
+        {
+            "id": "core_momentum",
+            "name": "Core momentum",
+            "budget_pct": 35,
+            "utilization_pct": 62,
+        },
+        {
+            "id": "satellite_breakout",
+            "name": "Satellite breakout",
+            "budget_pct": 20,
+            "utilization_pct": 40,
+        },
+        {
+            "id": "defensive_quality",
+            "name": "Defensive quality",
+            "budget_pct": 25,
+            "utilization_pct": 28,
+        },
+        {
+            "id": "pilot_experimental",
+            "name": "Pilot experimental",
+            "budget_pct": 10,
+            "utilization_pct": 15,
+        },
     ]
     out: List[Dict[str, Any]] = []
     for s in default:
@@ -55,7 +75,9 @@ def build_sleeve_budgets(
             {
                 **s,
                 "allocator_state": state,
-                "headroom_pct": round(max(0, budget - util * budget / 100), 1) if budget else 0,
+                "headroom_pct": round(max(0, budget - util * budget / 100), 1)
+                if budget
+                else 0,
                 "controls_capital": False,
             }
         )
@@ -65,10 +87,18 @@ def build_sleeve_budgets(
 def routing_suggestion(sleeves: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Strongest / weakest by utilization headroom — hint only."""
     if not sleeves:
-        return {"strongest": None, "weakest": None, "suggestion": "No sleeves configured"}
+        return {
+            "strongest": None,
+            "weakest": None,
+            "suggestion": "No sleeves configured",
+        }
     active = [s for s in sleeves if s.get("allocator_state") != STATE_PAUSED]
     if not active:
-        return {"strongest": None, "weakest": None, "suggestion": "All sleeves paused — no routing hint"}
+        return {
+            "strongest": None,
+            "weakest": None,
+            "suggestion": "All sleeves paused — no routing hint",
+        }
     by_headroom = sorted(active, key=lambda x: -(x.get("headroom_pct") or 0))
     strongest = by_headroom[0]
     weakest = by_headroom[-1]

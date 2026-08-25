@@ -33,11 +33,7 @@ def build_thesis_drift(
     drift_score = len(weakened) * 15 - len(improved) * 10
     drift_score = max(0, min(100, 50 + drift_score))
     status = (
-        "drifting"
-        if drift_score >= 65
-        else "stable"
-        if drift_score <= 40
-        else "watch"
+        "drifting" if drift_score >= 65 else "stable" if drift_score <= 40 else "watch"
     )
     return {
         "ticker": ticker.upper(),

@@ -29,20 +29,61 @@ INDEX_FUND_LABELS: Dict[str, str] = {
 
 _BROAD_INDEX_TICKERS = frozenset(
     {
-        "SPY", "IVV", "VOO", "VTI", "SCHB", "RSP", "DIA", "IWM",
-        "QQQ", "VT", "VXUS", "VEA", "VWO", "BND", "AGG",
-        "510300", "510500", "159915", "000300",
+        "SPY",
+        "IVV",
+        "VOO",
+        "VTI",
+        "SCHB",
+        "RSP",
+        "DIA",
+        "IWM",
+        "QQQ",
+        "VT",
+        "VXUS",
+        "VEA",
+        "VWO",
+        "BND",
+        "AGG",
+        "510300",
+        "510500",
+        "159915",
+        "000300",
     }
 )
 _NARROW_HINTS = frozenset(
     {
-        "sector", "semiconductor", "semi", "tech", "health", "energy",
-        "financial", "biotech", "gold", "commodity", "leveraged", "inverse",
-        "theme", "thematic", "growth", "value", "small-cap", "small cap",
+        "sector",
+        "semiconductor",
+        "semi",
+        "tech",
+        "health",
+        "energy",
+        "financial",
+        "biotech",
+        "gold",
+        "commodity",
+        "leveraged",
+        "inverse",
+        "theme",
+        "thematic",
+        "growth",
+        "value",
+        "small-cap",
+        "small cap",
     }
 )
 _INDEX_NAME_HINTS = frozenset(
-    {"index", "etf", "tracker", "passive", "broad", "total market", "500", "沪深300", "中证"}
+    {
+        "index",
+        "etf",
+        "tracker",
+        "passive",
+        "broad",
+        "total market",
+        "500",
+        "沪深300",
+        "中证",
+    }
 )
 
 
@@ -107,15 +148,18 @@ def is_index_etf_symbol(ticker: str, row: Optional[Dict[str, Any]] = None) -> bo
 def classify_index_fund(row: Dict[str, Any]) -> Dict[str, Any]:
     """Broad vs narrow index classification from ticker/name/sector tags."""
     ticker = str(row.get("ticker") or "").upper()
-    name = str(row.get("name") or row.get("display_name") or row.get("fund_name") or "").lower()
+    name = str(
+        row.get("name") or row.get("display_name") or row.get("fund_name") or ""
+    ).lower()
     sector_tags = " ".join(
-        str(x).lower()
-        for x in (row.get("sector_tags") or row.get("tags") or [])
+        str(x).lower() for x in (row.get("sector_tags") or row.get("tags") or [])
     )
     sleeve = str(row.get("sleeve") or row.get("sleeve_type") or "").lower()
     combined = f"{name} {sector_tags} {sleeve}"
 
-    if not is_index_etf_symbol(ticker, row) and not any(h in combined for h in _INDEX_NAME_HINTS):
+    if not is_index_etf_symbol(ticker, row) and not any(
+        h in combined for h in _INDEX_NAME_HINTS
+    ):
         return {
             "classification": "not_index",
             "classification_label": INDEX_FUND_LABELS["not_index"],
@@ -124,16 +168,25 @@ def classify_index_fund(row: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     if ticker in _BROAD_INDEX_TICKERS or any(
-        k in combined for k in ("total market", "broad", "500", "沪深300", "全市场", "标普")
+        k in combined
+        for k in ("total market", "broad", "500", "沪深300", "全市场", "标普")
     ):
         scope = "broad"
         label = INDEX_FUND_LABELS["broad_core"]
-    elif any(h in combined for h in _NARROW_HINTS) or sleeve in ("sector", "thematic", "tactical"):
+    elif any(h in combined for h in _NARROW_HINTS) or sleeve in (
+        "sector",
+        "thematic",
+        "tactical",
+    ):
         scope = "narrow"
         label = INDEX_FUND_LABELS["narrow_satellite"]
     elif ticker:
         scope = "broad" if len(ticker) <= 5 else "narrow"
-        label = INDEX_FUND_LABELS["broad_core"] if scope == "broad" else INDEX_FUND_LABELS["narrow_satellite"]
+        label = (
+            INDEX_FUND_LABELS["broad_core"]
+            if scope == "broad"
+            else INDEX_FUND_LABELS["narrow_satellite"]
+        )
     else:
         scope = "unknown"
         label = INDEX_FUND_LABELS["not_index"]
@@ -226,12 +279,24 @@ def evaluate_core_satellite_role(row: Dict[str, Any]) -> Dict[str, Any]:
     cls = classify_index_fund(row)
     scope = cls.get("scope") or cls.get("classification")
     if not cls.get("is_index"):
-        return {"core_satellite_role": "none", "role_label": INDEX_FUND_LABELS["not_primary"]}
+        return {
+            "core_satellite_role": "none",
+            "role_label": INDEX_FUND_LABELS["not_primary"],
+        }
     if scope == "broad":
-        return {"core_satellite_role": "core", "role_label": INDEX_FUND_LABELS["broad_core"]}
+        return {
+            "core_satellite_role": "core",
+            "role_label": INDEX_FUND_LABELS["broad_core"],
+        }
     if scope == "narrow":
-        return {"core_satellite_role": "satellite", "role_label": INDEX_FUND_LABELS["narrow_satellite"]}
-    return {"core_satellite_role": "unknown", "role_label": INDEX_FUND_LABELS["not_index"]}
+        return {
+            "core_satellite_role": "satellite",
+            "role_label": INDEX_FUND_LABELS["narrow_satellite"],
+        }
+    return {
+        "core_satellite_role": "unknown",
+        "role_label": INDEX_FUND_LABELS["not_index"],
+    }
 
 
 def evaluate_ordinary_investor_suitability(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -323,13 +388,10 @@ def index_fund_posture_strip_for_today(
     mode = evaluate_investment_mode(bench_row, valuation=val)
     zone = val.get("valuation_zone") or "unknown"
 
-    valuation_summary = (
-        f"{benchmark.upper()} · {zone} zone"
-        + (
-            f" · PE pct proxy {val['pe_percentile_proxy']:.0f}%"
-            if val.get("pe_percentile_proxy") is not None
-            else " · PE proxy unavailable"
-        )
+    valuation_summary = f"{benchmark.upper()} · {zone} zone" + (
+        f" · PE pct proxy {val['pe_percentile_proxy']:.0f}%"
+        if val.get("pe_percentile_proxy") is not None
+        else " · PE proxy unavailable"
     )
 
     return {
@@ -349,7 +411,9 @@ def index_fund_posture_strip_for_today(
     }
 
 
-def enrich_fund_card_index_layer(card: Dict[str, Any], *, benchmark: str = "SPY") -> Dict[str, Any]:
+def enrich_fund_card_index_layer(
+    card: Dict[str, Any], *, benchmark: str = "SPY"
+) -> Dict[str, Any]:
     """Attach index-fund judgment to a fund sleeve card (holdings + benchmark)."""
     out = dict(card)
     holdings = card.get("holdings") or []
@@ -366,11 +430,15 @@ def enrich_fund_card_index_layer(card: Dict[str, Any], *, benchmark: str = "SPY"
                     "valuation_zone": j["valuation"]["valuation_zone"],
                     "action": j["investment_mode"]["action"],
                     "action_label": j["investment_mode"]["action_label"],
-                    "core_satellite_role": j["core_satellite_role"]["core_satellite_role"],
+                    "core_satellite_role": j["core_satellite_role"][
+                        "core_satellite_role"
+                    ],
                 }
             )
 
-    bench = evaluate_allocation_decision({"ticker": benchmark.upper(), "name": f"{benchmark} broad index"})
+    bench = evaluate_allocation_decision(
+        {"ticker": benchmark.upper(), "name": f"{benchmark} broad index"}
+    )
     out["index_fund_layer"] = {
         "benchmark": benchmark.upper(),
         "benchmark_judgment": {
@@ -428,13 +496,20 @@ def index_fund_alignment_for_core_satellite(
     for p in positions:
         ticker = str(p.get("ticker") or "").upper()
         role = str(p.get("sleeve_role") or "").lower()
-        if role == "core_passive" or ticker in _BROAD_INDEX_TICKERS or is_index_etf_symbol(ticker, p):
+        if (
+            role == "core_passive"
+            or ticker in _BROAD_INDEX_TICKERS
+            or is_index_etf_symbol(ticker, p)
+        ):
             j = evaluate_allocation_decision({**p, "ticker": ticker})
             if j["classification"].get("is_index") or ticker in _BROAD_INDEX_TICKERS:
                 core_tickers.append(ticker)
 
     bench = evaluate_allocation_decision({"ticker": benchmark.upper()})
-    actions = {t: evaluate_allocation_decision({"ticker": t}).get("investment_mode", {}) for t in core_tickers[:5]}
+    actions = {
+        t: evaluate_allocation_decision({"ticker": t}).get("investment_mode", {})
+        for t in core_tickers[:5]
+    }
 
     return {
         "benchmark": benchmark.upper(),
@@ -453,7 +528,9 @@ def index_fund_alignment_for_core_satellite(
     }
 
 
-def tags_for_playbook_row(row: Dict[str, Any], *, tradeability: str = "") -> Dict[str, Any]:
+def tags_for_playbook_row(
+    row: Dict[str, Any], *, tradeability: str = ""
+) -> Dict[str, Any]:
     """Optional playbook tags — only when row maps to ETF/index symbol."""
     ticker = str(row.get("ticker") or "")
     if not is_index_etf_symbol(ticker, row):

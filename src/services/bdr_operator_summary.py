@@ -20,6 +20,7 @@ def _bi(zh: str, en: str) -> str:
     """Operator-facing bilingual line (繁中 · English)."""
     return f"{zh} · {en}"
 
+
 _AVOID_REASON_LABELS = {
     "poor_rr": "R:R below deploy bar",
     "regime_conflict": "Regime / setup mismatch",

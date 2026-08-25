@@ -18,8 +18,16 @@ from src.services.vibe_agent import (
     persist_intent_and_rules,
     review_agent_outcome,
 )
-from src.services.vibe_agent_store import list_alerts, list_journal, list_intents, list_rules, save_rule, update_alert, update_rule
 from src.services.vibe_agent_safety import agent_safety_contract
+from src.services.vibe_agent_store import (
+    list_alerts,
+    list_intents,
+    list_journal,
+    list_rules,
+    save_rule,
+    update_alert,
+    update_rule,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -106,12 +114,16 @@ async def post_intent(body: Dict[str, Any], _=optional_api_key):
 
 @router.get("/intents")
 async def get_intents(_=optional_api_key):
-    return sanitize_for_json({"intents": list_intents(), "safety": agent_safety_contract()})
+    return sanitize_for_json(
+        {"intents": list_intents(), "safety": agent_safety_contract()}
+    )
 
 
 @router.get("/rules")
 async def get_rules(status: Optional[str] = None, _=optional_api_key):
-    return sanitize_for_json({"rules": list_rules(status=status), "safety": agent_safety_contract()})
+    return sanitize_for_json(
+        {"rules": list_rules(status=status), "safety": agent_safety_contract()}
+    )
 
 
 @router.post("/rules")
@@ -142,7 +154,7 @@ async def patch_rule(rule_id: str, body: Dict[str, Any], _=optional_api_key):
 async def get_evaluate(request: Request, _=optional_api_key):
     ss = _system_state_from_request(request)
     today = getattr(request.app.state, "today_v7_cache", None) or {}
-    freshness = (today.get("trust") or {}) if isinstance(today, dict) else {}
+    (today.get("trust") or {}) if isinstance(today, dict) else {}
     result = evaluate_watch_rules(
         system_state=ss,
         market_data={"worst_tier": ss.get("data_freshness")},
@@ -154,7 +166,9 @@ async def get_evaluate(request: Request, _=optional_api_key):
 
 @router.get("/alerts")
 async def get_alerts(limit: int = 50, _=optional_api_key):
-    return sanitize_for_json({"alerts": list_alerts(limit=limit), "safety": agent_safety_contract()})
+    return sanitize_for_json(
+        {"alerts": list_alerts(limit=limit), "safety": agent_safety_contract()}
+    )
 
 
 @router.patch("/alerts/{alert_id}")
@@ -167,7 +181,9 @@ async def patch_alert(alert_id: str, body: Dict[str, Any], _=optional_api_key):
 
 @router.get("/journal")
 async def get_journal(limit: int = 100, _=optional_api_key):
-    return sanitize_for_json({"journal": list_journal(limit=limit), "safety": agent_safety_contract()})
+    return sanitize_for_json(
+        {"journal": list_journal(limit=limit), "safety": agent_safety_contract()}
+    )
 
 
 @router.post("/guardrail")
@@ -176,7 +192,11 @@ async def post_guardrail(body: Dict[str, Any], request: Request, _=optional_api_
     if not action_type:
         raise HTTPException(status_code=400, detail="action_type required")
     ss = _system_state_from_request(request)
-    ctx = (body or {}).get("context") if isinstance((body or {}).get("context"), dict) else {}
+    ctx = (
+        (body or {}).get("context")
+        if isinstance((body or {}).get("context"), dict)
+        else {}
+    )
     return sanitize_for_json(
         create_calm_down_guardrail(action_type, system_state=ss, context=ctx)
     )

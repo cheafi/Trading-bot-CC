@@ -24,7 +24,9 @@ def evaluate_crisis_portfolio_survival(
     total_mv = sum(float(p.get("market_value") or 0) for p in positions)
     top_pct = 0.0
     if total_mv > 0 and positions:
-        top_pct = max((float(p.get("market_value") or 0) / total_mv) * 100 for p in positions)
+        top_pct = max(
+            (float(p.get("market_value") or 0) / total_mv) * 100 for p in positions
+        )
 
     frag = evaluate_leverage_fragility(
         vix=vix,

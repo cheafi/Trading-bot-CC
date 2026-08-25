@@ -34,8 +34,7 @@ async def fred_series(series_id: str, limit: int = Query(10, ge=1, le=100)):
     if not meta:
         raise HTTPException(
             404,
-            f"Unknown series: {series_id}. "
-            f"Available: {list(FRED_SERIES.keys())}",
+            f"Unknown series: {series_id}. Available: {list(FRED_SERIES.keys())}",
         )
     obs = await _fred_client.fetch_series(series_id, limit=limit)
     return {

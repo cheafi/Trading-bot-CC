@@ -15,9 +15,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 
 from src.api.deps import sanitize_for_json, verify_api_key
 from src.core.risk_limits import RISK

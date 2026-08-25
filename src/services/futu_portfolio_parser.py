@@ -189,12 +189,7 @@ def holdings_from_rows(rows: List[Dict[str, Any]]) -> List[FutuHolding]:
             str(row.get("shares") or row.get("qty") or row.get("quantity") or "")
         )
         avg_cost = _parse_number(
-            str(
-                row.get("avg_cost")
-                or row.get("cost")
-                or row.get("average_cost")
-                or ""
-            )
+            str(row.get("avg_cost") or row.get("cost") or row.get("average_cost") or "")
         )
         if shares is None or avg_cost is None or shares <= 0:
             continue

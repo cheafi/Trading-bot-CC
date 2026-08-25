@@ -101,7 +101,11 @@ def list_rules(*, status: Optional[str] = None) -> List[Dict[str, Any]]:
 
 def save_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
     data = _load()
-    entry = {**rule, "id": rule.get("id") or str(uuid.uuid4())[:12], "created_at": _now()}
+    entry = {
+        **rule,
+        "id": rule.get("id") or str(uuid.uuid4())[:12],
+        "created_at": _now(),
+    }
     data.setdefault("rules", []).append(entry)
     _save(data)
     return entry

@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -32,28 +32,92 @@ __all__ = ["FredClient", "MacroSnapshot", "FRED_SERIES"]
 # ═══════════════════════════════════════════════════════════════
 
 FRED_SERIES: dict[str, dict[str, str]] = {
-    "DGS2": {"name": "2-Year Treasury Yield", "category": "rates", "frequency": "daily"},
-    "DGS5": {"name": "5-Year Treasury Yield", "category": "rates", "frequency": "daily"},
-    "DGS10": {"name": "10-Year Treasury Yield", "category": "rates", "frequency": "daily"},
-    "DGS30": {"name": "30-Year Treasury Yield", "category": "rates", "frequency": "daily"},
+    "DGS2": {
+        "name": "2-Year Treasury Yield",
+        "category": "rates",
+        "frequency": "daily",
+    },
+    "DGS5": {
+        "name": "5-Year Treasury Yield",
+        "category": "rates",
+        "frequency": "daily",
+    },
+    "DGS10": {
+        "name": "10-Year Treasury Yield",
+        "category": "rates",
+        "frequency": "daily",
+    },
+    "DGS30": {
+        "name": "30-Year Treasury Yield",
+        "category": "rates",
+        "frequency": "daily",
+    },
     "DFF": {"name": "Fed Funds Rate", "category": "rates", "frequency": "daily"},
-    "T10Y2Y": {"name": "10Y-2Y Spread (yield curve)", "category": "rates", "frequency": "daily"},
+    "T10Y2Y": {
+        "name": "10Y-2Y Spread (yield curve)",
+        "category": "rates",
+        "frequency": "daily",
+    },
     "T10Y3M": {"name": "10Y-3M Spread", "category": "rates", "frequency": "daily"},
-    "CPIAUCSL": {"name": "CPI (All Urban)", "category": "inflation", "frequency": "monthly"},
-    "CPILFESL": {"name": "Core CPI (ex food & energy)", "category": "inflation", "frequency": "monthly"},
-    "PCEPI": {"name": "PCE Price Index", "category": "inflation", "frequency": "monthly"},
-    "UNRATE": {"name": "Unemployment Rate", "category": "labor", "frequency": "monthly"},
+    "CPIAUCSL": {
+        "name": "CPI (All Urban)",
+        "category": "inflation",
+        "frequency": "monthly",
+    },
+    "CPILFESL": {
+        "name": "Core CPI (ex food & energy)",
+        "category": "inflation",
+        "frequency": "monthly",
+    },
+    "PCEPI": {
+        "name": "PCE Price Index",
+        "category": "inflation",
+        "frequency": "monthly",
+    },
+    "UNRATE": {
+        "name": "Unemployment Rate",
+        "category": "labor",
+        "frequency": "monthly",
+    },
     "PAYEMS": {"name": "Nonfarm Payrolls", "category": "labor", "frequency": "monthly"},
-    "ICSA": {"name": "Initial Jobless Claims", "category": "labor", "frequency": "weekly"},
+    "ICSA": {
+        "name": "Initial Jobless Claims",
+        "category": "labor",
+        "frequency": "weekly",
+    },
     "GDP": {"name": "GDP (nominal)", "category": "output", "frequency": "quarterly"},
     "GDPC1": {"name": "Real GDP", "category": "output", "frequency": "quarterly"},
     "VIXCLS": {"name": "VIX", "category": "volatility", "frequency": "daily"},
-    "BAMLC0A0CM": {"name": "IG Corporate Spread", "category": "credit", "frequency": "daily"},
-    "BAMLH0A0HYM2": {"name": "HY Corporate Spread", "category": "credit", "frequency": "daily"},
-    "MANEMP": {"name": "Manufacturing Employment", "category": "manufacturing", "frequency": "monthly"},
-    "UMCSENT": {"name": "U Michigan Consumer Sentiment", "category": "sentiment", "frequency": "monthly"},
-    "MORTGAGE30US": {"name": "30-Year Mortgage Rate", "category": "rates", "frequency": "weekly"},
-    "WALCL": {"name": "Fed Balance Sheet", "category": "liquidity", "frequency": "weekly"},
+    "BAMLC0A0CM": {
+        "name": "IG Corporate Spread",
+        "category": "credit",
+        "frequency": "daily",
+    },
+    "BAMLH0A0HYM2": {
+        "name": "HY Corporate Spread",
+        "category": "credit",
+        "frequency": "daily",
+    },
+    "MANEMP": {
+        "name": "Manufacturing Employment",
+        "category": "manufacturing",
+        "frequency": "monthly",
+    },
+    "UMCSENT": {
+        "name": "U Michigan Consumer Sentiment",
+        "category": "sentiment",
+        "frequency": "monthly",
+    },
+    "MORTGAGE30US": {
+        "name": "30-Year Mortgage Rate",
+        "category": "rates",
+        "frequency": "weekly",
+    },
+    "WALCL": {
+        "name": "Fed Balance Sheet",
+        "category": "liquidity",
+        "frequency": "weekly",
+    },
 }
 
 
@@ -126,7 +190,11 @@ class FredClient:
                 "limit": limit,
             }
             async with aiohttp.ClientSession() as session:
-                async with session.get(self.BASE_URL, params=params, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                async with session.get(
+                    self.BASE_URL,
+                    params=params,
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as resp:
                     if resp.status != 200:
                         logger.warning(f"[FRED] {series_id} HTTP {resp.status}")
                         return []
@@ -151,9 +219,16 @@ class FredClient:
             series_ids: specific series to fetch; defaults to core set
         """
         core_series = series_ids or [
-            "DGS2", "DGS10", "DGS30", "DFF", "T10Y2Y",
-            "CPIAUCSL", "UNRATE", "VIXCLS",
-            "BAMLH0A0HYM2", "ICSA",
+            "DGS2",
+            "DGS10",
+            "DGS30",
+            "DFF",
+            "T10Y2Y",
+            "CPIAUCSL",
+            "UNRATE",
+            "VIXCLS",
+            "BAMLH0A0HYM2",
+            "ICSA",
         ]
 
         indicators: dict[str, Any] = {}

@@ -165,12 +165,10 @@ class MarketIntelEngine:
         vol_detail = ""
         if atr_pct > 0.04:
             vol_signal = -0.3
-            vol_detail = f"ATR {atr_pct:.1%} — high volatility, " f"wider stops needed"
+            vol_detail = f"ATR {atr_pct:.1%} — high volatility, wider stops needed"
         elif atr_pct < 0.01:
             vol_signal = 0.2
-            vol_detail = (
-                f"ATR {atr_pct:.1%} — low volatility, " f"possible breakout setup"
-            )
+            vol_detail = f"ATR {atr_pct:.1%} — low volatility, possible breakout setup"
         else:
             vol_signal = 0.0
             vol_detail = f"ATR {atr_pct:.1%} — normal volatility"
@@ -243,8 +241,7 @@ class MarketIntelEngine:
                     direction=0.5,
                     confidence=0.6,
                     detail=(
-                        f"RSI {rsi:.0f} — deeply oversold, "
-                        f"bounce potential elevated"
+                        f"RSI {rsi:.0f} — deeply oversold, bounce potential elevated"
                     ),
                     source="rsi_extreme",
                     is_leading=True,

@@ -56,7 +56,9 @@ def research_safety_contract(*, surface: str = "research") -> Dict[str, Any]:
 
 
 def authority_notice_for_state(system_state: Dict[str, Any] | None) -> List[str]:
-    from src.services.vibe_agent_safety import authority_notice_for_state as _agent_notices
+    from src.services.vibe_agent_safety import (
+        authority_notice_for_state as _agent_notices,
+    )
 
     return _agent_notices(system_state)
 

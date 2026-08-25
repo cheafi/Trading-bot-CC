@@ -7,7 +7,7 @@ Stub/mock path is explicit; live EDGAR wiring is medium-term roadmap.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from src.services.signal_provenance import (
     SIGNAL_INSIDER_FORM4,
@@ -74,7 +74,7 @@ def score_form4_significance(
 
 def _mock_filings(ticker: str) -> List[Dict[str, Any]]:
     """Illustrative Form 4 rows — degraded/mock honest."""
-    sym = ticker.upper()
+    ticker.upper()
     return [
         {
             "form": "4",

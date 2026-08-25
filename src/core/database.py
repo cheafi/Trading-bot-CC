@@ -8,16 +8,20 @@ Features:
 - Session management with context managers
 - TimescaleDB support for time-series data
 """
-import asyncio
+
 import logging
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator
 
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
-from sqlalchemy.pool import NullPool
-from sqlalchemy import text, event
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from src.core.config import get_settings
 
@@ -31,15 +35,15 @@ database_url = settings.async_database_url
 engine = create_async_engine(
     database_url,
     echo=settings.log_level == "DEBUG",
-    pool_size=10,           # Increased for better concurrency
-    max_overflow=20,        # Allow more connections under load
-    pool_pre_ping=True,     # Verify connections before use
-    pool_recycle=3600,      # Recycle connections after 1 hour
-    pool_timeout=30,        # Wait up to 30s for connection
+    pool_size=10,  # Increased for better concurrency
+    max_overflow=20,  # Allow more connections under load
+    pool_pre_ping=True,  # Verify connections before use
+    pool_recycle=3600,  # Recycle connections after 1 hour
+    pool_timeout=30,  # Wait up to 30s for connection
     connect_args={
         "command_timeout": 60,  # Query timeout
         "prepared_statement_cache_size": 500,  # Cache prepared statements
-    }
+    },
 )
 
 # Session factory with optimized settings
@@ -47,7 +51,7 @@ async_session_maker = async_sessionmaker(
     engine,
     class_=AsyncSession,
     expire_on_commit=False,
-    autoflush=False,        # Manual flush for better control
+    autoflush=False,  # Manual flush for better control
 )
 
 # For use when we need a fresh connection (e.g., after fork)
@@ -61,7 +65,7 @@ Base = declarative_base()
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """
     Get async database session with automatic transaction management.
-    
+
     Usage:
         async with get_session() as session:
             result = await session.execute(query)
@@ -82,7 +86,7 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 async def get_read_session() -> AsyncGenerator[AsyncSession, None]:
     """
     Get read-only database session (no commit).
-    
+
     Use for SELECT queries to avoid unnecessary transaction overhead.
     """
     async with async_session_maker() as session:
@@ -96,12 +100,12 @@ async def get_read_session() -> AsyncGenerator[AsyncSession, None]:
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=1, max=10),
     retry=retry_if_exception_type((ConnectionError, OSError)),
-    reraise=True
+    reraise=True,
 )
 async def check_database_health() -> bool:
     """
     Check if database is healthy with retry logic.
-    
+
     Returns:
         True if database is accessible and healthy
     """
@@ -129,10 +133,10 @@ async def check_timescale_extension() -> bool:
 async def init_database() -> bool:
     """
     Initialize database connection and verify setup.
-    
+
     Returns:
         True if initialization successful
-    
+
     Raises:
         ConnectionError if database is not accessible
     """
@@ -140,14 +144,14 @@ async def init_database() -> bool:
     healthy = await check_database_health()
     if not healthy:
         raise ConnectionError("Cannot connect to database")
-    
+
     # Check for TimescaleDB
     has_timescale = await check_timescale_extension()
     if has_timescale:
         logger.info("TimescaleDB extension detected")
     else:
         logger.info("Running without TimescaleDB (standard PostgreSQL)")
-    
+
     logger.info("Database connection initialized successfully")
     return True
 

@@ -4,11 +4,18 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from src.services.reports_library import create_report_from_validation
 from src.services.research_committee import run_committee_review
 from src.services.research_safety import pipeline_step_labels, sanitize_research_payload
-from src.services.research_store import save_backtest_run, save_memory_item, save_strategy_draft
-from src.services.reports_library import create_report_from_validation
-from src.services.strategy_builder import build_strategy_draft_record, strategy_draft_to_watch_intent
+from src.services.research_store import (
+    save_backtest_run,
+    save_memory_item,
+    save_strategy_draft,
+)
+from src.services.strategy_builder import (
+    build_strategy_draft_record,
+    strategy_draft_to_watch_intent,
+)
 from src.services.validation_lab import run_validation
 from src.services.vibe_agent import parse_vibe_intent, persist_intent_and_rules
 
@@ -67,7 +74,9 @@ def run_research_pipeline(
             }
         )
         validation["id"] = run_row["id"]
-        report = create_report_from_validation(validation, strategy_draft=draft, authority_state=ss)
+        report = create_report_from_validation(
+            validation, strategy_draft=draft, authority_state=ss
+        )
         result["validation"] = validation
         result["report"] = report
         result["stepsCompleted"].append("validate")

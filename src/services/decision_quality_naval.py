@@ -37,7 +37,13 @@ def evaluate_decision_quality(
         known_unknowns.append(f"open objection: {why_not[:80]}")
 
     spread = max(thesis, timing, data) - min(thesis, timing, data)
-    clarity = "high" if spread < 0.25 and thesis >= 0.55 else "medium" if thesis >= 0.45 else "low"
+    clarity = (
+        "high"
+        if spread < 0.25 and thesis >= 0.55
+        else "medium"
+        if thesis >= 0.45
+        else "low"
+    )
 
     return {
         "clarity": clarity,
@@ -106,7 +112,9 @@ def build_naval_thinking(
         "leverage_label": lev["label"],
         "compounding_vs_noise": compound["headline"],
         "preserve_focus": sn["preserve_focus"],
-        "authority": "research_only" if sn["level"] in ("ignore", "noise") else "supportive",
+        "authority": "research_only"
+        if sn["level"] in ("ignore", "noise")
+        else "supportive",
     }
 
 
@@ -144,7 +152,9 @@ def naval_clarity_strip_for_today(
     elif calm.get("false_urgency"):
         action_necessity = "none — false urgency suppressed"
 
-    headline = calm.get("headline") or "Preserve focus — most scanner output is noise today"
+    headline = (
+        calm.get("headline") or "Preserve focus — most scanner output is noise today"
+    )
     if matters:
         tickers = ", ".join(m["ticker"] for m in matters[:2])
         headline = f"What matters: {tickers} — everything else can wait"
@@ -152,7 +162,8 @@ def naval_clarity_strip_for_today(
     return {
         "mode": "naval_almanac",
         "headline": headline,
-        "banner": calm.get("banner") or "No action required unless gates and clarity align",
+        "banner": calm.get("banner")
+        or "No action required unless gates and clarity align",
         "what_matters": matters,
         "action_necessity": action_necessity,
         "preserve_focus": calm.get("preserve_focus", True),

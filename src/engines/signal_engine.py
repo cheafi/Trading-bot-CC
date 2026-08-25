@@ -13,6 +13,7 @@ Upgrades (v6):
   • NO TRADE as a hard gate stored in system.market_state
   • Signal dedup + conflict resolution
 """
+
 import asyncio
 import hashlib
 import logging
@@ -34,11 +35,12 @@ from src.core.models import (
 )
 from src.engines.insight_engine import InsightEngine
 from src.engines.regime_throttle import RegimeThrottle
-from src.strategies import BaseStrategy, get_all_strategies, get_strategy
+from src.strategies import BaseStrategy, get_all_strategies
 
 # ═══════════════════════════════════════════════════════════════════════
 # UNIVERSE QUALITY FILTER
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class UniverseFilter:
     """
@@ -108,7 +110,13 @@ class UniverseFilter:
 
         for ticker in universe:
             # Per-ticker feature row (latest)
-            tf = features[features.index.get_level_values("ticker") == ticker] if "ticker" in features.index.names else features[features.get("ticker") == ticker] if "ticker" in features.columns else pd.DataFrame()
+            tf = (
+                features[features.index.get_level_values("ticker") == ticker]
+                if "ticker" in features.index.names
+                else features[features.get("ticker") == ticker]
+                if "ticker" in features.columns
+                else pd.DataFrame()
+            )
 
             # Fallback: try simple column lookup
             row = {}
@@ -127,16 +135,24 @@ class UniverseFilter:
                 rejections[ticker] = f"price ${price:.2f} < ${self.gates['min_price']}"
                 continue
             if dollar_vol < self.gates["min_dollar_vol_20d"]:
-                rejections[ticker] = f"dollar_vol ${dollar_vol:,.0f} < ${self.gates['min_dollar_vol_20d']:,.0f}"
+                rejections[ticker] = (
+                    f"dollar_vol ${dollar_vol:,.0f} < ${self.gates['min_dollar_vol_20d']:,.0f}"
+                )
                 continue
             if avg_vol < self.gates["min_avg_volume_20d"]:
-                rejections[ticker] = f"avg_vol {avg_vol:,.0f} < {self.gates['min_avg_volume_20d']:,.0f}"
+                rejections[ticker] = (
+                    f"avg_vol {avg_vol:,.0f} < {self.gates['min_avg_volume_20d']:,.0f}"
+                )
                 continue
             if mkt_cap < self.gates["min_market_cap"]:
-                rejections[ticker] = f"mkt_cap ${mkt_cap:,.0f} < ${self.gates['min_market_cap']:,.0f}"
+                rejections[ticker] = (
+                    f"mkt_cap ${mkt_cap:,.0f} < ${self.gates['min_market_cap']:,.0f}"
+                )
                 continue
             if history_len < self.gates["min_history_days"]:
-                rejections[ticker] = f"history {history_len}d < {self.gates['min_history_days']}d"
+                rejections[ticker] = (
+                    f"history {history_len}d < {self.gates['min_history_days']}d"
+                )
                 continue
             if ticker in blackout_tickers:
                 rejections[ticker] = "earnings_blackout"
@@ -151,13 +167,16 @@ class UniverseFilter:
             f"Universe filter: {len(universe)} → {len(clean)} "
             f"({len(rejections)} rejected)"
         )
-        self._rejection_log = [{"ticker": t, "reason": r} for t, r in rejections.items()]
+        self._rejection_log = [
+            {"ticker": t, "reason": r} for t, r in rejections.items()
+        ]
         return clean, rejections
 
 
 # ═══════════════════════════════════════════════════════════════════════
 # SCORE UNIFICATION
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class ScoreUnifier:
     """
@@ -176,10 +195,13 @@ class ScoreUnifier:
             "signal_score_0_100": score,
             "ai_score_0_10": round(score / 10, 1),
             "confidence_bucket": (
-                "HIGH" if score >= 80 else
-                "GOOD" if score >= 65 else
-                "MODERATE" if score >= 50 else
-                "LOW"
+                "HIGH"
+                if score >= 80
+                else "GOOD"
+                if score >= 65
+                else "MODERATE"
+                if score >= 50
+                else "LOW"
             ),
             "display_bar": "█" * (score // 10) + "░" * (10 - score // 10),
         }
@@ -212,6 +234,7 @@ class ScoreUnifier:
 # ═══════════════════════════════════════════════════════════════════════
 # EDGE CHECKLIST
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class EdgeChecklist:
     """
@@ -276,7 +299,10 @@ class EdgeChecklist:
         if calendar_events:
             today = date.today()
             for ev in calendar_events:
-                if ev.get("event_type") == "earnings" and ev.get("ticker") == signal.ticker:
+                if (
+                    ev.get("event_type") == "earnings"
+                    and ev.get("ticker") == signal.ticker
+                ):
                     ev_date = ev.get("event_date")
                     if isinstance(ev_date, str):
                         ev_date = date.fromisoformat(ev_date)
@@ -285,8 +311,14 @@ class EdgeChecklist:
                         break
 
         # R:R validation
-        stop_dist = abs(signal.entry_price - signal.invalidation.stop_price) if signal.invalidation else 0
-        target_dist = abs(signal.targets[0].price - signal.entry_price) if signal.targets else 0
+        stop_dist = (
+            abs(signal.entry_price - signal.invalidation.stop_price)
+            if signal.invalidation
+            else 0
+        )
+        target_dist = (
+            abs(signal.targets[0].price - signal.entry_price) if signal.targets else 0
+        )
         rr_ratio = target_dist / stop_dist if stop_dist > 0 else 0
 
         # ATR check: is stop too tight?
@@ -316,6 +348,7 @@ class EdgeChecklist:
 # SIGNAL DEDUP + CONFLICT RESOLUTION
 # ═══════════════════════════════════════════════════════════════════════
 
+
 class SignalDedup:
     """Prevent duplicate and conflicting signals."""
 
@@ -332,6 +365,7 @@ class SignalDedup:
         keep the higher-confidence one and log the resolution.
         """
         from collections import defaultdict
+
         by_ticker: Dict[str, List[Signal]] = defaultdict(list)
         for s in signals:
             by_ticker[s.ticker].append(s)
@@ -351,23 +385,34 @@ class SignalDedup:
                 winner = max(group, key=lambda s: s.confidence)
                 losers = [s for s in group if s is not winner]
                 kept.append(winner)
-                resolutions.append({
-                    "ticker": ticker,
-                    "kept": f"{winner.strategy_id}:{winner.direction.value} (conf={winner.confidence})",
-                    "dropped": [f"{s.strategy_id}:{s.direction.value} (conf={s.confidence})" for s in losers],
-                    "reason": "direction_conflict",
-                })
+                resolutions.append(
+                    {
+                        "ticker": ticker,
+                        "kept": f"{winner.strategy_id}:{winner.direction.value} (conf={winner.confidence})",
+                        "dropped": [
+                            f"{s.strategy_id}:{s.direction.value} (conf={s.confidence})"
+                            for s in losers
+                        ],
+                        "reason": "direction_conflict",
+                    }
+                )
             else:
                 # Same direction: keep highest confidence
                 winner = max(group, key=lambda s: s.confidence)
                 kept.append(winner)
                 if len(group) > 1:
-                    resolutions.append({
-                        "ticker": ticker,
-                        "kept": f"{winner.strategy_id} (conf={winner.confidence})",
-                        "dropped": [f"{s.strategy_id} (conf={s.confidence})" for s in group if s is not winner],
-                        "reason": "duplicate_same_direction",
-                    })
+                    resolutions.append(
+                        {
+                            "ticker": ticker,
+                            "kept": f"{winner.strategy_id} (conf={winner.confidence})",
+                            "dropped": [
+                                f"{s.strategy_id} (conf={s.confidence})"
+                                for s in group
+                                if s is not winner
+                            ],
+                            "reason": "duplicate_same_direction",
+                        }
+                    )
 
         return kept, resolutions
 
@@ -396,7 +441,9 @@ class SignalCooldown:
         self._history: Dict[str, Dict[str, datetime]] = {}
 
     def is_allowed(
-        self, ticker: str, direction: str,
+        self,
+        ticker: str,
+        direction: str,
     ) -> Tuple[bool, str]:
         """Check if a signal is allowed given cooldown rules.
 
@@ -419,9 +466,7 @@ class SignalCooldown:
                 )
 
         # Rule 2: opposite direction anti-flip
-        opposite = (
-            "SHORT" if direction == "LONG" else "LONG"
-        )
+        opposite = "SHORT" if direction == "LONG" else "LONG"
         flip_ts = prev.get(opposite)
         if flip_ts:
             elapsed = (now - flip_ts).total_seconds() / 3600
@@ -442,7 +487,8 @@ class SignalCooldown:
         self._history[ticker][direction] = now
 
     def filter_signals(
-        self, signals: List[Signal],
+        self,
+        signals: List[Signal],
     ) -> Tuple[List[Signal], List[Dict]]:
         """Filter a batch of signals, returning kept + log."""
         kept: List[Signal] = []
@@ -450,16 +496,19 @@ class SignalCooldown:
         for sig in signals:
             _dir = sig.direction.value
             allowed, reason = self.is_allowed(
-                sig.ticker, _dir,
+                sig.ticker,
+                _dir,
             )
             if allowed:
                 kept.append(sig)
             else:
-                blocked.append({
-                    "ticker": sig.ticker,
-                    "direction": _dir,
-                    "reason": reason,
-                })
+                blocked.append(
+                    {
+                        "ticker": sig.ticker,
+                        "direction": _dir,
+                        "reason": reason,
+                    }
+                )
         return kept, blocked
 
     def record_batch(self, signals: List[Signal]):
@@ -471,7 +520,8 @@ class SignalCooldown:
         """Purge entries older than max(cooldown, anti_flip)."""
         now = datetime.now(timezone.utc)
         max_h = max(
-            self.cooldown_hours, self.anti_flip_hours,
+            self.cooldown_hours,
+            self.anti_flip_hours,
         )
         cutoff = now - timedelta(hours=max_h)
         for ticker in list(self._history):
@@ -497,7 +547,7 @@ class RegimeDetector:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         try:
-            from src.engines.regime_router import RegimeRouter, RegimeState
+            from src.engines.regime_router import RegimeRouter
 
             self._router = RegimeRouter()
         except Exception:
@@ -513,37 +563,31 @@ class RegimeDetector:
         # ── Try canonical RegimeRouter first ────────────────
         if self._router is not None:
             try:
-                rs = self._router.classify({
-                    "vix": market_data.get("vix", 20),
-                    "spy_return_20d": market_data.get(
-                        "spx_change_pct", 0
-                    ) / 100,
-                    "breadth_pct": market_data.get(
-                        "pct_above_sma50", 50
-                    ) / 100,
-                    "hy_spread": market_data.get(
-                        "hy_spread", 350
-                    ) / 1000,
-                    "realized_vol_20d": market_data.get(
-                        "realized_vol_20d", 0.15
-                    ),
-                    "vix_term_slope": market_data.get(
-                        "vix_term_structure", 1.0
-                    ) - 1.0,
-                })
+                rs = self._router.classify(
+                    {
+                        "vix": market_data.get("vix", 20),
+                        "spy_return_20d": market_data.get("spx_change_pct", 0) / 100,
+                        "breadth_pct": market_data.get("pct_above_sma50", 50) / 100,
+                        "hy_spread": market_data.get("hy_spread", 350) / 1000,
+                        "realized_vol_20d": market_data.get("realized_vol_20d", 0.15),
+                        "vix_term_slope": market_data.get("vix_term_structure", 1.0)
+                        - 1.0,
+                    }
+                )
                 return self._regime_state_to_market(
-                    rs, market_data,
+                    rs,
+                    market_data,
                 )
             except Exception as e:
-                self.logger.warning(
-                    "RegimeRouter fallback: %s", e
-                )
+                self.logger.warning("RegimeRouter fallback: %s", e)
 
         # ── Legacy fallback ─────────────────────────────────
         return self._legacy_detect(market_data)
 
     def _regime_state_to_market(
-        self, rs, market_data,
+        self,
+        rs,
+        market_data,
     ) -> MarketRegime:
         """Map canonical RegimeState → legacy MarketRegime."""
         # Volatility
@@ -555,7 +599,8 @@ class RegimeDetector:
             "crisis_vol": VolatilityRegime.CRISIS,
         }
         vol_regime = vol_map.get(
-            rs.volatility_regime, VolatilityRegime.NORMAL,
+            rs.volatility_regime,
+            VolatilityRegime.NORMAL,
         )
 
         # Trend
@@ -565,7 +610,8 @@ class RegimeDetector:
             "sideways": TrendRegime.NEUTRAL,
         }
         trend_regime = trend_map.get(
-            rs.trend_regime, TrendRegime.NEUTRAL,
+            rs.trend_regime,
+            TrendRegime.NEUTRAL,
         )
 
         # Risk
@@ -575,12 +621,15 @@ class RegimeDetector:
             "neutral": RiskRegime.NEUTRAL,
         }
         risk_regime = risk_map.get(
-            rs.risk_regime, RiskRegime.NEUTRAL,
+            rs.risk_regime,
+            RiskRegime.NEUTRAL,
         )
 
         # Get strategy weights from the canonical source
         strategy_weights = self._get_active_strategies(
-            vol_regime, trend_regime, risk_regime,
+            vol_regime,
+            trend_regime,
+            risk_regime,
         )
 
         # If RegimeRouter says no trade, return empty
@@ -588,10 +637,11 @@ class RegimeDetector:
             strategy_weights = {}
 
         self.logger.info(
-            "Regime (unified): vol=%s, trend=%s, "
-            "risk=%s, strategies=%s",
-            vol_regime.value, trend_regime.value,
-            risk_regime.value, list(strategy_weights),
+            "Regime (unified): vol=%s, trend=%s, risk=%s, strategies=%s",
+            vol_regime.value,
+            trend_regime.value,
+            risk_regime.value,
+            list(strategy_weights),
         )
 
         mr = MarketRegime(
@@ -607,13 +657,14 @@ class RegimeDetector:
         return mr
 
     def _legacy_detect(
-        self, market_data: Dict[str, Any],
+        self,
+        market_data: Dict[str, Any],
     ) -> MarketRegime:
         """Original hard-threshold detection as fallback."""
-        vix = market_data.get('vix', 20)
-        vix_term = market_data.get('vix_term_structure', 1.0)
-        pct_above_50 = market_data.get('pct_above_sma50', 50)
-        hy_spread = market_data.get('hy_spread', 350)
+        vix = market_data.get("vix", 20)
+        vix_term = market_data.get("vix_term_structure", 1.0)
+        pct_above_50 = market_data.get("pct_above_sma50", 50)
+        hy_spread = market_data.get("hy_spread", 350)
 
         # Volatility regime
         if vix > 35:
@@ -646,7 +697,9 @@ class RegimeDetector:
             risk_regime = RiskRegime.NEUTRAL
 
         # Determine active strategies
-        strategy_weights = self._get_active_strategies(vol_regime, trend_regime, risk_regime)
+        strategy_weights = self._get_active_strategies(
+            vol_regime, trend_regime, risk_regime
+        )
         active_strategies = list(strategy_weights.keys())
 
         self.logger.info(
@@ -664,14 +717,11 @@ class RegimeDetector:
         )
 
     def _get_active_strategies(
-        self, 
-        vol: VolatilityRegime, 
-        trend: TrendRegime, 
-        risk: RiskRegime
+        self, vol: VolatilityRegime, trend: TrendRegime, risk: RiskRegime
     ) -> Dict[str, float]:
         """
         Map regime to active strategies with confidence weights.
-        
+
         Returns:
             Dict mapping strategy_id -> weight (0.0-1.0).
             Higher weight = more regime-appropriate = higher position sizing.
@@ -736,36 +786,42 @@ class RiskModel:
     """
     Portfolio-level risk management.
     """
-    
+
     def __init__(self, config: Optional[Dict] = None):
         trading_config = get_trading_config()
         config = config or {}
-        self.max_position_pct = config.get('max_position_pct', trading_config.max_position_pct)
-        self.max_sector_pct = config.get('max_sector_pct', trading_config.max_sector_pct)
-        self.max_correlation = config.get('max_correlation', trading_config.max_correlation)
-        self.min_confidence = config.get('min_confidence', trading_config.min_confidence)
+        self.max_position_pct = config.get(
+            "max_position_pct", trading_config.max_position_pct
+        )
+        self.max_sector_pct = config.get(
+            "max_sector_pct", trading_config.max_sector_pct
+        )
+        self.max_correlation = config.get(
+            "max_correlation", trading_config.max_correlation
+        )
+        self.min_confidence = config.get(
+            "min_confidence", trading_config.min_confidence
+        )
         self.logger = logging.getLogger(__name__)
-    
+
     def filter_and_size(
-        self, 
-        signals: List[Signal], 
-        portfolio: Optional[Dict] = None
+        self, signals: List[Signal], portfolio: Optional[Dict] = None
     ) -> List[Signal]:
         """
         Apply risk filters and calculate position sizes.
-        
+
         Args:
             signals: Raw signals from strategies
             portfolio: Current portfolio state (positions, cash, etc.)
-        
+
         Returns:
             Filtered and sized signals
         """
         portfolio = portfolio or {}
-        
+
         # Filter by minimum confidence
         signals = [s for s in signals if s.confidence >= self.min_confidence]
-        
+
         # Filter out duplicates (same ticker from different strategies)
         seen_tickers = set()
         unique_signals = []
@@ -773,39 +829,40 @@ class RiskModel:
             if signal.ticker not in seen_tickers:
                 seen_tickers.add(signal.ticker)
                 unique_signals.append(signal)
-        
+
         signals = unique_signals
-        
+
         # Filter out existing positions — use positions_by_ticker (dict)
         # with fallback to positions (may be list or dict)
-        pos_raw = portfolio.get('positions_by_ticker',
-                                portfolio.get('positions', {}))
+        pos_raw = portfolio.get("positions_by_ticker", portfolio.get("positions", {}))
         if isinstance(pos_raw, dict):
             existing_positions = set(pos_raw.keys())
         elif isinstance(pos_raw, list):
             existing_positions = {
-                getattr(p, 'ticker', getattr(p, 'symbol', ''))
+                getattr(p, "ticker", getattr(p, "symbol", ""))
                 if not isinstance(p, dict)
-                else p.get('ticker', p.get('symbol', ''))
+                else p.get("ticker", p.get("symbol", ""))
                 for p in pos_raw
             }
         else:
             existing_positions = set()
         signals = [s for s in signals if s.ticker not in existing_positions]
-        
+
         # Calculate position sizes
         for signal in signals:
             signal.position_size_pct = self._calculate_position_size(signal, portfolio)
-        
+
         # Filter out signals with 0 position size
         signals = [s for s in signals if (s.position_size_pct or 0) > 0]
-        
+
         self.logger.info(f"Risk model: {len(signals)} signals passed filters")
-        
+
         return signals
-    
+
     def _calculate_position_size(
-        self, signal: Signal, portfolio: Dict,
+        self,
+        signal: Signal,
+        portfolio: Dict,
     ) -> float:
         """Calculate position size based on risk parameters.
 
@@ -813,20 +870,17 @@ class RiskModel:
         (p_t1, risk_reward_ratio) is available on the signal,
         otherwise falls back to confidence-scaled risk sizing.
         """
-        equity = portfolio.get('equity', 100000)
+        portfolio.get("equity", 100000)
         risk_per_trade = portfolio.get(
-            'risk_per_trade', 0.01,
+            "risk_per_trade",
+            0.01,
         )  # Configurable, default 1%
 
         # Risk-based sizing
         if signal.invalidation.stop_price and signal.entry_price:
-            stop_distance = abs(
-                signal.entry_price
-                - signal.invalidation.stop_price
-            )
+            stop_distance = abs(signal.entry_price - signal.invalidation.stop_price)
             stop_pct = (
-                stop_distance / signal.entry_price
-                if signal.entry_price > 0 else 0.05
+                stop_distance / signal.entry_price if signal.entry_price > 0 else 0.05
             )
 
             if stop_pct > 0:
@@ -839,15 +893,14 @@ class RiskModel:
         # ── Half-Kelly overlay ──────────────────────────────
         # If EdgeCalculator data is on the signal, use Kelly
         # fraction to scale position (conservative half-Kelly).
-        edge_pwin = getattr(signal, 'edge_p_t1', 0)
+        edge_pwin = getattr(signal, "edge_p_t1", 0)
         edge_rr = getattr(
-            signal, 'risk_reward_ratio',
-            getattr(signal, 'edge_rr', 0),
+            signal,
+            "risk_reward_ratio",
+            getattr(signal, "edge_rr", 0),
         )
         if edge_pwin > 0 and edge_rr > 0:
-            kelly_f = (
-                edge_pwin - (1.0 - edge_pwin) / edge_rr
-            )
+            kelly_f = edge_pwin - (1.0 - edge_pwin) / edge_rr
             kelly_f = max(kelly_f, 0.0)
             kelly_mult = min(kelly_f * 0.5, 1.0)
             kelly_mult = max(kelly_mult, 0.25) if kelly_mult > 0 else 0.25
@@ -859,8 +912,8 @@ class RiskModel:
 
         # Volatility adjustment: reduce size in high vol
         vol_factor = 1.0
-        if hasattr(signal, 'metadata') and signal.metadata:
-            atr_pct = signal.metadata.get('atr_pct', 0.02)
+        if hasattr(signal, "metadata") and signal.metadata:
+            atr_pct = signal.metadata.get("atr_pct", 0.02)
             if atr_pct > 0.04:
                 vol_factor = 0.6
             elif atr_pct > 0.03:
@@ -875,7 +928,7 @@ class RiskModel:
 class SignalEngine:
     """
     Main signal generation pipeline (v6 — Pro Desk).
-    
+
     Orchestrates:
     0.  Data quality gates (reject stale/bad data)
     1.  Universe quality filter (hard gates)
@@ -893,7 +946,7 @@ class SignalEngine:
     """
 
     def __init__(
-        self, 
+        self,
         strategies: Optional[List[BaseStrategy]] = None,
         regime_detector: Optional[RegimeDetector] = None,
         risk_model: Optional[RiskModel] = None,
@@ -925,6 +978,7 @@ class SignalEngine:
     def _get_data_quality_gate(self):
         if self._data_quality_gate is None:
             from src.engines.data_quality import DataQualityGate
+
             self._data_quality_gate = DataQualityGate()
         return self._data_quality_gate
 
@@ -949,7 +1003,7 @@ class SignalEngine:
     ) -> List[Signal]:
         """
         Main signal generation pipeline (v6).
-        
+
         Args:
             universe: List of tickers to consider
             features: Pre-computed features DataFrame
@@ -959,7 +1013,7 @@ class SignalEngine:
             corporate_actions: Recent splits/dividends/mergers
             yesterday_market_data: Yesterday's market data for delta tracking
             week_ago_market_data: Week-ago market data for delta tracking
-        
+
         Returns:
             List of validated, sized, deduplicated signals with v6 fields
         """
@@ -969,21 +1023,14 @@ class SignalEngine:
             dq_passed, dq_reports = dq_gate.run_all_checks(market_data)
             self._last_data_quality = dq_reports
             if not dq_passed:
-                critical = [r for r in dq_reports
-                            if r.severity == "critical"
-                            and not r.passed]
-                reasons = "; ".join(
-                    f"{r.feed_name}:{r.check_type}"
-                    for r in critical
-                )
-                self.logger.warning(
-                    f"🚫 Data quality gate FAILED: {reasons}"
-                )
+                critical = [
+                    r for r in dq_reports if r.severity == "critical" and not r.passed
+                ]
+                reasons = "; ".join(f"{r.feed_name}:{r.check_type}" for r in critical)
+                self.logger.warning(f"🚫 Data quality gate FAILED: {reasons}")
                 return []
         except Exception as e:
-            self.logger.warning(
-                f"Data quality check error (continuing): {e}"
-            )
+            self.logger.warning(f"Data quality check error (continuing): {e}")
             self._last_data_quality = None
 
         # ── 0. Universe quality filter ──────────────────────────
@@ -1012,9 +1059,7 @@ class SignalEngine:
 
         if not regime.should_trade:
             self.logger.warning("Regime indicates no trading")
-            self._last_market_state["no_trade_reason"] = (
-                "regime_no_trade"
-            )
+            self._last_market_state["no_trade_reason"] = "regime_no_trade"
             return []
 
         # ── 2b. Build delta snapshot + scoreboard (v6) ─────────
@@ -1025,22 +1070,16 @@ class SignalEngine:
                 yesterday=yesterday_market_data or {},
                 week_ago=week_ago_market_data or {},
             )
-            bull, bear = dt.classify_changes(
-                self._last_delta_snapshot
-            )
+            bull, bear = dt.classify_changes(self._last_delta_snapshot)
             self._last_bullish_changes = bull
             self._last_bearish_changes = bear
-            self._last_scoreboard = sb_builder.build(
-                regime, market_data
-            )
+            self._last_scoreboard = sb_builder.build(regime, market_data)
             self.logger.info(
                 f"Scoreboard: {self._last_scoreboard.regime_label} "
                 f"| budget={self._last_scoreboard.risk_budget_pct}%"
             )
         except Exception as e:
-            self.logger.warning(
-                f"Delta/scoreboard build error (continuing): {e}"
-            )
+            self.logger.warning(f"Delta/scoreboard build error (continuing): {e}")
             self._last_delta_snapshot = None
             self._last_scoreboard = None
 
@@ -1053,14 +1092,11 @@ class SignalEngine:
                         clean_universe, features, market_data
                     )
                     self.logger.info(
-                        f"Strategy {strategy.STRATEGY_ID}: "
-                        f"{len(signals)} signals"
+                        f"Strategy {strategy.STRATEGY_ID}: {len(signals)} signals"
                     )
                     raw_signals.extend(signals)
                 except Exception as e:
-                    self.logger.error(
-                        f"Error in strategy {strategy.STRATEGY_ID}: {e}"
-                    )
+                    self.logger.error(f"Error in strategy {strategy.STRATEGY_ID}: {e}")
 
         self.logger.info(f"Total raw signals: {len(raw_signals)}")
         if not raw_signals:
@@ -1070,27 +1106,19 @@ class SignalEngine:
         for sig in raw_signals:
             try:
                 feat_row = self._get_feature_row(sig.ticker, features)
-                checklist = EdgeChecklist.build(
-                    sig, feat_row, regime, calendar_events
-                )
+                checklist = EdgeChecklist.build(sig, feat_row, regime, calendar_events)
                 sig.feature_snapshot = sig.feature_snapshot or {}
                 sig.feature_snapshot["edge_checklist"] = checklist
-                sig.feature_snapshot["setup_tags"] = (
-                    checklist["setup_tags"]
-                )
-                sig.feature_snapshot["regime_at_signal"] = (
-                    checklist["regime_at_signal"]
-                )
-                sig.feature_snapshot["earnings_risk_days"] = (
-                    checklist["earnings_risk_days"]
-                )
-                sig.feature_snapshot["dollar_volume_20d"] = (
-                    checklist["dollar_volume_20d"]
-                )
+                sig.feature_snapshot["setup_tags"] = checklist["setup_tags"]
+                sig.feature_snapshot["regime_at_signal"] = checklist["regime_at_signal"]
+                sig.feature_snapshot["earnings_risk_days"] = checklist[
+                    "earnings_risk_days"
+                ]
+                sig.feature_snapshot["dollar_volume_20d"] = checklist[
+                    "dollar_volume_20d"
+                ]
             except Exception as e:
-                self.logger.warning(
-                    f"Edge checklist error for {sig.ticker}: {e}"
-                )
+                self.logger.warning(f"Edge checklist error for {sig.ticker}: {e}")
 
         # ── 5. Score unification ───────────────────────────────
         for sig in raw_signals:
@@ -1103,9 +1131,7 @@ class SignalEngine:
                 sig.confidence,
             )
             if cal_wr is not None:
-                sig.feature_snapshot["calibrated_win_rate"] = (
-                    round(cal_wr, 4)
-                )
+                sig.feature_snapshot["calibrated_win_rate"] = round(cal_wr, 4)
 
         # ── 5b. 4D Confidence Engine (per signal) ─────────────
         # Uses real SectorClassifier + FitScorer data instead of
@@ -1143,10 +1169,14 @@ class SignalEngine:
                         "trend_structure": feat_row.get("trend_structure", ""),
                         "is_extended": feat_row.get("is_extended", False),
                         "volume_exhaustion": feat_row.get("volume_exhaustion", False),
-                        "distance_from_50ma_pct": feat_row.get("distance_from_50ma_pct", 0.0),
+                        "distance_from_50ma_pct": feat_row.get(
+                            "distance_from_50ma_pct", 0.0
+                        ),
                         "base_depth_pct": feat_row.get("base_depth_pct", 0.0),
                     }
-                    sector_ctx = sector_classifier.classify(sig.ticker, signal_for_sector)
+                    sector_ctx = sector_classifier.classify(
+                        sig.ticker, signal_for_sector
+                    )
 
                     # Real FitScores from FitScorer
                     signal_for_fit = {
@@ -1178,9 +1208,7 @@ class SignalEngine:
                     sig.feature_snapshot = sig.feature_snapshot or {}
                     sig.feature_snapshot["confidence_4d"] = cb.to_dict()
                 except Exception as e:
-                    self.logger.debug(
-                        f"4D confidence error for {sig.ticker}: {e}"
-                    )
+                    self.logger.debug(f"4D confidence error for {sig.ticker}: {e}")
         except ImportError:
             self.logger.debug("ConfidenceEngine not available — skipping 4D confidence")
 
@@ -1220,7 +1248,8 @@ class SignalEngine:
                         "rsi": feat_row.get("rsi_14", feat_row.get("rsi", 50)),
                         # 5-day history for accumulation/distribution layer
                         "volume_5d": [
-                            feat_row.get(f"volume_{d}d", volume) for d in range(5, 0, -1)
+                            feat_row.get(f"volume_{d}d", volume)
+                            for d in range(5, 0, -1)
                         ],
                         "close_5d": [
                             feat_row.get(f"close_{d}d", close) for d in range(5, 0, -1)
@@ -1230,40 +1259,29 @@ class SignalEngine:
                     sig.feature_snapshot = sig.feature_snapshot or {}
                     sig.feature_snapshot["flow_intelligence"] = profile.to_dict()
                 except Exception as e:
-                    self.logger.debug(
-                        f"Flow intelligence error for {sig.ticker}: {e}"
-                    )
+                    self.logger.debug(f"Flow intelligence error for {sig.ticker}: {e}")
         except ImportError:
-            self.logger.debug("FlowIntelligenceEngine not available — skipping flow analysis")
+            self.logger.debug(
+                "FlowIntelligenceEngine not available — skipping flow analysis"
+            )
 
         # ── 6. Dedup + conflict resolution ─────────────────────
-        deduped_signals, resolutions = (
-            self.dedup.resolve_conflicts(raw_signals)
-        )
+        deduped_signals, resolutions = self.dedup.resolve_conflicts(raw_signals)
         if resolutions:
-            self.logger.info(
-                f"Conflict resolutions: {len(resolutions)}"
-            )
+            self.logger.info(f"Conflict resolutions: {len(resolutions)}")
             for r in resolutions:
                 self.logger.info(
-                    f"  {r['ticker']}: kept {r['kept']}, "
-                    f"dropped {r['dropped']}"
+                    f"  {r['ticker']}: kept {r['kept']}, dropped {r['dropped']}"
                 )
 
         for sig in deduped_signals:
             sig.feature_snapshot = sig.feature_snapshot or {}
-            sig.feature_snapshot["dedupe_key"] = (
-                self.dedup.dedupe_key(sig)
-            )
+            sig.feature_snapshot["dedupe_key"] = self.dedup.dedupe_key(sig)
 
         # ── 7. Risk model filter + sizing ──────────────────────
-        filtered_signals = self.risk_model.filter_and_size(
-            deduped_signals, portfolio
-        )
+        filtered_signals = self.risk_model.filter_and_size(deduped_signals, portfolio)
 
-        self.logger.info(
-            f"Filtered signals: {len(filtered_signals)}"
-        )
+        self.logger.info(f"Filtered signals: {len(filtered_signals)}")
 
         # ── 8. Sort + limit ────────────────────────────────────
         filtered_signals = sorted(
@@ -1278,29 +1296,21 @@ class SignalEngine:
 
         # -- 8b. Regime-based signal throttle ---------------------
         regime_state = (
-            regime.trend.value
-            if hasattr(regime, 'trend')
-            else 'neutral_consolidation'
+            regime.trend.value if hasattr(regime, "trend") else "neutral_consolidation"
         )
-        filtered_signals = self.regime_throttle.apply(
-            filtered_signals, regime_state
-        )
-        regime_warning = self.regime_throttle.get_regime_warning(
-            regime_state
-        )
+        filtered_signals = self.regime_throttle.apply(filtered_signals, regime_state)
+        regime_warning = self.regime_throttle.get_regime_warning(regime_state)
         if regime_warning:
             self.logger.info(f"Regime warning: {regime_warning}")
             if self._last_market_state:
-                self._last_market_state["regime_warning"] = (
-                    regime_warning
-                )
+                self._last_market_state["regime_warning"] = regime_warning
 
         # ── 9. Insight enrichment (v5) ─────────────────────────
         try:
             features_by_ticker = {}
             for sig in filtered_signals:
-                features_by_ticker[sig.ticker] = (
-                    self._get_feature_row(sig.ticker, features)
+                features_by_ticker[sig.ticker] = self._get_feature_row(
+                    sig.ticker, features
                 )
             self._last_insights = self.insight_engine.generate_insights(
                 signals=filtered_signals,
@@ -1311,29 +1321,23 @@ class SignalEngine:
                 calendar_events=calendar_events,
                 yesterday_regime=(
                     self._last_market_state.get("yesterday_regime")
-                    if self._last_market_state else None
+                    if self._last_market_state
+                    else None
                 ),
             )
-            trade_briefs = self._last_insights.get(
-                "trade_briefs", []
-            )
+            trade_briefs = self._last_insights.get("trade_briefs", [])
             for sig, brief in zip(filtered_signals, trade_briefs):
                 sig.feature_snapshot = sig.feature_snapshot or {}
                 sig.feature_snapshot["edge_model"] = (
-                    brief.edge_model.model_dump()
-                    if brief.edge_model else {}
+                    brief.edge_model.model_dump() if brief.edge_model else {}
                 )
                 sig.feature_snapshot["execution_plan"] = (
-                    brief.execution_plan.model_dump()
-                    if brief.execution_plan else {}
+                    brief.execution_plan.model_dump() if brief.execution_plan else {}
                 )
                 sig.feature_snapshot["risk_plan"] = (
-                    brief.risk_plan.model_dump()
-                    if brief.risk_plan else {}
+                    brief.risk_plan.model_dump() if brief.risk_plan else {}
                 )
-                sig.feature_snapshot["trade_brief"] = (
-                    brief.model_dump()
-                )
+                sig.feature_snapshot["trade_brief"] = brief.model_dump()
         except Exception as e:
             self.logger.error(
                 f"InsightEngine enrichment failed: {e}",
@@ -1344,8 +1348,12 @@ class SignalEngine:
 
         # ── 10. Populate Signal v6 fields (pro desk) ──────────
         self._populate_v6_fields(
-            filtered_signals, trade_briefs, regime,
-            features, calendar_events, portfolio,
+            filtered_signals,
+            trade_briefs,
+            regime,
+            features,
+            calendar_events,
+            portfolio,
         )
 
         return filtered_signals
@@ -1370,19 +1378,15 @@ class SignalEngine:
 
         for sig in signals:
             try:
-                checklist = (
-                    (sig.feature_snapshot or {})
-                    .get("edge_checklist", {})
-                )
+                checklist = (sig.feature_snapshot or {}).get("edge_checklist", {})
                 tb = brief_map.get(sig.ticker)
                 edge = tb.edge_model if tb else None
-                rp = tb.risk_plan if tb else None
 
                 # setup_grade: A/B/C/D based on tag count + regime
                 tag_count = len(checklist.get("setup_tags", []))
-                regime_ok = checklist.get(
-                    "regime_at_signal", {}
-                ).get("risk", "") != "RISK_OFF"
+                regime_ok = (
+                    checklist.get("regime_at_signal", {}).get("risk", "") != "RISK_OFF"
+                )
                 if tag_count >= 5 and regime_ok:
                     sig.setup_grade = "A"
                 elif tag_count >= 3 and regime_ok:
@@ -1407,18 +1411,14 @@ class SignalEngine:
 
                 # time_stop_days from edge model
                 if edge:
-                    sig.time_stop_days = (
-                        edge.expected_holding_days
-                    )
+                    sig.time_stop_days = edge.expected_holding_days
                 else:
                     sig.time_stop_days = 5
 
                 # event_risk
                 earn_days = checklist.get("earnings_risk_days")
                 if earn_days is not None and earn_days <= 5:
-                    sig.event_risk = (
-                        f"Earnings in {earn_days}d"
-                    )
+                    sig.event_risk = f"Earnings in {earn_days}d"
                 else:
                     sig.event_risk = None
 
@@ -1434,15 +1434,18 @@ class SignalEngine:
 
                 # portfolio_fit
                 if portfolio:
-                    existing = set(
-                        portfolio.get("positions", {}).keys()
-                    )
+                    existing = set(portfolio.get("positions", {}).keys())
                     sector = (sig.metadata or {}).get("sector", "")
-                    same_sector = sum(
-                        1 for p in existing
-                        if portfolio.get("positions", {})
-                        .get(p, {}).get("sector") == sector
-                    ) if sector else 0
+                    same_sector = (
+                        sum(
+                            1
+                            for p in existing
+                            if portfolio.get("positions", {}).get(p, {}).get("sector")
+                            == sector
+                        )
+                        if sector
+                        else 0
+                    )
                     if same_sector >= 3:
                         sig.portfolio_fit = "over_concentrated"
                     elif same_sector >= 2:
@@ -1458,33 +1461,25 @@ class SignalEngine:
                     evidence.append(f"Setup: {tag}")
                 if edge:
                     evidence.append(
-                        f"P(T1)={edge.p_t1*100:.0f}%, "
+                        f"P(T1)={edge.p_t1 * 100:.0f}%, "
                         f"EV={edge.expected_return_pct:+.1f}%"
                     )
                 if checklist.get("rr_ratio"):
-                    evidence.append(
-                        f"R:R={checklist['rr_ratio']:.1f}"
-                    )
+                    evidence.append(f"R:R={checklist['rr_ratio']:.1f}")
                 sig.evidence = evidence
 
                 # expected_value
                 if edge:
-                    sig.expected_value = (
-                        edge.expected_return_pct
-                    )
+                    sig.expected_value = edge.expected_return_pct
 
                 # why_now — compose from regime + catalyst
                 parts = []
                 if self._last_scoreboard:
-                    parts.append(
-                        f"Regime: {self._last_scoreboard.regime_label}"
-                    )
+                    parts.append(f"Regime: {self._last_scoreboard.regime_label}")
                 if tb and tb.catalyst:
                     parts.append(f"Catalyst: {tb.catalyst}")
                 if checklist.get("relative_volume", 1) >= 1.5:
-                    parts.append(
-                        f"Volume {checklist['relative_volume']:.1f}x"
-                    )
+                    parts.append(f"Volume {checklist['relative_volume']:.1f}x")
                 sig.why_now = " | ".join(parts) if parts else None
 
                 # approval_status will be set by GPT validator later
@@ -1493,10 +1488,7 @@ class SignalEngine:
                     sig.approval_status = "conditional"
 
             except Exception as e:
-                self.logger.warning(
-                    f"v6 field population error for "
-                    f"{sig.ticker}: {e}"
-                )
+                self.logger.warning(f"v6 field population error for {sig.ticker}: {e}")
 
     def _get_feature_row(self, ticker: str, features: pd.DataFrame) -> Dict:
         """Extract latest feature row for a ticker."""
@@ -1572,12 +1564,12 @@ class SignalEngine:
         """
         from src.core.risk_limits import RISK
 
-        vix = market_data.get('vix', 20)
-        spx_change = market_data.get('spx_change_pct', 0)
-        is_fomc = market_data.get('is_fomc_day', False)
-        is_quad_witching = market_data.get('is_quad_witching', False)
-        data_fresh = market_data.get('data_fresh', True)
-        data_staleness_seconds = market_data.get('data_staleness_seconds', 0)
+        vix = market_data.get("vix", 20)
+        spx_change = market_data.get("spx_change_pct", 0)
+        is_fomc = market_data.get("is_fomc_day", False)
+        is_quad_witching = market_data.get("is_quad_witching", False)
+        data_fresh = market_data.get("data_fresh", True)
+        data_staleness_seconds = market_data.get("data_staleness_seconds", 0)
 
         # ── Account-level circuit breakers (P2: drawdown + daily loss) ──
         account_drawdown_pct = market_data.get("account_drawdown_pct", 0.0)
@@ -1612,14 +1604,14 @@ class SignalEngine:
                 abs(account_drawdown_pct) < RISK.max_drawdown_pct * 100,
                 "NO_TRADE_max_drawdown",
                 f"Account drawdown {account_drawdown_pct:.1f}% exceeds limit "
-                f"{RISK.max_drawdown_pct*100:.0f}% — trading halted",
+                f"{RISK.max_drawdown_pct * 100:.0f}% — trading halted",
             ),
             # ── Daily loss limit ──
             (
                 daily_pnl_pct > -(RISK.daily_loss_limit_pct * 100),
                 "NO_TRADE_daily_loss",
                 f"Daily loss {daily_pnl_pct:.1f}% exceeds limit "
-                f"{RISK.daily_loss_limit_pct*100:.0f}% — halted for today",
+                f"{RISK.daily_loss_limit_pct * 100:.0f}% — halted for today",
             ),
         ]
 
@@ -1633,14 +1625,14 @@ class SignalEngine:
         if abs(account_drawdown_pct) >= RISK.drawdown_warning_pct * 100:
             self.logger.warning(
                 f"Account drawdown {account_drawdown_pct:.1f}% >= "
-                f"warning level {RISK.drawdown_warning_pct*100:.0f}% — sizing reduced"
+                f"warning level {RISK.drawdown_warning_pct * 100:.0f}% — sizing reduced"
             )
 
         return True, "All checks passed"
 
     def _track_rejection(self, code: str, reason: str):
         """Track rejection reasons for observability."""
-        if not hasattr(self, '_rejection_counts'):
+        if not hasattr(self, "_rejection_counts"):
             self._rejection_counts = {}
 
         self._rejection_counts[code] = self._rejection_counts.get(code, 0) + 1
@@ -1648,58 +1640,68 @@ class SignalEngine:
 
     def get_rejection_stats(self) -> Dict[str, int]:
         """Get rejection reason statistics."""
-        return getattr(self, '_rejection_counts', {})
+        return getattr(self, "_rejection_counts", {})
 
     async def generate_signals_async(
         self,
         universe: List[str],
         features: pd.DataFrame,
         market_data: Dict[str, Any],
-        portfolio: Optional[Dict] = None
+        portfolio: Optional[Dict] = None,
     ) -> List[Signal]:
         """Async version of signal generation."""
         # Run in thread pool to not block
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
-            None,
-            self.generate_signals,
-            universe, features, market_data, portfolio
+            None, self.generate_signals, universe, features, market_data, portfolio
         )
 
 
 class SignalValidator:
     """
     Additional signal validation layer.
-    
+
     Performs sanity checks on generated signals before they're sent out.
     """
-    
+
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-    
+
     def validate_signal(self, signal: Signal) -> tuple[bool, str]:
         """
         Validate a single signal.
-        
+
         Returns:
             (is_valid, reason)
         """
         # Basic price checks
         if signal.entry_price <= 0:
             return False, "Invalid entry price"
-        
-        stop_loss = signal.invalidation.stop_price if hasattr(signal, 'invalidation') else getattr(signal, 'stop_loss', 0)
-        take_profit = signal.targets[0].price if hasattr(signal, 'targets') and signal.targets else getattr(signal, 'take_profit', 0)
-        
+
+        stop_loss = (
+            signal.invalidation.stop_price
+            if hasattr(signal, "invalidation")
+            else getattr(signal, "stop_loss", 0)
+        )
+        take_profit = (
+            signal.targets[0].price
+            if hasattr(signal, "targets") and signal.targets
+            else getattr(signal, "take_profit", 0)
+        )
+
         if stop_loss <= 0:
             return False, "Invalid stop loss"
-        
+
         if take_profit <= 0:
             return False, "Invalid take profit"
-        
+
         # Get direction as string
-        direction = signal.direction.value if hasattr(signal.direction, 'value') else str(signal.direction)
-        
+        direction = (
+            signal.direction.value
+            if hasattr(signal.direction, "value")
+            else str(signal.direction)
+        )
+
         # Direction consistency
         if direction == "LONG":
             if stop_loss >= signal.entry_price:
@@ -1711,32 +1713,32 @@ class SignalValidator:
                 return False, "Stop loss must be above entry for short"
             if take_profit >= signal.entry_price:
                 return False, "Take profit must be below entry for short"
-        
+
         # Risk/Reward ratio check
         risk = abs(signal.entry_price - stop_loss)
         reward = abs(take_profit - signal.entry_price)
-        
+
         if risk > 0:
             rr_ratio = reward / risk
             if rr_ratio < 1.0:
                 return False, f"R:R ratio too low ({rr_ratio:.2f})"
-        
+
         # Confidence check
         confidence = signal.confidence
         if confidence < 0 or confidence > 100:
             return False, f"Invalid confidence: {confidence}"
-        
+
         return True, "Valid"
-    
+
     def validate_signals(self, signals: List[Signal]) -> List[Signal]:
         """Validate a list of signals, returning only valid ones."""
         valid_signals = []
-        
+
         for signal in signals:
             is_valid, reason = self.validate_signal(signal)
             if is_valid:
                 valid_signals.append(signal)
             else:
                 self.logger.warning(f"Signal {signal.ticker} invalid: {reason}")
-        
+
         return valid_signals

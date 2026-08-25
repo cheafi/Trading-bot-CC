@@ -37,8 +37,6 @@ async def live_backtest(
     """
     import asyncio
 
-    import numpy as np
-
     ticker = validate_ticker(ticker)
 
     # Fetch historical data via MarketDataService
@@ -223,9 +221,7 @@ async def live_backtest(
 
         # ── Multi-position tracking ──
         MAX_POS = 3
-        positions: list = (
-            []
-        )  # [{idx, price, trailing_high, stop_pct, target_pct, max_hold}]
+        positions: list = []  # [{idx, price, trailing_high, stop_pct, target_pct, max_hold}]
         trades: list = []
 
         # ── Execution Cost Model (P1: Backtest Realism) ──
@@ -683,7 +679,7 @@ async def live_backtest(
                         "position": "aboveBar",
                         "color": clr,
                         "shape": "arrowDown",
-                        "text": f"{'+'if t['pnl_pct']>=0 else ''}{t['pnl_pct']:.1f}%",
+                        "text": f"{'+' if t['pnl_pct'] >= 0 else ''}{t['pnl_pct']:.1f}%",
                     }
                 )
 

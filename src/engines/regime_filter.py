@@ -166,11 +166,11 @@ class RegimeFilter:
             parts = []
             if not score_pass:
                 parts.append(
-                    f"Score {adjusted:.2f} < {min_score:.2f} " f"required in {regime}"
+                    f"Score {adjusted:.2f} < {min_score:.2f} required in {regime}"
                 )
             if not grade_pass:
                 parts.append(
-                    f"Grade {setup_grade} below {min_grade} " f"required in {regime}"
+                    f"Grade {setup_grade} below {min_grade} required in {regime}"
                 )
             reason = "; ".join(parts)
 

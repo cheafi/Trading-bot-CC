@@ -1,10 +1,10 @@
 # AlgoStrategyAdapter - bridges src.algo.IStrategy to src.strategies.BaseStrategy
 # Converts DataFrame-centric analyse()/populate_*_trend() to generate_signals() API
 from __future__ import annotations
+
 import logging
-from typing import Any, Dict, List, Optional
 from uuid import uuid4
-import numpy as np
+
 import pandas as pd
 
 from src.core.models import Direction, Horizon, Invalidation, Signal, StopType, Target
@@ -13,9 +13,13 @@ from src.strategies.base import BaseStrategy
 logger = logging.getLogger(__name__)
 
 _HORIZON_LOOKUP = {
-    "1m": Horizon.INTRADAY, "5m": Horizon.INTRADAY, "15m": Horizon.INTRADAY,
-    "30m": Horizon.INTRADAY, "1h": Horizon.INTRADAY,
-    "4h": Horizon.SWING_1_5D, "1d": Horizon.SWING_5_15D,
+    "1m": Horizon.INTRADAY,
+    "5m": Horizon.INTRADAY,
+    "15m": Horizon.INTRADAY,
+    "30m": Horizon.INTRADAY,
+    "1h": Horizon.INTRADAY,
+    "4h": Horizon.SWING_1_5D,
+    "1d": Horizon.SWING_5_15D,
     "1w": Horizon.POSITION_15_60D,
 }
 
@@ -83,7 +87,10 @@ class AlgoStrategyAdapter(BaseStrategy):
         if price <= 0:
             return out
 
-        for col, dirn in [("enter_long", Direction.LONG), ("enter_short", Direction.SHORT)]:
+        for col, dirn in [
+            ("enter_long", Direction.LONG),
+            ("enter_short", Direction.SHORT),
+        ]:
             if last.get(col, 0) != 1:
                 continue
             stop_pct = abs(getattr(self._algo, "stoploss", 0.05))
@@ -103,17 +110,27 @@ class AlgoStrategyAdapter(BaseStrategy):
             rsi = last.get("rsi", 50)
             adx = last.get("adx", 20)
             rv = last.get("relative_volume", last.get("volume_ratio", 1.0))
-            conf = int(min(100, max(30,
-                50 + (10 if adx > 25 else 0)
-                + (5 if 1.2 < rv < 5 else 0)
-                + (5 if dirn == Direction.LONG and 40 < rsi < 70 else 0)
-                + (5 if dirn == Direction.SHORT and 30 < rsi < 60 else 0)
-            )))
+            conf = int(
+                min(
+                    100,
+                    max(
+                        30,
+                        50
+                        + (10 if adx > 25 else 0)
+                        + (5 if 1.2 < rv < 5 else 0)
+                        + (5 if dirn == Direction.LONG and 40 < rsi < 70 else 0)
+                        + (5 if dirn == Direction.SHORT and 30 < rsi < 60 else 0),
+                    ),
+                )
+            )
 
             try:
                 sig = Signal(
-                    id=uuid4(), ticker=ticker, direction=dirn,
-                    horizon=self.HORIZON, entry_price=price,
+                    id=uuid4(),
+                    ticker=ticker,
+                    direction=dirn,
+                    horizon=self.HORIZON,
+                    entry_price=price,
                     invalidation=Invalidation(stop_price=stop, stop_type=StopType.HARD),
                     targets=[
                         Target(price=t1, pct_position=50),
@@ -130,5 +147,7 @@ class AlgoStrategyAdapter(BaseStrategy):
                 )
                 out.append(sig)
             except Exception as exc:
-                logger.warning(f"Signal build failed {ticker}/{self.STRATEGY_ID}: {exc}")
+                logger.warning(
+                    f"Signal build failed {ticker}/{self.STRATEGY_ID}: {exc}"
+                )
         return out

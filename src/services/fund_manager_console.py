@@ -74,11 +74,15 @@ def resolve_fund_regime(
     stale_note = ""
     regime_stale = False
     if fund_lab_sync_ts:
-        age_min = max(0, int((datetime.now(timezone.utc).timestamp() - fund_lab_sync_ts) / 60))
+        age_min = max(
+            0, int((datetime.now(timezone.utc).timestamp() - fund_lab_sync_ts) / 60)
+        )
         if age_min >= 30:
             hh = age_min // 60
             mm = age_min % 60
-            stale_note = f"Fund lab regime snapshot stale (last sync {hh:02d}:{mm:02d} ago)"
+            stale_note = (
+                f"Fund lab regime snapshot stale (last sync {hh:02d}:{mm:02d} ago)"
+            )
             regime_stale = True
     if sleeve_unknown and today_label:
         regime_stale = True
@@ -91,7 +95,9 @@ def resolve_fund_regime(
         "regime_stale_note": stale_note,
         "regime_stale": regime_stale,
         "regime_sync_age_min": (
-            max(0, int((datetime.now(timezone.utc).timestamp() - fund_lab_sync_ts) / 60))
+            max(
+                0, int((datetime.now(timezone.utc).timestamp() - fund_lab_sync_ts) / 60)
+            )
             if fund_lab_sync_ts
             else None
         ),
@@ -194,7 +200,9 @@ def _last_change_summary(card: Dict[str, Any]) -> Dict[str, Any]:
         parts.append(f"Reduced {', '.join(reduces[:3])}")
     return {
         "date": date.today().isoformat(),
-        "summary": " · ".join(parts) if parts else "No position changes vs prior snapshot",
+        "summary": " · ".join(parts)
+        if parts
+        else "No position changes vs prior snapshot",
         "adds": adds,
         "exits": exits,
         "reduces": reduces,
@@ -266,22 +274,23 @@ def build_manager_box(card: Dict[str, Any], regime: str = "") -> Dict[str, Any]:
         "manager_state": card.get("stance") or "NEUTRAL",
         "capital_deployed_pct": deploy_pct,
         "idle_cash_pct": cash_pct,
-        "hedge_pct": 10.0 if card.get("id") == "TACTICAL_DEF" and gs != "PAUSED" else 0.0,
+        "hedge_pct": 10.0
+        if card.get("id") == "TACTICAL_DEF" and gs != "PAUSED"
+        else 0.0,
         "conviction": conviction,
         "reason_code": _REASON_CODES.get(gs, "UNKNOWN"),
         "last_decision": {
-            "date": (card.get("last_rebalance") or {}).get("date") or date.today().isoformat(),
+            "date": (card.get("last_rebalance") or {}).get("date")
+            or date.today().isoformat(),
             "action": gs,
-            "summary": (card.get("last_rebalance") or {}).get("summary", "No change logged"),
+            "summary": (card.get("last_rebalance") or {}).get(
+                "summary", "No change logged"
+            ),
         },
         "decision_reason": card.get("status_reason", ""),
         "next_trigger": card.get("next_trigger", ""),
         "next_action": (
-            "ADD"
-            if gs == "REDUCED"
-            else "HOLD"
-            if gs == "ACTIVE"
-            else "WATCH"
+            "ADD" if gs == "REDUCED" else "HOLD" if gs == "ACTIVE" else "WATCH"
         ),
         "override_condition": (
             "Breadth >50% + VIX <22 → reconsider PAUSED sleeves"
@@ -332,7 +341,11 @@ def build_holdings_overlap(cards: List[Dict[str, Any]]) -> Dict[str, Any]:
             if t:
                 ticker_map.setdefault(t, []).append(name)
     overlaps = [
-        {"ticker": t, "sleeves": names, "severity": "high" if len(names) >= 2 else "low"}
+        {
+            "ticker": t,
+            "sleeves": names,
+            "severity": "high" if len(names) >= 2 else "low",
+        }
         for t, names in ticker_map.items()
         if len(names) >= 2
     ]
@@ -510,7 +523,9 @@ def build_allocator_decision_strip(
     handoff_ready = bool(ex.get("trade_handoff_ready"))
     paper_mode = str(ex.get("paper_or_live") or "paper") != "live"
     portfolio_manual = str(ex.get("portfolio_source") or "manual").lower() == "manual"
-    execution_ready = execution_state in ("basket_ready", "paper_handoff_ready") and handoff_ready
+    execution_ready = (
+        execution_state in ("basket_ready", "paper_handoff_ready") and handoff_ready
+    )
 
     alloc = build_allocation_recommendation(
         cards,
@@ -564,9 +579,13 @@ def build_allocator_decision_strip(
     if not blockers:
         blockers.append("No live-validated sleeve track record — backtest only")
 
-    how_much = alloc.get("tactical_mix_label") or alloc.get("marginal_instruction") or (
-        f"Deployable band {alloc.get('deployable_capital_range', deployable_pct)} · "
-        f"net ~{net_exposure}% · cash {alloc.get('cash_reserve_range', str(cash_pct)+'%')}"
+    how_much = (
+        alloc.get("tactical_mix_label")
+        or alloc.get("marginal_instruction")
+        or (
+            f"Deployable band {alloc.get('deployable_capital_range', deployable_pct)} · "
+            f"net ~{net_exposure}% · cash {alloc.get('cash_reserve_range', str(cash_pct) + '%')}"
+        )
     )
 
     return {
@@ -620,7 +639,11 @@ def build_allocator_decision_strip(
         "regime_display": regime_display,
         "tradeability": tradeability,
         "performance_basis": "Training / backtest only · not live track record",
-        "confidence": 35 if regime_stale or not execution_ready else 50 if only_reduced else 55,
+        "confidence": 35
+        if regime_stale or not execution_ready
+        else 50
+        if only_reduced
+        else 55,
         "reduce_exposure": regime_stale or only_reduced,
     }
 
@@ -640,7 +663,11 @@ def build_allocator_truth_strip(
         if c.get("gate_status") == "ACTIVE"
         and (c.get("evidence_quality") or {}).get("trust_tier") == "live_validated"
     ]
-    research = [c for c in cards if c.get("gate_status") in ("ACTIVE", "REDUCED", "PAUSED", "NO_DATA")]
+    research = [
+        c
+        for c in cards
+        if c.get("gate_status") in ("ACTIVE", "REDUCED", "PAUSED", "NO_DATA")
+    ]
     deploy_pool = [c for c in cards if c.get("gate_status") in ("ACTIVE", "REDUCED")]
     best_partial = deploy_pool[0] if deploy_pool else None
     execution_ready = (
@@ -718,7 +745,8 @@ def build_investable_now_zone(
         "allocation_headline": allocation.get("headline"),
         "allocation_lines": allocation.get("allocation_lines") or [],
         "max_capital_allowed": allocator_truth.get("max_capital_allowed"),
-        "execution_state_label": ex.get("execution_state_label") or ex.get("readiness_label"),
+        "execution_state_label": ex.get("execution_state_label")
+        or ex.get("readiness_label"),
         "execution_ready": allocator_truth.get("execution_ready_label"),
         "truth_headline": allocator_truth.get("headline"),
         "why_not_more": allocator_truth.get("why_not_more") or [],
@@ -755,9 +783,7 @@ def enrich_fund_card(
     out["last_rebalance"] = _last_change_summary(card)
     out["last_change"] = out["last_rebalance"]
     holdings = card.get("holdings") or []
-    out["top_monitored"] = [
-        h.get("ticker") for h in holdings[:4] if h.get("ticker")
-    ]
+    out["top_monitored"] = [h.get("ticker") for h in holdings[:4] if h.get("ticker")]
     gs_upper = (card.get("gate_status") or "").upper()
     if gs_upper in ("REDUCED", "PAUSED"):
         out["upgrade_trigger"] = out.get("next_trigger") or _next_trigger(card, regime)
@@ -789,7 +815,9 @@ def enrich_fund_card(
     bm = float(card.get("benchmark_return_pct") or benchmark_return_pct or 0)
     fr = float(card.get("fund_return_pct") or 0)
     if bm == 0 and fr != 0:
-        out["alpha_warning"] = "Benchmark return unavailable — excess vs SPY not computed"
+        out["alpha_warning"] = (
+            "Benchmark return unavailable — excess vs SPY not computed"
+        )
     else:
         out["alpha_warning"] = None
     risk_meta = _SLEEVE_RISK.get(card.get("id") or "", {})
@@ -816,7 +844,9 @@ def enrich_fund_card(
         },
         "current_book": {
             "top_holdings": [
-                h.get("ticker") for h in (card.get("holdings") or [])[:5] if h.get("ticker")
+                h.get("ticker")
+                for h in (card.get("holdings") or [])[:5]
+                if h.get("ticker")
             ],
             "target_weights": out.get("target_allocation") or [],
             "recent_changes": (out.get("last_rebalance") or {}).get("summary"),
@@ -1020,7 +1050,9 @@ def build_comparison_table(cards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "deployability": c.get("deployability"),
                 "evidence_badge": (c.get("evidence_quality") or {}).get("badge")
                 or c.get("evidence_badge"),
-                "live_trades_count": (c.get("evidence_quality") or {}).get("live_trades_count", 0),
+                "live_trades_count": (c.get("evidence_quality") or {}).get(
+                    "live_trades_count", 0
+                ),
                 "controls_capital": bool(c.get("controls_capital")),
                 "monitor_priority": (
                     "HIGH"
@@ -1128,7 +1160,9 @@ def enrich_execution_readiness_for_funds(
     breaker = bool(ex.get("circuit_breaker"))
     gateway = bool(ex.get("gateway_reachable"))
 
-    rebalance_names = sum(len(c.get("adds") or []) + len(c.get("exits") or []) for c in cards)
+    rebalance_names = sum(
+        len(c.get("adds") or []) + len(c.get("exits") or []) for c in cards
+    )
     estimated_turnover_pct = min(35.0, round(rebalance_names * 2.5, 1))
     estimated_cash_impact_pct = min(25.0, round(estimated_turnover_pct * 0.55, 1))
 
@@ -1153,7 +1187,9 @@ def enrich_execution_readiness_for_funds(
             "can_push_ibkr_label": "Yes" if broker and not breaker else "No",
             "order_basket_ready": rebalance_names > 0 and broker,
             "order_basket_ready_label": (
-                f"Yes · ~{rebalance_names} name(s)" if rebalance_names and broker else "No"
+                f"Yes · ~{rebalance_names} name(s)"
+                if rebalance_names and broker
+                else "No"
             ),
             "bracket_compatible": bracket,
             "bracket_compatible_label": "Yes" if bracket else "No — manual stops",
@@ -1177,7 +1213,9 @@ def build_sleeve_allocator_action(card: Dict[str, Any]) -> Dict[str, Any]:
         action = "OFF"
     return {
         "action": action,
-        "upgrade_condition": card.get("upgrade_trigger") or card.get("next_trigger") or "—",
+        "upgrade_condition": card.get("upgrade_trigger")
+        or card.get("next_trigger")
+        or "—",
         "cut_condition": (
             "VIX >28 or regime RISK_OFF → cut to REDUCED/OFF"
             if gs in ("ACTIVE", "REDUCED")
@@ -1194,7 +1232,9 @@ def build_consensus_matrix(cards: List[Dict[str, Any]]) -> Dict[str, Any]:
         holdings = (c.get("holdings") or [])[:3]
         tickers = [h.get("ticker") for h in holdings if h.get("ticker")]
         short = (c.get("display_name") or c.get("id") or "?").split()[0]
-        by_sleeve.append({"sleeve": short, "top_tickers": tickers, "stance": c.get("stance")})
+        by_sleeve.append(
+            {"sleeve": short, "top_tickers": tickers, "stance": c.get("stance")}
+        )
         for t in tickers:
             ticker_sleeves.setdefault(t.upper(), []).append(short)
 
@@ -1204,8 +1244,11 @@ def build_consensus_matrix(cards: List[Dict[str, Any]]) -> Dict[str, Any]:
     defense = next((c for c in cards if c.get("id") == "TACTICAL_DEF"), None)
     if growth and defense:
         g_top = [h.get("ticker") for h in (growth.get("holdings") or [])[:2]]
-        d_top = [h.get("ticker") for h in (defense.get("holdings") or [])[:2]
-                 if h.get("ticker") not in g_top]
+        d_top = [
+            h.get("ticker")
+            for h in (defense.get("holdings") or [])[:2]
+            if h.get("ticker") not in g_top
+        ]
         if g_top and d_top:
             conflicts.append(
                 f"{growth.get('display_name', 'Leader').split()[0]} prefers "
@@ -1227,11 +1270,17 @@ def build_strength_strips(cards: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Split strongest live deployable vs strongest research-only sleeve."""
     deployable = [c for c in cards if c.get("gate_status") in ("ACTIVE", "REDUCED")]
     research = [c for c in cards if c.get("gate_status") in ("PAUSED", "NO_DATA")]
-    live_best = max(deployable, key=lambda c: c.get("regime_fit") or 0) if deployable else None
-    research_best = max(
-        research,
-        key=lambda c: (c.get("excess_return_pct") or 0, c.get("regime_fit") or 0),
-    ) if research else None
+    live_best = (
+        max(deployable, key=lambda c: c.get("regime_fit") or 0) if deployable else None
+    )
+    research_best = (
+        max(
+            research,
+            key=lambda c: (c.get("excess_return_pct") or 0, c.get("regime_fit") or 0),
+        )
+        if research
+        else None
+    )
     return {
         "strongest_live": (
             {
@@ -1281,8 +1330,11 @@ def build_fund_console_payload(
     regime_ctx = resolve_fund_regime(
         sleeve_regime=regime,
         today_trend=today_trend or market_regime_label.split("·")[0].strip(),
-        today_tradeability=today_tradeability or (
-            market_regime_label.split("·")[1].strip() if "·" in market_regime_label else ""
+        today_tradeability=today_tradeability
+        or (
+            market_regime_label.split("·")[1].strip()
+            if "·" in market_regime_label
+            else ""
         ),
         fund_lab_sync_ts=fund_lab_sync_ts,
     )
@@ -1306,7 +1358,8 @@ def build_fund_console_payload(
         enriched,
         regime_resolved,
         regime_stale=regime_stale,
-        execution_ready=str(execution.get("execution_state") or "") in (
+        execution_ready=str(execution.get("execution_state") or "")
+        in (
             "basket_ready",
             "paper_handoff_ready",
         )

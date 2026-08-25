@@ -75,10 +75,10 @@ def default_ibkr_port(mode: str) -> int:
 # ── ibapi imports (installed via direct copy to site-packages) ──────────────
 try:
     from ibapi.client import EClient
-    from ibapi.wrapper import EWrapper
+    from ibapi.common import OrderId, TickAttrib, TickerId
     from ibapi.contract import Contract
     from ibapi.order import Order
-    from ibapi.common import OrderId, TickAttrib, TickerId
+    from ibapi.wrapper import EWrapper
 
     IBAPI_AVAILABLE = True
 except ImportError:
@@ -141,7 +141,9 @@ class OrderResult:
 
 
 # IB informational codes — update health subsystems, not hard failures.
-_IB_INFO_CODES = frozenset({1100, 1102, 2103, 2104, 2105, 2106, 2107, 2108, 2109, 2110, 2119, 2157, 2158})
+_IB_INFO_CODES = frozenset(
+    {1100, 1102, 2103, 2104, 2105, 2106, 2107, 2108, 2109, 2110, 2119, 2157, 2158}
+)
 
 
 @dataclass
@@ -233,10 +235,14 @@ class IBKRHealthState:
         else:
             self.execution_status = "unavailable"
 
-        session_usable = self.session_status in (
-            "connected",
-            "restored_data_maintained",
-        ) or self.account_status == "ok"
+        session_usable = (
+            self.session_status
+            in (
+                "connected",
+                "restored_data_maintained",
+            )
+            or self.account_status == "ok"
+        )
         farms_ok = (
             self.market_data_status != "degraded"
             and self.secdef_status != "degraded"
@@ -273,10 +279,14 @@ class IBKRHealthState:
         self.degraded_reasons = reasons
 
     def session_usable(self) -> bool:
-        return self.session_status in (
-            "connected",
-            "restored_data_maintained",
-        ) or self.account_status == "ok"
+        return (
+            self.session_status
+            in (
+                "connected",
+                "restored_data_maintained",
+            )
+            or self.account_status == "ok"
+        )
 
     def summary_label(self) -> str:
         if self.handoff_status == "ready":
@@ -308,9 +318,7 @@ class IBKRHealthState:
             parts.append("HMDS degraded")
         if self.handoff_status == "monitoring_only":
             if self.execution_status == "ready":
-                parts.append(
-                    "Execution path available · monitor / manual mode"
-                )
+                parts.append("Execution path available · monitor / manual mode")
             else:
                 parts.append("Technically connected, operationally partial")
         elif self.execution_status == "ready":
@@ -1518,9 +1526,13 @@ class IBKRService:
         bracket_enabled: bool = False,
     ) -> dict:
         connected = self.is_connected
-        authenticated = connected and self._app is not None and self._app._next_order_id is not None
+        authenticated = (
+            connected and self._app is not None and self._app._next_order_id is not None
+        )
         account_loaded = self._account_loaded_at is not None
-        order_routing_ready = authenticated and bool(self._app and self._app._next_order_id)
+        order_routing_ready = authenticated and bool(
+            self._app and self._app._next_order_id
+        )
         ibapi_ok = IBAPI_AVAILABLE
 
         if not ibapi_ok:
@@ -1531,7 +1543,9 @@ class IBKRService:
             bracket_reason = "請先連線 IB Gateway · Connect IB Gateway session first"
         elif not order_routing_ready:
             bracket_status = "unavailable"
-            bracket_reason = "等待 nextValidId／訂單佇列 · Waiting for nextValidId / order queue"
+            bracket_reason = (
+                "等待 nextValidId／訂單佇列 · Waiting for nextValidId / order queue"
+            )
         elif bracket_enabled and (not bracket_stop or not bracket_target):
             bracket_status = "partial"
             bracket_reason = "Bracket 預覽待填止損＋目標 · Bracket preview pending stop + target fields"
@@ -1566,7 +1580,9 @@ class IBKRService:
                 f"Portfolio page has {manual_position_count} local positions; "
                 f"IBKR shows 0 — local book is research/manual until broker sync"
             )
-        elif broker_position_count > 0 and manual_position_count > broker_position_count:
+        elif (
+            broker_position_count > 0 and manual_position_count > broker_position_count
+        ):
             portfolio_sync_status = "partial"
             portfolio_sync_reason = (
                 f"IBKR={broker_position_count} broker positions; "
@@ -1577,13 +1593,19 @@ class IBKRService:
             portfolio_sync_reason = "IBKR positions = broker truth when connected"
         elif connected:
             portfolio_sync_status = "partial"
-            portfolio_sync_reason = "Connected — refresh account/positions to confirm sync"
+            portfolio_sync_reason = (
+                "Connected — refresh account/positions to confirm sync"
+            )
         else:
             portfolio_sync_status = "unavailable"
-            portfolio_sync_reason = "Portfolio page = research/manual book until IBKR connected"
+            portfolio_sync_reason = (
+                "Portfolio page = research/manual book until IBKR connected"
+            )
 
-        playbook_handoff_ready = connected and order_routing_ready and not (
-            bracket_enabled and bracket_status != "ready"
+        playbook_handoff_ready = (
+            connected
+            and order_routing_ready
+            and not (bracket_enabled and bracket_status != "ready")
         )
 
         def _row(
@@ -1629,7 +1651,9 @@ class IBKRService:
                 authenticated,
                 category="critical",
                 partial=connected and not authenticated,
-                reason="API handshake complete" if authenticated else "Connect session to authenticate",
+                reason="API handshake complete"
+                if authenticated
+                else "Connect session to authenticate",
             ),
             _row(
                 "account",
@@ -1859,7 +1883,9 @@ class IBKRService:
                 else None
             ),
             "last_heartbeat": (
-                time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(self._last_heartbeat_ts))
+                time.strftime(
+                    "%Y-%m-%dT%H:%M:%SZ", time.gmtime(self._last_heartbeat_ts)
+                )
                 if self._last_heartbeat_ts
                 else None
             ),

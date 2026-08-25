@@ -10,6 +10,7 @@ from typing import List, Optional
 @dataclass
 class Greeks:
     """Option Greeks snapshot."""
+
     delta: float
     gamma: float
     theta: float
@@ -29,10 +30,7 @@ def black_scholes_greeks(
     from scipy.stats import norm
 
     T = max(dte / 365, 1e-6)
-    d1 = (
-        (math.log(spot / strike) + (rf + iv**2 / 2) * T)
-        / (iv * math.sqrt(T))
-    )
+    d1 = (math.log(spot / strike) + (rf + iv**2 / 2) * T) / (iv * math.sqrt(T))
     d2 = d1 - iv * math.sqrt(T)
 
     nd1 = norm.pdf(d1)
@@ -73,10 +71,7 @@ def strategy_payoff(
                "side": "BUY"|"SELL", "premium": float, "qty": int}
     """
     if spot_range is None:
-        spot_range = [
-            round(spot * (0.8 + i * 0.02), 2)
-            for i in range(21)
-        ]
+        spot_range = [round(spot * (0.8 + i * 0.02), 2) for i in range(21)]
 
     results = []
     for s in spot_range:

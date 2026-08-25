@@ -140,7 +140,7 @@ class SectorAlert:
         }
 
         emoji = action_emoji.get(self.action, "📊")
-        title = f"{emoji} {self.ticker} — " f"{self.action} ({self.grade})"
+        title = f"{emoji} {self.ticker} — {self.action} ({self.grade})"
 
         fields = [
             {
@@ -154,9 +154,7 @@ class SectorAlert:
             },
             {
                 "name": "🌍 Regime",
-                "value": (
-                    f"{self.regime_label or '—'}\n" f"VIX: {self.regime_vix:.0f}"
-                ),
+                "value": (f"{self.regime_label or '—'}\nVIX: {self.regime_vix:.0f}"),
                 "inline": True,
             },
             {
@@ -184,7 +182,7 @@ class SectorAlert:
                         f" ({self.size_rationale})"
                     )
                     if self.position_size_pct > 0
-                    else (f"Strategy: {self.strategy}\n" f"Risk: {self.risk_level}")
+                    else (f"Strategy: {self.strategy}\nRisk: {self.risk_level}")
                 ),
                 "inline": True,
             },
@@ -208,10 +206,7 @@ class SectorAlert:
             fields.append(
                 {
                     "name": "🔴 Contradictions",
-                    "value": "\n".join(
-                        f"• {c}"
-                        for c in self.key_contradiction[:3]
-                    ),
+                    "value": "\n".join(f"• {c}" for c in self.key_contradiction[:3]),
                     "inline": False,
                 }
             )
@@ -251,6 +246,7 @@ class SectorAlertBuilder:
         if persistent_dedup:
             try:
                 from src.engines.decision_tracker import DecisionTracker
+
                 self._tracker = DecisionTracker()
             except Exception:
                 logger.warning("DecisionTracker unavailable, using in-memory dedup")

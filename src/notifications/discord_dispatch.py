@@ -357,7 +357,10 @@ def push_notice(
                     title=title,
                     message=message,
                     severity=_normalize_severity(severity),
-                    meta={**(meta or {}), **({"zh_summary": zh_summary} if zh_summary else {})},
+                    meta={
+                        **(meta or {}),
+                        **({"zh_summary": zh_summary} if zh_summary else {}),
+                    },
                 )
             )
         except Exception as exc:

@@ -18,6 +18,7 @@ a trading system, not retail vanity metrics:
 
 Consumed by API, Discord /performance, and dashboard.
 """
+
 import logging
 import math
 from dataclasses import dataclass, field
@@ -29,12 +30,13 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CoverageFunnel:
     """Tracks how many names flow through each pipeline stage."""
-    watched: int = 0      # universe size
-    eligible: int = 0     # passed quality filter
-    ranked: int = 0       # scored by ensembler
-    approved: int = 0     # passed trade_decision
-    rejected: int = 0     # suppressed
-    executed: int = 0     # actually traded
+
+    watched: int = 0  # universe size
+    eligible: int = 0  # passed quality filter
+    ranked: int = 0  # scored by ensembler
+    approved: int = 0  # passed trade_decision
+    rejected: int = 0  # suppressed
+    executed: int = 0  # actually traded
 
     def to_dict(self) -> Dict[str, int]:
         return {
@@ -62,14 +64,14 @@ class KPISnapshot:
     """Point-in-time professional KPI report."""
 
     # Economic value metrics
-    net_expectancy_r: float = 0.0     # p(win)*avg_win_R - p(loss)*avg_loss_R
-    avg_r_multiple: float = 0.0       # average R on closed trades
-    profit_factor: float = 0.0        # gross_win / gross_loss
+    net_expectancy_r: float = 0.0  # p(win)*avg_win_R - p(loss)*avg_loss_R
+    avg_r_multiple: float = 0.0  # average R on closed trades
+    profit_factor: float = 0.0  # gross_win / gross_loss
     win_rate: float = 0.0
 
     # Risk metrics
     max_drawdown: float = 0.0
-    cvar_95: float = 0.0              # conditional VaR (daily)
+    cvar_95: float = 0.0  # conditional VaR (daily)
     volatility: float = 0.0
 
     # Benchmark comparison
@@ -78,8 +80,8 @@ class KPISnapshot:
     information_ratio: Optional[float] = None
 
     # Activity metrics
-    turnover: float = 0.0             # trades per day
-    no_trade_rate: float = 0.0        # fraction of cycles with no trade
+    turnover: float = 0.0  # trades per day
+    no_trade_rate: float = 0.0  # fraction of cycles with no trade
     avg_hold_hours: float = 0.0
 
     # Coverage funnel
@@ -92,7 +94,7 @@ class KPISnapshot:
     total_cycles: int = 0
 
     # Calibration
-    calibration_error: float = 0.0    # |predicted_wr - actual_wr|
+    calibration_error: float = 0.0  # |predicted_wr - actual_wr|
 
     def to_dict(self) -> Dict[str, Any]:
         d = {
@@ -103,17 +105,12 @@ class KPISnapshot:
             "max_drawdown": round(self.max_drawdown, 4),
             "cvar_95": round(self.cvar_95, 4),
             "volatility": round(self.volatility, 4),
-            "alpha": (
-                round(self.alpha, 4)
-                if self.alpha is not None else None
-            ),
-            "beta": (
-                round(self.beta, 3)
-                if self.beta is not None else None
-            ),
+            "alpha": (round(self.alpha, 4) if self.alpha is not None else None),
+            "beta": (round(self.beta, 3) if self.beta is not None else None),
             "information_ratio": (
                 round(self.information_ratio, 3)
-                if self.information_ratio is not None else None
+                if self.information_ratio is not None
+                else None
             ),
             "turnover": round(self.turnover, 2),
             "no_trade_rate": round(self.no_trade_rate, 3),
@@ -141,22 +138,24 @@ class KPISnapshot:
         if self.alpha is not None:
             lines.append(f"Alpha (ann.):   {self.alpha:+.2%}")
             lines.append(f"Beta:           {self.beta:.2f}")
-        lines.extend([
-            "",
-            f"Turnover:       {self.turnover:.1f} trades/day",
-            f"No-trade rate:  {self.no_trade_rate:.1%}",
-            f"Avg hold:       {self.avg_hold_hours:.0f}h",
-            f"Total trades:   {self.total_trades}",
-            "",
-            "Coverage Funnel:",
-            f"  Watched:  {self.funnel.watched}",
-            f"  Eligible: {self.funnel.eligible}",
-            f"  Ranked:   {self.funnel.ranked}",
-            f"  Approved: {self.funnel.approved}",
-            f"  Rejected: {self.funnel.rejected}",
-            f"  Executed: {self.funnel.executed}",
-            f"  Pass rate: {self.funnel.pass_rate:.1%}",
-        ])
+        lines.extend(
+            [
+                "",
+                f"Turnover:       {self.turnover:.1f} trades/day",
+                f"No-trade rate:  {self.no_trade_rate:.1%}",
+                f"Avg hold:       {self.avg_hold_hours:.0f}h",
+                f"Total trades:   {self.total_trades}",
+                "",
+                "Coverage Funnel:",
+                f"  Watched:  {self.funnel.watched}",
+                f"  Eligible: {self.funnel.eligible}",
+                f"  Ranked:   {self.funnel.ranked}",
+                f"  Approved: {self.funnel.approved}",
+                f"  Rejected: {self.funnel.rejected}",
+                f"  Executed: {self.funnel.executed}",
+                f"  Pass rate: {self.funnel.pass_rate:.1%}",
+            ]
+        )
         return "\n".join(lines)
 
 
@@ -184,12 +183,14 @@ class ProfessionalKPI:
         predicted_wr: float = 0.0,
     ):
         """Record a closed trade outcome."""
-        self._trades.append({
-            "pnl_pct": pnl_pct,
-            "r_multiple": r_multiple,
-            "hold_hours": hold_hours,
-            "is_win": pnl_pct > 0,
-        })
+        self._trades.append(
+            {
+                "pnl_pct": pnl_pct,
+                "r_multiple": r_multiple,
+                "hold_hours": hold_hours,
+                "is_win": pnl_pct > 0,
+            }
+        )
         if predicted_wr > 0:
             self._predicted_wrs.append(predicted_wr)
             self._actual_wrs.append(1.0 if pnl_pct > 0 else 0.0)
@@ -229,23 +230,34 @@ class ProfessionalKPI:
 
         # Net expectancy in R
         avg_win_r = (
-            sum(t["r_multiple"] for t in wins if t["r_multiple"] > 0)
-            / max(len(wins), 1)
-        ) if wins else 0
-        avg_loss_r = abs(
-            sum(t["r_multiple"] for t in losses if t["r_multiple"] < 0)
-            / max(len(losses), 1)
-        ) if losses else 1.0
+            (
+                sum(t["r_multiple"] for t in wins if t["r_multiple"] > 0)
+                / max(len(wins), 1)
+            )
+            if wins
+            else 0
+        )
+        avg_loss_r = (
+            abs(
+                sum(t["r_multiple"] for t in losses if t["r_multiple"] < 0)
+                / max(len(losses), 1)
+            )
+            if losses
+            else 1.0
+        )
         kpi.net_expectancy_r = (
-            kpi.win_rate * avg_win_r
-            - (1 - kpi.win_rate) * avg_loss_r
+            kpi.win_rate * avg_win_r - (1 - kpi.win_rate) * avg_loss_r
         )
 
         # Profit factor
         gross_win = sum(t["pnl_pct"] for t in wins) if wins else 0
-        gross_loss = abs(
-            sum(t["pnl_pct"] for t in losses),
-        ) if losses else 0.001
+        gross_loss = (
+            abs(
+                sum(t["pnl_pct"] for t in losses),
+            )
+            if losses
+            else 0.001
+        )
         kpi.profit_factor = gross_win / gross_loss if gross_loss > 0 else 0
 
         # PnL series for risk metrics
@@ -280,18 +292,12 @@ class ProfessionalKPI:
             kpi.volatility = 0
 
         # Activity
-        kpi.turnover = (
-            len(trades) / max(self._cycles, 1)
-        )
-        kpi.no_trade_rate = (
-            self._no_trade_cycles / max(self._cycles, 1)
-        )
+        kpi.turnover = len(trades) / max(self._cycles, 1)
+        kpi.no_trade_rate = self._no_trade_cycles / max(self._cycles, 1)
 
         # Hold time
         hold_vals = [t["hold_hours"] for t in trades if t["hold_hours"] > 0]
-        kpi.avg_hold_hours = (
-            sum(hold_vals) / len(hold_vals) if hold_vals else 0
-        )
+        kpi.avg_hold_hours = sum(hold_vals) / len(hold_vals) if hold_vals else 0
 
         # Calibration error
         if self._predicted_wrs and self._actual_wrs:

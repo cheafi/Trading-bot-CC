@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 
@@ -137,7 +137,11 @@ def _build_dossier(ticker: str) -> Dict[str, Any]:
     timing_score = (
         70
         if (rsi and 45 <= rsi <= 70)
-        else 50 if (rsi and rsi < 45) else 30 if (rsi and rsi > 75) else 50
+        else 50
+        if (rsi and rsi < 45)
+        else 30
+        if (rsi and rsi > 75)
+        else 50
     )
     execution_score = 80 if (volume_ok and above_ma) else 50 if above_ma else 30
     data_score = 40 if regime.get("synthetic") else 85
@@ -276,7 +280,7 @@ def _compute_trade_advice(
 
     stop = risk.get("stop")
     target = risk.get("target")
-    entry = risk.get("entry")
+    risk.get("entry")
 
     # ── Compute R-multiple if stop is known ──
     risk_per_share = abs(buy_price - stop) if stop and stop < buy_price else None
@@ -376,6 +380,7 @@ async def trade_advice(ticker: str, buy_price: float):
     Uses current market price from yfinance and dossier context.
     """
     import asyncio
+
     import yfinance as yf
 
     ticker = ticker.strip().upper()
@@ -441,6 +446,7 @@ async def peer_comparison(ticker: str):
     Returns sector peers with momentum comparison.
     """
     import asyncio
+
     import yfinance as yf
 
     ticker = ticker.strip().upper()
@@ -478,7 +484,9 @@ async def peer_comparison(ticker: str):
                 import pandas as pd
 
                 yr = pd.Timestamp.now().year
-                ytd_idx = int(close.index.get_indexer([f"{yr}-01-01"], method="nearest")[0])
+                ytd_idx = int(
+                    close.index.get_indexer([f"{yr}-01-01"], method="nearest")[0]
+                )
                 if ytd_idx < 0:
                     ytd_idx = 0
             except Exception:
@@ -533,7 +541,7 @@ async def peer_comparison(ticker: str):
             1 for p in peer_data if p.get("mom_3m", 0) > self_data.get("mom_3m", 0)
         )
         why.append(
-            f"{ticker} ranks #{rank}/{len(peer_data)+1} in 3M momentum among sector peers"
+            f"{ticker} ranks #{rank}/{len(peer_data) + 1} in 3M momentum among sector peers"
         )
         if rank == 1:
             why.append(f"✅ {ticker} IS the sector leader — strongest momentum")
@@ -556,7 +564,9 @@ async def peer_comparison(ticker: str):
     ticker_rank = 1
     if self_data.get("mom_3m") is not None:
         ticker_rank = 1 + sum(
-            1 for p in peer_data if (p.get("mom_3m") or 0) > (self_data.get("mom_3m") or 0)
+            1
+            for p in peer_data
+            if (p.get("mom_3m") or 0) > (self_data.get("mom_3m") or 0)
         )
     verdict = why[0] if why else "Peer comparison complete"
 

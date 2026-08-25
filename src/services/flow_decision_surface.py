@@ -16,6 +16,7 @@ def _metric(value: Any, default: float = 0.0) -> float:
 
     return coerce_float(value, default)
 
+
 _PM_ACTIONS = (
     "BUYABLE_NOW",
     "WATCH_FOR_STOCK_CONFIRM",
@@ -54,9 +55,7 @@ def _evidence_ladder(
         "flow_detected": True,
         "opening_estimate": row.get("volume_oi_ratio", 0) >= 0.8,
         "aggressive_side": (
-            "ask"
-            if row.get("side_bias", "").endswith("BUYING")
-            else "bid/mid"
+            "ask" if row.get("side_bias", "").endswith("BUYING") else "bid/mid"
         ),
         "sweep_or_block": bool(row.get("sweep_flag") or row.get("block_flag")),
         "stock_confirmed": stock_confirmed,
@@ -171,14 +170,13 @@ def _options_detail(row: Dict[str, Any]) -> Dict[str, Any]:
         "sweep": bool(row.get("sweep_flag")),
         "block": bool(row.get("block_flag")),
         "open_close_estimate": (
-            "likely_opening" if _metric(row.get("volume_oi_ratio"), 0) >= 1.0 else "unclear"
+            "likely_opening"
+            if _metric(row.get("volume_oi_ratio"), 0) >= 1.0
+            else "unclear"
         ),
         "aggressiveness": row.get("side_bias") or "UNKNOWN",
         "unusual_vs_baseline": (
-            "elevated"
-            if vol_avg >= 2
-            else "normal" if vol_avg >= 1.2
-            else "quiet"
+            "elevated" if vol_avg >= 2 else "normal" if vol_avg >= 1.2 else "quiet"
         ),
     }
 
@@ -306,7 +304,10 @@ async def build_flow_decision_surface(
 ) -> Dict[str, Any]:
     """PM-grade flow console from options radar + stock linkage."""
     from src.api.routers.options_radar import _scan_with_fallback
-    from src.services.flow_follow_through import _calibration_data, global_calibration_summary
+    from src.services.flow_follow_through import (
+        _calibration_data,
+        global_calibration_summary,
+    )
 
     t0 = datetime.now(timezone.utc)
     cal = _calibration_data()
@@ -366,13 +367,9 @@ async def build_flow_decision_surface(
         c for c in live_enriched if c.get("pm_action") == "PROMOTION_CANDIDATE"
     ][:3]
     watch_confirm = [
-        c
-        for c in live_enriched
-        if c.get("pm_action") == "WATCH_FOR_STOCK_CONFIRM"
+        c for c in live_enriched if c.get("pm_action") == "WATCH_FOR_STOCK_CONFIRM"
     ][:3]
-    crowded = [
-        c for c in live_enriched if c.get("pm_action") == "AVOID_CHASE"
-    ][:3]
+    crowded = [c for c in live_enriched if c.get("pm_action") == "AVOID_CHASE"][:3]
     bearish = [c for c in live_enriched if (c.get("call_put") or "C") == "P"][:3]
     bullish = [c for c in live_enriched if (c.get("call_put") or "C") == "C"][:3]
 

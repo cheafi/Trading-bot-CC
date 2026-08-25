@@ -8,14 +8,20 @@ Two critical missing layers that turn "market summary" into "market intelligence
 
 Both are data-derived, deterministic, and auditable.
 """
+
 import logging
-from datetime import date, datetime, timezone, timedelta
-from typing import Dict, Any, List, Optional, Tuple
+from datetime import date
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.core.models import (
-    DeltaSnapshot, RegimeScoreboard, ScenarioPlan,
-    MarketRegime, VolatilityRegime, TrendRegime, RiskRegime,
     ChangeItem,
+    DeltaSnapshot,
+    MarketRegime,
+    RegimeScoreboard,
+    RiskRegime,
+    ScenarioPlan,
+    TrendRegime,
+    VolatilityRegime,
 )
 
 logger = logging.getLogger(__name__)
@@ -24,6 +30,7 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════════════════════════════
 # DELTA TRACKER  — "What changed since last report"
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class DeltaTracker:
     """
@@ -58,9 +65,15 @@ class DeltaTracker:
         ndx_1d = today.get("ndx_change_pct", 0)
         iwm_1d = today.get("iwm_change_pct", 0)
 
-        spx_5d = self._pct_change(today.get("spx_close", 0), week_ago.get("spx_close", 0))
-        ndx_5d = self._pct_change(today.get("ndx_close", 0), week_ago.get("ndx_close", 0))
-        iwm_5d = self._pct_change(today.get("iwm_close", 0), week_ago.get("iwm_close", 0))
+        spx_5d = self._pct_change(
+            today.get("spx_close", 0), week_ago.get("spx_close", 0)
+        )
+        ndx_5d = self._pct_change(
+            today.get("ndx_close", 0), week_ago.get("ndx_close", 0)
+        )
+        iwm_5d = self._pct_change(
+            today.get("iwm_close", 0), week_ago.get("iwm_close", 0)
+        )
 
         # VIX deltas
         vix = today.get("vix", 0)
@@ -83,11 +96,11 @@ class DeltaTracker:
         bottom_3 = [{"name": s[0], "pct": round(s[1], 2)} for s in sorted_sectors[-3:]]
 
         # Sentiment delta
-        news_delta = (
-            today.get("news_sentiment_1d", 50) - yesterday.get("news_sentiment_1d", 50)
+        news_delta = today.get("news_sentiment_1d", 50) - yesterday.get(
+            "news_sentiment_1d", 50
         )
-        social_delta = (
-            today.get("social_sentiment_1d", 50) - yesterday.get("social_sentiment_1d", 50)
+        social_delta = today.get("social_sentiment_1d", 50) - yesterday.get(
+            "social_sentiment_1d", 50
         )
 
         return DeltaSnapshot(
@@ -116,7 +129,9 @@ class DeltaTracker:
             iv_rank_spy=today.get("iv_rank_spy"),
         )
 
-    def classify_changes(self, delta: DeltaSnapshot) -> Tuple[List[ChangeItem], List[ChangeItem]]:
+    def classify_changes(
+        self, delta: DeltaSnapshot
+    ) -> Tuple[List[ChangeItem], List[ChangeItem]]:
         """
         Classify deltas into bullish and bearish change items.
         Returns: (bullish_changes, bearish_changes)
@@ -126,52 +141,148 @@ class DeltaTracker:
 
         # Index moves
         if delta.spx_1d_pct > 0.5:
-            bullish.append(ChangeItem(category="macro", description=f"SPX +{delta.spx_1d_pct:.1f}% — broad rally", severity="info"))
+            bullish.append(
+                ChangeItem(
+                    category="macro",
+                    description=f"SPX +{delta.spx_1d_pct:.1f}% — broad rally",
+                    severity="info",
+                )
+            )
         elif delta.spx_1d_pct < -0.5:
-            bearish.append(ChangeItem(category="macro", description=f"SPX {delta.spx_1d_pct:.1f}% — selling pressure", severity="warning" if delta.spx_1d_pct < -1.5 else "info"))
+            bearish.append(
+                ChangeItem(
+                    category="macro",
+                    description=f"SPX {delta.spx_1d_pct:.1f}% — selling pressure",
+                    severity="warning" if delta.spx_1d_pct < -1.5 else "info",
+                )
+            )
 
         if delta.ndx_1d_pct > 0.5:
-            bullish.append(ChangeItem(category="leadership", description=f"Nasdaq outperforming +{delta.ndx_1d_pct:.1f}%", severity="info"))
+            bullish.append(
+                ChangeItem(
+                    category="leadership",
+                    description=f"Nasdaq outperforming +{delta.ndx_1d_pct:.1f}%",
+                    severity="info",
+                )
+            )
         elif delta.ndx_1d_pct < -0.5:
-            bearish.append(ChangeItem(category="leadership", description=f"Nasdaq weak {delta.ndx_1d_pct:.1f}%", severity="info"))
+            bearish.append(
+                ChangeItem(
+                    category="leadership",
+                    description=f"Nasdaq weak {delta.ndx_1d_pct:.1f}%",
+                    severity="info",
+                )
+            )
 
         # Small caps (breadth signal)
         if delta.iwm_1d_pct > 0.8:
-            bullish.append(ChangeItem(category="breadth", description=f"Small caps rallying +{delta.iwm_1d_pct:.1f}% — risk appetite healthy", severity="info"))
+            bullish.append(
+                ChangeItem(
+                    category="breadth",
+                    description=f"Small caps rallying +{delta.iwm_1d_pct:.1f}% — risk appetite healthy",
+                    severity="info",
+                )
+            )
         elif delta.iwm_1d_pct < -0.8:
-            bearish.append(ChangeItem(category="breadth", description=f"Small caps weak {delta.iwm_1d_pct:.1f}% — narrow leadership", severity="warning"))
+            bearish.append(
+                ChangeItem(
+                    category="breadth",
+                    description=f"Small caps weak {delta.iwm_1d_pct:.1f}% — narrow leadership",
+                    severity="warning",
+                )
+            )
 
         # VIX
         if delta.vix_1d_change < -2:
-            bullish.append(ChangeItem(category="volatility", description=f"VIX fell {delta.vix_1d_change:.1f} to {delta.vix_close:.1f} — fear receding", severity="info"))
+            bullish.append(
+                ChangeItem(
+                    category="volatility",
+                    description=f"VIX fell {delta.vix_1d_change:.1f} to {delta.vix_close:.1f} — fear receding",
+                    severity="info",
+                )
+            )
         elif delta.vix_1d_change > 2:
-            bearish.append(ChangeItem(category="volatility", description=f"VIX jumped +{delta.vix_1d_change:.1f} to {delta.vix_close:.1f} — hedging activity", severity="warning" if delta.vix_close > 22 else "info"))
+            bearish.append(
+                ChangeItem(
+                    category="volatility",
+                    description=f"VIX jumped +{delta.vix_1d_change:.1f} to {delta.vix_close:.1f} — hedging activity",
+                    severity="warning" if delta.vix_close > 22 else "info",
+                )
+            )
 
         # Rates
         if delta.yield_10y_1d_bp < -5:
-            bullish.append(ChangeItem(category="macro", description=f"10Y yield fell {delta.yield_10y_1d_bp:.0f}bp to {delta.yield_10y:.2f}% — growth-friendly", severity="info"))
+            bullish.append(
+                ChangeItem(
+                    category="macro",
+                    description=f"10Y yield fell {delta.yield_10y_1d_bp:.0f}bp to {delta.yield_10y:.2f}% — growth-friendly",
+                    severity="info",
+                )
+            )
         elif delta.yield_10y_1d_bp > 5:
-            bearish.append(ChangeItem(category="macro", description=f"10Y yield rose +{delta.yield_10y_1d_bp:.0f}bp to {delta.yield_10y:.2f}% — valuation pressure", severity="warning" if delta.yield_10y > 4.5 else "info"))
+            bearish.append(
+                ChangeItem(
+                    category="macro",
+                    description=f"10Y yield rose +{delta.yield_10y_1d_bp:.0f}bp to {delta.yield_10y:.2f}% — valuation pressure",
+                    severity="warning" if delta.yield_10y > 4.5 else "info",
+                )
+            )
 
         # Breadth
         if delta.pct_above_50dma_1d_change > 3:
-            bullish.append(ChangeItem(category="breadth", description=f"Breadth expanding: +{delta.pct_above_50dma_1d_change:.0f}% stocks above 50DMA → {delta.pct_above_50dma:.0f}%", severity="info"))
+            bullish.append(
+                ChangeItem(
+                    category="breadth",
+                    description=f"Breadth expanding: +{delta.pct_above_50dma_1d_change:.0f}% stocks above 50DMA → {delta.pct_above_50dma:.0f}%",
+                    severity="info",
+                )
+            )
         elif delta.pct_above_50dma_1d_change < -3:
-            bearish.append(ChangeItem(category="breadth", description=f"Breadth narrowing: {delta.pct_above_50dma_1d_change:.0f}% stocks lost 50DMA → {delta.pct_above_50dma:.0f}%", severity="warning"))
+            bearish.append(
+                ChangeItem(
+                    category="breadth",
+                    description=f"Breadth narrowing: {delta.pct_above_50dma_1d_change:.0f}% stocks lost 50DMA → {delta.pct_above_50dma:.0f}%",
+                    severity="warning",
+                )
+            )
 
         # Sector leadership
         if delta.top_3_sectors:
             top_names = ", ".join(s["name"] for s in delta.top_3_sectors)
-            bullish.append(ChangeItem(category="leadership", description=f"Leading: {top_names}", severity="info"))
+            bullish.append(
+                ChangeItem(
+                    category="leadership",
+                    description=f"Leading: {top_names}",
+                    severity="info",
+                )
+            )
         if delta.bottom_3_sectors:
             bot_names = ", ".join(s["name"] for s in delta.bottom_3_sectors)
-            bearish.append(ChangeItem(category="leadership", description=f"Lagging: {bot_names}", severity="info"))
+            bearish.append(
+                ChangeItem(
+                    category="leadership",
+                    description=f"Lagging: {bot_names}",
+                    severity="info",
+                )
+            )
 
         # Sentiment
         if delta.news_sentiment_change > 10:
-            bullish.append(ChangeItem(category="sentiment", description=f"News sentiment improving (+{delta.news_sentiment_change:.0f})", severity="info"))
+            bullish.append(
+                ChangeItem(
+                    category="sentiment",
+                    description=f"News sentiment improving (+{delta.news_sentiment_change:.0f})",
+                    severity="info",
+                )
+            )
         elif delta.news_sentiment_change < -10:
-            bearish.append(ChangeItem(category="sentiment", description=f"News sentiment deteriorating ({delta.news_sentiment_change:.0f})", severity="info"))
+            bearish.append(
+                ChangeItem(
+                    category="sentiment",
+                    description=f"News sentiment deteriorating ({delta.news_sentiment_change:.0f})",
+                    severity="info",
+                )
+            )
 
         return bullish, bearish
 
@@ -185,6 +296,7 @@ class DeltaTracker:
 # ═══════════════════════════════════════════════════════════════════════
 # REGIME SCOREBOARD BUILDER  — the decision layer
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class ScoreboardBuilder:
     """
@@ -269,32 +381,36 @@ class ScoreboardBuilder:
             risk_on_score=round(market_data.get("risk_on_score", 50), 0),
             trend_state=trend_map.get(regime.trend, "RANGE"),
             vol_state=regime.volatility.value.replace("_", " "),
-
             max_gross_pct=round(budget["max_gross_pct"], 0),
             net_long_target_low=round(budget["net_long_low"], 0),
             net_long_target_high=round(budget["net_long_high"], 0),
             max_single_name_pct=round(budget["max_single_name"], 1),
             max_sector_pct=round(budget["max_sector"], 0),
-
             strategies_on=strats_on,
             strategies_conditional=strats_cond,
             strategies_off=strats_off,
             no_trade_triggers=self.NO_TRADE_TRIGGERS,
-
             top_drivers=drivers,
             scenarios=scenarios,
         )
 
-    def _strategy_playbook(self, regime: MarketRegime) -> Tuple[List[str], List[Dict[str, str]], List[str]]:
+    def _strategy_playbook(
+        self, regime: MarketRegime
+    ) -> Tuple[List[str], List[Dict[str, str]], List[str]]:
         """Auto-derive which strategies are ON, CONDITIONAL, or OFF."""
         on: List[str] = []
         conditional: List[Dict[str, str]] = []
         off: List[str] = []
 
         all_strategies = [
-            "momentum_breakout", "trend_following", "vcp", "classic_swing",
-            "mean_reversion", "short_term_mean_reversion",
-            "momentum_rotation", "event_driven",
+            "momentum_breakout",
+            "trend_following",
+            "vcp",
+            "classic_swing",
+            "mean_reversion",
+            "short_term_mean_reversion",
+            "momentum_rotation",
+            "event_driven",
         ]
 
         active = set(regime.active_strategies)
@@ -306,25 +422,31 @@ class ScoreboardBuilder:
                 # Determine if conditional or fully off
                 if regime.risk == RiskRegime.RISK_OFF:
                     if strat == "mean_reversion":
-                        conditional.append({
-                            "strategy": strat,
-                            "condition": "Only at strong support + positive tape confirmation",
-                        })
+                        conditional.append(
+                            {
+                                "strategy": strat,
+                                "condition": "Only at strong support + positive tape confirmation",
+                            }
+                        )
                     else:
                         off.append(strat)
                 elif regime.volatility == VolatilityRegime.HIGH_VOL:
                     if strat in ("momentum_breakout", "vcp"):
-                        conditional.append({
-                            "strategy": strat,
-                            "condition": "Only A+ setups with 2x normal stop width",
-                        })
+                        conditional.append(
+                            {
+                                "strategy": strat,
+                                "condition": "Only A+ setups with 2x normal stop width",
+                            }
+                        )
                     else:
                         off.append(strat)
                 elif strat == "event_driven":
-                    conditional.append({
-                        "strategy": strat,
-                        "condition": "Defined-risk only (spreads) into binary events",
-                    })
+                    conditional.append(
+                        {
+                            "strategy": strat,
+                            "condition": "Defined-risk only (spreads) into binary events",
+                        }
+                    )
                 else:
                     off.append(strat)
 
@@ -359,20 +481,27 @@ class ScoreboardBuilder:
 
         # Calendar / earnings
         if calendar_events:
-            today = date.today()
+            date.today()
             upcoming = [
-                ev for ev in calendar_events
+                ev
+                for ev in calendar_events
                 if ev.get("event_date") and ev.get("importance") in ("high", "⭐⭐⭐")
             ]
             if upcoming:
                 ev = upcoming[0]
-                drivers.append(f"Event: {ev.get('title', ev.get('event_type', 'unknown'))} — binary risk")
+                drivers.append(
+                    f"Event: {ev.get('title', ev.get('event_type', 'unknown'))} — binary risk"
+                )
             else:
                 breadth = market_data.get("pct_above_sma50", 50)
-                drivers.append(f"Breadth: {breadth:.0f}% above 50DMA — {'expanding' if breadth > 55 else 'narrowing' if breadth < 45 else 'neutral'}")
+                drivers.append(
+                    f"Breadth: {breadth:.0f}% above 50DMA — {'expanding' if breadth > 55 else 'narrowing' if breadth < 45 else 'neutral'}"
+                )
         else:
             breadth = market_data.get("pct_above_sma50", 50)
-            drivers.append(f"Breadth: {breadth:.0f}% above 50DMA — {'expanding' if breadth > 55 else 'narrowing' if breadth < 45 else 'neutral'}")
+            drivers.append(
+                f"Breadth: {breadth:.0f}% above 50DMA — {'expanding' if breadth > 55 else 'narrowing' if breadth < 45 else 'neutral'}"
+            )
 
         return drivers[:3]
 
@@ -396,18 +525,18 @@ class ScoreboardBuilder:
                 },
                 bull_case={
                     "probability": 25,
-                    "description": f"Breadth expands above {breadth+5:.0f}%, VIX stays < 18 — melt-up",
+                    "description": f"Breadth expands above {breadth + 5:.0f}%, VIX stays < 18 — melt-up",
                     "action": "Press breakouts, add on pullbacks, size up to 120%",
                 },
                 bear_case={
                     "probability": 20,
-                    "description": f"VIX spikes above {max(vix+10, 25):.0f} or SPX breaks below {spx*0.97:.0f}",
+                    "description": f"VIX spikes above {max(vix + 10, 25):.0f} or SPX breaks below {spx * 0.97:.0f}",
                     "action": "Cut gross to 50%, hedge via VIX calls or IWM puts",
                 },
                 triggers=[
-                    f"BULL trigger: breadth > {breadth+5:.0f}% and VIX < 18",
-                    f"BEAR trigger: VIX > {max(vix+10, 25):.0f} or SPX < {spx*0.97:.0f}",
-                    f"NO TRADE trigger: VIX > 40 or SPX -3% intraday",
+                    f"BULL trigger: breadth > {breadth + 5:.0f}% and VIX < 18",
+                    f"BEAR trigger: VIX > {max(vix + 10, 25):.0f} or SPX < {spx * 0.97:.0f}",
+                    "NO TRADE trigger: VIX > 40 or SPX -3% intraday",
                 ],
             )
         elif regime.risk == RiskRegime.RISK_OFF:
@@ -419,17 +548,17 @@ class ScoreboardBuilder:
                 },
                 bull_case={
                     "probability": 20,
-                    "description": f"VIX peaks and breadth troughs — capitulation washout",
+                    "description": "VIX peaks and breadth troughs — capitulation washout",
                     "action": "Begin scaling into high-quality names at support",
                 },
                 bear_case={
                     "probability": 30,
-                    "description": f"Credit spreads widen, breadth collapses below 20%",
+                    "description": "Credit spreads widen, breadth collapses below 20%",
                     "action": "Full cash, consider tail hedges",
                 },
                 triggers=[
-                    f"RELIEF trigger: VIX drops below {max(vix-5, 20):.0f} + positive breadth divergence",
-                    f"CRISIS trigger: HY spreads > 500bp or SPX -5% week",
+                    f"RELIEF trigger: VIX drops below {max(vix - 5, 20):.0f} + positive breadth divergence",
+                    "CRISIS trigger: HY spreads > 500bp or SPX -5% week",
                 ],
             )
         else:
@@ -441,33 +570,33 @@ class ScoreboardBuilder:
                 },
                 bull_case={
                     "probability": 25,
-                    "description": f"Breadth expands, VIX drops below 18 — regime shifts risk-on",
+                    "description": "Breadth expands, VIX drops below 18 — regime shifts risk-on",
                     "action": "Gradually increase long exposure, add breakout trades",
                 },
                 bear_case={
                     "probability": 25,
-                    "description": f"VIX breaks above 25, SPX loses key support",
+                    "description": "VIX breaks above 25, SPX loses key support",
                     "action": "Cut to 30% gross, tighten all stops, add hedges",
                 },
                 triggers=[
-                    f"RISK-ON trigger: breadth > 60% and VIX < 18 for 2 consecutive days",
-                    f"RISK-OFF trigger: VIX > 25 and breadth < 40%",
+                    "RISK-ON trigger: breadth > 60% and VIX < 18 for 2 consecutive days",
+                    "RISK-OFF trigger: VIX > 25 and breadth < 40%",
                 ],
             )
 
     def format_scoreboard_text(self, sb: RegimeScoreboard) -> str:
         """Format the scoreboard as a clean text block for reports/Discord."""
         lines = [
-            f"## ✅ REGIME SCOREBOARD (Decision Layer)",
+            "## ✅ REGIME SCOREBOARD (Decision Layer)",
             f"- **Regime**: {sb.regime_label} (score: {sb.risk_on_score:.0f}/100)",
             f"- **Trend**: {sb.trend_state}",
             f"- **Volatility**: {sb.vol_state}",
-            f"- **Risk Budget Today**:",
+            "- **Risk Budget Today**:",
             f"  - Max Gross: {sb.max_gross_pct:.0f}%",
             f"  - Net Long Target: {sb.net_long_target_low:.0f}–{sb.net_long_target_high:.0f}%",
             f"  - Max Single Name: {sb.max_single_name_pct:.1f}%",
             f"  - Max Sector: {sb.max_sector_pct:.0f}%",
-            f"- **Strategy Playbook**:",
+            "- **Strategy Playbook**:",
         ]
         for s in sb.strategies_on:
             lines.append(f"  - ✅ {s}: ON")

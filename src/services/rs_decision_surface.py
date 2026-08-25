@@ -58,7 +58,9 @@ async def build_rs_universe_daily() -> tuple[List[Dict[str, Any]], Dict[str, Any
             "return_1w": _period_return_pct(spy, 5) or 0.0,
             "return_1m": _period_return_pct(spy, 21) or 0.0,
             "return_3m": _period_return_pct(spy, 63) or 0.0,
-            "return_6m": _period_return_pct(spy, 126) or _period_return_pct(spy, len(spy) - 1) or 0.0,
+            "return_6m": _period_return_pct(spy, 126)
+            or _period_return_pct(spy, len(spy) - 1)
+            or 0.0,
         }
         if len(spy) >= 11:
             bench["prev_rs_1w"] = 100.0  # placeholder for change calc via stock fields
@@ -202,7 +204,9 @@ def _enrich_row(raw: Dict[str, Any], regime_tradeability: str) -> Dict[str, Any]
             and float(row.get("rs_1w", 0)) >= 100
             else "mixed"
         ),
-        "vs_spy": "outperform" if float(row.get("rs_composite", 0)) >= 105 else "inline",
+        "vs_spy": "outperform"
+        if float(row.get("rs_composite", 0)) >= 105
+        else "inline",
     }
     row["why_leader"] = _why_leader(row)
     return row
@@ -309,9 +313,9 @@ async def build_rs_decision_surface(
         and r.get("action_label") != "PROMOTION_CANDIDATE"
         and r.get("buyability") in ("EXTENDED", "FAILING", "WATCH")
     ][:3]
-    pullback_candidates = [
-        r for r in live_rows if r.get("buyability") == "PULLBACK"
-    ][:3]
+    pullback_candidates = [r for r in live_rows if r.get("buyability") == "PULLBACK"][
+        :3
+    ]
     crowded = sorted(
         [r for r in live_rows if r.get("buyability") == "EXTENDED"],
         key=lambda x: float(x.get("rs_composite") or 0),
@@ -324,7 +328,8 @@ async def build_rs_decision_surface(
         "compute_ms": elapsed_ms,
         "freshness": {
             "live": bool(live_rows),
-            "stale_reason": error_note or (None if live_rows else "live_compute_failed"),
+            "stale_reason": error_note
+            or (None if live_rows else "live_compute_failed"),
             "universe_size": len(live_rows) or len(stale_rows),
             "benchmark": "SPY",
             "interval": "1d",
@@ -348,9 +353,7 @@ async def build_rs_decision_surface(
         "sector_rotation": sector_rs[:8],
         "live_leaders": live_rows,
         "stale_watchlist": stale_rows,
-        "emerging": [
-            r for r in live_rows if r.get("trend") == "BREAKING_OUT"
-        ][:8],
+        "emerging": [r for r in live_rows if r.get("trend") == "BREAKING_OUT"][:8],
         "failed": [r for r in live_rows if r.get("buyability") == "FAILING"][:8],
         "count_live": len(live_rows),
         "count_stale": len(stale_rows),

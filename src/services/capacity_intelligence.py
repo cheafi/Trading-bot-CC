@@ -101,14 +101,18 @@ def participation_fraction(size_shares: float, adv: Optional[float]) -> Optional
     return float(size_shares) / float(adv)
 
 
-def participation_ceiling_shares(adv: Optional[float], participation: float) -> Optional[int]:
+def participation_ceiling_shares(
+    adv: Optional[float], participation: float
+) -> Optional[int]:
     """Max shares at a given participation cap. None if ADV unknown."""
     if not adv or adv <= 0:
         return None
     return int(adv * participation)
 
 
-def market_impact_bps(part_frac: Optional[float], daily_vol: float = _DEFAULT_DAILY_VOL) -> Optional[float]:
+def market_impact_bps(
+    part_frac: Optional[float], daily_vol: float = _DEFAULT_DAILY_VOL
+) -> Optional[float]:
     """Square-root-law market-impact proxy, in basis points.
 
     impact_fraction = coef * daily_vol * sqrt(participation); *10000 -> bps.
@@ -151,7 +155,7 @@ def edge_net_of_scale(
     # Intensity 0 at zero participation, 1 at the hard limit; squared so the
     # penalty bites harder as you approach the refuse line.
     intensity = min(1.0, part_frac / HARD_LIMIT_PARTICIPATION)
-    scale_penalty = round((intensity ** 2) * _MAX_SCALE_PENALTY, 2)
+    scale_penalty = round((intensity**2) * _MAX_SCALE_PENALTY, 2)
     net_of_scale = round(max(0.0, net_after_cost - scale_penalty), 1)
     return {
         **cost,
@@ -174,11 +178,15 @@ def capacity_pressure_score(
     """
     components: Dict[str, float] = {}
     if part_frac is not None:
-        components["participation"] = round(min(40.0, (part_frac / HARD_LIMIT_PARTICIPATION) * 40.0), 2)
+        components["participation"] = round(
+            min(40.0, (part_frac / HARD_LIMIT_PARTICIPATION) * 40.0), 2
+        )
     if impact_bps is not None:
         components["market_impact"] = round(min(30.0, impact_bps / 2.0), 2)
     if spread_bps is not None:
-        components["spread"] = round(min(20.0, spread_bps / _HEAVY_SPREAD_BPS * 20.0), 2)
+        components["spread"] = round(
+            min(20.0, spread_bps / _HEAVY_SPREAD_BPS * 20.0), 2
+        )
     if crowding is not None:
         components["crowding"] = round(min(10.0, float(crowding) / 10.0), 2)
     score = round(min(100.0, sum(components.values())), 2) if components else None
@@ -266,7 +274,9 @@ def assess_capacity(
         "classification": classification,
         "capacity_label": CAPACITY_LABELS[classification],
         "tone": CAPACITY_TONES[classification],
-        "participation_pct": round(part_frac * 100, 2) if part_frac is not None else None,
+        "participation_pct": round(part_frac * 100, 2)
+        if part_frac is not None
+        else None,
         "target_participation_pct": round(TARGET_PARTICIPATION * 100, 2),
         "hard_limit_participation_pct": round(HARD_LIMIT_PARTICIPATION * 100, 2),
         "market_impact_bps": impact,
@@ -299,8 +309,13 @@ def build_capacity_chip(
     short detail. Never green/deploy-toned; explicitly downgrade-only.
     """
     a = assess_capacity(
-        ticker=ticker, size_shares=size_shares, adv=adv, raw_score=raw_score,
-        spread_bps=spread_bps, daily_vol=daily_vol, action=action,
+        ticker=ticker,
+        size_shares=size_shares,
+        adv=adv,
+        raw_score=raw_score,
+        spread_bps=spread_bps,
+        daily_vol=daily_vol,
+        action=action,
     )
     part = a["participation_pct"]
     detail = (
@@ -375,8 +390,12 @@ def build_capacity_context(
     required) — guaranteed by build_provenance_envelope + SIGNAL_CAPACITY rules.
     """
     assessment = assess_capacity(
-        ticker=ticker, size_shares=size_shares, adv=adv, price=price,
-        raw_score=raw_score, spread_bps=spread_bps,
+        ticker=ticker,
+        size_shares=size_shares,
+        adv=adv,
+        price=price,
+        raw_score=raw_score,
+        spread_bps=spread_bps,
     )
     return build_provenance_envelope(
         signal_type=SIGNAL_CAPACITY,

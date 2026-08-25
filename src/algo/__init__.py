@@ -126,7 +126,7 @@ def get_strategy(strategy_id: str) -> IStrategy:
     strategies = _build_all_strategies()
     if strategy_id not in strategies:
         raise ValueError(
-            f"Unknown strategy: {strategy_id}. " f"Available: {list(strategies.keys())}"
+            f"Unknown strategy: {strategy_id}. Available: {list(strategies.keys())}"
         )
     return strategies[strategy_id]()
 
@@ -134,10 +134,14 @@ def get_strategy(strategy_id: str) -> IStrategy:
 def list_all_strategies() -> dict:
     """List all available strategies by category."""
     return {
-        'pattern': ['vcp'],
-        'momentum': ['momentum_breakout', 'momentum_rotation'],
-        'mean_reversion': ['mean_reversion', 'short_term_mean_reversion'],
-        'trend_following': ['trend_following', 'short_term_trend_following'],
-        'swing_trading': ['classic_swing'],
-        'earnings': ['pre_earnings_momentum', 'post_earnings_drift', 'earnings_breakout'],
+        "pattern": ["vcp"],
+        "momentum": ["momentum_breakout", "momentum_rotation"],
+        "mean_reversion": ["mean_reversion", "short_term_mean_reversion"],
+        "trend_following": ["trend_following", "short_term_trend_following"],
+        "swing_trading": ["classic_swing"],
+        "earnings": [
+            "pre_earnings_momentum",
+            "post_earnings_drift",
+            "earnings_breakout",
+        ],
     }

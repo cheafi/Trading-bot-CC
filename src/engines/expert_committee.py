@@ -10,10 +10,8 @@ construction → risk → execution, plus scikit-learn's calibration docs.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 __all__ = [
     "Expert",
@@ -104,7 +102,9 @@ class Expert:
         # Exponential moving average for regime accuracy
         alpha = 0.1
         old = self.accuracy_by_regime.get(regime, 0.5)
-        self.accuracy_by_regime[regime] = old * (1 - alpha) + (1.0 if correct else 0.0) * alpha
+        self.accuracy_by_regime[regime] = (
+            old * (1 - alpha) + (1.0 if correct else 0.0) * alpha
+        )
 
     def to_dict(self) -> dict:
         return {
@@ -188,59 +188,263 @@ class ExpertCommittee:
 
         # ── Trend expert ──
         if trending and rsi > 50:
-            votes.append(ExpertVote("Trend", "LONG", min(rsi, 90), "Trend alignment confirmed", 0.8, "Trend reversal", "STRONG"))
+            votes.append(
+                ExpertVote(
+                    "Trend",
+                    "LONG",
+                    min(rsi, 90),
+                    "Trend alignment confirmed",
+                    0.8,
+                    "Trend reversal",
+                    "STRONG",
+                )
+            )
         elif trending:
-            votes.append(ExpertVote("Trend", "LONG", 55, "Trend intact but momentum fading", 0.5, "Momentum loss", "MODERATE"))
+            votes.append(
+                ExpertVote(
+                    "Trend",
+                    "LONG",
+                    55,
+                    "Trend intact but momentum fading",
+                    0.5,
+                    "Momentum loss",
+                    "MODERATE",
+                )
+            )
         else:
-            votes.append(ExpertVote("Trend", "FLAT", 30, "No clear trend", 0.6, "Whipsaw", "WEAK"))
+            votes.append(
+                ExpertVote(
+                    "Trend", "FLAT", 30, "No clear trend", 0.6, "Whipsaw", "WEAK"
+                )
+            )
 
         # ── Mean reversion expert ──
         if rsi < 30:
-            votes.append(ExpertVote("MeanReversion", "LONG", 75, "RSI oversold — reversion likely", 0.7, "Continued selling", "STRONG"))
+            votes.append(
+                ExpertVote(
+                    "MeanReversion",
+                    "LONG",
+                    75,
+                    "RSI oversold — reversion likely",
+                    0.7,
+                    "Continued selling",
+                    "STRONG",
+                )
+            )
         elif rsi > 70:
-            votes.append(ExpertVote("MeanReversion", "FLAT", 60, "RSI overbought — caution", 0.6, "Blow-off top", "MODERATE"))
+            votes.append(
+                ExpertVote(
+                    "MeanReversion",
+                    "FLAT",
+                    60,
+                    "RSI overbought — caution",
+                    0.6,
+                    "Blow-off top",
+                    "MODERATE",
+                )
+            )
         else:
-            votes.append(ExpertVote("MeanReversion", "ABSTAIN", 40, "RSI neutral — no edge", 0.4, "N/A", "NEUTRAL"))
+            votes.append(
+                ExpertVote(
+                    "MeanReversion",
+                    "ABSTAIN",
+                    40,
+                    "RSI neutral — no edge",
+                    0.4,
+                    "N/A",
+                    "NEUTRAL",
+                )
+            )
 
         # ── Macro expert ──
         if vix > 35:
-            votes.append(ExpertVote("Macro", "FLAT", 80, "VIX crisis — capital preservation", 0.9, "Systemic risk", "CRISIS"))
+            votes.append(
+                ExpertVote(
+                    "Macro",
+                    "FLAT",
+                    80,
+                    "VIX crisis — capital preservation",
+                    0.9,
+                    "Systemic risk",
+                    "CRISIS",
+                )
+            )
         elif vix > 25:
-            votes.append(ExpertVote("Macro", "FLAT", 60, "VIX elevated — reduce exposure", 0.7, "Volatility expansion", "CAUTIOUS"))
+            votes.append(
+                ExpertVote(
+                    "Macro",
+                    "FLAT",
+                    60,
+                    "VIX elevated — reduce exposure",
+                    0.7,
+                    "Volatility expansion",
+                    "CAUTIOUS",
+                )
+            )
         else:
-            votes.append(ExpertVote("Macro", "LONG", 55, "Macro environment supportive", 0.5, "Policy surprise", "SUPPORTIVE"))
+            votes.append(
+                ExpertVote(
+                    "Macro",
+                    "LONG",
+                    55,
+                    "Macro environment supportive",
+                    0.5,
+                    "Policy surprise",
+                    "SUPPORTIVE",
+                )
+            )
 
         # ── Volatility expert ──
         if atr_pct > 0.04:
-            votes.append(ExpertVote("Volatility", "FLAT", 65, "High ATR — wide stops needed", 0.6, "Gap risk", "HIGH_VOL"))
+            votes.append(
+                ExpertVote(
+                    "Volatility",
+                    "FLAT",
+                    65,
+                    "High ATR — wide stops needed",
+                    0.6,
+                    "Gap risk",
+                    "HIGH_VOL",
+                )
+            )
         elif vol_ratio > 1.5:
-            votes.append(ExpertVote("Volatility", "LONG", 70, "Volume surge — institutional interest", 0.7, "False breakout", "STRONG"))
+            votes.append(
+                ExpertVote(
+                    "Volatility",
+                    "LONG",
+                    70,
+                    "Volume surge — institutional interest",
+                    0.7,
+                    "False breakout",
+                    "STRONG",
+                )
+            )
         else:
-            votes.append(ExpertVote("Volatility", "ABSTAIN", 40, "Normal volatility — no signal", 0.4, "N/A", "NEUTRAL"))
+            votes.append(
+                ExpertVote(
+                    "Volatility",
+                    "ABSTAIN",
+                    40,
+                    "Normal volatility — no signal",
+                    0.4,
+                    "N/A",
+                    "NEUTRAL",
+                )
+            )
 
         # ── Execution expert ──
         if vol_ratio < 0.5:
-            votes.append(ExpertVote("Execution", "FLAT", 70, "Thin volume — poor fill quality", 0.8, "Slippage", "POOR"))
+            votes.append(
+                ExpertVote(
+                    "Execution",
+                    "FLAT",
+                    70,
+                    "Thin volume — poor fill quality",
+                    0.8,
+                    "Slippage",
+                    "POOR",
+                )
+            )
         elif rr_ratio < 1.5:
-            votes.append(ExpertVote("Execution", "FLAT", 55, "R:R below threshold", 0.6, "Insufficient reward", "MARGINAL"))
+            votes.append(
+                ExpertVote(
+                    "Execution",
+                    "FLAT",
+                    55,
+                    "R:R below threshold",
+                    0.6,
+                    "Insufficient reward",
+                    "MARGINAL",
+                )
+            )
         else:
-            votes.append(ExpertVote("Execution", "LONG", 65, "Adequate liquidity and R:R", 0.6, "Market impact", "ACCEPTABLE"))
+            votes.append(
+                ExpertVote(
+                    "Execution",
+                    "LONG",
+                    65,
+                    "Adequate liquidity and R:R",
+                    0.6,
+                    "Market impact",
+                    "ACCEPTABLE",
+                )
+            )
 
         # ── Portfolio expert ──
         if portfolio_heat > 0.8:
-            votes.append(ExpertVote("Portfolio", "FLAT", 80, "Portfolio heat critical — no new risk", 0.9, "Concentration", "OVERHEATED"))
+            votes.append(
+                ExpertVote(
+                    "Portfolio",
+                    "FLAT",
+                    80,
+                    "Portfolio heat critical — no new risk",
+                    0.9,
+                    "Concentration",
+                    "OVERHEATED",
+                )
+            )
         elif portfolio_heat > 0.6:
-            votes.append(ExpertVote("Portfolio", "LONG", 50, "Portfolio has room but limited", 0.5, "Correlation spike", "WARM"))
+            votes.append(
+                ExpertVote(
+                    "Portfolio",
+                    "LONG",
+                    50,
+                    "Portfolio has room but limited",
+                    0.5,
+                    "Correlation spike",
+                    "WARM",
+                )
+            )
         else:
-            votes.append(ExpertVote("Portfolio", "LONG", 65, "Portfolio has capacity", 0.6, "Sector overlap", "COOL"))
+            votes.append(
+                ExpertVote(
+                    "Portfolio",
+                    "LONG",
+                    65,
+                    "Portfolio has capacity",
+                    0.6,
+                    "Sector overlap",
+                    "COOL",
+                )
+            )
 
         # ── Risk expert ──
         if vix > 35 or portfolio_heat > 0.8:
-            votes.append(ExpertVote("Risk", "FLAT", 85, "Risk conditions prohibitive", 0.9, "Drawdown", "NO_TRADE"))
+            votes.append(
+                ExpertVote(
+                    "Risk",
+                    "FLAT",
+                    85,
+                    "Risk conditions prohibitive",
+                    0.9,
+                    "Drawdown",
+                    "NO_TRADE",
+                )
+            )
         elif atr_pct > 0.05:
-            votes.append(ExpertVote("Risk", "FLAT", 60, "ATR too wide for standard sizing", 0.7, "Stop distance", "REDUCE"))
+            votes.append(
+                ExpertVote(
+                    "Risk",
+                    "FLAT",
+                    60,
+                    "ATR too wide for standard sizing",
+                    0.7,
+                    "Stop distance",
+                    "REDUCE",
+                )
+            )
         else:
-            votes.append(ExpertVote("Risk", "LONG", 55, "Risk within parameters", 0.5, "Black swan", "ACCEPTABLE"))
+            votes.append(
+                ExpertVote(
+                    "Risk",
+                    "LONG",
+                    55,
+                    "Risk within parameters",
+                    0.5,
+                    "Black swan",
+                    "ACCEPTABLE",
+                )
+            )
 
         return votes
 
@@ -288,15 +492,27 @@ class ExpertCommittee:
 
         # Composite conviction (weighted average of agreeing votes)
         if agreeing and total_weight > 0:
-            composite = sum(
-                v.conviction * (expert_map.get(v.expert_name, Expert("?", "?")).weight_for_regime(regime))
-                for v in agreeing
-            ) / total_weight
+            composite = (
+                sum(
+                    v.conviction
+                    * (
+                        expert_map.get(
+                            v.expert_name, Expert("?", "?")
+                        ).weight_for_regime(regime)
+                    )
+                    for v in agreeing
+                )
+                / total_weight
+            )
         else:
             composite = 0
 
         # Dissenting views
-        dissenting = [v.to_dict() for v in votes if v.direction != consensus and v.direction != "ABSTAIN"]
+        dissenting = [
+            v.to_dict()
+            for v in votes
+            if v.direction != consensus and v.direction != "ABSTAIN"
+        ]
 
         # Dominant risk
         risks = [v.key_risk for v in votes if v.key_risk != "N/A"]

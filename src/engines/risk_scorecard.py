@@ -75,7 +75,9 @@ class RiskScorecardEngine:
             "status": (
                 "critical"
                 if drawdown_pct > 0.15
-                else "warning" if drawdown_pct > 0.08 else "ok"
+                else "warning"
+                if drawdown_pct > 0.08
+                else "ok"
             ),
         }
         if drawdown_pct > 0.15:
@@ -94,7 +96,9 @@ class RiskScorecardEngine:
             "status": (
                 "critical"
                 if portfolio_heat_pct > 0.06
-                else "warning" if portfolio_heat_pct > 0.04 else "ok"
+                else "warning"
+                if portfolio_heat_pct > 0.04
+                else "ok"
             ),
         }
         if portfolio_heat_pct > 0.06:
@@ -112,7 +116,9 @@ class RiskScorecardEngine:
             "status": (
                 "critical"
                 if concentration_grade in ("D", "F")
-                else "warning" if concentration_grade == "C" else "ok"
+                else "warning"
+                if concentration_grade == "C"
+                else "ok"
             ),
         }
         if concentration_grade in ("D", "F"):
@@ -148,7 +154,9 @@ class RiskScorecardEngine:
             "status": (
                 "critical"
                 if capacity_ratio >= 1.0
-                else "warning" if capacity_ratio > 0.7 else "ok"
+                else "warning"
+                if capacity_ratio > 0.7
+                else "ok"
             ),
         }
         if capacity_ratio >= 1.0:

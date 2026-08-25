@@ -66,11 +66,16 @@ def fetch_closes_batch(
     if needed:
         try:
             import yfinance as yf
+
             # Batch download — single HTTP call for all tickers
             batch_str = " ".join(needed)
             data = yf.download(
-                batch_str, period=period, interval=interval,
-                progress=False, group_by="ticker", threads=True,
+                batch_str,
+                period=period,
+                interval=interval,
+                progress=False,
+                group_by="ticker",
+                threads=True,
             )
 
             if data is not None and len(data) > 0:
@@ -119,18 +124,24 @@ def compute_rs_date_aligned(
     Merges on date, not array position — handles IPOs, missing days, etc.
     """
     import pandas as pd
+
     from src.services.indicators import compute_rs_vs_benchmark
 
     # Align on date index — inner join keeps only common dates
     merged = pd.concat(
         [ticker_closes.rename("ticker"), benchmark_closes.rename("bench")],
-        axis=1, join="inner",
+        axis=1,
+        join="inner",
     ).dropna()
 
     if len(merged) < 22:
         return {
-            "rs_composite": 100.0, "rs_1m": 100.0, "rs_3m": 100.0,
-            "rs_6m": 100.0, "rs_slope": 0.0, "rs_status": "NEUTRAL",
+            "rs_composite": 100.0,
+            "rs_1m": 100.0,
+            "rs_3m": 100.0,
+            "rs_6m": 100.0,
+            "rs_slope": 0.0,
+            "rs_status": "NEUTRAL",
         }
 
     return compute_rs_vs_benchmark(

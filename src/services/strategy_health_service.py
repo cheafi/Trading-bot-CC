@@ -231,7 +231,7 @@ def load_per_strategy(
 
     summaries = sorted(
         (r.to_summary(window_days) for r in rows.values()),
-        key=lambda s: (s.get("sharpe_trade") or 0.0),
+        key=lambda s: s.get("sharpe_trade") or 0.0,
         reverse=True,
     )
 

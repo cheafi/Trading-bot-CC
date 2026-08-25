@@ -257,8 +257,8 @@ class SignalEnricher:
             start = len(high) - lookback + i
             end = start + window
             h = float(np.max(high[start:end]))
-            l = float(np.min(low[start:end]))
-            curr_range = h - l
+            low_val = float(np.min(low[start:end]))
+            curr_range = h - low_val
 
             if prev_range > 0 and curr_range < prev_range * 0.7:
                 contractions += 1

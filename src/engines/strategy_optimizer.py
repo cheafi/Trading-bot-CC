@@ -179,6 +179,8 @@ def _backtest_swing(
     in_trade = False
     pb_count = 0
     entry_bar = 0
+    entry = stop_price = target_price = 0.0
+    hold = 0
 
     for i in range(55, len(close)):
         price = close.iloc[i]
@@ -296,6 +298,8 @@ def _backtest_breakout(
     hold_days = []
     in_trade = False
     entry_bar = 0
+    entry = stop_price = target_price = 0.0
+    hold = 0
 
     for i in range(lookback + 5, len(close)):
         price = close.iloc[i]
@@ -402,6 +406,8 @@ def _backtest_mean_reversion(
     hold_days = []
     in_trade = False
     entry_bar = 0
+    entry = stop_price = target_price = 0.0
+    hold = 0
 
     for i in range(20, len(close)):
         price = close.iloc[i]
@@ -499,6 +505,8 @@ def _backtest_momentum(
     hold_days = []
     in_trade = False
     entry_bar = 0
+    entry = stop_price = target_price = 0.0
+    hold = 0
 
     for i in range(21, len(close)):
         price = close.iloc[i]
@@ -968,9 +976,7 @@ class StrategyOptimizer:
             best_s = -999
             sample_keys = list(grid.keys())[:2]  # limit to 2 params for speed
             for v0 in grid[sample_keys[0]][:3]:
-                for v1 in (
-                    grid[sample_keys[1]][:3] if len(sample_keys) > 1 else [None]
-                ):
+                for v1 in grid[sample_keys[1]][:3] if len(sample_keys) > 1 else [None]:
                     p = dict(cfg["default_params"])
                     p[sample_keys[0]] = v0
                     if v1 is not None:

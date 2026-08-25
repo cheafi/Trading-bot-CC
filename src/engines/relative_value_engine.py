@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class MetricComparison:
     """Single metric comparison across peer group."""
+
     metric_name: str
     display_name: str
     stock_value: float = 0.0
@@ -44,7 +45,10 @@ class MetricComparison:
         """Which comparisons the stock beats (lower is better for some)."""
         wins = []
         lower_is_better = self.metric_name in (
-            "pe_ratio", "debt_to_equity", "volatility", "beta",
+            "pe_ratio",
+            "debt_to_equity",
+            "volatility",
+            "beta",
         )
         if lower_is_better:
             if self.stock_value < self.peer_median:
@@ -81,6 +85,7 @@ class MetricComparison:
 @dataclass
 class RelativeValueReport:
     """Full relative value comparison for a stock."""
+
     ticker: str
     sector: str = ""
     industry: str = ""
@@ -210,12 +215,14 @@ class RelativeValueEngine:
         if total_metrics > 0:
             driver_pct = len(report.conviction_drivers) / total_metrics
             risk_pct = len(report.conviction_risks) / total_metrics
-            report.edge_score = max(0, min(100,
-                50 + (driver_pct * 60) - (risk_pct * 40)
-            ))
+            report.edge_score = max(
+                0, min(100, 50 + (driver_pct * 60) - (risk_pct * 40))
+            )
 
         if report.edge_score >= 70:
-            report.edge_summary = "Strong relative edge — stock outperforms on most metrics"
+            report.edge_summary = (
+                "Strong relative edge — stock outperforms on most metrics"
+            )
         elif report.edge_score >= 50:
             report.edge_summary = "Moderate edge — mixed relative positioning"
         elif report.edge_score >= 30:
@@ -225,9 +232,7 @@ class RelativeValueEngine:
 
         return report
 
-    def _extract_metric(
-        self, data: Dict[str, Any], field_name: str
-    ) -> Optional[float]:
+    def _extract_metric(self, data: Dict[str, Any], field_name: str) -> Optional[float]:
         """Extract a metric from data, checking common key patterns."""
         # Direct lookup
         val = data.get(field_name)
@@ -248,9 +253,7 @@ class RelativeValueEngine:
 
         return None
 
-    def _median_metric(
-        self, peers: List[Dict[str, Any]], field_name: str
-    ) -> float:
+    def _median_metric(self, peers: List[Dict[str, Any]], field_name: str) -> float:
         """Compute median of a metric across peer group."""
         values = []
         for p in peers:

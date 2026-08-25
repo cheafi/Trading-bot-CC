@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RejectionRecord:
     """A single rejected idea with full reasoning."""
+
     ticker: str
     rejected_at: str = ""
     strategy: str = ""
@@ -65,6 +66,7 @@ class RejectionRecord:
 @dataclass
 class RejectionSummary:
     """Aggregate rejection intelligence."""
+
     total_evaluated: int = 0
     total_rejected: int = 0
     total_actionable: int = 0
@@ -165,7 +167,8 @@ class RejectionTracker:
             reasons=explanation.get("key_contradiction", []),
             failed_criteria=self._extract_failed_criteria(decision),
             risk_factors=explanation.get("invalidation", "").split(". ")
-            if explanation.get("invalidation") else [],
+            if explanation.get("invalidation")
+            else [],
             passing_criteria=explanation.get("key_evidence", []),
             counterfactuals=self._build_counterfactuals(explanation, decision),
             strategy=signal.get("strategy", ""),
@@ -175,9 +178,7 @@ class RejectionTracker:
             near_miss_score=decision.get("confidence", 0) * 100,
         )
 
-    def get_summary(
-        self, total_evaluated: Optional[int] = None
-    ) -> RejectionSummary:
+    def get_summary(self, total_evaluated: Optional[int] = None) -> RejectionSummary:
         """Get aggregate rejection intelligence."""
         summary = RejectionSummary()
         summary.rejections = list(self._rejections)
@@ -185,12 +186,8 @@ class RejectionTracker:
         summary.total_evaluated = total_evaluated or len(self._rejections)
 
         if summary.total_evaluated > 0:
-            summary.rejection_rate = (
-                summary.total_rejected / summary.total_evaluated
-            )
-        summary.total_actionable = (
-            summary.total_evaluated - summary.total_rejected
-        )
+            summary.rejection_rate = summary.total_rejected / summary.total_evaluated
+        summary.total_actionable = summary.total_evaluated - summary.total_rejected
 
         # Top rejection reasons
         sorted_reasons = sorted(
@@ -201,12 +198,8 @@ class RejectionTracker:
         ]
 
         # Near-misses (score >= 50)
-        summary.near_misses = [
-            r for r in self._rejections if r.near_miss_score >= 50
-        ]
-        summary.near_misses.sort(
-            key=lambda r: r.near_miss_score, reverse=True
-        )
+        summary.near_misses = [r for r in self._rejections if r.near_miss_score >= 50]
+        summary.near_misses.sort(key=lambda r: r.near_miss_score, reverse=True)
 
         return summary
 
@@ -220,25 +213,19 @@ class RejectionTracker:
         gates = decision.get("gates", {})
         for gate_name, gate_val in gates.items():
             if isinstance(gate_val, dict) and not gate_val.get("passed", True):
-                failed.append(
-                    f"{gate_name}: {gate_val.get('reason', 'failed')}"
-                )
+                failed.append(f"{gate_name}: {gate_val.get('reason', 'failed')}")
             elif isinstance(gate_val, bool) and not gate_val:
                 failed.append(f"{gate_name}: gate failed")
         return failed
 
-    def _build_counterfactuals(
-        self, explanation: Dict, decision: Dict
-    ) -> List[str]:
+    def _build_counterfactuals(self, explanation: Dict, decision: Dict) -> List[str]:
         """Build counterfactual statements — what would need to change."""
         counterfactuals = []
 
         # From why_not_stronger
         why_not = explanation.get("why_not_stronger", "")
         if why_not:
-            counterfactuals.append(
-                f"Would be stronger if: {why_not}"
-            )
+            counterfactuals.append(f"Would be stronger if: {why_not}")
 
         # From failed criteria
         gates = decision.get("gates", {})

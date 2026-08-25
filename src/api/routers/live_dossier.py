@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-import numpy as np
 from fastapi import APIRouter, HTTPException, Request
 
 from src.api.deps import sanitize_for_json, validate_ticker
@@ -170,16 +169,19 @@ async def live_dossier(ticker: str, request: Request):
 
     # ── Factor chips ──
     factors = []
-    _fc = lambda name, val, pos: factors.append(
-        {"name": name, "value": val, "signal": pos}
-    )
+
+    def _fc(name, val, pos):
+        return factors.append({"name": name, "value": val, "signal": pos})
+
     _fc(
         "RSI",
         round(rsi, 1),
         (
             "positive"
             if rsi < SIGNAL_THRESHOLDS.rsi_near_oversold
-            else "negative" if rsi > SIGNAL_THRESHOLDS.rsi_overbought else "neutral"
+            else "negative"
+            if rsi > SIGNAL_THRESHOLDS.rsi_overbought
+            else "neutral"
         ),
     )
     _fc(
@@ -214,7 +216,9 @@ async def live_dossier(ticker: str, request: Request):
         (
             "negative"
             if price > bbands_upper
-            else "positive" if price < bbands_lower else "neutral"
+            else "positive"
+            if price < bbands_lower
+            else "neutral"
         ),
     )
     pos_count = sum(1 for f in factors if f["signal"] == "positive")
@@ -253,16 +257,14 @@ async def live_dossier(ticker: str, request: Request):
             f"⚠️ Below 50-day MA (${sma50:.2f}) — intermediate trend bearish, buying against the trend"
         )
     if not above_sma200 and sma200:
-        why_stop.append(
-            f"⚠️ Below 200-day MA (${sma200:.2f}) — long-term trend is down"
-        )
+        why_stop.append(f"⚠️ Below 200-day MA (${sma200:.2f}) — long-term trend is down")
     if macd_signal == "BEARISH":
         why_stop.append(
             "⚠️ MACD bearish — momentum fading, new entries carry higher risk"
         )
     if price > bbands_upper:
         why_stop.append(
-            f"⚠️ Above upper Bollinger Band (${bbands_upper:.2f}) — extended {round((price/bbands_upper-1)*100,1)}% beyond normal range"
+            f"⚠️ Above upper Bollinger Band (${bbands_upper:.2f}) — extended {round((price / bbands_upper - 1) * 100, 1)}% beyond normal range"
         )
     # Support distance context
     if support and price:
@@ -420,5 +422,3 @@ async def live_dossier(ticker: str, request: Request):
             },
         }
     )
-
-

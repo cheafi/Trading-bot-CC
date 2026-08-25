@@ -89,7 +89,9 @@ def build_execution_readiness(
     elif trade_handoff_ready:
         readiness_label = f"Ready — {ibkr_mode.upper()} handoff"
     elif monitoring_only or (ibkr_connected and account_ok):
-        readiness_label = health.get("summary_label") or f"{ibkr_mode.upper()} · monitor / manual"
+        readiness_label = (
+            health.get("summary_label") or f"{ibkr_mode.upper()} · monitor / manual"
+        )
         level = "partial"
     elif ibkr_connected and bracket_ready:
         readiness_label = f"Connected — confirm {ibkr_mode.upper()} order"
@@ -111,7 +113,9 @@ def build_execution_readiness(
         "handoff_readiness": (
             "ready"
             if trade_handoff_ready
-            else "monitoring" if monitoring_only else "blocked"
+            else "monitoring"
+            if monitoring_only
+            else "blocked"
         ),
         "bracket_readiness": "ready" if bracket_ready else "draft",
         "market_data_farm": health.get("market_data_status") or "unknown",
@@ -161,6 +165,8 @@ def build_execution_readiness(
         "last_restore_at": health.get("last_restore_at"),
         "diagnosis": diagnosis if isinstance(diagnosis, dict) else {},
         "api_port_open": bool(
-            (diagnosis or {}).get("api_port_open") if isinstance(diagnosis, dict) else False
+            (diagnosis or {}).get("api_port_open")
+            if isinstance(diagnosis, dict)
+            else False
         ),
     }

@@ -9,6 +9,7 @@ Sprint 25: _get_market_state now fetches **real** VIX, SPY return,
 and market breadth via yfinance instead of returning hardcoded
 defaults.  Falls back gracefully to defaults on any fetch failure.
 """
+
 import asyncio
 import logging
 from datetime import datetime, timezone
@@ -105,9 +106,11 @@ class ContextAssembler:
             if loop.is_running():
                 # Already in async context — use thread
                 import concurrent.futures
+
                 with concurrent.futures.ThreadPoolExecutor() as pool:
                     future = pool.submit(
-                        asyncio.run, self.assemble(tickers),
+                        asyncio.run,
+                        self.assemble(tickers),
                     )
                     return future.result(timeout=30)
             return loop.run_until_complete(
@@ -186,7 +189,8 @@ class ContextAssembler:
         try:
             loop = asyncio.get_event_loop()
             return await loop.run_in_executor(
-                None, self._yfinance_market_state_sync,
+                None,
+                self._yfinance_market_state_sync,
             )
         except Exception as e:
             logger.warning("yfinance market-state fetch failed: %s", e)
@@ -233,6 +237,7 @@ class ContextAssembler:
                 daily_returns = closes.pct_change().dropna().tail(20)
                 if len(daily_returns) >= 10:
                     import math
+
                     rvol = float(daily_returns.std() * math.sqrt(252))
                     result["realized_vol_20d"] = round(rvol, 4)
         except Exception as e:
@@ -244,7 +249,9 @@ class ContextAssembler:
             sectors = ["XLK", "XLF", "XLV", "XLY", "XLP", "XLE", "XLI", "XLU", "XLB"]
             above = 0
             checked = 0
-            data = yf.download(sectors, period="60d", progress=False, group_by="ticker", threads=True)
+            data = yf.download(
+                sectors, period="60d", progress=False, group_by="ticker", threads=True
+            )
             for etf in sectors:
                 try:
                     if len(sectors) > 1:
@@ -298,7 +305,8 @@ class ContextAssembler:
                     tickers_list: List[str] = []
                     for p in positions:
                         tk = getattr(
-                            p, "ticker",
+                            p,
+                            "ticker",
                             getattr(p, "symbol", ""),
                         )
                         if not tk:
@@ -314,14 +322,16 @@ class ContextAssembler:
                 )
                 if account:
                     val = getattr(
-                        account, "portfolio_value",
+                        account,
+                        "portfolio_value",
                         account.get("portfolio_value", 0)
-                        if isinstance(account, dict) else 0,
+                        if isinstance(account, dict)
+                        else 0,
                     )
                     cash = getattr(
-                        account, "cash",
-                        account.get("cash", 0)
-                        if isinstance(account, dict) else 0,
+                        account,
+                        "cash",
+                        account.get("cash", 0) if isinstance(account, dict) else 0,
                     )
                     state["total_value"] = val
                     state["equity"] = val
@@ -333,7 +343,8 @@ class ContextAssembler:
         return state
 
     async def _get_news(
-        self, tickers: List[str],
+        self,
+        tickers: List[str],
     ) -> Dict[str, List[Dict[str, Any]]]:
         """Fetch recent news for tickers."""
         news_by_ticker: Dict[str, List[Dict[str, Any]]] = {}

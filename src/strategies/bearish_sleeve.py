@@ -13,10 +13,11 @@ Regime gate: only active in RISK_OFF or CRISIS regimes.
 Put expression: auto-generates protective put plan via
 ExpressionEngine when options data is available.
 """
+
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -24,19 +25,22 @@ logger = logging.getLogger(__name__)
 
 # Regime labels that enable the bearish sleeve
 BEARISH_REGIMES = {
-    "risk_off", "crisis", "risk_off_downtrend",
+    "risk_off",
+    "crisis",
+    "risk_off_downtrend",
 }
 
 
 @dataclass
 class BearishSetup:
     """A single bearish trade setup."""
+
     ticker: str
     direction: str = "SHORT"
     entry_price: float = 0.0
     stop_price: float = 0.0
     target_price: float = 0.0
-    setup_type: str = "breakdown"   # breakdown | failed_rally | sector_weak
+    setup_type: str = "breakdown"  # breakdown | failed_rally | sector_weak
     confidence: float = 50.0
     risk_reward: float = 1.5
     sector: str = ""
@@ -86,22 +90,20 @@ class BearishSleeve:
 
     # Breakdown thresholds
     SMA_PERIOD = 50
-    VOLUME_SURGE = 1.5     # relative volume for confirmation
+    VOLUME_SURGE = 1.5  # relative volume for confirmation
     MIN_DECLINE_PCT = 2.0  # min % below SMA50
 
     def __init__(self):
         self._setups: List[BearishSetup] = []
 
     def is_active(
-        self, regime_state: Dict[str, Any],
+        self,
+        regime_state: Dict[str, Any],
     ) -> bool:
         """Check if bearish sleeve should be active."""
         regime = regime_state.get("regime", "")
         risk = regime_state.get("risk_regime", "")
-        return (
-            regime in BEARISH_REGIMES
-            or risk in ("risk_off", "crisis")
-        )
+        return regime in BEARISH_REGIMES or risk in ("risk_off", "crisis")
 
     def scan(
         self,
@@ -132,7 +134,9 @@ class BearishSleeve:
                 continue
 
             setup = self._evaluate_ticker(
-                ticker, data, regime_label,
+                ticker,
+                data,
+                regime_label,
             )
             if setup:
                 setups.append(setup)
@@ -154,7 +158,7 @@ class BearishSleeve:
         volume = data.get("volume", 0)
         avg_volume = data.get("avg_volume", 1)
         rsi = data.get("rsi_14", 50)
-        high_52w = data.get("high_52w", close)
+        data.get("high_52w", close)
         sector = data.get("sector", "")
 
         if not close or not sma50:
@@ -165,21 +169,21 @@ class BearishSleeve:
         rel_vol = volume / avg_volume if avg_volume > 0 else 1
 
         # Breakdown setup
-        if (
-            pct_below >= self.MIN_DECLINE_PCT
-            and rel_vol >= self.VOLUME_SURGE
-        ):
+        if pct_below >= self.MIN_DECLINE_PCT and rel_vol >= self.VOLUME_SURGE:
             confidence = min(
-                85, 50 + pct_below * 3 + (rel_vol - 1) * 10,
+                85,
+                50 + pct_below * 3 + (rel_vol - 1) * 10,
             )
             # Stop above SMA50
             stop = sma50 * 1.02
             # Target: -2x the stop distance
             risk = stop - close
             target = close - risk * 2
-            rr = abs(close - target) / abs(
-                stop - close
-            ) if abs(stop - close) > 0 else 1.5
+            rr = (
+                abs(close - target) / abs(stop - close)
+                if abs(stop - close) > 0
+                else 1.5
+            )
 
             return BearishSetup(
                 ticker=ticker,

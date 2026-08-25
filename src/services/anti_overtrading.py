@@ -37,7 +37,9 @@ def evaluate_restraint(
     if deployable_count < 1 and pilot_count < 1:
         restraint_active = True
         posture = "patience"
-        reasons.append("Zero deploy-grade names — overtrading would be discretionary churn")
+        reasons.append(
+            "Zero deploy-grade names — overtrading would be discretionary churn"
+        )
 
     if recent_trade_count_5d >= _MAX_DAILY_DEPLOYS * 3:
         restraint_active = True
@@ -68,9 +70,7 @@ def evaluate_restraint(
     restraint_score = min(100, score)
 
     summary = (
-        " · ".join(reasons)
-        if reasons
-        else "Restraint clear — size within book rules"
+        " · ".join(reasons) if reasons else "Restraint clear — size within book rules"
     )
 
     return {

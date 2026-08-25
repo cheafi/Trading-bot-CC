@@ -19,19 +19,25 @@ Usage::
     )
     # tickers is a List[str] ready for yfinance download
 """
+
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
+from src.scanners.intl_universe import (
+    AU_TICKERS,
+    CRYPTO_TICKERS,
+    HK_TICKERS,
+    IN_TICKERS,
+    JP_TICKERS,
+    KR_TICKERS,
+    TW_TICKERS,
+)
 from src.scanners.multi_market_scanner import (
     MarketRegion,
     UniverseAsset,
 )
-from src.scanners.us_universe import US_UNIVERSE, US_SECTOR_MAP
-from src.scanners.intl_universe import (
-    HK_TICKERS, JP_TICKERS, KR_TICKERS, TW_TICKERS,
-    AU_TICKERS, IN_TICKERS, CRYPTO_TICKERS,
-)
+from src.scanners.us_universe import US_SECTOR_MAP, US_UNIVERSE
 
 logger = logging.getLogger(__name__)
 
@@ -105,42 +111,139 @@ _US_SECTOR_HINTS: Dict[str, str] = dict(US_SECTOR_MAP)
 # Sprint 32: sector hints for mid-caps
 _MID_SECTOR_MAP = {
     "Technology": [
-        "MRVL", "ON", "NXPI", "KLAC", "LRCX", "MPWR",
-        "SWKS", "QCOM", "NOW", "INTU", "ADBE", "CRM",
-        "WDAY", "TEAM", "HUBS", "VEEV", "BILL", "PAYC",
-        "PCTY", "GTLB", "MDB", "ESTC", "CFLT", "DKNG",
+        "MRVL",
+        "ON",
+        "NXPI",
+        "KLAC",
+        "LRCX",
+        "MPWR",
+        "SWKS",
+        "QCOM",
+        "NOW",
+        "INTU",
+        "ADBE",
+        "CRM",
+        "WDAY",
+        "TEAM",
+        "HUBS",
+        "VEEV",
+        "BILL",
+        "PAYC",
+        "PCTY",
+        "GTLB",
+        "MDB",
+        "ESTC",
+        "CFLT",
+        "DKNG",
     ],
     "Financials": [
-        "GS", "MS", "JPM", "BAC", "WFC", "C", "SCHW",
-        "BX", "KKR", "AXP", "PYPL", "FIS", "FISV", "GPN",
+        "GS",
+        "MS",
+        "JPM",
+        "BAC",
+        "WFC",
+        "C",
+        "SCHW",
+        "BX",
+        "KKR",
+        "AXP",
+        "PYPL",
+        "FIS",
+        "FISV",
+        "GPN",
     ],
     "Healthcare": [
-        "ISRG", "REGN", "VRTX", "GILD", "AMGN", "BIIB",
-        "MRNA", "BMY", "ZTS", "EW", "DXCM", "ALGN",
-        "IDXX", "SYK", "MDT", "BSX",
+        "ISRG",
+        "REGN",
+        "VRTX",
+        "GILD",
+        "AMGN",
+        "BIIB",
+        "MRNA",
+        "BMY",
+        "ZTS",
+        "EW",
+        "DXCM",
+        "ALGN",
+        "IDXX",
+        "SYK",
+        "MDT",
+        "BSX",
     ],
     "Industrials": [
-        "CAT", "DE", "GE", "LMT", "NOC", "GD", "BA",
-        "MMM", "EMR", "ETN", "ITW", "PH", "ROK", "FTV",
+        "CAT",
+        "DE",
+        "GE",
+        "LMT",
+        "NOC",
+        "GD",
+        "BA",
+        "MMM",
+        "EMR",
+        "ETN",
+        "ITW",
+        "PH",
+        "ROK",
+        "FTV",
     ],
     "Energy": [
-        "XOM", "CVX", "SLB", "EOG", "PXD", "DVN", "OXY",
-        "MPC", "PSX", "VLO", "HAL",
+        "XOM",
+        "CVX",
+        "SLB",
+        "EOG",
+        "PXD",
+        "DVN",
+        "OXY",
+        "MPC",
+        "PSX",
+        "VLO",
+        "HAL",
     ],
     "Consumer": [
-        "NKE", "SBUX", "TGT", "WMT", "LULU", "DG",
-        "DLTR", "ROST", "TJX", "CMG", "YUM", "DPZ",
-        "WYNN", "MGM", "MAR", "HLT", "DIS", "NFLX",
-        "CMCSA", "PARA", "WBD", "SPOT", "ROKU",
+        "NKE",
+        "SBUX",
+        "TGT",
+        "WMT",
+        "LULU",
+        "DG",
+        "DLTR",
+        "ROST",
+        "TJX",
+        "CMG",
+        "YUM",
+        "DPZ",
+        "WYNN",
+        "MGM",
+        "MAR",
+        "HLT",
+        "DIS",
+        "NFLX",
+        "CMCSA",
+        "PARA",
+        "WBD",
+        "SPOT",
+        "ROKU",
     ],
     "REITs": [
-        "AMT", "CCI", "PLD", "EQIX", "O", "SPG",
+        "AMT",
+        "CCI",
+        "PLD",
+        "EQIX",
+        "O",
+        "SPG",
     ],
     "Utilities": [
-        "SO", "DUK", "AEP", "D", "SRE",
+        "SO",
+        "DUK",
+        "AEP",
+        "D",
+        "SRE",
     ],
     "Staples": [
-        "CL", "GIS", "K", "HSY",
+        "CL",
+        "GIS",
+        "K",
+        "HSY",
     ],
 }
 for _sector, _tickers in _MID_SECTOR_MAP.items():
@@ -150,70 +253,309 @@ for _sector, _tickers in _MID_SECTOR_MAP.items():
 # Sprint 32-b: sector hints for S&P 500 remainder
 _SP500_SECTOR_MAP = {
     "Technology": [
-        "ORCL", "IBM", "FTNT", "ANSS", "CDNS", "SNPS", "KEYS",
-        "TER", "ZBRA", "JNPR", "HPE", "HPQ", "NTAP", "WDC",
-        "STX", "AKAM", "FFIV", "LDOS", "IT", "TRMB", "VRSN",
-        "GEN", "CTSH", "ENPH", "FSLR", "TYL", "BR", "CDW",
-        "FICO", "CPAY", "GDDY", "EPAM", "PTC", "MANH", "NTNX",
-        "JKHY", "MSCI",
+        "ORCL",
+        "IBM",
+        "FTNT",
+        "ANSS",
+        "CDNS",
+        "SNPS",
+        "KEYS",
+        "TER",
+        "ZBRA",
+        "JNPR",
+        "HPE",
+        "HPQ",
+        "NTAP",
+        "WDC",
+        "STX",
+        "AKAM",
+        "FFIV",
+        "LDOS",
+        "IT",
+        "TRMB",
+        "VRSN",
+        "GEN",
+        "CTSH",
+        "ENPH",
+        "FSLR",
+        "TYL",
+        "BR",
+        "CDW",
+        "FICO",
+        "CPAY",
+        "GDDY",
+        "EPAM",
+        "PTC",
+        "MANH",
+        "NTNX",
+        "JKHY",
+        "MSCI",
     ],
     "Financials": [
-        "BLK", "CB", "PGR", "AFL", "MET", "PRU", "TRV", "AIG",
-        "ALL", "CINF", "AJG", "MMC", "AON", "TROW", "BEN",
-        "IVZ", "NDAQ", "ICE", "CME", "MCO", "SPGI", "ACGL",
-        "RJF", "STT", "NTRS", "CFG", "HBAN", "KEY", "RF",
-        "FITB", "ZION", "CMA", "MTB", "PNC", "USB", "TFC",
-        "DFS", "SYF", "COF", "GL", "L", "ERIE", "RE",
+        "BLK",
+        "CB",
+        "PGR",
+        "AFL",
+        "MET",
+        "PRU",
+        "TRV",
+        "AIG",
+        "ALL",
+        "CINF",
+        "AJG",
+        "MMC",
+        "AON",
+        "TROW",
+        "BEN",
+        "IVZ",
+        "NDAQ",
+        "ICE",
+        "CME",
+        "MCO",
+        "SPGI",
+        "ACGL",
+        "RJF",
+        "STT",
+        "NTRS",
+        "CFG",
+        "HBAN",
+        "KEY",
+        "RF",
+        "FITB",
+        "ZION",
+        "CMA",
+        "MTB",
+        "PNC",
+        "USB",
+        "TFC",
+        "DFS",
+        "SYF",
+        "COF",
+        "GL",
+        "L",
+        "ERIE",
+        "RE",
     ],
     "Healthcare": [
-        "CI", "ELV", "HCA", "HUM", "CNC", "MOH", "A", "IQV",
-        "WAT", "BIO", "DGX", "LH", "HOLX", "MTD", "BAX", "BDX",
-        "COO", "RMD", "PODD", "INCY", "ALNY", "GEHC", "VTRS",
-        "PKI", "RVTY", "TFX", "OGN",
+        "CI",
+        "ELV",
+        "HCA",
+        "HUM",
+        "CNC",
+        "MOH",
+        "A",
+        "IQV",
+        "WAT",
+        "BIO",
+        "DGX",
+        "LH",
+        "HOLX",
+        "MTD",
+        "BAX",
+        "BDX",
+        "COO",
+        "RMD",
+        "PODD",
+        "INCY",
+        "ALNY",
+        "GEHC",
+        "VTRS",
+        "PKI",
+        "RVTY",
+        "TFX",
+        "OGN",
     ],
     "Consumer": [
-        "F", "GM", "APTV", "BWA", "RL", "PVH", "TPR", "GRMN",
-        "POOL", "TSCO", "BBY", "KMX", "AZO", "ORLY", "EBAY",
-        "ETSY", "LVS", "CZR", "RCL", "CCL", "NCLH", "LEN",
-        "DHI", "PHM", "NVR", "DECK", "BURL", "ULTA", "GPC",
-        "EXPE", "CPRT", "PENN",
+        "F",
+        "GM",
+        "APTV",
+        "BWA",
+        "RL",
+        "PVH",
+        "TPR",
+        "GRMN",
+        "POOL",
+        "TSCO",
+        "BBY",
+        "KMX",
+        "AZO",
+        "ORLY",
+        "EBAY",
+        "ETSY",
+        "LVS",
+        "CZR",
+        "RCL",
+        "CCL",
+        "NCLH",
+        "LEN",
+        "DHI",
+        "PHM",
+        "NVR",
+        "DECK",
+        "BURL",
+        "ULTA",
+        "GPC",
+        "EXPE",
+        "CPRT",
+        "PENN",
     ],
     "Staples": [
-        "MDLZ", "KHC", "SJM", "MKC", "CAG", "CPB", "HRL",
-        "TSN", "SYY", "KR", "ADM", "STZ", "TAP", "MNST",
-        "KDP", "CHD", "EL", "WBA", "CVS", "MO",
+        "MDLZ",
+        "KHC",
+        "SJM",
+        "MKC",
+        "CAG",
+        "CPB",
+        "HRL",
+        "TSN",
+        "SYY",
+        "KR",
+        "ADM",
+        "STZ",
+        "TAP",
+        "MNST",
+        "KDP",
+        "CHD",
+        "EL",
+        "WBA",
+        "CVS",
+        "MO",
     ],
     "Industrials": [
-        "WM", "RSG", "VRSK", "PAYX", "ADP", "CTAS", "FAST",
-        "GWW", "SNA", "SWK", "TT", "CARR", "OTIS", "AME",
-        "HUBB", "ROP", "IEX", "XYL", "DOV", "AOS", "GNRC",
-        "PWR", "PCAR", "WAB", "NSC", "CSX", "CHRW", "JBHT",
-        "UAL", "DAL", "LUV", "FDX", "UPS", "IR", "TDG",
-        "HWM", "AXON", "EXPD", "STE", "ALLE", "HII",
+        "WM",
+        "RSG",
+        "VRSK",
+        "PAYX",
+        "ADP",
+        "CTAS",
+        "FAST",
+        "GWW",
+        "SNA",
+        "SWK",
+        "TT",
+        "CARR",
+        "OTIS",
+        "AME",
+        "HUBB",
+        "ROP",
+        "IEX",
+        "XYL",
+        "DOV",
+        "AOS",
+        "GNRC",
+        "PWR",
+        "PCAR",
+        "WAB",
+        "NSC",
+        "CSX",
+        "CHRW",
+        "JBHT",
+        "UAL",
+        "DAL",
+        "LUV",
+        "FDX",
+        "UPS",
+        "IR",
+        "TDG",
+        "HWM",
+        "AXON",
+        "EXPD",
+        "STE",
+        "ALLE",
+        "HII",
     ],
     "Energy": [
-        "WMB", "KMI", "OKE", "TRGP", "FANG", "CTRA", "MRO",
-        "APA", "EQT", "BKR", "HES",
+        "WMB",
+        "KMI",
+        "OKE",
+        "TRGP",
+        "FANG",
+        "CTRA",
+        "MRO",
+        "APA",
+        "EQT",
+        "BKR",
+        "HES",
     ],
     "Materials": [
-        "LIN", "APD", "SHW", "ECL", "DD", "DOW", "LYB", "EMN",
-        "PPG", "ALB", "FMC", "CF", "MOS", "NUE", "STLD", "FCX",
-        "NEM", "IP", "PKG", "AVY", "BLL", "VMC", "MLM", "CE",
-        "CLF", "WRK", "SEE",
+        "LIN",
+        "APD",
+        "SHW",
+        "ECL",
+        "DD",
+        "DOW",
+        "LYB",
+        "EMN",
+        "PPG",
+        "ALB",
+        "FMC",
+        "CF",
+        "MOS",
+        "NUE",
+        "STLD",
+        "FCX",
+        "NEM",
+        "IP",
+        "PKG",
+        "AVY",
+        "BLL",
+        "VMC",
+        "MLM",
+        "CE",
+        "CLF",
+        "WRK",
+        "SEE",
     ],
     "Utilities": [
-        "EXC", "XEL", "ES", "WEC", "ED", "DTE", "CMS", "CNP",
-        "ATO", "NI", "EVRG", "PPL", "FE", "AWK", "PNW", "AES",
+        "EXC",
+        "XEL",
+        "ES",
+        "WEC",
+        "ED",
+        "DTE",
+        "CMS",
+        "CNP",
+        "ATO",
+        "NI",
+        "EVRG",
+        "PPL",
+        "FE",
+        "AWK",
+        "PNW",
+        "AES",
         "LNT",
     ],
     "REITs": [
-        "DLR", "PSA", "WELL", "AVB", "EQR", "ESS", "MAA",
-        "UDR", "INVH", "KIM", "REG", "VTR", "IRM", "SBA",
+        "DLR",
+        "PSA",
+        "WELL",
+        "AVB",
+        "EQR",
+        "ESS",
+        "MAA",
+        "UDR",
+        "INVH",
+        "KIM",
+        "REG",
+        "VTR",
+        "IRM",
+        "SBA",
         "ARE",
     ],
     "Communication": [
-        "T", "VZ", "TMUS", "CHTR", "EA", "TTWO", "MTCH",
-        "PINS", "SNAP", "LYV", "FOXA", "OMC", "IPG",
+        "T",
+        "VZ",
+        "TMUS",
+        "CHTR",
+        "EA",
+        "TTWO",
+        "MTCH",
+        "PINS",
+        "SNAP",
+        "LYV",
+        "FOXA",
+        "OMC",
+        "IPG",
     ],
 }
 for _sector, _tickers in _SP500_SECTOR_MAP.items():
@@ -286,8 +628,14 @@ class UniverseBuilder:
         """
         if markets is None:
             markets = [
-                "us", "hk", "jp", "kr", "tw",
-                "au", "in", "crypto",
+                "us",
+                "hk",
+                "jp",
+                "kr",
+                "tw",
+                "au",
+                "in",
+                "crypto",
             ]
         regime_state = regime_state or {}
         watchlist = watchlist or []
@@ -313,19 +661,20 @@ class UniverseBuilder:
         logger.info(
             "Universe built: %d tickers (%s)",
             len(tickers),
-            ", ".join(
-                f"{m}={stats.get(m, 0)}" for m in markets
-            ),
+            ", ".join(f"{m}={stats.get(m, 0)}" for m in markets),
         )
 
         return UniverseSpec(
-            tickers=tickers, assets=final, stats=stats,
+            tickers=tickers,
+            assets=final,
+            stats=stats,
         )
 
     # ── Stage 1: Source ───────────────────────────────────────
 
     def _source(
-        self, markets: List[str],
+        self,
+        markets: List[str],
     ) -> List[UniverseAsset]:
         """Gather raw assets from universe files."""
         assets: List[UniverseAsset] = []
@@ -333,59 +682,91 @@ class UniverseBuilder:
         if "us" in markets:
             for t in US_UNIVERSE:
                 sector = _US_SECTOR_HINTS.get(t, "Equity")
-                assets.append(UniverseAsset(
-                    ticker=t, name=t,
-                    market=MarketRegion.US, sector=sector,
-                ))
+                assets.append(
+                    UniverseAsset(
+                        ticker=t,
+                        name=t,
+                        market=MarketRegion.US,
+                        sector=sector,
+                    )
+                )
 
         if "hk" in markets:
             for t in HK_TICKERS:
-                assets.append(UniverseAsset(
-                    ticker=t, name=t,
-                    market=MarketRegion.HK, sector="HK Equity",
-                ))
+                assets.append(
+                    UniverseAsset(
+                        ticker=t,
+                        name=t,
+                        market=MarketRegion.HK,
+                        sector="HK Equity",
+                    )
+                )
 
         if "jp" in markets:
             for t in JP_TICKERS:
-                assets.append(UniverseAsset(
-                    ticker=t, name=t,
-                    market=MarketRegion.JP, sector="JP Equity",
-                ))
+                assets.append(
+                    UniverseAsset(
+                        ticker=t,
+                        name=t,
+                        market=MarketRegion.JP,
+                        sector="JP Equity",
+                    )
+                )
 
         if "kr" in markets:
             for t in KR_TICKERS:
-                assets.append(UniverseAsset(
-                    ticker=t, name=t,
-                    market=MarketRegion.US, sector="KR Equity",
-                ))
+                assets.append(
+                    UniverseAsset(
+                        ticker=t,
+                        name=t,
+                        market=MarketRegion.US,
+                        sector="KR Equity",
+                    )
+                )
 
         if "tw" in markets:
             for t in TW_TICKERS:
-                assets.append(UniverseAsset(
-                    ticker=t, name=t,
-                    market=MarketRegion.US, sector="TW Equity",
-                ))
+                assets.append(
+                    UniverseAsset(
+                        ticker=t,
+                        name=t,
+                        market=MarketRegion.US,
+                        sector="TW Equity",
+                    )
+                )
 
         if "au" in markets:
             for t in AU_TICKERS:
-                assets.append(UniverseAsset(
-                    ticker=t, name=t,
-                    market=MarketRegion.US, sector="AU Equity",
-                ))
+                assets.append(
+                    UniverseAsset(
+                        ticker=t,
+                        name=t,
+                        market=MarketRegion.US,
+                        sector="AU Equity",
+                    )
+                )
 
         if "in" in markets:
             for t in IN_TICKERS:
-                assets.append(UniverseAsset(
-                    ticker=t, name=t,
-                    market=MarketRegion.US, sector="IN Equity",
-                ))
+                assets.append(
+                    UniverseAsset(
+                        ticker=t,
+                        name=t,
+                        market=MarketRegion.US,
+                        sector="IN Equity",
+                    )
+                )
 
         if "crypto" in markets:
             for t in CRYPTO_TICKERS:
-                assets.append(UniverseAsset(
-                    ticker=t, name=t,
-                    market=MarketRegion.CRYPTO, sector="Crypto",
-                ))
+                assets.append(
+                    UniverseAsset(
+                        ticker=t,
+                        name=t,
+                        market=MarketRegion.CRYPTO,
+                        sector="Crypto",
+                    )
+                )
 
         return assets
 
@@ -441,6 +822,7 @@ class UniverseBuilder:
         )
 
         if sector_weights:
+
             def _sort_key(a: UniverseAsset) -> float:
                 """Higher weight → lower sort key (appears first)."""
                 sector = a.sector or "Equity"
@@ -485,11 +867,14 @@ class UniverseBuilder:
         prepended: List[UniverseAsset] = []
         for t in watchlist:
             if t not in existing:
-                prepended.append(UniverseAsset(
-                    ticker=t, name=t,
-                    market=MarketRegion.US,
-                    sector="Watchlist",
-                ))
+                prepended.append(
+                    UniverseAsset(
+                        ticker=t,
+                        name=t,
+                        market=MarketRegion.US,
+                        sector="Watchlist",
+                    )
+                )
         return prepended + assets
 
     # ── Sprint 38: Dynamic Sleeve Allocation ──────────────────
@@ -520,20 +905,26 @@ class UniverseBuilder:
 
     SLEEVE_SECTORS = {
         "momentum": {
-            "Technology", "Consumer Discretionary",
+            "Technology",
+            "Consumer Discretionary",
             "Crypto",
         },
         "growth": {
-            "Communication Services", "Biotechnology",
+            "Communication Services",
+            "Biotechnology",
             "Semiconductors",
         },
         "value": {
-            "Financials", "Industrials", "Energy",
+            "Financials",
+            "Industrials",
+            "Energy",
             "Materials",
         },
         "defensive": {
-            "Healthcare", "Utilities",
-            "Consumer Staples", "Real Estate",
+            "Healthcare",
+            "Utilities",
+            "Consumer Staples",
+            "Real Estate",
         },
         "bearish": set(),  # populated dynamically
     }
@@ -563,9 +954,7 @@ class UniverseBuilder:
         total = len(assets)
 
         # Classify each asset into a sleeve
-        sleeve_assets: Dict[str, List[UniverseAsset]] = {
-            s: [] for s in allocation
-        }
+        sleeve_assets: Dict[str, List[UniverseAsset]] = {s: [] for s in allocation}
         for a in assets:
             placed = False
             sector = a.sector or "Equity"
@@ -588,9 +977,7 @@ class UniverseBuilder:
         for sleeve, pct in allocation.items():
             cap = max(1, int(total * pct))
             pool = sleeve_assets.get(sleeve, [])
-            result[sleeve] = [
-                a.ticker for a in pool[:cap]
-            ]
+            result[sleeve] = [a.ticker for a in pool[:cap]]
 
         return result
 
@@ -610,7 +997,5 @@ class UniverseBuilder:
                 "crypto": MarketRegion.CRYPTO,
             }.get(mkey)
             if region:
-                stats[mkey] = sum(
-                    1 for a in assets if a.market == region
-                )
+                stats[mkey] = sum(1 for a in assets if a.market == region)
         return stats

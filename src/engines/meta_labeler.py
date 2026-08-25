@@ -17,10 +17,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from src.core.risk_limits import RISK, SIGNAL_THRESHOLDS
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
+
+from src.core.risk_limits import RISK, SIGNAL_THRESHOLDS
 from src.engines.confidence_calibrator import ConfidenceCalibrator
 
 logger = logging.getLogger(__name__)
@@ -160,7 +161,7 @@ class MetaLabeler:
 
         if ctx.avg_daily_volume < self.cfg["min_adv"]:
             label.vetoes.append(
-                f"ADV {ctx.avg_daily_volume:,.0f} < min " f"{self.cfg['min_adv']:,.0f}"
+                f"ADV {ctx.avg_daily_volume:,.0f} < min {self.cfg['min_adv']:,.0f}"
             )
 
         if ctx.days_to_earnings <= self.cfg["earnings_blackout_days"]:
@@ -208,7 +209,7 @@ class MetaLabeler:
         scores["regime_fit"] = ctx.regime_fit
         if ctx.regime_fit >= 0.6:
             label.reasons_for.append(
-                f"good regime fit ({ctx.regime}): " f"{ctx.regime_fit:.2f}"
+                f"good regime fit ({ctx.regime}): {ctx.regime_fit:.2f}"
             )
         elif ctx.regime_fit < self.cfg["min_regime_fit"]:
             label.reasons_against.append(f"poor regime fit: {ctx.regime_fit:.2f}")
@@ -227,7 +228,7 @@ class MetaLabeler:
             port_score *= 0.5
         if ctx.correlation_to_book > self.cfg["max_correlation_to_book"]:
             label.reasons_against.append(
-                f"high correlation to book: " f"{ctx.correlation_to_book:.2f}"
+                f"high correlation to book: {ctx.correlation_to_book:.2f}"
             )
             port_score *= 0.5
         if ctx.open_positions >= self.cfg["max_open_positions"]:
@@ -252,7 +253,7 @@ class MetaLabeler:
         scores["uncertainty"] = unc_score
         if ctx.uncertainty_width > 0.5:
             label.reasons_against.append(
-                f"wide uncertainty band: " f"\u00b1{ctx.uncertainty_width / 2:.1%}"
+                f"wide uncertainty band: \u00b1{ctx.uncertainty_width / 2:.1%}"
             )
 
         # 6. Execution quality

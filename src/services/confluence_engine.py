@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-
 _WEIGHTS = {
     "insider_cluster": 18,
     "options_conviction": 16,
@@ -49,45 +48,88 @@ def build_confluence(
         w = _WEIGHTS["technical_structure"] // 2
         score += w
         signals.append(
-            {"signal": "unified_verdict", "weight": w, "state": "positive", "detail": unified.get("reason")}
+            {
+                "signal": "unified_verdict",
+                "weight": w,
+                "state": "positive",
+                "detail": unified.get("reason"),
+            }
         )
 
     ins = (smart_money.get("insider") or "").lower()
     if ins == "bullish":
         w = _WEIGHTS["insider_cluster"]
         score += w
-        signals.append({"signal": "insider_cluster", "weight": w, "state": "positive", "detail": "Insider bullish"})
+        signals.append(
+            {
+                "signal": "insider_cluster",
+                "weight": w,
+                "state": "positive",
+                "detail": "Insider bullish",
+            }
+        )
 
-    opt = (smart_money.get("options_flow") or "")
+    opt = smart_money.get("options_flow") or ""
     if opt in ("unusual_activity_watch",):
         w = _WEIGHTS["options_conviction"]
         score += w
-        signals.append({"signal": "options_conviction", "weight": w, "state": "positive", "detail": opt})
+        signals.append(
+            {
+                "signal": "options_conviction",
+                "weight": w,
+                "state": "positive",
+                "detail": opt,
+            }
+        )
 
-    hf = (smart_money.get("hedge_fund_trend") or "")
+    hf = smart_money.get("hedge_fund_trend") or ""
     if "accumul" in hf:
         w = _WEIGHTS["institutional_accumulation"]
         score += w // 2
         signals.append(
-            {"signal": "institutional_accumulation", "weight": w // 2, "state": "mixed", "detail": "13F lagged"}
+            {
+                "signal": "institutional_accumulation",
+                "weight": w // 2,
+                "state": "mixed",
+                "detail": "13F lagged",
+            }
         )
 
     if regime and regime.get("should_trade"):
         w = _WEIGHTS["regime_gate"]
         score += w
-        signals.append({"signal": "regime_gate", "weight": w, "state": "positive", "detail": "Regime allows risk"})
+        signals.append(
+            {
+                "signal": "regime_gate",
+                "weight": w,
+                "state": "positive",
+                "detail": "Regime allows risk",
+            }
+        )
 
     if portfolio_fit and portfolio_fit.get("score", 0) >= 60:
         w = 6
         score += w
         signals.append(
-            {"signal": "portfolio_fit", "weight": w, "state": "positive", "detail": portfolio_fit.get("fit_label")}
+            {
+                "signal": "portfolio_fit",
+                "weight": w,
+                "state": "positive",
+                "detail": portfolio_fit.get("fit_label"),
+            }
         )
 
     action = (pm_answer.get("action_now") or "").upper()
     if action == "AVOID":
         score = max(0, score - 25)
-        signals.append({"signal": "pm_avoid", "weight": -25, "state": "negative", "detail": "PM layer avoid"})
+        signals.append(
+            {
+                "signal": "pm_avoid",
+                "weight": -25,
+                "state": "negative",
+                "detail": "PM layer avoid",
+            }
+        )
 
     normalized = round(min(100, score / max_score * 100)) if max_score else 0
     return {

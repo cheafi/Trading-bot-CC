@@ -174,7 +174,8 @@ class FundBuilder:
 
     @classmethod
     def trend_leader(
-        cls, capital: float = 100000.0,
+        cls,
+        capital: float = 100000.0,
     ) -> "FundBuilder":
         """Pre-built: Trend/Leader portfolio."""
         fund = cls("Trend Leader", capital)
@@ -185,7 +186,8 @@ class FundBuilder:
 
     @classmethod
     def pullback_swing(
-        cls, capital: float = 100000.0,
+        cls,
+        capital: float = 100000.0,
     ) -> "FundBuilder":
         """Pre-built: Pullback/Swing portfolio."""
         fund = cls("Pullback Swing", capital)
@@ -196,7 +198,8 @@ class FundBuilder:
 
     @classmethod
     def tactical_event(
-        cls, capital: float = 100000.0,
+        cls,
+        capital: float = 100000.0,
     ) -> "FundBuilder":
         """Pre-built: Tactical/Event portfolio."""
         fund = cls("Tactical Event", capital)
@@ -253,7 +256,7 @@ class FundBuilder:
         cost = entry_price * shares
         if cost > self.cash:
             raise ValueError(
-                f"Insufficient cash: need ${cost:.0f}," f" have ${self.cash:.0f}"
+                f"Insufficient cash: need ${cost:.0f}, have ${self.cash:.0f}"
             )
 
         # Sector concentration check
@@ -272,7 +275,7 @@ class FundBuilder:
                     import logging
 
                     logging.getLogger(__name__).warning(
-                        "Sector concentration warning: %s at" " %.0f%% (>30%%)",
+                        "Sector concentration warning: %s at %.0f%% (>30%%)",
                         sector,
                         concentration * 100,
                     )

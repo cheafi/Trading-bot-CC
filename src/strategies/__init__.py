@@ -3,6 +3,7 @@ TradingAI Bot - Unified Strategy Registry  (lazy-loaded)
 
 All heavy imports deferred until first use.
 """
+
 from __future__ import annotations
 
 import logging
@@ -54,15 +55,21 @@ def _ensure_registry():
         STRATEGY_REGISTRY[cls.STRATEGY_ID] = cls
 
     for algo_cls in [
-        VCPStrategy, MomentumBreakoutStrategy, AlgoMeanRevStrategy,
-        TrendFollowingStrategy, ShortTermTrendFollowingStrategy,
-        ClassicSwingStrategy, MomentumRotationStrategy,
-        ShortTermMeanReversionStrategy, PreEarningsMomentumStrategy,
-        PostEarningsDriftStrategy, EarningsBreakoutStrategy,
+        VCPStrategy,
+        MomentumBreakoutStrategy,
+        AlgoMeanRevStrategy,
+        TrendFollowingStrategy,
+        ShortTermTrendFollowingStrategy,
+        ClassicSwingStrategy,
+        MomentumRotationStrategy,
+        ShortTermMeanReversionStrategy,
+        PreEarningsMomentumStrategy,
+        PostEarningsDriftStrategy,
+        EarningsBreakoutStrategy,
     ]:
         sid = algo_cls.STRATEGY_ID
-        STRATEGY_REGISTRY[sid] = lambda cfg=None, _a=algo_cls: (
-            AlgoStrategyAdapter(_a, cfg)
+        STRATEGY_REGISTRY[sid] = lambda cfg=None, _a=algo_cls: AlgoStrategyAdapter(
+            _a, cfg
         )
 
     logger.debug("Strategy registry built: %d strategies", len(STRATEGY_REGISTRY))
@@ -71,9 +78,11 @@ def _ensure_registry():
 def __getattr__(name):
     if name == "BaseStrategy":
         from src.strategies.base import BaseStrategy
+
         return BaseStrategy
     if name == "AlgoStrategyAdapter":
         from src.strategies.algo_adapter import AlgoStrategyAdapter
+
         return AlgoStrategyAdapter
     if name == "STRATEGY_REGISTRY":
         _ensure_registry()

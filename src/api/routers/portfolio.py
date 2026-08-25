@@ -270,7 +270,9 @@ async def portfolio_from_futu():
         }
 
 
-_ALLOWED_CAPTURE_MIME = frozenset({"image/png", "image/jpeg", "image/jpg", "image/webp"})
+_ALLOWED_CAPTURE_MIME = frozenset(
+    {"image/png", "image/jpeg", "image/jpg", "image/webp"}
+)
 _MAX_CAPTURE_BYTES = int(os.getenv("FUTU_CAPTURE_MAX_BYTES", str(10 * 1024 * 1024)))
 
 
@@ -338,7 +340,9 @@ async def futu_portfolio_capture(
     if not raw:
         raise HTTPException(400, "Empty upload")
     if len(raw) > _MAX_CAPTURE_BYTES:
-        raise HTTPException(400, f"File too large (max {_MAX_CAPTURE_BYTES // (1024*1024)}MB)")
+        raise HTTPException(
+            400, f"File too large (max {_MAX_CAPTURE_BYTES // (1024 * 1024)}MB)"
+        )
 
     tmp_path = None
     parse_method = "unknown"

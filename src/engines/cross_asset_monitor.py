@@ -150,9 +150,7 @@ class CrossAssetMonitor:
                 CrossAssetSignal(
                     signal_type="rotation",
                     severity="medium",
-                    description=(
-                        f"Gold up {gld_change_pct:.1f}% — " f"safe-haven demand"
-                    ),
+                    description=(f"Gold up {gld_change_pct:.1f}% — safe-haven demand"),
                     implication="Risk aversion rising. Defensive rotation.",
                     action="Consider reducing equity long exposure",
                     affects="context",
@@ -167,7 +165,7 @@ class CrossAssetMonitor:
                     signal_type="stress",
                     severity="medium",
                     description=(
-                        f"USD Index up {dxy_change_pct:.1f}% — " f"dollar strength"
+                        f"USD Index up {dxy_change_pct:.1f}% — dollar strength"
                     ),
                     implication="Global liquidity tightening. EM and commodities pressured.",
                     action="Avoid EM-exposed and commodity stocks",

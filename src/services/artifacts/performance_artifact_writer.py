@@ -21,7 +21,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,10 @@ class PerformanceArtifactWriter:
     # ------------------------------------------------------------------
 
     def _json(
-        self, aid: str, payload: Dict[str, Any], ts: str,
+        self,
+        aid: str,
+        payload: Dict[str, Any],
+        ts: str,
     ) -> Path:
         out = self.base / f"{aid}.json"
         blob = {
@@ -144,6 +147,7 @@ class PerformanceArtifactWriter:
         """Best-effort equity + drawdown chart."""
         try:
             import matplotlib
+
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
             import numpy as np
@@ -162,14 +166,20 @@ class PerformanceArtifactWriter:
             return None
 
         fig, (ax1, ax2) = plt.subplots(
-            2, 1, figsize=(10, 6), height_ratios=[3, 1],
-            sharex=True, gridspec_kw={"hspace": 0.08},
+            2,
+            1,
+            figsize=(10, 6),
+            height_ratios=[3, 1],
+            sharex=True,
+            gridspec_kw={"hspace": 0.08},
         )
 
         x = list(range(len(values)))
         ax1.plot(x, values, label="Portfolio", linewidth=1.5, color="#2563eb")
         if benchmark and len(benchmark) == len(values):
-            ax1.plot(x, benchmark, label="SPY", linewidth=1, color="#94a3b8", linestyle="--")
+            ax1.plot(
+                x, benchmark, label="SPY", linewidth=1, color="#94a3b8", linestyle="--"
+            )
         ax1.set_ylabel("Value (indexed 100)")
         ax1.legend(loc="upper left", fontsize=8)
         ax1.set_title(f"Performance Lab — {mode}", fontsize=10)
@@ -190,7 +200,8 @@ class PerformanceArtifactWriter:
             ax2.set_xticks(x[::step])
             ax2.set_xticklabels(
                 [d[:7] for d in dates[::step]],
-                rotation=45, fontsize=7,
+                rotation=45,
+                fontsize=7,
             )
 
         out = self.base / f"{aid}.png"
@@ -200,7 +211,10 @@ class PerformanceArtifactWriter:
         return out
 
     def _md(
-        self, aid: str, payload: Dict[str, Any], ts: str,
+        self,
+        aid: str,
+        payload: Dict[str, Any],
+        ts: str,
     ) -> Path:
         out = self.base / f"{aid}.md"
 
@@ -212,14 +226,14 @@ class PerformanceArtifactWriter:
         warning = trust.get("data_warning")
 
         lines = [
-            f"# Performance Lab Report",
-            f"",
+            "# Performance Lab Report",
+            "",
             f"**Artifact ID:** `{aid}`  ",
             f"**Generated:** {ts}  ",
             f"**Mode:** {mode} | **Source:** {source} | **Sample:** {sample}  ",
         ]
         if warning:
-            lines.append(f"")
+            lines.append("")
             lines.append(f"> ⚠️ {warning}")
 
         lines += [

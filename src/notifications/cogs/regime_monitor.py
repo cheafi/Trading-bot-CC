@@ -7,6 +7,7 @@ This cog provides:
   /regime — Show current market regime with full detail
   Background task: monitor regime changes and alert on transitions
 """
+
 from __future__ import annotations
 
 import logging
@@ -56,22 +57,16 @@ class RegimeMonitorCog(commands.Cog, name="Regime Monitor"):
                 "CRISIS": "crisis",
             }
             raw_trend = regime.get("trend", "SIDEWAYS")
-            regime_state = _TREND_MAP.get(
-                raw_trend, "sideways"
-            )
+            regime_state = _TREND_MAP.get(raw_trend, "sideways")
             risk_score = regime.get("risk_score", 50)
             signals_list = regime.get("signals", [])
             # Build playbook from regime
             if risk_score < 30:
-                playbook = (
-                    "Full allocation. Momentum + breakout."
-                )
+                playbook = "Full allocation. Momentum + breakout."
             elif risk_score < 60:
                 playbook = "Standard allocation. Selective."
             else:
-                playbook = (
-                    "Reduced exposure. Capital preservation."
-                )
+                playbook = "Reduced exposure. Capital preservation."
         except Exception as e:
             logger.warning(f"Could not fetch regime: {e}")
 
@@ -128,9 +123,7 @@ class RegimeMonitorCog(commands.Cog, name="Regime Monitor"):
             ),
         }
 
-        color = regime_colors.get(
-            regime_state, EmbedColors.GRAY
-        )
+        color = regime_colors.get(regime_state, EmbedColors.GRAY)
         description = regime_descriptions.get(
             regime_state,
             "Regime not classified. Check /status for system health.",
@@ -153,9 +146,7 @@ class RegimeMonitorCog(commands.Cog, name="Regime Monitor"):
         if signals_list:
             embed.add_field(
                 name="📡 Signals",
-                value="\n".join(
-                    f"• {s}" for s in signals_list[:5]
-                ),
+                value="\n".join(f"• {s}" for s in signals_list[:5]),
                 inline=False,
             )
 

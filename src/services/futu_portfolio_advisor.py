@@ -13,9 +13,7 @@ ADVISORY_DISCLAIMER_EN = (
     "ADVISORY ONLY — not a trade instruction. "
     "Human approval required before any action. CC deploy authority unchanged."
 )
-ADVISORY_DISCLAIMER_ZH = (
-    "僅供參考 — 非交易指令。任何操作須人工確認，CC 部署權限不變。"
-)
+ADVISORY_DISCLAIMER_ZH = "僅供參考 — 非交易指令。任何操作須人工確認，CC 部署權限不變。"
 
 
 def _concentration_warnings(

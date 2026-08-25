@@ -135,71 +135,343 @@ def _seed_demo_leaders() -> None:
 
     holdings_seed = [
         # Trump timeline-style (derived from news summaries — delayed)
-        ("trump-disclosure", "NVDA", "new_buy", "large", "delayed", "2026-02-10", "Technology", "AI / Semis", 1, 0, "watch"),
-        ("trump-disclosure", "ORCL", "new_buy", "medium", "delayed", "2026-02-10", "Technology", "Cloud", 1, 0, "needs_confirmation"),
-        ("trump-disclosure", "MSFT", "reduce", "medium", "delayed", "2026-02-10", "Technology", "Mega-cap", 1, 0, "watch"),
-        ("trump-disclosure", "AAPL", "add", "medium", "delayed", "2026-03-02", "Technology", "Mega-cap", 1, 0, "follow"),
-        ("trump-disclosure", "VOO", "add", "small", "delayed", "2026-03-02", "ETF", "Index", 1, 0, "watch"),
+        (
+            "trump-disclosure",
+            "NVDA",
+            "new_buy",
+            "large",
+            "delayed",
+            "2026-02-10",
+            "Technology",
+            "AI / Semis",
+            1,
+            0,
+            "watch",
+        ),
+        (
+            "trump-disclosure",
+            "ORCL",
+            "new_buy",
+            "medium",
+            "delayed",
+            "2026-02-10",
+            "Technology",
+            "Cloud",
+            1,
+            0,
+            "needs_confirmation",
+        ),
+        (
+            "trump-disclosure",
+            "MSFT",
+            "reduce",
+            "medium",
+            "delayed",
+            "2026-02-10",
+            "Technology",
+            "Mega-cap",
+            1,
+            0,
+            "watch",
+        ),
+        (
+            "trump-disclosure",
+            "AAPL",
+            "add",
+            "medium",
+            "delayed",
+            "2026-03-02",
+            "Technology",
+            "Mega-cap",
+            1,
+            0,
+            "follow",
+        ),
+        (
+            "trump-disclosure",
+            "VOO",
+            "add",
+            "small",
+            "delayed",
+            "2026-03-02",
+            "ETF",
+            "Index",
+            1,
+            0,
+            "watch",
+        ),
         # Berkshire
-        ("berkshire-13f", "AAPL", "unchanged", "very_large", "verified", "2025-11-14", "Technology", "Quality", 1, 0, "watch"),
-        ("berkshire-13f", "BAC", "unchanged", "large", "verified", "2025-11-14", "Financials", "Banks", 1, 0, "watch"),
-        ("berkshire-13f", "OXY", "add", "medium", "verified", "2025-11-14", "Energy", "Oil", 1, 0, "watch"),
+        (
+            "berkshire-13f",
+            "AAPL",
+            "unchanged",
+            "very_large",
+            "verified",
+            "2025-11-14",
+            "Technology",
+            "Quality",
+            1,
+            0,
+            "watch",
+        ),
+        (
+            "berkshire-13f",
+            "BAC",
+            "unchanged",
+            "large",
+            "verified",
+            "2025-11-14",
+            "Financials",
+            "Banks",
+            1,
+            0,
+            "watch",
+        ),
+        (
+            "berkshire-13f",
+            "OXY",
+            "add",
+            "medium",
+            "verified",
+            "2025-11-14",
+            "Energy",
+            "Oil",
+            1,
+            0,
+            "watch",
+        ),
         # ARK
-        ("ark-invest", "TSLA", "reduce", "medium", "verified", "2025-11-14", "Consumer", "EV", 1, 0, "avoid"),
-        ("ark-invest", "COIN", "add", "small", "verified", "2025-11-14", "Financials", "Crypto", 1, 0, "watch"),
-        ("ark-invest", "ROKU", "exit", "small", "verified", "2025-11-14", "Technology", "Streaming", 1, 0, "avoid"),
+        (
+            "ark-invest",
+            "TSLA",
+            "reduce",
+            "medium",
+            "verified",
+            "2025-11-14",
+            "Consumer",
+            "EV",
+            1,
+            0,
+            "avoid",
+        ),
+        (
+            "ark-invest",
+            "COIN",
+            "add",
+            "small",
+            "verified",
+            "2025-11-14",
+            "Financials",
+            "Crypto",
+            1,
+            0,
+            "watch",
+        ),
+        (
+            "ark-invest",
+            "ROKU",
+            "exit",
+            "small",
+            "verified",
+            "2025-11-14",
+            "Technology",
+            "Streaming",
+            1,
+            0,
+            "avoid",
+        ),
         # Pelosi
-        ("pelosi-disclosure", "NVDA", "add", "medium", "delayed", "2026-01-20", "Technology", "Semis", 1, 0, "too_late"),
-        ("pelosi-disclosure", "AVGO", "new_buy", "small", "delayed", "2026-01-20", "Technology", "Semis", 1, 0, "watch"),
+        (
+            "pelosi-disclosure",
+            "NVDA",
+            "add",
+            "medium",
+            "delayed",
+            "2026-01-20",
+            "Technology",
+            "Semis",
+            1,
+            0,
+            "too_late",
+        ),
+        (
+            "pelosi-disclosure",
+            "AVGO",
+            "new_buy",
+            "small",
+            "delayed",
+            "2026-01-20",
+            "Technology",
+            "Semis",
+            1,
+            0,
+            "watch",
+        ),
         # Influencer (inferred)
-        ("kol-tech-leaps", "NVDA", "mention_only", "unknown", "inferred", "2026-03-15", "Technology", "LEAPS", 0, 1, "needs_confirmation"),
-        ("kol-tech-leaps", "AMD", "mention_only", "unknown", "inferred", "2026-03-15", "Technology", "LEAPS", 0, 1, "speculative"),
-        ("kol-tech-leaps", "SMCI", "mention_only", "unknown", "speculative", "2026-03-18", "Technology", "AI infra", 0, 1, "avoid"),
+        (
+            "kol-tech-leaps",
+            "NVDA",
+            "mention_only",
+            "unknown",
+            "inferred",
+            "2026-03-15",
+            "Technology",
+            "LEAPS",
+            0,
+            1,
+            "needs_confirmation",
+        ),
+        (
+            "kol-tech-leaps",
+            "AMD",
+            "mention_only",
+            "unknown",
+            "inferred",
+            "2026-03-15",
+            "Technology",
+            "LEAPS",
+            0,
+            1,
+            "speculative",
+        ),
+        (
+            "kol-tech-leaps",
+            "SMCI",
+            "mention_only",
+            "unknown",
+            "speculative",
+            "2026-03-18",
+            "Technology",
+            "AI infra",
+            0,
+            1,
+            "avoid",
+        ),
         # SPY top weights (illustrative)
-        ("spy-etf-holdings", "AAPL", "unchanged", "top10", "verified", "2026-03-20", "Technology", "Index", 1, 0, "watch"),
-        ("spy-etf-holdings", "MSFT", "unchanged", "top10", "verified", "2026-03-20", "Technology", "Index", 1, 0, "watch"),
-        ("spy-etf-holdings", "NVDA", "unchanged", "top10", "verified", "2026-03-20", "Technology", "Index", 1, 0, "watch"),
+        (
+            "spy-etf-holdings",
+            "AAPL",
+            "unchanged",
+            "top10",
+            "verified",
+            "2026-03-20",
+            "Technology",
+            "Index",
+            1,
+            0,
+            "watch",
+        ),
+        (
+            "spy-etf-holdings",
+            "MSFT",
+            "unchanged",
+            "top10",
+            "verified",
+            "2026-03-20",
+            "Technology",
+            "Index",
+            1,
+            0,
+            "watch",
+        ),
+        (
+            "spy-etf-holdings",
+            "NVDA",
+            "unchanged",
+            "top10",
+            "verified",
+            "2026-03-20",
+            "Technology",
+            "Index",
+            1,
+            0,
+            "watch",
+        ),
     ]
     for row in holdings_seed:
         lid, tkr, act, bucket, qual, disc, sector, theme, ver, inf, actionability = row
-        store.insert_holding({
-            "leader_id": lid,
-            "ticker": tkr,
-            "security_name": tkr,
-            "action_type": act,
-            "size_bucket": bucket,
-            "source_name": "demo_seed",
-            "source_quality": qual,
-            "disclosure_date": disc,
-            "effective_date": disc,
-            "sector": sector,
-            "theme": theme,
-            "verified_flag": ver,
-            "inferred_flag": inf,
-            "actionability": actionability,
-            "setup_quality": "neutral",
-            "notes": "Demo row — replace with live ingestion",
-        })
+        store.insert_holding(
+            {
+                "leader_id": lid,
+                "ticker": tkr,
+                "security_name": tkr,
+                "action_type": act,
+                "size_bucket": bucket,
+                "source_name": "demo_seed",
+                "source_quality": qual,
+                "disclosure_date": disc,
+                "effective_date": disc,
+                "sector": sector,
+                "theme": theme,
+                "verified_flag": ver,
+                "inferred_flag": inf,
+                "actionability": actionability,
+                "setup_quality": "neutral",
+                "notes": "Demo row — replace with live ingestion",
+            }
+        )
 
     events_seed = [
-        ("trump-disclosure", "2026-02-10", "NVDA,ORCL,BA", "reduce", "Sold MSFT/META/AMZN; added NVDA/ORCL per disclosure summary", "delayed", "Rotation into AI infra"),
-        ("trump-disclosure", "2026-03-02", "AAPL,GOOGL,VOO", "add", "Added AAPL, GOOGL, broad index exposure", "delayed", "Mega-cap add"),
-        ("berkshire-13f", "2025-11-14", "OXY", "add", "Increased OXY weight in latest 13F", "verified", "Energy overweight"),
-        ("ark-invest", "2025-11-14", "ROKU", "exit", "Exited ROKU position", "verified", "Trim speculative"),
-        ("kol-tech-leaps", "2026-03-15", "NVDA", "mention_only", "Discussed LEAPS OI build — not a verified holding", "inferred", "Options narrative"),
+        (
+            "trump-disclosure",
+            "2026-02-10",
+            "NVDA,ORCL,BA",
+            "reduce",
+            "Sold MSFT/META/AMZN; added NVDA/ORCL per disclosure summary",
+            "delayed",
+            "Rotation into AI infra",
+        ),
+        (
+            "trump-disclosure",
+            "2026-03-02",
+            "AAPL,GOOGL,VOO",
+            "add",
+            "Added AAPL, GOOGL, broad index exposure",
+            "delayed",
+            "Mega-cap add",
+        ),
+        (
+            "berkshire-13f",
+            "2025-11-14",
+            "OXY",
+            "add",
+            "Increased OXY weight in latest 13F",
+            "verified",
+            "Energy overweight",
+        ),
+        (
+            "ark-invest",
+            "2025-11-14",
+            "ROKU",
+            "exit",
+            "Exited ROKU position",
+            "verified",
+            "Trim speculative",
+        ),
+        (
+            "kol-tech-leaps",
+            "2026-03-15",
+            "NVDA",
+            "mention_only",
+            "Discussed LEAPS OI build — not a verified holding",
+            "inferred",
+            "Options narrative",
+        ),
     ]
     for lid, edate, tkr, etype, summary, qual, ctx in events_seed:
-        store.insert_event({
-            "leader_id": lid,
-            "ticker": tkr,
-            "event_type": etype,
-            "event_date": edate,
-            "disclosure_date": edate,
-            "summary": summary,
-            "source_quality": qual,
-            "context_tag": ctx,
-            "source_name": "demo_seed",
-        })
+        store.insert_event(
+            {
+                "leader_id": lid,
+                "ticker": tkr,
+                "event_type": etype,
+                "event_date": edate,
+                "disclosure_date": edate,
+                "summary": summary,
+                "source_quality": qual,
+                "context_tag": ctx,
+                "source_name": "demo_seed",
+            }
+        )
 
 
 def _rebuild_consensus() -> None:
@@ -211,16 +483,18 @@ def _rebuild_consensus() -> None:
     finally:
         conn.close()
 
-    agg: Dict[str, Dict[str, Any]] = defaultdict(lambda: {
-        "mention_count": 0,
-        "verified_count": 0,
-        "inferred_count": 0,
-        "add_count": 0,
-        "reduce_count": 0,
-        "exit_count": 0,
-        "new_buy_count": 0,
-        "leaders": set(),
-    })
+    agg: Dict[str, Dict[str, Any]] = defaultdict(
+        lambda: {
+            "mention_count": 0,
+            "verified_count": 0,
+            "inferred_count": 0,
+            "add_count": 0,
+            "reduce_count": 0,
+            "exit_count": 0,
+            "new_buy_count": 0,
+            "leaders": set(),
+        }
+    )
     for r in rows:
         t = r["ticker"]
         a = agg[t]
@@ -252,18 +526,20 @@ def _rebuild_consensus() -> None:
             + a["verified_count"] * 3
             - a["inferred_count"] * 2
         )
-        store.upsert_consensus({
-            "ticker": ticker,
-            "mention_count": a["mention_count"],
-            "verified_count": a["verified_count"],
-            "inferred_count": a["inferred_count"],
-            "add_count": a["add_count"],
-            "reduce_count": a["reduce_count"],
-            "exit_count": a["exit_count"],
-            "new_buy_count": a["new_buy_count"],
-            "consensus_score": round(max(0, score), 1),
-            "flow_confirmation_score": 0,
-        })
+        store.upsert_consensus(
+            {
+                "ticker": ticker,
+                "mention_count": a["mention_count"],
+                "verified_count": a["verified_count"],
+                "inferred_count": a["inferred_count"],
+                "add_count": a["add_count"],
+                "reduce_count": a["reduce_count"],
+                "exit_count": a["exit_count"],
+                "new_buy_count": a["new_buy_count"],
+                "consensus_score": round(max(0, score), 1),
+                "flow_confirmation_score": 0,
+            }
+        )
 
 
 def _seed_flow_signals() -> None:
@@ -277,16 +553,18 @@ def _seed_flow_signals() -> None:
         ("MSFT", -8, 5, -2, 8, 35, 28),
     ]
     for t, leaps, far, iv, unusual, spot, final in demo:
-        store.upsert_flow_signal({
-            "ticker": t,
-            "leaps_oi_change": leaps,
-            "far_dated_flow_score": far,
-            "iv_term_change": iv,
-            "unusual_flow_score": unusual,
-            "spot_confirmation_score": spot,
-            "final_confirmation_score": final,
-            "data_mode": "heuristic",
-        })
+        store.upsert_flow_signal(
+            {
+                "ticker": t,
+                "leaps_oi_change": leaps,
+                "far_dated_flow_score": far,
+                "iv_term_change": iv,
+                "unusual_flow_score": unusual,
+                "spot_confirmation_score": spot,
+                "final_confirmation_score": final,
+                "data_mode": "heuristic",
+            }
+        )
     # Attach flow scores to consensus
     for row in store.list_consensus():
         fs = store.get_flow_signal(row["ticker"])
@@ -337,12 +615,14 @@ def _seed_baskets() -> None:
         ("basket-leaps-confirmed", "AMD", 0.20),
     ]
     for bid, tkr, w in members:
-        store.insert_basket_member({
-            "basket_id": bid,
-            "ticker": tkr,
-            "weight": w,
-            "source_basis": "demo_seed",
-        })
+        store.insert_basket_member(
+            {
+                "basket_id": bid,
+                "ticker": tkr,
+                "weight": w,
+                "source_basis": "demo_seed",
+            }
+        )
 
 
 def _seed_alerts() -> None:
@@ -391,7 +671,9 @@ def _leader_metrics(leader_id: str) -> Dict[str, Any]:
     }
 
 
-def _decision_box(leader: Dict[str, Any], holding: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def _decision_box(
+    leader: Dict[str, Any], holding: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     sq = (holding or {}).get("source_quality") or leader.get("source_quality")
     verifiable = sq in ("verified", "delayed")
     delayed = sq in ("delayed",) or leader.get("disclosure_delay_days", 0) > 7
@@ -401,7 +683,9 @@ def _decision_box(leader: Dict[str, Any], holding: Optional[Dict[str, Any]] = No
         "verifiable": verifiable,
         "delayed_disclosure": delayed,
         "disclosure_delay_days": leader.get("disclosure_delay_days", 0),
-        "spot_or_options": "options_inferred" if sq == "speculative" else "spot_disclosed",
+        "spot_or_options": "options_inferred"
+        if sq == "speculative"
+        else "spot_disclosed",
         "repeat_accumulation": (holding or {}).get("action_type") in ("add", "new_buy"),
         "recommendation": actionability,
         "labels": {
@@ -413,7 +697,9 @@ def _decision_box(leader: Dict[str, Any], holding: Optional[Dict[str, Any]] = No
     }
 
 
-def _warnings_for(leader: Dict[str, Any], holding: Optional[Dict[str, Any]]) -> List[str]:
+def _warnings_for(
+    leader: Dict[str, Any], holding: Optional[Dict[str, Any]]
+) -> List[str]:
     w: List[str] = []
     sq = (holding or {}).get("source_quality") or leader.get("source_quality")
     if sq in ("inferred", "speculative"):
@@ -432,16 +718,24 @@ def list_leaders_enriched(
 ) -> List[Dict[str, Any]]:
     ensure_seeded()
     out = []
-    for L in store.list_leaders(category=category, source_quality=source_quality, search=search):
+    for L in store.list_leaders(
+        category=category, source_quality=source_quality, search=search
+    ):
         m = _leader_metrics(L["id"])
         holdings = store.get_holdings(L["id"])
-        out.append({
-            **L,
-            "source_quality_label": SOURCE_QUALITY_LABELS.get(L["source_quality"], L["source_quality"]),
-            "metrics": m,
-            "recent_tickers": [h["ticker"] for h in holdings[:5]],
-            "last_update": max((h["last_seen_at"] for h in holdings), default=L["updated_at"]),
-        })
+        out.append(
+            {
+                **L,
+                "source_quality_label": SOURCE_QUALITY_LABELS.get(
+                    L["source_quality"], L["source_quality"]
+                ),
+                "metrics": m,
+                "recent_tickers": [h["ticker"] for h in holdings[:5]],
+                "last_update": max(
+                    (h["last_seen_at"] for h in holdings), default=L["updated_at"]
+                ),
+            }
+        )
     return out
 
 
@@ -454,13 +748,16 @@ def get_leader_detail(leader_id: str) -> Optional[Dict[str, Any]]:
     for h in holdings:
         h["action_label"] = ACTION_LABELS.get(h["action_type"], h["action_type"])
         h["source_quality_label"] = SOURCE_QUALITY_LABELS.get(
-            h["source_quality"], h["source_quality"],
+            h["source_quality"],
+            h["source_quality"],
         )
         h["decision"] = _decision_box(L, h)
     events = store.get_events(leader_id)
     return {
         **L,
-        "source_quality_label": SOURCE_QUALITY_LABELS.get(L["source_quality"], L["source_quality"]),
+        "source_quality_label": SOURCE_QUALITY_LABELS.get(
+            L["source_quality"], L["source_quality"]
+        ),
         "metrics": _leader_metrics(leader_id),
         "holdings": holdings,
         "timeline": events,
@@ -472,7 +769,9 @@ def get_leader_detail(leader_id: str) -> Optional[Dict[str, Any]]:
     }
 
 
-def get_consensus_list(verified_only: bool = False, min_overlap: int = 2) -> Dict[str, Any]:
+def get_consensus_list(
+    verified_only: bool = False, min_overlap: int = 2
+) -> Dict[str, Any]:
     ensure_seeded()
     rows = store.list_consensus(verified_only=verified_only, min_overlap=min_overlap)
     for r in rows:
@@ -484,9 +783,13 @@ def get_consensus_list(verified_only: bool = False, min_overlap: int = 2) -> Dic
         "verified_only": verified_only,
         "items": rows,
         "summary": {
-            "most_accumulated": sorted(rows, key=lambda x: -(x.get("add_count", 0) + x.get("new_buy_count", 0)))[:8],
+            "most_accumulated": sorted(
+                rows, key=lambda x: -(x.get("add_count", 0) + x.get("new_buy_count", 0))
+            )[:8],
             "most_reduced": sorted(rows, key=lambda x: -x.get("reduce_count", 0))[:8],
-            "highest_overlap": sorted(rows, key=lambda x: -x.get("mention_count", 0))[:8],
+            "highest_overlap": sorted(rows, key=lambda x: -x.get("mention_count", 0))[
+                :8
+            ],
         },
     }
 
@@ -568,11 +871,13 @@ def get_flow_ticker(ticker: str) -> Dict[str, Any]:
         "leaders": consensus.get("leaders", []),
         "confirmation_breakdown": {
             "official_disclosure": sum(
-                1 for h in consensus.get("leaders", [])
+                1
+                for h in consensus.get("leaders", [])
                 if h.get("source_quality") in ("verified", "delayed")
             ),
             "inferred_mentions": sum(
-                1 for h in consensus.get("leaders", [])
+                1
+                for h in consensus.get("leaders", [])
                 if h.get("source_quality") in ("inferred", "speculative")
             ),
             "leaps_signal": (flow or {}).get("leaps_oi_change"),
@@ -591,21 +896,29 @@ def get_dashboard_cards() -> Dict[str, Any]:
     for L in leaders[:6]:
         for h in store.get_holdings(L["id"])[:2]:
             if h["action_type"] not in ("unchanged",):
-                moves.append({
-                    "leader_name": L["name"],
-                    "leader_id": L["id"],
-                    "ticker": h["ticker"],
-                    "action": ACTION_LABELS.get(h["action_type"], h["action_type"]),
-                    "source_quality": h["source_quality"],
-                    "source_quality_label": SOURCE_QUALITY_LABELS.get(h["source_quality"], ""),
-                    "disclosure_date": h.get("disclosure_date"),
-                    "size_bucket": h.get("size_bucket"),
-                })
+                moves.append(
+                    {
+                        "leader_name": L["name"],
+                        "leader_id": L["id"],
+                        "ticker": h["ticker"],
+                        "action": ACTION_LABELS.get(h["action_type"], h["action_type"]),
+                        "source_quality": h["source_quality"],
+                        "source_quality_label": SOURCE_QUALITY_LABELS.get(
+                            h["source_quality"], ""
+                        ),
+                        "disclosure_date": h.get("disclosure_date"),
+                        "size_bucket": h.get("size_bucket"),
+                    }
+                )
     verified_updates = [
         m for m in moves if m["source_quality"] in ("verified", "delayed")
     ]
     consensus = get_consensus_list(min_overlap=2)
-    flow_items = [x for x in store.list_flow_signals() if x.get("final_confirmation_score", 0) >= 60]
+    flow_items = [
+        x
+        for x in store.list_flow_signals()
+        if x.get("final_confirmation_score", 0) >= 60
+    ]
     return {
         "as_of": datetime.now(timezone.utc).isoformat(),
         "top_leader_moves": moves[:12],

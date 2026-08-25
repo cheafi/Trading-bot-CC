@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from src.services.decision_truth_model import TRADE_RR_THRESHOLD, parse_ratio
+from src.services.decision_truth_model import parse_ratio
 from src.services.playbook_upgrade_ladder import (
     enrich_row_ladder_fields,
     sort_rows_by_upgrade_proximity,
@@ -45,7 +45,9 @@ def _norm_action(row: Dict[str, Any]) -> str:
     return str(row.get("action") or row.get("effective_action") or "WATCH").upper()
 
 
-def build_operator_insight(row: Dict[str, Any], *, board_wait: bool = True) -> Dict[str, str]:
+def build_operator_insight(
+    row: Dict[str, Any], *, board_wait: bool = True
+) -> Dict[str, str]:
     """Structured insight strip: Now / Blocker / Upgrade / Risk / Next check."""
     gaps = row.get("upgrade_gaps") or {}
     act = _norm_action(row)
@@ -80,12 +82,14 @@ def build_operator_insight(row: Dict[str, Any], *, board_wait: bool = True) -> D
     if row.get("event_risk") or row.get("earnings"):
         risk_parts.append("event-sensitive")
     risk = " · ".join(risk_parts) if risk_parts else "standard monitor risk"
-    next_check = str(row.get("alert_trigger") or row.get("operator_action") or "volume + sector rank")[
-        :120
-    ]
-    now = str(row.get("why_here") or row.get("rank_explain", [""])[0] if row.get("rank_explain") else "")[
-        :140
-    ]
+    next_check = str(
+        row.get("alert_trigger") or row.get("operator_action") or "volume + sector rank"
+    )[:120]
+    now = str(
+        row.get("why_here") or row.get("rank_explain", [""])[0]
+        if row.get("rank_explain")
+        else ""
+    )[:140]
     if not now:
         now = f"{act} · {tb_note}"
     return {
@@ -120,7 +124,10 @@ def classify_monitor_state(row: Dict[str, Any]) -> str:
     act = _norm_action(row)
     if act in ("AVOID", "NO_TRADE", "BLOCKED"):
         return "avoid"
-    if row.get("stale") or str(row.get("freshness_tier") or "").upper() in ("STALE", "CRITICAL"):
+    if row.get("stale") or str(row.get("freshness_tier") or "").upper() in (
+        "STALE",
+        "CRITICAL",
+    ):
         return "stale"
     bucket = str(row.get("ladder_bucket") or "")
     if bucket == "deploy_ready" and row.get("execution_ready"):
@@ -223,8 +230,12 @@ def build_ai_vibe(
 ) -> Dict[str, Any]:
     """Rule-based monitor-only tape feel — never grants deploy authority."""
     tb = str(tradeability or "WAIT").upper()
-    leaders = sum(1 for r in opportunities if str(r.get("leader") or "").upper() == "LEADER")
-    laggards = sum(1 for r in opportunities if str(r.get("leader") or "").upper() == "LAGGARD")
+    leaders = sum(
+        1 for r in opportunities if str(r.get("leader") or "").upper() == "LEADER"
+    )
+    laggards = sum(
+        1 for r in opportunities if str(r.get("leader") or "").upper() == "LAGGARD"
+    )
     n = max(len(opportunities), 1)
     leader_ratio = leaders / n
     if tb in ("WAIT", "NO_TRADE") or deploy_count < 1:
@@ -272,12 +283,12 @@ def build_board_posture(
     tb = str(tradeability or "WAIT").upper()
     if deploy_count >= 1:
         effective = "DEPLOY_OPEN"
-        copy_line = f"{tb} · {deploy_count} deploy-qualified — page gate may still apply."
+        copy_line = (
+            f"{tb} · {deploy_count} deploy-qualified — page gate may still apply."
+        )
     elif tb == "SELECTIVE" and pilot_count >= 1:
         effective = "SELECTIVE_MONITOR"
-        copy_line = (
-            "SELECTIVE regime · pilot names exist but zero deploy-qualified — monitor only."
-        )
+        copy_line = "SELECTIVE regime · pilot names exist but zero deploy-qualified — monitor only."
     elif board_wait or tb in ("WAIT", "NO_TRADE"):
         effective = "WAIT"
         copy_line = "WAIT · no deploy-qualified setups — monitor session only."
@@ -304,13 +315,17 @@ def build_operator_sections(
 
     return {
         "deploy_candidates": _pick(
-            lambda r: r.get("ladder_bucket") == "deploy_ready" and r.get("execution_ready")
+            lambda r: (
+                r.get("ladder_bucket") == "deploy_ready" and r.get("execution_ready")
+            )
         ),
         "pilot_candidates": _pick(lambda r: r.get("ladder_bucket") == "pilot_ready"),
         "watch_upgrades": _pick(lambda r: r.get("ladder_bucket") == "watch_upgrade"),
         "blocked_high_conviction": _pick(
-            lambda r: _f(r.get("thesis_conf")) >= 0.65
-            and _norm_action(r) not in ("AVOID", "NO_TRADE")
+            lambda r: (
+                _f(r.get("thesis_conf")) >= 0.65
+                and _norm_action(r) not in ("AVOID", "NO_TRADE")
+            )
         ),
         "fastest_improving": sorted_rows[:5],
         "sector_leaders": _pick(
@@ -321,10 +336,10 @@ def build_operator_sections(
             key=lambda r: -(parse_ratio(r.get("risk_reward"), 0) or 0),
         )[:5],
         "monitor_queue": sorted_rows[:12],
-        "event_sensitive": _pick(lambda r: bool(r.get("earnings") or r.get("event_risk"))),
-        "contradiction_heavy": _pick(
-            lambda r: _f(r.get("contradiction_score")) >= 0.5
+        "event_sensitive": _pick(
+            lambda r: bool(r.get("earnings") or r.get("event_risk"))
         ),
+        "contradiction_heavy": _pick(lambda r: _f(r.get("contradiction_score")) >= 0.5),
     }
 
 
@@ -390,9 +405,11 @@ def build_monitor_auto_actions(rows: List[Dict[str, Any]]) -> List[Dict[str, Any
                 {
                     "ticker": ticker,
                     "action": "alert",
-                    "reason": str(row.get("alert_trigger") or row.get("operator_action") or "monitor state change")[
-                        :120
-                    ],
+                    "reason": str(
+                        row.get("alert_trigger")
+                        or row.get("operator_action")
+                        or "monitor state change"
+                    )[:120],
                     "paper_only": True,
                 }
             )
@@ -446,7 +463,11 @@ def enrich_playbook_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     funnel = payload.get("filter_funnel") or {}
     ba = payload.get("best_action") or {}
     tb = str(ba.get("tradeability") or payload.get("tradeability") or "WAIT")
-    deploy = int(funnel.get("deploy_qualified_setups") or funnel.get("execution_ready_setups") or 0)
+    deploy = int(
+        funnel.get("deploy_qualified_setups")
+        or funnel.get("execution_ready_setups")
+        or 0
+    )
     watch = int(funnel.get("watch_qualified_setups") or 0)
     pilot = int(ba.get("pilot_count") or 0)
     board_wait = deploy < 1 or tb.upper() in ("WAIT", "NO_TRADE")
@@ -490,7 +511,9 @@ def enrich_playbook_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     payload["watch_intelligence_summary"] = {
         "count": len(all_monitor),
         "alert_worthy": sum(
-            1 for r in all_monitor if (r.get("watch_intelligence") or {}).get("alert_worthy")
+            1
+            for r in all_monitor
+            if (r.get("watch_intelligence") or {}).get("alert_worthy")
         ),
         "top_watch": sorted(
             [r.get("watch_intelligence") or {} for r in all_monitor],

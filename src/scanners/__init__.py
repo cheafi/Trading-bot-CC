@@ -1,6 +1,7 @@
 """
 Market Scanners - AI-powered stock scanning and pattern recognition.
 """
+
 _LAZY = {
     "PatternScanner": ".pattern_scanner",
     "ChartPattern": ".pattern_scanner",

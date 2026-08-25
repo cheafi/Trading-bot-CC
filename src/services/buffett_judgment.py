@@ -32,14 +32,34 @@ BUFFETT_LABELS: Dict[str, str] = {
 }
 
 _PARTS_FRAMEWORK: List[Dict[str, str]] = [
-    {"part": "1", "title": "Business understanding", "focus": "Explain the business in a paragraph"},
-    {"part": "2", "title": "Economic quality", "focus": "Returns, margins, reinvestment"},
+    {
+        "part": "1",
+        "title": "Business understanding",
+        "focus": "Explain the business in a paragraph",
+    },
+    {
+        "part": "2",
+        "title": "Economic quality",
+        "focus": "Returns, margins, reinvestment",
+    },
     {"part": "3", "title": "Moat", "focus": "Durability of advantage"},
     {"part": "4", "title": "Management", "focus": "Honesty and capital allocation"},
-    {"part": "5", "title": "Circle of competence", "focus": "Stay inside what you can judge"},
-    {"part": "6", "title": "Valuation & margin", "focus": "Price vs owner value band (proxy)"},
+    {
+        "part": "5",
+        "title": "Circle of competence",
+        "focus": "Stay inside what you can judge",
+    },
+    {
+        "part": "6",
+        "title": "Valuation & margin",
+        "focus": "Price vs owner value band (proxy)",
+    },
     {"part": "7", "title": "Portfolio worthiness", "focus": "Ownable vs watch vs pass"},
-    {"part": "8", "title": "Temperament", "focus": "Filter noise; act only when necessary"},
+    {
+        "part": "8",
+        "title": "Temperament",
+        "focus": "Filter noise; act only when necessary",
+    },
 ]
 
 _KNOWN_SECTOR_KEYS = (
@@ -75,11 +95,19 @@ def _fundamentals_from_row(row: Dict[str, Any]) -> Dict[str, Any]:
     flags = list(fb.get("flags") or []) if isinstance(fb, dict) else []
     return {
         "flags": flags,
-        "pe": row.get("pe") or row.get("valuation_pe") or raw.get("pe_ratio") or raw.get("trailingPE"),
-        "margin": (fb.get("margin_trend") if isinstance(fb, dict) else None) or raw.get("profit_margin"),
-        "growth": (fb.get("revenue_growth") if isinstance(fb, dict) else None) or raw.get("revenue_growth"),
-        "quality_score": (fb.get("quality_score") if isinstance(fb, dict) else None) or raw.get("quality_score"),
-        "story_broken": bool(fb.get("story_broken")) if isinstance(fb, dict) else "story_broken_risk" in flags,
+        "pe": row.get("pe")
+        or row.get("valuation_pe")
+        or raw.get("pe_ratio")
+        or raw.get("trailingPE"),
+        "margin": (fb.get("margin_trend") if isinstance(fb, dict) else None)
+        or raw.get("profit_margin"),
+        "growth": (fb.get("revenue_growth") if isinstance(fb, dict) else None)
+        or raw.get("revenue_growth"),
+        "quality_score": (fb.get("quality_score") if isinstance(fb, dict) else None)
+        or raw.get("quality_score"),
+        "story_broken": bool(fb.get("story_broken"))
+        if isinstance(fb, dict)
+        else "story_broken_risk" in flags,
         "rich_valuation": "rich_valuation" in flags,
     }
 
@@ -88,7 +116,9 @@ def evaluate_business(row: Dict[str, Any]) -> Dict[str, Any]:
     """Business understanding + quality + moat heuristics."""
     thesis = _f(row, "thesis_conf") or _f(row, "thesis_quality")
     fund = _fundamentals_from_row(row)
-    sector = str(row.get("sector") or row.get("industry") or row.get("sector_bucket") or "—")
+    sector = str(
+        row.get("sector") or row.get("industry") or row.get("sector_bucket") or "—"
+    )
     name = str(row.get("name") or row.get("company") or row.get("ticker") or "")
     extended = bool((row.get("structure") or {}).get("is_extended"))
 
@@ -119,8 +149,7 @@ def evaluate_business(row: Dict[str, Any]) -> Dict[str, Any]:
 
     summary = (
         f"{name or row.get('ticker', '')}: {sector} — "
-        f"quality {quality}, moat {moat}. "
-        + (labels[0] if labels else "")
+        f"quality {quality}, moat {moat}. " + (labels[0] if labels else "")
     )[:240]
 
     return {
@@ -190,7 +219,9 @@ def evaluate_buffett_competence(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def evaluate_allocation(row: Dict[str, Any], *, tradeability: str = "") -> Dict[str, Any]:
+def evaluate_allocation(
+    row: Dict[str, Any], *, tradeability: str = ""
+) -> Dict[str, Any]:
     """Ownable / study / watch / inferior capital decision."""
     biz = evaluate_business(row)
     comp = evaluate_buffett_competence(row)
@@ -202,7 +233,12 @@ def evaluate_allocation(row: Dict[str, Any], *, tradeability: str = "") -> Dict[
     if biz["business_quality"] == "low" or comp["competence_fit"] == "outside":
         action = "inferior"
         tag = BUFFETT_LABELS["inferior"]
-    elif thesis >= 0.65 and score >= 7.0 and not extended and comp["competence_fit"] == "inside":
+    elif (
+        thesis >= 0.65
+        and score >= 7.0
+        and not extended
+        and comp["competence_fit"] == "inside"
+    ):
         action = "ownable"
         tag = BUFFETT_LABELS["ownable"]
     elif thesis >= 0.5 and comp["competence_fit"] != "outside":
@@ -235,8 +271,10 @@ def evaluate_temperament(
     high_scores = sum(1 for o in opps[:12] if _f(o, "score") >= 7.5)
 
     noise_high = tb in ("WAIT", "NO_TRADE") and high_scores >= 2
-    action_necessary = (
-        deployable_count > 0 and tb in ("TRADE", "SELECTIVE", "STRONG_TRADE")
+    action_necessary = deployable_count > 0 and tb in (
+        "TRADE",
+        "SELECTIVE",
+        "STRONG_TRADE",
     )
 
     labels: List[str] = []
@@ -315,7 +353,9 @@ def build_buffett_owner_view(
     regime: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Owner-view block for stock_intel dossier."""
-    conf = unified.get("confidence") if isinstance(unified.get("confidence"), dict) else {}
+    conf = (
+        unified.get("confidence") if isinstance(unified.get("confidence"), dict) else {}
+    )
     row: Dict[str, Any] = {
         "ticker": ticker,
         "name": dossier.get("name") or dossier.get("company"),
@@ -398,7 +438,9 @@ def buffett_clarity_strip_for_today(
             what_matters = [
                 {
                     "ticker": str(best.get("ticker") or "—"),
-                    "band": evaluate_allocation(dict(best), tradeability=tb)["allocation_action"],
+                    "band": evaluate_allocation(dict(best), tradeability=tb)[
+                        "allocation_action"
+                    ],
                 }
             ]
 
@@ -423,7 +465,9 @@ def buffett_clarity_strip_for_today(
     }
 
 
-def tags_for_playbook_row(row: Dict[str, Any], *, tradeability: str = "") -> Dict[str, Any]:
+def tags_for_playbook_row(
+    row: Dict[str, Any], *, tradeability: str = ""
+) -> Dict[str, Any]:
     biz = evaluate_business(row)
     comp = evaluate_buffett_competence(row)
     alloc = evaluate_allocation(row, tradeability=tradeability)

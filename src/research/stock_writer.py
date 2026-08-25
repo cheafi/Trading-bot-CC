@@ -18,10 +18,10 @@ Sections:
 Every claim must cite data (price, RSI value, date).
 No hallucinated forward guidance — only mechanical inference.
 """
-import json
+
 import logging
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -92,8 +92,9 @@ class StockWriter:
 
     # ────────────────────────────────────────────────────────────
 
-    def _header(self, ticker: str, price: float, pct: float,
-                signal: Optional[Dict]) -> str:
+    def _header(
+        self, ticker: str, price: float, pct: float, signal: Optional[Dict]
+    ) -> str:
         direction = signal.get("direction", "N/A") if signal else "N/A"
         score = signal.get("score", "N/A") if signal else "N/A"
         icon = "🟢" if direction == "LONG" else "🔴" if direction == "SHORT" else "⚪"
@@ -103,14 +104,19 @@ class StockWriter:
             f"**Generated:** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
         )
 
-    def _verdict(self, ticker: str, price: float,
-                 signal: Optional[Dict], technicals: Dict) -> str:
+    def _verdict(
+        self, ticker: str, price: float, signal: Optional[Dict], technicals: Dict
+    ) -> str:
         rsi = technicals.get("rsi", 50)
         sma20 = technicals.get("sma20", price)
         sma50 = technicals.get("sma50", price)
 
         if signal and signal.get("score", 0) >= 75:
-            verdict = "**CONVICTION BUY**" if signal["direction"] == "LONG" else "**CONVICTION SHORT**"
+            verdict = (
+                "**CONVICTION BUY**"
+                if signal["direction"] == "LONG"
+                else "**CONVICTION SHORT**"
+            )
         elif signal and signal.get("score", 0) >= 60:
             verdict = "**BUY**" if signal["direction"] == "LONG" else "**SHORT**"
         else:
@@ -131,8 +137,9 @@ class StockWriter:
             f"| **Trend** | {'Bullish' if price > sma50 else 'Bearish'} (price {'>' if price > sma20 else '<'} SMA20) |"
         )
 
-    def _why_now(self, ticker: str, price: float,
-                 technicals: Dict, signal: Optional[Dict]) -> str:
+    def _why_now(
+        self, ticker: str, price: float, technicals: Dict, signal: Optional[Dict]
+    ) -> str:
         reasons = []
         sma20 = technicals.get("sma20", price)
         sma50 = technicals.get("sma50", price)
@@ -146,15 +153,21 @@ class StockWriter:
             )
         elif price < sma20 < sma50:
             reasons.append(
-                f"📉 **Bearish structure**: Price < SMA20 < SMA50 — downtrend intact"
+                "📉 **Bearish structure**: Price < SMA20 < SMA50 — downtrend intact"
             )
 
         if 40 <= rsi <= 60:
-            reasons.append(f"⚡ **RSI reset**: At {rsi:.0f}, momentum has room to expand in either direction")
+            reasons.append(
+                f"⚡ **RSI reset**: At {rsi:.0f}, momentum has room to expand in either direction"
+            )
         elif rsi > 70:
-            reasons.append(f"⚠️ **RSI extended**: At {rsi:.0f}, momentum is stretched — watch for pullback")
+            reasons.append(
+                f"⚠️ **RSI extended**: At {rsi:.0f}, momentum is stretched — watch for pullback"
+            )
         elif rsi < 30:
-            reasons.append(f"🟢 **RSI oversold**: At {rsi:.0f}, potential mean-reversion setup")
+            reasons.append(
+                f"🟢 **RSI oversold**: At {rsi:.0f}, potential mean-reversion setup"
+            )
 
         if rel_vol > 1.5:
             reasons.append(
@@ -167,12 +180,15 @@ class StockWriter:
                 reasons.append(f"• {r}")
 
         if not reasons:
-            reasons.append("No strong catalyst identified — monitor for setup development")
+            reasons.append(
+                "No strong catalyst identified — monitor for setup development"
+            )
 
         return "## ❓ Why Now?\n" + "\n".join(reasons[:4])
 
-    def _technical_setup(self, ticker: str, price: float,
-                         price_data: Dict, technicals: Dict) -> str:
+    def _technical_setup(
+        self, ticker: str, price: float, price_data: Dict, technicals: Dict
+    ) -> str:
         sma20 = technicals.get("sma20", 0)
         sma50 = technicals.get("sma50", 0)
         sma200 = technicals.get("sma200", 0)
@@ -210,8 +226,14 @@ class StockWriter:
 
         pe_str = f"{pe:.1f}" if isinstance(pe, (int, float)) else str(pe)
         eps_str = f"${eps:.2f}" if isinstance(eps, (int, float)) else str(eps)
-        rev_str = f"{rev_growth:.1%}" if isinstance(rev_growth, (int, float)) else str(rev_growth)
-        margin_str = f"{margin:.1%}" if isinstance(margin, (int, float)) else str(margin)
+        rev_str = (
+            f"{rev_growth:.1%}"
+            if isinstance(rev_growth, (int, float))
+            else str(rev_growth)
+        )
+        margin_str = (
+            f"{margin:.1%}" if isinstance(margin, (int, float)) else str(margin)
+        )
 
         return (
             f"## 💰 Fundamental Snapshot\n"
@@ -224,26 +246,37 @@ class StockWriter:
             f"| **Profit Margin** | {margin_str} |"
         )
 
-    def _risk_factors(self, ticker: str, price: float,
-                      technicals: Dict, signal: Optional[Dict]) -> str:
+    def _risk_factors(
+        self, ticker: str, price: float, technicals: Dict, signal: Optional[Dict]
+    ) -> str:
         risks = []
         rsi = technicals.get("rsi", 50)
         atr_pct = technicals.get("atr", 0) / price * 100 if price > 0 else 0
         rel_vol = technicals.get("rel_vol", 1)
 
         if rsi > 75:
-            risks.append("🔴 **Overbought**: RSI above 75 — high probability of pullback")
+            risks.append(
+                "🔴 **Overbought**: RSI above 75 — high probability of pullback"
+            )
         if rsi < 25:
-            risks.append("🔴 **Oversold capitulation**: RSI below 25 — falling knife risk")
+            risks.append(
+                "🔴 **Oversold capitulation**: RSI below 25 — falling knife risk"
+            )
         if atr_pct > 4:
-            risks.append(f"⚠️ **High volatility**: ATR at {atr_pct:.1f}% — wide stops needed")
+            risks.append(
+                f"⚠️ **High volatility**: ATR at {atr_pct:.1f}% — wide stops needed"
+            )
         if rel_vol > 3:
-            risks.append(f"⚠️ **Crowded trade**: Rel vol {rel_vol:.1f}x — possible reversal setup")
+            risks.append(
+                f"⚠️ **Crowded trade**: Rel vol {rel_vol:.1f}x — possible reversal setup"
+            )
 
         if signal:
             rr = signal.get("rr_ratio", 0)
             if rr < 1.5:
-                risks.append(f"🔴 **Poor R:R**: {rr:.1f}:1 — below 1.5:1 minimum threshold")
+                risks.append(
+                    f"🔴 **Poor R:R**: {rr:.1f}:1 — below 1.5:1 minimum threshold"
+                )
             invalidation = signal.get("invalidation", "")
             if invalidation:
                 risks.append(f"🛑 **Invalidation**: {invalidation}")
@@ -274,8 +307,7 @@ class StockWriter:
             f"## 📐 Position Sizing (1% risk)\n"
             f"Stop distance: ${risk_per_share:.2f} ({risk_per_share / price * 100:.1f}%)\n\n"
             f"| Account | Risk $ | Shares | Value | % Capital |\n"
-            f"|---------|--------|--------|-------|-----------|\n"
-            + "\n".join(rows)
+            f"|---------|--------|--------|-------|-----------|\n" + "\n".join(rows)
         )
 
     def _news_section(self, news: List[str]) -> str:
@@ -318,10 +350,12 @@ class DiscordReportFormatter:
         embeds = []
         for i, chunk in enumerate(chunks):
             title = f"📋 {ticker} Research Report" if i == 0 else f"📋 {ticker} (cont.)"
-            embeds.append({
-                "title": title,
-                "description": chunk,
-                "color": color,
-            })
+            embeds.append(
+                {
+                    "title": title,
+                    "description": chunk,
+                    "color": color,
+                }
+            )
 
         return embeds

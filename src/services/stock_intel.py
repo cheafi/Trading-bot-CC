@@ -101,7 +101,9 @@ async def _resolve_dossier(
         except ValueError:
             raise
         except Exception as exc:
-            raise ValueError(f"Dossier fetch failed: {module_errors['dossier']}") from exc
+            raise ValueError(
+                f"Dossier fetch failed: {module_errors['dossier']}"
+            ) from exc
     dossier = dossier_raw if isinstance(dossier_raw, dict) else {}
     if not dossier.get("symbol") and not dossier.get("price"):
         raise ValueError("Dossier returned empty payload")
@@ -113,14 +115,19 @@ def _build_unified_decision(
     conviction: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
     """Merge dossier verdict heuristics, conviction action, and trade_plan."""
-    from src.utils.numeric_parse import coerce_float, normalize_trade_plan, parse_numeric
+    from src.utils.numeric_parse import (
+        coerce_float,
+        normalize_trade_plan,
+        parse_numeric,
+    )
 
     regime = dossier.get("regime") or {}
     trade_ok = regime.get("should_trade", True)
     conf = (dossier.get("confidence") or {}).get("final")
     if conf is None:
         conf = (dossier.get("signal") or {}).get("confidence", {}).get("final")
-    conflict = ((dossier.get("conflict") or {}).get("conflict_level")
+    conflict = (
+        (dossier.get("conflict") or {}).get("conflict_level")
         or (dossier.get("signal") or {}).get("conflict", {}).get("conflict_level")
         or "LOW"
     )
@@ -156,7 +163,11 @@ def _build_unified_decision(
         label = "WATCH"
         pill = "pa"
         color = "amber"
-        reason_parts.append(conviction.get("why_now", ["Setup forming — monitor trigger."])[0] if conviction else "Monitor for entry trigger.")
+        reason_parts.append(
+            conviction.get("why_now", ["Setup forming — monitor trigger."])[0]
+            if conviction
+            else "Monitor for entry trigger."
+        )
     elif conv_action in ("AVOID", "NO_TOUCH"):
         label = "AVOID"
         pill = "pr"
@@ -205,7 +216,9 @@ def _build_unified_decision(
     }
 
 
-def _narrative_structured(dossier: Dict[str, Any], conviction: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def _narrative_structured(
+    dossier: Dict[str, Any], conviction: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
     """Rule-based bull/bear/contradiction — no LLM wall of text."""
     bull: List[str] = []
     bear: List[str] = []
@@ -229,14 +242,18 @@ def _narrative_structured(dossier: Dict[str, Any], conviction: Optional[Dict[str
         contradictions.append("Technical and fundamental signals disagree materially.")
     t = dossier.get("technicals") or {}
     if t.get("rsi") and float(t["rsi"]) > 70 and bull:
-        contradictions.append("RSI elevated while bullish thesis active — extension risk.")
+        contradictions.append(
+            "RSI elevated while bullish thesis active — extension risk."
+        )
     if t.get("above_sma50") is False and bull:
         contradictions.append("Price below 50-day MA despite bullish factors.")
 
     if not bull:
         price = dossier.get("price")
         if price:
-            bull.append(f"Live quote ${price} — research from market data (no engine cycle required).")
+            bull.append(
+                f"Live quote ${price} — research from market data (no engine cycle required)."
+            )
         elif dossier.get("_partial"):
             bull.append("Partial quote load — full dossier may still be warming.")
     if not bear:
@@ -251,7 +268,9 @@ def _narrative_structured(dossier: Dict[str, Any], conviction: Optional[Dict[str
     }
 
 
-def _catalyst_strip(p9_earnings: Optional[Dict[str, Any]], events: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def _catalyst_strip(
+    p9_earnings: Optional[Dict[str, Any]], events: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
     items: List[Dict[str, Any]] = []
     earnings_status = "unavailable"
     dividend_status = "unavailable"
@@ -322,7 +341,8 @@ def _catalyst_strip(p9_earnings: Optional[Dict[str, Any]], events: Optional[Dict
                 {
                     "horizon": "90d",
                     "label": "Dividend",
-                    "date": p9_earnings.get("dividend_date") or p9_earnings.get("next_dividend_date"),
+                    "date": p9_earnings.get("dividend_date")
+                    or p9_earnings.get("next_dividend_date"),
                     "detail": "Ex-div on calendar",
                     "severity": "low",
                     "status": "confirmed",
@@ -340,7 +360,9 @@ def _catalyst_strip(p9_earnings: Optional[Dict[str, Any]], events: Optional[Dict
             }
         )
 
-    if dividend_status == "unavailable" and not any(i.get("label") == "Dividend" for i in items):
+    if dividend_status == "unavailable" and not any(
+        i.get("label") == "Dividend" for i in items
+    ):
         items.append(
             {
                 "horizon": "90d",
@@ -371,7 +393,9 @@ def _catalyst_strip(p9_earnings: Optional[Dict[str, Any]], events: Optional[Dict
 
     if event_count:
         feed_status = "confirmed"
-    elif events and (events.get("filings") is not None or events.get("upcoming_events")):
+    elif events and (
+        events.get("filings") is not None or events.get("upcoming_events")
+    ):
         feed_status = "delayed"
     elif items and any(i.get("status") == "confirmed" for i in items):
         feed_status = "confirmed"
@@ -401,7 +425,9 @@ def _catalyst_strip(p9_earnings: Optional[Dict[str, Any]], events: Optional[Dict
 
     return {
         "items": items[:8],
-        "next_label": next((i["label"] for i in items if i.get("status") == "confirmed"), None),
+        "next_label": next(
+            (i["label"] for i in items if i.get("status") == "confirmed"), None
+        ),
         "earnings_status": earnings_status,
         "dividend_status": dividend_status,
         "feed_status": feed_status,
@@ -410,7 +436,9 @@ def _catalyst_strip(p9_earnings: Optional[Dict[str, Any]], events: Optional[Dict
     }
 
 
-def _ownership_panel(conviction: Optional[Dict[str, Any]], edgar_insider: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def _ownership_panel(
+    conviction: Optional[Dict[str, Any]], edgar_insider: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
     insider = (conviction or {}).get("insider") or {}
     sponsor = (conviction or {}).get("sponsor") or {}
     filings: List[Dict[str, Any]] = []
@@ -435,7 +463,7 @@ def _ownership_panel(conviction: Optional[Dict[str, Any]], edgar_insider: Option
                 "cluster_buy": insider.get("cluster_buy", False),
             }
         )
-    overlap = (sponsor.get("13f_overlap") or {}).get("matched_sponsors") or []
+    (sponsor.get("13f_overlap") or {}).get("matched_sponsors") or []
     return {
         "insider": insider,
         "sponsor": sponsor,
@@ -510,14 +538,24 @@ def _smart_money_summary(
     elif insider_sig == "bearish":
         thesis_support = "contradict"
 
-    def _row(signal: str, status: str, strength: str, timing: str, use: str) -> Dict[str, str]:
-        return {"signal": signal, "status": status, "strength": strength, "timing": timing, "use": use}
+    def _row(
+        signal: str, status: str, strength: str, timing: str, use: str
+    ) -> Dict[str, str]:
+        return {
+            "signal": signal,
+            "status": status,
+            "strength": strength,
+            "timing": timing,
+            "use": use,
+        }
 
     support_matrix = [
         _row(
             "Insider Form 4",
             insider_sig if filings or insider_data else "unavailable",
-            "cluster_buy" if cluster_buy else ("cluster_sell" if cluster_sell else insider_sig),
+            "cluster_buy"
+            if cluster_buy
+            else ("cluster_sell" if cluster_sell else insider_sig),
             "medium_lag (~2–5d)",
             "supportive_only",
         ),
@@ -561,7 +599,8 @@ def _smart_money_summary(
         "politician_trend": "none",
         "options_flow": opt_label,
         "thesis_support": thesis_support,
-        "lag_warning": ownership.get("lag_warning") or "13F filings lag ~45–90 days; commentary ≠ capital",
+        "lag_warning": ownership.get("lag_warning")
+        or "13F filings lag ~45–90 days; commentary ≠ capital",
         "confidence": "medium" if filings else "low",
         "usefulness": "supportive_only — not standalone trigger",
         "support_matrix": support_matrix,
@@ -598,7 +637,11 @@ def _price_in_entry_zone(price: float, entry_zone: Any) -> bool:
     """True when mark is inside the trade-plan entry band."""
     from src.utils.numeric_parse import coerce_float
 
-    if not entry_zone or not isinstance(entry_zone, (list, tuple)) or len(entry_zone) < 2:
+    if (
+        not entry_zone
+        or not isinstance(entry_zone, (list, tuple))
+        or len(entry_zone) < 2
+    ):
         return False
     lo = coerce_float(entry_zone[0], 0.0)
     hi = coerce_float(entry_zone[1], 0.0)
@@ -734,7 +777,10 @@ def _build_decision_stack(
     primary_state = primary_map.get(verdict, "WATCH")
 
     execution_style: Optional[str] = None
-    if exec_state in ("BUY_ON_PULLBACK", "BUY_NOW") and primary_state in ("WATCH", "TRADE"):
+    if exec_state in ("BUY_ON_PULLBACK", "BUY_NOW") and primary_state in (
+        "WATCH",
+        "TRADE",
+    ):
         execution_style = exec_state
     elif exec_state not in ("AVOID_NOW", "WATCH_CONFIRM") and primary_state != "AVOID":
         execution_style = exec_state
@@ -786,7 +832,9 @@ def _build_confidence_metrics(
         "decision_confidence": conf_display.get("confidence"),
         "decision_confidence_pct": dc_pct,
         "decision_confidence_label": dc_label,
-        "decision_confidence_available": conf_display.get("confidence_available", False),
+        "decision_confidence_available": conf_display.get(
+            "confidence_available", False
+        ),
         "decision_confidence_source": conf_display.get("confidence_source"),
         "thesis_quality": thesis_score,
         "thesis_quality_label": tlabel,
@@ -982,8 +1030,6 @@ def _build_institutional_action_box(
 ) -> Dict[str, Any]:
     """PM action enum — explicit, not fake precision."""
     label = (unified.get("label") or "WATCH").upper()
-    rsi = None
-    change = None
     flow_top = (flow_intel or {}).get("top") or {}
     flow_action = flow_top.get("pm_action")
     regime_ok = getattr(regime, "should_trade", True)
@@ -1020,7 +1066,10 @@ def _build_institutional_action_box(
         "confidence": unified.get("confidence"),
         "evidence_quality": (
             "live_flow_calibrated"
-            if (flow_intel or {}).get("top", {}).get("follow_through", {}).get("sufficient")
+            if (flow_intel or {})
+            .get("top", {})
+            .get("follow_through", {})
+            .get("sufficient")
             else "heuristic"
         ),
         "flow_pm_action": flow_action,
@@ -1097,19 +1146,27 @@ def _pm_answer_layer(
             watch_to_buy.append(
                 f"Price pulls back into ${ez[0]}–${ez[1]} with volume confirmation"
             )
-            watch_to_buy.append("RSI cools from overheated levels while structure holds")
-        watch_to_buy.append("Conviction stack upgrades to BUY with flow + insider confirm")
+            watch_to_buy.append(
+                "RSI cools from overheated levels while structure holds"
+            )
+        watch_to_buy.append(
+            "Conviction stack upgrades to BUY with flow + insider confirm"
+        )
         watch_to_buy.append("Board gate moves WAIT → NOW with conflict staying LOW")
         watch_to_buy.append("Regime gate stays open and catalyst risk clears")
         watch_to_avoid.append(f"Break below stop ${unified.get('stop') or 'structure'}")
         watch_to_avoid.append(
-            unified.get("invalidation") or narrative.get("one_line_bear") or "Thesis invalidation on volume"
+            unified.get("invalidation")
+            or narrative.get("one_line_bear")
+            or "Thesis invalidation on volume"
         )
         watch_to_avoid.append("Regime gate closes or HIGH conflict emerges")
         if catalysts.get("earnings_status") == "confirmed":
             watch_to_avoid.append("Earnings blackout or negative surprise without edge")
         else:
-            watch_to_avoid.append("Unverified event risk — confirm calendar before sizing")
+            watch_to_avoid.append(
+                "Unverified event risk — confirm calendar before sizing"
+            )
     else:
         watch_to_buy.append("Conflict resolves LOW and regime reopens")
         watch_to_buy.append("Fresh base forms with RS vs SPY turning positive")
@@ -1125,7 +1182,11 @@ def _pm_answer_layer(
         catalyst_risk = "unknown — catalyst feed unavailable"
 
     verdict_line = label
-    if timing.get("thesis_constructive") and timing.get("timing_weak") and label == "WATCH":
+    if (
+        timing.get("thesis_constructive")
+        and timing.get("timing_weak")
+        and label == "WATCH"
+    ):
         verdict_line = "WATCH / Thesis constructive, timing weak"
 
     size_guidance = pf.get("recommended_sizing_context") or "Standard 0.5–1R starter"
@@ -1140,7 +1201,9 @@ def _pm_answer_layer(
         "thesis_breaks": unified.get("invalidation") or narrative.get("one_line_bear"),
         "thesis_confirms": confirms,
         "best_setup_type": setup,
-        "investor_fit": "Growth/momentum PM" if setup.startswith("momentum") else "Patient swing",
+        "investor_fit": "Growth/momentum PM"
+        if setup.startswith("momentum")
+        else "Patient swing",
         "action_now": action_now,
         "execution_mode": exec_mode,
         "verdict": label,
@@ -1150,7 +1213,9 @@ def _pm_answer_layer(
             "verdict": verdict_line,
             "why_not_buy_now": why_not_now[0] if why_not_now else "—",
             "what_makes_buyable": what_buyable[0] if what_buyable else "—",
-            "breaks_thesis": unified.get("invalidation") or narrative.get("one_line_bear") or "—",
+            "breaks_thesis": unified.get("invalidation")
+            or narrative.get("one_line_bear")
+            or "—",
             "size_guidance": size_guidance,
             "catalyst_risk": catalyst_risk,
             "book_fit": f"{pf_score}/100 · {pf.get('fit_label', 'neutral')}",
@@ -1169,7 +1234,11 @@ def _build_decision_hierarchy(
 ) -> Dict[str, Any]:
     """Chained verdict → execution mode → current action (not parallel equals)."""
     verdict = (unified.get("label") or "WATCH").upper()
-    execution_mode = (action_box or {}).get("state") or pm_answer.get("execution_mode") or "WATCH_CONFIRM"
+    execution_mode = (
+        (action_box or {}).get("state")
+        or pm_answer.get("execution_mode")
+        or "WATCH_CONFIRM"
+    )
     current_action = pm_answer.get("action_now") or "WAIT"
     exec_labels = {
         "BUY_NOW": "BUY_NOW",
@@ -1268,15 +1337,23 @@ def _peer_context(
                 break
 
     return {
-        "vs_sector_etf": sect.get("sector") or sect.get("name") or "Sector ETF — unavailable",
+        "vs_sector_etf": sect.get("sector")
+        or sect.get("name")
+        or "Sector ETF — unavailable",
         "sector_rs": sect.get("rs_vs_sector"),
         "vs_index": "SPY",
         "rs_vs_spy_pct": rs_spy,
         "peer_count": len(peer_rows),
         "peer_rank": self_rank,
-        "peer_verdict": (peers or {}).get("verdict") if isinstance(peers, dict) else None,
-        "stronger_peer": (peers or {}).get("stronger_peer") if isinstance(peers, dict) else None,
-        "weaker_peer": (peers or {}).get("weaker_peer") if isinstance(peers, dict) else None,
+        "peer_verdict": (peers or {}).get("verdict")
+        if isinstance(peers, dict)
+        else None,
+        "stronger_peer": (peers or {}).get("stronger_peer")
+        if isinstance(peers, dict)
+        else None,
+        "weaker_peer": (peers or {}).get("weaker_peer")
+        if isinstance(peers, dict)
+        else None,
         "has_data": bool(peer_rows or rs_spy is not None),
     }
 
@@ -1297,7 +1374,9 @@ def _identity_layer(dossier: Dict[str, Any], peers: Any) -> Dict[str, Any]:
         "sector": sect.get("sector") or sect.get("name"),
         "industry": sect.get("industry") or sect.get("sub_sector"),
         "factor_tags": factors or ["general_equity"],
-        "peer_count": len((peers or {}).get("rankings") or (peers or {}).get("table") or []),
+        "peer_count": len(
+            (peers or {}).get("rankings") or (peers or {}).get("table") or []
+        ),
         "business_note": "Load 10-K segments for revenue mix (P1)",
     }
 
@@ -1373,7 +1452,9 @@ def _dossier_trade_plan_note_value(
     )
 
 
-def _monitor_panel(ticker: str, dossier: Dict[str, Any], positions: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+def _monitor_panel(
+    ticker: str, dossier: Dict[str, Any], positions: List[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
     pos = None
     for p in positions or []:
         sym = (p.get("ticker") or p.get("symbol") or "").upper()
@@ -1388,7 +1469,10 @@ def _monitor_panel(ticker: str, dossier: Dict[str, Any], positions: List[Dict[st
     checklist = [
         {"item": "Thesis intact", "ok": len(dossier.get("why_buy") or []) > 0},
         {"item": "Above stop", "ok": True},
-        {"item": "Regime allows hold", "ok": dossier.get("regime", {}).get("should_trade", True)},
+        {
+            "item": "Regime allows hold",
+            "ok": dossier.get("regime", {}).get("should_trade", True),
+        },
     ]
     return {
         "position": pos,
@@ -1407,11 +1491,21 @@ async def _fetch_enrichments_parallel(request, ticker: str) -> Dict[str, Any]:
 
     mds = request.app.state.market_data
     results = await asyncio.gather(
-        _await_bounded(_conviction_endpoint(ticker, request), _SUB_FETCH_TIMEOUT_SEC, "conviction"),
+        _await_bounded(
+            _conviction_endpoint(ticker, request), _SUB_FETCH_TIMEOUT_SEC, "conviction"
+        ),
         _await_bounded(peer_comparison(ticker), 8.0, "peers"),
-        _await_bounded(_fetch_v9(mds, ticker, "fundamentals"), _SUB_FETCH_TIMEOUT_SEC, "p9_fundamentals"),
-        _await_bounded(_fetch_v9(mds, ticker, "earnings"), _SUB_FETCH_TIMEOUT_SEC, "p9_earnings"),
-        _await_bounded(_fetch_v9(mds, ticker, "structure"), _SUB_FETCH_TIMEOUT_SEC, "p9_structure"),
+        _await_bounded(
+            _fetch_v9(mds, ticker, "fundamentals"),
+            _SUB_FETCH_TIMEOUT_SEC,
+            "p9_fundamentals",
+        ),
+        _await_bounded(
+            _fetch_v9(mds, ticker, "earnings"), _SUB_FETCH_TIMEOUT_SEC, "p9_earnings"
+        ),
+        _await_bounded(
+            _fetch_v9(mds, ticker, "structure"), _SUB_FETCH_TIMEOUT_SEC, "p9_structure"
+        ),
         _await_bounded(_fetch_options(request, ticker), 8.0, "options"),
         _await_bounded(_fetch_events(ticker), 6.0, "events"),
         _await_bounded(_fetch_edgar_insider(ticker), 8.0, "edgar_insider"),
@@ -1493,7 +1587,9 @@ async def _build_intel_payload(
     dossier["_p9"] = p9
     if dossier.get("trade_plan"):
         dossier["trade_plan"] = normalize_trade_plan(dossier["trade_plan"])
-    unified = _build_unified_decision(dossier, conviction if isinstance(conviction, dict) else None)
+    unified = _build_unified_decision(
+        dossier, conviction if isinstance(conviction, dict) else None
+    )
     narrative = _narrative_structured(
         dossier, conviction if isinstance(conviction, dict) else None
     )
@@ -1514,7 +1610,11 @@ async def _build_intel_payload(
     monitor = _monitor_panel(ticker, dossier, positions)
     regime = await fetch_regime_state(request)
 
-    sect_name = identity.get("sector") if (identity := _identity_layer(dossier, peers)) else None
+    sect_name = (
+        identity.get("sector")
+        if (identity := _identity_layer(dossier, peers))
+        else None
+    )
     portfolio_fit = build_portfolio_fit(ticker, positions, sector=sect_name)
     fundamentals_block = _fundamentals_block(p9.get("fundamentals"), dossier)
     peers_block = _peers_block(peers)
@@ -1595,9 +1695,7 @@ async def _build_intel_payload(
         regime_ok=regime.should_trade,
     )
 
-    smart_money = _smart_money_summary(
-        ownership, options, conviction, unified=unified
-    )
+    smart_money = _smart_money_summary(ownership, options, conviction, unified=unified)
     confluence = build_confluence(
         dossier=dossier,
         unified=unified,
@@ -1629,7 +1727,9 @@ async def _build_intel_payload(
     )
 
     conf_display = _resolve_confidence_display(unified, dossier, confluence)
-    confidence_metrics = _build_confidence_metrics(conf_display, confluence, portfolio_fit)
+    confidence_metrics = _build_confidence_metrics(
+        conf_display, confluence, portfolio_fit
+    )
     unified = {**unified, **conf_display, **confidence_metrics}
 
     from src.services.cost_adjusted_edge import compute_net_edge
@@ -1686,7 +1786,9 @@ async def _build_intel_payload(
     )
     decision_hierarchy = _build_decision_hierarchy(unified, action_box, pm_answer)
     page_summary = _build_page_summary(ticker, unified, decision_stack, timing)
-    peer_context = _peer_context(dossier, peers, conviction if isinstance(conviction, dict) else None)
+    peer_context = _peer_context(
+        dossier, peers, conviction if isinstance(conviction, dict) else None
+    )
     trade_plan_human = _trade_plan_human(dossier.get("trade_plan") or {}, unified)
 
     from src.services.candlestick_context import build_candlestick_analysis
@@ -1697,8 +1799,8 @@ async def _build_intel_payload(
         regime={"label": regime.regime, "should_trade": regime.should_trade},
     )
 
-    from src.services.crisis_regime import build_crisis_context
     from src.services.buffett_judgment import build_buffett_owner_view
+    from src.services.crisis_regime import build_crisis_context
     from src.services.decision_quality_naval import build_naval_thinking
     from src.services.principles_engine import build_principles_memo
 
@@ -1712,20 +1814,31 @@ async def _build_intel_payload(
         ticker=ticker,
         dossier=dossier,
         unified=unified if isinstance(unified, dict) else {},
-        regime={"tradeability": getattr(regime, "tradeability", None), "should_trade": regime.should_trade},
+        regime={
+            "tradeability": getattr(regime, "tradeability", None),
+            "should_trade": regime.should_trade,
+        },
     )
     buffett_owner_view = build_buffett_owner_view(
         ticker=ticker,
         dossier=dossier,
         unified=unified if isinstance(unified, dict) else {},
-        fundamentals_block=fundamentals_block if isinstance(fundamentals_block, dict) else None,
-        regime={"tradeability": getattr(regime, "tradeability", None), "should_trade": regime.should_trade},
+        fundamentals_block=fundamentals_block
+        if isinstance(fundamentals_block, dict)
+        else None,
+        regime={
+            "tradeability": getattr(regime, "tradeability", None),
+            "should_trade": regime.should_trade,
+        },
     )
     principles_memo = build_principles_memo(
         ticker=ticker,
         dossier=dossier,
         unified=unified if isinstance(unified, dict) else {},
-        regime={"tradeability": getattr(regime, "tradeability", None), "should_trade": regime.should_trade},
+        regime={
+            "tradeability": getattr(regime, "tradeability", None),
+            "should_trade": regime.should_trade,
+        },
     )
 
     from src.services.index_relative_leadership import resolve_index_leadership
@@ -1777,9 +1890,7 @@ async def _build_intel_payload(
         or label_upper in _RESEARCH_ONLY_LABELS
         or dossier.get("_partial")
     )
-    missing_modules = sorted(
-        str(k) for k, v in (module_errors or {}).items() if v
-    )
+    missing_modules = sorted(str(k) for k, v in (module_errors or {}).items() if v)
     dossier_freshness = None
     try:
         from src.services.data_freshness_service import freshness_report
@@ -1802,7 +1913,9 @@ async def _build_intel_payload(
     cc_state = build_cc_state(
         tradeability=tradeability,
         should_trade=should_trade,
-        decision_authority=decision_authority if isinstance(decision_authority, dict) else {},
+        decision_authority=decision_authority
+        if isinstance(decision_authority, dict)
+        else {},
         execution_readiness=(today.get("execution_readiness") or {}),
         surface_authority=None,
         trust=trust,
@@ -1969,7 +2082,8 @@ def _fundamentals_block(
     return {
         "has_data": bool(raw),
         "raw": raw,
-        "revenue_growth": (raw or {}).get("revenue_growth") or (raw or {}).get("revenueGrowth"),
+        "revenue_growth": (raw or {}).get("revenue_growth")
+        or (raw or {}).get("revenueGrowth"),
         "earnings_growth": (raw or {}).get("earnings_growth"),
         "margin_trend": (raw or {}).get("profit_margin"),
         "valuation_note": (raw or {}).get("valuation") or "See multiples vs peers",
@@ -1989,7 +2103,10 @@ def _peers_block(peers: Any) -> Dict[str, Any]:
         "rows": table[:8] if isinstance(table, list) else [],
         "winner_label": "Compare RS and growth in table",
         "crowded_leader": None,
-        "evidence": {"basis": "peer_comparison_api", "label": "Live peer matrix when cached"},
+        "evidence": {
+            "basis": "peer_comparison_api",
+            "label": "Live peer matrix when cached",
+        },
     }
 
 
@@ -2035,7 +2152,9 @@ def _options_block(
     if pc_ratio is not None:
         try:
             pcr = float(pc_ratio)
-            call_put_bias = "put_heavy" if pcr > 1.1 else "call_heavy" if pcr < 0.9 else "balanced"
+            call_put_bias = (
+                "put_heavy" if pcr > 1.1 else "call_heavy" if pcr < 0.9 else "balanced"
+            )
         except (TypeError, ValueError):
             pass
 
@@ -2058,7 +2177,9 @@ def _options_block(
     vol_oi_note = "Volume/OI unavailable"
     if contracts:
         top_c = contracts[0] if isinstance(contracts[0], dict) else {}
-        vol_oi_note = f"Sample OI {top_c.get('oi', '—')} · vol {top_c.get('volume', '—')}"
+        vol_oi_note = (
+            f"Sample OI {top_c.get('oi', '—')} · vol {top_c.get('volume', '—')}"
+        )
 
     actionable = feed_state == "live" and not (flow_intel or {}).get("synthetic")
     opt_guidance = (
@@ -2079,9 +2200,7 @@ def _options_block(
         "leaps_note": options.get("leaps_accumulation"),
         "flow_quality_score": 70 if grade in ("A", "B") else 40,
         "classification": (
-            "directional_conviction"
-            if grade in ("A", "B")
-            else "short_dated_noise"
+            "directional_conviction" if grade in ("A", "B") else "short_dated_noise"
         ),
         "expected_move": options.get("expected_move"),
         "iv_note": iv_note,
@@ -2155,6 +2274,8 @@ async def _fetch_events(ticker: str) -> Dict[str, Any]:
 
 async def _fetch_edgar_insider(ticker: str) -> Optional[Dict[str, Any]]:
     try:
+        from src.ingestors.edgar import EdgarClient
+
         client = EdgarClient()
         return await client.get_insider_summary(ticker)
     except Exception as exc:

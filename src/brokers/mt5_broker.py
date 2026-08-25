@@ -10,10 +10,10 @@ Connects to MetaTrader 5 terminal for:
 Requires: pip install MetaTrader5
 MT5 terminal must be running (Windows or Wine on Linux/Mac).
 """
-import asyncio
+
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 from src.brokers.base import (
     AccountInfo,
@@ -34,8 +34,10 @@ logger = logging.getLogger(__name__)
 try:
     from src.core.errors import BrokerError
 except ImportError:
+
     class BrokerError(Exception):
         pass
+
 
 settings = get_settings()
 
@@ -73,6 +75,7 @@ class MetaTraderBroker(BaseBroker):
         """Initialize MT5 connection."""
         try:
             import MetaTrader5 as mt5
+
             self._mt5 = mt5
         except ImportError:
             self.logger.error(
@@ -164,14 +167,17 @@ class MetaTraderBroker(BaseBroker):
         for p in positions_raw:
             pos = Position(
                 ticker=p.symbol,
-                quantity=int(p.volume * 100000) if "JPY" not in p.symbol else int(p.volume * 1000),
+                quantity=int(p.volume * 100000)
+                if "JPY" not in p.symbol
+                else int(p.volume * 1000),
                 avg_price=p.price_open,
                 current_price=p.price_current,
                 market_value=p.volume * p.price_current,
                 unrealized_pnl=p.profit,
                 unrealized_pnl_pct=(
                     (p.price_current - p.price_open) / p.price_open * 100
-                    if p.price_open > 0 else 0
+                    if p.price_open > 0
+                    else 0
                 ),
                 market=Market.US,
             )
@@ -216,14 +222,18 @@ class MetaTraderBroker(BaseBroker):
                 price = tick.bid
                 mt5_type = mt5.ORDER_TYPE_SELL
         elif order.order_type == OrderType.LIMIT:
-            price = order.limit_price or (tick.ask if order.side == OrderSide.BUY else tick.bid)
+            price = order.limit_price or (
+                tick.ask if order.side == OrderSide.BUY else tick.bid
+            )
             mt5_type = (
                 mt5.ORDER_TYPE_BUY_LIMIT
                 if order.side == OrderSide.BUY
                 else mt5.ORDER_TYPE_SELL_LIMIT
             )
         elif order.order_type == OrderType.STOP:
-            price = order.stop_price or (tick.ask if order.side == OrderSide.BUY else tick.bid)
+            price = order.stop_price or (
+                tick.ask if order.side == OrderSide.BUY else tick.bid
+            )
             mt5_type = (
                 mt5.ORDER_TYPE_BUY_STOP
                 if order.side == OrderSide.BUY
@@ -239,10 +249,15 @@ class MetaTraderBroker(BaseBroker):
         symbol_info = mt5.symbol_info(symbol)
         lot_size = order.quantity
         if symbol_info:
-            lot_size = max(symbol_info.volume_min, round(order.quantity * symbol_info.volume_step, 2))
+            lot_size = max(
+                symbol_info.volume_min,
+                round(order.quantity * symbol_info.volume_step, 2),
+            )
 
         request = {
-            "action": mt5.TRADE_ACTION_DEAL if order.order_type == OrderType.MARKET else mt5.TRADE_ACTION_PENDING,
+            "action": mt5.TRADE_ACTION_DEAL
+            if order.order_type == OrderType.MARKET
+            else mt5.TRADE_ACTION_PENDING,
             "symbol": symbol,
             "volume": float(lot_size),
             "type": mt5_type,
@@ -293,9 +308,7 @@ class MetaTraderBroker(BaseBroker):
         result = mt5.order_send(request)
         return result is not None and result.retcode == mt5.TRADE_RETCODE_DONE
 
-    async def get_orders(
-        self, status: Optional[OrderStatus] = None
-    ) -> List[Dict]:
+    async def get_orders(self, status: Optional[OrderStatus] = None) -> List[Dict]:
         """Get pending orders from MT5, optionally filtered by status."""
         if not self.is_connected:
             return []
@@ -369,9 +382,7 @@ class MetaTraderBroker(BaseBroker):
             bid=tick.bid,
             ask=tick.ask,
             volume=tick.volume,
-            timestamp=datetime.fromtimestamp(
-                tick.time, tz=timezone.utc
-            ),
+            timestamp=datetime.fromtimestamp(tick.time, tz=timezone.utc),
         )
 
     async def get_historical(
@@ -401,6 +412,7 @@ class MetaTraderBroker(BaseBroker):
             return None
 
         import pandas as pd
+
         df = pd.DataFrame(rates)
         df["time"] = pd.to_datetime(df["time"], unit="s")
         df.rename(
@@ -429,6 +441,7 @@ class MetaTraderBroker(BaseBroker):
             return []
         mt5 = self._mt5
         from datetime import timedelta
+
         now = datetime.now(timezone.utc)
         deals = mt5.history_deals_get(now - timedelta(days=30), now)
         if deals is None:
@@ -437,16 +450,18 @@ class MetaTraderBroker(BaseBroker):
         for d in deals:
             if ticker and d.symbol != ticker:
                 continue
-            result.append({
-                "ticket": d.ticket,
-                "symbol": d.symbol,
-                "type": d.type,
-                "volume": d.volume,
-                "price": d.price,
-                "profit": d.profit,
-                "commission": d.commission,
-                "swap": d.swap,
-                "time": datetime.fromtimestamp(d.time, tz=timezone.utc).isoformat(),
-                "comment": d.comment,
-            })
+            result.append(
+                {
+                    "ticket": d.ticket,
+                    "symbol": d.symbol,
+                    "type": d.type,
+                    "volume": d.volume,
+                    "price": d.price,
+                    "profit": d.profit,
+                    "commission": d.commission,
+                    "swap": d.swap,
+                    "time": datetime.fromtimestamp(d.time, tz=timezone.utc).isoformat(),
+                    "comment": d.comment,
+                }
+            )
         return result[:limit]

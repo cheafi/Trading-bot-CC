@@ -49,14 +49,22 @@ def analyze_shadow_account(
         behavior_tags.append("overtrading")
 
     shadow_pnl = actual_pnl * 0.92 if behavior_tags else actual_pnl
-    avoided_losses = round(max(0, actual_pnl - shadow_pnl) if actual_pnl < shadow_pnl else 0, 2)
-    missed_winners = len([t for t in trades if float(t.get("pnl") or 0) < 0 and t.get("setup_valid")])
+    avoided_losses = round(
+        max(0, actual_pnl - shadow_pnl) if actual_pnl < shadow_pnl else 0, 2
+    )
+    missed_winners = len(
+        [t for t in trades if float(t.get("pnl") or 0) < 0 and t.get("setup_valid")]
+    )
 
     lessons = []
     if "chasing_extension" in behavior_tags:
-        lessons.append("Add monitor-zone rule; wait for Playbook confirmation before chase entries")
+        lessons.append(
+            "Add monitor-zone rule; wait for Playbook confirmation before chase entries"
+        )
     if "early_exits" in behavior_tags:
-        lessons.append("Define exit invalidation in Dossier; reduce discretionary early exits")
+        lessons.append(
+            "Define exit invalidation in Dossier; reduce discretionary early exits"
+        )
     if "revenge_trading" in behavior_tags:
         lessons.append("Use calm-down guardrail after drawdown; WAIT gate is binding")
     if not lessons:

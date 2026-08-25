@@ -6,7 +6,7 @@ Ops / research surface — does not authorize trades or override board WAIT.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from src.services.signal_provenance import (
     SIGNAL_EXECUTION_ANALYTICS,

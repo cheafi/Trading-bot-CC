@@ -45,7 +45,9 @@ def run_validation(
     trades = int(metrics.get("total_trades") or metrics.get("trades") or 0)
     max_dd = abs(float(metrics.get("max_drawdown") or metrics.get("max_dd") or 0))
     ret = float(metrics.get("total_return_pct") or metrics.get("return_pct") or 0)
-    wf_stability = int(metrics.get("walk_forward_stability") or metrics.get("stability_score") or 0)
+    wf_stability = int(
+        metrics.get("walk_forward_stability") or metrics.get("stability_score") or 0
+    )
 
     warnings: List[str] = []
     if data_quality in ("STALE", "CRITICAL"):
@@ -71,7 +73,8 @@ def run_validation(
         {
             "strategyDraftId": strategy_draft.get("id"),
             "dataSource": metrics.get("data_source") or "backtest_lab",
-            "period": metrics.get("period") or strategy_draft.get("backtestConfig", {}).get("period", "2y"),
+            "period": metrics.get("period")
+            or strategy_draft.get("backtestConfig", {}).get("period", "2y"),
             "benchmark": metrics.get("benchmark") or "SPY",
             "metrics": {
                 "total_return_pct": ret,
@@ -91,7 +94,8 @@ def run_validation(
                 "regime_specific": verdict == "Regime-specific only",
                 "retire": verdict == "Retire / do not use",
             },
-            "walkForward": metrics.get("walk_forward") or {"stability_score": wf_stability},
+            "walkForward": metrics.get("walk_forward")
+            or {"stability_score": wf_stability},
             "monteCarlo": monte_carlo,
             "bootstrap": bootstrap,
             "regimeSplit": metrics.get("regime_split") or {},
@@ -99,12 +103,16 @@ def run_validation(
             "setupFamilySplit": metrics.get("setup_family_split") or {},
             "provisional": data_quality in ("STALE", "CRITICAL", "mock"),
             "confirmationPath": "Playbook → Dashboard → Dossier",
-            "nextAction": "Create watch rule" if verdict == "Research pass" else "Gather more data / refine draft",
+            "nextAction": "Create watch rule"
+            if verdict == "Research pass"
+            else "Gather more data / refine draft",
         }
     )
 
 
-def _monte_carlo_stub(return_pct: float, max_dd: float, trades: int, n: int = 200) -> Dict[str, Any]:
+def _monte_carlo_stub(
+    return_pct: float, max_dd: float, trades: int, n: int = 200
+) -> Dict[str, Any]:
     if trades < 5:
         return {"runs": 0, "note": "Insufficient trades for Monte Carlo"}
     rng = random.Random(42)

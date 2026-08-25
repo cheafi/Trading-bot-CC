@@ -80,7 +80,11 @@ async def market_intel_vix(request: Request):
         else (
             "NORMAL"
             if vix < 20
-            else "ELEVATED" if vix < 30 else "HIGH" if vix < 40 else "EXTREME"
+            else "ELEVATED"
+            if vix < 30
+            else "HIGH"
+            if vix < 40
+            else "EXTREME"
         )
     )
     return {
@@ -166,7 +170,9 @@ async def market_intel_rates(request: Request):
         else (
             "FLAT"
             if spread is not None and spread < 0.5
-            else "NORMAL" if spread else "UNKNOWN"
+            else "NORMAL"
+            if spread
+            else "UNKNOWN"
         )
     )
 

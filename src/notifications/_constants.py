@@ -4,6 +4,7 @@ CC Discord Bot — Constants
 Shared constants, colors, roles, and server layout definitions.
 Extracted from discord_bot.py to reduce monolith size.
 """
+
 from __future__ import annotations
 
 # ── Brand Colors ──────────────────────────────────────────────
@@ -39,37 +40,74 @@ ACTION_EMOJI = {
 # ── Server Layout ─────────────────────────────────────────────
 SERVER_LAYOUT = {
     "\U0001f4ca Trading Signals": [
-        "signals", "breakouts", "dip-buys",
-        "swing-trades", "ai-picks",
+        "signals",
+        "breakouts",
+        "dip-buys",
+        "swing-trades",
+        "ai-picks",
     ],
     "\U0001f4bc Portfolio": [
-        "portfolio", "positions", "pnl-tracker",
+        "portfolio",
+        "positions",
+        "pnl-tracker",
     ],
     "\U0001f6a8 Alerts": [
-        "price-alerts", "vix-monitor",
-        "news-feed", "earnings-watch",
+        "price-alerts",
+        "vix-monitor",
+        "news-feed",
+        "earnings-watch",
     ],
     "\U0001f4c8 Market Intel": [
-        "market-pulse", "sector-rotation",
-        "macro-data", "crypto-watch",
+        "market-pulse",
+        "sector-rotation",
+        "macro-data",
+        "crypto-watch",
     ],
     "\U0001f916 AI Lab": [
-        "ai-analysis", "regime-tracker",
-        "strategy-lab", "backtest-results",
+        "ai-analysis",
+        "regime-tracker",
+        "strategy-lab",
+        "backtest-results",
     ],
     "\u2699\ufe0f Admin": [
-        "bot-commands", "bot-logs", "announcements",
+        "bot-commands",
+        "bot-logs",
+        "announcements",
     ],
 }
 
 # ── Default Watchlist ─────────────────────────────────────────
 DEFAULT_WATCHLIST = [
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA",
-    "META", "TSLA", "JPM", "V", "UNH",
-    "XOM", "JNJ", "PG", "MA", "HD",
-    "CVX", "MRK", "ABBV", "PEP", "COST",
-    "AVGO", "TMO", "MCD", "WMT", "CSCO",
-    "ACN", "ABT", "DHR", "NEE", "LIN",
+    "AAPL",
+    "MSFT",
+    "GOOGL",
+    "AMZN",
+    "NVDA",
+    "META",
+    "TSLA",
+    "JPM",
+    "V",
+    "UNH",
+    "XOM",
+    "JNJ",
+    "PG",
+    "MA",
+    "HD",
+    "CVX",
+    "MRK",
+    "ABBV",
+    "PEP",
+    "COST",
+    "AVGO",
+    "TMO",
+    "MCD",
+    "WMT",
+    "CSCO",
+    "ACN",
+    "ABT",
+    "DHR",
+    "NEE",
+    "LIN",
 ]
 
 # ── Sector ETFs ───────────────────────────────────────────────

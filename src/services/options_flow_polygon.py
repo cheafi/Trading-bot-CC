@@ -72,8 +72,7 @@ class PolygonOptionsFlowProvider(OptionsFlowProvider):
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 tasks = [
-                    self._fetch_underlying_chain(session, ticker)
-                    for ticker in tickers
+                    self._fetch_underlying_chain(session, ticker) for ticker in tickers
                 ]
                 chunks = await asyncio.gather(*tasks, return_exceptions=True)
                 for chunk in chunks:
@@ -153,9 +152,7 @@ class PolygonOptionsFlowProvider(OptionsFlowProvider):
         stock_price = self._underlying_price(results, payload)
         events: List[OptionsFlowEvent] = []
         for row in results:
-            event = self._normalize_contract(
-                underlying, row, stock_price=stock_price
-            )
+            event = self._normalize_contract(underlying, row, stock_price=stock_price)
             if event is not None:
                 events.append(event)
         return events
@@ -211,12 +208,9 @@ class PolygonOptionsFlowProvider(OptionsFlowProvider):
         iv = greeks.get("implied_volatility")
         iv_val = float(iv) if iv is not None else None
 
-        side_bias = self._infer_side_bias(
-            call_put, change_pct, price, bid, ask
-        )
+        side_bias = self._infer_side_bias(call_put, change_pct, price, bid, ask)
         contract_symbol = str(
-            details.get("ticker")
-            or f"O:{underlying}{expiry_date:%y%m%d}{call_put}"
+            details.get("ticker") or f"O:{underlying}{expiry_date:%y%m%d}{call_put}"
         )
 
         return OptionsFlowEvent(

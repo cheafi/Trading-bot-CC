@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.engines.sector_classifier import LeaderStatus, SectorBucket
+from src.engines.sector_classifier import LeaderStatus
 
 _BLOCKER_CATEGORIES = (
     "laggard",
@@ -419,9 +419,7 @@ def enrich_no_trade_list(
                 "timing_conf": round(float(r.confidence.timing), 2),
                 "thesis_conf": round(float(r.confidence.thesis), 2),
                 "data_conf": round(float(r.confidence.data), 2),
-                "conflict_level": (
-                    r.conflict.conflict_level if r.conflict else "LOW"
-                ),
+                "conflict_level": (r.conflict.conflict_level if r.conflict else "LOW"),
                 **audit,
             }
             rows.append(row)

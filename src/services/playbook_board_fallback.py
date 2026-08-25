@@ -8,7 +8,7 @@ import os
 import tempfile
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,8 @@ def load_playbook_snapshot(
         "cached": True,
         "stale": True,
         "age_seconds": int(age),
-        "snapshot_timestamp": entry.get("saved_at") or payload.get("snapshot_timestamp"),
+        "snapshot_timestamp": entry.get("saved_at")
+        or payload.get("snapshot_timestamp"),
     }
 
 
@@ -124,7 +125,9 @@ def save_playbook_snapshot(
         logger.warning("Playbook snapshot write failed: %s", exc)
 
 
-def _brief_row_to_opportunity(row: Dict[str, Any], brief: Dict[str, Any]) -> Dict[str, Any]:
+def _brief_row_to_opportunity(
+    row: Dict[str, Any], brief: Dict[str, Any]
+) -> Dict[str, Any]:
     entry = row.get("entry") or row.get("entry_price") or row.get("price")
     stop = row.get("stop") or row.get("stop_price")
     target = (
@@ -210,7 +213,9 @@ def _brief_row_to_opportunity(row: Dict[str, Any], brief: Dict[str, Any]) -> Dic
     }
 
 
-def _rejection_clusters_from_grouped(avoid_grouped: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _rejection_clusters_from_grouped(
+    avoid_grouped: Dict[str, Any],
+) -> List[Dict[str, Any]]:
     clusters: List[Dict[str, Any]] = []
     for g in avoid_grouped.get("groups") or []:
         key = g.get("group") or "other"
@@ -278,7 +283,11 @@ def build_compressed_fallback(
 
     watch_pool: List[Dict[str, Any]] = []
     review_pool: List[Dict[str, Any]] = []
-    for section, bucket in (("actionable", watch_pool), ("watch", watch_pool), ("review", review_pool)):
+    for section, bucket in (
+        ("actionable", watch_pool),
+        ("watch", watch_pool),
+        ("review", review_pool),
+    ):
         for row in brief.get(section, []) or []:
             opp = _brief_row_to_opportunity(row, brief)
             if action and str(opp.get("action") or "").upper() != action.upper():
@@ -322,7 +331,9 @@ def build_compressed_fallback(
                 break
 
     all_for_avoid = review_pool + [
-        r for r in watch_pool if str(r.get("action") or "").upper() in ("AVOID", "NO_TRADE")
+        r
+        for r in watch_pool
+        if str(r.get("action") or "").upper() in ("AVOID", "NO_TRADE")
     ]
     try:
         from src.services.decision_truth_model import build_avoid_grouped_from_rows
@@ -571,7 +582,11 @@ def resolve_board_mode_label(
     if payload.get("emergency"):
         return "Board unavailable"
     source = str(payload.get("source") or "")
-    if payload.get("compressed") or "fallback" in source or source == "compressed_fallback":
+    if (
+        payload.get("compressed")
+        or "fallback" in source
+        or source == "compressed_fallback"
+    ):
         return _COMPRESSED_LABEL
     if payload.get("cached") or payload.get("stale"):
         return _SNAPSHOT_BOARD_LABEL
@@ -582,7 +597,9 @@ def resolve_board_mode_label(
     return "Board unavailable"
 
 
-def annotate_board_mode(payload: Dict[str, Any], *, from_live: bool = False) -> Dict[str, Any]:
+def annotate_board_mode(
+    payload: Dict[str, Any], *, from_live: bool = False
+) -> Dict[str, Any]:
     """Set board_mode and labels on any ranked payload."""
     if payload.get("board_mode"):
         payload.setdefault(
@@ -596,7 +613,11 @@ def annotate_board_mode(payload: Dict[str, Any], *, from_live: bool = False) -> 
         payload.setdefault("board_mode_label", "Board unavailable")
         return payload
     source = str(payload.get("source") or "")
-    if payload.get("compressed") or "fallback" in source or source == "compressed_fallback":
+    if (
+        payload.get("compressed")
+        or "fallback" in source
+        or source == "compressed_fallback"
+    ):
         payload["board_mode"] = BOARD_MODE_COMPRESSED
         payload.setdefault("board_mode_label", _COMPRESSED_LABEL)
         payload.setdefault("board_message", _COMPRESSED_MESSAGE)
@@ -609,7 +630,9 @@ def annotate_board_mode(payload: Dict[str, Any], *, from_live: bool = False) -> 
         return payload
     if from_live or source == "ranked_pipeline":
         payload["board_mode"] = BOARD_MODE_FULL
-        payload["board_mode_label"] = resolve_board_mode_label(payload, from_live=from_live)
+        payload["board_mode_label"] = resolve_board_mode_label(
+            payload, from_live=from_live
+        )
         payload.setdefault(
             "snapshot_timestamp",
             datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),

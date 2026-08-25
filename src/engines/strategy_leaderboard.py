@@ -8,11 +8,13 @@ The leaderboard is consumed by the OpportunityEnsembler to
 weight strategy votes, and by the RegimeRouter to adjust
 strategy multipliers based on recent track record.
 """
+
 import logging
-from pathlib import Path
-from typing import Dict, List, Any, Optional
-from datetime import datetime, timedelta, timezone
+import os
+from datetime import datetime, timezone
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +24,9 @@ MODEL_DIR.mkdir(exist_ok=True)
 
 class StrategyStatus(str, Enum):
     ACTIVE = "active"
-    REDUCED = "reduced"       # still trading, half size
-    COOLDOWN = "cooldown"     # paused, will re-evaluate
-    RETIRED = "retired"       # permanently removed
+    REDUCED = "reduced"  # still trading, half size
+    COOLDOWN = "cooldown"  # paused, will re-evaluate
+    RETIRED = "retired"  # permanently removed
 
 
 class StrategyLeaderboard:
@@ -46,9 +48,9 @@ class StrategyLeaderboard:
     }
 
     # Lifecycle thresholds
-    COOLDOWN_SCORE = 0.20     # below this → cooldown
-    REDUCED_SCORE = 0.35      # below this → reduced
-    RETIRE_AFTER_DAYS = 90    # if cooldown > 90d → retired
+    COOLDOWN_SCORE = 0.20  # below this → cooldown
+    REDUCED_SCORE = 0.35  # below this → reduced
+    RETIRE_AFTER_DAYS = 90  # if cooldown > 90d → retired
     MIN_TRADES_FOR_EVAL = 20  # need this many trades
 
     def __init__(self):
@@ -58,6 +60,7 @@ class StrategyLeaderboard:
         # Read from config with fallback
         try:
             from src.core.config import get_trading_config
+
             tc = get_trading_config()
             self.COOLDOWN_SCORE = tc.strategy_cooldown_score
             self.REDUCED_SCORE = tc.strategy_reduced_score
@@ -81,13 +84,16 @@ class StrategyLeaderboard:
         Returns:
             Updated strategy entry with score and status.
         """
-        entry = self._strategies.get(strategy_name, {
-            "name": strategy_name,
-            "status": StrategyStatus.ACTIVE,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "cooldown_since": None,
-            "trade_count": 0,
-        })
+        entry = self._strategies.get(
+            strategy_name,
+            {
+                "name": strategy_name,
+                "status": StrategyStatus.ACTIVE,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "cooldown_since": None,
+                "trade_count": 0,
+            },
+        )
 
         # Update metrics
         entry["metrics"] = metrics
@@ -104,12 +110,14 @@ class StrategyLeaderboard:
         self._strategies[strategy_name] = entry
 
         # Record history
-        self._history.append({
-            "strategy": strategy_name,
-            "score": entry["blended_score"],
-            "status": entry["status"],
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        self._history.append(
+            {
+                "strategy": strategy_name,
+                "score": entry["blended_score"],
+                "status": entry["status"],
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
 
         return entry
 
@@ -127,8 +135,10 @@ class StrategyLeaderboard:
     def get_active_strategies(self) -> List[str]:
         """Return names of strategies that can trade."""
         return [
-            name for name, entry in self._strategies.items()
-            if entry.get("status") in (
+            name
+            for name, entry in self._strategies.items()
+            if entry.get("status")
+            in (
                 StrategyStatus.ACTIVE,
                 StrategyStatus.REDUCED,
             )
@@ -143,7 +153,8 @@ class StrategyLeaderboard:
         }
 
     def get_sizing_multiplier(
-        self, strategy_name: str,
+        self,
+        strategy_name: str,
     ) -> float:
         """
         Returns sizing multiplier based on strategy status.
@@ -162,7 +173,8 @@ class StrategyLeaderboard:
             return 0.0
 
     def get_health_multiplier(
-        self, strategy_name: str,
+        self,
+        strategy_name: str,
     ) -> float:
         """Sprint 28: composite health multiplier for live sizing.
 
@@ -213,7 +225,8 @@ class StrategyLeaderboard:
         return round(max(0.0, min(health, 1.0)), 3)
 
     def _calculate_score(
-        self, metrics: Dict[str, float],
+        self,
+        metrics: Dict[str, float],
     ) -> float:
         """Blended score from strategy metrics."""
         w = self.SCORE_WEIGHTS
@@ -251,7 +264,8 @@ class StrategyLeaderboard:
         return max(score, 0.0)
 
     def _evaluate_status(
-        self, entry: Dict[str, Any],
+        self,
+        entry: Dict[str, Any],
     ) -> StrategyStatus:
         """Determine lifecycle status based on score."""
         score = entry.get("blended_score", 0)
@@ -268,9 +282,7 @@ class StrategyLeaderboard:
             if cd_since:
                 try:
                     cd_dt = datetime.fromisoformat(cd_since)
-                    days_in_cd = (
-                        datetime.now(timezone.utc) - cd_dt
-                    ).days
+                    days_in_cd = (datetime.now(timezone.utc) - cd_dt).days
                     if days_in_cd > self.RETIRE_AFTER_DAYS:
                         return StrategyStatus.RETIRED
                 except (ValueError, TypeError):
@@ -279,9 +291,7 @@ class StrategyLeaderboard:
         # Score-based transitions
         if score < self.COOLDOWN_SCORE:
             if current != StrategyStatus.COOLDOWN:
-                entry["cooldown_since"] = (
-                    datetime.now(timezone.utc).isoformat()
-                )
+                entry["cooldown_since"] = datetime.now(timezone.utc).isoformat()
             return StrategyStatus.COOLDOWN
         elif score < self.REDUCED_SCORE:
             entry["cooldown_since"] = None
@@ -330,9 +340,14 @@ class StrategyLeaderboard:
             ("market_breakdown", market),
         ]:
             if bk_val:
-                sub = entry[bk_key].setdefault(bk_val, {
-                    "trades": 0, "wins": 0, "total_pnl": 0.0,
-                })
+                sub = entry[bk_key].setdefault(
+                    bk_val,
+                    {
+                        "trades": 0,
+                        "wins": 0,
+                        "total_pnl": 0.0,
+                    },
+                )
                 sub["trades"] += 1
                 if is_win:
                     sub["wins"] += 1
@@ -351,12 +366,8 @@ class StrategyLeaderboard:
         shrink_w = min(trades, shrinkage_n) / shrinkage_n
         win_rate = shrink_w * raw_wr + (1 - shrink_w) * prior_wr
 
-        avg_win = (
-            sum(p for p in pnl_hist if p > 0) / max(wins, 1)
-        )
-        avg_loss = abs(
-            sum(p for p in pnl_hist if p <= 0) / max(trades - wins, 1)
-        )
+        avg_win = sum(p for p in pnl_hist if p > 0) / max(wins, 1)
+        avg_loss = abs(sum(p for p in pnl_hist if p <= 0) / max(trades - wins, 1))
         profit_factor = avg_win / avg_loss if avg_loss > 0 else 1.0
         expectancy = win_rate * avg_win - (1 - win_rate) * avg_loss
 
@@ -386,6 +397,7 @@ class StrategyLeaderboard:
         """
         import json as _json
         import tempfile
+
         try:
             data = {
                 "strategies": self._strategies,
@@ -418,6 +430,7 @@ class StrategyLeaderboard:
         Uses file locking to prevent reading a partially-written file.
         """
         import json as _json
+
         if not self._persist_path.exists():
             return
         try:
@@ -425,6 +438,7 @@ class StrategyLeaderboard:
                 # Advisory lock: shared lock for reading
                 try:
                     import fcntl
+
                     fcntl.flock(f, fcntl.LOCK_SH)
                 except (ImportError, OSError):
                     pass  # Windows or non-POSIX — skip locking
@@ -433,6 +447,7 @@ class StrategyLeaderboard:
                 finally:
                     try:
                         import fcntl
+
                         fcntl.flock(f, fcntl.LOCK_UN)
                     except (ImportError, OSError):
                         pass
@@ -440,7 +455,8 @@ class StrategyLeaderboard:
             self._history = data.get("history", [])
             logger.info(
                 "Loaded leaderboard: %d strategies, %d history entries",
-                len(self._strategies), len(self._history),
+                len(self._strategies),
+                len(self._history),
             )
         except Exception as e:
             logger.warning("Leaderboard load error: %s", e)

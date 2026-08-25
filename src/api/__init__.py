@@ -3,7 +3,7 @@ TradingAI Bot - API Package
 FastAPI-based REST API for the trading bot.
 """
 
-__all__ = ['app']
+__all__ = ["app"]
 
 
 def __getattr__(name):

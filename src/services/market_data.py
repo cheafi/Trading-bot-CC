@@ -48,10 +48,10 @@ logger = logging.getLogger(__name__)
 
 # Cache TTL in seconds per interval type
 DEFAULT_TTL: Dict[str, int] = {
-    "1d":  300,    # 5 min  — daily bars update infrequently during the day
-    "1h":  180,    # 3 min
-    "5m":   60,    # 1 min
-    "1m":   30,    # 30 s
+    "1d": 300,  # 5 min  — daily bars update infrequently during the day
+    "1h": 180,  # 3 min
+    "5m": 60,  # 1 min
+    "1m": 30,  # 30 s
 }
 
 # Minimum non-NaN rows before a frame is accepted
@@ -64,28 +64,38 @@ MIN_ROWS: Dict[str, int] = {
 
 # Approximate max trading-day rows each period can deliver (daily interval)
 _PERIOD_MAX_DAILY: Dict[str, int] = {
-    "1d": 1, "5d": 5, "1mo": 22, "3mo": 66, "6mo": 132,
-    "1y": 252, "2y": 504, "5y": 1260, "10y": 2520, "max": 99999,
+    "1d": 1,
+    "5d": 5,
+    "1mo": 22,
+    "3mo": 66,
+    "6mo": 132,
+    "1y": 252,
+    "2y": 504,
+    "5y": 1260,
+    "10y": 2520,
+    "max": 99999,
 }
 
-MAX_NAN_FRACTION = 0.20     # reject if >20% of Close values are NaN
-BACKOFF_BASE     = 1.5      # base for exponential back-off
+MAX_NAN_FRACTION = 0.20  # reject if >20% of Close values are NaN
+BACKOFF_BASE = 1.5  # base for exponential back-off
 BACKOFF_MAX = 10.0  # cap on back-off delay (seconds)
-JITTER_FRAC      = 0.30     # ±30% random jitter applied to each delay
+JITTER_FRAC = 0.30  # ±30% random jitter applied to each delay
 MAX_RETRIES = 2  # reduced: neg-cache handles persistent failures
 
 
 # ── internal cache entry ──────────────────────────────────────────────────────
 
+
 class _CacheEntry:
     """Single cached frame with metadata."""
+
     __slots__ = ("df", "fetched_at", "stale", "error_count", "key")
 
     def __init__(self, key: str, df: Optional[pd.DataFrame]):
-        self.key         = key
-        self.df          = df
-        self.fetched_at  = time.monotonic()
-        self.stale       = (df is None)
+        self.key = key
+        self.df = df
+        self.fetched_at = time.monotonic()
+        self.stale = df is None
         self.error_count = 0 if df is not None else 1
 
     def is_fresh(self, ttl: int) -> bool:
@@ -93,6 +103,7 @@ class _CacheEntry:
 
 
 # ── main service class ────────────────────────────────────────────────────────
+
 
 class MarketDataService:
     """
@@ -106,7 +117,7 @@ class MarketDataService:
     def __init__(self):
         self._cache: Dict[str, _CacheEntry] = {}
         self._per_key_locks: Dict[str, asyncio.Lock] = {}
-        self._registry_lock = asyncio.Lock()   # guards _per_key_locks dict
+        self._registry_lock = asyncio.Lock()  # guards _per_key_locks dict
 
     # ── public API ────────────────────────────────────────────────────────────
 
@@ -155,14 +166,14 @@ class MarketDataService:
         if df is None or df.empty:
             return None
         try:
-            close_col  = "Close" if "Close" in df.columns else "close"
-            vol_col    = "Volume" if "Volume" in df.columns else "volume"
-            last       = df.iloc[-1]
-            prev       = df.iloc[-2] if len(df) >= 2 else last
-            close      = float(last[close_col])
+            close_col = "Close" if "Close" in df.columns else "close"
+            vol_col = "Volume" if "Volume" in df.columns else "volume"
+            last = df.iloc[-1]
+            prev = df.iloc[-2] if len(df) >= 2 else last
+            close = float(last[close_col])
             prev_close = float(prev[close_col])
-            chg        = close - prev_close
-            chg_pct    = (chg / prev_close * 100) if prev_close else 0.0
+            chg = close - prev_close
+            chg_pct = (chg / prev_close * 100) if prev_close else 0.0
 
             def _pct_from_offset(offset: int) -> Optional[float]:
                 if len(df) <= offset:
@@ -176,13 +187,13 @@ class MarketDataService:
             change_20d = _pct_from_offset(20)
 
             return {
-                "ticker":     ticker,
-                "price":      round(close, 4),
-                "change":     round(chg, 4),
+                "ticker": ticker,
+                "price": round(close, 4),
+                "change": round(chg, 4),
                 "change_pct": round(chg_pct, 2),
-                "change_5d":  change_5d,
+                "change_5d": change_5d,
                 "change_20d": change_20d,
-                "volume":     int(last.get(vol_col, 0)),
+                "volume": int(last.get(vol_col, 0)),
             }
         except Exception as exc:
             logger.warning(f"[MarketData] get_quote({ticker}) parse error: {exc}")
@@ -229,19 +240,22 @@ class MarketDataService:
         def _sync():
             try:
                 import yfinance as yf
+
                 t = yf.Ticker(ticker.upper())
                 raw = t.news if hasattr(t, "news") else []
                 out = []
-                for item in (raw or []):
+                for item in raw or []:
                     url = item.get("link", item.get("url", ""))
                     title = item.get("title", "")
                     if url and title and len(out) < max_items:
-                        out.append({
-                            "title": title[:200],
-                            "url": url,
-                            "publisher": item.get("publisher", ""),
-                            "time": item.get("providerPublishTime", 0),
-                        })
+                        out.append(
+                            {
+                                "title": title[:200],
+                                "url": url,
+                                "publisher": item.get("publisher", ""),
+                                "time": item.get("providerPublishTime", 0),
+                            }
+                        )
                 return out
             except Exception as exc:
                 logger.warning(f"[MarketData] get_news({ticker}) error: {exc}")
@@ -266,15 +280,26 @@ class MarketDataService:
             return 0.0
         try:
             close = df["Close"]
-            ret = (float(close.iloc[-1]) / float(close.iloc[-window]) - 1)
+            ret = float(close.iloc[-1]) / float(close.iloc[-window]) - 1
             return round(ret, 4)
         except Exception:
             return 0.0
 
     async def get_market_breadth(self) -> float:
         """Approximate breadth: fraction of 11 sector ETFs above SMA(20)."""
-        sectors = ["XLK", "XLF", "XLV", "XLE", "XLI", "XLY",
-                    "XLP", "XLU", "XLRE", "XLC", "XLB"]
+        sectors = [
+            "XLK",
+            "XLF",
+            "XLV",
+            "XLE",
+            "XLI",
+            "XLY",
+            "XLP",
+            "XLU",
+            "XLRE",
+            "XLC",
+            "XLB",
+        ]
         above = 0
         total = 0
         results = await asyncio.gather(
@@ -309,13 +334,14 @@ class MarketDataService:
         realized_vol = 0.15  # fallback when data unavailable
         try:
             import numpy as _np
+
             if spy_hist is not None and not spy_hist.empty:
                 c_col = "Close" if "Close" in spy_hist.columns else "close"
                 closes = spy_hist[c_col].dropna().values.astype(float)
                 if len(closes) >= 5:
                     log_rets = _np.diff(_np.log(closes))[-20:]
                     if len(log_rets) > 1:
-                        realized_vol = round(float(_np.std(log_rets) * (252 ** 0.5)), 4)
+                        realized_vol = round(float(_np.std(log_rets) * (252**0.5)), 4)
         except Exception:
             pass
         return {
@@ -332,15 +358,15 @@ class MarketDataService:
         Health snapshot for /status command.
         Returns entry counts, freshness, and cumulative error count.
         """
-        now    = time.monotonic()
-        total  = len(self._cache)
-        fresh  = sum(1 for e in self._cache.values() if e.is_fresh(300))
-        stale  = sum(1 for e in self._cache.values() if e.stale)
+        time.monotonic()
+        total = len(self._cache)
+        fresh = sum(1 for e in self._cache.values() if e.is_fresh(300))
+        stale = sum(1 for e in self._cache.values() if e.stale)
         errors = sum(e.error_count for e in self._cache.values())
         return {
-            "entries":      total,
-            "fresh":        fresh,
-            "stale":        stale,
+            "entries": total,
+            "fresh": fresh,
+            "stale": stale,
             "total_errors": errors,
         }
 
@@ -393,8 +419,8 @@ class MarketDataService:
 
             if attempt < MAX_RETRIES - 1:
                 base_delay = min(BACKOFF_MAX, BACKOFF_BASE ** (attempt + 1))
-                jitter     = base_delay * JITTER_FRAC * (2 * random.random() - 1)
-                delay      = max(0.5, base_delay + jitter)
+                jitter = base_delay * JITTER_FRAC * (2 * random.random() - 1)
+                delay = max(0.5, base_delay + jitter)
                 logger.debug(f"[MarketData] {ticker} retry in {delay:.1f}s")
                 await asyncio.sleep(delay)
 
@@ -407,6 +433,7 @@ class MarketDataService:
 
 
 # ── frame validation (module-level, stateless) ───────────────────────────────
+
 
 def _validate_frame(
     df: Any, ticker: str, interval: str, period: str = "1y"
@@ -425,7 +452,7 @@ def _validate_frame(
 
     # Normalise column name capitalisation
     col_map = {c.strip().lower(): c.strip() for c in df.columns}
-    rename  = {}
+    rename = {}
     for orig, normalised in col_map.items():
         if orig == "close" and "Close" not in df.columns:
             rename[normalised] = "Close"
@@ -438,13 +465,13 @@ def _validate_frame(
         logger.debug(f"[MarketData] {ticker}: no Close column after normalisation")
         return None
 
-    close     = df["Close"]
-    nan_frac  = close.isna().mean()
+    close = df["Close"]
+    nan_frac = close.isna().mean()
     min_valid = MIN_ROWS.get(interval, 10)
     # Cap min_valid by what the period can actually deliver.
     # E.g. period="5d" + interval="1d" → max 5 rows; don't require 10.
     period_max = _PERIOD_MAX_DAILY.get(period, 99999)
-    min_valid = min(min_valid, max(1, period_max - 2))   # 2-row slack for holidays
+    min_valid = min(min_valid, max(1, period_max - 2))  # 2-row slack for holidays
 
     if nan_frac > MAX_NAN_FRACTION:
         logger.warning(
@@ -465,6 +492,7 @@ def _validate_frame(
 
 
 # ── cache key helper ──────────────────────────────────────────────────────────
+
 
 def _cache_key(ticker: str, period: str, interval: str) -> str:
     return f"{ticker.upper()}:{period}:{interval}"

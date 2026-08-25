@@ -20,7 +20,11 @@ def _section_state(
     stale: bool = False,
 ) -> Dict[str, Any]:
     if not active:
-        return {"state": "inactive", "label": "Inactive", "detail": "Engine not running"}
+        return {
+            "state": "inactive",
+            "label": "Inactive",
+            "detail": "Engine not running",
+        }
     if not loaded:
         return {
             "state": "not_loaded",
@@ -28,7 +32,11 @@ def _section_state(
             "detail": "Click refresh or start engine",
         }
     if stale:
-        return {"state": "stale", "label": "Stale", "detail": "Data older than threshold"}
+        return {
+            "state": "stale",
+            "label": "Stale",
+            "detail": "Data older than threshold",
+        }
     if sample < min_sample:
         return {
             "state": "insufficient_sample",
@@ -239,15 +247,19 @@ def build_degraded_ops_operator_console(
         tier: str,
         runtime_ev: str,
     ) -> Dict[str, Any]:
-        evidence = runtime_ev if ok else (
-            _ops_bi(
-                "探測預熱 — 可達性未確認",
-                "Probe warming — reachability not confirmed",
-            )
-            if tier == "warming"
-            else _ops_bi(
-                "探測失敗或元件離線",
-                "Probe failed or component down",
+        evidence = (
+            runtime_ev
+            if ok
+            else (
+                _ops_bi(
+                    "探測預熱 — 可達性未確認",
+                    "Probe warming — reachability not confirmed",
+                )
+                if tier == "warming"
+                else _ops_bi(
+                    "探測失敗或元件離線",
+                    "Probe failed or component down",
+                )
             )
         )
         return {
@@ -474,13 +486,7 @@ def build_ops_operator_console(
         or ibkr_health.get("handoff_status") == "monitoring_only"
     )
     session_auth = (
-        "active"
-        if broker_connected
-        else (
-            "inactive"
-            if gateway_ok
-            else "unknown"
-        )
+        "active" if broker_connected else ("inactive" if gateway_ok else "unknown")
     )
     order_path_tested = bool(ibkr.get("last_order_ok")) and _is_today(
         str(ibkr.get("last_order_ok") or "")
@@ -521,7 +527,9 @@ def build_ops_operator_console(
         blockers.append("Broker path not reachable — paper handoff unavailable")
 
     paper_ready = running and dry_run and not breaker and cycles > 0 and cached_recs > 0
-    live_ready = running and not dry_run and not breaker and cycles > 0 and engine_handoff
+    live_ready = (
+        running and not dry_run and not breaker and cycles > 0 and engine_handoff
+    )
 
     if breaker:
         verdict_code = "LIVE_BLOCKED"
@@ -534,12 +542,19 @@ def build_ops_operator_console(
             if dry_run
             else "NOT READY FOR LIVE EXECUTION"
         )
-        verdict_detail = "Engine stopped — infrastructure may be up but trading loop is off"
+        verdict_detail = (
+            "Engine stopped — infrastructure may be up but trading loop is off"
+        )
     elif dry_run:
-        verdict_code = "PAPER_READY" if paper_ready and len(blockers) <= 1 else "PAPER_ONLY"
+        verdict_code = (
+            "PAPER_READY" if paper_ready and len(blockers) <= 1 else "PAPER_ONLY"
+        )
         system_verdict = (
             "PAPER EXECUTION READY"
-            if paper_ready and not [b for b in blockers if "cache" in b.lower() or "cycle" in b.lower()]
+            if paper_ready
+            and not [
+                b for b in blockers if "cache" in b.lower() or "cycle" in b.lower()
+            ]
             else "NOT READY FOR PAPER EXECUTION"
         )
         verdict_detail = (
@@ -635,13 +650,9 @@ def build_ops_operator_console(
     if uptime_raw:
         uptime_display = uptime_raw
         if not running:
-            uptime_reason = (
-                f"API process up ({uptime_raw}) — trading engine stopped"
-            )
+            uptime_reason = f"API process up ({uptime_raw}) — trading engine stopped"
         elif cycles == 0:
-            uptime_reason = (
-                f"API up ({uptime_raw}) — no engine cycles this session yet"
-            )
+            uptime_reason = f"API up ({uptime_raw}) — no engine cycles this session yet"
         else:
             uptime_reason = f"API up since {boot_label}"
     else:
@@ -775,11 +786,7 @@ def build_ops_operator_console(
                 else (
                     "connected, not exercised"
                     if broker_connected
-                    else (
-                        "reachable, not logged in"
-                        if gateway_ok
-                        else "disconnected"
-                    )
+                    else ("reachable, not logged in" if gateway_ok else "disconnected")
                 )
             )
         ),
@@ -908,7 +915,12 @@ def build_ops_operator_console(
                 "探測失敗或元件離線",
                 "Probe failed or component down",
             )
-        elif name in ("broker",) and broker_connected and cycles > 0 and order_path_tested:
+        elif (
+            name in ("broker",)
+            and broker_connected
+            and cycles > 0
+            and order_path_tested
+        ):
             tier = "trading_ready"
             probe_label = "Probe OK"
             evidence = runtime_ev
@@ -973,7 +985,9 @@ def build_ops_operator_console(
                 "scanner/regime filters may have rejected all candidates."
             )
     else:
-        signals_today_note = f"Signals today: {signals_today} — from engine runtime this session."
+        signals_today_note = (
+            f"Signals today: {signals_today} — from engine runtime this session."
+        )
 
     market_data_probe = bool(components.get("market_data"))
     if market_data_probe and (cycles == 0 or not _is_today(last_cycle)):
@@ -1080,7 +1094,9 @@ def build_ops_operator_console(
     failed_jobs = (jobs_status or {}).get("failed_jobs") or []
     operational_events = {
         "last_engine_error": eng.get("last_error"),
-        "last_failed_job": failed_jobs[0] if failed_jobs else scheduler.get("last_error"),
+        "last_failed_job": failed_jobs[0]
+        if failed_jobs
+        else scheduler.get("last_error"),
         "last_heartbeat": ibkr.get("last_heartbeat") or last_cycle,
         "last_cycle": last_cycle,
         "scheduler_detail": scheduler.get("detail"),
@@ -1151,9 +1167,9 @@ def build_ops_operator_console(
         "scheduler": scheduler,
         "last_events": {
             "last_cycle": last_cycle,
-            "last_brief": (cc_header.get("brief_status") or {}).get("latest", {}).get(
-                "as_of"
-            ),
+            "last_brief": (cc_header.get("brief_status") or {})
+            .get("latest", {})
+            .get("as_of"),
             "ibkr_heartbeat": ibkr.get("last_heartbeat"),
             "market_data_tier": freshness.get("worst_tier"),
         },
@@ -1179,7 +1195,8 @@ def build_ops_operator_console(
             "host": ibkr.get("host") or execution_readiness.get("host"),
             "port": ibkr.get("port") or execution_readiness.get("port"),
             "mode": ibkr.get("mode") or "paper",
-            "account_sync": ibkr.get("account") or execution_readiness.get("portfolio_source"),
+            "account_sync": ibkr.get("account")
+            or execution_readiness.get("portfolio_source"),
             "health": ibkr_health or execution_readiness.get("health") or {},
             "health_label": ibkr.get("health_label")
             or execution_readiness.get("health_label"),

@@ -191,14 +191,11 @@ class SectorPipeline:
         portfolio_value = signal.get("_portfolio_value", 0)
         portfolio_peak = signal.get("_portfolio_peak", 0)
         if portfolio_value > 0 and portfolio_peak > 0:
-            cb = self.circuit_breaker.check(
-                portfolio_value, portfolio_peak
-            )
+            cb = self.circuit_breaker.check(portfolio_value, portfolio_peak)
             if cb.level == "HALT":
                 decision.action = "NO_TRADE"
                 decision.rationale += (
-                    f" (circuit breaker: HALT at"
-                    f" {cb.drawdown_pct:.1f}% drawdown)"
+                    f" (circuit breaker: HALT at {cb.drawdown_pct:.1f}% drawdown)"
                 )
             elif cb.size_multiplier < 1.0:
                 decision.position_size_pct = round(
@@ -222,14 +219,10 @@ class SectorPipeline:
                 decision.position_size_pct = round(
                     decision.position_size_pct * report.sizing_adjustment, 1
                 )
-                decision.rationale += (
-                    f" (cross-asset stress:" f" {report.stress_level})"
-                )
+                decision.rationale += f" (cross-asset stress: {report.stress_level})"
 
         # 7. Explain
-        explanation = self.explainer.explain(
-            signal, sector, fit, conf, decision
-        )
+        explanation = self.explainer.explain(signal, sector, fit, conf, decision)
 
         return PipelineResult(
             signal=signal,

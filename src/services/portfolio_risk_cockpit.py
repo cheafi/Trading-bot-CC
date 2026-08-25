@@ -153,7 +153,9 @@ def build_portfolio_risk_cockpit(
 
     alerts: List[Dict[str, str]] = []
     for w in summary.get("warnings") or []:
-        alerts.append({"severity": "warning", "category": "concentration", "message": w})
+        alerts.append(
+            {"severity": "warning", "category": "concentration", "message": w}
+        )
     for c in summary.get("crowding_flags") or []:
         alerts.append({"severity": "warning", "category": "correlation", "message": c})
     if (summary.get("top_weight_pct") or 0) > max_sector_pct:
@@ -171,7 +173,9 @@ def build_portfolio_risk_cockpit(
             {
                 "severity": "critical",
                 "category": "stop_breach",
-                "message": heat.get("heat_quality_label", "Stop breached — exit risk unmanaged"),
+                "message": heat.get(
+                    "heat_quality_label", "Stop breached — exit risk unmanaged"
+                ),
             },
         )
     elif heat.get("without_stop"):
@@ -202,14 +206,18 @@ def build_portfolio_risk_cockpit(
     ]
 
     tech_weight = sector_pct.get("Technology", 0)
-    beta_concentration = round(
-        sum(
-            (float(p.get("market_value") or 0) / total)
-            * float(p.get("beta") or 1.0)
-            for p in positions
-        ),
-        2,
-    ) if positions else 0.0
+    beta_concentration = (
+        round(
+            sum(
+                (float(p.get("market_value") or 0) / total)
+                * float(p.get("beta") or 1.0)
+                for p in positions
+            ),
+            2,
+        )
+        if positions
+        else 0.0
+    )
 
     hhi = summary.get("hhi") or 0
     concentration_status = (
@@ -219,7 +227,12 @@ def build_portfolio_risk_cockpit(
         if hhi > 1800
         else "normal"
     )
-    if heat.get("stop_breached_count") or concentration_status == "critical" or heat.get("without_stop") or (heat.get("heat_available") and float(heat.get("heat_pct") or 0) > 6):
+    if (
+        heat.get("stop_breached_count")
+        or concentration_status == "critical"
+        or heat.get("without_stop")
+        or (heat.get("heat_available") and float(heat.get("heat_pct") or 0) > 6)
+    ):
         severity = "Action needed"
     elif concentration_status == "elevated" or sector_pct.get("Technology", 0) > 40:
         severity = "Watch"
@@ -240,7 +253,9 @@ def build_portfolio_risk_cockpit(
         if w > 12:
             action = f"Trim {r['ticker']} toward 12% cap"
         elif sec == "Technology" and sector_pct.get("Technology", 0) > 40:
-            action = f"Trim tech sleeve 15–20% (now {sector_pct.get('Technology', 0):.0f}%)"
+            action = (
+                f"Trim tech sleeve 15–20% (now {sector_pct.get('Technology', 0):.0f}%)"
+            )
         elif r.get("pnl_pct", 0) < -5:
             action = f"Review thesis — unrealized drag {r['pnl_pct']:.1f}%"
         else:
@@ -275,7 +290,11 @@ def build_portfolio_risk_cockpit(
         "at_position_cap": len(positions) >= 10,
         "sector_cap_pct": max_sector_pct,
         "sector_breaches": [
-            {"sector": sec, "weight_pct": wt, "message": f"{sec} {wt:.1f}% > {max_sector_pct:.0f}% cap"}
+            {
+                "sector": sec,
+                "weight_pct": wt,
+                "message": f"{sec} {wt:.1f}% > {max_sector_pct:.0f}% cap",
+            }
             for sec, wt in sector_pct.items()
             if wt > max_sector_pct
         ],

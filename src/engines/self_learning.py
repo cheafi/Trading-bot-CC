@@ -24,7 +24,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -359,7 +359,7 @@ class SelfLearningEngine:
                     parameter="max_position_pct",
                     old_value=current,
                     new_value=new_val,
-                    reason=f"Win/loss ratio {avg_win/avg_loss:.2f} < 1.0 — winners undersized",
+                    reason=f"Win/loss ratio {avg_win / avg_loss:.2f} < 1.0 — winners undersized",
                     confidence=0.4,
                     sample_size=len(outcomes),
                 )

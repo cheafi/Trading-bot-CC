@@ -4,18 +4,19 @@ Manages scheduled jobs for data ingestion, signal generation, and reporting.
 """
 
 import asyncio
-from datetime import datetime, time
-from typing import Any, Dict, Optional
 import logging
+from datetime import datetime, time
+from typing import Any, Dict
+
+import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-import pytz
 
 from src.core.config import get_settings
-from src.ingestors import MarketDataIngestor, NewsIngestor, SocialIngestor
 from src.engines import FeatureEngine, SignalEngine
 from src.engines.gpt_validator import GPTSignalValidator, GPTSummarizer
+from src.ingestors import MarketDataIngestor, NewsIngestor, SocialIngestor
 from src.notifications.multi_channel import MultiChannelNotifier
 
 settings = get_settings()
@@ -206,6 +207,7 @@ class TradingScheduler:
             # ── Generate brief JSON (data/brief-YYYY-MM-DD.json) ────────────
             try:
                 import asyncio
+
                 from data.generate_brief import build_brief, save_brief  # noqa: PLC0415
 
                 brief = await asyncio.to_thread(build_brief)
@@ -419,12 +421,11 @@ class TradingScheduler:
 
             # 5. Self-learning cycle — reset, analyse, apply, tune fund weights
             try:
+                from src.core.config import get_trading_config  # noqa: PLC0415
                 from src.engines.self_learning import (  # noqa: PLC0415
                     SelfLearningEngine,
                     pull_closed_trades_from_learning_loop,
-                    tune_fund_weights,
                 )
-                from src.core.config import get_trading_config  # noqa: PLC0415
 
                 engine = SelfLearningEngine()
                 engine.reset_cycle()
@@ -456,6 +457,8 @@ class TradingScheduler:
             try:
                 from src.engines.self_learning import (  # noqa: PLC0415
                     pull_closed_trades_from_learning_loop as _pull,
+                )
+                from src.engines.self_learning import (
                     tune_regime_params,
                 )
 
@@ -479,6 +482,8 @@ class TradingScheduler:
             try:
                 from src.engines.self_learning import (  # noqa: PLC0415
                     auto_schedule_experiments,
+                )
+                from src.engines.self_learning import (
                     pull_closed_trades_from_learning_loop as _pull_auto,
                 )
 
@@ -499,6 +504,8 @@ class TradingScheduler:
             try:
                 from src.engines.self_learning import (  # noqa: PLC0415
                     process_closed_trades_batch,
+                )
+                from src.engines.self_learning import (
                     pull_closed_trades_from_learning_loop as _pull2,
                 )
 
@@ -552,6 +559,7 @@ class TradingScheduler:
         try:
             import asyncio
             from datetime import datetime, timedelta
+
             import yfinance as yf
 
             # Universe: top 50 liquid symbols the engine tracks
@@ -620,8 +628,9 @@ class TradingScheduler:
         """Database maintenance tasks."""
         logger.info("Starting database maintenance")
         try:
-            from src.core.database import AsyncSessionLocal
             from sqlalchemy import text
+
+            from src.core.database import AsyncSessionLocal
 
             async with AsyncSessionLocal() as session:
                 # Refresh materialized views
@@ -630,11 +639,13 @@ class TradingScheduler:
                 )
 
                 # Clean up old data (keep 2 years)
-                await session.execute(text("""
-                    DELETE FROM ohlcv 
+                await session.execute(
+                    text("""
+                    DELETE FROM ohlcv
                     WHERE timestamp < NOW() - INTERVAL '2 years'
                     AND interval = '1min'
-                """))
+                """)
+                )
 
                 # Vacuum analyze
                 await session.execute(text("VACUUM ANALYZE"))

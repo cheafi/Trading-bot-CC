@@ -92,8 +92,8 @@ def _freshness_tier(row: Dict[str, Any]) -> str:
 def extract_families_from_row(row: Dict[str, Any]) -> Dict[str, Any]:
     """Build per-family display dict from a playbook or today row."""
     score = float(row.get("score") or row.get("validated_score") or 0)
-    thesis = float(row.get("thesis_conf") or 0)
-    timing = float(row.get("timing_conf") or 0)
+    float(row.get("thesis_conf") or 0)
+    float(row.get("timing_conf") or 0)
     rr = row.get("risk_reward")
     eq = row.get("evidence_quality") or {}
     crowding = row.get("crowding_narrative") or {}
@@ -126,14 +126,15 @@ def extract_families_from_row(row: Dict[str, Any]) -> Dict[str, Any]:
         },
         "deployability": {
             "value": row.get("action"),
-            "display": (row.get("action") or "WATCH") + (
-                " · ready" if row.get("execution_ready") else " · not ready"
-            ),
+            "display": (row.get("action") or "WATCH")
+            + (" · ready" if row.get("execution_ready") else " · not ready"),
             "execution_ready": bool(row.get("execution_ready")),
         },
         "portfolio_contribution": {
             "value": row.get("portfolio_gate") or row.get("sector_alignment"),
-            "display": str(row.get("sector_alignment_label") or row.get("sector_alignment") or "—"),
+            "display": str(
+                row.get("sector_alignment_label") or row.get("sector_alignment") or "—"
+            ),
         },
         "cost_adjusted_edge": {
             "value": row.get("net_deploy_score"),
@@ -272,7 +273,9 @@ def complexity_verdict(
         detail = "Simplest correct action is patience — cash is valid."
     elif deployable_count >= 2 and (net_edge or 0) >= 6.5:
         verdict = "justified"
-        detail = f"{deployable_count} deploy-grade names — board complexity earns its keep."
+        detail = (
+            f"{deployable_count} deploy-grade names — board complexity earns its keep."
+        )
     elif module_count > 12 and deployable_count < 1:
         verdict = "unjustified"
         detail = "Many modules firing but no deploy bar cleared — favor doing less."

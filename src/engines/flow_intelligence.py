@@ -152,7 +152,9 @@ class FlowIntelligenceEngine:
             direction = (
                 FlowDirection.BULLISH
                 if chg > 0.5
-                else FlowDirection.BEARISH if chg < -0.5 else FlowDirection.NEUTRAL
+                else FlowDirection.BEARISH
+                if chg < -0.5
+                else FlowDirection.NEUTRAL
             )
             signals.append(
                 FlowSignal(
@@ -209,7 +211,7 @@ class FlowIntelligenceEngine:
                         strength=FlowStrength.STRONG,
                         score=lt_score,
                         description="Wide range breakout + volume",
-                        detail=f"Range {range_pct:.1f}%, " f"vol {vol_ratio:.1f}x",
+                        detail=f"Range {range_pct:.1f}%, vol {vol_ratio:.1f}x",
                     )
                 )
                 profile.large_trade_score = lt_score * (
@@ -305,7 +307,7 @@ class FlowIntelligenceEngine:
                     strength=FlowStrength.WEAK,
                     score=ins_score,
                     description="Quiet accumulation pattern",
-                    detail="Accumulation + moderate volume + " "small price change",
+                    detail="Accumulation + moderate volume + small price change",
                 )
             )
             profile.insider_proxy_score = ins_score

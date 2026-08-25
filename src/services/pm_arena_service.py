@@ -173,7 +173,7 @@ class PMArenaService:
     def memo(self, fund: Dict[str, Any]) -> Dict[str, Any]:
         strongest = fund.get("strongest_holding") or "—"
         weakest = fund.get("weakest_holding") or "—"
-        posture = fund.get("posture", "WATCH")
+        fund.get("posture", "WATCH")
         return {
             "fund_id": fund.get("id"),
             "role": "pm_voice",
@@ -184,7 +184,7 @@ class PMArenaService:
                 "weakest_holding": weakest or "None",
                 "best_add_candidate": "Pending scanner alignment",
                 "biggest_risk": fund.get("risk_note", "—"),
-                "challenger_alternative": "Compare against Shield Tactical"
+                "challenger_alternative": "Compare against Shield Tactical",
             },
             "what_changed": fund.get("changes", {}),
             "biggest_risk": fund.get("risk_note", "—"),
@@ -279,7 +279,9 @@ class PMArenaService:
                 "best_idea": strongest or "Cash",
                 "avoid_now": weakest or "None",
                 "why_now": mandate["goal"] + f" ({regime_fit}% fit in current regime)",
-                "what_changed": "Evaluating new entries" if not (source or {}).get("adds") else ", ".join((source or {}).get("adds", []))
+                "what_changed": "Evaluating new entries"
+                if not (source or {}).get("adds")
+                else ", ".join((source or {}).get("adds", [])),
             },
             "action_book": action_book,
             "changes": {
@@ -342,7 +344,6 @@ class PMArenaService:
                     "next_trigger": "Upgrade to ADD if breakout holds.",
                     "why_still_held": "Relative strength remains in top decile.",
                     "invalidation": "Breaks fund stop discipline or mandate fit deteriorates.",
-                    "next_trigger": "Upgrade only if score, regime fit, and benchmark-relative trend improve.",
                     "deterministic_reason": f"gate={gate}, score={score:.1f}, regime_fit={regime_fit}",
                 }
             )
@@ -371,14 +372,14 @@ class PMArenaService:
                 "status": "Active (Paper since May 1)",
                 "alpha": "+0.5%",
                 "max_drawdown": "-1.2%",
-                "sharpe": "1.1"
+                "sharpe": "1.1",
             },
             "real_live": {
                 "status": "No Real Risk Deployed",
                 "sample": "insufficient",
                 "since_deployment": None,
-                "ytd_alpha": None
-            }
+                "ytd_alpha": None,
+            },
         }
 
     @staticmethod
@@ -453,8 +454,9 @@ class PMArenaService:
             "top_consensus_buy": top_buy or "No consensus buy",
             "top_consensus_avoid": top_avoid or "None",
             "near_miss_buys": ["AMD", "QCOM"] if not top_buy else [],
-            "missing_for_consensus": "Broader regime alignment and correlation guardrail clearance" if not top_buy else "",
-
+            "missing_for_consensus": "Broader regime alignment and correlation guardrail clearance"
+            if not top_buy
+            else "",
             "biggest_pm_disagreement": disputed[0] if disputed else None,
             "most_crowded_long": top_buy,
             "most_disputed_holding": disputed[0] if disputed else None,

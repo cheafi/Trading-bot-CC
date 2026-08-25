@@ -21,8 +21,8 @@ from __future__ import annotations
 
 import logging
 import math
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 
@@ -35,10 +35,10 @@ class CompareOverlayResult:
 
     tickers: List[str]
     dates: List[str]
-    series: Dict[str, List[float]]      # ticker → values
+    series: Dict[str, List[float]]  # ticker → values
     stats: Dict[str, Dict[str, float]]  # ticker → stat dict
     correlation_matrix: Dict[str, Dict[str, float]]
-    alignment: Dict[str, Any]           # metadata about join strategy
+    alignment: Dict[str, Any]  # metadata about join strategy
 
 
 class CompareOverlayService:
@@ -117,15 +117,22 @@ class CompareOverlayService:
             series, stats = self._normalized(combined, aligned_tickers)
         elif mode == "relative_strength":
             series, stats = self._relative_strength(
-                combined, aligned_tickers, benchmark,
+                combined,
+                aligned_tickers,
+                benchmark,
             )
         elif mode == "rolling_correlation":
             series, stats = self._rolling_corr(
-                combined, aligned_tickers, rolling_window,
+                combined,
+                aligned_tickers,
+                rolling_window,
             )
         elif mode == "rolling_beta":
             series, stats = self._rolling_beta(
-                combined, aligned_tickers, benchmark, rolling_window,
+                combined,
+                aligned_tickers,
+                benchmark,
+                rolling_window,
             )
         else:
             series, stats = self._normalized(combined, aligned_tickers)
@@ -144,9 +151,7 @@ class CompareOverlayService:
             "mode": mode,
             "pre_align_rows": pre_align_shape[0],
             "post_align_rows": post_align_shape[0],
-            "rows_dropped": (
-                pre_align_shape[0] - post_align_shape[0]
-            ),
+            "rows_dropped": (pre_align_shape[0] - post_align_shape[0]),
             "tickers_with_data": len(aligned_tickers),
             "tickers_requested": len(tickers),
             "date_range": {
@@ -170,7 +175,8 @@ class CompareOverlayService:
 
     @staticmethod
     def _normalized(
-        df: Any, tickers: List[str],
+        df: Any,
+        tickers: List[str],
     ) -> Tuple[Dict[str, List[float]], Dict[str, Dict[str, float]]]:
         """Rebased to 100 at first aligned date."""
         series: Dict[str, List[float]] = {}
@@ -188,7 +194,8 @@ class CompareOverlayService:
             sharpe = (
                 (float(np.mean(rets)) * 252 - 0.045)
                 / (float(np.std(rets)) * math.sqrt(252))
-                if np.std(rets) > 0 else 0
+                if np.std(rets) > 0
+                else 0
             )
             cum = np.cumprod(1 + rets)
             peak = np.maximum.accumulate(cum)
@@ -250,9 +257,7 @@ class CompareOverlayService:
         for sym in tickers[1:]:
             rc = rets[base_ticker].rolling(window).corr(rets[sym])
             vals = rc.dropna().tolist()
-            series[f"{base_ticker}_vs_{sym}"] = [
-                round(float(v), 3) for v in vals
-            ]
+            series[f"{base_ticker}_vs_{sym}"] = [round(float(v), 3) for v in vals]
             stats[f"{base_ticker}_vs_{sym}"] = {
                 "current_corr": round(float(vals[-1]), 3) if vals else 0,
                 "mean_corr": round(float(np.mean(vals)), 3) if vals else 0,
@@ -283,8 +288,8 @@ class CompareOverlayService:
             sym_rets = rets[sym].values
             betas: List[float] = []
             for i in range(window, len(sym_rets)):
-                x = bm_rets[i - window:i]
-                y = sym_rets[i - window:i]
+                x = bm_rets[i - window : i]
+                y = sym_rets[i - window : i]
                 cov = np.cov(x, y)[0, 1]
                 var = np.var(x)
                 beta = cov / var if var > 0 else 1.0
@@ -293,15 +298,9 @@ class CompareOverlayService:
             series[f"{sym}_beta"] = betas
             stats[f"{sym}_beta"] = {
                 "current_beta": betas[-1] if betas else 1.0,
-                "mean_beta": (
-                    round(float(np.mean(betas)), 3) if betas else 1.0
-                ),
-                "min_beta": (
-                    round(float(np.min(betas)), 3) if betas else 1.0
-                ),
-                "max_beta": (
-                    round(float(np.max(betas)), 3) if betas else 1.0
-                ),
+                "mean_beta": (round(float(np.mean(betas)), 3) if betas else 1.0),
+                "min_beta": (round(float(np.min(betas)), 3) if betas else 1.0),
+                "max_beta": (round(float(np.max(betas)), 3) if betas else 1.0),
             }
 
         return series, stats

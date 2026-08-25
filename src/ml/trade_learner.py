@@ -16,7 +16,6 @@ Model serialization: uses joblib with versioned filenames to avoid
 pickle security issues and sklearn version incompatibilities.
 """
 
-import asyncio
 import json
 import logging
 from collections import defaultdict
@@ -235,9 +234,9 @@ class TradeOutcomePredictor:
 
         try:
             from sklearn.ensemble import GradientBoostingClassifier
-            from sklearn.preprocessing import StandardScaler
+            from sklearn.metrics import brier_score_loss, roc_auc_score
             from sklearn.model_selection import TimeSeriesSplit
-            from sklearn.metrics import brier_score_loss, log_loss, roc_auc_score
+            from sklearn.preprocessing import StandardScaler
 
             self.model = GradientBoostingClassifier(
                 n_estimators=200,
@@ -600,7 +599,11 @@ class TradeLearningLoop:
             "signal_grade": (
                 "A"
                 if win_prob > 0.7
-                else "B" if win_prob > 0.55 else "C" if win_prob > 0.4 else "D"
+                else "B"
+                if win_prob > 0.55
+                else "C"
+                if win_prob > 0.4
+                else "D"
             ),
         }
 

@@ -34,9 +34,7 @@ class ResearchArtifactWriter:
     """Unified artifact writer for v7 research surfaces."""
 
     def __init__(self, data_dir: Optional[Path] = None):
-        self.base = (
-            (data_dir or _DEFAULT_DATA_DIR) / "artifacts" / "research"
-        )
+        self.base = (data_dir or _DEFAULT_DATA_DIR) / "artifacts" / "research"
         self.base.mkdir(parents=True, exist_ok=True)
 
     def write(
@@ -59,11 +57,7 @@ class ResearchArtifactWriter:
         dict with artifact_id, artifact_paths, generated_at
         """
         ts = datetime.now(timezone.utc)
-        artifact_id = (
-            f"{surface}-"
-            f"{ts.strftime('%Y%m%d-%H%M%S')}-"
-            f"{uuid.uuid4().hex[:8]}"
-        )
+        artifact_id = f"{surface}-{ts.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
         ts_iso = ts.isoformat()
         paths: Dict[str, str] = {}
 
@@ -73,13 +67,18 @@ class ResearchArtifactWriter:
 
         # CSV
         csv_path = self._write_csv(
-            artifact_id, surface, payload,
+            artifact_id,
+            surface,
+            payload,
         )
         paths["csv"] = str(csv_path)
 
         # Markdown
         md_path = self._write_md(
-            artifact_id, surface, payload, ts_iso,
+            artifact_id,
+            surface,
+            payload,
+            ts_iso,
         )
         paths["md"] = str(md_path)
 
@@ -114,9 +113,7 @@ class ResearchArtifactWriter:
         )
 
         if surface:
-            entries = [
-                e for e in entries if e.get("surface") == surface
-            ]
+            entries = [e for e in entries if e.get("surface") == surface]
 
         return sorted(
             entries,
@@ -129,7 +126,10 @@ class ResearchArtifactWriter:
     # ------------------------------------------------------------------
 
     def _write_json(
-        self, aid: str, payload: Dict, ts: str,
+        self,
+        aid: str,
+        payload: Dict,
+        ts: str,
     ) -> Path:
         out = self.base / f"{aid}.json"
         blob = {
@@ -146,7 +146,10 @@ class ResearchArtifactWriter:
         return out
 
     def _write_csv(
-        self, aid: str, surface: str, payload: Dict,
+        self,
+        aid: str,
+        surface: str,
+        payload: Dict,
     ) -> Path:
         out = self.base / f"{aid}.csv"
         buf = io.StringIO()
@@ -169,7 +172,11 @@ class ResearchArtifactWriter:
         return out
 
     def _write_md(
-        self, aid: str, surface: str, payload: Dict, ts: str,
+        self,
+        aid: str,
+        surface: str,
+        payload: Dict,
+        ts: str,
     ) -> Path:
         out = self.base / f"{aid}.md"
         trust = payload.get("trust", {})
@@ -218,12 +225,14 @@ class ResearchArtifactWriter:
             except Exception:
                 entries = []
 
-        entries.append({
-            "artifact_id": aid,
-            "surface": surface,
-            "generated_at": ts,
-            "paths": paths,
-        })
+        entries.append(
+            {
+                "artifact_id": aid,
+                "surface": surface,
+                "generated_at": ts,
+                "paths": paths,
+            }
+        )
 
         # Keep last 200
         entries = entries[-200:]
@@ -247,17 +256,35 @@ class ResearchArtifactWriter:
     @staticmethod
     def _csv_options(w: Any, p: Dict) -> None:
         w.writerow(["# Options Screen"])
-        w.writerow([
-            "rank", "strike", "dte", "type", "delta",
-            "mid", "oi", "spread_pct", "ev", "liquidity_score",
-        ])
+        w.writerow(
+            [
+                "rank",
+                "strike",
+                "dte",
+                "type",
+                "delta",
+                "mid",
+                "oi",
+                "spread_pct",
+                "ev",
+                "liquidity_score",
+            ]
+        )
         for c in p.get("contracts", []):
-            w.writerow([
-                c.get("rank"), c.get("strike"), c.get("dte"),
-                c.get("type"), c.get("delta"), c.get("mid"),
-                c.get("oi"), c.get("spread_pct"), c.get("ev"),
-                c.get("liquidity_score"),
-            ])
+            w.writerow(
+                [
+                    c.get("rank"),
+                    c.get("strike"),
+                    c.get("dte"),
+                    c.get("type"),
+                    c.get("delta"),
+                    c.get("mid"),
+                    c.get("oi"),
+                    c.get("spread_pct"),
+                    c.get("ev"),
+                    c.get("liquidity_score"),
+                ]
+            )
 
     @staticmethod
     def _csv_strategy(w: Any, p: Dict) -> None:

@@ -9,6 +9,7 @@ Consumed by:
   - API ``/api/v1/scorecard``
   - Discord monthly notification
 """
+
 from __future__ import annotations
 
 import logging
@@ -24,7 +25,7 @@ class MonthlyScorecard:
     """One month's aggregated performance."""
 
     # Period
-    month: str = ""          # "2026-03"
+    month: str = ""  # "2026-03"
     start_date: str = ""
     end_date: str = ""
 
@@ -72,10 +73,12 @@ class MonthlyScorecard:
             "start_date": self.start_date,
             "end_date": self.end_date,
             "total_return_pct": round(
-                self.total_return_pct, 2,
+                self.total_return_pct,
+                2,
             ),
             "gross_return_pct": round(
-                self.gross_return_pct, 2,
+                self.gross_return_pct,
+                2,
             ),
             "fees_pct": round(self.fees_pct, 3),
             "best_day_pct": round(self.best_day_pct, 2),
@@ -86,7 +89,8 @@ class MonthlyScorecard:
             "win_rate": round(self.win_rate, 3),
             "avg_hold_hours": round(self.avg_hold_hours, 1),
             "max_drawdown_pct": round(
-                self.max_drawdown_pct, 2,
+                self.max_drawdown_pct,
+                2,
             ),
             "sharpe_ratio": round(self.sharpe_ratio, 2),
             "profit_factor": round(self.profit_factor, 2),
@@ -107,8 +111,7 @@ class MonthlyScorecard:
             "",
             "\U0001f4b0 Returns",
             f"  Total: {self.total_return_pct:+.2f}%",
-            f"  Gross: {self.gross_return_pct:+.2f}% "
-            f"(fees: {self.fees_pct:.3f}%)",
+            f"  Gross: {self.gross_return_pct:+.2f}% (fees: {self.fees_pct:.3f}%)",
             f"  Best day: {self.best_day_pct:+.2f}% "
             f"| Worst: {self.worst_day_pct:+.2f}%",
             "",
@@ -136,27 +139,17 @@ class MonthlyScorecard:
                 trades = stats.get("trades", 0)
                 wr = stats.get("win_rate", 0)
                 emoji = "\U0001f7e2" if pnl > 0 else "\U0001f534"
-                lines.append(
-                    f"  {emoji} {name}: "
-                    f"{pnl:+.2f}% ({trades}T, "
-                    f"{wr:.0%} WR)"
-                )
+                lines.append(f"  {emoji} {name}: {pnl:+.2f}% ({trades}T, {wr:.0%} WR)")
 
         if self.top_winners:
             lines.extend(["", "\u2b50 Top Winners"])
             for w in self.top_winners[:3]:
-                lines.append(
-                    f"  {w['ticker']}: "
-                    f"{w['pnl_pct']:+.2f}%"
-                )
+                lines.append(f"  {w['ticker']}: {w['pnl_pct']:+.2f}%")
 
         if self.top_losers:
             lines.extend(["", "\U0001f4a5 Top Losers"])
             for lo in self.top_losers[:3]:
-                lines.append(
-                    f"  {lo['ticker']}: "
-                    f"{lo['pnl_pct']:+.2f}%"
-                )
+                lines.append(f"  {lo['ticker']}: {lo['pnl_pct']:+.2f}%")
 
         return "\n".join(lines)
 
@@ -194,52 +187,29 @@ class MonthlyScorecardBuilder:
         card.total_trades = len(trades)
         card.total_return_pct = sum(pnls)
         card.gross_return_pct = sum(
-            t.get("gross_pnl_pct", t.get("pnl_pct", 0))
-            for t in trades
+            t.get("gross_pnl_pct", t.get("pnl_pct", 0)) for t in trades
         )
-        card.fees_pct = sum(
-            t.get("fees_pct", 0) for t in trades
-        )
+        card.fees_pct = sum(t.get("fees_pct", 0) for t in trades)
         card.best_day_pct = max(pnls) if pnls else 0
         card.worst_day_pct = min(pnls) if pnls else 0
 
         wins = [t for t in trades if t.get("pnl_pct", 0) > 0]
-        losses = [
-            t for t in trades if t.get("pnl_pct", 0) <= 0
-        ]
+        losses = [t for t in trades if t.get("pnl_pct", 0) <= 0]
         card.winning_trades = len(wins)
         card.losing_trades = len(losses)
-        card.win_rate = (
-            len(wins) / len(trades) if trades else 0
-        )
+        card.win_rate = len(wins) / len(trades) if trades else 0
 
-        holds = [
-            t.get("hold_hours", 0) for t in trades
-            if t.get("hold_hours", 0) > 0
-        ]
-        card.avg_hold_hours = (
-            sum(holds) / len(holds) if holds else 0
-        )
+        holds = [t.get("hold_hours", 0) for t in trades if t.get("hold_hours", 0) > 0]
+        card.avg_hold_hours = sum(holds) / len(holds) if holds else 0
 
         # R multiples
-        r_vals = [
-            t.get("r_multiple", 0) for t in trades
-            if t.get("r_multiple", 0) != 0
-        ]
-        card.avg_r_multiple = (
-            sum(r_vals) / len(r_vals) if r_vals else 0
-        )
+        r_vals = [t.get("r_multiple", 0) for t in trades if t.get("r_multiple", 0) != 0]
+        card.avg_r_multiple = sum(r_vals) / len(r_vals) if r_vals else 0
 
         # Profit factor
-        gross_win = sum(
-            t["pnl_pct"] for t in wins
-        ) if wins else 0
-        gross_loss = abs(sum(
-            t["pnl_pct"] for t in losses
-        )) if losses else 0.001
-        card.profit_factor = (
-            gross_win / gross_loss if gross_loss > 0 else 0
-        )
+        gross_win = sum(t["pnl_pct"] for t in wins) if wins else 0
+        gross_loss = abs(sum(t["pnl_pct"] for t in losses)) if losses else 0.001
+        card.profit_factor = gross_win / gross_loss if gross_loss > 0 else 0
 
         # Max drawdown
         cum = 0.0
@@ -256,28 +226,23 @@ class MonthlyScorecardBuilder:
 
         # Sharpe (simplified)
         import math
+
         mean_pnl = sum(pnls) / len(pnls)
         if len(pnls) > 1:
-            var = sum(
-                (p - mean_pnl) ** 2 for p in pnls
-            ) / (len(pnls) - 1)
+            var = sum((p - mean_pnl) ** 2 for p in pnls) / (len(pnls) - 1)
             std = math.sqrt(var) if var > 0 else 0.001
             card.sharpe_ratio = mean_pnl / std
         else:
             card.sharpe_ratio = 0
 
         # No-trade rate
-        card.no_trade_rate = (
-            no_trade_cycles / max(cycles, 1)
-        )
+        card.no_trade_rate = no_trade_cycles / max(cycles, 1)
 
         # Strategy breakdown
         strat_map: Dict[str, List[float]] = {}
         for t in trades:
             sid = t.get("strategy_id", "unknown")
-            strat_map.setdefault(sid, []).append(
-                t.get("pnl_pct", 0)
-            )
+            strat_map.setdefault(sid, []).append(t.get("pnl_pct", 0))
         for sid, pnl_list in strat_map.items():
             w = sum(1 for p in pnl_list if p > 0)
             card.strategy_breakdown[sid] = {
@@ -288,7 +253,8 @@ class MonthlyScorecardBuilder:
 
         # Top winners / losers
         sorted_trades = sorted(
-            trades, key=lambda t: t.get("pnl_pct", 0),
+            trades,
+            key=lambda t: t.get("pnl_pct", 0),
             reverse=True,
         )
         card.top_winners = [

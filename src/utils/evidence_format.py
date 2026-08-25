@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, List, Union
+from typing import List, Union
 
 EvidenceValue = Union[str, int, float, bool, dict, list, None]
 
 
-def format_evidence(value: EvidenceValue, *, default: str = "Evidence unavailable") -> str:
+def format_evidence(
+    value: EvidenceValue, *, default: str = "Evidence unavailable"
+) -> str:
     """Render evidence_quality / evidence_strength for display."""
     if value is None or value == "":
         return default
@@ -41,7 +43,9 @@ def format_evidence(value: EvidenceValue, *, default: str = "Evidence unavailabl
     return default
 
 
-def playbook_evidence_line(value: EvidenceValue, *, default: str = "Evidence unavailable") -> str:
+def playbook_evidence_line(
+    value: EvidenceValue, *, default: str = "Evidence unavailable"
+) -> str:
     """Playbook card evidence — score + data quality wording."""
     if value is None or value == "":
         return default

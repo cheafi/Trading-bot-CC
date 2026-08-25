@@ -17,19 +17,19 @@ Documentation: https://ib-insync.readthedocs.io/
 import asyncio
 import logging
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Dict, List, Optional
 
 from src.brokers.base import (
+    AccountInfo,
     BaseBroker,
+    Market,
     OrderRequest,
     OrderResult,
-    Position,
-    AccountInfo,
-    Quote,
-    OrderType,
     OrderSide,
     OrderStatus,
-    Market,
+    OrderType,
+    Position,
+    Quote,
 )
 from src.core.config import get_settings
 
@@ -69,9 +69,6 @@ class IBBroker(BaseBroker):
 
         # Try to import ib_insync
         try:
-            from ib_insync import IB, Stock, Order, MarketOrder, LimitOrder, StopOrder
-            from ib_insync import util
-
             self._ib_insync = __import__("ib_insync")
             self._ib_insync_available = True
         except ImportError:

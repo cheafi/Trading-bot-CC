@@ -58,7 +58,9 @@ def build_playbook_near_miss_rows(
         )
         if not is_watch and not is_near_avoid:
             continue
-        min_watch_score = 5.2 if str(row.get("asset_class") or "") in ("etf", "index") else 5.3
+        min_watch_score = (
+            5.2 if str(row.get("asset_class") or "") in ("etf", "index") else 5.3
+        )
         if is_watch and score < min_watch_score:
             continue
 

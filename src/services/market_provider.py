@@ -7,6 +7,7 @@ Phase 2+: swap backend to Alpaca / Polygon / Databento without
 
 All Discord bot hot-paths should call this instead of yfinance directly.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -33,6 +34,7 @@ class MarketDataProvider:
         if self._yf is None:
             try:
                 import yfinance as yf
+
                 self._yf = yf
             except ImportError:
                 logger.error("yfinance not installed")
@@ -70,9 +72,7 @@ class MarketDataProvider:
                 or fi.get("previous_close", 0)
                 or info.get("previousClose", 0)
             )
-            pct = (
-                ((price - prev) / prev * 100) if prev else 0
-            )
+            pct = ((price - prev) / prev * 100) if prev else 0
             vol = (
                 fi.get("lastVolume", 0)
                 or fi.get("last_volume", 0)
@@ -104,9 +104,7 @@ class MarketDataProvider:
         interval: str = "1d",
     ) -> Optional[pd.DataFrame]:
         """Get historical OHLCV data."""
-        return await asyncio.to_thread(
-            self._sync_history, ticker, period, interval
-        )
+        return await asyncio.to_thread(self._sync_history, ticker, period, interval)
 
     def _sync_history(
         self, ticker: str, period: str, interval: str
@@ -122,31 +120,23 @@ class MarketDataProvider:
                 return df
             return None
         except Exception as exc:
-            logger.warning(
-                f"History fetch failed for {ticker}: {exc}"
-            )
+            logger.warning(f"History fetch failed for {ticker}: {exc}")
             return None
 
     # ── News ──────────────────────────────────────────────────
 
-    async def get_news(
-        self, ticker: str, max_items: int = 5
-    ) -> List[Dict[str, Any]]:
+    async def get_news(self, ticker: str, max_items: int = 5) -> List[Dict[str, Any]]:
         """Get recent news for a ticker (cached)."""
         now = time.time()
         cached = self._news_cache.get(ticker)
         if cached and (now - cached[0]) < self._cache_ttl:
             return cached[1]
 
-        items = await asyncio.to_thread(
-            self._sync_news, ticker, max_items
-        )
+        items = await asyncio.to_thread(self._sync_news, ticker, max_items)
         self._news_cache[ticker] = (now, items)
         return items
 
-    def _sync_news(
-        self, ticker: str, max_items: int
-    ) -> List[Dict[str, Any]]:
+    def _sync_news(self, ticker: str, max_items: int) -> List[Dict[str, Any]]:
         yf = self._get_yf()
         if not yf:
             return []
@@ -157,16 +147,12 @@ class MarketDataProvider:
                 return []
             return news[:max_items]
         except Exception as exc:
-            logger.warning(
-                f"News fetch failed for {ticker}: {exc}"
-            )
+            logger.warning(f"News fetch failed for {ticker}: {exc}")
             return []
 
     # ── Batch operations ──────────────────────────────────────
 
-    async def get_quotes_batch(
-        self, tickers: List[str]
-    ) -> Dict[str, Dict[str, Any]]:
+    async def get_quotes_batch(self, tickers: List[str]) -> Dict[str, Dict[str, Any]]:
         """Get quotes for multiple tickers concurrently."""
         tasks = [self.get_quote(t) for t in tickers]
         results = await asyncio.gather(*tasks, return_exceptions=True)

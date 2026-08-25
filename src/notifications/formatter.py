@@ -5,11 +5,11 @@ Builds concise paragraph-style commentary for trade signals.
 v6.1: Added bilingual (English + Traditional Chinese) summary support
       and strategy-style labeling.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, List
-
 
 # ── Strategy style labels ─────────────────────────────────────────
 STRATEGY_LABELS = {
@@ -95,7 +95,8 @@ class SignalNarrativeFormatter:
         strategy_label = self._get_strategy_label(strategy)
         horizon = getattr(signal, "horizon", None)
         horizon_text = (
-            horizon.value if hasattr(horizon, "value")
+            horizon.value
+            if hasattr(horizon, "value")
             else (str(horizon) if horizon else "swing")
         )
 
@@ -123,9 +124,7 @@ class SignalNarrativeFormatter:
             else float(pos_size or 0)
         )
 
-        confidence = self._normalize_confidence(
-            getattr(signal, "confidence", 0)
-        )
+        confidence = self._normalize_confidence(getattr(signal, "confidence", 0))
         rationale = (
             getattr(signal, "gpt_rationale", None)
             or getattr(signal, "rationale", "")
@@ -148,9 +147,7 @@ class SignalNarrativeFormatter:
                 f"<b>${target_price:.2f}</b> "
                 f"(estimated R:R <b>{rr:.2f}:1</b>)."
             )
-            default_thesis = (
-                "price/volume alignment with trend continuation conditions"
-            )
+            default_thesis = "price/volume alignment with trend continuation conditions"
             default_catalyst = (
                 "no singular catalyst; setup driven by technical structure"
             )
@@ -163,8 +160,7 @@ class SignalNarrativeFormatter:
             risk_text = (
                 "; ".join(risks[:3])
                 if risks
-                else "event-driven volatility and trend failure "
-                     "below invalidation"
+                else "event-driven volatility and trend failure below invalidation"
             )
             p3 = (
                 f"Execution note: prioritize disciplined entries "
@@ -215,9 +211,7 @@ class SignalNarrativeFormatter:
 
         stop_price = self._get_stop(signal)
         target_price = self._get_target(signal)
-        confidence = self._normalize_confidence(
-            getattr(signal, "confidence", 0)
-        )
+        confidence = self._normalize_confidence(getattr(signal, "confidence", 0))
 
         # Grade
         if confidence >= 80:
@@ -232,9 +226,7 @@ class SignalNarrativeFormatter:
             grade = "C"
 
         setup_desc = (
-            getattr(signal, "entry_logic", "")
-            or getattr(signal, "rationale", "")
-            or ""
+            getattr(signal, "entry_logic", "") or getattr(signal, "rationale", "") or ""
         )
         setup_short = setup_desc[:50] if setup_desc else ""
 
@@ -242,9 +234,7 @@ class SignalNarrativeFormatter:
         risk_zh = risks[0][:30] if risks else "注意市場環境風險"
 
         # English line
-        en_line = (
-            f"{direction_emoji} {ticker} {strategy_zh}{direction_zh}"
-        )
+        en_line = f"{direction_emoji} {ticker} {strategy_zh}{direction_zh}"
         if setup_short:
             en_line += f" — {setup_short}"
 
@@ -258,9 +248,7 @@ class SignalNarrativeFormatter:
 
         return f"{en_line}\n{zh_line}\n{zh_risk}"
 
-    def format_signal_batch(
-        self, signals: List[Any], as_html: bool = True
-    ) -> str:
+    def format_signal_batch(self, signals: List[Any], as_html: bool = True) -> str:
         """Format a batch of signals into a single summary."""
         if not signals:
             return "No signals to report."
@@ -269,9 +257,7 @@ class SignalNarrativeFormatter:
         for i, sig in enumerate(signals, 1):
             ticker = getattr(sig, "ticker", "?")
             direction = self._get_direction(sig).upper()
-            confidence = self._normalize_confidence(
-                getattr(sig, "confidence", 0)
-            )
+            confidence = self._normalize_confidence(getattr(sig, "confidence", 0))
             strategy = (
                 getattr(sig, "strategy_id", None)
                 or getattr(sig, "strategy", None)
@@ -280,8 +266,7 @@ class SignalNarrativeFormatter:
             label = self._get_strategy_label(strategy)
             emoji = "🟢" if direction in ("LONG", "BUY") else "🔴"
             parts.append(
-                f"{i}. {emoji} **{ticker}** {direction} "
-                f"({label}, {confidence:.0f}%)"
+                f"{i}. {emoji} **{ticker}** {direction} ({label}, {confidence:.0f}%)"
             )
 
         header = f"📡 **{len(signals)} Signal(s) Generated**\n"

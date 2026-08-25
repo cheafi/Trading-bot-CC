@@ -20,7 +20,9 @@ def _holdings_table(holdings: List[Dict[str, Any]], limit: int = 12) -> str:
         pnl = h.get("pnl_pct")
         price_s = f"${price:,.2f}" if price else "—"
         pnl_s = f"{pnl:+.1f}%" if pnl is not None else "—"
-        lines.append(f"**{ticker}** · {shares:g} sh · cost ${cost:,.2f} · {price_s} · {pnl_s}")
+        lines.append(
+            f"**{ticker}** · {shares:g} sh · cost ${cost:,.2f} · {price_s} · {pnl_s}"
+        )
     extra = len(holdings) - limit
     if extra > 0:
         lines.append(f"_+{extra} more positions_")

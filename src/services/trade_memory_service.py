@@ -131,9 +131,11 @@ class TradeMemoryService:
         if candidates:
             return sorted(
                 candidates,
-                key=lambda row: row["trade"].get("exit_time")
-                or row["trade"].get("entry_time")
-                or "",
+                key=lambda row: (
+                    row["trade"].get("exit_time")
+                    or row["trade"].get("entry_time")
+                    or ""
+                ),
                 reverse=True,
             )[0]["trade"]
         return None

@@ -70,7 +70,9 @@ class OptionsFlowRadar:
         snapshot_status = (
             "live"
             if status.mode == "realtime"
-            else "snapshot" if status.mode == "mock" else "stale"
+            else "snapshot"
+            if status.mode == "mock"
+            else "stale"
         )
         return OptionsRadarSnapshot(
             timestamp=datetime.now(timezone.utc).isoformat(),
@@ -138,7 +140,9 @@ class OptionsFlowRadar:
         flag_score = (
             100.0
             if event.sweep_flag and event.block_flag
-            else 80.0 if event.sweep_flag or event.block_flag else 0.0
+            else 80.0
+            if event.sweep_flag or event.block_flag
+            else 0.0
         )
         return self._clamp(
             premium_score * 0.45
@@ -237,7 +241,7 @@ class OptionsFlowRadar:
     def _explanation(self, event: OptionsFlowEvent) -> str:
         reasons = []
         if event.premium >= 100_000:
-            reasons.append(f"${event.premium/1000:.0f}k premium")
+            reasons.append(f"${event.premium / 1000:.0f}k premium")
         if event.volume_vs_avg_ratio >= 2:
             reasons.append(f"volume {event.volume_vs_avg_ratio:.1f}x avg")
         if event.volume_oi_ratio >= 1:

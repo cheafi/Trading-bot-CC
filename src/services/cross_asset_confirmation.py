@@ -89,9 +89,7 @@ async def build_cross_asset_confirmation(
     PM-readable cross-asset strip: SPY, QQQ, IWM, TLT, DXY, VIX, breadth.
     """
     regime = regime or {}
-    cache_key = (
-        f"{regime.get('trend')}_{regime.get('vix')}_{regime.get('breadth')}_{should_trade}"
-    )
+    cache_key = f"{regime.get('trend')}_{regime.get('vix')}_{regime.get('breadth')}_{should_trade}"
     cached = get_cached(request.app.state, f"{_CACHE_ATTR}_{cache_key}")
     if cached is not None:
         return cached
@@ -141,7 +139,7 @@ async def build_cross_asset_confirmation(
 
     if mds:
         fetched = await asyncio.gather(
-            *[_chg(s, l, r) for s, l, r in _PROXY_ASSETS]
+            *[_chg(s, label, r) for s, label, r in _PROXY_ASSETS]
         )
         assets = [a for a in fetched if a]
 
@@ -219,7 +217,9 @@ async def build_cross_asset_confirmation(
         else "conflicted"
     )
 
-    equity_stance = "RISK_ON" if should_trade and alignment != "conflicted" else "CAUTIOUS"
+    equity_stance = (
+        "RISK_ON" if should_trade and alignment != "conflicted" else "CAUTIOUS"
+    )
 
     result = {
         "as_of": datetime.now(timezone.utc).isoformat() + "Z",

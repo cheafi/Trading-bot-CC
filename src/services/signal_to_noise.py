@@ -26,7 +26,9 @@ def classify_signal_to_noise(
     deployable_count: int = 0,
 ) -> Dict[str, Any]:
     """Map row + board context to a single signal band."""
-    tb = (tradeability or row.get("tradeability") or row.get("honest_tradeability") or "").upper()
+    tb = (
+        tradeability or row.get("tradeability") or row.get("honest_tradeability") or ""
+    ).upper()
     action = (row.get("action") or "").upper()
     score = float(row.get("score") or row.get("validated_score") or 0)
     thesis = float(row.get("thesis_conf") or row.get("thesis_quality") or 0)
@@ -56,7 +58,11 @@ def classify_signal_to_noise(
         "level": level,
         "label": SIGNAL_LABELS[level],
         "action_necessity": (
-            "required" if level == "act_now" else "optional" if level == "think_deeply" else "none"
+            "required"
+            if level == "act_now"
+            else "optional"
+            if level == "think_deeply"
+            else "none"
         ),
         "preserve_focus": level in ("ignore", "noise", "monitor_lightly"),
     }
@@ -68,7 +74,9 @@ def tags_for_playbook_row(
     tradeability: str = "",
     deployable_count: int = 0,
 ) -> Dict[str, Any]:
-    sn = classify_signal_to_noise(row, tradeability=tradeability, deployable_count=deployable_count)
+    sn = classify_signal_to_noise(
+        row, tradeability=tradeability, deployable_count=deployable_count
+    )
     return {
         "signal_to_noise": sn["level"],
         "signal_to_noise_label": sn["label"],

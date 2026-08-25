@@ -189,12 +189,12 @@ class EntryQualityEngine:
             if rr >= min_rr:
                 report.rr_acceptable = True
                 report.reasons_pass.append(
-                    f"R/R {rr:.1f}:1 — acceptable" f" (min {min_rr}:1)"
+                    f"R/R {rr:.1f}:1 — acceptable (min {min_rr}:1)"
                 )
                 score += 15
             else:
                 report.reasons_fail.append(
-                    f"Poor R/R {rr:.1f}:1" f" (need {min_rr}:1 for {sector_type})"
+                    f"Poor R/R {rr:.1f}:1 (need {min_rr}:1 for {sector_type})"
                 )
                 score -= 15
 
@@ -207,7 +207,7 @@ class EntryQualityEngine:
                     sr_rr = sr_reward / sr_risk
                     if sr_rr > report.risk_reward_ratio:
                         report.reasons_pass.append(
-                            f"S/R-based R/R {sr_rr:.1f}:1" " — structure confirms"
+                            f"S/R-based R/R {sr_rr:.1f}:1 — structure confirms"
                         )
 
         # ── 4. Near resistance? ──
@@ -217,7 +217,7 @@ class EntryQualityEngine:
             if dist < 1.5:
                 report.near_resistance = True
                 report.reasons_fail.append(
-                    f"Only {dist:.1f}% below resistance" f" (${nearest_resistance:.2f})"
+                    f"Only {dist:.1f}% below resistance (${nearest_resistance:.2f})"
                 )
                 score -= 15
             elif dist < 3.0:
@@ -231,7 +231,7 @@ class EntryQualityEngine:
             if cur_vol > avg_vol * 1.5:
                 report.volume_confirming = True
                 report.reasons_pass.append(
-                    f"Volume {cur_vol / avg_vol:.1f}x" " — conviction confirmed"
+                    f"Volume {cur_vol / avg_vol:.1f}x — conviction confirmed"
                 )
                 score += 10
             elif cur_vol < avg_vol * 0.7:
@@ -250,7 +250,7 @@ class EntryQualityEngine:
             if report.is_extended:
                 report.sector_appropriate = False
                 report.reasons_fail.append(
-                    "Defensive stock extended — " "mean reversion likely"
+                    "Defensive stock extended — mean reversion likely"
                 )
                 score -= 10
 

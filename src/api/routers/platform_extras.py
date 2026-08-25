@@ -147,7 +147,9 @@ async def _cc_header_for_ops(request: Request) -> dict:
             request.app.state.cc_header_cache = {"payload": cc, "ts": now}
             return cc
     except asyncio.TimeoutError:
-        logger.warning("ops-console: cc_header timed out; using cache or minimal snapshot")
+        logger.warning(
+            "ops-console: cc_header timed out; using cache or minimal snapshot"
+        )
     except Exception as exc:
         logger.warning("ops-console: cc_header failed: %s", exc)
 
@@ -165,11 +167,12 @@ async def ops_console(request: Request):
     from datetime import datetime, timezone
 
     from src.api.app_state import get_engine
-    from src.services.ops_operator_console import build_ops_operator_console
-
     from src.core.telemetry import telemetry
     from src.services.execution_readiness import build_execution_readiness
-    from src.services.ops_operator_console import _read_engine_heartbeat
+    from src.services.ops_operator_console import (
+        _read_engine_heartbeat,
+        build_ops_operator_console,
+    )
 
     engine = get_engine(request.app)
     st = getattr(request.app.state, "startup_time", None)
@@ -193,12 +196,8 @@ async def ops_console(request: Request):
         "running": bool(getattr(engine, "_running", False)) if engine else False,
         "dry_run": bool(getattr(engine, "dry_run", True)) if engine else True,
         "cycle_count": int(getattr(engine, "_cycle_count", 0)) if engine else 0,
-        "signals_today": (
-            len(getattr(engine, "_signals_today", [])) if engine else 0
-        ),
-        "trades_today": (
-            len(getattr(engine, "_trades_today", [])) if engine else 0
-        ),
+        "signals_today": (len(getattr(engine, "_signals_today", [])) if engine else 0),
+        "trades_today": (len(getattr(engine, "_trades_today", [])) if engine else 0),
         "cached_recommendations": (
             len(getattr(engine, "_cached_recommendations", [])) if engine else 0
         ),

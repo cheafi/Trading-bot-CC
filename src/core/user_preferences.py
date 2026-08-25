@@ -10,10 +10,11 @@ Supports three output verbosity levels:
 Each Discord user can toggle their mode via ``/mode``.
 The preference is stored in-memory (per bot session).
 """
+
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Optional
 
@@ -32,42 +33,60 @@ DEFAULT_MODE = OutputMode.PRO
 # What each mode includes
 MODE_FIELDS = {
     OutputMode.QUICK: {
-        "ticker", "direction", "entry_price",
-        "stop_price", "trade_decision",
+        "ticker",
+        "direction",
+        "entry_price",
+        "stop_price",
+        "trade_decision",
     },
     OutputMode.PRO: {
-        "ticker", "direction", "entry_price",
-        "stop_price", "trade_decision",
-        "composite_score", "signal_confidence",
-        "setup_grade", "regime_label",
-        "strategy_id", "risk_reward_ratio",
-        "horizon", "trust",
+        "ticker",
+        "direction",
+        "entry_price",
+        "stop_price",
+        "trade_decision",
+        "composite_score",
+        "signal_confidence",
+        "setup_grade",
+        "regime_label",
+        "strategy_id",
+        "risk_reward_ratio",
+        "horizon",
+        "trust",
     },
     OutputMode.EXPLAINER: {
-        "ticker", "direction", "entry_price",
-        "stop_price", "trade_decision",
-        "composite_score", "signal_confidence",
-        "setup_grade", "regime_label",
-        "strategy_id", "risk_reward_ratio",
-        "horizon", "trust",
+        "ticker",
+        "direction",
+        "entry_price",
+        "stop_price",
+        "trade_decision",
+        "composite_score",
+        "signal_confidence",
+        "setup_grade",
+        "regime_label",
+        "strategy_id",
+        "risk_reward_ratio",
+        "horizon",
+        "trust",
         # Explanation layer
-        "why_now", "scenario_plan", "evidence",
-        "event_risk", "portfolio_fit", "key_risks",
-        "why_not_trade", "better_alternative",
-        "approval_status", "approval_flags",
+        "why_now",
+        "scenario_plan",
+        "evidence",
+        "event_risk",
+        "portfolio_fit",
+        "key_risks",
+        "why_not_trade",
+        "better_alternative",
+        "approval_status",
+        "approval_flags",
     },
 }
 
 MODE_DESCRIPTIONS = {
-    OutputMode.QUICK: (
-        "\u26a1 **Quick** \u2014 just ticker, direction, price"
-    ),
-    OutputMode.PRO: (
-        "\U0001f4ca **Pro** \u2014 scores, regime, trust badges"
-    ),
+    OutputMode.QUICK: ("\u26a1 **Quick** \u2014 just ticker, direction, price"),
+    OutputMode.PRO: ("\U0001f4ca **Pro** \u2014 scores, regime, trust badges"),
     OutputMode.EXPLAINER: (
-        "\U0001f4d6 **Explainer** \u2014 full narrative "
-        "with why-now, scenarios, risks"
+        "\U0001f4d6 **Explainer** \u2014 full narrative with why-now, scenarios, risks"
     ),
 }
 
@@ -75,6 +94,7 @@ MODE_DESCRIPTIONS = {
 @dataclass
 class UserPreferences:
     """Per-user preferences."""
+
     user_id: str = ""
     mode: OutputMode = DEFAULT_MODE
 
@@ -108,7 +128,9 @@ class UserPreferenceManager:
         return pref.mode if pref else DEFAULT_MODE
 
     def set_mode(
-        self, user_id: str, mode: OutputMode,
+        self,
+        user_id: str,
+        mode: OutputMode,
     ) -> OutputMode:
         """Set user's output mode. Returns the new mode."""
         if user_id not in self._prefs:
@@ -117,7 +139,9 @@ class UserPreferenceManager:
             )
         self._prefs[user_id].mode = mode
         logger.info(
-            "User %s mode set to %s", user_id, mode.value,
+            "User %s mode set to %s",
+            user_id,
+            mode.value,
         )
         return mode
 
@@ -145,13 +169,11 @@ class UserPreferenceManager:
         """
         mode = self.get_mode(user_id)
         allowed = MODE_FIELDS.get(mode, MODE_FIELDS[DEFAULT_MODE])
-        return {
-            k: v for k, v in rec_dict.items()
-            if k in allowed
-        }
+        return {k: v for k, v in rec_dict.items() if k in allowed}
 
     def get_mode_description(
-        self, user_id: str,
+        self,
+        user_id: str,
     ) -> str:
         """Get description of current mode."""
         mode = self.get_mode(user_id)

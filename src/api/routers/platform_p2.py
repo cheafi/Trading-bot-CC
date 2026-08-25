@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
@@ -130,7 +130,9 @@ async def scenario_shock(
                 {
                     "ticker": p.get("ticker"),
                     "weight": float(p.get("market_value") or 0),
-                    "entry_price": float(p.get("avg_cost") or p.get("current_price") or 100),
+                    "entry_price": float(
+                        p.get("avg_cost") or p.get("current_price") or 100
+                    ),
                 }
             )
     except Exception:

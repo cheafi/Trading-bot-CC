@@ -20,7 +20,7 @@ import logging
 import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -31,10 +31,10 @@ logger = logging.getLogger(__name__)
 class SleeveResult:
     """Result for one optimization objective."""
 
-    objective: str                      # max_sharpe | min_drawdown | risk_parity
-    weights: Dict[str, float]           # strategy → weight
-    expected_return: float              # annualized
-    expected_vol: float                 # annualized
+    objective: str  # max_sharpe | min_drawdown | risk_parity
+    weights: Dict[str, float]  # strategy → weight
+    expected_return: float  # annualized
+    expected_vol: float  # annualized
     sharpe: float
     max_drawdown: float
     equity_curve: List[float]
@@ -49,7 +49,7 @@ class StrategyPortfolioResult:
     optimizations: List[SleeveResult]
     combined_equity: List[float]
     combined_dates: List[str]
-    attribution: Dict[str, float]       # strategy → contribution %
+    attribution: Dict[str, float]  # strategy → contribution %
     regime_weights: Optional[Dict[str, Dict[str, float]]] = None
 
 
@@ -93,9 +93,9 @@ class StrategyPortfolioLab:
                 f"Need ≥ 10 return observations, got {min_len}",
             )
 
-        R = np.array([
-            return_streams[s][:min_len] for s in strategies
-        ], dtype=float)  # shape: (n_strategies, T)
+        R = np.array(
+            [return_streams[s][:min_len] for s in strategies], dtype=float
+        )  # shape: (n_strategies, T)
 
         # Correlation + covariance
         corr = np.corrcoef(R)
@@ -116,7 +116,11 @@ class StrategyPortfolioLab:
 
         # ── Optimization: Max Sharpe ──
         max_sharpe = self._max_sharpe_weights(
-            means, cov, ann, R, strategies,
+            means,
+            cov,
+            ann,
+            R,
+            strategies,
         )
 
         # ── Optimization: Min Drawdown ──
@@ -124,15 +128,16 @@ class StrategyPortfolioLab:
 
         # ── Optimization: Risk Parity ──
         risk_par = self._risk_parity_weights(
-            cov, ann, R, strategies,
+            cov,
+            ann,
+            R,
+            strategies,
         )
 
         optimizations = [max_sharpe, min_dd, risk_par]
 
         # Combined equity using max-Sharpe weights
-        best_w = np.array([
-            max_sharpe.weights[s] for s in strategies
-        ])
+        best_w = np.array([max_sharpe.weights[s] for s in strategies])
         combined_rets = R.T @ best_w  # (T,)
         combined_eq = [100.0]
         for r in combined_rets:
@@ -152,12 +157,16 @@ class StrategyPortfolioLab:
         regime_weights = None
         if regime:
             regime_weights = self._regime_conditioned(
-                regime, means, vols, corr, strategies,
+                regime,
+                means,
+                vols,
+                corr,
+                strategies,
             )
 
-        combined_dates = dates[:min_len + 1] if dates else [
-            f"T{i}" for i in range(min_len + 1)
-        ]
+        combined_dates = (
+            dates[: min_len + 1] if dates else [f"T{i}" for i in range(min_len + 1)]
+        )
 
         return StrategyPortfolioResult(
             strategies=strategies,
@@ -218,7 +227,11 @@ class StrategyPortfolioLab:
                     best_dd = dd
                     best_w = w
             return self._build_result(
-                "min_drawdown", best_w, R, ann, strategies,  # type: ignore[arg-type]
+                "min_drawdown",
+                best_w,
+                R,
+                ann,
+                strategies,  # type: ignore[arg-type]
             )
 
         # For >2 strategies, use inverse-vol heuristic
@@ -259,15 +272,10 @@ class StrategyPortfolioLab:
 
         ann_ret = float(np.mean(port_rets) * ann) * 100
         ann_vol = float(np.std(port_rets) * math.sqrt(ann)) * 100
-        sharpe = (
-            (ann_ret / 100 - self.rf) / (ann_vol / 100)
-            if ann_vol > 0 else 0
-        )
+        sharpe = (ann_ret / 100 - self.rf) / (ann_vol / 100) if ann_vol > 0 else 0
         dd = self._max_dd(port_rets)
 
-        weights = {
-            s: round(float(w[i]), 4) for i, s in enumerate(strategies)
-        }
+        weights = {s: round(float(w[i]), 4) for i, s in enumerate(strategies)}
 
         return SleeveResult(
             objective=objective,
@@ -321,10 +329,7 @@ class StrategyPortfolioLab:
         w = w / w.sum()
 
         return {
-            regime: {
-                s: round(float(w[i]), 4)
-                for i, s in enumerate(strategies)
-            },
+            regime: {s: round(float(w[i]), 4) for i, s in enumerate(strategies)},
         }
 
 
@@ -340,6 +345,7 @@ SLEEVE_NAMES = ["momentum", "breakout", "swing"]
 @dataclass
 class PortfolioTrade:
     """A single closed trade in a model portfolio."""
+
     ticker: str
     strategy: str
     entry_price: float
@@ -368,6 +374,7 @@ class PortfolioTrade:
 @dataclass
 class SleeveStats:
     """Live stats for one model portfolio sleeve."""
+
     name: str
     trades: List[PortfolioTrade] = field(default_factory=list)
 
@@ -398,7 +405,7 @@ class SleeveStats:
         """Compounded total return."""
         r = 1.0
         for t in self.trades:
-            r *= (1 + t.pnl_pct / 100)
+            r *= 1 + t.pnl_pct / 100
         return round((r - 1) * 100, 2)
 
     @property
@@ -502,7 +509,8 @@ class ModelPortfolioEngine:
             stats["alpha_vs_spy"] = alpha
             stats["spy_return_pct"] = round(spy_return_pct, 2)
             stats["vs_spy"] = (
-                "BEATING" if alpha > 0
+                "BEATING"
+                if alpha > 0
                 else ("MATCHING" if abs(alpha) < 1.0 else "LAGGING")
             )
             stats["explanation"] = self._explain(sleeve, spy_return_pct)

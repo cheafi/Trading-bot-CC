@@ -161,18 +161,20 @@ class SizingAdvisor:
     ) -> AdvisedSize:
         """Compute a full advised size with audit trail."""
         audit: List[str] = []
-        zero_result = lambda reason: self._zero(
-            ticker,
-            entry_price,
-            stop_price,
-            signal_score,
-            signal_grade,
-            age_hours,
-            strategy,
-            regime,
-            reason,
-            audit,
-        )
+
+        def zero_result(reason):
+            return self._zero(
+                ticker,
+                entry_price,
+                stop_price,
+                signal_score,
+                signal_grade,
+                age_hours,
+                strategy,
+                regime,
+                reason,
+                audit,
+            )
 
         # ── Guard: minimum score ───────────────────────────────────────────
         if signal_score < _MIN_SCORE_TO_SIZE:
@@ -298,8 +300,7 @@ class SizingAdvisor:
         size_pct = dollar_for_those_shares / self.equity
         size_pct = min(size_pct, self.max_position_pct)
         audit.append(
-            f"Fixed-risk base: {size_pct:.2%} "
-            f"(risk_per_share=${risk_per_share:.2f})"
+            f"Fixed-risk base: {size_pct:.2%} (risk_per_share=${risk_per_share:.2f})"
         )
         return size_pct, "fixed_risk"
 
@@ -326,7 +327,7 @@ class SizingAdvisor:
     ):
         """Return (adj_factor, decay_pct).  adj_factor ∈ [0.5, 1.0]."""
         try:
-            from src.engines.signal_decay import apply_decay_penalty, DECAY_SCHEDULE
+            from src.engines.signal_decay import DECAY_SCHEDULE
 
             half_life = DECAY_SCHEDULE.get(signal_grade, 16.0)
             decay_frac = 1 - math.exp(-math.log(2) * age_hours / half_life)

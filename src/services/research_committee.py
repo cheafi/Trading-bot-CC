@@ -6,7 +6,6 @@ from typing import Any, Dict, List, Optional
 
 from src.services.research_safety import sanitize_research_payload
 
-
 _AGENTS = (
     ("quant_reviewer", "Quant reviewer · 量化審閱"),
     ("risk_manager", "Risk manager · 風控"),
@@ -99,26 +98,58 @@ def _agent_opinion(
 
     if agent_id == "quant_reviewer":
         stance = "support" if has_rules else "neutral"
-        return stance, ["Structured entry/exit rules present"] if has_rules else [], ["Backtest metrics"], "Overfit if untested"
+        return (
+            stance,
+            ["Structured entry/exit rules present"] if has_rules else [],
+            ["Backtest metrics"],
+            "Overfit if untested",
+        )
     if agent_id == "risk_manager":
         stance = "contradiction" if wait else "neutral"
-        return stance, [f"Board {tradeability}"], ["Portfolio heat"], "Size only after gates"
+        return (
+            stance,
+            [f"Board {tradeability}"],
+            ["Portfolio heat"],
+            "Size only after gates",
+        )
     if agent_id == "regime_analyst":
         stance = "contradiction" if wait else "support"
-        return stance, [f"Regime {tradeability}"], ["Sector breadth"], "Regime drift risk"
+        return (
+            stance,
+            [f"Regime {tradeability}"],
+            ["Sector breadth"],
+            "Regime drift risk",
+        )
     if agent_id == "technical_analyst":
-        return "support" if has_rules else "neutral", ["Setup rules defined"], ["Live price structure"], "Extended chase risk"
+        return (
+            "support" if has_rules else "neutral",
+            ["Setup rules defined"],
+            ["Live price structure"],
+            "Extended chase risk",
+        )
     if agent_id == "portfolio_manager":
         return "neutral", ["Universe scoped"], ["Correlation cluster"], "Concentration"
     if agent_id == "skeptic":
-        return "contradiction" if not hypothesis else "neutral", ["Bear case: unvalidated draft"], ["Forward sample"], "Narrative risk"
+        return (
+            "contradiction" if not hypothesis else "neutral",
+            ["Bear case: unvalidated draft"],
+            ["Forward sample"],
+            "Narrative risk",
+        )
     if agent_id == "execution_checker":
         stance = "contradiction" if stale or wait else "neutral"
-        return stance, ["No handoff from research"], ["Broker session"], "Execution blocked"
+        return (
+            stance,
+            ["No handoff from research"],
+            ["Broker session"],
+            "Execution blocked",
+        )
     return "neutral", [], [], ""
 
 
-def _summary_zh(consensus: str, deploy_blocked: bool, support: int, contradict: int) -> str:
+def _summary_zh(
+    consensus: str, deploy_blocked: bool, support: int, contradict: int
+) -> str:
     if deploy_blocked:
         return f"委員會結論：只可監察（support {support} / contradiction {contradict}）· 需 Playbook 確認"
     if consensus == "research_favorable":

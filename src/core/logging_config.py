@@ -7,6 +7,7 @@ Production-ready JSON logging with:
 - Human-readable console format for development
 - Configurable via LOG_FORMAT env var ('json' | 'text')
 """
+
 import json
 import logging
 import os
@@ -17,9 +18,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 # ── Correlation ID (per-cycle tracing) ──────────────────────
-_correlation_id: ContextVar[str] = ContextVar(
-    "correlation_id", default=""
-)
+_correlation_id: ContextVar[str] = ContextVar("correlation_id", default="")
 
 
 def set_correlation_id(cid: Optional[str] = None) -> str:
@@ -45,9 +44,7 @@ class JSONFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         doc: Dict[str, Any] = {
-            "ts": datetime.fromtimestamp(
-                record.created, tz=timezone.utc
-            ).isoformat(),
+            "ts": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -72,9 +69,7 @@ class JSONFormatter(logging.Formatter):
 class ConsoleFormatter(logging.Formatter):
     """Rich console format with optional correlation ID."""
 
-    FMT = (
-        "%(asctime)s │ %(levelname)-8s │ %(name)-30s │ %(message)s"
-    )
+    FMT = "%(asctime)s │ %(levelname)-8s │ %(name)-30s │ %(message)s"
 
     def __init__(self):
         super().__init__(self.FMT, datefmt="%H:%M:%S")

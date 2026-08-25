@@ -4,6 +4,7 @@ CC Discord Bot — Shared Helpers
 Utility functions shared across cogs: fetch stock data,
 audit logging, channel helpers, formatting.
 """
+
 from __future__ import annotations
 
 import logging
@@ -91,15 +92,14 @@ async def fetch_stock_data(
     """
     try:
         import yfinance as yf
+
         t = yf.Ticker(ticker)
         info = t.info
         if not info or "regularMarketPrice" not in info:
             return None
         price = info.get("regularMarketPrice", 0)
         prev = info.get("regularMarketPreviousClose", price)
-        change = (
-            (price - prev) / prev * 100 if prev else 0
-        )
+        change = (price - prev) / prev * 100 if prev else 0
         return {
             "ticker": ticker.upper(),
             "price": price,

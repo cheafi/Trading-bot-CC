@@ -117,7 +117,9 @@ def _empty_follow_through(reason: str, *, total: int = 0) -> Dict[str, Any]:
     }
 
 
-def global_calibration_summary(*, cal: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def global_calibration_summary(
+    *, cal: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """Platform-wide flow grade calibration headline for Flow tab."""
     cal = cal if cal is not None else _calibration_data()
     if cal is None:
@@ -153,7 +155,7 @@ def global_calibration_summary(*, cal: Optional[Dict[str, Any]] = None) -> Dict[
         "best_avg_fwd_pct": best.get("avg_forward_return_pct") if best else None,
         "label": (
             f"Calibration active — {total} records; best bucket "
-            f"{best.get('label')}: {(best.get('hit_rate') or 0)*100:.0f}% hit"
+            f"{best.get('label')}: {(best.get('hit_rate') or 0) * 100:.0f}% hit"
             if best
             else f"Calibration active — {total} records"
         ),

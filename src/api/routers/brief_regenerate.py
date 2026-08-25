@@ -101,7 +101,9 @@ def _latest_brief() -> Optional[Dict[str, Any]]:
         "tier": (
             "FRESH"
             if effective_age == 0
-            else "STALE" if effective_age <= 3 else "CRITICAL"
+            else "STALE"
+            if effective_age <= 3
+            else "CRITICAL"
         ),
     }
 
@@ -136,9 +138,7 @@ def _roll_forward_brief(source_path: str, source_date: str) -> Dict[str, Any]:
 
 
 @router.post("/api/brief/regenerate", tags=["brief"])
-async def brief_regenerate(
-    request: Request, dry_run: bool = False, _=optional_api_key
-):
+async def brief_regenerate(request: Request, dry_run: bool = False, _=optional_api_key):
     """Run data/generate_brief.py in a subprocess. Returns generated path + age."""
     if not os.path.exists(GENERATOR):
         return {

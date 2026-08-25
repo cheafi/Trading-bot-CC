@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+from typing import Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from src.api.deps import sanitize_for_json, validate_ticker
-from src.utils.numeric_parse import parse_ratio
-from src.api.live_analytics import compute_4layer_confidence as _compute_4layer_confidence
 from src.api.live_state import fetch_regime_state
+from src.api.routers.live_quotes import live_quote
+from src.core.risk_limits import SIGNAL_THRESHOLDS
+from src.utils.numeric_parse import parse_ratio
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["v7-surface"])
@@ -20,12 +21,12 @@ router = APIRouter(tags=["v7-surface"])
 
 def _engine():
     from src.api.main import _get_engine
+
     return _get_engine()
 
 
 async def _regime(request: Request):
     return await fetch_regime_state(request)
-
 
 
 @router.get("/api/v7/regime-screener", tags=["v7-surface"])
@@ -38,7 +39,6 @@ async def regime_screener_data(request: Request):
       - Candidates: engine ``_cached_recommendations`` (TradeRecommendation)
       - Fallback: live-quote scoring for a representative universe
     """
-    import asyncio
 
     from src.core.models import RegimeScoreboard
 
@@ -84,9 +84,7 @@ async def regime_screener_data(request: Request):
                         "tp1": r.get("target_price", r.get("tp1", 0)),
                         "tp2": r.get("target_2", r.get("tp2", 0)),
                         "rr": round(
-                            parse_ratio(
-                                r.get("risk_reward_ratio", r.get("rr", 0)), 0.0
-                            )
+                            parse_ratio(r.get("risk_reward_ratio", r.get("rr", 0)), 0.0)
                             or 0.0,
                             1,
                         ),
@@ -425,6 +423,7 @@ async def regime_screener_data(request: Request):
 
 @router.get("/api/v7/portfolio-brief", tags=["v7-surface"])
 async def portfolio_brief_data(
+    request: Request,
     date_str: Optional[str] = Query(None, alias="date"),
     holdings: Optional[str] = Query(
         None,
@@ -469,7 +468,7 @@ async def portfolio_brief_data(
         try:
             q_resp = await live_quote(sym)
             q = q_resp.get("quote", {})
-            price = q.get("price", 0)
+            q.get("price", 0)
             change_pct = q.get("change_pct", 0)
             rsi = q.get("rsi", 50)
             above_ma20 = q.get("above_sma20", False)
@@ -844,12 +843,13 @@ async def why_moved(request: Request, ticker: str):
 
 @router.get("/api/v7/compare-overlay", tags=["v7-surface"])
 async def compare_overlay_data(
+    request: Request,
     tickers: str = Query(..., description="Comma-separated tickers"),
     period: str = Query("6M", description="1M, 3M, 6M, 1Y, 2Y"),
     mode: str = Query(
         "normalized",
         description=(
-            "normalized / relative_strength / " "rolling_correlation / rolling_beta"
+            "normalized / relative_strength / rolling_correlation / rolling_beta"
         ),
     ),
     join: str = Query(
@@ -875,7 +875,6 @@ async def compare_overlay_data(
       - **strict** — inner join (only shared trading dates)
       - **smooth** — outer join + forward-fill (mixed calendars)
     """
-    import asyncio
 
     from src.services.compare_overlay_service import CompareOverlayService
 
@@ -969,6 +968,7 @@ async def compare_overlay_data(
 
 @router.get("/api/v7/performance-lab", tags=["v7-surface"])
 async def performance_lab_data(
+    request: Request,
     source: str = Query(
         "live",
         description="live / paper / backtest / synthetic",
@@ -1011,7 +1011,6 @@ async def performance_lab_data(
         if engine and hasattr(engine, "trade_repo"):
             repo = engine.trade_repo
             if hasattr(repo, "get_recent_outcomes"):
-
                 real_trades = (
                     await repo.get_recent_outcomes(
                         limit=500,
@@ -1219,7 +1218,7 @@ async def performance_lab_data(
     ann_ret = total_ret / max(n_months / 12, 0.01)
     # Gross return: add back the cost assumption
     gross_ann_ret = ann_ret + (TOTAL_COST_BPS / 100) * 12
-    vol = float(np.std(monthly_rets) * np.sqrt(12) * 100)
+    float(np.std(monthly_rets) * np.sqrt(12) * 100)
     sharpe = (
         float(np.mean(monthly_rets) / np.std(monthly_rets) * np.sqrt(12))
         if np.std(monthly_rets) > 0
@@ -1335,6 +1334,7 @@ async def performance_lab_data(
 
 @router.get("/api/v7/strategy-portfolio-lab", tags=["v7-surface"])
 async def strategy_portfolio_lab_data(
+    request: Request,
     strategies: str = Query(
         "swing,momentum,mean_reversion",
         description="Comma-separated strategy names",
@@ -1489,6 +1489,7 @@ async def strategy_portfolio_lab_data(
 
 @router.get("/api/v7/options-screen", tags=["v7-surface"])
 async def options_screen_data(
+    request: Request,
     ticker: str = Query(..., description="Stock ticker"),
     strategy: str = Query(
         "auto", description="long_call / long_put / debit_spread / credit_spread / auto"
@@ -1621,8 +1622,7 @@ async def research_artifact_list(
     surface: Optional[str] = Query(
         None,
         description=(
-            "Filter by surface: compare-overlay, "
-            "options-screen, strategy-portfolio-lab"
+            "Filter by surface: compare-overlay, options-screen, strategy-portfolio-lab"
         ),
     ),
     limit: int = Query(50, description="Max results"),
@@ -1718,7 +1718,6 @@ async def macro_intel_data(request: Request):
     war/geopolitical hedge basket, insider sentiment proxy,
     and cross-correlation matrix between all factors and SPY.
     """
-    import asyncio
     import time as _time
 
     import numpy as np

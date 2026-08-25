@@ -27,6 +27,7 @@ Usage::
     )
     card["trust"] = meta.to_dict()
 """
+
 from __future__ import annotations
 
 import logging
@@ -46,6 +47,7 @@ MODEL_VERSION = "v9.0"  # bump each sprint
 
 class TrustBadge(Enum):
     """Execution-mode badge for every card."""
+
     LIVE = "LIVE"
     PAPER = "PAPER"
     BACKTEST = "BACKTEST"
@@ -54,28 +56,32 @@ class TrustBadge(Enum):
 
 class FreshnessLevel(Enum):
     """Data freshness classification."""
-    FRESH = "FRESH"          # < 15 min
-    AGING = "AGING"          # 15 min – 2 h
-    STALE = "STALE"          # > 2 h
+
+    FRESH = "FRESH"  # < 15 min
+    AGING = "AGING"  # 15 min – 2 h
+    STALE = "STALE"  # > 2 h
 
 
 class ContradictionLevel(Enum):
     """Source agreement classification."""
-    LOW = "LOW"              # sources agree
-    MEDIUM = "MEDIUM"        # partial disagreement
-    HIGH = "HIGH"            # sources conflict
+
+    LOW = "LOW"  # sources agree
+    MEDIUM = "MEDIUM"  # partial disagreement
+    HIGH = "HIGH"  # sources conflict
 
 
 class ConfidenceTier(Enum):
     """Signal confidence tier for display."""
-    HIGH = "HIGH"            # ≥ 75
-    MEDIUM = "MEDIUM"        # 50–74
-    LOW = "LOW"              # < 50
+
+    HIGH = "HIGH"  # ≥ 75
+    MEDIUM = "MEDIUM"  # 50–74
+    LOW = "LOW"  # < 50
 
 
 # ─────────────────────────────────────────────────────────────────────
 # PnL Breakdown
 # ─────────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class PnLBreakdown:
@@ -83,6 +89,7 @@ class PnLBreakdown:
 
     All values in percent of entry capital.
     """
+
     gross_pnl_pct: float = 0.0
     fees_pct: float = 0.0
     slippage_pct: float = 0.0
@@ -95,9 +102,7 @@ class PnLBreakdown:
 
     def __post_init__(self):
         if self.net_pnl_pct == 0.0 and self.gross_pnl_pct != 0.0:
-            self.net_pnl_pct = (
-                self.gross_pnl_pct - self.fees_pct - self.slippage_pct
-            )
+            self.net_pnl_pct = self.gross_pnl_pct - self.fees_pct - self.slippage_pct
         self.is_win = self.net_pnl_pct > 0
 
     @classmethod
@@ -144,12 +149,14 @@ class PnLBreakdown:
 # Trade Attribution
 # ─────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class TradeAttribution:
     """Post-trade attribution: what worked / what failed.
 
     Populated when a position closes, surfaced on result cards.
     """
+
     what_worked: List[str] = field(default_factory=list)
     what_failed: List[str] = field(default_factory=list)
     regime_correct: bool = False
@@ -177,10 +184,7 @@ class TradeAttribution:
         is_win = pnl_pct > 0
 
         # Regime assessment
-        same_regime = (
-            regime_at_entry == regime_at_exit
-            or not regime_at_exit
-        )
+        same_regime = regime_at_entry == regime_at_exit or not regime_at_exit
         attr.regime_correct = same_regime and is_win
         if attr.regime_correct:
             attr.what_worked.append("Regime stable throughout hold")
@@ -192,18 +196,12 @@ class TradeAttribution:
         # Signal assessment
         attr.signal_correct = is_win
         if is_win:
-            attr.what_worked.append(
-                f"Signal direction correct ({direction})"
-            )
+            attr.what_worked.append(f"Signal direction correct ({direction})")
         else:
-            attr.what_failed.append(
-                f"Signal direction wrong ({direction})"
-            )
+            attr.what_failed.append(f"Signal direction wrong ({direction})")
 
         # Timing assessment
-        attr.timing_correct = (
-            is_win and hold_hours < max_hold_hours
-        )
+        attr.timing_correct = is_win and hold_hours < max_hold_hours
         if exit_reason == "time_stop":
             attr.what_failed.append("Timed out before target")
         elif exit_reason == "stop_loss":
@@ -214,30 +212,17 @@ class TradeAttribution:
         # Exit quality
         if target_price > 0 and entry_price > 0:
             if direction == "LONG":
-                max_possible = (
-                    (target_price - entry_price) / entry_price * 100
-                )
-                capture_pct = (
-                    pnl_pct / max_possible * 100
-                    if max_possible > 0 else 0
-                )
+                max_possible = (target_price - entry_price) / entry_price * 100
+                capture_pct = pnl_pct / max_possible * 100 if max_possible > 0 else 0
             else:
-                max_possible = (
-                    (entry_price - target_price) / entry_price * 100
-                )
-                capture_pct = (
-                    pnl_pct / max_possible * 100
-                    if max_possible > 0 else 0
-                )
+                max_possible = (entry_price - target_price) / entry_price * 100
+                capture_pct = pnl_pct / max_possible * 100 if max_possible > 0 else 0
             attr.exit_optimal = capture_pct >= 60
             if attr.exit_optimal:
-                attr.what_worked.append(
-                    f"Captured {capture_pct:.0f}% of target move"
-                )
+                attr.what_worked.append(f"Captured {capture_pct:.0f}% of target move")
             elif is_win and capture_pct < 40:
                 attr.what_failed.append(
-                    f"Only captured {capture_pct:.0f}% — "
-                    "exited too early"
+                    f"Only captured {capture_pct:.0f}% — exited too early"
                 )
 
         return attr
@@ -266,6 +251,7 @@ class TradeAttribution:
 # No-Trade Reason
 # ─────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class NoTradeCard:
     """Structured no-trade card for when the system decides NOT to trade.
@@ -273,6 +259,7 @@ class NoTradeCard:
     Professional systems show their discipline by explaining
     why they passed, not just when they traded.
     """
+
     reason: str = ""
     tickers_considered: List[str] = field(default_factory=list)
     regime_label: str = ""
@@ -335,9 +322,7 @@ class NoTradeCard:
             f"Reason: {self.reason}",
         ]
         if self.tickers_considered:
-            lines.append(
-                f"Considered: {', '.join(self.tickers_considered[:5])}"
-            )
+            lines.append(f"Considered: {', '.join(self.tickers_considered[:5])}")
         if self.resume_conditions:
             lines.append("Resume when:")
             for c in self.resume_conditions[:3]:
@@ -350,6 +335,7 @@ class NoTradeCard:
 # Main TrustMetadata container
 # ─────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class TrustMetadata:
     """Unified trust metadata attached to every output card.
@@ -361,6 +347,7 @@ class TrustMetadata:
       - What are the gross/net numbers?
       - What model version produced this?
     """
+
     # Badge
     badge: TrustBadge = TrustBadge.PAPER
     model_version: str = MODEL_VERSION
@@ -386,7 +373,8 @@ class TrustMetadata:
 
     @classmethod
     def classify_freshness(
-        cls, age_minutes: float,
+        cls,
+        age_minutes: float,
     ) -> FreshnessLevel:
         """Classify data age into freshness level."""
         if age_minutes < 15:
@@ -398,7 +386,8 @@ class TrustMetadata:
 
     @classmethod
     def classify_confidence(
-        cls, confidence: float,
+        cls,
+        confidence: float,
     ) -> ConfidenceTier:
         """Classify signal confidence into tier."""
         if confidence >= 75:
@@ -501,8 +490,4 @@ class TrustMetadata:
             if self.data_age_minutes > 0
             else "just now"
         )
-        return (
-            f"{self.badge_emoji()} │ "
-            f"Updated: {age_str} │ "
-            f"{self.model_version}"
-        )
+        return f"{self.badge_emoji()} │ Updated: {age_str} │ {self.model_version}"

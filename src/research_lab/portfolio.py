@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from typing import Dict, List
 
 import numpy as np
@@ -37,9 +36,7 @@ def max_sharpe_weight(
     n = len(strategies)
     min_len = min(len(v) for v in returns_map.values())
 
-    R = np.array([
-        returns_map[s][:min_len] for s in strategies
-    ])
+    R = np.array([returns_map[s][:min_len] for s in strategies])
 
     means = R.mean(axis=1) * ann
     cov = np.cov(R) * ann

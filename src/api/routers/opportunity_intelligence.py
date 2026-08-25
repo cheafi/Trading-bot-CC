@@ -66,5 +66,7 @@ async def intelligence_strategy_health(
 ):
     sym = _validate_ticker(ticker)
     return sanitize_for_json(
-        build_strategy_curve_context(sym, strategy_id=strategy_id or "momentum_breakout_v2")
+        build_strategy_curve_context(
+            sym, strategy_id=strategy_id or "momentum_breakout_v2"
+        )
     )

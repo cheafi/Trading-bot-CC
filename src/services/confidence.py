@@ -1,5 +1,7 @@
 """CC — 4-Layer Confidence Engine (extracted from src/api/main.py)."""
+
 from src.core.risk_limits import RISK, SIGNAL_THRESHOLDS  # noqa
+
 
 def compute_4layer_confidence(
     close,
@@ -177,8 +179,19 @@ def compute_4layer_confidence(
             p9_adjustments.append("weak_fundamentals")
 
     # Regime gating: CRISIS/RISK_OFF → suppress non-defensive
-    if regime_label and str(regime_label).upper() in ("CRISIS", "RISK_OFF", "DOWNTREND"):
-        defensive_sectors = {"utilities", "healthcare", "consumer_staples", "XLU", "XLV", "XLP"}
+    if regime_label and str(regime_label).upper() in (
+        "CRISIS",
+        "RISK_OFF",
+        "DOWNTREND",
+    ):
+        defensive_sectors = {
+            "utilities",
+            "healthcare",
+            "consumer_staples",
+            "XLU",
+            "XLV",
+            "XLP",
+        }
         is_defensive = ticker_sector and str(ticker_sector).lower() in defensive_sectors
         if not is_defensive:
             thesis_factors.append((f"P9: Regime {regime_label} — non-defensive", -15))
@@ -201,7 +214,7 @@ def compute_4layer_confidence(
         cases = find_similar_cases(
             strategy=strategy,
             regime=regime_label_str,
-            grade=str(grade) if "grade" in locals() else "",
+            grade="",
             direction="LONG",
         )
         analog = analog_summary(cases)
@@ -248,10 +261,10 @@ def compute_4layer_confidence(
     # Trade / Watch / Wait / Hold / Reduce / Exit / No Trade
     if composite >= SIGNAL_THRESHOLDS.strong_buy_threshold and not penalties:
         decision_tier = "TRADE"
-        sizing = "Full position" f" ({RISK.max_position_pct*100:.0f}%" " of portfolio)"
+        sizing = f"Full position ({RISK.max_position_pct * 100:.0f}% of portfolio)"
     elif composite >= SIGNAL_THRESHOLDS.buy_threshold:
         decision_tier = "TRADE"
-        sizing = "Half position" f" ({RISK.max_position_pct*50:.1f}%" " of portfolio)"
+        sizing = f"Half position ({RISK.max_position_pct * 50:.1f}% of portfolio)"
     elif composite >= SIGNAL_THRESHOLDS.watch_threshold:
         decision_tier = "WATCH"
         sizing = "No position — watchlist only"
@@ -293,7 +306,7 @@ def compute_4layer_confidence(
         invalidation.append(f"Close below SMA20 ({sma20[i]:.2f}) → timing fails")
     if atr_pct[i] > 0.03:
         invalidation.append(
-            f"ATR expansion beyond {atr_pct[i]*1.5:.1%} → risk too high"
+            f"ATR expansion beyond {atr_pct[i] * 1.5:.1%} → risk too high"
         )
     if not invalidation:
         invalidation.append("Broad market crash or sector-wide sell-off")
@@ -310,7 +323,9 @@ def compute_4layer_confidence(
         "confidence_bucket": (
             "high"
             if composite >= SIGNAL_THRESHOLDS.high_confidence_threshold
-            else "medium" if composite >= SIGNAL_THRESHOLDS.watch_threshold else "low"
+            else "medium"
+            if composite >= SIGNAL_THRESHOLDS.watch_threshold
+            else "low"
         ),
         "decay_rate_per_day": confidence_decay_rate,
         "abstention_threshold": ABSTENTION_THRESHOLD,
@@ -340,5 +355,3 @@ def compute_4layer_confidence(
         "historical_win_rate": win_rate,
         "historical_analog_count": analog_count,
     }
-
-

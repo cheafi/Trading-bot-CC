@@ -219,12 +219,16 @@ class DecisionObject:
             macro_regime=(
                 "RISK_ON"
                 if regime.get("trend", "") in ("BULL", "UPTREND")
-                else "RISK_OFF" if regime.get("vix", 0) > 28 else "NEUTRAL"
+                else "RISK_OFF"
+                if regime.get("vix", 0) > 28
+                else "NEUTRAL"
             ),
             vix_regime=(
                 "RISK_OFF"
                 if regime.get("vix", 0) > 28
-                else "ELEVATED" if regime.get("vix", 0) > 20 else "NORMAL"
+                else "ELEVATED"
+                if regime.get("vix", 0) > 20
+                else "NORMAL"
             ),
             sector=sec.sector_bucket.value if sec else "—",
             sector_type=sec.sector_bucket.value if sec else "—",
@@ -243,7 +247,9 @@ class DecisionObject:
                 else (
                     "LEADER"
                     if fit and fit.final_score >= 6
-                    else "WATCH" if fit and fit.final_score >= 3 else "WAIT"
+                    else "WATCH"
+                    if fit and fit.final_score >= 3
+                    else "WAIT"
                 )
             ),
             entry_zone=str(sig.get("entry", "—")),
@@ -402,11 +408,11 @@ class DecisionPipeline:
     def _rs_node(self, d: DecisionObject) -> None:
         """Inject RS ranking data."""
         try:
+            from src.engines.rs_hub import classify_rs_state
             from src.services.rs_data_service import (
                 compute_rs_date_aligned,
                 fetch_single,
             )
-            from src.engines.rs_hub import classify_rs_state
 
             ticker_closes = fetch_single(d.ticker)
             spy_closes = fetch_single("SPY")
@@ -449,7 +455,11 @@ class DecisionPipeline:
                 d.conviction_tier = (
                     "TRADE"
                     if score >= 8
-                    else "LEADER" if score >= 6 else "WATCH" if score >= 3 else "WAIT"
+                    else "LEADER"
+                    if score >= 6
+                    else "WATCH"
+                    if score >= 3
+                    else "WAIT"
                 )
 
                 indicators = signal.get("indicators") or {}

@@ -37,8 +37,10 @@ logger = logging.getLogger(__name__)
 # Enums
 # ─────────────────────────────────────────────────────────────────────
 
+
 class DataQualityState(str, Enum):
     """Universal data quality classification."""
+
     REAL_TIME = "REAL_TIME"
     DELAYED = "DELAYED"
     FRESH = "FRESH"
@@ -52,8 +54,9 @@ class DataQualityState(str, Enum):
 
 class QualitySeverity(str, Enum):
     """Escalation severity for quality issues."""
-    OK = "OK"            # green — no action needed
-    INFO = "INFO"        # blue — informational
+
+    OK = "OK"  # green — no action needed
+    INFO = "INFO"  # blue — informational
     WARNING = "WARNING"  # amber — degraded but usable
     CRITICAL = "CRITICAL"  # red — do not act on this data
 
@@ -76,9 +79,11 @@ _SEVERITY_MAP: Dict[DataQualityState, QualitySeverity] = {
 # Data classes
 # ─────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class FieldQuality:
     """Quality metadata for a single data field."""
+
     field_name: str
     state: DataQualityState
     age_seconds: Optional[float] = None
@@ -117,6 +122,7 @@ class DataQualityReport:
 
     The *overall* state is the worst state across all fields.
     """
+
     overall_state: DataQualityState = DataQualityState.REAL_TIME
     overall_severity: QualitySeverity = QualitySeverity.OK
     fields: List[FieldQuality] = field(default_factory=list)
@@ -145,6 +151,7 @@ class DataQualityReport:
 @dataclass
 class PortfolioQualitySummary:
     """Aggregate quality summary across all holdings."""
+
     total_holdings: int = 0
     by_state: Dict[str, int] = field(default_factory=dict)
     worst_state: DataQualityState = DataQualityState.REAL_TIME
@@ -165,6 +172,7 @@ class PortfolioQualitySummary:
 # Engine
 # ─────────────────────────────────────────────────────────────────────
 
+
 class DataQualityEngine:
     """Evaluates and aggregates data quality across signals and portfolios.
 
@@ -176,9 +184,9 @@ class DataQualityEngine:
     """
 
     # Thresholds
-    STALE_THRESHOLD_S = 2 * 3600       # 2 hours
-    AGING_THRESHOLD_S = 15 * 60        # 15 minutes
-    REAL_TIME_THRESHOLD_S = 15         # 15 seconds
+    STALE_THRESHOLD_S = 2 * 3600  # 2 hours
+    AGING_THRESHOLD_S = 15 * 60  # 15 minutes
+    REAL_TIME_THRESHOLD_S = 15  # 15 seconds
     DEGRADED_CONFIDENCE_THRESHOLD = 0.3  # 30% reduction → warning
 
     def evaluate_signal_quality(
@@ -220,21 +228,23 @@ class DataQualityEngine:
         # Trust metadata from signal
         trust = signal.get("trust", {})
         if trust.get("mode") == "SYNTHETIC":
-            fields.append(FieldQuality(
-                field_name="execution_mode",
-                state=DataQualityState.SYNTHETIC,
-                source="trust_metadata",
-                reason="Signal generated from synthetic/heuristic data",
-                methodology=trust.get("methodology", "heuristic"),
-            ))
+            fields.append(
+                FieldQuality(
+                    field_name="execution_mode",
+                    state=DataQualityState.SYNTHETIC,
+                    source="trust_metadata",
+                    reason="Signal generated from synthetic/heuristic data",
+                    methodology=trust.get("methodology", "heuristic"),
+                )
+            )
 
         report.fields = fields
         report.overall_state = self._worst_state(fields)
         report.overall_severity = _SEVERITY_MAP[report.overall_state]
 
         # Check escalation
-        report.escalation_triggered, report.escalation_reasons = (
-            self._check_escalation(fields, signal)
+        report.escalation_triggered, report.escalation_reasons = self._check_escalation(
+            fields, signal
         )
 
         return report
@@ -258,41 +268,49 @@ class DataQualityEngine:
                 dt = datetime.fromisoformat(last_update.replace("Z", "+00:00"))
                 age = (now - dt).total_seconds()
                 state = self._age_to_state(age)
-                fields.append(FieldQuality(
-                    field_name="last_price",
-                    state=state,
-                    age_seconds=age,
-                    source=holding.get("price_source", "unknown"),
-                ))
+                fields.append(
+                    FieldQuality(
+                        field_name="last_price",
+                        state=state,
+                        age_seconds=age,
+                        source=holding.get("price_source", "unknown"),
+                    )
+                )
             except (ValueError, TypeError):
-                fields.append(FieldQuality(
+                fields.append(
+                    FieldQuality(
+                        field_name="last_price",
+                        state=DataQualityState.UNAVAILABLE,
+                        reason="Cannot parse last update timestamp",
+                    )
+                )
+        else:
+            fields.append(
+                FieldQuality(
                     field_name="last_price",
                     state=DataQualityState.UNAVAILABLE,
-                    reason="Cannot parse last update timestamp",
-                ))
-        else:
-            fields.append(FieldQuality(
-                field_name="last_price",
-                state=DataQualityState.UNAVAILABLE,
-                reason="No last_update timestamp on holding",
-            ))
+                    reason="No last_update timestamp on holding",
+                )
+            )
 
         # Check for missing fields
         required = ["ticker", "shares", "avg_cost", "current_price"]
         missing = [f for f in required if not holding.get(f)]
         if missing:
-            fields.append(FieldQuality(
-                field_name="holding_fields",
-                state=DataQualityState.PARTIAL,
-                missing_fields=missing,
-                reason=f"Missing {len(missing)} required field(s)",
-            ))
+            fields.append(
+                FieldQuality(
+                    field_name="holding_fields",
+                    state=DataQualityState.PARTIAL,
+                    missing_fields=missing,
+                    reason=f"Missing {len(missing)} required field(s)",
+                )
+            )
 
         report.fields = fields
         report.overall_state = self._worst_state(fields)
         report.overall_severity = _SEVERITY_MAP[report.overall_state]
-        report.escalation_triggered, report.escalation_reasons = (
-            self._check_escalation(fields, {"ticker": ticker})
+        report.escalation_triggered, report.escalation_reasons = self._check_escalation(
+            fields, {"ticker": ticker}
         )
         return report
 
@@ -319,12 +337,14 @@ class DataQualityEngine:
 
             if report.escalation_triggered:
                 summary.escalation_count += 1
-                summary.holdings_with_issues.append({
-                    "ticker": ticker,
-                    "state": report.overall_state.value,
-                    "severity": report.overall_severity.value,
-                    "reasons": report.escalation_reasons,
-                })
+                summary.holdings_with_issues.append(
+                    {
+                        "ticker": ticker,
+                        "state": report.overall_state.value,
+                        "severity": report.overall_severity.value,
+                        "reasons": report.escalation_reasons,
+                    }
+                )
 
         summary.by_state = state_counts
         summary.worst_state = worst
@@ -342,12 +362,14 @@ class DataQualityEngine:
             freshness = trust.get("freshness", "")
             if freshness == "REAL_TIME":
                 return FieldQuality(
-                    field_name="price", state=DataQualityState.REAL_TIME,
+                    field_name="price",
+                    state=DataQualityState.REAL_TIME,
                     source="trust_metadata",
                 )
             elif freshness == "DELAYED":
                 return FieldQuality(
-                    field_name="price", state=DataQualityState.DELAYED,
+                    field_name="price",
+                    state=DataQualityState.DELAYED,
                     source="trust_metadata",
                 )
             return None
@@ -384,8 +406,9 @@ class DataQualityEngine:
                 reason="No fundamental data available",
                 missing_fields=["pe_ratio", "revenue_growth", "market_cap"],
             )
-        missing = [k for k in ("pe_ratio", "revenue_growth", "market_cap")
-                   if not fund.get(k)]
+        missing = [
+            k for k in ("pe_ratio", "revenue_growth", "market_cap") if not fund.get(k)
+        ]
         if len(missing) >= 2:
             return FieldQuality(
                 field_name="fundamentals",
@@ -394,9 +417,7 @@ class DataQualityEngine:
             )
         return None
 
-    def _eval_news_quality(
-        self, signal: Dict, now: datetime
-    ) -> Optional[FieldQuality]:
+    def _eval_news_quality(self, signal: Dict, now: datetime) -> Optional[FieldQuality]:
         news_ts = signal.get("news_freshness")
         if not news_ts:
             return FieldQuality(
@@ -473,20 +494,20 @@ class DataQualityEngine:
                     f"({f.age_human if f.age_seconds else 'unknown age'})"
                 )
             elif f.state == DataQualityState.UNAVAILABLE:
-                reasons.append(
-                    f"{ticker}: {f.field_name} is UNAVAILABLE — {f.reason}"
-                )
-            elif (f.state == DataQualityState.DEGRADED
-                  and f.confidence_reduction >= self.DEGRADED_CONFIDENCE_THRESHOLD):
+                reasons.append(f"{ticker}: {f.field_name} is UNAVAILABLE — {f.reason}")
+            elif (
+                f.state == DataQualityState.DEGRADED
+                and f.confidence_reduction >= self.DEGRADED_CONFIDENCE_THRESHOLD
+            ):
                 reasons.append(
                     f"{ticker}: {f.field_name} confidence degraded "
                     f"{f.confidence_reduction:.0%}"
                 )
-            elif (f.state == DataQualityState.SYNTHETIC
-                  and context.get("trust", {}).get("mode") == "LIVE"):
-                reasons.append(
-                    f"{ticker}: SYNTHETIC data in LIVE mode — BLOCK"
-                )
+            elif (
+                f.state == DataQualityState.SYNTHETIC
+                and context.get("trust", {}).get("mode") == "LIVE"
+            ):
+                reasons.append(f"{ticker}: SYNTHETIC data in LIVE mode — BLOCK")
 
         return (len(reasons) > 0, reasons)
 
@@ -494,6 +515,7 @@ class DataQualityEngine:
 # ─────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────
+
 
 def _human_age(seconds: float) -> str:
     """Convert seconds to human-readable age string."""

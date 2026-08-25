@@ -155,7 +155,7 @@ class ExplanationEngine:
         """What would invalidate this trade?"""
         stop = sig.get("stop_price", 0)
         entry = sig.get("entry_price", 0)
-        ticker = sig.get("ticker", "?")
+        sig.get("ticker", "?")
 
         parts = []
         if stop > 0:

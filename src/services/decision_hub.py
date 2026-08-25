@@ -27,7 +27,9 @@ def _pick_best_by_style(
                 "action": row.get("action"),
                 "score": row.get("score") or row.get("final_conf"),
                 "risk_reward": row.get("risk_reward"),
-                "reason": (row.get("why_now") or row.get("upgrade_trigger") or "")[:120],
+                "reason": (row.get("why_now") or row.get("upgrade_trigger") or "")[
+                    :120
+                ],
             }
     return None
 
@@ -287,7 +289,9 @@ async def build_decision_hub(request) -> Dict[str, Any]:
     decision_strip = {
         "best_idea_now": best_idea,
         "best_risk_reward_now": _best_rr(ranked_rows),
-        "best_momentum_now": _pick_best_by_style(ranked_rows, _STYLE_BUCKETS["momentum"]),
+        "best_momentum_now": _pick_best_by_style(
+            ranked_rows, _STYLE_BUCKETS["momentum"]
+        ),
         "best_mean_reversion_now": _pick_best_by_style(
             ranked_rows, _STYLE_BUCKETS["mean_reversion"]
         ),

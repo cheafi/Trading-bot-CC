@@ -84,11 +84,9 @@ class PeerEngine:
         if not candidates:
             # Fallback to sector
             from src.engines.rs_hub import _get_sector
+
             sector = _get_sector(ticker)
-            candidates = [
-                t for t in _SECTOR_FALLBACK.get(sector, [])
-                if t != ticker
-            ]
+            candidates = [t for t in _SECTOR_FALLBACK.get(sector, []) if t != ticker]
 
         if not candidates:
             return []
@@ -96,23 +94,31 @@ class PeerEngine:
         # Fetch RS for all peers
         peers = []
         try:
-            from src.services.rs_data_service import compute_rs_date_aligned, fetch_closes_batch
+            from src.services.rs_data_service import (
+                compute_rs_date_aligned,
+                fetch_closes_batch,
+            )
+
             closes = fetch_closes_batch(candidates + ["SPY"])
             spy = closes.get("SPY")
             if spy is None or len(spy) < 22:
-                return [{"ticker": t, "rs_composite": 100.0} for t in candidates[:limit]]
+                return [
+                    {"ticker": t, "rs_composite": 100.0} for t in candidates[:limit]
+                ]
 
             for t in candidates:
                 t_closes = closes.get(t)
                 if t_closes is None or len(t_closes) < 22:
                     continue
                 rs = compute_rs_date_aligned(t_closes, spy)
-                peers.append({
-                    "ticker": t,
-                    "rs_composite": rs["rs_composite"],
-                    "rs_slope": rs["rs_slope"],
-                    "rs_status": str(rs["rs_status"]),
-                })
+                peers.append(
+                    {
+                        "ticker": t,
+                        "rs_composite": rs["rs_composite"],
+                        "rs_slope": rs["rs_slope"],
+                        "rs_status": str(rs["rs_status"]),
+                    }
+                )
         except Exception as e:
             logger.debug("[PeerEngine] RS fetch failed: %s", e)
             return [{"ticker": t, "rs_composite": 100.0} for t in candidates[:limit]]
@@ -133,8 +139,11 @@ class PeerEngine:
         similar composite level + similar slope direction.
         """
         try:
-            from src.services.rs_data_service import compute_rs_date_aligned, fetch_closes_batch
             from src.engines.rs_hub import SECTOR_MAP
+            from src.services.rs_data_service import (
+                compute_rs_date_aligned,
+                fetch_closes_batch,
+            )
 
             # Search across a broad universe
             universe = list(SECTOR_MAP.keys())
@@ -155,12 +164,14 @@ class PeerEngine:
                 comp_diff = abs(rs["rs_composite"] - rs_composite)
                 slope_same = (rs["rs_slope"] > 0) == (rs_slope > 0)
                 if comp_diff <= 15 and slope_same:
-                    similar.append({
-                        "ticker": t,
-                        "rs_composite": rs["rs_composite"],
-                        "rs_slope": rs["rs_slope"],
-                        "similarity": round(100 - comp_diff * 3, 1),
-                    })
+                    similar.append(
+                        {
+                            "ticker": t,
+                            "rs_composite": rs["rs_composite"],
+                            "rs_slope": rs["rs_slope"],
+                            "similarity": round(100 - comp_diff * 3, 1),
+                        }
+                    )
 
             similar.sort(key=lambda p: p["similarity"], reverse=True)
             return similar[:limit]
@@ -185,7 +196,11 @@ class PeerEngine:
         # Get subject's own RS
         subject_rs = 100.0
         try:
-            from src.services.rs_data_service import compute_rs_date_aligned, fetch_single
+            from src.services.rs_data_service import (
+                compute_rs_date_aligned,
+                fetch_single,
+            )
+
             t_closes = fetch_single(ticker)
             spy_closes = fetch_single("SPY")
             if t_closes is not None and spy_closes is not None and len(t_closes) >= 22:

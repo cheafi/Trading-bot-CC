@@ -65,9 +65,7 @@ async def lookup_13f_sponsor_overlap(ticker: str) -> Dict[str, Any]:
     if ticker in _CACHE and now - _CACHE_TS.get(ticker, 0) < _CACHE_TTL:
         return _CACHE[ticker]
 
-    start = (
-        datetime.now(timezone.utc) - timedelta(days=180)
-    ).strftime("%Y-%m-%d")
+    start = (datetime.now(timezone.utc) - timedelta(days=180)).strftime("%Y-%m-%d")
     url = (
         "https://efts.sec.gov/LATEST/search-index"
         f"?q=%22{quote(ticker)}%22"

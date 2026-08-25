@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from src.services.decision_truth_model import (
     TRADE_RR_THRESHOLD,
@@ -16,9 +16,7 @@ TIMING_WATCH_GATE = 0.50
 EXEC_GATE = 0.40
 DATA_GATE = 0.35
 
-_TRADE_ACTIONS = frozenset(
-    {"TRADE", "BUY", "BUY_ON_DIP", "TRADE_NOW", "STRONG_TRADE"}
-)
+_TRADE_ACTIONS = frozenset({"TRADE", "BUY", "BUY_ON_DIP", "TRADE_NOW", "STRONG_TRADE"})
 _REJECT_ACTIONS = frozenset({"AVOID", "NO_TRADE"})
 
 

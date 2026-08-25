@@ -7,6 +7,7 @@ for the ExpressionEngine to evaluate option spreads.
 Falls back to synthetic estimates when no live options
 data provider is configured (e.g. no CBOE/OPRA feed).
 """
+
 from __future__ import annotations
 
 import logging
@@ -21,17 +22,18 @@ logger = logging.getLogger(__name__)
 @dataclass
 class OptionChainSnapshot:
     """Single-expiry option chain snapshot."""
+
     ticker: str
-    expiry: str                     # ISO date
+    expiry: str  # ISO date
     underlying_price: float = 0.0
-    iv_rank: float = 0.0           # 0-100 percentile
-    iv_percentile: float = 0.0     # 0-100 percentile
-    hv_20d: float = 0.0           # 20-day historical vol
+    iv_rank: float = 0.0  # 0-100 percentile
+    iv_percentile: float = 0.0  # 0-100 percentile
+    hv_20d: float = 0.0  # 20-day historical vol
     put_call_ratio: float = 1.0
     total_oi: int = 0
     total_volume: int = 0
     atm_iv: float = 0.0
-    skew_25d: float = 0.0        # 25-delta put-call skew
+    skew_25d: float = 0.0  # 25-delta put-call skew
     timestamp: str = ""
 
     # Per-strike data (optional, for detailed analysis)
@@ -61,14 +63,17 @@ class OptionsDataProvider(ABC):
 
     @abstractmethod
     async def fetch_chain(
-        self, ticker: str, expiry: Optional[str] = None,
+        self,
+        ticker: str,
+        expiry: Optional[str] = None,
     ) -> Optional[OptionChainSnapshot]:
         """Fetch option chain for ticker."""
         ...
 
     @abstractmethod
     async def fetch_iv_rank(
-        self, ticker: str,
+        self,
+        ticker: str,
     ) -> Optional[float]:
         """Fetch IV rank (0-100) for ticker."""
         ...
@@ -100,7 +105,9 @@ class SyntheticOptionsProvider(OptionsDataProvider):
         self._cache: Dict[str, OptionChainSnapshot] = {}
 
     async def fetch_chain(
-        self, ticker: str, expiry: Optional[str] = None,
+        self,
+        ticker: str,
+        expiry: Optional[str] = None,
     ) -> Optional[OptionChainSnapshot]:
         """Generate synthetic chain snapshot."""
         now = datetime.now(timezone.utc).isoformat()
@@ -112,7 +119,7 @@ class SyntheticOptionsProvider(OptionsDataProvider):
         snap = OptionChainSnapshot(
             ticker=ticker,
             expiry=expiry or "synthetic",
-            iv_rank=30.0,       # neutral default
+            iv_rank=30.0,  # neutral default
             iv_percentile=35.0,
             hv_20d=0.25,
             put_call_ratio=1.0,
@@ -124,7 +131,8 @@ class SyntheticOptionsProvider(OptionsDataProvider):
         return snap
 
     async def fetch_iv_rank(
-        self, ticker: str,
+        self,
+        ticker: str,
     ) -> Optional[float]:
         chain = await self.fetch_chain(ticker)
         return chain.iv_rank if chain else None
@@ -156,10 +164,7 @@ def get_options_provider() -> OptionsDataProvider:
     global _provider
     if _provider is None:
         _provider = SyntheticOptionsProvider()
-        logger.info(
-            "Using synthetic options provider "
-            "(no live feed configured)"
-        )
+        logger.info("Using synthetic options provider (no live feed configured)")
     return _provider
 
 

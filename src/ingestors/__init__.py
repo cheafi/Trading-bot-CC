@@ -7,6 +7,7 @@ Data ingestion services:
 - NewsIngestor: Financial news aggregation
 - SocialIngestor: Social sentiment tracking
 """
+
 _LAZY = {
     "BaseIngestor": "src.ingestors.base",
     "MarketDataIngestor": "src.ingestors.market_data",

@@ -15,11 +15,7 @@ def build_portfolio_fit(
 ) -> Dict[str, Any]:
     """Heuristic portfolio-fit for single-stock 360."""
     sym = ticker.upper()
-    holdings = [
-        (p.get("ticker") or "").upper()
-        for p in positions
-        if p.get("ticker")
-    ]
+    holdings = [(p.get("ticker") or "").upper() for p in positions if p.get("ticker")]
     total = sum(float(p.get("market_value") or 0) for p in positions) or 1.0
     same_sector = 0.0
     overlap: List[str] = []
@@ -54,11 +50,7 @@ def build_portfolio_fit(
     return {
         "score": score,
         "fit_label": (
-            "strong_fit"
-            if score >= 75
-            else "neutral"
-            if score >= 50
-            else "poor_fit"
+            "strong_fit" if score >= 75 else "neutral" if score >= 50 else "poor_fit"
         ),
         "overlap_tickers": overlap,
         "sector_weight_pct": sector_overlap_pct,
@@ -83,12 +75,34 @@ def build_portfolio_fit(
             else "Standard sleeve sizing"
         ),
         "decomposition": [
-            {"factor": "Sector overlap", "value": f"{sector_overlap_pct}%", "impact": "high" if sector_overlap_pct > 25 else "low"},
-            {"factor": "Factor", "value": factors_or_default(sector), "impact": "neutral"},
-            {"factor": "Correlation", "value": "same-sector cluster" if sector_overlap_pct > 25 else "diversifying", "impact": "medium" if sector_overlap_pct > 25 else "low"},
+            {
+                "factor": "Sector overlap",
+                "value": f"{sector_overlap_pct}%",
+                "impact": "high" if sector_overlap_pct > 25 else "low",
+            },
+            {
+                "factor": "Factor",
+                "value": factors_or_default(sector),
+                "impact": "neutral",
+            },
+            {
+                "factor": "Correlation",
+                "value": "same-sector cluster"
+                if sector_overlap_pct > 25
+                else "diversifying",
+                "impact": "medium" if sector_overlap_pct > 25 else "low",
+            },
             {"factor": "Beta", "value": "unmodeled", "impact": "neutral"},
-            {"factor": "Concentration", "value": concentration, "impact": concentration},
-            {"factor": "Cap compatibility", "value": "neutral default", "impact": "neutral"},
+            {
+                "factor": "Concentration",
+                "value": concentration,
+                "impact": concentration,
+            },
+            {
+                "factor": "Cap compatibility",
+                "value": "neutral default",
+                "impact": "neutral",
+            },
         ],
         "notes": notes,
         "evidence": {"basis": "heuristic", "label": "Sector map + holdings overlap"},

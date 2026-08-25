@@ -296,9 +296,7 @@ class ModelFundService:
             metrics: Dict[str, Any] = (raw or {}).get("metrics", {})
 
             fund_return = float(
-                metrics.get("total_return_pct")
-                or metrics.get("total_return")
-                or 0.0
+                metrics.get("total_return_pct") or metrics.get("total_return") or 0.0
             )
             # Total-period excess vs benchmark (not annualized excess_return field)
             excess_return = round(
@@ -306,7 +304,14 @@ class ModelFundService:
                 2,
             )
             sharpe = round(float(metrics.get("sharpe", 0.0)), 2)
-            max_dd = round(float(metrics.get("max_drawdown_pct") or metrics.get("max_drawdown") or 0.0), 2)
+            max_dd = round(
+                float(
+                    metrics.get("max_drawdown_pct")
+                    or metrics.get("max_drawdown")
+                    or 0.0
+                ),
+                2,
+            )
             calmar = round(float(metrics.get("calmar", 0.0)), 2)
             regime_fit = self._regime_fit(model_id, regime)
             diff = self._compute_diff(model_id, source, picks)
@@ -386,7 +391,10 @@ class ModelFundService:
         if active_cards:
             controller = max(
                 active_cards,
-                key=lambda c: (c.get("regime_fit") or 0, c.get("excess_return_pct") or 0),
+                key=lambda c: (
+                    c.get("regime_fit") or 0,
+                    c.get("excess_return_pct") or 0,
+                ),
             )
             controller["controls_capital"] = True
             for c in cards:

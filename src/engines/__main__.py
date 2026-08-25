@@ -7,6 +7,7 @@ Delegates to src.engines.main which handles:
 - Boot pre-flight checks
 - Graceful shutdown via signal handlers
 """
+
 from src.engines.main import main
 
 if __name__ == "__main__":

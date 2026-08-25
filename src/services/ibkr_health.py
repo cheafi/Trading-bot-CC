@@ -279,9 +279,7 @@ class IBKRHealthTracker:
 
         if self.handoff_status == "monitoring_only":
             if self.execution_status == "ready":
-                parts.append(
-                    "Execution path available · monitor / manual mode"
-                )
+                parts.append("Execution path available · monitor / manual mode")
             else:
                 parts.append("Technically connected, operationally partial")
         elif self.handoff_status == "ready":
@@ -336,9 +334,7 @@ def build_unified_labels(
         }
 
     mode = (ibkr_mode or "paper").upper()
-    session_op = bool(
-        health.get("session_operational") or health.get("session_usable")
-    )
+    session_op = bool(health.get("session_operational") or health.get("session_usable"))
     account_ok = health.get("account_status") == "ok"
     degraded = health.get("degraded_reasons") or []
     has_degraded = any(

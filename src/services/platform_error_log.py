@@ -10,7 +10,7 @@ import uuid
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Deque, Dict, List, Literal, Optional
+from typing import Any, Deque, Dict, Literal, Optional
 
 from src.core.version import APP_VERSION
 
@@ -72,7 +72,8 @@ def log_platform_error(
         "component": component,
         "message": message,
         "detail": detail,
-        "suggested_action": suggested_action or "Review Ops console and retry when upstream services recover.",
+        "suggested_action": suggested_action
+        or "Review Ops console and retry when upstream services recover.",
         "meta": meta or {},
     }
     if root_cause:

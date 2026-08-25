@@ -14,15 +14,12 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from src.services.fetch_surface_state import (
-    STATE_EXECUTION_BLOCKED,
     STATE_FAILED_FETCH,
     STATE_FALLBACK,
     STATE_LOADING,
-    STATE_MOCK_ONLY,
     STATE_NOT_AUTHORITATIVE,
     STATE_OK,
     STATE_PARTIAL,
-    STATE_RESEARCH_ONLY,
     STATE_STALE,
     describe_dossier_fetch_state,
     describe_fetch_state,
@@ -227,14 +224,25 @@ def authority_strip_for_today(
     deployable_count: int = 0,
 ) -> Dict[str, Any]:
     """Dashboard + playbook header authority chips."""
-    tabs = ("today", "playbook", "dossier", "portfolio", "discovery", "flow", "funds", "ibkr", "ops")
+    tabs = (
+        "today",
+        "playbook",
+        "dossier",
+        "portfolio",
+        "discovery",
+        "flow",
+        "funds",
+        "ibkr",
+        "ops",
+    )
     return {
         "surfaces": [
             resolve_authority(
                 t,
                 tradeability=tradeability,
                 board_mode=board_mode if t == "playbook" else None,
-                ibkr_blocked=not ibkr_connected and t in ("today", "playbook", "portfolio"),
+                ibkr_blocked=not ibkr_connected
+                and t in ("today", "playbook", "portfolio"),
                 deployable_count=deployable_count,
             )
             for t in tabs
@@ -248,7 +256,9 @@ def is_decision_surface_suspended(ui_tab: str) -> bool:
     return _canonical_tab(ui_tab) == "guide"
 
 
-def guide_mode_strip(*, engine_running: bool = False, display_mode: str = "PAPER") -> Dict[str, Any]:
+def guide_mode_strip(
+    *, engine_running: bool = False, display_mode: str = "PAPER"
+) -> Dict[str, Any]:
     """Passive header payload when Guide tab is active — reference surface, not runtime proof."""
     mode = (display_mode or "PAPER").upper()
     return {
@@ -539,6 +549,7 @@ def resolve_authority_for_ui_tab(
         canonical,
         tradeability=tradeability,
         board_mode=board_mode if canonical == "playbook" else None,
-        ibkr_blocked=not ibkr_connected and canonical in ("today", "playbook", "portfolio"),
+        ibkr_blocked=not ibkr_connected
+        and canonical in ("today", "playbook", "portfolio"),
         deployable_count=deployable_count,
     )

@@ -12,8 +12,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Any, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -154,14 +153,15 @@ class EdgarClient:
                 "owner": "include",
                 "count": "1",
                 "search_text": "",
-                "action": "getcompany",
                 "CIK": ticker,
                 "output": "atom",
             }
             headers = {"User-Agent": self.USER_AGENT}
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    url, params=params, headers=headers,
+                    url,
+                    params=params,
+                    headers=headers,
                     timeout=aiohttp.ClientTimeout(total=10),
                 ) as resp:
                     if resp.status == 200:
@@ -213,13 +213,12 @@ class EdgarClient:
 
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    url, headers=headers,
+                    url,
+                    headers=headers,
                     timeout=aiohttp.ClientTimeout(total=10),
                 ) as resp:
                     if resp.status != 200:
-                        logger.warning(
-                            f"[EDGAR] {ticker} filings HTTP {resp.status}"
-                        )
+                        logger.warning(f"[EDGAR] {ticker} filings HTTP {resp.status}")
                         return []
                     data = await resp.json()
 
@@ -240,19 +239,20 @@ class EdgarClient:
                 doc = docs[i] if i < len(docs) else ""
                 acc_path = acc.replace("-", "")
                 filing_url = (
-                    f"https://www.sec.gov/Archives/edgar/data/"
-                    f"{cik}/{acc_path}/{doc}"
+                    f"https://www.sec.gov/Archives/edgar/data/{cik}/{acc_path}/{doc}"
                 )
 
-                filings.append(Filing(
-                    ticker=ticker,
-                    cik=cik,
-                    form_type=form,
-                    filed_date=dates[i] if i < len(dates) else "",
-                    description=descriptions[i] if i < len(descriptions) else "",
-                    url=filing_url,
-                    accession_number=acc,
-                ))
+                filings.append(
+                    Filing(
+                        ticker=ticker,
+                        cik=cik,
+                        form_type=form,
+                        filed_date=dates[i] if i < len(dates) else "",
+                        description=descriptions[i] if i < len(descriptions) else "",
+                        url=filing_url,
+                        accession_number=acc,
+                    )
+                )
                 if len(filings) >= limit:
                     break
 
@@ -273,14 +273,10 @@ class EdgarClient:
 
         Returns aggregate buy/sell activity for the last N days.
         """
-        filings = await self.get_recent_filings(
-            ticker, form_types=["4"], limit=20
-        )
+        filings = await self.get_recent_filings(ticker, form_types=["4"], limit=20)
 
         buy_count = 0
         sell_count = 0
-        buy_value = 0.0
-        sell_value = 0.0
 
         # Note: actual Form 4 parsing requires XML parsing of each filing
         # This returns filing metadata as a proxy

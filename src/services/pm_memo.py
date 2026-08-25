@@ -24,15 +24,26 @@ def generate_pm_memo(
         sections.append(
             {
                 "title": "Summary",
-                "body": pm.get("one_line") or f"{ticker} — {pm.get('action_now', 'WAIT')}",
+                "body": pm.get("one_line")
+                or f"{ticker} — {pm.get('action_now', 'WAIT')}",
             }
         )
         bull = pm.get("bull_case") or []
         bear = pm.get("bear_case") or []
         if bull:
-            sections.append({"title": "Bull case", "body": " · ".join(bull) if isinstance(bull, list) else str(bull)})
+            sections.append(
+                {
+                    "title": "Bull case",
+                    "body": " · ".join(bull) if isinstance(bull, list) else str(bull),
+                }
+            )
         if bear:
-            sections.append({"title": "Bear case", "body": " · ".join(bear) if isinstance(bear, list) else str(bear)})
+            sections.append(
+                {
+                    "title": "Bear case",
+                    "body": " · ".join(bear) if isinstance(bear, list) else str(bear),
+                }
+            )
         sections.append(
             {
                 "title": "Smart money (supporting only)",
@@ -94,12 +105,16 @@ def generate_pm_memo(
                     lines.append(str(a))
             sections.append({"title": "Avoid", "body": " · ".join(lines)})
 
-    markdown = "\n\n".join(f"## {s['title']}\n{s['body']}" for s in sections if s.get("body"))
+    markdown = "\n\n".join(
+        f"## {s['title']}\n{s['body']}" for s in sections if s.get("body")
+    )
     return {
         "scope": scope_u,
         "ticker": ticker,
         "as_of": datetime.now(timezone.utc).isoformat() + "Z",
         "sections": sections,
         "markdown": markdown,
-        "one_liner": sections[0]["body"] if sections else "No memo data — load portfolio or dossier first",
+        "one_liner": sections[0]["body"]
+        if sections
+        else "No memo data — load portfolio or dossier first",
     }

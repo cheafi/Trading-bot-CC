@@ -101,67 +101,67 @@ HK_TICKERS = [
 # ═══════════════════════════════════════════════════════════
 
 JP_TICKERS = [
-    "7203.T",   # Toyota
-    "6758.T",   # Sony
-    "6861.T",   # Keyence
-    "9984.T",   # SoftBank Group
-    "6098.T",   # Recruit
-    "8306.T",   # MUFG
-    "7741.T",   # HOYA
-    "9433.T",   # KDDI
-    "4063.T",   # Shin-Etsu Chemical
-    "6501.T",   # Hitachi
-    "4568.T",   # Daiichi Sankyo
-    "6902.T",   # Denso
-    "7974.T",   # Nintendo
-    "8035.T",   # Tokyo Electron
-    "6857.T",   # Advantest
-    "4519.T",   # Chugai Pharma
-    "6367.T",   # Daikin
-    "4661.T",   # Oriental Land
-    "6954.T",   # Fanuc
-    "7267.T",   # Honda
+    "7203.T",  # Toyota
+    "6758.T",  # Sony
+    "6861.T",  # Keyence
+    "9984.T",  # SoftBank Group
+    "6098.T",  # Recruit
+    "8306.T",  # MUFG
+    "7741.T",  # HOYA
+    "9433.T",  # KDDI
+    "4063.T",  # Shin-Etsu Chemical
+    "6501.T",  # Hitachi
+    "4568.T",  # Daiichi Sankyo
+    "6902.T",  # Denso
+    "7974.T",  # Nintendo
+    "8035.T",  # Tokyo Electron
+    "6857.T",  # Advantest
+    "4519.T",  # Chugai Pharma
+    "6367.T",  # Daikin
+    "4661.T",  # Oriental Land
+    "6954.T",  # Fanuc
+    "7267.T",  # Honda
     # Extended TOPIX / Nikkei
-    "9432.T",   # NTT
-    "4502.T",   # Takeda
-    "4503.T",   # Astellas Pharma
-    "6326.T",   # Kubota
-    "6752.T",   # Panasonic
-    "8001.T",   # ITOCHU
-    "8031.T",   # Mitsui & Co
-    "8058.T",   # Mitsubishi Corp
-    "8316.T",   # Sumitomo Mitsui
-    "8411.T",   # Mizuho Financial
-    "8766.T",   # Tokio Marine
-    "8801.T",   # Mitsui Fudosan
-    "9020.T",   # JR East
-    "9021.T",   # JR West
-    "9022.T",   # JR Central
-    "9101.T",   # NYK Line
-    "9104.T",   # Mitsui OSK
-    "4452.T",   # Kao Corp
-    "4901.T",   # Fujifilm
-    "6273.T",   # SMC Corp
-    "6594.T",   # Nidec
-    "6645.T",   # Omron
-    "6701.T",   # NEC
-    "6702.T",   # Fujitsu
-    "6723.T",   # Renesas
-    "6762.T",   # TDK
-    "6981.T",   # Murata Mfg
-    "7201.T",   # Nissan
-    "7269.T",   # Suzuki
-    "7270.T",   # Subaru
-    "7751.T",   # Canon
-    "7832.T",   # Bandai Namco
-    "8002.T",   # Marubeni
-    "8053.T",   # Sumitomo Corp
-    "8591.T",   # Orix
-    "8725.T",   # MS&AD Insurance
-    "9434.T",   # SoftBank Corp
-    "9613.T",   # NTT Data
-    "9983.T",   # Fast Retailing
-    "3382.T",   # Seven & i
+    "9432.T",  # NTT
+    "4502.T",  # Takeda
+    "4503.T",  # Astellas Pharma
+    "6326.T",  # Kubota
+    "6752.T",  # Panasonic
+    "8001.T",  # ITOCHU
+    "8031.T",  # Mitsui & Co
+    "8058.T",  # Mitsubishi Corp
+    "8316.T",  # Sumitomo Mitsui
+    "8411.T",  # Mizuho Financial
+    "8766.T",  # Tokio Marine
+    "8801.T",  # Mitsui Fudosan
+    "9020.T",  # JR East
+    "9021.T",  # JR West
+    "9022.T",  # JR Central
+    "9101.T",  # NYK Line
+    "9104.T",  # Mitsui OSK
+    "4452.T",  # Kao Corp
+    "4901.T",  # Fujifilm
+    "6273.T",  # SMC Corp
+    "6594.T",  # Nidec
+    "6645.T",  # Omron
+    "6701.T",  # NEC
+    "6702.T",  # Fujitsu
+    "6723.T",  # Renesas
+    "6762.T",  # TDK
+    "6981.T",  # Murata Mfg
+    "7201.T",  # Nissan
+    "7269.T",  # Suzuki
+    "7270.T",  # Subaru
+    "7751.T",  # Canon
+    "7832.T",  # Bandai Namco
+    "8002.T",  # Marubeni
+    "8053.T",  # Sumitomo Corp
+    "8591.T",  # Orix
+    "8725.T",  # MS&AD Insurance
+    "9434.T",  # SoftBank Corp
+    "9613.T",  # NTT Data
+    "9983.T",  # Fast Retailing
+    "3382.T",  # Seven & i
 ]
 
 # ═══════════════════════════════════════════════════════════
@@ -209,21 +209,21 @@ TW_TICKERS = [
 # ═══════════════════════════════════════════════════════════
 
 AU_TICKERS = [
-    "BHP.AX",   # BHP Group
-    "CBA.AX",   # Commonwealth Bank
-    "CSL.AX",   # CSL Limited
-    "NAB.AX",   # National Aust Bank
-    "WBC.AX",   # Westpac
-    "ANZ.AX",   # ANZ Group
-    "WES.AX",   # Wesfarmers
-    "MQG.AX",   # Macquarie Group
-    "FMG.AX",   # Fortescue Metals
-    "RIO.AX",   # Rio Tinto
-    "WOW.AX",   # Woolworths
-    "TLS.AX",   # Telstra
-    "WDS.AX",   # Woodside Energy
-    "ALL.AX",   # Aristocrat
-    "REA.AX",   # REA Group
+    "BHP.AX",  # BHP Group
+    "CBA.AX",  # Commonwealth Bank
+    "CSL.AX",  # CSL Limited
+    "NAB.AX",  # National Aust Bank
+    "WBC.AX",  # Westpac
+    "ANZ.AX",  # ANZ Group
+    "WES.AX",  # Wesfarmers
+    "MQG.AX",  # Macquarie Group
+    "FMG.AX",  # Fortescue Metals
+    "RIO.AX",  # Rio Tinto
+    "WOW.AX",  # Woolworths
+    "TLS.AX",  # Telstra
+    "WDS.AX",  # Woodside Energy
+    "ALL.AX",  # Aristocrat
+    "REA.AX",  # REA Group
 ]
 
 # ═══════════════════════════════════════════════════════════
@@ -232,15 +232,15 @@ AU_TICKERS = [
 
 IN_TICKERS = [
     "RELIANCE.NS",  # Reliance
-    "TCS.NS",       # Tata Consultancy
-    "INFY.NS",      # Infosys
+    "TCS.NS",  # Tata Consultancy
+    "INFY.NS",  # Infosys
     "HDFCBANK.NS",  # HDFC Bank
-    "ICICIBANK.NS", # ICICI Bank
-    "HINDUNILVR.NS",# Hindustan Unilever
-    "ITC.NS",       # ITC
-    "SBIN.NS",      # State Bank India
-    "BHARTIARTL.NS",# Bharti Airtel
-    "WIPRO.NS",     # Wipro
+    "ICICIBANK.NS",  # ICICI Bank
+    "HINDUNILVR.NS",  # Hindustan Unilever
+    "ITC.NS",  # ITC
+    "SBIN.NS",  # State Bank India
+    "BHARTIARTL.NS",  # Bharti Airtel
+    "WIPRO.NS",  # Wipro
 ]
 
 # ═══════════════════════════════════════════════════════════
@@ -249,21 +249,72 @@ IN_TICKERS = [
 
 CRYPTO_TICKERS = [
     # Top 25
-    "BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "AVAX", "DOT",
-    "MATIC", "LINK", "UNI", "AAVE", "MKR", "LDO", "ARB",
-    "OP", "APT", "SUI", "SEI", "TIA", "NEAR", "ATOM",
-    "DOGE", "SHIB", "PEPE",
+    "BTC",
+    "ETH",
+    "BNB",
+    "SOL",
+    "XRP",
+    "ADA",
+    "AVAX",
+    "DOT",
+    "MATIC",
+    "LINK",
+    "UNI",
+    "AAVE",
+    "MKR",
+    "LDO",
+    "ARB",
+    "OP",
+    "APT",
+    "SUI",
+    "SEI",
+    "TIA",
+    "NEAR",
+    "ATOM",
+    "DOGE",
+    "SHIB",
+    "PEPE",
     # DeFi
-    "CRV", "COMP", "SNX", "SUSHI", "YFI", "BAL", "FXS",
-    "PENDLE", "GMX", "RDNT", "JOE",
+    "CRV",
+    "COMP",
+    "SNX",
+    "SUSHI",
+    "YFI",
+    "BAL",
+    "FXS",
+    "PENDLE",
+    "GMX",
+    "RDNT",
+    "JOE",
     # Layer 1 / Layer 2
-    "FTM", "ALGO", "HBAR", "VET", "EGLD", "KAVA", "INJ",
-    "MINA", "CELO", "ZK", "STRK", "BLAST",
+    "FTM",
+    "ALGO",
+    "HBAR",
+    "VET",
+    "EGLD",
+    "KAVA",
+    "INJ",
+    "MINA",
+    "CELO",
+    "ZK",
+    "STRK",
+    "BLAST",
     # Gaming / Metaverse
-    "AXS", "SAND", "MANA", "GALA", "IMX", "RONIN",
-    "ILV", "MAGIC",
+    "AXS",
+    "SAND",
+    "MANA",
+    "GALA",
+    "IMX",
+    "RONIN",
+    "ILV",
+    "MAGIC",
     # AI tokens
-    "FET", "AGIX", "OCEAN", "RNDR", "TAO", "ARKM",
+    "FET",
+    "AGIX",
+    "OCEAN",
+    "RNDR",
+    "TAO",
+    "ARKM",
     "WLD",
 ]
 
@@ -290,6 +341,7 @@ class MarketRegion(str, Enum):
 def get_universe_stats():
     """Return dict of market → ticker count."""
     from src.scanners.us_universe import US_UNIVERSE
+
     return {
         "us": len(US_UNIVERSE),
         "hk": len(HK_TICKERS),

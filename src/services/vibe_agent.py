@@ -13,7 +13,6 @@ from src.services.vibe_agent_safety import (
 )
 from src.services.vibe_agent_store import (
     list_alerts,
-    list_journal,
     list_rules,
     log_agent_decision,
     save_alert,
@@ -104,7 +103,9 @@ def parse_vibe_intent(raw_text: str) -> Dict[str, Any]:
         {
             "intentType": intent_type,
             "assets": assets,
-            "timeframe": "1-5 sessions" if "星期" in text or "week" in lower else "overnight",
+            "timeframe": "1-5 sessions"
+            if "星期" in text or "week" in lower
+            else "overnight",
             "hypothesis": text[:240] if text else "Monitor hypothesis pending detail",
             "desiredSetup": desired,
             "riskTolerance": risk,
@@ -174,7 +175,9 @@ def build_watch_rules_from_intent(intent_plan: Dict[str, Any]) -> List[Dict[str,
     return rules
 
 
-def build_watch_rule(intent_plan: Dict[str, Any], *, intent_id: str = "") -> List[Dict[str, Any]]:
+def build_watch_rule(
+    intent_plan: Dict[str, Any], *, intent_id: str = ""
+) -> List[Dict[str, Any]]:
     rules = build_watch_rules_from_intent(intent_plan)
     for r in rules:
         r["intentId"] = intent_id
@@ -242,7 +245,11 @@ def evaluate_watch_rules(
         row = rank_map.get(asset)
         hit = False
         reason = ""
-        if row and str(row.get("action") or "").upper() not in ("AVOID", "NO_TRADE", "BLOCKED"):
+        if row and str(row.get("action") or "").upper() not in (
+            "AVOID",
+            "NO_TRADE",
+            "BLOCKED",
+        ):
             hit = True
             reason = f"候選升級 · Candidate upgraded — Playbook {row.get('action')}"
         elif asset in (pf.get("heat_tickers") or []):
@@ -340,7 +347,7 @@ def generate_overnight_brief(
     ss = system_state or {}
     today = today_payload or {}
     tb = str(ss.get("tradeability") or today.get("tradeability") or "WAIT").upper()
-    regime = (today.get("market_regime") or {})
+    regime = today.get("market_regime") or {}
     lines: List[str] = []
 
     lines.append(f"1. Regime 狀態：{regime.get('trend') or tb} · {tb}。")
@@ -351,9 +358,13 @@ def generate_overnight_brief(
 
     monitors = today.get("dashboard_monitors") or []
     if monitors:
-        lines.append(f"3. Top monitors：{' / '.join(monitors[:3])} — 需 Playbook 確認。")
+        lines.append(
+            f"3. Top monitors：{' / '.join(monitors[:3])} — 需 Playbook 確認。"
+        )
     else:
-        lines.append("3. 暫無 valid monitor candidates — 檢查 Playbook rejected bucket。")
+        lines.append(
+            "3. 暫無 valid monitor candidates — 檢查 Playbook rejected bucket。"
+        )
 
     broker = str(ss.get("broker_state") or "")
     if broker in ("GATEWAY_DOWN", "DISCONNECTED", "SESSION_INACTIVE", "EXEC_BLOCKED"):
@@ -365,7 +376,9 @@ def generate_overnight_brief(
     if alert_rows:
         lines.append(f"5. Agent alerts ({len(alert_rows)}) — review timeline first。")
 
-    lines.append("下一步：先修復 data freshness（如需要），再睇 Playbook watch-qualified。")
+    lines.append(
+        "下一步：先修復 data freshness（如需要），再睇 Playbook watch-qualified。"
+    )
 
     return sanitize_agent_payload(
         {

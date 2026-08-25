@@ -15,7 +15,7 @@ P3: Added EMA smoothing + minimum hold time to prevent regime whipsaw.
 import logging
 import math
 import time as _time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -32,11 +32,14 @@ class RegimeState:
     Every component (strategy routing, sizing, explanation,
     dashboard, API, bots) consumes this same object.
     """
+
     # Derived labels
-    regime: str = "NEUTRAL"             # RISK_ON / NEUTRAL / RISK_OFF
-    risk_regime: str = "neutral"        # risk_on / neutral / risk_off
-    trend_regime: str = "sideways"      # uptrend / downtrend / sideways
-    volatility_regime: str = "normal_vol"  # low_vol / normal_vol / elevated_vol / high_vol / crisis_vol
+    regime: str = "NEUTRAL"  # RISK_ON / NEUTRAL / RISK_OFF
+    risk_regime: str = "neutral"  # risk_on / neutral / risk_off
+    trend_regime: str = "sideways"  # uptrend / downtrend / sideways
+    volatility_regime: str = (
+        "normal_vol"  # low_vol / normal_vol / elevated_vol / high_vol / crisis_vol
+    )
     no_trade_reason: str = ""
 
     # Probabilities
@@ -129,27 +132,18 @@ class RegimeRouter:
         # Read from config with fallback defaults
         try:
             from src.core.config import get_trading_config
+
             tc = get_trading_config()
             _nte = tc.regime_no_trade_entropy
             _mc = tc.regime_min_confidence
             _vc = tc.regime_vix_crisis
-            self.no_trade_entropy = (
-                no_trade_entropy
-                or (float(_nte) if isinstance(
-                    _nte, (int, float)
-                ) else 1.35)
+            self.no_trade_entropy = no_trade_entropy or (
+                float(_nte) if isinstance(_nte, (int, float)) else 1.35
             )
-            self.min_confidence = (
-                min_confidence
-                or (float(_mc) if isinstance(
-                    _mc, (int, float)
-                ) else 0.40)
+            self.min_confidence = min_confidence or (
+                float(_mc) if isinstance(_mc, (int, float)) else 0.40
             )
-            self.VIX_CRISIS = (
-                float(_vc) if isinstance(
-                    _vc, (int, float)
-                ) else 35.0
-            )
+            self.VIX_CRISIS = float(_vc) if isinstance(_vc, (int, float)) else 35.0
         except Exception:
             self.no_trade_entropy = no_trade_entropy or 1.35
             self.min_confidence = min_confidence or 0.40
@@ -180,7 +174,9 @@ class RegimeRouter:
         risk_on_score += self._sigmoid(self.VIX_MID - vix, k=0.3)  # low VIX → bullish
         risk_on_score += self._sigmoid(spy_ret * 100, k=0.5)  # positive return
         risk_on_score += self._sigmoid((breadth - 0.5) * 5, k=0.8)  # breadth > 50%
-        risk_on_score += self._sigmoid(-vix_term_slope, k=0.3)  # contango (negative slope = calm)
+        risk_on_score += self._sigmoid(
+            -vix_term_slope, k=0.3
+        )  # contango (negative slope = calm)
 
         # Neutral range signals
         neutral_score = 0.0
@@ -196,11 +192,13 @@ class RegimeRouter:
         risk_off_score += self._sigmoid(hy_spread - 1.0, k=0.5)  # wide HY spread
 
         # Normalise to probabilities via softmax
-        scores = np.array([
-            max(risk_on_score, 0.01),
-            max(neutral_score, 0.01),
-            max(risk_off_score, 0.01),
-        ])
+        scores = np.array(
+            [
+                max(risk_on_score, 0.01),
+                max(neutral_score, 0.01),
+                max(risk_off_score, 0.01),
+            ]
+        )
         raw_probs = self._softmax(scores, temperature=1.5)
 
         # ── EMA smoothing (P3: regime hysteresis) ──
@@ -217,9 +215,12 @@ class RegimeRouter:
         risk_off_prob = float(probs[2])
 
         # Entropy: 0 = certain, ln(3)≈1.10 = max uncertainty
-        entropy = float(-sum(
-            p * math.log(p + 1e-10) for p in [risk_on_prob, neutral_prob, risk_off_prob]
-        ))
+        entropy = float(
+            -sum(
+                p * math.log(p + 1e-10)
+                for p in [risk_on_prob, neutral_prob, risk_off_prob]
+            )
+        )
 
         max_prob = max(risk_on_prob, neutral_prob, risk_off_prob)
 
@@ -302,8 +303,7 @@ class RegimeRouter:
         if not should_trade:
             if vix >= self.VIX_CRISIS:
                 no_trade_reason = (
-                    f"VIX at {vix:.1f} exceeds crisis "
-                    f"threshold ({self.VIX_CRISIS})"
+                    f"VIX at {vix:.1f} exceeds crisis threshold ({self.VIX_CRISIS})"
                 )
             elif entropy > self.no_trade_entropy:
                 no_trade_reason = (
@@ -370,7 +370,8 @@ class RegimeRouter:
         return e_x / e_x.sum()
 
     def get_strategy_multipliers(
-        self, regime_state,
+        self,
+        regime_state,
     ) -> Dict[str, float]:
         """
         Convert regime state into strategy-family multipliers.

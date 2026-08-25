@@ -23,9 +23,10 @@ Soft gates (warn but allow with reduced size):
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from src.core.risk_limits import RISK
 from datetime import datetime, timezone
 from typing import Optional
+
+from src.core.risk_limits import RISK
 
 
 @dataclass
@@ -127,23 +128,21 @@ class TradeGate:
                 reduction = min(0.5, (vix - self.vix_soft_warn) / 40)
                 multiplier *= 1.0 - reduction
                 soft.append(
-                    f"VIX at {vix:.1f} — elevated, " f"size reduced to {multiplier:.0%}"
+                    f"VIX at {vix:.1f} — elevated, size reduced to {multiplier:.0%}"
                 )
 
         if regime in ("UNKNOWN", "TRANSITIONAL", "CONFLICTED"):
             multiplier *= 0.5
-            soft.append(f"Regime '{regime}' uncertain — " f"half size recommended")
+            soft.append(f"Regime '{regime}' uncertain — half size recommended")
 
         if is_earnings_week and ticker:
             multiplier *= 0.5
-            soft.append(
-                f"{ticker} in earnings week — " f"size halved due to event risk"
-            )
+            soft.append(f"{ticker} in earnings week — size halved due to event risk")
 
         if current_hour_utc is not None:
             if current_hour_utc < 13 or current_hour_utc > 20:
                 # Outside US market core hours (9:00–16:00 ET)
-                soft.append("Outside core US market hours — " "wider spreads likely")
+                soft.append("Outside core US market hours — wider spreads likely")
                 multiplier *= 0.8
 
         # ── Final decision ──────────────────────────────────────────

@@ -15,6 +15,7 @@ Usage:
     throttle = RegimeThrottle()
     signals = throttle.apply(signals, regime_state="bear_volatile")
 """
+
 from __future__ import annotations
 
 import logging

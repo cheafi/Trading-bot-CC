@@ -55,7 +55,9 @@ def assess_macro_trend(
         trend_bias = "neutral"
         bias_strength = 0.45
 
-    regime_label = str(reg.get("label") or reg.get("trend") or reg.get("regime_label") or "")
+    regime_label = str(
+        reg.get("label") or reg.get("trend") or reg.get("regime_label") or ""
+    )
     should_trade = reg.get("should_trade", True)
     if not should_trade or "hostile" in regime_label.lower():
         trend_bias = "bearish" if trend_bias != "bullish" else "neutral"
@@ -85,9 +87,18 @@ def assess_macro_trend(
         "regime_label": regime_label or None,
         "regime_allows_trading": bool(should_trade),
         "chart_methods": {
-            "trendline": {"status": "stub", "note": "Swing high/low trendline bias pending OHLC feed"},
-            "three_line_break": {"status": "stub", "note": "Three-line break direction pending daily bars"},
-            "renko": {"status": "stub", "note": "Renko brick bias pending brick-size config"},
+            "trendline": {
+                "status": "stub",
+                "note": "Swing high/low trendline bias pending OHLC feed",
+            },
+            "three_line_break": {
+                "status": "stub",
+                "note": "Three-line break direction pending daily bars",
+            },
+            "renko": {
+                "status": "stub",
+                "note": "Renko brick bias pending brick-size config",
+            },
         },
         "summary": _macro_summary(trend_bias, ma_stack, regime_label, rsi),
         "price": round(price, 2) if price > 0 else None,
@@ -98,7 +109,9 @@ def assess_market_macro(regime: Optional[Dict[str, Any]] = None) -> Dict[str, An
     """Dashboard-level macro strip from cached regime (no per-ticker technicals)."""
     reg = regime or {}
     label = str(reg.get("trend") or reg.get("label") or "Unknown")
-    tradeability = str(reg.get("tradeability") or ("OPEN" if reg.get("should_trade") else "WAIT"))
+    tradeability = str(
+        reg.get("tradeability") or ("OPEN" if reg.get("should_trade") else "WAIT")
+    )
     vix = reg.get("vix")
     breadth = reg.get("breadth")
     should = bool(reg.get("should_trade", True))

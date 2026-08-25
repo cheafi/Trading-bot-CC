@@ -100,8 +100,8 @@ async def pm_memory_post(ticker: str, body: Dict[str, Any]):
 
 @router.get("/thesis-drift/{ticker}")
 async def thesis_drift(ticker: str, request: Request):
-    from src.services.stock_intel import build_stock_intel
     from src.services.pm_memory import get_memory
+    from src.services.stock_intel import build_stock_intel
 
     try:
         intel = await build_stock_intel(request, ticker)

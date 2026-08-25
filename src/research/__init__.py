@@ -4,6 +4,7 @@ News Intelligence - AI-powered news analysis and summarization.
 Condenses earnings reports, analyst updates, and macroeconomic news
 into actionable trading briefs.
 """
+
 _LAZY = {
     "NewsAnalyzer": ".news_analyzer",
     "NewsItem": ".news_analyzer",

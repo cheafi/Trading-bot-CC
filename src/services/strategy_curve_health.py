@@ -7,7 +7,7 @@ Distinct from strategy_health_service (realized closed trades).
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from src.services.signal_provenance import (
     SIGNAL_STRATEGY_CURVE,
@@ -80,7 +80,13 @@ def evaluate_regime_filter(
     n_trades: int = 42,
 ) -> Dict[str, Any]:
     """Trend, DD acceleration, expectancy decay, and sample-size labels."""
-    trend = TREND_UP if equity_slope > 0.01 else TREND_DOWN if equity_slope < -0.01 else TREND_FLAT
+    trend = (
+        TREND_UP
+        if equity_slope > 0.01
+        else TREND_DOWN
+        if equity_slope < -0.01
+        else TREND_FLAT
+    )
     dd_tag = DD_ACCEL if dd_velocity > 1.2 else DD_STABLE
     exp_tag = EXPECTANCY_DECAY if expectancy_ratio < 0.75 else EXPECTANCY_STABLE
     sample = SAMPLE_LOW if n_trades < 20 else SAMPLE_OK
@@ -93,7 +99,9 @@ def evaluate_regime_filter(
         "expectancy_label": CURVE_FILTER_LABELS[exp_tag],
         "sample": sample,
         "sample_label": CURVE_FILTER_LABELS[sample],
-        "regime_blocks_size_upgrade": trend == TREND_DOWN or dd_tag == DD_ACCEL or sample == SAMPLE_LOW,
+        "regime_blocks_size_upgrade": trend == TREND_DOWN
+        or dd_tag == DD_ACCEL
+        or sample == SAMPLE_LOW,
     }
 
 

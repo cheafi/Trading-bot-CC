@@ -17,7 +17,6 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -49,6 +48,7 @@ ROLLING_PERIODS = {
 @dataclass
 class HoldingBenchmark:
     """Benchmark comparison for a single holding."""
+
     ticker: str
     benchmark: str
     sector: str
@@ -96,6 +96,7 @@ class HoldingBenchmark:
 @dataclass
 class PortfolioBenchmark:
     """Aggregate portfolio vs benchmark comparison."""
+
     benchmark_ticker: str = "SPY"
 
     # Portfolio metrics
@@ -122,9 +123,7 @@ class PortfolioBenchmark:
     rolling_returns: Dict[str, Dict[str, float]] = field(default_factory=dict)
 
     # Regime-conditioned
-    regime_performance: Dict[str, Dict[str, float]] = field(
-        default_factory=dict
-    )
+    regime_performance: Dict[str, Dict[str, float]] = field(default_factory=dict)
 
     # Per-holding breakdown
     holdings: List[HoldingBenchmark] = field(default_factory=list)
@@ -198,7 +197,8 @@ class BenchmarkEngine:
             sector = h.get("sector", "Unknown")
             bm_ticker = SECTOR_BENCHMARKS.get(sector, benchmark)
             weight = (
-                h.get("shares", 0) * h.get("current_price", h.get("avg_cost", 0))
+                h.get("shares", 0)
+                * h.get("current_price", h.get("avg_cost", 0))
                 / total_weight
             )
 
@@ -216,9 +216,8 @@ class BenchmarkEngine:
 
         # Aggregate portfolio metrics
         result.portfolio_return = sum(
-            h.holding_return * (
-                h.weight if hasattr(h, "weight") else 1.0 / len(holdings)
-            )
+            h.holding_return
+            * (h.weight if hasattr(h, "weight") else 1.0 / len(holdings))
             for h in holding_benchmarks
         )
 
@@ -269,10 +268,13 @@ class BenchmarkEngine:
         hb.weight = weight  # type: ignore[attr-defined]
 
         # Extract returns from holding data
-        hb.holding_return = holding_data.get(
-            "return_pct",
-            holding_data.get("gain_loss_pct", 0.0),
-        ) / 100.0
+        hb.holding_return = (
+            holding_data.get(
+                "return_pct",
+                holding_data.get("gain_loss_pct", 0.0),
+            )
+            / 100.0
+        )
 
         # Factor exposures from signal data
         hb.factor_exposures = {
@@ -313,13 +315,15 @@ class BenchmarkEngine:
         for h in holdings:
             w = getattr(h, "weight", 1.0 / len(holdings))
             contribution = h.alpha * w
-            contributions.append({
-                "ticker": h.ticker,
-                "weight": round(w, 4),
-                "alpha": round(h.alpha, 4),
-                "contribution": round(contribution, 4),
-                "direction": "positive" if contribution > 0 else "negative",
-            })
+            contributions.append(
+                {
+                    "ticker": h.ticker,
+                    "weight": round(w, 4),
+                    "alpha": round(h.alpha, 4),
+                    "contribution": round(contribution, 4),
+                    "direction": "positive" if contribution > 0 else "negative",
+                }
+            )
         contributions.sort(key=lambda x: abs(x["contribution"]), reverse=True)
         return contributions
 
@@ -345,7 +349,7 @@ class BenchmarkEngine:
             return 0.0
         cumulative = 1.0
         for r in returns:
-            cumulative *= (1.0 + r)
+            cumulative *= 1.0 + r
         n_years = len(returns) / 252.0
         if n_years <= 0:
             return 0.0
@@ -367,7 +371,7 @@ class BenchmarkEngine:
         downside = [r for r in returns if r < 0]
         if not downside:
             return 10.0  # cap
-        down_var = sum(r ** 2 for r in downside) / len(downside)
+        down_var = sum(r**2 for r in downside) / len(downside)
         down_std = math.sqrt(down_var) if down_var > 0 else 1e-10
         daily_rf = self.risk_free_rate / 252
         return (mean_r - daily_rf) / down_std * math.sqrt(252)
@@ -379,7 +383,7 @@ class BenchmarkEngine:
         max_dd = 0.0
         equity = 1.0
         for r in returns:
-            equity *= (1.0 + r)
+            equity *= 1.0 + r
             peak = max(peak, equity)
             dd = (peak - equity) / peak
             max_dd = max(max_dd, dd)

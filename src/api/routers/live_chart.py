@@ -231,5 +231,3 @@ async def live_chart_data(
             else []
         ),
     }
-
-

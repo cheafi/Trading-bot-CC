@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
-from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import HTMLResponse
+from typing import Any, Dict
 
+from fastapi import APIRouter, Depends, Query, Request
+
+from src.core.trust_metadata import (
+    MODEL_VERSION,
+    FreshnessLevel,
+    TrustBadge,
+    TrustMetadata,
+)
 from src.engines.confidence_calibrator import ConfidenceCalibrator
 from src.engines.correlation_risk import CorrelationRiskEngine
 from src.engines.cross_asset_monitor import CrossAssetMonitor
@@ -13,6 +19,7 @@ from src.engines.decision_journal import DecisionJournal
 from src.engines.expert_tracker import ExpertTracker
 from src.engines.learning_loop import LearningLoopPipeline
 from src.engines.market_intel import MarketIntelEngine
+from src.engines.meta_ensemble import MetaEnsemble
 from src.engines.portfolio_risk_budget import PortfolioRiskBudget
 from src.engines.position_sizer import PositionSizer
 from src.engines.professional_kpi import ProfessionalKPI
@@ -21,13 +28,6 @@ from src.engines.risk_scorecard import RiskScorecardEngine
 from src.engines.signal_decay import SignalDecayTracker
 from src.engines.trade_gate import TradeGate
 from src.engines.watchlist_intel import WatchlistIntelEngine
-from src.engines.meta_ensemble import MetaEnsemble
-from src.core.trust_metadata import (
-    MODEL_VERSION,
-    FreshnessLevel,
-    TrustBadge,
-    TrustMetadata,
-)
 
 router = APIRouter()
 
@@ -51,8 +51,10 @@ _professional_kpi = ProfessionalKPI()
 
 
 from src.api.deps import (
-    verify_api_key as _verify_api_key_dep,
     sanitize_for_json as _sanitize_for_json,
+)
+from src.api.deps import (
+    verify_api_key as _verify_api_key_dep,
 )
 
 
@@ -86,7 +88,6 @@ async def stale_signals(
     """
     from src.engines.signal_decay import (
         get_stale_signals,
-        STALE_THRESHOLD_HOURS,
     )  # noqa: PLC0415
 
     active = _signal_decay.active_signals()
@@ -111,8 +112,8 @@ async def decay_penalty_preview(
 ) -> Dict[str, Any]:
     """Preview how much score is lost for a signal of given age, score, and grade."""
     from src.engines.signal_decay import (
-        apply_decay_penalty,
         DECAY_SCHEDULE,
+        apply_decay_penalty,
     )  # noqa: PLC0415
 
     signal = {
@@ -661,6 +662,7 @@ async def gap_analysis(ticker: str):
 
     try:
         import yfinance as yf
+
         from src.engines.gap_detector import GapDetector
 
         df = await asyncio.to_thread(
@@ -675,8 +677,8 @@ async def gap_analysis(ticker: str):
         lows = df["Low"].dropna().values.flatten().tolist()
         closes = df["Close"].dropna().values.flatten().tolist()
         bars = [
-            {"open": o, "high": h, "low": l, "close": c}
-            for o, h, l, c in zip(opens, highs, lows, closes)
+            {"open": o, "high": h, "low": lo, "close": c}
+            for o, h, lo, c in zip(opens, highs, lows, closes)
         ]
         report = detector.detect(bars, ticker=ticker.upper())
         return {
@@ -700,7 +702,7 @@ async def historical_analogs(
     regime: str = Query("", description="Filter by regime"),
 ):
     """Find similar past trades for a ticker/strategy."""
-    from src.engines.historical_analog import find_similar_cases, analog_summary
+    from src.engines.historical_analog import analog_summary, find_similar_cases
 
     cases = find_similar_cases(
         strategy=strategy or "vcp",

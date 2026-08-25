@@ -36,11 +36,7 @@ async def live_quote(ticker: str, request: Request):
             c_col = "Close" if "Close" in hist.columns else "close"
             close = hist[c_col]
             sma20 = float(close.rolling(20).mean().iloc[-1])
-            sma50 = (
-                float(close.rolling(50).mean().iloc[-1])
-                if len(close) >= 50
-                else 0
-            )
+            sma50 = float(close.rolling(50).mean().iloc[-1]) if len(close) >= 50 else 0
             delta = close.diff()
             gain = delta.clip(lower=0).rolling(14).mean()
             loss = (-delta.clip(upper=0)).rolling(14).mean()
@@ -127,11 +123,7 @@ async def live_perf_vs_spy(
         ts = int(common[j].timestamp()) if hasattr(common[j], "timestamp") else j
         equity_stock.append({"time": ts, "value": round(float(s_norm[j]), 2)})
         equity_spy.append({"time": ts, "value": round(float(b_norm[j]), 2)})
-    ts_last = (
-        int(common[-1].timestamp())
-        if hasattr(common[-1], "timestamp")
-        else n - 1
-    )
+    ts_last = int(common[-1].timestamp()) if hasattr(common[-1], "timestamp") else n - 1
     equity_stock.append({"time": ts_last, "value": round(float(s_norm[-1]), 2)})
     equity_spy.append({"time": ts_last, "value": round(float(b_norm[-1]), 2)})
 
@@ -287,9 +279,7 @@ async def live_perf_vs_spy(
                 "win_months": win_months,
                 "total_months": total_months,
                 "win_rate_vs_spy": (
-                    round(win_months / total_months * 100, 1)
-                    if total_months > 0
-                    else 0
+                    round(win_months / total_months * 100, 1) if total_months > 0 else 0
                 ),
             },
             "monthly": monthly[-24:],

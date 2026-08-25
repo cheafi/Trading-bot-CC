@@ -50,5 +50,10 @@ def evaluate_liquidity_funding_stress(
         "score": round(score, 1),
         "labels": labels,
         "headline": labels[0],
-        "size_multiplier": {"calm": 1.0, "thin": 0.6, "funding_tight": 0.35, "liquidity_trap": 0.0}[state],
+        "size_multiplier": {
+            "calm": 1.0,
+            "thin": 0.6,
+            "funding_tight": 0.35,
+            "liquidity_trap": 0.0,
+        }[state],
     }

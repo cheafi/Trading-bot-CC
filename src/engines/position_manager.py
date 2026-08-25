@@ -155,7 +155,7 @@ class PositionManager:
         if regime_trend == "CRISIS" and action.current_pnl_pct < 0:
             action.action = "EXIT"
             action.reason = (
-                f"CRISIS regime + underwater " f"({action.current_pnl_pct:+.1f}%)"
+                f"CRISIS regime + underwater ({action.current_pnl_pct:+.1f}%)"
             )
             action.urgency = "HIGH"
             return action
@@ -186,7 +186,7 @@ class PositionManager:
                 action.action = "REDUCE"
                 action.reduce_pct = 50.0
             reasons.append(
-                f"RS rank {pos.rs_rank:.0f} below " f"{self.RS_REDUCE_THRESHOLD}"
+                f"RS rank {pos.rs_rank:.0f} below {self.RS_REDUCE_THRESHOLD}"
             )
             action.urgency = "MEDIUM"
 
@@ -200,7 +200,7 @@ class PositionManager:
                 if action.action == "HOLD":
                     action.action = "TRAIL_STOP"
                 reasons.append(
-                    f"Trail stop → ${trail_stop:.2f} " f"(from ${pos.stop_price:.2f})"
+                    f"Trail stop → ${trail_stop:.2f} (from ${pos.stop_price:.2f})"
                 )
 
         # ── Check 8: Time stop ──
@@ -209,8 +209,7 @@ class PositionManager:
                 action.action = "REDUCE"
                 action.reduce_pct = 50.0
             reasons.append(
-                f"Time stop: {pos.days_held}d held, "
-                f"only {action.current_pnl_pct:+.1f}%"
+                f"Time stop: {pos.days_held}d held, only {action.current_pnl_pct:+.1f}%"
             )
 
         # ── Default: HOLD ──

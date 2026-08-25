@@ -85,7 +85,7 @@ def evaluate_crisis_regime(
     prior_state: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Crisis evaluation — regime/plumbing before card appeal."""
-    tb = (tradeability or "").upper()
+    (tradeability or "").upper()
     vix_f = float(vix) if vix is not None else 0.0
     breadth_f = float(breadth) if breadth is not None else 50.0
     hostile = (macro_regime or "").lower() in ("hostile", "crisis", "risk_off")
@@ -103,7 +103,11 @@ def evaluate_crisis_regime(
     labels: List[str] = []
     if state == "cascade":
         labels.extend(
-            [CRISIS_LABELS["vol_crisis"], CRISIS_LABELS["cascade"], CRISIS_LABELS["cash_is_position"]]
+            [
+                CRISIS_LABELS["vol_crisis"],
+                CRISIS_LABELS["cascade"],
+                CRISIS_LABELS["cash_is_position"],
+            ]
         )
     elif state == "funding_stress":
         labels.append(CRISIS_LABELS["funding_stress"])
@@ -126,14 +130,20 @@ def evaluate_crisis_regime(
     elif vix_f >= 24 or breadth_f < 35:
         labels.append(CRISIS_LABELS["correlation_spike"])
 
-    deploy_blocked = level == "crisis" or state in ("cascade", "funding_stress") or hostile
+    deploy_blocked = (
+        level == "crisis" or state in ("cascade", "funding_stress") or hostile
+    )
     preservation = deploy_blocked or state in (
         "liquidity_stress",
         "funding_stress",
         "fragile",
         "cascade",
     )
-    posture = "preservation" if preservation else ("selective_attack" if level == "normal" else "balanced")
+    posture = (
+        "preservation"
+        if preservation
+        else ("selective_attack" if level == "normal" else "balanced")
+    )
 
     return {
         "mode": "luanshi_wallstreet",
@@ -147,7 +157,9 @@ def evaluate_crisis_regime(
             if preservation
             else "Stress monitor — confirmation only"
         ),
-        "authority": "blocked" if deploy_blocked else ("confirmation_only" if preservation else "normal"),
+        "authority": "blocked"
+        if deploy_blocked
+        else ("confirmation_only" if preservation else "normal"),
         "posture": posture,
         "capital_preservation_priority": preservation,
         "attack_permission": not deploy_blocked and posture == "selective_attack",
@@ -177,7 +189,9 @@ def build_crisis_bundle(
     )
 
     from src.services.counterparty_trust import evaluate_counterparty_trust
-    from src.services.crisis_portfolio_survival import evaluate_crisis_portfolio_survival
+    from src.services.crisis_portfolio_survival import (
+        evaluate_crisis_portfolio_survival,
+    )
     from src.services.liquidity_funding_stress import evaluate_liquidity_funding_stress
 
     liquidity = evaluate_liquidity_funding_stress(
@@ -207,7 +221,8 @@ def build_crisis_bundle(
         "liquidity_state": liquidity.get("liquidity_state"),
         "counterparty_trust": trust,
         "crisis_survival": survival,
-        "plumbing_first": not plumbing_ok or regime.get("capital_preservation_priority"),
+        "plumbing_first": not plumbing_ok
+        or regime.get("capital_preservation_priority"),
         "regime_fit": _crisis_regime_fit_score(regime, liquidity),
     }
 
@@ -228,7 +243,9 @@ def tags_for_playbook_row(
     market_vix: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Playbook enrich fields — survival-first."""
-    tb = tradeability or str(row.get("tradeability") or row.get("honest_tradeability") or "")
+    tb = tradeability or str(
+        row.get("tradeability") or row.get("honest_tradeability") or ""
+    )
     ev = evaluate_crisis_regime(
         tradeability=tb,
         vix=row.get("vix") or market_vix,
@@ -239,8 +256,14 @@ def tags_for_playbook_row(
 
     disloc = dislocation_for_row(row, market_vix=market_vix)
     fit = _crisis_regime_fit_score(ev, {"score": 50})
-    preservation = ev.get("capital_preservation_priority") or not disloc.get("attack_allowed")
-    attack = ev.get("attack_permission") and disloc.get("attack_allowed") and not ev.get("deploy_blocked")
+    preservation = ev.get("capital_preservation_priority") or not disloc.get(
+        "attack_allowed"
+    )
+    attack = (
+        ev.get("attack_permission")
+        and disloc.get("attack_allowed")
+        and not ev.get("deploy_blocked")
+    )
 
     return {
         "regime_fit": fit,
@@ -265,7 +288,11 @@ def build_crisis_context(
     should_trade = getattr(regime, "should_trade", True)
     if isinstance(regime, dict):
         should_trade = bool(regime.get("should_trade", True))
-    vix = getattr(regime, "vix", None) if not isinstance(regime, dict) else regime.get("vix")
+    vix = (
+        getattr(regime, "vix", None)
+        if not isinstance(regime, dict)
+        else regime.get("vix")
+    )
     chg = dossier.get("change_pct")
 
     ev = evaluate_crisis_regime(should_trade=should_trade, vix=vix)
@@ -288,7 +315,8 @@ def build_crisis_context(
         "liquidity_exposure": liq.get("liquidity_state"),
         "dislocation": disloc.get("kind"),
         "capital_preservation_priority": ev.get("capital_preservation_priority"),
-        "attack_permission": ev.get("attack_permission") and disloc.get("attack_allowed"),
+        "attack_permission": ev.get("attack_permission")
+        and disloc.get("attack_allowed"),
         "deploy_blocked": ev.get("deploy_blocked"),
         "labels": ev.get("labels") or [],
     }
@@ -313,6 +341,8 @@ def crisis_strip_for_today(
         **bundle,
         "regime_state": bundle.get("state"),
         "liquidity_state": bundle.get("liquidity_state"),
-        "preservation_vs_attack": "preservation" if preservation else bundle.get("posture", "balanced"),
+        "preservation_vs_attack": "preservation"
+        if preservation
+        else bundle.get("posture", "balanced"),
         "strip_headline": bundle.get("banner") or bundle.get("headline"),
     }

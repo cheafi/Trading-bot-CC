@@ -40,7 +40,9 @@ async def portfolio_decision(request: Request):
         payload["cc_state"] = build_cc_state(
             tradeability=tradeability,
             should_trade=should_trade,
-            decision_authority=decision_authority if isinstance(decision_authority, dict) else {},
+            decision_authority=decision_authority
+            if isinstance(decision_authority, dict)
+            else {},
             execution_readiness=payload.get("execution") or {},
             surface_authority=None,
             trust=trust,

@@ -6,6 +6,7 @@ with configurable intervals.  Designed to be launched by Docker:
 
     CMD ["python", "-m", "src.ingestors.main"]
 """
+
 import asyncio
 import logging
 import signal
@@ -46,6 +47,7 @@ class IngestorService:
         """Lazy-import and instantiate ingestors (keeps top-level lean)."""
         try:
             from src.ingestors.market_data import MarketDataIngestor
+
             self._market = MarketDataIngestor()
             logger.info("MarketDataIngestor ready")
         except Exception as exc:
@@ -53,6 +55,7 @@ class IngestorService:
 
         try:
             from src.ingestors.news import NewsIngestor
+
             self._news = NewsIngestor()
             logger.info("NewsIngestor ready")
         except Exception as exc:
@@ -60,6 +63,7 @@ class IngestorService:
 
         try:
             from src.ingestors.social import SocialIngestor
+
             self._social = SocialIngestor()
             logger.info("SocialIngestor ready")
         except Exception as exc:

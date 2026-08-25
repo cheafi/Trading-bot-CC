@@ -68,7 +68,9 @@ def returns_from_equity(equity: List[float]) -> List[float]:
     return out
 
 
-def sharpe(returns: List[float], periods_per_year: int = _PERIODS_PER_YEAR) -> Optional[float]:
+def sharpe(
+    returns: List[float], periods_per_year: int = _PERIODS_PER_YEAR
+) -> Optional[float]:
     """Annualized Sharpe of a return series. None if undefined."""
     if len(returns) < 2:
         return None
@@ -85,30 +87,48 @@ def rolling_sharpe(
     """Rolling Sharpe series + latest value + first-vs-last trend label."""
     if len(returns) < window:
         s = sharpe(returns, periods_per_year)
-        return {"window": window, "series": [], "latest": s, "trend": "insufficient_sample"}
+        return {
+            "window": window,
+            "series": [],
+            "latest": s,
+            "trend": "insufficient_sample",
+        }
     series: List[float] = []
     for i in range(window, len(returns) + 1):
-        s = sharpe(returns[i - window:i], periods_per_year)
+        s = sharpe(returns[i - window : i], periods_per_year)
         if s is not None:
             series.append(s)
     if not series:
-        return {"window": window, "series": [], "latest": None, "trend": "insufficient_sample"}
+        return {
+            "window": window,
+            "series": [],
+            "latest": None,
+            "trend": "insufficient_sample",
+        }
     trend = "stable"
     if len(series) >= 2:
         if series[-1] < series[0] - 0.3:
             trend = "deteriorating"
         elif series[-1] > series[0] + 0.3:
             trend = "improving"
-    return {"window": window, "series": [round(x, 2) for x in series], "latest": series[-1], "trend": trend}
+    return {
+        "window": window,
+        "series": [round(x, 2) for x in series],
+        "latest": series[-1],
+        "trend": trend,
+    }
 
 
 def drawdown_profile(equity: List[float]) -> Dict[str, Any]:
     """Current/max drawdown, underwater durations, and drawdown acceleration."""
     if len(equity) < 2:
         return {
-            "current_dd_pct": None, "max_dd_pct": None,
-            "current_underwater_len": 0, "max_underwater_len": 0,
-            "dd_accelerating": False, "degraded": True,
+            "current_dd_pct": None,
+            "max_dd_pct": None,
+            "current_underwater_len": 0,
+            "max_underwater_len": 0,
+            "dd_accelerating": False,
+            "degraded": True,
         }
     peak = equity[0]
     dd_series: List[float] = []
@@ -128,7 +148,7 @@ def drawdown_profile(equity: List[float]) -> Dict[str, Any]:
     # Acceleration: recent worsening velocity vs earlier in the underwater stretch.
     accel = False
     if len(dd_series) >= 6:
-        recent = dd_series[-3] - dd_series[-1]   # how much deeper in last 2 steps
+        recent = dd_series[-3] - dd_series[-1]  # how much deeper in last 2 steps
         prior = dd_series[-6] - dd_series[-4]
         accel = recent > max(0.0, prior) and recent > 0.5
     return {
@@ -157,7 +177,12 @@ def _half_trend(values: List[float], better: str = "higher") -> Dict[str, Any]:
         label = "improving"
     else:
         label = "decaying"
-    return {"trend": label, "early": round(early, 3), "late": round(late, 3), "n": len(clean)}
+    return {
+        "trend": label,
+        "early": round(early, 3),
+        "late": round(late, 3),
+        "n": len(clean),
+    }
 
 
 def expectancy_trend(r_multiples: List[float]) -> Dict[str, Any]:
@@ -176,7 +201,11 @@ def live_vs_backtest_divergence(
 ) -> Dict[str, Any]:
     """Ratio of live to backtest expectancy + an honest label."""
     if not backtest_expectancy_r or live_expectancy_r is None:
-        return {"ratio": None, "label": "Divergence unknown — no live sample", "degraded": True}
+        return {
+            "ratio": None,
+            "label": "Divergence unknown — no live sample",
+            "degraded": True,
+        }
     ratio = round(live_expectancy_r / backtest_expectancy_r, 2)
     if ratio < 0.5:
         label = "Live edge far below backtest — decay / overfit risk"
@@ -191,7 +220,11 @@ def live_vs_backtest_divergence(
 
 def calibration_status(days_since_calibration: Optional[int]) -> Dict[str, Any]:
     if days_since_calibration is None:
-        return {"badge": CALIB_STALE, "days": None, "label": "Calibration age unknown — treat as stale"}
+        return {
+            "badge": CALIB_STALE,
+            "days": None,
+            "label": "Calibration age unknown — treat as stale",
+        }
     d = int(days_since_calibration)
     if d <= 30:
         badge = CALIB_FRESH
@@ -225,8 +258,12 @@ def strategy_decay_score(
     comp["drawdown"] = 20.0 if dd_accelerating else 0.0
     comp["expectancy"] = 20.0 if expectancy_trend_label == "decaying" else 0.0
     if divergence_ratio is not None:
-        comp["live_vs_backtest"] = round(min(20.0, max(0.0, (1.0 - divergence_ratio) * 25.0)), 1)
-    comp["calibration"] = {CALIB_FRESH: 0.0, CALIB_AGING: 5.0, CALIB_STALE: 10.0}.get(calibration_badge, 10.0)
+        comp["live_vs_backtest"] = round(
+            min(20.0, max(0.0, (1.0 - divergence_ratio) * 25.0)), 1
+        )
+    comp["calibration"] = {CALIB_FRESH: 0.0, CALIB_AGING: 5.0, CALIB_STALE: 10.0}.get(
+        calibration_badge, 10.0
+    )
     if execution_drag_bps is not None:
         comp["execution_drag"] = round(min(15.0, max(0.0, execution_drag_bps / 2.0)), 1)
     score = round(min(100.0, sum(comp.values())), 1)
@@ -240,7 +277,12 @@ def strategy_decay_score(
 
 
 def resolve_curve_state(
-    *, sharpe_wf: float, max_dd_pct: float, win_rate: float, n_trades: int, decay_band: str
+    *,
+    sharpe_wf: float,
+    max_dd_pct: float,
+    win_rate: float,
+    n_trades: int,
+    decay_band: str,
 ) -> str:
     """Discrete curve state, with decay as a downgrade-only override."""
     base = resolve_health_state(
@@ -325,7 +367,9 @@ def build_strategy_curve_analytics(
     }
     return build_provenance_envelope(
         signal_type=SIGNAL_STRATEGY_CURVE,
-        source="strategy_curve_analytics" if equity else "strategy_curve_analytics-empty",
+        source="strategy_curve_analytics"
+        if equity
+        else "strategy_curve_analytics-empty",
         degraded=is_degraded,
         data_mode="research_only",
         extra=body,

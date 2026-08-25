@@ -142,7 +142,7 @@ class BreakoutMonitor:
         elif rec.max_gain_pct > 3.0 and pct < rec.max_gain_pct * 0.3:
             rec.status = BreakoutStatus.REJECTED
             rec.failure_reasons.append(
-                f"Gave back {rec.max_gain_pct - pct:.1f}%" " of gains — rejection"
+                f"Gave back {rec.max_gain_pct - pct:.1f}% of gains — rejection"
             )
         elif (
             rec.days_since >= self.confirm_days
@@ -153,7 +153,7 @@ class BreakoutMonitor:
         elif rec.days_since >= self.confirm_days and not rec.follow_through_volume:
             rec.status = BreakoutStatus.WEAK
             rec.failure_reasons.append(
-                "No volume follow-through after" f" {self.confirm_days} days"
+                f"No volume follow-through after {self.confirm_days} days"
             )
 
         # Archive completed signals

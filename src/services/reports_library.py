@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from src.services.research_safety import PINE_DISCLAIMER, sanitize_research_payload
-from src.services.research_store import get_report, list_reports, save_report
+from src.services.research_safety import sanitize_research_payload
+from src.services.research_store import get_report, save_report
 from src.services.strategy_export import export_pine_draft
 
 
@@ -34,7 +34,9 @@ def create_report_from_validation(
     return save_report(report)
 
 
-def create_report_from_shadow(shadow: Dict[str, Any], *, authority_state: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def create_report_from_shadow(
+    shadow: Dict[str, Any], *, authority_state: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     report = sanitize_research_payload(
         {
             "type": "shadow_account",
@@ -56,7 +58,9 @@ def export_report(report_id: str, fmt: str = "markdown") -> str:
         return ""
     fmt = str(fmt or "markdown").lower()
     if fmt == "json":
-        return json.dumps(sanitize_research_payload(report), ensure_ascii=False, indent=2)
+        return json.dumps(
+            sanitize_research_payload(report), ensure_ascii=False, indent=2
+        )
     if fmt == "html":
         return _report_html(report)
     if fmt == "pine":
@@ -79,7 +83,7 @@ def _report_markdown(report: Dict[str, Any]) -> str:
         "",
         "> Research / Monitoring only · 非部署權限 · No deploy authority",
         "",
-        f"## Summary",
+        "## Summary",
         str(report.get("summary") or ""),
         "",
     ]

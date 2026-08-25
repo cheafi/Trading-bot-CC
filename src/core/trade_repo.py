@@ -5,8 +5,8 @@ Database persistence layer for trade outcomes, leaderboard snapshots,
 and regime snapshots.  Falls back silently to no-op when the DB is
 unavailable (e.g. local dev without PostgreSQL).
 """
+
 import logging
-from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -97,9 +97,7 @@ class TradeOutcomeRepository:
         """Persist a single trade outcome row. Returns True on success."""
         return await self._execute(self._INSERT_OUTCOME, record)
 
-    async def save_outcomes_batch(
-        self, records: List[Dict[str, Any]]
-    ) -> int:
+    async def save_outcomes_batch(self, records: List[Dict[str, Any]]) -> int:
         """Persist multiple outcomes. Returns count of rows saved."""
         saved = 0
         for rec in records:
@@ -107,9 +105,7 @@ class TradeOutcomeRepository:
                 saved += 1
         return saved
 
-    async def save_leaderboard_snapshot(
-        self, rows: List[Dict[str, Any]]
-    ) -> bool:
+    async def save_leaderboard_snapshot(self, rows: List[Dict[str, Any]]) -> bool:
         """Persist a daily leaderboard snapshot."""
         ok = True
         for row in rows:
@@ -117,21 +113,15 @@ class TradeOutcomeRepository:
                 ok = False
         return ok
 
-    async def save_regime_snapshot(
-        self, snapshot: Dict[str, Any]
-    ) -> bool:
+    async def save_regime_snapshot(self, snapshot: Dict[str, Any]) -> bool:
         """Persist a regime classification snapshot."""
         return await self._execute(self._INSERT_REGIME, snapshot)
 
-    async def save_health_snapshot(
-        self, snapshot: Dict[str, Any]
-    ) -> bool:
+    async def save_health_snapshot(self, snapshot: Dict[str, Any]) -> bool:
         """Persist an engine health snapshot."""
         return await self._execute(self._INSERT_HEALTH, snapshot)
 
-    async def get_recent_outcomes(
-        self, limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    async def get_recent_outcomes(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Fetch the most recent trade outcomes."""
         query = (
             "SELECT * FROM analytics.trade_outcomes "
@@ -139,9 +129,7 @@ class TradeOutcomeRepository:
         )
         return await self._fetch(query, {"limit": limit})
 
-    async def get_strategy_stats(
-        self, strategy_id: str
-    ) -> Optional[Dict[str, Any]]:
+    async def get_strategy_stats(self, strategy_id: str) -> Optional[Dict[str, Any]]:
         """Get aggregate stats for a single strategy."""
         query = """
             SELECT
@@ -160,13 +148,13 @@ class TradeOutcomeRepository:
 
     # ── internal helpers ────────────────────────────────────
 
-    async def _execute(
-        self, sql: str, params: Dict[str, Any]
-    ) -> bool:
+    async def _execute(self, sql: str, params: Dict[str, Any]) -> bool:
         """Execute a write query. Returns True on success."""
         try:
             from sqlalchemy import text
+
             from src.core.database import get_session
+
             async with get_session() as session:
                 await session.execute(text(sql), params)
             return True
@@ -174,13 +162,13 @@ class TradeOutcomeRepository:
             logger.debug("TradeOutcomeRepository write skipped: %s", e)
             return False
 
-    async def _fetch(
-        self, sql: str, params: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+    async def _fetch(self, sql: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Execute a read query. Returns list of row dicts."""
         try:
             from sqlalchemy import text
+
             from src.core.database import get_read_session
+
             async with get_read_session() as session:
                 result = await session.execute(text(sql), params)
                 cols = list(result.keys())

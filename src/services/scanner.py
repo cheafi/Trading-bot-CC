@@ -4,6 +4,7 @@ ScannerService holds the watchlist-scan caches and the full async scan logic.
 Wire once in app startup via _init_shared_services(), access everywhere via
 request.app.state.scanner_service.scan(limit).
 """
+
 import asyncio
 import logging
 import time as _time
@@ -14,6 +15,8 @@ from src.core.risk_limits import RISK, SIGNAL_THRESHOLDS
 from src.services.confidence import compute_4layer_confidence
 from src.services.indicators import (
     compute_indicators as _compute_indicators,
+)
+from src.services.indicators import (
     compute_rs_vs_benchmark as _compute_rs_vs_benchmark,
 )
 
@@ -28,6 +31,7 @@ try:
     from src.engines.fundamental_data import get_fundamentals
     from src.engines.portfolio_gate import PortfolioGate
     from src.engines.structure_detector import StructureDetector
+
     _P9_ENGINES = True
 except ImportError:
     _P9_ENGINES = False
@@ -35,8 +39,13 @@ except ImportError:
 try:
     from src.engines.conformal_predictor import reliability_bucket, reliability_note
 except ImportError:
-    def reliability_bucket(n): return "low"  # noqa
-    def reliability_note(n): return "Insufficient data"  # noqa
+
+    def reliability_bucket(n):
+        return "low"  # noqa
+
+    def reliability_note(n):
+        return "Insufficient data"  # noqa
+
 
 # ── Watchlist + sector map ───────────────────────────────────────────────────
 SCAN_WATCHLIST = [
@@ -952,9 +961,9 @@ _SPY_CACHE: dict = {"close": None, "ts": 0.0}
 class ScannerService:
     """Holds scan caches and exposes .scan(limit) coroutine."""
 
-    CACHE_TTL = 300      # 5 minutes
-    NEG_TTL   = 3600     # 1 hour
-    BATCH     = 25
+    CACHE_TTL = 300  # 5 minutes
+    NEG_TTL = 3600  # 1 hour
+    BATCH = 25
 
     def __init__(self, mds):
         self._mds = mds
@@ -977,6 +986,7 @@ class ScannerService:
             pass
         return None
 
+
 def honest_confidence_label(composite: float) -> dict:
     """Return honest labeling for confidence scores.
 
@@ -985,20 +995,28 @@ def honest_confidence_label(composite: float) -> dict:
     """
     if composite >= 85:
         alignment = "Strong indicator alignment"
-        honest_note = ("Indicators are well-aligned. This does NOT guarantee profit. "
-                       "No backtest validates this specific threshold.")
+        honest_note = (
+            "Indicators are well-aligned. This does NOT guarantee profit. "
+            "No backtest validates this specific threshold."
+        )
     elif composite >= 70:
         alignment = "Good indicator alignment"
-        honest_note = ("Most indicators agree. This is a technical alignment score, "
-                       "not a win probability. Historical hit rate unknown.")
+        honest_note = (
+            "Most indicators agree. This is a technical alignment score, "
+            "not a win probability. Historical hit rate unknown."
+        )
     elif composite >= 55:
         alignment = "Moderate indicator alignment"
-        honest_note = ("Mixed signals. Some indicators support, others neutral. "
-                       "This is NOT a 55% win probability.")
+        honest_note = (
+            "Mixed signals. Some indicators support, others neutral. "
+            "This is NOT a 55% win probability."
+        )
     else:
         alignment = "Weak indicator alignment"
-        honest_note = ("Indicators are poorly aligned. Low-quality setup. "
-                       "Consider waiting for better conditions.")
+        honest_note = (
+            "Indicators are poorly aligned. Low-quality setup. "
+            "Consider waiting for better conditions."
+        )
 
     return {
         "composite": composite,
@@ -1018,27 +1036,30 @@ async def days_to_earnings(ticker: str, mds) -> int | None:
     """
     try:
         import yfinance as yf
+
         t = yf.Ticker(ticker)
         cal = t.calendar
         if cal is not None and not cal.empty:
             from datetime import datetime, timezone
+
             now = datetime.now(timezone.utc)
             # Calendar may be a DataFrame with 'Earnings Date' column
-            if hasattr(cal, 'iloc'):
+            if hasattr(cal, "iloc"):
                 for col in cal.columns:
                     val = cal[col].iloc[0]
-                    if hasattr(val, 'date'):
+                    if hasattr(val, "date"):
                         delta = (val - now).days
                         if delta >= 0:
                             return delta
         # Try .earnings_dates attribute
-        ed = getattr(t, 'earnings_dates', None)
+        ed = getattr(t, "earnings_dates", None)
         if ed is not None and not ed.empty:
             from datetime import datetime, timezone
+
             now = datetime.now(timezone.utc)
             for dt in ed.index:
-                if hasattr(dt, 'tz_localize'):
-                    dt = dt.tz_localize('UTC')
+                if hasattr(dt, "tz_localize"):
+                    dt = dt.tz_localize("UTC")
                 delta = (dt - now).days
                 if delta >= 0:
                     return int(delta)
@@ -1138,11 +1159,13 @@ def build_reasons_against(
         reasons.append("Below-average volume — weak conviction")
     if float(atr_pct[i]) > 0.04:
         reasons.append(
-            f"High volatility ({float(atr_pct[i])*100:.1f}% ATR) — wider stops needed"
+            f"High volatility ({float(atr_pct[i]) * 100:.1f}% ATR) — wider stops needed"
         )
     dist_sma20 = abs(close[i] - sma20[i]) / sma20[i] if sma20[i] > 0 else 0
     if dist_sma20 > 0.05:
-        reasons.append(f"Extended {dist_sma20*100:.1f}% from SMA20 — may need pullback")
+        reasons.append(
+            f"Extended {dist_sma20 * 100:.1f}% from SMA20 — may need pullback"
+        )
     if strategy == "mean_reversion" and close[i] < sma200[i]:
         reasons.append("Counter-trend trade in downtrend — higher failure rate")
     if not reasons:
@@ -1187,9 +1210,6 @@ def build_why_wait(conf: dict, rr: float) -> str | None:
     if not reasons:
         return None
     return "Consider waiting: " + "; ".join(reasons)
-
-
-
 
     async def scan(self, limit: int = 10) -> tuple[list, dict]:
         """Scan watchlist for live signals using current market data.
@@ -1241,7 +1261,9 @@ def build_why_wait(conf: dict, rr: float) -> str | None:
                 *[_fetch_one(t) for t in batch], return_exceptions=True
             )
             all_results.extend(
-                r for r in batch_results if r is not None and not isinstance(r, Exception)
+                r
+                for r in batch_results
+                if r is not None and not isinstance(r, Exception)
             )
 
         # Fetch SPY benchmark for RS computation
@@ -1327,7 +1349,9 @@ def build_why_wait(conf: dict, rr: float) -> str | None:
                 strat_params = {
                     "momentum": {
                         "stop": cur_atr * _ST.stop_atr_multiplier_momentum,
-                        "target": _ST.target_trending if trending else _ST.target_normal,
+                        "target": _ST.target_trending
+                        if trending
+                        else _ST.target_normal,
                     },
                     "breakout": {
                         "stop": cur_atr * _ST.stop_atr_multiplier_breakout,
@@ -1435,7 +1459,9 @@ def build_why_wait(conf: dict, rr: float) -> str | None:
                             )
                             _entry_qual = _eqr.to_dict()
                         except Exception as _e9:
-                            logger.debug("[Phase9] StructureDetector/EntryQuality: %s", _e9)
+                            logger.debug(
+                                "[Phase9] StructureDetector/EntryQuality: %s", _e9
+                            )
                         try:
                             _earnings = get_earnings_info(ticker)
                         except Exception as _e9:
@@ -1446,7 +1472,9 @@ def build_why_wait(conf: dict, rr: float) -> str | None:
                                 "quality": _fd.get("quality_score", None),
                                 "pe": _fd.get("valuation", {}).get("pe_trailing"),
                                 "roe": _fd.get("profitability", {}).get("roe"),
-                                "rev_growth": _fd.get("growth", {}).get("revenue_growth"),
+                                "rev_growth": _fd.get("growth", {}).get(
+                                    "revenue_growth"
+                                ),
                                 "moat": _fd.get("moat_indicators", {}).get(
                                     "has_moat", False
                                 ),
@@ -1456,8 +1484,16 @@ def build_why_wait(conf: dict, rr: float) -> str | None:
 
                     # Confidence from 4-layer (now includes Phase 9 penalties)
                     conf = compute_4layer_confidence(
-                        close, sma20, sma50, sma200, rsi, atr_pct,
-                        vol_ratio, i, volume, trending,
+                        close,
+                        sma20,
+                        sma50,
+                        sma200,
+                        rsi,
+                        atr_pct,
+                        vol_ratio,
+                        i,
+                        volume,
+                        trending,
                         structure_result=_structure,
                         entry_quality_result=_entry_qual,
                         earnings_info=_earnings,
@@ -1487,7 +1523,9 @@ def build_why_wait(conf: dict, rr: float) -> str | None:
                             "vol_ratio": round(float(vol_ratio[i]), 2),
                             "atr_pct": round(float(atr_pct[i]) * 100, 2),
                             # ── Calibrated confidence (6-layer) ──
-                            "calibrated_confidence": enrich_calibration(conf, strat_name),
+                            "calibrated_confidence": enrich_calibration(
+                                conf, strat_name
+                            ),
                             # ── Action state ──
                             "action_state": compute_action_state(conf, rr, trending),
                             # ── Trust strip ──
@@ -1568,7 +1606,11 @@ def build_why_wait(conf: dict, rr: float) -> str | None:
                                 entry_price=entry_price,
                                 stop_price=stop_price,
                                 target_price=target_price,
-                                extra={"strategy": strat_name, "rr": rr, "score": score},
+                                extra={
+                                    "strategy": strat_name,
+                                    "rr": rr,
+                                    "score": score,
+                                },
                             )
                         except Exception as _e9:
                             logger.debug("[Phase9] DecisionJournal: %s", _e9)
@@ -1626,7 +1668,9 @@ def build_why_wait(conf: dict, rr: float) -> str | None:
                                 "quality": _fd.get("quality_score"),
                                 "pe": _fd.get("valuation", {}).get("pe_trailing"),
                                 "roe": _fd.get("profitability", {}).get("roe"),
-                                "rev_growth": _fd.get("growth", {}).get("revenue_growth"),
+                                "rev_growth": _fd.get("growth", {}).get(
+                                    "revenue_growth"
+                                ),
                                 "moat": _fd.get("moat_indicators", {}).get(
                                     "has_moat", False
                                 ),
@@ -1682,7 +1726,9 @@ def build_why_wait(conf: dict, rr: float) -> str | None:
                                 "calibrated_confidence": enrich_calibration(
                                     conf, "momentum"
                                 ),
-                                "action_state": compute_action_state(conf, rr, trending),
+                                "action_state": compute_action_state(
+                                    conf, rr, trending
+                                ),
                                 "trust_strip": {
                                     "mode": "WATCH",
                                     "source": "yfinance",
@@ -1736,7 +1782,9 @@ def build_why_wait(conf: dict, rr: float) -> str | None:
                     continue
             _fallback.sort(key=lambda x: x[1]["score"], reverse=True)
             recs = [r for _, r in _fallback[:limit]]
-            logger.info(f"[Scanner] no strategy triggered — returning top {len(recs)} by strength")
+            logger.info(
+                f"[Scanner] no strategy triggered — returning top {len(recs)} by strength"
+            )
 
         # Sort by score desc
         recs.sort(key=lambda r: r["score"], reverse=True)
@@ -1755,7 +1803,9 @@ def build_why_wait(conf: dict, rr: float) -> str | None:
                 sector_counts[sector] = cur + 1
                 filtered_recs.append(rec)
             else:
-                rec["demoted_reason"] = f"Sector cap ({sector}: {MAX_SIGNALS_PER_SECTOR} max)"
+                rec["demoted_reason"] = (
+                    f"Sector cap ({sector}: {MAX_SIGNALS_PER_SECTOR} max)"
+                )
                 demoted.append(rec)
         recs = filtered_recs  # demoted signals dropped from active list
 
@@ -1775,6 +1825,3 @@ def build_why_wait(conf: dict, rr: float) -> str | None:
             f"{len(recs)} signals ({len(demoted)} demoted by sector cap)"
         )
         return recs[:limit], scores
-
-
-

@@ -10,29 +10,26 @@ Manages connections to:
 Integrates with Discord bot for real-time trading.
 """
 
-import asyncio
 import logging
 import os
-from datetime import datetime
-from typing import Optional, Dict, List, Any
 from enum import Enum
+from typing import Dict, List, Optional
 
 from src.brokers.base import (
+    AccountInfo,
     BaseBroker,
+    Market,
     OrderRequest,
     OrderResult,
-    Position,
-    AccountInfo,
-    Quote,
-    OrderType,
     OrderSide,
-    OrderStatus,
-    Market,
+    OrderType,
+    Position,
+    Quote,
 )
 from src.brokers.futu_broker import FutuBroker
 from src.brokers.ib_broker import IBBroker
-from src.brokers.paper_broker import PaperBroker
 from src.brokers.mt5_broker import MetaTraderBroker
+from src.brokers.paper_broker import PaperBroker
 from src.core.config import get_settings
 
 try:
@@ -105,7 +102,11 @@ class BrokerManager:
                 logger.warning(f"Futu broker not available: {e}")
 
         # Initialize IB if configured (legacy ib_insync path; new IBKRService uses ibapi directly)
-        skip_insync = os.getenv("CC_SKIP_IB_INSYNC", "").strip().lower() in ("1", "true", "yes")
+        skip_insync = os.getenv("CC_SKIP_IB_INSYNC", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        )
         if settings.has_ib and not skip_insync:
             try:
                 ib = IBBroker()

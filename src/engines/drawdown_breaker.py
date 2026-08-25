@@ -27,10 +27,11 @@ from dataclasses import dataclass
 @dataclass
 class CircuitBreakerResult:
     """Output of circuit breaker check."""
-    size_multiplier: float = 1.0   # 0.0 = halt, 1.0 = normal
-    drawdown_pct: float = 0.0     # Current drawdown from peak
-    weekly_pnl_pct: float = 0.0   # This week's P&L
-    level: str = "NORMAL"         # NORMAL / CAUTION / REDUCED / HALT
+
+    size_multiplier: float = 1.0  # 0.0 = halt, 1.0 = normal
+    drawdown_pct: float = 0.0  # Current drawdown from peak
+    weekly_pnl_pct: float = 0.0  # This week's P&L
+    level: str = "NORMAL"  # NORMAL / CAUTION / REDUCED / HALT
     reason: str = ""
     new_entries_allowed: bool = True
 
@@ -53,10 +54,10 @@ class DrawdownCircuitBreaker:
 
     # Weekly drawdown thresholds → size multipliers
     THRESHOLDS = [
-        (-3.0, 0.70, "CAUTION"),   # -3% → 30% reduction
-        (-5.0, 0.50, "REDUCED"),   # -5% → 50% reduction
-        (-8.0, 0.25, "REDUCED"),   # -8% → 75% reduction
-        (-10.0, 0.0, "HALT"),      # -10% → no new entries
+        (-3.0, 0.70, "CAUTION"),  # -3% → 30% reduction
+        (-5.0, 0.50, "REDUCED"),  # -5% → 50% reduction
+        (-8.0, 0.25, "REDUCED"),  # -8% → 75% reduction
+        (-10.0, 0.0, "HALT"),  # -10% → no new entries
     ]
 
     def check(
@@ -77,15 +78,12 @@ class DrawdownCircuitBreaker:
 
         # Drawdown from peak
         if peak_value > 0:
-            result.drawdown_pct = (
-                (current_value - peak_value) / peak_value * 100
-            )
+            result.drawdown_pct = (current_value - peak_value) / peak_value * 100
 
         # Weekly P&L
         if period_start_value > 0:
             result.weekly_pnl_pct = (
-                (current_value - period_start_value)
-                / period_start_value * 100
+                (current_value - period_start_value) / period_start_value * 100
             )
         else:
             # Use drawdown if no weekly start

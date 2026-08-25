@@ -51,7 +51,9 @@ async def live_time_travel(
     try:
         return await _run_time_travel(request, ticker, target_date, strategy)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=_replay_value_error_detail(exc)) from exc
+        raise HTTPException(
+            status_code=400, detail=_replay_value_error_detail(exc)
+        ) from exc
 
 
 async def _run_time_travel(
@@ -60,7 +62,6 @@ async def _run_time_travel(
     target_date: str,
     strategy: str,
 ):
-    import numpy as np
 
     # Parse target date
     try:
@@ -83,8 +84,6 @@ async def _run_time_travel(
     # Resolve columns
     c_col = "Close" if "Close" in hist.columns else "close"
     v_col = "Volume" if "Volume" in hist.columns else "volume"
-    h_col = "High" if "High" in hist.columns else "high"
-    l_col = "Low" if "Low" in hist.columns else "low"
 
     all_dates = hist.index
     # Find the target date index (nearest trading day)

@@ -7,8 +7,8 @@ Replaces 5 duplicate _load_brief() functions across routers.
 
 from __future__ import annotations
 
-import glob
 import errno
+import glob
 import json
 import logging
 import os

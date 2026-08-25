@@ -8,11 +8,11 @@ Provides:
   4. Risk-adjusted metrics vs benchmark (Sharpe, Sortino, Information Ratio)
   5. Drawdown analysis relative to benchmark
 """
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PositionSnapshot:
     """Single position for portfolio analysis."""
+
     ticker: str
     weight: float  # 0-1, fraction of portfolio
     return_pct: float  # period return %
@@ -34,6 +35,7 @@ class PositionSnapshot:
 @dataclass
 class BenchmarkAttribution:
     """Portfolio vs benchmark attribution result."""
+
     portfolio_return: float = 0.0
     benchmark_return: float = 0.0
     active_return: float = 0.0  # portfolio - benchmark
@@ -82,9 +84,13 @@ class BenchmarkAttribution:
             "beta": round(self.beta, 2),
             "alpha": round(self.alpha, 2),
             "treynor_ratio": round(self.treynor_ratio, 2),
-            "sector_contributions": {k: round(v, 2) for k, v in self.sector_contributions.items()},
+            "sector_contributions": {
+                k: round(v, 2) for k, v in self.sector_contributions.items()
+            },
             "sector_weights": {k: round(v, 2) for k, v in self.sector_weights.items()},
-            "factor_exposures": {k: round(v, 3) for k, v in self.factor_exposures.items()},
+            "factor_exposures": {
+                k: round(v, 3) for k, v in self.factor_exposures.items()
+            },
             "method_note": "Pseudo-Brinson · sector heuristic · equal-weight benchmark sectors",
             "frequency": "daily",
             "evidence_quality": "heuristic_sector_map",
@@ -187,25 +193,28 @@ class BenchmarkPortfolioEngine:
             daily_rf = risk_free_rate / 252
             port_mean = np.mean(portfolio_returns_series)
             bench_mean = np.mean(benchmark_returns_series)
-            result.alpha = (port_mean - daily_rf - result.beta * (bench_mean - daily_rf)) * 252 * 100
+            result.alpha = (
+                (port_mean - daily_rf - result.beta * (bench_mean - daily_rf))
+                * 252
+                * 100
+            )
 
             # Information ratio
             active_returns = [
-                p - b for p, b in zip(portfolio_returns_series, benchmark_returns_series)
+                p - b
+                for p, b in zip(portfolio_returns_series, benchmark_returns_series)
             ]
             if len(active_returns) > 1:
                 te = np.std(active_returns) * np.sqrt(252)
                 result.tracking_error = te * 100
                 if te > 0:
-                    result.information_ratio = (
-                        np.mean(active_returns) * 252 / te
-                    )
+                    result.information_ratio = np.mean(active_returns) * 252 / te
 
             # Treynor ratio
             if result.beta != 0:
                 result.treynor_ratio = (
-                    (result.portfolio_return - risk_free_rate * 100) / result.beta
-                )
+                    result.portfolio_return - risk_free_rate * 100
+                ) / result.beta
 
         # Brinson attribution (simplified)
         result.allocation_effect, result.selection_effect = self._brinson_attribution(
@@ -256,7 +265,9 @@ class BenchmarkPortfolioEngine:
             port_w = data["weight"]
             port_r = np.mean(data["returns"])
             # Allocation: overweight sectors that outperform
-            allocation += (port_w - bench_sector_weight) * (port_r - benchmark_return / 100)
+            allocation += (port_w - bench_sector_weight) * (
+                port_r - benchmark_return / 100
+            )
             # Selection: pick better stocks within sectors
             selection += bench_sector_weight * (port_r - benchmark_return / 100)
 

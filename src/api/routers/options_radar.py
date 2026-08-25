@@ -118,9 +118,7 @@ async def options_radar_top(
     if universe:
         tickers = [t.strip().upper() for t in universe.split(",") if t.strip()]
 
-    payload = await _scan_with_fallback(
-        tickers, limit=limit, min_grade=min_grade
-    )
+    payload = await _scan_with_fallback(tickers, limit=limit, min_grade=min_grade)
     payload["candidates"] = payload.get("candidates") or []
     if payload["candidates"]:
         trust = payload["candidates"][0].get("trust") or {}
@@ -141,9 +139,7 @@ async def options_radar_ticker(
 ) -> Dict[str, Any]:
     """Options flow evidence for a single underlying."""
     ticker = ticker.upper().strip()
-    payload = await _scan_with_fallback(
-        [ticker], limit=limit, min_grade=min_grade
-    )
+    payload = await _scan_with_fallback([ticker], limit=limit, min_grade=min_grade)
     candidates = [
         row
         for row in (payload.get("candidates") or [])

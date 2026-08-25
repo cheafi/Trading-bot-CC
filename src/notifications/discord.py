@@ -1,8 +1,9 @@
 """Discord webhook notifier."""
+
 from __future__ import annotations
 
 import logging
-from typing import Optional, List, Any
+from typing import Any, List
 
 import aiohttp
 
@@ -55,10 +56,14 @@ class DiscordNotifier:
         try:
             async with aiohttp.ClientSession() as session:
                 for chunk in chunks:
-                    async with session.post(self.webhook_url, json={"content": chunk}) as resp:
+                    async with session.post(
+                        self.webhook_url, json={"content": chunk}
+                    ) as resp:
                         if resp.status not in (200, 204):
                             body = await resp.text()
-                            self.logger.error(f"Discord webhook error {resp.status}: {body[:200]}")
+                            self.logger.error(
+                                f"Discord webhook error {resp.status}: {body[:200]}"
+                            )
                             return False
             return True
         except Exception as e:

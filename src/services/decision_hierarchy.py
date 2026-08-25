@@ -78,7 +78,9 @@ def evaluate_decision_hierarchy(
         l1_detail = "Macro hostile — capital preservation overrides isolated setups"
     if crisis.get("deploy_blocked"):
         l1_blocked = True
-        l1_detail = crisis.get("headline") or "Crisis regime — preservation overrides setups"
+        l1_detail = (
+            crisis.get("headline") or "Crisis regime — preservation overrides setups"
+        )
     if crisis.get("plumbing_first") and not crisis.get("counterparty_trust", {}).get(
         "deploy_trusted"
     ):
@@ -94,7 +96,9 @@ def evaluate_decision_hierarchy(
         if not l2_blocked
         else "No deploy-grade or pilot-eligible names on today's board"
     )
-    levels.append(_level_status(LEVEL_BOARD_QUALITY, blocked=l2_blocked, detail=l2_detail))
+    levels.append(
+        _level_status(LEVEL_BOARD_QUALITY, blocked=l2_blocked, detail=l2_detail)
+    )
 
     l3_blocked = deploy_n < 1
     l3_detail = (
@@ -102,7 +106,9 @@ def evaluate_decision_hierarchy(
         if not l3_blocked
         else "Setups lack validated evidence bar — research only"
     )
-    levels.append(_level_status(LEVEL_SETUP_EVIDENCE, blocked=l3_blocked, detail=l3_detail))
+    levels.append(
+        _level_status(LEVEL_SETUP_EVIDENCE, blocked=l3_blocked, detail=l3_detail)
+    )
 
     l4_blocked = deploy_n >= 1 and (not ibkr_connected or not bracket_ready)
     l4_detail = (
@@ -131,9 +137,7 @@ def evaluate_decision_hierarchy(
         and tradeability_u in ("TRADE", "STRONG_TRADE")
     )
     can_pilot = (
-        not l1_blocked
-        and (pilot_ready_count >= 1 or deploy_n >= 1)
-        and not l5_blocked
+        not l1_blocked and (pilot_ready_count >= 1 or deploy_n >= 1) and not l5_blocked
     )
 
     return {
@@ -143,13 +147,13 @@ def evaluate_decision_hierarchy(
         "binding_detail": binding["detail"],
         "can_full_deploy": can_full_deploy,
         "can_pilot_only": can_pilot and not can_full_deploy,
-        "headline": (
-            f"L{binding['level']} {binding['label']}: {binding['detail']}"
-        ),
+        "headline": (f"L{binding['level']} {binding['label']}: {binding['detail']}"),
     }
 
 
-def can_deploy_at_level(hierarchy: Dict[str, Any], min_level: int = LEVEL_EXECUTION) -> bool:
+def can_deploy_at_level(
+    hierarchy: Dict[str, Any], min_level: int = LEVEL_EXECUTION
+) -> bool:
     """True when no blocked level from L1 through min_level."""
     for lv in hierarchy.get("levels") or []:
         level = int(lv.get("level") or 0)

@@ -46,13 +46,7 @@ def evidence_quality_block(
     if source_quality == "high":
         score += 10
     score = max(0, min(100, score))
-    tier = (
-        "strong"
-        if score >= 70
-        else "mixed"
-        if score >= 45
-        else "weak"
-    )
+    tier = "strong" if score >= 70 else "mixed" if score >= 45 else "weak"
     return {
         "basis": basis,
         "sample_size": sample_size,
@@ -90,7 +84,9 @@ def build_decision_bar(
         "next_catalyst": _display_text(next_catalyst, default="Sleeve gate review"),
         "time_horizon": _display_text(time_horizon),
         "next_action": action_text,
-        "invalidation": _display_text(invalidation, default="") if invalidation else None,
+        "invalidation": _display_text(invalidation, default="")
+        if invalidation
+        else None,
         "why_now": _display_text(why_now, default="")[:240],
         "why_not": _display_text(why_not, default="")[:240],
         "as_of": as_of or _now(),
@@ -112,7 +108,11 @@ def bar_from_today(
 
     deploy_upper = str(deploy or "WAIT").upper()
     trade_upper = str(tradeability or "WAIT").upper()
-    if deploy_upper == "DEPLOY" and trade_upper in ("TRADE", "STRONG_TRADE", "SELECTIVE"):
+    if deploy_upper == "DEPLOY" and trade_upper in (
+        "TRADE",
+        "STRONG_TRADE",
+        "SELECTIVE",
+    ):
         verdict = "DEPLOY"
     elif deploy_upper == "REDUCE":
         verdict = "REDUCE"
@@ -145,7 +145,9 @@ def bar_from_today(
         verdict=verdict,
         conviction=conv,
         evidence=evidence_quality_block(
-            basis="live" if today.get("trust", {}).get("freshness") == "REAL_TIME" else "mixed",
+            basis="live"
+            if today.get("trust", {}).get("freshness") == "REAL_TIME"
+            else "mixed",
             freshness="recent" if today else "warming",
             source_quality="high" if today.get("top_5") else "low",
             label="Today engine · regime + scan",
@@ -187,7 +189,9 @@ def bar_from_portfolio(
             label="Book + allocation monitor",
         ),
         risk_state=risk,
-        next_catalyst="Rebalance review" if rebalance_urgency else "Hold — monitor drift",
+        next_catalyst="Rebalance review"
+        if rebalance_urgency
+        else "Hold — monitor drift",
         time_horizon="medium",
         next_action=allocator_summary.get("recommended_action"),
         why_now=allocator_summary.get("recommended_action"),
@@ -214,11 +218,14 @@ def bar_from_funds(
     regime_stale: bool = False,
 ) -> Dict[str, Any]:
     deploy_label = str(allocator_decision.get("deploy_capital_label") or "")
-    posture = str(allocator_decision.get("deploy_posture") or "").lower()
+    str(allocator_decision.get("deploy_posture") or "").lower()
     should_deploy = bool(allocator_decision.get("deploy_capital"))
     if "research-weight" in deploy_label.lower() or regime_stale:
         verdict = "RESEARCH ONLY"
-    elif "analysis only" in deploy_label.lower() or "not execution" in deploy_label.lower():
+    elif (
+        "analysis only" in deploy_label.lower()
+        or "not execution" in deploy_label.lower()
+    ):
         verdict = "ANALYSIS ONLY"
     elif should_deploy:
         verdict = "ALLOCATE"
@@ -251,11 +258,18 @@ def bar_from_funds(
             source_quality="low",
             label="Fund lab · backtest only · not live-validated",
         ),
-        risk_state="Elevated" if regime_stale or not ex.get("broker_connected") else "Normal",
-        next_catalyst="Regime sync + execution login" if regime_stale else "Sleeve gate review",
+        risk_state="Elevated"
+        if regime_stale or not ex.get("broker_connected")
+        else "Normal",
+        next_catalyst="Regime sync + execution login"
+        if regime_stale
+        else "Sleeve gate review",
         time_horizon="medium",
-        next_action=deploy_label or _format_deploy_str(allocator_decision.get("deploy_capital")),
-        why_now=allocator_decision.get("why_now") or active_sleeve or allocator_decision.get("where"),
+        next_action=deploy_label
+        or _format_deploy_str(allocator_decision.get("deploy_capital")),
+        why_now=allocator_decision.get("why_now")
+        or active_sleeve
+        or allocator_decision.get("where"),
         why_not="; ".join(why_not_parts)[:200],
     )
 

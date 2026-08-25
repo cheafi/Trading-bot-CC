@@ -150,8 +150,8 @@ class GapScanner(BaseScanner):
             lows = sig.get("lows", closes)
             # Build bar dicts expected by GapDetector.detect(bars)
             bars = [
-                {"open": o, "high": h, "low": l, "close": c}
-                for o, h, l, c in zip(opens, highs, lows, closes)
+                {"open": o, "high": h, "low": lo, "close": c}
+                for o, h, lo, c in zip(opens, highs, lows, closes)
             ]
             report = detector.detect(bars, ticker=sig.get("ticker", ""))
             gaps = report.gaps if report else []
@@ -1193,10 +1193,10 @@ class ScannerMatrix:
     ) -> Dict[str, Any]:
         """Dashboard summary — only core categories; count aligned with hits."""
         all_hits = self.scan_all(signals, regime)
+
         def enrich(h):
-            return self.enrich_hit_for_ui(
-                    h, score_display_mode=score_display_mode
-                )
+            return self.enrich_hit_for_ui(h, score_display_mode=score_display_mode)
+
         return {
             cat.value: self._category_summary_entry(
                 all_hits.get(cat.value, []),

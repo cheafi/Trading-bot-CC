@@ -11,6 +11,7 @@ Checks:
   • Outlier detection: single-bar return > 30% → flag for review
   • Symbol mapping: if > 10% of universe has no features → critical
 """
+
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -90,9 +91,7 @@ class DataQualityGate:
         if freshness_overrides:
             for feed, minutes in freshness_overrides.items():
                 if feed in self.thresholds:
-                    self.thresholds[feed][
-                        "max_staleness_minutes"
-                    ] = minutes
+                    self.thresholds[feed]["max_staleness_minutes"] = minutes
 
     # ── public API ──────────────────────────────────────────────
 
@@ -122,25 +121,17 @@ class DataQualityGate:
         reports.extend(self._check_freshness(market_data))
         reports.extend(self._check_missing_bars(market_data))
         reports.extend(self._check_outliers(market_data))
-        reports.extend(
-            self._check_symbol_mapping(market_data, universe)
-        )
+        reports.extend(self._check_symbol_mapping(market_data, universe))
 
         all_critical_passed = all(
-            not (r.severity == "critical" and not r.passed)
-            for r in reports
+            not (r.severity == "critical" and not r.passed) for r in reports
         )
 
         if not all_critical_passed:
-            critical = [
-                r for r in reports
-                if r.severity == "critical" and not r.passed
-            ]
+            critical = [r for r in reports if r.severity == "critical" and not r.passed]
             logger.warning(
                 "Data quality CRITICAL failures: %s",
-                "; ".join(
-                    f"{r.feed_name}/{r.check_type}" for r in critical
-                ),
+                "; ".join(f"{r.feed_name}/{r.check_type}" for r in critical),
             )
         else:
             logger.info(
@@ -150,39 +141,21 @@ class DataQualityGate:
 
         return all_critical_passed, reports
 
-    def get_status_summary(
-        self, reports: List[DataQualityReport]
-    ) -> Dict[str, Any]:
+    def get_status_summary(self, reports: List[DataQualityReport]) -> Dict[str, Any]:
         """Human-readable summary for dashboards / Discord."""
-        critical = [
-            r for r in reports
-            if r.severity == "critical" and not r.passed
-        ]
-        warnings = [
-            r for r in reports
-            if r.severity == "warning" and not r.passed
-        ]
-        overall = (
-            "🔴 CRITICAL"
-            if critical
-            else "🟡 WARNING" if warnings else "🟢 OK"
-        )
+        critical = [r for r in reports if r.severity == "critical" and not r.passed]
+        warnings = [r for r in reports if r.severity == "warning" and not r.passed]
+        overall = "🔴 CRITICAL" if critical else "🟡 WARNING" if warnings else "🟢 OK"
         return {
             "overall": overall,
-            "critical": [
-                f"{r.feed_name}: {r.details}" for r in critical
-            ],
-            "warnings": [
-                f"{r.feed_name}: {r.details}" for r in warnings
-            ],
+            "critical": [f"{r.feed_name}: {r.details}" for r in critical],
+            "warnings": [f"{r.feed_name}: {r.details}" for r in warnings],
             "total_checks": len(reports),
         }
 
     # ── individual checks ───────────────────────────────────────
 
-    def _check_freshness(
-        self, market_data: Dict[str, Any]
-    ) -> List[DataQualityReport]:
+    def _check_freshness(self, market_data: Dict[str, Any]) -> List[DataQualityReport]:
         """Check each feed timestamp vs its staleness threshold."""
         reports: List[DataQualityReport] = []
         feed_ts = market_data.get("feed_timestamps", {})
@@ -198,8 +171,7 @@ class DataQualityGate:
                         severity=cfg["severity"],
                         passed=False,
                         details_text=(
-                            f"No timestamp for {feed} — "
-                            "cannot verify freshness"
+                            f"No timestamp for {feed} — cannot verify freshness"
                         ),
                     )
                 )
@@ -207,9 +179,9 @@ class DataQualityGate:
 
             if isinstance(ts_raw, str):
                 try:
-                    ts = datetime.fromisoformat(
-                        ts_raw.replace("Z", "+00:00")
-                    ).replace(tzinfo=None)
+                    ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00")).replace(
+                        tzinfo=None
+                    )
                 except ValueError:
                     reports.append(
                         _make_report(
@@ -217,9 +189,7 @@ class DataQualityGate:
                             check="freshness",
                             severity="warning",
                             passed=False,
-                            details_text=(
-                                f"Unparseable timestamp: {ts_raw}"
-                            ),
+                            details_text=(f"Unparseable timestamp: {ts_raw}"),
                         )
                     )
                     continue
@@ -229,9 +199,7 @@ class DataQualityGate:
                 continue
 
             age = now - ts
-            limit = timedelta(
-                minutes=cfg["max_staleness_minutes"]
-            )
+            limit = timedelta(minutes=cfg["max_staleness_minutes"])
             if age > limit:
                 reports.append(
                     _make_report(
@@ -264,10 +232,7 @@ class DataQualityGate:
                     check="missing_bars",
                     severity="critical",
                     passed=False,
-                    details_text=(
-                        f"OHLCV has {gap_days}-day gap "
-                        "(> 3 trading days)"
-                    ),
+                    details_text=(f"OHLCV has {gap_days}-day gap (> 3 trading days)"),
                 )
             )
         elif gap_days > 1:
@@ -277,23 +242,17 @@ class DataQualityGate:
                     check="missing_bars",
                     severity="warning",
                     passed=False,
-                    details_text=(
-                        f"OHLCV has {gap_days}-day gap"
-                    ),
+                    details_text=(f"OHLCV has {gap_days}-day gap"),
                 )
             )
 
         return reports
 
-    def _check_outliers(
-        self, market_data: Dict[str, Any]
-    ) -> List[DataQualityReport]:
+    def _check_outliers(self, market_data: Dict[str, Any]) -> List[DataQualityReport]:
         """Flag single-bar returns > 30% as possible data errors."""
         reports: List[DataQualityReport] = []
 
-        outlier_tickers = market_data.get(
-            "outlier_tickers", []
-        )
+        outlier_tickers = market_data.get("outlier_tickers", [])
         if outlier_tickers:
             names = []
             for item in outlier_tickers:
@@ -338,8 +297,7 @@ class DataQualityGate:
                     severity=sev,
                     passed=coverage_pct >= 80,
                     details_text=(
-                        f"Only {coverage_pct:.0f}% of universe "
-                        "has feature data"
+                        f"Only {coverage_pct:.0f}% of universe has feature data"
                     ),
                 )
             )

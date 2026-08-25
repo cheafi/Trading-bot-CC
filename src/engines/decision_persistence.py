@@ -149,9 +149,12 @@ class DecisionJournal:
         )
         from src.utils.numeric_parse import parse_ratio
 
-        rr = parse_ratio(
-            recommendation.get("risk_reward") or recommendation.get("rr"), 0.0
-        ) or 0.0
+        rr = (
+            parse_ratio(
+                recommendation.get("risk_reward") or recommendation.get("rr"), 0.0
+            )
+            or 0.0
+        )
         if rr <= 0 and entry_price and stop_price and target_price:
             risk = abs(entry_price - stop_price)
             reward = abs(target_price - entry_price)
