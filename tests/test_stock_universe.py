@@ -16,6 +16,16 @@ def test_core_watchlist_size():
 def test_rs_universe_expanded():
     assert len(RS_UNIVERSE) >= 50
     assert "SPY" in RS_UNIVERSE
+    assert "XLK" in RS_UNIVERSE
+    assert "SOXX" in RS_UNIVERSE
+
+
+def test_opportunity_coverage_universe():
+    from src.core.stock_universe import OPPORTUNITY_COVERAGE_UNIVERSE, is_index_or_etf
+
+    assert len(OPPORTUNITY_COVERAGE_UNIVERSE) >= len(RS_UNIVERSE)
+    assert is_index_or_etf("QQQ")
+    assert "NVDA" in OPPORTUNITY_COVERAGE_UNIVERSE
 
 
 def test_demo_portfolio_diversified():
@@ -32,3 +42,4 @@ def test_universe_summary_counts():
     s = universe_summary()
     assert s["core_watchlist_count"] == len(CORE_WATCHLIST)
     assert s["rs_universe_count"] == len(RS_UNIVERSE)
+    assert s["coverage_universe_count"] >= s["rs_universe_count"]

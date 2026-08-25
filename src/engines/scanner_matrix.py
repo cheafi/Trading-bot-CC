@@ -116,10 +116,7 @@ class VCPScanner(BaseScanner):
                         ticker=sig.get("ticker", ""),
                         score=score,
                         headline=f"VCP ({cc} contractions)",
-                        detail=(
-                            f"Base depth"
-                            f" {sig.get('base_depth_pct', 0):.0f}%"
-                        ),
+                        detail=(f"Base depth {sig.get('base_depth_pct', 0):.0f}%"),
                         priority=(
                             ScannerPriority.HIGH
                             if score >= 7
@@ -133,6 +130,7 @@ class VCPScanner(BaseScanner):
 
 class GapScanner(BaseScanner):
     """Detect price gaps from OHLCV data using GapDetector."""
+
     name = "gap"
     category = ScannerCategory.PATTERN
 
@@ -368,9 +366,7 @@ class AbnormalVolumeScanner(BaseScanner):
                         score=min(10, 5 + vol),
                         headline=f"Abnormal volume {vol:.1f}x",
                         priority=(
-                            ScannerPriority.HIGH
-                            if vol > 3
-                            else ScannerPriority.NORMAL
+                            ScannerPriority.HIGH if vol > 3 else ScannerPriority.NORMAL
                         ),
                         metadata={"vol_ratio": vol, "research_only": False},
                     )
@@ -407,7 +403,7 @@ class VolumeSurgeScanner(BaseScanner):
             # Detect unusual activity from computed fields:
             # High volume + near resistance + uptrend = smart money positioning
             vol = sig.get("vol_ratio", 1.0)
-            at_res = sig.get("is_at_resistance", False)
+            sig.get("is_at_resistance", False)
             trend = sig.get("trend_structure", "")
             bb = sig.get("bb_width", 10)
             if vol >= 2.5 and trend in ("strong_uptrend", "uptrend") and bb < 5:
@@ -490,9 +486,7 @@ class HighVolumeLeaderScanner(BaseScanner):
                         category=self.category,
                         ticker=sig.get("ticker", ""),
                         score=8.0,
-                        headline=(
-                            f"High-vol leader: {vol:.1f}x vol, RS {rs}"
-                        ),
+                        headline=(f"High-vol leader: {vol:.1f}x vol, RS {rs}"),
                         priority=ScannerPriority.HIGH,
                         metadata={
                             "vol_ratio": vol,
@@ -533,12 +527,7 @@ class SectorRotationScanner(BaseScanner):
                         category=self.category,
                         ticker=bucket,
                         score=min(10, avg_rs / 10),
-                        headline=(
-                            f"{bucket} sector"
-                            f" rotation"
-                            f" (avg RS"
-                            f" {avg_rs:.0f})"
-                        ),
+                        headline=(f"{bucket} sector rotation (avg RS {avg_rs:.0f})"),
                     )
                 )
         return hits
@@ -552,6 +541,14 @@ class LeaderLaggardScanner(BaseScanner):
         hits = []
         for sig in signals:
             rs = sig.get("rs_rank", 50)
+            if rs is None:
+                rs = 50
+            try:
+                rs = float(rs)
+            except (TypeError, ValueError):
+                rs = 50.0
+            if rs <= 10:
+                rs = rs * 10
             vol = sig.get("vol_ratio", 1.0)
             # Laggard with high volume = potential late chase
             if rs < 40 and vol > 2.0:
@@ -566,6 +563,63 @@ class LeaderLaggardScanner(BaseScanner):
                         is_warning=True,
                     )
                 )
+        return hits
+
+
+class IndexETFTrendScanner(BaseScanner):
+    """Index/sector ETF trend path — RS vs SPY, research tier only."""
+
+    name = "index_etf_trend"
+    category = ScannerCategory.SECTOR
+
+    def scan(self, signals, regime) -> List[ScannerHit]:
+        from src.core.stock_universe import asset_class_for, is_index_or_etf
+
+        hits = []
+        for sig in signals:
+            ticker = str(sig.get("ticker") or "").strip().upper()
+            if not ticker or not is_index_or_etf(ticker):
+                continue
+            rs_raw = sig.get("rs_rank")
+            if rs_raw is None:
+                rs_raw = sig.get("rs_score", 50)
+            try:
+                rs = float(rs_raw)
+            except (TypeError, ValueError):
+                rs = 50.0
+            if rs <= 10:
+                rs = rs * 10
+            vol = float(sig.get("vol_ratio") or 1.0)
+            trend = str(sig.get("trend_structure") or "").lower()
+            above_50 = bool(sig.get("above_50sma", True))
+            score = min(10.0, max(4.0, rs / 10.0))
+            if trend in ("strong_uptrend", "uptrend") or above_50:
+                score = min(10.0, score + 0.5)
+            if vol >= 1.2:
+                score = min(10.0, score + 0.3)
+            if rs < 55 and trend not in ("strong_uptrend", "uptrend"):
+                continue
+            ac = asset_class_for(ticker)
+            label = "Index" if ac == "index" else "ETF"
+            hits.append(
+                ScannerHit(
+                    scanner_name=self.name,
+                    category=self.category,
+                    ticker=ticker,
+                    score=round(score, 1),
+                    headline=f"{label} trend leader (RS {rs:.0f})",
+                    detail="RS vs SPY · monitor until Playbook confirms deploy gates",
+                    priority=(
+                        ScannerPriority.HIGH if rs >= 70 else ScannerPriority.NORMAL
+                    ),
+                    metadata={
+                        "rs_rank": int(min(99, max(1, round(rs)))),
+                        "asset_class": ac,
+                        "research_only": True,
+                        "surface_authority": "monitor_only",
+                    },
+                )
+            )
         return hits
 
 
@@ -613,12 +667,7 @@ class ExtensionRiskScanner(BaseScanner):
                         category=self.category,
                         ticker=sig.get("ticker", ""),
                         score=3.0,
-                        headline=(
-                            f"Extended"
-                            f" ({dist:.0f}%"
-                            f" above 50MA,"
-                            f" RSI {rsi:.0f})"
-                        ),
+                        headline=(f"Extended ({dist:.0f}% above 50MA, RSI {rsi:.0f})"),
                         is_warning=True,
                     )
                 )
@@ -845,6 +894,7 @@ DECISION_INTENT_UNDERLYING: Dict[str, Tuple[str, ...]] = {
 DECISION_INTENT_SCANNERS: Dict[str, Tuple[str, ...]] = {
     "LEADERS": (
         "rs_leader",
+        "index_etf_trend",
         "leader_laggard",
         "sector_rotation",
         "high_volume_leader",
@@ -900,6 +950,7 @@ class ScannerMatrix:
             # Sector
             SectorRotationScanner(),
             LeaderLaggardScanner(),
+            IndexETFTrendScanner(),
             # Risk
             EarningsRiskScanner(),
             ExtensionRiskScanner(),
@@ -918,9 +969,7 @@ class ScannerMatrix:
         regime: Dict[str, Any],
     ) -> Dict[str, List[ScannerHit]]:
         """Run all scanners, return grouped by category."""
-        results: Dict[str, List[ScannerHit]] = {
-            c.value: [] for c in ScannerCategory
-        }
+        results: Dict[str, List[ScannerHit]] = {c.value: [] for c in ScannerCategory}
         for scanner in self.scanners:
             try:
                 hits = scanner.scan(signals, regime)
@@ -974,7 +1023,9 @@ class ScannerMatrix:
     ) -> Dict[str, Any]:
         """Decision-card fields for Discovery / scanner hub UI."""
         payload = hit.to_dict()
-        priority = hit.priority.value if hasattr(hit.priority, "value") else str(hit.priority)
+        priority = (
+            hit.priority.value if hasattr(hit.priority, "value") else str(hit.priority)
+        )
         score = float(hit.score or 0)
         nison_meta: Dict[str, Any] = {}
         if hit.category == ScannerCategory.PATTERN and hit.metadata:
@@ -994,11 +1045,7 @@ class ScannerMatrix:
         else:
             next_action = "Monitor only"
         status = (
-            "avoid"
-            if hit.is_warning
-            else "actionable"
-            if score >= 7.5
-            else "monitor"
+            "avoid" if hit.is_warning else "actionable" if score >= 7.5 else "monitor"
         )
         if nison_meta.get("nison_demoted") and status == "actionable":
             status = "monitor"
@@ -1015,9 +1062,7 @@ class ScannerMatrix:
                 "reason": hit.detail,
                 "status": status,
                 "urgency": (
-                    "HIGH"
-                    if hit.is_warning or priority == "URGENT"
-                    else "NORMAL"
+                    "HIGH" if hit.is_warning or priority == "URGENT" else "NORMAL"
                 ),
                 "confidence": round(min(0.95, 0.35 + score * 0.06), 2),
                 **nison_meta,
@@ -1042,6 +1087,19 @@ class ScannerMatrix:
                 "score_display_label",
                 "Research-only · not deploy-grade",
             )
+            payload.setdefault(
+                "score_display_label_zh",
+                "研究層 · 非部署級",
+            )
+        ac = hit.metadata.get("asset_class")
+        if ac in ("etf", "index"):
+            payload["asset_class"] = ac
+            if ac == "index":
+                payload.setdefault("score_display_label", "Index · research tier")
+                payload.setdefault("score_display_label_zh", "指數 · 研究層")
+            else:
+                payload.setdefault("score_display_label", "ETF · research tier")
+                payload.setdefault("score_display_label_zh", "ETF · 研究層")
         return payload
 
     @staticmethod
@@ -1072,7 +1130,7 @@ class ScannerMatrix:
         hits: List[ScannerHit],
         enrich: Any,
     ) -> Dict[str, Any]:
-        enriched = [enrich(h) for h in hits]
+        [enrich(h) for h in hits]
         total = len(hits)
         top = sorted(hits, key=lambda x: x.score, reverse=True)[:15]
         top_enriched = [enrich(h) for h in top]
@@ -1082,9 +1140,7 @@ class ScannerMatrix:
                 1 for h in hits if h.priority == ScannerPriority.URGENT
             ),
             "warning_count": sum(1 for h in hits if h.is_warning),
-            "urgent": sum(
-                1 for h in hits if h.priority == ScannerPriority.URGENT
-            ),
+            "urgent": sum(1 for h in hits if h.priority == ScannerPriority.URGENT),
             "warnings": sum(1 for h in hits if h.is_warning),
             "top_hits": top_enriched,
             "display_count": max(total, len(top_enriched)),
@@ -1137,9 +1193,10 @@ class ScannerMatrix:
     ) -> Dict[str, Any]:
         """Dashboard summary — only core categories; count aligned with hits."""
         all_hits = self.scan_all(signals, regime)
-        enrich = lambda h: self.enrich_hit_for_ui(
-            h, score_display_mode=score_display_mode
-        )
+        def enrich(h):
+            return self.enrich_hit_for_ui(
+                    h, score_display_mode=score_display_mode
+                )
         return {
             cat.value: self._category_summary_entry(
                 all_hits.get(cat.value, []),
@@ -1167,9 +1224,7 @@ class ScannerMatrix:
         for cat, scanners in grouped.items():
             for scan_name, bucket in scanners.items():
                 hits = ScannerMatrix.hits_from_bucket(bucket)
-                scanner_totals[scan_name] = (
-                    scanner_totals.get(scan_name, 0) + len(hits)
-                )
+                scanner_totals[scan_name] = scanner_totals.get(scan_name, 0) + len(hits)
                 for h in hits:
                     tk = str(h.get("ticker") or "").upper()
                     if not tk:
@@ -1202,9 +1257,7 @@ class ScannerMatrix:
             overlap = len(entry["scanners"])
             max_score = max(entry["scores"]) if entry["scores"] else 0.0
             avg_score = (
-                sum(entry["scores"]) / len(entry["scores"])
-                if entry["scores"]
-                else 0.0
+                sum(entry["scores"]) / len(entry["scores"]) if entry["scores"] else 0.0
             )
             if entry["is_warning"]:
                 action = "AVOID"
@@ -1285,18 +1338,14 @@ class ScannerMatrix:
             for cat in _CORE_SCANNER_CATEGORIES
             if int((summary.get(cat.value) or {}).get("count") or 0) > 0
         )
-        scanner_overlap = {
-            m["ticker"]: m["overlap"] for m in merged_top_names
-        }
+        scanner_overlap = {m["ticker"]: m["overlap"] for m in merged_top_names}
 
         discovery_verdict = {
             "best_scanner_today": best_scanner_today,
             "best_scanner_hits": scanner_totals.get(best_scanner_today or "", 0),
             "best_confirmed_name": confirmed[0] if confirmed else None,
             "best_confirmed_label": (
-                "Most represented scanner sample"
-                if confirmed
-                else None
+                "Most represented scanner sample" if confirmed else None
             ),
             "best_speculative_name": speculative[0] if speculative else None,
             "avoid_now_count": avoid_now_count,

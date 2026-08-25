@@ -31,7 +31,7 @@ import logging
 import math
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
@@ -451,16 +451,20 @@ async def run_opportunity_scanner(
     Returns:
         ScannerResult with ranked candidates + filter funnel stats.
     """
-    import yfinance as yf
     from datetime import datetime, timezone
 
+    import yfinance as yf
+
     from src.scanners.us_universe import US_UNIVERSE
+    from src.core.stock_universe import OPPORTUNITY_COVERAGE_UNIVERSE
 
     regime_upper = regime.upper()
     engine = "bull" if regime_upper in _BULL_REGIMES else "weak"
     generated_at = datetime.now(timezone.utc).isoformat()
 
-    universe = list(dict.fromkeys(US_UNIVERSE))  # deduplicate
+    universe = list(
+        dict.fromkeys(list(OPPORTUNITY_COVERAGE_UNIVERSE) + list(US_UNIVERSE))
+    )
     universe_size = len(universe)
 
     # ── Step 1: Fetch SPY as benchmark ──────────────────────────────────────

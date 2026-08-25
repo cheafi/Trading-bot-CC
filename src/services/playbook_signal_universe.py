@@ -24,8 +24,82 @@ BRIEF_PIPELINE_SECTIONS: Tuple[str, ...] = (
 
 # Top up with live scan when merged pool is below target (monitor candidates only).
 PLAYBOOK_MIN_SIGNALS_BEFORE_SCAN = 15
-PLAYBOOK_SIGNAL_TARGET = 100
-PLAYBOOK_LIVE_SCAN_LIMIT = 120
+PLAYBOOK_SIGNAL_TARGET = 120
+PLAYBOOK_LIVE_SCAN_LIMIT = 150
+
+
+def resolve_rs_rank(row: Dict[str, Any]) -> int:
+    """Map rs_score / rs_rank to 1–99 for Discovery LEADERS and RS scanners."""
+    explicit = row.get("rs_rank")
+    if explicit is not None:
+        try:
+            return int(min(99, max(1, round(float(explicit)))))
+        except (TypeError, ValueError):
+            pass
+    rs = float(row.get("rs_score") or row.get("score") or 50.0)
+    if rs > 10:
+        return int(min(99, max(1, round(rs))))
+    return int(min(99, max(1, round(rs * 10))))
+
+
+def build_coverage_pad_signal(ticker: str) -> Dict[str, Any]:
+    """Research-tier pad row for stocks/ETFs/indices — never deploy authority."""
+    from src.core.stock_universe import (
+        asset_class_for,
+        etf_theme_for,
+        is_index_or_etf,
+        rs_sector_for,
+    )
+
+    tk = str(ticker or "").strip().upper()
+    if not tk:
+        return {}
+    ac = asset_class_for(tk)
+    sig: Dict[str, Any] = {
+        "ticker": tk,
+        "score": 5.0,
+        "rs_score": 50.0,
+        "rs_rank": 50,
+        "vol_ratio": 1.0,
+        "conviction": "WATCH",
+        "strategy": "index_etf" if is_index_or_etf(tk) else "coverage",
+        "pattern": "universe",
+        "source": "coverage_pad",
+        "surface_authority": "monitor_only",
+        "asset_class": ac,
+    }
+    if is_index_or_etf(tk):
+        sig["sector"] = "ETF"
+        sig["theme"] = etf_theme_for(tk)
+        sig["sector_bucket"] = rs_sector_for(tk)
+    return sig
+
+
+def pad_signals_with_coverage(
+    signals: List[Dict[str, Any]],
+    *,
+    target: int = PLAYBOOK_SIGNAL_TARGET,
+) -> Tuple[List[Dict[str, Any]], int]:
+    """Fill monitor pool from OPPORTUNITY_COVERAGE_UNIVERSE without duplicating tickers."""
+    from src.core.stock_universe import OPPORTUNITY_COVERAGE_UNIVERSE
+
+    if len(signals) >= target:
+        return signals, 0
+
+    merged = list(signals)
+    seen = {str((row or {}).get("ticker") or "").strip().upper() for row in merged}
+    padded = 0
+    for ticker in OPPORTUNITY_COVERAGE_UNIVERSE:
+        if len(merged) >= target:
+            break
+        pad = build_coverage_pad_signal(ticker)
+        tk = pad.get("ticker")
+        if not tk or tk in seen:
+            continue
+        merged.append(pad)
+        seen.add(tk)
+        padded += 1
+    return merged, padded
 
 
 def normalize_brief_row(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -37,16 +111,15 @@ def normalize_brief_row(row: Dict[str, Any]) -> Dict[str, Any]:
     rs = float(row.get("rs_score") or row.get("score") or 5.0)
     if rs > 10:
         board_score = min(10.0, max(3.0, rs / 10.0))
-        rs_rank = int(min(99, max(1, round(rs))))
     else:
         board_score = min(10.0, max(3.0, rs))
-        rs_rank = int(min(99, max(1, round(rs * 10))))
+    rs_rank = resolve_rs_rank(row)
 
     sig: Dict[str, Any] = {
         "ticker": ticker,
         "score": board_score,
         "rs_score": rs,
-        "rs_rank": int(row.get("rs_rank") or rs_rank),
+        "rs_rank": rs_rank,
         "vol_ratio": float(row.get("vol_ratio") or 1.0),
         "atr_pct": row.get("atr_pct"),
         "near_52w_high": bool(row.get("near_52w_high")),
@@ -61,11 +134,7 @@ def normalize_brief_row(row: Dict[str, Any]) -> Dict[str, Any]:
 
     entry = row.get("entry_price") or row.get("entry") or row.get("price")
     stop = row.get("stop_price") or row.get("stop")
-    target = (
-        row.get("target_price")
-        or row.get("target_2r")
-        or row.get("target")
-    )
+    target = row.get("target_price") or row.get("target_2r") or row.get("target")
     if entry is not None:
         try:
             entry_f = float(entry)
@@ -140,18 +209,12 @@ def normalize_scan_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "ticker": ticker,
         "score": min(10.0, max(3.0, board_score)),
         "rs_score": rs_composite,
-        "rs_rank": int(
-            min(
-                99,
-                max(
-                    1,
-                    round(
-                        rs_info.get("rs_rank")
-                        or row.get("rs_rank")
-                        or rs_composite
-                    ),
-                ),
-            )
+        "rs_rank": resolve_rs_rank(
+            {
+                **row,
+                "rs_rank": rs_info.get("rs_rank") or row.get("rs_rank"),
+                "rs_score": rs_composite,
+            }
         ),
         "vol_ratio": float(row.get("vol_ratio") or 1.0),
         "atr_pct": row.get("atr_pct"),
@@ -263,6 +326,7 @@ async def load_playbook_signals(
         "merged_count": 0,
         "live_scan_used": False,
         "live_scan_degraded": False,
+        "coverage_pad_count": 0,
     }
 
     brief_signals = load_brief_pipeline_signals()
@@ -274,13 +338,9 @@ async def load_playbook_signals(
         try:
             scanned, scan_meta = await scan_fn(scan_limit)
             meta["live_scan_used"] = True
-            meta["live_scan_degraded"] = bool(
-                (scan_meta or {}).get("_degraded")
-            )
+            meta["live_scan_degraded"] = bool((scan_meta or {}).get("_degraded"))
             live_rows = [
-                normalize_scan_row(r)
-                for r in (scanned or [])
-                if isinstance(r, dict)
+                normalize_scan_row(r) for r in (scanned or []) if isinstance(r, dict)
             ]
             live_rows = [r for r in live_rows if r.get("ticker")]
             meta["live_scan_count"] = len(live_rows)
@@ -290,6 +350,10 @@ async def load_playbook_signals(
             meta["live_scan_error"] = str(exc)[:120]
     elif len(signals) < min_before_scan:
         meta["live_scan_skipped"] = "scan_fn unavailable"
+
+    if len(signals) < target:
+        signals, padded = pad_signals_with_coverage(signals, target=target)
+        meta["coverage_pad_count"] = padded
 
     meta["merged_count"] = len(signals)
     return signals, meta

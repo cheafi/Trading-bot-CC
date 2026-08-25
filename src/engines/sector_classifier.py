@@ -240,6 +240,38 @@ _SECTOR_MAP: Dict[str, tuple[SectorBucket, str, str]] = {
     "BLK": (SectorBucket.CYCLICAL, "Asset Management", "XLF"),
     "V": (SectorBucket.HIGH_GROWTH, "Payments/Fintech", "XLF"),
     "MA": (SectorBucket.HIGH_GROWTH, "Payments/Fintech", "XLF"),
+    # ── Index / sector / thematic ETFs ─────────────────────────────
+    "SPY": (SectorBucket.HIGH_GROWTH, "Broad Market", "SPY"),
+    "QQQ": (SectorBucket.HIGH_GROWTH, "Nasdaq 100", "QQQ"),
+    "IWM": (SectorBucket.CYCLICAL, "Small Cap", "IWM"),
+    "DIA": (SectorBucket.HIGH_GROWTH, "Dow 30", "DIA"),
+    "RSP": (SectorBucket.HIGH_GROWTH, "Equal Weight S&P", "SPY"),
+    "VTI": (SectorBucket.HIGH_GROWTH, "Total Market", "SPY"),
+    "VOO": (SectorBucket.HIGH_GROWTH, "S&P 500", "SPY"),
+    "XLK": (SectorBucket.HIGH_GROWTH, "Sector/Tech", "XLK"),
+    "XLF": (SectorBucket.CYCLICAL, "Sector/Financials", "XLF"),
+    "XLV": (SectorBucket.DEFENSIVE, "Sector/Healthcare", "XLV"),
+    "XLE": (SectorBucket.CYCLICAL, "Sector/Energy", "XLE"),
+    "XLI": (SectorBucket.CYCLICAL, "Sector/Industrials", "XLI"),
+    "XLC": (SectorBucket.HIGH_GROWTH, "Sector/Comm Services", "XLC"),
+    "XLY": (SectorBucket.HIGH_GROWTH, "Sector/Cons Disc", "XLY"),
+    "XLP": (SectorBucket.DEFENSIVE, "Sector/Staples", "XLP"),
+    "XLRE": (SectorBucket.DEFENSIVE, "Sector/REITs", "VNQ"),
+    "XLU": (SectorBucket.DEFENSIVE, "Sector/Utilities", "XLU"),
+    "XLB": (SectorBucket.CYCLICAL, "Sector/Materials", "XLB"),
+    "SOXX": (SectorBucket.HIGH_GROWTH, "Semiconductor ETF", "SOXX"),
+    "SMH": (SectorBucket.HIGH_GROWTH, "Semiconductor ETF", "SOXX"),
+    "IGV": (SectorBucket.HIGH_GROWTH, "Software ETF", "IGV"),
+    "ARKK": (SectorBucket.THEME_HYPE, "Innovation ETF", "ARKK"),
+    "KWEB": (SectorBucket.THEME_HYPE, "China Internet", "KWEB"),
+    "FXI": (SectorBucket.THEME_HYPE, "China Large Cap", "FXI"),
+    "EEM": (SectorBucket.CYCLICAL, "Emerging Markets", "EEM"),
+    "VNQ": (SectorBucket.DEFENSIVE, "REIT ETF", "VNQ"),
+    "GDX": (SectorBucket.CYCLICAL, "Gold Miners", "GDX"),
+    "XBI": (SectorBucket.DEFENSIVE, "Biotech ETF", "XBI"),
+    "ITA": (SectorBucket.CYCLICAL, "Aerospace/Defense", "ITA"),
+    "TLT": (SectorBucket.DEFENSIVE, "Long Treasury", "TLT"),
+    "BITO": (SectorBucket.THEME_HYPE, "Bitcoin ETF", "BITO"),
 }
 
 
@@ -250,9 +282,9 @@ class SectorClassifier:
     """Classify tickers into sector buckets with metadata."""
 
     def __init__(self):
-        self._cache: Dict[str, Tuple[SectorContext, float]] = (
-            {}
-        )  # ticker → (ctx, timestamp)
+        self._cache: Dict[
+            str, Tuple[SectorContext, float]
+        ] = {}  # ticker → (ctx, timestamp)
 
     def classify(
         self,
@@ -267,6 +299,15 @@ class SectorClassifier:
             # Expired — re-classify
 
         ctx = SectorContext(ticker=ticker)
+
+        from src.core.stock_universe import asset_class_for, etf_theme_for, is_index_or_etf
+
+        if is_index_or_etf(ticker):
+            ctx.liquidity_quality = "deep"
+            ctx.theme = ctx.theme or etf_theme_for(ticker)
+            if asset_class_for(ticker) == "index":
+                ctx.sector_bucket = SectorBucket.HIGH_GROWTH
+                ctx.benchmark_etf = ticker if ticker in ("SPY", "QQQ", "IWM") else "SPY"
 
         # Static lookup
         entry = _SECTOR_MAP.get(ticker.upper())
@@ -305,7 +346,7 @@ class SectorClassifier:
         """Fallback classification using signal metadata."""
         ctx = SectorContext(ticker=ticker)
 
-        strategy = signal.get("strategy", "").lower()
+        signal.get("strategy", "").lower()
         sector_hint = signal.get("sector", "").lower()
 
         # Sector hints from signal data

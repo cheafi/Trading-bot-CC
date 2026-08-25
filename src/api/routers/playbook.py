@@ -22,7 +22,7 @@ from typing import Any, Callable, Dict, List
 
 from fastapi import APIRouter, Query, Request
 
-from src.core.stock_universe import RS_UNIVERSE, rs_sector_for
+from src.core.stock_universe import OPPORTUNITY_COVERAGE_UNIVERSE, RS_UNIVERSE, rs_sector_for
 from src.scanners.intl_universe import (
     AU_TICKERS,
     CRYPTO_TICKERS,
@@ -60,7 +60,8 @@ _SCANNER_DISCOVERY_EXTRA_TICKERS = [
 ]
 _SCANNER_DISCOVERY_UNIVERSE = list(
     dict.fromkeys(
-        list(US_UNIVERSE)
+        list(OPPORTUNITY_COVERAGE_UNIVERSE)
+        + list(US_UNIVERSE)
         + list(HK_TICKERS)
         + list(JP_TICKERS)
         + list(KR_TICKERS)
@@ -131,10 +132,7 @@ async def _scanner_signal_universe(
     signals = await _real_signals(scan_fn=scan_fn)
     if signals:
         pooled: List[Dict[str, Any]] = list(signals)
-        seen = {
-            str((row or {}).get("ticker") or "").strip().upper()
-            for row in pooled
-        }
+        seen = {str((row or {}).get("ticker") or "").strip().upper() for row in pooled}
         for ticker in _SCANNER_DISCOVERY_UNIVERSE:
             if len(pooled) >= _SCANNER_SIGNAL_UNIVERSE_TARGET:
                 break
@@ -158,7 +156,15 @@ async def _scanner_signal_universe(
 
         brief = await asyncio.to_thread(load_brief)
         pooled: List[Dict[str, Any]] = []
-        for section in ("actionable", "watch", "review", "monitor", "pilot", "near_miss", "candidates"):
+        for section in (
+            "actionable",
+            "watch",
+            "review",
+            "monitor",
+            "pilot",
+            "near_miss",
+            "candidates",
+        ):
             for row in brief.get(section) or []:
                 sig = _brief_row_to_scanner_signal(row)
                 if sig:
@@ -378,9 +384,21 @@ def _finalize_ranked_response(
             limit, action, sector, reason="board empty after live scan"
         )
         if board_has_content(fallback):
-            data = {**fallback, **{k: v for k, v in data.items() if k in (
-                "best_action", "surface_authority", "restraint", "warning",
-            ) and v}}
+            data = {
+                **fallback,
+                **{
+                    k: v
+                    for k, v in data.items()
+                    if k
+                    in (
+                        "best_action",
+                        "surface_authority",
+                        "restraint",
+                        "warning",
+                    )
+                    and v
+                },
+            }
             annotate_board_mode(data, from_live=False)
     funnel = data.get("filter_funnel") or {}
     opps = data.get("opportunities") or []
@@ -499,9 +517,7 @@ def _brief_ranked_fallback(
 ) -> Dict[str, Any]:
     from src.services.playbook_board_fallback import build_compressed_fallback
 
-    return build_compressed_fallback(
-        limit, action, sector, reason=reason
-    )
+    return build_compressed_fallback(limit, action, sector, reason=reason)
 
 
 def _get_flow_cached(*, allow_stale: bool = False) -> Dict[str, Any] | None:
@@ -868,9 +884,7 @@ async def warm_playbook_discovery_cache(app) -> None:
                 _compute_ranked_live(40, None, None, scan_fn=scan_fn),
                 timeout=_RANKED_LOAD_TIMEOUT_SECONDS + _RANKED_TIMEOUT_SECONDS,
             )
-            response = _finalize_ranked_response(
-                response, from_live=True, limit=40
-            )
+            response = _finalize_ranked_response(response, from_live=True, limit=40)
             _set_ranked_cached(cache_key, response)
             from src.services.playbook_board_fallback import save_playbook_snapshot
 
@@ -965,11 +979,12 @@ async def ranked_opportunities(
     ),
 ) -> Dict[str, Any]:
     """3-layer ranked opportunity board."""
-    from src.services.playbook_board_fallback import load_playbook_snapshot, save_playbook_snapshot
-
-    from src.services.playbook_board_fallback import board_has_content
-
     from src.services.cc_live_policy import cc_live_data_only_enabled
+    from src.services.playbook_board_fallback import (
+        board_has_content,
+        load_playbook_snapshot,
+        save_playbook_snapshot,
+    )
 
     cache_key = _ranked_cache_key(limit, action, sector)
     live_only = cc_live_data_only_enabled()
@@ -983,9 +998,7 @@ async def ranked_opportunities(
 
     if not live_only and not refresh and not action and not sector:
         if snap := load_playbook_snapshot(cache_key):
-            asyncio.create_task(
-                _refresh_ranked_cache(cache_key, limit, action, sector)
-            )
+            asyncio.create_task(_refresh_ranked_cache(cache_key, limit, action, sector))
             return _finalize_ranked_response(
                 {
                     **snap,
@@ -1000,9 +1013,7 @@ async def ranked_opportunities(
 
     try:
         scan_fn = getattr(request.app.state, "scan_signals", None)
-        response = await _compute_ranked_live(
-            limit, action, sector, scan_fn=scan_fn
-        )
+        response = await _compute_ranked_live(limit, action, sector, scan_fn=scan_fn)
         response = _finalize_ranked_response(
             response, from_live=True, limit=limit, action=action, sector=sector
         )
@@ -1128,9 +1139,7 @@ def _scanner_hub_diagnostics(
             "hits are heuristic until upstream refreshes."
         )
     elif signals_empty:
-        reason_no_hits = (
-            "Upstream signal cache empty — scanners run on default pool or brief watchlist."
-        )
+        reason_no_hits = "Upstream signal cache empty — scanners run on default pool or brief watchlist."
     else:
         reason_no_hits = (
             "No names passed strict scanner thresholds for the selected filter."
@@ -1286,7 +1295,8 @@ def _enrich_discovery_zero_hits(
     intent = dict(payload.get("decision_intent") or {})
     leaders = dict(intent.get("LEADERS") or {})
     if not leaders.get("top_hits"):
-        from src.engines.scanner_matrix import ScannerCategory, ScannerHit, ScannerMatrix as _SM
+        from src.engines.scanner_matrix import ScannerCategory, ScannerHit
+        from src.engines.scanner_matrix import ScannerMatrix as _SM
 
         top_hits = [
             _SM.enrich_hit_for_ui(
@@ -1346,6 +1356,8 @@ async def scanner_hub(
     from src.engines.scanner_matrix import (  # noqa: PLC0415
         DECISION_INTENT_ORDER,
         ScannerCategory,
+    )
+    from src.engines.scanner_matrix import (
         ScannerMatrix as _SM,
     )
 
@@ -1796,7 +1808,8 @@ async def rs_ranking(
     cap: str = Query(None, description="MEGA/LARGE/MID/SMALL"),
     limit: int = Query(50, ge=1, le=100),
     live: bool = Query(
-        False, description="Await live RS compute (use /rs-decision for full PM surface)"
+        False,
+        description="Await live RS compute (use /rs-decision for full PM surface)",
     ),
 ) -> Dict[str, Any]:
     """Relative Strength ranking with sector/size filters."""

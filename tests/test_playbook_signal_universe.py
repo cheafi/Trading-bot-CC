@@ -65,8 +65,9 @@ def test_normalize_scan_row_maps_live_scan_shape():
     assert sig["entry_price"] == 120.0
 
 
-@pytest.mark.asyncio
-async def test_load_playbook_signals_tops_up_below_target(monkeypatch):
+def test_load_playbook_signals_tops_up_below_target(monkeypatch):
+    import asyncio
+
     from src.services.playbook_signal_universe import (
         PLAYBOOK_SIGNAL_TARGET,
         load_brief_pipeline_signals,
@@ -95,9 +96,11 @@ async def test_load_playbook_signals_tops_up_below_target(monkeypatch):
         ]
         return rows, {}
 
-    signals, meta = await load_playbook_signals(
-        scan_fn=_fake_scan,
-        target=PLAYBOOK_SIGNAL_TARGET,
+    signals, meta = asyncio.run(
+        load_playbook_signals(
+            scan_fn=_fake_scan,
+            target=PLAYBOOK_SIGNAL_TARGET,
+        )
     )
     assert meta["live_scan_used"] is True
     assert len(signals) >= 2

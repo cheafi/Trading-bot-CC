@@ -4,13 +4,18 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-PLAYBOOK_NEAR_MISS_LIMIT = 12
+PLAYBOOK_NEAR_MISS_LIMIT = 16
+DISCOVERY_NEAR_MISS_STRIP_LIMIT = 12
 
 _WATCH_ACTIONS = frozenset(
     {"WATCH", "WAIT", "WATCH_TRIGGER", "LEADER", "LEADER_MONITOR"}
 )
-_DEPLOY_ACTIONS = frozenset({"TRADE", "PILOT", "BUY", "BUY_ON_DIP", "TRADE_NOW", "STRONG_TRADE"})
-_AVOID_ACTIONS = frozenset({"AVOID", "NO_TRADE", "NO_TOUCH", "DO_NOT_TOUCH", "AVOID_NOW"})
+_DEPLOY_ACTIONS = frozenset(
+    {"TRADE", "PILOT", "BUY", "BUY_ON_DIP", "TRADE_NOW", "STRONG_TRADE"}
+)
+_AVOID_ACTIONS = frozenset(
+    {"AVOID", "NO_TRADE", "NO_TOUCH", "DO_NOT_TOUCH", "AVOID_NOW"}
+)
 
 _DEFAULT_MISSING = (
     "stronger timing, confirmed volume follow-through, "
@@ -31,9 +36,7 @@ def build_playbook_near_miss_rows(
     Never marks rows execution-ready or deploy-qualified.
     """
     deploy_tickers = {
-        str(o.get("ticker") or "").upper()
-        for o in opps
-        if o.get("execution_ready")
+        str(o.get("ticker") or "").upper() for o in opps if o.get("execution_ready")
     }
     candidates: List[Dict[str, Any]] = []
     for row in opps or []:
@@ -51,11 +54,12 @@ def build_playbook_near_miss_rows(
 
         is_watch = act in _WATCH_ACTIONS
         is_near_avoid = act in _AVOID_ACTIONS and (
-            (score >= 4.5 or net >= 4.0) and (timing >= 0.5 or thesis >= 0.4)
+            (score >= 4.3 or net >= 3.8) and (timing >= 0.48 or thesis >= 0.38)
         )
         if not is_watch and not is_near_avoid:
             continue
-        if is_watch and score < 5.5:
+        min_watch_score = 5.2 if str(row.get("asset_class") or "") in ("etf", "index") else 5.3
+        if is_watch and score < min_watch_score:
             continue
 
         nm = dict(row)
@@ -90,7 +94,7 @@ def build_playbook_near_miss_rows(
 def build_discovery_near_miss_strip(
     merged_top_names: List[Dict[str, Any]],
     *,
-    limit: int = 8,
+    limit: int = DISCOVERY_NEAR_MISS_STRIP_LIMIT,
 ) -> List[Dict[str, Any]]:
     """Discovery-tab monitor strip from merged scanner names (research only)."""
     strip: List[Dict[str, Any]] = []
@@ -102,7 +106,9 @@ def build_discovery_near_miss_strip(
             continue
         item = {
             **row,
-            "monitor_label": "near_miss" if row.get("status") == "speculative" else "watch",
+            "monitor_label": "near_miss"
+            if row.get("status") == "speculative"
+            else "watch",
             "research_only": True,
             "surface_authority": "monitor_only",
         }

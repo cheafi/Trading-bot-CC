@@ -7,7 +7,7 @@ scores, not raw scanner thresholds alone.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.utils.numeric_parse import parse_ratio
 
@@ -153,11 +153,7 @@ def is_below_trade_rr_threshold(rr_value: Any) -> bool:
 def _rr(cr: Any) -> float:
     try:
         sig = cr.pipeline.signal
-        raw = (
-            sig.get("risk_reward")
-            or cr.pipeline.decision.risk_reward
-            or 0
-        )
+        raw = sig.get("risk_reward") or cr.pipeline.decision.risk_reward or 0
         return parse_ratio(raw, 0.0) or 0.0
     except Exception:
         return 0.0
@@ -244,7 +240,6 @@ def is_pilot_eligible(cr: Any) -> bool:
 def build_pilot_explanations(cr: Any) -> Dict[str, str]:
     """Required fields when labeling PILOT."""
     pr = cr.pipeline
-    sig = pr.signal
     gaps: List[str] = []
     if float(pr.confidence.timing) < 0.55:
         gaps.append("timing not fully confirmed")
@@ -297,12 +292,12 @@ def build_pilot_explanations(cr: Any) -> Dict[str, str]:
 
 
 def _brief_monitor_cap(cr: Any, refined: str) -> str:
-    """Brief rows seed the monitor pool — deploy requires council validation."""
+    """Brief/coverage-pad rows seed the monitor pool — deploy requires council validation."""
     try:
         src = str(cr.pipeline.signal.get("source") or "").lower()
     except Exception:
         return refined
-    if src != "brief":
+    if src not in ("brief", "coverage_pad"):
         return refined
     if refined in _AVOID_ACTIONS or _score(cr) < 5.0:
         return refined
@@ -317,9 +312,7 @@ def refine_action(cr: Any) -> str:
     """
     act = _action(cr)
     if act in _AVOID_ACTIONS:
-        return _brief_monitor_cap(
-            cr, act if act != "NO_TRADE" else "AVOID"
-        )
+        return _brief_monitor_cap(cr, act if act != "NO_TRADE" else "AVOID")
     if is_execution_ready(cr):
         return _brief_monitor_cap(cr, "TRADE")
     if act in _PILOT_ACTIONS or act == "PILOT":
@@ -414,9 +407,7 @@ def normalize_playbook_funnel(
     f = dict(funnel or {})
     scanned = int(f.get("universe_scanned") or f.get("universe") or 0)
     deploy = int(
-        f.get("deploy_qualified_setups")
-        or f.get("execution_ready_setups")
-        or 0
+        f.get("deploy_qualified_setups") or f.get("execution_ready_setups") or 0
     )
     watch = f.get("watch_qualified_setups")
     if watch is None:
@@ -472,7 +463,9 @@ def compute_opportunity_quality(
     if execution_ready == 1 or pilot_ready >= 1:
         return "Mixed", "Limited A-grade names — pilots or singles only"
     high_watch = sum(
-        1 for cr in council_results if _score(cr) >= 6.5 and refine_action(cr) == "WATCH"
+        1
+        for cr in council_results
+        if _score(cr) >= 6.5 and refine_action(cr) == "WATCH"
     )
     if high_watch >= 2:
         return "Mixed", f"{high_watch} near-miss names forming — not deploy-grade"
@@ -501,7 +494,10 @@ def compute_execution_readiness_label(
             )
         return "No Trade", "No deploy — regime or setup quality blocks risk"
     if execution_ready >= 1 and bracket_ready and ibkr_connected:
-        return "Trade Now", f"{execution_ready} name(s) pass full gates · IBKR handoff ready"
+        return (
+            "Trade Now",
+            f"{execution_ready} name(s) pass full gates · IBKR handoff ready",
+        )
     if execution_ready >= 1:
         return (
             "Trade Now",
@@ -583,18 +579,14 @@ def build_three_layer_model(
         macro=macro,
         opportunity=opportunity,
     )
-    headline = (
-        f"Macro {macro} · Opportunities {opportunity} · Execution: {exec_label}"
-    )
+    headline = f"Macro {macro} · Opportunities {opportunity} · Execution: {exec_label}"
     if macro == "Supportive" and opportunity == "Weak":
         guidance = (
             "Backdrop is supportive but today's board is weak — do not infer "
             "full-size deploy from regime alone."
         )
     elif honest_tradeability == "STRONG_TRADE" and execution_ready < 2:
-        guidance = (
-            "Downgraded from STRONG — fewer than 2 execution-ready names."
-        )
+        guidance = "Downgraded from STRONG — fewer than 2 execution-ready names."
     else:
         guidance = exec_detail
 
@@ -882,7 +874,10 @@ def sector_tailwind_for_row(
     for sec in laggards:
         name = (sec.get("name") or sec.get("symbol") or "").upper()
         if name and (name in bucket or bucket.replace("_", " ") in name):
-            return "misaligned", f"Sector bucket lagging today ({sec.get('name') or name})"
+            return (
+                "misaligned",
+                f"Sector bucket lagging today ({sec.get('name') or name})",
+            )
     return "neutral", "Sector mixed vs today's leadership"
 
 
@@ -963,9 +958,7 @@ def build_runner_up_comparison(
         return None
     parts: List[str] = []
     if cur_score > run_score:
-        parts.append(
-            f"Higher validated score ({cur_score:.1f} vs {run_score:.1f})"
-        )
+        parts.append(f"Higher validated score ({cur_score:.1f} vs {run_score:.1f})")
     else:
         parts.append(
             f"Ranked above on action tier despite lower score "
@@ -982,18 +975,20 @@ def build_runner_up_comparison(
     cur_rr = _row_rr(current)
     run_rr = _row_rr(runner)
     if cur_rr > 0 and run_rr > 0 and abs(cur_rr - run_rr) >= 0.3:
-        parts.append(
-            f"R:R {cur_rr:.1f} vs {run_rr:.1f}"
-        )
+        parts.append(f"R:R {cur_rr:.1f} vs {run_rr:.1f}")
     cur_bucket = (current.get("sector_type") or "").upper()
     run_bucket = (runner.get("sector_type") or "").upper()
     if cur_bucket and run_bucket and cur_bucket != run_bucket:
-        parts.append(f"Sector fit: {cur_bucket.replace('_', ' ')} vs {run_bucket.replace('_', ' ')}")
+        parts.append(
+            f"Sector fit: {cur_bucket.replace('_', ' ')} vs {run_bucket.replace('_', ' ')}"
+        )
     return {
         "ticker": run_ticker,
         "score": round(run_score, 1),
         "fit_score": round(run_score, 1),
-        "reason": " · ".join(parts) if parts else f"{cur_ticker} ranked above {run_ticker}",
+        "reason": " · ".join(parts)
+        if parts
+        else f"{cur_ticker} ranked above {run_ticker}",
     }
 
 
@@ -1060,7 +1055,11 @@ def _row_rr_available(row: Dict[str, Any]) -> bool:
 
 def assemble_confidence_breakdown(row: Dict[str, Any]) -> Dict[str, Any]:
     """4D confidence — null overall when all components missing/zero."""
-    cb = row.get("confidence_breakdown") if isinstance(row.get("confidence_breakdown"), dict) else {}
+    cb = (
+        row.get("confidence_breakdown")
+        if isinstance(row.get("confidence_breakdown"), dict)
+        else {}
+    )
     thesis = float(cb.get("thesis") or row.get("thesis_conf") or 0)
     timing = float(cb.get("timing") or row.get("timing_conf") or 0)
     execution = float(cb.get("execution") or row.get("exec_conf") or 0)
@@ -1108,7 +1107,13 @@ def resolve_active_data_source(
     if fallback_brief:
         return "fallback_brief"
     src = (ranked_source or trust_source or "").lower()
-    if stale or "snapshot" in src or "stale" in src or "degraded" in src or "cache" in src:
+    if (
+        stale
+        or "snapshot" in src
+        or "stale" in src
+        or "degraded" in src
+        or "cache" in src
+    ):
         return "stale_cache"
     if "brief" in src or "fallback" in src or "compressed" in src:
         return "fallback_brief"
@@ -1192,9 +1197,7 @@ def build_decision_authority(
         and deploy_ideas_count != live_deploy_count
     ):
         mismatch = True
-        mismatch_detail = (
-            mismatch_detail + "; " if mismatch_detail else ""
-        ) + (
+        mismatch_detail = (mismatch_detail + "; " if mismatch_detail else "") + (
             f"Deploy ideas {deploy_ideas_count} vs live {live_deploy_count}"
         )
 
@@ -1226,11 +1229,7 @@ def build_decision_authority(
         "fallback_board_line": (
             "Fallback board: informational only · reference plan · no deploy authority"
             if source == "fallback_brief"
-            else (
-                " · ".join(stale_snapshot_lines)
-                if stale_snapshot_lines
-                else ""
-            )
+            else (" · ".join(stale_snapshot_lines) if stale_snapshot_lines else "")
         ),
         "stale_snapshot_lines": stale_snapshot_lines,
     }
@@ -1242,9 +1241,7 @@ def build_decision_authority(
         "gates_active": gates_active,
         "effective_action_max": effective_action_max,
         "display_action_max": (
-            effective_action_max
-            if effective_action_max != "DEPLOY"
-            else "WATCH"
+            effective_action_max if effective_action_max != "DEPLOY" else "WATCH"
         ),
         "allows_trade_labels": allows_trade_labels,
         "degraded": gates_active or source != "live",
@@ -1284,7 +1281,11 @@ def _downgrade_display_label(
         return "INCOMPLETE"
     if authority.get("source") == "stale_cache":
         return "REFERENCE ONLY"
-    if gates.get("regime_wait") or gates.get("data_stale") or gates.get("scanner_loading"):
+    if (
+        gates.get("regime_wait")
+        or gates.get("data_stale")
+        or gates.get("scanner_loading")
+    ):
         return "WATCH ONLY"
     if authority.get("authority_level") == "suspended":
         return "NOT EXECUTION-GRADE"
@@ -1539,7 +1540,8 @@ def enrich_opportunity_row(
             "sample_size": cal_n,
             "win_rate": sig.get("historical_win_rate") or sig.get("win_rate"),
             "avg_r": sig.get("avg_r") or sig.get("expectancy_r"),
-            "regime_follow_through": sig.get("regime_fit") or pr.sector.sector_bucket.value,
+            "regime_follow_through": sig.get("regime_fit")
+            or pr.sector.sector_bucket.value,
             "calibration_note": (
                 f"Calibrated n={cal_n} — use validated score"
                 if cal_avail
@@ -1556,7 +1558,9 @@ def enrich_opportunity_row(
         from src.services.score_families import attach_score_families_to_row
 
         sig = cr.pipeline.signal if hasattr(cr, "pipeline") else {}
-        nison_tags = tags_for_playbook_row(signal=sig if isinstance(sig, dict) else None)
+        nison_tags = tags_for_playbook_row(
+            signal=sig if isinstance(sig, dict) else None
+        )
         row.update(
             {
                 "nison_pattern_tag": nison_tags.get("pattern_tag"),
@@ -1573,13 +1577,21 @@ def enrich_opportunity_row(
         row = attach_crowding_to_row(row)
         row = attach_score_families_to_row(row)
         row["guardrail_labels"] = labels_for_playbook_row(row)
-        from src.services.crisis_regime import tags_for_playbook_row as crisis_tags
-        from src.services.opportunity_quality_naval import tags_for_playbook_row as naval_quality_tags
-        from src.services.signal_to_noise import tags_for_playbook_row as naval_signal_tags
-        from src.services.specific_knowledge import tags_for_playbook_row as naval_competence_tags
-        from src.services.turtle_system import tags_for_playbook_row as turtle_tags
         from src.services.buffett_judgment import tags_for_playbook_row as buffett_tags
-        from src.services.index_fund_judgment import tags_for_playbook_row as index_fund_tags
+        from src.services.crisis_regime import tags_for_playbook_row as crisis_tags
+        from src.services.index_fund_judgment import (
+            tags_for_playbook_row as index_fund_tags,
+        )
+        from src.services.opportunity_quality_naval import (
+            tags_for_playbook_row as naval_quality_tags,
+        )
+        from src.services.signal_to_noise import (
+            tags_for_playbook_row as naval_signal_tags,
+        )
+        from src.services.specific_knowledge import (
+            tags_for_playbook_row as naval_competence_tags,
+        )
+        from src.services.turtle_system import tags_for_playbook_row as turtle_tags
         from src.services.value_investing import tags_for_playbook_row as value_tags
 
         tb = str(row.get("tradeability") or row.get("honest_tradeability") or "")
@@ -1592,7 +1604,9 @@ def enrich_opportunity_row(
         row.update(naval_signal_tags(row, tradeability=tb, deployable_count=deploy_n))
         row.update(naval_competence_tags(row, tradeability=tb))
         row.update(naval_quality_tags(row, tradeability=tb))
-        from src.services.principles_engine import tags_for_playbook_row as principles_tags
+        from src.services.principles_engine import (
+            tags_for_playbook_row as principles_tags,
+        )
 
         row.update(principles_tags(row, tradeability=tb))
     except Exception:
