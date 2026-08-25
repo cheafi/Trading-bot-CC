@@ -553,6 +553,17 @@ def _tier_counts(rows: List[Dict[str, Any]]) -> Dict[str, int]:
     return counts
 
 
+def _authority_label(row: Dict[str, Any]) -> str:
+    ps = str(row.get("pilot_state") or "").upper()
+    if row.get("execution_ready"):
+        return "DEPLOY ELIGIBLE · Decision Engine"
+    if ps == "MONITOR_ONLY" or ps == "PILOT_RESEARCH_ONLY":
+        return "MONITOR ONLY"
+    if ps == "BLOCKED":
+        return "BLOCKED"
+    return "MONITOR ONLY"
+
+
 def attach_opportunity_verdict_to_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Enrich board payload with verdict, tier counts, and per-row quality/authority labels."""
     out = dict(payload)

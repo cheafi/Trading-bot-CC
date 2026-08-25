@@ -1,4 +1,32 @@
       <div x-show="tab==='today'" data-cc="today-deploy-chrome">
+      <!-- ── Mission Brief (operator landing — 5-second decision) ── -->
+      <template x-if="tab==='today'">
+        <div data-cc="mission-brief-card" style="padding:4px 12px 0">
+          <div class="card card-p" style="padding:10px 12px;border-left:4px solid var(--green);background:linear-gradient(135deg,rgba(0,212,170,.06),rgba(88,166,255,.04))">
+            <div class="flex flex-wrap items-center gap-2 mb-2">
+              <span class="pill pg text-[8px] font-bold uppercase" x-text="missionBriefCard().title"></span>
+              <span class="pill text-[8px] font-bold" :class="missionBriefCard().deploy_open?'pg':'pa'" x-text="missionBriefCard().tradeability"></span>
+              <span class="pill text-[7px] pw" x-text="'Deploy '+missionBriefCard().deploy_label"></span>
+            </div>
+            <div class="text-[11px] font-bold text-white mb-2" x-text="missionBriefCard().quality_headline"></div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[8px] mb-2">
+              <div><span class="font-bold" style="color:var(--t3)">Market</span><div class="text-white" x-text="missionBriefCard().market"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Broker</span><div class="text-white" x-text="missionBriefCard().broker"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Engine</span><div class="text-white" x-text="missionBriefCard().engine"></div></div>
+              <div><span class="font-bold" style="color:var(--t3)">Best monitor</span><div class="mono text-amber-300" x-text="missionBriefCard().best_monitor"></div></div>
+            </div>
+            <div class="text-[8px] mb-1" x-show="missionBriefCard().why_not_deploy.length">
+              <div class="font-bold uppercase mb-0.5" style="color:var(--amber)">Why not deploy? · 點解唔部署</div>
+              <template x-for="w in missionBriefCard().why_not_deploy" :key="'mbw-'+w"><div style="color:var(--t2)" x-text="'• '+w"></div></template>
+            </div>
+            <div class="text-[8px] mb-1" x-show="missionBriefCard().next_actions.length">
+              <div class="font-bold uppercase mb-0.5" style="color:var(--green)">Next action · 下一步</div>
+              <template x-for="a in missionBriefCard().next_actions" :key="'mba-'+a"><div style="color:var(--t2)" x-text="'→ '+a"></div></template>
+            </div>
+            <div class="text-[8px] font-bold mt-1" style="color:var(--t3)" x-text="'Review again in '+missionBriefCard().review_in_minutes+' minutes · '+missionBriefCard().review_in_minutes+' 分鐘後再檢查'"></div>
+          </div>
+        </div>
+      </template>
       <template x-if="tab==='today'&&(todayMissionPanel().system_blockers.length||todayMissionPanel().card_gates.length||todayMissionPanel().monitors.length||todayMissionPanel().quant_cluster_lines.length)">
         <div data-cc="today-mission-panel" style="padding:4px 12px 0">
           <div class="card card-p" style="padding:8px 10px;border-left:3px solid var(--blue)">
@@ -88,3 +116,4 @@
       <div x-show="tab==='today'&&ibkrStateFrom(today7.execution_readiness).level!=='ready'" class="w-full text-[8px] px-3 pb-1" style="color:var(--t3)" x-text="ibkrLoginToReadyHint()"></div>
       <div x-show="tab==='today'&&todayExecutionReadinessDiagnostic()" class="w-full text-[8px] px-3 pb-1 mono" style="color:var(--t3)" x-text="todayExecutionReadinessDiagnostic()"></div>
       </div>
+    

@@ -1823,6 +1823,90 @@
 		}
 	}
 
+	var RESEARCH_SURFACE_TABS = {
+		scanners: true,
+		flow: true,
+		rs: true,
+		funds: true,
+		agent: true,
+		"strategy-lab": true,
+		shadow: true,
+		reports: true,
+		btlab: true,
+		leaders: true,
+		command: true,
+	}
+
+	function isResearchSurfaceTab(tab) {
+		return !!RESEARCH_SURFACE_TABS[String(tab || "")]
+	}
+
+	function researchOnlyBannerLine() {
+		return "研究層 · RESEARCH ONLY · Cannot authorize deployment · 不可授權部署"
+	}
+
+	function pageGatePhilosophyLine() {
+		return "Page Gate > Card Rank · 頁面閘門優於卡片排名"
+	}
+
+	function qualityTierClass(tier) {
+		var t = String(tier || "").toUpperCase()
+		if (t === "STRONG") return "pg"
+		if (t === "PROMISING") return "pb"
+		if (t === "WEAK") return "pa"
+		if (t === "REJECT") return "pr"
+		return "pw"
+	}
+
+	function cardRankQualityAuthorityLine(opp, idx, total) {
+		if (!opp) return ""
+		var rank = opp.rank_label || "#" + (opp.rank || (idx != null ? idx + 1 : 1)) + " / " + (total || "—")
+		var q = (opp.quality && opp.quality.tier) || opp.quality_tier || "—"
+		var auth = opp.authority_label || "MONITOR ONLY"
+		return "Rank " + rank + " · Quality " + q + " · Authority " + auth
+	}
+
+	function opportunityVerdictMuted(opts) {
+		var o = opts || {}
+		return !!(o.briefStale || o.briefFallback || o.researchContextOnly)
+	}
+
+	function buildMissionBriefCard(opts) {
+		var o = opts || {}
+		var v = o.verdict || {}
+		var whyNot = []
+		var best = v.best_monitor || {}
+		if (best.why_weak) whyNot.push(String(best.why_weak))
+		;(o.systemBlockers || []).slice(0, 2).forEach(function (b) {
+			if (b && whyNot.indexOf(b) < 0) whyNot.push(String(b))
+		})
+		;(v.main_blocker_bilingual || v.main_blocker || "").split("·").forEach(function (part) {
+			var s = String(part || "").trim()
+			if (s && whyNot.indexOf(s) < 0) whyNot.push(s)
+		})
+		var nextActions = []
+		var nextRaw = v.next_action_bilingual || v.next_action || o.repair || ""
+		nextRaw.split("·").forEach(function (part) {
+			var s = String(part || "").trim()
+			if (s) nextActions.push(s)
+		})
+		if (o.repair && nextActions.indexOf(o.repair) < 0) nextActions.unshift(String(o.repair))
+		return {
+			title: "TODAY · Mission Brief · 今日任務",
+			tradeability: String(o.tradeability || "WAIT").toUpperCase(),
+			quality_headline: v.headline_bilingual || v.headline || o.qualityHeadline || "—",
+			market: o.market || "—",
+			broker: o.broker || "—",
+			engine: o.engine || "—",
+			deploy_label: o.deployOpen ? "OPEN · 可部署" : "BLOCKED · 封鎖",
+			deploy_open: !!o.deployOpen,
+			best_monitor: best.ticker || "—",
+			why_not_deploy: whyNot.filter(Boolean).slice(0, 4),
+			next_actions: nextActions.filter(Boolean).slice(0, 4),
+			review_in_minutes: o.reviewMinutes != null ? o.reviewMinutes : 30,
+		}
+	}
+
 	/** PM strip / trust strip chip tiers — primary authority first, context second. */
 	function partitionHeaderChips(chips, opts) {
 		var o = opts || {}
@@ -2347,6 +2431,13 @@
 		regimeStackStripLine: regimeStackStripLine,
 		allocatorStanceHint: allocatorStanceHint,
 		aiContradictionDossierLine: aiContradictionDossierLine,
+		isResearchSurfaceTab: isResearchSurfaceTab,
+		researchOnlyBannerLine: researchOnlyBannerLine,
+		pageGatePhilosophyLine: pageGatePhilosophyLine,
+		qualityTierClass: qualityTierClass,
+		cardRankQualityAuthorityLine: cardRankQualityAuthorityLine,
+		opportunityVerdictMuted: opportunityVerdictMuted,
+		buildMissionBriefCard: buildMissionBriefCard,
 	}
 })(typeof window !== "undefined" ? window : globalThis)
 
@@ -2405,12 +2496,21 @@ function cc() {
 			"today",
 		),
 		tabs: [
-			{ id: "guide", icon: "📖", label: "Guide 指南" },
-			{ id: "today", icon: "🎯", label: "Dashboard 儀表板" },
+			{ id: "today", icon: "☀", label: "Today 今日" },
 			{ id: "signals", icon: "📋", label: "Playbook 策略簿" },
+			{ id: "dossier", icon: "🗂", label: "Workspace 工作區" },
+			{ id: "portfolio", icon: "💼", label: "Portfolio 持倉" },
 			{ id: "scanners", icon: "🔬", label: "Discovery 探索" },
-			{ id: "portfolio", icon: "💼", label: "Portfolio 持倉與風險" },
-			{ id: "dossier", icon: "🔍", label: "Dossier 檔案" },
+			{ id: "ibkr", icon: "⚡", label: "IBKR 券商" },
+			{ id: "ops", icon: "⚙️", label: "Ops 運維" },
+		],
+		guideTab: { id: "guide", icon: "📖", label: "Guide 指南" },
+		guideSection: "quickstart",
+		guideSections: [
+			{ id: "quickstart", label: "Quick Start 快速上手" },
+			{ id: "workflow", label: "Operator Workflow 操盤流程" },
+			{ id: "reference", label: "Reference 參考" },
+			{ id: "glossary", label: "Glossary 詞彙" },
 		],
 		moreTabs: [
 			{ id: "agent", icon: "🤖", label: "Agent 盯盤 · monitor" },
@@ -2422,9 +2522,8 @@ function cc() {
 			{ id: "rs", icon: "📈", label: "RS 相對強度 · research" },
 			{ id: "command", icon: "🖥", label: "Command 指揮台 · advanced", hidden_from_primary_nav: true },
 			{ id: "notrade", icon: "🚫", label: "Rejections 否決" },
-			{ id: "ops", icon: "⚙️", label: "Ops 運維" },
-			{ id: "ibkr", icon: "⚡", label: "IBKR 券商" },
 			{ id: "btlab", icon: "🧪", label: "Backtest Lab 回測室" },
+			{ id: "leaders", icon: "📊", label: "Leaders 領袖" },
 		],
 
 		showMore: false,
@@ -2759,6 +2858,7 @@ function cc() {
 			allocator_stance: null,
 			ai_reason_codes: [],
 			score_reconciliation: null,
+			opportunity_verdict: null,
 			ai_commentary_open: false,
 			avoid_collapsed: true,
 		},
@@ -6186,8 +6286,7 @@ function cc() {
 			return "pa"
 		},
 		bdrShouldAutoOpen() {
-			const c = (this.today7.bdr_summary || {}).decision_code || ""
-			return c === "NO_TRADE" || c === "SELECTIVE" || this.isWaitDay()
+			return false
 		},
 		featureIcDecayAlert() {
 			const st = this.today7.feature_ic_status
@@ -6780,6 +6879,196 @@ function cc() {
 			if (this.topRankedIsTrade()) return "#1 部署候選 · deploy candidate"
 			if (act === "PILOT" || act === "WATCH" || act === "WATCH ONLY") return "#1 監察候選 · monitor candidate"
 			return "#1 監察候選 · monitor candidate"
+		},
+		topRankedSectionTitle() {
+			const ss = this.systemState()
+			const deployOpen = !!(ss && ss.deploy_open) || !!this.today7.todays_decision?.can_deploy_today
+			if (deployOpen && !this.isWaitDay() && !this.pageAuthorityIsDegraded())
+				return this._uiText("🏆 Deploy Opportunities · 可部署機會")
+			return this._uiText("🔎 今日最佳監察候選 · Best Monitor Candidates")
+		},
+		opportunityVerdictHeadline() {
+			const v = this.today7.opportunity_verdict
+			if (!v) return ""
+			return this._uiText(v.headline_bilingual || v.headline || "")
+		},
+		opportunityVerdictCountsLine() {
+			const v = this.today7.opportunity_verdict
+			if (!v) return ""
+			return (
+				String(v.monitor_qualified_count || 0) +
+				" monitor-qualified · " +
+				String(v.quality_qualified_count || 0) +
+				" quality-qualified · " +
+				String(v.deploy_qualified_count || 0) +
+				" deploy-qualified"
+			)
+		},
+		cardRankTotalLabel(opp, idx) {
+			if (!opp) return ""
+			if (opp.rank_label) return opp.rank_label
+			const total = (this.today7.top_ranked || []).length
+			return "#" + (opp.rank || idx + 1) + " / " + total
+		},
+		cardQualityTier(opp) {
+			return String(opp?.quality?.tier || "—").toUpperCase()
+		},
+		cardQualityScore(opp) {
+			const s = opp?.quality?.score
+			return s == null ? "—" : String(s) + "/100"
+		},
+		cardQualityLabel(opp) {
+			const q = opp?.quality
+			if (!q) return "—"
+			return this._uiText((q.label_zh || q.tier || "—") + " · " + this.cardQualityScore(opp))
+		},
+		cardQualityPillClass(opp) {
+			const t = this.cardQualityTier(opp)
+			if (t === "STRONG") return "pg"
+			if (t === "PROMISING") return "pb"
+			if (t === "WEAK") return "pa"
+			return "pr"
+		},
+		cardAuthorityLabel(opp) {
+			if (!opp) return "—"
+			const ps = String(opp.pilot_state || "").toUpperCase()
+			if (opp.execution_ready && !this.isWaitDay() && this.today7.todays_decision?.can_deploy_today)
+				return this._uiText("DEPLOY · Decision Engine")
+			if (ps === "BLOCKED") return this._uiText("BLOCKED · 封鎖")
+			return this._uiText("MONITOR ONLY · 只可監察")
+		},
+		cardQualityReasons(opp) {
+			return (opp?.quality?.reasons || []).slice(0, 4)
+		},
+		cardQualityUpgradePath(opp) {
+			return (opp?.quality?.upgrade_path || []).slice(0, 4)
+		},
+		cardIsResearchContext(opp) {
+			if (!opp) return false
+			if (opp?.quality?.research_context_only) return true
+			const age = this.today7.opportunity_verdict?.brief_context?.brief_age_days
+			const thresh = this.today7.opportunity_verdict?.brief_context?.brief_stale_threshold_days || 7
+			return !!(this.todayUsesBriefFallback() && age != null && age > thresh)
+		},
+		cardResearchContextBanner(opp) {
+			if (!this.cardIsResearchContext(opp)) return ""
+			return this._uiText("RESEARCH CONTEXT ONLY · 研究脈絡 · brief stale — not live deploy signal")
+		},
+		qualityTierClass(tier) {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.qualityTierClass) return CCHelpers.qualityTierClass(tier)
+			const t = String(tier || "").toUpperCase()
+			if (t === "STRONG") return "pg"
+			if (t === "PROMISING") return "pb"
+			if (t === "WEAK") return "pa"
+			if (t === "REJECT") return "pr"
+			return "pw"
+		},
+		cardRankQualityAuthorityLine(opp, idx) {
+			const total = (this.today7.top_ranked || this.rankedOpps?.opportunities || []).length || undefined
+			if (typeof CCHelpers !== "undefined" && CCHelpers.cardRankQualityAuthorityLine)
+				return CCHelpers.cardRankQualityAuthorityLine(opp, idx, total)
+			if (!opp) return ""
+			return (
+				"Rank " +
+				this.cardRankTotalLabel(opp, idx) +
+				" · Quality " +
+				this.cardQualityLabel(opp) +
+				" · Authority " +
+				this.cardAuthorityLabel(opp)
+			)
+		},
+		opportunityVerdictMuted() {
+			const v = this.today7.opportunity_verdict || {}
+			const opts = {
+				briefStale: !!(v.brief_context?.brief_stale || this.today7.brief_stale),
+				briefFallback: !!this.todayUsesBriefFallback(),
+				researchContextOnly: !!v.research_context_only,
+			}
+			if (typeof CCHelpers !== "undefined" && CCHelpers.opportunityVerdictMuted)
+				return CCHelpers.opportunityVerdictMuted(opts)
+			return !!(opts.briefStale || opts.briefFallback || opts.researchContextOnly)
+		},
+		missionBriefCard() {
+			const v = this.today7.opportunity_verdict || {}
+			const ss = this.systemState() || {}
+			const td = this.today7.todays_decision || {}
+			const ibkr = this.ibkrUnifiedShort(this.today7.execution_readiness || {})
+			const opts = {
+				tradeability: this.canonicalTradeability() || ss.tradeability || "WAIT",
+				verdict: v,
+				market: this.canonicalRegimeLine() || this.today7.regime?.regime || "—",
+				broker: ibkr || "OFFLINE",
+				engine: this.cc_status.breaker ? "BLOCKED" : this.ops.running ? "ON" : "OFF",
+				deployOpen: !!(ss.deploy_open || td.can_deploy_today),
+				systemBlockers: this.todayMissionSystemBlockersList(),
+				repair: ss.repair_priority || this.globalSystemRepairLine() || "",
+				reviewMinutes: 30,
+			}
+			if (typeof CCHelpers !== "undefined" && CCHelpers.buildMissionBriefCard)
+				return CCHelpers.buildMissionBriefCard(opts)
+			return {
+				title: "TODAY · Mission Brief",
+				tradeability: opts.tradeability,
+				quality_headline: v.headline_bilingual || v.headline || "—",
+				market: opts.market,
+				broker: opts.broker,
+				engine: opts.engine,
+				deploy_label: opts.deployOpen ? "OPEN" : "BLOCKED",
+				deploy_open: opts.deployOpen,
+				best_monitor: v.best_monitor?.ticker || "—",
+				why_not_deploy: [],
+				next_actions: [],
+				review_in_minutes: 30,
+			}
+		},
+		isResearchSurfaceTab(tab) {
+			const t = tab != null ? tab : this.tab
+			if (typeof CCHelpers !== "undefined" && CCHelpers.isResearchSurfaceTab)
+				return CCHelpers.isResearchSurfaceTab(t)
+			return [
+				"scanners",
+				"flow",
+				"rs",
+				"funds",
+				"agent",
+				"strategy-lab",
+				"shadow",
+				"reports",
+				"btlab",
+				"leaders",
+				"command",
+			].includes(t)
+		},
+		researchOnlyBannerLine() {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.researchOnlyBannerLine)
+				return CCHelpers.researchOnlyBannerLine()
+			return "RESEARCH ONLY · Cannot authorize deployment · 不可授權部署"
+		},
+		pageGatePhilosophyLine() {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.pageGatePhilosophyLine)
+				return CCHelpers.pageGatePhilosophyLine()
+			return "Page Gate > Card Rank · 頁面閘門優於卡片排名"
+		},
+		pageOperatorCompactVisible() {
+			return this.tab !== "guide" && !this.globalSystemStripVisible()
+		},
+		guideSectionLabel(id) {
+			const sec = (this.guideSections || []).find((s) => s.id === (id || this.guideSection))
+			return sec ? sec.label : id
+		},
+		guideLayerVisible(layer) {
+			const map = {
+				quickstart: ["quickstart"],
+				workflow: ["workflow", "advanced", "layer2"],
+				reference: ["reference", "layer3"],
+				glossary: ["glossary"],
+			}
+			const section = this.guideSection || "quickstart"
+			if (section === "quickstart") return layer === "quickstart" || layer === "layer1"
+			if (section === "workflow") return layer === "workflow" || layer === "layer2" || layer === "advanced"
+			if (section === "reference") return layer === "reference" || layer === "layer3"
+			if (section === "glossary") return layer === "glossary"
+			return false
 		},
 		dashboardOperatorNowLine() {
 			const td = this.today7.todays_decision
@@ -13042,14 +13331,15 @@ function cc() {
 				this.today7.decision_authority = d.decision_authority || null
 				this.today7.top_ranked = d.top_5 || []
 				this.today7.todays_decision = d.todays_decision || null
-				this.today7.bdr_summary = d.bdr_summary || null
-				if (this.bdrShouldAutoOpen()) this.bdrPanelOpen = true
+				this.today7.bdr_summary = null
+				this.bdrPanelOpen = false
 				this.today7.feature_ic_status = d.feature_ic_status || null
 				this.today7.ml_advisory = d.ml_advisory || null
 				this.today7.best_action = d.best_action || null
 				this.today7.overlap_warning = d.overlap_warning || null
 				this.today7.near_miss = d.near_miss || []
 				this.today7.score_reconciliation = d.score_reconciliation || null
+				this.today7.opportunity_verdict = d.opportunity_verdict || null
 				this.today7.no_setup_diagnosis = d.no_setup_diagnosis || null
 				this.today7.quant_cluster_hints = d.quant_cluster_hints || []
 				this.today7.unlock_deploy = d.unlock_deploy || null

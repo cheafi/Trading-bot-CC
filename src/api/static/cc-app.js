@@ -52,12 +52,21 @@ function cc() {
 			"today",
 		),
 		tabs: [
-			{ id: "guide", icon: "📖", label: "Guide 指南" },
-			{ id: "today", icon: "🎯", label: "Dashboard 儀表板" },
+			{ id: "today", icon: "☀", label: "Today 今日" },
 			{ id: "signals", icon: "📋", label: "Playbook 策略簿" },
+			{ id: "dossier", icon: "🗂", label: "Workspace 工作區" },
+			{ id: "portfolio", icon: "💼", label: "Portfolio 持倉" },
 			{ id: "scanners", icon: "🔬", label: "Discovery 探索" },
-			{ id: "portfolio", icon: "💼", label: "Portfolio 持倉與風險" },
-			{ id: "dossier", icon: "🔍", label: "Dossier 檔案" },
+			{ id: "ibkr", icon: "⚡", label: "IBKR 券商" },
+			{ id: "ops", icon: "⚙️", label: "Ops 運維" },
+		],
+		guideTab: { id: "guide", icon: "📖", label: "Guide 指南" },
+		guideSection: "quickstart",
+		guideSections: [
+			{ id: "quickstart", label: "Quick Start 快速上手" },
+			{ id: "workflow", label: "Operator Workflow 操盤流程" },
+			{ id: "reference", label: "Reference 參考" },
+			{ id: "glossary", label: "Glossary 詞彙" },
 		],
 		moreTabs: [
 			{ id: "agent", icon: "🤖", label: "Agent 盯盤 · monitor" },
@@ -69,9 +78,8 @@ function cc() {
 			{ id: "rs", icon: "📈", label: "RS 相對強度 · research" },
 			{ id: "command", icon: "🖥", label: "Command 指揮台 · advanced", hidden_from_primary_nav: true },
 			{ id: "notrade", icon: "🚫", label: "Rejections 否決" },
-			{ id: "ops", icon: "⚙️", label: "Ops 運維" },
-			{ id: "ibkr", icon: "⚡", label: "IBKR 券商" },
 			{ id: "btlab", icon: "🧪", label: "Backtest Lab 回測室" },
+			{ id: "leaders", icon: "📊", label: "Leaders 領袖" },
 		],
 
 		showMore: false,
@@ -4501,6 +4509,122 @@ function cc() {
 		cardResearchContextBanner(opp) {
 			if (!this.cardIsResearchContext(opp)) return ""
 			return this._uiText("RESEARCH CONTEXT ONLY · 研究脈絡 · brief stale — not live deploy signal")
+		},
+		qualityTierClass(tier) {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.qualityTierClass) return CCHelpers.qualityTierClass(tier)
+			const t = String(tier || "").toUpperCase()
+			if (t === "STRONG") return "pg"
+			if (t === "PROMISING") return "pb"
+			if (t === "WEAK") return "pa"
+			if (t === "REJECT") return "pr"
+			return "pw"
+		},
+		cardRankQualityAuthorityLine(opp, idx) {
+			const total = (this.today7.top_ranked || this.rankedOpps?.opportunities || []).length || undefined
+			if (typeof CCHelpers !== "undefined" && CCHelpers.cardRankQualityAuthorityLine)
+				return CCHelpers.cardRankQualityAuthorityLine(opp, idx, total)
+			if (!opp) return ""
+			return (
+				"Rank " +
+				this.cardRankTotalLabel(opp, idx) +
+				" · Quality " +
+				this.cardQualityLabel(opp) +
+				" · Authority " +
+				this.cardAuthorityLabel(opp)
+			)
+		},
+		opportunityVerdictMuted() {
+			const v = this.today7.opportunity_verdict || {}
+			const opts = {
+				briefStale: !!(v.brief_context?.brief_stale || this.today7.brief_stale),
+				briefFallback: !!this.todayUsesBriefFallback(),
+				researchContextOnly: !!v.research_context_only,
+			}
+			if (typeof CCHelpers !== "undefined" && CCHelpers.opportunityVerdictMuted)
+				return CCHelpers.opportunityVerdictMuted(opts)
+			return !!(opts.briefStale || opts.briefFallback || opts.researchContextOnly)
+		},
+		missionBriefCard() {
+			const v = this.today7.opportunity_verdict || {}
+			const ss = this.systemState() || {}
+			const td = this.today7.todays_decision || {}
+			const ibkr = this.ibkrUnifiedShort(this.today7.execution_readiness || {})
+			const opts = {
+				tradeability: this.canonicalTradeability() || ss.tradeability || "WAIT",
+				verdict: v,
+				market: this.canonicalRegimeLine() || this.today7.regime?.regime || "—",
+				broker: ibkr || "OFFLINE",
+				engine: this.cc_status.breaker ? "BLOCKED" : this.ops.running ? "ON" : "OFF",
+				deployOpen: !!(ss.deploy_open || td.can_deploy_today),
+				systemBlockers: this.todayMissionSystemBlockersList(),
+				repair: ss.repair_priority || this.globalSystemRepairLine() || "",
+				reviewMinutes: 30,
+			}
+			if (typeof CCHelpers !== "undefined" && CCHelpers.buildMissionBriefCard)
+				return CCHelpers.buildMissionBriefCard(opts)
+			return {
+				title: "TODAY · Mission Brief",
+				tradeability: opts.tradeability,
+				quality_headline: v.headline_bilingual || v.headline || "—",
+				market: opts.market,
+				broker: opts.broker,
+				engine: opts.engine,
+				deploy_label: opts.deployOpen ? "OPEN" : "BLOCKED",
+				deploy_open: opts.deployOpen,
+				best_monitor: v.best_monitor?.ticker || "—",
+				why_not_deploy: [],
+				next_actions: [],
+				review_in_minutes: 30,
+			}
+		},
+		isResearchSurfaceTab(tab) {
+			const t = tab != null ? tab : this.tab
+			if (typeof CCHelpers !== "undefined" && CCHelpers.isResearchSurfaceTab)
+				return CCHelpers.isResearchSurfaceTab(t)
+			return [
+				"scanners",
+				"flow",
+				"rs",
+				"funds",
+				"agent",
+				"strategy-lab",
+				"shadow",
+				"reports",
+				"btlab",
+				"leaders",
+				"command",
+			].includes(t)
+		},
+		researchOnlyBannerLine() {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.researchOnlyBannerLine)
+				return CCHelpers.researchOnlyBannerLine()
+			return "RESEARCH ONLY · Cannot authorize deployment · 不可授權部署"
+		},
+		pageGatePhilosophyLine() {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.pageGatePhilosophyLine)
+				return CCHelpers.pageGatePhilosophyLine()
+			return "Page Gate > Card Rank · 頁面閘門優於卡片排名"
+		},
+		pageOperatorCompactVisible() {
+			return this.tab !== "guide" && !this.globalSystemStripVisible()
+		},
+		guideSectionLabel(id) {
+			const sec = (this.guideSections || []).find((s) => s.id === (id || this.guideSection))
+			return sec ? sec.label : id
+		},
+		guideLayerVisible(layer) {
+			const map = {
+				quickstart: ["quickstart"],
+				workflow: ["workflow", "advanced", "layer2"],
+				reference: ["reference", "layer3"],
+				glossary: ["glossary"],
+			}
+			const section = this.guideSection || "quickstart"
+			if (section === "quickstart") return layer === "quickstart" || layer === "layer1"
+			if (section === "workflow") return layer === "workflow" || layer === "layer2" || layer === "advanced"
+			if (section === "reference") return layer === "reference" || layer === "layer3"
+			if (section === "glossary") return layer === "glossary"
+			return false
 		},
 		dashboardOperatorNowLine() {
 			const td = this.today7.todays_decision

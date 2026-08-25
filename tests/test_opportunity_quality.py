@@ -124,3 +124,13 @@ def test_reject_extended_row():
     row["data_conf"] = 0.30
     q = classify_opportunity_quality(row)
     assert q["tier"] == "REJECT"
+
+
+def test_attach_opportunity_verdict_enriches_rows():
+    from src.services.opportunity_quality import attach_opportunity_verdict_to_payload
+
+    rows = [attach_quality_to_row(_mstr_like_row()), attach_quality_to_row(_v_like_row())]
+    payload = attach_opportunity_verdict_to_payload({"top_ranked": rows, "near_miss": []})
+    assert payload["opportunity_verdict"]["tier_counts"]["WEAK"] >= 1
+    assert payload["top_ranked"][0]["quality_tier"] == "WEAK"
+    assert payload["top_ranked"][0]["authority_label"]
