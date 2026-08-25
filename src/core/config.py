@@ -122,9 +122,7 @@ class Settings:
         self.x_bearer_token = _env("X_BEARER_TOKEN")
         self.reddit_client_id = _env("REDDIT_CLIENT_ID")
         self.reddit_client_secret = _env("REDDIT_CLIENT_SECRET")
-        self.reddit_user_agent = _env(
-            "REDDIT_USER_AGENT", "TradingAI Bot/1.0"
-        )
+        self.reddit_user_agent = _env("REDDIT_USER_AGENT", "TradingAI Bot/1.0")
 
         # OpenAI
         self.openai_api_key = _env("OPENAI_API_KEY")
@@ -137,9 +135,7 @@ class Settings:
         self.azure_client_secret = _env("AZURE_CLIENT_SECRET")
         self.azure_openai_endpoint = _env("AZURE_OPENAI_ENDPOINT")
         self.azure_openai_api_key = _env("AZURE_OPENAI_API_KEY")
-        self.azure_openai_deployment = _env(
-            "AZURE_OPENAI_DEPLOYMENT", "gpt-5.2"
-        )
+        self.azure_openai_deployment = _env("AZURE_OPENAI_DEPLOYMENT", "gpt-5.2")
         self.azure_openai_api_version = _env(
             "AZURE_OPENAI_API_VERSION", "2026-01-15-preview"
         )
@@ -152,14 +148,10 @@ class Settings:
         self.discord_channel_id = _env("DISCORD_CHANNEL_ID") or _env(
             "DISCORD_ALERT_CHANNEL_ID"
         )
-        self.discord_channel_name = _env(
-            "DISCORD_CHANNEL_NAME", "Trading CC"
-        )
+        self.discord_channel_name = _env("DISCORD_CHANNEL_NAME", "Trading CC")
 
         # MetaTrader 5
-        self.mt5_login: Optional[int] = (
-            _env_int("MT5_LOGIN", 0) or None
-        )
+        self.mt5_login: Optional[int] = _env_int("MT5_LOGIN", 0) or None
         self.mt5_password = _env("MT5_PASSWORD")
         self.mt5_server = _env("MT5_SERVER")
         self.mt5_path = _env("MT5_PATH")
@@ -182,6 +174,10 @@ class Settings:
         self.twilio_auth_token = _env("TWILIO_AUTH_TOKEN")
         self.twilio_whatsapp_from = _env("TWILIO_WHATSAPP_FROM")
         self.whatsapp_to = _env("WHATSAPP_TO")
+
+        # Telegram
+        self.telegram_bot_token = _env("TELEGRAM_BOT_TOKEN")
+        self.telegram_chat_id = _env("TELEGRAM_CHAT_ID")
 
         # S3 Storage
         self.s3_access_key_id = _env("S3_ACCESS_KEY_ID")
@@ -216,16 +212,11 @@ class Settings:
 
     @property
     def redis_url(self) -> str:
-        return (
-            f"redis://:{self.redis_password}"
-            f"@{self.redis_host}:{self.redis_port}/0"
-        )
+        return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/0"
 
     @property
     def use_azure_openai(self) -> bool:
-        return bool(
-            self.azure_openai_endpoint and self.azure_client_id
-        )
+        return bool(self.azure_openai_endpoint and self.azure_client_id)
 
     @property
     def has_discord(self) -> bool:
@@ -239,6 +230,10 @@ class Settings:
             and self.twilio_whatsapp_from
             and self.whatsapp_to
         )
+
+    @property
+    def has_telegram(self) -> bool:
+        return bool(self.telegram_bot_token and self.telegram_chat_id)
 
     @property
     def has_s3(self) -> bool:
@@ -281,52 +276,30 @@ class TradingConfig:
 
         # Signal filters
         self.min_confidence = _env_int("MIN_CONFIDENCE", 50)
-        self.max_vix_for_trading = _env_float(
-            "MAX_VIX_FOR_TRADING", 40.0
-        )
+        self.max_vix_for_trading = _env_float("MAX_VIX_FOR_TRADING", 40.0)
 
         # Regime router thresholds
         self.regime_vix_crisis = _env_float("REGIME_VIX_CRISIS", 35.0)
-        self.regime_no_trade_entropy = _env_float(
-            "REGIME_NO_TRADE_ENTROPY", 1.35
-        )
-        self.regime_min_confidence = _env_float(
-            "REGIME_MIN_CONFIDENCE", 0.40
-        )
+        self.regime_no_trade_entropy = _env_float("REGIME_NO_TRADE_ENTROPY", 1.35)
+        self.regime_min_confidence = _env_float("REGIME_MIN_CONFIDENCE", 0.40)
 
         # Ensembler thresholds
-        self.ensemble_min_score = _env_float(
-            "ENSEMBLE_MIN_SCORE", 0.35
-        )
+        self.ensemble_min_score = _env_float("ENSEMBLE_MIN_SCORE", 0.35)
 
         # Expression engine
         self.options_enabled = _env_bool("OPTIONS_ENABLED", False)
-        self.max_option_allocation = _env_float(
-            "MAX_OPTION_ALLOCATION", 0.20
-        )
+        self.max_option_allocation = _env_float("MAX_OPTION_ALLOCATION", 0.20)
         self.min_option_oi = _env_int("MIN_OPTION_OI", 500)
 
         # Strategy leaderboard
-        self.strategy_cooldown_score = _env_float(
-            "STRATEGY_COOLDOWN_SCORE", 0.20
-        )
-        self.strategy_reduced_score = _env_float(
-            "STRATEGY_REDUCED_SCORE", 0.35
-        )
-        self.strategy_retire_days = _env_int(
-            "STRATEGY_RETIRE_DAYS", 90
-        )
+        self.strategy_cooldown_score = _env_float("STRATEGY_COOLDOWN_SCORE", 0.20)
+        self.strategy_reduced_score = _env_float("STRATEGY_REDUCED_SCORE", 0.35)
+        self.strategy_retire_days = _env_int("STRATEGY_RETIRE_DAYS", 90)
 
         # Circuit breaker
-        self.max_daily_loss_pct = _env_float(
-            "MAX_DAILY_LOSS_PCT", 3.0
-        )
-        self.max_consecutive_losses = _env_int(
-            "MAX_CONSECUTIVE_LOSSES", 5
-        )
-        self.circuit_breaker_cooldown_min = _env_int(
-            "CIRCUIT_BREAKER_COOLDOWN_MIN", 60
-        )
+        self.max_daily_loss_pct = _env_float("MAX_DAILY_LOSS_PCT", 3.0)
+        self.max_consecutive_losses = _env_int("MAX_CONSECUTIVE_LOSSES", 5)
+        self.circuit_breaker_cooldown_min = _env_int("CIRCUIT_BREAKER_COOLDOWN_MIN", 60)
         # Sprint 82 CONFIG: aligned with RISK.max_positions (was 15)
         self.max_open_positions = _env_int("MAX_OPEN_POSITIONS", 10)
 
@@ -336,21 +309,13 @@ class TradingConfig:
         self.max_hold_days = _env_int("MAX_HOLD_DAYS", 30)
 
         # Signal dedup / anti-flip
-        self.signal_cooldown_hours = _env_int(
-            "SIGNAL_COOLDOWN_HOURS", 4
-        )
+        self.signal_cooldown_hours = _env_int("SIGNAL_COOLDOWN_HOURS", 4)
         self.anti_flip_hours = _env_int("ANTI_FLIP_HOURS", 6)
-        self.max_correlated_held = _env_int(
-            "MAX_CORRELATED_HELD", 3
-        )
+        self.max_correlated_held = _env_int("MAX_CORRELATED_HELD", 3)
 
         # Scheduling (Eastern Time)
-        self.premarket_report_time = _env(
-            "PREMARKET_REPORT_TIME", "06:30"
-        )
-        self.postmarket_report_time = _env(
-            "POSTMARKET_REPORT_TIME", "16:30"
-        )
+        self.premarket_report_time = _env("PREMARKET_REPORT_TIME", "06:30")
+        self.postmarket_report_time = _env("POSTMARKET_REPORT_TIME", "16:30")
 
 
 @lru_cache()

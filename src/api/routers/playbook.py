@@ -22,7 +22,11 @@ from typing import Any, Callable, Dict, List
 
 from fastapi import APIRouter, Query, Request
 
-from src.core.stock_universe import OPPORTUNITY_COVERAGE_UNIVERSE, RS_UNIVERSE, rs_sector_for
+from src.core.stock_universe import (
+    OPPORTUNITY_COVERAGE_UNIVERSE,
+    RS_UNIVERSE,
+    rs_sector_for,
+)
 from src.scanners.intl_universe import (
     AU_TICKERS,
     CRYPTO_TICKERS,
@@ -845,6 +849,16 @@ async def _compute_ranked_live(
     }
 
 
+def _notify_live_ranked_scan(payload: Dict[str, Any], *, source: str) -> None:
+    """Fire-and-forget Telegram alerts after a live ranked scan (non-fatal)."""
+    try:
+        from src.services.opportunity_telegram_alerts import notify_live_playbook_scan
+
+        notify_live_playbook_scan(payload, source=source)
+    except Exception as exc:
+        logger.debug("Telegram opportunity notify skipped: %s", exc)
+
+
 async def _refresh_ranked_cache(
     cache_key: str,
     limit: int,
@@ -863,8 +877,7 @@ async def _refresh_ranked_cache(
         )
         _set_ranked_cached(cache_key, response)
         save_playbook_snapshot(response, cache_key)
-    except asyncio.TimeoutError:
-        logger.warning("Ranked background refresh timeout for %s", cache_key)
+        _notify_live_ranked_scan(response, source="playbook_refresh")
     except Exception as exc:
         logger.warning("Ranked background refresh failed: %s", exc)
     finally:
@@ -889,6 +902,7 @@ async def warm_playbook_discovery_cache(app) -> None:
             from src.services.playbook_board_fallback import save_playbook_snapshot
 
             save_playbook_snapshot(response, cache_key)
+            _notify_live_ranked_scan(response, source="playbook_prewarm")
             logger.info(
                 "[Prewarm] Playbook ranked cache: %d opps, %d near-miss",
                 len(response.get("opportunities") or []),
@@ -1027,6 +1041,7 @@ async def ranked_opportunities(
             )
         _set_ranked_cached(cache_key, response)
         save_playbook_snapshot(response, cache_key)
+        _notify_live_ranked_scan(response, source="playbook_ranked")
         return response
     except asyncio.TimeoutError:
         logger.warning("Ranked playbook timeout")

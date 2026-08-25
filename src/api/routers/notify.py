@@ -98,20 +98,28 @@ async def resolve_discord_channel() -> Dict[str, Any]:
 
 @router.get("/status")
 async def notify_status() -> Dict[str, Any]:
-    """Discord configuration and last alert timestamp."""
+    """Discord + Telegram configuration and last alert timestamp."""
     try:
         from src.notifications.discord_dispatch import discord_config_status
+        from src.notifications.telegram import telegram_config_status
         from src.services.alert_service import get_alert_log
 
-        status = discord_config_status()
+        status = {
+            **discord_config_status(),
+            "telegram": telegram_config_status(),
+        }
         log = get_alert_log(limit=1)
         status["last_alert_ts"] = log[-1]["ts"] if log else None
         status["last_alert_type"] = log[-1]["event_type"] if log else None
-        if not status["discord_configured"]:
+        if not status.get("discord_configured"):
             status["setup_hint"] = (
                 "Set DISCORD_WEBHOOK_URL (recommended), or "
                 "DISCORD_BOT_TOKEN + DISCORD_CHANNEL_ID, or "
                 "DISCORD_BOT_TOKEN + DISCORD_CHANNEL_NAME"
+            )
+        if not status.get("telegram", {}).get("telegram_configured"):
+            status["telegram_setup_hint"] = (
+                "Set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID — see docs/TELEGRAM_SETUP.md"
             )
         return status
     except Exception as exc:
@@ -122,3 +130,44 @@ async def notify_status() -> Dict[str, Any]:
             "discord_configured": bool(webhook),
             "error": str(exc),
         }
+
+
+@router.post("/telegram/test")
+async def send_telegram_test(
+    message: str = Query(default="Test ping from TradingAI Bot · CC 測試"),
+) -> Dict[str, Any]:
+    """Fire a test Telegram message (HTML)."""
+    try:
+        from src.notifications.telegram import (
+            escape_html,
+            send_message,
+            telegram_config_status,
+        )
+
+        text = f"<b>🧪 Test Alert · CC</b>\n{escape_html(message)}"
+        pushed = send_message(text)
+        return {
+            "ok": True,
+            "pushed_to_telegram": pushed,
+            "message": message,
+            "config": telegram_config_status(),
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@router.get("/telegram/setup")
+async def telegram_setup() -> Dict[str, Any]:
+    """Human-readable Telegram setup checklist."""
+    from src.notifications.telegram import telegram_config_status
+
+    st = telegram_config_status()
+    steps = [
+        "1. Message @BotFather → /newbot → copy TELEGRAM_BOT_TOKEN",
+        "2. Send /start to your bot, then open https://api.telegram.org/bot<TOKEN>/getUpdates",
+        "3. Copy chat.id → TELEGRAM_CHAT_ID in .env",
+        "4. Optional: CC_PUBLIC_BASE_URL for deep links in alerts",
+        "5. Restart API → POST /api/v7/notify/telegram/test",
+        "See docs/TELEGRAM_SETUP.md for full guide",
+    ]
+    return {**st, "steps": steps}

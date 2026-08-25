@@ -1,10 +1,12 @@
 """Multi-channel notification dispatcher."""
+
 from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List
 
 from src.notifications.discord import DiscordNotifier
+from src.notifications.telegram_notifier import TelegramNotifier
 from src.notifications.whatsapp import WhatsAppNotifier
 
 
@@ -15,12 +17,14 @@ class MultiChannelNotifier:
         self.logger = logging.getLogger(__name__)
         self.discord = DiscordNotifier()
         self.whatsapp = WhatsAppNotifier()
+        self.telegram = TelegramNotifier()
 
     @property
     def channels_status(self) -> Dict[str, bool]:
         return {
             "discord": self.discord.is_configured,
             "whatsapp": self.whatsapp.is_configured,
+            "telegram": self.telegram.is_configured,
         }
 
     @property
@@ -32,12 +36,15 @@ class MultiChannelNotifier:
         results = {
             "discord": False,
             "whatsapp": False,
+            "telegram": False,
         }
 
         if self.discord.is_configured:
             results["discord"] = await self.discord.send_message(message)
         if self.whatsapp.is_configured:
             results["whatsapp"] = await self.whatsapp.send_message(message)
+        if self.telegram.is_configured:
+            results["telegram"] = await self.telegram.send_message(message)
 
         return results
 
@@ -71,7 +78,9 @@ class MultiChannelNotifier:
         message = self._format_daily_report_message(report)
         return await self.send_message(message)
 
-    async def send_alert(self, title: str, message: str, level: str = "INFO") -> Dict[str, bool]:
+    async def send_alert(
+        self, title: str, message: str, level: str = "INFO"
+    ) -> Dict[str, bool]:
         text = self._format_alert_message(title=title, message=message, level=level)
         sev = "warning" if level.upper() in ("WARNING", "ERROR") else "info"
         if level.upper() == "ERROR":
@@ -131,10 +140,7 @@ class MultiChannelNotifier:
         stop = trade_info.get("stop_price", 0)
         score = trade_info.get("composite_score", 0)
 
-        emoji = (
-            "\U0001f7e2" if direction == "LONG"
-            else "\U0001f534"
-        )
+        emoji = "\U0001f7e2" if direction == "LONG" else "\U0001f534"
 
         # Sprint 36: trust metadata line
         trust = trade_info.get("trust", {})
@@ -213,13 +219,9 @@ class MultiChannelNotifier:
         worked = attr.get("what_worked", [])
         failed = attr.get("what_failed", [])
         if worked:
-            lines.append(
-                "\u2705 " + " | ".join(worked[:3])
-            )
+            lines.append("\u2705 " + " | ".join(worked[:3]))
         if failed:
-            lines.append(
-                "\u274c " + " | ".join(failed[:3])
-            )
+            lines.append("\u274c " + " | ".join(failed[:3]))
 
         # Sprint 36: trust badge
         trust = exit_info.get("trust", {})
@@ -238,7 +240,8 @@ class MultiChannelNotifier:
         return await self.send_message(text)
 
     async def send_no_trade_alert(
-        self, no_trade_info: Dict[str, Any],
+        self,
+        no_trade_info: Dict[str, Any],
     ) -> Dict[str, bool]:
         """Send a no-trade card when system passes (Sprint 36).
 
@@ -256,9 +259,7 @@ class MultiChannelNotifier:
             f"Reason: {reason}",
         ]
         if tickers:
-            lines.append(
-                f"Considered: {', '.join(tickers[:5])}"
-            )
+            lines.append(f"Considered: {', '.join(tickers[:5])}")
         if resume:
             lines.append("Resume when:")
             for c in resume[:3]:
