@@ -59,9 +59,10 @@ def _bot_token() -> str:
 
 
 def _channel_id() -> str:
-    return os.getenv("DISCORD_CHANNEL_ID", "").strip() or os.getenv(
-        "DISCORD_ALERT_CHANNEL_ID", ""
-    ).strip()
+    return (
+        os.getenv("DISCORD_CHANNEL_ID", "").strip()
+        or os.getenv("DISCORD_ALERT_CHANNEL_ID", "").strip()
+    )
 
 
 def _cached_channel_id() -> str:
@@ -133,7 +134,12 @@ async def resolve_channel_id_async() -> str:
                         cid = str(ch.get("id") or "")
                         if cid:
                             _save_channel_cache(cid, label=f"{gname}/{cname}")
-                            logger.info("Discord channel resolved: %s/%s → %s", gname, cname, cid)
+                            logger.info(
+                                "Discord channel resolved: %s/%s → %s",
+                                gname,
+                                cname,
+                                cid,
+                            )
                             return cid
     except Exception as exc:
         logger.warning("Discord channel resolve failed: %s", exc)
@@ -148,7 +154,11 @@ def discord_is_configured() -> bool:
         return True
     if not _bot_token():
         return False
-    return bool(_channel_id() or _cached_channel_id() or os.getenv("DISCORD_CHANNEL_NAME", "").strip())
+    return bool(
+        _channel_id()
+        or _cached_channel_id()
+        or os.getenv("DISCORD_CHANNEL_NAME", "").strip()
+    )
 
 
 def discord_config_status() -> Dict[str, Any]:
@@ -223,19 +233,30 @@ def _build_embed(
     severity: str,
     event_type: str,
     meta: Optional[Dict[str, Any]] = None,
+    zh_summary: Optional[str] = None,
 ) -> Dict[str, Any]:
     sev = _normalize_severity(severity)
     emoji = _SEVERITY_EMOJI.get(sev, "ℹ️")
+    description = str(message or "")[:4096]
+    if zh_summary:
+        zh = str(zh_summary).strip()
+        if zh and zh not in description:
+            suffix = f"\n\n📝 **中文摘要 · zh-TW**\n{zh[:1800]}"
+            description = (description + suffix)[:4096]
     embed: Dict[str, Any] = {
         "title": f"{emoji} {title}"[:256],
-        "description": str(message or "")[:4096],
+        "description": description,
         "color": _SEVERITY_COLOR.get(sev, 0x5865F2),
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "footer": {"text": f"CC · {event_type} · monitor only — confirm in Playbook"},
+        "footer": {
+            "text": f"CC · {event_type} · 只 monitor — Playbook 確認 · monitor only — confirm in Playbook"
+        },
     }
     if meta:
         fields: List[Dict[str, Any]] = []
         for k, v in list(meta.items())[:6]:
+            if k == "zh_summary":
+                continue
             fields.append(
                 {
                     "name": str(k)[:256],
@@ -255,6 +276,7 @@ async def push_notice_async(
     severity: str = "info",
     event_type: str = "operator",
     meta: Optional[Dict[str, Any]] = None,
+    zh_summary: Optional[str] = None,
 ) -> bool:
     """Send embed to Discord via webhook or bot REST API."""
     if not _should_send(event_type, _normalize_severity(severity)):
@@ -264,8 +286,16 @@ async def push_notice_async(
         logger.debug("discord dedupe skip: %s", title)
         return False
 
+    meta_obj = dict(meta or {})
+    zh = zh_summary or meta_obj.pop("zh_summary", None)
+
     embed = _build_embed(
-        title=title, message=message, severity=severity, event_type=event_type, meta=meta
+        title=title,
+        message=message,
+        severity=severity,
+        event_type=event_type,
+        meta=meta_obj or None,
+        zh_summary=zh,
     )
     payload = {"embeds": [embed]}
 
@@ -298,7 +328,9 @@ async def push_notice_async(
                     if resp.status in (200, 201):
                         return True
                     body = await resp.text()
-                    logger.warning("Discord bot channel %s: %s", resp.status, body[:200])
+                    logger.warning(
+                        "Discord bot channel %s: %s", resp.status, body[:200]
+                    )
         except Exception as exc:
             logger.warning("Discord bot channel error: %s", exc)
     return False
@@ -312,6 +344,7 @@ def push_notice(
     event_type: str = "operator",
     meta: Optional[Dict[str, Any]] = None,
     log: bool = True,
+    zh_summary: Optional[str] = None,
 ) -> bool:
     """Sync entry — logs to alert_log then pushes to Discord."""
     if log:
@@ -324,7 +357,7 @@ def push_notice(
                     title=title,
                     message=message,
                     severity=_normalize_severity(severity),
-                    meta=meta,
+                    meta={**(meta or {}), **({"zh_summary": zh_summary} if zh_summary else {})},
                 )
             )
         except Exception as exc:
@@ -340,6 +373,7 @@ def push_notice(
             severity=severity,
             event_type=event_type,
             meta=meta,
+            zh_summary=zh_summary,
         )
 
     try:

@@ -83,6 +83,17 @@ class TestDiscordDispatch(unittest.TestCase):
         )
         self.assertIn("Playbook", emb["footer"]["text"])
 
+    def test_embed_bilingual_zh_summary(self):
+        emb = dd._build_embed(
+            title="Test",
+            message="English body",
+            severity="info",
+            event_type="test",
+            zh_summary="中文摘要",
+        )
+        self.assertIn("中文摘要", emb["description"])
+        self.assertIn("zh-TW", emb["description"])
+
 
 if __name__ == "__main__":
     unittest.main()

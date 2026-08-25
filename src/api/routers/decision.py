@@ -1552,6 +1552,32 @@ async def today_summary(request: Request):
             from src.services.alert_service import on_regime_change
 
             on_regime_change(old_regime, new_regime, vix)
+
+        prev_unlock = (prev.get("unlock_deploy") or {}).get("unlocked")
+        new_unlock = (payload.get("unlock_deploy") or {}).get("unlocked")
+        if prev_unlock is not None and new_unlock is not None and prev_unlock != new_unlock:
+            from src.services.alert_service import on_deploy_gate_change
+
+            ud = payload.get("unlock_deploy") or {}
+            on_deploy_gate_change(
+                unlocked=bool(new_unlock),
+                summary=str(ud.get("summary") or ""),
+                tradeability=str(
+                    (payload.get("market_regime") or {}).get("tradeability") or ""
+                ),
+                remaining=ud.get("remaining") or [],
+            )
+
+        prev_bdr = str((prev.get("bdr_summary") or {}).get("decision_code") or "")
+        new_bdr = str((payload.get("bdr_summary") or {}).get("decision_code") or "")
+        if prev_bdr and new_bdr and prev_bdr != new_bdr:
+            from src.services.alert_service import on_bdr_decision_change
+
+            on_bdr_decision_change(
+                prev_bdr,
+                new_bdr,
+                str((payload.get("bdr_summary") or {}).get("decision_line") or ""),
+            )
     except Exception:
         pass
     try:

@@ -61,6 +61,12 @@ def get_engine(app) -> Optional[Any]:
             if hasattr(engine, "context_assembler"):
                 engine.context_assembler.market_data = app.state.market_data
             app.state.engine = engine
+            try:
+                from src.services.runtime_truth import register_engine
+
+                register_engine(engine)
+            except Exception:
+                pass
             logger.info("[AppState] AutoTradingEngine created")
         except Exception as exc:
             logger.warning("[AppState] engine init failed: %s", exc)

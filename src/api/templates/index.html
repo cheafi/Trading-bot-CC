@@ -1054,13 +1054,13 @@
             </summary>
             <div class="text-[9px] font-bold mt-2 mb-1" style="color:var(--t2)">
               <span style="color:var(--t3)">決策 · Decision:</span>
-              <span x-text="today7.bdr_summary.decision_line"></span>
+              <span x-text="bdrDecisionLine()"></span>
             </div>
             <div class="text-[8px] font-bold uppercase mb-0.5" style="color:var(--amber)">硬性閘門 · Hard gates blocking</div>
             <template x-for="g in (today7.bdr_summary.hard_gates_blocking||[])" :key="'bdr-g-'+g.n">
               <div class="text-[8px] mb-0.5" style="color:var(--t2);line-height:1.45">
                 <span class="font-bold" x-text="g.n+'.'"></span>
-                <span x-text="g.label+' — '+g.detail"></span>
+                <span x-text="bdrHardGateLine(g)"></span>
               </div>
             </template>
             <div class="text-[8px] font-bold uppercase mt-2 mb-0.5" style="color:var(--t3)">風險回報 · R:R quality (top names)</div>
@@ -1082,37 +1082,34 @@
                       <td class="pr-2 mono font-bold" x-text="row.ticker"></td>
                       <td class="pr-2" x-text="row.action"></td>
                       <td class="pr-2 mono" x-text="row.risk_reward"></td>
-                      <td x-text="row.main_issue"></td>
+                      <td x-text="bdrMainIssue(row)"></td>
                     </tr>
                   </template>
                 </tbody>
               </table>
             </div>
             <div class="text-[8px] font-bold uppercase mt-2 mb-0.5" style="color:var(--t3)">白話解讀 · Plain-English read</div>
-            <div class="text-[8px] mb-1" style="color:var(--t2);line-height:1.45" x-text="today7.bdr_summary.plain_english_read"></div>
+            <div class="text-[8px] mb-1" style="color:var(--t2);line-height:1.45" x-text="bdrPlainEnglishRead()"></div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
               <div>
                 <div class="text-[8px] font-bold uppercase mb-0.5" style="color:var(--blue)">只監察 · Monitor only</div>
                 <template x-for="(ln,i) in ((today7.bdr_summary.what_to_do_now||{}).monitor_only||[])" :key="'bdr-mon-'+i">
-                  <div class="text-[8px]" style="color:var(--t2)" x-text="'• '+ln"></div>
+                  <div class="text-[8px]" style="color:var(--t2)" x-text="bdrActionBullet(ln)"></div>
                 </template>
               </div>
               <div>
                 <div class="text-[8px] font-bold uppercase mb-0.5" style="color:var(--red)">不可部署 · Do not deploy</div>
                 <template x-for="(ln,i) in ((today7.bdr_summary.what_to_do_now||{}).do_not_deploy||[])" :key="'bdr-dnd-'+i">
-                  <div class="text-[8px]" style="color:var(--t2)" x-text="'• '+ln"></div>
+                  <div class="text-[8px]" style="color:var(--t2)" x-text="bdrActionBullet(ln)"></div>
                 </template>
               </div>
             </div>
             <div class="text-[8px] font-bold uppercase mt-2 mb-0.5" style="color:var(--t3)">解鎖清單 · Unlock checklist</div>
             <template x-for="c in (today7.bdr_summary.unlock_checklist||[])" :key="'bdr-u-'+c.key">
-              <div class="text-[8px] mb-0.5" style="color:var(--t2)">
-                <span x-text="(c.met?'✓':'✗')+' '+c.label+': '+c.current"></span>
-                <span style="color:var(--t3)" x-text="' → '+c.target"></span>
-              </div>
+              <div class="text-[8px] mb-0.5" style="color:var(--t2)" x-text="bdrUnlockChecklistLine(c)"></div>
             </template>
             <div class="text-[8px] font-bold uppercase mt-2 mb-0.5" style="color:var(--green)">一句重點 · Best concise note</div>
-            <div class="text-[8px] font-semibold" style="color:var(--t2)" x-text="today7.bdr_summary.best_concise_note"></div>
+            <div class="text-[8px] font-semibold" style="color:var(--t2)" x-text="bdrBestConciseNote()"></div>
           </details>
         </div>
       </template>

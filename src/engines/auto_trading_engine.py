@@ -13,8 +13,7 @@ Runs 24/7 without human intervention. Handles:
 import asyncio
 import logging
 import time
-from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
 from src.algo.position_manager import PositionManager, RiskParameters
@@ -27,8 +26,9 @@ from src.core.errors import (
     SignalError,
     ValidationError,
 )
-from src.core.logging_config import get_correlation_id, set_correlation_id
-from src.core.models import Direction, Signal, SignalStatus, TradeRecommendation
+from src.core.logging_config import set_correlation_id
+from src.core.models import Direction, Signal, TradeRecommendation
+from src.core.risk_limits import RISK
 from src.core.trade_repo import TradeOutcomeRepository
 from src.core.trust_metadata import (
     NoTradeCard,
@@ -37,13 +37,13 @@ from src.core.trust_metadata import (
     TrustBadge,
     TrustMetadata,
 )
-from src.core.risk_limits import RISK
 from src.engines.context_assembler import ContextAssembler
 from src.engines.opportunity_ensembler import OpportunityEnsembler
 from src.engines.portfolio_risk_budget import PortfolioRiskBudget
 from src.engines.professional_kpi import CoverageFunnel, ProfessionalKPI
 from src.engines.regime_router import RegimeRouter
 from src.engines.strategy_leaderboard import StrategyLeaderboard
+from src.engines.trade_gate import TradeGate
 from src.ml.trade_learner import TradeLearningLoop, TradeOutcomeRecord
 from src.scanners.universe_builder import UniverseBuilder
 
@@ -248,6 +248,7 @@ class AutoTradingEngine:
 
         # Sprint 4: decision-layer components
         self.regime_router = RegimeRouter()
+        self.trade_gate = TradeGate()
         self.ensembler = OpportunityEnsembler()
 
         # Sprint 42: wire MarketDataService into ContextAssembler
@@ -304,6 +305,8 @@ class AutoTradingEngine:
         self._no_trade_readiness: Dict[str, Any] = {}
 
         # Sprint 36: cached no-trade card
+        self._trade_gate_was_blocked = False
+        self._last_trade_gate: Dict[str, Any] = {}
         self._no_trade_card = None
 
         # Sprint 31: signal cooldown + correlation guard
@@ -603,99 +606,130 @@ class AutoTradingEngine:
         # Sprint 24: refuse new trades when equity is stale
         if self._is_equity_stale():
             logger.warning(
-                "Equity data stale/missing — skipping "
-                "new trade execution this cycle",
+                "Equity data stale/missing — skipping new trade execution this cycle",
             )
-            return
-
-        for rec in ranked:
-            if not rec.trade_decision:
-                continue
-
-            # Sprint 31: correlation guard — skip if
-            # candidate is too correlated with held positions
-            corr_ok, corr_reason = self.position_mgr.check_correlation_guard(
-                rec.ticker,
-                price_data=self._last_price_data,
-                max_correlated=self._max_correlated,
-                threshold=0.70,
-            )
-            if not corr_ok:
-                logger.info(
-                    "Correlation guard skipped %s: %s",
-                    rec.ticker,
-                    corr_reason,
-                )
-                continue
-
-            # Sprint 28: ML grade → size modulation (not just D-reject)
-            # A=1.0, B=0.75, C=0.5, D=reject
-            ml_quality = self.learning_loop.predict_signal_quality(
-                rec.to_entry_snapshot(),
-            )
-            _ml_grade = ml_quality.get("signal_grade", "B")
-            _ml_prob = ml_quality.get("win_probability", 0)
-            if ml_quality.get("model_available"):
-                rec.ml_grade = _ml_grade
-                rec.ml_win_probability = _ml_prob
-                if _ml_grade == "D":
-                    logger.info(
-                        "ML gate rejected %s (grade=D, p=%.2f)",
-                        rec.ticker,
-                        _ml_prob,
+        else:
+            gate_result = await self._evaluate_trade_gate_for_cycle()
+            gate_allowed = bool(gate_result.get("allowed"))
+            if not gate_allowed:
+                blocks = gate_result.get("hard_blocks") or []
+                if self._cycle_count % 30 == 0:
+                    logger.warning(
+                        "TradeGate blocked execution: %s",
+                        "; ".join(str(b) for b in blocks),
                     )
-                    continue
-            # Store grade for sizing layer
-            rec.ml_grade = _ml_grade
-
-            if self.dry_run:
-                logger.info(
-                    "[DRY RUN] Would execute: %s %s (score=%.3f)",
-                    rec.ticker,
-                    rec.direction,
-                    rec.composite_score,
-                )
-            else:
-                result = await self._execute_recommendation(rec)
-                if result:
-                    result["composite_score"] = rec.composite_score
-                    self._trades_today.append(result)
-                    # Record in PositionManager for trailing stops
+                if not self._trade_gate_was_blocked:
+                    self._trade_gate_was_blocked = True
                     try:
-                        _is_short = rec.direction == Direction.SHORT.value
-                        _entry = result.get(
-                            "entry_price",
-                            rec.entry_price,
-                        )
-                        if rec.stop_price and rec.stop_price > 0:
-                            _stop = rec.stop_price
-                        elif _is_short:
-                            _stop = _entry * (1 + trading_config.stop_loss_pct)
-                        else:
-                            _stop = _entry * (1 - trading_config.stop_loss_pct)
-                        self.position_mgr.open_position(
-                            ticker=rec.ticker,
-                            strategy_id=rec.strategy_id,
-                            entry_price=_entry,
-                            shares=rec.position_size_shares or 1,
-                            stop_loss_price=_stop,
-                            max_hold_days=trading_config.max_hold_days,
-                            direction=("short" if _is_short else "long"),
-                        )
-                    except RiskLimitError as e:
-                        logger.warning(
-                            "PositionManager risk limit " "for %s: %s",
+                        from src.services.alert_service import on_trade_gate_blocked
+
+                        on_trade_gate_blocked(blocks)
+                    except Exception:
+                        pass
+            else:
+                if self._trade_gate_was_blocked:
+                    self._trade_gate_was_blocked = False
+                    try:
+                        from src.services.alert_service import on_trade_gate_cleared
+
+                        on_trade_gate_cleared(gate_result.get("soft_warnings") or [])
+                    except Exception:
+                        pass
+                size_mult = float(gate_result.get("size_multiplier") or 1.0)
+
+                for rec in ranked:
+                    if not rec.trade_decision:
+                        continue
+
+                    # Sprint 31: correlation guard — skip if
+                    # candidate is too correlated with held positions
+                    corr_ok, corr_reason = self.position_mgr.check_correlation_guard(
+                        rec.ticker,
+                        price_data=self._last_price_data,
+                        max_correlated=self._max_correlated,
+                        threshold=0.70,
+                    )
+                    if not corr_ok:
+                        logger.info(
+                            "Correlation guard skipped %s: %s",
                             rec.ticker,
-                            e,
+                            corr_reason,
                         )
-                    except Exception as e:
-                        logger.warning(
-                            "PositionManager track error " "for %s: %s",
+                        continue
+
+                    # Sprint 28: ML grade → size modulation (not just D-reject)
+                    # A=1.0, B=0.75, C=0.5, D=reject
+                    ml_quality = self.learning_loop.predict_signal_quality(
+                        rec.to_entry_snapshot(),
+                    )
+                    _ml_grade = ml_quality.get("signal_grade", "B")
+                    _ml_prob = ml_quality.get("win_probability", 0)
+                    if ml_quality.get("model_available"):
+                        rec.ml_grade = _ml_grade
+                        rec.ml_win_probability = _ml_prob
+                        if _ml_grade == "D":
+                            logger.info(
+                                "ML gate rejected %s (grade=D, p=%.2f)",
+                                rec.ticker,
+                                _ml_prob,
+                            )
+                            continue
+                    # Store grade for sizing layer
+                    rec.ml_grade = _ml_grade
+
+                    if size_mult < 1.0 and rec.position_size_shares:
+                        rec.position_size_shares = max(
+                            1, int(rec.position_size_shares * size_mult)
+                        )
+
+                    if self.dry_run:
+                        logger.info(
+                            "[DRY RUN] Would execute: %s %s (score=%.3f)",
                             rec.ticker,
-                            e,
+                            rec.direction,
+                            rec.composite_score,
                         )
-                    # Sprint 24: persist state after open
-                    self.position_mgr.save_state()
+                    else:
+                        result = await self._execute_recommendation(rec)
+                        if result:
+                            result["composite_score"] = rec.composite_score
+                            self._trades_today.append(result)
+                            # Record in PositionManager for trailing stops
+                            try:
+                                _is_short = rec.direction == Direction.SHORT.value
+                                _entry = result.get(
+                                    "entry_price",
+                                    rec.entry_price,
+                                )
+                                if rec.stop_price and rec.stop_price > 0:
+                                    _stop = rec.stop_price
+                                elif _is_short:
+                                    _stop = _entry * (1 + trading_config.stop_loss_pct)
+                                else:
+                                    _stop = _entry * (1 - trading_config.stop_loss_pct)
+                                self.position_mgr.open_position(
+                                    ticker=rec.ticker,
+                                    strategy_id=rec.strategy_id,
+                                    entry_price=_entry,
+                                    shares=rec.position_size_shares or 1,
+                                    stop_loss_price=_stop,
+                                    max_hold_days=trading_config.max_hold_days,
+                                    direction=("short" if _is_short else "long"),
+                                )
+                            except RiskLimitError as e:
+                                logger.warning(
+                                    "PositionManager risk limit for %s: %s",
+                                    rec.ticker,
+                                    e,
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    "PositionManager track error for %s: %s",
+                                    rec.ticker,
+                                    e,
+                                )
+                            # Sprint 24: persist state after open
+                            self.position_mgr.save_state()
 
         # Sprint 35: record engine cycle into KPI tracker
         _traded = len(self._trades_today) > 0
@@ -772,7 +806,7 @@ class AutoTradingEngine:
         """
         if self._cycle_count % 30 == 0:
             logger.info(
-                "Regime gate: no-trade " "(entropy=%.2f, regime=%s)",
+                "Regime gate: no-trade (entropy=%.2f, regime=%s)",
                 self._regime_state.get("entropy", 0),
                 self._regime_state.get("regime", "unknown"),
             )
@@ -1959,7 +1993,7 @@ class AutoTradingEngine:
                     wait,
                 )
                 await asyncio.sleep(wait)
-            except Exception as e:
+            except Exception:
                 raise  # Non-retryable
         raise last_exc
 
@@ -1991,6 +2025,43 @@ class AutoTradingEngine:
         except (BrokerError, ConnectionError, OSError, RuntimeError) as e:
             logger.debug("Equity fetch fallback to cache: %s", e)
             return self._last_known_equity
+
+    async def _evaluate_trade_gate_for_cycle(self) -> Dict[str, Any]:
+        """Portfolio-level trade gate — blocks new executions, not monitoring."""
+        equity = await self._get_equity()
+        open_positions = await self._count_positions()
+        drawdown_pct = 0.0
+        cb = self.circuit_breaker
+        peak = float(getattr(cb, "peak_equity", 0) or 0)
+        if peak > 0 and equity > 0:
+            drawdown_pct = max(0.0, (peak - equity) / peak)
+
+        heat_pct = 0.0
+        try:
+            from src.engines.portfolio_heat import get_portfolio_heat_engine
+
+            snap = get_portfolio_heat_engine().snapshot()
+            heat_pct = float(getattr(snap, "heat_pct", 0) or 0) / 100.0
+        except Exception:
+            pass
+
+        vix = float(self._regime_state.get("vix") or 0)
+        regime = str(
+            self._regime_state.get("regime")
+            or self._regime_state.get("composite_regime")
+            or "UNKNOWN"
+        )
+        result = self.trade_gate.evaluate(
+            current_drawdown_pct=drawdown_pct,
+            open_positions=open_positions,
+            portfolio_heat_pct=heat_pct,
+            vix=vix if vix > 0 else None,
+            regime=regime,
+            current_hour_utc=datetime.now(timezone.utc).hour,
+        )
+        gate_dict = result.to_dict()
+        self._last_trade_gate = gate_dict
+        return gate_dict
 
     def _is_equity_stale(self) -> bool:
         """True if we have never fetched equity or it's older than threshold."""

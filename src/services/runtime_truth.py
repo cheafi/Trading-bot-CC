@@ -2,6 +2,25 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+_REGISTERED_ENGINE: Any = None
+
+
+def register_engine(engine: Any) -> None:
+    """Register the in-process AutoTradingEngine for gate snapshots."""
+    global _REGISTERED_ENGINE
+    _REGISTERED_ENGINE = engine
+
+
+def registered_engine_breaker() -> Dict[str, Any]:
+    """Circuit breaker state from the registered engine, if any."""
+    engine = _REGISTERED_ENGINE
+    if not engine:
+        return {"circuit_breaker": False, "circuit_breaker_reason": ""}
+    cb = getattr(engine, "circuit_breaker", None)
+    triggered = bool(getattr(cb, "triggered", False)) if cb else False
+    reason = str(getattr(cb, "trigger_reason", "") or "") if cb else ""
+    return {"circuit_breaker": triggered, "circuit_breaker_reason": reason}
+
 
 def engine_runtime_snapshot(engine: Any) -> Dict[str, Any]:
     """Canonical runtime snapshot shared across Today / Header / Ops."""
@@ -44,13 +63,17 @@ def merge_execution_runtime_truth(
     merged: Dict[str, Any] = dict(execution_readiness or {})
     runtime = engine_runtime_snapshot(engine)
     merged["engine_running"] = bool(
-        merged.get("engine_running") if merged.get("engine_running") is not None else runtime["running"]
+        merged.get("engine_running")
+        if merged.get("engine_running") is not None
+        else runtime["running"]
     )
     merged["circuit_breaker"] = bool(
         merged.get("circuit_breaker")
         if merged.get("circuit_breaker") is not None
         else runtime["circuit_breaker"]
     )
-    if runtime.get("circuit_breaker_reason") and not merged.get("circuit_breaker_reason"):
+    if runtime.get("circuit_breaker_reason") and not merged.get(
+        "circuit_breaker_reason"
+    ):
         merged["circuit_breaker_reason"] = runtime["circuit_breaker_reason"]
     return merged

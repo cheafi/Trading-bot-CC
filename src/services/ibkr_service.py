@@ -1931,9 +1931,13 @@ def ibkr_authority_gate_snapshot() -> dict[str, Any]:
         effective_connected = socket_connected or (
             health.get("account_status") == "ok" and session_usable
         )
+        from src.services.runtime_truth import registered_engine_breaker
+
+        breaker = registered_engine_breaker()
         return {
             "connected": effective_connected,
-            "circuit_breaker": False,
+            "circuit_breaker": bool(breaker.get("circuit_breaker")),
+            "circuit_breaker_reason": breaker.get("circuit_breaker_reason") or "",
         }
     except Exception:
         return {"connected": False, "circuit_breaker": False}

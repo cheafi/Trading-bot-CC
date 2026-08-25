@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -95,7 +94,16 @@ def _make_event(
 # ── Discord push helper ───────────────────────────────────────────────────────
 
 
-def _push_discord(title: str, message: str, severity: str = "info") -> bool:
+def _push_discord(
+    title: str,
+    message: str,
+    severity: str = "info",
+    *,
+    event_type: str = "alert_service",
+    meta: Optional[Dict[str, Any]] = None,
+    zh_summary: Optional[str] = None,
+    log: bool = False,
+) -> bool:
     """Fire-and-forget Discord push. Returns True if dispatched."""
     try:
         from src.notifications.discord_dispatch import push_notice
@@ -104,8 +112,10 @@ def _push_discord(title: str, message: str, severity: str = "info") -> bool:
             title=title,
             message=message,
             severity=severity,
-            event_type="alert_service",
-            log=False,
+            event_type=event_type,
+            meta=meta,
+            log=log,
+            zh_summary=zh_summary,
         )
     except Exception as exc:
         logger.warning("Discord push failed: %s", exc)
@@ -149,8 +159,8 @@ def on_thompson_arm_degrade(arms: List[Dict[str, Any]]) -> bool:
         return False
     title = f"Thompson Arm Degrade — {len(degraded)} arm(s) below {WIN_RATE_FLOOR:.0%}"
     lines = [
-        f"• {a.get('strategy','?')} / {a.get('regime','?')} — "
-        f"win_rate={a.get('win_rate',0):.1%}"
+        f"• {a.get('strategy', '?')} / {a.get('regime', '?')} — "
+        f"win_rate={a.get('win_rate', 0):.1%}"
         for a in degraded
     ]
     message = "\n".join(lines)
@@ -197,18 +207,27 @@ def on_regime_change(old_regime: str, new_regime: str, vix: float = 0.0) -> bool
     if old_regime == new_regime:
         return False
     title = f"Regime Change: {old_regime} → {new_regime}"
-    message = f"Market regime shifted.  VIX: {vix:.1f}"
+    message = (
+        f"Market regime shifted.\n"
+        f"VIX: {vix:.1f}\n"
+        f"Next: refresh Dashboard + Playbook — ranking ≠ deploy permission."
+    )
+    zh = (
+        f"市場體制由 {old_regime} 轉為 {new_regime}。"
+        f"VIX {vix:.1f}。"
+        f"請刷新 Dashboard／Playbook — 排序不等於 deploy 許可。"
+    )
     severity = "warning" if new_regime in ("BEAR", "CHOPPY") else "info"
     event = _make_event(
         "regime_change",
         title,
         message,
         severity=severity,
-        meta={"old": old_regime, "new": new_regime, "vix": vix},
+        meta={"old": old_regime, "new": new_regime, "vix": vix, "zh_summary": zh},
     )
     _append_log(event)
     logger.info("[ALERT] %s", title)
-    return _push_discord(title, message, severity)
+    return _push_discord(title, message, severity, zh_summary=zh)
 
 
 def on_drawdown_breach(
@@ -235,14 +254,149 @@ def on_drawdown_breach(
 
 def on_circuit_breaker(reason: str) -> bool:
     """Push a hard circuit-breaker triggered alert."""
-    title = "⚡ Circuit Breaker Triggered"
-    message = reason
+    title = "Circuit Breaker Triggered"
+    message = f"{reason}\n\nNew executions blocked — confirm in Ops before resuming."
+    zh = f"熔斷已觸發：{reason}。新 execution 已阻 — 請於 Ops 確認後再繼續。"
     event = _make_event(
-        "circuit_breaker", title, message, severity="critical", meta={"reason": reason}
+        "circuit_breaker",
+        title,
+        message,
+        severity="critical",
+        meta={"reason": reason, "zh_summary": zh},
     )
     _append_log(event)
     logger.error("[ALERT] %s | %s", title, message)
-    return _push_discord(title, message, "critical")
+    return _push_discord(title, message, "critical", zh_summary=zh)
+
+
+def on_deploy_gate_change(
+    *,
+    unlocked: bool,
+    summary: str = "",
+    tradeability: str = "",
+    remaining: Optional[List[str]] = None,
+) -> bool:
+    """Notify when unlock_deploy flips locked ↔ unlocked."""
+    rem = remaining or []
+    if unlocked:
+        title = "Deploy Gate UNLOCKED"
+        message = summary or "All four unlock_deploy conditions met."
+        zh = "部署閘門已解鎖 — 四項條件齊備。送出前仍須確認 size 同 bracket。"
+        severity = "ok"
+    else:
+        title = "Deploy Gate LOCKED"
+        message = summary or "Deploy gate not cleared."
+        if rem:
+            message += "\nRemaining:\n" + "\n".join(f"• {r}" for r in rem[:4])
+        zh = "部署閘門已鎖 — 請完成 unlock checklist 後再 handoff。"
+        severity = "warning"
+    event = _make_event(
+        "deploy_gate_change",
+        title,
+        message,
+        severity=severity,
+        meta={
+            "unlocked": unlocked,
+            "tradeability": tradeability,
+            "remaining": rem if not unlocked else [],
+            "zh_summary": zh,
+        },
+    )
+    _append_log(event)
+    logger.info("[ALERT] %s", title)
+    return _push_discord(
+        title,
+        message,
+        severity,
+        event_type="deploy_gate_change",
+        zh_summary=zh,
+        log=True,
+    )
+
+
+def on_bdr_decision_change(
+    old_code: str,
+    new_code: str,
+    decision_line: str = "",
+) -> bool:
+    """Notify when BDR decision_code transitions."""
+    if not old_code or not new_code or old_code == new_code:
+        return False
+    title = f"BDR Decision: {old_code} → {new_code}"
+    message = decision_line or f"Board decision review shifted to {new_code}."
+    zh = f"BDR 決策由 {old_code} 轉為 {new_code} — 請查 Today 面板。"
+    severity = "ok" if new_code == "DEPLOY" else "info"
+    if new_code == "NO_TRADE":
+        severity = "warning"
+    event = _make_event(
+        "bdr_decision_change",
+        title,
+        message,
+        severity=severity,
+        meta={"old": old_code, "new": new_code, "zh_summary": zh},
+    )
+    _append_log(event)
+    logger.info("[ALERT] %s", title)
+    return _push_discord(
+        title,
+        message,
+        severity,
+        event_type="bdr_decision_change",
+        zh_summary=zh,
+        log=True,
+    )
+
+
+def on_trade_gate_blocked(hard_blocks: List[str]) -> bool:
+    """Engine TradeGate hard-block — new autonomous executions paused."""
+    if not hard_blocks:
+        return False
+    title = "Trade Gate BLOCKED (engine)"
+    message = "Portfolio trade gate blocked new executions:\n" + "\n".join(
+        f"• {b}" for b in hard_blocks[:5]
+    )
+    zh = "引擎 TradeGate 阻擋新 execution — 持倉監控仍運行。"
+    event = _make_event(
+        "trade_gate_blocked",
+        title,
+        message,
+        severity="warning",
+        meta={"hard_blocks": hard_blocks, "zh_summary": zh},
+    )
+    _append_log(event)
+    return _push_discord(
+        title,
+        message,
+        "warning",
+        event_type="trade_gate_blocked",
+        zh_summary=zh,
+        log=True,
+    )
+
+
+def on_trade_gate_cleared(soft_warnings: Optional[List[str]] = None) -> bool:
+    """Engine TradeGate cleared — executions may resume (subject to other gates)."""
+    title = "Trade Gate CLEARED (engine)"
+    message = "Portfolio trade gate allows new executions again."
+    if soft_warnings:
+        message += "\nSoft warnings:\n" + "\n".join(f"• {w}" for w in soft_warnings[:3])
+    zh = "引擎 TradeGate 已清 — 仍受 deploy authority 同 Playbook 閘門約束。"
+    event = _make_event(
+        "trade_gate_cleared",
+        title,
+        message,
+        severity="ok",
+        meta={"soft_warnings": soft_warnings or [], "zh_summary": zh},
+    )
+    _append_log(event)
+    return _push_discord(
+        title,
+        message,
+        "ok",
+        event_type="trade_gate_cleared",
+        zh_summary=zh,
+        log=True,
+    )
 
 
 def check_and_push_ic_decay() -> bool:
@@ -264,7 +418,7 @@ def check_and_push_thompson_degrade() -> bool:
         from src.engines.thompson_sizing import get_thompson_engine
 
         engine = get_thompson_engine()
-        best = engine.recommend_best_arm()
+        engine.recommend_best_arm()
         arms = []
         for key, arm in engine._arms.items():
             strategy, regime = key.split("::", 1) if "::" in key else (key, "")

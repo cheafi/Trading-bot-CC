@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Set
 
-
 _AVOID_CATEGORIES = (
     "regime",
     "breadth",
@@ -57,9 +56,19 @@ def build_avoid_now_engine(
     if tradeability in ("NO_TRADE", "WAIT") and not should_trade:
         _add("—", f"Tradeability {tradeability} — observe only", "regime", "medium")
     if vix > 28:
-        _add("—", f"VIX {vix:.0f} — elevated; avoid full-size adds", "stretched_vol", "high")
+        _add(
+            "—",
+            f"VIX {vix:.0f} — elevated; avoid full-size adds",
+            "stretched_vol",
+            "high",
+        )
     if breadth < 40:
-        _add("—", f"Breadth {breadth:.0f}% — narrow market; avoid broad deploy", "breadth", "medium")
+        _add(
+            "—",
+            f"Breadth {breadth:.0f}% — narrow market; avoid broad deploy",
+            "breadth",
+            "medium",
+        )
     if confidence < 0.4:
         _add("—", "Low regime confidence — size down", "regime", "medium")
 
@@ -141,7 +150,9 @@ def build_regime_wait_explanation(
     """Explain UPTREND + WAIT without sounding contradictory."""
     lines: List[str] = []
     if trend_label == "UPTREND" and tradeability in ("WAIT", "SELECTIVE"):
-        lines.append("Broad trend is supportive — uptrend is the backdrop, not a deploy signal.")
+        lines.append(
+            "Broad trend is supportive — uptrend is the backdrop, not a deploy signal."
+        )
         lines.append(
             "No name passed full action rules (score ≥8, thesis+timing ≥65%, R:R ≥2.5, regime gate)."
         )
@@ -150,15 +161,21 @@ def build_regime_wait_explanation(
                 f"{actionable} setup(s) scored ≥7.0 but failed timing, execution, or R:R gates."
             )
         else:
-            lines.append("Scanner found no names above actionable score threshold today.")
+            lines.append(
+                "Scanner found no names above actionable score threshold today."
+            )
     elif not should_trade:
-        lines.append("Regime gate is closed — capital preservation overrides individual setups.")
+        lines.append(
+            "Regime gate is closed — capital preservation overrides individual setups."
+        )
     elif trade_count > 0:
         lines.append(f"{trade_count} TRADE-ready name(s) — deploy selectively at 1R.")
     else:
         lines.append(f"Tradeability: {tradeability} — patience is the active decision.")
     if vix > 22:
-        lines.append(f"VIX {vix:.0f} — elevated vol; size down or wait for compression.")
+        lines.append(
+            f"VIX {vix:.0f} — elevated vol; size down or wait for compression."
+        )
     if breadth < 40:
         lines.append(f"Breadth {breadth:.0f}% — narrow participation; leaders only.")
     return lines[:5]
@@ -309,25 +326,25 @@ def build_unlock_deploy(
     conditions = [
         {
             "key": "regime",
-            "label": "Tradeability improves to SELECTIVE+",
+            "label": "可交易性升至 SELECTIVE+ · Tradeability improves to SELECTIVE+",
             "met": regime_ok,
             "detail": f"Current: {tb}",
         },
         {
             "key": "deployable",
-            "label": "At least 1 deploy-qualified setup exists",
+            "label": "至少 1 個 deploy-qualified · At least 1 deploy-qualified setup",
             "met": deployable_count >= 1,
             "detail": f"{deployable_count} deploy-qualified",
         },
         {
             "key": "broker",
-            "label": "Broker handoff is live",
+            "label": "券商 handoff 就緒 · Broker handoff is live",
             "met": broker_ready,
             "detail": ex.get("unified_label") or ex.get("readiness_label") or "Offline",
         },
         {
             "key": "board",
-            "label": "Board-level quality supports risk",
+            "label": "板面質素支持風險 · Board-level quality supports risk",
             "met": board_quality_ok,
             "detail": format_board_quality_detail(
                 wq, scan_ranked=sr, scanner_degraded=scanner_degraded
@@ -338,19 +355,33 @@ def build_unlock_deploy(
     remaining = [c["label"] for c in conditions if not c["met"]]
     board_present = wq >= 1 or deployable_count >= 1 or sr >= 1
     if unlocked:
-        status_line = "Current status: all conditions met — confirm size and brackets before send."
+        status_line = (
+            "現況：四項齊備 — 送出前確認 size 同 bracket · "
+            "Current status: all conditions met — confirm size and brackets before send."
+        )
     elif board_present and deployable_count < 1:
-        status_line = "Current status: board present, deploy absent."
+        status_line = (
+            "現況：有板面、無 deploy · "
+            "Current status: board present, deploy absent."
+        )
     elif not board_present:
-        status_line = "Current status: board thin, deploy absent."
+        status_line = (
+            "現況：板面薄、無 deploy · "
+            "Current status: board thin, deploy absent."
+        )
     else:
-        status_line = "Current status: deploy gate not cleared."
+        status_line = (
+            "現況：deploy 閘門未清 · "
+            "Current status: deploy gate not cleared."
+        )
     return {
         "unlocked": unlocked,
         "conditions": conditions,
         "remaining": remaining,
         "summary": status_line if not unlocked else status_line,
         "intro": (
+            "解鎖 deploy 須四項齊備：tradeability SELECTIVE+、≥1 deploy-qualified、"
+            "live broker handoff、≥1 watch-qualified（僅 scan-ranked 不足） · "
             "Unlock deploy requires all 4 conditions together: "
             "tradeability SELECTIVE+, ≥1 deploy-qualified setup, live broker handoff, "
             "and ≥1 watch-qualified name on fresh data (scan-ranked alone does not qualify)."
@@ -369,7 +400,11 @@ def _timing_bucket(timing_conf: float, score: float) -> str:
 def _near_miss_gate_distance(row: Dict[str, Any]) -> tuple:
     """Sort key: fewer gaps first, then higher score (closest to deploy gate)."""
     gaps = row.get("gaps") or []
-    return (len(gaps), -float(row.get("score") or 0), -float(row.get("final_conf") or 0))
+    return (
+        len(gaps),
+        -float(row.get("score") or 0),
+        -float(row.get("final_conf") or 0),
+    )
 
 
 def best_net_edge_from_opportunities(
@@ -453,21 +488,25 @@ def build_near_miss_candidates(
                 if gaps:
                     trigger = f"Fix {gaps[0]} — reclaim entry on volume"
                 elif entry and stop:
-                    trigger = f"Hold above ${float(entry):.2f} with stop ${float(stop):.2f}"
+                    trigger = (
+                        f"Hold above ${float(entry):.2f} with stop ${float(stop):.2f}"
+                    )
                 else:
                     trigger = "Await trigger confirmation"
             distance_parts: List[str] = []
             if timing < 0.5:
-                distance_parts.append(
-                    f"timing +{int(max(0, (0.5 - timing) * 100))}pts"
-                )
+                distance_parts.append(f"timing +{int(max(0, (0.5 - timing) * 100))}pts")
             if thesis < 0.65:
                 distance_parts.append(
                     f"thesis +{int(max(0, (0.65 - thesis) * 100))}pts"
                 )
             if rr > 0 and rr < 2.5:
                 distance_parts.append(f"R:R need {2.5 - rr:.1f}")
-            distance_to_pass = " · ".join(distance_parts) if distance_parts else "At gate — review sizing"
+            distance_to_pass = (
+                " · ".join(distance_parts)
+                if distance_parts
+                else "At gate — review sizing"
+            )
             whats_missing = (
                 ", ".join(gaps) if gaps else "At gate — confirm volume and R:R"
             )
@@ -494,7 +533,9 @@ def build_near_miss_candidates(
                     "risk_reward": round(rr, 1) if rr else None,
                     "timing_bucket": _timing_bucket(timing, score),
                     "why_not": (
-                        getattr(expl, "why_not_stronger", None) or gaps if expl else gaps
+                        getattr(expl, "why_not_stronger", None) or gaps
+                        if expl
+                        else gaps
                     ),
                 }
             )
@@ -632,9 +673,7 @@ def format_monitor_upgrade_gap_alert(
             "closest upgrade — not deploy"
         )
     if gap_n == 0:
-        return (
-            f"Monitor upgrade alert — {ticker} at gate — confirm volume; not deploy"
-        )
+        return f"Monitor upgrade alert — {ticker} at gate — confirm volume; not deploy"
     return None
 
 
@@ -918,11 +957,17 @@ def build_evidence_badges(
     """Evidence quality tags for major dashboard surfaces."""
     return {
         "regime": {
-            "badge": "fallback" if regime_synthetic else ("stale" if scanner_degraded else "live"),
+            "badge": "fallback"
+            if regime_synthetic
+            else ("stale" if scanner_degraded else "live"),
             "label": (
                 "Regime: synthetic fallback"
                 if regime_synthetic
-                else ("Regime: degraded scanner" if scanner_degraded else "Regime: live engine")
+                else (
+                    "Regime: degraded scanner"
+                    if scanner_degraded
+                    else "Regime: live engine"
+                )
             ),
         },
         "scanner": {
@@ -1056,17 +1101,17 @@ def build_todays_decision(
         o for o in opportunities if _norm_action(o.get("action")) in _PILOT_ACTIONS
     ]
     watch_rows = [
-        o
-        for o in opportunities
-        if _norm_action(o.get("action")) in _WATCH_ACTIONS
+        o for o in opportunities if _norm_action(o.get("action")) in _WATCH_ACTIONS
     ]
 
     exec_ready_count = execution_ready_count or sum(
         1 for o in opportunities if o.get("execution_ready")
     )
-    best_trade = ba.get("best_trade_now") if (ba.get("best_trade_now") or {}).get(
-        "execution_ready"
-    ) else None
+    best_trade = (
+        ba.get("best_trade_now")
+        if (ba.get("best_trade_now") or {}).get("execution_ready")
+        else None
+    )
     if not best_trade:
         best_trade = _pick_best(
             opportunities, _TRADE_ACTIONS, execution_ready_only=True
@@ -1222,12 +1267,13 @@ def build_sleeve_summary(
         }
     active = [c for c in cards if c.get("gate_status") == "ACTIVE"]
     sorted_cards = sorted(
-        cards, key=lambda c: (-(c.get("regime_fit") or 0), -(c.get("excess_return_pct") or 0))
+        cards,
+        key=lambda c: (-(c.get("regime_fit") or 0), -(c.get("excess_return_pct") or 0)),
     )
     strongest = sorted_cards[0] if sorted_cards else None
     controller = next((c for c in cards if c.get("controls_capital")), strongest)
     strongest_training = max(
-        cards, key=lambda c: (c.get("excess_return_pct") or 0), default=None
+        cards, key=lambda c: c.get("excess_return_pct") or 0, default=None
     )
 
     def _card_strip(c: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -1255,7 +1301,7 @@ def build_sleeve_summary(
 
     live_sleeves = [c for c in cards if (c.get("mode") or "").lower() == "live"]
     strongest_live_card = (
-        max(live_sleeves, key=lambda c: (c.get("regime_fit") or 0), default=None)
+        max(live_sleeves, key=lambda c: c.get("regime_fit") or 0, default=None)
         if live_sleeves
         else strongest
     )

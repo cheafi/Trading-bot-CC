@@ -7,9 +7,18 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from src.utils.numeric_parse import parse_ratio
 
-_AVOID_ACTIONS = frozenset({"AVOID", "NO_TRADE", "NO_TOUCH", "DO_NOT_TOUCH", "AVOID_NOW"})
-_WATCH_ACTIONS = frozenset({"WATCH", "WAIT", "WATCH_TRIGGER", "LEADER", "LEADER_MONITOR", "MONITOR", "PILOT"})
+_AVOID_ACTIONS = frozenset(
+    {"AVOID", "NO_TRADE", "NO_TOUCH", "DO_NOT_TOUCH", "AVOID_NOW"}
+)
+_WATCH_ACTIONS = frozenset(
+    {"WATCH", "WAIT", "WATCH_TRIGGER", "LEADER", "LEADER_MONITOR", "MONITOR", "PILOT"}
+)
 _DEPLOY_ACTIONS = frozenset({"TRADE", "BUY", "BUY_ON_DIP", "TRADE_NOW", "STRONG_TRADE"})
+
+
+def _bi(zh: str, en: str) -> str:
+    """Operator-facing bilingual line (繁中 · English)."""
+    return f"{zh} · {en}"
 
 _AVOID_REASON_LABELS = {
     "poor_rr": "R:R below deploy bar",
@@ -66,16 +75,28 @@ def _decision_headline(
 ) -> Tuple[str, str]:
     tb = (tradeability or "WAIT").upper()
     if deploy_open and deploy_count >= 1 and not gates_active:
-        return "DEPLOY", "DEPLOY. Selective sizing at 1R when brackets ready."
+        return "DEPLOY", _bi(
+            "DEPLOY — bracket 就緒時以 1R 選擇性 sizing",
+            "DEPLOY. Selective sizing at 1R when brackets ready.",
+        )
     if tb in ("SELECTIVE", "TRADE", "STRONG_TRADE") and deploy_count >= 1:
         if gates_active:
-            return "SELECTIVE", "SELECTIVE. Deploy when gates open."
-        return "SELECTIVE", "SELECTIVE. Review deploy-qualified — verify execution ladder."
+            return "SELECTIVE", _bi(
+                "SELECTIVE — 閘門開啟後 deploy",
+                "SELECTIVE. Deploy when gates open.",
+            )
+        return (
+            "SELECTIVE",
+            _bi(
+                "SELECTIVE — 複核 deploy-qualified，確認 execution ladder",
+                "SELECTIVE. Review deploy-qualified — verify execution ladder.",
+            ),
+        )
     if tb in ("NO_TRADE",) or not should_trade:
-        return "NO_TRADE", "NO TRADE. Monitor only."
+        return "NO_TRADE", _bi("NO TRADE — 只 monitor", "NO TRADE. Monitor only.")
     if tb == "WAIT":
-        return "NO_TRADE", "NO TRADE. Monitor only."
-    return "NO_TRADE", "NO TRADE. Monitor only."
+        return "NO_TRADE", _bi("NO TRADE — 只 monitor", "NO TRADE. Monitor only.")
+    return "NO_TRADE", _bi("NO TRADE — 只 monitor", "NO TRADE. Monitor only.")
 
 
 def _regime_gate_detail(
@@ -86,7 +107,9 @@ def _regime_gate_detail(
 ) -> str:
     tb = (tradeability or "WAIT").upper()
     trend = str(market_regime.get("trend") or market_regime.get("label") or "—").upper()
-    risk = str(market_regime.get("risk_state") or market_regime.get("label") or "").upper()
+    risk = str(
+        market_regime.get("risk_state") or market_regime.get("label") or ""
+    ).upper()
     parts = [f"tradeability {tb}"]
     if trend:
         parts.append(f"market {trend}")
@@ -130,7 +153,9 @@ def _broker_gate_detail(
     return False, str(label)
 
 
-def _pick_rr_table_rows(playbook_rows: List[Dict[str, Any]], limit: int = 5) -> List[Dict[str, Any]]:
+def _pick_rr_table_rows(
+    playbook_rows: List[Dict[str, Any]], limit: int = 5
+) -> List[Dict[str, Any]]:
     """Top names for R:R quality table — prefer AVOID/monitor from ranked board."""
     ranked: List[Dict[str, Any]] = []
     for i, row in enumerate(playbook_rows or [], 1):
@@ -211,7 +236,9 @@ def _what_to_do_now(
 
     for t in monitor_tickers[:5]:
         if t:
-            monitor_only.append(f"Track {t} for upgrade triggers — Playbook monitor queue only.")
+            monitor_only.append(
+                f"Track {t} for upgrade triggers — Playbook monitor queue only."
+            )
 
     for ln in (td.get("monitor_triggers") or [])[:3]:
         s = str(ln).strip()
@@ -219,7 +246,9 @@ def _what_to_do_now(
             monitor_only.append(s)
 
     if not monitor_only:
-        monitor_only.append("Follow Dashboard monitor queue and near-miss upgrade candidates.")
+        monitor_only.append(
+            "Follow Dashboard monitor queue and near-miss upgrade candidates."
+        )
     monitor_only.append("Refresh Dashboard + Playbook after data / IBKR repair.")
     if repair_priority:
         monitor_only.append(repair_priority)
@@ -243,8 +272,12 @@ def _what_to_do_now(
             if active:
                 do_not_deploy.append(f"Gate active: {key.replace('_', ' ')}")
     if not do_not_deploy:
-        do_not_deploy.append("Do not deploy — board gate closed until unlock checklist clears.")
-    do_not_deploy.append("No sizing, bracket send, or handoff until deploy_open and authority=deploy.")
+        do_not_deploy.append(
+            "Do not deploy — board gate closed until unlock checklist clears."
+        )
+    do_not_deploy.append(
+        "No sizing, bracket send, or handoff until deploy_open and authority=deploy."
+    )
 
     return {
         "monitor_only": monitor_only[:6],
@@ -332,14 +365,29 @@ def _best_concise_note(
 ) -> str:
     tb = (tradeability or "WAIT").upper()
     if decision_code == "DEPLOY" and deploy_count >= 1:
-        return "Deploy window — size only at 1R with bracket; gates cleared."
+        return _bi(
+            "Deploy 窗口 — 僅以 1R＋bracket sizing；閘門已清",
+            "Deploy window — size only at 1R with bracket; gates cleared.",
+        )
     if decision_code == "SELECTIVE" and deploy_count >= 1:
-        return "Selective day — verify checklist before any handoff."
+        return _bi(
+            "SELECTIVE 日 — handoff 前確認清單",
+            "Selective day — verify checklist before any handoff.",
+        )
     if gates_active and deploy_count < 1:
-        return "Preservation / monitor day — ideas exist but deploy bar not met."
+        return _bi(
+            "守護／monitor 日 — 有 idea 但未達 deploy bar",
+            "Preservation / monitor day — ideas exist but deploy bar not met.",
+        )
     if tb in ("WAIT", "NO_TRADE"):
-        return "Monitor-only day — protect capital until tradeability improves."
-    return "Monitor session — no full-size deploy until gates open."
+        return _bi(
+            "只 monitor 日 — 待 tradeability 改善前守護資金",
+            "Monitor-only day — protect capital until tradeability improves.",
+        )
+    return _bi(
+        "Monitor session — 閘門開啟前勿全倉 deploy",
+        "Monitor session — no full-size deploy until gates open.",
+    )
 
 
 def format_bdr_summary_text(summary: Dict[str, Any]) -> str:
@@ -414,7 +462,10 @@ def build_bdr_operator_summary(
         or "WAIT"
     ).upper()
     should_trade = bool(
-        market_regime.get("should_trade", cc_state.get("tradeability_state", {}).get("should_trade", False))
+        market_regime.get(
+            "should_trade",
+            cc_state.get("tradeability_state", {}).get("should_trade", False),
+        )
     )
     deploy_open = bool(system_state.get("deploy_open"))
     gates_active = bool(decision_authority.get("gates_active"))
@@ -431,7 +482,10 @@ def build_bdr_operator_summary(
     )
     if gates_active and decision_code == "DEPLOY":
         decision_code = "SELECTIVE"
-        decision_line = "SELECTIVE. Deploy when gates open."
+        decision_line = _bi(
+            "SELECTIVE — 閘門開啟後 deploy",
+            "SELECTIVE. Deploy when gates open.",
+        )
 
     hard_gates: List[Dict[str, Any]] = []
     n = 0
@@ -439,7 +493,8 @@ def build_bdr_operator_summary(
     regime_blocked = (
         not should_trade
         or tradeability in ("WAIT", "NO_TRADE")
-        or str(market_regime.get("risk_state") or "").upper() in ("RISK_OFF", "NO_TRADE")
+        or str(market_regime.get("risk_state") or "").upper()
+        in ("RISK_OFF", "NO_TRADE")
     )
     if regime_blocked:
         n += 1
@@ -479,12 +534,17 @@ def build_bdr_operator_summary(
                 "n": n,
                 "key": "deploy_count",
                 "label": "Deploy-qualified count · 可部署數量",
-                "detail": f"0 deploy-qualified (target ≥1)",
+                "detail": "0 deploy-qualified (target ≥1)",
             }
         )
 
     rr_rows = _pick_rr_table_rows(playbook_rows, limit=5)
-    poor_rr = [r for r in rr_rows if isinstance(r.get("risk_reward"), (int, float)) and float(r["risk_reward"]) < 2.5]
+    poor_rr = [
+        r
+        for r in rr_rows
+        if isinstance(r.get("risk_reward"), (int, float))
+        and float(r["risk_reward"]) < 2.5
+    ]
     if rr_rows:
         n += 1
         rr_detail = (
@@ -557,7 +617,9 @@ def build_bdr_operator_summary(
     return payload
 
 
-def build_bdr_from_today_payload(today: Dict[str, Any], *, ops: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def build_bdr_from_today_payload(
+    today: Dict[str, Any], *, ops: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """Convenience wrapper for /api/v7/today-shaped payloads."""
     state = {
         "market_regime": today.get("market_regime") or {},
@@ -566,7 +628,9 @@ def build_bdr_from_today_payload(today: Dict[str, Any], *, ops: Optional[Dict[st
         "decision_authority": today.get("decision_authority") or {},
         "execution_readiness": today.get("execution_readiness") or {},
         "dashboard_monitors": today.get("dashboard_monitors") or [],
-        "deploy_qualified_count": (today.get("filter_funnel") or {}).get("execution_ready_setups"),
+        "deploy_qualified_count": (today.get("filter_funnel") or {}).get(
+            "execution_ready_setups"
+        ),
     }
     ex = today.get("execution_readiness") or {}
     ibkr_status = {
