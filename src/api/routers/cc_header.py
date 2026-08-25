@@ -195,7 +195,7 @@ async def cc_header(
 
     if light:
         components = {
-            "market_data": True,
+            "market_data": None,
             "regime_router": getattr(request.app.state, "regime_router", None)
             is not None,
             "broker": bool(
@@ -208,20 +208,32 @@ async def cc_header(
         components = await _provider_components(request, engine, freshness)
     alpaca_configured = bool(settings.alpaca_api_key and settings.alpaca_secret_key)
 
+    data_tier = "UNKNOWN" if light else (freshness or {}).get("worst_tier", "FRESH")
     pills = {
-        "data": (freshness or {}).get("worst_tier", "FRESH"),
+        "data": data_tier,
         "brief": (brief.get("latest") or {}).get("tier", "FRESH"),
         "alerts": int(alerts.get("count") or 0),
     }
     healthy = (
-        display_mode in ("PAPER", "LIVE")
+        not light
+        and display_mode in ("PAPER", "LIVE")
         and pills["data"] == "FRESH"
         and pills["brief"] == "FRESH"
         and pills["alerts"] == 0
         and not eng["circuit_breaker"]
     )
 
-    today = _cached_today_payload()
+    today_raw = _cached_today_payload()
+    today: Dict[str, Any] | None = None
+    if today_raw:
+        try:
+            from src.api.routers.decision import _refresh_today_authority
+
+            today = await _refresh_today_authority(request, today_raw)
+        except Exception as exc:
+            logger.debug("cc-header authority refresh failed: %s", exc)
+            today = today_raw
+
     decision_board = None
     if today and today.get("decision_board"):
         decision_board = today.get("decision_board")
@@ -235,7 +247,7 @@ async def cc_header(
 
     decision_authority = (today or {}).get("decision_authority")
     tradeability = "WAIT"
-    should_trade = True
+    should_trade = False
     if decision_board:
         regime = decision_board.get("regime") or {}
         tradeability = str(
@@ -243,7 +255,7 @@ async def cc_header(
             or regime.get("tradeability")
             or "WAIT"
         )
-        should_trade = bool(regime.get("should_trade", True))
+        should_trade = bool(regime.get("should_trade", False))
         decision_authority = (
             decision_board.get("decision_authority") or decision_authority
         )
@@ -254,23 +266,24 @@ async def cc_header(
             or (today.get("decision_model") or {}).get("honest_tradeability")
             or "WAIT"
         )
-        should_trade = bool(regime.get("should_trade", True))
+        should_trade = bool(regime.get("should_trade", False))
 
     if not decision_authority:
         from src.services.decision_truth_model import build_decision_authority
 
         data_stale = pills["data"] in ("STALE", "CRITICAL")
         brief_stale = pills["brief"] in ("STALE", "CRITICAL")
+        freshness_unknown = light or pills["data"] == "UNKNOWN"
         ibkr_connected = bool(ibkr_st.get("session_usable") or ibkr_st.get("connected"))
         decision_authority = build_decision_authority(
             tradeability=tradeability,
             should_trade=should_trade,
-            data_stale=data_stale,
+            data_stale=data_stale or freshness_unknown,
             fallback_brief=brief_stale,
             broker_offline=not ibkr_connected,
             engine_off=not eng["running"],
             exec_blocked=bool(eng.get("circuit_breaker")),
-            trust_source="cc-header",
+            trust_source="cc-header-light" if light else "cc-header",
         )
 
     page_authority_mode = _page_authority_mode(
@@ -307,13 +320,18 @@ async def cc_header(
 
     trust = {
         "mode": trust_mode,
-        "source": "cc-header",
-        "freshness": "DEGRADED"
-        if pills["data"] in ("STALE", "CRITICAL")
-        else "REAL_TIME",
-        "stale": pills["data"] in ("STALE", "CRITICAL")
+        "source": "cc-header-light" if light else "cc-header",
+        "freshness": "UNKNOWN"
+        if light
+        else (
+            "DEGRADED"
+            if pills["data"] in ("STALE", "CRITICAL")
+            else "REAL_TIME"
+        ),
+        "stale": light
+        or pills["data"] in ("STALE", "CRITICAL")
         or pills["brief"] in ("STALE", "CRITICAL"),
-        "reason": "",
+        "reason": "Fast header — freshness not verified" if light else "",
         "as_of": now.isoformat() + "Z",
         "ai_powered": False,
     }
@@ -357,6 +375,12 @@ async def cc_header(
         {
             "as_of": now.isoformat() + "Z",
             "healthy": healthy,
+            "light_mode": light,
+            "light_banner": (
+                "Fast header — data freshness not verified"
+                if light
+                else None
+            ),
             "display_mode": display_mode,
             "trust_mode": trust_mode,
             "engine": eng,
@@ -369,6 +393,7 @@ async def cc_header(
             "decision_authority": decision_authority,
             "decision_board": decision_board,
             "decision_board_hash": (decision_board or {}).get("decision_board_hash"),
+            "trust": trust,
             "cc_state": cc_state,
             "system_state": state_payload.get("system_state"),
             "page_capability": page_capability,
@@ -382,7 +407,8 @@ async def cc_header(
                     "regime_trend": (today or {}).get("market_regime", {}).get("trend"),
                     "execution_blocked": bool(eng["circuit_breaker"])
                     or not ibkr_connected,
-                    "stale": pills["data"] in ("STALE", "CRITICAL"),
+                    "stale": light
+                    or pills["data"] in ("STALE", "CRITICAL", "UNKNOWN"),
                     "fallback": page_authority_mode == "fallback_board",
                     "position_count": portfolio_context.get("position_count"),
                     "ibkr_label": ibkr_st.get("health_label") or "IBKR",

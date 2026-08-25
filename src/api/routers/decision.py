@@ -42,9 +42,6 @@ _today_cache_ts: float = 0.0
 _today_lock = asyncio.Lock()
 _TODAY_CACHE_TTL = 120.0
 _TODAY_SCAN_TIMEOUT = 3.0
-_board_cache: Optional[Dict[str, Any]] = None
-_board_cache_ts: float = 0.0
-_BOARD_CACHE_TTL = 15.0
 
 
 def _stale_today_payload(reason: str) -> Dict[str, Any]:
@@ -360,22 +357,22 @@ async def today_summary(request: Request):
             _today_cache = None
             _today_cache_ts = 0.0
         else:
-            return _today_cache
+            return await _refresh_today_authority(request, _today_cache)
     if _today_lock.locked():
         cached = _cached_today_payload("fresh scan already running")
         if cached:
-            return cached
+            return await _refresh_today_authority(request, cached)
         return _stale_today_payload("fresh scan already running")
 
     async with _today_lock:
         now_ts = time.time()
         if _today_cache and now_ts - _today_cache_ts < _TODAY_CACHE_TTL:
-            return _today_cache
+            return await _refresh_today_authority(request, _today_cache)
 
     # 1. Market Regime
     regime_state = await _fetch_regime(request)
     regime_label = getattr(regime_state, "regime", "NEUTRAL")
-    should_trade = getattr(regime_state, "should_trade", True)
+    should_trade = getattr(regime_state, "should_trade", False)
     confidence = getattr(regime_state, "confidence", 0.5)
     vix_val = getattr(regime_state, "vix", 18.0)
     breadth = getattr(regime_state, "breadth_pct", 0.50)
@@ -1567,9 +1564,6 @@ async def today_summary(request: Request):
     if not scanner_degraded:
         _today_cache = payload
         _today_cache_ts = time.time()
-        global _board_cache, _board_cache_ts
-        _board_cache = None
-        _board_cache_ts = 0.0
     else:
         _today_cache = None
         _today_cache_ts = 0.0
@@ -1641,6 +1635,107 @@ def _board_ops_snapshot(request: Request) -> Dict[str, Any]:
         return {}
 
 
+async def _refresh_today_authority(
+    request: Request, payload: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Recompute deploy authority on cached scan body — never serve stale deploy_open."""
+    from copy import deepcopy
+
+    from src.services.cc_state import attach_page_capability, attach_system_state, build_cc_state
+    from src.services.decision_board_service import attach_decision_board
+    from src.services.decision_truth_model import build_decision_authority
+
+    out = deepcopy(payload)
+    regime_state = await _fetch_regime(request)
+    should_trade = bool(getattr(regime_state, "should_trade", False))
+
+    mr = dict(out.get("market_regime") or {})
+    if not should_trade:
+        mr["should_trade"] = False
+        regime_label = str(getattr(regime_state, "regime", "") or "").upper()
+        if regime_label == "RISK_OFF" or getattr(regime_state, "no_trade_reason", ""):
+            mr["tradeability"] = "NO_TRADE"
+        else:
+            mr["tradeability"] = "WAIT"
+    else:
+        mr["should_trade"] = True
+    out["market_regime"] = mr
+
+    dm = out.get("decision_model") or {}
+    tradeability = str(
+        dm.get("honest_tradeability") or mr.get("tradeability") or "WAIT"
+    ).upper()
+    if not should_trade:
+        tradeability = str(mr.get("tradeability") or "WAIT").upper()
+
+    ops = _board_ops_snapshot(request)
+    eng_running = bool(ops.get("running"))
+    exec_blocked = bool(ops.get("breaker"))
+    try:
+        from src.services.ibkr_service import get_ibkr_service
+
+        ibkr_st = get_ibkr_service().status()
+        ibkr_connected = bool(
+            ibkr_st.get("session_usable") or ibkr_st.get("connected")
+        )
+    except Exception:
+        ibkr_connected = False
+
+    trust = out.get("trust") or {}
+    scanner_degraded = bool(
+        trust.get("stale") or trust.get("freshness") == "DEGRADED"
+    )
+    da_prev = out.get("decision_authority") or {}
+    da_source = str(da_prev.get("source") or trust.get("source") or "")
+    used_brief_fallback = "brief" in da_source or "fallback" in da_source
+    funnel = out.get("filter_funnel") or {}
+    deploy_count = int(
+        funnel.get("deploy_qualified_setups")
+        or funnel.get("execution_ready_setups")
+        or 0
+    )
+
+    decision_authority = build_decision_authority(
+        tradeability=tradeability,
+        should_trade=should_trade,
+        scanner_degraded=scanner_degraded,
+        scanner_loading=scanner_degraded and deploy_count < 1,
+        data_stale=scanner_degraded,
+        fallback_brief=used_brief_fallback,
+        broker_offline=not ibkr_connected,
+        engine_off=not eng_running,
+        exec_blocked=exec_blocked,
+        trust_source=da_source or "decision_engine",
+        ranked_stale=scanner_degraded,
+        deploy_ideas_count=deploy_count,
+    )
+    out["decision_authority"] = decision_authority
+
+    execution_readiness = dict(out.get("execution_readiness") or {})
+    execution_readiness["engine_running"] = eng_running
+    execution_readiness["circuit_breaker"] = exec_blocked
+    execution_readiness["broker_connected"] = ibkr_connected
+    execution_readiness["ibkr_connected"] = ibkr_connected
+    out["execution_readiness"] = execution_readiness
+
+    surface_authority = out.get("surface_authority")
+    out["cc_state"] = build_cc_state(
+        tradeability=tradeability,
+        should_trade=should_trade,
+        decision_authority=decision_authority,
+        execution_readiness=execution_readiness,
+        surface_authority=surface_authority,
+        trust=trust if isinstance(trust, dict) else None,
+    )
+    attach_system_state(out)
+    attach_page_capability(out, "today")
+    try:
+        attach_decision_board(out, ops=ops, source="today")
+    except Exception:
+        logger.debug("refresh today authority: decision_board attach failed", exc_info=True)
+    return sanitize_for_json(out)
+
+
 def _today_payload_for_board(request: Request) -> Optional[Dict[str, Any]]:
     """Prefer any cached today payload — never block board on live scan."""
     cached = getattr(request.app.state, "today_v7_cache", None)
@@ -1665,34 +1760,34 @@ def _build_board_payload(
 @router.get("/api/v7/decision/board")
 async def decision_board(request: Request):
     """Lightweight canonical decision board for header / cross-surface polling."""
-    global _board_cache, _board_cache_ts
-    now_ts = time.time()
-    if _board_cache and now_ts - _board_cache_ts < _BOARD_CACHE_TTL:
-        return sanitize_for_json(_board_cache)
-
     ops = _board_ops_snapshot(request)
     today = _today_payload_for_board(request)
     if today:
         try:
-            board = _build_board_payload(today, ops=ops, source="board")
-            _board_cache = board
-            _board_cache_ts = now_ts
+            refreshed = await _refresh_today_authority(request, today)
+            board = _build_board_payload(refreshed, ops=ops, source="board")
             return sanitize_for_json(board)
         except Exception as exc:
             logger.debug("decision board from cache failed: %s", exc)
 
     if _today_lock.locked():
-        if _board_cache:
-            return sanitize_for_json(_board_cache)
-        return sanitize_for_json(_stale_today_payload("today scan in progress"))
+        stale = _cached_today_payload("today scan in progress")
+        if stale:
+            try:
+                refreshed = await _refresh_today_authority(request, stale)
+                board = _build_board_payload(refreshed, ops=ops, source="board")
+                return sanitize_for_json(board)
+            except Exception as exc:
+                logger.debug("decision board from stale today failed: %s", exc)
+        warmed = _stale_today_payload("today scan in progress")
+        board = _build_board_payload(warmed, ops=ops, source="board")
+        return sanitize_for_json(board)
 
     today = await today_summary(request)
     if isinstance(today, dict) and today.get("error"):
         raise HTTPException(503, today.get("error") or "today payload unavailable")
     try:
         board = _build_board_payload(today, ops=ops, source="board")
-        _board_cache = board
-        _board_cache_ts = now_ts
         return sanitize_for_json(board)
     except Exception as exc:
         logger.warning("decision board failed: %s", exc)
@@ -1749,7 +1844,7 @@ async def ranked_opportunities(
     Each row answers: What? Why? Why now? Why not? What to do? When to bail?
     """
     regime_state = await _fetch_regime(request)
-    should_trade = getattr(regime_state, "should_trade", True)
+    should_trade = getattr(regime_state, "should_trade", False)
 
     import asyncio as _asyncio
 
@@ -2031,7 +2126,7 @@ async def signal_card(ticker: str, request: Request):
     ticker = ticker.upper().strip()
     mds = request.app.state.market_data
     regime_state = await _fetch_regime(request)
-    should_trade = getattr(regime_state, "should_trade", True)
+    should_trade = getattr(regime_state, "should_trade", False)
 
     try:
         hist = await mds.get_history(ticker, period="1y", interval="1d")
@@ -2221,7 +2316,7 @@ async def regime_summary(request: Request):
     )
     vix = getattr(regime_state, "vix", 18.0)
     breadth = getattr(regime_state, "breadth_pct", 0.5)
-    should_trade = getattr(regime_state, "should_trade", True)
+    should_trade = getattr(regime_state, "should_trade", False)
     confidence = getattr(regime_state, "confidence", 0.5)
 
     # Cross-asset stress

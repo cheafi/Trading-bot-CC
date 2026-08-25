@@ -1421,7 +1421,16 @@ def apply_authority_to_rows(
 def build_ranked_decision_authority(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Derive decision authority for playbook ranked / degraded boards."""
     existing = payload.get("decision_authority")
-    if isinstance(existing, dict) and existing.get("gates") is not None:
+    stale_serve = bool(
+        payload.get("stale")
+        or payload.get("cached")
+        or payload.get("refreshing")
+    )
+    if (
+        isinstance(existing, dict)
+        and existing.get("gates") is not None
+        and not stale_serve
+    ):
         return existing
     ba = payload.get("best_action") or {}
     ex = ba.get("execution_readiness") or payload.get("execution_readiness") or {}

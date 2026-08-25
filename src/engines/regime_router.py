@@ -47,7 +47,7 @@ class RegimeState:
     neutral_range: float = 0.334
     risk_off_downtrend: float = 0.333
     entropy: float = 1.0
-    should_trade: bool = True
+    should_trade: bool = False
     confidence: float = 0.334
 
     # Sizing scalar (Sprint 34: graduated, not binary)

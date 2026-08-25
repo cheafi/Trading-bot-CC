@@ -159,7 +159,7 @@ class RegimeService:
             "breadth": "neutral",
             "confidence": 0.3,
             "signals": ["no data available"],
-            "should_trade": True,
+            "should_trade": False,
             "vix": 18.0,
             "source": "default",
             "synthetic": True,
