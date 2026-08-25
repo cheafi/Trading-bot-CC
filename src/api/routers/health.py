@@ -57,10 +57,22 @@ def _ai_status() -> Dict[str, Any]:
     """Report AI availability without gating readiness on optional LLM services."""
     openai_key = bool(os.getenv("OPENAI_API_KEY"))
     azure_key = bool(os.getenv("AZURE_OPENAI_API_KEY"))
+    azure_enabled = os.getenv("AZURE_OPENAI_ENABLED", "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    azure_endpoint = bool(os.getenv("AZURE_OPENAI_ENDPOINT"))
+    azure_sp = all(
+        os.getenv(k)
+        for k in ("AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET")
+    )
+    azure_configured = azure_enabled and azure_endpoint and (azure_key or azure_sp)
     disabled = os.getenv("AI_DISABLED", "").lower() in {"1", "true", "yes"}
     if disabled:
         return {"status": "disabled", "provider": None, "reason": "AI_DISABLED set"}
-    if azure_key:
+    if azure_configured:
         return {"status": "active", "provider": "azure_openai"}
     if openai_key:
         return {"status": "active", "provider": "openai"}

@@ -26,6 +26,31 @@ _NVIDIA_BASE = "https://integrate.api.nvidia.com/v1"
 _OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
 _OPENAI_BASE = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
 
+# Azure OpenAI — opt-in via AZURE_OPENAI_ENABLED; supports API key or service principal
+_AZURE_ENABLED = os.getenv("AZURE_OPENAI_ENABLED", "").lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+_AZURE_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "").rstrip("/")
+_AZURE_KEY = os.getenv("AZURE_OPENAI_API_KEY", "")
+_AZURE_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT", "")
+_AZURE_DEPLOYMENT_NARRATIVE = os.getenv(
+    "AZURE_OPENAI_DEPLOYMENT_NARRATIVE", _AZURE_DEPLOYMENT
+)
+_AZURE_DEPLOYMENT_SIGNAL = os.getenv(
+    "AZURE_OPENAI_DEPLOYMENT_SIGNAL", _AZURE_DEPLOYMENT
+)
+_AZURE_DEPLOYMENT_QUICK = os.getenv(
+    "AZURE_OPENAI_DEPLOYMENT_QUICK", _AZURE_DEPLOYMENT
+)
+_AZURE_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2026-01-15-preview")
+_AZURE_TENANT = os.getenv("AZURE_TENANT_ID", "")
+_AZURE_CLIENT = os.getenv("AZURE_CLIENT_ID", "")
+_AZURE_SECRET = os.getenv("AZURE_CLIENT_SECRET", "")
+_azure_ad_token_cache: Optional[tuple[float, str]] = None
+
 # Docker Model Runner — local LLM (OpenAI-compatible, no key needed)
 # Host: http://localhost:12434/engines/llama.cpp/v1
 # Container: http://model-runner.docker.internal/engines/llama.cpp/v1
@@ -83,8 +108,51 @@ SYSTEM_TRADE_REVIEWER = (
 
 AI_SETUP_HINT = (
     "Set OPENAI_API_KEY, NVIDIA_API_KEY, OPENCLAW_API_KEY, "
+    "AZURE_OPENAI_ENABLED + endpoint/deployment, "
     "or enable LOCAL_LLM_URL (Docker Model Runner)."
 )
+
+
+def _azure_openai_configured() -> bool:
+    """True when Azure OpenAI is explicitly enabled with HTTPS endpoint and auth."""
+    if not _AZURE_ENABLED or not _AZURE_ENDPOINT or not _AZURE_DEPLOYMENT:
+        return False
+    if not _AZURE_ENDPOINT.startswith("https://"):
+        logger.warning("[AI] AZURE_OPENAI_ENDPOINT must use HTTPS")
+        return False
+    return bool(_AZURE_KEY) or all((_AZURE_TENANT, _AZURE_CLIENT, _AZURE_SECRET))
+
+
+def _resolve_azure_deployment(preferred_model: Optional[str]) -> str:
+    if preferred_model in (_MODEL_NARRATIVE, _MODEL_DOSSIER):
+        return _AZURE_DEPLOYMENT_NARRATIVE or _AZURE_DEPLOYMENT
+    if preferred_model == _MODEL_SIGNAL:
+        return _AZURE_DEPLOYMENT_SIGNAL or _AZURE_DEPLOYMENT
+    return _AZURE_DEPLOYMENT_QUICK or _AZURE_DEPLOYMENT
+
+
+def _get_azure_bearer_token() -> Optional[str]:
+    """Fetch Azure AD token for service-principal auth (cached until expiry)."""
+    global _azure_ad_token_cache
+    if _AZURE_KEY:
+        return None
+    now = time.time()
+    if _azure_ad_token_cache and _azure_ad_token_cache[0] > now + 60:
+        return _azure_ad_token_cache[1]
+    try:
+        from azure.identity import ClientSecretCredential
+
+        credential = ClientSecretCredential(
+            tenant_id=_AZURE_TENANT,
+            client_id=_AZURE_CLIENT,
+            client_secret=_AZURE_SECRET,
+        )
+        token = credential.get_token("https://cognitiveservices.azure.com/.default")
+        _azure_ad_token_cache = (token.expires_on, token.token)
+        return token.token
+    except Exception as exc:
+        logger.warning("[AI] Azure AD token fetch failed: %s", exc)
+        return None
 
 
 def build_stub_narrative(
@@ -190,6 +258,10 @@ class AIService:
             self._local_llm_ok
             or (_OPENCLAW_KEY and "openclaw" not in self._disabled_providers)
             or (_NVIDIA_KEY and "nvidia" not in self._disabled_providers)
+            or (
+                _azure_openai_configured()
+                and "azure_openai" not in self._disabled_providers
+            )
             or (_OPENAI_KEY and "openai" not in self._disabled_providers)
         )
 
@@ -213,6 +285,10 @@ class AIService:
                 and "nvidia" not in self._disabled_providers,
                 "openai": bool(_OPENAI_KEY)
                 and "openai" not in self._disabled_providers,
+                "azure_openai": _azure_openai_configured()
+                and "azure_openai" not in self._disabled_providers,
+                "azure_openai_endpoint": _AZURE_ENDPOINT or None,
+                "azure_openai_deployment": _AZURE_DEPLOYMENT or None,
             },
             "disabled_providers": sorted(self._disabled_providers),
             "last_provider": self._provider_used,
@@ -316,6 +392,64 @@ class AIService:
             self._error_count += 1
         return None
 
+    async def _call_azure_provider(
+        self,
+        deployment: str,
+        messages,
+        max_tokens,
+        temperature,
+        response_format=None,
+    ):
+        """Call Azure OpenAI chat completions (HTTPS only, deployment-based routing)."""
+        if not _azure_openai_configured() or "azure_openai" in self._disabled_providers:
+            return None
+        session = await self._get_session()
+        url = (
+            f"{_AZURE_ENDPOINT}/openai/deployments/{deployment}/chat/completions"
+            f"?api-version={_AZURE_API_VERSION}"
+        )
+        headers = {"Content-Type": "application/json"}
+        if _AZURE_KEY:
+            headers["api-key"] = _AZURE_KEY
+        else:
+            token = _get_azure_bearer_token()
+            if not token:
+                self._disable_provider("azure_openai", "Azure AD token unavailable")
+                return None
+            headers["Authorization"] = f"Bearer {token}"
+
+        payload: Dict[str, Any] = {
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stream": False,
+        }
+        if response_format is not None:
+            payload["response_format"] = response_format
+
+        try:
+            async with session.post(url, json=payload, headers=headers) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    text = data["choices"][0]["message"]["content"]
+                    self._call_count += 1
+                    self._provider_used = "azure_openai"
+                    self._last_model = deployment
+                    logger.info(
+                        "[AI] azure_openai/%s -> %d chars", deployment, len(text)
+                    )
+                    return text
+                body = await resp.text()
+                if resp.status in (401, 403):
+                    self._disable_provider("azure_openai", f"auth {resp.status}")
+                logger.warning(
+                    "[AI] azure_openai %s: %s", resp.status, body[:200]
+                )
+        except Exception as exc:
+            logger.warning("[AI] azure_openai error: %s", exc)
+            self._error_count += 1
+        return None
+
     def _resolve_local_model(self, preferred_model: str) -> str:
         if preferred_model in (_MODEL_NARRATIVE, _MODEL_DOSSIER, _MODEL_QUICK):
             return _LOCAL_MODEL_ADVISOR
@@ -357,6 +491,18 @@ class AIService:
             chain.append((_OPENCLAW_BASE, _OPENCLAW_KEY, preferred_model, "openclaw"))
         if _NVIDIA_KEY and "nvidia" not in self._disabled_providers:
             chain.append((_NVIDIA_BASE, _NVIDIA_KEY, _MODEL_NVIDIA, "nvidia"))
+        if _azure_openai_configured() and "azure_openai" not in self._disabled_providers:
+            azure_deployment = _resolve_azure_deployment(preferred_model)
+            azure_text = await self._call_azure_provider(
+                azure_deployment,
+                messages,
+                max_tokens,
+                temperature,
+                response_format=response_format,
+            )
+            if azure_text:
+                self._cache.set(cache_key, azure_text)
+                return azure_text
         if _OPENAI_KEY and "openai" not in self._disabled_providers:
             chain.append((_OPENAI_BASE, _OPENAI_KEY, _MODEL_QUICK, "openai"))
 
@@ -445,6 +591,19 @@ class AIService:
                 ],
             },
         ]
+        if _azure_openai_configured() and "azure_openai" not in self._disabled_providers:
+            azure_deployment = _resolve_azure_deployment(model)
+            text = await self._call_azure_provider(
+                azure_deployment,
+                messages,
+                max_tokens,
+                0.1,
+                response_format={"type": "json_object"},
+            )
+            parsed = self._extract_json_block(text or "")
+            if parsed is not None:
+                return parsed
+
         chain = []
         if _OPENCLAW_KEY and "openclaw" not in self._disabled_providers:
             chain.append((_OPENCLAW_BASE, _OPENCLAW_KEY, model, "openclaw"))
