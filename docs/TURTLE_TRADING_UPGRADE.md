@@ -84,5 +84,5 @@ IBKR bracket + pilot size only when entry_ok
 
 ## Cross-reference
 
-- `docs/CRISIS_WALLSTREET_UPGRADE.md` — blocks new turtle entries in crisis
+- `docs/CRISIS_WALL_STREET_UPGRADE.md` — blocks new turtle entries in crisis
 - `docs/NISON_CANDLESTICK_UPGRADE.md` — pattern context vs breakout system
