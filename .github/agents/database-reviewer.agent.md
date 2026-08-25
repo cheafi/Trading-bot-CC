@@ -1,12 +1,7 @@
 ---
 name: database-reviewer
-description: >
-  Database code review specialist with embedded style and safety rules.
-  Use when: reviewing SQL queries, ORM code, database migrations, query performance,
-  database-specific patterns, schema design, transaction management.
-model: claude-sonnet-4-6
-tools: [readFile, read, search, codebase, problems, usages]
-user-invocable: true
+description: Database code review specialist — reviews SQL queries, ORM code, migrations, schema design, and transaction management.
+tools: [search, codebase, problems, usages]
 ---
 
 # Database Reviewer

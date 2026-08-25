@@ -16,3 +16,6 @@ slowapi>=0.1.9
 
 # Market data (used by MarketDataService at runtime)
 yfinance>=0.2.36
+
+# Broker integrations
+ibapi>=9.81.1.post1

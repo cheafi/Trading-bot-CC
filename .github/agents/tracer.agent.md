@@ -1,13 +1,7 @@
 ---
 name: tracer
-description: >
-  Evidence-driven causal tracing with competing hypotheses.
-  Use when: causal analysis, root cause investigation, evidence tracing,
-  hypothesis testing, uncertainty tracking, outcome explanation,
-  incident investigation, why did X happen.
-model: claude-sonnet-4-6
-tools: [readFile, read, search, codebase, problems, runInTerminal, shell, usages]
-user-invocable: true
+description: Evidence-driven causal tracing with competing hypotheses. Use when causal analysis, root cause investigation, evidence tracing, hypothesis testing, uncertainty tracking, outcome explanation, incident investigation.
+tools: [search, codebase, problems, runInTerminal, usages]
 ---
 
 # Tracer

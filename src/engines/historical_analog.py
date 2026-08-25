@@ -16,12 +16,15 @@ from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
-_TRADES_PATH = os.path.join(
-    os.path.dirname(__file__),
-    "..",
-    "..",
-    "data",
-    "closed_trades.jsonl",
+_TRADES_PATH = os.getenv(
+    "CLOSED_TRADES_PATH",
+    os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "..",
+        "data",
+        "closed_trades.jsonl",
+    ),
 )
 
 
@@ -40,6 +43,8 @@ def load_closed_trades(
                     trades.append(json.loads(line))
     except FileNotFoundError:
         logger.debug("No closed trades file at %s", path)
+    except OSError as e:
+        logger.debug("Closed trades file unavailable: %s", e)
     except Exception as e:
         logger.warning("Error loading closed trades: %s", e)
     return trades

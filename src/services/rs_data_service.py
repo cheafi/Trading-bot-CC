@@ -13,12 +13,28 @@ Routers MUST use this service instead of calling yfinance directly.
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Any, Dict, List, Optional
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+_YF_CACHE = os.environ.get("YFINANCE_CACHE_DIR") or "/tmp/yfinance-cache"
+
+
+def _configure_yfinance_cache() -> None:
+    try:
+        os.makedirs(_YF_CACHE, exist_ok=True)
+        import yfinance as yf
+
+        yf.set_tz_cache_location(_YF_CACHE)
+    except Exception as exc:
+        logger.debug("[RSData] yfinance cache setup skipped: %s", exc)
+
+
+_configure_yfinance_cache()
 
 _CLOSES_CACHE: Dict[str, tuple[float, Any]] = {}  # ticker → (ts, DataFrame)
 _CACHE_TTL = 300  # 5 min

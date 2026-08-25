@@ -352,6 +352,18 @@ class TradingScheduler:
 
             BriefDataService.invalidate_cache()
 
+            # --- IBKR PAPER TRADING SYNC ---
+            try:
+                from src.engines.paper_trading_engine import (
+                    PaperTradingEngine,
+                )  # noqa: PLC0415
+
+                logger.info("Executing Paper Trading Engine Sync...")
+                paper_engine = PaperTradingEngine()
+                await paper_engine.execute_top_strategy()
+            except Exception as pe:
+                logger.error("Paper Trader execution failed: %s", pe)
+
         except Exception as e:
             logger.error("Signal refresh job failed: %s", e)
 
@@ -519,6 +531,17 @@ class TradingScheduler:
                 logger.info("EOD AlertService: decay/degrade checks complete")
             except Exception as _ale:
                 logger.warning("EOD AlertService check failed (non-fatal): %s", _ale)
+
+            # 9. Vibe Agent evaluate + overnight brief to Discord
+            try:
+                from src.services.alert_service import push_overnight_brief_discord
+                from src.services.vibe_agent import evaluate_watch_rules
+
+                evaluate_watch_rules()
+                if push_overnight_brief_discord():
+                    logger.info("EOD overnight brief pushed to Discord")
+            except Exception as _ob:
+                logger.warning("EOD overnight brief failed (non-fatal): %s", _ob)
 
         except Exception as e:
             logger.error("EOD processing failed: %s", e)

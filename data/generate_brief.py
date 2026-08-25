@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -24,6 +25,11 @@ from typing import Any, Dict, List
 # ── resolve project root ──────────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+
+# Docker/read-only FS: yfinance cache must be writable
+_yf_cache = os.environ.get("YFINANCE_CACHE_DIR") or "/tmp/yfinance-cache"
+os.makedirs(_yf_cache, exist_ok=True)
+os.environ.setdefault("YFINANCE_CACHE_DIR", _yf_cache)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -141,6 +147,45 @@ def _near_52w_high(closes: List[float]) -> bool:
     return closes[-1] >= 0.95 * high_52
 
 
+def _compute_levels(
+    closes: List[float], highs: List[float], lows: List[float]
+) -> Dict[str, Any]:
+    """Derive actionable entry/stop/target levels from price + ATR.
+
+    Entry:  current price (market) or pullback to 0.5×ATR below close
+    Stop:   1× ATR below entry (1R risk)
+    Target: 3× ATR above entry (3:1 R:R for TRADE conviction)
+    """
+    if len(closes) < 15:
+        return {}
+    price = closes[-1]
+    # ATR-14
+    trs = []
+    for i in range(1, min(len(closes), 15)):
+        tr = max(
+            highs[-i] - lows[-i],
+            abs(highs[-i] - closes[-i - 1]),
+            abs(lows[-i] - closes[-i - 1]),
+        )
+        trs.append(tr)
+    atr = sum(trs) / len(trs) if trs else price * 0.02
+
+    entry = round(price, 2)
+    stop = round(entry - atr, 2)
+    target_2r = round(entry + 2 * atr, 2)
+    target_3r = round(entry + 3 * atr, 2)
+    risk_pct = round((atr / price) * 100, 2)
+
+    return {
+        "entry": entry,
+        "stop": stop,
+        "target_2r": target_2r,
+        "target_3r": target_3r,
+        "risk_1r_pct": risk_pct,
+        "atr_value": round(atr, 2),
+    }
+
+
 def _classify_ticker(
     ticker: str,
     closes: List[float],
@@ -149,7 +194,7 @@ def _classify_ticker(
     volumes: List[float],
     spy_closes: List[float],
 ) -> Dict[str, Any]:
-    """Return a signal dict for one ticker."""
+    """Return a signal dict for one ticker with actionable levels."""
     rs = _rs_score(closes, spy_closes)
     atr = _atr_pct(highs, lows, closes)
     vol_r = _vol_ratio(volumes)
@@ -170,6 +215,9 @@ def _classify_ticker(
         conviction = "AVOID"
         section = "review"
 
+    # Compute actionable entry/stop/target levels
+    levels = _compute_levels(closes, highs, lows)
+
     return {
         "ticker": ticker,
         "price": price,
@@ -179,6 +227,7 @@ def _classify_ticker(
         "near_52w_high": near_high,
         "conviction": conviction,
         "section": section,
+        **levels,
         "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
     }
 

@@ -85,6 +85,9 @@ class BenchmarkAttribution:
             "sector_contributions": {k: round(v, 2) for k, v in self.sector_contributions.items()},
             "sector_weights": {k: round(v, 2) for k, v in self.sector_weights.items()},
             "factor_exposures": {k: round(v, 3) for k, v in self.factor_exposures.items()},
+            "method_note": "Pseudo-Brinson · sector heuristic · equal-weight benchmark sectors",
+            "frequency": "daily",
+            "evidence_quality": "heuristic_sector_map",
         }
 
 

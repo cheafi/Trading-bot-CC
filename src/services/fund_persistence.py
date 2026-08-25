@@ -21,7 +21,9 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 _DB_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data")
-_DB_PATH = os.path.join(_DB_DIR, "fund_state.db")
+_DB_PATH = os.environ.get("FUND_STATE_DB_PATH") or os.path.join(
+    _DB_DIR, "fund_state.db"
+)
 
 
 def _get_db(db_path: str | None = None) -> sqlite3.Connection:

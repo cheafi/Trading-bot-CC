@@ -1,12 +1,7 @@
 ---
 name: typescript-reviewer
-description: >
-  TypeScript code review specialist with embedded style and safety rules.
-  Use when: reviewing TypeScript code, TypeScript best practices, type safety,
-  TypeScript-specific patterns, idiomatic TypeScript, strict mode compliance.
-model: claude-sonnet-4-6
-tools: [readFile, read, search, codebase, problems, usages]
-user-invocable: true
+description: TypeScript code review specialist — reviews TypeScript code for type safety, strict mode compliance, and idiomatic patterns.
+tools: [search, codebase, problems, usages]
 ---
 
 # TypeScript Reviewer

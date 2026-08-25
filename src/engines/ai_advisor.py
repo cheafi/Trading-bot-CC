@@ -1,26 +1,33 @@
 """
-TradingAI Bot - AI Advisor with Reasoning Engine
+TradingAI Bot - AI Advisor (Explanation & Review Layer)
 
-The brain of the system: an LLM-powered advisor that:
-1. Synthesizes signals, market regime, news, and portfolio state
-2. Provides trade-or-no-trade decisions with chain-of-thought reasoning
-3. Learns from past trade outcomes to calibrate confidence
-4. Generates natural-language market briefs and risk warnings
-5. Acts as the final gatekeeper before execution
+Role: AI commentary, explanation, and challenge layer.
+The deterministic engine (RegimeRouter → Scanner → ExpertCouncil → DecisionMapper)
+remains the final decision authority. AI output is advisory only.
+
+What AI may do:
+1. Explain why the deterministic engine scored/ranked a signal
+2. Challenge a signal — surface alternative interpretations or risks
+3. Retrieve historical analogues from closed-trade history
+4. Generate trade review and improvement commentary
+5. Produce morning briefs and regime narrative
+
+What AI must NOT do:
+- Override conviction tier, action mapping, or position sizing
+- Control regime detection, scanner scoring, or risk gates
+- Act as a gatekeeper or veto for execution decisions
 
 Architecture:
-    Market Data ─┐
-    Signals ─────┤
-    News/Social ─┼──► AI Advisor ──► Decision + Reasoning
-    Portfolio ───┤
-    ML Scores ───┘
+    Deterministic decision ──► AI Advisor ──► Explanation / Review / Memo
+                                             (additive only, never final authority)
 
 Usage:
     advisor = AIAdvisor()
-    decision = await advisor.evaluate_signal(signal, context)
+    explanation = await advisor.evaluate_signal(signal, context)  # explanation only
     brief = await advisor.generate_market_brief(market_data)
     review = await advisor.review_portfolio(positions)
 """
+
 import json
 import logging
 from datetime import datetime, timezone
@@ -37,21 +44,23 @@ settings = get_settings()
 # Prompt templates
 # ---------------------------------------------------------------------------
 
-ADVISOR_SYSTEM_PROMPT = """You are an elite quantitative trading advisor managing a multi-market \
+ADVISOR_SYSTEM_PROMPT = """You are an elite quantitative trading reviewer for a multi-market \
 portfolio (US, HK, JP, Crypto). You combine technical analysis, fundamental data, \
-market regime awareness, and risk management into actionable decisions.
+market regime awareness, and risk management into advisory explanations only.
 
 Your guiding principles:
-1. Capital preservation first — never risk more than 1% per trade, 3% daily
-2. Only take asymmetric risk/reward (≥2:1 R:R minimum)
-3. Regime awareness — different strategies for different markets
-4. Position sizing via Kelly criterion (half-Kelly for safety)
-5. Correlation control — avoid concentrated sector/factor bets
-6. Always explain your reasoning step-by-step
+1. Deterministic engine remains final authority for action, sizing, regime, and risk gates
+2. Capital preservation first — call out risk, missing evidence, and bad R:R
+3. Regime awareness — explain whether the setup fits current market conditions
+4. Correlation awareness — highlight concentrated sector/factor exposure
+5. Never provide order instructions, execution commands, or size overrides
+6. Explain concisely without hidden chain-of-thought
 
 You respond ONLY in valid JSON."""
 
-SIGNAL_EVALUATION_PROMPT = """Evaluate this trading signal and decide whether to EXECUTE, REDUCE, or SKIP.
+SIGNAL_EVALUATION_PROMPT = """Explain this trading signal. The deterministic engine has already scored it.
+Your role is to EXPLAIN the setup, CHALLENGE any risks you see, or CONFIRM the thesis.
+Do NOT override the engine's action tier or position sizing.
 
 ## Signal
 - Ticker: {ticker}
@@ -92,20 +101,18 @@ SIGNAL_EVALUATION_PROMPT = """Evaluate this trading signal and decide whether to
 
 Provide your analysis in JSON:
 {{
-    "decision": "EXECUTE" | "REDUCE" | "SKIP",
+    "assessment": "CONFIRM" | "CHALLENGE" | "EXPLAIN",
     "reasoning": {{
         "technical": "...",
         "fundamental": "...",
         "risk": "...",
         "regime_fit": "..."
     }},
-    "confidence_override": null | 1-100,
-    "position_size_pct": 0.0-5.0,
-    "adjusted_stop": null | price,
-    "adjusted_target": null | price,
-    "time_limit_hours": null | number,
+    "risk_challenges": ["...", "..."],
+    "confirming_evidence": ["...", "..."],
+    "missing_evidence": ["...", "..."],
     "warnings": ["...", "..."],
-    "one_liner": "Brief summary of decision"
+    "one_liner": "Brief advisory summary; no order instruction"
 }}"""
 
 MARKET_BRIEF_PROMPT = """Generate a concise morning market brief for a professional trader.
@@ -206,16 +213,18 @@ Provide JSON:
 # AI Advisor
 # ---------------------------------------------------------------------------
 
+
 class AIAdvisor:
     """
-    The central AI brain that makes final trading decisions.
-    
+    Advisory AI layer for explanation, review, and critique.
+
     Combines:
-    - GPT reasoning for signal evaluation
-    - ML model predictions for win probability
+    - LLM commentary for signal explanation
+    - ML model context for evidence review
     - Portfolio risk assessment
     - Market regime analysis
-    - Learning from past trades
+
+    It must not override deterministic action, sizing, regime, or risk gates.
     """
 
     def __init__(self, model: Optional[str] = None):
@@ -235,6 +244,7 @@ class AIAdvisor:
         try:
             if settings.use_azure_openai:
                 from openai import AsyncAzureOpenAI
+
                 azure_key = getattr(settings, "azure_openai_api_key", None)
                 if azure_key:
                     self._client = AsyncAzureOpenAI(
@@ -247,6 +257,7 @@ class AIAdvisor:
                         ClientSecretCredential,
                         get_bearer_token_provider,
                     )
+
                     cred = ClientSecretCredential(
                         tenant_id=settings.azure_tenant_id,
                         client_id=settings.azure_client_id,
@@ -262,6 +273,7 @@ class AIAdvisor:
                     )
             else:
                 from openai import AsyncOpenAI
+
                 self._client = AsyncOpenAI(api_key=settings.openai_api_key)
         except Exception as e:
             self.logger.error(f"Failed to init AI client: {e}")
@@ -277,6 +289,7 @@ class AIAdvisor:
 
         try:
             import asyncio
+
             response = await asyncio.wait_for(
                 client.chat.completions.create(
                     model=self.model,
@@ -309,7 +322,7 @@ class AIAdvisor:
         context: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
-        Evaluate a signal and return EXECUTE / REDUCE / SKIP decision.
+        Explain and challenge a deterministic signal decision.
 
         Args:
             signal: The trading signal to evaluate
@@ -318,7 +331,7 @@ class AIAdvisor:
                      ml_prediction, strategy_stats, etc.
 
         Returns:
-            Decision dict with reasoning, position size, warnings.
+            Advisory dict with reasoning, challenges, missing evidence, and warnings.
         """
         inv = signal.invalidation
         targets = signal.targets
@@ -344,7 +357,11 @@ class AIAdvisor:
             rr_ratio=rr,
             strategy=signal.strategy_id or "unknown",
             confidence=signal.confidence,
-            horizon=signal.horizon.value if hasattr(signal.horizon, "value") else str(signal.horizon),
+            horizon=(
+                signal.horizon.value
+                if hasattr(signal.horizon, "value")
+                else str(signal.horizon)
+            ),
             regime=context.get("regime", "UNKNOWN"),
             vix=context.get("vix", "N/A"),
             trend=context.get("trend", "N/A"),
@@ -365,42 +382,52 @@ class AIAdvisor:
 
         result = await self._call_llm(prompt)
         if result is None:
-            # Fallback: basic rule-based decision
-            return self._fallback_decision(signal, context)
+            return self._fallback_advisory(signal, context)
 
         self.logger.info(
-            f"AI Advisor: {signal.ticker} → {result.get('decision', '?')} "
+            f"AI Advisor: {signal.ticker} → {result.get('assessment', '?')} "
             f"| {result.get('one_liner', '')}"
         )
         return result
 
-    def _fallback_decision(
+    def _fallback_advisory(
         self, signal: Signal, context: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Rule-based fallback when LLM is unavailable."""
+        """Deterministic advisory fallback when LLM is unavailable."""
         conf = signal.confidence
         vix = context.get("vix", 20)
         exposure = context.get("exposure", 0)
 
         if vix > 35 or exposure > 80 or conf < 50:
-            decision = "SKIP"
+            assessment = "CHALLENGE"
         elif conf < 65 or vix > 28:
-            decision = "REDUCE"
+            assessment = "CHALLENGE"
         else:
-            decision = "EXECUTE"
+            assessment = "CONFIRM"
 
         return {
-            "decision": decision,
+            "assessment": assessment,
             "reasoning": {
                 "technical": f"Confidence {conf}%",
-                "fundamental": "LLM unavailable — using rule-based fallback",
+                "fundamental": "LLM unavailable — deterministic advisory fallback only",
                 "risk": f"VIX={vix}, Exposure={exposure}%",
                 "regime_fit": "N/A",
             },
-            "confidence_override": None,
-            "position_size_pct": min(signal.position_size_pct or 2.0, 3.0),
-            "warnings": ["AI advisor unavailable — rule-based decision"],
-            "one_liner": f"Fallback: {decision} based on rules (conf={conf}, VIX={vix})",
+            "risk_challenges": [
+                item
+                for item in [
+                    "VIX above crisis threshold" if vix > 35 else "",
+                    "Portfolio exposure high" if exposure > 80 else "",
+                    "Signal confidence below advisory floor" if conf < 50 else "",
+                ]
+                if item
+            ],
+            "confirming_evidence": [],
+            "missing_evidence": ["LLM unavailable", "No additional retrieval context"],
+            "warnings": [
+                "AI advisor unavailable — deterministic advisory fallback only"
+            ],
+            "one_liner": f"Fallback advisory: {assessment} evidence quality (conf={conf}, VIX={vix})",
         }
 
     # ------------------------------------------------------------------

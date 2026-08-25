@@ -1,13 +1,14 @@
 ---
 name: executor
-description: >
-  Focused task executor for implementation work.
-  Use when: implementing code changes, writing features, fixing bugs,
-  executing plan steps, making code modifications, building functionality.
-model: claude-sonnet-4-6
-tools: [readFile, read, editFiles, edit, search, codebase, problems, runInTerminal, shell, findTestFiles, testFailures, usages]
-agents: [explore, architect]
-user-invocable: true
+description: Focused task executor for TradingAI Bot — implements code changes, writes features, fixes bugs following project conventions
+tools: [codebase, problems, runInTerminal, editFiles, search, usages]
+handoffs:
+  - label: Search codebase
+    agent: explore
+    prompt: Find relevant files and patterns in the codebase
+  - label: Check architecture
+    agent: architect
+    prompt: Verify this implementation approach is architecturally sound
 ---
 
 # Executor

@@ -73,6 +73,25 @@ class MultiChannelNotifier:
 
     async def send_alert(self, title: str, message: str, level: str = "INFO") -> Dict[str, bool]:
         text = self._format_alert_message(title=title, message=message, level=level)
+        sev = "warning" if level.upper() in ("WARNING", "ERROR") else "info"
+        if level.upper() == "ERROR":
+            sev = "critical"
+        try:
+            from src.notifications.discord_dispatch import (
+                discord_is_configured,
+                push_notice_async,
+            )
+
+            if discord_is_configured():
+                ok = await push_notice_async(
+                    title=title,
+                    message=message,
+                    severity=sev,
+                    event_type="multi_channel_alert",
+                )
+                return {"discord": ok, "whatsapp": False}
+        except Exception:
+            pass
         return await self.send_message(text)
 
     @staticmethod

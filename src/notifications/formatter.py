@@ -102,7 +102,9 @@ class SignalNarrativeFormatter:
         entry_price = float(getattr(signal, "entry_price", 0) or 0)
         stop_price = self._get_stop(signal)
         target_price = self._get_target(signal)
-        rr = float(getattr(signal, "risk_reward_ratio", 0) or 0)
+        from src.utils.numeric_parse import parse_ratio
+
+        rr = parse_ratio(getattr(signal, "risk_reward_ratio", 0), 0.0) or 0.0
         if (
             rr == 0
             and entry_price

@@ -32,6 +32,17 @@ _CORR_GUARD_THRESHOLD = 0.70  # matches copilot-instructions.md
 _VAR_CONFIDENCE = 0.95
 _TRADING_DAYS_YEAR = 252
 
+# ── Returns cache: avoids per-request yfinance calls (15-min TTL) ─────────────
+import time as _time_module
+
+_returns_cache: dict = {}
+_returns_cache_ts: float = 0.0
+_RETURNS_CACHE_TTL = 900.0  # 15 minutes
+
+
+def _risk_value(name: str, default: Any) -> Any:
+    return getattr(RISK, name, default)
+
 
 def _get_open_positions() -> List[Dict[str, Any]]:
     """Pull open paper positions from fund_persistence."""
@@ -47,8 +58,16 @@ def _get_open_positions() -> List[Dict[str, Any]]:
 async def _fetch_returns(
     tickers: List[str], period: str = "3mo"
 ) -> Dict[str, List[float]]:
-    """Fetch daily returns for a list of tickers via yfinance."""
+    """Fetch daily returns for a list of tickers via yfinance.
+    Results are cached for 15 minutes to avoid per-request yfinance calls.
+    """
+    global _returns_cache, _returns_cache_ts
     import yfinance as yf
+
+    now = _time_module.time()
+    cache_key = (tuple(sorted(tickers)), period)
+    if _returns_cache.get(cache_key) and now - _returns_cache_ts < _RETURNS_CACHE_TTL:
+        return _returns_cache[cache_key]
 
     def _dl():
         data = yf.download(
@@ -62,7 +81,10 @@ async def _fetch_returns(
         }
 
     try:
-        return await asyncio.to_thread(_dl)
+        result = await asyncio.to_thread(_dl)
+        _returns_cache[cache_key] = result
+        _returns_cache_ts = _time_module.time()
+        return result
     except Exception as e:
         logger.debug("Return fetch failed: %s", e)
         return {}
@@ -209,7 +231,7 @@ async def var_gate(
             "total_var_usd": 0.0,
             "total_var_pct": 0.0,
             "var_budget_usd": round(
-                RISK.get("max_drawdown_pct", 0.15) * account_equity, 2
+                _risk_value("max_drawdown_pct", 0.15) * account_equity, 2
             ),
             "positions": [],
         }
@@ -217,7 +239,7 @@ async def var_gate(
     tickers = list({p.get("ticker", "") for p in open_positions if p.get("ticker")})
     returns_map = await _fetch_returns(tickers, period="3mo")
 
-    max_dd_pct = RISK.get("max_drawdown_pct", 0.15)
+    max_dd_pct = _risk_value("max_drawdown_pct", 0.15)
     var_budget = max_dd_pct * account_equity
     position_details: List[Dict[str, Any]] = []
     total_var = 0.0
@@ -307,12 +329,12 @@ async def risk_summary(
     """
     open_positions = _get_open_positions()
     n_open = len(open_positions)
-    max_positions = RISK.get("max_positions", 10)
+    max_positions = _risk_value("max_positions", 10)
 
     # VaR (re-use logic inline to avoid duplicate yfinance calls)
     tickers = list({p.get("ticker", "") for p in open_positions if p.get("ticker")})
     returns_map = await _fetch_returns(tickers, period="3mo") if tickers else {}
-    max_dd_pct = RISK.get("max_drawdown_pct", 0.15)
+    max_dd_pct = _risk_value("max_drawdown_pct", 0.15)
     var_budget = max_dd_pct * account_equity
     total_var = 0.0
     for pos in open_positions:

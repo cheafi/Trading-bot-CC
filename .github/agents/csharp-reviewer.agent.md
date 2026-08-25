@@ -1,12 +1,7 @@
 ---
 name: csharp-reviewer
-description: >
-  C# code review specialist with embedded style and safety rules.
-  Use when: reviewing C# code, C# best practices, type safety,
-  C#-specific patterns, idiomatic C#, async/await review, nullable analysis.
-model: claude-sonnet-4-6
-tools: [readFile, read, search, codebase, problems, usages]
-user-invocable: true
+description: C# code review specialist — reviews C# code for async correctness, nullable reference types, and idiomatic modern .NET patterns.
+tools: [search, codebase, problems, usages]
 ---
 
 # C# Reviewer

@@ -181,9 +181,19 @@ class FundLabService:
     }
 
     async def _history(self, mds: Any, ticker: str, period: str) -> pd.Series:
-        """Fetch close series for one ticker."""
-        df = await mds.get_history(ticker, period=period, interval="1d")
-        if df is None or df.empty:
+        """Fetch close series for one ticker. Falls back to yfinance if mds unavailable."""
+        if mds is not None:
+            df = await mds.get_history(ticker, period=period, interval="1d")
+        else:
+            # Direct yfinance fallback when market_data_service not initialized
+            import yfinance as yf
+
+            df = await asyncio.to_thread(
+                lambda: yf.download(
+                    ticker, period=period, interval="1d", progress=False
+                )
+            )
+        if df is None or (hasattr(df, "empty") and df.empty):
             return pd.Series(dtype=float)
         close = df.get("Close") if isinstance(df, pd.DataFrame) else None
         if close is None:
@@ -366,7 +376,54 @@ class FundLabService:
         rows = await asyncio.gather(*tasks)
         rows = [r for r in rows if math.isfinite(r[1])]
         rows.sort(key=lambda x: x[1], reverse=True)
-        picks = rows[: max(1, min(effective_top_n, len(rows)))]
+
+        # ── Sprint 118: Correlation guard ──────────────────────────────────
+        # Greedily select top picks while rejecting any with >0.7 correlation
+        # to an already-selected pick (uses 63-day returns correlation).
+        MAX_CORR = 0.70
+        selected: list = []
+        _histories: dict = {}
+
+        for row in rows:
+            if len(selected) >= effective_top_n:
+                break
+            ticker = row[0]
+            # Lazy-fetch history for correlation check
+            if ticker not in _histories:
+                s = await self._history(mds, ticker, period)
+                _histories[ticker] = (
+                    s.pct_change().dropna().iloc[-63:]
+                    if len(s) > 63
+                    else s.pct_change().dropna()
+                )
+
+            # Check correlation against all already-selected
+            dominated = False
+            for sel_row in selected:
+                sel_ticker = sel_row[0]
+                if sel_ticker not in _histories:
+                    s2 = await self._history(mds, sel_ticker, period)
+                    _histories[sel_ticker] = (
+                        s2.pct_change().dropna().iloc[-63:]
+                        if len(s2) > 63
+                        else s2.pct_change().dropna()
+                    )
+                r1 = _histories[ticker]
+                r2 = _histories[sel_ticker]
+                if len(r1) >= 20 and len(r2) >= 20:
+                    # Align on common dates
+                    common = r1.index.intersection(r2.index)
+                    if len(common) >= 20:
+                        corr = float(r1.loc[common].corr(r2.loc[common]))
+                        if not math.isnan(corr) and abs(corr) > MAX_CORR:
+                            dominated = True
+                            break
+            if not dominated:
+                selected.append(row)
+
+        picks = (
+            selected if selected else rows[: max(1, min(effective_top_n, len(rows)))]
+        )
         if not picks:
             return {"name": name, "thesis": spec["thesis"], "picks": []}
 
@@ -491,6 +548,26 @@ class FundLabService:
         vol = float(p.std() * np.sqrt(252)) if p.std() > 0 else 0.0
         sharpe = float((p.mean() / p.std()) * np.sqrt(252)) if p.std() > 0 else 0.0
 
+        # Sortino ratio: downside deviation only
+        downside = p[p < 0]
+        sortino = (
+            float((p.mean() / downside.std()) * np.sqrt(252))
+            if len(downside) > 1 and downside.std() > 0
+            else 0.0
+        )
+
+        # Win rate: % of positive return days
+        win_rate = float((p > 0).sum() / len(p) * 100) if len(p) > 0 else 0.0
+
+        # Best/worst day
+        best_day = float(p.max() * 100) if len(p) > 0 else 0.0
+        worst_day = float(p.min() * 100) if len(p) > 0 else 0.0
+
+        # Profit factor: sum of gains / abs(sum of losses)
+        gains_sum = float(p[p > 0].sum())
+        losses_sum = float(abs(p[p < 0].sum()))
+        profit_factor = round(gains_sum / losses_sum, 2) if losses_sum > 0 else 0.0
+
         running_max = eq_p.cummax()
         dd_series = eq_p / running_max - 1.0
         dd = float(dd_series.min())
@@ -511,24 +588,33 @@ class FundLabService:
             else None
         )
 
-        # Equity curve normalised to base=100, last 20 bars
+        # Equity curve normalised to base=100
         eq_norm = (eq_p / eq_p.iloc[0] * 100.0).round(2)
         equity_curve_20 = eq_norm.iloc[-20:].tolist()
+        equity_curve_60 = eq_norm.iloc[-60:].tolist()
 
         return {
             "total_return": round(total_p * 100, 2),
             "annualized": round(ann_p * 100, 2),
             "volatility": round(vol * 100, 2),
             "sharpe": round(sharpe, 2),
+            "sortino": round(sortino, 2),
             "calmar": calmar,
             "max_drawdown": round(dd * 100, 2),
             "excess_return": round((ann_p - ann_b) * 100, 2),
             "roi_vs_benchmark": round((total_p - total_b) * 100, 2),
+            "win_rate": round(win_rate, 1),
+            "profit_factor": profit_factor,
+            "best_day": round(best_day, 2),
+            "worst_day": round(worst_day, 2),
             # Sprint 105 fields
             "watermark_drawdown": watermark_dd,
             "recovery_days": recovery_days,
             "underwater_days": underwater_days,
             "equity_curve_20": equity_curve_20,
+            "equity_curve_60": equity_curve_60,
+            "total_return_pct": round(total_p * 100, 2),
+            "max_drawdown_pct": round(dd * 100, 2),
         }
 
     @staticmethod
@@ -755,9 +841,13 @@ class FundLabService:
 
         # "Best Performer" instead of "Winner" — avoids misleading label when all alpha < 0
         best = results[0]["name"] if results else None
+        bm_total_pct = 0.0
+        if len(bm_rets) > 0:
+            bm_total_pct = round(float((1 + bm_rets).prod() - 1) * 100, 2)
         return {
             "period": period,
             "benchmark": benchmark.upper(),
+            "benchmark_return_pct": bm_total_pct,
             "funds": results,
             "best_performer": best,
             "winner": best,  # backward compat

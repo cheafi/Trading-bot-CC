@@ -20,7 +20,6 @@ REST layer can surface them without a live Discord session.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
@@ -97,39 +96,17 @@ def _make_event(
 
 
 def _push_discord(title: str, message: str, severity: str = "info") -> bool:
-    """Fire-and-forget Discord push.  Returns True if dispatched."""
-    webhook = os.getenv("DISCORD_WEBHOOK_URL", "") or os.getenv(
-        "DISCORD_ALERT_WEBHOOK", ""
-    )
-    if not webhook:
-        return False
+    """Fire-and-forget Discord push. Returns True if dispatched."""
     try:
-        from src.notifications.discord_bot import DiscordInteractiveBot
+        from src.notifications.discord_dispatch import push_notice
 
-        bot = DiscordInteractiveBot()
-        if not bot.is_configured():
-            return False
-        color = _SEVERITY_COLOR.get(severity, 0x5865F2)
-        emoji = _SEVERITY_EMOJI.get(severity, "ℹ️")
-
-        async def _send():
-            await bot.push_alert(
-                title=f"{emoji} {title}",
-                message=message,
-                color=color,
-            )
-            await bot.close()
-
-        # Run in a new event loop if there's no running loop
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(_send())
-            else:
-                loop.run_until_complete(_send())
-        except RuntimeError:
-            asyncio.run(_send())
-        return True
+        return push_notice(
+            title=title,
+            message=message,
+            severity=severity,
+            event_type="alert_service",
+            log=False,
+        )
     except Exception as exc:
         logger.warning("Discord push failed: %s", exc)
         return False
@@ -310,3 +287,35 @@ def get_alert_log(limit: int = MAX_LOG) -> List[Dict[str, Any]]:
     """Return the last ``limit`` alert events from persistent log."""
     log = _load_log()
     return log[-limit:]
+
+
+def push_overnight_brief_discord(
+    *,
+    system_state: Optional[Dict[str, Any]] = None,
+    today_payload: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """Generate overnight brief and push to Discord (monitor-only)."""
+    try:
+        from src.notifications.discord_dispatch import push_notice
+        from src.services.vibe_agent import generate_overnight_brief
+
+        brief = generate_overnight_brief(
+            system_state=system_state,
+            today_payload=today_payload,
+        )
+        title = str(brief.get("title") or "昨晚重點 · Overnight")
+        message = str(brief.get("summary") or "\n".join(brief.get("lines") or []))
+        return push_notice(
+            title=title,
+            message=message,
+            severity="info",
+            event_type="overnight_brief",
+            meta={
+                "regime": brief.get("regime"),
+                "alert_count": brief.get("alert_count"),
+            },
+            log=True,
+        )
+    except Exception as exc:
+        logger.warning("push_overnight_brief_discord error: %s", exc)
+        return False

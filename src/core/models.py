@@ -1288,6 +1288,10 @@ class TradeRecommendation(BaseModel):
         if inv and getattr(inv, "stop_price", 0):
             _stop = inv.stop_price
 
+        from src.utils.numeric_parse import parse_ratio
+
+        _rr = parse_ratio(getattr(signal, "risk_reward_ratio", None), 1.5) or 1.5
+
         fields: Dict[str, Any] = dict(
             ticker=signal.ticker,
             direction=direction_val,
@@ -1296,7 +1300,7 @@ class TradeRecommendation(BaseModel):
             score=_conf / 100.0,
             entry_price=getattr(signal, "entry_price", 0) or 0,
             stop_price=_stop,
-            risk_reward_ratio=getattr(signal, "risk_reward_ratio", 1.5) or 1.5,
+            risk_reward_ratio=_rr,
             expected_return=getattr(signal, "expected_return", 0.02) or 0.02,
             horizon=(
                 signal.horizon.value
@@ -1356,7 +1360,11 @@ class TradeRecommendation(BaseModel):
         """
         _score = d.get("score", 0.5)
         _conf = d.get("confidence", int(_score * 100))
-        _rr = d.get("risk_reward_ratio", d.get("risk_reward", 1.5))
+        from src.utils.numeric_parse import parse_ratio
+
+        _rr = parse_ratio(
+            d.get("risk_reward_ratio", d.get("risk_reward", 1.5)), 1.5
+        ) or 1.5
 
         rec = cls(
             ticker=d.get("ticker", "???"),

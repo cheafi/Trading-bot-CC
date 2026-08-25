@@ -242,6 +242,8 @@ class MultiLayerRanker:
         # Action bonus (0-18) — TRADE must outweigh LEADER status
         if decision.action == "TRADE":
             c += 18
+        elif decision.action == "PILOT":
+            c += 10
         elif decision.action == "WATCH":
             c += 3
 

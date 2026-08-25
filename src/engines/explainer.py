@@ -87,9 +87,20 @@ class ExplanationEngine:
                 f"{ticker} {strategy} scores {fit.final_score:.1f} "
                 f"({fit.grade}) with {decision.confidence_label} confidence"
             )
-        elif decision.action == Action.WATCH:
+        elif decision.action == Action.PILOT:
             parts.append(
-                f"{ticker} showing potential {strategy} — " f"needs confirmation"
+                f"{ticker} decent {strategy} ({fit.grade}) — taking a Pilot entry"
+            )
+        elif decision.action == Action.WATCH:
+            trigger_text = (
+                decision.entry_trigger if decision.entry_trigger else "confirmation"
+            )
+            parts.append(
+                f"{ticker} showing potential {strategy} — needs {trigger_text}"
+            )
+        elif decision.action == Action.AVOID:
+            parts.append(
+                f"{ticker} is structurally broken or below thresholds — AVOID NOW"
             )
         else:
             parts.append(f"{ticker} not actionable now — {decision.rationale}")
@@ -172,8 +183,10 @@ class ExplanationEngine:
         """Key supporting evidence."""
         evidence = []
 
+        from src.utils.numeric_parse import parse_ratio
+
         score = sig.get("score", 0)
-        rr = sig.get("risk_reward", 0)
+        rr = parse_ratio(sig.get("risk_reward"), 0.0) or 0.0
         vol = sig.get("vol_ratio", 1.0)
 
         if score >= 7:

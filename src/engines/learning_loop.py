@@ -18,7 +18,9 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 _DATA_DIR = Path(os.getenv("CC_DATA_DIR", "data"))
-_TRADES_FILE = _DATA_DIR / "closed_trades.jsonl"
+_TRADES_FILE = Path(
+    os.getenv("CLOSED_TRADES_PATH", str(_DATA_DIR / "closed_trades.jsonl"))
+)
 
 
 @dataclass
@@ -79,13 +81,15 @@ class LearningLoopPipeline:
                 count += 1
             if count:
                 logger.info("Loaded %d persisted trades", count)
+        except OSError as e:
+            logger.debug("Closed trades unavailable: %s", e)
         except Exception as e:
             logger.warning("Failed to load trades: %s", e)
 
     def _persist_trade(self, trade: ClosedTrade) -> None:
         """Append trade to JSONL file."""
         try:
-            _DATA_DIR.mkdir(parents=True, exist_ok=True)
+            _TRADES_FILE.parent.mkdir(parents=True, exist_ok=True)
             with open(_TRADES_FILE, "a") as f:
                 row = {
                     "ticker": trade.ticker,
@@ -102,6 +106,8 @@ class LearningLoopPipeline:
                     "hold_days": trade.hold_days,
                 }
                 f.write(json.dumps(row) + "\n")
+        except OSError as e:
+            logger.debug("Closed trade persistence unavailable: %s", e)
         except Exception as e:
             logger.warning("Failed to persist trade: %s", e)
 

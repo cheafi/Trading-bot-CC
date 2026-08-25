@@ -1,0 +1,47 @@
+# CC public tunnel sidecar — use with docker-compose.dev.yml
+#
+# Quick tunnel (no Cloudflare account; random *.trycloudflare.com URL):
+#   docker compose -f docker-compose.dev.yml -f docker-compose.tunnel.yml --profile tunnel up
+#
+# Named Cloudflare tunnel (persistent URL; set CLOUDFLARE_TUNNEL_TOKEN in .env):
+#   docker compose -f docker-compose.dev.yml -f docker-compose.tunnel.yml --profile tunnel-token up
+#
+# ngrok (set NGROK_AUTHTOKEN in .env):
+#   docker compose -f docker-compose.dev.yml -f docker-compose.tunnel.yml --profile tunnel-ngrok up
+#
+# Security: dev-only. Use a strong API_SECRET_KEY — never commit tunnel tokens.
+
+services:
+  cloudflared-quick:
+    image: cloudflare/cloudflared:latest
+    container_name: cc_tunnel_cloudflare_quick
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+
+  cloudflared-token:
+    image: cloudflare/cloudflared:latest
+    container_name: cc_tunnel_cloudflare_token
+    profiles: ["tunnel-token"]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in .env}
+    depends_on:
+      api:
+        condition: service_healthy
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: cc_tunnel_ngrok
+    profiles: ["tunnel-ngrok"]
+    restart: unless-stopped
+    command: http api:8000
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:?Set NGROK_AUTHTOKEN in .env}
+    depends_on:
+      api:
+        condition: service_healthy

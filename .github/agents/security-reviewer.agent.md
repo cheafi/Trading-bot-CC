@@ -1,13 +1,7 @@
 ---
 name: security-reviewer
-description: >
-  Security vulnerability detection specialist (READ-ONLY).
-  Use when: security review, OWASP Top 10 analysis, secrets detection,
-  input validation review, auth/authz checks, dependency security audit,
-  vulnerability assessment, penetration test guidance.
-model: claude-opus-4-7
-tools: [readFile, read, search, codebase, problems, runInTerminal, shell, usages]
-user-invocable: true
+description: Security vulnerability detection for trading API keys, auth, and OWASP compliance (READ-ONLY)
+tools: [codebase, search, problems, runInTerminal, usages]
 ---
 
 # Security Reviewer

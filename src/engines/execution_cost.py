@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
@@ -43,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-_DB_PATH = Path("data") / "fund_portfolio.db"
+_DB_PATH = Path(os.getenv("EXECUTION_DB_PATH", str(Path("data") / "fund_portfolio.db")))
 _COMMISSION_PER_SHARE: float = 0.005  # Interactive Brokers tiered
 _COMMISSION_MIN: float = 1.00
 _COMMISSION_OPTIONS: float = 0.65  # per contract
@@ -103,23 +104,29 @@ class FillRecord:
 
 
 def _ensure_table() -> None:
-    with _db() as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS execution_fills (
-                id             INTEGER PRIMARY KEY AUTOINCREMENT,
-                ticker         TEXT    NOT NULL,
-                side           TEXT    NOT NULL,
-                shares         INTEGER NOT NULL,
-                expected_price REAL    NOT NULL,
-                fill_price     REAL    NOT NULL,
-                commission     REAL    NOT NULL DEFAULT 0,
-                strategy       TEXT    NOT NULL DEFAULT 'MARKET',
-                slippage_bps   REAL    NOT NULL DEFAULT 0,
-                slippage_usd   REAL    NOT NULL DEFAULT 0,
-                timestamp      TEXT    NOT NULL
-            )
-            """)
-        conn.commit()
+    try:
+        with _db() as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS execution_fills (
+                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ticker         TEXT    NOT NULL,
+                    side           TEXT    NOT NULL,
+                    shares         INTEGER NOT NULL,
+                    expected_price REAL    NOT NULL,
+                    fill_price     REAL    NOT NULL,
+                    commission     REAL    NOT NULL DEFAULT 0,
+                    strategy       TEXT    NOT NULL DEFAULT 'MARKET',
+                    slippage_bps   REAL    NOT NULL DEFAULT 0,
+                    slippage_usd   REAL    NOT NULL DEFAULT 0,
+                    timestamp      TEXT    NOT NULL
+                )
+                """)
+            conn.commit()
+    except sqlite3.Error as exc:
+        logger.warning(
+            "Execution cost DB unavailable; continuing without fill persistence: %s",
+            exc,
+        )
 
 
 @contextmanager

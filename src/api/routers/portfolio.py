@@ -13,12 +13,39 @@ import numpy as np
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
+from src.services.ibkr_service import get_ibkr_service
+from src.services.portfolio_positions import build_position_record, portfolio_header_snapshot
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 # ── Portfolio state ──────────────────────────────────────────────────
 _user_portfolio: dict = {"holdings": [], "source": "manual", "updated_at": ""}
+
+
+def positions_label(count: int) -> str:
+    """Human count label: 0 → No positions, 1 → 1 position, else N positions."""
+    n = int(count or 0)
+    if n <= 0:
+        return "No positions"
+    if n == 1:
+        return "1 position"
+    return f"{n} positions"
+
+
+def portfolio_header_snapshot_for_cc(*, ibkr_connected: bool = False) -> dict:
+    """Book snapshot with live position count for cc-header."""
+    holdings = _user_portfolio.get("holdings") or []
+    source = str(_user_portfolio.get("source") or "manual")
+    count = len(holdings)
+    manual = source in ("manual", "demo-seed", "") or not ibkr_connected
+    base = portfolio_header_snapshot(ibkr_connected=ibkr_connected and not manual)
+    base["position_count"] = count
+    base["positions_label"] = positions_label(count)
+    base["book_label"] = "Manual book" if manual else source.upper()
+    base["source"] = source
+    return base
 
 
 class HoldingInput(BaseModel):
@@ -37,6 +64,8 @@ class PositionAddRequest(BaseModel):
     target_1r: float = 0
     target_2r: float = 0
     notes: str = ""
+    sleeve: str = ""
+    sector: str = ""
 
 
 class PositionUpdateRequest(BaseModel):
@@ -92,6 +121,7 @@ async def portfolio_import(req: PortfolioImportRequest, request: Request):
                 "ticker": t,
                 "shares": h.shares,
                 "avg_cost": h.avg_cost,
+                "stop_price": float(h.stop_price or 0),
                 "current_price": price,
                 "market_value": round(price * h.shares, 2) if price else None,
                 "unrealized_pnl": (
@@ -119,6 +149,71 @@ async def portfolio_import(req: PortfolioImportRequest, request: Request):
 async def portfolio_holdings():
     """Return the currently stored portfolio."""
     return _user_portfolio
+
+
+@router.post("/api/portfolio/seed-demo", tags=["portfolio"])
+async def portfolio_seed_demo(request: Request):
+    """Seed a diversified demo portfolio for instant HISTSIM / portfolio console demo.
+
+    Idempotent — overwrites any existing holdings. Pulls live prices via
+    market_data so cost basis is realistic.
+    """
+    global _user_portfolio
+    now = datetime.now(timezone.utc).isoformat() + "Z"
+    mds = request.app.state.market_data
+    from src.core.stock_universe import DEMO_PORTFOLIO_POSITIONS
+
+    demo = DEMO_PORTFOLIO_POSITIONS
+    enriched = []
+    for d in demo:
+        t = d["ticker"]
+        price = None
+        try:
+            hist = await mds.get_history(t, period="5d", interval="1d")
+            if hist is not None and not hist.empty:
+                c_col = "Close" if "Close" in hist.columns else "close"
+                price = float(hist[c_col].iloc[-1])
+        except Exception:
+            pass
+        avg_cost = round((price or 100) * 0.95, 2)  # pretend bought 5% lower
+        entry = avg_cost
+        stop = round(entry * 0.95, 2) if entry else 0.0
+        risk = entry - stop if entry and stop else entry * 0.05
+        enriched.append(
+            {
+                "ticker": t,
+                "shares": d["shares"],
+                "entry_price": entry,
+                "avg_cost": avg_cost,
+                "stop_price": stop,
+                "target_1r": round(entry + risk, 2) if entry and stop else 0.0,
+                "target_2r": round(entry + 2 * risk, 2) if entry and stop else 0.0,
+                "current_price": price,
+                "market_value": (price * d["shares"]) if price else None,
+                "unrealized_pnl": (
+                    round((price - avg_cost) * d["shares"], 2)
+                    if price and avg_cost
+                    else None
+                ),
+                "pnl_pct": (
+                    round((price / avg_cost - 1) * 100, 2)
+                    if price and avg_cost
+                    else None
+                ),
+            }
+        )
+    _user_portfolio = {
+        "holdings": enriched,
+        "source": "demo-seed",
+        "updated_at": now,
+        "count": len(enriched),
+    }
+    return {
+        "ok": True,
+        "seeded": len(enriched),
+        "holdings": enriched,
+        "next": "Open Portfolio tab; VaR pill should flip to HISTSIM in 5min refresh window.",
+    }
 
 
 @router.get("/api/portfolio/futu", tags=["portfolio"])
@@ -160,7 +255,14 @@ async def portfolio_from_futu():
         }
         return _user_portfolio
     except Exception as exc:
-        raise HTTPException(500, f"Futu fetch failed: {exc}") from exc
+        # FUTU OpenD not running / not installed — degrade honestly, do not 500.
+        return {
+            "holdings": _user_portfolio.get("holdings", []),
+            "source": _user_portfolio.get("source", "manual"),
+            "futu_connected": False,
+            "degraded": True,
+            "error": f"Futu unavailable: {exc}",
+        }
 
 
 # ── Position management (add/update/remove/monitor) ──────────────────
@@ -171,9 +273,15 @@ async def add_position(req: PositionAddRequest, request: Request):
     """Add a single position (e.g., from BUY confirmation flow)."""
     global _user_portfolio
     t = req.ticker.upper().strip()
+    if not t:
+        raise HTTPException(400, "Ticker is required")
+    if req.shares <= 0:
+        raise HTTPException(400, "Shares must be greater than 0")
+    if req.entry_price <= 0:
+        raise HTTPException(400, "Entry price must be greater than 0")
+
     now = datetime.now(timezone.utc).isoformat() + "Z"
 
-    # Fetch current price
     price = None
     try:
         mds = request.app.state.market_data
@@ -184,27 +292,8 @@ async def add_position(req: PositionAddRequest, request: Request):
     except Exception:
         pass
 
-    entry = req.entry_price or price or 0
-    risk = entry - req.stop_price if req.stop_price else entry * 0.05
-    pos = {
-        "ticker": t,
-        "shares": req.shares,
-        "avg_cost": entry,
-        "entry_price": entry,
-        "current_price": price,
-        "stop_price": req.stop_price or round(entry - risk, 2),
-        "target_1r": req.target_1r or round(entry + risk * 2, 2),
-        "target_2r": req.target_2r or round(entry + risk * 3, 2),
-        "market_value": round(price * req.shares, 2) if price else None,
-        "unrealized_pnl": round((price - entry) * req.shares, 2) if price else None,
-        "pnl_pct": round((price / entry - 1) * 100, 2) if price and entry else None,
-        "r_multiple": round((price - entry) / risk, 2) if price and risk else None,
-        "status": "OPEN",
-        "added_at": now,
-        "notes": req.notes,
-    }
+    pos = build_position_record(req, price=price, now=now)
 
-    # Replace if ticker exists, else append
     holdings = _user_portfolio.get("holdings", [])
     holdings = [h for h in holdings if h.get("ticker") != t]
     holdings.append(pos)
@@ -214,7 +303,30 @@ async def add_position(req: PositionAddRequest, request: Request):
         "updated_at": now,
         "count": len(holdings),
     }
-    return {"status": "added", "position": pos}
+
+    broker_sync = "skipped"
+    broker_message = ""
+    try:
+        ibkr = get_ibkr_service()
+        ibkr_st = ibkr.status() if ibkr else {}
+        ibkr_ok = bool(ibkr_st.get("session_usable") or ibkr_st.get("connected"))
+        if ibkr_ok:
+            broker_sync = "unavailable"
+            broker_message = "Saved locally · broker push not configured for manual adds"
+        else:
+            broker_sync = "unavailable"
+            broker_message = "Saved locally · Broker sync unavailable"
+    except Exception:
+        broker_sync = "unavailable"
+        broker_message = "Saved locally · Broker sync unavailable"
+
+    return {
+        "status": "added",
+        "position": pos,
+        "saved_locally": True,
+        "broker_sync": broker_sync,
+        "message": broker_message or "Saved locally",
+    }
 
 
 @router.put("/api/portfolio/position", tags=["portfolio"])
@@ -278,7 +390,7 @@ async def portfolio_monitor(request: Request):
     for h in holdings:
         t = h.get("ticker", "")
         entry = h.get("entry_price") or h.get("avg_cost") or 0
-        stop = h.get("stop_price", 0)
+        stop = h.get("stop_price") or h.get("initial_stop") or h.get("current_stop") or 0
         t1r = h.get("target_1r", 0)
         t2r = h.get("target_2r", 0)
         shares = h.get("shares", 0)
@@ -296,12 +408,42 @@ async def portfolio_monitor(request: Request):
         except Exception:
             pass
 
-        risk = entry - stop if stop and entry else entry * 0.05
+        stop_defined = bool(stop and stop > 0)
+        risk = abs(entry - stop) if stop_defined and entry else 0.0
+        if stop_defined and entry and not t1r:
+            t1r = round(entry + risk, 2)
+        if stop_defined and entry and not t2r:
+            t2r = round(entry + 2 * risk, 2)
         r_multiple = (
-            round((price - entry) / risk, 2) if price and risk and risk != 0 else 0
+            round((price - entry) / risk, 2)
+            if price and stop_defined and risk
+            else None
         )
         pnl = round((price - entry) * shares, 2) if price and entry else 0
         pnl_pct = round((price / entry - 1) * 100, 2) if price and entry else 0
+
+        dist_to_stop_pct = (
+            round((price - stop) / price * 100, 2) if price and stop_defined else None
+        )
+        dist_to_stop_usd = (
+            round((price - stop) * shares, 2) if price and stop_defined and shares else None
+        )
+        unrealized_r = r_multiple if stop_defined else None
+        if not stop_defined:
+            risk_status = "RISK ANCHOR MISSING"
+            next_action = "SET STOP"
+        elif price and stop and price <= stop:
+            risk_status = "STOP BREACHED"
+            next_action = "EXIT NOW"
+        elif r_multiple is not None and r_multiple >= 2:
+            risk_status = "TARGET ZONE"
+            next_action = "TRIM / TRAIL"
+        elif r_multiple is not None and r_multiple >= 1:
+            risk_status = "PROFIT ZONE"
+            next_action = "TRAIL STOP"
+        else:
+            risk_status = "IN TRADE"
+            next_action = "MONITOR"
 
         pos = {
             **h,
@@ -311,6 +453,20 @@ async def portfolio_monitor(request: Request):
             "pnl_pct": pnl_pct,
             "r_multiple": r_multiple,
             "market_value": round(price * shares, 2) if price else None,
+            "initial_stop": stop if stop_defined else None,
+            "current_stop": stop if stop_defined else None,
+            "trailing_stop": h.get("trailing_stop"),
+            "target_1r": t1r or None,
+            "target_2r": t2r or None,
+            "stop_defined": stop_defined,
+            "distance_to_stop_pct": dist_to_stop_pct,
+            "distance_to_stop_usd": dist_to_stop_usd,
+            "unrealized_r": unrealized_r,
+            "risk_status": risk_status,
+            "next_action": next_action,
+            "heat_included": stop_defined,
+            "quote_pending": h.get("quote_pending", False) and not price,
+            "cost_basis": round(entry * shares, 2) if entry and shares else None,
         }
         enriched.append(pos)
 
@@ -324,7 +480,7 @@ async def portfolio_monitor(request: Request):
                     "msg": f"🛑 {t} hit stop ${stop:.2f} (now ${price:.2f})",
                 }
             )
-        if price and t1r and price >= t1r and r_multiple < 2.5:
+        if price and t1r and price >= t1r and r_multiple is not None and r_multiple < 2.5:
             alerts.append(
                 {
                     "ticker": t,

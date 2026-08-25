@@ -1,0 +1,151 @@
+3645:    <main x-show="tab==='trade_intel'" class="fade" x-init="$watch('tab',v=>{if(v==='trade_intel')fetchTradeIntel()})">
+3646-      <div class="p-3 space-y-3">
+3647-        <div class="flex items-center justify-between flex-wrap gap-2">
+3648-          <div>
+3649-            <div class="text-[14px] font-bold" style="color:var(--t1)">🧠 Trade Intelligence</div>
+3650-            <div class="text-[10px]" style="color:var(--t3)">Confidence validation · Why Win/Loss · Repeated mistake tags</div>
+3651-          </div>
+3652-          <button @click="fetchTradeIntel()" :disabled="tradeIntel.loading" class="btn-p text-[10px]" style="padding:5px 12px">
+3653-            <span x-show="!tradeIntel.loading">↻ Refresh</span>
+3654-            <span x-show="tradeIntel.loading"><span class="spin"></span></span>
+3655-          </button>
+3656-        </div>
+3657-
+3658-        <!-- Loading -->
+3659-        <template x-if="tradeIntel.loading && !tradeIntel.confData">
+3660-          <div style="padding:40px;text-align:center;color:var(--t3);font-size:12px"><span class="spin"></span> Analysing trade history…</div>
+3661-        </template>
+3662-
+3663-        <!-- Confidence Validation -->
+3664-        <template x-if="tradeIntel.confData">
+3665-          <div class="card card-p" :style="tradeIntel.confData.validation_pass?'border-left:3px solid var(--green)':'border-left:3px solid var(--amber)'">
+3666-            <div class="flex items-center gap-2 mb-2">
+3667-              <span style="font-size:15px" x-text="tradeIntel.confData.validation_pass?'✅':'⚠️'"></span>
+3668-              <span class="font-bold text-[13px]" style="color:var(--t1)">Confidence → Outcome Validation</span>
+3669-              <span class="pill text-[9px]" :class="tradeIntel.confData.validation_pass?'pg':'pa'" x-text="tradeIntel.confData.validation_pass?'PASS':'REVIEW'"></span>
+3670-            </div>
+3671-            <div class="text-[11px] mb-2" style="color:var(--t2)" x-text="tradeIntel.confData.evidence"></div>
+3672-            <div class="text-[10px]" style="color:var(--t3)" x-text="'Sample: '+tradeIntel.confData.sample_size+' trades'"></div>
+3673-            <template x-if="tradeIntel.confData.note">
+3674-              <div class="text-[10px] mt-1" style="color:var(--amber)" x-text="tradeIntel.confData.note"></div>
+3675-            </template>
+3676-
+3677-            <!-- By-tier grid -->
+3678-            <template x-if="Object.keys(tradeIntel.confData.by_tier||{}).length">
+3679-              <div style="margin-top:10px">
+3680-                <div class="text-[9px] uppercase mb-1" style="color:var(--t3);letter-spacing:.6px">By Conviction Tier</div>
+3681-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px">
+3682-                  <template x-for="[tier,stats] in Object.entries(tradeIntel.confData.by_tier)" :key="tier">
+3683-                    <div class="card" style="padding:8px">
+3684-                      <div class="font-bold text-[11px] mb-1" :class="tier==='TRADE'?'text-blue-400':tier==='LEADER'?'text-green-400':'text-amber-300'" x-text="tier"></div>
+3685-                      <div class="text-[10px]" style="color:var(--t3)">Trades: <span class="text-white" x-text="stats.count"></span></div>
+3686-                      <div class="text-[10px]" style="color:var(--t3)">Win Rate: <span :class="(stats.win_rate||0)>=0.5?'text-green-400':'text-red-400'" x-text="((stats.win_rate||0)*100).toFixed(0)+'%'"></span></div>
+3687-                      <div class="text-[10px]" style="color:var(--t3)">Avg R: <span class="mono" :class="(stats.avg_r||0)>=0?'text-green-400':'text-red-400'" x-text="((stats.avg_r||0)>=0?'+':'')+Number(stats.avg_r||0).toFixed(2)+'R'"></span></div>
+3688-                      <div class="text-[10px]" style="color:var(--t3)">Expect: <span class="mono" :class="(stats.expectancy||0)>=0?'text-green-400':'text-red-400'" x-text="((stats.expectancy||0)>=0?'+':'')+Number(stats.expectancy||0).toFixed(2)+'R'"></span></div>
+3689-                    </div>
+3690-                  </template>
+3691-                </div>
+3692-              </div>
+3693-            </template>
+3694-
+3695-            <!-- By-regime grid -->
+3696-            <template x-if="Object.keys(tradeIntel.confData.by_regime||{}).length">
+3697-              <div style="margin-top:10px">
+3698-                <div class="text-[9px] uppercase mb-1" style="color:var(--t3);letter-spacing:.6px">By Regime</div>
+3699-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px">
+3700-                  <template x-for="[reg,stats] in Object.entries(tradeIntel.confData.by_regime)" :key="reg">
+3701-                    <div class="card" style="padding:8px">
+3702-                      <div class="font-bold text-[10px] mb-1 text-white" x-text="reg"></div>
+3703-                      <div class="text-[10px]" style="color:var(--t3)">n=<span class="text-white" x-text="stats.count"></span> · WR:<span :class="(stats.win_rate||0)>=0.5?'text-green-400':'text-red-400'" x-text="((stats.win_rate||0)*100).toFixed(0)+'%'"></span></div>
+3704-                      <div class="mono text-[10px]" :class="(stats.avg_r||0)>=0?'text-green-400':'text-red-400'" x-text="'Avg '+((stats.avg_r||0)>=0?'+':'')+Number(stats.avg_r||0).toFixed(2)+'R'"></div>
+3705-                    </div>
+3706-                  </template>
+3707-                </div>
+3708-              </div>
+3709-            </template>
+3710-          </div>
+3711-        </template>
+3712-
+3713-        <!-- Repeated Mistakes -->
+3714-        <template x-if="tradeIntel.mistakesData && tradeIntel.mistakesData.mistakes && tradeIntel.mistakesData.mistakes.length">
+3715-          <div class="card card-p" style="border-left:3px solid var(--red)">
+3716-            <div class="font-bold text-[13px] mb-3" style="color:var(--t1)">🔁 Repeated Mistakes</div>
+3717-            <template x-for="m in tradeIntel.mistakesData.mistakes" :key="m.tag">
+3718-              <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--bd)">
+3719-                <span class="pill pr text-[9px]" x-text="m.tag"></span>
+3720-                <div style="flex:1">
+3721-                  <div class="text-[10px]" style="color:var(--t2)" x-text="m.description"></div>
+3722-                </div>
+3723-                <div style="text-align:right">
+3724-                  <div class="mono text-[11px] font-bold" style="color:var(--t1)" x-text="m.count+'×'"></div>
+3725-                  <div class="mono text-[9px] text-red-400" x-text="'Avg '+Number(m.avg_loss_r).toFixed(2)+'R'"></div>
+3726-                </div>
+3727-              </div>
+3728-            </template>
+3729-          </div>
+3730-        </template>
+3731-
+3732-        <!-- AI Trade Review -->
+3733-        <div class="card card-p">
+3734-          <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+3735-            <div>
+3736-              <div class="font-bold text-[13px]" style="color:var(--t1)">🤖 AI Trade Review</div>
+3737-              <div class="text-[10px]" style="color:var(--t3)">Select a historical trade row to compare against similar past cases.</div>
+3738-            </div>
+3739-            <button @click="fetchSelectedTradeAIReview()" :disabled="tradeIntel.aiLoading || !tradeIntel.selectedTradeKey" class="btn-s text-[9px]">Refresh</button>
+3740-          </div>
+3741-          <template x-if="tradeIntel.aiLoading && !tradeIntel.aiReview">
+3742-            <div class="text-[10px]" style="color:var(--t3)"><span class="spin"></span> Reviewing selected trade…</div>
+3743-          </template>
+3744-          <template x-if="tradeIntel.aiError">
+3745-            <div class="text-[10px] mb-2" style="color:var(--red)" x-text="tradeIntel.aiError"></div>
+3746-          </template>
+3747-          <template x-if="tradeIntel.aiReview">
+3748-            <div style="display:grid;grid-template-columns:1.1fr .9fr;gap:8px">
+3749-              <div>
+3750-                <div class="flex items-center gap-2 mb-2 flex-wrap">
+3751-                  <span class="pill text-[9px]" :class="tradeIntel.aiReview.verdict==='GOOD_PROCESS'?'pg':'pa'" x-text="tradeIntel.aiReview.verdict||'REVIEW'"></span>
+3752-                  <span class="text-[10px] mono" style="color:var(--t3)" x-text="(tradeIntel.aiReview.trade?.ticker||'—')+' · '+(tradeIntel.aiReview.trade?.conviction||'WATCH')"></span>
+3753-                </div>
+3754-                <div class="text-[9px] uppercase mb-1" style="color:var(--t3)">What Worked</div>
+3755-                <template x-for="item in (tradeIntel.aiReview.what_worked||[])" :key="item">
+3756-                  <div class="text-[10px]" style="color:var(--green)">• <span x-text="item"></span></div>
+3757-                </template>
+3758-                <div class="text-[9px] uppercase mt-2 mb-1" style="color:var(--t3)">What Failed</div>
+3759-                <template x-for="item in (tradeIntel.aiReview.what_failed||[])" :key="item">
+3760-                  <div class="text-[10px]" style="color:var(--red)">• <span x-text="item"></span></div>
+3761-                </template>
+3762-                <div class="mt-2 text-[10px]" style="color:var(--t2)"><strong style="color:var(--t1)">Repeat Rule:</strong> <span x-text="tradeIntel.aiReview.repeat_rule||'—'"></span></div>
+3763-                <div class="mt-1 text-[10px]" style="color:var(--t2)"><strong style="color:var(--t1)">Confidence Reset:</strong> <span x-text="tradeIntel.aiReview.confidence_recalibration||'—'"></span></div>
+3764-                <div class="mt-1 text-[9px]" style="color:var(--t3)">Provider: <span class="mono text-white" x-text="tradeIntel.aiReview.provider||'deterministic'"></span> · Model: <span class="mono text-white" x-text="tradeIntel.aiReview.model||'fallback'"></span></div>
+3765-              </div>
+3766-              <div>
+3767-                <div class="text-[9px] uppercase mb-1" style="color:var(--t3)">Similar Past Cases</div>
+3768-                <template x-for="item in (tradeIntel.aiReview.similar_cases||[])" :key="(item.ticker||'')+(item.entry_time||'')">
+3769-                  <div class="card" style="padding:8px;margin-bottom:6px">
+3770-                    <div class="flex items-center justify-between gap-2">
+3771-                      <span class="mono font-bold text-[10px] text-white" x-text="item.ticker||'—'"></span>
+3772-                      <span class="mono text-[9px]" :class="(item.r_multiple||0)>=0?'text-green-400':'text-red-400'" x-text="((item.r_multiple||0)>=0?'+':'')+Number(item.r_multiple||0).toFixed(2)+'R'"></span>
+3773-                    </div>
+3774-                    <div class="text-[9px]" style="color:var(--t3)" x-text="(item.strategy_id||'—')+' · '+(item.regime_at_entry||'—')+' · sim '+Number(item.similarity||0).toFixed(2)"></div>
+3775-                    <div class="text-[10px] mt-1" style="color:var(--t2)" x-text="item.lesson||'—'"></div>
+3776-                  </div>
+3777-                </template>
+3778-                <template x-if="tradeIntel.aiReview && (!tradeIntel.aiReview.similar_cases || tradeIntel.aiReview.similar_cases.length===0)">
+3779-                  <div class="text-[10px]" style="color:var(--t3)">No similar past cases yet.</div>
+3780-                </template>
+3781-              </div>
+3782-            </div>
+3783-          </template>
+3784-        </div>
+3785-
+3786-        <!-- Trade History -->
+3787-        <template x-if="tradeIntel.data && tradeIntel.data.trades">
+3788-          <div class="card" style="padding:10px">
+3789-            <div class="font-bold text-[12px] mb-2" style="color:var(--t1)">📜 Trade History</div>
+3790-            <div class="text-[10px] mb-2" style="color:var(--t3)">
+3791-              Win Rate: <span :class="(tradeIntel.data.win_rate||0)>=0.5?'text-green-400':'text-red-400'" x-text="((tradeIntel.data.win_rate||0)*100).toFixed(0)+'%'"></span> ·
+3792-              Avg R: <span class="mono" :class="(tradeIntel.data.avg_r||0)>=0?'text-green-400':'text-red-400'" x-text="((tradeIntel.data.avg_r||0)>=0?'+':'')+Number(tradeIntel.data.avg_r||0).toFixed(2)+'R'"></span> ·
+3793-              Sample: <span x-text="tradeIntel.data.sample_size"></span>
+3794-            </div>
+3795-            <div style="overflow-x:auto">

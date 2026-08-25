@@ -190,10 +190,18 @@ class RiskCircuitBreaker:
         return True
 
     def _trigger(self, reason: str):
+        was_triggered = self.triggered
         self.triggered = True
         self.trigger_reason = reason
         self.trigger_time = datetime.now(timezone.utc)
         logger.warning(f"🚨 Circuit breaker triggered: {reason}")
+        if not was_triggered:
+            try:
+                from src.services.alert_service import on_circuit_breaker
+
+                on_circuit_breaker(reason)
+            except Exception as exc:
+                logger.debug("circuit breaker discord notify skipped: %s", exc)
 
 
 class AutoTradingEngine:
@@ -430,6 +438,10 @@ class AutoTradingEngine:
 
         return all_ok
 
+    @property
+    def running(self) -> bool:
+        return self._running
+
     async def run(self):
         """Main loop — runs until stopped."""
         self._running = True
@@ -460,6 +472,18 @@ class AutoTradingEngine:
     async def stop(self):
         self._running = False
         logger.info("AutoTradingEngine stopped")
+
+    async def run_one_cycle(self) -> Dict[str, Any]:
+        """Run a single scan cycle without starting the main loop."""
+        await self._run_cycle()
+        self._touch_heartbeat()
+        return {
+            "cycle_count": self._cycle_count,
+            "cached_recommendations": len(self._cached_recommendations),
+            "signals_today": len(self._signals_today),
+            "trades_today": len(self._trades_today),
+            "last_cycle": getattr(self, "last_cycle_time", None),
+        }
 
     async def _run_cycle(self):
         self._cycle_count += 1
@@ -499,7 +523,13 @@ class AutoTradingEngine:
 
         # Regime classification and trade gate
         mkt_state = self._context.get("market_state", {})
-        self._regime_state = self.regime_router.classify(mkt_state)
+        _raw_regime = self.regime_router.classify(mkt_state)
+        if hasattr(_raw_regime, "to_dict"):
+            self._regime_state = _raw_regime.to_dict()
+        elif isinstance(_raw_regime, dict):
+            self._regime_state = _raw_regime
+        else:
+            self._regime_state = {}
 
         # Persist regime snapshot to DB
         try:
@@ -561,11 +591,7 @@ class AutoTradingEngine:
         ranked = self.ensembler.rank_opportunities(
             recommendations,
             self._regime_state,
-            portfolio_state=self._context.get("portfolio_state"),
-            strategy_scores=self.leaderboard.get_strategy_scores(),
-            regime_weights=self.regime_router.get_strategy_multipliers(
-                self._regime_state
-            ),
+            strategy_health=self.leaderboard.get_strategy_scores(),
         )
 
         # Cache ranked results for API (JSON-safe)

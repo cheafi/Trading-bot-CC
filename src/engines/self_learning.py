@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -670,6 +671,51 @@ def analyze_regime_performance(
 # ── Learning loop integration helper ────────────────────────────────────────
 
 
+def _resolve_closed_trades_path() -> Path | None:
+    """Resolve the active closed-trades JSONL file across local/Docker runs."""
+    candidates: List[Path] = []
+    configured = (os.getenv("CLOSED_TRADES_PATH") or "").strip()
+    if configured:
+        candidates.append(Path(configured))
+    candidates.extend(
+        [
+            Path.cwd() / "data" / "closed_trades.jsonl",
+            Path(__file__).resolve().parents[2] / "data" / "closed_trades.jsonl",
+            Path("/app/data/closed_trades.jsonl"),
+        ]
+    )
+    for path in candidates:
+        try:
+            if path.is_file() and path.stat().st_size > 0:
+                return path
+        except OSError:
+            continue
+    return None
+
+
+def _load_closed_trades_jsonl() -> List[Dict[str, Any]]:
+    path = _resolve_closed_trades_path()
+    if path is None:
+        return []
+
+    trades: List[Dict[str, Any]] = []
+    try:
+        for line in path.read_text().splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if not isinstance(row, dict):
+                continue
+            row.setdefault("strategy", row.get("strategy_id", ""))
+            row.setdefault("regime", row.get("regime_at_entry", "UNKNOWN"))
+            row.setdefault("confidence", row.get("confidence", 0.5))
+            trades.append(row)
+    except Exception as exc:
+        logger.debug("Could not load closed trades JSONL: %s", exc)
+        return []
+    return trades
+
+
 def pull_closed_trades_from_learning_loop() -> List[Dict[str, Any]]:
     """
     Pull closed trades from LearningLoopPipeline for use in SelfLearningEngine.
@@ -680,10 +726,12 @@ def pull_closed_trades_from_learning_loop() -> List[Dict[str, Any]]:
         from src.engines.learning_loop import LearningLoopPipeline
 
         pipeline = LearningLoopPipeline()
-        return [t.to_dict() for t in pipeline._closed_trades]
+        trades = [t.to_dict() for t in pipeline._closed_trades]
+        if trades:
+            return trades
     except Exception as e:
         logger.debug("Could not pull trades from LearningLoopPipeline: %s", e)
-        return []
+    return _load_closed_trades_jsonl()
 
 
 # ── Per-regime parameter auto-adjuster ──────────────────────────────────────

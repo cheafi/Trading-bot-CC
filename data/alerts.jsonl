@@ -1,0 +1,5 @@
+{"ticker": "^VIX", "kind": "STALE_QUOTE", "severity": "WARN", "msg": "1 stream(s) STALE; worst ^VIX age 3013.5min", "value": 3013.5, "ts": "2026-06-10T07:13:29.398513Z"}
+{"ticker": "^VIX", "kind": "STALE_QUOTE", "severity": "WARN", "msg": "1 stream(s) STALE; worst ^VIX age 3018.4min", "value": 3018.4, "ts": "2026-06-10T07:18:24.744204Z"}
+{"ticker": "^VIX", "kind": "STALE_QUOTE", "severity": "WARN", "msg": "1 stream(s) STALE; worst ^VIX age 3022.9min", "value": 3022.9, "ts": "2026-06-10T07:22:55.118279Z"}
+{"ticker": "SPY", "kind": "STALE_QUOTE", "severity": "HIGH", "msg": "2 stream(s) CRITICAL; worst SPY age 2010.1min", "value": 2010.1, "ts": "2026-06-10T13:30:03.238676Z"}
+{"ticker": "^VIX", "kind": "STALE_QUOTE", "severity": "WARN", "msg": "1 stream(s) STALE; worst ^VIX age 2880.1min", "value": 2880.1, "ts": "2026-06-11T05:00:06.983818Z"}

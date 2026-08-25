@@ -1,12 +1,7 @@
 ---
 name: java-reviewer
-description: >
-  Java code review specialist with embedded style and safety rules.
-  Use when: reviewing Java code, Java best practices, type safety,
-  Java-specific patterns, idiomatic Java, Spring framework review.
-model: claude-sonnet-4-6
-tools: [readFile, read, search, codebase, problems, usages]
-user-invocable: true
+description: Java code review specialist — reviews Java code for null safety, concurrency, Spring patterns, and idiomatic modern Java.
+tools: [search, codebase, problems, usages]
 ---
 
 # Java Reviewer

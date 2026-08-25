@@ -1,12 +1,7 @@
 ---
 name: scientist
-description: >
-  Data analysis and research execution specialist (READ-ONLY).
-  Use when: data analysis, statistical analysis, hypothesis testing,
-  visualization, research execution, data exploration, report generation.
-model: claude-sonnet-4-6
-tools: [readFile, read, search, codebase, runInTerminal, shell]
-user-invocable: true
+description: Data analysis and research execution specialist. Use when data analysis, statistical analysis, hypothesis testing, visualization, research execution, data exploration, report generation.
+tools: [search, codebase, runInTerminal]
 ---
 
 # Scientist

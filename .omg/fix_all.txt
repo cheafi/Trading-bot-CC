@@ -1,0 +1,8 @@
+== FIX ALL PROGRESS ==
+
+1. Fixed Regime sync mismatch in dashboard vs scanner.
+2. Added scanner fallback to use cached data instead of showing purely empty 0 ranked tables if engine fails or returns zero hits.
+== ARCHITECTURE REVIEW PROGRESS ==
+
+1. Cleansed UI surface by removing the 'More...' megamenu dropdown and limiting the primary interface shell to the core 5 workflow tabs recommended by the board.
+2. Identified a key indexing bug (total_return_pct vs total_return mapping) inside Model Funds fetching which resulted in the 0

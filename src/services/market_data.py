@@ -39,6 +39,8 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
+logging.getLogger("yfinance").setLevel(logging.CRITICAL)
+
 logger = logging.getLogger(__name__)
 
 
@@ -149,7 +151,7 @@ class MarketDataService:
         Keys: ticker, price, change, change_pct, volume.
         Returns None on failure.
         """
-        df = await self.get_history(ticker, period="5d", interval="1d")
+        df = await self.get_history(ticker, period="1mo", interval="1d")
         if df is None or df.empty:
             return None
         try:
@@ -161,11 +163,25 @@ class MarketDataService:
             prev_close = float(prev[close_col])
             chg        = close - prev_close
             chg_pct    = (chg / prev_close * 100) if prev_close else 0.0
+
+            def _pct_from_offset(offset: int) -> Optional[float]:
+                if len(df) <= offset:
+                    return None
+                base = float(df.iloc[-1 - offset][close_col])
+                if not base:
+                    return None
+                return round((close / base - 1) * 100, 2)
+
+            change_5d = _pct_from_offset(5)
+            change_20d = _pct_from_offset(20)
+
             return {
                 "ticker":     ticker,
                 "price":      round(close, 4),
                 "change":     round(chg, 4),
                 "change_pct": round(chg_pct, 2),
+                "change_5d":  change_5d,
+                "change_20d": change_20d,
                 "volume":     int(last.get(vol_col, 0)),
             }
         except Exception as exc:
@@ -364,7 +380,7 @@ class MarketDataService:
                 if validated is not None:
                     return validated
                 # Validation failed — may be transient (partial data); retry
-                logger.warning(
+                logger.debug(
                     f"[MarketData] {ticker}/{period}/{interval} "
                     f"validation failed (attempt {attempt + 1}/{MAX_RETRIES})"
                 )
@@ -382,8 +398,9 @@ class MarketDataService:
                 logger.debug(f"[MarketData] {ticker} retry in {delay:.1f}s")
                 await asyncio.sleep(delay)
 
-        logger.error(
-            f"[MarketData] {ticker}/{period}/{interval} failed after "
+        log_failed = logger.warning if last_exc is not None else logger.debug
+        log_failed(
+            f"[MarketData] {ticker}/{period}/{interval} unavailable after "
             f"{MAX_RETRIES} attempts. Last error: {last_exc}"
         )
         return None

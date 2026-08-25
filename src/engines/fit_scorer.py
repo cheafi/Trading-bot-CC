@@ -170,7 +170,9 @@ class FitScorer:
         vol_exhaustion = sig.get("volume_exhaustion", False)
         is_near_support = sig.get("is_near_support", False)
         contraction_count = sig.get("contraction_count", 0)
-        rr = sig.get("risk_reward", 1.0)
+        from src.utils.numeric_parse import parse_ratio
+
+        rr = parse_ratio(sig.get("risk_reward"), 1.0) or 1.0
 
         if not trend:
             # Fallback: no structure data — penalize instead of neutral
@@ -318,7 +320,9 @@ class FitScorer:
 
     def _score_risk(self, sig: Dict) -> float:
         """Risk quality — stop quality, ATR, drawdown."""
-        rr = sig.get("risk_reward", 1.0)
+        from src.utils.numeric_parse import parse_ratio
+
+        rr = parse_ratio(sig.get("risk_reward"), 1.0) or 1.0
         atr_pct = sig.get("atr_pct", 2.0)
 
         score = 5.0
