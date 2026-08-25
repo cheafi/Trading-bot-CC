@@ -6,15 +6,20 @@ Handles portfolio import/holdings/futu/advise + operator console.
 """
 
 import logging
+import os
+import tempfile
 from datetime import datetime, timezone
 from typing import List
 
 import numpy as np
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 
 from src.services.ibkr_service import get_ibkr_service
-from src.services.portfolio_positions import build_position_record, portfolio_header_snapshot
+from src.services.portfolio_positions import (
+    build_position_record,
+    portfolio_header_snapshot,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -265,6 +270,155 @@ async def portfolio_from_futu():
         }
 
 
+_ALLOWED_CAPTURE_MIME = frozenset({"image/png", "image/jpeg", "image/jpg", "image/webp"})
+_MAX_CAPTURE_BYTES = int(os.getenv("FUTU_CAPTURE_MAX_BYTES", str(10 * 1024 * 1024)))
+
+
+async def _enrich_futu_holdings(holdings: list, mds) -> list:
+    """Attach live prices to parsed Futu holdings."""
+    enriched = []
+    for h in holdings:
+        t = h["ticker"]
+        price = h.get("current_price")
+        try:
+            if price is None:
+                hist = await mds.get_history(t, period="5d", interval="1d")
+                if hist is not None and not hist.empty:
+                    c_col = "Close" if "Close" in hist.columns else "close"
+                    price = float(hist[c_col].iloc[-1])
+        except Exception:
+            pass
+        shares = float(h.get("shares") or 0)
+        avg_cost = float(h.get("avg_cost") or 0)
+        mv = h.get("market_value")
+        if mv is None and price and shares:
+            mv = round(price * shares, 2)
+        pnl = h.get("unrealized_pnl")
+        if pnl is None and price and avg_cost and shares:
+            pnl = round((price - avg_cost) * shares, 2)
+        pnl_pct = h.get("pnl_pct")
+        if pnl_pct is None and price and avg_cost:
+            pnl_pct = round((price / avg_cost - 1) * 100, 2)
+        enriched.append(
+            {
+                "ticker": t,
+                "shares": shares,
+                "avg_cost": avg_cost,
+                "entry_price": avg_cost,
+                "current_price": price,
+                "market_value": mv,
+                "unrealized_pnl": pnl,
+                "pnl_pct": pnl_pct,
+            }
+        )
+    return enriched
+
+
+@router.post("/api/v7/portfolio/futu-capture", tags=["portfolio", "v7"])
+async def futu_portfolio_capture(
+    request: Request,
+    file: UploadFile = File(...),
+    notify_discord: bool = Form(True),
+    ocr_text: str = Form(""),
+):
+    """Upload Futu portfolio screenshot → parse holdings → AI advisory → optional Discord.
+
+    ADVISORY ONLY — never auto-trades or deploys.
+    """
+    global _user_portfolio
+
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if content_type not in _ALLOWED_CAPTURE_MIME:
+        raise HTTPException(
+            400,
+            f"Unsupported file type: {content_type or 'unknown'}. Use PNG/JPEG/WebP.",
+        )
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "Empty upload")
+    if len(raw) > _MAX_CAPTURE_BYTES:
+        raise HTTPException(400, f"File too large (max {_MAX_CAPTURE_BYTES // (1024*1024)}MB)")
+
+    tmp_path = None
+    parse_method = "unknown"
+    holdings_raw: list = []
+
+    try:
+        from src.services.futu_portfolio_advisor import build_futu_advisory
+        from src.services.futu_portfolio_parser import (
+            parse_futu_image_vision,
+            parse_futu_text,
+        )
+
+        if ocr_text.strip():
+            parsed, parse_method = parse_futu_text(ocr_text)
+            holdings_raw = [h.to_dict() for h in parsed]
+
+        if not holdings_raw:
+            suffix = ".png" if "png" in content_type else ".jpg"
+            fd, tmp_path = tempfile.mkstemp(prefix="futu_cap_", suffix=suffix)
+            os.close(fd)
+            with open(tmp_path, "wb") as fh:
+                fh.write(raw)
+            parsed, parse_method, _ = await parse_futu_image_vision(raw, content_type)
+            holdings_raw = [h.to_dict() for h in parsed]
+
+        if not holdings_raw:
+            raise HTTPException(
+                422,
+                "Could not extract holdings. Try a clearer screenshot or pass ocr_text.",
+            )
+
+        mds = request.app.state.market_data
+        enriched = await _enrich_futu_holdings(holdings_raw, mds)
+        now = datetime.now(timezone.utc).isoformat() + "Z"
+        _user_portfolio = {
+            "holdings": enriched,
+            "source": "futu-capture",
+            "updated_at": now,
+            "count": len(enriched),
+        }
+
+        regime = {}
+        try:
+            regime = getattr(request.app.state, "regime", None) or {}
+        except Exception:
+            pass
+
+        advisory = await build_futu_advisory(
+            enriched, market_data=mds, regime=regime if isinstance(regime, dict) else {}
+        )
+
+        pushed = False
+        if notify_discord:
+            from src.services.futu_capture_notify import notify_futu_capture_discord
+
+            pushed = await notify_futu_capture_discord(
+                holdings=enriched,
+                advisory=advisory,
+                parse_method=parse_method,
+            )
+
+        return {
+            "ok": True,
+            "advisory_only": True,
+            "parse_method": parse_method,
+            "holdings": enriched,
+            "count": len(enriched),
+            "advisory": advisory,
+            "pushed_to_discord": pushed,
+            "source": "futu-capture",
+            "updated_at": now,
+        }
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
 # ── Position management (add/update/remove/monitor) ──────────────────
 
 
@@ -312,7 +466,9 @@ async def add_position(req: PositionAddRequest, request: Request):
         ibkr_ok = bool(ibkr_st.get("session_usable") or ibkr_st.get("connected"))
         if ibkr_ok:
             broker_sync = "unavailable"
-            broker_message = "Saved locally · broker push not configured for manual adds"
+            broker_message = (
+                "Saved locally · broker push not configured for manual adds"
+            )
         else:
             broker_sync = "unavailable"
             broker_message = "Saved locally · Broker sync unavailable"
@@ -390,7 +546,9 @@ async def portfolio_monitor(request: Request):
     for h in holdings:
         t = h.get("ticker", "")
         entry = h.get("entry_price") or h.get("avg_cost") or 0
-        stop = h.get("stop_price") or h.get("initial_stop") or h.get("current_stop") or 0
+        stop = (
+            h.get("stop_price") or h.get("initial_stop") or h.get("current_stop") or 0
+        )
         t1r = h.get("target_1r", 0)
         t2r = h.get("target_2r", 0)
         shares = h.get("shares", 0)
@@ -426,7 +584,9 @@ async def portfolio_monitor(request: Request):
             round((price - stop) / price * 100, 2) if price and stop_defined else None
         )
         dist_to_stop_usd = (
-            round((price - stop) * shares, 2) if price and stop_defined and shares else None
+            round((price - stop) * shares, 2)
+            if price and stop_defined and shares
+            else None
         )
         unrealized_r = r_multiple if stop_defined else None
         if not stop_defined:
@@ -480,7 +640,13 @@ async def portfolio_monitor(request: Request):
                     "msg": f"🛑 {t} hit stop ${stop:.2f} (now ${price:.2f})",
                 }
             )
-        if price and t1r and price >= t1r and r_multiple is not None and r_multiple < 2.5:
+        if (
+            price
+            and t1r
+            and price >= t1r
+            and r_multiple is not None
+            and r_multiple < 2.5
+        ):
             alerts.append(
                 {
                     "ticker": t,
@@ -532,6 +698,7 @@ async def portfolio_monitor(request: Request):
     }
 
 
+@router.post("/api/portfolio/advise", tags=["portfolio"])
 async def portfolio_advise(request: Request):
     """Analyse imported portfolio — expert committee + conformal prediction."""
     holdings = _user_portfolio.get("holdings", [])
@@ -542,11 +709,11 @@ async def portfolio_advise(request: Request):
     mds = request.app.state.market_data
 
     # Lazy imports to avoid circular deps
+    from src.engines.conformal_predictor import ConformalPredictor
+    from src.engines.expert_committee import ExpertCommittee
     from src.services.indicators import (
         compute_indicators as _compute_indicators,
     )  # noqa: PLC0415
-    from src.engines.conformal_predictor import ConformalPredictor
-    from src.engines.expert_committee import ExpertCommittee
 
     advice_items = []
     total_value = 0

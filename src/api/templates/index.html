@@ -5763,6 +5763,10 @@
           <div class="text-[10px] font-bold uppercase" style="color:var(--t3)">💼 My Portfolio</div>
           <div class="flex gap-2">
             <button @click="fetchPortfolio()" class="btn-s text-[10px]" :disabled="pf.loading">🔄</button>
+            <label class="btn-s text-[10px] cursor-pointer" style="background:var(--blue);color:#0d1117;font-weight:700">
+              📸 Futu
+              <input type="file" accept="image/png,image/jpeg,image/webp" class="hidden" @change="uploadFutuCapture($event)" />
+            </label>
             <button @click="pf.showAdd=!pf.showAdd" class="btn-s text-[10px]" style="background:var(--green);color:#0d1117;font-weight:700">+ Add Position</button>
           </div>
         </div>

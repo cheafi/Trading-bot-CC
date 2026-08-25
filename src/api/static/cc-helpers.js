@@ -8299,13 +8299,11 @@ function cc() {
 				const rr = this.parseRR(t.risk_reward || 0)
 				if (rr > 0 && (!best_rr || rr > best_rr.risk_reward)) best_rr = { ticker: t.ticker, risk_reward: rr }
 			})
-			const stock_mon = (d.near_miss || [])
-				.slice(0, 3)
-				.map((nm) => ({
-					class: "stock",
-					rule: "Upgrade watch " + (nm.ticker || ""),
-					detail: nm.upgrade_trigger || "",
-				}))
+			const stock_mon = (d.near_miss || []).slice(0, 3).map((nm) => ({
+				class: "stock",
+				rule: "Upgrade watch " + (nm.ticker || ""),
+				detail: nm.upgrade_trigger || "",
+			}))
 			const market_mon = []
 			if (regime.vix != null)
 				market_mon.push({ class: "market", rule: "VIX " + regime.vix, detail: "Reduce size if VIX >25" })
@@ -10885,6 +10883,43 @@ function cc() {
 				console.warn("histVar fetch error:", e)
 			} finally {
 				this.histVar.loading = false
+			}
+		},
+		async uploadFutuCapture(ev) {
+			const file = ev.target && ev.target.files && ev.target.files[0]
+			if (!file) return
+			if (file.size > 10 * 1024 * 1024) {
+				alert("Image too large (max 10MB)")
+				ev.target.value = ""
+				return
+			}
+			const okType = /^image\/(png|jpeg|jpg|webp)$/i.test(file.type || "")
+			if (!okType) {
+				alert("Use PNG, JPEG, or WebP")
+				ev.target.value = ""
+				return
+			}
+			this.pf.loading = true
+			try {
+				const fd = new FormData()
+				fd.append("file", file)
+				fd.append("notify_discord", "true")
+				const r = await fetch("/api/v7/portfolio/futu-capture", { method: "POST", body: fd })
+				const d = await r.json().catch(() => ({}))
+				if (!r.ok) throw new Error(d.detail || "HTTP " + r.status)
+				const adv = d.advisory || {}
+				const msg =
+					(adv.summary_zh || adv.summary_en || "") +
+					"\n\n" +
+					(adv.disclaimer_zh || adv.disclaimer_en || "Advisory only")
+				alert("✅ Parsed " + d.count + " holdings (" + (d.parse_method || "?") + ")\n\n" + msg.slice(0, 1200))
+				await this.fetchPortfolio()
+				await this.fetchPortfolioDecision()
+			} catch (e) {
+				alert("Futu capture failed: " + e.message)
+			} finally {
+				this.pf.loading = false
+				if (ev.target) ev.target.value = ""
 			}
 		},
 		resetAddPositionForm() {

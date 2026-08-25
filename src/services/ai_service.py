@@ -6,9 +6,15 @@ All calls cached 5 min.
 """
 
 from __future__ import annotations
-import hashlib, json, logging, os, time
+
+import hashlib
+import json
+import logging
+import os
+import time
 from contextlib import suppress
 from typing import Any, Dict, List, Optional
+
 import aiohttp
 
 logger = logging.getLogger(__name__)
@@ -134,7 +140,9 @@ def build_stub_narrative(
     elif board_narrative:
         paragraphs.append(board_narrative.strip()[:600])
     else:
-        paragraphs.append("No ranked setups on the board yet — observe until the funnel clears.")
+        paragraphs.append(
+            "No ranked setups on the board yet — observe until the funnel clears."
+        )
 
     action = (
         "Bias: selective adds only where the board and regime align."
@@ -415,6 +423,49 @@ class AIService:
         )
         return self._extract_json_block(text or "")
 
+    async def analyze_image_json(
+        self,
+        system: str,
+        user_prompt: str,
+        image_url: str,
+        preferred_model: Optional[str] = None,
+        max_tokens: int = 2000,
+    ) -> Optional[Dict[str, Any]]:
+        """Vision LLM — extract structured JSON from an image (OpenAI-compatible)."""
+        if not self.is_configured:
+            return None
+        model = preferred_model or _MODEL_SIGNAL
+        messages = [
+            {"role": "system", "content": system},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user_prompt},
+                    {"type": "image_url", "image_url": {"url": image_url}},
+                ],
+            },
+        ]
+        chain = []
+        if _OPENCLAW_KEY and "openclaw" not in self._disabled_providers:
+            chain.append((_OPENCLAW_BASE, _OPENCLAW_KEY, model, "openclaw"))
+        if _OPENAI_KEY and "openai" not in self._disabled_providers:
+            chain.append((_OPENAI_BASE, _OPENAI_KEY, model, "openai"))
+        for base, key, m, name in chain:
+            text = await self._call_provider(
+                base,
+                key,
+                m,
+                messages,
+                max_tokens,
+                0.1,
+                name,
+                response_format={"type": "json_object"},
+            )
+            parsed = self._extract_json_block(text or "")
+            if parsed is not None:
+                return parsed
+        return None
+
     async def embed_texts(self, texts: List[str]) -> List[List[float]]:
         if not texts:
             return []
@@ -450,19 +501,19 @@ class AIService:
     async def generate_narrative(self, regime, top_signals, pulse, funnel):
         """Morning briefing -> Claude (best prose)."""
         sigs = "\n".join(
-            f"{i}. {s.get('ticker','?')} Score {s.get('score',0):.1f} "
-            f"{s.get('strategy','?')} R:R {s.get('risk_reward',0):.1f} "
-            f"Entry ${s.get('entry_price',0):.2f}"
+            f"{i}. {s.get('ticker', '?')} Score {s.get('score', 0):.1f} "
+            f"{s.get('strategy', '?')} R:R {s.get('risk_reward', 0):.1f} "
+            f"Entry ${s.get('entry_price', 0):.2f}"
             for i, s in enumerate(top_signals[:5], 1)
         )
         prompt = (
             f"Morning briefing.\n"
-            f"REGIME: {regime.get('trend','?')} {regime.get('volatility','?')} vol "
-            f"VIX {regime.get('vix',18)} Breadth {regime.get('breadth',50)}% "
-            f"Trade: {regime.get('should_trade',True)}\n"
-            f"FUNNEL: {funnel.get('universe',0)} scanned "
-            f"{funnel.get('actionable_above_7',0)} actionable "
-            f"{funnel.get('high_conviction_above_8',0)} high-conviction\n"
+            f"REGIME: {regime.get('trend', '?')} {regime.get('volatility', '?')} vol "
+            f"VIX {regime.get('vix', 18)} Breadth {regime.get('breadth', 50)}% "
+            f"Trade: {regime.get('should_trade', True)}\n"
+            f"FUNNEL: {funnel.get('universe', 0)} scanned "
+            f"{funnel.get('actionable_above_7', 0)} actionable "
+            f"{funnel.get('high_conviction_above_8', 0)} high-conviction\n"
             f"PULSE: {json.dumps(pulse, default=str)[:400]}\n"
             f"TOP SIGNALS:\n{sigs}\n"
             f"Write 2-3 paragraphs: regime outlook, opportunities, action guidance."
@@ -477,13 +528,13 @@ class AIService:
     async def analyze_signal(self, signal):
         """Signal card -> GPT-4o (fast structured)."""
         prompt = (
-            f"Trade setup: {signal.get('ticker','?')} {signal.get('strategy','?')} "
-            f"Score {signal.get('score',0):.1f}/10 R:R {signal.get('risk_reward',0):.1f}\n"
-            f"Entry ${signal.get('entry_price',0):.2f} "
-            f"Target ${signal.get('target_price',0):.2f} "
-            f"Stop ${signal.get('stop_price',0):.2f}\n"
-            f"RSI {signal.get('rsi',50):.0f} Vol {signal.get('vol_ratio',1.0):.1f}x "
-            f"ATR {signal.get('atr_pct',1.0):.1f}% {signal.get('regime','?')}\n"
+            f"Trade setup: {signal.get('ticker', '?')} {signal.get('strategy', '?')} "
+            f"Score {signal.get('score', 0):.1f}/10 R:R {signal.get('risk_reward', 0):.1f}\n"
+            f"Entry ${signal.get('entry_price', 0):.2f} "
+            f"Target ${signal.get('target_price', 0):.2f} "
+            f"Stop ${signal.get('stop_price', 0):.2f}\n"
+            f"RSI {signal.get('rsi', 50):.0f} Vol {signal.get('vol_ratio', 1.0):.1f}x "
+            f"ATR {signal.get('atr_pct', 1.0):.1f}% {signal.get('regime', '?')}\n"
             f"Give: VERDICT, SETUP (2 sent), CATALYST (1 sent), KEY RISK (1 sent)"
         )
         text = await self._call_llm(
@@ -505,24 +556,24 @@ class AIService:
         ez = trade_plan.get("entry_zone", [0, 0])
         prompt = (
             f"Deep analysis: {ticker}\n"
-            f"Price ${technicals.get('price',0):.2f} "
-            f"({technicals.get('change_pct',0):+.2f}%)\n"
-            f"RSI {technicals.get('rsi',50):.0f} "
-            f"MACD {technicals.get('macd_signal','?')}\n"
+            f"Price ${technicals.get('price', 0):.2f} "
+            f"({technicals.get('change_pct', 0):+.2f}%)\n"
+            f"RSI {technicals.get('rsi', 50):.0f} "
+            f"MACD {technicals.get('macd_signal', '?')}\n"
             f"SMA20 {'up' if technicals.get('above_sma20') else 'dn'} "
             f"SMA50 {'up' if technicals.get('above_sma50') else 'dn'} "
             f"SMA200 {'up' if technicals.get('above_sma200') else 'dn'}\n"
-            f"Volume {technicals.get('vol_ratio',1.0):.1f}x "
-            f"ATR ${technicals.get('atr',0):.2f}\n"
-            f"52W: ${technicals.get('low_52w',0):.2f}"
-            f"-${technicals.get('high_52w',0):.2f}\n"
-            f"Support ${technicals.get('support',0):.2f} "
-            f"Resist ${technicals.get('resistance',0):.2f}\n"
+            f"Volume {technicals.get('vol_ratio', 1.0):.1f}x "
+            f"ATR ${technicals.get('atr', 0):.2f}\n"
+            f"52W: ${technicals.get('low_52w', 0):.2f}"
+            f"-${technicals.get('high_52w', 0):.2f}\n"
+            f"Support ${technicals.get('support', 0):.2f} "
+            f"Resist ${technicals.get('resistance', 0):.2f}\n"
             f"Plan: Entry ${ez[0]:.2f}-${ez[1]:.2f} "
-            f"T1 ${trade_plan.get('target_1r',0):.2f} "
-            f"Stop ${trade_plan.get('stop',0):.2f}\n"
-            f"Regime: {regime.get('label','?')} "
-            f"trade={regime.get('should_trade',True)}\n"
+            f"T1 ${trade_plan.get('target_1r', 0):.2f} "
+            f"Stop ${trade_plan.get('stop', 0):.2f}\n"
+            f"Regime: {regime.get('label', '?')} "
+            f"trade={regime.get('should_trade', True)}\n"
             f"3 paragraphs: STRUCTURE, SETUP, PLAN with conviction level."
         )
         return await self._call_llm(
@@ -536,17 +587,17 @@ class AIService:
         """Portfolio brief -> GPT-4o-mini (fast)."""
         holdings = (
             "\n".join(
-                f"- {h.get('ticker','?')}: {h.get('qty',0)} sh "
-                f"@ ${h.get('avg_cost',0):.2f}, "
-                f"P&L {h.get('pnl_pct',0):.1f}%"
+                f"- {h.get('ticker', '?')}: {h.get('qty', 0)} sh "
+                f"@ ${h.get('avg_cost', 0):.2f}, "
+                f"P&L {h.get('pnl_pct', 0):.1f}%"
                 for h in portfolio[:10]
             )
             or "No positions"
         )
         prompt = (
             f"Portfolio brief:\n{holdings}\n"
-            f"Regime: {regime.get('label','?')} {regime.get('trend','?')} "
-            f"VIX {regime.get('vix',18):.0f}\n"
+            f"Regime: {regime.get('label', '?')} {regime.get('trend', '?')} "
+            f"VIX {regime.get('vix', 18):.0f}\n"
             f"2 paragraphs: EXPOSURE (risk, sectors), ACTION (trim/hold/add for this regime)"
         )
         return await self._call_llm(
