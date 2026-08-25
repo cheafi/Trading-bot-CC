@@ -122,6 +122,47 @@ def _build_gate_reasons(
     return reasons
 
 
+def _build_gate_snapshot(
+    *,
+    system_state: Dict[str, Any],
+    decision_authority: Dict[str, Any],
+    unlock_deploy: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Sprint 115 — gate snapshot for attribution chain."""
+    return {
+        "deploy_open": bool(system_state.get("deploy_open")),
+        "tradeability": system_state.get("tradeability"),
+        "gates_active": bool(decision_authority.get("gates_active")),
+        "authority_level": decision_authority.get("authority_level"),
+        "unlock_deploy": bool(unlock_deploy.get("unlocked")),
+        "blocker_compact": system_state.get("blocker_compact"),
+    }
+
+
+def _build_board_rows(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Attach decision_id + attribution_root_ref to top board rows."""
+    from src.services.attribution_tree import enrich_board_row_attribution
+
+    rows = list(payload.get("top_5") or payload.get("opportunities") or [])[:12]
+    out: List[Dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict) or not row.get("ticker"):
+            continue
+        enriched = enrich_board_row_attribution(row)
+        out.append(
+            {
+                "ticker": enriched.get("ticker"),
+                "rank": enriched.get("rank"),
+                "action": enriched.get("action"),
+                "decision_id": enriched.get("decision_id"),
+                "attribution_root_ref": enriched.get("attribution_root_ref"),
+                "artifact_id": enriched.get("artifact_id"),
+                "alpha_id": enriched.get("alpha_id"),
+            }
+        )
+    return out
+
+
 def decision_board_hash(board: Dict[str, Any]) -> str:
     """Stable hash for polling — deploy_open + gate fingerprint."""
     fingerprint = {
@@ -223,6 +264,12 @@ def build_decision_board(
         "unlock_deploy": unlock_deploy,
         "bdr_summary": bdr_summary,
         "gate_reasons": gate_reasons,
+        "gate_snapshot": _build_gate_snapshot(
+            system_state=system_state,
+            decision_authority=decision_authority,
+            unlock_deploy=unlock_deploy,
+        ),
+        "board_rows": _build_board_rows(normalized),
         "regime": regime,
         "stale": stale,
         "degraded": degraded,

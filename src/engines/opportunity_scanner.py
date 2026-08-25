@@ -669,6 +669,15 @@ async def run_opportunity_scanner(
         )
         candidates.append(c)
 
+    try:
+        from src.core.telemetry import telemetry
+
+        telemetry.record_job_run("opportunity_scanner", success=True, duration=0.0)
+        for c in candidates[:12]:
+            telemetry.record_signal_generated(c.engine, c.ticker)
+    except Exception:
+        pass
+
     return ScannerResult(
         engine=engine,
         regime=regime_upper,

@@ -174,15 +174,41 @@ def enrich_opportunity_rows(
     *,
     index_regime: Optional[Dict[str, Any]] = None,
     tradeability: str = "",
+    run_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    """Rank + index intel enrichment for playbook rows."""
+    """Rank + index intel + EV + IO/AlphaObject birth for playbook rows."""
+    from datetime import datetime, timezone
+
+    from src.services.alpha_factory import attach_alpha_objects
+    from src.services.ev_ranking import enrich_rows_with_ev
+    from src.services.investment_object_factory import attach_investment_objects
+    from src.services.knowledge_graph import register_tickers, theme_cluster_id_for
+    from src.services.provenance_contract import enrich_row_provenance
+
+    as_of = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     ranked = rank_opportunity_rows(rows, tradeability=tradeability)
-    return [
-        enrich_row_with_index_intel(
-            r, index_regime=index_regime, tradeability=tradeability
+    with_prov = [
+        enrich_row_provenance(
+            enrich_row_with_index_intel(
+                r, index_regime=index_regime, tradeability=tradeability
+            ),
+            source="cost_adjusted_ranker",
+            as_of=as_of,
+            mode="LIVE",
         )
         for r in ranked
     ]
+    with_ev = enrich_rows_with_ev(with_prov, tradeability=tradeability)
+    regime_label = str((index_regime or {}).get("label") or "")
+    with_io = attach_investment_objects(
+        with_ev, tradeability=tradeability, regime_label=regime_label
+    )
+    for r in with_io:
+        sym = str(r.get("ticker") or "").upper()
+        if sym:
+            r["theme_cluster_id"] = theme_cluster_id_for(sym)
+    register_tickers([str(r.get("ticker") or "") for r in with_io if r.get("ticker")])
+    return attach_alpha_objects(with_io, run_id=run_id, top_n=12)
 
 
 def rank_opportunity_rows(

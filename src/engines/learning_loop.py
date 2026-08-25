@@ -86,7 +86,13 @@ class LearningLoopPipeline:
         except Exception as e:
             logger.warning("Failed to load trades: %s", e)
 
-    def _persist_trade(self, trade: ClosedTrade) -> None:
+    def _persist_trade(
+        self,
+        trade: ClosedTrade,
+        *,
+        decision_id: Optional[str] = None,
+        alpha_id: Optional[str] = None,
+    ) -> None:
         """Append trade to JSONL file."""
         try:
             _TRADES_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -105,6 +111,10 @@ class LearningLoopPipeline:
                     "setup_grade": trade.setup_grade,
                     "hold_days": trade.hold_days,
                 }
+                if decision_id:
+                    row["decision_id"] = decision_id
+                if alpha_id:
+                    row["alpha_id"] = alpha_id
                 f.write(json.dumps(row) + "\n")
         except OSError as e:
             logger.debug("Closed trade persistence unavailable: %s", e)
@@ -133,6 +143,8 @@ class LearningLoopPipeline:
         regime_at_entry: str = "",
         setup_grade: str = "C",
         component_scores: Optional[Dict[str, float]] = None,
+        decision_id: Optional[str] = None,
+        alpha_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Record a closed trade and feed to MetaEnsemble."""
         if entry_price > 0:
@@ -161,7 +173,7 @@ class LearningLoopPipeline:
             setup_grade=setup_grade,
         )
         self._closed_trades.append(trade)
-        self._persist_trade(trade)
+        self._persist_trade(trade, decision_id=decision_id, alpha_id=alpha_id)
 
         ensemble = self._get_ensemble()
         if ensemble and component_scores:
@@ -179,6 +191,8 @@ class LearningLoopPipeline:
         attribution = {
             "trade": trade.to_dict(),
             "component_scores": component_scores,
+            "decision_id": decision_id,
+            "alpha_id": alpha_id,
             "ensemble_trained": (ensemble.is_trained if ensemble else False),
             "ensemble_samples": (ensemble.sample_count if ensemble else 0),
             "recorded_at": datetime.now(timezone.utc).isoformat(),

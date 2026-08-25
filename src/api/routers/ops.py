@@ -134,3 +134,30 @@ async def ops_engine_stop(request: Request, _: bool = Depends(verify_api_key)):
 async def ops_engine_run_cycle(request: Request, _: bool = Depends(verify_api_key)):
     """Run one scan cycle on demand (dev helper when loop is not running)."""
     return sanitize_for_json(await _run_engine_cycle_once(request.app))
+
+
+@router.get("/intelligence/daily")
+async def ops_intelligence_daily(request: Request, _: bool = Depends(verify_api_key)):
+    """Intelligence Engine CEO daily report — research_only."""
+    try:
+        from src.api.routers.decision import today_summary
+        from src.services.intelligence_engine import build_intelligence_daily_report
+
+        today = await today_summary(request)
+        report = build_intelligence_daily_report(
+            today_payload=today if isinstance(today, dict) else None
+        )
+        return sanitize_for_json(report)
+    except Exception as exc:
+        logger.warning("intelligence daily failed: %s", exc)
+        from src.services.intelligence_engine import build_intelligence_daily_report
+
+        return sanitize_for_json(build_intelligence_daily_report())
+
+
+@router.get("/knowledge/neighbors/{ticker}")
+async def ops_knowledge_neighbors(ticker: str, _: bool = Depends(verify_api_key)):
+    """Knowledge graph neighbors MVP — research_only."""
+    from src.services.knowledge_graph import neighbors_for
+
+    return sanitize_for_json(neighbors_for(ticker))

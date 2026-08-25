@@ -81,6 +81,7 @@ BACKOFF_BASE = 1.5  # base for exponential back-off
 BACKOFF_MAX = 10.0  # cap on back-off delay (seconds)
 JITTER_FRAC = 0.30  # ±30% random jitter applied to each delay
 MAX_RETRIES = 2  # reduced: neg-cache handles persistent failures
+MAX_CACHE_ENTRIES = 512
 
 
 # ── internal cache entry ──────────────────────────────────────────────────────
@@ -153,6 +154,14 @@ class MarketDataService:
 
             df = await self._fetch_with_retry(ticker, period, interval)
             self._cache[key] = _CacheEntry(key, df)
+            self._trim_cache_if_needed()
+            if df is not None:
+                try:
+                    from src.core.telemetry import telemetry
+
+                    telemetry.record_data_update("prices")
+                except Exception:
+                    pass
             return df
 
     async def get_quote(self, ticker: str) -> Optional[Dict[str, Any]]:
@@ -352,6 +361,18 @@ class MarketDataService:
             "realized_vol_20d": realized_vol,
             "vix_term_slope": 0.0,
         }
+
+    def _trim_cache_if_needed(self) -> None:
+        overflow = len(self._cache) - MAX_CACHE_ENTRIES
+        if overflow <= 0:
+            return
+        victims = sorted(
+            self._cache.items(),
+            key=lambda item: item[1].fetched_at,
+        )[:overflow]
+        for key, _ in victims:
+            self._cache.pop(key, None)
+            self._per_key_locks.pop(key, None)
 
     def cache_stats(self) -> Dict[str, Any]:
         """
