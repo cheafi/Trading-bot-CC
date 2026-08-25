@@ -75,6 +75,16 @@ pip install -r requirements/requirements.txt
 python _cc_instant.py          # starts uvicorn on :8000 → :8001
 ```
 
+### Public access (dev demos)
+
+Share CC on the internet via Cloudflare or ngrok tunnel:
+
+```bash
+./scripts/dev/expose-cc-public.sh   # CC must already be on :8000
+```
+
+See [docs/CC_PUBLIC_ACCESS.md](docs/CC_PUBLIC_ACCESS.md) for security notes, Docker tunnel profile, and LAN access.
+
 ### Environment Variables
 
 | Variable | Default | Description |
