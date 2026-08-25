@@ -1680,6 +1680,32 @@
         </div>
       </div>
 
+      <!-- ── Leader tracking dashboard cards ── -->
+      <div style="padding:8px 12px" x-show="leadersDash.top_leader_moves?.length">
+        <div class="text-[9px] font-bold uppercase mb-2" style="color:var(--t3)">👤 Leader Intelligence</div>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="card card-p">
+            <div class="text-[9px] font-bold mb-1" style="color:var(--t3)">Top Moves</div>
+            <template x-for="m in (leadersDash.top_leader_moves||[]).slice(0,4)">
+              <div class="text-[10px] py-0.5 flex justify-between">
+                <span><span class="mono font-bold" x-text="m.ticker"></span> <span style="color:var(--t3)" x-text="m.action"></span></span>
+                <span class="pill pw text-[8px]" x-text="m.source_quality_label?.slice(0,8)||''"></span>
+              </div>
+            </template>
+            <button @click="switchTab('leaders')" class="text-[9px] mt-1" style="color:var(--blue)">Open Leaders →</button>
+          </div>
+          <div class="card card-p">
+            <div class="text-[9px] font-bold mb-1" style="color:var(--t3)">Consensus Accumulation</div>
+            <template x-for="c in (leadersDash.consensus_accumulation||[]).slice(0,4)">
+              <div class="text-[10px] py-0.5 flex justify-between">
+                <span class="mono font-bold" x-text="c.ticker"></span>
+                <span style="color:var(--green)" x-text="'score '+c.consensus_score"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+
       <template x-if="today7.best_action && !today7.todays_decision">
         <div style="padding:8px 12px">
           <div class="card card-p" :style="'border-left:4px solid var(--'+(pageAuthorityIsDegraded()?'amber':'green')+')'">
@@ -1812,6 +1838,45 @@
           </div>
         </div>
       </template>
+
+      <!-- ── Engine portfolio / sleeves (desk decision layer) ── -->
+      <div style="padding:8px 12px" x-show="desk.portfolio">
+        <div class="card card-p">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-[9px] font-bold uppercase" style="color:var(--t3)">🏛️ Engine Portfolio</div>
+            <div class="text-[10px] mono font-bold" :class="(desk.portfolio?.kpis?.total_return_pct||0)>=0?'text-green-400':'text-red-400'"
+                 x-text="'$'+Number(desk.portfolio?.kpis?.equity||0).toLocaleString(undefined,{maximumFractionDigits:0})+' · '+((desk.portfolio?.kpis?.total_return_pct||0)>=0?'+':'')+(desk.portfolio?.kpis?.total_return_pct||0).toFixed(2)+'%'"></div>
+          </div>
+          <div class="flex gap-3 text-[9px] mb-2" style="color:var(--t3)">
+            <span><span style="color:var(--green)">●</span> Book</span>
+            <span><span style="color:var(--blue)">●</span> SPY B&H</span>
+          </div>
+          <div x-html="deskSparkSvg(desk.portfolio?.equity_curve, desk.portfolio?.benchmark_curve, 320, 48)"></div>
+          <div class="grid grid-cols-4 gap-2 text-center text-[10px] mt-2">
+            <div><div style="color:var(--t3)">Day P&L</div><div class="mono font-bold" :class="(desk.portfolio?.kpis?.daily_pnl||0)>=0?'text-green-400':'text-red-400'" x-text="(desk.portfolio?.kpis?.daily_pnl>=0?'+':'')+'$'+Number(desk.portfolio?.kpis?.daily_pnl||0).toFixed(0)"></div></div>
+            <div><div style="color:var(--t3)">Open</div><div class="mono font-bold" x-text="desk.portfolio?.kpis?.open_positions||0"></div></div>
+            <div><div style="color:var(--t3)">Win%</div><div class="mono font-bold" x-text="(desk.portfolio?.kpis?.win_rate||0)+'%'"></div></div>
+            <div><div style="color:var(--t3)">Trades</div><div class="mono font-bold" x-text="desk.portfolio?.kpis?.total_trades||0"></div></div>
+          </div>
+          <template x-if="(desk.portfolio?.active_sleeves||[]).length">
+            <div class="text-[9px] font-bold uppercase mt-3 mb-1" style="color:var(--t3)">Active Sleeves</div>
+            <div class="flex flex-wrap gap-1.5">
+              <template x-for="sl in (desk.portfolio?.active_sleeves||[]).slice(0,4)">
+                <span class="pill pw text-[9px]" x-text="sl.name+' · '+sl.score"></span>
+              </template>
+            </div>
+          </template>
+          <template x-if="(desk.portfolio?.allocation?.holdings||[]).length">
+            <div class="text-[9px] font-bold uppercase mt-2 mb-1" style="color:var(--t3)">Allocation</div>
+            <template x-for="h in (desk.portfolio?.allocation?.holdings||[]).slice(0,4)">
+              <div class="flex justify-between text-[10px] py-0.5">
+                <span class="mono font-bold" x-text="h.ticker"></span>
+                <span style="color:var(--t3)" x-text="h.actual_pct+'% / tgt '+h.target_pct+'%'"></span>
+              </div>
+            </template>
+          </template>
+        </div>
+      </div>
 
       <!-- ── Synthetic Data Warning ── -->
       <template x-if="today7.regime && today7.regime.synthetic">
@@ -5075,9 +5140,180 @@
     <!-- SURFACE: STRATEGY FACTORY                              -->
     <!-- ═══════════════════════════════════════════════════════ -->
     <!-- ═══════════════════════════════════════════════════════ -->
-    <!-- SURFACE: PORTFOLIO MANAGEMENT                          -->
+<main x-show="tab==='leaders'" class="fade" x-init="$watch('tab',v=>{if(v==='leaders')fetchLeadersHub()})">
+      <div class="trust-strip">
+        <span style="color:var(--amber)">● LEADER TRACKING</span>
+        <span>Verified ≠ Inferred — always check source badge</span>
+        <span x-text="leadersHub.loading?'Loading…':(leadersHub.leaders?.length||0)+' entities'"></span>
+      </div>
+      <div class="p-3 space-y-3">
+        <!-- Sub-nav -->
+        <div class="flex gap-2 flex-wrap">
+          <button @click="leadersView='hub'" class="btn-s text-[10px]" :style="leadersView==='hub'&&'border-color:var(--green);color:var(--green)'">Hub</button>
+          <button @click="leadersView='consensus';fetchLeadersConsensus()" class="btn-s text-[10px]" :style="leadersView==='consensus'&&'border-color:var(--green);color:var(--green)'">Consensus</button>
+          <button @click="leadersView='flow';fetchLeadersFlow()" class="btn-s text-[10px]" :style="leadersView==='flow'&&'border-color:var(--green);color:var(--green)'">Flow Confirm</button>
+          <button @click="leadersView='baskets';fetchLeadersBaskets()" class="btn-s text-[10px]" :style="leadersView==='baskets'&&'border-color:var(--green);color:var(--green)'">Shadow Baskets</button>
+          <button @click="leadersView='alerts';fetchLeadersAlerts()" class="btn-s text-[10px]" :style="leadersView==='alerts'&&'border-color:var(--green);color:var(--green)'">Alerts</button>
+        </div>
+
+        <!-- HUB -->
+        <template x-if="leadersView==='hub'">
+          <div class="space-y-3">
+            <div class="flex gap-2 flex-wrap">
+              <select x-model="leadersFilter.category" @change="fetchLeadersHub()" class="text-[10px] flex-1">
+                <option value="">All categories</option>
+                <option value="verified_filer">Verified filers</option>
+                <option value="public_figure">Public figures</option>
+                <option value="fund_manager">Fund managers</option>
+                <option value="influencer">Influencers</option>
+                <option value="etf">ETF</option>
+              </select>
+              <select x-model="leadersFilter.quality" @change="fetchLeadersHub()" class="text-[10px] flex-1">
+                <option value="">All quality</option>
+                <option value="verified">Verified</option>
+                <option value="delayed">Delayed</option>
+                <option value="derived">Derived</option>
+                <option value="inferred">Inferred</option>
+                <option value="speculative">Speculative</option>
+              </select>
+              <input x-model="leadersFilter.search" @keydown.enter="fetchLeadersHub()" placeholder="Search…" class="text-[10px] flex-1">
+            </div>
+            <template x-if="leadersDetail">
+              <div class="card card-p border-l-4" style="border-left-color:var(--green)">
+                <button @click="leadersDetail=null" class="text-[10px] mb-2" style="color:var(--t3)">← Back to list</button>
+                <div class="flex justify-between items-start mb-2">
+                  <div>
+                    <div class="text-sm font-bold" x-text="leadersDetail.name"></div>
+                    <div class="text-[10px]" style="color:var(--t3)" x-text="leadersDetail.entity_type"></div>
+                  </div>
+                  <span class="pill" :class="leaderQualityClass(leadersDetail.source_quality)" x-text="leadersDetail.source_quality_label"></span>
+                </div>
+                <div class="text-[10px] mb-2" style="color:var(--t2)" x-text="leadersDetail.description"></div>
+                <div class="grid grid-cols-4 gap-2 text-center text-[10px] mb-3">
+                  <div><div style="color:var(--t3)">Holdings</div><div class="font-bold mono" x-text="leadersDetail.metrics?.active_holdings||0"></div></div>
+                  <div><div style="color:var(--t3)">Adds</div><div class="font-bold mono text-green-400" x-text="leadersDetail.metrics?.adds_30d||0"></div></div>
+                  <div><div style="color:var(--t3)">Reduces</div><div class="font-bold mono text-red-400" x-text="leadersDetail.metrics?.reductions_30d||0"></div></div>
+                  <div><div style="color:var(--t3)">Delay</div><div class="font-bold mono" x-text="(leadersDetail.disclosure_delay_days||0)+'d'"></div></div>
+                </div>
+                <div class="card card-p mb-2" style="background:var(--s2)">
+                  <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">Decision Box</div>
+                  <div class="text-[10px] space-y-0.5">
+                    <div x-text="'Verifiable: '+(leadersDetail.decision?.verifiable?'Yes':'No')"></div>
+                    <div x-text="'Delayed: '+(leadersDetail.decision?.delayed_disclosure?'Yes':'No')"></div>
+                    <div x-text="'Recommendation: '+(leadersDetail.decision?.recommendation||'—')"></div>
+                    <template x-for="w in (leadersDetail.decision?.warnings||[])">
+                      <div class="text-amber-300" x-text="'⚠ '+w"></div>
+                    </template>
+                  </div>
+                </div>
+                <div class="text-[9px] font-bold uppercase mb-1" style="color:var(--t3)">Holdings</div>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-[10px]">
+                    <thead><tr style="color:var(--t3)"><th>Ticker</th><th>Action</th><th>Size</th><th>Source</th><th>Date</th><th>Action</th></tr></thead>
+                    <tbody>
+                      <template x-for="h in (leadersDetail.holdings||[])">
+                        <tr>
+                          <td class="mono font-bold" x-text="h.ticker"></td>
+                          <td x-text="h.action_label"></td>
+                          <td x-text="h.size_bucket||'—'"></td>
+                          <td><span class="pill text-[8px]" :class="leaderQualityClass(h.source_quality)" x-text="h.source_quality"></span></td>
+                          <td x-text="h.disclosure_date||'—'"></td>
+                          <td x-text="h.actionability||'—'"></td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="text-[9px] font-bold uppercase mt-3 mb-1" style="color:var(--t3)">Timeline</div>
+                <template x-for="ev in (leadersDetail.timeline||[])">
+                  <div class="text-[10px] py-1 border-b border-gray-800/40">
+                    <span class="mono" style="color:var(--t3)" x-text="ev.event_date"></span>
+                    <span class="font-bold ml-1" x-text="ev.event_type"></span>
+                    <span x-text="' · '+ev.summary"></span>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <template x-if="!leadersDetail">
+              <template x-for="L in (leadersHub.leaders||[])" :key="L.id">
+                <div class="card card-p cursor-pointer row-hi" @click="openLeaderDetail(L.id)">
+                  <div class="flex justify-between items-start">
+                    <div>
+                      <div class="text-sm font-bold" x-text="L.name"></div>
+                      <div class="text-[10px]" style="color:var(--t3)" x-text="L.focus_area"></div>
+                    </div>
+                    <span class="pill text-[9px]" :class="leaderQualityClass(L.source_quality)" x-text="L.source_quality_label"></span>
+                  </div>
+                  <div class="flex gap-3 mt-1 text-[10px]" style="color:var(--t3)">
+                    <span x-text="(L.metrics?.active_holdings||0)+' holdings'"></span>
+                    <span x-text="'+'+(L.metrics?.adds_30d||0)+' / -'+(L.metrics?.reductions_30d||0)"></span>
+                    <span x-text="L.recent_tickers?.join(', ')"></span>
+                  </div>
+                </div>
+              </template>
+            </template>
+          </div>
+        </template>
+
+        <!-- CONSENSUS -->
+        <template x-if="leadersView==='consensus'">
+          <div class="space-y-2">
+            <label class="text-[10px] flex items-center gap-2"><input type="checkbox" x-model="leadersConsensusVerified" @change="fetchLeadersConsensus()"> Verified sources only</label>
+            <template x-for="c in (leadersConsensus.items||[])" :key="c.ticker">
+              <div class="card card-p flex justify-between items-center cursor-pointer" @click="openConsensusTicker(c.ticker)">
+                <div>
+                  <span class="mono font-bold" x-text="c.ticker"></span>
+                  <span class="text-[10px] ml-2" style="color:var(--t3)" x-text="c.mention_count+' mentions'"></span>
+                </div>
+                <div class="text-right text-[10px]">
+                  <div class="font-bold text-green-400" x-text="'consensus '+c.consensus_score"></div>
+                  <div style="color:var(--t3)" x-text="'flow '+(c.flow_confirmation_score||0)"></div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- FLOW -->
+        <template x-if="leadersView==='flow'">
+          <div class="text-[9px] mb-2 p-2 rounded" style="background:rgba(251,191,36,.1);color:var(--amber)">⚠ Flow scores are heuristic — not exchange-confirmed OI/IV feeds.</div>
+          <template x-for="f in (leadersFlow.items||[])" :key="f.ticker">
+            <div class="card card-p flex justify-between">
+              <span class="mono font-bold" x-text="f.ticker"></span>
+              <span class="font-bold" :class="(f.final_confirmation_score||0)>=60?'text-green-400':'text-amber-300'" x-text="f.final_confirmation_score+' confirm'"></span>
+            </div>
+          </template>
+        </template>
+
+        <!-- BASKETS -->
+        <template x-if="leadersView==='baskets'">
+          <template x-for="b in (leadersBaskets.baskets||[])" :key="b.id">
+            <div class="card card-p">
+              <div class="font-bold text-sm" x-text="b.name"></div>
+              <div class="text-[10px]" style="color:var(--t3)" x-text="b.methodology"></div>
+              <div class="mt-2 flex flex-wrap gap-1">
+                <template x-for="m in (b.members||[])">
+                  <span class="pill pw text-[9px]" x-text="m.ticker+' '+Math.round((m.weight||0)*100)+'%'"></span>
+                </template>
+              </div>
+            </div>
+          </template>
+        </template>
+
+        <!-- ALERTS -->
+        <template x-if="leadersView==='alerts'">
+          <template x-for="a in (leadersAlerts.alerts||[])" :key="a.id">
+            <div class="card card-p text-[10px]" :style="'border-left:3px solid '+(a.severity==='critical'?'var(--red)':a.severity==='warn'?'var(--amber)':'var(--blue)')">
+              <span x-text="a.message"></span>
+            </div>
+          </template>
+        </template>
+      </div>
+    </main>
+
+        <!-- SURFACE: PORTFOLIO MANAGEMENT                          -->
     <!-- ═══════════════════════════════════════════════════════ -->
-    <main x-show="tab==='portfolio'" class="fade" x-init="$watch('tab',v=>{if(v==='portfolio'){fetchPortfolio();fetchPortfolioDecision();fetchPortfolioEquity()}})">
+    <main x-show="tab==='portfolio'" class="fade" x-init="$watch('tab',v=>{if(v==='portfolio'){fetchPortfolio();fetchPortfolioDecision();fetchPortfolioEquity();fetchDesk()}})">
       <div class="trust-strip">
         <span :style="pfBrokerSource().pillClass" x-text="'● '+pfBrokerSource().pill"></span>
         <span x-text="portfolioSummaryPositionsLabel()"></span>
@@ -5660,6 +5896,20 @@
             <div class="text-[9px] mt-2" style="color:var(--t3)">Primary risk blocker: stop missing — set a defensive exit level before sizing/adding risk.</div>
           </div>
         </template>
+        <!-- Engine book: target vs actual (desk API) -->
+        <template x-if="desk.portfolio&&(desk.portfolio.allocation?.holdings||[]).length">
+          <div class="card card-p">
+            <div class="text-[10px] font-bold uppercase mb-2" style="color:var(--t3)">⚖️ Engine Book · Target vs Actual</div>
+            <template x-for="h in desk.portfolio.allocation.holdings">
+              <div class="flex justify-between text-[10px] py-1 border-b border-gray-800/30 last:border-0">
+                <span class="mono font-bold" x-text="h.ticker"></span>
+                <span style="color:var(--t3)" x-text="h.actual_pct+'% actual · '+h.target_pct+'% tgt · drift '+(h.drift_pct>=0?'+':'')+h.drift_pct+'%'"></span>
+              </div>
+            </template>
+            <div class="text-[9px] mt-1" style="color:var(--t3)" x-text="'Cash '+desk.portfolio.allocation.cash_pct+'% · Gross '+desk.portfolio.allocation.gross_pct+'%'"></div>
+          </div>
+        </template>
+        <!-- Position cards -->
         <!-- Position cards -->
         <template x-if="pf.positions.length===0&&!pf.loading">
           <div class="card card-p" style="text-align:center;padding:30px">

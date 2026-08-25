@@ -1990,7 +1990,7 @@
       const safeFallback=fallback||'today';
       const value=String(tab||'').trim();
       if(!value) return safeFallback;
-      const allowed=new Set(['guide','today','signals','scanners','portfolio','dossier','funds','flow','rs','command','notrade','ops','ibkr','btlab','agent','strategy-lab','shadow','reports']);
+      const allowed=new Set(['guide','today','signals','scanners','portfolio','dossier','leaders','funds','flow','rs','command','notrade','ops','ibkr','btlab','agent','strategy-lab','shadow','reports']);
       return allowed.has(value)?value:safeFallback;
     }
     function cc(){return{
@@ -2064,6 +2064,17 @@
       fundMonitor:{loading:false,data:null,console:null,error:'',lastRefresh:null,autoRefreshTimer:null,benchmark:'SPY',activeFund:null},
       leadersPanel:{loading:false,data:null,error:''},
       pmStrip:{funds:[],lastFetch:0},
+      desk:{portfolio:null,monitor:null,strategies:null},
+      leadersDash:{},
+      leadersView:'hub',
+      leadersHub:{loading:false,leaders:[]},
+      leadersFilter:{category:'',quality:'',search:''},
+      leadersDetail:null,
+      leadersConsensus:{items:[]},
+      leadersConsensusVerified:false,
+      leadersFlow:{items:[]},
+      leadersBaskets:{baskets:[]},
+      leadersAlerts:{alerts:[]},
       tradeIntel:{loading:false,data:null,error:'',confData:null,mistakesData:null,aiLoading:false,aiError:'',aiReview:null,selectedTradeKey:''},
       ibkr:{connected:false,mode:'paper',host:'127.0.0.1',docker:false,loading:false,pingResult:null,account:null,positions:[],readiness:null,diagnostics:null,health:null,health_label:'',session_usable:false,monitoring_only:false,openOrders:[],recentFills:[],portfolioCompare:{manual:0,broker:0,note:''},lastSyncedAt:null,orderPreview:null,orderForm:{symbol:'',secType:'STK',action:'BUY',qty:1,orderType:'MKT',limitPrice:'',stopPrice:'',tif:'DAY',useBracket:false,targetPrice:'',trail:false,trailKind:'percent',trailValue:''},orderResult:null,orderError:'',statusLoading:false,statusFetchError:'',lastRefresh:null,workingBracket:null,bracketArchive:[]},
       ops:{running:false,cycle_count:0,signals_today:0,trades_today:0,circuit_breaker:false,circuit_breaker_reason:'',dry_run:true,components:{},engineStarting:false},
@@ -2148,6 +2159,9 @@
         setTimeout(()=>{this.fetchRanked();this.fetchFlow()},600);
         setTimeout(()=>{this.fetchFunds()},1200);
         setTimeout(()=>{this.fetchDecisionHub();this.fetchPortfolio();this.fetchAosMonitors();this.fetchAIStatus()},2000);
+        setTimeout(()=>{this.fetchDesk();this.fetchLeadersDashboard();},3000);
+        setInterval(()=>this.fetchDesk(),120000);
+        setInterval(()=>this.fetchLeadersDashboard(),300000);
         setInterval(()=>this.fetchDecisionHub(),120000);
         setInterval(()=>this.fetchPortfolio(),180000);
         // Per-strategy realized analytics (cheap; refresh every 10min)
@@ -6625,14 +6639,15 @@
         this.ccHeader.header_summary=null;
         this.fetchCcStatus();
         const tSafe=this.tab;
-        if(tSafe==='today'){this.fetchToday7();this.fetchMarketStrip();}
+        if(tSafe==='today'){this.fetchToday7();this.fetchMarketStrip();this.fetchLeadersDashboard();}
         if(tSafe==='signals'){this.hydrateRankedFromCache();this.fetchSignals();this.fetchRanked();if(!this._signalsPoll){this._signalsPoll=setInterval(()=>{if(this.tab==='signals')this.fetchSignals()},60000)}}
         if(tSafe==='scanners'){this.hydrateScannersFromCache();this.fetchScanners();}
-        if(tSafe==='portfolio'){this.fetchPortfolio();}
+        if(tSafe==='portfolio'){this.fetchPortfolio();this.fetchDesk();}
         if(tSafe==='dossier'){
           if(this.dos.ticker){this.fetchDossier();}
           else{this.dos.status='idle_no_query';this.dos.error='';this.dos.loading=false;}
         }
+        if(tSafe==='leaders'){this.fetchLeadersHub();}
         if(tSafe==='funds'){this.fetchFunds();this.fetchLeaders();}
         if(tSafe==='flow'){if(!this.today7.regime)this.fetchToday7();this.fetchFlow();}
         if(tSafe==='agent'){if(!this.today7?.regime)this.fetchToday7();this.fetchVibeAgent();}
@@ -7546,6 +7561,98 @@
           this.surfaceFetchHints.ops_error_log={loading:false,error:this.opsDegradedLine(state,msg),unavailable:true};
         }finally{this.errorLog.loading=false}
       },
+
+      async fetchDesk(){
+        try{
+          const [p,m]=await Promise.all([
+            fetch('/api/desk/portfolio').then(r=>r.ok?r.json():null).catch(()=>null),
+            fetch('/api/desk/monitor').then(r=>r.ok?r.json():null).catch(()=>null),
+          ]);
+          if(p)this.desk.portfolio=p;
+          if(m)this.desk.monitor=m;
+        }catch(e){console.warn('desk fetch:',e)}
+      },
+      deskSeriesPts(series){
+        return (series||[]).map(x=>typeof x==='number'?x:(x.equity??x.value??0));
+      },
+      deskSparkSvg(primary,overlay,w,h){
+        const ptsA=this.deskSeriesPts(primary);
+        const ptsB=this.deskSeriesPts(overlay);
+        if(!ptsA.length&&!ptsB.length)return '<div style="text-align:center;font-size:10px;color:var(--t3);padding:12px">no curve data</div>';
+        const pad=4,combined=ptsA.length?ptsA:ptsB;
+        const min=Math.min(...combined,...ptsB);
+        const max=Math.max(...combined,...ptsB);
+        const rng=(max-min)||1;
+        const mkPath=(pts,color,dash)=>{
+          if(!pts.length)return '';
+          const sx=(w-pad*2)/Math.max(pts.length-1,1);
+          const d=pts.map((v,i)=>{
+            const x=pad+i*sx;
+            const y=pad+(h-pad*2)*(1-(v-min)/rng);
+            return (i?'L':'M')+x.toFixed(1)+','+y.toFixed(1);
+          }).join(' ');
+          return '<path d="'+d+'" fill="none" stroke="'+color+'" stroke-width="1.5"'+(dash?' stroke-dasharray="4 3"':'')+'/>';
+        };
+        return '<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'">'+mkPath(ptsA,'#00d4aa',false)+mkPath(ptsB,'#58a6ff',true)+'</svg>';
+      },
+      leaderQualityClass(q){
+        return ({verified:'pg',delayed:'pa',derived:'pb',inferred:'pp',speculative:'pr'})[q]||'pw';
+      },
+      async fetchLeadersDashboard(){
+        try{
+          const r=await fetch('/api/leaders/dashboard');
+          if(r.ok)this.leadersDash=await r.json();
+        }catch(e){console.warn('leaders dash',e)}
+      },
+      async fetchLeadersHub(){
+        this.leadersHub.loading=true;
+        try{
+          let u='/api/leaders?';
+          if(this.leadersFilter.category)u+='category='+encodeURIComponent(this.leadersFilter.category)+'&';
+          if(this.leadersFilter.quality)u+='source_quality='+encodeURIComponent(this.leadersFilter.quality)+'&';
+          if(this.leadersFilter.search)u+='search='+encodeURIComponent(this.leadersFilter.search)+'&';
+          const r=await fetch(u);
+          if(r.ok){const d=await r.json();this.leadersHub.leaders=d.leaders||[];}
+        }catch(e){console.warn('leaders hub',e)}finally{this.leadersHub.loading=false}
+      },
+      async openLeaderDetail(id){
+        try{
+          const r=await fetch('/api/leaders/'+encodeURIComponent(id));
+          if(r.ok)this.leadersDetail=await r.json();
+        }catch(e){console.warn('leader detail',e)}
+      },
+      async fetchLeadersConsensus(){
+        try{
+          const u='/api/consensus?min_overlap=2&verified_only='+(this.leadersConsensusVerified?'true':'false');
+          const r=await fetch(u);
+          if(r.ok)this.leadersConsensus=await r.json();
+        }catch(e){console.warn('consensus',e)}
+      },
+      async openConsensusTicker(t){
+        try{
+          const r=await fetch('/api/consensus/ticker/'+encodeURIComponent(t));
+          if(r.ok){const d=await r.json();alert(t+': consensus '+JSON.stringify(d.consensus||{},null,0).slice(0,200));}
+        }catch(e){}
+      },
+      async fetchLeadersFlow(){
+        try{
+          const r=await fetch('/api/flow/tracked');
+          if(r.ok)this.leadersFlow=await r.json();
+        }catch(e){console.warn('flow',e)}
+      },
+      async fetchLeadersBaskets(){
+        try{
+          const r=await fetch('/api/baskets');
+          if(r.ok)this.leadersBaskets=await r.json();
+        }catch(e){console.warn('baskets',e)}
+      },
+      async fetchLeadersAlerts(){
+        try{
+          const r=await fetch('/api/alerts/leaders?unseen_only=false');
+          if(r.ok)this.leadersAlerts=await r.json();
+        }catch(e){console.warn('alerts',e)}
+      },
+
       async fetchLeaders(){
         this.leadersPanel.loading=true;this.leadersPanel.error='';
         try{
