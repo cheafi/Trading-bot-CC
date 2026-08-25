@@ -496,30 +496,9 @@ def _finalize_ranked_response(
     except Exception:
         pass
     try:
-        from src.services.opportunity_quality import (
-            attach_quality_to_rows,
-            build_opportunity_verdict,
-            resolve_brief_stale_context,
-        )
+        from src.services.opportunity_pipeline import finalize_opportunity_pipeline
 
-        scanner_degraded = bool(data.get("compressed") or data.get("stale"))
-        brief_ctx = resolve_brief_stale_context(
-            used_brief_fallback=bool(data.get("from_brief") or data.get("brief_fallback")),
-        )
-        _brief_stale = bool(brief_ctx.get("brief_stale"))
-        for key in ("opportunities", "near_miss", "near_miss_rows"):
-            rows = data.get(key)
-            if rows:
-                data[key] = attach_quality_to_rows(
-                    rows,
-                    data_stale=scanner_degraded,
-                    brief_stale=_brief_stale,
-                )
-        data["brief_context"] = brief_ctx
-        data["data_stale"] = scanner_degraded
-        data["brief_stale"] = _brief_stale
-        data["top_ranked"] = data.get("opportunities") or []
-        data["opportunity_verdict"] = build_opportunity_verdict(data)
+        data = finalize_opportunity_pipeline(data, source="playbook", tradeability=tb)
     except Exception:
         pass
     try:

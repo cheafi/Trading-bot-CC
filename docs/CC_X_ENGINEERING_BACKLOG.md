@@ -1,7 +1,7 @@
 # CC X — Engineering Backlog (Living SSOT)
 
 **Product:** CC X · `TradingAI_Bot`  
-**Last updated:** 2026-08-25  
+**Last updated:** 2026-08-25 (Phase A · Constitution 64/100 + CIO v12 sync)  
 **Architecture:** [`CC_X_ARCHITECTURE.md`](./CC_X_ARCHITECTURE.md)  
 **Sprint reference:** [`archive/CC_VNEXT_SPRINT_PLAN.md`](./archive/CC_VNEXT_SPRINT_PLAN.md), [`archive/CC_X_INSTITUTIONAL_ALPHA_OS.md`](./archive/CC_X_INSTITUTIONAL_ALPHA_OS.md)
 
@@ -11,35 +11,37 @@
 
 ## In-flight UX (current sprint)
 
-| ID        | Item                                                        | Priority | Status      | Owner   | Sprint | Acceptance criteria                                                                           | Evidence/PR                                                   |
-| --------- | ----------------------------------------------------------- | -------- | ----------- | ------- | ------ | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| CCX-UX-01 | Mission Brief panel — bilingual NOW/BLOCKER/NEXT            | P1       | in-progress | CC Core | 115    | `[data-cc="today-mission-panel"]`; title "TODAY · Mission Brief · 今日任務"; WAIT copy honest | `4905a4e`, `cc-helpers.js`                                    |
-| CCX-UX-02 | Opportunity quality on decision board regime block          | P1       | in-progress | CC Core | 115    | `opportunity_quality` in board regime; Hostile macro consistency                              | `decision_board_service.py`                                   |
-| CCX-UX-03 | Opportunity quality chips on Playbook monitor cards         | P1       | in-progress | CC Core | 115    | Quality tier visible; never implies deploy                                                    | `opportunity_quality.py`, `tests/test_opportunity_quality.py` |
-| CCX-UX-04 | Today PM strip — best action, near-miss, sleeve gate_status | P1       | in-progress | CC Core | 115    | 5-second deploy/wait/monitor answers                                                          | `today_insights.py`, `decision.py`                            |
-| CCX-UX-05 | Guide tab as Help — suspended decision language             | P1       | in-progress | CC Core | 115    | Guide shows reference-only; no deploy chips                                                   | `4905a4e`, `surface_authority.py`                             |
-| CCX-UX-06 | Provenance strip on price fields                            | P0       | todo        | CC Core | 116    | source/as_of/mode on prices; STALE hides deploy CTAs                                          | Sprint 116                                                    |
+| ID        | Item                                                        | Priority | Status      | Owner   | Sprint | Acceptance criteria                                                                           | Evidence/PR                                                              |
+| --------- | ----------------------------------------------------------- | -------- | ----------- | ------- | ------ | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| CCX-UX-01 | Mission Brief panel — bilingual NOW/BLOCKER/NEXT            | P1       | done        | CC Core | 115    | `[data-cc="today-mission-panel"]`; title "TODAY · Mission Brief · 今日任務"; WAIT copy honest | `4905a4e`, `cc-helpers.js`                                               |
+| CCX-UX-02 | Opportunity quality on decision board regime block          | P1       | done        | CC Core | 115    | `opportunity_quality` in board regime; Hostile macro consistency                              | `bf94f8e`, `decision_board_service.py`                                   |
+| CCX-UX-03 | Opportunity quality chips on Playbook monitor cards         | P1       | done        | CC Core | 115    | Quality tier visible; never implies deploy                                                    | `bf94f8e`, `opportunity_quality.py`, `tests/test_opportunity_quality.py` |
+| CCX-UX-04 | Today PM strip — best action, near-miss, sleeve gate_status | P1       | in-progress | CC Core | 115    | 5-second deploy/wait/monitor answers                                                          | `today_insights.py`, `decision.py`                                       |
+| CCX-UX-05 | Guide tab as Help — suspended decision language             | P1       | done        | CC Core | 115    | Guide shows reference-only; no deploy chips                                                   | `4905a4e`, `surface_authority.py`                                        |
+| CCX-UX-06 | Provenance strip on price fields                            | P0       | todo        | CC Core | 116    | source/as_of/mode on prices; STALE hides deploy CTAs                                          | Sprint 116                                                               |
+| CCX-UX-07 | Today WAIT-day context collapse — Expand context            | P0       | done        | CC Core | 115    | Mission Brief + Attention queue always visible; secondary strips behind expand on WAIT        | `deploy_surfaces.html`, `cc-app.js` `todayContextExpanded`               |
 
 ---
 
 ## Authority & decision
 
-| ID      | Item                                            | Priority | Status      | Owner   | Sprint | Acceptance criteria                                 | Evidence/PR                                                   |
-| ------- | ----------------------------------------------- | -------- | ----------- | ------- | ------ | --------------------------------------------------- | ------------------------------------------------------------- |
-| CCX-001 | DecisionBoardService SSOT — all deploy surfaces | P0       | in-progress | CC Core | 115    | Today, Playbook, cc-header identical `deploy_open`  | `decision_board_service.py`, `test_decision_board_service.py` |
-| CCX-002 | Never cache `deploy_open` on cached scan read   | P0       | done        | CC Core | 115    | Authority fields recomputed on read                 | `8b51620`, `test_decision_board_authority_cache.py`           |
-| CCX-003 | Fail-closed regime on router/service errors     | P0       | done        | CC Core | 115    | Errors → WAIT; no optimistic TRADE                  | `8b51620`                                                     |
-| CCX-004 | cc-header light mode honest deploy/regime       | P0       | done        | CC Core | 115    | Header poll matches board                           | `8b51620`, `test_cc_header_light.py`                          |
-| CCX-005 | Attribution root ref on all board rows          | P0       | todo        | CC Core | 115    | Each row has `attribution_root_ref` / `decision_id` | Sprint 115                                                    |
-| CCX-006 | Mandatory provenance on all prices              | P0       | todo        | CC Core | 116    | 100% price fields labeled; CI contract              | Sprint 116                                                    |
-| CCX-007 | CI blocks authority regressions                 | P0       | todo        | CC Core | 116    | `verify_10_10.sh` on every PR                       | Sprint 116                                                    |
-| CCX-008 | Hide mock factor on deploy surfaces             | P0       | todo        | CC Core | 116    | degraded or hidden on Portfolio deploy              | Sprint 116                                                    |
-| CCX-009 | Extract 25 largest main.py handlers             | P1       | todo        | CC Core | 116    | Routes moved to routers                             | Sprint 116                                                    |
-| CCX-010 | Unified header poll                             | P1       | todo        | CC Core | 116    | −40% API QPS                                        | Sprint 116                                                    |
-| CCX-011 | Server-render authority labels                  | P2       | todo        | CC Core | 116    | Authority chip from API                             | Sprint 116                                                    |
-| CCX-012 | Near-miss consolidate in contract               | P2       | todo        | CC Core | 115    | Single near_miss source                             | Sprint 115                                                    |
-| CCX-013 | Shared \_norm_action utility                    | P2       | todo        | CC Core | 115    | Dedupe action normalization                         | Sprint 115                                                    |
-| CCX-014 | Decision hub monitor payload unify              | P2       | todo        | CC Core | 115    | One monitor poll path                               | Sprint 115                                                    |
+| ID       | Item                                                  | Priority | Status | Owner   | Sprint | Acceptance criteria                                                                         | Evidence/PR                                                      |
+| -------- | ----------------------------------------------------- | -------- | ------ | ------- | ------ | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| CCX-001  | DecisionBoardService SSOT — all deploy surfaces       | P0       | done   | CC Core | 115    | Today, Playbook, cc-header identical `deploy_open`; UI uses `system_state.deploy_open` only | `decision_board_service.py`, `cc-app.js` `deployOpen()`, Phase A |
+| CCX-001b | Shared opportunity pipeline — Today + Playbook parity | P0       | done   | CC Core | 115    | `finalize_opportunity_pipeline`; quality + IO/Alpha on both paths                           | `opportunity_pipeline.py`, `tests/test_opportunity_pipeline.py`  |
+| CCX-002  | Never cache `deploy_open` on cached scan read         | P0       | done   | CC Core | 115    | Authority fields recomputed on read                                                         | `8b51620`, `test_decision_board_authority_cache.py`              |
+| CCX-003  | Fail-closed regime on router/service errors           | P0       | done   | CC Core | 115    | Errors → WAIT; no optimistic TRADE                                                          | `8b51620`                                                        |
+| CCX-004  | cc-header light mode honest deploy/regime             | P0       | done   | CC Core | 115    | Header poll matches board                                                                   | `8b51620`, `test_cc_header_light.py`                             |
+| CCX-005  | Attribution root ref on all board rows                | P0       | todo   | CC Core | 115    | Each row has `attribution_root_ref` / `decision_id`                                         | Sprint 115                                                       |
+| CCX-006  | Mandatory provenance on all prices                    | P0       | todo   | CC Core | 116    | 100% price fields labeled; CI contract                                                      | Sprint 116                                                       |
+| CCX-007  | CI blocks authority regressions                       | P0       | todo   | CC Core | 116    | `verify_10_10.sh` on every PR                                                               | Sprint 116                                                       |
+| CCX-008  | Hide mock factor on deploy surfaces                   | P0       | todo   | CC Core | 116    | degraded or hidden on Portfolio deploy                                                      | Sprint 116                                                       |
+| CCX-009  | Extract 25 largest main.py handlers                   | P1       | todo   | CC Core | 116    | Routes moved to routers                                                                     | Sprint 116                                                       |
+| CCX-010  | Unified header poll                                   | P1       | todo   | CC Core | 116    | −40% API QPS                                                                                | Sprint 116                                                       |
+| CCX-011  | Server-render authority labels                        | P2       | todo   | CC Core | 116    | Authority chip from API                                                                     | Sprint 116                                                       |
+| CCX-012  | Near-miss consolidate in contract                     | P2       | todo   | CC Core | 115    | Single near_miss source                                                                     | Sprint 115                                                       |
+| CCX-013  | Shared \_norm_action utility                          | P2       | todo   | CC Core | 115    | Dedupe action normalization                                                                 | Sprint 115                                                       |
+| CCX-014  | Decision hub monitor payload unify                    | P2       | todo   | CC Core | 115    | One monitor poll path                                                                       | Sprint 115                                                       |
 
 ---
 
@@ -63,36 +65,36 @@
 
 ## Learning & measured alpha
 
-| ID      | Item                              | Priority | Status | Owner   | Sprint | Acceptance criteria                        | Evidence/PR |
-| ------- | --------------------------------- | -------- | ------ | ------- | ------ | ------------------------------------------ | ----------- |
-| CCX-040 | IBKR → closed_trades.jsonl ≥95%   | P1       | todo   | CC Core | 118    | Nightly capture job                        | Sprint 118  |
-| CCX-041 | Forward outcomes T+1/T+5/T+20     | P1       | todo   | CC Core | 118    | `forward_outcomes.py` service              | Sprint 118  |
-| CCX-042 | Real-Time Alpha Monitor (6 KPIs)  | P1       | todo   | CC Core | 118    | Produced/Lost/Preserved in Ops             | Sprint 118  |
-| CCX-043 | Thompson/ML hidden n<5 / n<30     | P1       | todo   | CC Core | 118    | Insufficient sample not shown as precision | Sprint 118  |
-| CCX-044 | Merge decision journal SSOT       | P2       | todo   | CC Core | 118    | Single journal path                        | Sprint 118  |
-| CCX-045 | Ops Alpha QA panel                | P2       | todo   | CC Core | 118    | IC decay, Brier visible                    | Sprint 118  |
-| CCX-046 | Self-learning audit log UI        | P3       | todo   | CC Core | 118    | Apply rate visible; default 0              | Sprint 118  |
-| CCX-047 | Regime params versioned changelog | P3       | todo   | CC Core | 118    | Threshold changes human-reviewed           | Sprint 118  |
-| CCX-048 | Council outcome tracking          | P2       | todo   | CC Core | 118    | Council vs outcome calibration             | Sprint 118  |
+| ID      | Item                              | Priority | Status      | Owner   | Sprint | Acceptance criteria                                                      | Evidence/PR                                             |
+| ------- | --------------------------------- | -------- | ----------- | ------- | ------ | ------------------------------------------------------------------------ | ------------------------------------------------------- |
+| CCX-040 | IBKR → closed_trades.jsonl ≥95%   | P1       | todo        | CC Core | 118    | Nightly capture job                                                      | Sprint 118                                              |
+| CCX-041 | Forward outcomes T+1/T+5/T+20     | P1       | in-progress | CC Core | 118    | `forward_outcomes.py` service; T+0 stub on trade close via learning_loop | `forward_outcomes.py`, `learning_loop.py`, Phase A stub |
+| CCX-042 | Real-Time Alpha Monitor (6 KPIs)  | P1       | todo        | CC Core | 118    | Produced/Lost/Preserved in Ops                                           | Sprint 118                                              |
+| CCX-043 | Thompson/ML hidden n<5 / n<30     | P1       | todo        | CC Core | 118    | Insufficient sample not shown as precision                               | Sprint 118                                              |
+| CCX-044 | Merge decision journal SSOT       | P2       | todo        | CC Core | 118    | Single journal path                                                      | Sprint 118                                              |
+| CCX-045 | Ops Alpha QA panel                | P2       | todo        | CC Core | 118    | IC decay, Brier visible                                                  | Sprint 118                                              |
+| CCX-046 | Self-learning audit log UI        | P3       | todo        | CC Core | 118    | Apply rate visible; default 0                                            | Sprint 118                                              |
+| CCX-047 | Regime params versioned changelog | P3       | todo        | CC Core | 118    | Threshold changes human-reviewed                                         | Sprint 118                                              |
+| CCX-048 | Council outcome tracking          | P2       | todo        | CC Core | 118    | Council vs outcome calibration                                           | Sprint 118                                              |
 
 ---
 
 ## Portfolio & capital
 
-| ID      | Item                                   | Priority | Status | Owner   | Sprint | Acceptance criteria              | Evidence/PR |
-| ------- | -------------------------------------- | -------- | ------ | ------- | ------ | -------------------------------- | ----------- |
-| CCX-050 | EV Ranking 3.0 decomposition           | P1       | todo   | CC Core | 122    | `ev_ranking.py`; research_only   | Sprint 122  |
-| CCX-051 | Capital Allocation panel               | P1       | todo   | CC Core | 122    | Next $10K ranked; no gate bypass | Sprint 122  |
-| CCX-052 | Live factor wire (remove mock)         | P1       | todo   | CC Core | 122    | Real factor or explicit degraded | Sprint 122  |
-| CCX-053 | marginal_return_on_capital on IO       | P1       | todo   | CC Core | 122    | Field on IO / AlphaObject        | Sprint 122  |
-| CCX-054 | Sector cap blocks portfolio quick-add  | P1       | todo   | CC Core | 122    | max_sector_pct enforced in UI    | Sprint 122  |
-| CCX-055 | Portfolio replacement rank             | P2       | todo   | CC Core | 124    | Sell-first ranked; human confirm | Sprint 124  |
-| CCX-056 | sell_first_candidates[] on AlphaObject | P2       | todo   | CC Core | 124    | Swap discipline on IO            | Sprint 124  |
-| CCX-057 | Portfolio brain IO consumer            | P2       | todo   | CC Core | 122    | Fit-delta sim uses IO            | Sprint 122  |
-| CCX-058 | Crisis stress on portfolio tab         | P3       | todo   | CC Core | 122    | Regime stress visible            | Sprint 122  |
-| CCX-059 | Drawdown sizer live wire               | P2       | todo   | CC Core | 122    | Sizing discipline in UI          | Sprint 122  |
-| CCX-060 | Book-level capacity rollup             | P2       | todo   | CC Core | 122    | Aggregate capacity on book       | Sprint 122  |
-| CCX-061 | Rebalance sim portfolio embed          | P3       | todo   | CC Core | 122    | What-if in Portfolio tab         | Sprint 122  |
+| ID      | Item                                   | Priority | Status | Owner   | Sprint | Acceptance criteria                                     | Evidence/PR |
+| ------- | -------------------------------------- | -------- | ------ | ------- | ------ | ------------------------------------------------------- | ----------- |
+| CCX-050 | EV Ranking 3.0 decomposition           | P1       | todo   | CC Core | 122    | `ev_ranking.py`; research_only                          | Sprint 122  |
+| CCX-051 | Capital Allocation panel               | P1       | todo   | CC Core | 122    | Next $10K ranked; no gate bypass                        | Sprint 122  |
+| CCX-052 | Live factor wire (remove mock)         | P1       | todo   | CC Core | 122    | Real factor or explicit degraded                        | Sprint 122  |
+| CCX-053 | marginal_return_on_capital on IO       | P1       | todo   | CC Core | 122    | Field on IO / AlphaObject; Constitution P0 + CIO v12 #4 | Sprint 122  |
+| CCX-054 | Sector cap blocks portfolio quick-add  | P1       | todo   | CC Core | 122    | max_sector_pct enforced in UI                           | Sprint 122  |
+| CCX-055 | Portfolio replacement rank             | P2       | todo   | CC Core | 124    | Sell-first ranked; human confirm                        | Sprint 124  |
+| CCX-056 | sell_first_candidates[] on AlphaObject | P2       | todo   | CC Core | 124    | Swap discipline on IO                                   | Sprint 124  |
+| CCX-057 | Portfolio brain IO consumer            | P2       | todo   | CC Core | 122    | Fit-delta sim uses IO                                   | Sprint 122  |
+| CCX-058 | Crisis stress on portfolio tab         | P3       | todo   | CC Core | 122    | Regime stress visible                                   | Sprint 122  |
+| CCX-059 | Drawdown sizer live wire               | P2       | todo   | CC Core | 122    | Sizing discipline in UI                                 | Sprint 122  |
+| CCX-060 | Book-level capacity rollup             | P2       | todo   | CC Core | 122    | Aggregate capacity on book                              | Sprint 122  |
+| CCX-061 | Rebalance sim portfolio embed          | P3       | todo   | CC Core | 122    | What-if in Portfolio tab                                | Sprint 122  |
 
 ---
 
@@ -139,17 +141,21 @@
 
 ## UX & operator productivity
 
-| ID      | Item                                  | Priority | Status      | Owner   | Sprint | Acceptance criteria               | Evidence/PR   |
-| ------- | ------------------------------------- | -------- | ----------- | ------- | ------ | --------------------------------- | ------------- |
-| CCX-100 | Command palette ⌘K v0                 | P2       | todo        | CC Core | 120    | Launcher for surfaces             | Sprint 120    |
-| CCX-101 | Keyboard shortcuts G T/P/D            | P3       | todo        | CC Core | 120    | Power-user nav                    | Sprint 120    |
-| CCX-102 | Command tab best_action sync          | P1       | todo        | CC Core | 115    | Command strip = Today best_action | Backlog N7    |
-| CCX-103 | Near-miss → watchlist triggers        | P1       | todo        | CC Core | 115    | POST /api/watchlist/trigger       | Backlog M9/N8 |
-| CCX-104 | i18n Ops remaining strings            | P2       | todo        | CC Core | —      | HK operator UX                    | Tier 3        |
-| CCX-105 | i18n completion all tabs              | P3       | todo        | CC Core | —      | Bilingual all surfaces            | Tier 3        |
-| CCX-106 | Template partial split Today/Playbook | P2       | todo        | CC Core | —      | build-cc-template.mjs             | Tier 3        |
-| CCX-107 | Flow synthetic watermark persistent   | P2       | todo        | CC Core | 116    | Synthetic flow labeled            | Sprint 116    |
-| CCX-108 | AI Commentary collapsed by default    | P2       | in-progress | CC Core | 115    | Non-decision AI demoted           | Backlog R2    |
+| ID      | Item                                                        | Priority | Status      | Owner   | Sprint | Acceptance criteria                                             | Evidence/PR                                    |
+| ------- | ----------------------------------------------------------- | -------- | ----------- | ------- | ------ | --------------------------------------------------------------- | ---------------------------------------------- |
+| CCX-100 | Command palette ⌘K v0                                       | P2       | todo        | CC Core | 120    | Launcher for surfaces                                           | Sprint 120                                     |
+| CCX-101 | Keyboard shortcuts G T/P/D                                  | P3       | todo        | CC Core | 120    | Power-user nav                                                  | Sprint 120                                     |
+| CCX-102 | Command tab best_action sync                                | P1       | todo        | CC Core | 115    | Command strip = Today best_action                               | Backlog N7                                     |
+| CCX-103 | Near-miss → watchlist triggers                              | P1       | todo        | CC Core | 115    | POST /api/watchlist/trigger                                     | Backlog M9/N8                                  |
+| CCX-104 | i18n Ops remaining strings                                  | P2       | todo        | CC Core | —      | HK operator UX                                                  | Tier 3                                         |
+| CCX-105 | i18n completion all tabs                                    | P3       | todo        | CC Core | —      | Bilingual all surfaces                                          | Tier 3                                         |
+| CCX-106 | Template partial split Today/Playbook                       | P2       | todo        | CC Core | —      | build-cc-template.mjs                                           | Tier 3                                         |
+| CCX-107 | Flow synthetic watermark persistent                         | P2       | todo        | CC Core | 116    | Synthetic flow labeled                                          | Sprint 116                                     |
+| CCX-108 | AI Commentary collapsed by default                          | P2       | in-progress | CC Core | 115    | Non-decision AI demoted                                         | Backlog R2                                     |
+| CCX-109 | Portfolio settings persist (cachedState buffer)             | P1       | done        | CC Core | 115    | SettingsView binds cachedState; no live-state race              | `6aa222e`, AGENTS.md pattern                   |
+| CCX-129 | Docs consolidation — single backlog SSOT                    | P2       | done        | CC Core | 115    | No new scored review docs; living backlog only                  | `7032700`, `CC_X_ENGINEERING_BACKLOG.md`       |
+| CCX-130 | CC X sprint modules wired (EV, Alpha, KG, Intel)            | P1       | done        | CC Core | 115    | Module tests green; research_only authority                     | `a540602`, `tests/test_cc_x_sprint_modules.py` |
+| CCX-131 | Belief / conviction review loop — post-trade calibration UI | P0       | todo        | CC Core | 118    | Operator belief review linked to forward outcomes + decision_id | Constitution P0 · CIO v12                      |
 
 ---
 
@@ -184,13 +190,15 @@
 
 | Metric                  |   Count |
 | ----------------------- | ------: |
-| **Total backlog items** | **108** |
-| done                    |       6 |
-| in-progress             |       9 |
-| todo                    |      93 |
+| **Total backlog items** | **113** |
+| done                    |      16 |
+| in-progress             |       6 |
+| todo                    |      91 |
 | blocked                 |       0 |
 
-**Done:** CCX-002, CCX-003, CCX-004, CCX-110, CCX-111, CCX-128
+**Done:** CCX-001, CCX-001b, CCX-002, CCX-003, CCX-004, CCX-UX-01, CCX-UX-02, CCX-UX-03, CCX-UX-05, CCX-UX-07, CCX-109, CCX-110, CCX-111, CCX-128, CCX-129, CCX-130
+
+**Phase B (next):** CCX-UX-04 PM strip parity · CCX-005 attribution root ref · CCX-006 provenance · CCX-041 forward scheduler T+1/T+5/T+20 · CCX-053 marginal ROC · CCX-126 IO consumer migration · CCX-131 belief review UI · CCX-090 Playwright E2E
 
 ---
 

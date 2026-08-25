@@ -1102,7 +1102,6 @@ async def today_summary(request: Request, _: bool = Depends(verify_api_key)):
         },
         should_trade=should_trade,
     )
-    from src.services.cost_adjusted_ranker import enrich_opportunity_rows
     from src.services.index_regime import build_index_regime_for_today
 
     index_regime_summary = await build_index_regime_for_today(
@@ -1128,22 +1127,6 @@ async def today_summary(request: Request, _: bool = Depends(verify_api_key)):
         "degraded": bool(index_regime_summary.get("degraded")),
         "may_authorize_deploy": False,
     }
-    all_opps_for_action = enrich_opportunity_rows(
-        all_opps_for_action,
-        index_regime=index_regime_summary,
-        tradeability=tradeability,
-    )
-    top5 = enrich_opportunity_rows(
-        top5,
-        index_regime=index_regime_summary,
-        tradeability=tradeability,
-    )
-    near_miss = enrich_opportunity_rows(
-        near_miss,
-        index_regime=index_regime_summary,
-        tradeability=tradeability,
-    )
-
     equity_dd_pct = None
     if not used_brief_fallback and not scanner_degraded:
         equity_dd_pct = await load_equity_dd_pct_for_hints(request)
@@ -1228,8 +1211,8 @@ async def today_summary(request: Request, _: bool = Depends(verify_api_key)):
         event_risks=event_risks,
     )
 
+    from src.services.opportunity_pipeline import finalize_opportunity_pipeline
     from src.services.opportunity_quality import (
-        attach_quality_to_rows,
         build_opportunity_verdict,
         resolve_brief_stale_context,
     )
@@ -1239,21 +1222,25 @@ async def today_summary(request: Request, _: bool = Depends(verify_api_key)):
     )
     _quality_stale = scanner_degraded or used_brief_fallback
     _brief_stale = bool(brief_ctx.get("brief_stale"))
-    top5 = attach_quality_to_rows(
-        top5,
-        data_stale=_quality_stale,
-        brief_stale=_brief_stale,
+    _pipe = finalize_opportunity_pipeline(
+        {
+            "top_ranked": top5,
+            "near_miss": near_miss,
+            "opportunities": all_opps_for_action,
+            "filter_funnel": funnel,
+            "brief_context": brief_ctx,
+            "data_stale": _quality_stale,
+            "brief_stale": _brief_stale,
+            "best_action": best_action,
+        },
+        source="today",
+        index_regime=index_regime_summary,
+        tradeability=tradeability,
     )
-    near_miss = attach_quality_to_rows(
-        near_miss,
-        data_stale=_quality_stale,
-        brief_stale=_brief_stale,
-    )
-    all_opps_for_action = attach_quality_to_rows(
-        all_opps_for_action,
-        data_stale=_quality_stale,
-        brief_stale=_brief_stale,
-    )
+    top5 = _pipe.get("top_ranked") or top5
+    near_miss = _pipe.get("near_miss") or near_miss
+    all_opps_for_action = _pipe.get("opportunities") or all_opps_for_action
+    _opportunity_verdict = _pipe.get("opportunity_verdict")
 
     todays_decision = build_todays_decision(
         tradeability=tradeability,
@@ -1525,7 +1512,7 @@ async def today_summary(request: Request, _: bool = Depends(verify_api_key)):
         "data_stale": _quality_stale,
         "brief_stale": _brief_stale,
     }
-    payload["opportunity_verdict"] = build_opportunity_verdict(payload)
+    payload["opportunity_verdict"] = _opportunity_verdict or build_opportunity_verdict(payload)
     payload["cc_state"] = build_cc_state(
         tradeability=decision_model.get("honest_tradeability") or tradeability,
         should_trade=should_trade,

@@ -198,6 +198,19 @@ class LearningLoopPipeline:
             "recorded_at": datetime.now(timezone.utc).isoformat(),
         }
         self._attribution_log.append(attribution)
+        if decision_id:
+            try:
+                from src.services.forward_outcomes import record_forward_outcome
+
+                record_forward_outcome(
+                    decision_id=decision_id,
+                    ticker=ticker,
+                    horizon="T+0",
+                    mark_r=round(r_multiple, 3),
+                    alpha_id=alpha_id,
+                )
+            except Exception as exc:
+                logger.debug("forward outcome T+0 stub failed: %s", exc)
         return attribution
 
     def get_trade_log(self, limit: int = 50) -> List[Dict[str, Any]]:
